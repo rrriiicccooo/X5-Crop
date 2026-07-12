@@ -69,6 +69,7 @@ def hard_safety_candidate(
             holder_occlusion=holder_occlusion,
             frame_dimension_prior=dimensions,
             residuals=solved.residuals,
+            assignment_consensus=solved.assignment_consensus,
             search_budget_exhausted=solved.search_budget_exhausted,
             source=CANDIDATE_SOURCE_HARD_SAFETY,
             automatic_processing_supported=False,

@@ -17,7 +17,6 @@ from ...evidence.holder_occupancy import (
 )
 from ...evidence.sequence_content_alignment import SequenceContentAlignmentEvidence
 from ...evidence.partial_edge import PartialEdgeSafetyEvidence
-from ...evidence.separator_continuity import SeparatorContinuityEvidence
 from x5crop.domain import EvidenceState
 from ...physical.photo_size import FrameDimensionEvidence
 from ...physical.boundary import HolderOcclusionEvidence
@@ -157,21 +156,6 @@ def assess_dual_lane_candidate(
             for lane in lanes
             for tonal_evidence in lane.assessment.evidence.separator_sequence.hard_tonal_evidence
         ),
-    )
-    continuity = SeparatorContinuityEvidence(
-        state=_combined_state(
-            tuple(
-                lane.assessment.evidence.separator_continuity.state
-                for lane in lanes
-            )
-        ),
-        reason="dual_lane_separator_continuity",
-        records=tuple(
-            record
-            for lane in lanes
-            for record in lane.assessment.evidence.separator_continuity.records
-        ),
-        observations=geometry.separator_observations,
     )
     dimension_states = tuple(
         lane.assessment.evidence.frame_dimensions.state for lane in lanes
@@ -414,7 +398,6 @@ def assess_dual_lane_candidate(
             ),
         ),
         separator_sequence=sequence,
-        separator_continuity=continuity,
         frame_dimensions=dimensions,
         frame_content=frame_content,
         holder_texture=holder_texture,

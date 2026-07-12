@@ -17,6 +17,7 @@ from ..domain import (
     PixelInterval,
     SeparatorAssignment,
     SeparatorBandObservation,
+    SeparatorCrossAxisMeasurement,
     SeparatorWidthConstraint,
     VisibleSequenceSpan,
 )
@@ -59,10 +60,31 @@ def _observation(value: dict[str, Any]) -> SeparatorBandObservation:
         center=float(value["center"]),
         tonal_evidence=float(value["tonal_evidence"]),
         provenance=_provenance(value["provenance"]),
-        lane_box=None if value["lane_box"] is None else _box(value["lane_box"]),
-        continuity=(
-            None if value["continuity"] is None else float(value["continuity"])
+        cross_axis=SeparatorCrossAxisMeasurement(
+            state=EvidenceState(str(value["cross_axis"]["state"])),
+            coverage_ratio=(
+                None
+                if value["cross_axis"]["coverage_ratio"] is None
+                else float(value["cross_axis"]["coverage_ratio"])
+            ),
+            continuity_ratio=(
+                None
+                if value["cross_axis"]["continuity_ratio"] is None
+                else float(value["cross_axis"]["continuity_ratio"])
+            ),
+            break_count=(
+                None
+                if value["cross_axis"]["break_count"] is None
+                else int(value["cross_axis"]["break_count"])
+            ),
+            straightness=(
+                None
+                if value["cross_axis"]["straightness"] is None
+                else float(value["cross_axis"]["straightness"])
+            ),
+            reason=str(value["cross_axis"]["reason"]),
         ),
+        lane_box=None if value["lane_box"] is None else _box(value["lane_box"]),
     )
 
 

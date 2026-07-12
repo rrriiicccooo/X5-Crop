@@ -66,7 +66,6 @@ def _boundary_proof_paths(
         and geometry.count > 1
         and common
         and evidence.separator_sequence.state == EvidenceState.SUPPORTED
-        and evidence.separator_continuity.state == EvidenceState.SUPPORTED
     )
     hard_anchor_count = evidence.separator_sequence.hard_count
     single_frame_physical_boundaries = bool(
@@ -106,7 +105,7 @@ def _boundary_proof_paths(
             else EvidenceState.UNAVAILABLE,
             (
                 "complete_hard_separator_sequence",
-                "cross_axis_separator_continuity",
+                "cross_axis_separator_pixel_paths",
                 "frame_union_content_coverage",
             ),
         ),
@@ -156,11 +155,9 @@ def assess_candidate(
         raise ValueError("standard candidate assessment requires sequence geometry")
     frame_sequence = frame_sequence_evidence(geometry)
     core = measure_core_physical_evidence(
-        context.measurement_cache.gray_work,
         candidate,
         physical_spec,
         context.scan_calibration,
-        context.measurement_cache.image_statistics,
     )
     coverage = frame_coverage_evidence(
         geometry.holder_span,
@@ -184,10 +181,7 @@ def assess_candidate(
         context.measurement_cache,
         context.configuration.content.evidence,
     )
-    sequence = separator_sequence_evidence(
-        geometry,
-        core.separator_continuity,
-    )
+    sequence = separator_sequence_evidence(geometry)
     occupancy = holder_occupancy_evidence(
         layout=geometry.layout,
         strip_mode=geometry.strip_mode,
@@ -222,7 +216,6 @@ def assess_candidate(
         frame_coverage=coverage,
         frame_sequence=frame_sequence,
         separator_sequence=sequence,
-        separator_continuity=core.separator_continuity,
         frame_dimensions=core.frame_dimensions,
         frame_content=content,
         holder_texture=holder_texture,

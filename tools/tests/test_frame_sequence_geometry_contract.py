@@ -34,13 +34,11 @@ from x5crop.configuration.separator import SeparatorObservationParameters
 from x5crop.domain import MeasurementProvenance
 from x5crop.domain import Box
 from x5crop.detection.physical.model import PhotoInterval, SequenceSolution
-from x5crop.detection.evidence.separator_continuity import (
-    separator_cross_axis_continuity_evidence,
+from x5crop.detection.candidate.assessment.separator_support import (
+    separator_sequence_evidence,
 )
 from x5crop.image.statistics import (
     ImageMeasurementStatistics,
-    ImageMeasurementStatisticsParameters,
-    image_measurement_statistics,
 )
 from x5crop.domain import CropEnvelope, VisibleSequenceSpan
 from tools.tests.physical_gate_support import (
@@ -57,60 +55,70 @@ from x5crop.domain import FrameDimensionPrior
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def _statistics() -> ImageMeasurementStatistics:
+    return ImageMeasurementStatistics(
+        intensity_quantiles=(0.0, 32.0, 128.0, 224.0, 255.0),
+        intensity_mad=32.0,
+        gradient_quantiles=(0.0, 32.0, 128.0),
+        gradient_mad=1.0,
+        texture_quantiles=(0.0, 32.0, 128.0),
+        texture_mad=1.0,
+        edge_intensity_quantiles=(32.0, 128.0, 224.0),
+        edge_texture_quantiles=(0.0, 32.0, 128.0),
+    )
+
+
 class FrameSequenceGeometryContractTests(unittest.TestCase):
     def test_separator_requires_a_connected_cross_axis_pixel_path(self) -> None:
-        geometry = candidate_fixture().geometry
         gray = np.full((100, 200), 128, dtype=np.uint8)
         gray[::2, 95] = 0
         gray[1::2, 104] = 0
-        statistics = ImageMeasurementStatistics(
-            intensity_quantiles=(0.0, 32.0, 128.0, 224.0, 255.0),
-            intensity_mad=32.0,
-            gradient_quantiles=(0.0, 32.0, 128.0),
-            gradient_mad=1.0,
-            texture_quantiles=(0.0, 32.0, 128.0),
-            texture_mad=1.0,
-            edge_intensity_quantiles=(32.0, 128.0, 224.0),
-            edge_texture_quantiles=(0.0, 32.0, 128.0),
+        profile = np.zeros(200, dtype=np.float32)
+        profile[95:105] = 1.0
+        parameters = SeparatorObservationParameters(
+            activation_percentile=99.0,
+            minimum_run_px=1,
+            maximum_observations=8,
         )
-        evidence = separator_cross_axis_continuity_evidence(
-            gray,
-            geometry,
-            statistics,
+        observation = measure_focused_separator_band(
+            profile,
+            PixelInterval(95.0, 105.0),
+            gray_work=gray,
+            corridor=Box(0, 0, 200, 100),
+            statistics=_statistics(),
+            parameters=parameters,
         )
-        self.assertEqual(evidence.state, EvidenceState.CONTRADICTED)
+        assert observation is not None
+        self.assertEqual(
+            observation.cross_axis.state,
+            EvidenceState.CONTRADICTED,
+        )
 
         gray[:, 100] = 0
-        evidence = separator_cross_axis_continuity_evidence(
-            gray,
-            geometry,
-            statistics,
+        observation = measure_focused_separator_band(
+            profile,
+            PixelInterval(95.0, 105.0),
+            gray_work=gray,
+            corridor=Box(0, 0, 200, 100),
+            statistics=_statistics(),
+            parameters=parameters,
         )
-        self.assertEqual(evidence.state, EvidenceState.SUPPORTED)
+        assert observation is not None
+        self.assertEqual(observation.cross_axis.state, EvidenceState.SUPPORTED)
 
     def test_unused_weak_band_does_not_reduce_selected_separator_proof(self) -> None:
         geometry = candidate_fixture().geometry
-        unused = separator_observation(35.0, start=30.0, end=40.0)
+        unused = separator_observation(
+            35.0,
+            start=30.0,
+            end=40.0,
+            cross_axis_state=EvidenceState.CONTRADICTED,
+        )
         geometry = replace(
             geometry,
             separator_observations=(*geometry.separator_observations, unused),
         )
-        gray = np.full((100, 200), 128, dtype=np.uint8)
-        gray[:, 95:105] = 255
-        evidence = separator_cross_axis_continuity_evidence(
-            gray,
-            geometry,
-            ImageMeasurementStatistics(
-                intensity_quantiles=(0.0, 32.0, 128.0, 224.0, 255.0),
-                intensity_mad=32.0,
-                gradient_quantiles=(0.0, 32.0, 128.0),
-                gradient_mad=1.0,
-                texture_quantiles=(0.0, 32.0, 128.0),
-                texture_mad=1.0,
-                edge_intensity_quantiles=(32.0, 128.0, 224.0),
-                edge_texture_quantiles=(0.0, 32.0, 128.0),
-            ),
-        )
+        evidence = separator_sequence_evidence(geometry)
         self.assertEqual(evidence.state, EvidenceState.SUPPORTED)
 
     def test_raw_separator_observation_is_count_independent(self) -> None:
@@ -126,7 +134,9 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
         profile[70:130] = 0.95
         observations = measure_separator_bands(
             profile,
-            corridor_start=0.0,
+            gray_work=np.zeros((100, 200), dtype=np.uint8),
+            corridor=Box(0, 0, 200, 100),
+            statistics=_statistics(),
             parameters=SeparatorObservationParameters(
                 activation_percentile=70.0,
                 minimum_run_px=1,
@@ -142,7 +152,9 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
             profile[start : start + 2] = 1.0
         result = measure_separator_bands(
             profile,
-            corridor_start=0.0,
+            gray_work=np.zeros((100, 100), dtype=np.uint8),
+            corridor=Box(0, 0, 100, 100),
+            statistics=_statistics(),
             parameters=SeparatorObservationParameters(
                 activation_percentile=95.0,
                 minimum_run_px=1,
@@ -158,8 +170,14 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
             "synthetic",
             ("gray_work",),
         )
-        contained = SeparatorBandObservation(40.0, 50.0, 45.0, 0.9, provenance)
-        partial = SeparatorBandObservation(50.0, 70.0, 60.0, 0.9, provenance)
+        contained = replace(
+            separator_observation(45.0, start=40.0, end=50.0),
+            provenance=provenance,
+        )
+        partial = replace(
+            separator_observation(60.0, start=50.0, end=70.0),
+            provenance=provenance,
+        )
         allowed = PixelInterval(35.0, 55.0)
         constraints = separator_constraints(1, allowed, PixelInterval(0.0, 25.0))
         accepted = assign_observation_to_boundary(1, contained, *constraints)
@@ -232,7 +250,9 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
         observation = measure_focused_separator_band(
             profile,
             PixelInterval(90.0, 110.0),
-            corridor_start=0.0,
+            gray_work=np.zeros((100, 200), dtype=np.uint8),
+            corridor=Box(0, 0, 200, 100),
+            statistics=_statistics(),
             parameters=SeparatorObservationParameters(
                 activation_percentile=70.0,
                 minimum_run_px=1,

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+from math import prod
 from typing import Callable
 
 from ...cache.analysis import make_measurement_cache
@@ -8,6 +9,7 @@ from ...constants import CANDIDATE_SOURCE_DUAL_LANE
 from ...domain import (
     Box,
     CropEnvelope,
+    EvidenceState,
     FrameBoundary,
     HolderSpan,
     MeasurementProvenance,
@@ -28,6 +30,7 @@ from ..candidate.selection.choose import select_candidates
 from ..candidate.selection.model import SelectionResult
 from ..context import DetectionContext
 from ..physical.model import (
+    BoundaryAssignmentConsensus,
     DualLaneSolution,
     PhotoInterval,
     SequenceResiduals,
@@ -288,6 +291,13 @@ def _parent_candidate(
         item for group in translated for item in group.inter_frame_spacings
     )
     count = sum(candidate.geometry.count for candidate in lane_candidates)
+    lane_assignment_consensus = tuple(
+        solution.assignment_consensus for solution in lane_solutions
+    )
+    assignments_resolved = all(
+        consensus.state == EvidenceState.SUPPORTED
+        for consensus in lane_assignment_consensus
+    )
     work_height, work_width = context.measurement_cache.gray_work.shape
     return BuiltCandidate(
         geometry=DualLaneSolution(
@@ -309,6 +319,23 @@ def _parent_candidate(
             holder_occlusion=HolderOcclusionEvidence.not_applicable(),
             frame_dimension_prior=lane_candidates[0].geometry.frame_dimension_prior,
             residuals=SequenceResiduals(None, None, 0.0),
+            assignment_consensus=BoundaryAssignmentConsensus(
+                (
+                    EvidenceState.SUPPORTED
+                    if assignments_resolved
+                    else EvidenceState.UNAVAILABLE
+                ),
+                (
+                    "dual_lane_separator_assignments_agree"
+                    if assignments_resolved
+                    else "dual_lane_separator_assignments_unresolved"
+                ),
+                prod(
+                    consensus.solution_count
+                    for consensus in lane_assignment_consensus
+                ),
+                (),
+            ),
             search_budget_exhausted=bool(
                 proposal_budget_exhausted
                 or any(solution.search_budget_exhausted for solution in lane_solutions)

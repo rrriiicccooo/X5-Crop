@@ -50,6 +50,13 @@ def assign_observation_to_boundary(
         state = EvidenceState.CONTRADICTED
         geometry_dependent = False
         reason = "separator_position_outside_physical_constraint"
+    if state == EvidenceState.SUPPORTED:
+        if observation.cross_axis.state == EvidenceState.CONTRADICTED:
+            state = EvidenceState.CONTRADICTED
+            reason = "separator_cross_axis_continuity_contradicted"
+        elif observation.cross_axis.state != EvidenceState.SUPPORTED:
+            state = EvidenceState.UNAVAILABLE
+            reason = "separator_cross_axis_continuity_unavailable"
     return SeparatorAssignment(
         boundary_index=int(boundary_index),
         observation=observation,

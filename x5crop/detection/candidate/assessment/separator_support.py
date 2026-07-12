@@ -2,10 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ...evidence.separator_continuity import (
-    SeparatorContinuityEvidence,
-    continuity_state_for_observation,
-)
 from x5crop.domain import EvidenceState
 from ...physical.model import SequenceSolution
 
@@ -24,7 +20,6 @@ class SeparatorSequenceEvidence:
 
 def separator_sequence_evidence(
     geometry: SequenceSolution,
-    continuity: SeparatorContinuityEvidence,
 ) -> SeparatorSequenceEvidence:
     expected = max(0, geometry.count - 1)
     accepted = tuple(
@@ -32,10 +27,7 @@ def separator_sequence_evidence(
         for boundary in geometry.frame_boundaries
         if boundary.hard_separator
         and boundary.assignment is not None
-        and continuity_state_for_observation(
-            continuity,
-            boundary.assignment.observation,
-        )
+        and boundary.assignment.observation.cross_axis.state
         == EvidenceState.SUPPORTED
     )
     indexes = tuple(sorted(boundary.boundary_index for boundary in accepted))

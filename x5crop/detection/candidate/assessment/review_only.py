@@ -12,7 +12,6 @@ from ...evidence.holder_occupancy import (
     StripCompletenessEvidence,
 )
 from ...evidence.partial_edge import PartialEdgeSafetyEvidence
-from ...evidence.separator_continuity import SeparatorContinuityEvidence
 from ...evidence.sequence_content_alignment import (
     SequenceContentAlignmentEvidence,
 )
@@ -101,12 +100,6 @@ def assess_review_only_candidate(
         hard_boundary_indexes=(),
         missing_boundary_indexes=tuple(range(1, expected_boundaries + 1)),
         hard_tonal_evidence=(),
-    )
-    separator_continuity = SeparatorContinuityEvidence(
-        state=unavailable,
-        reason=_REVIEW_ONLY_EVIDENCE_REASON,
-        records=(),
-        observations=(),
     )
     frame_dimensions = FrameDimensionEvidence(
         state=unavailable,
@@ -215,7 +208,6 @@ def assess_review_only_candidate(
         frame_coverage=coverage,
         frame_sequence=frame_sequence,
         separator_sequence=separator_sequence,
-        separator_continuity=separator_continuity,
         frame_dimensions=frame_dimensions,
         frame_content=frame_content,
         holder_texture=holder_texture,

@@ -26,8 +26,8 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
                 "center",
                 "tonal_evidence",
                 "provenance",
+                "cross_axis",
                 "lane_box",
-                "continuity",
             ),
         )
         self.assertTrue(SeparatorBandObservation.__dataclass_params__.frozen)

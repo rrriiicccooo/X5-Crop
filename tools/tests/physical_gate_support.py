@@ -42,11 +42,11 @@ from x5crop.detection.evidence.holder_occupancy import (
 )
 from x5crop.detection.evidence.sequence_content_alignment import SequenceContentAlignmentEvidence
 from x5crop.detection.evidence.partial_edge import PartialEdgeSafetyEvidence
-from x5crop.detection.evidence.separator_continuity import SeparatorContinuityEvidence
 from x5crop.domain import EvidenceState
 from x5crop.detection.evidence.transform_geometry import TransformGeometryEvidence
 from x5crop.detection.gate_checks import GateCheck
 from x5crop.detection.physical.model import (
+    BoundaryAssignmentConsensus,
     PhotoInterval,
     SequenceResiduals,
     SequenceSolution,
@@ -64,7 +64,10 @@ from x5crop.detection.physical.separator.assignment import (
     assign_observation_to_boundary,
     frame_boundary_from_assignment,
 )
-from x5crop.domain import SeparatorBandObservation
+from x5crop.domain import (
+    SeparatorBandObservation,
+    SeparatorCrossAxisMeasurement,
+)
 from x5crop.domain import (
     AxisBleedParameters,
     BoundaryPositionConstraint,
@@ -82,6 +85,7 @@ def separator_observation(
     tonal_evidence: float = 1.0,
     start: float | None = None,
     end: float | None = None,
+    cross_axis_state: EvidenceState = EvidenceState.SUPPORTED,
 ) -> SeparatorBandObservation:
     start = float(center - 1.0 if start is None else start)
     end = float(center + 1.0 if end is None else end)
@@ -94,6 +98,24 @@ def separator_observation(
             root_measurement="separator_profile",
             source="test_fixture",
             dependencies=("gray_work",),
+        ),
+        cross_axis=SeparatorCrossAxisMeasurement(
+            state=cross_axis_state,
+            coverage_ratio=(
+                1.0 if cross_axis_state == EvidenceState.SUPPORTED else 0.0
+            ),
+            continuity_ratio=(
+                1.0 if cross_axis_state == EvidenceState.SUPPORTED else 0.0
+            ),
+            break_count=0,
+            straightness=(
+                1.0 if cross_axis_state == EvidenceState.SUPPORTED else 0.0
+            ),
+            reason=(
+                "supported"
+                if cross_axis_state == EvidenceState.SUPPORTED
+                else "cross_axis_continuity_weak"
+            ),
         ),
     )
 
@@ -219,12 +241,6 @@ def candidate_evidence_fixture(
             (1,),
             (),
             (1.0,),
-        ),
-        separator_continuity=SeparatorContinuityEvidence(
-            EvidenceState.SUPPORTED,
-            "supported",
-            (),
-            (separator_observation(100.0, start=95.0, end=105.0),),
         ),
         frame_dimensions=FrameDimensionEvidence(
             EvidenceState.SUPPORTED,
@@ -393,6 +409,12 @@ def candidate_fixture(
             ),
         ),
         residuals=SequenceResiduals(0.05, 0.0, 0.0),
+        assignment_consensus=BoundaryAssignmentConsensus(
+            EvidenceState.SUPPORTED,
+            "synthetic_assignment_consensus",
+            1,
+            (),
+        ),
         search_budget_exhausted=False,
         source=CANDIDATE_SOURCE_FRAME_SEQUENCE,
         automatic_processing_supported=automatic_processing_supported,

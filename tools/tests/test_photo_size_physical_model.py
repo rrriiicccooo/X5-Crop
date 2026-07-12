@@ -8,10 +8,6 @@ from tools.tests.physical_gate_support import (
     separator_constraints,
     separator_observation,
 )
-from x5crop.detection.evidence.separator_continuity import (
-    SeparatorContinuityEvidence,
-    SeparatorContinuityRecord,
-)
 from x5crop.detection.physical.boundary import (
     HolderOcclusionEvidence,
     holder_occlusion_evidence,
@@ -120,28 +116,6 @@ def _geometry(second_start: float = 205.0):
     )
 
 
-def _continuity(geometry) -> SeparatorContinuityEvidence:
-    records = tuple(
-        SeparatorContinuityRecord(
-            item.start,
-            item.end,
-            EvidenceState.SUPPORTED,
-            1.0,
-            1.0,
-            0,
-            1.0,
-            "supported",
-        )
-        for item in geometry.separator_observations
-    )
-    return SeparatorContinuityEvidence(
-        EvidenceState.SUPPORTED,
-        "supported",
-        records,
-        geometry.separator_observations,
-    )
-
-
 class PhotoSizePhysicalModelTest(unittest.TestCase):
     def test_physical_aspect_prior_does_not_become_dimension_evidence(self) -> None:
         base = candidate_fixture().geometry
@@ -171,7 +145,6 @@ class PhotoSizePhysicalModelTest(unittest.TestCase):
             geometry,
             format_spec("135"),
             ScanCalibration(None, None, "unavailable", False),
-            _continuity(geometry),
         )
         self.assertEqual(result.state, EvidenceState.UNAVAILABLE)
         self.assertEqual(
@@ -226,7 +199,6 @@ class PhotoSizePhysicalModelTest(unittest.TestCase):
             geometry,
             format_spec("135"),
             ScanCalibration(None, None, "unavailable", False),
-            _continuity(geometry),
         )
         self.assertEqual(occlusion.leading.state, EvidenceState.SUPPORTED)
         self.assertEqual(result.photo_widths_px, ())
@@ -238,7 +210,6 @@ class PhotoSizePhysicalModelTest(unittest.TestCase):
             geometry,
             format_spec("135"),
             ScanCalibration(None, None, "unavailable", False),
-            _continuity(geometry),
         )
         self.assertEqual(result.photo_widths_px, (100.0, 100.0, 100.0))
         self.assertGreater(result.separator_width_cv or 0.0, 0.0)
@@ -250,7 +221,6 @@ class PhotoSizePhysicalModelTest(unittest.TestCase):
             geometry,
             format_spec("135"),
             ScanCalibration(None, None, "unavailable", False),
-            _continuity(geometry),
         )
         self.assertEqual(result.state, EvidenceState.CONTRADICTED)
         self.assertEqual(result.reason, "physical_frame_dimensions_contradicted")

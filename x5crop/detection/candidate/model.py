@@ -14,7 +14,6 @@ from ..evidence.frame_topology import FrameTopologyEvidence
 from ..evidence.holder_occupancy import HolderOccupancyEvidence
 from ..evidence.sequence_content_alignment import SequenceContentAlignmentEvidence
 from ..evidence.partial_edge import PartialEdgeSafetyEvidence
-from ..evidence.separator_continuity import SeparatorContinuityEvidence
 from ..physical.photo_size import FrameDimensionEvidence
 from .assessment.candidate_gate import CandidateGateAssessment
 from .plan.count_hypotheses import CountHypothesis
@@ -34,7 +33,6 @@ class CandidateEvidence:
     frame_coverage: FrameCoverageEvidence
     frame_sequence: FrameSequenceEvidence
     separator_sequence: SeparatorSequenceEvidence
-    separator_continuity: SeparatorContinuityEvidence
     frame_dimensions: FrameDimensionEvidence
     frame_content: FrameContentEvidence
     holder_texture: HolderTextureEvidence

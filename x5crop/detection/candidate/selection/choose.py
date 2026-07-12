@@ -135,6 +135,9 @@ def geometry_resolution_for_selection(
     conservation_not_contradicted = (
         evidence.frame_sequence.conservation.state != EvidenceState.CONTRADICTED
     )
+    assignment_geometry_resolved = (
+        selected.geometry.assignment_consensus.state == EvidenceState.SUPPORTED
+    )
     automatic_count_supported = bool(
         count_topology_supported
         and evidence.frame_coverage.state == EvidenceState.SUPPORTED
@@ -142,6 +145,7 @@ def geometry_resolution_for_selection(
         and conservation_not_contradicted
         and evidence.content_preservation.state == EvidenceState.SUPPORTED
         and boundary_supported
+        and assignment_geometry_resolved
         and not selected.geometry.search_budget_exhausted
     )
     count_resolved = bool(
@@ -154,6 +158,7 @@ def geometry_resolution_for_selection(
         and len(selected.geometry.frames) == selected.geometry.count
         and boundary_supported
         and conservation_not_contradicted
+        and assignment_geometry_resolved
         and not selected.geometry.search_budget_exhausted
     )
     boundaries_resolved = bool(boundary_supported)
@@ -174,6 +179,8 @@ def geometry_resolution_for_selection(
         reasons.append("larger_counts_not_evaluated")
     if not alternative_geometries_resolved:
         reasons.append("geometry_clusters_disagree")
+    if not assignment_geometry_resolved:
+        reasons.append("separator_assignment_geometry_unresolved")
     if selected.geometry.search_budget_exhausted:
         reasons.append("search_budget_exhausted")
     supported = not reasons

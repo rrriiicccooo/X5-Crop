@@ -21,6 +21,11 @@ repository rules in `AGENTS.md`.
 - Dimension-constrained cut 保留完整位置区间，不再把未观测边界伪装成精确中点。
 - Separator band 必须整体落入 boundary position constraint 才能成为独立实测证据；仅中心点
   落入约束的宽 tonal region 保持 geometry-dependent，不能定义 hard separator。
+- Cross-axis pixel-path measurement 已前移到 separator observation；assignment、photo edges、
+  partial safety 和 evidence independence 不再把 continuity 未成立的 tonal band 当成独立边界。
+- Global solver 保留同一 span/count 下所有最大 independent-anchor assignment 解，并输出
+  `BoundaryAssignmentConsensus`。不同物理解的切线区间不相交时，`GeometryResolution` 保持
+  unavailable，tonal strength 或先验位置只能选择 REVIEW representative，不能消除歧义。
 - 单个 separator 宽度上限由边界两侧照片的物理占位决定，不再被其他 boundary 的 overlap
   抵消。可信 calibration、两端实测边界与其余独立 spacing 唯一共同确定的负 residual 可形成
   `CorroboratedSpacingEvidence`，只保护相邻输出，不反向证明 conservation。
@@ -45,7 +50,7 @@ repository rules in `AGENTS.md`.
 - Cache reuse 不再从 report candidate 反向选择 configuration；output bleed layout 必须显式传入。
 - Diagnostics 参数不再使 detection analysis fingerprint 失效；无法测得的 content threshold 也只
   计算一次。Malformed current-schema record 现在返回 validation error，不再从 validator 抛异常。
-- 271 项测试、14 个 format/mode configuration、package/regression compile、launcher syntax、
+- 276 项测试、14 个 format/mode configuration、package/regression compile、launcher syntax、
   version 和 whitespace 检查通过。
 
 #### 物理序列求解与经验参数退场（2026-07-12）

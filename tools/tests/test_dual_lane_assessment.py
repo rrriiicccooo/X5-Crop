@@ -37,6 +37,7 @@ def _parent(lane):
         holder_occlusion=lane.geometry.holder_occlusion,
         frame_dimension_prior=lane.geometry.frame_dimension_prior,
         residuals=lane.geometry.residuals,
+        assignment_consensus=lane.geometry.assignment_consensus,
         search_budget_exhausted=False,
         source=lane.geometry.source,
         automatic_processing_supported=True,

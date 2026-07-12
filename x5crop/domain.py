@@ -225,14 +225,41 @@ class BoundaryObservation:
 
 
 @dataclass(frozen=True)
+class SeparatorCrossAxisMeasurement:
+    state: EvidenceState
+    coverage_ratio: float | None
+    continuity_ratio: float | None
+    break_count: int | None
+    straightness: float | None
+    reason: str
+
+    def __post_init__(self) -> None:
+        ratios = tuple(
+            value
+            for value in (
+                self.coverage_ratio,
+                self.continuity_ratio,
+                self.straightness,
+            )
+            if value is not None
+        )
+        if any(not math.isfinite(value) or not 0.0 <= value <= 1.0 for value in ratios):
+            raise ValueError("separator cross-axis ratios must lie in [0, 1]")
+        if self.break_count is not None and self.break_count < 0:
+            raise ValueError("separator cross-axis break count cannot be negative")
+        if not self.reason:
+            raise ValueError("separator cross-axis measurement requires a reason")
+
+
+@dataclass(frozen=True)
 class SeparatorBandObservation:
     start: float
     end: float
     center: float
     tonal_evidence: float
     provenance: MeasurementProvenance
+    cross_axis: SeparatorCrossAxisMeasurement
     lane_box: Box | None = None
-    continuity: float | None = None
 
     def __post_init__(self) -> None:
         if self.end <= self.start:

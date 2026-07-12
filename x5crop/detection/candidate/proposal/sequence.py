@@ -7,7 +7,14 @@ import numpy as np
 
 from ....cache import MeasurementCache
 from ....cache.separator import cached_separator_profile
-from ....domain import Box, MeasurementProvenance, SequenceHypothesis
+from ....domain import (
+    Box,
+    CropEnvelope,
+    EvidenceState,
+    MeasurementProvenance,
+    SequenceHypothesis,
+    VisibleSequenceSpan,
+)
 from ....formats import FormatPhysicalSpec
 from ....configuration.content import ContentConfiguration
 from ....configuration.boundary import BoundaryObservationParameters
@@ -21,7 +28,6 @@ from ...physical.sequence import (
 )
 from ...physical.photo_size import frame_dimension_prior
 from ...physical.separator.observations import measure_separator_bands
-from x5crop.domain import CropEnvelope, VisibleSequenceSpan
 
 
 @dataclass(frozen=True)
@@ -75,10 +81,16 @@ def _separator_dimension_hypotheses(
         profile = cached_separator_profile(cache, corridor, separator_policy.profile)
         observation_set = measure_separator_bands(
             profile,
-            corridor_start=float(corridor.left),
+            gray_work=cache.gray_work,
+            corridor=corridor,
+            statistics=cache.image_statistics,
             parameters=separator_policy.observation,
         )
-        observations = observation_set.observations
+        observations = tuple(
+            observation
+            for observation in observation_set.observations
+            if observation.cross_axis.state == EvidenceState.SUPPORTED
+        )
         budget_exhausted |= observation_set.budget_exhausted
         if len(observations) < count - 1:
             continue

@@ -69,7 +69,9 @@ def build_sequence_candidate(
     )
     observation_set = measure_separator_bands(
         profile,
-        corridor_start=float(corridor.left),
+        gray_work=cache.gray_work,
+        corridor=corridor,
+        statistics=cache.image_statistics,
         parameters=separator_policy.observation,
     )
     observations = observation_set.observations
@@ -108,7 +110,9 @@ def build_sequence_candidate(
                     dimensions,
                     holder_occlusion,
                 ).position,
-                corridor_start=float(corridor.left),
+                gray_work=cache.gray_work,
+                corridor=corridor,
+                statistics=cache.image_statistics,
                 parameters=separator_policy.observation,
             )
         )
@@ -142,6 +146,7 @@ def build_sequence_candidate(
             holder_occlusion=holder_occlusion,
             frame_dimension_prior=dimensions,
             residuals=solved.residuals,
+            assignment_consensus=solved.assignment_consensus,
             search_budget_exhausted=bool(
                 planning_budget_exhausted
                 or observation_set.budget_exhausted

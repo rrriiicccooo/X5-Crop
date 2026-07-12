@@ -15,7 +15,11 @@ from ...domain import (
     VisibleSequenceSpan,
 )
 from .boundary import HolderOcclusionEvidence
-from .model import PhotoInterval, SequenceResiduals
+from .model import (
+    BoundaryAssignmentConsensus,
+    PhotoInterval,
+    SequenceResiduals,
+)
 from .separator.assignment import (
     assign_observation_to_boundary,
     boundary_position_constraint,
@@ -39,6 +43,7 @@ class SequenceSolveResult:
     boundaries: tuple[FrameBoundary, ...]
     relations: tuple[InterFrameSpacing, ...]
     residuals: SequenceResiduals
+    assignment_consensus: BoundaryAssignmentConsensus
     search_budget_exhausted: bool
 
 
@@ -46,6 +51,20 @@ class SequenceSolveResult:
 class _AssignmentState:
     rank: tuple[int, float, float, tuple[int, ...]]
     selections: tuple[tuple[int, int, SeparatorAssignment], ...]
+
+
+@dataclass(frozen=True)
+class _AssignmentSearchResult:
+    states: tuple[_AssignmentState, ...]
+    diagnostic: dict[int, SeparatorAssignment]
+    budget_exhausted: bool
+
+
+@dataclass(frozen=True)
+class _SolvedAssignmentState:
+    state: _AssignmentState
+    boundaries: tuple[FrameBoundary, ...]
+    focused_assignments: tuple[SeparatorAssignment, ...]
 
 
 def _assignment_rank(
@@ -71,23 +90,16 @@ def _assignment_rank(
     )
 
 
-def _best_monotonic_assignments(
+def _monotonic_assignment_solutions(
     observations: tuple[SeparatorBandObservation, ...],
     span: VisibleSequenceSpan,
     count: int,
     dimensions: FrameDimensionPrior,
     holder_occlusion: HolderOcclusionEvidence,
     maximum_assignment_evaluations: int,
-) -> tuple[
-    dict[int, SeparatorAssignment],
-    dict[int, SeparatorAssignment],
-    bool,
-]:
+) -> _AssignmentSearchResult:
     if maximum_assignment_evaluations <= 0:
         raise ValueError("sequence solver evaluation budget must be positive")
-    states: dict[int, _AssignmentState] = {
-        -1: _AssignmentState(_assignment_rank(()), ())
-    }
     diagnostic: dict[int, SeparatorAssignment] = {}
     for observation_index, observation in enumerate(observations):
         for boundary_index in range(1, count):
@@ -124,9 +136,22 @@ def _best_monotonic_assignments(
                 ),
             ):
                 diagnostic[observation_index] = assignment
+    terminal: list[_AssignmentState] = []
     evaluations = 0
     exhausted = False
-    for boundary_index in range(1, count):
+
+    def visit(
+        boundary_index: int,
+        next_observation_index: int,
+        selections: tuple[tuple[int, int, SeparatorAssignment], ...],
+    ) -> None:
+        nonlocal evaluations, exhausted
+        if boundary_index >= count:
+            terminal.append(_AssignmentState(_assignment_rank(selections), selections))
+            return
+        visit(boundary_index + 1, next_observation_index, selections)
+        if exhausted:
+            return
         position = boundary_position_constraint(
             span,
             boundary_index,
@@ -141,54 +166,48 @@ def _best_monotonic_assignments(
             dimensions,
             holder_occlusion,
         )
-        next_states = dict(states)
-        for last_observation_index, state in states.items():
-            previous_boundary_index = (
-                state.selections[-1][0] if state.selections else 0
+        previous_boundary_index = selections[-1][0] if selections else 0
+        previous_center = (
+            selections[-1][2].observation.center
+            if selections
+            else float(span.box.left)
+        )
+        for observation_index in range(next_observation_index, len(observations)):
+            if evaluations >= maximum_assignment_evaluations:
+                exhausted = True
+                return
+            evaluations += 1
+            observation = observations[observation_index]
+            assignment = assign_observation_to_boundary(
+                boundary_index,
+                observation,
+                position,
+                width,
             )
-            previous_center = (
-                state.selections[-1][2].observation.center
-                if state.selections
-                else float(span.box.left)
+            if not assignment.independent:
+                continue
+            minimum_separation = float(boundary_index - previous_boundary_index)
+            if observation.center - previous_center < minimum_separation:
+                continue
+            if float(span.box.right) - observation.center < float(
+                count - boundary_index
+            ):
+                continue
+            visit(
+                boundary_index + 1,
+                observation_index + 1,
+                (
+                    *selections,
+                    (boundary_index, observation_index, assignment),
+                ),
             )
-            for observation_index in range(last_observation_index + 1, len(observations)):
-                if evaluations >= maximum_assignment_evaluations:
-                    exhausted = True
-                    break
-                evaluations += 1
-                observation = observations[observation_index]
-                assignment = assign_observation_to_boundary(
-                    boundary_index,
-                    observation,
-                    position,
-                    width,
-                )
-                if not assignment.independent:
-                    continue
-                minimum_separation = float(boundary_index - previous_boundary_index)
-                if observation.center - previous_center < minimum_separation:
-                    continue
-                if float(span.box.right) - observation.center < float(count - boundary_index):
-                    continue
-                selections = (*state.selections, (boundary_index, observation_index, assignment))
-                candidate = _AssignmentState(
-                    _assignment_rank(selections),
-                    selections,
-                )
-                existing = next_states.get(observation_index)
-                if existing is None or candidate.rank > existing.rank:
-                    next_states[observation_index] = candidate
             if exhausted:
-                break
-        states = next_states
-        if exhausted:
-            break
-    selected_state = max(states.values(), key=lambda state: state.rank)
-    selected = {
-        boundary_index: replace(assignment, used_for_boundary=True)
-        for boundary_index, _observation_index, assignment in selected_state.selections
-    }
-    return selected, diagnostic, exhausted
+                return
+
+    visit(1, 0, ())
+    if not terminal:
+        terminal.append(_AssignmentState(_assignment_rank(()), ()))
+    return _AssignmentSearchResult(tuple(terminal), diagnostic, exhausted)
 
 
 def _cuts(
@@ -280,6 +299,89 @@ def _cuts(
         boundaries.append(boundary)
         previous = boundary.coordinate
     return tuple(boundaries), tuple(focused_assignments)
+
+
+def _selected_assignments(
+    state: _AssignmentState,
+) -> dict[int, SeparatorAssignment]:
+    return {
+        boundary_index: replace(assignment, used_for_boundary=True)
+        for boundary_index, _observation_index, assignment in state.selections
+    }
+
+
+def _solve_assignment_states(
+    states: tuple[_AssignmentState, ...],
+    span: VisibleSequenceSpan,
+    count: int,
+    dimensions: FrameDimensionPrior,
+    holder_occlusion: HolderOcclusionEvidence,
+    focused: dict[int, SeparatorBandObservation],
+) -> tuple[_SolvedAssignmentState, ...]:
+    assignment_counts = sorted(
+        {len(state.selections) for state in states},
+        reverse=True,
+    )
+    for assignment_count in assignment_counts:
+        solved: list[_SolvedAssignmentState] = []
+        for state in states:
+            if len(state.selections) != assignment_count:
+                continue
+            try:
+                boundaries, focused_assignments = _cuts(
+                    span,
+                    count,
+                    dimensions,
+                    holder_occlusion,
+                    _selected_assignments(state),
+                    focused,
+                )
+            except ValueError:
+                continue
+            solved.append(
+                _SolvedAssignmentState(
+                    state,
+                    boundaries,
+                    focused_assignments,
+                )
+            )
+        if solved:
+            return tuple(solved)
+    raise ValueError("physical sequence has no valid assignment solution")
+
+
+def _assignment_consensus(
+    solutions: tuple[_SolvedAssignmentState, ...],
+    *,
+    budget_exhausted: bool,
+) -> BoundaryAssignmentConsensus:
+    conflicting = tuple(
+        boundary_index
+        for boundary_index in range(1, len(solutions[0].boundaries) + 1)
+        if max(
+            solution.boundaries[boundary_index - 1].position.minimum
+            for solution in solutions
+        )
+        > min(
+            solution.boundaries[boundary_index - 1].position.maximum
+            for solution in solutions
+        )
+    )
+    if budget_exhausted:
+        state = EvidenceState.UNAVAILABLE
+        reason = "assignment_search_budget_exhausted"
+    elif conflicting:
+        state = EvidenceState.UNAVAILABLE
+        reason = "alternative_separator_assignments_disagree"
+    else:
+        state = EvidenceState.SUPPORTED
+        reason = "separator_assignment_geometry_agrees"
+    return BoundaryAssignmentConsensus(
+        state,
+        reason,
+        len(solutions),
+        conflicting,
+    )
 
 
 def _frames(
@@ -493,9 +595,15 @@ def solve_frame_sequence(
             (),
             (),
             _residuals(span, intervals, (), dimensions),
+            BoundaryAssignmentConsensus(
+                EvidenceState.SUPPORTED,
+                "single_frame_has_no_internal_assignments",
+                1,
+                (),
+            ),
             False,
         )
-    selected, diagnostic, search_budget_exhausted = _best_monotonic_assignments(
+    search = _monotonic_assignment_solutions(
         observations,
         span,
         count,
@@ -503,19 +611,23 @@ def solve_frame_sequence(
         holder_occlusion,
         maximum_assignment_evaluations,
     )
-    boundaries, focused_assignments = _cuts(
+    solved_states = _solve_assignment_states(
+        search.states,
         span,
         count,
         dimensions,
         holder_occlusion,
-        selected,
         dict(focused_observations),
     )
+    representative = max(solved_states, key=lambda item: item.state.rank)
+    selected = _selected_assignments(representative.state)
+    boundaries = representative.boundaries
+    focused_assignments = representative.focused_assignments
     selected_observations = {
         id(assignment.observation): assignment for assignment in selected.values()
     }
     assignments = tuple(
-        selected_observations.get(id(observation), diagnostic[id_index])
+        selected_observations.get(id(observation), search.diagnostic[id_index])
         for id_index, observation in enumerate(observations)
     ) + focused_assignments
     frames = _frames(span, boundaries, count)
@@ -534,5 +646,9 @@ def solve_frame_sequence(
         boundaries=boundaries,
         relations=relations,
         residuals=_residuals(span, intervals, boundaries, dimensions),
-        search_budget_exhausted=search_budget_exhausted,
+        assignment_consensus=_assignment_consensus(
+            solved_states,
+            budget_exhausted=search.budget_exhausted,
+        ),
+        search_budget_exhausted=search.budget_exhausted,
     )

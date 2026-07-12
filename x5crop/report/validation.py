@@ -74,6 +74,7 @@ def _provenance_valid(value: Any) -> bool:
 
 
 def _separator_observation_valid(value: Any) -> bool:
+    cross_axis = value.get("cross_axis") if isinstance(value, dict) else None
     return bool(
         isinstance(value, dict)
         and {
@@ -82,11 +83,20 @@ def _separator_observation_valid(value: Any) -> bool:
             "center",
             "tonal_evidence",
             "provenance",
+            "cross_axis",
             "lane_box",
-            "continuity",
         }.issubset(value)
         and float(value["end"]) > float(value["start"])
         and _provenance_valid(value["provenance"])
+        and isinstance(cross_axis, dict)
+        and {
+            "state",
+            "coverage_ratio",
+            "continuity_ratio",
+            "break_count",
+            "straightness",
+            "reason",
+        }.issubset(cross_axis)
         and (value["lane_box"] is None or _box_valid(value["lane_box"]))
     )
 
@@ -146,6 +156,7 @@ def _candidate_geometry_valid(kind: str, value: Any) -> bool:
         "holder_occlusion",
         "frame_dimension_prior",
         "residuals",
+        "assignment_consensus",
         "search_budget_exhausted",
         "source",
         "automatic_processing_supported",

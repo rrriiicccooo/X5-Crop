@@ -11,7 +11,6 @@ from x5crop.domain import EvidenceState
 from x5crop.domain import PixelInterval, VisibleSequenceSpan
 
 if TYPE_CHECKING:
-    from ..evidence.separator_continuity import SeparatorContinuityEvidence
     from .model import SequenceSolution
 
 
@@ -91,22 +90,8 @@ def frame_dimension_prior(
     )
 
 
-def _continuity_supported(
-    continuity: SeparatorContinuityEvidence,
-    start: float,
-    end: float,
-) -> bool:
-    return any(
-        record.start == start
-        and record.end == end
-        and record.state == EvidenceState.SUPPORTED
-        for record in continuity.records
-    )
-
-
 def _photo_widths(
     geometry: SequenceSolution,
-    continuity: SeparatorContinuityEvidence,
 ) -> tuple[tuple[float, ...], tuple[float, ...]]:
     assignments = tuple(
         sorted(
@@ -114,11 +99,6 @@ def _photo_widths(
                 assignment
                 for assignment in geometry.separator_assignments
                 if assignment.used_for_boundary and assignment.independent
-                and _continuity_supported(
-                    continuity,
-                    assignment.observation.start,
-                    assignment.observation.end,
-                )
             ),
             key=lambda assignment: assignment.boundary_index,
         )
@@ -138,12 +118,10 @@ def frame_dimension_evidence(
     geometry: SequenceSolution,
     physical_spec: FormatPhysicalSpec,
     calibration: ScanCalibration,
-    continuity: SeparatorContinuityEvidence,
 ) -> FrameDimensionEvidence:
     nominal = physical_spec.nominal_frame_size_mm
     photo_widths, separator_widths = _photo_widths(
         geometry,
-        continuity,
     )
     target = geometry.frame_dimension_prior.width_px.midpoint
     photo_cv = _width_cv(photo_widths)

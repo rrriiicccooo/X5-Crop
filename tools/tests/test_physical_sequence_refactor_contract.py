@@ -15,6 +15,7 @@ from tools.tests.physical_gate_support import (
     transform_geometry_fixture,
 )
 from x5crop.detection.candidate.selection.model import GeometryResolution
+from x5crop.detection.candidate.selection.choose import select_candidates
 from x5crop.detection.decision.decision_gate import apply_decision_gate
 from x5crop.detection.evidence.content.frame_support import (
     FrameContentEvidence,
@@ -30,6 +31,7 @@ from x5crop.detection.evidence.sequence_content_alignment import (
 )
 from x5crop.detection.physical.boundary import HolderOcclusionEvidence
 from x5crop.detection.physical.boundary import holder_occlusion_for_sequence
+from x5crop.detection.physical.model import BoundaryAssignmentConsensus
 from x5crop.detection.physical.separator.assignment import (
     assign_observation_to_boundary,
     separator_width_constraint,
@@ -56,6 +58,15 @@ from x5crop.units import ScanCalibration
 
 
 class PhysicalSequenceRefactorContractTest(unittest.TestCase):
+    def test_not_applicable_assignment_consensus_has_no_solution(self) -> None:
+        consensus = BoundaryAssignmentConsensus(
+            EvidenceState.NOT_APPLICABLE,
+            "review_only_geometry_has_no_assignments",
+            0,
+            (),
+        )
+        self.assertEqual(consensus.solution_count, 0)
+
     def test_observed_spacing_and_geometry_hypothesis_are_distinct_types(
         self,
     ) -> None:
@@ -175,6 +186,87 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
         self.assertEqual(assignment.state, EvidenceState.UNAVAILABLE)
         self.assertTrue(assignment.geometry_dependent)
         self.assertFalse(assignment.independent)
+
+    def test_cross_axis_contradicted_band_is_not_an_independent_separator(
+        self,
+    ) -> None:
+        observation = separator_observation(
+            100.0,
+            cross_axis_state=EvidenceState.CONTRADICTED,
+        )
+        assignment = assign_observation_to_boundary(
+            1,
+            observation,
+            *separator_constraints(1, PixelInterval(90.0, 110.0)),
+        )
+
+        self.assertFalse(assignment.independent)
+
+    def test_cross_axis_measurement_has_no_parallel_evidence_owner(self) -> None:
+        module = (
+            Path(__file__).resolve().parents[2]
+            / "x5crop/detection/evidence/separator_continuity.py"
+        )
+        self.assertFalse(module.exists())
+
+    def test_alternative_supported_separator_cuts_remain_unresolved(self) -> None:
+        result = solve_frame_sequence(
+            (
+                separator_observation(90.0, tonal_evidence=1.0),
+                separator_observation(110.0, tonal_evidence=0.5),
+            ),
+            (),
+            VisibleSequenceSpan(Box(0, 0, 200, 100)),
+            2,
+            FrameDimensionPrior(
+                PixelInterval(80.0, 120.0),
+                PixelInterval.exact(100.0),
+                ((36.0, 24.0),),
+                "synthetic",
+                MeasurementProvenance(
+                    "frame_dimensions",
+                    "synthetic",
+                    ("physical_frame_size",),
+                ),
+            ),
+            HolderOcclusionEvidence.not_applicable(),
+            (),
+            100,
+        )
+
+        self.assertEqual(
+            result.assignment_consensus.state,
+            EvidenceState.UNAVAILABLE,
+        )
+        self.assertEqual(
+            result.assignment_consensus.conflicting_boundary_indexes,
+            (1,),
+        )
+
+    def test_assignment_disagreement_prevents_geometry_resolution(self) -> None:
+        candidate = candidate_fixture()
+        candidate = replace(
+            candidate,
+            geometry=replace(
+                candidate.geometry,
+                assignment_consensus=BoundaryAssignmentConsensus(
+                    EvidenceState.UNAVAILABLE,
+                    "alternative_separator_assignments_disagree",
+                    2,
+                    (1,),
+                ),
+            ),
+        )
+        selection = select_candidates(
+            (candidate,),
+            larger_counts_evaluated=True,
+        )
+
+        self.assertFalse(selection.geometry_resolution.supported)
+        self.assertIn(
+            "separator_assignment_geometry_unresolved",
+            selection.geometry_resolution.reasons,
+        )
 
     def test_positive_separator_width_is_not_erased_by_other_overlap(self) -> None:
         constraint = separator_width_constraint(

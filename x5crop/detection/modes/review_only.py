@@ -1,14 +1,24 @@
 from __future__ import annotations
 
 from ...constants import CANDIDATE_SOURCE_REVIEW_ONLY
-from ...domain import Box, MeasurementProvenance
+from ...domain import (
+    Box,
+    CropEnvelope,
+    EvidenceState,
+    HolderSpan,
+    MeasurementProvenance,
+    VisibleSequenceSpan,
+)
 from ..candidate.model import BuiltCandidate
 from ..candidate.plan.count_hypotheses import CountHypothesis
 from ..context import DetectionContext
-from ..physical.model import ReviewOnlyGeometry, SequenceResiduals
+from ..physical.model import (
+    BoundaryAssignmentConsensus,
+    ReviewOnlyGeometry,
+    SequenceResiduals,
+)
 from ..physical.boundary import canvas_boundary_observations
 from ..physical.photo_size import frame_dimension_prior
-from x5crop.domain import CropEnvelope, HolderSpan, VisibleSequenceSpan
 
 
 def review_only_candidate(context: DetectionContext) -> BuiltCandidate:
@@ -39,6 +49,12 @@ def review_only_candidate(context: DetectionContext) -> BuiltCandidate:
             crop_envelope=CropEnvelope(span),
             frame_dimension_prior=dimensions,
             residuals=SequenceResiduals(None, None, 0.0),
+            assignment_consensus=BoundaryAssignmentConsensus(
+                EvidenceState.NOT_APPLICABLE,
+                "review_only_geometry_has_no_assignments",
+                0,
+                (),
+            ),
             source=CANDIDATE_SOURCE_REVIEW_ONLY,
             sequence_hypothesis_name="review_only_canvas",
             sequence_hypothesis_strategy="review_only_canvas",

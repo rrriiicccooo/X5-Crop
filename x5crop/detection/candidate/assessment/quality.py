@@ -17,7 +17,6 @@ def evidence_quality(
         ("frame_coverage", evidence.frame_coverage.state),
         ("frame_sequence_conservation", evidence.frame_sequence.conservation.state),
         ("separator_sequence", evidence.separator_sequence.state),
-        ("separator_continuity", evidence.separator_continuity.state),
         ("frame_dimensions", evidence.frame_dimensions.state),
         ("frame_content", evidence.frame_content.state),
         ("holder_texture", evidence.holder_texture.state),

@@ -76,13 +76,18 @@ cut 或制造 frame count。
 
 ### 1.4 Separator 与 Signed Spacing
 
-`SeparatorBandObservation` 是 count-independent raw pixel band。它记录 start/end/center、
-局部 tonal evidence、cross-axis continuity 和 root provenance。
+`SeparatorBandObservation` 是 count-independent raw pixel band。它在 assignment 前一次性记录
+start/end/center、局部 tonal evidence、完整 cross-axis pixel-path measurement 和 root
+provenance；后续 evidence 只聚合这些 observation，不重新读取像素。
 
 Candidate-specific assignment 同时满足：
 
 - `BoundaryPositionConstraint`: 该内部切线允许出现的位置区间。
 - `SeparatorWidthConstraint`: 相邻照片物理尺寸允许的 separator 宽度区间。
+
+Band 必须整体落入 position constraint，并且 cross-axis path、position 与 width 同时成立，
+才能成为独立 separator assignment。只让中心点落入区间、局部相交或 continuity 不成立的
+tonal region 只能保留为 diagnostic / geometry-dependent observation。
 
 过宽的欠曝 tonal run 保留为 diagnostic observation，但不能成为 hard separator。缺失 cut 可由
 `DimensionConstrainedBoundary` 表示；它不能增加 hard separator 数量。
@@ -105,6 +110,8 @@ Sequence solver 同时求解所有内部 boundaries，不逐边贪心：
 - Interior photos 服从同一 `FrameDimensionPrior` option。
 - Holder occlusion 只能作用于首张 leading edge 和末张 trailing edge。
 - Position、width、sequence conservation 和 provenance 必须同时成立。
+- 同一 span/count 下所有最大独立-anchor 解都参与 `BoundaryAssignmentConsensus`；不同解的
+  cut interval 没有共同交集时，assignment geometry 保持 unresolved。
 - Search budget exhausted 时 geometry 保持 unresolved。
 
 Observation、hypothesis、assignment 和 dual-lane proposal 的执行预算都通过 typed result 显式

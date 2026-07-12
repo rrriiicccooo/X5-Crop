@@ -15,6 +15,7 @@ from ...domain import (
     SeparatorAssignment,
     SeparatorBandObservation,
     VisibleSequenceSpan,
+    EvidenceState,
 )
 from .boundary import HolderOcclusionEvidence
 from .spacing import InterFrameSpacing
@@ -69,6 +70,32 @@ class SequenceResiduals:
 
 
 @dataclass(frozen=True)
+class BoundaryAssignmentConsensus:
+    state: EvidenceState
+    reason: str
+    solution_count: int
+    conflicting_boundary_indexes: tuple[int, ...]
+
+    def __post_init__(self) -> None:
+        if self.solution_count < 0:
+            raise ValueError("boundary assignment solution count cannot be negative")
+        if (
+            self.state == EvidenceState.NOT_APPLICABLE
+            and self.solution_count != 0
+        ):
+            raise ValueError("not-applicable assignment consensus has no solution")
+        if (
+            self.state != EvidenceState.NOT_APPLICABLE
+            and self.solution_count == 0
+        ):
+            raise ValueError("assignment consensus requires a solution")
+        if any(index <= 0 for index in self.conflicting_boundary_indexes):
+            raise ValueError("conflicting boundary indexes must be positive")
+        if not self.reason:
+            raise ValueError("boundary assignment consensus requires a reason")
+
+
+@dataclass(frozen=True)
 class SequenceSolution:
     format_id: str
     layout: str
@@ -86,6 +113,7 @@ class SequenceSolution:
     holder_occlusion: HolderOcclusionEvidence
     frame_dimension_prior: FrameDimensionPrior
     residuals: SequenceResiduals
+    assignment_consensus: BoundaryAssignmentConsensus
     search_budget_exhausted: bool
     source: str
     automatic_processing_supported: bool
@@ -141,6 +169,7 @@ class DualLaneSolution:
     holder_occlusion: HolderOcclusionEvidence
     frame_dimension_prior: FrameDimensionPrior
     residuals: SequenceResiduals
+    assignment_consensus: BoundaryAssignmentConsensus
     search_budget_exhausted: bool
     source: str
     automatic_processing_supported: bool
@@ -192,6 +221,7 @@ class ReviewOnlyGeometry:
     crop_envelope: CropEnvelope
     frame_dimension_prior: FrameDimensionPrior
     residuals: SequenceResiduals
+    assignment_consensus: BoundaryAssignmentConsensus
     source: str
     sequence_hypothesis_name: str
     sequence_hypothesis_strategy: str
