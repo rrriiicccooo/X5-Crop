@@ -379,6 +379,22 @@ class OutputReadModelContractTest(unittest.TestCase):
             current_report_record_errors(record),
         )
 
+    def test_current_schema_rejects_duplicate_decision_check_codes(self) -> None:
+        record = _record()
+        record["decision"]["gate"]["checks"].append(
+            deepcopy(record["decision"]["gate"]["checks"][0])
+        )
+        self.assertTrue(current_report_record_errors(record))
+
+    def test_candidate_gate_cannot_carry_decision_stage_authority(self) -> None:
+        record = _record()
+        check = record["selection"]["candidates"][0]["candidate_gate"][
+            "checks"
+        ][0]
+        check["stage"] = "decision"
+        check["final_review_reason"] = "frame_topology_invalid"
+        self.assertTrue(current_report_record_errors(record))
+
     def test_final_reasons_are_derived_from_decision_checks(self) -> None:
         record = _record()
         record["decision"]["status"] = "needs_review"

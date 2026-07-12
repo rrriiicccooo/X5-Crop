@@ -2,9 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..detection.decision.model import DecisionGateAssessment, FinalDetection
+from ..detection.decision.model import FinalDetection
 from ..detection.evidence.transform_geometry import TransformGeometryEvidence
-from ..detection.gate_checks import GateCheck
 from ..domain import (
     Box,
     CropEnvelope,
@@ -19,7 +18,10 @@ from ..output.model import (
     OutputGeometry,
 )
 from ..units import ScanCalibration
-from .validation import current_report_record_errors
+from .validation import (
+    current_report_record_errors,
+    decision_gate_from_read_model,
+)
 
 
 def _box(value: dict[str, Any]) -> Box:
@@ -35,24 +37,6 @@ def _output_geometry(value: dict[str, Any]) -> OutputGeometry:
     return OutputGeometry(
         crop_envelope=CropEnvelope(_box(value["crop_envelope"])),
         frames=tuple(_box(frame) for frame in value["frame_boxes"]),
-    )
-
-
-def _decision_gate(value: dict[str, Any]) -> DecisionGateAssessment:
-    return DecisionGateAssessment(
-        checks=tuple(
-            GateCheck(
-                code=str(check["code"]),
-                stage=str(check["stage"]),
-                state=EvidenceState(str(check["state"])),
-                final_review_reason=(
-                    None
-                    if check["final_review_reason"] is None
-                    else str(check["final_review_reason"])
-                ),
-            )
-            for check in value["checks"]
-        )
     )
 
 
@@ -148,7 +132,7 @@ def final_detection_from_record(record: dict[str, Any]) -> FinalDetection:
         layout=str(geometry["layout"]),
         strip_mode=str(geometry["strip_mode"]),
         count=int(geometry["count"]),
-        decision_gate=_decision_gate(decision["gate"]),
+        decision_gate=decision_gate_from_read_model(decision["gate"]),
         decision_geometry=_output_geometry(output["decision_geometry"]),
         output_geometry=_output_geometry(output["final_geometry"]),
         frame_bleed_plan=_frame_bleed_plan(output["frame_bleed_plan"]),

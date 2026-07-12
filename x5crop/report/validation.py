@@ -12,7 +12,11 @@ from ..configuration.diagnostics import DiagnosticsConfiguration
 from ..configuration.preprocess import PreprocessConfiguration
 from ..configuration.separator import SeparatorConfiguration
 from ..detection.decision.vocabulary import FINAL_REVIEW_REASONS
-from ..detection.candidate.assessment.candidate_gate import BoundaryProofPath
+from ..detection.candidate.assessment.candidate_gate import (
+    BoundaryProofPath,
+    CandidateGateAssessment,
+)
+from ..detection.decision.model import DecisionGateAssessment
 from ..detection.candidate.model import CandidateEvidence, EvidenceQuality
 from ..detection.candidate.plan.count_hypotheses import CountHypothesis
 from ..detection.candidate.selection.model import CountResolution, GeometryResolution
@@ -28,7 +32,7 @@ from ..detection.physical.spacing import (
     ObservedSpacingEvidence,
     SpacingHypothesis,
 )
-from ..domain import SeparatorAssignment, SeparatorBandObservation
+from ..domain import EvidenceState, SeparatorAssignment, SeparatorBandObservation
 from ..io.model import ImageProfile
 from ..formats import FrameSizeMm
 from ..output.model import FrameBleedPlan
@@ -296,7 +300,7 @@ def _candidate_geometry_valid(kind: str, value: Any) -> bool:
     return False
 
 
-def _gate_check_valid(value: Any) -> bool:
+def _gate_check_from_read_model(value: Any) -> GateCheck:
     expected = {field.name for field in fields(GateCheck)} | {"blocks"}
     if not (
         isinstance(value, dict)
@@ -307,12 +311,35 @@ def _gate_check_valid(value: Any) -> bool:
         )
         and isinstance(value["blocks"], bool)
     ):
-        return False
-    expected_blocks = value["state"] == "contradicted"
-    return value["blocks"] == expected_blocks
+        raise ValueError("gate check read model is incomplete")
+    check = GateCheck(
+        code=str(value["code"]),
+        stage=str(value["stage"]),
+        state=EvidenceState(str(value["state"])),
+        final_review_reason=(
+            None
+            if value["final_review_reason"] is None
+            else str(value["final_review_reason"])
+        ),
+    )
+    if value["blocks"] != check.blocks:
+        raise ValueError("gate check blocking projection is inconsistent")
+    return check
 
 
-def _candidate_gate_valid(value: Any) -> bool:
+def _boundary_proof_path_from_read_model(value: Any) -> BoundaryProofPath:
+    if not _typed_value_valid(value, BoundaryProofPath):
+        raise ValueError("boundary proof path read model is incomplete")
+    return BoundaryProofPath(
+        code=str(value["code"]),
+        state=EvidenceState(str(value["state"])),
+        supporting_evidence=tuple(
+            str(item) for item in value["supporting_evidence"]
+        ),
+    )
+
+
+def candidate_gate_from_read_model(value: Any) -> CandidateGateAssessment:
     expected = {
         "passed",
         "checks",
@@ -325,19 +352,61 @@ def _candidate_gate_valid(value: Any) -> bool:
         and set(value) == expected
         and isinstance(value["passed"], bool)
         and isinstance(value["checks"], list)
-        and all(_gate_check_valid(check) for check in value["checks"])
-        and _typed_value_valid(
-            value["proof_paths"],
-            tuple[BoundaryProofPath, ...],
-        )
+        and isinstance(value["proof_paths"], list)
         and isinstance(value["failed_checks"], list)
         and all(isinstance(code, str) for code in value["failed_checks"])
         and isinstance(value["diagnostics"], list)
         and all(isinstance(item, str) for item in value["diagnostics"])
     ):
+        raise ValueError("candidate gate read model is incomplete")
+    gate = CandidateGateAssessment(
+        checks=tuple(
+            _gate_check_from_read_model(check) for check in value["checks"]
+        ),
+        proof_paths=tuple(
+            _boundary_proof_path_from_read_model(path)
+            for path in value["proof_paths"]
+        ),
+        diagnostics=tuple(str(item) for item in value["diagnostics"]),
+    )
+    if value["passed"] != gate.passed or value["failed_checks"] != list(
+        gate.failed_checks
+    ):
+        raise ValueError("candidate gate projections are inconsistent")
+    return gate
+
+
+def _candidate_gate_valid(value: Any) -> bool:
+    try:
+        candidate_gate_from_read_model(value)
+    except (KeyError, TypeError, ValueError):
         return False
-    failed = [check["code"] for check in value["checks"] if check["blocks"]]
-    return value["failed_checks"] == failed and value["passed"] == (not failed)
+    return True
+
+
+def decision_gate_from_read_model(value: Any) -> DecisionGateAssessment:
+    expected = {"passed", "checks", "reason_inputs"}
+    if not (
+        isinstance(value, dict)
+        and set(value) == expected
+        and isinstance(value["passed"], bool)
+        and isinstance(value["checks"], list)
+        and isinstance(value["reason_inputs"], list)
+        and all(
+            isinstance(item, dict)
+            and set(item) == {"check", "final_review_reason"}
+            and isinstance(item["check"], str)
+            and isinstance(item["final_review_reason"], str)
+            for item in value["reason_inputs"]
+        )
+    ):
+        raise ValueError("decision gate read model is incomplete")
+    gate = DecisionGateAssessment(
+        checks=tuple(
+            _gate_check_from_read_model(check) for check in value["checks"]
+        )
+    )
+    return gate
 
 
 def _candidate_valid(value: Any) -> bool:
@@ -425,52 +494,23 @@ def _decision_consistent(value: Any, errors: list[str]) -> None:
     ):
         errors.append("decision_incomplete")
         return
-    gate = value["gate"]
-    if not (
-        set(gate) == {"passed", "checks", "reason_inputs"}
-        and isinstance(gate["passed"], bool)
-        and isinstance(gate["checks"], list)
-        and all(_gate_check_valid(check) for check in gate["checks"])
-        and isinstance(gate["reason_inputs"], list)
-        and all(
-            isinstance(item, dict)
-            and set(item) == {"check", "final_review_reason"}
-            and isinstance(item["check"], str)
-            and isinstance(item["final_review_reason"], str)
-            for item in gate["reason_inputs"]
-        )
-    ):
+    try:
+        gate = decision_gate_from_read_model(value["gate"])
+    except (KeyError, TypeError, ValueError):
         errors.append("decision_gate_incomplete")
         return
-    blocking = [
-        check
-        for check in gate["checks"]
-        if isinstance(check, dict)
-        and check.get("state") == "contradicted"
-    ]
-    derived_passed = not blocking
-    derived_reasons = list(
-        dict.fromkeys(
-            str(check["final_review_reason"])
-            for check in blocking
-            if check.get("final_review_reason") is not None
-        )
-    )
-    if gate["passed"] != derived_passed:
+    gate_read_model = value["gate"]
+    if gate_read_model["passed"] != gate.passed:
         errors.append("decision_gate_passed_mismatch")
-    if gate["passed"] != (value["status"] == "approved_auto"):
+    if gate_read_model["passed"] != (value["status"] == "approved_auto"):
         errors.append("decision_gate_status_mismatch")
-    if derived_reasons != value["final_review_reasons"]:
+    if list(gate.final_review_reasons) != value["final_review_reasons"]:
         errors.append("decision_gate_reason_mismatch")
-    derived_inputs = [
-        {
-            "check": str(check["code"]),
-            "final_review_reason": str(check["final_review_reason"]),
-        }
-        for check in blocking
-        if check.get("final_review_reason") is not None
+    reason_inputs = [
+        {"check": code, "final_review_reason": reason}
+        for code, reason in gate.reason_inputs
     ]
-    if derived_inputs != gate["reason_inputs"]:
+    if gate_read_model["reason_inputs"] != reason_inputs:
         errors.append("decision_gate_reason_inputs_mismatch")
     for reason in value["final_review_reasons"]:
         if reason not in FINAL_REVIEW_REASONS:
