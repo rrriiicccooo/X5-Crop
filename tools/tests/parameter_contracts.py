@@ -1,13 +1,18 @@
 from __future__ import annotations
 
 import ast
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, fields, is_dataclass
 from enum import Enum
+import importlib
 from pathlib import Path
 from types import UnionType
 from typing import Any, get_args, get_origin
 
-from tools.tests.architecture_contracts import PROJECT_ROOT
+from tools.tests.architecture_contracts import (
+    PROJECT_ROOT,
+    parsed_source,
+    source_modules,
+)
 from x5crop.configuration.boundary import BoundaryObservationParameters
 from x5crop.configuration.candidate import (
     DualLaneDividerParameters,
@@ -31,6 +36,8 @@ from x5crop.image.evidence import (
 )
 from x5crop.image.gray import BaseGrayParameters
 from x5crop.image.statistics import ImageMeasurementStatisticsParameters
+from x5crop.run_config import RunConfig
+from x5crop.runtime.options import RuntimeOptions
 
 
 class ParameterRole(str, Enum):
@@ -79,19 +86,25 @@ PARAMETER_GROUPS = (
     _group(FormatPhysicalSpec, ("default_count", "allowed_counts", "complete_strip_can_be_underfilled", "lane_count"), ParameterRole.PHYSICAL_FACT, "physical_identity", "format", "Physical strip layout and count facts."),
     _group(BaseGrayParameters, ("red_weight", "green_weight", "blue_weight"), ParameterRole.STANDARD_TRANSFORM, "coefficient", "preprocess", "Standard linear-light luma transform."),
     _group(BaseGrayParameters, ("low_percentile", "high_percentile"), ParameterRole.ADAPTIVE_MEASUREMENT, "percentile", "preprocess", "Per-image intensity normalization."),
-    _group(ImageMeasurementStatisticsParameters, ("intensity_percentiles", "noise_percentiles"), ParameterRole.ADAPTIVE_MEASUREMENT, "percentile", "preprocess", "Robust image measurement statistics."),
+    _group(BaseGrayParameters, ("maximum_percentile_samples",), ParameterRole.ADAPTIVE_MEASUREMENT, "sample_count", "preprocess", "Deterministic percentile sampling support."),
+    _group(ImageMeasurementStatisticsParameters, ("intensity_percentiles", "noise_percentiles", "edge_intensity_percentiles", "edge_texture_percentiles"), ParameterRole.ADAPTIVE_MEASUREMENT, "percentile", "preprocess", "Robust image measurement statistics."),
     _group(ImageMeasurementStatisticsParameters, ("edge_sample_ratio",), ParameterRole.ADAPTIVE_MEASUREMENT, "ratio", "preprocess", "Scale-independent edge sampling."),
     _group(ImageMeasurementStatisticsParameters, ("edge_sample_min_px",), ParameterRole.ADAPTIVE_MEASUREMENT, "px", "preprocess", "Minimum sampling support."),
+    _group(ImageMeasurementStatisticsParameters, ("maximum_percentile_samples",), ParameterRole.ADAPTIVE_MEASUREMENT, "sample_count", "preprocess", "Deterministic percentile sampling support."),
     _group(ContentEvidenceImageParameters, ("gradient_percentile", "texture_percentile", "local_contrast_percentile", "tonal_presence_percentile"), ParameterRole.ADAPTIVE_MEASUREMENT, "percentile", "preprocess", "Per-image content evidence normalization."),
     _group(ContentEvidenceImageParameters, ("minimum_active_pixels",), ParameterRole.ADAPTIVE_MEASUREMENT, "px_count", "preprocess", "Minimum content measurement support."),
+    _group(ContentEvidenceImageParameters, ("numerical_floor",), ParameterRole.NUMERICAL_SAFETY, "normalized", "preprocess", "Content evidence normalization floor."),
+    _group(ContentEvidenceImageParameters, ("maximum_percentile_samples",), ParameterRole.ADAPTIVE_MEASUREMENT, "sample_count", "preprocess", "Deterministic percentile sampling support."),
     _group(DeskewFallbackEvidenceParameters, ("low_percentile", "high_percentile"), ParameterRole.ADAPTIVE_MEASUREMENT, "percentile", "deskew", "Per-image fallback intensity normalization."),
     _group(DeskewFallbackEvidenceParameters, ("shadow_gamma", "edge_weight", "shadow_blend_weight", "edge_blend_weight", "gutter_extreme_min_fraction", "gutter_activity_max", "gutter_run_width_ratio"), ParameterRole.ADAPTIVE_MEASUREMENT, "normalized", "deskew", "Fallback deskew evidence measurement."),
     _group(DeskewFallbackEvidenceParameters, ("gutter_run_width_min",), ParameterRole.ADAPTIVE_MEASUREMENT, "px", "deskew", "Minimum gutter measurement support."),
+    _group(DeskewFallbackEvidenceParameters, ("maximum_percentile_samples",), ParameterRole.ADAPTIVE_MEASUREMENT, "sample_count", "deskew", "Deterministic percentile sampling support."),
     _group(SeparatorEvidenceImageParameters, ("low_percentile", "high_percentile"), ParameterRole.DIAGNOSTICS_ONLY, "percentile", "debug", "Debug-only separator image normalization."),
     _group(SeparatorEvidenceImageParameters, ("tonal_low_percentile", "tonal_high_percentile"), ParameterRole.DIAGNOSTICS_ONLY, "percentile", "debug", "Debug-only adaptive tonal-tail visualization."),
     _group(SeparatorEvidenceImageParameters, ("vertical_edge_smooth_ratio", "local_weight", "vertical_edge_weight", "tonal_band_weight"), ParameterRole.DIAGNOSTICS_ONLY, "normalized", "debug", "Debug-only separator visualization."),
     _group(SeparatorEvidenceImageParameters, ("vertical_edge_smooth_min",), ParameterRole.DIAGNOSTICS_ONLY, "px", "debug", "Debug-only minimum smoothing support."),
     _group(SeparatorEvidenceImageParameters, ("numerical_floor",), ParameterRole.NUMERICAL_SAFETY, "normalized", "debug", "Debug-only numerical division floor."),
+    _group(SeparatorEvidenceImageParameters, ("maximum_percentile_samples",), ParameterRole.DIAGNOSTICS_ONLY, "sample_count", "debug", "Debug-only percentile sampling support."),
     _group(SeparatorProfileParameters, ("top_ratio", "bottom_ratio", "smooth_ratio"), ParameterRole.ADAPTIVE_MEASUREMENT, "ratio", "separator_observation", "Scale-independent separator profile measurement."),
     _group(SeparatorProfileParameters, ("consistency_percentile",), ParameterRole.ADAPTIVE_MEASUREMENT, "percentile", "separator_observation", "Robust cross-axis profile aggregation."),
     _group(SeparatorProfileParameters, ("segments", "sample_short_axis_max", "smooth_min"), ParameterRole.ADAPTIVE_MEASUREMENT, "count_or_px", "separator_observation", "Separator profile sampling support."),
@@ -103,6 +116,7 @@ PARAMETER_GROUPS = (
     _group(ContentEvidenceParameters, ("activation_percentile",), ParameterRole.ADAPTIVE_MEASUREMENT, "percentile", "content_evidence", "Adaptive content activation."),
     _group(ContentEvidenceParameters, ("minimum_evidence_range",), ParameterRole.NUMERICAL_SAFETY, "normalized", "content_evidence", "Rejects numerically flat evidence."),
     _group(ContentEvidenceParameters, ("minimum_active_pixels", "boundary_band_min_px"), ParameterRole.ADAPTIVE_MEASUREMENT, "px_count", "content_evidence", "Minimum content measurement support."),
+    _group(ContentEvidenceParameters, ("maximum_percentile_samples",), ParameterRole.ADAPTIVE_MEASUREMENT, "sample_count", "content_evidence", "Deterministic percentile sampling support."),
     _group(ContentEvidenceParameters, ("boundary_band_ratio",), ParameterRole.ADAPTIVE_MEASUREMENT, "ratio", "content_evidence", "Scale-independent boundary sampling."),
     _group(ContentProfileParameters, ("activation_percentile",), ParameterRole.ADAPTIVE_MEASUREMENT, "percentile", "content_guidance", "Adaptive content-run activation."),
     _group(ContentProfileParameters, ("smooth_ratio",), ParameterRole.ADAPTIVE_MEASUREMENT, "ratio", "content_guidance", "Scale-independent content profile smoothing."),
@@ -118,10 +132,87 @@ PARAMETER_GROUPS = (
     _group(DeskewParameters, tuple(field.name for field in fields(DeskewParameters)), ParameterRole.ADAPTIVE_MEASUREMENT, "mixed_measurement", "deskew", "Deskew sampling and robust fit parameters."),
     _group(SeparatorOverlayParameters, tuple(field.name for field in fields(SeparatorOverlayParameters)), ParameterRole.DIAGNOSTICS_ONLY, "rendering", "debug", "Debug-only separator overlay rendering."),
     _group(AxisBleedParameters, ("long_axis", "short_axis"), ParameterRole.USER_PREFERENCE, "px", "output", "User-selected output margin."),
+    _group(RuntimeOptions, ("requested_count",), ParameterRole.USER_PREFERENCE, "count", "runtime_input", "Optional user-selected frame count."),
+    _group(RuntimeOptions, ("page",), ParameterRole.USER_PREFERENCE, "page_index", "input", "User-selected TIFF page."),
+    _group(RuntimeOptions, ("bleed", "bleed_x", "bleed_y"), ParameterRole.USER_PREFERENCE, "px", "output", "Optional user-selected output margins."),
+    _group(RuntimeOptions, ("deskew_min_angle", "deskew_max_angle"), ParameterRole.USER_PREFERENCE, "degrees", "deskew", "User-selected deskew application bounds."),
+    _group(RuntimeOptions, ("copy_review_files", "export_review", "dry_run", "overwrite", "report", "reuse_analysis"), ParameterRole.USER_PREFERENCE, "boolean", "runtime", "User-selected runtime behavior."),
+    _group(RuntimeOptions, ("debug", "debug_analysis", "diagnostics", "debug_errors"), ParameterRole.DIAGNOSTICS_ONLY, "boolean", "diagnostics", "User-selected diagnostics behavior."),
+    _group(RuntimeOptions, ("jobs",), ParameterRole.EXECUTION_BUDGET, "worker_count", "runtime", "User-selected worker budget."),
+    _group(RunConfig, ("layout_auto", "requested_count", "page", "bleed_x", "bleed_y", "deskew_min_angle", "deskew_max_angle", "copy_review_files", "export_review", "dry_run", "overwrite", "report", "reuse_analysis"), ParameterRole.USER_PREFERENCE, "resolved_runtime_input", "runtime", "Validated runtime inputs."),
+    _group(RunConfig, ("debug", "debug_analysis", "diagnostics", "debug_errors"), ParameterRole.DIAGNOSTICS_ONLY, "boolean", "diagnostics", "Validated diagnostics inputs."),
+    _group(RunConfig, ("jobs",), ParameterRole.EXECUTION_BUDGET, "worker_count", "runtime", "Validated worker budget."),
 )
 
 
-PARAMETER_MODELS = frozenset(group.model for group in PARAMETER_GROUPS)
+CONSTANT_PARAMETER_CONTRACTS = (
+    ParameterContract(
+        "x5crop.debug.canvas.FRAME_FILL_COLORS",
+        ParameterRole.DIAGNOSTICS_ONLY,
+        "rgb",
+        "debug",
+        "Debug-only frame identity colors.",
+        "fixed_by_contract",
+    ),
+    ParameterContract(
+        "x5crop.formats.FORMATS",
+        ParameterRole.PHYSICAL_FACT,
+        "physical_registry",
+        "format",
+        "Canonical format physical facts.",
+        "fixed_by_contract",
+    ),
+    ParameterContract(
+        "x5crop.runtime.limits.STANDARD_JOB_LIMIT",
+        ParameterRole.EXECUTION_BUDGET,
+        "worker_count",
+        "runtime",
+        "Bounds standard process concurrency.",
+        "fixed_by_contract",
+    ),
+    ParameterContract(
+        "x5crop.runtime.limits.DIAGNOSTICS_JOB_LIMIT",
+        ParameterRole.EXECUTION_BUDGET,
+        "worker_count",
+        "runtime",
+        "Bounds diagnostics process concurrency.",
+        "fixed_by_contract",
+    ),
+    ParameterContract(
+        "x5crop.runtime.options.DEFAULT_DESKEW_MIN_ANGLE_DEGREES",
+        ParameterRole.USER_PREFERENCE,
+        "degrees",
+        "deskew",
+        "Default user-facing minimum deskew angle.",
+        "fixed_by_contract",
+    ),
+    ParameterContract(
+        "x5crop.runtime.options.DEFAULT_DESKEW_MAX_ANGLE_DEGREES",
+        ParameterRole.USER_PREFERENCE,
+        "degrees",
+        "deskew",
+        "Default user-facing maximum deskew angle.",
+        "fixed_by_contract",
+    ),
+    ParameterContract(
+        "x5crop.runtime.options.DEFAULT_OUTPUT_BLEED",
+        ParameterRole.USER_PREFERENCE,
+        "px",
+        "output",
+        "Default user-facing output margin.",
+        "fixed_by_contract",
+    ),
+)
+
+
+EXPLICIT_PARAMETER_MODELS = frozenset(
+    {
+        FormatPhysicalSpec,
+        FrameSizeMm,
+        RunConfig,
+        RuntimeOptions,
+    }
+)
 
 
 def _is_numeric_annotation(annotation: Any) -> bool:
@@ -133,6 +224,25 @@ def _is_numeric_annotation(annotation: Any) -> bool:
     if origin in {tuple, list, set, frozenset, UnionType}:
         return any(_is_numeric_annotation(item) for item in get_args(annotation))
     return False
+
+
+def parameter_models() -> frozenset[type]:
+    models: set[type] = set()
+    for module_name in source_modules():
+        module = importlib.import_module(module_name)
+        for value in vars(module).values():
+            if (
+                isinstance(value, type)
+                and value.__module__ == module_name
+                and is_dataclass(value)
+                and (
+                    value.__name__.endswith(("Parameters", "Configuration"))
+                    or value in EXPLICIT_PARAMETER_MODELS
+                )
+                and any(_is_numeric_annotation(field.type) for field in fields(value))
+            ):
+                models.add(value)
+    return frozenset(models)
 
 
 def parameter_contracts() -> dict[str, ParameterContract]:
@@ -155,27 +265,60 @@ def parameter_contracts() -> dict[str, ParameterContract]:
                 rationale=group.rationale,
                 calibration_status=calibration_status,
             )
+    for contract in CONSTANT_PARAMETER_CONTRACTS:
+        if contract.owner in contracts:
+            raise AssertionError(f"duplicate parameter contract: {contract.owner}")
+        contracts[contract.owner] = contract
     return contracts
 
 
-def unclassified_parameter_fields() -> list[str]:
-    classified = set(parameter_contracts())
-    declared = {
+def numeric_module_constant_owners() -> frozenset[str]:
+    owners: set[str] = set()
+    for module_name, module in source_modules().items():
+        for node in parsed_source(module).body:
+            if isinstance(node, ast.Assign):
+                targets = node.targets
+                value = node.value
+            elif isinstance(node, ast.AnnAssign):
+                targets = (node.target,)
+                value = node.value
+            else:
+                continue
+            if value is None or not any(
+                isinstance(child, ast.Constant)
+                and isinstance(child.value, (int, float))
+                and not isinstance(child.value, bool)
+                for child in ast.walk(value)
+            ):
+                continue
+            owners.update(
+                f"{module_name}.{target.id}"
+                for target in targets
+                if isinstance(target, ast.Name)
+                and target.id.isupper()
+                and not target.id.startswith("_")
+            )
+    return frozenset(owners)
+
+
+def declared_parameter_owners() -> frozenset[str]:
+    fields_owners = {
         f"{model.__module__}.{model.__name__}.{field.name}"
-        for model in PARAMETER_MODELS
+        for model in parameter_models()
         for field in fields(model)
         if _is_numeric_annotation(field.type)
     }
+    return frozenset(fields_owners) | numeric_module_constant_owners()
+
+
+def unclassified_parameter_owners() -> list[str]:
+    classified = set(parameter_contracts())
+    declared = declared_parameter_owners()
     return sorted(declared - classified)
 
 
 def stale_parameter_contracts() -> list[str]:
-    declared = {
-        f"{model.__module__}.{model.__name__}.{field.name}"
-        for model in PARAMETER_MODELS
-        for field in fields(model)
-        if _is_numeric_annotation(field.type)
-    }
+    declared = declared_parameter_owners()
     return sorted(set(parameter_contracts()) - declared)
 
 
@@ -196,9 +339,9 @@ def _contains_numeric_literal(node: ast.AST) -> bool:
     )
 
 
-def hidden_detection_percentiles() -> list[str]:
+def hidden_runtime_percentiles() -> list[str]:
     offenders: list[str] = []
-    root = PROJECT_ROOT / "x5crop/detection"
+    root = PROJECT_ROOT / "x5crop"
     for path in sorted(root.rglob("*.py")):
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         for node in ast.walk(tree):

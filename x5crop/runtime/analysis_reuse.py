@@ -225,13 +225,7 @@ def result_from_reusable_analysis(
         )
 
     arr, profile, page_warnings = read_tiff(input_file, config.page)
-    selection = cached_record["selection"]
-    selected = selection["candidates"][int(selection["selected_rank"]) - 1]
-    sequence = selected["sequence_solution"]
-    configuration = configuration_bundle.configuration_for(
-        str(sequence["format_id"]),
-        str(sequence["strip_mode"]),
-    )
+    configuration = configuration_bundle.initial_configuration
     gray = make_base_gray_u8(
         arr,
         profile.axes,

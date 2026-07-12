@@ -11,6 +11,7 @@ from ..image.deskew import choose_deskew_angle
 from ..image.gray import make_base_gray_u8
 from ..image.transforms import rotate_array_expand
 from ..configuration.preprocess import PreprocessConfiguration
+from ..image.statistics import ImageMeasurementStatistics
 from ..utils import clamp_float
 from ..run_config import RunConfig
 
@@ -21,6 +22,7 @@ def apply_deskew(
     profile: ImageProfile,
     config: RunConfig,
     preprocess: PreprocessConfiguration,
+    measurement_statistics: ImageMeasurementStatistics,
     warnings: list[str],
 ) -> tuple[Any, Any, TransformGeometryEvidence]:
     deskew = preprocess.deskew
@@ -41,6 +43,8 @@ def apply_deskew(
         config.deskew_fallback,
         deskew,
         preprocess.deskew_fallback_evidence,
+        measurement_statistics,
+        preprocess.image_statistics,
     )
     deskew_work_width = float(work_gray(gray, config.layout).shape[1])
     deskew_span = abs(math.tan(math.radians(angle)) * deskew_work_width)

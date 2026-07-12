@@ -84,7 +84,12 @@ def spatial_shape_from_shape(shape: tuple[int, ...]) -> tuple[int, int]:
     return int(shape[0]), int(shape[1])
 
 
-def sampled_values_for_percentile(values: np.ndarray, max_samples: int = 1_000_000) -> np.ndarray:
+def sampled_values_for_percentile(
+    values: np.ndarray,
+    max_samples: int,
+) -> np.ndarray:
+    if max_samples <= 0:
+        raise ValueError("percentile sample count must be positive")
     flat = values.reshape(-1)
     if flat.size <= max_samples:
         return flat
@@ -92,7 +97,11 @@ def sampled_values_for_percentile(values: np.ndarray, max_samples: int = 1_000_0
     return flat[::step]
 
 
-def sampled_percentile(values: np.ndarray, percentiles: Iterable[float], max_samples: int = 1_000_000) -> np.ndarray:
+def sampled_percentile(
+    values: np.ndarray,
+    percentiles: Iterable[float],
+    max_samples: int,
+) -> np.ndarray:
     sample = sampled_values_for_percentile(values, max_samples=max_samples)
     if sample.size == 0:
         return np.array([0.0 for _ in percentiles], dtype=np.float64)
@@ -121,7 +130,11 @@ def runs_from_mask(mask: np.ndarray) -> list[tuple[int, int]]:
     return runs
 
 
-def bbox_from_mask(mask: np.ndarray, min_row_fraction: float = 0.01, min_col_fraction: float = 0.01) -> Optional[Box]:
+def bbox_from_mask(
+    mask: np.ndarray,
+    min_row_fraction: float,
+    min_col_fraction: float,
+) -> Optional[Box]:
     if mask.size == 0:
         return None
     row_has = mask.mean(axis=1) >= min_row_fraction

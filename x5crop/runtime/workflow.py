@@ -18,8 +18,9 @@ from ..detection.final.finalize import finalize_detection
 from ..detection.pipeline import choose_detection
 from ..domain import AxisBleedParameters, ProcessResult
 from ..export.actions import copy_for_review_if_needed, write_crops_if_allowed
-from ..geometry.layout import infer_layout
+from ..geometry.layout import infer_layout, work_gray
 from ..image.gray import make_base_gray_u8
+from ..image.statistics import image_measurement_statistics
 from ..io.tiff import read_tiff, read_tiff_profile
 from ..output.surface import output_surface_for_input
 from ..report.configuration import detection_configuration_read_model
@@ -51,6 +52,10 @@ def process_one(
     gray = make_base_gray_u8(arr, profile.axes, profile.photometric, initial_configuration.preprocess.base_gray)
     _extend_unique(warnings, page_warnings)
     source_arr = arr
+    measurement_statistics = image_measurement_statistics(
+        work_gray(gray, config.layout),
+        initial_configuration.preprocess.image_statistics,
+    )
 
     arr, gray, transform_geometry = apply_deskew(
         arr,
@@ -58,14 +63,20 @@ def process_one(
         profile,
         config,
         initial_configuration.preprocess,
+        measurement_statistics,
         warnings,
     )
+    if transform_geometry.applied:
+        measurement_statistics = image_measurement_statistics(
+            work_gray(gray, config.layout),
+            initial_configuration.preprocess.image_statistics,
+        )
     scan_calibration = scan_calibration_from_profile(profile)
     measurement_cache = make_measurement_cache(
         gray,
         config.layout,
         initial_configuration.preprocess.content_evidence_image,
-        initial_configuration.preprocess.image_statistics,
+        measurement_statistics,
     )
     detection_context = DetectionContext(
         image_profile=profile,

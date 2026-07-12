@@ -44,21 +44,12 @@ def evidence_independence_evidence(
     )
     sequence_root = geometry.sequence_provenance.root_measurement
     sequence_dependencies = set(geometry.sequence_provenance.dependencies)
-    dimension_provenance = geometry.frame_dimension_prior.provenance
-    measurement_roots = (
-        hard_roots
-        if hard_roots
-        else (dimension_provenance.root_measurement,)
-    )
-    measurement_dependencies = (
-        {
-            dependency
-            for observation in hard_observations
-            for dependency in observation.provenance.dependencies
-        }
-        if hard_roots
-        else set(dimension_provenance.dependencies)
-    )
+    measurement_roots = hard_roots
+    measurement_dependencies = {
+        dependency
+        for observation in hard_observations
+        for dependency in observation.provenance.dependencies
+    }
     dependency_cycle = {
         dependency
         for dependency in (
@@ -77,8 +68,8 @@ def evidence_independence_evidence(
         state = EvidenceState.CONTRADICTED
         reason = "sequence_and_separator_share_measurement_dependency"
     elif not hard_roots:
-        state = EvidenceState.SUPPORTED
-        reason = "independent_sequence_and_dimension_measurements"
+        state = EvidenceState.UNAVAILABLE
+        reason = "independent_separator_measurement_unavailable"
     else:
         state = EvidenceState.SUPPORTED
         reason = "independent_sequence_and_separator_measurements"

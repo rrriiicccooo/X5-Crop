@@ -45,6 +45,24 @@ def candidate_rank(
     )
 
 
+def candidate_dominates(
+    left: AssessedCandidate,
+    right: AssessedCandidate,
+) -> bool:
+    left_rank = candidate_rank(left)
+    right_rank = candidate_rank(right)
+    return bool(
+        all(
+            left_value >= right_value
+            for left_value, right_value in zip(left_rank, right_rank)
+        )
+        and any(
+            left_value > right_value
+            for left_value, right_value in zip(left_rank, right_rank)
+        )
+    )
+
+
 def geometry_equivalent(
     left: AssessedCandidate,
     right: AssessedCandidate,
@@ -75,7 +93,10 @@ def geometry_clusters(
     groups: list[list[AssessedCandidate]] = []
     for candidate in candidates:
         for group in groups:
-            if geometry_equivalent(candidate, group[0]):
+            if all(
+                geometry_equivalent(candidate, existing)
+                for existing in group
+            ):
                 group.append(candidate)
                 break
         else:
@@ -101,10 +122,18 @@ def geometry_resolution_for_selection(
         path.state == EvidenceState.SUPPORTED
         for path in selected.assessment.gate.proof_paths
     )
-    count_resolved = bool(
+    fixed_count = bool(
+        hypothesis is not None
+        and hypothesis.source in {"format_default", "requested_count"}
+    )
+    count_topology_supported = bool(
         hypothesis is not None
         and hypothesis.allowed_by_physical_spec
         and evidence.frame_topology.state == EvidenceState.SUPPORTED
+        and evidence.frame_topology.count_matches
+    )
+    automatic_count_supported = bool(
+        count_topology_supported
         and evidence.frame_coverage.state == EvidenceState.SUPPORTED
         and evidence.frame_dimensions.state == EvidenceState.SUPPORTED
         and evidence.frame_sequence.conservation.state == EvidenceState.SUPPORTED
@@ -112,10 +141,16 @@ def geometry_resolution_for_selection(
         and boundary_supported
         and not selected.geometry.search_budget_exhausted
     )
+    count_resolved = bool(
+        count_topology_supported
+        and (fixed_count or automatic_count_supported)
+    )
     placement_resolved = bool(
         count_resolved
         and selected.geometry.visible_sequence_span.box.valid()
         and len(selected.geometry.frames) == selected.geometry.count
+        and boundary_supported
+        and evidence.frame_sequence.conservation.state == EvidenceState.SUPPORTED
     )
     boundaries_resolved = bool(boundary_supported)
     coverage_resolved = (
@@ -170,16 +205,12 @@ def select_candidates(
     competing = tuple(
         cluster for cluster in clusters if cluster is not selected_cluster
     )
-    nearest_competitor = (
-        max(competing, key=lambda cluster: candidate_rank(cluster.representative))
-        if competing
-        else None
+    unresolved_competitors = tuple(
+        cluster
+        for cluster in competing
+        if not candidate_dominates(selected, cluster.representative)
     )
-    disagreement = bool(
-        nearest_competitor is not None
-        and candidate_rank(nearest_competitor.representative)
-        == candidate_rank(selected)
-    )
+    disagreement = bool(unresolved_competitors)
     if disagreement:
         consensus = "disagreed"
     elif len(selected_cluster.candidates) > 1:

@@ -30,6 +30,7 @@ def content_region_runs(
         smoothed,
         parameters.activation_percentile,
         content_policy.evidence.minimum_evidence_range,
+        content_policy.evidence.maximum_percentile_samples,
     )
     if threshold is None:
         return ()

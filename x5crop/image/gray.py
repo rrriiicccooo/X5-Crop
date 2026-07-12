@@ -14,6 +14,7 @@ class BaseGrayParameters:
     blue_weight: float = 0.0722
     low_percentile: float = 0.2
     high_percentile: float = 99.8
+    maximum_percentile_samples: int = 1_000_000
 
 
 def make_base_gray_u8(
@@ -45,7 +46,10 @@ def make_base_gray_u8(
     finite = np.isfinite(gray)
     if not finite.any():
         return np.zeros(gray.shape, dtype=np.uint8)
-    finite_values = sampled_values_for_percentile(gray[finite])
+    finite_values = sampled_values_for_percentile(
+        gray[finite],
+        params.maximum_percentile_samples,
+    )
     lo, hi = np.percentile(finite_values, [params.low_percentile, params.high_percentile])
     if hi <= lo:
         hi = float(finite_values.max())

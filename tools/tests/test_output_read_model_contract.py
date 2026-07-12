@@ -34,6 +34,12 @@ def _record() -> dict:
 
 
 class OutputReadModelContractTest(unittest.TestCase):
+    def test_cache_reuse_does_not_resolve_configuration_from_report_data(self) -> None:
+        source = (
+            PROJECT_ROOT / "x5crop/runtime/analysis_reuse.py"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn("configuration_bundle.configuration_for(", source)
+
     def test_typed_read_model_serializes_every_typed_result_field(self) -> None:
         from x5crop.domain import MeasurementProvenance, PixelInterval
         from x5crop.domain import FrameDimensionPrior

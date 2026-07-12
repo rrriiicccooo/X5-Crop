@@ -28,9 +28,6 @@ from .quality import evidence_quality
 from .separator_support import separator_sequence_evidence
 
 
-MINIMUM_INDEPENDENT_SINGLE_FRAME_BOUNDARY_SIDES = 2
-
-
 def _boundary_proof_paths(
     candidate: BuiltCandidate,
     evidence: CandidateEvidence,
@@ -71,21 +68,11 @@ def _boundary_proof_paths(
         and evidence.separator_continuity.state == EvidenceState.SUPPORTED
     )
     hard_anchor_count = evidence.separator_sequence.hard_count
-    measured_single_frame_boundaries = {
-        observation.side
-        for observation in geometry.boundary_observations
-        if observation.kind != "canvas_clip"
-    }
     single_frame_physical_boundaries = bool(
         geometry.count == 1
         and sequence_boundary_supported
         and evidence.frame_dimensions.state == EvidenceState.SUPPORTED
         and evidence.content_preservation.state == EvidenceState.SUPPORTED
-        and (
-            evidence.frame_dimensions.calibration_used
-            or len(measured_single_frame_boundaries)
-            >= MINIMUM_INDEPENDENT_SINGLE_FRAME_BOUNDARY_SIDES
-        )
     )
     geometry_led = bool(
         geometry.source == CANDIDATE_SOURCE_FRAME_SEQUENCE

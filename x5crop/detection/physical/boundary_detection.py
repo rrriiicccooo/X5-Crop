@@ -5,7 +5,7 @@ import numpy as np
 from ...configuration.boundary import BoundaryObservationParameters
 from ...domain import BoundaryObservation, MeasurementProvenance, PixelInterval
 from ...image.statistics import ImageMeasurementStatistics
-from ...utils import runs_from_mask, sampled_percentile
+from ...utils import runs_from_mask
 from .boundary import canvas_boundary_observations
 
 
@@ -42,10 +42,7 @@ def _reference_masks(
     edge_reference = float(np.median((intensity[0], intensity[-1])))
     deviation = np.abs(intensity - edge_reference)
     tolerance = float(
-        sampled_percentile(
-            deviation,
-            [parameters.holder_reference_percentile],
-        )[0]
+        np.percentile(deviation, parameters.holder_reference_percentile)
     )
     holder = (deviation <= tolerance) & (texture <= float(texture_limit))
     tonal_change = deviation > tolerance
@@ -61,7 +58,7 @@ def _change_point_interval(
         return PixelInterval.exact(float(position))
     change = np.abs(np.diff(profile, prepend=profile[:1]))
     threshold = float(
-        sampled_percentile(change, [parameters.change_point_percentile])[0]
+        np.percentile(change, parameters.change_point_percentile)
     )
     if threshold <= 0.0:
         return PixelInterval.exact(float(position))

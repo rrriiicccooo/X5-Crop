@@ -7,6 +7,7 @@ from ...cache.analysis import make_measurement_cache
 from ...constants import CANDIDATE_SOURCE_DUAL_LANE
 from ...domain import Box, MeasurementProvenance
 from ...geometry.boxes import translate_box
+from ...image.statistics import image_measurement_statistics
 from ...units import ScanCalibration
 from ..candidate.assessment.dual_lane import assess_dual_lane_candidate
 from ..candidate.model import BuiltCandidate
@@ -57,7 +58,10 @@ def _lane_context(
         lane_gray,
         "horizontal",
         lane_configuration.preprocess.content_evidence_image,
-        lane_configuration.preprocess.image_statistics,
+        image_measurement_statistics(
+            lane_gray,
+            lane_configuration.preprocess.image_statistics,
+        ),
     )
     profile = replace(
         context.image_profile,
@@ -167,7 +171,7 @@ def _parent_candidate(
         count_hypothesis=CountHypothesis(
             count=count,
             strip_mode="full",
-            source=divider.source,
+            source="format_default",
             allowed_by_physical_spec=count
             in physical_spec.allowed_counts,
         ),

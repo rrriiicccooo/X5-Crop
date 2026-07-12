@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 from inspect import signature
 import unittest
 
+from tools.tests.physical_gate_support import candidate_fixture
+from x5crop.detection.candidate.plan.count_hypotheses import CountHypothesis
 from x5crop.detection.candidate.plan.count_hypotheses import count_hypothesis_plan
+from x5crop.detection.candidate.selection.choose import select_candidates
 from x5crop.detection.candidate.selection.model import GeometryResolution
 from x5crop.formats import format_spec
 
@@ -62,6 +66,33 @@ class AutoCountContractTest(unittest.TestCase):
     def test_geometry_resolution_names_resolved_alternatives(self) -> None:
         fields = GeometryResolution.__dataclass_fields__
         self.assertIn("alternative_geometries_resolved", fields)
+
+    def test_full_format_count_is_resolved_independently_of_placement(self) -> None:
+        candidate = candidate_fixture(failed_candidate_check="boundary_proof")
+        candidate = replace(
+            candidate,
+            count_hypothesis=CountHypothesis(2, "full", "format_default", True),
+        )
+        resolution = select_candidates(
+            (candidate,),
+            larger_counts_evaluated=True,
+        ).geometry_resolution
+        self.assertTrue(resolution.count_resolved)
+        self.assertFalse(resolution.placement_resolved)
+
+    def test_requested_partial_count_is_resolved_independently_of_placement(self) -> None:
+        candidate = candidate_fixture(failed_candidate_check="boundary_proof")
+        candidate = replace(
+            candidate,
+            geometry=replace(candidate.geometry, strip_mode="partial"),
+            count_hypothesis=CountHypothesis(2, "partial", "requested_count", True),
+        )
+        resolution = select_candidates(
+            (candidate,),
+            larger_counts_evaluated=True,
+        ).geometry_resolution
+        self.assertTrue(resolution.count_resolved)
+        self.assertFalse(resolution.placement_resolved)
 
 
 if __name__ == "__main__":

@@ -9,6 +9,11 @@ from ..geometry.layout import work_gray
 from ..utils import bbox_from_mask
 from .evidence import DeskewFallbackEvidenceParameters, make_deskew_fallback_gray
 from .deskew_parameters import DeskewParameters
+from .statistics import (
+    ImageMeasurementStatistics,
+    ImageMeasurementStatisticsParameters,
+    image_measurement_statistics,
+)
 
 def fit_line(
     points: list[tuple[float, float]],
@@ -39,10 +44,15 @@ def fit_line(
     }
 
 
-def fit_edge_angle(gray: np.ndarray, layout: str, deskew: DeskewParameters) -> tuple[float, dict[str, Any]]:
+def fit_edge_angle(
+    gray: np.ndarray,
+    layout: str,
+    deskew: DeskewParameters,
+    statistics: ImageMeasurementStatistics,
+) -> tuple[float, dict[str, Any]]:
     work = work_gray(gray, layout)
     h = work.shape[0]
-    mask = work < deskew.footprint_dark_threshold
+    mask = work < float(statistics.intensity_high)
     footprint = bbox_from_mask(
         mask,
         deskew.footprint_min_fraction,
@@ -129,8 +139,15 @@ def choose_deskew_angle(
     deskew_fallback: str,
     deskew: DeskewParameters,
     fallback_params: DeskewFallbackEvidenceParameters,
+    base_statistics: ImageMeasurementStatistics,
+    statistics_parameters: ImageMeasurementStatisticsParameters,
 ) -> tuple[float, dict[str, Any]]:
-    base_angle, base_detail = fit_edge_angle(gray, layout, deskew)
+    base_angle, base_detail = fit_edge_angle(
+        gray,
+        layout,
+        deskew,
+        base_statistics,
+    )
     base_detail["source"] = "base"
     if deskew_fallback == "off":
         return base_angle, base_detail
@@ -141,7 +158,16 @@ def choose_deskew_angle(
         gray,
         fallback_params,
     )
-    fallback_angle, fallback_detail = fit_edge_angle(fallback_gray, layout, deskew)
+    fallback_statistics = image_measurement_statistics(
+        work_gray(fallback_gray, layout),
+        statistics_parameters,
+    )
+    fallback_angle, fallback_detail = fit_edge_angle(
+        fallback_gray,
+        layout,
+        deskew,
+        fallback_statistics,
+    )
     fallback_detail["source"] = "fallback"
     if deskew_quality(fallback_detail, deskew) > deskew_quality(base_detail, deskew) + deskew.fallback_quality_gain:
         fallback_detail["base_candidate"] = base_detail

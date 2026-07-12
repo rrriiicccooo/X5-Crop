@@ -14,6 +14,21 @@ repository rules in `AGENTS.md`.
 
 ### V4.9 当前开发线
 
+#### 封口参数与几何解析契约（2026-07-12）
+
+- 固定的 format/full count 与用户显式 count 已和 partial auto inference 分离；固定 count
+  不再因 placement 未解决而伪装成 count 未解决。
+- Geometry clustering 要求同簇区间具有共同共识；非支配的不同几何仍保持 disagreement。
+- `FrameDimensionPrior` 不再充当独立 measurement evidence。没有独立 separator observation
+  时，evidence independence 保持 unavailable。
+- 参数契约现在动态发现参数 dataclass、模块级数值常量和隐藏 percentile；每项都具有唯一
+  role、unit、stage、rationale 和 calibration status。
+- Deskew 固定灰度身份阈值已由 per-image robust statistics 取代；percentile sampling budget、
+  edge quantiles 和 numerical floors 均由显式参数拥有。
+- Cache reuse 不再从 report candidate 反向选择 configuration；output bleed layout 必须显式传入。
+- 238 项测试、14 个 format/mode configuration、compile、launcher、version 和 whitespace 检查
+  通过；`135/full` 真实 smoke 生成无 schema error 的 current report。
+
 #### 物理序列求解与经验参数退场（2026-07-12）
 
 - 逐边贪心 assignment 已替换为全局单调 `SequenceSolution` solver；零宽、负宽和倒序 frame

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import unittest
+from inspect import signature
 
 from x5crop.domain import AxisBleedParameters, Box, CropEnvelope
 from x5crop.output.frame_bleed import apply_frame_bleed, frame_bleed_plan
@@ -11,6 +12,12 @@ from x5crop.output.model import (
 
 
 class InterFrameOverlapBleedTest(unittest.TestCase):
+    def test_frame_bleed_layout_is_explicit(self) -> None:
+        self.assertIs(
+            signature(frame_bleed_plan).parameters["layout"].default,
+            signature(frame_bleed_plan).empty,
+        )
+
     def test_overlap_protection_only_expands_adjacent_frame_sides(self) -> None:
         frames = (
             Box(0, 0, 100, 60),
@@ -32,6 +39,7 @@ class InterFrameOverlapBleedTest(unittest.TestCase):
                 ),
             ),
             user_bleed=AxisBleedParameters(5, 2),
+            layout="horizontal",
         )
 
         self.assertTrue(plan.feasible)
@@ -65,6 +73,7 @@ class InterFrameOverlapBleedTest(unittest.TestCase):
                 ),
             ),
             user_bleed=AxisBleedParameters(5, 2),
+            layout="horizontal",
         )
 
         self.assertFalse(plan.feasible)
@@ -93,6 +102,7 @@ class InterFrameOverlapBleedTest(unittest.TestCase):
                 FrameOverlapRequirement(1, 0, 1, 30, True, "observed_overlap"),
             ),
             user_bleed=AxisBleedParameters(5, 2),
+            layout="horizontal",
         )
 
         expanded = apply_frame_bleed(

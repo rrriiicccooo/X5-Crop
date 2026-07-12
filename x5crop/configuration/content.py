@@ -10,6 +10,7 @@ class ContentEvidenceParameters:
     minimum_active_pixels: int = 16
     boundary_band_ratio: float = 0.02
     boundary_band_min_px: int = 2
+    maximum_percentile_samples: int = 1_000_000
 
 
 @dataclass(frozen=True)

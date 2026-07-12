@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from ..utils import sampled_percentile
+from ..utils import sampled_percentile, sampled_values_for_percentile
 
 
 @dataclass(frozen=True)
@@ -17,8 +17,11 @@ class ImageMeasurementStatisticsParameters:
         98.0,
     )
     noise_percentiles: tuple[float, float, float] = (50.0, 90.0, 99.0)
+    edge_intensity_percentiles: tuple[float, float, float] = (10.0, 50.0, 90.0)
+    edge_texture_percentiles: tuple[float, float, float] = (50.0, 90.0, 99.0)
     edge_sample_ratio: float = 0.05
     edge_sample_min_px: int = 8
+    maximum_percentile_samples: int = 1_000_000
 
 
 @dataclass(frozen=True)
@@ -49,10 +52,18 @@ class ImageMeasurementStatistics:
         return self.edge_texture_quantiles[2]
 
 
-def _median_absolute_deviation(values: np.ndarray, median: float) -> float:
+def _median_absolute_deviation(
+    values: np.ndarray,
+    median: float,
+    maximum_samples: int,
+) -> float:
     if not values.size:
         return 0.0
-    return float(sampled_percentile(np.abs(values - float(median)), [50.0])[0])
+    sampled = sampled_values_for_percentile(
+        np.abs(values - float(median)),
+        maximum_samples,
+    )
+    return float(np.median(sampled))
 
 
 def _neighbor_texture(data: np.ndarray) -> np.ndarray:
@@ -85,7 +96,11 @@ def image_measurement_statistics(
     data = gray.astype(np.float32, copy=False)
     intensity = tuple(
         float(value)
-        for value in sampled_percentile(data, parameters.intensity_percentiles)
+        for value in sampled_percentile(
+            data,
+            parameters.intensity_percentiles,
+            parameters.maximum_percentile_samples,
+        )
     )
     gx = np.abs(np.diff(data, axis=1, prepend=data[:, :1]))
     gy = np.abs(np.diff(data, axis=0, prepend=data[:1, :]))
@@ -93,11 +108,19 @@ def image_measurement_statistics(
     texture = _neighbor_texture(data)
     gradient_quantiles = tuple(
         float(value)
-        for value in sampled_percentile(gradient, parameters.noise_percentiles)
+        for value in sampled_percentile(
+            gradient,
+            parameters.noise_percentiles,
+            parameters.maximum_percentile_samples,
+        )
     )
     texture_quantiles = tuple(
         float(value)
-        for value in sampled_percentile(texture, parameters.noise_percentiles)
+        for value in sampled_percentile(
+            texture,
+            parameters.noise_percentiles,
+            parameters.maximum_percentile_samples,
+        )
     )
     edge_band = min(
         min(gray.shape),
@@ -115,19 +138,39 @@ def image_measurement_statistics(
     edge_texture = texture[edge_mask]
     edge_intensity_quantiles = tuple(
         float(value)
-        for value in sampled_percentile(edge_intensity, (10.0, 50.0, 90.0))
+        for value in sampled_percentile(
+            edge_intensity,
+            parameters.edge_intensity_percentiles,
+            parameters.maximum_percentile_samples,
+        )
     )
     edge_texture_quantiles = tuple(
         float(value)
-        for value in sampled_percentile(edge_texture, (50.0, 90.0, 99.0))
+        for value in sampled_percentile(
+            edge_texture,
+            parameters.edge_texture_percentiles,
+            parameters.maximum_percentile_samples,
+        )
     )
     return ImageMeasurementStatistics(
         intensity_quantiles=intensity,
-        intensity_mad=_median_absolute_deviation(data, intensity[2]),
+        intensity_mad=_median_absolute_deviation(
+            data,
+            intensity[2],
+            parameters.maximum_percentile_samples,
+        ),
         gradient_quantiles=gradient_quantiles,
-        gradient_mad=_median_absolute_deviation(gradient, gradient_quantiles[0]),
+        gradient_mad=_median_absolute_deviation(
+            gradient,
+            gradient_quantiles[0],
+            parameters.maximum_percentile_samples,
+        ),
         texture_quantiles=texture_quantiles,
-        texture_mad=_median_absolute_deviation(texture, texture_quantiles[0]),
+        texture_mad=_median_absolute_deviation(
+            texture,
+            texture_quantiles[0],
+            parameters.maximum_percentile_samples,
+        ),
         edge_intensity_quantiles=edge_intensity_quantiles,
         edge_texture_quantiles=edge_texture_quantiles,
     )

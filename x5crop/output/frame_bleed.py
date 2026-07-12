@@ -37,7 +37,7 @@ def frame_bleed_plan(
     frame_crop_envelopes: tuple[CropEnvelope, ...],
     overlap_requirements: tuple[FrameOverlapRequirement, ...],
     user_bleed: AxisBleedParameters,
-    layout: str = "horizontal",
+    layout: str,
 ) -> FrameBleedPlan:
     if len(frame_crop_envelopes) != len(frames):
         raise ValueError("each frame requires one crop envelope")

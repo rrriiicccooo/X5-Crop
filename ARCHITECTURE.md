@@ -215,12 +215,17 @@ cannot import detection computation.
 
 ### 2.3 Parameter Ownership 与 Cache
 
-保留的数值只属于四类：
+每个运行参数和模块级数值常量必须且只能属于一个 canonical role：
 
-- 标准 pixel transform 数值，例如 luma coefficients 和 numerical epsilon。
-- Adaptive measurement quantiles、minimum samples 和 numerical floors。
-- Candidate/observation/deskew execution budgets。
-- 用户 output preferences，例如默认 20/10px bleed。
+| Role | Ownership |
+|---|---|
+| `physical_fact` | mm、count、layout 和 occupancy 等真实物理规格。 |
+| `standard_transform` | luma 和单位换算等标准变换。 |
+| `adaptive_measurement` | quantile、采样支持、平滑和 minimum samples。 |
+| `numerical_safety` | epsilon 和数值 clamp；不得改变物理语义。 |
+| `execution_budget` | observation、solver、deskew 和 worker 的有限计算量。 |
+| `user_preference` | bleed、deskew 范围和显式运行选项。 |
+| `diagnostics_only` | Debug 渲染；不得反向进入 detection。 |
 
 Physical proof、candidate ordering 和 Gate 不使用 format-family profile、weighted score、scalar
 confidence 或 overlap capacity。真实样片阈值校准属于后续独立项目。

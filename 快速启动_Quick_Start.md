@@ -88,7 +88,7 @@ Windows: 双击 X5_Crop_win.bat
 - 生成 Debug Analysis JPG。
 - 生成 `x5_crop_report.jsonl` 和 `x5_crop_summary.csv`。
 
-适合正式裁切前检查外框、分隔线和裁切范围。
+适合正式裁切前检查可见序列边界、separator 观测和最终裁切范围。
 
 ### 8. 输出和复核
 
@@ -205,8 +205,8 @@ Type `y` for a dry run:
 - It writes Debug Analysis JPGs.
 - It writes `x5_crop_report.jsonl` and `x5_crop_summary.csv`.
 
-Use it before final cropping to inspect the outer box, separators, and crop
-range.
+Use it before final cropping to inspect visible-sequence boundaries, separator
+observations, and the final crop range.
 
 ### 8. Output And Review
 

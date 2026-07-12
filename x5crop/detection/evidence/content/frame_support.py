@@ -31,6 +31,7 @@ def content_evidence_threshold(
         evidence_float,
         parameters.activation_percentile,
         parameters.minimum_evidence_range,
+        parameters.maximum_percentile_samples,
     )
 
 

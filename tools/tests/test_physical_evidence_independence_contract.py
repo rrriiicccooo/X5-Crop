@@ -67,17 +67,16 @@ class PhysicalEvidenceIndependenceContractTest(unittest.TestCase):
             EvidenceState.NOT_APPLICABLE,
         )
 
-    def test_dimensions_and_sequence_boundaries_can_be_independent_without_hard_separator(self) -> None:
+    def test_dimension_prior_is_not_independent_measurement_evidence(self) -> None:
         candidate = candidate_fixture()
         geometry = replace(
             candidate.geometry,
             separator_assignments=(),
             frame_boundaries=(),
         )
-        self.assertEqual(
-            evidence_independence_evidence(geometry).state,
-            EvidenceState.SUPPORTED,
-        )
+        evidence = evidence_independence_evidence(geometry)
+        self.assertEqual(evidence.state, EvidenceState.UNAVAILABLE)
+        self.assertEqual(evidence.supporting_root_measurements, ())
 
     def test_separator_width_variation_is_not_gate_language(self) -> None:
         source = "\n".join(

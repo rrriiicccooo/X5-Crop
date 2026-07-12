@@ -147,6 +147,21 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
             self.assertNotIn(removed, coordination)
         self.assertIn("physical_sequence_resolution", coordination)
 
+    def test_user_docs_describe_current_sequence_and_bleed_model(self) -> None:
+        quick_start = (PROJECT_ROOT / "快速启动_Quick_Start.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotIn("检查外框", quick_start)
+        self.assertNotIn("inspect the outer box", quick_start)
+
+        readme = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
+        self.assertNotIn("可用容量由可信 scan calibration", readme)
+        self.assertNotIn(
+            "Capacity is resolved from trusted scan calibration",
+            readme,
+        )
+        self.assertIn("CropEnvelope", readme)
+
     def test_content_guidance_cannot_create_or_replace_sequence_geometry(self) -> None:
         guidance = PROJECT_ROOT / "x5crop/detection/guidance"
         source = "\n".join(

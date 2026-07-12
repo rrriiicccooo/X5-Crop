@@ -6,7 +6,7 @@ import numpy as np
 
 from ....domain import MeasurementProvenance
 from ....configuration.separator import SeparatorObservationParameters
-from ....utils import runs_from_mask, sampled_percentile
+from ....utils import runs_from_mask
 from x5crop.domain import PixelInterval, SeparatorBandObservation
 
 
@@ -22,7 +22,7 @@ def _activation_threshold(
     if spread <= float(parameters.minimum_profile_range):
         return None
     threshold = float(
-        sampled_percentile(profile, [parameters.activation_percentile])[0]
+        np.percentile(profile, parameters.activation_percentile)
     )
     return threshold, spread
 

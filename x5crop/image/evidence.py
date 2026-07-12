@@ -24,6 +24,7 @@ class DeskewFallbackEvidenceParameters:
     gutter_activity_max: float = 0.10
     gutter_run_width_ratio: float = 1.0 / 14.0
     gutter_run_width_min: int = 3
+    maximum_percentile_samples: int = 1_000_000
 
 
 @dataclass(frozen=True)
@@ -38,6 +39,7 @@ class SeparatorEvidenceImageParameters:
     vertical_edge_weight: float = 0.28
     tonal_band_weight: float = 0.55
     numerical_floor: float = 1e-6
+    maximum_percentile_samples: int = 1_000_000
 
 
 @dataclass(frozen=True)
@@ -47,12 +49,15 @@ class ContentEvidenceImageParameters:
     local_contrast_percentile: float = 99.0
     tonal_presence_percentile: float = 99.0
     minimum_active_pixels: int = 16
+    numerical_floor: float = 1e-6
+    maximum_percentile_samples: int = 1_000_000
 
 
 def adaptive_activation_threshold(
     values: np.ndarray,
     percentile: float,
     minimum_range: float,
+    maximum_percentile_samples: int,
 ) -> float | None:
     if not values.size:
         return None
@@ -60,7 +65,13 @@ def adaptive_activation_threshold(
     maximum = float(values.max())
     if maximum - minimum <= float(minimum_range):
         return None
-    return float(sampled_percentile(values, [percentile])[0])
+    return float(
+        sampled_percentile(
+            values,
+            [percentile],
+            maximum_percentile_samples,
+        )[0]
+    )
 
 
 def make_deskew_fallback_gray(
@@ -68,7 +79,11 @@ def make_deskew_fallback_gray(
     params: DeskewFallbackEvidenceParameters,
 ) -> np.ndarray:
     data = gray.astype(np.float32)
-    lo, hi = sampled_percentile(data, [params.low_percentile, params.high_percentile])
+    lo, hi = sampled_percentile(
+        data,
+        [params.low_percentile, params.high_percentile],
+        params.maximum_percentile_samples,
+    )
     if hi <= lo:
         return gray.copy()
     stretched = np.clip((data - lo) / (hi - lo), 0.0, 1.0)
@@ -101,7 +116,11 @@ def make_separator_evidence_gray(
     params: SeparatorEvidenceImageParameters,
 ) -> np.ndarray:
     data = gray.astype(np.float32, copy=False)
-    lo, hi = sampled_percentile(data, [params.low_percentile, params.high_percentile])
+    lo, hi = sampled_percentile(
+        data,
+        [params.low_percentile, params.high_percentile],
+        params.maximum_percentile_samples,
+    )
     if hi <= lo:
         return gray.copy()
     local = np.clip((data - lo) / (hi - lo), 0.0, 1.0)
@@ -114,14 +133,15 @@ def make_separator_evidence_gray(
         ),
     )
     column_mean = local.mean(axis=0)
-    tonal_low, tonal_center, tonal_high = sampled_percentile(
+    tonal_low, tonal_high = sampled_percentile(
         column_mean,
         [
             params.tonal_low_percentile,
-            50.0,
             params.tonal_high_percentile,
         ],
+        params.maximum_percentile_samples,
     )
+    tonal_center = float(np.median(column_mean))
     dark_response = np.clip(
         (tonal_center - column_mean)
         / max(params.numerical_floor, tonal_center - tonal_low),
@@ -143,10 +163,21 @@ def make_separator_evidence_gray(
     return (np.clip(evidence, 0.0, 1.0) * 255.0 + 0.5).astype(np.uint8)
 
 
-def normalize_score_image(score: np.ndarray, percentile: float) -> np.ndarray:
+def normalize_score_image(
+    score: np.ndarray,
+    percentile: float,
+    numerical_floor: float,
+    maximum_percentile_samples: int,
+) -> np.ndarray:
     data = score.astype(np.float32, copy=False)
-    hi = float(sampled_percentile(data, [percentile])[0])
-    if hi <= 1e-6:
+    hi = float(
+        sampled_percentile(
+            data,
+            [percentile],
+            maximum_percentile_samples,
+        )[0]
+    )
+    if hi <= numerical_floor:
         return np.zeros(data.shape, dtype=np.float32)
     return np.clip(data / hi, 0.0, 1.0)
 
@@ -162,7 +193,12 @@ def make_content_evidence_gray(
 
     gx = np.abs(np.diff(data, axis=1, prepend=data[:, :1]))
     gy = np.abs(np.diff(data, axis=0, prepend=data[:1, :]))
-    gradient = normalize_score_image(gx + gy, params.gradient_percentile)
+    gradient = normalize_score_image(
+        gx + gy,
+        params.gradient_percentile,
+        params.numerical_floor,
+        params.maximum_percentile_samples,
+    )
 
     north = np.empty_like(data)
     south = np.empty_like(data)
@@ -177,14 +213,26 @@ def make_content_evidence_gray(
     east[:, -1] = data[:, -1]
     east[:, :-1] = data[:, 1:]
     neighbor_texture = (np.abs(data - north) + np.abs(data - south) + np.abs(data - west) + np.abs(data - east)) * 0.25
-    texture = normalize_score_image(neighbor_texture, params.texture_percentile)
+    texture = normalize_score_image(
+        neighbor_texture,
+        params.texture_percentile,
+        params.numerical_floor,
+        params.maximum_percentile_samples,
+    )
 
     local_mean = (data + north + south + west + east) * 0.2
-    local_contrast = normalize_score_image(np.abs(data - local_mean), params.local_contrast_percentile)
+    local_contrast = normalize_score_image(
+        np.abs(data - local_mean),
+        params.local_contrast_percentile,
+        params.numerical_floor,
+        params.maximum_percentile_samples,
+    )
 
     tonal_presence = normalize_score_image(
         np.abs(data - float(statistics.intensity_median) / 255.0),
         params.tonal_presence_percentile,
+        params.numerical_floor,
+        params.maximum_percentile_samples,
     )
     stack = np.stack((gradient, texture, local_contrast, tonal_presence), axis=0)
     evidence = np.partition(stack, -2, axis=0)[-2]

@@ -19,6 +19,7 @@ def measured_content_span(
         evidence,
         parameters.activation_percentile,
         parameters.minimum_evidence_range,
+        parameters.maximum_percentile_samples,
     )
     if threshold is None:
         return None

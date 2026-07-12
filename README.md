@@ -36,8 +36,8 @@ Current stable release: v4.2.8
 - `needs_review/` 里的文件是原始 TIFF 的复制，用于人工处理。
 - 自动裁切输出会保留原 TIFF 的位深、通道结构、ICC / 色彩空间、resolution、
   metadata 和已知无损压缩行为。
-- 检测阶段依据物理证据决定自动导出或复核。可由输出
-  bleed 保护的叠片 / 近似叠片证据只扩大最终输出范围，不天然阻断自动裁切。
+- 检测阶段依据物理证据决定自动导出或复核。可由输出 bleed 保护的独立实测叠片
+  只扩大相邻 frame 的最终输出范围，不天然阻断自动裁切。
 
 ### 推荐下载
 
@@ -223,10 +223,10 @@ x5_crop_output/
 - `x5_crop_summary.csv` 是便于人工浏览的摘要表。
 - 普通启动器不会覆盖已有裁切 TIFF；命令行可用 `--overwrite` 覆盖。
 
-默认输出 bleed 为长轴 20px、短轴 10px。Signed spacing 确认叠片时，长轴 bleed
-会增加到覆盖该叠片所需的宽度；可用容量由可信 scan calibration 或 frame-relative
-physical length 计算。所需 bleed 在容量内时不单独触发复核；超过容量时进入复核并使用
-当前可用容量。Bleed 只影响最终输出，不能改变 candidate geometry 或 Gate 结果。
+默认输出 bleed 为长轴 20px、短轴 10px。只有独立观测的 signed spacing 确认叠片时，
+相邻两张 frame 的对应侧才会增加到所需宽度。可用保护范围是基础 frame 到其
+`CropEnvelope` 的实际几何余量，并最终 clamp 到图像 canvas；任一侧余量不足时进入复核。
+Bleed 只影响最终输出，不能改变 candidate geometry 或 Gate 结果。
 
 ### 常用命令行
 
@@ -473,12 +473,12 @@ x5_crop_output/
   x5_crop_summary.csv
 ```
 
-Default output bleed is 20px on the long axis and 10px on the short axis. When
-signed spacing confirms overlap, long-axis bleed grows to the required width.
-Capacity is resolved from trusted scan calibration or frame-relative physical
-length. Feasible bleed does not independently require review; a requirement
-beyond capacity goes to review and uses the available capacity. Bleed affects
-final output only and cannot change candidate geometry or Gate results.
+Default output bleed is 20px on the long axis and 10px on the short axis. Only
+independently observed signed spacing can expand the corresponding sides of the
+two adjacent frames. Available protection is the actual geometric slack between
+each base frame and its `CropEnvelope`, finally clamped to the image canvas. If
+either side lacks enough slack, the result goes to review. Bleed affects final
+output only and cannot change candidate geometry or Gate results.
 
 ### Command Line
 
