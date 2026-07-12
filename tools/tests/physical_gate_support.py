@@ -277,11 +277,7 @@ def candidate_evidence_fixture(
             calibration_used=False,
         ),
         frame_content=FrameContentEvidence(
-            EvidenceState.SUPPORTED,
-            "supported",
             0.5,
-            0.8,
-            0.8,
             (
                 FrameContentObservation(1, 0.8, 0.8, True, ()),
                 FrameContentObservation(2, 0.8, 0.8, True, ()),

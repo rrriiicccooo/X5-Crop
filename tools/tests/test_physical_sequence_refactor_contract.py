@@ -617,11 +617,7 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
 
     def test_content_at_frame_edges_is_not_undercrop(self) -> None:
         frame_content = FrameContentEvidence(
-            EvidenceState.SUPPORTED,
-            "content_observed",
             0.2,
-            0.4,
-            0.4,
             (
                 FrameContentObservation(1, 0.4, 0.4, True, ("right",)),
                 FrameContentObservation(2, 0.4, 0.4, True, ("left",)),

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -44,12 +44,51 @@ class FrameContentObservation:
 
 @dataclass(frozen=True)
 class FrameContentEvidence:
-    state: EvidenceState
-    reason: str
     threshold: float | None
-    median_mean: float | None
-    median_coverage: float | None
     observations: tuple[FrameContentObservation, ...]
+    unavailable_reason: str | None = None
+    state: EvidenceState = field(init=False)
+    reason: str = field(init=False)
+    median_mean: float | None = field(init=False)
+    median_coverage: float | None = field(init=False)
+
+    def __post_init__(self) -> None:
+        if self.observations:
+            if self.threshold is None or self.unavailable_reason is not None:
+                raise ValueError(
+                    "frame content observations require a threshold without an unavailable reason"
+                )
+            state = (
+                EvidenceState.SUPPORTED
+                if any(item.content_present for item in self.observations)
+                else EvidenceState.UNAVAILABLE
+            )
+            reason = (
+                "content_observed"
+                if state == EvidenceState.SUPPORTED
+                else "content_not_observed"
+            )
+            median_mean = float(
+                np.median(np.asarray([item.mean for item in self.observations]))
+            )
+            median_coverage = float(
+                np.median(
+                    np.asarray([item.coverage for item in self.observations])
+                )
+            )
+        else:
+            if not self.unavailable_reason:
+                raise ValueError(
+                    "frame content without observations requires an unavailable reason"
+                )
+            state = EvidenceState.UNAVAILABLE
+            reason = self.unavailable_reason
+            median_mean = None
+            median_coverage = None
+        object.__setattr__(self, "state", state)
+        object.__setattr__(self, "reason", reason)
+        object.__setattr__(self, "median_mean", median_mean)
+        object.__setattr__(self, "median_coverage", median_coverage)
 
     @property
     def support_available(self) -> bool:
@@ -124,12 +163,9 @@ def frame_content_evidence(
     )
     if not sequence_box.valid():
         return FrameContentEvidence(
-            EvidenceState.UNAVAILABLE,
-            "invalid_visible_sequence_span",
-            None,
-            None,
             None,
             (),
+            "invalid_visible_sequence_span",
         )
     evidence = cache.content_evidence_float_work[
         sequence_box.top : sequence_box.bottom,
@@ -137,12 +173,9 @@ def frame_content_evidence(
     ]
     if not evidence.size:
         return FrameContentEvidence(
-            EvidenceState.UNAVAILABLE,
-            "empty_visible_sequence_span",
-            None,
-            None,
             None,
             (),
+            "empty_visible_sequence_span",
         )
     parameters = configuration.evidence
     threshold = _cached_content_evidence_threshold(
@@ -153,12 +186,9 @@ def frame_content_evidence(
     )
     if threshold is None:
         return FrameContentEvidence(
-            EvidenceState.UNAVAILABLE,
-            "content_evidence_has_no_dynamic_range",
-            None,
-            None,
             None,
             (),
+            "content_evidence_has_no_dynamic_range",
         )
     statistics_key = ThresholdedMeasurementRegionKey(
         parameters,
@@ -214,29 +244,8 @@ def frame_content_evidence(
             )
         )
 
-    if not observations:
-        state = EvidenceState.UNAVAILABLE
-        reason = "no_valid_frames"
-        median_mean = None
-        median_coverage = None
-    else:
-        median_mean = float(
-            np.median(np.asarray([item.mean for item in observations]))
-        )
-        median_coverage = float(
-            np.median(np.asarray([item.coverage for item in observations]))
-        )
-        if any(item.content_present for item in observations):
-            state = EvidenceState.SUPPORTED
-            reason = "content_observed"
-        else:
-            state = EvidenceState.UNAVAILABLE
-            reason = "content_not_observed"
     return FrameContentEvidence(
-        state=state,
-        reason=reason,
         threshold=float(threshold),
-        median_mean=median_mean,
-        median_coverage=median_coverage,
         observations=tuple(observations),
+        unavailable_reason=None if observations else "no_valid_frames",
     )

@@ -100,6 +100,7 @@ class PhysicalModelInvariantTest(unittest.TestCase):
         for derived in (
             evidence.frame_dimensions,
             evidence.separator_sequence,
+            evidence.frame_content,
             evidence.sequence_content_alignment,
         ):
             with self.subTest(derived=type(derived).__name__):
@@ -135,6 +136,10 @@ class PhysicalModelInvariantTest(unittest.TestCase):
                 evidence.sequence_content_alignment,
                 state=EvidenceState.SUPPORTED,
                 content_span=Box(0, 0, 210, 100),
+            ),
+            lambda: replace(
+                evidence.frame_content,
+                state=EvidenceState.UNAVAILABLE,
             ),
             lambda: replace(
                 evidence.holder_occupancy,
