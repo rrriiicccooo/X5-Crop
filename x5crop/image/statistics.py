@@ -4,7 +4,13 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from ..utils import sampled_percentile, sampled_values_for_percentile
+from ..utils import (
+    require_percentile,
+    require_positive,
+    require_unit_interval,
+    sampled_percentile,
+    sampled_values_for_percentile,
+)
 
 
 @dataclass(frozen=True)
@@ -22,6 +28,25 @@ class ImageMeasurementStatisticsParameters:
     edge_sample_ratio: float = 0.05
     edge_sample_min_px: int = 8
     maximum_percentile_samples: int = 1_000_000
+
+    def __post_init__(self) -> None:
+        groups = (
+            ("intensity", self.intensity_percentiles, 5),
+            ("noise", self.noise_percentiles, 3),
+            ("edge intensity", self.edge_intensity_percentiles, 3),
+            ("edge texture", self.edge_texture_percentiles, 3),
+        )
+        for name, values, expected_length in groups:
+            if len(values) != expected_length or tuple(sorted(values)) != values:
+                raise ValueError(f"{name} percentiles must be ordered and complete")
+            for value in values:
+                require_percentile(f"{name} percentile", value)
+        require_unit_interval("edge sample ratio", self.edge_sample_ratio)
+        require_positive("edge sample width", self.edge_sample_min_px)
+        require_positive(
+            "statistics percentile sample budget",
+            self.maximum_percentile_samples,
+        )
 
 
 @dataclass(frozen=True)

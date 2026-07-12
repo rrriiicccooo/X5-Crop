@@ -222,6 +222,7 @@ def _parent_candidate(
     divider: LaneDividerProposal,
     lane_boxes: tuple[Box, Box],
     lanes: tuple[SelectionResult, SelectionResult],
+    proposal_budget_exhausted: bool,
 ) -> BuiltCandidate:
     physical_spec = context.configuration.physical_spec
     lane_candidates = tuple(selection.selected for selection in lanes)
@@ -291,7 +292,10 @@ def _parent_candidate(
             holder_occlusion=HolderOcclusionEvidence.not_applicable(),
             frame_dimension_prior=lane_candidates[0].geometry.frame_dimension_prior,
             residuals=SequenceResiduals(None, None, 0.0),
-            search_budget_exhausted=False,
+            search_budget_exhausted=bool(
+                proposal_budget_exhausted
+                or any(solution.search_budget_exhausted for solution in lane_solutions)
+            ),
             source=CANDIDATE_SOURCE_DUAL_LANE,
             automatic_processing_supported=divider.source != "center_safety",
             sequence_hypothesis_name="measured_lane_divider",
@@ -335,12 +339,12 @@ def choose_dual_lane_detection(
         raise ValueError("dual-lane detector is only valid for full mode")
     if physical_spec.lane_count != 2:
         raise ValueError("dual-lane detector supports exactly two lanes")
-    proposals = lane_divider_proposals(
+    proposal_set = lane_divider_proposals(
         context.measurement_cache.content_evidence_float_work,
         context.configuration.candidate_plan.dual_lane_divider,
     )
     parent_candidates = []
-    for proposal in proposals:
+    for proposal in proposal_set.proposals:
         lanes = proposal.lane_boxes(
             context.measurement_cache.gray_work.shape[1],
             context.measurement_cache.gray_work.shape[0],
@@ -355,11 +359,16 @@ def choose_dual_lane_detection(
             proposal,
             lanes,
             lane_selections,
+            proposal_set.budget_exhausted,
         )
         parent_candidates.append(
             assess_dual_lane_candidate(
                 built,
                 tuple(selection.selected for selection in lane_selections),
+                lane_geometry_resolved=tuple(
+                    selection.geometry_resolution.supported
+                    for selection in lane_selections
+                ),
             )
         )
     if not parent_candidates:

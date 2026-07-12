@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import replace
 import unittest
 
+import numpy as np
+
 from tools.tests.physical_gate_support import candidate_fixture
 from x5crop.detection.candidate.assessment.dual_lane import assess_dual_lane_candidate
 from x5crop.detection.candidate.model import BuiltCandidate
@@ -12,6 +14,8 @@ from x5crop.detection.physical.model import DualLaneSolution
 from x5crop.detection.physical.spacing import observed_spacing_evidence
 from x5crop.domain import CropEnvelope, HolderSpan, VisibleSequenceSpan
 from x5crop.domain import Box, MeasurementProvenance
+from x5crop.configuration.candidate import DualLaneDividerParameters
+from x5crop.detection.modes.dual_lane_split import lane_divider_proposals
 
 
 def _parent(lane):
@@ -55,6 +59,13 @@ def _parent(lane):
 
 
 class DualLaneAssessmentTest(unittest.TestCase):
+    def test_lane_divider_proposal_budget_exhaustion_is_explicit(self) -> None:
+        result = lane_divider_proposals(
+            np.zeros((100, 10), dtype=np.float32),
+            DualLaneDividerParameters(proposal_count=1),
+        )
+        self.assertTrue(result.budget_exhausted)
+
     def test_dual_lane_solution_requires_complete_flattened_geometry(self) -> None:
         geometry = _parent(candidate_fixture()).geometry
         with self.assertRaises(ValueError):
@@ -63,16 +74,38 @@ class DualLaneAssessmentTest(unittest.TestCase):
     def test_dual_lane_builds_structured_evidence_quality(self) -> None:
         first = candidate_fixture()
         second = candidate_fixture()
-        assessed = assess_dual_lane_candidate(_parent(first), (first, second))
+        assessed = assess_dual_lane_candidate(
+            _parent(first),
+            (first, second),
+            lane_geometry_resolved=(True, True),
+        )
         self.assertTrue(assessed.assessment.quality.supported_proof_paths)
         self.assertTrue(assessed.assessment.gate.passed)
+
+    def test_unresolved_lane_geometry_blocks_mode_composition(self) -> None:
+        first = candidate_fixture()
+        second = candidate_fixture()
+        assessed = assess_dual_lane_candidate(
+            _parent(first),
+            (first, second),
+            lane_geometry_resolved=(True, False),
+        )
+        self.assertFalse(assessed.assessment.gate.passed)
+        self.assertEqual(
+            assessed.assessment.gate.proof_paths[0].state,
+            EvidenceState.CONTRADICTED,
+        )
 
     def test_failed_lane_blocks_mode_composition_proof(self) -> None:
         first = candidate_fixture()
         second = candidate_fixture(
             failed_candidate_check="boundary_proof",
         )
-        assessed = assess_dual_lane_candidate(_parent(first), (first, second))
+        assessed = assess_dual_lane_candidate(
+            _parent(first),
+            (first, second),
+            lane_geometry_resolved=(True, True),
+        )
         path = assessed.assessment.gate.proof_paths[0]
         self.assertEqual(path.code, "mode_composition")
         self.assertEqual(path.state, EvidenceState.CONTRADICTED)
@@ -82,6 +115,7 @@ class DualLaneAssessmentTest(unittest.TestCase):
         assessed = assess_dual_lane_candidate(
             _parent(candidate_fixture()),
             (candidate_fixture(), candidate_fixture()),
+            lane_geometry_resolved=(True, True),
         )
         self.assertFalse(hasattr(assessed, "status"))
         self.assertFalse(hasattr(assessed, "final_review_reasons"))
@@ -112,7 +146,11 @@ class DualLaneAssessmentTest(unittest.TestCase):
                 ),
             ),
         )
-        assessed = assess_dual_lane_candidate(_parent(first), (first, second))
+        assessed = assess_dual_lane_candidate(
+            _parent(first),
+            (first, second),
+            lane_geometry_resolved=(True, True),
+        )
         spacings = assessed.assessment.evidence.frame_sequence.spacings
         overlap = next(spacing for spacing in spacings if spacing.kind == "overlap")
         self.assertEqual(overlap.lane_index, 2)

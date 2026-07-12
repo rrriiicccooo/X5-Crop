@@ -18,6 +18,16 @@ from x5crop.image.evidence import (
 )
 from x5crop.image.deskew_parameters import DeskewParameters
 from x5crop.configuration.content import ContentEvidenceParameters
+from x5crop.configuration.candidate import (
+    SequenceHypothesisParameters,
+    SequenceSolverParameters,
+)
+from x5crop.configuration.separator import SeparatorObservationParameters
+from x5crop.detection.candidate.plan.count_hypotheses import CountHypothesis
+from x5crop.domain import AxisBleedParameters
+from x5crop.formats import FormatPhysicalSpec, FrameSizeMm, expected_separator_count
+from x5crop.geometry.detection_parameters import SeparatorProfileParameters
+from x5crop.geometry.sampling import sampling_step_for_limit
 from x5crop.run_config import RunConfig
 from x5crop.runtime.options import RuntimeOptions
 from x5crop.utils import bbox_from_mask, sampled_percentile
@@ -26,6 +36,32 @@ import x5crop.units as units
 
 
 class ParameterLegitimacyContractTest(unittest.TestCase):
+    def test_invalid_physical_facts_and_execution_budgets_are_rejected(self) -> None:
+        invalid_factories = (
+            lambda: FrameSizeMm(0.0, 24.0),
+            lambda: FormatPhysicalSpec(
+                "invalid",
+                3,
+                (1, 2),
+                "test",
+                (FrameSizeMm(36.0, 24.0),),
+            ),
+            lambda: CountHypothesis(0, "partial", "automatic_count", True),
+            lambda: AxisBleedParameters(-1, 0),
+            lambda: SeparatorProfileParameters(segments=0),
+            lambda: SeparatorObservationParameters(minimum_run_px=0),
+            lambda: SeparatorObservationParameters(maximum_observations=0),
+            lambda: SequenceHypothesisParameters(maximum_hypotheses=0),
+            lambda: SequenceSolverParameters(maximum_assignment_evaluations=0),
+        )
+        for factory in invalid_factories:
+            with self.subTest(factory=factory), self.assertRaises(ValueError):
+                factory()
+
+        with self.assertRaises(ValueError):
+            expected_separator_count(0, "single_strip")
+        with self.assertRaises(ValueError):
+            sampling_step_for_limit(100, 0)
     def test_every_runtime_parameter_has_one_complete_contract(self) -> None:
         self.assertEqual(unclassified_parameter_owners(), [])
         self.assertEqual(stale_parameter_contracts(), [])

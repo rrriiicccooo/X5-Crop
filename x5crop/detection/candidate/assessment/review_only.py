@@ -157,7 +157,6 @@ def assess_review_only_candidate(
         reason=_REVIEW_ONLY_EVIDENCE_REASON,
         uncovered_content=(),
         boundary_contact_frame_indexes=(),
-        confirmed_visible_undercrop_sides=(),
         partial_edge_state=unavailable,
     )
     alignment = SequenceContentAlignmentEvidence(
@@ -165,16 +164,13 @@ def assess_review_only_candidate(
         reason=_REVIEW_ONLY_EVIDENCE_REASON,
         visible_sequence_span=geometry.visible_sequence_span.box,
         content_span=None,
-        content_measurement_sources=(),
-        confirmed_undercrop_sides=(),
-        unconfirmed_undercrop_sides=(),
+        content_outside_sides=(),
         overcontains_long_axis=False,
         overcontains_short_axis=False,
         leading_slack_px=0,
         trailing_slack_px=0,
         top_slack_px=0,
         bottom_slack_px=0,
-        border_tonal_fraction=(),
     )
     completeness = StripCompletenessEvidence(
         frame_count_complete=False,

@@ -25,9 +25,17 @@ repository rules in `AGENTS.md`.
   role、unit、stage、rationale 和 calibration status。
 - Deskew 固定灰度身份阈值已由 per-image robust statistics 取代；percentile sampling budget、
   edge quantiles 和 numerical floors 均由显式参数拥有。
+- Physical fact、adaptive measurement、numerical safety、execution budget 与 diagnostics 参数
+  在 canonical owner 构造时验证；低层 helper 不再静默修正无效参数。
+- Separator continuity 现在要求真实横跨短轴的 8 邻域像素路径。Content span 与 frame coverage
+  冲突保持 unavailable，旧的 write-only undercrop confirmation 字段已删除。
+- Observation、hypothesis、solver 与 dual-lane proposal 的预算耗尽状态全程传播；截断搜索不能
+  形成 resolved geometry。Dual-lane composition 同时要求每条 lane 的 gate 与 geometry resolution。
 - Cache reuse 不再从 report candidate 反向选择 configuration；output bleed layout 必须显式传入。
-- 238 项测试、14 个 format/mode configuration、compile、launcher、version 和 whitespace 检查
-  通过；`135/full` 真实 smoke 生成无 schema error 的 current report。
+- Diagnostics 参数不再使 detection analysis fingerprint 失效；无法测得的 content threshold 也只
+  计算一次。Malformed current-schema record 现在返回 validation error，不再从 validator 抛异常。
+- 256 项测试、14 个 format/mode configuration、package/regression compile、launcher syntax、
+  version 和 whitespace 检查通过。
 
 #### 物理序列求解与经验参数退场（2026-07-12）
 

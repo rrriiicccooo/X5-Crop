@@ -5,6 +5,10 @@ from dataclasses import dataclass
 import numpy as np
 
 from ..utils import (
+    require_nonnegative,
+    require_percentile,
+    require_positive,
+    require_unit_interval,
     runs_from_mask,
     sampled_percentile,
     smooth_1d,
@@ -26,6 +30,44 @@ class DeskewFallbackEvidenceParameters:
     gutter_run_width_min: int = 3
     maximum_percentile_samples: int = 1_000_000
 
+    def __post_init__(self) -> None:
+        require_percentile("deskew fallback low percentile", self.low_percentile)
+        require_percentile("deskew fallback high percentile", self.high_percentile)
+        if self.high_percentile <= self.low_percentile:
+            raise ValueError("deskew fallback high percentile must follow low")
+        require_positive("deskew fallback shadow gamma", self.shadow_gamma)
+        require_nonnegative("deskew fallback edge weight", self.edge_weight)
+        require_nonnegative(
+            "deskew fallback shadow blend weight",
+            self.shadow_blend_weight,
+        )
+        require_nonnegative(
+            "deskew fallback edge blend weight",
+            self.edge_blend_weight,
+        )
+        if self.shadow_blend_weight + self.edge_blend_weight <= 0.0:
+            raise ValueError("deskew fallback blend requires positive support")
+        require_unit_interval(
+            "deskew fallback gutter extreme fraction",
+            self.gutter_extreme_min_fraction,
+        )
+        require_unit_interval(
+            "deskew fallback gutter activity",
+            self.gutter_activity_max,
+        )
+        require_nonnegative(
+            "deskew fallback gutter width ratio",
+            self.gutter_run_width_ratio,
+        )
+        require_positive(
+            "deskew fallback gutter minimum width",
+            self.gutter_run_width_min,
+        )
+        require_positive(
+            "deskew fallback percentile sample budget",
+            self.maximum_percentile_samples,
+        )
+
 
 @dataclass(frozen=True)
 class SeparatorEvidenceImageParameters:
@@ -41,6 +83,38 @@ class SeparatorEvidenceImageParameters:
     numerical_floor: float = 1e-6
     maximum_percentile_samples: int = 1_000_000
 
+    def __post_init__(self) -> None:
+        for name, value in (
+            ("separator image low percentile", self.low_percentile),
+            ("separator image high percentile", self.high_percentile),
+            ("separator tonal low percentile", self.tonal_low_percentile),
+            ("separator tonal high percentile", self.tonal_high_percentile),
+        ):
+            require_percentile(name, value)
+        if self.high_percentile <= self.low_percentile:
+            raise ValueError("separator image high percentile must follow low")
+        if self.tonal_high_percentile <= self.tonal_low_percentile:
+            raise ValueError("separator tonal high percentile must follow low")
+        require_nonnegative(
+            "separator vertical-edge smoothing ratio",
+            self.vertical_edge_smooth_ratio,
+        )
+        require_positive(
+            "separator vertical-edge minimum width",
+            self.vertical_edge_smooth_min,
+        )
+        for name, value in (
+            ("separator local weight", self.local_weight),
+            ("separator vertical-edge weight", self.vertical_edge_weight),
+            ("separator tonal-band weight", self.tonal_band_weight),
+        ):
+            require_nonnegative(name, value)
+        require_positive("separator image numerical floor", self.numerical_floor)
+        require_positive(
+            "separator image percentile sample budget",
+            self.maximum_percentile_samples,
+        )
+
 
 @dataclass(frozen=True)
 class ContentEvidenceImageParameters:
@@ -51,6 +125,21 @@ class ContentEvidenceImageParameters:
     minimum_active_pixels: int = 16
     numerical_floor: float = 1e-6
     maximum_percentile_samples: int = 1_000_000
+
+    def __post_init__(self) -> None:
+        for name, value in (
+            ("content gradient percentile", self.gradient_percentile),
+            ("content texture percentile", self.texture_percentile),
+            ("content local-contrast percentile", self.local_contrast_percentile),
+            ("content tonal-presence percentile", self.tonal_presence_percentile),
+        ):
+            require_percentile(name, value)
+        require_positive("content evidence active pixels", self.minimum_active_pixels)
+        require_positive("content evidence numerical floor", self.numerical_floor)
+        require_positive(
+            "content evidence percentile sample budget",
+            self.maximum_percentile_samples,
+        )
 
 
 def adaptive_activation_threshold(

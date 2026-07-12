@@ -75,7 +75,7 @@ def frame_coverage_evidence(
         holder,
         content_policy=content_policy,
     )
-    tolerance = max(1, int(content_policy.profile.min_run_width_px))
+    tolerance = int(content_policy.profile.min_run_width_px)
     uncovered = tuple(
         segment
         for run in runs

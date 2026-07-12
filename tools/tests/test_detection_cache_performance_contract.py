@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import fields
 import unittest
 from unittest.mock import patch
+from dataclasses import replace
 
 import numpy as np
 
@@ -11,6 +12,10 @@ from x5crop.cache.separator import cached_separator_profile
 from x5crop.domain import Box
 from x5crop.geometry.detection_parameters import SeparatorProfileParameters
 from x5crop.image.statistics import ImageMeasurementStatisticsParameters, image_measurement_statistics
+from x5crop.configuration.registry import get_detection_configuration
+from x5crop.detection.evidence.content.frame_support import frame_content_evidence
+from tools.tests.physical_gate_support import candidate_fixture
+from x5crop.runtime.analysis_reuse import analysis_configuration_fingerprint
 
 
 def _cache() -> MeasurementCache:
@@ -25,6 +30,35 @@ def _cache() -> MeasurementCache:
 
 
 class DetectionCachePerformanceContractTest(unittest.TestCase):
+    def test_unavailable_content_threshold_is_cached_exactly_once(self) -> None:
+        cache = _cache()
+        geometry = candidate_fixture().geometry
+        configuration = get_detection_configuration("135", "full").content
+        with patch(
+            "x5crop.detection.evidence.content.frame_support.content_evidence_threshold",
+            return_value=None,
+        ) as measurement:
+            frame_content_evidence(geometry, cache, configuration)
+            frame_content_evidence(geometry, cache, configuration)
+        measurement.assert_called_once()
+
+    def test_diagnostics_do_not_invalidate_detection_analysis(self) -> None:
+        configuration = get_detection_configuration("135", "full")
+        changed = replace(
+            configuration,
+            diagnostics=replace(
+                configuration.diagnostics,
+                separator_overlay=replace(
+                    configuration.diagnostics.separator_overlay,
+                    tick_length_min=99,
+                ),
+            ),
+        )
+        self.assertEqual(
+            analysis_configuration_fingerprint(configuration),
+            analysis_configuration_fingerprint(changed),
+        )
+
     def test_separator_profile_is_cached_by_exact_corridor_and_parameters(self) -> None:
         cache = _cache()
         corridor = Box(0, 10, 240, 70)

@@ -19,6 +19,7 @@ from ..proposal.sequence import sequence_hypotheses
 class FrameSequencePlan:
     hypotheses: tuple[SequenceHypothesis, ...]
     count_hypothesis: CountHypothesis
+    search_budget_exhausted: bool
 
 
 def frame_sequence_plan(
@@ -35,7 +36,7 @@ def frame_sequence_plan(
 ) -> FrameSequencePlan:
     if cache.layout != request.layout:
         raise ValueError("sequence planning requires matching measurement cache")
-    hypotheses = sequence_hypotheses(
+    hypothesis_set = sequence_hypotheses(
         cache.gray_work,
         fmt,
         count_hypothesis.count,
@@ -47,4 +48,8 @@ def frame_sequence_plan(
         separator_policy=separator_policy,
         hypothesis_parameters=hypothesis_parameters,
     )
-    return FrameSequencePlan(tuple(hypotheses), count_hypothesis)
+    return FrameSequencePlan(
+        hypothesis_set.hypotheses,
+        count_hypothesis,
+        hypothesis_set.budget_exhausted,
+    )

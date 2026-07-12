@@ -264,6 +264,10 @@ class AxisBleedParameters:
     long_axis: int
     short_axis: int
 
+    def __post_init__(self) -> None:
+        if self.long_axis < 0 or self.short_axis < 0:
+            raise ValueError("output bleed must be non-negative")
+
 
 @dataclass(frozen=True)
 class ProcessResult:

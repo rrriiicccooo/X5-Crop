@@ -34,7 +34,7 @@ def _cross_axis_extreme_score(
     parameters: SeparatorProfileParameters,
 ) -> np.ndarray:
     profiles: list[np.ndarray] = []
-    segments = max(1, int(parameters.segments))
+    segments = int(parameters.segments)
     for index in range(segments):
         start = int(round(index * middle.shape[0] / segments))
         end = int(round((index + 1) * middle.shape[0] / segments))

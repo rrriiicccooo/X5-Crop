@@ -18,16 +18,13 @@ class SequenceContentAlignmentEvidence:
     reason: str
     visible_sequence_span: Box
     content_span: Box | None
-    content_measurement_sources: tuple[str, ...]
-    confirmed_undercrop_sides: tuple[str, ...]
-    unconfirmed_undercrop_sides: tuple[str, ...]
+    content_outside_sides: tuple[str, ...]
     overcontains_long_axis: bool
     overcontains_short_axis: bool
     leading_slack_px: int
     trailing_slack_px: int
     top_slack_px: int
     bottom_slack_px: int
-    border_tonal_fraction: tuple[tuple[str, float], ...]
 
 
 def sequence_content_alignment_evidence(
@@ -50,15 +47,12 @@ def sequence_content_alignment_evidence(
             sequence,
             content,
             (),
-            (),
-            (),
             False,
             False,
             0,
             0,
             0,
             0,
-            (),
         )
     outside = tuple(
         side
@@ -83,14 +77,11 @@ def sequence_content_alignment_evidence(
         ),
         visible_sequence_span=sequence,
         content_span=content,
-        content_measurement_sources=("adaptive_content_consensus",),
-        confirmed_undercrop_sides=(),
-        unconfirmed_undercrop_sides=outside,
+        content_outside_sides=outside,
         overcontains_long_axis=bool(leading_slack or trailing_slack),
         overcontains_short_axis=bool(top_slack or bottom_slack),
         leading_slack_px=leading_slack,
         trailing_slack_px=trailing_slack,
         top_slack_px=top_slack,
         bottom_slack_px=bottom_slack,
-        border_tonal_fraction=(),
     )

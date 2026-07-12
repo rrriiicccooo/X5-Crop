@@ -72,11 +72,12 @@ def _cached_content_evidence_threshold(
     parameters: ContentEvidenceParameters,
 ) -> float | None:
     key = (parameters, *box_cache_key(sequence_box))
-    threshold = cache.content_evidence_thresholds.get(key)
-    if threshold is None:
-        threshold = content_evidence_threshold(evidence, parameters)
-        cache.content_evidence_thresholds[key] = threshold
-    return threshold
+    if key not in cache.content_evidence_thresholds:
+        cache.content_evidence_thresholds[key] = content_evidence_threshold(
+            evidence,
+            parameters,
+        )
+    return cache.content_evidence_thresholds[key]
 
 
 def _boundary_contact_sides(

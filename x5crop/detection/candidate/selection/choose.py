@@ -132,11 +132,14 @@ def geometry_resolution_for_selection(
         and evidence.frame_topology.state == EvidenceState.SUPPORTED
         and evidence.frame_topology.count_matches
     )
+    conservation_not_contradicted = (
+        evidence.frame_sequence.conservation.state != EvidenceState.CONTRADICTED
+    )
     automatic_count_supported = bool(
         count_topology_supported
         and evidence.frame_coverage.state == EvidenceState.SUPPORTED
         and evidence.frame_dimensions.state == EvidenceState.SUPPORTED
-        and evidence.frame_sequence.conservation.state == EvidenceState.SUPPORTED
+        and conservation_not_contradicted
         and evidence.content_preservation.state == EvidenceState.SUPPORTED
         and boundary_supported
         and not selected.geometry.search_budget_exhausted
@@ -150,7 +153,8 @@ def geometry_resolution_for_selection(
         and selected.geometry.visible_sequence_span.box.valid()
         and len(selected.geometry.frames) == selected.geometry.count
         and boundary_supported
-        and evidence.frame_sequence.conservation.state == EvidenceState.SUPPORTED
+        and conservation_not_contradicted
+        and not selected.geometry.search_budget_exhausted
     )
     boundaries_resolved = bool(boundary_supported)
     coverage_resolved = (

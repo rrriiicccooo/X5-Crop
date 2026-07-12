@@ -12,6 +12,14 @@ class CountHypothesis:
     source: str
     allowed_by_physical_spec: bool
 
+    def __post_init__(self) -> None:
+        if self.count <= 0:
+            raise ValueError("count hypothesis must be positive")
+        if self.strip_mode not in {FULL, PARTIAL}:
+            raise ValueError(f"unsupported count hypothesis mode: {self.strip_mode}")
+        if not self.source:
+            raise ValueError("count hypothesis source must not be empty")
+
 
 @dataclass(frozen=True)
 class CountHypothesisPlan:

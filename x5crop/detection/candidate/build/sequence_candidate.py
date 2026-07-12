@@ -50,10 +50,11 @@ def build_sequence_candidate(
     cache: MeasurementCache,
     separator_policy: SeparatorConfiguration,
     solver_parameters: SequenceSolverParameters,
+    planning_budget_exhausted: bool,
 ) -> BuiltCandidate:
     if cache.layout != request.layout:
         raise ValueError("candidate build requires matching measurement cache")
-    count = max(1, int(count_hypothesis.count))
+    count = int(count_hypothesis.count)
     height, width = cache.gray_work.shape
     holder_span = HolderSpan(Box(0, 0, width, height))
     visible_sequence_span = sequence_hypothesis.visible_sequence_span
@@ -66,11 +67,12 @@ def build_sequence_candidate(
         corridor,
         separator_policy.profile,
     )
-    observations = measure_separator_bands(
+    observation_set = measure_separator_bands(
         profile,
         corridor_start=float(corridor.left),
         parameters=separator_policy.observation,
     )
+    observations = observation_set.observations
     dimensions = frame_dimension_prior(
         visible_sequence_span,
         fmt,
@@ -140,7 +142,12 @@ def build_sequence_candidate(
             holder_occlusion=holder_occlusion,
             frame_dimension_prior=dimensions,
             residuals=solved.residuals,
-            search_budget_exhausted=solved.search_budget_exhausted,
+            search_budget_exhausted=bool(
+                planning_budget_exhausted
+                or observation_set.budget_exhausted
+                or provisional.search_budget_exhausted
+                or solved.search_budget_exhausted
+            ),
             source=CANDIDATE_SOURCE_FRAME_SEQUENCE,
             automatic_processing_supported=True,
             sequence_hypothesis_name=sequence_hypothesis.name,

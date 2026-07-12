@@ -66,8 +66,10 @@ def config_cache_signature(config: RunConfig) -> dict[str, Any]:
 
 
 def analysis_configuration_fingerprint(configuration: DetectionConfiguration) -> str:
+    analysis_configuration = asdict(configuration)
+    del analysis_configuration["diagnostics"]
     payload = json.dumps(
-        asdict(configuration),
+        analysis_configuration,
         sort_keys=True,
         separators=(",", ":"),
         default=str,

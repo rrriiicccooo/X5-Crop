@@ -105,6 +105,10 @@ Sequence solver 同时求解所有内部 boundaries，不逐边贪心：
 - Position、width、sequence conservation 和 provenance 必须同时成立。
 - Search budget exhausted 时 geometry 保持 unresolved。
 
+Observation、hypothesis、assignment 和 dual-lane proposal 的执行预算都通过 typed result 显式
+传播到 `SequenceSolution.search_budget_exhausted`；任何阶段的静默截断都不能形成 resolved
+geometry。
+
 Partial auto count 从允许的较大 count 向较小 count 求解。XPAN 和 120-66 可由 physical trait
 包含 nominal count，以表达完整胶片未铺满片夹。`GeometryResolution` 只有在 count、placement、
 coverage 和实质替代解均已解决时才 supported；CandidateGate PASS 不能替代这一结论。
@@ -114,13 +118,16 @@ coverage 和实质替代解均已解决时才 supported；CandidateGate PASS 不
 `CandidateGeometry` 是唯一 candidate geometry union：标准 strip 使用 `SequenceSolution`；
 dual-lane 使用带有独立 lane solutions 的 `DualLaneSolution`；不支持自动求解的 mode 使用
 `ReviewOnlyGeometry`，其 solved frame geometry 必须为空。三者分别进入 standard、dual-lane 和
-review-only assessment，不以空字段伪装成另一种物理状态。
+review-only assessment，不以空字段伪装成另一种物理状态。Dual-lane 的 composition proof 要求
+每条 lane 的 CandidateGate 与 GeometryResolution 都成立。
 
 Candidate evidence 包括 topology、frame coverage、separator sequence、photo dimensions、
 content preservation、holder occupancy、sequence conservation 和 evidence independence。
 
 `FrameDimensionPrior` 只约束搜索。只有独立 photo-edge measurement 才能形成
 `FrameDimensionEvidence`。Content run 数量只做 guidance/diagnostic，不能证明 frame count。
+全局 content span 与局部 frame coverage 冲突时保持 unavailable，不能由任一侧单独宣告
+preserved 或 undercrop。
 
 `EvidenceQuality` 保存 supported、contradicted、unavailable 项和物理 residual。系统没有
 scalar confidence、weighted score、confidence cap 或 confidence gate。

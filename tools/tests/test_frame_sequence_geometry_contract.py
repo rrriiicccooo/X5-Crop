@@ -37,7 +37,11 @@ from x5crop.detection.physical.model import PhotoInterval, SequenceSolution
 from x5crop.detection.evidence.separator_continuity import (
     separator_cross_axis_continuity_evidence,
 )
-from x5crop.image.statistics import ImageMeasurementStatisticsParameters, image_measurement_statistics
+from x5crop.image.statistics import (
+    ImageMeasurementStatistics,
+    ImageMeasurementStatisticsParameters,
+    image_measurement_statistics,
+)
 from x5crop.domain import CropEnvelope, VisibleSequenceSpan
 from tools.tests.physical_gate_support import (
     candidate_fixture,
@@ -54,6 +58,36 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class FrameSequenceGeometryContractTests(unittest.TestCase):
+    def test_separator_requires_a_connected_cross_axis_pixel_path(self) -> None:
+        geometry = candidate_fixture().geometry
+        gray = np.full((100, 200), 128, dtype=np.uint8)
+        gray[::2, 95] = 0
+        gray[1::2, 104] = 0
+        statistics = ImageMeasurementStatistics(
+            intensity_quantiles=(0.0, 32.0, 128.0, 224.0, 255.0),
+            intensity_mad=32.0,
+            gradient_quantiles=(0.0, 32.0, 128.0),
+            gradient_mad=1.0,
+            texture_quantiles=(0.0, 32.0, 128.0),
+            texture_mad=1.0,
+            edge_intensity_quantiles=(32.0, 128.0, 224.0),
+            edge_texture_quantiles=(0.0, 32.0, 128.0),
+        )
+        evidence = separator_cross_axis_continuity_evidence(
+            gray,
+            geometry,
+            statistics,
+        )
+        self.assertEqual(evidence.state, EvidenceState.CONTRADICTED)
+
+        gray[:, 100] = 0
+        evidence = separator_cross_axis_continuity_evidence(
+            gray,
+            geometry,
+            statistics,
+        )
+        self.assertEqual(evidence.state, EvidenceState.SUPPORTED)
+
     def test_unused_weak_band_does_not_reduce_selected_separator_proof(self) -> None:
         geometry = candidate_fixture().geometry
         unused = separator_observation(35.0, start=30.0, end=40.0)
@@ -66,9 +100,15 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
         evidence = separator_cross_axis_continuity_evidence(
             gray,
             geometry,
-            image_measurement_statistics(
-                gray,
-                ImageMeasurementStatisticsParameters(),
+            ImageMeasurementStatistics(
+                intensity_quantiles=(0.0, 32.0, 128.0, 224.0, 255.0),
+                intensity_mad=32.0,
+                gradient_quantiles=(0.0, 32.0, 128.0),
+                gradient_mad=1.0,
+                texture_quantiles=(0.0, 32.0, 128.0),
+                texture_mad=1.0,
+                edge_intensity_quantiles=(32.0, 128.0, 224.0),
+                edge_texture_quantiles=(0.0, 32.0, 128.0),
             ),
         )
         self.assertEqual(evidence.state, EvidenceState.SUPPORTED)
@@ -93,8 +133,24 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
                 maximum_observations=8,
             ),
         )
-        self.assertEqual(len(observations), 1)
-        self.assertEqual(observations[0].width, 60.0)
+        self.assertEqual(len(observations.observations), 1)
+        self.assertEqual(observations.observations[0].width, 60.0)
+
+    def test_separator_observation_budget_exhaustion_is_explicit(self) -> None:
+        profile = np.zeros(100, dtype=np.float32)
+        for start in (10, 30, 50, 70):
+            profile[start : start + 2] = 1.0
+        result = measure_separator_bands(
+            profile,
+            corridor_start=0.0,
+            parameters=SeparatorObservationParameters(
+                activation_percentile=95.0,
+                minimum_run_px=1,
+                maximum_observations=2,
+            ),
+        )
+        self.assertEqual(len(result.observations), 2)
+        self.assertTrue(result.budget_exhausted)
 
     def test_only_fully_contained_band_is_independent_separator_assignment(self) -> None:
         provenance = MeasurementProvenance(

@@ -212,8 +212,6 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
             "content_inside_visible_sequence",
             Box(0, 0, 200, 100),
             Box(0, 0, 200, 100),
-            ("synthetic",),
-            (),
             (),
             False,
             False,
@@ -221,7 +219,6 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
             0,
             0,
             0,
-            (),
         )
         partial = PartialEdgeSafetyEvidence(
             EvidenceState.NOT_APPLICABLE,

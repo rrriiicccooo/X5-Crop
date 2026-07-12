@@ -23,12 +23,25 @@ CURRENT_REPORT_SECTIONS = (
 )
 
 
+def _integer(value: Any) -> int | None:
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
 def _box_valid(value: Any) -> bool:
+    if not isinstance(value, dict):
+        return False
+    left = _integer(value.get("left"))
+    top = _integer(value.get("top"))
+    right = _integer(value.get("right"))
+    bottom = _integer(value.get("bottom"))
     return bool(
-        isinstance(value, dict)
-        and {"left", "top", "right", "bottom"}.issubset(value)
-        and int(value["right"]) > int(value["left"])
-        and int(value["bottom"]) > int(value["top"])
+        None not in {left, top, right, bottom}
+        and right is not None
+        and left is not None
+        and bottom is not None
+        and top is not None
+        and right > left
+        and bottom > top
     )
 
 
@@ -98,17 +111,20 @@ def _separator_assignment_valid(value: Any) -> bool:
 
 
 def _sequence_geometry_valid(value: Any) -> bool:
+    count = _integer(value.get("count")) if isinstance(value, dict) else None
     return bool(
         isinstance(value, dict)
+        and count is not None
+        and count > 0
         and isinstance(value.get("frames"), list)
-        and len(value["frames"]) == int(value.get("count", 0))
+        and len(value["frames"]) == count
         and all(_box_valid(frame) for frame in value["frames"])
         and isinstance(value.get("photo_intervals"), list)
-        and len(value["photo_intervals"]) == int(value["count"])
+        and len(value["photo_intervals"]) == count
         and isinstance(value.get("frame_boundaries"), list)
-        and len(value["frame_boundaries"]) == max(0, int(value["count"]) - 1)
+        and len(value["frame_boundaries"]) == count - 1
         and isinstance(value.get("inter_frame_spacings"), list)
-        and len(value["inter_frame_spacings"]) == max(0, int(value["count"]) - 1)
+        and len(value["inter_frame_spacings"]) == count - 1
     )
 
 
@@ -138,10 +154,12 @@ def _candidate_geometry_valid(kind: str, value: Any) -> bool:
         "sequence_provenance",
         "boundary_observations",
     }
+    count = _integer(value.get("count")) if isinstance(value, dict) else None
     if not (
         isinstance(value, dict)
         and common_fields.issubset(value)
-        and int(value["count"]) > 0
+        and count is not None
+        and count > 0
         and _span_valid(value["holder_span"])
         and _span_valid(value["visible_sequence_span"])
         and _span_valid(value["crop_envelope"])
@@ -163,29 +181,44 @@ def _candidate_geometry_valid(kind: str, value: Any) -> bool:
         lane_solutions = value.get("lane_solutions")
         lane_boxes = value.get("lane_boxes")
         lane_envelopes = value.get("lane_crop_envelopes")
-        component_count = (
-            sum(int(lane.get("count", 0)) for lane in lane_solutions)
+        lane_counts = (
+            tuple(
+                _integer(lane.get("count"))
+                if isinstance(lane, dict)
+                else None
+                for lane in lane_solutions
+            )
             if isinstance(lane_solutions, list)
+            else ()
+        )
+        lane_counts_valid = bool(
+            lane_counts
+            and all(item is not None and item > 0 for item in lane_counts)
+        )
+        component_count = (
+            sum(item for item in lane_counts if item is not None)
+            if lane_counts_valid
             else 0
         )
         component_boundaries = (
-            sum(max(0, int(lane.get("count", 0)) - 1) for lane in lane_solutions)
-            if isinstance(lane_solutions, list)
+            sum(item - 1 for item in lane_counts if item is not None)
+            if lane_counts_valid
             else 0
         )
         return bool(
             isinstance(value["frames"], list)
-            and len(value["frames"]) == int(value["count"])
+            and len(value["frames"]) == count
             and all(_box_valid(frame) for frame in value["frames"])
             and isinstance(value["photo_intervals"], list)
-            and len(value["photo_intervals"]) == int(value["count"])
+            and len(value["photo_intervals"]) == count
             and isinstance(value["frame_boundaries"], list)
             and len(value["frame_boundaries"]) == component_boundaries
             and isinstance(value["inter_frame_spacings"], list)
             and len(value["inter_frame_spacings"]) == component_boundaries
             and isinstance(lane_solutions, list)
             and len(lane_solutions) > 1
-            and component_count == int(value["count"])
+            and lane_counts_valid
+            and component_count == count
             and all(
                 _candidate_geometry_valid("sequence", lane)
                 for lane in lane_solutions
@@ -260,7 +293,9 @@ def _selection_valid(value: Any) -> bool:
         and isinstance(value["clusters"], list)
     ):
         return False
-    selected_rank = int(value["selected_rank"])
+    selected_rank = _integer(value["selected_rank"])
+    if selected_rank is None:
+        return False
     return 1 <= selected_rank <= len(value["candidates"])
 
 
@@ -441,14 +476,18 @@ def current_report_record_errors(record: dict[str, Any]) -> list[str]:
         and isinstance(selection.get("candidates"), list)
         and selection["candidates"]
     ):
-        selected_rank = int(selection.get("selected_rank", 0))
-        if 1 <= selected_rank <= len(selection["candidates"]):
+        selected_rank = _integer(selection.get("selected_rank"))
+        if (
+            selected_rank is not None
+            and 1 <= selected_rank <= len(selection["candidates"])
+        ):
             selected_kind = selection["candidates"][selected_rank - 1].get(
                 "geometry_kind"
             )
+    decision = record["decision"] if isinstance(record["decision"], dict) else {}
     allow_empty_frames = bool(
         selected_kind == "review_only"
-        and record["decision"].get("status") == "needs_review"
+        and decision.get("status") == "needs_review"
     )
     if not _output_valid(
         record["output"],

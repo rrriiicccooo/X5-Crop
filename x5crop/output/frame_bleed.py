@@ -42,8 +42,8 @@ def frame_bleed_plan(
     if len(frame_crop_envelopes) != len(frames):
         raise ValueError("each frame requires one crop envelope")
     horizontal = layout == "horizontal"
-    leading = [max(0, int(user_bleed.long_axis)) for _frame in frames]
-    trailing = [max(0, int(user_bleed.long_axis)) for _frame in frames]
+    leading = [int(user_bleed.long_axis) for _frame in frames]
+    trailing = [int(user_bleed.long_axis) for _frame in frames]
     protections: list[BoundaryOverlapProtection] = []
     unresolved: list[int] = []
 
@@ -90,7 +90,7 @@ def frame_bleed_plan(
                 frame_index=index,
                 leading_px=leading[index],
                 trailing_px=trailing[index],
-                short_axis_px=max(0, int(user_bleed.short_axis)),
+                short_axis_px=int(user_bleed.short_axis),
             )
             for index in range(len(frames))
         ),

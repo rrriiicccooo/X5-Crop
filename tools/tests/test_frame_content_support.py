@@ -5,10 +5,16 @@ import unittest
 
 import numpy as np
 
-from tools.tests.physical_gate_support import candidate_fixture
+from tools.tests.physical_gate_support import (
+    candidate_evidence_fixture,
+    candidate_fixture,
+)
 from x5crop.cache import MeasurementCache
 from x5crop.detection.evidence.content.frame_support import frame_content_evidence
 from x5crop.detection.evidence.sequence_content_alignment import sequence_content_alignment_evidence
+from x5crop.detection.evidence.content.preservation import (
+    content_preservation_evidence,
+)
 from x5crop.domain import EvidenceState
 from x5crop.domain import VisibleSequenceSpan
 from x5crop.domain import Box
@@ -28,6 +34,21 @@ def _cache(gray: np.ndarray) -> MeasurementCache:
 
 
 class FrameContentSupportTest(unittest.TestCase):
+    def test_content_span_conflict_prevents_supported_preservation(self) -> None:
+        evidence = candidate_evidence_fixture()
+        alignment = replace(
+            evidence.sequence_content_alignment,
+            state=EvidenceState.UNAVAILABLE,
+            content_outside_sides=("top",),
+        )
+        preservation = content_preservation_evidence(
+            evidence.frame_content,
+            alignment,
+            evidence.partial_edge_safety,
+            evidence.frame_coverage,
+        )
+        self.assertEqual(preservation.state, EvidenceState.UNAVAILABLE)
+
     def test_empty_frame_does_not_claim_content_damage(self) -> None:
         candidate = candidate_fixture()
         gray = np.full((100, 200), 255, dtype=np.uint8)
@@ -81,8 +102,7 @@ class FrameContentSupportTest(unittest.TestCase):
             get_detection_configuration("120-645", "full").content.evidence,
         )
         self.assertEqual(alignment.state, EvidenceState.UNAVAILABLE)
-        self.assertFalse(alignment.confirmed_undercrop_sides)
-        self.assertTrue(alignment.unconfirmed_undercrop_sides)
+        self.assertTrue(alignment.content_outside_sides)
 
 
 if __name__ == "__main__":

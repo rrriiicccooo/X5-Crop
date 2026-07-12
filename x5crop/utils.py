@@ -9,6 +9,26 @@ import numpy as np
 from .domain import Box
 
 
+def require_positive(name: str, value: int | float) -> None:
+    if not math.isfinite(float(value)) or float(value) <= 0.0:
+        raise ValueError(f"{name} must be positive")
+
+
+def require_nonnegative(name: str, value: int | float) -> None:
+    if not math.isfinite(float(value)) or float(value) < 0.0:
+        raise ValueError(f"{name} must be non-negative")
+
+
+def require_percentile(name: str, value: int | float) -> None:
+    if not math.isfinite(float(value)) or not 0.0 <= float(value) <= 100.0:
+        raise ValueError(f"{name} must be within [0, 100]")
+
+
+def require_unit_interval(name: str, value: int | float) -> None:
+    if not math.isfinite(float(value)) or not 0.0 <= float(value) <= 1.0:
+        raise ValueError(f"{name} must be within [0, 1]")
+
+
 def clamp_int(value: float, lower: int, upper: int) -> int:
     return int(max(lower, min(upper, int(round(value)))))
 

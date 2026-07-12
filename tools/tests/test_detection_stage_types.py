@@ -89,6 +89,30 @@ class DetectionStageTypeContractTests(unittest.TestCase):
             source,
         )
 
+    def test_content_alignment_has_no_write_only_confirmation_fields(self) -> None:
+        from x5crop.detection.evidence.content.preservation import (
+            ContentPreservationEvidence,
+        )
+        from x5crop.detection.evidence.sequence_content_alignment import (
+            SequenceContentAlignmentEvidence,
+        )
+
+        alignment_fields = set(
+            SequenceContentAlignmentEvidence.__dataclass_fields__
+        )
+        self.assertIn("content_outside_sides", alignment_fields)
+        for removed in (
+            "content_measurement_sources",
+            "confirmed_undercrop_sides",
+            "unconfirmed_undercrop_sides",
+            "border_tonal_fraction",
+        ):
+            self.assertNotIn(removed, alignment_fields)
+        self.assertNotIn(
+            "confirmed_visible_undercrop_sides",
+            ContentPreservationEvidence.__dataclass_fields__,
+        )
+
     def test_gate_outcomes_are_derived_from_canonical_checks(self) -> None:
         candidate_fields = set(CandidateGateAssessment.__dataclass_fields__)
         decision_fields = set(DecisionGateAssessment.__dataclass_fields__)
@@ -140,6 +164,7 @@ class DetectionStageTypeContractTests(unittest.TestCase):
         parameters = inspect.signature(build_sequence_candidate).parameters
         self.assertIn("sequence_hypothesis", parameters)
         self.assertIn("count_hypothesis", parameters)
+        self.assertIn("planning_budget_exhausted", parameters)
         for duplicated_field in (
             "count",
             "strip_mode",
@@ -151,6 +176,16 @@ class DetectionStageTypeContractTests(unittest.TestCase):
             "boundary_observations",
         ):
             self.assertNotIn(duplicated_field, parameters)
+
+    def test_frame_sequence_plan_carries_search_budget_state(self) -> None:
+        from x5crop.detection.candidate.execution.source_candidates import (
+            FrameSequencePlan,
+        )
+
+        self.assertIn(
+            "search_budget_exhausted",
+            FrameSequencePlan.__dataclass_fields__,
+        )
 
     def test_removed_gap_and_outer_modules_do_not_exist(self) -> None:
         for relative in (

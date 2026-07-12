@@ -19,7 +19,9 @@ def hard_safety_candidate(
 ) -> BuiltCandidate:
     physical_spec = context.configuration.physical_spec
     work_height, work_width = context.measurement_cache.gray_work.shape
-    count = max(1, int(count))
+    if count <= 0:
+        raise ValueError("hard-safety candidate count must be positive")
+    count = int(count)
     span = Box(0, 0, work_width, work_height)
     visible_span = VisibleSequenceSpan(span)
     dimensions = frame_dimension_prior(

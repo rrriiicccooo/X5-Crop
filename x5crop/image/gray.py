@@ -4,7 +4,12 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from ..utils import sampled_values_for_percentile
+from ..utils import (
+    require_nonnegative,
+    require_percentile,
+    require_positive,
+    sampled_values_for_percentile,
+)
 
 
 @dataclass(frozen=True)
@@ -15,6 +20,24 @@ class BaseGrayParameters:
     low_percentile: float = 0.2
     high_percentile: float = 99.8
     maximum_percentile_samples: int = 1_000_000
+
+    def __post_init__(self) -> None:
+        for name, value in (
+            ("red luma weight", self.red_weight),
+            ("green luma weight", self.green_weight),
+            ("blue luma weight", self.blue_weight),
+        ):
+            require_nonnegative(name, value)
+        if self.red_weight + self.green_weight + self.blue_weight <= 0.0:
+            raise ValueError("luma weights must contain positive support")
+        require_percentile("gray low percentile", self.low_percentile)
+        require_percentile("gray high percentile", self.high_percentile)
+        if self.high_percentile <= self.low_percentile:
+            raise ValueError("gray high percentile must follow low percentile")
+        require_positive(
+            "gray percentile sample budget",
+            self.maximum_percentile_samples,
+        )
 
 
 def make_base_gray_u8(

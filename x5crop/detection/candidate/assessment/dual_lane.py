@@ -61,10 +61,14 @@ def _combined_state(states: tuple[EvidenceState, ...]) -> EvidenceState:
 def assess_dual_lane_candidate(
     candidate: BuiltCandidate,
     lanes: tuple[AssessedCandidate, ...],
+    *,
+    lane_geometry_resolved: tuple[bool, ...],
 ) -> AssessedCandidate:
     geometry = candidate.geometry
     if not isinstance(geometry, DualLaneSolution):
         raise ValueError("dual-lane assessment requires dual-lane geometry")
+    if len(lane_geometry_resolved) != len(lanes):
+        raise ValueError("dual-lane assessment requires one resolution per lane")
     topology_state = _combined_state(
         tuple(lane.assessment.evidence.frame_topology.state for lane in lanes)
     )
@@ -304,11 +308,6 @@ def assess_dual_lane_candidate(
             for lane in lanes
             for index in lane.assessment.evidence.content_preservation.boundary_contact_frame_indexes
         ),
-        confirmed_visible_undercrop_sides=tuple(
-            side
-            for lane in lanes
-            for side in lane.assessment.evidence.content_preservation.confirmed_visible_undercrop_sides
-        ),
         partial_edge_state=EvidenceState.NOT_APPLICABLE,
     )
     alignment = SequenceContentAlignmentEvidence(
@@ -318,9 +317,11 @@ def assess_dual_lane_candidate(
         reason="dual_lane_sequence_content_alignment",
         visible_sequence_span=geometry.visible_sequence_span.box,
         content_span=None,
-        content_measurement_sources=("lane_components",),
-        confirmed_undercrop_sides=preservation.confirmed_visible_undercrop_sides,
-        unconfirmed_undercrop_sides=(),
+        content_outside_sides=tuple(
+            side
+            for lane in lanes
+            for side in lane.assessment.evidence.sequence_content_alignment.content_outside_sides
+        ),
         overcontains_long_axis=any(
             lane.assessment.evidence.sequence_content_alignment.overcontains_long_axis
             for lane in lanes
@@ -333,7 +334,6 @@ def assess_dual_lane_candidate(
         trailing_slack_px=0,
         top_slack_px=0,
         bottom_slack_px=0,
-        border_tonal_fraction=(),
     )
     completeness = StripCompletenessEvidence(
         frame_count_complete=True,
@@ -424,7 +424,10 @@ def assess_dual_lane_candidate(
         partial_edge_safety=partial,
         independence=independence,
     )
-    components_pass = all(lane.assessment.gate.passed for lane in lanes)
+    components_pass = bool(
+        all(lane.assessment.gate.passed for lane in lanes)
+        and all(lane_geometry_resolved)
+    )
     gate = candidate_gate_assessment(
         CandidateGateInput(
             frame_topology=topology.state,
@@ -438,7 +441,10 @@ def assess_dual_lane_candidate(
                     EvidenceState.SUPPORTED
                     if components_pass
                     else EvidenceState.CONTRADICTED,
-                    ("two_independently_assessed_lanes",),
+                    (
+                        "two_independently_assessed_lanes",
+                        "resolved_lane_geometry",
+                    ),
                 ),
             ),
             diagnostics=candidate.build_diagnostics,

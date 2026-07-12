@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from itertools import combinations
 
 import numpy as np
@@ -21,6 +22,12 @@ from ...physical.sequence import (
 from ...physical.photo_size import frame_dimension_prior
 from ...physical.separator.observations import measure_separator_bands
 from x5crop.domain import CropEnvelope, VisibleSequenceSpan
+
+
+@dataclass(frozen=True)
+class SequenceHypothesisSet:
+    hypotheses: tuple[SequenceHypothesis, ...]
+    budget_exhausted: bool
 
 
 def _measurement_corridor(
@@ -57,25 +64,29 @@ def _separator_dimension_hypotheses(
     layout: str,
     separator_policy: SeparatorConfiguration,
     hypothesis_parameters: SequenceHypothesisParameters,
-) -> list[SequenceHypothesis]:
+) -> SequenceHypothesisSet:
     if count <= 1:
-        return []
+        return SequenceHypothesisSet((), False)
     height, width = cache.gray_work.shape
     candidates: list[tuple[float, SequenceHypothesis]] = []
+    budget_exhausted = False
     for source in base:
         corridor = _measurement_corridor(source, cache)
         profile = cached_separator_profile(cache, corridor, separator_policy.profile)
-        observations = measure_separator_bands(
+        observation_set = measure_separator_bands(
             profile,
             corridor_start=float(corridor.left),
             parameters=separator_policy.observation,
         )
+        observations = observation_set.observations
+        budget_exhausted |= observation_set.budget_exhausted
         if len(observations) < count - 1:
             continue
         observation_budget = max(
             count - 1,
             int(hypothesis_parameters.observation_budget),
         )
+        budget_exhausted |= len(observations) > observation_budget
         strongest = tuple(
             sorted(
                 sorted(
@@ -139,9 +150,12 @@ def _separator_dimension_hypotheses(
                 )
             )
     ranked = [item for _residual, item in sorted(candidates, key=lambda item: item[0])]
-    return unique_sequence_hypotheses(ranked)[
-        : max(0, int(hypothesis_parameters.maximum_hypotheses))
-    ]
+    unique = unique_sequence_hypotheses(ranked)
+    limit = int(hypothesis_parameters.maximum_hypotheses)
+    return SequenceHypothesisSet(
+        hypotheses=tuple(unique[:limit]),
+        budget_exhausted=budget_exhausted or len(unique) > limit,
+    )
 
 
 def sequence_hypotheses(
@@ -156,7 +170,7 @@ def sequence_hypotheses(
     content_policy: ContentConfiguration,
     separator_policy: SeparatorConfiguration,
     hypothesis_parameters: SequenceHypothesisParameters,
-) -> list[SequenceHypothesis]:
+) -> SequenceHypothesisSet:
     if cache.gray_work is not gray_work and not np.shares_memory(cache.gray_work, gray_work):
         raise ValueError("sequence proposal requires the context measurement workspace")
     base = base_sequence_span_candidates(
@@ -174,9 +188,17 @@ def sequence_hypotheses(
         separator_policy,
         hypothesis_parameters,
     )
-    physical_sources = unique_sequence_hypotheses([*base, *separator_dimension])
-    return expand_crop_envelopes_for_content(
+    physical_sources = unique_sequence_hypotheses(
+        [*base, *separator_dimension.hypotheses]
+    )
+    limit = int(hypothesis_parameters.maximum_hypotheses)
+    budget_exhausted = (
+        separator_dimension.budget_exhausted
+        or len(physical_sources) > limit
+    )
+    hypotheses = expand_crop_envelopes_for_content(
         cache.content_evidence_float_work,
-        physical_sources,
+        physical_sources[:limit],
         content_policy.evidence,
     )
+    return SequenceHypothesisSet(tuple(hypotheses), budget_exhausted)

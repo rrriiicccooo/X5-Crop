@@ -22,19 +22,25 @@ class LaneDividerProposal:
         )
 
 
+@dataclass(frozen=True)
+class LaneDividerProposalSet:
+    proposals: tuple[LaneDividerProposal, ...]
+    budget_exhausted: bool
+
+
 def lane_divider_proposals(
     content_evidence: np.ndarray,
     parameters: DualLaneDividerParameters,
-) -> tuple[LaneDividerProposal, ...]:
+) -> LaneDividerProposalSet:
     if content_evidence.ndim != 2:
         raise ValueError("dual-lane divider requires two-dimensional evidence")
     height, width = content_evidence.shape
     if height < 2 or width < 1:
-        return ()
+        return LaneDividerProposalSet((), False)
     start = max(1, int(round(height * parameters.search_min_ratio)))
     end = min(height - 1, int(round(height * parameters.search_max_ratio)))
     if end <= start:
-        return ()
+        return LaneDividerProposalSet((), False)
     row_content = content_evidence.mean(axis=1, dtype=np.float64)
     row_texture = content_evidence.std(axis=1, dtype=np.float64)
     content_scale = max(
@@ -54,7 +60,7 @@ def lane_divider_proposals(
         parameters.band_width_min_px,
         parameters.band_width_max_px,
     )
-    kernel_width = max(1, band_width)
+    kernel_width = band_width
     kernel = np.ones(kernel_width, dtype=np.float64) / float(kernel_width)
     smoothed = np.convolve(gutter_residual, kernel, mode="same")
     minimum_separation = max(
@@ -62,11 +68,13 @@ def lane_divider_proposals(
         int(round(height * parameters.minimum_center_separation_ratio)),
     )
     selected: list[int] = []
+    budget_exhausted = False
     for row in sorted(range(start, end), key=lambda index: float(smoothed[index])):
         if all(abs(row - existing) >= minimum_separation for existing in selected):
+            if len(selected) >= int(parameters.proposal_count):
+                budget_exhausted = True
+                break
             selected.append(row)
-        if len(selected) >= int(parameters.proposal_count):
-            break
 
     half = max(1, band_width // 2)
     proposals = [
@@ -91,4 +99,4 @@ def lane_divider_proposals(
                 source="center_safety",
             )
         )
-    return tuple(proposals)
+    return LaneDividerProposalSet(tuple(proposals), budget_exhausted)

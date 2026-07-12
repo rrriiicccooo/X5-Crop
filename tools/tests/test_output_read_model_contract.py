@@ -154,6 +154,13 @@ class OutputReadModelContractTest(unittest.TestCase):
     def test_fresh_record_is_current_schema_valid(self) -> None:
         self.assertEqual(current_report_record_errors(_record()), [])
 
+    def test_malformed_current_record_is_rejected_without_raising(self) -> None:
+        record = _record()
+        record["selection"]["candidates"][0]["candidate_geometry"][
+            "count"
+        ] = "not-an-integer"
+        self.assertTrue(current_report_record_errors(record))
+
     def test_unavailable_transform_span_remains_explicitly_unavailable(self) -> None:
         transform = replace(
             transform_geometry_fixture(),

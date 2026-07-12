@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from inspect import signature
+from pathlib import Path
 import unittest
 
 import numpy as np
@@ -67,6 +68,40 @@ def _single_frame_candidate(*, measured_boundaries: bool) -> BuiltCandidate:
 
 
 class PhysicalDetectionResolutionContractTest(unittest.TestCase):
+    def test_dual_lane_parent_does_not_erase_search_budget_exhaustion(self) -> None:
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "x5crop/detection/modes/dual_lane.py").read_text()
+        self.assertNotIn("search_budget_exhausted=False", source)
+
+    def test_independently_proved_geometry_does_not_require_observed_spacing(self) -> None:
+        candidate = candidate_fixture()
+        candidate = replace(
+            candidate,
+            count_hypothesis=replace(
+                candidate.count_hypothesis,
+                source="requested_count",
+            ),
+            assessment=replace(
+                candidate.assessment,
+                evidence=replace(
+                    candidate.assessment.evidence,
+                    frame_sequence=replace(
+                        candidate.assessment.evidence.frame_sequence,
+                        conservation=replace(
+                            candidate.assessment.evidence.frame_sequence.conservation,
+                            state=EvidenceState.UNAVAILABLE,
+                        ),
+                    ),
+                ),
+            ),
+        )
+        selection = select_candidates(
+            (candidate,),
+            larger_counts_evaluated=True,
+        )
+        self.assertTrue(selection.geometry_resolution.count_resolved)
+        self.assertTrue(selection.geometry_resolution.placement_resolved)
+
     def test_search_budget_exhaustion_prevents_geometry_resolution(self) -> None:
         candidate = candidate_fixture()
         candidate = replace(
@@ -142,11 +177,11 @@ class PhysicalDetectionResolutionContractTest(unittest.TestCase):
             any(path.state == EvidenceState.SUPPORTED for path in paths)
         )
 
-    def test_geometry_resolution_requires_sequence_conservation(self) -> None:
+    def test_geometry_resolution_rejects_contradicted_sequence_conservation(self) -> None:
         candidate = candidate_fixture()
         conservation = replace(
             candidate.assessment.evidence.frame_sequence.conservation,
-            state=EvidenceState.UNAVAILABLE,
+            state=EvidenceState.CONTRADICTED,
         )
         evidence = replace(
             candidate.assessment.evidence,

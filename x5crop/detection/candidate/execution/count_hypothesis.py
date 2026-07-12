@@ -28,6 +28,7 @@ def _assess_sequence_plan(
             cache=context.measurement_cache,
             separator_policy=context.configuration.separator,
             solver_parameters=context.configuration.candidate_plan.sequence_solver,
+            planning_budget_exhausted=plan.search_budget_exhausted,
         )
         assessed.append(assess_candidate(built, context))
     return assessed

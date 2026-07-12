@@ -271,7 +271,6 @@ def candidate_evidence_fixture(
             ),
             (),
             (),
-            (("left",) if content_preservation == EvidenceState.CONTRADICTED else ()),
             EvidenceState.NOT_APPLICABLE,
         ),
         sequence_content_alignment=SequenceContentAlignmentEvidence(
@@ -279,8 +278,6 @@ def candidate_evidence_fixture(
             "content_contained",
             outer,
             Box(10, 10, 190, 90),
-            ("synthetic",),
-            (),
             (),
             False,
             False,
@@ -288,7 +285,6 @@ def candidate_evidence_fixture(
             10,
             10,
             10,
-            (),
         ),
         holder_occupancy=HolderOccupancyEvidence(
             EvidenceState.SUPPORTED,

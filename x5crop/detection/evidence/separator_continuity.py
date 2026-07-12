@@ -48,6 +48,20 @@ def _break_count(mask: np.ndarray) -> int:
     return int(max(0, np.count_nonzero(transitions == 1) - 1))
 
 
+def _cross_axis_path_exists(mask: np.ndarray) -> bool:
+    if mask.ndim != 2 or not mask.shape[0] or not mask.shape[1]:
+        return False
+    reachable = mask[0].astype(bool, copy=True)
+    for row in mask[1:]:
+        adjacent = reachable.copy()
+        adjacent[1:] |= reachable[:-1]
+        adjacent[:-1] |= reachable[1:]
+        reachable = row.astype(bool, copy=False) & adjacent
+        if not reachable.any():
+            return False
+    return bool(reachable.any())
+
+
 def _measurement_corridor(
     geometry: SequenceSolution,
     observation: SeparatorBandObservation,
@@ -94,6 +108,21 @@ def separator_cross_axis_continuity_evidence(
             enriched.append(observation)
             continue
         band = gray_work[corridor.top:corridor.bottom, start:end]
+        if statistics.intensity_high <= statistics.intensity_low:
+            records.append(
+                SeparatorContinuityRecord(
+                    observation.start,
+                    observation.end,
+                    EvidenceState.UNAVAILABLE,
+                    None,
+                    None,
+                    None,
+                    None,
+                    "separator_tonal_reference_unavailable",
+                )
+            )
+            enriched.append(observation)
+            continue
         extreme = (band <= float(statistics.intensity_low)) | (
             band >= float(statistics.intensity_high)
         )
@@ -117,7 +146,7 @@ def separator_cross_axis_continuity_evidence(
             if row_centers
             else 0.0
         )
-        supported = bool(row_support.size and row_support.all())
+        supported = _cross_axis_path_exists(extreme)
         records.append(
             SeparatorContinuityRecord(
                 observation.start,

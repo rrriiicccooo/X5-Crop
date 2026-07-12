@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from math import ceil, floor
 
 import numpy as np
@@ -8,6 +9,12 @@ from ....domain import MeasurementProvenance
 from ....configuration.separator import SeparatorObservationParameters
 from ....utils import runs_from_mask
 from x5crop.domain import PixelInterval, SeparatorBandObservation
+
+
+@dataclass(frozen=True)
+class SeparatorObservationSet:
+    observations: tuple[SeparatorBandObservation, ...]
+    budget_exhausted: bool
 
 
 def _activation_threshold(
@@ -46,7 +53,7 @@ def measure_focused_separator_band(
     )
     if local_end <= local_start:
         return None
-    minimum_width = max(1, int(parameters.minimum_run_px))
+    minimum_width = int(parameters.minimum_run_px)
     measured: list[SeparatorBandObservation] = []
     focused = profile[local_start:local_end]
     activation = _activation_threshold(profile, parameters)
@@ -91,14 +98,14 @@ def measure_separator_bands(
     *,
     corridor_start: float,
     parameters: SeparatorObservationParameters,
-) -> tuple[SeparatorBandObservation, ...]:
+) -> SeparatorObservationSet:
     if profile.ndim != 1:
         raise ValueError("separator profile must be one-dimensional")
     activation = _activation_threshold(profile, parameters)
     if activation is None:
-        return ()
+        return SeparatorObservationSet((), False)
     threshold, spread = activation
-    minimum_width = max(1, int(parameters.minimum_run_px))
+    minimum_width = int(parameters.minimum_run_px)
     measured: list[SeparatorBandObservation] = []
     for local_start, local_end in runs_from_mask(
         profile >= threshold
@@ -124,9 +131,7 @@ def measure_separator_bands(
                 ),
             )
         )
-    budget = max(0, int(parameters.maximum_observations))
-    if budget == 0:
-        return ()
+    budget = int(parameters.maximum_observations)
     strongest = sorted(
         measured,
         key=lambda observation: (
@@ -135,4 +140,9 @@ def measure_separator_bands(
         ),
         reverse=True,
     )[:budget]
-    return tuple(sorted(strongest, key=lambda observation: observation.center))
+    return SeparatorObservationSet(
+        observations=tuple(
+            sorted(strongest, key=lambda observation: observation.center)
+        ),
+        budget_exhausted=len(measured) > budget,
+    )
