@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from pathlib import Path
 import os
 from tempfile import TemporaryDirectory
 import unittest
 import numpy as np
-from dataclasses import fields, replace
+from dataclasses import asdict, fields, replace
 
 from tools.tests.physical_gate_support import (
     final_detection_fixture,
@@ -13,6 +14,8 @@ from tools.tests.physical_gate_support import (
 )
 from x5crop.detection.decision.model import FinalDetection
 from x5crop.domain import ImageProfile, ProcessResult
+from x5crop.configuration.registry import get_detection_configuration
+from x5crop.report.configuration import detection_configuration_read_model
 from x5crop.report.record import report_record_for_final_detection
 from x5crop.report.restoration import final_detection_from_record
 from x5crop.report.validation import current_report_record_errors
@@ -22,17 +25,71 @@ from tools.regression.compare import DEFAULT_FIELDS
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
+def _profile() -> ImageProfile:
+    return ImageProfile(
+        (120, 240),
+        "uint8",
+        "YX",
+        "MINISBLACK",
+        "NONE",
+        None,
+        8,
+        1,
+        None,
+        None,
+        None,
+        None,
+    )
+
+
+def _analysis_reuse_signature(
+    format_id: str = "135",
+    strip_mode: str = "full",
+) -> dict:
+    return {
+        "script": "X5_Crop.py",
+        "script_version": "4.9",
+        "source": {
+            "name": "input.tif",
+            "size": 1,
+            "mtime_ns": 1,
+            "content_sha256": "0" * 64,
+            "page": 0,
+            "shape": [120, 240],
+            "dtype": "uint8",
+            "axes": "YX",
+            "photometric": "MINISBLACK",
+        },
+        "config": {
+            "format_id": format_id,
+            "layout": "horizontal",
+            "strip_mode": strip_mode,
+            "requested_count": None,
+            "page": 0,
+            "deskew": "off",
+            "deskew_fallback": "off",
+            "deskew_min_angle": 0.03,
+            "deskew_max_angle": 2.0,
+            "bleed_x": 20,
+            "bleed_y": 10,
+        },
+        "configuration_fingerprint": "0" * 64,
+    }
+
+
 def _record() -> dict:
     return report_record_for_final_detection(
         final_detection_fixture(),
         source="input.tif",
-        profile={},
+        profile=asdict(_profile()),
         output_files=[],
         review_copy=None,
         warnings=[],
-        configuration={"configuration_id": "test_configuration"},
+        configuration=detection_configuration_read_model(
+            get_detection_configuration("135", "full")
+        ),
         transform_geometry=transform_geometry_fixture(),
-        analysis_reuse_signature={},
+        analysis_reuse_signature=_analysis_reuse_signature(),
     )
 
 
@@ -150,13 +207,16 @@ class OutputReadModelContractTest(unittest.TestCase):
         record = report_record_for_final_detection(
             detection,
             source="synthetic.tif",
-            profile={},
+            profile=asdict(profile),
             output_files=[],
             review_copy=None,
             warnings=[],
             configuration=detection_configuration_read_model(configuration),
             transform_geometry=transform_geometry_fixture(),
-            analysis_reuse_signature={},
+            analysis_reuse_signature=_analysis_reuse_signature(
+                "135-dual",
+                "partial",
+            ),
         )
         self.assertEqual(current_report_record_errors(record), [])
 
@@ -189,6 +249,33 @@ class OutputReadModelContractTest(unittest.TestCase):
     def test_fresh_record_is_current_schema_valid(self) -> None:
         self.assertEqual(current_report_record_errors(_record()), [])
 
+    def test_current_schema_rejects_unknown_fields_at_every_runtime_boundary(
+        self,
+    ) -> None:
+        mutations = (
+            lambda record: record.__setitem__("legacy_top_level", {}),
+            lambda record: record["decision"].__setitem__(
+                "review_reasons",
+                [],
+            ),
+            lambda record: record["selection"]["candidates"][0][
+                "candidate_geometry"
+            ].__setitem__("outer_box", {}),
+            lambda record: record["selection"]["candidates"][0][
+                "evidence"
+            ].__setitem__("risk_summary", {}),
+            lambda record: record["output"]["frame_bleed_plan"].__setitem__(
+                "global_overlap_bleed",
+                0,
+            ),
+        )
+        baseline = _record()
+        for mutation in mutations:
+            record = deepcopy(baseline)
+            mutation(record)
+            with self.subTest(mutation=mutation):
+                self.assertTrue(current_report_record_errors(record))
+
     def test_superseded_geometry_resolution_shape_is_not_current(self) -> None:
         record = _record()
         resolution = record["selection"]["geometry_resolution"]
@@ -216,13 +303,15 @@ class OutputReadModelContractTest(unittest.TestCase):
         record = report_record_for_final_detection(
             final_detection_fixture(),
             source="input.tif",
-            profile={},
+            profile=asdict(_profile()),
             output_files=[],
             review_copy=None,
             warnings=[],
-            configuration={"configuration_id": "test_configuration"},
+            configuration=detection_configuration_read_model(
+                get_detection_configuration("135", "full")
+            ),
             transform_geometry=transform,
-            analysis_reuse_signature={},
+            analysis_reuse_signature=_analysis_reuse_signature(),
         )
         self.assertIsNone(
             record["diagnostics"]["transform_geometry"]["span_px"]

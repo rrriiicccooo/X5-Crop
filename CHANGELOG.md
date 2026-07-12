@@ -69,9 +69,11 @@ repository rules in `AGENTS.md`.
   lookup 与 current report 共同使用。相同文件名、大小和时间戳不再足以复用检测。
 - TIFF `ImageProfile` 已成为 immutable typed input contract；rational、enum 和 NumPy scalar 在
   I/O 边界归一化，calibration/cache/report 不再兼容解析底层 tag 对象或旧 rational shape。
+- Current report validator 现在递归要求 canonical typed model 与 report projection 的精确字段集合；
+  顶层或任意嵌套层级出现旧 alias、额外字段或不一致 derived gate 字段都会拒绝 cache reuse。
 - Diagnostics 参数不再使 detection analysis fingerprint 失效；无法测得的 content threshold 也只
   计算一次。Malformed current-schema record 现在返回 validation error，不再从 validator 抛异常。
-- 290 项测试、14 个 format/mode configuration、package/regression compile、launcher syntax、
+- 291 项测试、14 个 format/mode configuration、package/regression compile、launcher syntax、
   version 和 whitespace 检查通过。
 
 #### 物理序列求解与经验参数退场（2026-07-12）

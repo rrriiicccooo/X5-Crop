@@ -216,7 +216,8 @@ schema 与完全匹配的 source/configuration fingerprint；source identity 包
 同一次运行的 lookup 和 report 写入共用同一个 canonical signature。旧 record 或内容不同的同名
 文件直接重新检测。Debug Analysis 保持 original gray、debug boxes、separator evidence 三联图。
 Current validator 精确校验 `GeometryResolution` 字段；旧字段形状即使使用相同 schema identity
-也会被拒绝并重新检测。
+也会被拒绝并重新检测。所有 typed result 由 canonical dataclass 结构递归校验，report 自有投影
+也使用精确字段集合；任何层级的额外 alias、旧字段或未知 section 都会使 record 失效。
 
 ## 2. 源码分层 / Source Layers
 
