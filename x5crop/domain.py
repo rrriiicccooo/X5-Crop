@@ -260,16 +260,26 @@ class BoundaryObservation:
             raise ValueError(f"unsupported boundary kind: {self.kind}")
 
 
+class SeparatorCrossAxisOutcome(str, Enum):
+    BAND_OUTSIDE_CORRIDOR = "band_outside_corridor"
+    TONAL_REFERENCE_UNAVAILABLE = "tonal_reference_unavailable"
+    PATH_SUPPORTED = "path_supported"
+    CONTINUITY_WEAK = "continuity_weak"
+
+
 @dataclass(frozen=True)
 class SeparatorCrossAxisMeasurement:
-    state: EvidenceState
+    outcome: SeparatorCrossAxisOutcome
     coverage_ratio: float | None
     continuity_ratio: float | None
     break_count: int | None
     straightness: float | None
-    reason: str
+    state: EvidenceState = field(init=False)
+    reason: str = field(init=False)
 
     def __post_init__(self) -> None:
+        if not isinstance(self.outcome, SeparatorCrossAxisOutcome):
+            raise TypeError("separator cross-axis measurement requires a typed outcome")
         ratios = tuple(
             value
             for value in (
@@ -283,8 +293,40 @@ class SeparatorCrossAxisMeasurement:
             raise ValueError("separator cross-axis ratios must lie in [0, 1]")
         if self.break_count is not None and self.break_count < 0:
             raise ValueError("separator cross-axis break count cannot be negative")
-        if not self.reason:
-            raise ValueError("separator cross-axis measurement requires a reason")
+        unavailable = self.outcome in {
+            SeparatorCrossAxisOutcome.BAND_OUTSIDE_CORRIDOR,
+            SeparatorCrossAxisOutcome.TONAL_REFERENCE_UNAVAILABLE,
+        }
+        measurements = (
+            self.coverage_ratio,
+            self.continuity_ratio,
+            self.break_count,
+            self.straightness,
+        )
+        if unavailable != all(value is None for value in measurements):
+            raise ValueError(
+                "cross-axis outcome must match measurement availability"
+            )
+        state, reason = {
+            SeparatorCrossAxisOutcome.BAND_OUTSIDE_CORRIDOR: (
+                EvidenceState.UNAVAILABLE,
+                "separator_band_outside_measurement_corridor",
+            ),
+            SeparatorCrossAxisOutcome.TONAL_REFERENCE_UNAVAILABLE: (
+                EvidenceState.UNAVAILABLE,
+                "separator_tonal_reference_unavailable",
+            ),
+            SeparatorCrossAxisOutcome.PATH_SUPPORTED: (
+                EvidenceState.SUPPORTED,
+                "cross_axis_path_supported",
+            ),
+            SeparatorCrossAxisOutcome.CONTINUITY_WEAK: (
+                EvidenceState.CONTRADICTED,
+                "cross_axis_continuity_weak",
+            ),
+        }[self.outcome]
+        object.__setattr__(self, "state", state)
+        object.__setattr__(self, "reason", reason)
 
 
 @dataclass(frozen=True)

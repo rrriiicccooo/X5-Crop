@@ -66,6 +66,8 @@ repository rules in `AGENTS.md`.
   width 由两侧自动求和，只有单 frame 双边分配未解决时保留 unallocated total。
 - Separator assignment 删除 caller-supplied state/reason/geometry-dependency；assignment classification
   现在只由 observation、position/width constraints 与 cross-axis measurement 派生。
+- Cross-axis separator measurement 删除 caller-supplied state/reason，改为 typed measurement outcome；
+  availability 与 continuity classification 不能再和测量值漂移。
 - Transform geometry 删除 caller-supplied state/applied/reason 组合，改由 typed deskew outcome 与
   canonical angle/span measurements 派生；report 同时删除手写 transform schema projection，统一使用
   current typed read model。

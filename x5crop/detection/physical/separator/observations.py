@@ -7,12 +7,12 @@ import numpy as np
 
 from ....domain import (
     Box,
-    EvidenceState,
     MeasurementIdentity,
     MeasurementProvenance,
     PixelInterval,
     SeparatorBandObservation,
     SeparatorCrossAxisMeasurement,
+    SeparatorCrossAxisOutcome,
 )
 from ....configuration.separator import SeparatorObservationParameters
 from ....image.statistics import ImageMeasurementStatistics
@@ -68,21 +68,19 @@ def _cross_axis_measurement(
     pixel_end = min(bounded.right, int(ceil(end)))
     if not bounded.valid() or pixel_end <= pixel_start:
         return SeparatorCrossAxisMeasurement(
-            EvidenceState.UNAVAILABLE,
+            SeparatorCrossAxisOutcome.BAND_OUTSIDE_CORRIDOR,
             None,
             None,
             None,
             None,
-            "separator_band_outside_measurement_corridor",
         )
     if statistics.intensity_high <= statistics.intensity_low:
         return SeparatorCrossAxisMeasurement(
-            EvidenceState.UNAVAILABLE,
+            SeparatorCrossAxisOutcome.TONAL_REFERENCE_UNAVAILABLE,
             None,
             None,
             None,
             None,
-            "separator_tonal_reference_unavailable",
         )
     band = gray_work[
         bounded.top : bounded.bottom,
@@ -113,12 +111,15 @@ def _cross_axis_measurement(
     )
     supported = _cross_axis_path_exists(extreme)
     return SeparatorCrossAxisMeasurement(
-        EvidenceState.SUPPORTED if supported else EvidenceState.CONTRADICTED,
+        (
+            SeparatorCrossAxisOutcome.PATH_SUPPORTED
+            if supported
+            else SeparatorCrossAxisOutcome.CONTINUITY_WEAK
+        ),
         coverage,
         continuity,
         _break_count(row_support),
         straightness,
-        "supported" if supported else "cross_axis_continuity_weak",
     )
 
 

@@ -84,6 +84,7 @@ from x5crop.detection.physical.separator.assignment import (
 from x5crop.domain import (
     SeparatorBandObservation,
     SeparatorCrossAxisMeasurement,
+    SeparatorCrossAxisOutcome,
 )
 from x5crop.domain import (
     BoundaryPositionConstraint,
@@ -117,7 +118,11 @@ def separator_observation(
             dependencies=(MeasurementIdentity.GRAY_WORK,),
         ),
         cross_axis=SeparatorCrossAxisMeasurement(
-            state=cross_axis_state,
+            outcome=(
+                SeparatorCrossAxisOutcome.PATH_SUPPORTED
+                if cross_axis_state == EvidenceState.SUPPORTED
+                else SeparatorCrossAxisOutcome.CONTINUITY_WEAK
+            ),
             coverage_ratio=(
                 1.0 if cross_axis_state == EvidenceState.SUPPORTED else 0.0
             ),
@@ -127,11 +132,6 @@ def separator_observation(
             break_count=0,
             straightness=(
                 1.0 if cross_axis_state == EvidenceState.SUPPORTED else 0.0
-            ),
-            reason=(
-                "supported"
-                if cross_axis_state == EvidenceState.SUPPORTED
-                else "cross_axis_continuity_weak"
             ),
         ),
     )

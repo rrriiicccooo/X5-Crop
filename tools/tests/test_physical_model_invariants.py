@@ -301,6 +301,12 @@ class PhysicalModelInvariantTest(unittest.TestCase):
             with self.subTest(field=field_name):
                 self.assertFalse(assignment_fields[field_name].init)
 
+    def test_cross_axis_measurement_derives_state_and_reason(self) -> None:
+        cross_axis = candidate_fixture().geometry.separator_observations[0].cross_axis
+        cross_axis_fields = type(cross_axis).__dataclass_fields__
+        self.assertFalse(cross_axis_fields["state"].init)
+        self.assertFalse(cross_axis_fields["reason"].init)
+
     def test_pixel_intervals_and_residuals_require_finite_values(self) -> None:
         with self.assertRaises(ValueError):
             PixelInterval(math.nan, 1.0)
