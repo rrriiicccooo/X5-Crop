@@ -4,6 +4,7 @@ from pathlib import Path
 import numpy as np
 
 from ..detection.decision.model import FinalDetection
+from ..detection.candidate.model import AssessedCandidate
 from ..configuration.diagnostics import DiagnosticsConfiguration
 from .canvas import DebugRenderCache, write_rgb_jpeg
 from .panels import make_debug_analysis_panel, make_debug_preview_rgb
@@ -28,6 +29,7 @@ def write_debug_preview(
 def write_debug_analysis(
     gray: np.ndarray,
     detection: FinalDetection,
+    selected_candidate: AssessedCandidate,
     output_dir: Path,
     stem: str,
     diagnostics: DiagnosticsConfiguration,
@@ -39,6 +41,7 @@ def write_debug_analysis(
         make_debug_analysis_panel(
             gray,
             detection,
+            selected_candidate,
             diagnostics,
             render_cache,
         ),

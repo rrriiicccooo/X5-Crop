@@ -5,6 +5,7 @@ from typing import Any
 import numpy as np
 
 from ..detection.decision.model import FinalDetection
+from ..detection.candidate.model import AssessedCandidate
 from ..image.evidence import (
     SeparatorEvidenceImageParameters,
     make_separator_evidence_gray,
@@ -83,6 +84,7 @@ def make_separator_evidence_debug_gray(
 def make_separator_evidence_debug_rgb(
     gray: np.ndarray,
     detection: FinalDetection,
+    selected_candidate: AssessedCandidate,
     separator_overlay: Any,
     params: SeparatorEvidenceImageParameters,
     style: DebugStyleParameters,
@@ -99,13 +101,21 @@ def make_separator_evidence_debug_rgb(
         style.preview_max_side,
     )
     draw_evidence_context_overlay(rgb, detection, scale, style)
-    draw_separator_overlay(rgb, detection, scale, separator_overlay, style)
+    draw_separator_overlay(
+        rgb,
+        detection,
+        selected_candidate,
+        scale,
+        separator_overlay,
+        style,
+    )
     return rgb
 
 
 def make_debug_analysis_panel(
     gray: np.ndarray,
     detection: FinalDetection,
+    selected_candidate: AssessedCandidate,
     diagnostics: DiagnosticsConfiguration,
     render_cache: DebugRenderCache,
 ) -> np.ndarray:
@@ -135,6 +145,7 @@ def make_debug_analysis_panel(
             make_separator_evidence_debug_rgb(
                 gray,
                 detection,
+                selected_candidate,
                 separator_overlay,
                 diagnostics.separator_evidence_image,
                 style,

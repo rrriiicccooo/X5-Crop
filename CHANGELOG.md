@@ -75,6 +75,9 @@ repository rules in `AGENTS.md`.
   推导；DetectionContext 同时删除无消费方的 TIFF `ImageProfile`，I/O metadata 不再下沉 detection。
 - Measurement cache 的参数、精确区域与 threshold key 已改为 named immutable types；旧
   `tuple[Any, ...]` 位置 key 删除，cache 仍只保存 count/offset-independent root measurements。
+- `FinalDetection` 已删除 optional selection、sequence span、separator assignments 与 frame
+  boundaries 等候选阶段副本。Report/debug 显式接收 `SelectionResult` 或 selected candidate；
+  cache restoration 只恢复 final decision/output，不再维护半有效 FinalDetection 或物理反序列化。
 - Diagnostics 参数不再使 detection analysis fingerprint 失效；无法测得的 content threshold 也只
   计算一次。Malformed current-schema record 现在返回 validation error，不再从 validator 抛异常。
 - 294 项测试、14 个 format/mode configuration、package/regression compile、launcher syntax、

@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from ..detection.decision.model import FinalDetection
+from ..detection.candidate.selection.model import SelectionResult
 from ..detection.evidence.transform_geometry import TransformGeometryEvidence
 from ..domain import ImageProfile, ProcessResult
 from ..utils import json_safe
@@ -14,6 +15,7 @@ from .record import report_record_for_final_detection
 def result_from_detection(
     input_file: Path,
     detection: FinalDetection,
+    selection: SelectionResult,
     profile: ImageProfile,
     output_files: list[str],
     review_copy: Optional[str],
@@ -25,6 +27,7 @@ def result_from_detection(
 ) -> ProcessResult:
     record = report_record_for_final_detection(
         detection,
+        selection,
         source=str(input_file),
         profile=json_safe(asdict(profile)),
         output_files=output_files,

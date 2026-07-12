@@ -7,19 +7,9 @@ from ..detection.evidence.transform_geometry import TransformGeometryEvidence
 from ..detection.gate_checks import GateCheck
 from ..domain import (
     AxisBleedParameters,
-    BoundaryPositionConstraint,
     Box,
     CropEnvelope,
-    DimensionConstrainedBoundary,
     EvidenceState,
-    FrameBoundary,
-    MeasurementProvenance,
-    PixelInterval,
-    SeparatorAssignment,
-    SeparatorBandObservation,
-    SeparatorCrossAxisMeasurement,
-    SeparatorWidthConstraint,
-    VisibleSequenceSpan,
 )
 from ..output.model import (
     BoundaryOverlapProtection,
@@ -37,104 +27,6 @@ def _box(value: dict[str, Any]) -> Box:
         int(value["top"]),
         int(value["right"]),
         int(value["bottom"]),
-    )
-
-
-def _interval(value: dict[str, Any]) -> PixelInterval:
-    return PixelInterval(float(value["minimum"]), float(value["maximum"]))
-
-
-def _provenance(value: dict[str, Any]) -> MeasurementProvenance:
-    return MeasurementProvenance(
-        root_measurement=str(value["root_measurement"]),
-        source=str(value["source"]),
-        dependencies=tuple(str(item) for item in value["dependencies"]),
-        boundary_anchors=tuple(str(item) for item in value["boundary_anchors"]),
-    )
-
-
-def _observation(value: dict[str, Any]) -> SeparatorBandObservation:
-    return SeparatorBandObservation(
-        start=float(value["start"]),
-        end=float(value["end"]),
-        center=float(value["center"]),
-        tonal_evidence=float(value["tonal_evidence"]),
-        provenance=_provenance(value["provenance"]),
-        cross_axis=SeparatorCrossAxisMeasurement(
-            state=EvidenceState(str(value["cross_axis"]["state"])),
-            coverage_ratio=(
-                None
-                if value["cross_axis"]["coverage_ratio"] is None
-                else float(value["cross_axis"]["coverage_ratio"])
-            ),
-            continuity_ratio=(
-                None
-                if value["cross_axis"]["continuity_ratio"] is None
-                else float(value["cross_axis"]["continuity_ratio"])
-            ),
-            break_count=(
-                None
-                if value["cross_axis"]["break_count"] is None
-                else int(value["cross_axis"]["break_count"])
-            ),
-            straightness=(
-                None
-                if value["cross_axis"]["straightness"] is None
-                else float(value["cross_axis"]["straightness"])
-            ),
-            reason=str(value["cross_axis"]["reason"]),
-        ),
-        lane_box=None if value["lane_box"] is None else _box(value["lane_box"]),
-    )
-
-
-def _assignment(value: dict[str, Any]) -> SeparatorAssignment:
-    return SeparatorAssignment(
-        boundary_index=int(value["boundary_index"]),
-        observation=_observation(value["observation"]),
-        position_constraint=BoundaryPositionConstraint(
-            boundary_index=int(value["position_constraint"]["boundary_index"]),
-            position=_interval(value["position_constraint"]["position"]),
-            provenance=_provenance(value["position_constraint"]["provenance"]),
-        ),
-        width_constraint=SeparatorWidthConstraint(
-            boundary_index=int(value["width_constraint"]["boundary_index"]),
-            width=_interval(value["width_constraint"]["width"]),
-            provenance=_provenance(value["width_constraint"]["provenance"]),
-        ),
-        state=EvidenceState(str(value["state"])),
-        geometry_dependent=bool(value["geometry_dependent"]),
-        used_for_boundary=bool(value["used_for_boundary"]),
-        reason=str(value["reason"]),
-    )
-
-
-def _frame_boundary(value: dict[str, Any]) -> FrameBoundary:
-    assignment = (
-        None if value["assignment"] is None else _assignment(value["assignment"])
-    )
-    constraint_value = value["dimension_constraint"]
-    constraint = (
-        None
-        if constraint_value is None
-        else DimensionConstrainedBoundary(
-            boundary_index=int(constraint_value["boundary_index"]),
-            position=_interval(constraint_value["position"]),
-            provenance=_provenance(constraint_value["provenance"]),
-            focused_observation=(
-                None
-                if constraint_value["focused_observation"] is None
-                else _observation(constraint_value["focused_observation"])
-            ),
-        )
-    )
-    return FrameBoundary(
-        boundary_index=int(value["boundary_index"]),
-        position=_interval(value["position"]),
-        source=str(value["source"]),
-        provenance=_provenance(value["provenance"]),
-        assignment=assignment,
-        dimension_constraint=constraint,
     )
 
 
@@ -246,26 +138,12 @@ def final_detection_from_record(record: dict[str, Any]) -> FinalDetection:
         layout=str(geometry["layout"]),
         strip_mode=str(geometry["strip_mode"]),
         count=int(geometry["count"]),
-        visible_sequence_span=VisibleSequenceSpan(
-            _box(geometry["visible_sequence_span"]["box"])
-        ),
-        crop_envelope=CropEnvelope(_box(geometry["crop_envelope"]["box"])),
         decision_gate=_decision_gate(decision["gate"]),
         decision_geometry=_output_geometry(output["decision_geometry"]),
         output_geometry=_output_geometry(output["final_geometry"]),
-        separator_observations=tuple(
-            _observation(item) for item in geometry["separator_observations"]
-        ),
-        separator_assignments=tuple(
-            _assignment(item) for item in geometry["separator_assignments"]
-        ),
-        frame_boundaries=tuple(
-            _frame_boundary(item) for item in geometry["frame_boundaries"]
-        ),
         frame_bleed_plan=_frame_bleed_plan(output["frame_bleed_plan"]),
         scan_calibration=_scan_calibration(
             record["input"]["scan_calibration"]
         ),
         diagnostics=tuple(str(item) for item in record["diagnostics"]["detection"]),
-        selection=None,
     )

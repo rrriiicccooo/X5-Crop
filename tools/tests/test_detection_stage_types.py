@@ -27,7 +27,7 @@ from x5crop.detection.pipeline import choose_detection
 from x5crop.export.actions import copy_for_review_if_needed, write_crops_if_allowed
 from x5crop.report.result_builder import result_from_detection
 from x5crop.report.record import report_record_for_final_detection
-from x5crop.domain import CropEnvelope, VisibleSequenceSpan
+from x5crop.domain import CropEnvelope
 from x5crop.output.model import OutputGeometry
 
 
@@ -85,9 +85,15 @@ class DetectionStageTypeContractTests(unittest.TestCase):
         self.assertTrue(AssessedCandidate.__dataclass_params__.frozen)
         self.assertNotIn("status", final_fields)
         self.assertNotIn("final_review_reasons", final_fields)
-        self.assertIn("selection", final_fields)
-        self.assertIn("visible_sequence_span", final_fields)
-        self.assertIn("crop_envelope", final_fields)
+        for candidate_stage_field in (
+            "selection",
+            "visible_sequence_span",
+            "crop_envelope",
+            "separator_observations",
+            "separator_assignments",
+            "frame_boundaries",
+        ):
+            self.assertNotIn(candidate_stage_field, final_fields)
         self.assertIn("frame_bleed_plan", final_fields)
 
     def test_standard_dual_lane_and_review_only_geometry_have_distinct_types(self) -> None:
@@ -158,12 +164,10 @@ class DetectionStageTypeContractTests(unittest.TestCase):
         self.assertNotIn("frames", FinalDetection.__dict__)
         self.assertNotIn("gaps", FinalDetection.__dict__)
         self.assertNotIn("restore_current_schema", FinalDetection.__dict__)
+        self.assertNotIn("require_selection", FinalDetection.__dict__)
 
     def test_sequence_and_envelope_types_remain_canonical_through_output(self) -> None:
-        final_hints = get_type_hints(FinalDetection)
         output_hints = get_type_hints(OutputGeometry)
-        self.assertIs(final_hints["visible_sequence_span"], VisibleSequenceSpan)
-        self.assertIs(final_hints["crop_envelope"], CropEnvelope)
         self.assertIs(output_hints["crop_envelope"], CropEnvelope)
 
     def test_pipeline_returns_selection_without_pass_through_wrapper(self) -> None:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from ..app_info import VERSION
 from ..detection.decision.model import FinalDetection
+from ..detection.candidate.selection.model import SelectionResult
 from ..detection.evidence.transform_geometry import TransformGeometryEvidence
 from ..output.model import OutputGeometry
 from ..utils import json_safe
@@ -44,6 +45,7 @@ def _geometry_read_model(geometry: OutputGeometry) -> dict[str, object]:
 
 def report_record_for_final_detection(
     detection: FinalDetection,
+    selection: SelectionResult,
     *,
     source: str,
     profile: dict,
@@ -66,7 +68,7 @@ def report_record_for_final_detection(
             ),
         },
         "configuration": dict(configuration),
-        "selection": selection_read_model(detection),
+        "selection": selection_read_model(selection),
         "decision": {
             "status": detection.status,
             "final_review_reasons": list(detection.final_review_reasons),

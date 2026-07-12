@@ -144,6 +144,7 @@ def process_one(
     write_debug_outputs(
         gray,
         detection,
+        selection.selected,
         output_dir,
         input_file.stem,
         config,
@@ -154,6 +155,7 @@ def process_one(
     result = result_from_detection(
         input_file,
         detection,
+        selection,
         profile,
         output_files,
         review_copy,

@@ -6,6 +6,7 @@ import numpy as np
 
 from ..run_config import RunConfig
 from ..detection.decision.model import FinalDetection
+from ..detection.candidate.model import AssessedCandidate
 from ..output.surface import display_generated_path
 from ..configuration.diagnostics import DiagnosticsConfiguration
 from .writer import write_debug_analysis, write_debug_preview
@@ -15,6 +16,7 @@ from .canvas import DebugRenderCache
 def write_debug_outputs(
     gray: np.ndarray,
     detection: FinalDetection,
+    selected_candidate: AssessedCandidate,
     output_dir: Path,
     input_stem: str,
     config: RunConfig,
@@ -36,6 +38,7 @@ def write_debug_outputs(
         analysis_paths = write_debug_analysis(
             gray,
             detection,
+            selected_candidate,
             output_dir,
             input_stem,
             diagnostics,

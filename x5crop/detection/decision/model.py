@@ -1,16 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from ...domain import (
-    CropEnvelope,
-    FrameBoundary,
-    SeparatorAssignment,
-    SeparatorBandObservation,
-    VisibleSequenceSpan,
-)
 from ...output.model import FrameBleedPlan, OutputGeometry
 from ...units import ScanCalibration
-from ..candidate.selection.model import SelectionResult
 from ..gate_checks import GateCheck
 
 
@@ -51,23 +43,12 @@ class FinalDetection:
     layout: str
     strip_mode: str
     count: int
-    visible_sequence_span: VisibleSequenceSpan
-    crop_envelope: CropEnvelope
     decision_gate: DecisionGateAssessment
     decision_geometry: OutputGeometry
     output_geometry: OutputGeometry
-    separator_observations: tuple[SeparatorBandObservation, ...]
-    separator_assignments: tuple[SeparatorAssignment, ...]
-    frame_boundaries: tuple[FrameBoundary, ...]
     frame_bleed_plan: FrameBleedPlan
     scan_calibration: ScanCalibration
     diagnostics: tuple[str, ...]
-    selection: SelectionResult | None
-
-    def require_selection(self) -> SelectionResult:
-        if self.selection is None:
-            raise RuntimeError("final detection candidate selection is unavailable")
-        return self.selection
 
     @property
     def status(self) -> str:

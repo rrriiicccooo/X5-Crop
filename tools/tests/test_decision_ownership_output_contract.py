@@ -33,8 +33,8 @@ class DecisionOwnershipOutputContractTest(unittest.TestCase):
         self.assertEqual(decided.status, "approved_auto")
 
     def test_report_read_models_are_passive_projections(self) -> None:
-        decided = decide_candidate()
-        selected = decided.require_selection().selected
+        selected = candidate_fixture()
+        decided = decide_candidate(selected)
         self.assertTrue(candidate_gate_read_model(selected)["passed"])
         self.assertTrue(decision_gate_detail(decided)["passed"])
 

@@ -10,6 +10,7 @@ from dataclasses import asdict, fields, replace
 
 from tools.tests.physical_gate_support import (
     final_detection_fixture,
+    selection_fixture,
     transform_geometry_fixture,
 )
 from x5crop.detection.decision.model import FinalDetection
@@ -80,6 +81,7 @@ def _analysis_reuse_signature(
 def _record() -> dict:
     return report_record_for_final_detection(
         final_detection_fixture(),
+        selection_fixture(),
         source="input.tif",
         profile=asdict(_profile()),
         output_files=[],
@@ -205,6 +207,7 @@ class OutputReadModelContractTest(unittest.TestCase):
         )
         record = report_record_for_final_detection(
             detection,
+            selection,
             source="synthetic.tif",
             profile=asdict(profile),
             output_files=[],
@@ -301,6 +304,7 @@ class OutputReadModelContractTest(unittest.TestCase):
         )
         record = report_record_for_final_detection(
             final_detection_fixture(),
+            selection_fixture(),
             source="input.tif",
             profile=asdict(_profile()),
             output_files=[],

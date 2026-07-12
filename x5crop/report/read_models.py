@@ -6,6 +6,7 @@ from typing import Any
 
 from ..detection.candidate.model import AssessedCandidate
 from ..detection.decision.model import FinalDetection
+from ..detection.candidate.selection.model import SelectionResult
 from ..detection.physical.model import (
     DualLaneSolution,
     ReviewOnlyGeometry,
@@ -108,8 +109,7 @@ def candidate_read_model(candidate: AssessedCandidate) -> dict[str, Any]:
     }
 
 
-def selection_read_model(detection: FinalDetection) -> dict[str, Any]:
-    selection = detection.require_selection()
+def selection_read_model(selection: SelectionResult) -> dict[str, Any]:
     ranks = {
         id(candidate): index
         for index, candidate in enumerate(selection.ranked_candidates, start=1)

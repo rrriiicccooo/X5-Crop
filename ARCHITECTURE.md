@@ -43,6 +43,10 @@ entry
 | Finalization | 只应用 `FrameBleedPlan` 和 bounds clamp；不重新检测。 |
 | Report / Debug | 只读 typed final results；不补算事实、不参与裁决。 |
 
+`SelectionResult` 与 `FinalDetection` 是并列的生命周期输出：前者拥有候选、evidence 和 geometry
+resolution，后者只拥有最终 decision/output facts。Report 与 Debug 显式接收所需 typed result；
+`FinalDetection` 不复制 selection 或 separator/candidate state，也不存在 cache-only optional 字段。
+
 `x5crop.image.deskew` 只生成 immutable line-fit / angle measurements 并计算 measurement
 quality。Base/fallback 是否启用及二者择优归 runtime preprocess 编排；foundation 不接收运行模式
 字符串，也不产生可变 detail 字典。
@@ -218,7 +222,8 @@ Canonical sections：
 同一事实不再同时投影为顶层 alias、candidate table 和 evidence summary。Cache reuse 只接受该
 schema 与完全匹配的 source/configuration fingerprint；source identity 包含文件内容 SHA-256，
 同一次运行的 lookup 和 report 写入共用同一个 canonical signature。旧 record 或内容不同的同名
-文件直接重新检测。Debug Analysis 保持 original gray、debug boxes、separator evidence 三联图。
+文件直接重新检测。Cache restoration 只恢复 final decision/output actions，不反序列化 candidate
+selection。Debug Analysis 保持 original gray、debug boxes、separator evidence 三联图。
 Current validator 精确校验 `GeometryResolution` 字段；旧字段形状即使使用相同 schema identity
 也会被拒绝并重新检测。所有 typed result 由 canonical dataclass 结构递归校验，report 自有投影
 也使用精确字段集合；任何层级的额外 alias、旧字段或未知 section 都会使 record 失效。
