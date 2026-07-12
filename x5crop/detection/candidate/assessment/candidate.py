@@ -5,7 +5,7 @@ from ...evidence.content.frame_support import frame_content_evidence
 from ...evidence.content.holder_texture import holder_texture_evidence
 from ...evidence.content.preservation import content_preservation_evidence
 from ...evidence.frame_coverage import frame_coverage_evidence
-from ...evidence.frame_sequence import frame_sequence_evidence
+from ...evidence.frame_sequence import sequence_conservation_for_geometry
 from ...evidence.frame_topology import frame_topology_evidence
 from ...evidence.holder_occupancy import holder_occupancy_evidence
 from ...evidence.sequence_content_alignment import sequence_content_alignment_evidence
@@ -58,7 +58,7 @@ def _boundary_proof_paths(
         sequence_boundary_supported
         and evidence.frame_topology.state == EvidenceState.SUPPORTED
         and content_not_contradicted
-        and evidence.frame_sequence.conservation.state
+        and evidence.sequence_conservation.state
         != EvidenceState.CONTRADICTED
         and evidence.independence.state
         in {EvidenceState.SUPPORTED, EvidenceState.NOT_APPLICABLE}
@@ -149,7 +149,7 @@ def assess_candidate(
     geometry = candidate.geometry
     if not isinstance(geometry, SequenceSolution):
         raise ValueError("standard candidate assessment requires sequence geometry")
-    frame_sequence = frame_sequence_evidence(geometry)
+    sequence_conservation = sequence_conservation_for_geometry(geometry)
     frame_topology = frame_topology_evidence(geometry.frames, geometry.count)
     frame_dimensions = frame_dimension_evidence(
         geometry,
@@ -209,7 +209,7 @@ def assess_candidate(
     evidence = CandidateEvidence(
         frame_topology=frame_topology,
         frame_coverage=coverage,
-        frame_sequence=frame_sequence,
+        sequence_conservation=sequence_conservation,
         separator_sequence=sequence,
         frame_dimensions=frame_dimensions,
         frame_content=content,
@@ -234,7 +234,7 @@ def assess_candidate(
             frame_topology=evidence.frame_topology.state,
             content_preservation=evidence.content_preservation.state,
             photo_geometry=evidence.frame_dimensions.state,
-            sequence_conservation=evidence.frame_sequence.conservation.state,
+            sequence_conservation=evidence.sequence_conservation.state,
             evidence_independence=evidence.independence.state,
             proof_paths=proof_paths,
             diagnostics=tuple(diagnostics),

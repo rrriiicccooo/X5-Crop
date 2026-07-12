@@ -163,12 +163,9 @@ class PhysicalDetectionResolutionContractTest(unittest.TestCase):
                 candidate.assessment,
                 evidence=replace(
                     candidate.assessment.evidence,
-                    frame_sequence=replace(
-                        candidate.assessment.evidence.frame_sequence,
-                        conservation=replace(
-                            candidate.assessment.evidence.frame_sequence.conservation,
-                            state=EvidenceState.UNAVAILABLE,
-                        ),
+                    sequence_conservation=replace(
+                        candidate.assessment.evidence.sequence_conservation,
+                        state=EvidenceState.UNAVAILABLE,
                     ),
                 ),
             ),
@@ -320,16 +317,13 @@ class PhysicalDetectionResolutionContractTest(unittest.TestCase):
     def test_geometry_resolution_rejects_contradicted_sequence_conservation(self) -> None:
         candidate = candidate_fixture()
         conservation = replace(
-            candidate.assessment.evidence.frame_sequence.conservation,
+            candidate.assessment.evidence.sequence_conservation,
             state=EvidenceState.CONTRADICTED,
             visible_length_px=PixelInterval.exact(400.0),
         )
         evidence = replace(
             candidate.assessment.evidence,
-            frame_sequence=replace(
-                candidate.assessment.evidence.frame_sequence,
-                conservation=conservation,
-            ),
+            sequence_conservation=conservation,
         )
         candidate = replace(
             candidate,

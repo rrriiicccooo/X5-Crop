@@ -40,7 +40,6 @@ from x5crop.detection.evidence.content.frame_support import (
 from x5crop.detection.evidence.content.holder_texture import HolderTextureEvidence
 from x5crop.detection.evidence.content.preservation import ContentPreservationEvidence
 from x5crop.detection.evidence.frame_coverage import FrameCoverageEvidence
-from x5crop.detection.evidence.frame_sequence import FrameSequenceEvidence
 from x5crop.detection.evidence.frame_topology import FrameTopologyEvidence
 from x5crop.detection.evidence.holder_occupancy import (
     HolderOccupancyEvidence,
@@ -235,16 +234,14 @@ def candidate_evidence_fixture(
             (),
             0,
         ),
-        frame_sequence=FrameSequenceEvidence(
-            conservation=SequenceConservationEvidence(
-                EvidenceState.SUPPORTED,
-                "frame_sequence_conserved",
-                PixelInterval.exact(200.0),
-                PixelInterval.zero(),
-                PixelInterval.exact(200.0),
-                PixelInterval.zero(),
-                PixelInterval.exact(200.0),
-            ),
+        sequence_conservation=SequenceConservationEvidence(
+            EvidenceState.SUPPORTED,
+            "frame_sequence_conserved",
+            PixelInterval.exact(200.0),
+            PixelInterval.zero(),
+            PixelInterval.exact(200.0),
+            PixelInterval.zero(),
+            PixelInterval.exact(200.0),
         ),
         separator_sequence=SeparatorSequenceEvidence(
             1,

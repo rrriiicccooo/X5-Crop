@@ -58,7 +58,9 @@ from tools.tests.physical_gate_support import (
     separator_observation,
 )
 from dataclasses import replace
-from x5crop.detection.evidence.frame_sequence import frame_sequence_evidence
+from x5crop.detection.evidence.frame_sequence import (
+    sequence_conservation_for_geometry,
+)
 from x5crop.detection.physical.separator.assignment import frame_boundary_from_assignment
 from x5crop.domain import FrameDimensionPrior
 from x5crop.cache import MeasurementCache
@@ -678,8 +680,8 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
                 ),
             ),
         )
-        evidence = frame_sequence_evidence(geometry)
-        self.assertEqual(evidence.conservation.state, EvidenceState.UNAVAILABLE)
+        evidence = sequence_conservation_for_geometry(geometry)
+        self.assertEqual(evidence.state, EvidenceState.UNAVAILABLE)
 
 
 if __name__ == "__main__":

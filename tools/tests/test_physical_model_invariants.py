@@ -90,7 +90,7 @@ class PhysicalModelInvariantTest(unittest.TestCase):
                 photo_widths_px=(),
             ),
             lambda: replace(
-                evidence.frame_sequence.conservation,
+                evidence.sequence_conservation,
                 state=EvidenceState.SUPPORTED,
                 physical_sequence_px=PixelInterval.zero(),
             ),

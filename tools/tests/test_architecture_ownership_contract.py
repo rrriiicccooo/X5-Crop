@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import fields
+from typing import get_type_hints
 import unittest
 
 from tools.tests.architecture_contracts import (
@@ -10,6 +11,17 @@ from tools.tests.architecture_contracts import (
 
 
 class ArchitectureOwnershipContractTest(unittest.TestCase):
+    def test_candidate_evidence_owns_sequence_conservation_directly(self) -> None:
+        from x5crop.detection.candidate.model import CandidateEvidence
+        from x5crop.detection.physical.spacing import SequenceConservationEvidence
+        import x5crop.detection.evidence.frame_sequence as frame_sequence
+
+        self.assertIs(
+            get_type_hints(CandidateEvidence)["sequence_conservation"],
+            SequenceConservationEvidence,
+        )
+        self.assertFalse(hasattr(frame_sequence, "FrameSequenceEvidence"))
+
     def test_removed_architecture_surfaces_do_not_exist(self) -> None:
         removed = (
             "x5crop/gap_methods.py",

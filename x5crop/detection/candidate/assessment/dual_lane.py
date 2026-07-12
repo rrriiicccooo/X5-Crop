@@ -86,7 +86,7 @@ def assess_dual_lane_candidate(
             ),
             sequence_conservation=_combined_state(
                 tuple(
-                    item.frame_sequence.conservation.state
+                    item.sequence_conservation.state
                     for item in physical_evidence
                 )
             ),

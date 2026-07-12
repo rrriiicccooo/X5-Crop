@@ -178,7 +178,7 @@ def geometry_resolution_for_selection(
         )
     )
     conservation_not_contradicted = all(
-        item.frame_sequence.conservation.state != EvidenceState.CONTRADICTED
+        item.sequence_conservation.state != EvidenceState.CONTRADICTED
         for item in evidence
     )
     assignment_geometry_resolved = (

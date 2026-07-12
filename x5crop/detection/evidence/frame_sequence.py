@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-
 from ..physical.model import SequenceSolution
 from ..physical.boundary import (
     visible_sequence_length_interval,
@@ -12,15 +10,10 @@ from ..physical.spacing import (
 )
 
 
-@dataclass(frozen=True)
-class FrameSequenceEvidence:
-    conservation: SequenceConservationEvidence
-
-
-def frame_sequence_evidence(
+def sequence_conservation_for_geometry(
     geometry: SequenceSolution,
-) -> FrameSequenceEvidence:
-    conservation = sequence_conservation_evidence(
+) -> SequenceConservationEvidence:
+    return sequence_conservation_evidence(
         visible_length_px=visible_sequence_length_interval(
             geometry.visible_sequence_span,
             geometry.boundary_observations,
@@ -30,4 +23,3 @@ def frame_sequence_evidence(
         spacings=geometry.inter_frame_spacings,
         holder_occlusion=geometry.holder_occlusion,
     )
-    return FrameSequenceEvidence(conservation)

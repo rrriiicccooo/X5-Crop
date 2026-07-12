@@ -201,8 +201,9 @@ Dual-lane evidence 保留各 lane 的 canonical evidence，父级 CandidateGate 
 不把 lane gate 或 resolution 结果伪装成 evidence。
 `AssessedCandidate.evidence_quality` 从 evidence、proof paths 和 geometry residuals 确定性派生；
 selection 与 report 只读取该 canonical property，不维护第二事实源或反向调用 assessment。
-Inter-frame spacing 与 holder occlusion 只属于 candidate geometry；`FrameSequenceEvidence` 只保存由这些
-事实推导的 conservation，不复制 geometry facts。Output bleed 与 Debug 也直接读取 canonical geometry。
+Inter-frame spacing 与 holder occlusion 只属于 candidate geometry；`CandidateEvidence` 直接拥有由这些
+事实推导的 `SequenceConservationEvidence`，不经过包装层或复制 geometry facts。Output bleed 与 Debug
+也直接读取 canonical geometry。
 系统没有 scalar confidence、weighted score、confidence cap 或 confidence gate。
 
 Selection 使用确定性顺序：

@@ -15,7 +15,6 @@ from ..evidence.content.preservation import ContentPreservationEvidence
 from ..evidence.content.frame_support import FrameContentEvidence
 from ..evidence.content.holder_texture import HolderTextureEvidence
 from ..evidence.frame_coverage import FrameCoverageEvidence
-from ..evidence.frame_sequence import FrameSequenceEvidence
 from ..evidence.frame_topology import FrameTopologyEvidence
 from ..evidence.holder_occupancy import HolderOccupancyEvidence
 from ..evidence.sequence_content_alignment import SequenceContentAlignmentEvidence
@@ -24,6 +23,7 @@ from ..physical.photo_size import FrameDimensionEvidence
 from .assessment.candidate_gate import CandidateGateAssessment
 from .plan.count_hypotheses import CountHypothesis
 from ..physical.model import SequenceResiduals
+from ..physical.spacing import SequenceConservationEvidence
 
 
 @dataclass(frozen=True)
@@ -48,7 +48,7 @@ class BuiltCandidate:
 class CandidateEvidence:
     frame_topology: FrameTopologyEvidence
     frame_coverage: FrameCoverageEvidence
-    frame_sequence: FrameSequenceEvidence
+    sequence_conservation: SequenceConservationEvidence
     separator_sequence: SeparatorSequenceEvidence
     frame_dimensions: FrameDimensionEvidence
     frame_content: FrameContentEvidence
@@ -161,7 +161,7 @@ class AssessedCandidate:
                     ("frame_coverage", evidence.frame_coverage.state),
                     (
                         "frame_sequence_conservation",
-                        evidence.frame_sequence.conservation.state,
+                        evidence.sequence_conservation.state,
                     ),
                     ("separator_sequence", evidence.separator_sequence.state),
                     ("frame_dimensions", evidence.frame_dimensions.state),
