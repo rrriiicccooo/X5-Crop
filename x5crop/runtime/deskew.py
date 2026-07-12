@@ -4,9 +4,11 @@ import math
 
 import numpy as np
 
-from ..domain import EvidenceState
 from ..io.model import ImageProfile
-from ..detection.evidence.transform_geometry import TransformGeometryEvidence
+from ..detection.evidence.transform_geometry import (
+    TransformGeometryEvidence,
+    TransformOutcome,
+)
 from ..geometry.layout import work_gray
 from ..image.deskew import (
     DeskewAngleMeasurement,
@@ -94,11 +96,8 @@ def apply_deskew(
     deskew = preprocess.deskew
     if config.deskew == "off":
         return arr, gray, TransformGeometryEvidence(
-            state=EvidenceState.SUPPORTED,
-            applied=False,
+            outcome=TransformOutcome.DISABLED,
             estimated_angle_degrees=0.0,
-            applied_angle_degrees=0.0,
-            reason="deskew_disabled",
             span_px=None,
             span_threshold_px=None,
         )
@@ -117,11 +116,8 @@ def apply_deskew(
         deskew.span_skip_min,
         deskew.span_skip_max,
     )
-    applied = False
-    applied_angle = 0.0
     if deskew_span < deskew_span_threshold:
-        state = EvidenceState.SUPPORTED
-        reason = "span_below_threshold"
+        outcome = TransformOutcome.SPAN_BELOW_THRESHOLD
     elif config.deskew_min_angle <= abs(angle) <= config.deskew_max_angle:
         arr = rotate_array_expand(
             arr,
@@ -133,22 +129,18 @@ def apply_deskew(
             ),
         )
         gray = make_base_gray_u8(arr, profile.axes, profile.photometric, preprocess.base_gray)
-        applied = True
-        applied_angle = -float(angle)
-        state = EvidenceState.SUPPORTED
-        reason = "deskew_applied"
+        outcome = TransformOutcome.APPLIED
         warnings.append(f"deskew applied: {-angle:.4f} degrees")
     else:
-        state = EvidenceState.CONTRADICTED
-        reason = "angle_out_of_range"
-    if measurement.reason is not None and reason == "span_below_threshold":
-        reason = measurement.reason
+        outcome = TransformOutcome.ANGLE_OUT_OF_RANGE
     return arr, gray, TransformGeometryEvidence(
-        state=state,
-        applied=applied,
+        outcome=outcome,
         estimated_angle_degrees=float(angle),
-        applied_angle_degrees=applied_angle,
-        reason=reason,
         span_px=float(deskew_span),
         span_threshold_px=float(deskew_span_threshold),
+        measurement_reason=(
+            measurement.reason
+            if outcome == TransformOutcome.SPAN_BELOW_THRESHOLD
+            else None
+        ),
     )

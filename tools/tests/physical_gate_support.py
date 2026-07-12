@@ -50,7 +50,10 @@ from x5crop.detection.evidence.holder_occupancy import (
 from x5crop.detection.evidence.sequence_content_alignment import SequenceContentAlignmentEvidence
 from x5crop.detection.evidence.partial_edge import PartialEdgeSafetyEvidence
 from x5crop.domain import EvidenceState, FrameBoundaryReference
-from x5crop.detection.evidence.transform_geometry import TransformGeometryEvidence
+from x5crop.detection.evidence.transform_geometry import (
+    TransformGeometryEvidence,
+    TransformOutcome,
+)
 from x5crop.detection.gate_checks import GateCheck
 from x5crop.detection.physical.model import (
     BoundaryAssignmentConsensus,
@@ -521,7 +524,17 @@ def frame_bleed_fixture(*, feasible: bool = True) -> FrameBleedPlan:
 def transform_geometry_fixture(
     state: EvidenceState = EvidenceState.SUPPORTED,
 ) -> TransformGeometryEvidence:
-    return TransformGeometryEvidence(state, False, 0.0, 0.0, "test_fixture", 0.0, 1.0)
+    return TransformGeometryEvidence(
+        (
+            TransformOutcome.SPAN_BELOW_THRESHOLD
+            if state == EvidenceState.SUPPORTED
+            else TransformOutcome.ANGLE_OUT_OF_RANGE
+        ),
+        0.0,
+        0.0,
+        1.0,
+        "test_fixture" if state == EvidenceState.SUPPORTED else None,
+    )
 
 
 def decide_candidate(

@@ -160,6 +160,8 @@ content preservation compatibility 和实质替代解均已解决时才 supporte
 state 和 ordered reasons 只能由完整 resolution facts 派生，caller 不得另行写入。
 Sequence conservation 同样只保存 visible length、holder occlusion、frame/spacing totals 与 typed
 spacing basis；physical extent、state 和 reason 均由这些物理事实派生。
+Transform geometry 只保存 typed deskew outcome、角度、span measurement 与可选 measurement
+diagnostic；state、applied geometry 和 reason 均由 outcome 派生。
 片夹 occupancy 只由 normalized horizontal work-space 的 holder/visible spans 和正向物理证据派生；
 原始 layout 只负责选择 source X/Y calibration。用户选择的 full/partial mode 不能改写同一几何的
 filled/underfilled 状态；slack、fill ratio 与 calibration projection 都是同一 typed evidence 的

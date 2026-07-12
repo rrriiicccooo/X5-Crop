@@ -26,7 +26,10 @@ from x5crop.detection.physical.model import (
 from x5crop.detection.physical.separator.assignment import (
     dimension_constrained_boundary,
 )
-from x5crop.detection.evidence.transform_geometry import TransformGeometryEvidence
+from x5crop.detection.evidence.transform_geometry import (
+    TransformGeometryEvidence,
+    TransformOutcome,
+)
 from x5crop.domain import (
     BoundaryPositionConstraint,
     Box,
@@ -169,40 +172,32 @@ class PhysicalModelInvariantTest(unittest.TestCase):
                 factory()
 
     def test_transform_geometry_rejects_inconsistent_measurements(self) -> None:
+        transform_fields = TransformGeometryEvidence.__dataclass_fields__
+        for field_name in ("state", "applied", "applied_angle_degrees", "reason"):
+            with self.subTest(field=field_name):
+                self.assertFalse(transform_fields[field_name].init)
         invalid_factories = (
             lambda: TransformGeometryEvidence(
-                EvidenceState.SUPPORTED,
-                False,
+                TransformOutcome.SPAN_BELOW_THRESHOLD,
                 math.nan,
-                0.0,
-                "non_finite_angle",
-                None,
-                None,
-            ),
-            lambda: TransformGeometryEvidence(
-                EvidenceState.SUPPORTED,
-                False,
-                1.0,
-                -1.0,
-                "unapplied_angle",
                 1.0,
                 2.0,
             ),
             lambda: TransformGeometryEvidence(
-                EvidenceState.CONTRADICTED,
-                True,
+                TransformOutcome.DISABLED,
                 1.0,
-                -1.0,
-                "contradicted_applied_transform",
-                1.0,
-                2.0,
+                None,
+                None,
             ),
             lambda: TransformGeometryEvidence(
-                EvidenceState.SUPPORTED,
-                False,
+                TransformOutcome.APPLIED,
+                1.0,
+                None,
+                None,
+            ),
+            lambda: TransformGeometryEvidence(
+                TransformOutcome.SPAN_BELOW_THRESHOLD,
                 0.0,
-                0.0,
-                "incomplete_span_pair",
                 1.0,
                 None,
             ),

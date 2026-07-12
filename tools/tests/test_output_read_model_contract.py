@@ -16,6 +16,10 @@ from tools.tests.physical_gate_support import (
     transform_geometry_fixture,
 )
 from x5crop.detection.final.model import FinalDetection
+from x5crop.detection.evidence.transform_geometry import (
+    TransformGeometryEvidence,
+    TransformOutcome,
+)
 from x5crop.io.model import ImageProfile, TiffMetadata
 from x5crop.io.tiff import compression_for_write
 from x5crop.configuration.registry import get_detection_configuration
@@ -508,10 +512,11 @@ class OutputReadModelContractTest(unittest.TestCase):
             )
 
     def test_unavailable_transform_span_remains_explicitly_unavailable(self) -> None:
-        transform = replace(
-            transform_geometry_fixture(),
-            span_px=None,
-            span_threshold_px=None,
+        transform = TransformGeometryEvidence(
+            TransformOutcome.DISABLED,
+            0.0,
+            None,
+            None,
         )
         record = report_record_for_final_detection(
             final_detection_fixture(),
@@ -535,6 +540,10 @@ class OutputReadModelContractTest(unittest.TestCase):
         )
         self.assertIsNone(
             record["input"]["transform_geometry"]["span_px"]
+        )
+        self.assertEqual(
+            record["input"]["transform_geometry"]["outcome"],
+            "deskew_disabled",
         )
         self.assertEqual(current_report_record_errors(record), [])
 

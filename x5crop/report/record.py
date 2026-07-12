@@ -16,26 +16,6 @@ from .read_models import (
 )
 
 
-def _transform_read_model(
-    transform: TransformGeometryEvidence,
-) -> dict[str, object]:
-    return {
-        "state": transform.state.value,
-        "applied": bool(transform.applied),
-        "estimated_angle_degrees": float(transform.estimated_angle_degrees),
-        "applied_angle_degrees": float(transform.applied_angle_degrees),
-        "reason": transform.reason,
-        "span_px": (
-            None if transform.span_px is None else float(transform.span_px)
-        ),
-        "span_threshold_px": (
-            None
-            if transform.span_threshold_px is None
-            else float(transform.span_threshold_px)
-        ),
-    }
-
-
 def _geometry_read_model(geometry: OutputGeometry) -> dict[str, object]:
     return {
         "crop_envelope": typed_read_model(geometry.crop_envelope.box),
@@ -80,7 +60,7 @@ def report_record_for_final_detection(
             "scan_calibration": scan_calibration_read_model(
                 scan_calibration
             ),
-            "transform_geometry": _transform_read_model(transform_geometry),
+            "transform_geometry": typed_read_model(transform_geometry),
         },
         "configuration": dict(configuration),
         "selection": selection_read_model(selection),
