@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from ..image.statistics import ImageMeasurementStatistics
 from ..utils import smooth_1d
 from .detection_parameters import SeparatorProfileParameters
 from .sampling import sampling_step_for_limit
@@ -11,111 +12,139 @@ from .sampling import sampling_step_for_limit
 
 @dataclass(frozen=True)
 class SeparatorProfileSignals:
-    extreme_score: np.ndarray
-    soft_score: np.ndarray
-    uniform_score: np.ndarray
-    gradient_score: np.ndarray
+    cross_axis_extreme: np.ndarray
+    tonal_uniformity: np.ndarray
+    transition_uniformity: np.ndarray
 
 
-def vertical_profile_sample(crop: np.ndarray, top_ratio: float, bottom_ratio: float) -> np.ndarray:
+def vertical_profile_sample(
+    crop: np.ndarray,
+    top_ratio: float,
+    bottom_ratio: float,
+) -> np.ndarray:
     height = crop.shape[0]
     y0 = max(0, min(height - 1, int(round(height * top_ratio))))
     y1 = max(y0 + 1, min(height, int(round(height * bottom_ratio))))
     return crop[y0:y1, :]
 
 
-def segmented_extreme_separator_score(
+def _cross_axis_extreme_score(
     middle: np.ndarray,
-    config: SeparatorProfileParameters,
+    statistics: ImageMeasurementStatistics,
+    parameters: SeparatorProfileParameters,
 ) -> np.ndarray:
     profiles: list[np.ndarray] = []
-    segments = max(1, int(config.segments))
-    for i in range(segments):
-        sy0 = int(round(i * middle.shape[0] / segments))
-        sy1 = int(round((i + 1) * middle.shape[0] / segments))
-        if sy1 <= sy0:
+    segments = max(1, int(parameters.segments))
+    for index in range(segments):
+        start = int(round(index * middle.shape[0] / segments))
+        end = int(round((index + 1) * middle.shape[0] / segments))
+        if end <= start:
             continue
-        part = middle[sy0:sy1, :]
-        black = (part <= config.dark_threshold).mean(axis=0).astype(np.float32)
-        white = (part >= config.light_threshold).mean(axis=0).astype(np.float32)
-        profiles.append(np.maximum(black, white))
-    if not profiles:
-        fallback = (
-            ((middle <= config.dark_threshold) | (middle >= config.light_threshold))
-            .mean(axis=0)
-            .astype(np.float32)
+        segment = middle[start:end, :]
+        profiles.append(
+            (
+                (segment <= statistics.intensity_low)
+                | (segment >= statistics.intensity_high)
+            ).mean(axis=0, dtype=np.float32)
         )
-        profiles.append(fallback)
-
-    stack = np.stack(profiles, axis=0)
-    average_extreme = stack.mean(axis=0).astype(np.float32)
-    vertical_consistency = np.percentile(stack, config.consistency_percentile, axis=0).astype(np.float32)
-    return config.average_weight * average_extreme + config.consistency_weight * vertical_consistency
-
-
-def uniform_soft_separator_score(
-    middle_f: np.ndarray,
-    config: SeparatorProfileParameters,
-) -> tuple[np.ndarray, np.ndarray]:
-    col_std = middle_f.std(axis=0)
-    uniform_score = 1.0 - np.clip(col_std / config.std_norm, 0.0, 1.0)
-    col_mean = middle_f.mean(axis=0)
-    dark_soft = np.clip((config.dark_soft_mean - col_mean) / config.dark_soft_mean, 0.0, 1.0)
-    light_soft = np.clip((col_mean - config.light_soft_mean) / config.light_soft_span, 0.0, 1.0)
-    soft_score = np.maximum(dark_soft, light_soft) * uniform_score * config.soft_weight
-    return soft_score, uniform_score
-
-
-def column_gradient_score(middle_f: np.ndarray) -> np.ndarray:
-    return np.abs(np.diff(middle_f, axis=1, prepend=middle_f[:, :1])).mean(axis=0) / 255.0
+    if not profiles:
+        return np.zeros(middle.shape[1], dtype=np.float32)
+    return np.percentile(
+        np.stack(profiles, axis=0),
+        float(parameters.consistency_percentile),
+        axis=0,
+    ).astype(np.float32)
 
 
 def separator_profile_signals(
     middle: np.ndarray,
-    config: SeparatorProfileParameters,
+    statistics: ImageMeasurementStatistics,
+    parameters: SeparatorProfileParameters,
 ) -> SeparatorProfileSignals:
-    middle_f = middle.astype(np.float32, copy=False)
-    extreme_score = segmented_extreme_separator_score(middle, config)
-    soft_score, uniform_score = uniform_soft_separator_score(middle_f, config)
-    gradient_score = column_gradient_score(middle_f)
+    data = middle.astype(np.float32, copy=False)
+    floor = float(parameters.numerical_floor)
+    column_mean = data.mean(axis=0)
+    column_std = data.std(axis=0)
+    tonal_scale = max(
+        floor,
+        statistics.intensity_mad,
+        0.5 * (statistics.intensity_high - statistics.intensity_low),
+    )
+    texture_scale = max(
+        floor,
+        statistics.texture_quantiles[1],
+        statistics.texture_mad,
+    )
+    tonal_deviation = np.clip(
+        np.abs(column_mean - statistics.intensity_median) / tonal_scale,
+        0.0,
+        1.0,
+    )
+    uniformity = 1.0 - np.clip(column_std / texture_scale, 0.0, 1.0)
+    tonal_uniformity = np.minimum(tonal_deviation, uniformity).astype(np.float32)
+    gradient = np.abs(np.diff(data, axis=1, prepend=data[:, :1])).mean(axis=0)
+    gradient_scale = max(
+        floor,
+        statistics.gradient_quantiles[1],
+        statistics.gradient_mad,
+    )
+    transition_uniformity = np.minimum(
+        np.clip(gradient / gradient_scale, 0.0, 1.0),
+        uniformity,
+    ).astype(np.float32)
     return SeparatorProfileSignals(
-        extreme_score=extreme_score,
-        soft_score=soft_score,
-        uniform_score=uniform_score,
-        gradient_score=gradient_score,
+        cross_axis_extreme=_cross_axis_extreme_score(
+            middle,
+            statistics,
+            parameters,
+        ),
+        tonal_uniformity=tonal_uniformity,
+        transition_uniformity=transition_uniformity,
     )
 
 
-def combined_separator_profile_score(
-    signals: SeparatorProfileSignals,
-    config: SeparatorProfileParameters,
-) -> np.ndarray:
-    weighted_extreme = signals.extreme_score * (
-        config.uniform_base + config.uniform_weight * signals.uniform_score
-    )
-    score = np.maximum(weighted_extreme, signals.soft_score)
-    return np.maximum(
-        score,
-        np.clip(signals.gradient_score, 0.0, 1.0) * config.gradient_weight,
-    )
+def combined_separator_profile_score(signals: SeparatorProfileSignals) -> np.ndarray:
+    return np.maximum.reduce(
+        (
+            signals.cross_axis_extreme,
+            signals.tonal_uniformity,
+            signals.transition_uniformity,
+        )
+    ).astype(np.float32)
 
 
-def separator_profile_smooth_window(width: int, config: SeparatorProfileParameters) -> int:
-    return max(config.smooth_min, int(round(width * config.smooth_ratio)))
+def separator_profile_smooth_window(
+    width: int,
+    parameters: SeparatorProfileParameters,
+) -> int:
+    return max(
+        int(parameters.smooth_min),
+        int(round(width * float(parameters.smooth_ratio))),
+    )
 
 
 def separator_profile(
     crop: np.ndarray,
-    config: SeparatorProfileParameters,
+    statistics: ImageMeasurementStatistics,
+    parameters: SeparatorProfileParameters,
 ) -> np.ndarray:
-    h, w = crop.shape
-    if h <= 0 or w <= 0:
+    height, width = crop.shape
+    if height <= 0 or width <= 0:
         return np.zeros(0, dtype=np.float32)
-    middle = vertical_profile_sample(crop, config.top_ratio, config.bottom_ratio)
+    middle = vertical_profile_sample(
+        crop,
+        parameters.top_ratio,
+        parameters.bottom_ratio,
+    )
     middle = middle[
-        ::sampling_step_for_limit(middle.shape[0], config.sample_short_axis_max),
+        ::sampling_step_for_limit(
+            middle.shape[0],
+            parameters.sample_short_axis_max,
+        ),
         :,
     ]
-    signals = separator_profile_signals(middle, config)
-    score = combined_separator_profile_score(signals, config)
-    return smooth_1d(score.astype(np.float32), separator_profile_smooth_window(w, config))
+    signals = separator_profile_signals(middle, statistics, parameters)
+    return smooth_1d(
+        combined_separator_profile_score(signals),
+        separator_profile_smooth_window(width, parameters),
+    )

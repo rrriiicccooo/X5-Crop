@@ -5,7 +5,7 @@ from dataclasses import dataclass, replace
 import numpy as np
 
 from ...domain import Box
-from ...geometry.detection_parameters import SeparatorContinuityParameters
+from ...image.statistics import ImageMeasurementStatistics
 from ..physical.model import SequenceSolution
 from x5crop.domain import SeparatorBandObservation
 from x5crop.domain import EvidenceState
@@ -29,8 +29,6 @@ class SeparatorContinuityEvidence:
     reason: str
     records: tuple[SeparatorContinuityRecord, ...]
     observations: tuple[SeparatorBandObservation, ...]
-    minimum_coverage_ratio: float
-    minimum_continuity_ratio: float
 
 
 def _longest_true_run(mask: np.ndarray) -> int:
@@ -69,7 +67,7 @@ def _measurement_corridor(
 def separator_cross_axis_continuity_evidence(
     gray_work: np.ndarray,
     geometry: SequenceSolution,
-    parameters: SeparatorContinuityParameters,
+    statistics: ImageMeasurementStatistics,
 ) -> SeparatorContinuityEvidence:
     records: list[SeparatorContinuityRecord] = []
     enriched: list[SeparatorBandObservation] = []
@@ -96,10 +94,10 @@ def separator_cross_axis_continuity_evidence(
             enriched.append(observation)
             continue
         band = gray_work[corridor.top:corridor.bottom, start:end]
-        extreme = (band <= int(parameters.extreme_dark_threshold)) | (
-            band >= int(parameters.extreme_light_threshold)
+        extreme = (band <= float(statistics.intensity_low)) | (
+            band >= float(statistics.intensity_high)
         )
-        row_support = extreme.mean(axis=1) >= float(parameters.minimum_row_activity)
+        row_support = extreme.any(axis=1)
         coverage = float(row_support.mean()) if row_support.size else 0.0
         continuity = (
             float(_longest_true_run(row_support)) / float(max(1, len(row_support)))
@@ -119,10 +117,7 @@ def separator_cross_axis_continuity_evidence(
             if row_centers
             else 0.0
         )
-        supported = bool(
-            coverage >= float(parameters.minimum_cross_axis_coverage)
-            and continuity >= float(parameters.minimum_cross_axis_continuity)
-        )
+        supported = bool(row_support.size and row_support.all())
         records.append(
             SeparatorContinuityRecord(
                 observation.start,
@@ -174,8 +169,6 @@ def separator_cross_axis_continuity_evidence(
         reason,
         tuple(records),
         tuple(enriched),
-        float(parameters.minimum_cross_axis_coverage),
-        float(parameters.minimum_cross_axis_continuity),
     )
 
 

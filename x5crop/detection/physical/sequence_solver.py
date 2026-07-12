@@ -38,16 +38,16 @@ class SequenceSolveResult:
     boundaries: tuple[FrameBoundary, ...]
     relations: tuple[InterFrameRelation, ...]
     residuals: SequenceResiduals
-    search_exhausted: bool
+    search_budget_exhausted: bool
 
 
 @dataclass(frozen=True)
 class _AssignmentState:
-    score: tuple[int, float, float, tuple[int, ...]]
+    rank: tuple[int, float, float, tuple[int, ...]]
     selections: tuple[tuple[int, int, SeparatorAssignment], ...]
 
 
-def _assignment_score(
+def _assignment_rank(
     selections: tuple[tuple[int, int, SeparatorAssignment], ...],
 ) -> tuple[int, float, float, tuple[int, ...]]:
     position_error = sum(
@@ -59,7 +59,7 @@ def _assignment_score(
         for _boundary_index, _observation_index, assignment in selections
     )
     signal_support = sum(
-        float(assignment.observation.score)
+        float(assignment.observation.tonal_evidence)
         for _boundary_index, _observation_index, assignment in selections
     )
     return (
@@ -76,14 +76,55 @@ def _best_monotonic_assignments(
     count: int,
     dimensions: FrameDimensionPrior,
     holder_occlusion: HolderOcclusionEvidence,
+    maximum_assignment_evaluations: int,
 ) -> tuple[
     dict[int, SeparatorAssignment],
     dict[int, SeparatorAssignment],
+    bool,
 ]:
+    if maximum_assignment_evaluations <= 0:
+        raise ValueError("sequence solver evaluation budget must be positive")
     states: dict[int, _AssignmentState] = {
-        -1: _AssignmentState(_assignment_score(()), ())
+        -1: _AssignmentState(_assignment_rank(()), ())
     }
     diagnostic: dict[int, SeparatorAssignment] = {}
+    for observation_index, observation in enumerate(observations):
+        for boundary_index in range(1, count):
+            assignment = assign_observation_to_boundary(
+                boundary_index,
+                observation,
+                boundary_position_constraint(
+                    span,
+                    boundary_index,
+                    count,
+                    dimensions,
+                    holder_occlusion,
+                ),
+                separator_width_constraint(
+                    span,
+                    boundary_index,
+                    count,
+                    dimensions,
+                    holder_occlusion,
+                ),
+            )
+            current = diagnostic.get(observation_index)
+            if current is None or (
+                int(assignment.state == EvidenceState.SUPPORTED),
+                -abs(
+                    observation.center
+                    - assignment.position_constraint.position.midpoint
+                ),
+            ) > (
+                int(current.state == EvidenceState.SUPPORTED),
+                -abs(
+                    current.observation.center
+                    - current.position_constraint.position.midpoint
+                ),
+            ):
+                diagnostic[observation_index] = assignment
+    evaluations = 0
+    exhausted = False
     for boundary_index in range(1, count):
         position = boundary_position_constraint(
             span,
@@ -110,6 +151,10 @@ def _best_monotonic_assignments(
                 else float(span.box.left)
             )
             for observation_index in range(last_observation_index + 1, len(observations)):
+                if evaluations >= maximum_assignment_evaluations:
+                    exhausted = True
+                    break
+                evaluations += 1
                 observation = observations[observation_index]
                 assignment = assign_observation_to_boundary(
                     boundary_index,
@@ -117,18 +162,6 @@ def _best_monotonic_assignments(
                     position,
                     width,
                 )
-                current = diagnostic.get(observation_index)
-                if current is None or (
-                    int(assignment.state == EvidenceState.SUPPORTED),
-                    -abs(observation.center - position.position.midpoint),
-                ) > (
-                    int(current.state == EvidenceState.SUPPORTED),
-                    -abs(
-                        current.observation.center
-                        - current.position_constraint.position.midpoint
-                    ),
-                ):
-                    diagnostic[observation_index] = assignment
                 if not assignment.independent:
                     continue
                 minimum_separation = float(boundary_index - previous_boundary_index)
@@ -138,19 +171,23 @@ def _best_monotonic_assignments(
                     continue
                 selections = (*state.selections, (boundary_index, observation_index, assignment))
                 candidate = _AssignmentState(
-                    _assignment_score(selections),
+                    _assignment_rank(selections),
                     selections,
                 )
                 existing = next_states.get(observation_index)
-                if existing is None or candidate.score > existing.score:
+                if existing is None or candidate.rank > existing.rank:
                     next_states[observation_index] = candidate
+            if exhausted:
+                break
         states = next_states
-    selected_state = max(states.values(), key=lambda state: state.score)
+        if exhausted:
+            break
+    selected_state = max(states.values(), key=lambda state: state.rank)
     selected = {
         boundary_index: replace(assignment, used_for_boundary=True)
         for boundary_index, _observation_index, assignment in selected_state.selections
     }
-    return selected, diagnostic
+    return selected, diagnostic, exhausted
 
 
 def _cuts(
@@ -255,14 +292,28 @@ def _frames(
         right <= left for left, right in zip(cuts[:-1], cuts[1:])
     ):
         raise ValueError("sequence solution requires strictly monotonic cuts")
+    rounded = [int(round(cuts[0]))]
+    for index, coordinate in enumerate(cuts[1:-1], start=1):
+        rounded.append(
+            max(
+                rounded[-1] + 1,
+                min(
+                    int(round(coordinate)),
+                    int(round(cuts[-1])) - (count - index),
+                ),
+            )
+        )
+    rounded.append(int(round(cuts[-1])))
+    if any(right <= left for left, right in zip(rounded[:-1], rounded[1:])):
+        raise ValueError("sequence solution has no positive-width pixel frames")
     return tuple(
         Box(
-            int(round(left)),
+            left,
             span.box.top,
-            int(round(right)),
+            right,
             span.box.bottom,
         )
-        for left, right in zip(cuts[:-1], cuts[1:])
+        for left, right in zip(rounded[:-1], rounded[1:])
     )
 
 
@@ -414,6 +465,7 @@ def solve_frame_sequence(
     dimensions: FrameDimensionPrior,
     holder_occlusion: HolderOcclusionEvidence,
     boundary_observations: tuple[BoundaryObservation, ...],
+    maximum_assignment_evaluations: int,
 ) -> SequenceSolveResult:
     if count <= 0:
         raise ValueError("sequence count must be positive")
@@ -429,12 +481,13 @@ def solve_frame_sequence(
             _residuals(span, intervals, (), dimensions),
             False,
         )
-    selected, diagnostic = _best_monotonic_assignments(
+    selected, diagnostic, search_budget_exhausted = _best_monotonic_assignments(
         observations,
         span,
         count,
         dimensions,
         holder_occlusion,
+        maximum_assignment_evaluations,
     )
     boundaries, focused_assignments = _cuts(
         span,
@@ -461,5 +514,5 @@ def solve_frame_sequence(
         boundaries=boundaries,
         relations=relations,
         residuals=_residuals(span, intervals, boundaries, dimensions),
-        search_exhausted=False,
+        search_budget_exhausted=search_budget_exhausted,
     )

@@ -145,10 +145,10 @@ def assess_dual_lane_candidate(
         ),
         hard_boundary_indexes=hard_indexes,
         missing_boundary_indexes=(),
-        hard_scores=tuple(
-            score
+        hard_tonal_evidence=tuple(
+            tonal_evidence
             for lane in lanes
-            for score in lane.assessment.evidence.separator_sequence.hard_scores
+            for tonal_evidence in lane.assessment.evidence.separator_sequence.hard_tonal_evidence
         ),
     )
     continuity = SeparatorContinuityEvidence(
@@ -165,14 +165,6 @@ def assess_dual_lane_candidate(
             for record in lane.assessment.evidence.separator_continuity.records
         ),
         observations=geometry.separator_observations,
-        minimum_coverage_ratio=min(
-            lane.assessment.evidence.separator_continuity.minimum_coverage_ratio
-            for lane in lanes
-        ),
-        minimum_continuity_ratio=min(
-            lane.assessment.evidence.separator_continuity.minimum_continuity_ratio
-            for lane in lanes
-        ),
     )
     dimension_states = tuple(
         lane.assessment.evidence.frame_dimensions.state for lane in lanes

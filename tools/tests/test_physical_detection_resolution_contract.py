@@ -23,6 +23,7 @@ from x5crop.cache import MeasurementCache
 from x5crop.domain import HolderSpan, VisibleSequenceSpan
 from x5crop.policies.registry import get_detection_policy
 from x5crop.detection.final.finalize import finalize_detection
+from x5crop.image.statistics import ImageMeasurementStatisticsParameters, image_measurement_statistics
 
 
 def _single_frame_candidate(*, measured_boundaries: bool) -> BuiltCandidate:
@@ -53,6 +54,25 @@ def _single_frame_candidate(*, measured_boundaries: bool) -> BuiltCandidate:
 
 
 class PhysicalDetectionResolutionContractTest(unittest.TestCase):
+    def test_search_budget_exhaustion_prevents_geometry_resolution(self) -> None:
+        candidate = candidate_fixture()
+        candidate = replace(
+            candidate,
+            geometry=replace(
+                candidate.geometry,
+                search_budget_exhausted=True,
+            ),
+        )
+        selection = select_candidates(
+            (candidate,),
+            larger_counts_evaluated=True,
+        )
+        self.assertFalse(selection.geometry_resolution.supported)
+        self.assertIn(
+            "search_budget_exhausted",
+            selection.geometry_resolution.reasons,
+        )
+
     def test_full_canvas_does_not_prove_single_frame_geometry(self) -> None:
         built = _single_frame_candidate(measured_boundaries=False)
         paths = _boundary_proof_paths(built, candidate_evidence_fixture())
@@ -193,7 +213,7 @@ class PhysicalDetectionResolutionContractTest(unittest.TestCase):
 
         self.assertNotIn("count", signature(content_region_runs).parameters)
         self.assertNotIn("fmt", signature(frame_coverage_evidence).parameters)
-        self.assertIn(
+        self.assertNotIn(
             "frame_width_reference_px",
             signature(frame_coverage_evidence).parameters,
         )
@@ -209,12 +229,15 @@ class PhysicalDetectionResolutionContractTest(unittest.TestCase):
             np.full_like(content, 255),
             content,
             content.astype(np.float32) / 255.0,
+            image_measurement_statistics(
+                np.full_like(content, 255),
+                ImageMeasurementStatisticsParameters(),
+            ),
         )
         evidence = frame_coverage_evidence(
             HolderSpan(Box(0, 0, 450, 60)),
             VisibleSequenceSpan(Box(0, 0, 450, 60)),
             (Box(0, 0, 140, 60), Box(140, 0, 290, 60)),
-            100.0,
             cache,
             get_detection_policy("135", "partial").content,
         )

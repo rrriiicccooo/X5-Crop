@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from ....cache import MeasurementCache
 from ....domain import SequenceHypothesis
 from ....formats import FormatPhysicalSpec
-from ....policies.parameters.sequence import SequenceParameters
+from ....policies.runtime.content import ContentPolicy
 from ....policies.runtime.separator import SeparatorPolicy
 from ....policies.parameters.candidate import SequenceHypothesisParameters
 from ....units import ScanCalibration
@@ -26,7 +26,7 @@ def frame_sequence_plan(
     count_hypothesis: CountHypothesis,
     *,
     cache: MeasurementCache,
-    sequence_policy: SequenceParameters,
+    content_policy: ContentPolicy,
     separator_policy: SeparatorPolicy,
     hypothesis_parameters: SequenceHypothesisParameters,
     scan_calibration: ScanCalibration,
@@ -40,7 +40,7 @@ def frame_sequence_plan(
         cache,
         scan_calibration,
         request.layout,
-        sequence_policy=sequence_policy,
+        content_policy=content_policy,
         separator_policy=separator_policy,
         hypothesis_parameters=hypothesis_parameters,
     )

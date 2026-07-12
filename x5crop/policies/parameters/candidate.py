@@ -12,8 +12,6 @@ class DualLaneDividerParameters:
     band_width_max_px: int = 96
     proposal_count: int = 3
     minimum_center_separation_ratio: float = 0.06
-    content_weight: float = 0.55
-    texture_weight: float = 0.45
 
 
 @dataclass(frozen=True)
@@ -23,9 +21,17 @@ class SequenceHypothesisParameters:
 
 
 @dataclass(frozen=True)
+class SequenceSolverParameters:
+    maximum_assignment_evaluations: int = 100_000
+
+
+@dataclass(frozen=True)
 class CandidatePlanParameters:
     sequence_hypotheses: SequenceHypothesisParameters = field(
         default_factory=SequenceHypothesisParameters
+    )
+    sequence_solver: SequenceSolverParameters = field(
+        default_factory=SequenceSolverParameters
     )
     dual_lane_divider: DualLaneDividerParameters = field(
         default_factory=DualLaneDividerParameters

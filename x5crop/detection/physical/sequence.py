@@ -5,7 +5,7 @@ from collections.abc import Iterable
 import numpy as np
 
 from ...domain import BoundaryObservation, MeasurementProvenance, SequenceHypothesis
-from ...geometry.detection_parameters import BoundaryDetectionParameters
+from ...image.statistics import ImageMeasurementStatistics
 from .boundary import visible_sequence_and_crop_envelope
 from .boundary_detection import boundary_observation_groups
 
@@ -36,7 +36,6 @@ def _proposal_from_observations(
     name: str,
     observations: tuple[BoundaryObservation, ...],
     gray: np.ndarray,
-    parameters: BoundaryDetectionParameters,
 ) -> SequenceHypothesis | None:
     try:
         visible, envelope = visible_sequence_and_crop_envelope(
@@ -45,13 +44,6 @@ def _proposal_from_observations(
             canvas_height=gray.shape[0],
         )
     except ValueError:
-        return None
-    box = envelope.box
-    if (
-        box.width < max(parameters.min_width_px, gray.shape[1] * parameters.min_width_ratio)
-        or box.height
-        < max(parameters.min_height_px, gray.shape[0] * parameters.min_height_ratio)
-    ):
         return None
     roots = tuple(
         dict.fromkeys(
@@ -110,9 +102,9 @@ def _mixed_safe_observations(
 
 def base_sequence_span_candidates(
     gray: np.ndarray,
-    parameters: BoundaryDetectionParameters,
+    statistics: ImageMeasurementStatistics,
 ) -> list[SequenceHypothesis]:
-    groups = boundary_observation_groups(gray, parameters)
+    groups = boundary_observation_groups(gray, statistics)
     proposals = [
         proposal
         for name, observations in groups
@@ -121,7 +113,6 @@ def base_sequence_span_candidates(
                 name,
                 observations,
                 gray,
-                parameters,
             )
         )
         is not None
@@ -130,7 +121,6 @@ def base_sequence_span_candidates(
         "mixed_safe_overcontain",
         _mixed_safe_observations(groups),
         gray,
-        parameters,
     )
     if mixed is not None and any(
         observation.kind != "canvas_clip"

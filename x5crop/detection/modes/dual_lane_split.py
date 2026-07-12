@@ -13,7 +13,6 @@ from ...utils import clamp_int
 class LaneDividerProposal:
     center: int
     gutter: Box
-    score: float | None
     source: str
 
     def lane_boxes(self, canvas_width: int, canvas_height: int) -> tuple[Box, Box]:
@@ -38,9 +37,11 @@ def lane_divider_proposals(
         return ()
     row_content = content_evidence.mean(axis=1, dtype=np.float64)
     row_texture = content_evidence.std(axis=1, dtype=np.float64)
-    cost = (
-        float(parameters.content_weight) * row_content
-        + float(parameters.texture_weight) * row_texture
+    content_scale = max(1e-6, float(np.percentile(row_content, 90.0)))
+    texture_scale = max(1e-6, float(np.percentile(row_texture, 90.0)))
+    gutter_residual = np.maximum(
+        row_content / content_scale,
+        row_texture / texture_scale,
     )
     band_width = clamp_int(
         height * parameters.band_width_ratio,
@@ -49,7 +50,7 @@ def lane_divider_proposals(
     )
     kernel_width = max(1, band_width)
     kernel = np.ones(kernel_width, dtype=np.float64) / float(kernel_width)
-    smoothed = np.convolve(cost, kernel, mode="same")
+    smoothed = np.convolve(gutter_residual, kernel, mode="same")
     minimum_separation = max(
         1,
         int(round(height * parameters.minimum_center_separation_ratio)),
@@ -66,7 +67,6 @@ def lane_divider_proposals(
         LaneDividerProposal(
             center=row,
             gutter=Box(0, max(1, row - half), width, min(height - 1, row + half)),
-            score=float(-smoothed[row]),
             source="measured_holder_gutter",
         )
         for row in selected
@@ -82,7 +82,6 @@ def lane_divider_proposals(
                     width,
                     min(height - 1, center + half),
                 ),
-                score=None,
                 source="center_safety",
             )
         )

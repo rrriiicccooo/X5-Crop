@@ -41,6 +41,7 @@ def hard_safety_candidate(
         dimensions,
         holder_occlusion,
         boundary_observations,
+        context.policy.candidate_plan.sequence_solver.maximum_assignment_evaluations,
     )
     hypothesis = CountHypothesis(
         count=count,
@@ -66,7 +67,7 @@ def hard_safety_candidate(
             holder_occlusion=holder_occlusion,
             frame_dimension_prior=dimensions,
             residuals=solved.residuals,
-            search_exhausted=solved.search_exhausted,
+            search_budget_exhausted=solved.search_budget_exhausted,
             source=CANDIDATE_SOURCE_HARD_SAFETY,
             automatic_processing_supported=False,
             sequence_hypothesis_name="full_canvas_safety",

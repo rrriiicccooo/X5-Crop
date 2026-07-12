@@ -47,7 +47,7 @@ def review_only_candidate(context: DetectionContext) -> BuiltCandidate:
             holder_occlusion=HolderOcclusionEvidence.unavailable(),
             frame_dimension_prior=dimensions,
             residuals=SequenceResiduals(None, None, 0.0),
-            search_exhausted=False,
+            search_budget_exhausted=False,
             source=CANDIDATE_SOURCE_REVIEW_ONLY,
             automatic_processing_supported=False,
             sequence_hypothesis_name="review_only_canvas",

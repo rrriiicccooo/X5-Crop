@@ -10,6 +10,7 @@ from ...image.evidence import (
 )
 from ...image.gray import BaseGrayParameters
 from ...units import ScanCalibrationTrustParameters
+from ...image.statistics import ImageMeasurementStatisticsParameters
 
 
 @dataclass(frozen=True)
@@ -19,4 +20,5 @@ class RuntimePreprocessPolicy:
     deskew_fallback_evidence: DeskewFallbackEvidenceParameters = field(default_factory=DeskewFallbackEvidenceParameters)
     separator_evidence_image: SeparatorEvidenceImageParameters = field(default_factory=SeparatorEvidenceImageParameters)
     content_evidence_image: ContentEvidenceImageParameters = field(default_factory=ContentEvidenceImageParameters)
+    image_statistics: ImageMeasurementStatisticsParameters = field(default_factory=ImageMeasurementStatisticsParameters)
     scan_calibration_trust: ScanCalibrationTrustParameters = field(default_factory=ScanCalibrationTrustParameters)

@@ -6,6 +6,7 @@ from ....constants import CANDIDATE_SOURCE_FRAME_SEQUENCE
 from ....domain import Box, CropEnvelope, HolderSpan, SequenceHypothesis
 from ....formats import FormatPhysicalSpec
 from ....policies.runtime.separator import SeparatorPolicy
+from ....policies.parameters.candidate import SequenceSolverParameters
 from ....units import ScanCalibration
 from ...context import DetectionRequest
 from ...physical.model import SequenceSolution
@@ -48,6 +49,7 @@ def build_frame_sequence_geometry(
     *,
     cache: MeasurementCache,
     separator_policy: SeparatorPolicy,
+    solver_parameters: SequenceSolverParameters,
 ) -> BuiltCandidate:
     if cache.layout != request.layout:
         raise ValueError("candidate build requires matching measurement cache")
@@ -83,9 +85,11 @@ def build_frame_sequence_geometry(
         dimensions,
         HolderOcclusionEvidence.unavailable(),
         sequence_hypothesis.boundary_observations,
+        solver_parameters.maximum_assignment_evaluations,
     )
     holder_occlusion = holder_occlusion_for_sequence(
         sequence_hypothesis.boundary_observations,
+        solver_parameters.maximum_assignment_evaluations,
         visible_sequence_span,
         provisional.boundaries,
         dimensions.width_px,
@@ -136,7 +140,7 @@ def build_frame_sequence_geometry(
             holder_occlusion=holder_occlusion,
             frame_dimension_prior=dimensions,
             residuals=solved.residuals,
-            search_exhausted=solved.search_exhausted,
+            search_budget_exhausted=solved.search_budget_exhausted,
             source=CANDIDATE_SOURCE_FRAME_SEQUENCE,
             automatic_processing_supported=True,
             sequence_hypothesis_name=sequence_hypothesis.name,

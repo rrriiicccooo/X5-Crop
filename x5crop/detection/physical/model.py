@@ -72,7 +72,7 @@ class SequenceSolution:
     holder_occlusion: HolderOcclusionEvidence
     frame_dimension_prior: FrameDimensionPrior
     residuals: SequenceResiduals
-    search_exhausted: bool
+    search_budget_exhausted: bool
     source: str
     automatic_processing_supported: bool
     sequence_hypothesis_name: str

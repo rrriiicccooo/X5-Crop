@@ -27,6 +27,7 @@ def _assess_sequence_plan(
             context.scan_calibration,
             cache=context.measurement_cache,
             separator_policy=context.policy.separator,
+            solver_parameters=context.policy.candidate_plan.sequence_solver,
         )
         assessed.append(assess_candidate(built, context))
     return assessed
@@ -43,7 +44,7 @@ def evaluate_count_hypothesis(
         context.policy.physical_spec,
         hypothesis,
         cache=context.measurement_cache,
-        sequence_policy=context.policy.sequence,
+        content_policy=context.policy.content,
         separator_policy=context.policy.separator,
         hypothesis_parameters=context.policy.candidate_plan.sequence_hypotheses,
         scan_calibration=context.scan_calibration,

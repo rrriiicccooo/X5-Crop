@@ -5,11 +5,7 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class SeparatorObservationParameters:
-    profile_threshold: float = 0.22
+    activation_percentile: float = 90.0
+    minimum_profile_range: float = 1e-6
     minimum_run_px: int = 1
     maximum_observations: int = 32
-
-
-@dataclass(frozen=True)
-class FrameDimensionPriorParameters:
-    pass

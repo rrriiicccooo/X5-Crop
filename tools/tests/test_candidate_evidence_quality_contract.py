@@ -42,7 +42,7 @@ class CandidateEvidenceQualityContractTest(unittest.TestCase):
             dimension_constrained_count=1,
             hard_boundary_indexes=(),
             missing_boundary_indexes=(1,),
-            hard_scores=(),
+            hard_tonal_evidence=(),
         )
         quality = evidence_quality(
             replace(evidence, separator_sequence=constrained),

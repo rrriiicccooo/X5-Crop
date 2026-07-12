@@ -57,7 +57,6 @@ def frame_coverage_evidence(
     holder_span: HolderSpan,
     visible_sequence_span: VisibleSequenceSpan,
     frames: tuple[Box, ...],
-    frame_width_reference_px: float,
     cache: MeasurementCache,
     content_policy: ContentPolicy,
 ) -> FrameCoverageEvidence:
@@ -74,7 +73,6 @@ def frame_coverage_evidence(
     runs = content_region_runs(
         cache.content_evidence_work,
         holder,
-        frame_width_reference_px,
         content_policy=content_policy,
     )
     tolerance = max(1, int(content_policy.profile.min_run_width_px))

@@ -53,16 +53,11 @@ def _observation(value: dict[str, Any]) -> SeparatorBandObservation:
         start=float(value["start"]),
         end=float(value["end"]),
         center=float(value["center"]),
-        score=float(value["score"]),
+        tonal_evidence=float(value["tonal_evidence"]),
         provenance=_provenance(value["provenance"]),
         lane_box=None if value["lane_box"] is None else _box(value["lane_box"]),
         continuity=(
             None if value["continuity"] is None else float(value["continuity"])
-        ),
-        tonal_evidence=(
-            None
-            if value["tonal_evidence"] is None
-            else float(value["tonal_evidence"])
         ),
     )
 

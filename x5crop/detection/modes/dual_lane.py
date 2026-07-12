@@ -57,6 +57,7 @@ def _lane_context(
         lane_gray,
         "horizontal",
         lane_policy.preprocess.content_evidence_image,
+        lane_policy.preprocess.image_statistics,
     )
     profile = replace(
         context.image_profile,
@@ -144,7 +145,7 @@ def _parent_candidate(
             holder_occlusion=HolderOcclusionEvidence.not_applicable(),
             frame_dimension_prior=lane_candidates[0].geometry.frame_dimension_prior,
             residuals=SequenceResiduals(None, None, 0.0),
-            search_exhausted=False,
+            search_budget_exhausted=False,
             source=CANDIDATE_SOURCE_DUAL_LANE,
             automatic_processing_supported=divider.source != "center_safety",
             sequence_hypothesis_name="measured_lane_divider",

@@ -13,6 +13,7 @@ from x5crop.domain import EvidenceState
 from x5crop.domain import VisibleSequenceSpan
 from x5crop.domain import Box
 from x5crop.policies.registry import get_detection_policy
+from x5crop.image.statistics import ImageMeasurementStatisticsParameters, image_measurement_statistics
 
 
 def _cache(gray: np.ndarray) -> MeasurementCache:
@@ -22,6 +23,7 @@ def _cache(gray: np.ndarray) -> MeasurementCache:
         gray,
         evidence,
         evidence.astype(np.float32) / 255.0,
+        image_measurement_statistics(gray, ImageMeasurementStatisticsParameters()),
     )
 
 
@@ -60,12 +62,12 @@ class FrameContentSupportTest(unittest.TestCase):
         alignment = sequence_content_alignment_evidence(
             geometry,
             _cache(gray),
-            get_detection_policy("120-645", "full").sequence.content_alignment,
+            get_detection_policy("120-645", "full").content.evidence,
         )
         self.assertNotEqual(alignment.state, EvidenceState.CONTRADICTED)
         self.assertTrue(alignment.overcontains_long_axis)
 
-    def test_confirmed_sequence_undercrop_is_integrity_failure(self) -> None:
+    def test_global_content_span_alone_does_not_confirm_undercrop(self) -> None:
         candidate = candidate_fixture()
         gray = np.full((120, 900), 255, dtype=np.uint8)
         gray[20:100, 50:850] = 0
@@ -76,10 +78,11 @@ class FrameContentSupportTest(unittest.TestCase):
         alignment = sequence_content_alignment_evidence(
             geometry,
             _cache(gray),
-            get_detection_policy("120-645", "full").sequence.content_alignment,
+            get_detection_policy("120-645", "full").content.evidence,
         )
-        self.assertEqual(alignment.state, EvidenceState.CONTRADICTED)
-        self.assertTrue(alignment.confirmed_undercrop_sides)
+        self.assertEqual(alignment.state, EvidenceState.UNAVAILABLE)
+        self.assertFalse(alignment.confirmed_undercrop_sides)
+        self.assertTrue(alignment.unconfirmed_undercrop_sides)
 
 
 if __name__ == "__main__":

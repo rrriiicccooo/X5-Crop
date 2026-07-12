@@ -35,7 +35,11 @@ def cached_separator_profile(
         full_key = separator_profile_full_cache_key(profile_config)
         profile = cache.separator_profiles_full.get(full_key)
         if profile is None:
-            profile = separator_profile(cache.gray_work, profile_config)
+            profile = separator_profile(
+                cache.gray_work,
+                cache.image_statistics,
+                profile_config,
+            )
             cache.separator_profiles_full[full_key] = profile
             cache.separator_profiles[
                 separator_profile_cache_key(
@@ -49,6 +53,7 @@ def cached_separator_profile(
     if profile is None:
         profile = separator_profile(
             crop_work_box(cache.gray_work, corridor),
+            cache.image_statistics,
             profile_config,
         )
         cache.separator_profiles[key] = profile

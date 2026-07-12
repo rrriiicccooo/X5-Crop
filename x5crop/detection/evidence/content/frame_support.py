@@ -11,7 +11,7 @@ from ....domain import Box
 from ....geometry.boxes import box_cache_key
 from ....policies.parameters.content import ContentEvidenceParameters
 from ....policies.runtime.content import ContentPolicy
-from ....utils import sampled_percentile
+from ....image.evidence import adaptive_activation_threshold
 from x5crop.domain import EvidenceState
 
 if TYPE_CHECKING:
@@ -26,19 +26,11 @@ CACHED_CONTENT_SIGNAL_COMPOSITE = (
 def content_evidence_threshold(
     evidence_float: np.ndarray,
     parameters: ContentEvidenceParameters,
-) -> float:
-    percentile_value = float(
-        sampled_percentile(
-            evidence_float,
-            [parameters.percentile],
-        )[0]
-    )
-    return max(
-        parameters.threshold_min,
-        min(
-            parameters.threshold_max,
-            percentile_value * parameters.threshold_multiplier,
-        ),
+) -> float | None:
+    return adaptive_activation_threshold(
+        evidence_float,
+        parameters.activation_percentile,
+        parameters.minimum_evidence_range,
     )
 
 
@@ -77,13 +69,13 @@ def _cached_content_evidence_threshold(
     evidence: np.ndarray,
     sequence_box: Box,
     parameters: ContentEvidenceParameters,
-) -> float:
+) -> float | None:
     key = (parameters, *box_cache_key(sequence_box))
     threshold = cache.content_evidence_thresholds.get(key)
     if threshold is None:
         threshold = content_evidence_threshold(evidence, parameters)
-        cache.content_evidence_thresholds[key] = float(threshold)
-    return float(threshold)
+        cache.content_evidence_thresholds[key] = threshold
+    return threshold
 
 
 def _boundary_contact_sides(
@@ -107,8 +99,8 @@ def _boundary_contact_sides(
         side
         for side, sample in samples.items()
         if sample.size
-        and float((sample >= threshold).mean())
-        >= float(parameters.present_coverage_min)
+        and int(np.count_nonzero(sample >= threshold))
+        >= min(int(parameters.minimum_active_pixels), int(sample.size))
     )
 
 
@@ -154,6 +146,16 @@ def frame_content_evidence(
         sequence_box,
         parameters,
     )
+    if threshold is None:
+        return FrameContentEvidence(
+            EvidenceState.UNAVAILABLE,
+            "content_evidence_has_no_dynamic_range",
+            None,
+            None,
+            None,
+            (),
+            CACHED_CONTENT_SIGNAL_COMPOSITE,
+        )
     statistics_key = (parameters, *box_cache_key(sequence_box), float(threshold))
     statistics = cache.content_column_statistics.get(statistics_key)
     if statistics is None:
@@ -186,8 +188,8 @@ def frame_content_evidence(
             mean = float(crop.mean())
             coverage = float((crop >= threshold).mean())
         content_present = bool(
-            mean >= float(parameters.present_mean_min)
-            or coverage >= float(parameters.present_coverage_min)
+            int(np.count_nonzero(crop >= threshold))
+            >= min(int(parameters.minimum_active_pixels), int(crop.size))
         )
         observations.append(
             FrameContentObservation(

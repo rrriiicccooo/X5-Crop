@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from ...geometry.detection_parameters import (
-    SeparatorContinuityParameters,
     SeparatorProfileParameters,
 )
 from ...image.deskew_parameters import DeskewParameters
@@ -13,12 +12,10 @@ from .content import (
     ContentProfileParameters,
 )
 from .diagnostics import SeparatorOverlayParameters
-from .sequence import SequenceParameters
 from .output import (
     OverlapBleedParameters,
 )
 from .separator import (
-    FrameDimensionPriorParameters,
     SeparatorObservationParameters,
 )
 
@@ -39,12 +36,6 @@ class SeparatorParameters:
     separator_observation: SeparatorObservationParameters = field(
         default_factory=SeparatorObservationParameters
     )
-    frame_dimension_prior: FrameDimensionPriorParameters = field(
-        default_factory=FrameDimensionPriorParameters
-    )
-    separator_continuity: SeparatorContinuityParameters = field(
-        default_factory=SeparatorContinuityParameters
-    )
     separator_profile: SeparatorProfileParameters = field(default_factory=SeparatorProfileParameters)
 
 
@@ -62,7 +53,6 @@ class DiagnosticsParameters:
 class FormatParameters:
     preprocess: PreprocessParameters = field(default_factory=PreprocessParameters)
     content: ContentParameters = field(default_factory=ContentParameters)
-    sequence: SequenceParameters = field(default_factory=SequenceParameters)
     separator: SeparatorParameters = field(default_factory=SeparatorParameters)
     candidate: CandidateParameters = field(default_factory=CandidateParameters)
     output: OverlapBleedParameters = field(default_factory=OverlapBleedParameters)

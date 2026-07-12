@@ -41,20 +41,13 @@ def _physical_runtime_detail(policy: "DetectionPolicy") -> dict[str, Any]:
     return {
         "preprocess": _plain(policy.preprocess),
         "detector_kind": policy.detector_kind,
-        "sequence": {
-            "boundary_detection": _plain(policy.sequence.boundary_detection),
-            "hypothesis_budget": _plain(policy.candidate_plan.sequence_hypotheses),
-        },
         "separator": {
             "observation": _plain(policy.separator.observation),
             "profile": _plain(policy.separator.profile),
-            "continuity": _plain(policy.separator.continuity),
-            "frame_dimensions": _plain(policy.separator.frame_dimension_prior),
         },
         "content": {
             "evidence": _plain(policy.content.evidence),
             "profile": _plain(policy.content.profile),
-            "sequence_alignment": _plain(policy.sequence.content_alignment),
         },
     }
 

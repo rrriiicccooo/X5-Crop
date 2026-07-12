@@ -7,6 +7,7 @@ from ...image.evidence import (
     SeparatorEvidenceImageParameters,
 )
 from ...image.gray import BaseGrayParameters
+from ...image.statistics import ImageMeasurementStatisticsParameters
 from ..parameters.aggregate import FormatParameters
 from ...strip_modes import FULL, PARTIAL
 from .separator import separator_policy
@@ -36,6 +37,7 @@ def build_detection_policy(
         deskew_fallback_evidence=DeskewFallbackEvidenceParameters(),
         separator_evidence_image=SeparatorEvidenceImageParameters(),
         content_evidence_image=ContentEvidenceImageParameters(),
+        image_statistics=ImageMeasurementStatisticsParameters(),
     )
     separator = separator_policy(params)
     return DetectionPolicy(
@@ -43,7 +45,6 @@ def build_detection_policy(
         strip_mode=strip_mode,
         preprocess=preprocess,
         detector_kind=detector_kind,
-        sequence=params.sequence,
         separator=separator,
         content=ContentPolicy(
             evidence=params.content.content_evidence,

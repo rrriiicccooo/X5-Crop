@@ -8,7 +8,7 @@ from ....cache import MeasurementCache
 from ....cache.separator import cached_separator_profile
 from ....domain import Box, MeasurementProvenance, SequenceHypothesis
 from ....formats import FormatPhysicalSpec
-from ....policies.parameters.sequence import SequenceParameters
+from ....policies.runtime.content import ContentPolicy
 from ....policies.runtime.separator import SeparatorPolicy
 from ....policies.parameters.candidate import SequenceHypothesisParameters
 from ....units import ScanCalibration
@@ -79,7 +79,7 @@ def _separator_dimension_hypotheses(
             sorted(
                 sorted(
                     observations,
-                    key=lambda item: (item.score, item.width),
+                    key=lambda item: (item.tonal_evidence, item.width),
                     reverse=True,
                 )[:observation_budget],
                 key=lambda item: item.center,
@@ -113,11 +113,9 @@ def _separator_dimension_hypotheses(
                 if photo_widths
                 else 0.0
             )
-            observation_score = sum(item.score for item in sequence) / len(sequence)
-            rank = float(observation_score) - float(physical_error)
             candidates.append(
                 (
-                    rank,
+                    physical_error,
                     SequenceHypothesis(
                         name="separator_dimension_sequence",
                         visible_sequence_span=VisibleSequenceSpan(box),
@@ -139,7 +137,7 @@ def _separator_dimension_hypotheses(
                     ),
                 )
             )
-    ranked = [item for _rank, item in sorted(candidates, key=lambda item: item[0], reverse=True)]
+    ranked = [item for _residual, item in sorted(candidates, key=lambda item: item[0])]
     return unique_sequence_hypotheses(ranked)[
         : max(0, int(hypothesis_parameters.maximum_hypotheses))
     ]
@@ -153,7 +151,7 @@ def sequence_hypotheses(
     calibration: ScanCalibration,
     layout: str,
     *,
-    sequence_policy: SequenceParameters,
+    content_policy: ContentPolicy,
     separator_policy: SeparatorPolicy,
     hypothesis_parameters: SequenceHypothesisParameters,
 ) -> list[SequenceHypothesis]:
@@ -161,7 +159,7 @@ def sequence_hypotheses(
         raise ValueError("sequence proposal requires the context measurement workspace")
     base = base_sequence_span_candidates(
         gray_work,
-        sequence_policy.boundary_detection,
+        cache.image_statistics,
     )
     separator_dimension = _separator_dimension_hypotheses(
         base,
@@ -175,7 +173,7 @@ def sequence_hypotheses(
     )
     physical_sources = unique_sequence_hypotheses([*base, *separator_dimension])
     return expand_crop_envelopes_for_content(
-        gray_work,
+        cache.content_evidence_float_work,
         physical_sources,
-        sequence_policy.content_alignment,
+        content_policy.evidence,
     )

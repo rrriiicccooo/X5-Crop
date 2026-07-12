@@ -3,212 +3,175 @@ from __future__ import annotations
 import numpy as np
 
 from ...domain import BoundaryObservation, MeasurementProvenance, PixelInterval
-from ...geometry.detection_parameters import BoundaryDetectionParameters
-from ...utils import clamp_int, runs_from_mask
+from ...image.statistics import ImageMeasurementStatistics
+from ...utils import runs_from_mask, sampled_percentile
 from .boundary import canvas_boundary_observations
 
 
 BoundaryObservationGroup = tuple[str, tuple[BoundaryObservation, ...]]
 
 
-def _first_footprint_index(holder_mask: np.ndarray, min_run: int) -> int | None:
-    if holder_mask.size == 0:
-        return None
-    footprint = ~holder_mask.astype(bool)
-    for start, end in runs_from_mask(footprint):
-        if end - start >= min_run:
-            return int(start)
-    return None
+def _axis_profiles(gray: np.ndarray, axis: int) -> tuple[np.ndarray, np.ndarray]:
+    data = gray.astype(np.float32, copy=False)
+    gx = np.abs(np.diff(data, axis=1, prepend=data[:, :1]))
+    gy = np.abs(np.diff(data, axis=0, prepend=data[:1, :]))
+    texture = gx + gy
+    reduction_axis = 0 if axis == 1 else 1
+    return data.mean(axis=reduction_axis), texture.mean(axis=reduction_axis)
 
 
-def _edge_holder_transition(holder_mask: np.ndarray, min_run: int) -> int | None:
+def _first_run(mask: np.ndarray) -> int | None:
+    return next((int(start) for start, end in runs_from_mask(mask) if end > start), None)
+
+
+def _edge_transition(holder_mask: np.ndarray) -> int | None:
     holder = holder_mask.astype(bool)
-    if holder.size == 0 or not bool(holder[0]):
+    if not holder.size or not bool(holder[0]):
         return None
     non_holder = np.flatnonzero(~holder)
-    if not non_holder.size:
-        return None
-    transition = int(non_holder[0])
-    return transition if transition >= int(min_run) else None
+    return None if not non_holder.size else int(non_holder[0])
 
 
-def _position_interval(
-    side: str,
-    position: int,
-    gray: np.ndarray,
-    parameters: BoundaryDetectionParameters,
-) -> PixelInterval:
-    axis_length = gray.shape[1] if side in {"leading", "trailing"} else gray.shape[0]
-    uncertainty = max(
-        int(parameters.white_margin_min),
-        int(round(float(axis_length) * float(parameters.white_margin_ratio))),
+def _reference_masks(
+    intensity: np.ndarray,
+    texture: np.ndarray,
+    texture_limit: float,
+) -> tuple[np.ndarray, np.ndarray]:
+    edge_reference = float(np.median((intensity[0], intensity[-1])))
+    deviation = np.abs(intensity - edge_reference)
+    tolerance = float(sampled_percentile(deviation, [10.0])[0])
+    holder = (deviation <= tolerance) & (texture <= float(texture_limit))
+    tonal_change = deviation > tolerance
+    return holder, tonal_change
+
+
+def _change_point_interval(profile: np.ndarray, position: int) -> PixelInterval:
+    if profile.size <= 1:
+        return PixelInterval.exact(float(position))
+    change = np.abs(np.diff(profile, prepend=profile[:1]))
+    threshold = float(sampled_percentile(change, [90.0])[0])
+    if threshold <= 0.0:
+        return PixelInterval.exact(float(position))
+    runs = tuple(runs_from_mask(change >= threshold))
+    if not runs:
+        return PixelInterval.exact(float(position))
+    start, end = min(
+        runs,
+        key=lambda run: abs(0.5 * (run[0] + run[1]) - float(position)),
     )
-    return PixelInterval(
-        max(0.0, float(position - uncertainty)),
-        min(float(axis_length), float(position + uncertainty)),
-    )
+    return PixelInterval(float(start), float(max(start + 1, end)))
 
 
-def _boundary_observation(
+def _observation(
     side: str,
     position: int,
     kind: str,
-    gray: np.ndarray,
-    parameters: BoundaryDetectionParameters,
+    profile: np.ndarray,
 ) -> BoundaryObservation:
     return BoundaryObservation(
         side=side,
-        position=_position_interval(side, position, gray, parameters),
+        position=_change_point_interval(profile, position),
         kind=kind,
         provenance=MeasurementProvenance(
             root_measurement="holder_boundary_profile",
             source=kind,
-            dependencies=("gray_work",),
+            dependencies=("gray_work", "image_measurement_statistics"),
             boundary_anchors=(side,),
         ),
     )
 
 
-def _observations_from_holder_profiles(
-    gray: np.ndarray,
-    col_holder: np.ndarray,
-    row_holder: np.ndarray,
-    parameters: BoundaryDetectionParameters,
-    min_run_x: int,
-    min_run_y: int,
-) -> tuple[BoundaryObservation, ...]:
-    width = gray.shape[1]
-    height = gray.shape[0]
-    transitions = (
-        ("leading", _edge_holder_transition(col_holder, min_run_x)),
-        (
-            "trailing",
-            (
-                None
-                if (offset := _edge_holder_transition(col_holder[::-1], min_run_x))
-                is None
-                else width - offset
-            ),
-        ),
-        ("top", _edge_holder_transition(row_holder, min_run_y)),
-        (
-            "bottom",
-            (
-                None
-                if (offset := _edge_holder_transition(row_holder[::-1], min_run_y))
-                is None
-                else height - offset
-            ),
-        ),
-    )
-    return tuple(
-        _boundary_observation(
-            side,
-            position,
-            "white_holder_transition",
-            gray,
-            parameters,
-        )
-        for side, position in transitions
-        if position is not None
-    )
-
-
-def _observations_from_footprint(
-    gray: np.ndarray,
-    column_footprint: np.ndarray,
-    row_footprint: np.ndarray,
+def _four_side_observations(
+    column_mask: np.ndarray,
+    row_mask: np.ndarray,
+    column_profile: np.ndarray,
+    row_profile: np.ndarray,
     kind: str,
-    parameters: BoundaryDetectionParameters,
-    min_run_x: int,
-    min_run_y: int,
+    *,
+    holder_transition: bool,
 ) -> tuple[BoundaryObservation, ...]:
-    width = gray.shape[1]
-    height = gray.shape[0]
-    leading = _first_footprint_index(~column_footprint, min_run_x)
-    trailing_offset = _first_footprint_index(
-        (~column_footprint)[::-1],
-        min_run_x,
-    )
-    top = _first_footprint_index(~row_footprint, min_run_y)
-    bottom_offset = _first_footprint_index((~row_footprint)[::-1], min_run_y)
-    transitions = (
-        ("leading", leading if leading not in {None, 0} else None),
+    find = _edge_transition if holder_transition else _first_run
+    width = int(column_mask.size)
+    height = int(row_mask.size)
+    leading = find(column_mask)
+    trailing_offset = find(column_mask[::-1])
+    top = find(row_mask)
+    bottom_offset = find(row_mask[::-1])
+    values = (
+        ("leading", leading, column_profile),
         (
             "trailing",
-            width - trailing_offset
-            if trailing_offset not in {None, 0}
-            else None,
+            None if trailing_offset is None else width - trailing_offset,
+            column_profile,
         ),
-        ("top", top if top not in {None, 0} else None),
+        ("top", top, row_profile),
         (
             "bottom",
-            height - bottom_offset
-            if bottom_offset not in {None, 0}
-            else None,
+            None if bottom_offset is None else height - bottom_offset,
+            row_profile,
         ),
     )
     return tuple(
-        _boundary_observation(
-            side,
-            position,
-            kind,
-            gray,
-            parameters,
-        )
-        for side, position in transitions
-        if position is not None
+        _observation(side, int(position), kind, profile)
+        for side, position, profile in values
+        if position not in {None, 0, len(profile)}
     )
 
 
 def boundary_observation_groups(
     gray: np.ndarray,
-    parameters: BoundaryDetectionParameters,
+    statistics: ImageMeasurementStatistics,
 ) -> tuple[BoundaryObservationGroup, ...]:
-    height, width = gray.shape
-    min_run_x = clamp_int(
-        width * parameters.white_run_ratio,
-        parameters.white_run_min,
-        parameters.white_run_max,
+    column_intensity, column_texture = _axis_profiles(gray, axis=1)
+    row_intensity, row_texture = _axis_profiles(gray, axis=0)
+    texture_limit = statistics.edge_texture_limit
+    column_holder, column_tonal = _reference_masks(
+        column_intensity,
+        column_texture,
+        texture_limit,
     )
-    min_run_y = clamp_int(
-        height * parameters.white_run_ratio,
-        parameters.white_run_min,
-        parameters.white_run_max,
+    row_holder, row_tonal = _reference_masks(
+        row_intensity,
+        row_texture,
+        texture_limit,
     )
-    white = gray >= int(parameters.white_light_threshold)
-    white_boundaries = _observations_from_holder_profiles(
-        gray,
-        white.mean(axis=0) >= float(parameters.white_holder_cross_axis_min),
-        white.mean(axis=1) >= float(parameters.white_holder_cross_axis_min),
-        parameters,
-        min_run_x,
-        min_run_y,
+    column_texture_change = column_texture > texture_limit
+    row_texture_change = row_texture > texture_limit
+    edge_is_white_holder = bool(
+        statistics.intensity_low < statistics.edge_intensity_quantiles[1]
+        and statistics.edge_intensity_quantiles[1] >= statistics.intensity_high
     )
-    tonal = gray < int(parameters.bw_not_white_threshold)
-    tonal_boundaries = _observations_from_footprint(
-        gray,
-        tonal.mean(axis=0) >= float(parameters.tonal_footprint_min_fraction),
-        tonal.mean(axis=1) >= float(parameters.tonal_footprint_min_fraction),
+    white_holder = (
+        _four_side_observations(
+            column_holder,
+            row_holder,
+            column_intensity,
+            row_intensity,
+            "white_holder_transition",
+            holder_transition=True,
+        )
+        if edge_is_white_holder
+        else ()
+    )
+    tonal = _four_side_observations(
+        column_tonal,
+        row_tonal,
+        column_intensity,
+        row_intensity,
         "tonal_transition",
-        parameters,
-        min_run_x,
-        min_run_y,
+        holder_transition=False,
     )
-    texture_boundaries = _observations_from_footprint(
-        gray,
-        gray.astype(np.float32).std(axis=0) / 255.0
-        >= float(parameters.texture_activity_min),
-        gray.astype(np.float32).std(axis=1) / 255.0
-        >= float(parameters.texture_activity_min),
+    texture = _four_side_observations(
+        column_texture_change,
+        row_texture_change,
+        column_texture,
+        row_texture,
         "texture_transition",
-        parameters,
-        min_run_x,
-        min_run_y,
+        holder_transition=False,
     )
     return (
-        ("white_holder", white_boundaries),
-        ("tonal", tonal_boundaries),
-        ("texture", texture_boundaries),
-        ("full_canvas", canvas_boundary_observations(width, height)),
+        ("white_holder", white_holder),
+        ("tonal", tonal),
+        ("texture", texture),
+        ("full_canvas", canvas_boundary_observations(gray.shape[1], gray.shape[0])),
     )

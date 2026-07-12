@@ -130,8 +130,6 @@ def _continuity(geometry) -> SeparatorContinuityEvidence:
         "supported",
         records,
         geometry.separator_observations,
-        0.62,
-        0.55,
     )
 
 

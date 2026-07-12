@@ -6,8 +6,25 @@ import numpy as np
 
 from ....domain import MeasurementProvenance
 from ....policies.parameters.separator import SeparatorObservationParameters
-from ....utils import runs_from_mask
+from ....utils import runs_from_mask, sampled_percentile
 from x5crop.domain import PixelInterval, SeparatorBandObservation
+
+
+def _activation_threshold(
+    profile: np.ndarray,
+    parameters: SeparatorObservationParameters,
+) -> tuple[float, float] | None:
+    if not profile.size:
+        return None
+    minimum = float(profile.min())
+    maximum = float(profile.max())
+    spread = maximum - minimum
+    if spread <= float(parameters.minimum_profile_range):
+        return None
+    threshold = float(
+        sampled_percentile(profile, [parameters.activation_percentile])[0]
+    )
+    return threshold, spread
 
 
 def measure_focused_separator_band(
@@ -32,8 +49,12 @@ def measure_focused_separator_band(
     minimum_width = max(1, int(parameters.minimum_run_px))
     measured: list[SeparatorBandObservation] = []
     focused = profile[local_start:local_end]
+    activation = _activation_threshold(profile, parameters)
+    if activation is None:
+        return None
+    threshold, spread = activation
     for start, end in runs_from_mask(
-        focused >= float(parameters.profile_threshold)
+        focused >= threshold
     ):
         if end - start < minimum_width:
             continue
@@ -44,7 +65,9 @@ def measure_focused_separator_band(
                 start=absolute_start,
                 end=absolute_end,
                 center=0.5 * (absolute_start + absolute_end),
-                score=float(focused[start:end].mean()),
+                tonal_evidence=float(
+                    max(0.0, focused[start:end].mean() - threshold) / spread
+                ),
                 provenance=MeasurementProvenance(
                     root_measurement="separator_profile",
                     source="focused_dimension_window",
@@ -54,10 +77,13 @@ def measure_focused_separator_band(
                         "sequence_boundaries",
                     ),
                 ),
-                tonal_evidence=float(focused[start:end].mean()),
             )
         )
-    return max(measured, key=lambda item: (item.score, item.width), default=None)
+    return max(
+        measured,
+        key=lambda item: (item.tonal_evidence, item.width),
+        default=None,
+    )
 
 
 def measure_separator_bands(
@@ -68,10 +94,14 @@ def measure_separator_bands(
 ) -> tuple[SeparatorBandObservation, ...]:
     if profile.ndim != 1:
         raise ValueError("separator profile must be one-dimensional")
+    activation = _activation_threshold(profile, parameters)
+    if activation is None:
+        return ()
+    threshold, spread = activation
     minimum_width = max(1, int(parameters.minimum_run_px))
     measured: list[SeparatorBandObservation] = []
     for local_start, local_end in runs_from_mask(
-        profile >= float(parameters.profile_threshold)
+        profile >= threshold
     ):
         if int(local_end) - int(local_start) < minimum_width:
             continue
@@ -83,13 +113,15 @@ def measure_separator_bands(
                 start=start,
                 end=end,
                 center=center,
-                score=float(profile[local_start:local_end].mean()),
+                tonal_evidence=float(
+                    max(0.0, profile[local_start:local_end].mean() - threshold)
+                    / spread
+                ),
                 provenance=MeasurementProvenance(
                     root_measurement="separator_profile",
                     source="observed_separator_band",
                     dependencies=("gray_work", "boundary_corridor"),
                 ),
-                tonal_evidence=float(profile[local_start:local_end].mean()),
             )
         )
     budget = max(0, int(parameters.maximum_observations))
@@ -97,7 +129,10 @@ def measure_separator_bands(
         return ()
     strongest = sorted(
         measured,
-        key=lambda observation: (observation.score, observation.width),
+        key=lambda observation: (
+            observation.tonal_evidence,
+            observation.width,
+        ),
         reverse=True,
     )[:budget]
     return tuple(sorted(strongest, key=lambda observation: observation.center))

@@ -166,13 +166,12 @@ def assess_candidate(
         candidate,
         physical_spec,
         context.scan_calibration,
-        context.policy.separator.continuity,
+        context.measurement_cache.image_statistics,
     )
     coverage = frame_coverage_evidence(
         geometry.holder_span,
         geometry.visible_sequence_span,
         geometry.frames,
-        geometry.frame_dimension_prior.width_px.midpoint,
         context.measurement_cache,
         context.policy.content,
     )
@@ -185,12 +184,11 @@ def assess_candidate(
         geometry,
         context.measurement_cache,
         content,
-        context.policy.content.evidence,
     )
     alignment = sequence_content_alignment_evidence(
         geometry,
         context.measurement_cache,
-        context.policy.sequence.content_alignment,
+        context.policy.content.evidence,
     )
     sequence = separator_sequence_evidence(
         geometry,

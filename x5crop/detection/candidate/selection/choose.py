@@ -110,6 +110,7 @@ def geometry_resolution_for_selection(
         and evidence.frame_sequence.conservation.state == EvidenceState.SUPPORTED
         and evidence.content_preservation.state == EvidenceState.SUPPORTED
         and boundary_supported
+        and not selected.geometry.search_budget_exhausted
     )
     placement_resolved = bool(
         count_resolved
@@ -134,6 +135,8 @@ def geometry_resolution_for_selection(
         reasons.append("larger_counts_not_evaluated")
     if not alternative_geometries_resolved:
         reasons.append("geometry_clusters_disagree")
+    if selected.geometry.search_budget_exhausted:
+        reasons.append("search_budget_exhausted")
     supported = not reasons
     return GeometryResolution(
         state=(

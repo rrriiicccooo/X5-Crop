@@ -37,7 +37,7 @@ from x5crop.detection.physical.model import SequenceSolution
 from x5crop.detection.evidence.separator_continuity import (
     separator_cross_axis_continuity_evidence,
 )
-from x5crop.geometry.detection_parameters import SeparatorContinuityParameters
+from x5crop.image.statistics import ImageMeasurementStatisticsParameters, image_measurement_statistics
 from x5crop.domain import CropEnvelope, VisibleSequenceSpan
 from tools.tests.physical_gate_support import (
     candidate_fixture,
@@ -66,7 +66,10 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
         evidence = separator_cross_axis_continuity_evidence(
             gray,
             geometry,
-            SeparatorContinuityParameters(),
+            image_measurement_statistics(
+                gray,
+                ImageMeasurementStatisticsParameters(),
+            ),
         )
         self.assertEqual(evidence.state, EvidenceState.SUPPORTED)
 
@@ -85,7 +88,7 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
             profile,
             corridor_start=0.0,
             parameters=SeparatorObservationParameters(
-                profile_threshold=0.5,
+                activation_percentile=70.0,
                 minimum_run_px=1,
                 maximum_observations=8,
             ),
@@ -112,7 +115,7 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
     def test_width_contradicted_raw_band_remains_a_candidate_assignment(self) -> None:
         observation = separator_observation(
             175.0,
-            score=0.95,
+            tonal_evidence=0.95,
             start=160.0,
             end=190.0,
         )
@@ -134,6 +137,7 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
             ),
             HolderOcclusionEvidence.not_applicable(),
             (),
+            10_000,
         )
         self.assertEqual(len(result.assignments), 1)
         self.assertEqual(result.assignments[0].state, EvidenceState.CONTRADICTED)
@@ -142,8 +146,8 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
     def test_selected_observation_boundaries_are_monotonic(self) -> None:
         result = solve_frame_sequence(
             (
-                separator_observation(180.0, score=0.99, start=175.0, end=185.0),
-                separator_observation(120.0, score=0.80, start=115.0, end=125.0),
+                separator_observation(180.0, tonal_evidence=0.99, start=175.0, end=185.0),
+                separator_observation(120.0, tonal_evidence=0.80, start=115.0, end=125.0),
             ),
             (),
             VisibleSequenceSpan(Box(0, 0, 300, 100)),
@@ -161,6 +165,7 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
             ),
             HolderOcclusionEvidence.not_applicable(),
             (),
+            10_000,
         )
         coordinates = tuple(boundary.coordinate for boundary in result.boundaries)
         self.assertEqual(coordinates, tuple(sorted(coordinates)))
@@ -173,7 +178,7 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
             PixelInterval(90.0, 110.0),
             corridor_start=0.0,
             parameters=SeparatorObservationParameters(
-                profile_threshold=0.5,
+                activation_percentile=70.0,
                 minimum_run_px=1,
                 maximum_observations=8,
             ),

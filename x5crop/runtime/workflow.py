@@ -65,6 +65,7 @@ def process_one(
         gray,
         config.layout,
         initial_policy.preprocess.content_evidence_image,
+        initial_policy.preprocess.image_statistics,
     )
     detection_context = DetectionContext(
         image_profile=profile,

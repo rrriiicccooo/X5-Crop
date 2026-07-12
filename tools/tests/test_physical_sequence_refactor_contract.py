@@ -45,6 +45,32 @@ from x5crop.units import ScanCalibration
 
 
 class PhysicalSequenceRefactorContractTest(unittest.TestCase):
+    def test_sequence_solver_reports_assignment_budget_exhaustion(self) -> None:
+        result = solve_frame_sequence(
+            (
+                separator_observation(100.0),
+                separator_observation(200.0),
+            ),
+            (),
+            VisibleSequenceSpan(Box(0, 0, 300, 100)),
+            3,
+            FrameDimensionPrior(
+                PixelInterval.exact(100.0),
+                PixelInterval.exact(100.0),
+                ((36.0, 24.0),),
+                "synthetic",
+                MeasurementProvenance(
+                    "frame_dimensions",
+                    "synthetic",
+                    ("physical_frame_size",),
+                ),
+            ),
+            HolderOcclusionEvidence.not_applicable(),
+            (),
+            1,
+        )
+        self.assertTrue(result.search_budget_exhausted)
+
     def test_broad_tonal_band_cannot_become_independent_separator(self) -> None:
         observation = separator_observation(
             325.0,
@@ -94,6 +120,7 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
             ),
             HolderOcclusionEvidence.not_applicable(),
             (),
+            10_000,
         )
         self.assertTrue(all(frame.valid() for frame in result.frames))
         self.assertTrue(

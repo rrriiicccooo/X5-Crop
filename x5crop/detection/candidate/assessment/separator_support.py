@@ -19,7 +19,7 @@ class SeparatorSequenceEvidence:
     dimension_constrained_count: int
     hard_boundary_indexes: tuple[int, ...]
     missing_boundary_indexes: tuple[int, ...]
-    hard_scores: tuple[float, ...]
+    hard_tonal_evidence: tuple[float, ...]
 
 
 def separator_sequence_evidence(
@@ -63,8 +63,8 @@ def separator_sequence_evidence(
         dimension_constrained_count=dimension_count,
         hard_boundary_indexes=indexes,
         missing_boundary_indexes=missing,
-        hard_scores=tuple(
-            float(boundary.assignment.observation.score)
+        hard_tonal_evidence=tuple(
+            float(boundary.assignment.observation.tonal_evidence)
             for boundary in accepted
             if boundary.assignment is not None
         ),

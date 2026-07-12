@@ -182,11 +182,10 @@ class SeparatorBandObservation:
     start: float
     end: float
     center: float
-    score: float
+    tonal_evidence: float
     provenance: MeasurementProvenance
     lane_box: Box | None = None
     continuity: float | None = None
-    tonal_evidence: float | None = None
 
     def __post_init__(self) -> None:
         if self.end <= self.start:

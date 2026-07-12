@@ -92,7 +92,7 @@ def _separator_observation_valid(value: Any) -> bool:
             "start",
             "end",
             "center",
-            "score",
+            "tonal_evidence",
             "provenance",
             "lane_box",
             "continuity",

@@ -10,6 +10,7 @@ from x5crop.cache import MeasurementCache
 from x5crop.cache.separator import cached_separator_profile
 from x5crop.domain import Box
 from x5crop.geometry.detection_parameters import SeparatorProfileParameters
+from x5crop.image.statistics import ImageMeasurementStatisticsParameters, image_measurement_statistics
 
 
 def _cache() -> MeasurementCache:
@@ -19,6 +20,7 @@ def _cache() -> MeasurementCache:
         gray,
         gray,
         gray.astype(np.float32),
+        image_measurement_statistics(gray, ImageMeasurementStatisticsParameters()),
     )
 
 
@@ -42,7 +44,10 @@ class DetectionCachePerformanceContractTest(unittest.TestCase):
         parameters = SeparatorProfileParameters()
         with patch(
             "x5crop.cache.separator.separator_profile",
-            side_effect=lambda crop, _params: np.zeros(crop.shape[1], dtype=np.float32),
+            side_effect=lambda crop, _statistics, _params: np.zeros(
+                crop.shape[1],
+                dtype=np.float32,
+            ),
         ) as measurement:
             cached_separator_profile(cache, Box(0, 0, 240, 60), parameters)
             cached_separator_profile(cache, Box(0, 20, 240, 80), parameters)

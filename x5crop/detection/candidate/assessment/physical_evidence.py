@@ -5,7 +5,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from ....formats import FormatPhysicalSpec
-from ....geometry.detection_parameters import SeparatorContinuityParameters
+from ....image.statistics import ImageMeasurementStatistics
 from ....units import ScanCalibration
 from ...evidence.frame_topology import FrameTopologyEvidence, frame_topology_evidence
 from ...evidence.separator_continuity import (
@@ -28,14 +28,14 @@ def measure_core_physical_evidence(
     candidate: BuiltCandidate,
     physical_spec: FormatPhysicalSpec,
     calibration: ScanCalibration,
-    separator_continuity_parameters: SeparatorContinuityParameters,
+    image_statistics: ImageMeasurementStatistics,
 ) -> CorePhysicalEvidence:
     geometry = candidate.geometry
     topology = frame_topology_evidence(geometry.frames, geometry.count)
     continuity = separator_cross_axis_continuity_evidence(
         gray_work,
         geometry,
-        separator_continuity_parameters,
+        image_statistics,
     )
     dimensions = frame_dimension_evidence(
         geometry,

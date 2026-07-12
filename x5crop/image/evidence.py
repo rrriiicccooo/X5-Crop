@@ -7,9 +7,9 @@ import numpy as np
 from ..utils import (
     runs_from_mask,
     sampled_percentile,
-    sampled_values_for_percentile,
     smooth_1d,
 )
+from .statistics import ImageMeasurementStatistics
 
 
 @dataclass(frozen=True)
@@ -46,12 +46,22 @@ class ContentEvidenceImageParameters:
     gradient_percentile: float = 99.2
     texture_percentile: float = 99.2
     local_contrast_percentile: float = 99.0
-    tonal_presence_multiplier: float = 0.35
     tonal_presence_percentile: float = 99.0
-    gradient_weight: float = 0.42
-    texture_weight: float = 0.34
-    local_contrast_weight: float = 0.18
-    tonal_presence_weight: float = 0.06
+    minimum_active_pixels: int = 16
+
+
+def adaptive_activation_threshold(
+    values: np.ndarray,
+    percentile: float,
+    minimum_range: float,
+) -> float | None:
+    if not values.size:
+        return None
+    minimum = float(values.min())
+    maximum = float(values.max())
+    if maximum - minimum <= float(minimum_range):
+        return None
+    return float(sampled_percentile(values, [percentile])[0])
 
 
 def make_deskew_fallback_gray(
@@ -137,6 +147,7 @@ def normalize_score_image(score: np.ndarray, percentile: float) -> np.ndarray:
 
 def make_content_evidence_gray(
     gray: np.ndarray,
+    statistics: ImageMeasurementStatistics,
     params: ContentEvidenceImageParameters,
 ) -> np.ndarray:
     data = gray.astype(np.float32, copy=False) / 255.0
@@ -166,14 +177,10 @@ def make_content_evidence_gray(
     local_contrast = normalize_score_image(np.abs(data - local_mean), params.local_contrast_percentile)
 
     tonal_presence = normalize_score_image(
-        np.abs(data - float(np.median(sampled_values_for_percentile(data)))) * params.tonal_presence_multiplier,
+        np.abs(data - float(statistics.intensity_median) / 255.0),
         params.tonal_presence_percentile,
     )
-    evidence = (
-        params.gradient_weight * gradient
-        + params.texture_weight * texture
-        + params.local_contrast_weight * local_contrast
-        + params.tonal_presence_weight * tonal_presence
-    )
+    stack = np.stack((gradient, texture, local_contrast, tonal_presence), axis=0)
+    evidence = np.partition(stack, -2, axis=0)[-2]
     evidence = np.clip(evidence, 0.0, 1.0)
     return (evidence * 255.0 + 0.5).astype(np.uint8)

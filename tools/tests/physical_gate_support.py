@@ -79,7 +79,7 @@ from x5crop.units import ScanCalibration
 
 def separator_observation(
     center: float,
-    score: float = 1.0,
+    tonal_evidence: float = 1.0,
     start: float | None = None,
     end: float | None = None,
 ) -> SeparatorBandObservation:
@@ -89,13 +89,12 @@ def separator_observation(
         start=start,
         end=end,
         center=center,
-        score=score,
+        tonal_evidence=tonal_evidence,
         provenance=MeasurementProvenance(
             root_measurement="separator_profile",
             source="test_fixture",
             dependencies=("gray_work",),
         ),
-        tonal_evidence=score,
     )
 
 
@@ -226,8 +225,6 @@ def candidate_evidence_fixture(
             "supported",
             (),
             (separator_observation(100.0, start=95.0, end=105.0),),
-            0.62,
-            0.55,
         ),
         frame_dimensions=FrameDimensionEvidence(
             EvidenceState.SUPPORTED,
@@ -400,7 +397,7 @@ def candidate_fixture(
             ),
         ),
         residuals=SequenceResiduals(0.05, 0.0, 0.0),
-        search_exhausted=False,
+        search_budget_exhausted=False,
         source=CANDIDATE_SOURCE_FRAME_SEQUENCE,
         automatic_processing_supported=automatic_processing_supported,
         sequence_hypothesis_name="synthetic_sequence",

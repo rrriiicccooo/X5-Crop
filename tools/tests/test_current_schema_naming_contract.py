@@ -24,11 +24,10 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
                 "start",
                 "end",
                 "center",
-                "score",
+                "tonal_evidence",
                 "provenance",
                 "lane_box",
                 "continuity",
-                "tonal_evidence",
             ),
         )
         self.assertTrue(SeparatorBandObservation.__dataclass_params__.frozen)

@@ -40,7 +40,6 @@ class ArchitectureOwnershipContractTest(unittest.TestCase):
             (
                 "preprocess",
                 "content",
-                "sequence",
                 "separator",
                 "candidate",
                 "output",
@@ -54,7 +53,6 @@ class ArchitectureOwnershipContractTest(unittest.TestCase):
                 "strip_mode",
                 "preprocess",
                 "detector_kind",
-                "sequence",
                 "separator",
                 "content",
                 "candidate_plan",
@@ -68,7 +66,7 @@ class ArchitectureOwnershipContractTest(unittest.TestCase):
 
         self.assertEqual(
             tuple(CandidatePlanParameters.__dataclass_fields__),
-            ("sequence_hypotheses", "dual_lane_divider"),
+            ("sequence_hypotheses", "sequence_solver", "dual_lane_divider"),
         )
 
     def test_policy_identity_is_derived_from_format_and_mode(self) -> None:
