@@ -21,7 +21,9 @@ from x5crop.detection.physical.spacing import (
     spacing_hypothesis,
 )
 from x5crop.domain import (
+    BoundaryKind,
     BoundaryObservation,
+    BoundarySide,
     Box,
     EvidenceState,
     FrameBoundaryReference,
@@ -45,15 +47,15 @@ class SequenceSolverIntegrityContractTest(unittest.TestCase):
         )
         boundaries = (
             BoundaryObservation(
-                "leading",
+                BoundarySide.LEADING,
                 PixelInterval.exact(0.0),
-                "tonal_transition",
+                BoundaryKind.TONAL_TRANSITION,
                 edge_provenance,
             ),
             BoundaryObservation(
-                "trailing",
+                BoundarySide.TRAILING,
                 PixelInterval.exact(290.0),
-                "tonal_transition",
+                BoundaryKind.TONAL_TRANSITION,
                 edge_provenance,
             ),
         )
@@ -92,15 +94,15 @@ class SequenceSolverIntegrityContractTest(unittest.TestCase):
         )
         observations = (
             BoundaryObservation(
-                "leading",
+                BoundarySide.LEADING,
                 PixelInterval.exact(0.0),
-                "white_holder_transition",
+                BoundaryKind.WHITE_HOLDER_TRANSITION,
                 edge_provenance,
             ),
             BoundaryObservation(
-                "trailing",
+                BoundarySide.TRAILING,
                 PixelInterval.exact(192.0),
-                "tonal_transition",
+                BoundaryKind.TONAL_TRANSITION,
                 edge_provenance,
             ),
         )
@@ -156,15 +158,15 @@ class SequenceSolverIntegrityContractTest(unittest.TestCase):
         )
         edge_observations = (
             BoundaryObservation(
-                "leading",
+                BoundarySide.LEADING,
                 PixelInterval.exact(0.0),
-                "tonal_transition",
+                BoundaryKind.TONAL_TRANSITION,
                 provenance,
             ),
             BoundaryObservation(
-                "trailing",
+                BoundarySide.TRAILING,
                 PixelInterval.exact(100.0),
-                "tonal_transition",
+                BoundaryKind.TONAL_TRANSITION,
                 provenance,
             ),
         )
@@ -247,15 +249,15 @@ class SequenceSolverIntegrityContractTest(unittest.TestCase):
         )
         boundaries = (
             BoundaryObservation(
-                "leading",
+                BoundarySide.LEADING,
                 PixelInterval.exact(0.0),
-                "white_holder_transition",
+                BoundaryKind.WHITE_HOLDER_TRANSITION,
                 provenance,
             ),
             BoundaryObservation(
-                "trailing",
+                BoundarySide.TRAILING,
                 PixelInterval.exact(80.0),
-                "white_holder_transition",
+                BoundaryKind.WHITE_HOLDER_TRANSITION,
                 provenance,
             ),
         )

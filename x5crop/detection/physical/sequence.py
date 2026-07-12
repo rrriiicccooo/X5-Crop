@@ -6,6 +6,7 @@ import numpy as np
 
 from ...configuration.boundary import BoundaryObservationParameters
 from ...domain import (
+    BoundaryKind,
     BoundaryObservation,
     MeasurementIdentity,
     MeasurementProvenance,
@@ -128,7 +129,7 @@ def base_sequence_span_candidates(
         gray,
     )
     if mixed is not None and any(
-        observation.kind != "canvas_clip"
+        observation.kind != BoundaryKind.CANVAS_CLIP
         for observation in mixed.boundary_observations
     ):
         proposals.append(mixed)

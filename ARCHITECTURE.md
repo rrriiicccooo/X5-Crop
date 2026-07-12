@@ -90,6 +90,8 @@ Request mode、configuration mode、workspace layout、cache layout 与 dual-lan
 每条边使用自己的 edge reference、scan direction 和 robust change-point measurement，独立测量
 white-holder、tonal、texture 或 canvas boundary interval。Base boundary 不合并相对两端的
 tonal identity，也不假设照片一定有黑边；左白右黑、上白下黑等四边混合状态都可成为观测。
+Boundary side/kind 与 holder-occlusion side 使用同一组 typed physical identities；自由字符串不能
+授予 white-holder 或 edge-side 物理语义。
 Full canvas 只能作为保守 envelope，不能成为 count 或 boundary proof。
 
 Content 只允许向外扩张 `CropEnvelope` 以保护可见内容。它不能收缩 sequence span、定义内部

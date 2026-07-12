@@ -5,7 +5,9 @@ from enum import Enum
 
 from ...domain import (
     BOUNDARY_SIDES,
+    BoundaryKind,
     BoundaryObservation,
+    BoundarySide,
     Box,
     CropEnvelope,
     EvidenceState,
@@ -43,19 +45,22 @@ def holder_occlusion_constraint(
     by_side = {
         observation.side: observation
         for observation in boundary_observations
-        if observation.side in {"leading", "trailing"}
+        if observation.side in {BoundarySide.LEADING, BoundarySide.TRAILING}
     }
     maximum_hidden = frame_width_px.maximum
 
-    def side_interval(side: str) -> PixelInterval:
+    def side_interval(side: BoundarySide) -> PixelInterval:
         observation = by_side.get(side)
-        if observation is None or observation.kind != "white_holder_transition":
+        if (
+            observation is None
+            or observation.kind != BoundaryKind.WHITE_HOLDER_TRANSITION
+        ):
             return PixelInterval.zero()
         return PixelInterval(0.0, maximum_hidden)
 
     return HolderOcclusionConstraint(
-        side_interval("leading"),
-        side_interval("trailing"),
+        side_interval(BoundarySide.LEADING),
+        side_interval(BoundarySide.TRAILING),
     )
 
 
@@ -70,7 +75,7 @@ class HolderOcclusionSideOutcome(str, Enum):
 
 @dataclass(frozen=True)
 class HolderOcclusionSideEvidence:
-    side: str
+    side: BoundarySide
     outcome: HolderOcclusionSideOutcome
     hidden_width_px: PixelInterval
     boundary: BoundaryObservation | None
@@ -78,7 +83,7 @@ class HolderOcclusionSideEvidence:
     reason: str = field(init=False)
 
     def __post_init__(self) -> None:
-        if self.side not in {"leading", "trailing"}:
+        if self.side not in {BoundarySide.LEADING, BoundarySide.TRAILING}:
             raise ValueError("holder occlusion side must be leading or trailing")
         if not isinstance(self.outcome, HolderOcclusionSideOutcome):
             raise TypeError("holder occlusion side requires a typed outcome")
@@ -88,7 +93,7 @@ class HolderOcclusionSideEvidence:
             raise ValueError("holder occlusion boundary must match its side")
         white_holder = bool(
             self.boundary is not None
-            and self.boundary.kind == "white_holder_transition"
+            and self.boundary.kind == BoundaryKind.WHITE_HOLDER_TRANSITION
         )
         if self.outcome == HolderOcclusionSideOutcome.MEASUREMENT_UNAVAILABLE:
             if (
@@ -204,8 +209,8 @@ class HolderOcclusionEvidence:
     @classmethod
     def unavailable(cls) -> "HolderOcclusionEvidence":
         return cls(
-            _unavailable_side("leading"),
-            _unavailable_side("trailing"),
+            _unavailable_side(BoundarySide.LEADING),
+            _unavailable_side(BoundarySide.TRAILING),
         )
 
 
@@ -216,11 +221,11 @@ def visible_sequence_length_interval(
     by_side = {
         observation.side: observation
         for observation in boundary_observations
-        if observation.side in {"leading", "trailing"}
+        if observation.side in {BoundarySide.LEADING, BoundarySide.TRAILING}
     }
-    if set(by_side) == {"leading", "trailing"}:
-        measured = by_side["trailing"].position.minus(
-            by_side["leading"].position
+    if set(by_side) == {BoundarySide.LEADING, BoundarySide.TRAILING}:
+        measured = by_side[BoundarySide.TRAILING].position.minus(
+            by_side[BoundarySide.LEADING].position
         )
         if measured.maximum > 0.0:
             return PixelInterval(
@@ -230,7 +235,7 @@ def visible_sequence_length_interval(
     return PixelInterval.exact(float(visible_sequence_span.box.width))
 
 
-def _unavailable_side(side: str) -> HolderOcclusionSideEvidence:
+def _unavailable_side(side: BoundarySide) -> HolderOcclusionSideEvidence:
     return HolderOcclusionSideEvidence(
         side=side,
         outcome=HolderOcclusionSideOutcome.MEASUREMENT_UNAVAILABLE,
@@ -240,7 +245,7 @@ def _unavailable_side(side: str) -> HolderOcclusionSideEvidence:
 
 
 def _occlusion_side_evidence(
-    side: str,
+    side: BoundarySide,
     boundary: BoundaryObservation | None,
     visible_width: PixelInterval | None,
     frame_width: PixelInterval,
@@ -254,7 +259,7 @@ def _occlusion_side_evidence(
         )
     if boundary.side != side:
         raise ValueError(f"{side} occlusion requires a {side} boundary")
-    if boundary.kind != "white_holder_transition":
+    if boundary.kind != BoundaryKind.WHITE_HOLDER_TRANSITION:
         return HolderOcclusionSideEvidence(
             side,
             HolderOcclusionSideOutcome.NOT_WHITE_HOLDER,
@@ -303,13 +308,13 @@ def holder_occlusion_evidence(
     frame_width_px: PixelInterval,
 ) -> HolderOcclusionEvidence:
     leading = _occlusion_side_evidence(
-        "leading",
+        BoundarySide.LEADING,
         leading_boundary,
         leading_visible_frame_width,
         frame_width_px,
     )
     trailing = _occlusion_side_evidence(
-        "trailing",
+        BoundarySide.TRAILING,
         trailing_boundary,
         trailing_visible_frame_width,
         frame_width_px,
@@ -327,8 +332,8 @@ def _single_frame_two_sided_occlusion(
     frame_width: PixelInterval,
 ) -> HolderOcclusionEvidence | None:
     if (
-        leading_boundary.kind != "white_holder_transition"
-        or trailing_boundary.kind != "white_holder_transition"
+        leading_boundary.kind != BoundaryKind.WHITE_HOLDER_TRANSITION
+        or trailing_boundary.kind != BoundaryKind.WHITE_HOLDER_TRANSITION
     ):
         return None
     total_hidden = PixelInterval(
@@ -340,13 +345,13 @@ def _single_frame_two_sided_occlusion(
     side_interval = PixelInterval(0.0, total_hidden.maximum)
     return HolderOcclusionEvidence(
         HolderOcclusionSideEvidence(
-            "leading",
+            BoundarySide.LEADING,
             HolderOcclusionSideOutcome.ALLOCATION_UNRESOLVED,
             side_interval,
             leading_boundary,
         ),
         HolderOcclusionSideEvidence(
-            "trailing",
+            BoundarySide.TRAILING,
             HolderOcclusionSideOutcome.ALLOCATION_UNRESOLVED,
             side_interval,
             trailing_boundary,
@@ -364,14 +369,14 @@ def holder_occlusion_for_sequence(
     sequence_edges = {
         observation.side: observation
         for observation in boundary_observations
-        if observation.side in {"leading", "trailing"}
+        if observation.side in {BoundarySide.LEADING, BoundarySide.TRAILING}
     }
     if not frame_boundaries:
         visible_width = PixelInterval.exact(
             float(visible_sequence_span.box.width)
         )
-        leading_boundary = sequence_edges.get("leading")
-        trailing_boundary = sequence_edges.get("trailing")
+        leading_boundary = sequence_edges.get(BoundarySide.LEADING)
+        trailing_boundary = sequence_edges.get(BoundarySide.TRAILING)
         if leading_boundary is not None and trailing_boundary is not None:
             unresolved = _single_frame_two_sided_occlusion(
                 leading_boundary,
@@ -403,8 +408,8 @@ def holder_occlusion_for_sequence(
             else None
         )
     return holder_occlusion_evidence(
-        leading_boundary=sequence_edges.get("leading"),
-        trailing_boundary=sequence_edges.get("trailing"),
+        leading_boundary=sequence_edges.get(BoundarySide.LEADING),
+        trailing_boundary=sequence_edges.get(BoundarySide.TRAILING),
         leading_visible_frame_width=leading_width,
         trailing_visible_frame_width=trailing_width,
         frame_width_px=frame_width_px,
@@ -421,16 +426,16 @@ def visible_sequence_and_crop_envelope(
     if set(by_side) != BOUNDARY_SIDES:
         raise ValueError("four boundary observations are required")
     visible = Box(
-        int(round(by_side["leading"].position.midpoint)),
-        int(round(by_side["top"].position.midpoint)),
-        int(round(by_side["trailing"].position.midpoint)),
-        int(round(by_side["bottom"].position.midpoint)),
+        int(round(by_side[BoundarySide.LEADING].position.midpoint)),
+        int(round(by_side[BoundarySide.TOP].position.midpoint)),
+        int(round(by_side[BoundarySide.TRAILING].position.midpoint)),
+        int(round(by_side[BoundarySide.BOTTOM].position.midpoint)),
     ).clamp(canvas_width, canvas_height)
     envelope = Box(
-        int(round(by_side["leading"].position.minimum)),
-        int(round(by_side["top"].position.minimum)),
-        int(round(by_side["trailing"].position.maximum)),
-        int(round(by_side["bottom"].position.maximum)),
+        int(round(by_side[BoundarySide.LEADING].position.minimum)),
+        int(round(by_side[BoundarySide.TOP].position.minimum)),
+        int(round(by_side[BoundarySide.TRAILING].position.maximum)),
+        int(round(by_side[BoundarySide.BOTTOM].position.maximum)),
     ).clamp(canvas_width, canvas_height)
     if not visible.valid() or not envelope.valid():
         raise ValueError("boundary observations produce invalid geometry")
@@ -448,15 +453,27 @@ def canvas_boundary_observations(
     )
     return (
         BoundaryObservation(
-            "leading", PixelInterval.exact(0.0), "canvas_clip", provenance
+            BoundarySide.LEADING,
+            PixelInterval.exact(0.0),
+            BoundaryKind.CANVAS_CLIP,
+            provenance,
         ),
         BoundaryObservation(
-            "trailing", PixelInterval.exact(float(width)), "canvas_clip", provenance
+            BoundarySide.TRAILING,
+            PixelInterval.exact(float(width)),
+            BoundaryKind.CANVAS_CLIP,
+            provenance,
         ),
         BoundaryObservation(
-            "top", PixelInterval.exact(0.0), "canvas_clip", provenance
+            BoundarySide.TOP,
+            PixelInterval.exact(0.0),
+            BoundaryKind.CANVAS_CLIP,
+            provenance,
         ),
         BoundaryObservation(
-            "bottom", PixelInterval.exact(float(height)), "canvas_clip", provenance
+            BoundarySide.BOTTOM,
+            PixelInterval.exact(float(height)),
+            BoundaryKind.CANVAS_CLIP,
+            provenance,
         ),
     )

@@ -4,7 +4,9 @@ from dataclasses import dataclass, field
 from enum import Enum
 
 from x5crop.domain import (
+    BoundaryKind,
     BoundaryObservation,
+    BoundarySide,
     EvidenceState,
     FrameBoundaryReference,
     FrameDimensionPriorSource,
@@ -252,12 +254,12 @@ def corroborate_single_missing_overlap(
     edge_observations = {
         observation.side: observation
         for observation in boundary_observations
-        if observation.side in {"leading", "trailing"}
+        if observation.side in {BoundarySide.LEADING, BoundarySide.TRAILING}
     }
     if any(
         side not in edge_observations
-        or edge_observations[side].kind == "canvas_clip"
-        for side in ("leading", "trailing")
+        or edge_observations[side].kind == BoundaryKind.CANVAS_CLIP
+        for side in (BoundarySide.LEADING, BoundarySide.TRAILING)
     ):
         return spacings
     occlusion_sides = (holder_occlusion.leading, holder_occlusion.trailing)

@@ -4,7 +4,9 @@ import numpy as np
 
 from ...configuration.boundary import BoundaryObservationParameters
 from ...domain import (
+    BoundaryKind,
     BoundaryObservation,
+    BoundarySide,
     MeasurementIdentity,
     MeasurementProvenance,
     PixelInterval,
@@ -81,9 +83,9 @@ def _change_point_interval(
 
 
 def _observation(
-    side: str,
+    side: BoundarySide,
     position: int,
-    kind: str,
+    kind: BoundaryKind,
     profile: np.ndarray,
     parameters: BoundaryObservationParameters,
 ) -> BoundaryObservation:
@@ -93,12 +95,12 @@ def _observation(
         kind=kind,
         provenance=MeasurementProvenance(
             root_measurement=MeasurementIdentity.HOLDER_BOUNDARY_PROFILE,
-            source=kind,
+            source=kind.value,
             dependencies=(
                 MeasurementIdentity.GRAY_WORK,
                 MeasurementIdentity.IMAGE_MEASUREMENT_STATISTICS,
             ),
-            boundary_anchors=(side,),
+            boundary_anchors=(side.value,),
         ),
     )
 
@@ -109,14 +111,14 @@ def _side_observations(
     row_intensity: np.ndarray,
     row_texture: np.ndarray,
     statistics: ImageMeasurementStatistics,
-    kind: str,
+    kind: BoundaryKind,
     parameters: BoundaryObservationParameters,
 ) -> tuple[BoundaryObservation, ...]:
     profiles = (
-        ("leading", column_intensity, column_texture, False),
-        ("trailing", column_intensity, column_texture, True),
-        ("top", row_intensity, row_texture, False),
-        ("bottom", row_intensity, row_texture, True),
+        (BoundarySide.LEADING, column_intensity, column_texture, False),
+        (BoundarySide.TRAILING, column_intensity, column_texture, True),
+        (BoundarySide.TOP, row_intensity, row_texture, False),
+        (BoundarySide.BOTTOM, row_intensity, row_texture, True),
     )
     observations: list[BoundaryObservation] = []
     for side, intensity, texture, reverse in profiles:
@@ -128,13 +130,13 @@ def _side_observations(
             statistics.edge_texture_limit,
             parameters,
         )
-        if kind == "white_holder_transition":
+        if kind == BoundaryKind.WHITE_HOLDER_TRANSITION:
             if float(oriented_intensity[0]) < float(statistics.intensity_high):
                 continue
             offset = _edge_transition(holder)
-        elif kind == "tonal_transition":
+        elif kind == BoundaryKind.TONAL_TRANSITION:
             offset = _first_run(tonal)
-        elif kind == "texture_transition":
+        elif kind == BoundaryKind.TEXTURE_TRANSITION:
             offset = _first_run(
                 oriented_texture > float(statistics.edge_texture_limit)
             )
@@ -174,7 +176,7 @@ def boundary_observation_groups(
         row_intensity,
         row_texture,
         statistics,
-        "white_holder_transition",
+        BoundaryKind.WHITE_HOLDER_TRANSITION,
         parameters,
     )
     tonal = _side_observations(
@@ -183,7 +185,7 @@ def boundary_observation_groups(
         row_intensity,
         row_texture,
         statistics,
-        "tonal_transition",
+        BoundaryKind.TONAL_TRANSITION,
         parameters,
     )
     texture = _side_observations(
@@ -192,7 +194,7 @@ def boundary_observation_groups(
         row_intensity,
         row_texture,
         statistics,
-        "texture_transition",
+        BoundaryKind.TEXTURE_TRANSITION,
         parameters,
     )
     return (

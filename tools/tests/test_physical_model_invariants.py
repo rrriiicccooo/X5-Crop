@@ -27,6 +27,7 @@ from x5crop.detection.physical.model import (
     SequenceResiduals,
     SequenceSolution,
 )
+from x5crop.detection.physical.boundary import HolderOcclusionSideEvidence
 from x5crop.detection.physical.separator.assignment import (
     dimension_constrained_boundary,
 )
@@ -41,6 +42,7 @@ from x5crop.detection.evidence.transform_geometry import (
 )
 from x5crop.domain import (
     BoundaryPositionConstraint,
+    BoundaryObservation,
     Box,
     CropEnvelope,
     EvidenceState,
@@ -77,6 +79,17 @@ def _provenance() -> MeasurementProvenance:
 
 
 class PhysicalModelInvariantTest(unittest.TestCase):
+    def test_boundary_observation_identity_is_typed(self) -> None:
+        hints = get_type_hints(BoundaryObservation)
+        for field_name in ("side", "kind"):
+            with self.subTest(field=field_name):
+                annotation = hints[field_name]
+                self.assertTrue(
+                    isinstance(annotation, type) and issubclass(annotation, Enum)
+                )
+        occlusion_side = get_type_hints(HolderOcclusionSideEvidence)["side"]
+        self.assertIs(occlusion_side, hints["side"])
+
     def test_selection_consensus_is_a_typed_gate_input(self) -> None:
         annotation = get_type_hints(SelectionResult)["consensus"]
         self.assertTrue(

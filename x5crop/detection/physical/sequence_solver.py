@@ -3,7 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 
 from ...domain import (
+    BoundaryKind,
     BoundaryObservation,
+    BoundarySide,
     Box,
     EvidenceState,
     FrameBoundary,
@@ -449,7 +451,7 @@ def _photo_intervals(
     sequence_edges = {
         observation.side: observation
         for observation in boundary_observations
-        if observation.side in {"leading", "trailing"}
+        if observation.side in {BoundarySide.LEADING, BoundarySide.TRAILING}
     }
     generated_provenance = MeasurementProvenance(
         root_measurement=MeasurementIdentity.FRAME_GEOMETRY,
@@ -474,7 +476,7 @@ def _photo_intervals(
         elif leading is not None:
             start = leading.position
             start_provenance = leading.provenance
-            start_observed = leading.kind != "canvas_clip"
+            start_observed = leading.kind != BoundaryKind.CANVAS_CLIP
         else:
             start = PixelInterval.exact(float(frame.left))
             start_provenance = generated_provenance
@@ -491,7 +493,7 @@ def _photo_intervals(
         elif trailing is not None:
             end = trailing.position
             end_provenance = trailing.provenance
-            end_observed = trailing.kind != "canvas_clip"
+            end_observed = trailing.kind != BoundaryKind.CANVAS_CLIP
         else:
             end = PixelInterval.exact(float(frame.right))
             end_provenance = generated_provenance

@@ -23,7 +23,9 @@ from x5crop.detection.physical.separator.assignment import (
     frame_boundary_from_assignment,
 )
 from x5crop.domain import (
+    BoundaryKind,
     BoundaryObservation,
+    BoundarySide,
     EvidenceState,
     FrameBoundaryReference,
     FrameDimensionPriorSource,
@@ -235,9 +237,9 @@ class PhotoSizePhysicalModelTest(unittest.TestCase):
             ),
         )
         boundary = BoundaryObservation(
-            "leading",
+            BoundarySide.LEADING,
             PixelInterval.exact(0.0),
-            "white_holder_transition",
+            BoundaryKind.WHITE_HOLDER_TRANSITION,
             MeasurementProvenance(
                 MeasurementIdentity.HOLDER_BOUNDARY_PROFILE,
                 "white_holder_transition",
@@ -293,15 +295,15 @@ class PhotoSizePhysicalModelTest(unittest.TestCase):
         geometry = _geometry()
         provenance = geometry.photo_intervals[0].start_provenance
         leading = BoundaryObservation(
-            "leading",
+            BoundarySide.LEADING,
             PixelInterval.exact(0.0),
-            "white_holder_transition",
+            BoundaryKind.WHITE_HOLDER_TRANSITION,
             provenance,
         )
         trailing = BoundaryObservation(
-            "trailing",
+            BoundarySide.TRAILING,
             PixelInterval.exact(315.0),
-            "white_holder_transition",
+            BoundaryKind.WHITE_HOLDER_TRANSITION,
             provenance,
         )
         occlusion = holder_occlusion_evidence(

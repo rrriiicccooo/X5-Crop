@@ -31,7 +31,9 @@ from x5crop.detection.candidate.model import (
 from x5crop.detection.candidate.selection.choose import select_candidates
 from x5crop.detection.evidence.partial_edge import PartialEdgeSafetyEvidence
 from x5crop.domain import (
+    BoundaryKind,
     BoundaryObservation,
+    BoundarySide,
     Box,
     EvidenceState,
     FrameBoundaryReference,
@@ -57,12 +59,16 @@ def _single_frame_candidate(*, measured_boundaries: bool) -> BuiltCandidate:
         "synthetic",
         (MeasurementIdentity.GRAY_WORK,),
     )
-    kind = "tonal_transition" if measured_boundaries else "canvas_clip"
+    kind = (
+        BoundaryKind.TONAL_TRANSITION
+        if measured_boundaries
+        else BoundaryKind.CANVAS_CLIP
+    )
     observations = (
-        BoundaryObservation("leading", PixelInterval.exact(0.0), kind, provenance),
-        BoundaryObservation("trailing", PixelInterval.exact(200.0), kind, provenance),
-        BoundaryObservation("top", PixelInterval.exact(0.0), kind, provenance),
-        BoundaryObservation("bottom", PixelInterval.exact(100.0), kind, provenance),
+        BoundaryObservation(BoundarySide.LEADING, PixelInterval.exact(0.0), kind, provenance),
+        BoundaryObservation(BoundarySide.TRAILING, PixelInterval.exact(200.0), kind, provenance),
+        BoundaryObservation(BoundarySide.TOP, PixelInterval.exact(0.0), kind, provenance),
+        BoundaryObservation(BoundarySide.BOTTOM, PixelInterval.exact(100.0), kind, provenance),
     )
     geometry = replace(
         candidate.geometry,
@@ -356,7 +362,11 @@ class PhysicalDetectionResolutionContractTest(unittest.TestCase):
         observations = tuple(
             replace(
                 observation,
-                kind=("canvas_clip" if observation.side == "leading" else observation.kind),
+                kind=(
+                    BoundaryKind.CANVAS_CLIP
+                    if observation.side == BoundarySide.LEADING
+                    else observation.kind
+                ),
             )
             for observation in candidate.geometry.boundary_observations
         )

@@ -9,6 +9,8 @@ from unittest.mock import patch
 import numpy as np
 
 from x5crop.domain import (
+    BoundaryKind,
+    BoundarySide,
     EvidenceState,
     FrameBoundarySource,
     FrameBoundaryReference,
@@ -160,7 +162,7 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
     def test_not_applicable_holder_occlusion_cannot_hide_frame_width(self) -> None:
         with self.assertRaises(ValueError):
             HolderOcclusionSideEvidence(
-                "leading",
+                BoundarySide.LEADING,
                 HolderOcclusionSideOutcome.NOT_WHITE_HOLDER,
                 PixelInterval(1.0, 2.0),
                 None,
@@ -416,10 +418,10 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
             (MeasurementIdentity.GRAY_WORK,),
         )
         observations = (
-            BoundaryObservation("leading", PixelInterval(9.0, 11.0), "white_holder_transition", provenance),
-            BoundaryObservation("trailing", PixelInterval(189.0, 191.0), "white_holder_transition", provenance),
-            BoundaryObservation("top", PixelInterval(4.0, 6.0), "tonal_transition", provenance),
-            BoundaryObservation("bottom", PixelInterval(94.0, 96.0), "tonal_transition", provenance),
+            BoundaryObservation(BoundarySide.LEADING, PixelInterval(9.0, 11.0), BoundaryKind.WHITE_HOLDER_TRANSITION, provenance),
+            BoundaryObservation(BoundarySide.TRAILING, PixelInterval(189.0, 191.0), BoundaryKind.WHITE_HOLDER_TRANSITION, provenance),
+            BoundaryObservation(BoundarySide.TOP, PixelInterval(4.0, 6.0), BoundaryKind.TONAL_TRANSITION, provenance),
+            BoundaryObservation(BoundarySide.BOTTOM, PixelInterval(94.0, 96.0), BoundaryKind.TONAL_TRANSITION, provenance),
         )
         visible, envelope = visible_sequence_and_crop_envelope(
             observations,
@@ -504,9 +506,9 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
 
     def test_leading_holder_occlusion_explains_short_visible_edge_frame(self) -> None:
         boundary = BoundaryObservation(
-            side="leading",
+            side=BoundarySide.LEADING,
             position=PixelInterval.exact(20.0),
-            kind="white_holder_transition",
+            kind=BoundaryKind.WHITE_HOLDER_TRANSITION,
             provenance=MeasurementProvenance(
                 MeasurementIdentity.HOLDER_BOUNDARY_PROFILE,
                 "white_holder_transition",
@@ -535,15 +537,15 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
         evidence = holder_occlusion_for_sequence(
             (
                 BoundaryObservation(
-                    "leading",
+                    BoundarySide.LEADING,
                     PixelInterval.exact(0.0),
-                    "white_holder_transition",
+                    BoundaryKind.WHITE_HOLDER_TRANSITION,
                     provenance,
                 ),
                 BoundaryObservation(
-                    "trailing",
+                    BoundarySide.TRAILING,
                     PixelInterval.exact(94.0),
-                    "white_holder_transition",
+                    BoundaryKind.WHITE_HOLDER_TRANSITION,
                     provenance,
                 ),
             ),
@@ -560,9 +562,9 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
 
     def test_measured_non_white_edge_rules_out_white_holder_occlusion(self) -> None:
         boundary = BoundaryObservation(
-            side="leading",
+            side=BoundarySide.LEADING,
             position=PixelInterval.exact(20.0),
-            kind="texture_transition",
+            kind=BoundaryKind.TEXTURE_TRANSITION,
             provenance=MeasurementProvenance(
                 MeasurementIdentity.HOLDER_BOUNDARY_PROFILE,
                 "texture_transition",

@@ -9,6 +9,7 @@ import numpy as np
 from ....cache import MeasurementCache
 from ....cache.separator import cached_separator_profile
 from ....domain import (
+    BoundarySide,
     Box,
     CropEnvelope,
     EvidenceState,
@@ -54,7 +55,7 @@ def _compatible_boundary_observations(
 ) -> tuple:
     compatible = []
     for observation in source.boundary_observations:
-        if observation.side in {"top", "bottom"}:
+        if observation.side in {BoundarySide.TOP, BoundarySide.BOTTOM}:
             compatible.append(observation)
             continue
         coordinate = float(box.left if observation.side == "leading" else box.right)

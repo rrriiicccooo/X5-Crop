@@ -235,29 +235,35 @@ class SequenceHypothesis:
             raise ValueError("crop envelope must contain the visible sequence")
 
 
-BOUNDARY_SIDES = frozenset({"leading", "trailing", "top", "bottom"})
-BOUNDARY_KINDS = frozenset(
-    {
-        "white_holder_transition",
-        "tonal_transition",
-        "texture_transition",
-        "canvas_clip",
-    }
-)
+class BoundarySide(str, Enum):
+    LEADING = "leading"
+    TRAILING = "trailing"
+    TOP = "top"
+    BOTTOM = "bottom"
+
+
+class BoundaryKind(str, Enum):
+    WHITE_HOLDER_TRANSITION = "white_holder_transition"
+    TONAL_TRANSITION = "tonal_transition"
+    TEXTURE_TRANSITION = "texture_transition"
+    CANVAS_CLIP = "canvas_clip"
+
+
+BOUNDARY_SIDES = frozenset(BoundarySide)
 
 
 @dataclass(frozen=True)
 class BoundaryObservation:
-    side: str
+    side: BoundarySide
     position: PixelInterval
-    kind: str
+    kind: BoundaryKind
     provenance: MeasurementProvenance
 
     def __post_init__(self) -> None:
-        if self.side not in BOUNDARY_SIDES:
-            raise ValueError(f"unsupported boundary side: {self.side}")
-        if self.kind not in BOUNDARY_KINDS:
-            raise ValueError(f"unsupported boundary kind: {self.kind}")
+        if not isinstance(self.side, BoundarySide):
+            raise TypeError("boundary observation requires a typed side")
+        if not isinstance(self.kind, BoundaryKind):
+            raise TypeError("boundary observation requires a typed kind")
 
 
 class SeparatorCrossAxisOutcome(str, Enum):

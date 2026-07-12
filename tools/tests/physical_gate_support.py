@@ -77,7 +77,7 @@ from x5crop.detection.physical.spacing import (
     SequenceConservationEvidence,
     observed_spacing_evidence,
 )
-from x5crop.domain import BoundaryObservation
+from x5crop.domain import BoundaryKind, BoundaryObservation, BoundarySide
 from x5crop.domain import CropEnvelope, HolderSpan, VisibleSequenceSpan
 from x5crop.detection.physical.separator.assignment import (
     assign_observation_to_boundary,
@@ -140,11 +140,13 @@ def separator_observation(
 
 
 def holder_occlusion_not_applicable() -> HolderOcclusionEvidence:
-    def side(name: str) -> HolderOcclusionSideEvidence:
+    def side(name: BoundarySide) -> HolderOcclusionSideEvidence:
         boundary = BoundaryObservation(
             name,
-            PixelInterval.exact(0.0 if name == "leading" else 200.0),
-            "tonal_transition",
+            PixelInterval.exact(
+                0.0 if name == BoundarySide.LEADING else 200.0
+            ),
+            BoundaryKind.TONAL_TRANSITION,
             MeasurementProvenance(
                 MeasurementIdentity.HOLDER_BOUNDARY_PROFILE,
                 "synthetic_non_white_holder_edge",
@@ -159,8 +161,8 @@ def holder_occlusion_not_applicable() -> HolderOcclusionEvidence:
         )
 
     return HolderOcclusionEvidence(
-        side("leading"),
-        side("trailing"),
+        side(BoundarySide.LEADING),
+        side(BoundarySide.TRAILING),
     )
 
 
@@ -440,19 +442,19 @@ def candidate_fixture(
             BoundaryObservation(
                 side,
                 PixelInterval.exact(position),
-                "tonal_transition",
+                BoundaryKind.TONAL_TRANSITION,
                 MeasurementProvenance(
                     MeasurementIdentity.HOLDER_BOUNDARY_PROFILE,
                     "synthetic_boundary",
                     (MeasurementIdentity.GRAY_WORK,),
-                    (side,),
+                    (side.value,),
                 ),
             )
             for side, position in (
-                ("leading", 1.0),
-                ("trailing", 199.0),
-                ("top", 1.0),
-                ("bottom", 99.0),
+                (BoundarySide.LEADING, 1.0),
+                (BoundarySide.TRAILING, 199.0),
+                (BoundarySide.TOP, 1.0),
+                (BoundarySide.BOTTOM, 99.0),
             )
         ),
     )

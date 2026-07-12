@@ -2,7 +2,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from x5crop.domain import EvidenceState, MeasurementIdentity
+from x5crop.domain import (
+    BoundaryKind,
+    BoundarySide,
+    EvidenceState,
+    MeasurementIdentity,
+)
 
 from ..physical.model import (
     CandidateGeometry,
@@ -130,8 +135,8 @@ def boundary_proof_paths_for_geometry(
         }
         and all(
             side in boundary_by_side
-            and boundary_by_side[side].kind != "canvas_clip"
-            for side in ("leading", "trailing")
+            and boundary_by_side[side].kind != BoundaryKind.CANVAS_CLIP
+            for side in (BoundarySide.LEADING, BoundarySide.TRAILING)
         )
     )
     common = bool(
