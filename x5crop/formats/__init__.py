@@ -8,13 +8,10 @@ from ..utils import require_positive
 class FrameSizeMm:
     width_mm: float
     height_mm: float
-    label: str = "nominal"
 
     def __post_init__(self) -> None:
         require_positive("frame width", self.width_mm)
         require_positive("frame height", self.height_mm)
-        if not self.label:
-            raise ValueError("frame size label must not be empty")
 
     @property
     def aspect(self) -> float:
@@ -26,7 +23,6 @@ class FormatPhysicalSpec:
     format_id: str
     default_count: int
     allowed_counts: tuple[int, ...]
-    family: str
     frame_size_mm_options: tuple[FrameSizeMm, ...]
     physical_layout: str = "single_strip"
     complete_strip_can_be_underfilled: bool = False
@@ -34,8 +30,8 @@ class FormatPhysicalSpec:
     lane_format_id: str | None = None
 
     def __post_init__(self) -> None:
-        if not self.format_id or not self.family:
-            raise ValueError("format identity and family must not be empty")
+        if not self.format_id:
+            raise ValueError("format identity must not be empty")
         require_positive("default frame count", self.default_count)
         if (
             not self.allowed_counts
@@ -94,7 +90,6 @@ def _format_spec(
     format_id: str,
     default_count: int,
     allowed_counts: tuple[int, ...],
-    family: str,
     nominal_frame_size_mm: FrameSizeMm,
     *,
     lane_count: int,
@@ -108,7 +103,6 @@ def _format_spec(
         format_id=format_id,
         default_count=default_count,
         allowed_counts=allowed_counts,
-        family=family,
         frame_size_mm_options=frame_options,
         physical_layout=physical_layout,
         complete_strip_can_be_underfilled=complete_strip_can_be_underfilled,
@@ -122,7 +116,6 @@ FORMATS: dict[str, FormatPhysicalSpec] = {
         "135",
         6,
         tuple(range(1, 7)),
-        "35mm",
         FrameSizeMm(36.0, 24.0),
         lane_count=1,
     ),
@@ -130,7 +123,6 @@ FORMATS: dict[str, FormatPhysicalSpec] = {
         "135-dual",
         12,
         (12,),
-        "35mm",
         FrameSizeMm(36.0, 24.0),
         physical_layout="dual_lane",
         lane_count=2,
@@ -140,7 +132,6 @@ FORMATS: dict[str, FormatPhysicalSpec] = {
         "half",
         12,
         tuple(range(1, 13)),
-        "35mm",
         FrameSizeMm(18.0, 24.0),
         lane_count=1,
     ),
@@ -148,7 +139,6 @@ FORMATS: dict[str, FormatPhysicalSpec] = {
         "xpan",
         3,
         (1, 2, 3),
-        "35mm",
         FrameSizeMm(65.0, 24.0),
         lane_count=1,
         complete_strip_can_be_underfilled=True,
@@ -157,7 +147,6 @@ FORMATS: dict[str, FormatPhysicalSpec] = {
         "120-645",
         4,
         (1, 2, 3, 4),
-        "120",
         FrameSizeMm(42.0, 56.0),
         lane_count=1,
     ),
@@ -165,12 +154,11 @@ FORMATS: dict[str, FormatPhysicalSpec] = {
         "120-66",
         3,
         (1, 2, 3),
-        "120",
         FrameSizeMm(56.0, 56.0),
         lane_count=1,
         frame_size_mm_options=(
             FrameSizeMm(56.0, 56.0),
-            FrameSizeMm(54.0, 54.0, label="camera_variant"),
+            FrameSizeMm(54.0, 54.0),
         ),
         complete_strip_can_be_underfilled=True,
     ),
@@ -178,7 +166,6 @@ FORMATS: dict[str, FormatPhysicalSpec] = {
         "120-67",
         3,
         (1, 2, 3),
-        "120",
         FrameSizeMm(70.0, 56.0),
         lane_count=1,
     ),

@@ -538,7 +538,6 @@ def _configuration_valid(value: Any) -> bool:
         "diagnostics",
     }
     physical_fields = {
-        "family",
         "physical_layout",
         "default_count",
         "expected_separator_count",
@@ -562,7 +561,6 @@ def _configuration_valid(value: Any) -> bool:
         and isinstance(value["strip_mode"], str)
         and isinstance(physical, dict)
         and set(physical) == physical_fields
-        and isinstance(physical["family"], str)
         and physical["physical_layout"] in {"single_strip", "dual_lane"}
         and _integer(physical["default_count"]) is not None
         and _integer(physical["expected_separator_count"]) is not None

@@ -28,7 +28,6 @@ def detection_configuration_read_model(
         "format_id": spec.format_id,
         "strip_mode": configuration.strip_mode,
         "physical": {
-            "family": spec.family,
             "physical_layout": spec.physical_layout,
             "default_count": int(spec.default_count),
             "expected_separator_count": int(spec.expected_separator_count),

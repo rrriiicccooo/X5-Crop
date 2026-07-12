@@ -10,6 +10,19 @@ from x5crop.configuration.bundle import DetectionConfigurationBundle
 
 
 class FormatPhysicalSpecTests(unittest.TestCase):
+    def test_physical_spec_and_report_exclude_unused_family_description(self) -> None:
+        from x5crop.formats import FormatPhysicalSpec, FrameSizeMm
+
+        self.assertNotIn("family", FormatPhysicalSpec.__dataclass_fields__)
+        self.assertEqual(
+            set(FrameSizeMm.__dataclass_fields__),
+            {"width_mm", "height_mm"},
+        )
+        detail = detection_configuration_read_model(
+            get_detection_configuration("135", "full")
+        )
+        self.assertNotIn("family", detail["physical"])
+
     def test_expected_separator_count_is_derived_not_stored(self) -> None:
         from x5crop.formats import FormatPhysicalSpec
 
@@ -77,8 +90,8 @@ class FormatPhysicalSpecTests(unittest.TestCase):
     def test_medium_square_records_same_aspect_size_variant(self) -> None:
         spec = FORMATS["120-66"]
         self.assertEqual(
-            [(item.width_mm, item.height_mm, item.label) for item in spec.frame_size_mm_options],
-            [(56.0, 56.0, "nominal"), (54.0, 54.0, "camera_variant")],
+            [(item.width_mm, item.height_mm) for item in spec.frame_size_mm_options],
+            [(56.0, 56.0), (54.0, 54.0)],
         )
         self.assertTrue(
             all(

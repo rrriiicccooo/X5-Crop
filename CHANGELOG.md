@@ -77,6 +77,8 @@ repository rules in `AGENTS.md`.
   cache identity；统一 work-layout validator 删除所有“未知即 vertical”的静默 fallback。
 - Transform geometry 与 per-frame bleed plan 增加完整 typed invariants；applied angle、span pair、用户
   bleed、overlap protection、unresolved boundaries、feasible 和 reason 不能表达互相矛盾的状态。
+- `FormatPhysicalSpec` 删除未参与检测的 family 描述，`FrameSizeMm` 删除由 option 顺序已唯一表达的
+  nominal/variant label；configuration report 只输出检测实际消费的物理事实。
 - Deskew 固定灰度身份阈值已由 per-image robust statistics 取代；percentile sampling budget、
   edge quantiles 和 numerical floors 均由显式参数拥有。
 - Physical fact、adaptive measurement、numerical safety、execution budget 与 diagnostics 参数
@@ -105,7 +107,7 @@ repository rules in `AGENTS.md`.
   使旧分析失效。Bundle 同时拒绝空集合、initial identity 漂移和重复 configuration identity。
 - Diagnostics 参数不再使 detection analysis fingerprint 失效；无法测得的 content threshold 也只
   计算一次。Malformed current-schema record 现在返回 validation error，不再从 validator 抛异常。
-- 315 项测试、14 个 format/mode configuration、package/regression compile、launcher syntax、
+- 316 项测试、14 个 format/mode configuration、package/regression compile、launcher syntax、
   version 和 whitespace 检查通过。
 
 #### 物理序列求解与经验参数退场（2026-07-12）
