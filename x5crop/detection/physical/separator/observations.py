@@ -184,7 +184,7 @@ def measure_focused_separator_band(
                     max(0.0, focused[start:end].mean() - threshold) / spread
                 ),
                 provenance=MeasurementProvenance(
-                    root_measurement=MeasurementIdentity.SEPARATOR_PROFILE,
+                    root_measurement=MeasurementIdentity.FOCUSED_SEPARATOR_PROFILE,
                     source="focused_dimension_window",
                     dependencies=(
                         MeasurementIdentity.GRAY_WORK,

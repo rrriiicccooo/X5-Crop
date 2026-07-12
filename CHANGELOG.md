@@ -16,6 +16,9 @@ repository rules in `AGENTS.md`.
 
 #### 封口参数与几何解析契约（2026-07-12）
 
+- Focused separator measurement 现在使用独立的 typed measurement identity，并由 provenance
+  直接派生 geometry dependency；sequence solver 不再覆盖 assignment 的派生 state/reason，真实
+  runtime 与 synthetic contract 共享同一条非独立证据路径。
 - Current-schema validation 现在通过正式 dataclass 构造器执行全部跨字段物理不变量，并核对
   input/signature、configuration/candidate、count 与 finalization geometry 的共同 identity；损坏记录
   或 restoration 失败只会导致重新检测。Configuration fingerprint 也不再静默字符串化未知类型。

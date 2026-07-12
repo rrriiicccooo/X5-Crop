@@ -285,17 +285,7 @@ def _cuts(
                 position,
                 width,
             )
-            focused_assignment = replace(
-                measured,
-                state=(
-                    EvidenceState.CONTRADICTED
-                    if measured.state == EvidenceState.CONTRADICTED
-                    else EvidenceState.UNAVAILABLE
-                ),
-                geometry_dependent=True,
-                used_for_boundary=True,
-                reason="focused_observation_depends_on_sequence_solution",
-            )
+            focused_assignment = replace(measured, used_for_boundary=True)
             focused_assignments.append(focused_assignment)
         boundary = dimension_constrained_boundary(
             boundary_index,

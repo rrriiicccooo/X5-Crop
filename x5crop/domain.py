@@ -350,6 +350,15 @@ class SeparatorBandObservation:
             raise ValueError("separator observation must have positive width")
         if not self.start <= self.center <= self.end:
             raise ValueError("separator center must lie inside its observed band")
+        if self.provenance.root_measurement == MeasurementIdentity.FOCUSED_SEPARATOR_PROFILE:
+            required = {
+                MeasurementIdentity.FRAME_DIMENSIONS,
+                MeasurementIdentity.SEQUENCE_BOUNDARIES,
+            }
+            if not required.issubset(self.provenance.dependencies):
+                raise ValueError(
+                    "focused separator measurement requires geometry dependencies"
+                )
 
     @property
     def width(self) -> float:
@@ -392,6 +401,10 @@ class SeparatorAssignment:
         ):
             raise ValueError("separator assignment constraints must share one index")
         position = self.position_constraint.position
+        focused_measurement = bool(
+            self.observation.provenance.root_measurement
+            == MeasurementIdentity.FOCUSED_SEPARATOR_PROFILE
+        )
         width = float(self.observation.width)
         width_supported = bool(
             self.width_constraint.width.minimum
@@ -425,6 +438,11 @@ class SeparatorAssignment:
             elif self.observation.cross_axis.state != EvidenceState.SUPPORTED:
                 state = EvidenceState.UNAVAILABLE
                 reason = "separator_cross_axis_continuity_unavailable"
+        if focused_measurement:
+            geometry_dependent = True
+            if state == EvidenceState.SUPPORTED:
+                state = EvidenceState.UNAVAILABLE
+                reason = "focused_observation_depends_on_sequence_solution"
         object.__setattr__(self, "state", state)
         object.__setattr__(self, "geometry_dependent", geometry_dependent)
         object.__setattr__(self, "reason", reason)

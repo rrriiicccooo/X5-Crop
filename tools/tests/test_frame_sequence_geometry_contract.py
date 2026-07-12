@@ -391,6 +391,30 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
             MeasurementIdentity.FRAME_DIMENSIONS,
             observation.provenance.dependencies,
         )
+        result = solve_frame_sequence(
+            (),
+            ((1, observation),),
+            VisibleSequenceSpan(Box(0, 0, 200, 100)),
+            2,
+            FrameDimensionPrior(
+                PixelInterval(80.0, 100.0),
+                PixelInterval.exact(100.0),
+                (36.0, 24.0),
+                FrameDimensionPriorSource.SHORT_AXIS_ASPECT,
+                MeasurementProvenance(
+                    MeasurementIdentity.FRAME_DIMENSIONS,
+                    "synthetic",
+                    (MeasurementIdentity.FORMAT_PHYSICAL_SPEC,),
+                ),
+            ),
+            (),
+            10_000,
+        )
+        self.assertEqual(len(result.assignments), 1)
+        self.assertEqual(result.assignments[0].state, EvidenceState.UNAVAILABLE)
+        self.assertTrue(result.assignments[0].geometry_dependent)
+        self.assertFalse(result.assignments[0].independent)
+        self.assertFalse(result.boundaries[0].hard_separator)
 
     def test_dimension_constrained_boundary_is_never_hard_separator(self) -> None:
         boundary = dimension_constrained_boundary(

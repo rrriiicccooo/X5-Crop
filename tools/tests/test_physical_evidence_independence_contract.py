@@ -59,7 +59,6 @@ class PhysicalEvidenceIndependenceContractTest(unittest.TestCase):
             original_assignment.observation,
             provenance=replace(
                 original_assignment.observation.provenance,
-                root_measurement=MeasurementIdentity.FOCUSED_SEPARATOR_PROFILE,
                 dependencies=(MeasurementIdentity.HOLDER_BOUNDARY_PROFILE,),
             ),
         )
