@@ -157,9 +157,7 @@ def separator_width_constraint(
 ) -> SeparatorWidthConstraint:
     if not 0 < boundary_index < count:
         raise ValueError("separator width constraint index must be internal")
-    occlusion = holder_occlusion.leading.hidden_width_px.plus(
-        holder_occlusion.trailing.hidden_width_px
-    )
+    occlusion = holder_occlusion.combined_hidden_width_px
     available_anchor_span = PixelInterval.exact(float(span.box.width)).plus(
         occlusion
     )

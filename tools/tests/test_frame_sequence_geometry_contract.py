@@ -14,6 +14,7 @@ from x5crop.detection.physical.boundary import (
     HolderOcclusionSideEvidence,
     visible_sequence_and_crop_envelope,
     holder_occlusion_evidence,
+    holder_occlusion_for_sequence,
 )
 from x5crop.domain import PixelInterval
 from x5crop.detection.physical.spacing import (
@@ -102,6 +103,7 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
                 boundary,
             ),
             HolderOcclusionEvidence.not_applicable().trailing,
+            PixelInterval.exact(1_000.0),
         )
         dimensions = FrameDimensionPrior(
             PixelInterval.exact(200.0),
@@ -430,6 +432,40 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
         )
         self.assertEqual(evidence.leading.state, EvidenceState.SUPPORTED)
         self.assertEqual(evidence.leading.hidden_width_px, PixelInterval.exact(6.0))
+
+    def test_single_frame_two_sided_occlusion_does_not_duplicate_hidden_width(
+        self,
+    ) -> None:
+        provenance = MeasurementProvenance(
+            "holder_boundary_profile",
+            "white_holder_transition",
+            ("gray_work",),
+        )
+        evidence = holder_occlusion_for_sequence(
+            (
+                BoundaryObservation(
+                    "leading",
+                    PixelInterval.exact(0.0),
+                    "white_holder_transition",
+                    provenance,
+                ),
+                BoundaryObservation(
+                    "trailing",
+                    PixelInterval.exact(94.0),
+                    "white_holder_transition",
+                    provenance,
+                ),
+            ),
+            VisibleSequenceSpan(Box(0, 0, 94, 100)),
+            (),
+            PixelInterval.exact(100.0),
+        )
+
+        self.assertEqual(evidence.leading.state, EvidenceState.UNAVAILABLE)
+        self.assertEqual(evidence.trailing.state, EvidenceState.UNAVAILABLE)
+        self.assertEqual(evidence.leading.hidden_width_px, PixelInterval(0.0, 6.0))
+        self.assertEqual(evidence.trailing.hidden_width_px, PixelInterval(0.0, 6.0))
+        self.assertEqual(evidence.combined_hidden_width_px, PixelInterval.exact(6.0))
 
     def test_measured_non_white_edge_rules_out_white_holder_occlusion(self) -> None:
         boundary = BoundaryObservation(

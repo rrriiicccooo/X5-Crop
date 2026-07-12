@@ -32,6 +32,8 @@ repository rules in `AGENTS.md`.
   invariant 约束；完全不相交的 boundary constraints 直接无解，不再伪造 midpoint。
 - 已由 white-holder measurement 确认遮挡的首尾 frame 不再进入普通 photo-width contradiction；
   dimension evidence 只使用未遮挡且独立测得的 frame。
+- 单张照片双侧白片夹遮挡使用 canonical `combined_hidden_width_px`；两侧分配未知时保持
+  unavailable，sequence conservation 不再重复累加同一段缺失宽度。
 - Partial auto count 找到最高 resolved count 后，最终 selection pool 只保留该 count；此前评估过的
   unresolved 较大 count 不再被普通排序重新选回。
 - Content unavailable 不再否决 fixed/requested count 的完整 separator/geometry proof；明确 content
@@ -248,6 +250,8 @@ schema_revision: frame_sequence_geometry
   cannot prove overlap or trigger automatic bleed.
 - Edge frames with supported white-holder occlusion are excluded from ordinary
   photo-width contradiction; dimension evidence uses only unoccluded independent frames.
+- Two-sided single-frame holder occlusion keeps one canonical combined hidden-width
+  interval while per-side allocation remains unavailable, preventing double counting.
 - Candidate comparison now uses `EvidenceQuality` and deterministic physical ordering.
   Scalar confidence, weighted scores, format-family profiles, and fixed-percentage
   geometry clustering are removed.

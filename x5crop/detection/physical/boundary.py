@@ -52,16 +52,41 @@ class HolderOcclusionSideEvidence:
 class HolderOcclusionEvidence:
     leading: HolderOcclusionSideEvidence
     trailing: HolderOcclusionSideEvidence
+    combined_hidden_width_px: PixelInterval
 
     def __post_init__(self) -> None:
         if self.leading.side != "leading" or self.trailing.side != "trailing":
             raise ValueError("holder occlusion evidence requires ordered edge sides")
+        if self.combined_hidden_width_px.minimum < 0.0:
+            raise ValueError("combined holder occlusion width cannot be negative")
+        allocation_unresolved = bool(
+            self.leading.reason == "single_frame_occlusion_allocation_unresolved"
+            and self.trailing.reason
+            == "single_frame_occlusion_allocation_unresolved"
+        )
+        if allocation_unresolved:
+            if (
+                self.leading.state != EvidenceState.UNAVAILABLE
+                or self.trailing.state != EvidenceState.UNAVAILABLE
+                or self.leading.hidden_width_px.minimum != 0.0
+                or self.trailing.hidden_width_px.minimum != 0.0
+                or self.leading.hidden_width_px.maximum
+                != self.combined_hidden_width_px.maximum
+                or self.trailing.hidden_width_px.maximum
+                != self.combined_hidden_width_px.maximum
+            ):
+                raise ValueError("unresolved edge allocation must preserve one total width")
+        elif self.combined_hidden_width_px != self.leading.hidden_width_px.plus(
+            self.trailing.hidden_width_px
+        ):
+            raise ValueError("combined holder occlusion must derive from edge widths")
 
     @classmethod
     def not_applicable(cls) -> "HolderOcclusionEvidence":
         return cls(
             _not_applicable_side("leading"),
             _not_applicable_side("trailing"),
+            PixelInterval.zero(),
         )
 
     @classmethod
@@ -69,6 +94,7 @@ class HolderOcclusionEvidence:
         return cls(
             _unavailable_side("leading"),
             _unavailable_side("trailing"),
+            PixelInterval.zero(),
         )
 
 
@@ -153,19 +179,62 @@ def holder_occlusion_evidence(
     trailing_visible_frame_width: PixelInterval | None,
     frame_width_px: PixelInterval,
 ) -> HolderOcclusionEvidence:
+    leading = _occlusion_side_evidence(
+        "leading",
+        leading_boundary,
+        leading_visible_frame_width,
+        frame_width_px,
+    )
+    trailing = _occlusion_side_evidence(
+        "trailing",
+        trailing_boundary,
+        trailing_visible_frame_width,
+        frame_width_px,
+    )
     return HolderOcclusionEvidence(
-        leading=_occlusion_side_evidence(
+        leading=leading,
+        trailing=trailing,
+        combined_hidden_width_px=leading.hidden_width_px.plus(
+            trailing.hidden_width_px
+        ),
+    )
+
+
+def _single_frame_two_sided_occlusion(
+    leading_boundary: BoundaryObservation,
+    trailing_boundary: BoundaryObservation,
+    visible_width: PixelInterval,
+    frame_width: PixelInterval,
+) -> HolderOcclusionEvidence | None:
+    if (
+        leading_boundary.kind != "white_holder_transition"
+        or trailing_boundary.kind != "white_holder_transition"
+    ):
+        return None
+    total_hidden = PixelInterval(
+        max(0.0, frame_width.minimum - visible_width.maximum),
+        max(0.0, frame_width.maximum - visible_width.minimum),
+    )
+    if total_hidden.maximum <= 0.0:
+        return None
+    side_interval = PixelInterval(0.0, total_hidden.maximum)
+    reason = "single_frame_occlusion_allocation_unresolved"
+    return HolderOcclusionEvidence(
+        HolderOcclusionSideEvidence(
             "leading",
+            EvidenceState.UNAVAILABLE,
+            side_interval,
+            reason,
             leading_boundary,
-            leading_visible_frame_width,
-            frame_width_px,
         ),
-        trailing=_occlusion_side_evidence(
+        HolderOcclusionSideEvidence(
             "trailing",
+            EvidenceState.UNAVAILABLE,
+            side_interval,
+            reason,
             trailing_boundary,
-            trailing_visible_frame_width,
-            frame_width_px,
         ),
+        total_hidden,
     )
 
 
@@ -184,6 +253,17 @@ def holder_occlusion_for_sequence(
         visible_width = PixelInterval.exact(
             float(visible_sequence_span.box.width)
         )
+        leading_boundary = sequence_edges.get("leading")
+        trailing_boundary = sequence_edges.get("trailing")
+        if leading_boundary is not None and trailing_boundary is not None:
+            unresolved = _single_frame_two_sided_occlusion(
+                leading_boundary,
+                trailing_boundary,
+                visible_width,
+                frame_width_px,
+            )
+            if unresolved is not None:
+                return unresolved
         leading_width = visible_width
         trailing_width = visible_width
     else:

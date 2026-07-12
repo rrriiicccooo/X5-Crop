@@ -165,10 +165,10 @@ def _dimension_photo_intervals(
     geometry: SequenceSolution,
 ) -> tuple[PhotoInterval, ...]:
     leading_occluded = (
-        geometry.holder_occlusion.leading.state == EvidenceState.SUPPORTED
+        geometry.holder_occlusion.leading.hidden_width_px.maximum > 0.0
     )
     trailing_occluded = (
-        geometry.holder_occlusion.trailing.state == EvidenceState.SUPPORTED
+        geometry.holder_occlusion.trailing.hidden_width_px.maximum > 0.0
     )
     return tuple(
         interval

@@ -252,9 +252,7 @@ def corroborate_single_missing_overlap(
     )
     if len(missing) != 1 or len(observed) != len(spacings) - 1 or not observed:
         return spacings
-    occlusion = holder_occlusion.leading.hidden_width_px.plus(
-        holder_occlusion.trailing.hidden_width_px
-    )
+    occlusion = holder_occlusion.combined_hidden_width_px
     residual = (
         visible_length_px.plus(occlusion)
         .minus(frame_width_px.scaled(float(count)))
@@ -329,9 +327,7 @@ def sequence_conservation_evidence(
             sum_pixel_intervals(tuple(item.signed_width_px for item in spacings)),
             PixelInterval.zero(),
         )
-    occlusion = holder_occlusion.leading.hidden_width_px.plus(
-        holder_occlusion.trailing.hidden_width_px
-    )
+    occlusion = holder_occlusion.combined_hidden_width_px
     frame_total = frame_width_px.scaled(float(count))
     spacing_total = sum_pixel_intervals(
         tuple(item.signed_width_px for item in spacings)

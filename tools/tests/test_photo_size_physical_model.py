@@ -196,6 +196,24 @@ class PhotoSizePhysicalModelTest(unittest.TestCase):
             trailing_visible_frame_width=None,
             frame_width_px=PixelInterval.exact(100.0),
         )
+        photo_edges = MeasurementProvenance(
+            "photo_edges",
+            "test_fixture",
+            ("holder_boundary_profile",),
+        )
+        geometry = replace(
+            geometry,
+            holder_occlusion=occlusion,
+            photo_intervals=(
+                replace(
+                    geometry.photo_intervals[0],
+                    start_provenance=photo_edges,
+                    end_provenance=photo_edges,
+                    start_independently_observed=True,
+                    end_independently_observed=True,
+                ),
+            ),
+        )
         result = frame_dimension_evidence(
             geometry,
             format_spec("135"),
