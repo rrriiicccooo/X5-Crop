@@ -47,7 +47,7 @@ def process_one(
         input_file,
         profile,
         config,
-        initial_configuration,
+        configuration_bundle,
     )
 
     cached_result = result_from_reusable_analysis(

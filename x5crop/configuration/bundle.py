@@ -11,6 +11,21 @@ class DetectionConfigurationBundle:
     initial_configuration: DetectionConfiguration
     resolved_configurations: tuple[DetectionConfiguration, ...]
 
+    def __post_init__(self) -> None:
+        if (
+            not self.resolved_configurations
+            or self.resolved_configurations[0] != self.initial_configuration
+        ):
+            raise ValueError(
+                "configuration bundle must start with its initial configuration"
+            )
+        identities = tuple(
+            configuration.configuration_id
+            for configuration in self.resolved_configurations
+        )
+        if len(set(identities)) != len(identities):
+            raise ValueError("configuration bundle identities must be unique")
+
     @classmethod
     def for_format_mode(
         cls,

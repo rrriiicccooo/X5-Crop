@@ -47,6 +47,21 @@ class DetectionConfigurationBundleTests(unittest.TestCase):
         with self.assertRaises(KeyError):
             bundle.configuration_for("135", "partial")
 
+    def test_bundle_rejects_ambiguous_runtime_identity(self) -> None:
+        bundle = DetectionConfigurationBundle.for_format_mode("135", "full")
+        initial = bundle.initial_configuration
+        invalid_bundles = (
+            lambda: DetectionConfigurationBundle(initial, ()),
+            lambda: DetectionConfigurationBundle(
+                replace(initial, strip_mode="partial"),
+                (initial,),
+            ),
+            lambda: DetectionConfigurationBundle(initial, (initial, initial)),
+        )
+        for factory in invalid_bundles:
+            with self.subTest(factory=factory), self.assertRaises(ValueError):
+                factory()
+
     def test_detection_configuration_rejects_unknown_strip_mode(self) -> None:
         configuration = DetectionConfigurationBundle.for_format_mode(
             "135",

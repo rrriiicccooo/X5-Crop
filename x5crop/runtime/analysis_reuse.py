@@ -18,7 +18,7 @@ from ..export.actions import copy_for_review_if_needed, write_crops_if_allowed
 from ..output.surface import OutputSurface
 from ..image.transforms import rotate_array_expand
 from ..io.tiff import read_tiff
-from ..configuration.model import DetectionConfiguration
+from ..configuration.bundle import DetectionConfigurationBundle
 from ..report.restoration import (
     final_detection_from_record as _final_detection_from_record,
     transform_geometry_from_record as _transform_geometry_from_record,
@@ -66,11 +66,16 @@ def config_cache_signature(config: RunConfig) -> dict[str, Any]:
     }
 
 
-def analysis_configuration_fingerprint(configuration: DetectionConfiguration) -> str:
-    analysis_configuration = asdict(configuration)
-    del analysis_configuration["diagnostics"]
+def analysis_configuration_fingerprint(
+    configuration_bundle: DetectionConfigurationBundle,
+) -> str:
+    analysis_configurations = []
+    for configuration in configuration_bundle.resolved_configurations:
+        analysis_configuration = asdict(configuration)
+        del analysis_configuration["diagnostics"]
+        analysis_configurations.append(analysis_configuration)
     payload = json.dumps(
-        analysis_configuration,
+        analysis_configurations,
         sort_keys=True,
         separators=(",", ":"),
         default=str,
@@ -82,14 +87,16 @@ def make_analysis_reuse_signature(
     input_file: Path,
     profile: ImageProfile,
     config: RunConfig,
-    configuration: DetectionConfiguration,
+    configuration_bundle: DetectionConfigurationBundle,
 ) -> dict[str, Any]:
     return {
         "script": SCRIPT_NAME,
         "script_version": VERSION,
         "source": source_cache_signature(input_file, profile, config.page),
         "config": config_cache_signature(config),
-        "configuration_fingerprint": analysis_configuration_fingerprint(configuration),
+        "configuration_fingerprint": analysis_configuration_fingerprint(
+            configuration_bundle
+        ),
     }
 
 

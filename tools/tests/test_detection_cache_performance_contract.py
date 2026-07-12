@@ -13,6 +13,7 @@ from x5crop.cache.separator import cached_separator_profile
 from x5crop.domain import Box
 from x5crop.geometry.detection_parameters import SeparatorProfileParameters
 from x5crop.image.statistics import ImageMeasurementStatisticsParameters, image_measurement_statistics
+from x5crop.configuration.bundle import DetectionConfigurationBundle
 from x5crop.configuration.registry import get_detection_configuration
 from x5crop.detection.evidence.content.frame_support import frame_content_evidence
 from tools.tests.physical_gate_support import candidate_fixture
@@ -60,19 +61,63 @@ class DetectionCachePerformanceContractTest(unittest.TestCase):
         measurement.assert_called_once()
 
     def test_diagnostics_do_not_invalidate_detection_analysis(self) -> None:
-        configuration = get_detection_configuration("135", "full")
+        bundle = DetectionConfigurationBundle.for_format_mode("135", "full")
+        configuration = bundle.initial_configuration
         changed = replace(
-            configuration,
-            diagnostics=replace(
-                configuration.diagnostics,
-                separator_overlay=replace(
-                    configuration.diagnostics.separator_overlay,
-                    tick_length_min=99,
+            bundle,
+            initial_configuration=replace(
+                configuration,
+                diagnostics=replace(
+                    configuration.diagnostics,
+                    separator_overlay=replace(
+                        configuration.diagnostics.separator_overlay,
+                        tick_length_min=99,
+                    ),
+                ),
+            ),
+            resolved_configurations=(
+                replace(
+                    configuration,
+                    diagnostics=replace(
+                        configuration.diagnostics,
+                        separator_overlay=replace(
+                            configuration.diagnostics.separator_overlay,
+                            tick_length_min=99,
+                        ),
+                    ),
                 ),
             ),
         )
         self.assertEqual(
-            analysis_configuration_fingerprint(configuration),
+            analysis_configuration_fingerprint(bundle),
+            analysis_configuration_fingerprint(changed),
+        )
+
+    def test_reuse_fingerprint_includes_every_resolved_configuration(self) -> None:
+        bundle = DetectionConfigurationBundle.for_format_mode("135-dual", "full")
+        lane_configuration = bundle.resolved_configurations[1]
+        changed_lane = replace(
+            lane_configuration,
+            separator=replace(
+                lane_configuration.separator,
+                observation=replace(
+                    lane_configuration.separator.observation,
+                    maximum_observations=(
+                        lane_configuration.separator.observation.maximum_observations
+                        + 1
+                    ),
+                ),
+            ),
+        )
+        changed = replace(
+            bundle,
+            resolved_configurations=(
+                bundle.initial_configuration,
+                changed_lane,
+            ),
+        )
+        self.assertNotEqual(
+            analysis_configuration_fingerprint(bundle),
             analysis_configuration_fingerprint(changed),
         )
 
