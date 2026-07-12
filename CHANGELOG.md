@@ -60,6 +60,8 @@ repository rules in `AGENTS.md`.
   lane solutions 精确投影，residuals 与 assignment consensus 也只能由 lane results 聚合。
 - Separator evidence、signed spacing、Debug overlay 与逐 frame overlap protection 共享 typed
   `FrameBoundaryReference`；相同局部 boundary index 在不同 lane 中保持不同物理身份。
+- `GeometryResolution`、`GeometryCluster`、`CountResolution` 与 `SelectionResult` 现在拒绝
+  supported/reason 漂移、空 cluster、重复 candidate、未评估 count 和 selected/ranked 不一致。
 - Deskew 固定灰度身份阈值已由 per-image robust statistics 取代；percentile sampling budget、
   edge quantiles 和 numerical floors 均由显式参数拥有。
 - Physical fact、adaptive measurement、numerical safety、execution budget 与 diagnostics 参数
@@ -88,7 +90,7 @@ repository rules in `AGENTS.md`.
   使旧分析失效。Bundle 同时拒绝空集合、initial identity 漂移和重复 configuration identity。
 - Diagnostics 参数不再使 detection analysis fingerprint 失效；无法测得的 content threshold 也只
   计算一次。Malformed current-schema record 现在返回 validation error，不再从 validator 抛异常。
-- 301 项测试、14 个 format/mode configuration、package/regression compile、launcher syntax、
+- 302 项测试、14 个 format/mode configuration、package/regression compile、launcher syntax、
   version 和 whitespace 检查通过。
 
 #### 物理序列求解与经验参数退场（2026-07-12）

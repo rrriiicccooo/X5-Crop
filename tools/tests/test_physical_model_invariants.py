@@ -3,12 +3,20 @@ from __future__ import annotations
 import math
 import unittest
 
+from tools.tests.physical_gate_support import candidate_fixture, selection_fixture
+from x5crop.detection.candidate.selection.model import (
+    CountResolution,
+    GeometryCluster,
+    GeometryResolution,
+    SelectionResult,
+)
 from x5crop.detection.physical.model import SequenceResiduals
 from x5crop.domain import (
     AxisBleedParameters,
     BoundaryPositionConstraint,
     Box,
     CropEnvelope,
+    EvidenceState,
     FrameBoundary,
     FrameBoundaryReference,
     FrameDimensionPrior,
@@ -33,6 +41,34 @@ def _provenance() -> MeasurementProvenance:
 
 
 class PhysicalModelInvariantTest(unittest.TestCase):
+    def test_selection_models_reject_internally_inconsistent_states(self) -> None:
+        candidate = candidate_fixture()
+        selection = selection_fixture()
+        invalid_factories = (
+            lambda: GeometryResolution(
+                EvidenceState.SUPPORTED,
+                False,
+                True,
+                True,
+                True,
+                True,
+                True,
+                (),
+            ),
+            lambda: GeometryCluster((), candidate),
+            lambda: CountResolution(0, (1,), (1,), None, "synthetic"),
+            lambda: SelectionResult(
+                candidate,
+                (),
+                selection.clusters,
+                "uncontested",
+                selection.geometry_resolution,
+            ),
+        )
+        for factory in invalid_factories:
+            with self.subTest(factory=factory), self.assertRaises(ValueError):
+                factory()
+
     def test_pixel_intervals_and_residuals_require_finite_values(self) -> None:
         with self.assertRaises(ValueError):
             PixelInterval(math.nan, 1.0)

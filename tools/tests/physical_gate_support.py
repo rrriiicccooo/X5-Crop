@@ -485,21 +485,26 @@ def selection_fixture(
 ) -> SelectionResult:
     selected = candidate or candidate_fixture()
     cluster = GeometryCluster((selected,), selected)
+    resolution = GeometryResolution(
+        (
+            EvidenceState.UNAVAILABLE
+            if geometry_disagreement
+            else EvidenceState.SUPPORTED
+        ),
+        True,
+        True,
+        True,
+        True,
+        True,
+        not geometry_disagreement,
+        ("geometry_clusters_disagree",) if geometry_disagreement else (),
+    )
     return SelectionResult(
         selected=selected,
         ranked_candidates=(selected,),
         clusters=(cluster,),
         consensus="disagreed" if geometry_disagreement else "uncontested",
-        geometry_resolution=GeometryResolution(
-            EvidenceState.SUPPORTED,
-            True,
-            True,
-            True,
-            True,
-            True,
-            True,
-            (),
-        ),
+        geometry_resolution=resolution,
     )
 
 

@@ -133,8 +133,15 @@ class PhysicalGateModelContractTest(unittest.TestCase):
 
     def test_equivalent_geometry_is_consensus(self) -> None:
         candidate = candidate_fixture()
+        corroborating_candidate = replace(
+            candidate,
+            geometry=replace(
+                candidate.geometry,
+                sequence_hypothesis_name="equivalent_independent_candidate",
+            ),
+        )
         result = select_candidates(
-            (candidate, candidate),
+            (candidate, corroborating_candidate),
             larger_counts_evaluated=True,
         )
         self.assertEqual(result.consensus, "agreed")

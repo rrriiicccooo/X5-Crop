@@ -216,7 +216,9 @@ def select_candidates(
     clusters = geometry_clusters(ranked)
     selected = ranked[0]
     selected_cluster = next(
-        cluster for cluster in clusters if selected in cluster.candidates
+        cluster
+        for cluster in clusters
+        if any(candidate is selected for candidate in cluster.candidates)
     )
     competing = tuple(
         cluster for cluster in clusters if cluster is not selected_cluster
