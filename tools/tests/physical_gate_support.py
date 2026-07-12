@@ -56,7 +56,7 @@ from x5crop.detection.evidence.transform_geometry import (
     TransformOutcome,
 )
 from x5crop.image.deskew import DeskewMeasurementOutcome
-from x5crop.detection.gate_checks import GateCheck
+from x5crop.detection.gate_checks import GateCheck, GateStage
 from x5crop.detection.physical.model import (
     AssignmentConsensusOutcome,
     BoundaryAssignmentConsensus,
@@ -195,7 +195,7 @@ def candidate_gate_fixture(
     checks = tuple(
         GateCheck(
             code=code,
-            stage="candidate",
+            stage=GateStage.CANDIDATE,
             state=(
                 EvidenceState.CONTRADICTED
                 if not passed and code == failed_check

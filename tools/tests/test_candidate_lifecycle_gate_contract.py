@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import fields, replace
+from enum import Enum
+from typing import get_type_hints
 import unittest
 
 from x5crop.detection.candidate.assessment.candidate_gate import (
@@ -9,7 +11,7 @@ from x5crop.detection.candidate.assessment.candidate_gate import (
     candidate_gate_assessment,
 )
 from x5crop.domain import EvidenceState
-from x5crop.detection.gate_checks import GateCheck
+from x5crop.detection.gate_checks import GateCheck, GateStage
 
 
 def _path(code: str, state: EvidenceState) -> BoundaryProofPath:
@@ -43,6 +45,12 @@ def _gate(
 
 
 class CandidateLifecycleGateContractTest(unittest.TestCase):
+    def test_gate_stage_is_a_typed_authority(self) -> None:
+        annotation = get_type_hints(GateCheck)["stage"]
+        self.assertTrue(
+            isinstance(annotation, type) and issubclass(annotation, Enum)
+        )
+
     def test_gate_check_has_no_unused_consequence_dimension(self) -> None:
         self.assertEqual(
             {field.name for field in fields(GateCheck)},
@@ -51,10 +59,10 @@ class CandidateLifecycleGateContractTest(unittest.TestCase):
 
     def test_gate_check_rejects_cross_stage_reason_ownership(self) -> None:
         invalid_factories = (
-            lambda: GateCheck("", "candidate", EvidenceState.SUPPORTED),
+            lambda: GateCheck("", GateStage.CANDIDATE, EvidenceState.SUPPORTED),
             lambda: GateCheck(
                 "content_preservation",
-                "candidate",
+                GateStage.CANDIDATE,
                 EvidenceState.CONTRADICTED,
                 "content_preservation_unresolved",
             ),
@@ -65,12 +73,14 @@ class CandidateLifecycleGateContractTest(unittest.TestCase):
             ),
             lambda: GateCheck(
                 "decision_check",
-                "decision",
+                GateStage.DECISION,
                 EvidenceState.CONTRADICTED,
             ),
         )
         for factory in invalid_factories:
-            with self.subTest(factory=factory), self.assertRaises(ValueError):
+            with self.subTest(factory=factory), self.assertRaises(
+                (TypeError, ValueError)
+            ):
                 factory()
 
     def test_candidate_gate_rejects_incomplete_check_ownership(self) -> None:

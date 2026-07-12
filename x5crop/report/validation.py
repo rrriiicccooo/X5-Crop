@@ -32,7 +32,7 @@ from ..detection.candidate.selection.model import (
     SelectionResult,
 )
 from ..detection.final.model import FinalizationPlan
-from ..detection.gate_checks import GateCheck
+from ..detection.gate_checks import GateCheck, GateStage
 from ..detection.evidence.transform_geometry import TransformGeometryEvidence
 from ..detection.physical.model import (
     DualLaneSolution,
@@ -262,7 +262,7 @@ def _gate_check_from_read_model(value: Any) -> GateCheck:
         raise ValueError("gate check read model is incomplete")
     check = GateCheck(
         code=str(value["code"]),
-        stage=str(value["stage"]),
+        stage=GateStage(value["stage"]),
         state=EvidenceState(str(value["state"])),
         final_review_reason=(
             None

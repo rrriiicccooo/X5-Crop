@@ -69,7 +69,7 @@ def typed_read_model(value: Any) -> Any:
 def gate_check_read_model(check: GateCheck) -> dict[str, Any]:
     return {
         "code": check.code,
-        "stage": check.stage,
+        "stage": typed_read_model(check.stage),
         "state": check.state.value,
         "final_review_reason": check.final_review_reason,
         "blocks": bool(check.blocks),

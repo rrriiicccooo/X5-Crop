@@ -17,7 +17,7 @@ from ...output.model import FrameBleedPlan
 from ..candidate.assessment.candidate_gate import CandidateGateAssessment
 from ..candidate.selection.model import SelectionConsensus, SelectionResult
 from x5crop.domain import EvidenceState
-from ..gate_checks import GateCheck
+from ..gate_checks import GateCheck, GateStage
 from ..evidence.transform_geometry import TransformGeometryEvidence
 from .model import DecisionGateAssessment
 
@@ -38,7 +38,7 @@ def _decision_check(
 ) -> GateCheck:
     return GateCheck(
         code=code,
-        stage="decision",
+        stage=GateStage.DECISION,
         state=state,
         final_review_reason=final_reason,
     )

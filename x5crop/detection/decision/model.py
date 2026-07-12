@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from ..gate_checks import GateCheck
+from ..gate_checks import GateCheck, GateStage
 from .vocabulary import FINAL_REVIEW_REASONS
 
 
@@ -12,7 +12,7 @@ class DecisionGateAssessment:
     def __post_init__(self) -> None:
         if not self.checks:
             raise ValueError("decision gate requires checks")
-        if any(check.stage != "decision" for check in self.checks):
+        if any(check.stage != GateStage.DECISION for check in self.checks):
             raise ValueError("decision gate can contain only decision-stage checks")
         if any(
             check.final_review_reason not in FINAL_REVIEW_REASONS

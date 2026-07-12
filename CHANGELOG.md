@@ -62,6 +62,8 @@ repository rules in `AGENTS.md`.
   必须对应真实 early-stop。
 - Selection consensus 从自由字符串改为 typed outcome；report validation 与 DecisionGate 共享同一个
   geometry-agreement identity。
+- GateCheck stage 改为 typed lifecycle identity，candidate/decision 的 final-reason 权限不再由自由
+  字符串控制。
 - Sequence conservation 删除 caller-supplied extent/state/reason，改由 visible/occlusion/frame/spacing
   intervals 与 typed spacing basis 确定性派生。
 - Observed/corroborated/hypothesized spacing 删除自由 reason 字段；read-model reason 现在由 concrete

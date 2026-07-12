@@ -261,7 +261,7 @@ Dual-lane composition 同样保存每条 lane 的 typed evidence、CandidateGate
 结果；父 proof 必须从这些事实和 `DualLaneSolution` 重算，且 component geometry 必须精确一致。
 `GateCheck` 只表达所属 stage 与 evidence state；所有 check 都是该 Gate 的正式检查，不再保留
 未使用的 consequence 维度。Candidate check 不能拥有 final reason，diagnostic 也不能伪装成
-GateCheck。
+GateCheck。Stage 使用 typed lifecycle identity，不能由自由字符串授予 final-reason 权限。
 
 `DecisionGate` 只消费 CandidateGate、GeometryResolution、selection consensus、output
 protection 和 transform geometry。它不重新测量 evidence，也不生成候选。

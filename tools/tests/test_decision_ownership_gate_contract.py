@@ -19,7 +19,7 @@ from x5crop.detection.decision.vocabulary import (
 )
 from x5crop.domain import EvidenceState
 from x5crop.detection.decision.model import DecisionGateAssessment
-from x5crop.detection.gate_checks import GateCheck
+from x5crop.detection.gate_checks import GateCheck, GateStage
 
 
 class DecisionOwnershipGateContractTest(unittest.TestCase):
@@ -29,7 +29,7 @@ class DecisionOwnershipGateContractTest(unittest.TestCase):
                 (
                     GateCheck(
                         "synthetic",
-                        "decision",
+                        GateStage.DECISION,
                         EvidenceState.CONTRADICTED,
                         "unowned_final_reason",
                     ),

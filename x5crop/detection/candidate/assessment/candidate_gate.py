@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from x5crop.domain import EvidenceState
-from ...gate_checks import GateCheck
+from ...gate_checks import GateCheck, GateStage
 
 
 BOUNDARY_PROOF_PATH_CODES = frozenset(
@@ -75,7 +75,7 @@ class CandidateGateAssessment:
     def __post_init__(self) -> None:
         if tuple(check.code for check in self.checks) != CANDIDATE_GATE_CHECK_CODES:
             raise ValueError("candidate gate checks must be complete and ordered")
-        if any(check.stage != "candidate" for check in self.checks):
+        if any(check.stage != GateStage.CANDIDATE for check in self.checks):
             raise ValueError("candidate gate can contain only candidate-stage checks")
         path_codes = tuple(path.code for path in self.proof_paths)
         if path_codes not in {
@@ -108,27 +108,27 @@ def candidate_gate_assessment(gate_input: CandidateGateInput) -> CandidateGateAs
     checks = (
         GateCheck(
             code="content_preservation",
-            stage="candidate",
+            stage=GateStage.CANDIDATE,
             state=gate_input.content_preservation,
         ),
         GateCheck(
             code="photo_geometry_consistency",
-            stage="candidate",
+            stage=GateStage.CANDIDATE,
             state=gate_input.photo_geometry,
         ),
         GateCheck(
             code="frame_sequence_conservation",
-            stage="candidate",
+            stage=GateStage.CANDIDATE,
             state=gate_input.sequence_conservation,
         ),
         GateCheck(
             code="evidence_independence",
-            stage="candidate",
+            stage=GateStage.CANDIDATE,
             state=gate_input.evidence_independence,
         ),
         GateCheck(
             code="boundary_proof",
-            stage="candidate",
+            stage=GateStage.CANDIDATE,
             state=boundary_state,
         ),
     )
