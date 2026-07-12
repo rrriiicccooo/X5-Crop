@@ -504,6 +504,10 @@ def selection_fixture(
 def frame_bleed_fixture(*, feasible: bool = True) -> FrameBleedPlan:
     return FrameBleedPlan(
         user_bleed=AxisBleedParameters(20, 10),
+        frame_output_bounds=(
+            Box(0, 0, 200, 100),
+            Box(0, 0, 200, 100),
+        ),
         frame_sides=(
             FrameSideBleed(0, 20, 20, 10),
             FrameSideBleed(1, 20, 20, 10),

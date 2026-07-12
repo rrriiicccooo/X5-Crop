@@ -86,7 +86,7 @@ class LayerBoundariesOutputContractTest(unittest.TestCase):
             tuple(signature(frame_bleed_plan).parameters),
             (
                 "frames",
-                "frame_crop_envelopes",
+                "frame_output_bounds",
                 "overlap_requirements",
                 "user_bleed",
                 "layout",

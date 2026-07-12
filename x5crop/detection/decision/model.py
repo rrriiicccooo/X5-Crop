@@ -77,11 +77,15 @@ class FinalDetection:
             )
         if self.count <= 0:
             raise ValueError("final detection count must be positive")
-        if (
-            self.decision_geometry.crop_envelope
-            != self.output_geometry.crop_envelope
+        decision_envelope = self.decision_geometry.crop_envelope.box
+        output_envelope = self.output_geometry.crop_envelope.box
+        if not (
+            output_envelope.left <= decision_envelope.left
+            and output_envelope.top <= decision_envelope.top
+            and output_envelope.right >= decision_envelope.right
+            and output_envelope.bottom >= decision_envelope.bottom
         ):
-            raise ValueError("final output must preserve the decision crop envelope")
+            raise ValueError("final output must contain the decision crop envelope")
         decision_frame_count = len(self.decision_geometry.frames)
         if decision_frame_count not in {0, self.count}:
             raise ValueError("final detection has incomplete decision frames")
@@ -89,6 +93,18 @@ class FinalDetection:
             raise ValueError("approved final detection requires one frame per count")
         if len(self.output_geometry.frames) != decision_frame_count:
             raise ValueError("final output must preserve decision frame identity")
+        if any(
+            output.left > decision.left
+            or output.top > decision.top
+            or output.right < decision.right
+            or output.bottom < decision.bottom
+            for decision, output in zip(
+                self.decision_geometry.frames,
+                self.output_geometry.frames,
+                strict=True,
+            )
+        ):
+            raise ValueError("final output frames may expand but cannot shrink or move")
         if len(self.frame_bleed_plan.frame_sides) != decision_frame_count:
             raise ValueError("final bleed plan must match decision frames")
         if any(not item for item in self.diagnostics) or len(

@@ -82,7 +82,7 @@ Request mode、configuration mode、workspace layout、cache layout 与 dual-lan
 |---|---|
 | `HolderSpan` | 片夹可用范围。 Holder geometry only. |
 | `VisibleSequenceSpan` | 源图中实际可见的照片序列范围。 |
-| `CropEnvelope` | 覆盖所有可见内容与 boundary uncertainty 的保守输出包络。 |
+| `CropEnvelope` | 覆盖所有可见内容与 boundary uncertainty 的基础裁切包络；不包含用户 bleed。 |
 
 每条边使用自己的 edge reference、scan direction 和 robust change-point measurement，独立测量
 white-holder、tonal、texture 或 canvas boundary interval。Base boundary 不合并相对两端的
@@ -213,11 +213,14 @@ DecisionGateAssessment 在构造时拒绝 vocabulary 之外的 final reason。
 `FrameBleedPlan` 为每个 frame 分别记录 leading、trailing 和 short-axis bleed：
 
 - 用户 `--bleed*` 是每侧输出偏好。
+- 每张 frame 的 `frame_output_bounds` 来自 holder canvas 或所属 lane，不复用物理
+  `CropEnvelope` 充当输出上限。
 - 只有 independently observed 或 independent-constraint corroborated overlap 才增加相邻两张
   frame 的对应侧。
 - 全局最大 overlap 不扩张无关 frame。
 - Geometry overlap hypothesis 产生 unresolved output protection，不产生自动 bleed。
-- Finalization clamp 到 `CropEnvelope` 和 canvas，不读取 gray/content/separator。
+- Finalization 在 `frame_output_bounds` 内应用 bleed，生成实际 final envelope；它不读取
+  gray/content/separator，也不修改 decision geometry。
 
 Transform evidence、output protection、user bleed 与 final geometry 都在 typed model 边界验证派生
 状态；`applied` angle、span pair、feasible、reason 和 unresolved boundaries 不能彼此矛盾。

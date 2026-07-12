@@ -50,8 +50,11 @@ class DecisionOwnershipGateContractTest(unittest.TestCase):
             lambda: replace(
                 detection,
                 output_geometry=OutputGeometry(
-                    CropEnvelope(Box(0, 0, 210, 100)),
-                    detection.output_geometry.frames,
+                    detection.output_geometry.crop_envelope,
+                    (
+                        Box(1, 0, 100, 100),
+                        detection.output_geometry.frames[1],
+                    ),
                 ),
             ),
             lambda: replace(

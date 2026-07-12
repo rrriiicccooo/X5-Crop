@@ -3,32 +3,28 @@ from __future__ import annotations
 from math import ceil
 
 from ..detection.candidate.model import AssessedCandidate
-from ..domain import CropEnvelope
+from ..domain import Box
 from ..output.frame_bleed import frame_bleed_plan
 from ..output.model import AxisBleedParameters, FrameBleedPlan, FrameOverlapRequirement
 from ..detection.physical.model import DualLaneSolution
 
 
-def _frame_crop_envelopes(candidate: AssessedCandidate) -> tuple[CropEnvelope, ...]:
+def _frame_output_bounds(candidate: AssessedCandidate) -> tuple[Box, ...]:
     geometry = candidate.geometry
     if not isinstance(geometry, DualLaneSolution):
-        return (geometry.crop_envelope,) * len(geometry.frames)
-    envelopes: list[CropEnvelope] = []
+        return (geometry.holder_span.box,) * len(geometry.frames)
+    bounds: list[Box] = []
     for frame in geometry.frames:
         center_y = 0.5 * float(frame.top + frame.bottom)
         matches = tuple(
-            envelope
-            for lane, envelope in zip(
-                geometry.lane_boxes,
-                geometry.lane_crop_envelopes,
-                strict=True,
-            )
+            lane
+            for lane in geometry.lane_boxes
             if float(lane.top) <= center_y < float(lane.bottom)
         )
         if len(matches) != 1:
-            raise ValueError("frame must belong to exactly one crop envelope")
-        envelopes.append(matches[0])
-    return tuple(envelopes)
+            raise ValueError("frame must belong to exactly one output bound")
+        bounds.append(matches[0])
+    return tuple(bounds)
 
 
 def _lane_frame_indexes(candidate: AssessedCandidate) -> tuple[tuple[int, ...], ...]:
@@ -88,7 +84,7 @@ def prepare_frame_bleed(
 ) -> FrameBleedPlan:
     return frame_bleed_plan(
         frames=candidate.geometry.frames,
-        frame_crop_envelopes=_frame_crop_envelopes(candidate),
+        frame_output_bounds=_frame_output_bounds(candidate),
         overlap_requirements=_overlap_requirements(candidate),
         user_bleed=user_bleed,
         layout=candidate.geometry.layout,

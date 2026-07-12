@@ -105,6 +105,7 @@ class BoundaryOverlapProtection:
 @dataclass(frozen=True)
 class FrameBleedPlan:
     user_bleed: AxisBleedParameters
+    frame_output_bounds: tuple[Box, ...]
     frame_sides: tuple[FrameSideBleed, ...]
     overlap_protection: tuple[BoundaryOverlapProtection, ...]
     unresolved_overlap_boundaries: tuple[FrameBoundaryReference, ...]
@@ -115,6 +116,10 @@ class FrameBleedPlan:
         indexes = tuple(side.frame_index for side in self.frame_sides)
         if indexes != tuple(range(len(indexes))):
             raise ValueError("frame bleed plan indexes must be complete and ordered")
+        if len(self.frame_output_bounds) != len(self.frame_sides) or any(
+            not bound.valid() for bound in self.frame_output_bounds
+        ):
+            raise ValueError("frame bleed plan requires one valid output bound per frame")
         if any(
             side.leading_px < self.user_bleed.long_axis
             or side.trailing_px < self.user_bleed.long_axis

@@ -151,6 +151,7 @@ def scan_calibration_read_model(calibration: Any) -> dict[str, Any]:
 def frame_bleed_plan_read_model(plan: Any) -> dict[str, Any]:
     return {
         "user_bleed": typed_read_model(plan.user_bleed),
+        "frame_output_bounds": typed_read_model(plan.frame_output_bounds),
         "frame_sides": typed_read_model(plan.frame_sides),
         "overlap_protection": typed_read_model(plan.overlap_protection),
         "unresolved_overlap_boundaries": typed_read_model(

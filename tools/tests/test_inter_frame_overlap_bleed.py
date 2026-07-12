@@ -3,11 +3,7 @@ from __future__ import annotations
 import unittest
 from inspect import signature
 
-from x5crop.domain import (
-    Box,
-    CropEnvelope,
-    FrameBoundaryReference,
-)
+from x5crop.domain import Box, CropEnvelope, FrameBoundaryReference
 from x5crop.output.frame_bleed import apply_frame_bleed, frame_bleed_plan
 from x5crop.output.model import (
     AxisBleedParameters,
@@ -25,7 +21,7 @@ class InterFrameOverlapBleedTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             frame_bleed_plan(
                 frames=(Box(0, 0, 100, 60),),
-                frame_crop_envelopes=(CropEnvelope(Box(0, 0, 100, 60)),),
+                frame_output_bounds=(Box(0, 0, 100, 60),),
                 overlap_requirements=(),
                 user_bleed=AxisBleedParameters(0, 0),
                 layout="diagonal",
@@ -37,10 +33,10 @@ class InterFrameOverlapBleedTest(unittest.TestCase):
             Box(100, 0, 200, 60),
             Box(200, 0, 300, 60),
         )
-        envelopes = (CropEnvelope(Box(0, 0, 300, 60)),) * 3
+        output_bounds = (Box(0, 0, 300, 60),) * 3
         plan = frame_bleed_plan(
             frames=frames,
-            frame_crop_envelopes=envelopes,
+            frame_output_bounds=output_bounds,
             overlap_requirements=(
                 FrameOverlapRequirement(
                     boundary=FrameBoundaryReference(None, 1),
@@ -71,9 +67,9 @@ class InterFrameOverlapBleedTest(unittest.TestCase):
     def test_geometry_overlap_hypothesis_cannot_create_output_protection(self) -> None:
         plan = frame_bleed_plan(
             frames=(Box(0, 0, 100, 60), Box(100, 0, 200, 60)),
-            frame_crop_envelopes=(
-                CropEnvelope(Box(0, 0, 200, 60)),
-                CropEnvelope(Box(0, 0, 200, 60)),
+            frame_output_bounds=(
+                Box(0, 0, 200, 60),
+                Box(0, 0, 200, 60),
             ),
             overlap_requirements=(
                 FrameOverlapRequirement(
@@ -109,11 +105,11 @@ class InterFrameOverlapBleedTest(unittest.TestCase):
             Box(0, 60, 100, 120),
             Box(100, 60, 200, 120),
         )
-        envelopes = (
-            CropEnvelope(Box(0, 0, 200, 60)),
-            CropEnvelope(Box(0, 0, 200, 60)),
-            CropEnvelope(Box(0, 60, 200, 120)),
-            CropEnvelope(Box(0, 60, 200, 120)),
+        output_bounds = (
+            Box(0, 0, 200, 60),
+            Box(0, 0, 200, 60),
+            Box(0, 60, 200, 120),
+            Box(0, 60, 200, 120),
         )
         boundaries = (
             FrameBoundaryReference(1, 1),
@@ -121,7 +117,7 @@ class InterFrameOverlapBleedTest(unittest.TestCase):
         )
         plan = frame_bleed_plan(
             frames=frames,
-            frame_crop_envelopes=envelopes,
+            frame_output_bounds=output_bounds,
             overlap_requirements=tuple(
                 FrameOverlapRequirement(
                     boundary=boundary,
@@ -139,7 +135,7 @@ class InterFrameOverlapBleedTest(unittest.TestCase):
 
         self.assertEqual(plan.unresolved_overlap_boundaries, boundaries)
 
-    def test_frame_bleed_is_clamped_to_each_crop_envelope(self) -> None:
+    def test_frame_bleed_is_clamped_to_each_output_bound(self) -> None:
         geometry = OutputGeometry(
             CropEnvelope(Box(0, 0, 300, 60)),
             (
@@ -150,7 +146,7 @@ class InterFrameOverlapBleedTest(unittest.TestCase):
         )
         plan = frame_bleed_plan(
             frames=geometry.frames,
-            frame_crop_envelopes=(geometry.crop_envelope,) * 3,
+            frame_output_bounds=(geometry.crop_envelope.box,) * 3,
             overlap_requirements=(
                 FrameOverlapRequirement(
                     FrameBoundaryReference(None, 1),
@@ -177,6 +173,36 @@ class InterFrameOverlapBleedTest(unittest.TestCase):
         self.assertEqual(expanded.frames[0], Box(0, 0, 130, 60))
         self.assertEqual(expanded.frames[1], Box(70, 0, 205, 60))
         self.assertEqual(expanded.frames[2], Box(195, 0, 300, 60))
+
+    def test_user_bleed_expands_beyond_the_physical_crop_envelope(self) -> None:
+        geometry = OutputGeometry(
+            CropEnvelope(Box(10, 5, 290, 55)),
+            (
+                Box(10, 5, 100, 55),
+                Box(100, 5, 200, 55),
+                Box(200, 5, 290, 55),
+            ),
+        )
+        holder = Box(0, 0, 300, 60)
+        plan = frame_bleed_plan(
+            frames=geometry.frames,
+            frame_output_bounds=(holder,) * 3,
+            overlap_requirements=(),
+            user_bleed=AxisBleedParameters(5, 2),
+            layout="horizontal",
+        )
+
+        expanded = apply_frame_bleed(
+            geometry,
+            plan,
+            layout="horizontal",
+            image_width=300,
+            image_height=60,
+        )
+
+        self.assertEqual(expanded.frames[0], Box(5, 3, 105, 57))
+        self.assertEqual(expanded.frames[2], Box(195, 3, 295, 57))
+        self.assertEqual(expanded.crop_envelope, CropEnvelope(Box(5, 3, 295, 57)))
 
     def test_overlap_requirement_uses_physical_support_not_observation_alias(self) -> None:
         fields = FrameOverlapRequirement.__dataclass_fields__

@@ -77,6 +77,9 @@ repository rules in `AGENTS.md`.
   cache identity；统一 work-layout validator 删除所有“未知即 vertical”的静默 fallback。
 - Transform geometry 与 per-frame bleed plan 增加完整 typed invariants；applied angle、span pair、用户
   bleed、overlap protection、unresolved boundaries、feasible 和 reason 不能表达互相矛盾的状态。
+- `CropEnvelope` 不再兼任 output clamp。`FrameBleedPlan` 显式保存 holder/lane
+  `frame_output_bounds`，用户与叠片 bleed 可在基础物理包络外扩张，但不能越过实际输出边界；
+  final frame 必须包含对应 decision frame。
 - `FormatPhysicalSpec` 删除未参与检测的 family 描述，`FrameSizeMm` 删除由 option 顺序已唯一表达的
   nominal/variant label；configuration report 只输出检测实际消费的物理事实。
 - CandidateGate 直接消费的 topology、content preservation、frame dimensions、sequence
@@ -247,6 +250,9 @@ schema_revision: frame_sequence_geometry
   a compatibility shim.
 - Per-boundary `FrameBleedPlan` replaces global overlap capacity. Only adjacent frame
   sides receive independently observed or independent-constraint corroborated overlap protection.
+- `CropEnvelope` no longer doubles as the output clamp. Each frame has an explicit
+  holder/lane `frame_output_bounds`; user and overlap bleed may expand beyond the
+  physical envelope without shrinking or moving the decision frame.
 - Current reports use `detection_report / physical_sequence_resolution` with canonical
   `input / configuration / selection / decision / output` sections. Old records are
   redetected.

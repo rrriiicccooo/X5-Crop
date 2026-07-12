@@ -68,6 +68,9 @@ def _frame_bleed_plan(value: dict[str, Any]) -> FrameBleedPlan:
         user_bleed=AxisBleedParameters(
             int(user["long_axis"]), int(user["short_axis"])
         ),
+        frame_output_bounds=tuple(
+            _box(item) for item in value["frame_output_bounds"]
+        ),
         frame_sides=tuple(
             FrameSideBleed(
                 int(item["frame_index"]),
