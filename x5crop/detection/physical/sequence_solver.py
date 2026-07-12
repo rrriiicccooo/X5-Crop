@@ -66,6 +66,8 @@ class _SolvedAssignmentState:
     state: _AssignmentState
     boundaries: tuple[FrameBoundary, ...]
     focused_assignments: tuple[SeparatorAssignment, ...]
+    frames: tuple[Box, ...]
+    photo_intervals: tuple[PhotoInterval, ...]
 
 
 def _assignment_rank(
@@ -318,6 +320,7 @@ def _solve_assignment_states(
     dimensions: FrameDimensionPrior,
     holder_occlusion: HolderOcclusionEvidence,
     focused: dict[int, SeparatorBandObservation],
+    boundary_observations: tuple[BoundaryObservation, ...],
 ) -> tuple[_SolvedAssignmentState, ...]:
     assignment_counts = sorted(
         {len(state.selections) for state in states},
@@ -337,6 +340,12 @@ def _solve_assignment_states(
                     _selected_assignments(state),
                     focused,
                 )
+                frames = _frames(span, boundaries, count)
+                photo_intervals = _photo_intervals(
+                    boundaries,
+                    frames,
+                    boundary_observations,
+                )
             except ValueError:
                 continue
             solved.append(
@@ -344,6 +353,8 @@ def _solve_assignment_states(
                     state,
                     boundaries,
                     focused_assignments,
+                    frames,
+                    photo_intervals,
                 )
             )
         if solved:
@@ -619,6 +630,7 @@ def solve_frame_sequence(
         dimensions,
         holder_occlusion,
         dict(focused_observations),
+        boundary_observations,
     )
     representative = max(solved_states, key=lambda item: item.state.rank)
     selected = _selected_assignments(representative.state)
@@ -631,8 +643,8 @@ def solve_frame_sequence(
         selected_observations.get(id(observation), search.diagnostic[id_index])
         for id_index, observation in enumerate(observations)
     ) + focused_assignments
-    frames = _frames(span, boundaries, count)
-    intervals = _photo_intervals(boundaries, frames, boundary_observations)
+    frames = representative.frames
+    intervals = representative.photo_intervals
     relations = _relations(
         boundaries,
         dimensions,

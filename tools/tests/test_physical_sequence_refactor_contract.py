@@ -180,6 +180,46 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
         )
         self.assertTrue(result.search_budget_exhausted)
 
+    def test_overlapping_separator_bands_cannot_form_negative_photo_extent(
+        self,
+    ) -> None:
+        result = solve_frame_sequence(
+            (
+                separator_observation(120.0, start=80.0, end=160.0),
+                separator_observation(180.0, start=150.0, end=210.0),
+            ),
+            (),
+            VisibleSequenceSpan(Box(0, 0, 300, 100)),
+            3,
+            FrameDimensionPrior(
+                PixelInterval(50.0, 150.0),
+                PixelInterval.exact(100.0),
+                (36.0, 24.0),
+                "synthetic",
+                MeasurementProvenance(
+                    "frame_dimensions",
+                    "synthetic",
+                    ("physical_frame_size",),
+                ),
+            ),
+            HolderOcclusionEvidence.not_applicable(),
+            (),
+            10_000,
+        )
+        self.assertTrue(all(frame.valid() for frame in result.frames))
+        self.assertTrue(
+            all(interval.width_px.maximum > 0.0 for interval in result.photo_intervals)
+        )
+        selected = tuple(
+            assignment
+            for assignment in result.assignments
+            if assignment.used_for_boundary
+        )
+        self.assertFalse(
+            len(selected) == 2
+            and selected[0].observation.end > selected[1].observation.start
+        )
+
     def test_broad_tonal_band_cannot_become_independent_separator(self) -> None:
         observation = separator_observation(
             325.0,
