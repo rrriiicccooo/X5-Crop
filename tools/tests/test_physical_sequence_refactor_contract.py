@@ -660,14 +660,14 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
         selection = replace(
             selection_fixture(candidate),
             geometry_resolution=GeometryResolution(
-                EvidenceState.UNAVAILABLE,
                 False,
                 False,
                 False,
                 False,
                 True,
                 True,
-                ("count_unresolved",),
+                True,
+                False,
             ),
         )
         detection = apply_decision_gate(

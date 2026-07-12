@@ -254,16 +254,13 @@ class PhysicalModelInvariantTest(unittest.TestCase):
     def test_selection_models_reject_internally_inconsistent_states(self) -> None:
         candidate = candidate_fixture()
         selection = selection_fixture()
+        resolution_fields = GeometryResolution.__dataclass_fields__
+        self.assertFalse(resolution_fields["state"].init)
+        self.assertFalse(resolution_fields["reasons"].init)
         invalid_factories = (
-            lambda: GeometryResolution(
-                EvidenceState.SUPPORTED,
-                False,
-                True,
-                True,
-                True,
-                True,
-                True,
-                (),
+            lambda: replace(
+                selection.geometry_resolution,
+                state=EvidenceState.UNAVAILABLE,
             ),
             lambda: GeometryCluster((), candidate),
             lambda: CountResolution(0, (1,), (1,), None, "synthetic"),
@@ -276,7 +273,9 @@ class PhysicalModelInvariantTest(unittest.TestCase):
             ),
         )
         for factory in invalid_factories:
-            with self.subTest(factory=factory), self.assertRaises(ValueError):
+            with self.subTest(factory=factory), self.assertRaises(
+                (TypeError, ValueError)
+            ):
                 factory()
 
     def test_pixel_intervals_and_residuals_require_finite_values(self) -> None:

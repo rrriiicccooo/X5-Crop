@@ -49,14 +49,14 @@ class PhysicalGateModelContractTest(unittest.TestCase):
     ) -> None:
         detection = self._decision_for_resolution(
             GeometryResolution(
-                EvidenceState.UNAVAILABLE,
                 False,
                 False,
                 False,
                 True,
                 True,
                 True,
-                ("count_unresolved", "placement_unresolved"),
+                True,
+                False,
             )
         )
         self.assertEqual(
@@ -67,14 +67,14 @@ class PhysicalGateModelContractTest(unittest.TestCase):
     def test_selection_disagreement_owns_its_final_reason(self) -> None:
         detection = self._decision_for_resolution(
             GeometryResolution(
-                EvidenceState.UNAVAILABLE,
                 True,
                 True,
                 True,
                 True,
                 True,
                 False,
-                ("geometry_clusters_disagree",),
+                True,
+                False,
             ),
             consensus="disagreed",
         )

@@ -127,26 +127,15 @@ def geometry_resolution_for_selection(
 ) -> GeometryResolution:
     evidence_model = selected.assessment.evidence
     if isinstance(evidence_model, ReviewOnlyEvidence):
-        reasons = (
-            "count_unresolved",
-            "placement_unresolved",
-            "boundaries_unresolved",
-            "content_preservation_unavailable",
-            "separator_assignment_geometry_unresolved",
-        )
-        if not larger_counts_evaluated:
-            reasons = (*reasons, "larger_counts_not_evaluated")
-        if consensus == "disagreed":
-            reasons = (*reasons, "geometry_clusters_disagree")
         return GeometryResolution(
-            state=EvidenceState.UNAVAILABLE,
             count_resolved=False,
             placement_resolved=False,
             boundaries_resolved=False,
             content_preservation_compatible=False,
             larger_counts_evaluated=larger_counts_evaluated,
             alternative_geometries_resolved=consensus != "disagreed",
-            reasons=reasons,
+            assignment_geometry_resolved=False,
+            search_budget_exhausted=selected.geometry.search_budget_exhausted,
         )
     evidence_sets = (
         evidence_model.lane_evidence
@@ -219,37 +208,15 @@ def geometry_resolution_for_selection(
         )
     )
     alternative_geometries_resolved = consensus != "disagreed"
-    reasons: list[str] = []
-    if not count_resolved:
-        reasons.append("count_unresolved")
-    if not placement_resolved:
-        reasons.append("placement_unresolved")
-    if not boundaries_resolved:
-        reasons.append("boundaries_unresolved")
-    if not content_preservation_compatible:
-        reasons.append("content_preservation_contradicted")
-    if not larger_counts_evaluated:
-        reasons.append("larger_counts_not_evaluated")
-    if not alternative_geometries_resolved:
-        reasons.append("geometry_clusters_disagree")
-    if not assignment_geometry_resolved:
-        reasons.append("separator_assignment_geometry_unresolved")
-    if selected.geometry.search_budget_exhausted:
-        reasons.append("search_budget_exhausted")
-    supported = not reasons
     return GeometryResolution(
-        state=(
-            EvidenceState.SUPPORTED
-            if supported
-            else EvidenceState.UNAVAILABLE
-        ),
         count_resolved=count_resolved,
         placement_resolved=placement_resolved,
         boundaries_resolved=boundaries_resolved,
         content_preservation_compatible=content_preservation_compatible,
         larger_counts_evaluated=larger_counts_evaluated,
         alternative_geometries_resolved=alternative_geometries_resolved,
-        reasons=tuple(reasons),
+        assignment_geometry_resolved=assignment_geometry_resolved,
+        search_budget_exhausted=selected.geometry.search_budget_exhausted,
     )
 
 

@@ -161,14 +161,14 @@ class PhysicalDetectionResolutionContractTest(unittest.TestCase):
         unresolved = replace(
             selection_fixture(higher),
             geometry_resolution=GeometryResolution(
-                EvidenceState.UNAVAILABLE,
                 False,
                 False,
                 False,
                 True,
                 True,
                 True,
-                ("count_unresolved",),
+                True,
+                False,
             ),
         )
         resolved = selection_fixture(lower)
