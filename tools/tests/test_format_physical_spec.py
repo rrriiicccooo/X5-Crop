@@ -10,6 +10,11 @@ from x5crop.configuration.bundle import DetectionConfigurationBundle
 
 
 class FormatPhysicalSpecTests(unittest.TestCase):
+    def test_format_factory_accepts_one_physical_size_source(self) -> None:
+        import x5crop.formats as formats
+
+        self.assertFalse(hasattr(formats, "_format_spec"))
+
     def test_physical_spec_and_report_exclude_unused_family_description(self) -> None:
         from x5crop.formats import FormatPhysicalSpec, FrameSizeMm
 

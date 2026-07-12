@@ -86,88 +86,56 @@ def expected_separator_count(
     return int(default_count) - 1
 
 
-def _format_spec(
-    format_id: str,
-    default_count: int,
-    allowed_counts: tuple[int, ...],
-    nominal_frame_size_mm: FrameSizeMm,
-    *,
-    lane_count: int,
-    frame_size_mm_options: tuple[FrameSizeMm, ...] = (),
-    physical_layout: str = "single_strip",
-    complete_strip_can_be_underfilled: bool = False,
-    lane_format_id: str | None = None,
-) -> FormatPhysicalSpec:
-    frame_options = frame_size_mm_options or (nominal_frame_size_mm,)
-    return FormatPhysicalSpec(
-        format_id=format_id,
-        default_count=default_count,
-        allowed_counts=allowed_counts,
-        frame_size_mm_options=frame_options,
-        physical_layout=physical_layout,
-        complete_strip_can_be_underfilled=complete_strip_can_be_underfilled,
-        lane_count=lane_count,
-        lane_format_id=lane_format_id,
-    )
-
-
 FORMATS: dict[str, FormatPhysicalSpec] = {
-    "135": _format_spec(
-        "135",
-        6,
-        tuple(range(1, 7)),
-        FrameSizeMm(36.0, 24.0),
-        lane_count=1,
+    "135": FormatPhysicalSpec(
+        format_id="135",
+        default_count=6,
+        allowed_counts=tuple(range(1, 7)),
+        frame_size_mm_options=(FrameSizeMm(36.0, 24.0),),
     ),
-    "135-dual": _format_spec(
-        "135-dual",
-        12,
-        (12,),
-        FrameSizeMm(36.0, 24.0),
+    "135-dual": FormatPhysicalSpec(
+        format_id="135-dual",
+        default_count=12,
+        allowed_counts=(12,),
+        frame_size_mm_options=(FrameSizeMm(36.0, 24.0),),
         physical_layout="dual_lane",
         lane_count=2,
         lane_format_id="135",
     ),
-    "half": _format_spec(
-        "half",
-        12,
-        tuple(range(1, 13)),
-        FrameSizeMm(18.0, 24.0),
-        lane_count=1,
+    "half": FormatPhysicalSpec(
+        format_id="half",
+        default_count=12,
+        allowed_counts=tuple(range(1, 13)),
+        frame_size_mm_options=(FrameSizeMm(18.0, 24.0),),
     ),
-    "xpan": _format_spec(
-        "xpan",
-        3,
-        (1, 2, 3),
-        FrameSizeMm(65.0, 24.0),
-        lane_count=1,
+    "xpan": FormatPhysicalSpec(
+        format_id="xpan",
+        default_count=3,
+        allowed_counts=(1, 2, 3),
+        frame_size_mm_options=(FrameSizeMm(65.0, 24.0),),
         complete_strip_can_be_underfilled=True,
     ),
-    "120-645": _format_spec(
-        "120-645",
-        4,
-        (1, 2, 3, 4),
-        FrameSizeMm(42.0, 56.0),
-        lane_count=1,
+    "120-645": FormatPhysicalSpec(
+        format_id="120-645",
+        default_count=4,
+        allowed_counts=(1, 2, 3, 4),
+        frame_size_mm_options=(FrameSizeMm(42.0, 56.0),),
     ),
-    "120-66": _format_spec(
-        "120-66",
-        3,
-        (1, 2, 3),
-        FrameSizeMm(56.0, 56.0),
-        lane_count=1,
+    "120-66": FormatPhysicalSpec(
+        format_id="120-66",
+        default_count=3,
+        allowed_counts=(1, 2, 3),
         frame_size_mm_options=(
             FrameSizeMm(56.0, 56.0),
             FrameSizeMm(54.0, 54.0),
         ),
         complete_strip_can_be_underfilled=True,
     ),
-    "120-67": _format_spec(
-        "120-67",
-        3,
-        (1, 2, 3),
-        FrameSizeMm(70.0, 56.0),
-        lane_count=1,
+    "120-67": FormatPhysicalSpec(
+        format_id="120-67",
+        default_count=3,
+        allowed_counts=(1, 2, 3),
+        frame_size_mm_options=(FrameSizeMm(70.0, 56.0),),
     ),
 }
 

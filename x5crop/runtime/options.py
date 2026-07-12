@@ -6,6 +6,7 @@ from typing import Optional
 
 from ..output.model import AxisBleedParameters
 from ..geometry.layout import HORIZONTAL, VERTICAL
+from ..run_config import CompressionMode
 
 
 DEFAULT_DESKEW_MIN_ANGLE_DEGREES = 0.03
@@ -14,7 +15,7 @@ DEFAULT_OUTPUT_BLEED = AxisBleedParameters(long_axis=20, short_axis=10)
 LAYOUT_CHOICES = ("auto", HORIZONTAL, VERTICAL)
 DESKEW_CHOICES = ("off", "auto")
 DESKEW_FALLBACK_CHOICES = ("off", "auto", "always")
-COMPRESSION_CHOICES = ("none", "same")
+COMPRESSION_CHOICES: tuple[CompressionMode, ...] = ("none", "same")
 
 
 @dataclass(frozen=True)
@@ -36,7 +37,7 @@ class RuntimeOptions:
     review_dir: Optional[Path]
     copy_review_files: bool
     export_review: bool
-    compression: str
+    compression: CompressionMode
     debug: bool
     debug_analysis: bool
     dry_run: bool

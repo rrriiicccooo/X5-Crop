@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from functools import lru_cache
-
 from ..formats import FORMAT_CHOICES, format_spec
 from ..strip_modes import STRIP_MODES
 from .boundary import BoundaryObservationParameters
@@ -12,7 +10,6 @@ from .model import DetectionConfiguration
 from .preprocess import PreprocessConfiguration
 from .separator import SeparatorConfiguration
 
-@lru_cache(maxsize=None)
 def get_detection_configuration(
     format_id: str,
     strip_mode: str,

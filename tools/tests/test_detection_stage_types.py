@@ -7,6 +7,8 @@ from types import SimpleNamespace
 import unittest
 from typing import get_type_hints
 
+import numpy as np
+
 from x5crop.debug.status import debug_status_parts
 from x5crop.detection.candidate.model import (
     AssessedCandidate,
@@ -27,7 +29,7 @@ from x5crop.detection.pipeline import choose_detection
 from x5crop.export.actions import copy_for_review_if_needed, write_crops_if_allowed
 from x5crop.report.result_builder import result_from_detection
 from x5crop.report.record import report_record_for_final_detection
-from x5crop.domain import CropEnvelope
+from x5crop.domain import Box, CropEnvelope
 from x5crop.output.model import OutputGeometry
 from x5crop.units import ScanCalibration
 
@@ -298,6 +300,15 @@ class DetectionStageTypeContractTests(unittest.TestCase):
             with self.subTest(function=function.__name__):
                 annotation = inspect.signature(function).parameters["detection"].annotation
                 self.assertEqual(annotation, "FinalDetection")
+
+    def test_export_surfaces_preserve_canonical_array_and_frame_types(self) -> None:
+        from x5crop.export.crops import write_crops
+
+        action_hints = get_type_hints(write_crops_if_allowed)
+        crop_hints = get_type_hints(write_crops)
+        self.assertIs(action_hints["arr"], np.ndarray)
+        self.assertIs(action_hints["source_arr"], np.ndarray)
+        self.assertEqual(crop_hints["frames"], tuple[Box, ...])
 
     def test_candidate_layers_do_not_import_final_detection(self) -> None:
         checked_roots = (

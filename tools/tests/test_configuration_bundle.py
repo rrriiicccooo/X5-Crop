@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import MISSING, fields, replace
+import inspect
 from pathlib import Path
 import unittest
 from unittest.mock import patch
@@ -13,6 +14,29 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 class DetectionConfigurationBundleTests(unittest.TestCase):
+    def test_bundle_stores_one_configuration_source_of_truth(self) -> None:
+        self.assertEqual(
+            {field.name for field in fields(DetectionConfigurationBundle)},
+            {"resolved_configurations"},
+        )
+        self.assertIsInstance(
+            DetectionConfigurationBundle.initial_configuration,
+            property,
+        )
+
+    def test_configuration_registry_does_not_cache_runtime_configuration(
+        self,
+    ) -> None:
+        source = (
+            PROJECT_ROOT / "x5crop/configuration/registry.py"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn("lru_cache", source)
+
+    def test_consistency_entry_has_no_ignored_argument_surface(self) -> None:
+        from x5crop.configuration.consistency import main
+
+        self.assertEqual(inspect.signature(main).parameters, {})
+
     def test_bundle_resolves_active_and_lane_configurations(self) -> None:
         bundle = DetectionConfigurationBundle.for_format_mode(
             "135-dual",
@@ -51,12 +75,8 @@ class DetectionConfigurationBundleTests(unittest.TestCase):
         bundle = DetectionConfigurationBundle.for_format_mode("135", "full")
         initial = bundle.initial_configuration
         invalid_bundles = (
-            lambda: DetectionConfigurationBundle(initial, ()),
-            lambda: DetectionConfigurationBundle(
-                replace(initial, strip_mode="partial"),
-                (initial,),
-            ),
-            lambda: DetectionConfigurationBundle(initial, (initial, initial)),
+            lambda: DetectionConfigurationBundle(()),
+            lambda: DetectionConfigurationBundle((initial, initial)),
         )
         for factory in invalid_bundles:
             with self.subTest(factory=factory), self.assertRaises(ValueError):

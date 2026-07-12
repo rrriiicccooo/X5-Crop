@@ -8,23 +8,21 @@ from .registry import get_detection_configuration
 
 @dataclass(frozen=True)
 class DetectionConfigurationBundle:
-    initial_configuration: DetectionConfiguration
     resolved_configurations: tuple[DetectionConfiguration, ...]
 
     def __post_init__(self) -> None:
-        if (
-            not self.resolved_configurations
-            or self.resolved_configurations[0] != self.initial_configuration
-        ):
-            raise ValueError(
-                "configuration bundle must start with its initial configuration"
-            )
+        if not self.resolved_configurations:
+            raise ValueError("configuration bundle requires a configuration")
         identities = tuple(
             configuration.configuration_id
             for configuration in self.resolved_configurations
         )
         if len(set(identities)) != len(identities):
             raise ValueError("configuration bundle identities must be unique")
+
+    @property
+    def initial_configuration(self) -> DetectionConfiguration:
+        return self.resolved_configurations[0]
 
     @classmethod
     def for_format_mode(
@@ -43,7 +41,7 @@ class DetectionConfigurationBundle:
             configurations.append(
                 get_detection_configuration(lane_format_id, "full")
             )
-        return cls(initial, tuple(configurations))
+        return cls(tuple(configurations))
 
     def configuration_for(
         self,

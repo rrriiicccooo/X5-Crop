@@ -4,7 +4,6 @@ import numpy as np
 
 from . import MeasurementCache, MeasurementRegionKey
 from ..domain import Box
-from ..geometry.boxes import crop_work_box, full_work_box, is_full_work_box
 from ..image.separator_profile import SeparatorProfileParameters, separator_profile
 
 
@@ -20,25 +19,20 @@ def cached_separator_profile(
     corridor: Box,
     profile_parameters: SeparatorProfileParameters,
 ) -> np.ndarray:
-    if is_full_work_box(cache.gray_work, corridor):
-        key = separator_profile_cache_key(
-            full_work_box(cache.gray_work),
-            profile_parameters,
-        )
-        profile = cache.separator_profiles.get(key)
-        if profile is None:
-            profile = separator_profile(
-                cache.gray_work,
-                cache.image_statistics,
-                profile_parameters,
-            )
-            cache.separator_profiles[key] = profile
-        return profile
-    key = separator_profile_cache_key(corridor, profile_parameters)
+    width = int(cache.gray_work.shape[1])
+    height = int(cache.gray_work.shape[0])
+    measured_corridor = corridor.clamp(width, height)
+    if not measured_corridor.valid():
+        raise ValueError("separator corridor does not intersect the workspace")
+    key = separator_profile_cache_key(measured_corridor, profile_parameters)
     profile = cache.separator_profiles.get(key)
     if profile is None:
+        pixels = cache.gray_work[
+            measured_corridor.top:measured_corridor.bottom,
+            measured_corridor.left:measured_corridor.right,
+        ]
         profile = separator_profile(
-            crop_work_box(cache.gray_work, corridor),
+            pixels,
             cache.image_statistics,
             profile_parameters,
         )

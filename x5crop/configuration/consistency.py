@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Iterable
-
 from ..formats import FORMAT_CHOICES
 from ..strip_modes import FULL, PARTIAL, STRIP_MODES
 from .registry import get_detection_configuration
@@ -27,8 +25,7 @@ def configuration_consistency_issues() -> tuple[str, ...]:
     return tuple(issues)
 
 
-def main(argv: Iterable[str] | None = None) -> int:
-    _ = tuple(argv or ())
+def main() -> int:
     issues = configuration_consistency_issues()
     if issues:
         print("Configuration consistency check failed:")

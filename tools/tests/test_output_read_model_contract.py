@@ -16,6 +16,7 @@ from tools.tests.physical_gate_support import (
 )
 from x5crop.detection.final.model import FinalDetection
 from x5crop.io.model import ImageProfile
+from x5crop.io.tiff import compression_for_write
 from x5crop.configuration.registry import get_detection_configuration
 from x5crop.report.configuration import detection_configuration_read_model
 from x5crop.report.model import ReportResult
@@ -99,6 +100,10 @@ def _record() -> dict:
 
 
 class OutputReadModelContractTest(unittest.TestCase):
+    def test_tiff_compression_mode_is_exhaustive(self) -> None:
+        with self.assertRaises(ValueError):
+            compression_for_write(_profile(), "invalid")
+
     def test_analysis_reuse_is_disabled_for_every_debug_surface(self) -> None:
         from x5crop.runtime.analysis_reuse import result_from_reusable_analysis
 

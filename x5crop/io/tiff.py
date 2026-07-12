@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 import tifffile
 
 from .model import ImageProfile
+from ..run_config import CompressionMode
 from ..utils import (
     enum_name,
     infer_axes,
@@ -101,7 +102,12 @@ def read_tiff(path: Path, page_index: int) -> tuple[np.ndarray, ImageProfile, li
     return arr, profile, warnings
 
 
-def compression_for_write(profile: ImageProfile, mode: str) -> Optional[str]:
+def compression_for_write(
+    profile: ImageProfile,
+    mode: CompressionMode,
+) -> str | None:
+    if mode not in {"none", "same"}:
+        raise ValueError(f"Unsupported TIFF compression mode: {mode}")
     if mode == "none":
         return None
     name = profile.compression.upper()
@@ -118,7 +124,10 @@ def compression_for_write(profile: ImageProfile, mode: str) -> Optional[str]:
     return mapping.get(name)
 
 
-def tiff_write_kwargs(profile: ImageProfile, compression_mode: str) -> dict[str, Any]:
+def tiff_write_kwargs(
+    profile: ImageProfile,
+    compression_mode: CompressionMode,
+) -> dict[str, Any]:
     kwargs: dict[str, Any] = {}
     photometric = profile.photometric.lower()
     if photometric in {"rgb", "minisblack", "miniswhite"}:
@@ -161,7 +170,7 @@ def expected_bits_for_dtype(dtype_name: str, samples: int) -> int | tuple[int, .
     return tuple(bits for _ in range(samples))
 
 
-def rational_to_float(value: Any) -> Optional[float]:
+def rational_to_float(value: Any) -> float | None:
     value = normalize_tag_value(value)
     if isinstance(value, tuple) and len(value) == 2:
         denominator = float(value[1])
@@ -193,7 +202,7 @@ def validate_written_tiff(
     out_path: Path,
     expected_array: np.ndarray,
     source_profile: ImageProfile,
-    compression_mode: str,
+    compression_mode: CompressionMode,
 ) -> None:
     problems: list[str] = []
     with tifffile.TiffFile(out_path) as tif:

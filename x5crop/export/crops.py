@@ -18,7 +18,7 @@ def write_crops(
     arr: np.ndarray,
     source_arr: np.ndarray,
     profile: ImageProfile,
-    frames: list[Box],
+    frames: tuple[Box, ...],
     config: RunConfig,
     deskew_applied: bool,
     output_dir: Path,

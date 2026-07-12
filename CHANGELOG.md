@@ -16,6 +16,11 @@ repository rules in `AGENTS.md`.
 
 #### 封口参数与几何解析契约（2026-07-12）
 
+- Format physical sizes 与 runtime configuration bundle 各自收敛为一个 canonical tuple；删除
+  重复 nominal size 输入、重复 initial configuration 存储和 configuration registry 隐藏缓存。
+- Separator measurement region 现在先 canonicalize 再同时用于 cache key 与 pixels，无交集
+  region 明确失败，不再静默测量整图。Export array/frame 和 TIFF compression mode 也保持
+  canonical typed boundary，未知 compression mode 不再默认为 source mode。
 - Global sequence solver 现在按物理数据流先解出单调 boundaries，再测量首尾
   holder occlusion，最后构建 signed spacing；这使单个缺失 separator 的可验证叠片
   保护路径在真实 runtime 可达，同时禁止候选层预先注入遮挡结论。

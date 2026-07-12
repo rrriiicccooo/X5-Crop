@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+
+import numpy as np
 
 from ..run_config import RunConfig
 from ..detection.final.model import FinalDetection
@@ -33,8 +34,8 @@ def copy_for_review_if_needed(
 
 def write_crops_if_allowed(
     input_file: Path,
-    arr: Any,
-    source_arr: Any,
+    arr: np.ndarray,
+    source_arr: np.ndarray,
     profile: ImageProfile,
     detection: FinalDetection,
     config: RunConfig,

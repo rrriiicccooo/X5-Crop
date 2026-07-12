@@ -2,6 +2,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
+
+
+CompressionMode = Literal["none", "same"]
 
 
 @dataclass(frozen=True)
@@ -23,7 +27,7 @@ class RunConfig:
     review_dir: Path | None
     copy_review_files: bool
     export_review: bool
-    compression: str
+    compression: CompressionMode
     debug: bool
     debug_analysis: bool
     dry_run: bool

@@ -89,30 +89,19 @@ class DetectionCachePerformanceContractTest(unittest.TestCase):
     def test_diagnostics_do_not_invalidate_detection_analysis(self) -> None:
         bundle = DetectionConfigurationBundle.for_format_mode("135", "full")
         configuration = bundle.initial_configuration
+        changed_configuration = replace(
+            configuration,
+            diagnostics=replace(
+                configuration.diagnostics,
+                separator_overlay=replace(
+                    configuration.diagnostics.separator_overlay,
+                    tick_length_min=99,
+                ),
+            ),
+        )
         changed = replace(
             bundle,
-            initial_configuration=replace(
-                configuration,
-                diagnostics=replace(
-                    configuration.diagnostics,
-                    separator_overlay=replace(
-                        configuration.diagnostics.separator_overlay,
-                        tick_length_min=99,
-                    ),
-                ),
-            ),
-            resolved_configurations=(
-                replace(
-                    configuration,
-                    diagnostics=replace(
-                        configuration.diagnostics,
-                        separator_overlay=replace(
-                            configuration.diagnostics.separator_overlay,
-                            tick_length_min=99,
-                        ),
-                    ),
-                ),
-            ),
+            resolved_configurations=(changed_configuration,),
         )
         self.assertEqual(
             analysis_configuration_fingerprint(bundle),
@@ -174,6 +163,32 @@ class DetectionCachePerformanceContractTest(unittest.TestCase):
             cached_separator_profile(cache, Box(0, 0, 240, 60), parameters)
             cached_separator_profile(cache, Box(0, 20, 240, 80), parameters)
         self.assertEqual(measurement.call_count, 2)
+
+    def test_profile_cache_uses_the_canonical_measured_corridor(self) -> None:
+        cache = _cache()
+        parameters = SeparatorProfileParameters()
+        with patch(
+            "x5crop.cache.separator.separator_profile",
+            side_effect=lambda crop, _statistics, _params: np.zeros(
+                crop.shape[1],
+                dtype=np.float32,
+            ),
+        ) as measurement:
+            cached_separator_profile(cache, Box(-20, 0, 120, 80), parameters)
+
+        key = next(iter(cache.separator_profiles))
+        self.assertEqual(key.region, Box(0, 0, 120, 80))
+        self.assertEqual(measurement.call_args.args[0].shape, (80, 120))
+
+    def test_profile_cache_rejects_corridor_outside_the_workspace(self) -> None:
+        cache = _cache()
+        with self.assertRaises(ValueError):
+            cached_separator_profile(
+                cache,
+                Box(300, 0, 400, 80),
+                SeparatorProfileParameters(),
+            )
+        self.assertEqual(cache.separator_profiles, {})
 
     def test_cache_contains_measurements_not_candidates_or_decisions(self) -> None:
         names = {field.name for field in fields(MeasurementCache)}
