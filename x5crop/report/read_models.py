@@ -6,6 +6,7 @@ from typing import Any
 
 from ..detection.candidate.model import AssessedCandidate
 from ..detection.decision.model import DecisionGateAssessment
+from ..detection.gate_checks import GateCheck
 from ..detection.candidate.selection.model import SelectionResult
 from ..detection.physical.model import (
     DualLaneSolution,
@@ -17,6 +18,8 @@ from ..detection.physical.spacing import (
     ObservedSpacingEvidence,
     SpacingHypothesis,
 )
+from ..output.model import FrameBleedPlan
+from ..units import ScanCalibration
 
 
 def typed_read_model(value: Any) -> Any:
@@ -63,7 +66,7 @@ def typed_read_model(value: Any) -> Any:
     return value
 
 
-def gate_check_read_model(check: Any) -> dict[str, Any]:
+def gate_check_read_model(check: GateCheck) -> dict[str, Any]:
     return {
         "code": check.code,
         "stage": check.stage,
@@ -149,11 +152,11 @@ def decision_gate_detail(gate: DecisionGateAssessment) -> dict[str, Any]:
     }
 
 
-def scan_calibration_read_model(calibration: Any) -> dict[str, Any]:
+def scan_calibration_read_model(calibration: ScanCalibration) -> dict[str, Any]:
     return typed_read_model(calibration)
 
 
-def frame_bleed_plan_read_model(plan: Any) -> dict[str, Any]:
+def frame_bleed_plan_read_model(plan: FrameBleedPlan) -> dict[str, Any]:
     return {
         "user_bleed": typed_read_model(plan.user_bleed),
         "frame_output_bounds": typed_read_model(plan.frame_output_bounds),

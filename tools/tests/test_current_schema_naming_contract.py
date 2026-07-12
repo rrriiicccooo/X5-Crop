@@ -2,12 +2,24 @@ from __future__ import annotations
 
 import ast
 from pathlib import Path
+from typing import get_type_hints
 import unittest
 
 from tools.tests.architecture_contracts import PROJECT_ROOT
+from x5crop.configuration.diagnostics import SeparatorOverlayParameters
+from x5crop.debug.panels import make_separator_evidence_debug_rgb
+from x5crop.debug.separators import draw_separator_overlay
+from x5crop.detection.gate_checks import GateCheck
 from x5crop.domain import MeasurementProvenance, SeparatorBandObservation
 from x5crop.io.model import ImageProfile
+from x5crop.output.model import FrameBleedPlan
 from x5crop.report.identity import REPORT_SCHEMA_ID, REPORT_SCHEMA_REVISION
+from x5crop.report.read_models import (
+    frame_bleed_plan_read_model,
+    gate_check_read_model,
+    scan_calibration_read_model,
+)
+from x5crop.units import ScanCalibration
 
 
 def _active_source() -> str:
@@ -18,6 +30,28 @@ def _active_source() -> str:
 
 
 class CurrentSchemaNamingContractTest(unittest.TestCase):
+    def test_known_report_and_debug_interfaces_use_canonical_types(self) -> None:
+        self.assertIs(
+            get_type_hints(make_separator_evidence_debug_rgb)["separator_overlay"],
+            SeparatorOverlayParameters,
+        )
+        self.assertIs(
+            get_type_hints(draw_separator_overlay)["overlay"],
+            SeparatorOverlayParameters,
+        )
+        self.assertIs(
+            get_type_hints(gate_check_read_model)["check"],
+            GateCheck,
+        )
+        self.assertIs(
+            get_type_hints(scan_calibration_read_model)["calibration"],
+            ScanCalibration,
+        )
+        self.assertIs(
+            get_type_hints(frame_bleed_plan_read_model)["plan"],
+            FrameBleedPlan,
+        )
+
     def test_tiff_profile_is_an_immutable_typed_input_contract(self) -> None:
         self.assertTrue(ImageProfile.__dataclass_params__.frozen)
         self.assertFalse(

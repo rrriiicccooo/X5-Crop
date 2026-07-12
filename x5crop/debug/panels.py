@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Any
-
 import numpy as np
 
 from ..detection.final.model import FinalDetection
@@ -13,6 +11,7 @@ from ..image.evidence import (
 from ..configuration.diagnostics import (
     DebugStyleParameters,
     DiagnosticsConfiguration,
+    SeparatorOverlayParameters,
 )
 from ..utils import RGB_CHANNEL_COUNT
 from .canvas import (
@@ -80,7 +79,7 @@ def make_separator_evidence_debug_rgb(
     gray: np.ndarray,
     detection: FinalDetection,
     selected_candidate: AssessedCandidate,
-    separator_overlay: Any,
+    separator_overlay: SeparatorOverlayParameters,
     params: SeparatorEvidenceImageParameters,
     style: DebugStyleParameters,
     render_cache: DebugRenderCache,

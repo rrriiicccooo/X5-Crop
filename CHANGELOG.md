@@ -124,6 +124,8 @@ repository rules in `AGENTS.md`.
   frame-content evidence 删除只供 generic report reflection 使用的固定 composite 字段。
 - Regression compare 使用 source page 与完整 request configuration 构成 typed identity；重复 identity
   直接失败，不再让同名 TIFF 的不同 page 或运行配置静默覆盖。
+- Debug overlay 与 current report projection 直接接收 canonical separator、GateCheck、calibration 和
+  bleed-plan 类型；项目内已知对象不再以 `Any` 掩盖边界。
 - Shared domain 不再混放 report、TIFF 或 output 类型：current-schema `ReportResult` 归 report 并在
   构造时验证，`ImageProfile` 与 TIFF tag value 归 I/O，`AxisBleedParameters` 归 output；units 只
   接收 resolution 与 unit，不再依赖完整 TIFF profile。
@@ -325,6 +327,9 @@ schema_revision: frame_sequence_geometry
   `ReviewOnlyGeometry` types instead of optional lane fields or empty sequence geometry.
 - All behavioral and schema diffs are accepted for this structural project; numerical
   measurement calibration remains separate.
+- Debug overlays and current-report projections now accept canonical separator,
+  GateCheck, calibration, and bleed-plan types instead of hiding known boundaries
+  behind `Any`.
 
 #### Physical Frame-Sequence Model (2026-07-11)
 

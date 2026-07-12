@@ -1,16 +1,13 @@
 from __future__ import annotations
 
-from typing import Any
-
 import numpy as np
 
 from ..detection.final.model import FinalDetection
 from ..detection.candidate.model import AssessedCandidate
 from ..detection.physical.model import DualLaneSolution, SequenceSolution
-from x5crop.domain import FrameBoundarySource, SeparatorBandObservation
-from ..domain import Box
+from ..configuration.diagnostics import DebugStyleParameters, SeparatorOverlayParameters
+from ..domain import Box, FrameBoundarySource, SeparatorBandObservation
 from ..geometry.boxes import map_work_box
-from ..configuration.diagnostics import DebugStyleParameters
 from .canvas import draw_preview_line, draw_preview_mark
 
 
@@ -36,7 +33,7 @@ def _boundary_ticks(
     detection: FinalDetection,
     corridor: Box,
     center: float,
-    overlay: Any,
+    overlay: SeparatorOverlayParameters,
     image_width: int,
     image_height: int,
 ) -> tuple[Box, Box]:
@@ -69,7 +66,7 @@ def _draw_sequence_overlay(
     long_axis_offset: int,
     overlap_boundaries: set[tuple[int | None, int]],
     scale: float,
-    overlay: Any,
+    overlay: SeparatorOverlayParameters,
     style: DebugStyleParameters,
     image_width: int,
     image_height: int,
@@ -133,7 +130,7 @@ def draw_separator_overlay(
     detection: FinalDetection,
     selected_candidate: AssessedCandidate,
     scale: float,
-    overlay: Any,
+    overlay: SeparatorOverlayParameters,
     style: DebugStyleParameters,
 ) -> None:
     geometry = selected_candidate.geometry
