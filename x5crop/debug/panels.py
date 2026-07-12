@@ -94,7 +94,6 @@ def make_debug_analysis_panel(
     gray: np.ndarray,
     detection: FinalDetection,
     diagnostics: DiagnosticsConfiguration,
-    separator_evidence_image: SeparatorEvidenceImageParameters,
     render_cache: DebugRenderCache,
 ) -> np.ndarray:
     separator_overlay = diagnostics.separator_overlay
@@ -114,7 +113,7 @@ def make_debug_analysis_panel(
                 gray,
                 detection,
                 separator_overlay,
-                separator_evidence_image,
+                diagnostics.separator_evidence_image,
                 render_cache,
             ),
             title,

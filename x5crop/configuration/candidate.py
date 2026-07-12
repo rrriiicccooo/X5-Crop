@@ -12,6 +12,8 @@ class DualLaneDividerParameters:
     band_width_max_px: int = 96
     proposal_count: int = 3
     minimum_center_separation_ratio: float = 0.06
+    residual_scale_percentile: float = 90.0
+    numerical_floor: float = 1e-6
 
 
 @dataclass(frozen=True)

@@ -19,12 +19,6 @@ class ScanCalibration:
         return self.y_px_per_mm if axis == "y" else self.x_px_per_mm
 
 
-@dataclass(frozen=True)
-class ScanCalibrationTrustParameters:
-    min_axis_resolution_ratio: float = 0.5
-    max_axis_resolution_ratio: float = 2.0
-
-
 def _numeric_value(value: Any) -> float | None:
     if value is None:
         return None
@@ -62,7 +56,6 @@ def _unavailable(*warnings: str) -> ScanCalibration:
 
 def scan_calibration_from_profile(
     profile: ImageProfile,
-    parameters: ScanCalibrationTrustParameters,
 ) -> ScanCalibration:
     if not profile.resolution:
         return _unavailable("missing_tiff_resolution")
@@ -84,18 +77,6 @@ def scan_calibration_from_profile(
     y_px_per_mm = float(y_res) / divisor
     if not math.isfinite(x_px_per_mm) or not math.isfinite(y_px_per_mm):
         return _unavailable("non_finite_tiff_resolution")
-    ratio = x_px_per_mm / y_px_per_mm if y_px_per_mm else 0.0
-    if (
-        ratio < float(parameters.min_axis_resolution_ratio)
-        or ratio > float(parameters.max_axis_resolution_ratio)
-    ):
-        return ScanCalibration(
-            x_px_per_mm=x_px_per_mm,
-            y_px_per_mm=y_px_per_mm,
-            source="tiff_resolution",
-            trusted=False,
-            warnings=("non_square_resolution_ratio",),
-        )
     return ScanCalibration(
         x_px_per_mm=x_px_per_mm,
         y_px_per_mm=y_px_per_mm,

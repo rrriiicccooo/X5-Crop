@@ -39,6 +39,7 @@ class ArchitectureOwnershipContractTest(unittest.TestCase):
                 "strip_mode",
                 "preprocess",
                 "detector_kind",
+                "boundary",
                 "separator",
                 "content",
                 "candidate_plan",

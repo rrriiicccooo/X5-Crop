@@ -28,6 +28,9 @@ from .quality import evidence_quality
 from .separator_support import separator_sequence_evidence
 
 
+MINIMUM_INDEPENDENT_SINGLE_FRAME_BOUNDARY_SIDES = 2
+
+
 def _boundary_proof_paths(
     candidate: BuiltCandidate,
     evidence: CandidateEvidence,
@@ -80,7 +83,8 @@ def _boundary_proof_paths(
         and evidence.content_preservation.state == EvidenceState.SUPPORTED
         and (
             evidence.frame_dimensions.calibration_used
-            or len(measured_single_frame_boundaries) >= 2
+            or len(measured_single_frame_boundaries)
+            >= MINIMUM_INDEPENDENT_SINGLE_FRAME_BOUNDARY_SIDES
         )
     )
     geometry_led = bool(

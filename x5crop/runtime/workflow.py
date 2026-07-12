@@ -60,7 +60,7 @@ def process_one(
         initial_configuration.preprocess,
         warnings,
     )
-    scan_calibration = scan_calibration_from_profile(profile, initial_configuration.preprocess.scan_calibration_trust)
+    scan_calibration = scan_calibration_from_profile(profile)
     measurement_cache = make_measurement_cache(
         gray,
         config.layout,
@@ -125,7 +125,6 @@ def process_one(
         config,
         warnings,
         selected_configuration.diagnostics,
-        selected_configuration.preprocess.separator_evidence_image,
     )
 
     result = result_from_detection(

@@ -10,10 +10,6 @@ from .model import (
     OutputGeometry,
 )
 
-
-DEFAULT_OUTPUT_BLEED = AxisBleedParameters(long_axis=20, short_axis=10)
-
-
 def _long_axis_capacity(
     frame: Box,
     envelope: CropEnvelope,

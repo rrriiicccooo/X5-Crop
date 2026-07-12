@@ -6,6 +6,7 @@ from ....cache import MeasurementCache
 from ....domain import SequenceHypothesis
 from ....formats import FormatPhysicalSpec
 from ....configuration.content import ContentConfiguration
+from ....configuration.boundary import BoundaryObservationParameters
 from ....configuration.separator import SeparatorConfiguration
 from ....configuration.candidate import SequenceHypothesisParameters
 from ....units import ScanCalibration
@@ -26,6 +27,7 @@ def frame_sequence_plan(
     count_hypothesis: CountHypothesis,
     *,
     cache: MeasurementCache,
+    boundary_parameters: BoundaryObservationParameters,
     content_policy: ContentConfiguration,
     separator_policy: SeparatorConfiguration,
     hypothesis_parameters: SequenceHypothesisParameters,
@@ -40,6 +42,7 @@ def frame_sequence_plan(
         cache,
         scan_calibration,
         request.layout,
+        boundary_parameters=boundary_parameters,
         content_policy=content_policy,
         separator_policy=separator_policy,
         hypothesis_parameters=hypothesis_parameters,

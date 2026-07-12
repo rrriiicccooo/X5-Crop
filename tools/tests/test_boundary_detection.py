@@ -18,6 +18,10 @@ from x5crop.domain import (
 )
 from x5crop.image.statistics import ImageMeasurementStatisticsParameters, image_measurement_statistics
 from x5crop.configuration.content import ContentEvidenceParameters
+from x5crop.configuration.boundary import BoundaryObservationParameters
+
+
+BOUNDARY_PARAMETERS = BoundaryObservationParameters()
 
 
 def _statistics(gray: np.ndarray):
@@ -29,7 +33,11 @@ class BoundaryDetectionTests(unittest.TestCase):
         gray = np.full((120, 240), 255, dtype=np.uint8)
         gray[20:100, 40:200] = 120
         gray[20:24, 40:200] = 0
-        results = boundary_observation_groups(gray, _statistics(gray))
+        results = boundary_observation_groups(
+            gray,
+            _statistics(gray),
+            BOUNDARY_PARAMETERS,
+        )
         self.assertEqual(
             tuple(name for name, _observations in results),
             (
@@ -44,7 +52,11 @@ class BoundaryDetectionTests(unittest.TestCase):
     def test_each_side_has_an_explicit_boundary_model(self) -> None:
         gray = np.full((120, 240), 255, dtype=np.uint8)
         gray[20:100, 40:200] = 120
-        _name, observations = boundary_observation_groups(gray, _statistics(gray))[0]
+        _name, observations = boundary_observation_groups(
+            gray,
+            _statistics(gray),
+            BOUNDARY_PARAMETERS,
+        )[0]
         self.assertEqual(
             {observation.side for observation in observations},
             {"leading", "trailing", "top", "bottom"},
@@ -54,7 +66,11 @@ class BoundaryDetectionTests(unittest.TestCase):
     def test_sequence_hypothesis_carries_four_side_boundary_provenance(self) -> None:
         gray = np.full((120, 240), 255, dtype=np.uint8)
         gray[20:100, 40:200] = 120
-        proposals = base_sequence_span_candidates(gray, _statistics(gray))
+        proposals = base_sequence_span_candidates(
+            gray,
+            _statistics(gray),
+            BOUNDARY_PARAMETERS,
+        )
         measured = [
             proposal
             for proposal in proposals
@@ -71,7 +87,11 @@ class BoundaryDetectionTests(unittest.TestCase):
 
     def test_full_canvas_is_preserved_as_safe_overcontain_proposal(self) -> None:
         gray = np.full((120, 240), 255, dtype=np.uint8)
-        proposals = base_sequence_span_candidates(gray, _statistics(gray))
+        proposals = base_sequence_span_candidates(
+            gray,
+            _statistics(gray),
+            BOUNDARY_PARAMETERS,
+        )
         full_canvas = next(item for item in proposals if item.name == "full_canvas")
         self.assertEqual(
             (
@@ -85,17 +105,33 @@ class BoundaryDetectionTests(unittest.TestCase):
 
     def test_no_white_holder_observation_is_invented_without_edge_white(self) -> None:
         gray = np.full((120, 240), 80, dtype=np.uint8)
-        groups = dict(boundary_observation_groups(gray, _statistics(gray)))
+        groups = dict(
+            boundary_observation_groups(
+                gray,
+                _statistics(gray),
+                BOUNDARY_PARAMETERS,
+            )
+        )
         self.assertEqual(groups["white_holder"], ())
 
     def test_uniform_canvas_has_no_invented_pixel_transition(self) -> None:
         for value in (0, 255):
             with self.subTest(value=value):
                 gray = np.full((120, 240), value, dtype=np.uint8)
-                groups = dict(boundary_observation_groups(gray, _statistics(gray)))
+                groups = dict(
+                    boundary_observation_groups(
+                        gray,
+                        _statistics(gray),
+                        BOUNDARY_PARAMETERS,
+                    )
+                )
                 self.assertEqual(groups["tonal"], ())
                 self.assertEqual(groups["texture"], ())
-                proposals = base_sequence_span_candidates(gray, _statistics(gray))
+                proposals = base_sequence_span_candidates(
+                    gray,
+                    _statistics(gray),
+                    BOUNDARY_PARAMETERS,
+                )
                 self.assertEqual([item.name for item in proposals], ["full_canvas"])
 
     def test_content_expands_crop_envelope_without_changing_sequence_geometry(self) -> None:

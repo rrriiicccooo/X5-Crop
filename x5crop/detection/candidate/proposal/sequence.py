@@ -9,6 +9,7 @@ from ....cache.separator import cached_separator_profile
 from ....domain import Box, MeasurementProvenance, SequenceHypothesis
 from ....formats import FormatPhysicalSpec
 from ....configuration.content import ContentConfiguration
+from ....configuration.boundary import BoundaryObservationParameters
 from ....configuration.separator import SeparatorConfiguration
 from ....configuration.candidate import SequenceHypothesisParameters
 from ....units import ScanCalibration
@@ -151,6 +152,7 @@ def sequence_hypotheses(
     calibration: ScanCalibration,
     layout: str,
     *,
+    boundary_parameters: BoundaryObservationParameters,
     content_policy: ContentConfiguration,
     separator_policy: SeparatorConfiguration,
     hypothesis_parameters: SequenceHypothesisParameters,
@@ -160,6 +162,7 @@ def sequence_hypotheses(
     base = base_sequence_span_candidates(
         gray_work,
         cache.image_statistics,
+        boundary_parameters,
     )
     separator_dimension = _separator_dimension_hypotheses(
         base,

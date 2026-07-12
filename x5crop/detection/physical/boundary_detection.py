@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 
+from ...configuration.boundary import BoundaryObservationParameters
 from ...domain import BoundaryObservation, MeasurementProvenance, PixelInterval
 from ...image.statistics import ImageMeasurementStatistics
 from ...utils import runs_from_mask, sampled_percentile
@@ -36,20 +37,32 @@ def _reference_masks(
     intensity: np.ndarray,
     texture: np.ndarray,
     texture_limit: float,
+    parameters: BoundaryObservationParameters,
 ) -> tuple[np.ndarray, np.ndarray]:
     edge_reference = float(np.median((intensity[0], intensity[-1])))
     deviation = np.abs(intensity - edge_reference)
-    tolerance = float(sampled_percentile(deviation, [10.0])[0])
+    tolerance = float(
+        sampled_percentile(
+            deviation,
+            [parameters.holder_reference_percentile],
+        )[0]
+    )
     holder = (deviation <= tolerance) & (texture <= float(texture_limit))
     tonal_change = deviation > tolerance
     return holder, tonal_change
 
 
-def _change_point_interval(profile: np.ndarray, position: int) -> PixelInterval:
+def _change_point_interval(
+    profile: np.ndarray,
+    position: int,
+    parameters: BoundaryObservationParameters,
+) -> PixelInterval:
     if profile.size <= 1:
         return PixelInterval.exact(float(position))
     change = np.abs(np.diff(profile, prepend=profile[:1]))
-    threshold = float(sampled_percentile(change, [90.0])[0])
+    threshold = float(
+        sampled_percentile(change, [parameters.change_point_percentile])[0]
+    )
     if threshold <= 0.0:
         return PixelInterval.exact(float(position))
     runs = tuple(runs_from_mask(change >= threshold))
@@ -67,10 +80,11 @@ def _observation(
     position: int,
     kind: str,
     profile: np.ndarray,
+    parameters: BoundaryObservationParameters,
 ) -> BoundaryObservation:
     return BoundaryObservation(
         side=side,
-        position=_change_point_interval(profile, position),
+        position=_change_point_interval(profile, position, parameters),
         kind=kind,
         provenance=MeasurementProvenance(
             root_measurement="holder_boundary_profile",
@@ -89,6 +103,7 @@ def _four_side_observations(
     kind: str,
     *,
     holder_transition: bool,
+    parameters: BoundaryObservationParameters,
 ) -> tuple[BoundaryObservation, ...]:
     find = _edge_transition if holder_transition else _first_run
     width = int(column_mask.size)
@@ -112,7 +127,7 @@ def _four_side_observations(
         ),
     )
     return tuple(
-        _observation(side, int(position), kind, profile)
+        _observation(side, int(position), kind, profile, parameters)
         for side, position, profile in values
         if position not in {None, 0, len(profile)}
     )
@@ -121,6 +136,7 @@ def _four_side_observations(
 def boundary_observation_groups(
     gray: np.ndarray,
     statistics: ImageMeasurementStatistics,
+    parameters: BoundaryObservationParameters,
 ) -> tuple[BoundaryObservationGroup, ...]:
     column_intensity, column_texture = _axis_profiles(gray, axis=1)
     row_intensity, row_texture = _axis_profiles(gray, axis=0)
@@ -129,11 +145,13 @@ def boundary_observation_groups(
         column_intensity,
         column_texture,
         texture_limit,
+        parameters,
     )
     row_holder, row_tonal = _reference_masks(
         row_intensity,
         row_texture,
         texture_limit,
+        parameters,
     )
     column_texture_change = column_texture > texture_limit
     row_texture_change = row_texture > texture_limit
@@ -149,6 +167,7 @@ def boundary_observation_groups(
             row_intensity,
             "white_holder_transition",
             holder_transition=True,
+            parameters=parameters,
         )
         if edge_is_white_holder
         else ()
@@ -160,6 +179,7 @@ def boundary_observation_groups(
         row_intensity,
         "tonal_transition",
         holder_transition=False,
+        parameters=parameters,
     )
     texture = _four_side_observations(
         column_texture_change,
@@ -168,6 +188,7 @@ def boundary_observation_groups(
         row_texture,
         "texture_transition",
         holder_transition=False,
+        parameters=parameters,
     )
     return (
         ("white_holder", white_holder),

@@ -44,6 +44,7 @@ def evaluate_count_hypothesis(
         context.configuration.physical_spec,
         hypothesis,
         cache=context.measurement_cache,
+        boundary_parameters=context.configuration.boundary,
         content_policy=context.configuration.content,
         separator_policy=context.configuration.separator,
         hypothesis_parameters=context.configuration.candidate_plan.sequence_hypotheses,

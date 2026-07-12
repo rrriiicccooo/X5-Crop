@@ -6,7 +6,6 @@ import numpy as np
 
 from ..run_config import RunConfig
 from ..detection.decision.model import FinalDetection
-from ..image.evidence import SeparatorEvidenceImageParameters
 from ..output.surface import display_generated_path
 from ..configuration.diagnostics import DiagnosticsConfiguration
 from .writer import write_debug_analysis, write_debug_preview
@@ -21,7 +20,6 @@ def write_debug_outputs(
     config: RunConfig,
     warnings: list[str],
     diagnostics: DiagnosticsConfiguration,
-    separator_evidence_image: SeparatorEvidenceImageParameters,
 ) -> None:
     render_cache = DebugRenderCache()
     if config.debug and not config.debug_analysis:
@@ -35,7 +33,6 @@ def write_debug_outputs(
             output_dir,
             input_stem,
             diagnostics,
-            separator_evidence_image,
             render_cache,
         )
         for analysis_path in analysis_paths:

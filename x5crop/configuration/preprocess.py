@@ -6,11 +6,9 @@ from ..image.deskew_parameters import DeskewParameters
 from ..image.evidence import (
     ContentEvidenceImageParameters,
     DeskewFallbackEvidenceParameters,
-    SeparatorEvidenceImageParameters,
 )
 from ..image.gray import BaseGrayParameters
 from ..image.statistics import ImageMeasurementStatisticsParameters
-from ..units import ScanCalibrationTrustParameters
 
 
 @dataclass(frozen=True)
@@ -20,15 +18,9 @@ class PreprocessConfiguration:
     deskew_fallback_evidence: DeskewFallbackEvidenceParameters = field(
         default_factory=DeskewFallbackEvidenceParameters
     )
-    separator_evidence_image: SeparatorEvidenceImageParameters = field(
-        default_factory=SeparatorEvidenceImageParameters
-    )
     content_evidence_image: ContentEvidenceImageParameters = field(
         default_factory=ContentEvidenceImageParameters
     )
     image_statistics: ImageMeasurementStatisticsParameters = field(
         default_factory=ImageMeasurementStatisticsParameters
-    )
-    scan_calibration_trust: ScanCalibrationTrustParameters = field(
-        default_factory=ScanCalibrationTrustParameters
     )

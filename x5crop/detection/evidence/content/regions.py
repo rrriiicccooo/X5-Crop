@@ -29,7 +29,7 @@ def content_region_runs(
     threshold = adaptive_activation_threshold(
         smoothed,
         parameters.activation_percentile,
-        1e-6,
+        content_policy.evidence.minimum_evidence_range,
     )
     if threshold is None:
         return ()

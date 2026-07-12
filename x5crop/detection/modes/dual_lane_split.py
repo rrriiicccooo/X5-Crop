@@ -37,8 +37,14 @@ def lane_divider_proposals(
         return ()
     row_content = content_evidence.mean(axis=1, dtype=np.float64)
     row_texture = content_evidence.std(axis=1, dtype=np.float64)
-    content_scale = max(1e-6, float(np.percentile(row_content, 90.0)))
-    texture_scale = max(1e-6, float(np.percentile(row_texture, 90.0)))
+    content_scale = max(
+        parameters.numerical_floor,
+        float(np.percentile(row_content, parameters.residual_scale_percentile)),
+    )
+    texture_scale = max(
+        parameters.numerical_floor,
+        float(np.percentile(row_texture, parameters.residual_scale_percentile)),
+    )
     gutter_residual = np.maximum(
         row_content / content_scale,
         row_texture / texture_scale,

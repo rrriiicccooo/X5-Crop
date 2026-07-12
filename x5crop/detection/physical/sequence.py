@@ -4,6 +4,7 @@ from collections.abc import Iterable
 
 import numpy as np
 
+from ...configuration.boundary import BoundaryObservationParameters
 from ...domain import BoundaryObservation, MeasurementProvenance, SequenceHypothesis
 from ...image.statistics import ImageMeasurementStatistics
 from .boundary import visible_sequence_and_crop_envelope
@@ -103,8 +104,9 @@ def _mixed_safe_observations(
 def base_sequence_span_candidates(
     gray: np.ndarray,
     statistics: ImageMeasurementStatistics,
+    parameters: BoundaryObservationParameters,
 ) -> list[SequenceHypothesis]:
-    groups = boundary_observation_groups(gray, statistics)
+    groups = boundary_observation_groups(gray, statistics, parameters)
     proposals = [
         proposal
         for name, observations in groups

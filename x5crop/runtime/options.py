@@ -4,9 +4,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
+from ..domain import AxisBleedParameters
+
 
 DEFAULT_DESKEW_MIN_ANGLE_DEGREES = 0.03
 DEFAULT_DESKEW_MAX_ANGLE_DEGREES = 2.0
+DEFAULT_OUTPUT_BLEED = AxisBleedParameters(long_axis=20, short_axis=10)
 LAYOUT_CHOICES = ("auto", "horizontal", "vertical")
 DESKEW_CHOICES = ("off", "auto")
 DESKEW_FALLBACK_CHOICES = ("off", "auto", "always")

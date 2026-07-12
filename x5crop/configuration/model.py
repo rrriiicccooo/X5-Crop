@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from ..formats import FormatPhysicalSpec
+from .boundary import BoundaryObservationParameters
 from .candidate import CandidatePlanParameters
 from .content import ContentConfiguration
 from .diagnostics import DiagnosticsConfiguration
@@ -16,6 +17,7 @@ class DetectionConfiguration:
     strip_mode: str
     preprocess: PreprocessConfiguration
     detector_kind: str
+    boundary: BoundaryObservationParameters
     separator: SeparatorConfiguration
     content: ContentConfiguration
     candidate_plan: CandidatePlanParameters

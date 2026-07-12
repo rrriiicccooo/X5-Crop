@@ -4,6 +4,7 @@ from functools import lru_cache
 
 from ..formats import FORMAT_CHOICES, FormatPhysicalSpec, format_spec
 from ..strip_modes import FULL, PARTIAL, STRIP_MODES
+from .boundary import BoundaryObservationParameters
 from .candidate import CandidatePlanParameters
 from .content import ContentConfiguration
 from .diagnostics import DiagnosticsConfiguration
@@ -35,6 +36,7 @@ def get_detection_configuration(
         strip_mode=strip_mode,
         preprocess=PreprocessConfiguration(),
         detector_kind=_detector_kind(spec, strip_mode),
+        boundary=BoundaryObservationParameters(),
         separator=SeparatorConfiguration(),
         content=ContentConfiguration(),
         candidate_plan=CandidatePlanParameters(),

@@ -20,8 +20,6 @@ class DeskewFallbackEvidenceParameters:
     edge_weight: float = 2.0
     shadow_blend_weight: float = 0.82
     edge_blend_weight: float = 0.18
-    extreme_dark_threshold: int = 35
-    extreme_light_threshold: int = 235
     gutter_extreme_min_fraction: float = 0.82
     gutter_activity_max: float = 0.10
     gutter_run_width_ratio: float = 1.0 / 14.0
@@ -34,11 +32,12 @@ class SeparatorEvidenceImageParameters:
     high_percentile: float = 98.0
     vertical_edge_smooth_ratio: float = 0.0015
     vertical_edge_smooth_min: int = 3
-    tonal_dark_mean: float = 0.28
-    tonal_light_mean: float = 0.78
+    tonal_low_percentile: float = 10.0
+    tonal_high_percentile: float = 90.0
     local_weight: float = 0.72
     vertical_edge_weight: float = 0.28
     tonal_band_weight: float = 0.55
+    numerical_floor: float = 1e-6
 
 
 @dataclass(frozen=True)
@@ -82,10 +81,7 @@ def make_deskew_fallback_gray(
         0.0,
         1.0,
     )
-    extreme = (
-        (gray < params.extreme_dark_threshold)
-        | (gray > params.extreme_light_threshold)
-    ).mean(axis=0)
+    extreme = ((data <= lo) | (data >= hi)).mean(axis=0)
     activity = (gx + gy).mean(axis=0)
     gutter_cols = (
         (extreme >= params.gutter_extreme_min_fraction)
@@ -118,13 +114,23 @@ def make_separator_evidence_gray(
         ),
     )
     column_mean = local.mean(axis=0)
+    tonal_low, tonal_center, tonal_high = sampled_percentile(
+        column_mean,
+        [
+            params.tonal_low_percentile,
+            50.0,
+            params.tonal_high_percentile,
+        ],
+    )
     dark_response = np.clip(
-        (params.tonal_dark_mean - column_mean) / params.tonal_dark_mean,
+        (tonal_center - column_mean)
+        / max(params.numerical_floor, tonal_center - tonal_low),
         0.0,
         1.0,
     )
     light_band = np.clip(
-        (column_mean - params.tonal_light_mean) / (1.0 - params.tonal_light_mean),
+        (column_mean - tonal_center)
+        / max(params.numerical_floor, tonal_high - tonal_center),
         0.0,
         1.0,
     )

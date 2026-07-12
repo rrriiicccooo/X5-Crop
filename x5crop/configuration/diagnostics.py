@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from ..image.evidence import SeparatorEvidenceImageParameters
+
 
 @dataclass(frozen=True)
 class SeparatorOverlayParameters:
@@ -22,6 +24,9 @@ class DebugPanelConfiguration:
 class DiagnosticsConfiguration:
     separator_overlay: SeparatorOverlayParameters = field(
         default_factory=SeparatorOverlayParameters
+    )
+    separator_evidence_image: SeparatorEvidenceImageParameters = field(
+        default_factory=SeparatorEvidenceImageParameters
     )
     debug_panels: tuple[str, ...] = (
         "original_gray",

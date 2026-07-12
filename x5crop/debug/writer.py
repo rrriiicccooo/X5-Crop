@@ -4,7 +4,6 @@ from pathlib import Path
 import numpy as np
 
 from ..detection.decision.model import FinalDetection
-from ..image.evidence import SeparatorEvidenceImageParameters
 from ..configuration.diagnostics import DiagnosticsConfiguration
 from .canvas import DebugRenderCache, write_rgb_jpeg
 from .panels import make_debug_analysis_panel, make_debug_preview_rgb
@@ -30,7 +29,6 @@ def write_debug_analysis(
     output_dir: Path,
     stem: str,
     diagnostics: DiagnosticsConfiguration,
-    separator_evidence_image: SeparatorEvidenceImageParameters,
     render_cache: DebugRenderCache,
 ) -> list[str]:
     analysis_dir = output_dir / "_debug_analysis"
@@ -40,7 +38,6 @@ def write_debug_analysis(
             gray,
             detection,
             diagnostics,
-            separator_evidence_image,
             render_cache,
         ),
         panel_path,
