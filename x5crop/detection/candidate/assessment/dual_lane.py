@@ -8,20 +8,13 @@ from ..model import (
     CandidateAssessment,
     CandidateEvidence,
     DualLaneEvidence,
+    _combined_evidence_state,
 )
 from .candidate_gate import (
     BoundaryProofPath,
     CandidateGateInput,
     candidate_gate_assessment,
 )
-
-
-def _combined_state(states: tuple[EvidenceState, ...]) -> EvidenceState:
-    if any(state == EvidenceState.CONTRADICTED for state in states):
-        return EvidenceState.CONTRADICTED
-    if states and all(state == EvidenceState.SUPPORTED for state in states):
-        return EvidenceState.SUPPORTED
-    return EvidenceState.UNAVAILABLE
 
 
 def assess_dual_lane_candidate(
@@ -75,22 +68,19 @@ def assess_dual_lane_candidate(
     )
     gate = candidate_gate_assessment(
         CandidateGateInput(
-            frame_topology=_combined_state(
-                tuple(item.frame_topology.state for item in physical_evidence)
-            ),
-            content_preservation=_combined_state(
+            content_preservation=_combined_evidence_state(
                 tuple(item.content_preservation.state for item in physical_evidence)
             ),
-            photo_geometry=_combined_state(
+            photo_geometry=_combined_evidence_state(
                 tuple(item.frame_dimensions.state for item in physical_evidence)
             ),
-            sequence_conservation=_combined_state(
+            sequence_conservation=_combined_evidence_state(
                 tuple(
                     item.sequence_conservation.state
                     for item in physical_evidence
                 )
             ),
-            evidence_independence=_combined_state(
+            evidence_independence=_combined_evidence_state(
                 tuple(item.independence.state for item in physical_evidence)
             ),
             proof_paths=(proof_path,),

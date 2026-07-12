@@ -43,6 +43,9 @@ repository rules in `AGENTS.md`.
   删除永远 supported 的伪 evidence state，partial occupancy proof 也必须确实观测到 underfilled geometry。
 - Frame coverage 现在只保存 canonical holder/sequence、frame union、content runs 与 candidate count；
   uncovered content、region diagnostic、state 和 reason 全部确定性派生，无法与 interval facts 漂移。
+- Frame topology 收敛为 `SequenceSolution` / `DualLaneSolution` 的构造不变量；删除重复 evidence、
+  CandidateGate check 和不可达 final reason。CandidateGate checks 也必须与 canonical evidence 及完整
+  proof-path set 精确一致。
 - Format physical sizes 与 runtime configuration bundle 各自收敛为一个 canonical tuple；删除
   重复 nominal size 输入、重复 initial configuration 存储和 configuration registry 隐藏缓存。
 - Separator measurement region 现在先 canonicalize 再同时用于 cache key 与 pixels，无交集

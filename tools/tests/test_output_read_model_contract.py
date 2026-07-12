@@ -584,7 +584,7 @@ class OutputReadModelContractTest(unittest.TestCase):
             "checks"
         ][0]
         check["stage"] = "decision"
-        check["final_review_reason"] = "frame_topology_invalid"
+        check["final_review_reason"] = "content_preservation_unresolved"
         self.assertTrue(current_report_record_errors(record))
 
     def test_final_reasons_are_derived_from_decision_checks(self) -> None:

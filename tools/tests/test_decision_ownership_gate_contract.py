@@ -13,7 +13,6 @@ from x5crop.detection.decision.vocabulary import (
     FINAL_REASON_AUTOMATIC_PROCESSING_NOT_SUPPORTED,
     FINAL_REASON_BOUNDARY_EVIDENCE_INSUFFICIENT,
     FINAL_REASON_CONTENT_PRESERVATION_UNRESOLVED,
-    FINAL_REASON_FRAME_TOPOLOGY_INVALID,
     FINAL_REASON_OUTPUT_PROTECTION_UNRESOLVED,
     FINAL_REASON_SELECTION_GEOMETRY_DISAGREEMENT,
     FINAL_REASON_TRANSFORM_GEOMETRY_UNCERTAIN,
@@ -71,17 +70,6 @@ class DecisionOwnershipGateContractTest(unittest.TestCase):
         self.assertFalse(hasattr(decided, "confidence"))
         self.assertEqual(decided.status, "approved_auto")
         self.assertEqual(decided.final_review_reasons, ())
-
-    def test_candidate_failure_projects_specific_reason(self) -> None:
-        decided = decide_candidate(
-            candidate_fixture(
-                failed_candidate_check="frame_topology_integrity",
-            )
-        )
-        self.assertEqual(
-            decided.final_review_reasons,
-            (FINAL_REASON_FRAME_TOPOLOGY_INVALID,),
-        )
 
     def test_missing_boundary_proof_has_one_reason(self) -> None:
         decided = decide_candidate(

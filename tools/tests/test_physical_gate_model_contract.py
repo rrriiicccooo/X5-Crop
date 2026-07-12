@@ -83,34 +83,6 @@ class PhysicalGateModelContractTest(unittest.TestCase):
             ("selection_geometry_disagreement",),
         )
 
-    def test_candidate_physical_failure_owns_its_final_reason(self) -> None:
-        candidate = candidate_fixture(
-            failed_candidate_check="frame_topology_integrity",
-        )
-        selection = replace(
-            selection_fixture(candidate),
-            geometry_resolution=GeometryResolution(
-                EvidenceState.UNAVAILABLE,
-                False,
-                False,
-                False,
-                False,
-                True,
-                True,
-                ("count_unresolved", "placement_unresolved"),
-            ),
-        )
-        detection = apply_decision_gate(
-            selection,
-            frame_bleed_fixture(feasible=False),
-            transform_geometry_fixture(EvidenceState.CONTRADICTED),
-        )
-
-        self.assertEqual(
-            detection.final_review_reasons,
-            ("frame_topology_invalid",),
-        )
-
     def test_evidence_state_has_explicit_non_failure_states(self) -> None:
         self.assertEqual(
             {state.value for state in EvidenceState},
@@ -271,7 +243,7 @@ class PhysicalGateModelContractTest(unittest.TestCase):
     def test_final_reason_vocabulary_is_finite_and_physical(self) -> None:
         from x5crop.detection.decision.vocabulary import FINAL_REVIEW_REASONS
 
-        self.assertEqual(len(FINAL_REVIEW_REASONS), 12)
+        self.assertEqual(len(FINAL_REVIEW_REASONS), 11)
         self.assertIn("content_preservation_unresolved", FINAL_REVIEW_REASONS)
         self.assertIn("boundary_evidence_insufficient", FINAL_REVIEW_REASONS)
         self.assertIn("frame_sequence_not_conserved", FINAL_REVIEW_REASONS)

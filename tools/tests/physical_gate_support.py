@@ -40,7 +40,6 @@ from x5crop.detection.evidence.content.frame_support import (
 from x5crop.detection.evidence.content.holder_texture import HolderTextureEvidence
 from x5crop.detection.evidence.content.preservation import ContentPreservationEvidence
 from x5crop.detection.evidence.frame_coverage import FrameCoverageEvidence
-from x5crop.detection.evidence.frame_topology import FrameTopologyEvidence
 from x5crop.detection.evidence.holder_occupancy import (
     HolderOccupancyEvidence,
     StripCompletenessEvidence,
@@ -167,7 +166,6 @@ def candidate_gate_fixture(
     failed_check: str = "boundary_proof",
 ) -> CandidateGateAssessment:
     codes = (
-        "frame_topology_integrity",
         "content_preservation",
         "photo_geometry_consistency",
         "frame_sequence_conservation",
@@ -186,10 +184,25 @@ def candidate_gate_fixture(
         )
         for code in codes
     )
+    boundary_supported = passed or failed_check != "boundary_proof"
     proof_paths = (
         BoundaryProofPath(
             code="separator_led",
-            state=(EvidenceState.SUPPORTED if passed else EvidenceState.UNAVAILABLE),
+            state=(
+                EvidenceState.SUPPORTED
+                if boundary_supported
+                else EvidenceState.UNAVAILABLE
+            ),
+            supporting_evidence=("test_fixture",),
+        ),
+        BoundaryProofPath(
+            code="geometry_led",
+            state=EvidenceState.UNAVAILABLE,
+            supporting_evidence=("test_fixture",),
+        ),
+        BoundaryProofPath(
+            code="partial_occupancy_led",
+            state=EvidenceState.NOT_APPLICABLE,
             supporting_evidence=("test_fixture",),
         ),
     )
@@ -210,20 +223,6 @@ def candidate_evidence_fixture(
     visible_sequence_span = VisibleSequenceSpan(sequence_box)
     completeness = StripCompletenessEvidence(2, 2, 2, 1, 1)
     return CandidateEvidence(
-        frame_topology=FrameTopologyEvidence(
-            EvidenceState.SUPPORTED,
-            "sequence",
-            2,
-            2,
-            True,
-            True,
-            True,
-            True,
-            (),
-            (),
-            (),
-            frames,
-        ),
         frame_coverage=FrameCoverageEvidence(
             holder_long_axis_interval=(0, 200),
             visible_sequence_interval=(0, 200),

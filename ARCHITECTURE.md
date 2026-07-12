@@ -177,14 +177,13 @@ GeometryResolution 都成立。
 Geometry 不保存重复的 candidate-source、hypothesis name 或 strategy string。Geometry type、
 automatic-processing eligibility 与 measurement provenance 共同表达其物理身份。
 
-Candidate evidence 包括 topology、frame coverage、separator sequence、photo dimensions、
-content preservation、holder occupancy、sequence conservation 和 evidence independence。
+Candidate evidence 包括 frame coverage、separator sequence、photo dimensions、content preservation、
+holder occupancy、sequence conservation 和 evidence independence。
 Evidence 只保存测量与状态，不携带固定 report 描述副本。
-直接进入 CandidateGate 或 geometry resolution 的 topology、coverage、preservation、dimensions、
-conservation 与 independence 在 typed model 边界重算 state/derived measurements；state 不能与 raw
-physical facts 漂移。
-Topology 显式区分 sequence、lane composition 与 unmeasured scope；dual-lane measurement root
-保留 lane identity 后再聚合。
+直接进入 CandidateGate 或 geometry resolution 的 coverage、preservation、dimensions、conservation
+与 independence 在 typed model 边界重算 state/derived measurements；state 不能与 raw physical facts
+漂移。Frame count、positive extent、order、overlap absence 与完整 partition 已由 `SequenceSolution` 和
+`DualLaneSolution` 构造器强制，不再复制成 evidence 或 GateCheck。
 
 `FrameDimensionPrior` 只约束搜索。只有独立 photo-edge measurement 才能形成
 `FrameDimensionEvidence`。Content run 数量只做 guidance/diagnostic，不能证明 frame count。
@@ -223,8 +222,8 @@ clustering tolerance。
 
 ### 1.7 Gate、Output Protection 与 Finalization
 
-`CandidateGate` 只检查 topology、content preservation、measured photo geometry、sequence
-conservation、evidence independence 和 proof paths。
+`CandidateGate` 只检查 content preservation、measured photo geometry、sequence conservation、
+evidence independence 和完整 proof paths。
 `GateCheck` 只表达所属 stage 与 evidence state；所有 check 都是该 Gate 的正式检查，不再保留
 未使用的 consequence 维度。Candidate check 不能拥有 final reason，diagnostic 也不能伪装成
 GateCheck。

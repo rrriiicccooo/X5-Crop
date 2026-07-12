@@ -170,13 +170,6 @@ def geometry_resolution_for_selection(
         hypothesis.source
         in {CountHypothesisSource.FORMAT_DEFAULT, CountHypothesisSource.REQUESTED}
     )
-    count_topology_supported = bool(
-        all(
-            item.frame_topology.state == EvidenceState.SUPPORTED
-            and item.frame_topology.count_matches
-            for item in evidence
-        )
-    )
     conservation_not_contradicted = all(
         item.sequence_conservation.state != EvidenceState.CONTRADICTED
         for item in evidence
@@ -185,8 +178,7 @@ def geometry_resolution_for_selection(
         selected.geometry.assignment_consensus.state == EvidenceState.SUPPORTED
     )
     automatic_count_supported = bool(
-        count_topology_supported
-        and all(
+        all(
             item.frame_coverage.state == EvidenceState.SUPPORTED
             for item in evidence
         )
@@ -204,8 +196,7 @@ def geometry_resolution_for_selection(
         and not selected.geometry.search_budget_exhausted
     )
     count_resolved = bool(
-        count_topology_supported
-        and (fixed_count or automatic_count_supported)
+        fixed_count or automatic_count_supported
     )
     placement_resolved = bool(
         count_resolved

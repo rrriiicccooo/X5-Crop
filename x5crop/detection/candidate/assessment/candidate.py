@@ -6,7 +6,6 @@ from ...evidence.content.holder_texture import holder_texture_evidence
 from ...evidence.content.preservation import content_preservation_evidence
 from ...evidence.frame_coverage import frame_coverage_evidence
 from ...evidence.frame_sequence import sequence_conservation_for_geometry
-from ...evidence.frame_topology import frame_topology_evidence
 from ...evidence.holder_occupancy import holder_occupancy_evidence
 from ...evidence.sequence_content_alignment import sequence_content_alignment_evidence
 from ...evidence.partial_edge import partial_edge_safety_evidence
@@ -21,6 +20,7 @@ from ..model import (
 )
 from .candidate_gate import (
     BoundaryProofPath,
+    CandidateGateAssessment,
     CandidateGateInput,
     candidate_gate_assessment,
 )
@@ -56,7 +56,6 @@ def _boundary_proof_paths(
     )
     common = bool(
         sequence_boundary_supported
-        and evidence.frame_topology.state == EvidenceState.SUPPORTED
         and content_not_contradicted
         and evidence.sequence_conservation.state
         != EvidenceState.CONTRADICTED
@@ -76,8 +75,7 @@ def _boundary_proof_paths(
         and content_not_contradicted
     )
     geometry_led = bool(
-        evidence.frame_topology.state == EvidenceState.SUPPORTED
-        and evidence.frame_dimensions.state == EvidenceState.SUPPORTED
+        evidence.frame_dimensions.state == EvidenceState.SUPPORTED
         and (
             single_frame_physical_boundaries
             or (
@@ -139,6 +137,23 @@ def _boundary_proof_paths(
     )
 
 
+def candidate_gate_for_evidence(
+    candidate: BuiltCandidate,
+    evidence: CandidateEvidence,
+    diagnostics: tuple[str, ...] = (),
+) -> CandidateGateAssessment:
+    return candidate_gate_assessment(
+        CandidateGateInput(
+            content_preservation=evidence.content_preservation.state,
+            photo_geometry=evidence.frame_dimensions.state,
+            sequence_conservation=evidence.sequence_conservation.state,
+            evidence_independence=evidence.independence.state,
+            proof_paths=_boundary_proof_paths(candidate, evidence),
+            diagnostics=diagnostics,
+        )
+    )
+
+
 def assess_candidate(
     candidate: BuiltCandidate,
     context: DetectionContext,
@@ -150,7 +165,6 @@ def assess_candidate(
     if not isinstance(geometry, SequenceSolution):
         raise ValueError("standard candidate assessment requires sequence geometry")
     sequence_conservation = sequence_conservation_for_geometry(geometry)
-    frame_topology = frame_topology_evidence(geometry.frames, geometry.count)
     frame_dimensions = frame_dimension_evidence(
         geometry,
         context.scan_calibration,
@@ -206,7 +220,6 @@ def assess_candidate(
     )
     independence = evidence_independence_evidence(geometry)
     evidence = CandidateEvidence(
-        frame_topology=frame_topology,
         frame_coverage=coverage,
         sequence_conservation=sequence_conservation,
         separator_sequence=sequence,
@@ -219,7 +232,6 @@ def assess_candidate(
         partial_edge_safety=partial_edge,
         independence=independence,
     )
-    proof_paths = _boundary_proof_paths(candidate, evidence)
     diagnostics = list(candidate.build_diagnostics)
     diagnostics.extend(partial_edge.diagnostics)
     if alignment.overcontains_long_axis or alignment.overcontains_short_axis:
@@ -228,16 +240,10 @@ def assess_candidate(
         diagnostics.append("frame_content_unavailable")
     if holder_texture.state == EvidenceState.CONTRADICTED:
         diagnostics.append("content_like_signal_in_holder_slack")
-    gate = candidate_gate_assessment(
-        CandidateGateInput(
-            frame_topology=evidence.frame_topology.state,
-            content_preservation=evidence.content_preservation.state,
-            photo_geometry=evidence.frame_dimensions.state,
-            sequence_conservation=evidence.sequence_conservation.state,
-            evidence_independence=evidence.independence.state,
-            proof_paths=proof_paths,
-            diagnostics=tuple(diagnostics),
-        )
+    gate = candidate_gate_for_evidence(
+        candidate,
+        evidence,
+        tuple(diagnostics),
     )
     return AssessedCandidate(
         geometry=geometry,

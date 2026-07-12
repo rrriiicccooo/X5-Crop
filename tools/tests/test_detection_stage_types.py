@@ -149,6 +149,7 @@ class DetectionStageTypeContractTests(unittest.TestCase):
         )
         self.assertIn("evidence", CandidateAssessment.__dataclass_fields__)
         self.assertIn("frame_coverage", CandidateEvidence.__dataclass_fields__)
+        self.assertNotIn("frame_topology", CandidateEvidence.__dataclass_fields__)
         self.assertTrue(SequenceSolution.__dataclass_params__.frozen)
         self.assertTrue(BuiltCandidate.__dataclass_params__.frozen)
         self.assertTrue(AssessedCandidate.__dataclass_params__.frozen)

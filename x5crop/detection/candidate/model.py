@@ -15,7 +15,6 @@ from ..evidence.content.preservation import ContentPreservationEvidence
 from ..evidence.content.frame_support import FrameContentEvidence
 from ..evidence.content.holder_texture import HolderTextureEvidence
 from ..evidence.frame_coverage import FrameCoverageEvidence
-from ..evidence.frame_topology import FrameTopologyEvidence
 from ..evidence.holder_occupancy import HolderOccupancyEvidence
 from ..evidence.sequence_content_alignment import SequenceContentAlignmentEvidence
 from ..evidence.partial_edge import PartialEdgeSafetyEvidence
@@ -46,7 +45,6 @@ class BuiltCandidate:
 
 @dataclass(frozen=True)
 class CandidateEvidence:
-    frame_topology: FrameTopologyEvidence
     frame_coverage: FrameCoverageEvidence
     sequence_conservation: SequenceConservationEvidence
     separator_sequence: SeparatorSequenceEvidence
@@ -81,6 +79,36 @@ class ReviewOnlyEvidence:
 CandidateEvidenceModel = CandidateEvidence | DualLaneEvidence | ReviewOnlyEvidence
 
 
+def _combined_evidence_state(states: tuple[EvidenceState, ...]) -> EvidenceState:
+    if any(state == EvidenceState.CONTRADICTED for state in states):
+        return EvidenceState.CONTRADICTED
+    if states and all(state == EvidenceState.SUPPORTED for state in states):
+        return EvidenceState.SUPPORTED
+    return EvidenceState.UNAVAILABLE
+
+
+def _candidate_gate_evidence_states(
+    evidence: CandidateEvidence | DualLaneEvidence,
+) -> dict[str, EvidenceState]:
+    evidence_sets = (
+        evidence.lane_evidence
+        if isinstance(evidence, DualLaneEvidence)
+        else (evidence,)
+    )
+
+    def combined(attribute: str) -> EvidenceState:
+        return _combined_evidence_state(
+            tuple(getattr(item, attribute).state for item in evidence_sets)
+        )
+
+    return {
+        "content_preservation": combined("content_preservation"),
+        "photo_geometry_consistency": combined("frame_dimensions"),
+        "frame_sequence_conservation": combined("sequence_conservation"),
+        "evidence_independence": combined("independence"),
+    }
+
+
 @dataclass(frozen=True)
 class EvidenceQuality:
     supported: tuple[str, ...]
@@ -103,6 +131,15 @@ class CandidateAssessment:
                 raise ValueError("review-only assessment cannot own CandidateGate")
         elif self.gate is None:
             raise ValueError("physical candidate assessment requires CandidateGate")
+        else:
+            expected = _candidate_gate_evidence_states(self.evidence)
+            actual = {
+                check.code: check.state
+                for check in self.gate.checks
+                if check.code in expected
+            }
+            if actual != expected:
+                raise ValueError("CandidateGate checks must match candidate evidence")
 
 
 @dataclass(frozen=True)
@@ -157,7 +194,6 @@ class AssessedCandidate:
             named_states.extend(
                 (f"{prefix}{code}", state)
                 for code, state in (
-                    ("frame_topology", evidence.frame_topology.state),
                     ("frame_coverage", evidence.frame_coverage.state),
                     (
                         "frame_sequence_conservation",

@@ -65,6 +65,19 @@ def _provenance() -> MeasurementProvenance:
 
 
 class PhysicalModelInvariantTest(unittest.TestCase):
+    def test_candidate_gate_must_match_candidate_evidence(self) -> None:
+        candidate = candidate_fixture()
+        gate = candidate.assessment.gate
+        self.assertIsNotNone(gate)
+        checks = tuple(
+            replace(check, state=EvidenceState.CONTRADICTED)
+            if check.code == "content_preservation"
+            else check
+            for check in gate.checks
+        )
+        with self.assertRaises(ValueError):
+            replace(candidate.assessment, gate=replace(gate, checks=checks))
+
     def test_candidate_gate_evidence_rejects_state_measurement_drift(self) -> None:
         evidence = candidate_fixture().assessment.evidence
         for derived in (
@@ -75,10 +88,6 @@ class PhysicalModelInvariantTest(unittest.TestCase):
                 self.assertFalse(derived.__dataclass_fields__["state"].init)
                 self.assertFalse(derived.__dataclass_fields__["reason"].init)
         invalid_factories = (
-            lambda: replace(
-                evidence.frame_topology,
-                count_matches=False,
-            ),
             lambda: replace(
                 evidence.content_preservation,
                 state=EvidenceState.SUPPORTED,

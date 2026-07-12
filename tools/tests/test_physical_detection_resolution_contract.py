@@ -18,8 +18,15 @@ from x5crop.detection.candidate.plan.count_hypotheses import (
     CountHypothesisSource,
 )
 from x5crop.detection.candidate.selection.model import GeometryResolution
-from x5crop.detection.candidate.assessment.candidate import _boundary_proof_paths
-from x5crop.detection.candidate.model import AssessedCandidate, BuiltCandidate
+from x5crop.detection.candidate.assessment.candidate import (
+    _boundary_proof_paths,
+    candidate_gate_for_evidence,
+)
+from x5crop.detection.candidate.model import (
+    AssessedCandidate,
+    BuiltCandidate,
+    CandidateEvidence,
+)
 from x5crop.detection.candidate.selection.choose import select_candidates
 from x5crop.detection.evidence.partial_edge import PartialEdgeSafetyEvidence
 from x5crop.domain import (
@@ -81,6 +88,21 @@ def _single_frame_candidate(*, measured_boundaries: bool) -> BuiltCandidate:
         geometry,
         replace(candidate.count_hypothesis, count=1),
         (),
+    )
+
+
+def _with_candidate_evidence(
+    candidate: AssessedCandidate,
+    evidence: CandidateEvidence,
+) -> AssessedCandidate:
+    built = BuiltCandidate(candidate.geometry, candidate.count_hypothesis, ())
+    return replace(
+        candidate,
+        assessment=replace(
+            candidate.assessment,
+            evidence=evidence,
+            gate=candidate_gate_for_evidence(built, evidence),
+        ),
     )
 
 
@@ -160,14 +182,14 @@ class PhysicalDetectionResolutionContractTest(unittest.TestCase):
                 candidate.count_hypothesis,
                 source=CountHypothesisSource.REQUESTED,
             ),
-            assessment=replace(
-                candidate.assessment,
-                evidence=replace(
-                    candidate.assessment.evidence,
-                    sequence_conservation=replace(
-                        candidate.assessment.evidence.sequence_conservation,
-                        state=EvidenceState.UNAVAILABLE,
-                    ),
+        )
+        candidate = _with_candidate_evidence(
+            candidate,
+            replace(
+                candidate.assessment.evidence,
+                sequence_conservation=replace(
+                    candidate.assessment.evidence.sequence_conservation,
+                    state=EvidenceState.UNAVAILABLE,
                 ),
             ),
         )
@@ -286,8 +308,8 @@ class PhysicalDetectionResolutionContractTest(unittest.TestCase):
                 candidate.count_hypothesis,
                 source=CountHypothesisSource.FORMAT_DEFAULT,
             ),
-            assessment=replace(candidate.assessment, evidence=evidence),
         )
+        candidate = _with_candidate_evidence(candidate, evidence)
 
         selection = select_candidates(
             (candidate,),
@@ -356,8 +378,8 @@ class PhysicalDetectionResolutionContractTest(unittest.TestCase):
                 candidate.count_hypothesis,
                 source=CountHypothesisSource.AUTOMATIC,
             ),
-            assessment=replace(candidate.assessment, evidence=evidence),
         )
+        candidate = _with_candidate_evidence(candidate, evidence)
         selection = select_candidates(
             (candidate,),
             larger_counts_evaluated=True,

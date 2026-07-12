@@ -11,6 +11,18 @@ from tools.tests.architecture_contracts import (
 
 
 class ArchitectureOwnershipContractTest(unittest.TestCase):
+    def test_frame_topology_is_a_geometry_invariant_not_duplicate_evidence(self) -> None:
+        from x5crop.detection.candidate.assessment.candidate_gate import (
+            CANDIDATE_GATE_CHECK_CODES,
+        )
+        from x5crop.detection.candidate.model import CandidateEvidence
+
+        self.assertFalse(
+            (PROJECT_ROOT / "x5crop/detection/evidence/frame_topology.py").exists()
+        )
+        self.assertNotIn("frame_topology", CandidateEvidence.__dataclass_fields__)
+        self.assertNotIn("frame_topology_integrity", CANDIDATE_GATE_CHECK_CODES)
+
     def test_candidate_evidence_owns_sequence_conservation_directly(self) -> None:
         from x5crop.detection.candidate.model import CandidateEvidence
         from x5crop.detection.physical.spacing import SequenceConservationEvidence

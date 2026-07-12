@@ -18,7 +18,6 @@ def _path(code: str, state: EvidenceState) -> BoundaryProofPath:
 
 def _gate(
     *,
-    frame_topology: EvidenceState = EvidenceState.SUPPORTED,
     content_preservation: EvidenceState = EvidenceState.SUPPORTED,
     photo_geometry: EvidenceState = EvidenceState.SUPPORTED,
     sequence_conservation: EvidenceState = EvidenceState.SUPPORTED,
@@ -28,13 +27,16 @@ def _gate(
 ):
     return candidate_gate_assessment(
         CandidateGateInput(
-            frame_topology=frame_topology,
             content_preservation=content_preservation,
             photo_geometry=photo_geometry,
             sequence_conservation=sequence_conservation,
             evidence_independence=evidence_independence,
             proof_paths=proof_paths
-            or (_path("separator_led", EvidenceState.SUPPORTED),),
+            or (
+                _path("separator_led", EvidenceState.SUPPORTED),
+                _path("geometry_led", EvidenceState.UNAVAILABLE),
+                _path("partial_occupancy_led", EvidenceState.NOT_APPLICABLE),
+            ),
             diagnostics=diagnostics,
         )
     )
@@ -76,11 +78,21 @@ class CandidateLifecycleGateContractTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             replace(gate, checks=gate.checks[:-1])
 
+    def test_boundary_check_must_match_proof_paths(self) -> None:
+        gate = _gate()
+        checks = tuple(
+            replace(check, state=EvidenceState.CONTRADICTED)
+            if check.code == "boundary_proof"
+            else check
+            for check in gate.checks
+        )
+        with self.assertRaises(ValueError):
+            replace(gate, checks=checks)
+
     def test_candidate_gate_has_only_physical_checks(self) -> None:
         self.assertEqual(
             tuple(check.code for check in _gate().checks),
             (
-                "frame_topology_integrity",
                 "content_preservation",
                 "photo_geometry_consistency",
                 "frame_sequence_conservation",
@@ -91,7 +103,6 @@ class CandidateLifecycleGateContractTest(unittest.TestCase):
 
     def test_each_physical_contradiction_blocks_its_own_check(self) -> None:
         cases = (
-            ("frame_topology", "frame_topology_integrity"),
             ("content_preservation", "content_preservation"),
             ("photo_geometry", "photo_geometry_consistency"),
             ("sequence_conservation", "frame_sequence_conservation"),
@@ -133,6 +144,14 @@ class CandidateLifecycleGateContractTest(unittest.TestCase):
     def test_unknown_boundary_path_is_rejected(self) -> None:
         with self.assertRaisesRegex(ValueError, "boundary proof path"):
             _gate(proof_paths=(_path("unknown", EvidenceState.SUPPORTED),))
+
+    def test_standard_boundary_proof_set_must_be_complete(self) -> None:
+        with self.assertRaises(ValueError):
+            _gate(
+                proof_paths=(
+                    _path("separator_led", EvidenceState.SUPPORTED),
+                )
+            )
 
     def test_diagnostics_never_become_blockers(self) -> None:
         gate = _gate(
