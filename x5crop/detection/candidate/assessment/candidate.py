@@ -169,7 +169,6 @@ def assess_candidate(
         candidate,
         physical_spec,
         context.scan_calibration,
-        frame_sequence,
         context.policy.scoring,
         context.policy.separator.continuity,
     )
@@ -177,7 +176,7 @@ def assess_candidate(
         geometry.holder_span,
         geometry.visible_sequence_span,
         geometry.frames,
-        geometry.frame_dimension_estimate.width_px.midpoint,
+        geometry.frame_dimension_prior.width_px.midpoint,
         context.measurement_cache,
         context.policy.content,
     )

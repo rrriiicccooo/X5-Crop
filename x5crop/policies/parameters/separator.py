@@ -11,5 +11,5 @@ class SeparatorObservationParameters:
 
 
 @dataclass(frozen=True)
-class FrameDimensionEstimateParameters:
-    relative_tolerance: float = 0.18
+class FrameDimensionPriorParameters:
+    pass

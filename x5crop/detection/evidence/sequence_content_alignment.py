@@ -10,7 +10,7 @@ from ...utils import bbox_from_mask, clamp_int
 from x5crop.domain import EvidenceState
 
 if TYPE_CHECKING:
-    from ..geometry import CandidateGeometry
+    from ..physical.model import SequenceSolution
 
 
 @dataclass(frozen=True)
@@ -31,7 +31,7 @@ class SequenceContentAlignmentEvidence:
     border_tonal_fraction: tuple[tuple[str, float], ...]
 
 def sequence_content_alignment_evidence(
-    geometry: CandidateGeometry,
+    geometry: SequenceSolution,
     cache: MeasurementCache,
     parameters: SequenceContentAlignmentParameters,
 ) -> SequenceContentAlignmentEvidence:

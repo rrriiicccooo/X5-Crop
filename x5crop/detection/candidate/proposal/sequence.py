@@ -17,7 +17,7 @@ from ...physical.sequence import (
     base_sequence_span_candidates,
     unique_sequence_hypotheses,
 )
-from ...physical.photo_size import frame_dimension_estimate
+from ...physical.photo_size import frame_dimension_prior
 from ...physical.separator.observations import measure_separator_bands
 from x5crop.domain import CropEnvelope, VisibleSequenceSpan
 
@@ -85,11 +85,10 @@ def _separator_dimension_hypotheses(
                 key=lambda item: item.center,
             )
         )
-        dimensions = frame_dimension_estimate(
+        dimensions = frame_dimension_prior(
             source.visible_sequence_span,
             fmt,
             calibration,
-            separator_policy.frame_dimension_estimate,
             layout=layout,
         )
         frame_width = dimensions.width_px.midpoint

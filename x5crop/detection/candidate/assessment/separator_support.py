@@ -7,7 +7,7 @@ from ...evidence.separator_continuity import (
     continuity_state_for_observation,
 )
 from x5crop.domain import EvidenceState
-from ...geometry import CandidateGeometry
+from ...physical.model import SequenceSolution
 
 
 @dataclass(frozen=True)
@@ -23,7 +23,7 @@ class SeparatorSequenceEvidence:
 
 
 def separator_sequence_evidence(
-    geometry: CandidateGeometry,
+    geometry: SequenceSolution,
     continuity: SeparatorContinuityEvidence,
 ) -> SeparatorSequenceEvidence:
     expected = max(0, geometry.count - 1)

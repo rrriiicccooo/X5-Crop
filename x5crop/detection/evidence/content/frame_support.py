@@ -15,7 +15,7 @@ from ....utils import sampled_percentile
 from x5crop.domain import EvidenceState
 
 if TYPE_CHECKING:
-    from ...geometry import CandidateGeometry
+    from ...physical.model import SequenceSolution
 
 
 CACHED_CONTENT_SIGNAL_COMPOSITE = (
@@ -113,7 +113,7 @@ def _boundary_contact_sides(
 
 
 def frame_content_evidence(
-    geometry: CandidateGeometry,
+    geometry: SequenceSolution,
     cache: MeasurementCache,
     policy: ContentPolicy,
 ) -> FrameContentEvidence:

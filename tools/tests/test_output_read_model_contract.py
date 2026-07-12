@@ -37,18 +37,19 @@ def _record() -> dict:
 class OutputReadModelContractTest(unittest.TestCase):
     def test_typed_read_model_serializes_every_typed_result_field(self) -> None:
         from x5crop.domain import MeasurementProvenance, PixelInterval
-        from x5crop.domain import FrameDimensionEstimate
+        from x5crop.domain import FrameDimensionPrior
         from x5crop.report.read_models import typed_read_model
 
-        value = FrameDimensionEstimate(
+        value = FrameDimensionPrior(
             width_px=PixelInterval.exact(100.0),
             height_px=PixelInterval.exact(80.0),
+            frame_size_options_mm=((36.0, 24.0),),
             source="test",
             provenance=MeasurementProvenance("frame_dimensions", "test", ()),
         )
         self.assertEqual(
             set(typed_read_model(value)),
-            {field.name for field in fields(FrameDimensionEstimate)},
+            {field.name for field in fields(FrameDimensionPrior)},
         )
 
     def test_final_detection_has_no_schema_restoration_wrapper(self) -> None:

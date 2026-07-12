@@ -3,26 +3,23 @@ from __future__ import annotations
 from ....cache import MeasurementCache
 from ....cache.separator import cached_separator_profile
 from ....constants import CANDIDATE_SOURCE_FRAME_SEQUENCE
-from ....domain import Box, HolderSpan, SequenceHypothesis
+from ....domain import Box, CropEnvelope, HolderSpan, SequenceHypothesis
 from ....formats import FormatPhysicalSpec
 from ....policies.runtime.separator import SeparatorPolicy
 from ....units import ScanCalibration
 from ...context import DetectionRequest
-from ...geometry import CandidateGeometry
+from ...physical.model import SequenceSolution
 from ...physical.boundary import (
     HolderOcclusionEvidence,
     holder_occlusion_for_sequence,
 )
-from ...physical.photo_size import frame_dimension_estimate
-from ...physical.separator.assignment import (
-    boundary_position_constraint,
-    build_frame_boundaries,
-    frames_from_boundaries,
-)
+from ...physical.photo_size import frame_dimension_prior
+from ...physical.separator.assignment import boundary_position_constraint
 from ...physical.separator.observations import (
     measure_focused_separator_band,
     measure_separator_bands,
 )
+from ...physical.sequence_solver import solve_frame_sequence
 from ..model import BuiltCandidate
 from ..plan.count_hypotheses import CountHypothesis
 
@@ -72,14 +69,13 @@ def build_frame_sequence_geometry(
         corridor_start=float(corridor.left),
         parameters=separator_policy.observation,
     )
-    dimensions = frame_dimension_estimate(
+    dimensions = frame_dimension_prior(
         visible_sequence_span,
         fmt,
         scan_calibration,
-        separator_policy.frame_dimension_estimate,
         layout=request.layout,
     )
-    provisional = build_frame_boundaries(
+    provisional = solve_frame_sequence(
         observations,
         (),
         visible_sequence_span,
@@ -112,7 +108,7 @@ def build_frame_sequence_geometry(
         )
         is not None
     )
-    boundary_result = build_frame_boundaries(
+    solved = solve_frame_sequence(
         observations,
         focused_observations,
         visible_sequence_span,
@@ -120,13 +116,8 @@ def build_frame_sequence_geometry(
         dimensions,
         holder_occlusion,
     )
-    frames = frames_from_boundaries(
-        visible_sequence_span,
-        boundary_result.boundaries,
-        count,
-    )
     return BuiltCandidate(
-        geometry=CandidateGeometry(
+        geometry=SequenceSolution(
             format_id=fmt.format_id,
             layout=request.layout,
             strip_mode=count_hypothesis.strip_mode,
@@ -134,11 +125,16 @@ def build_frame_sequence_geometry(
             holder_span=holder_span,
             visible_sequence_span=visible_sequence_span,
             crop_envelope=sequence_hypothesis.crop_envelope,
-            frames=frames,
+            photo_intervals=solved.photo_intervals,
+            frames=solved.frames,
             separator_observations=observations,
-            separator_assignments=boundary_result.assignments,
-            frame_boundaries=boundary_result.boundaries,
-            frame_dimension_estimate=dimensions,
+            separator_assignments=solved.assignments,
+            frame_boundaries=solved.boundaries,
+            inter_frame_relations=solved.relations,
+            holder_occlusion=holder_occlusion,
+            frame_dimension_prior=dimensions,
+            residuals=solved.residuals,
+            search_exhausted=solved.search_exhausted,
             source=CANDIDATE_SOURCE_FRAME_SEQUENCE,
             automatic_processing_supported=True,
             sequence_hypothesis_name=sequence_hypothesis.name,

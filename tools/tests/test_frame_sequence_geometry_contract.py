@@ -18,12 +18,13 @@ from x5crop.domain import PixelInterval
 from x5crop.detection.physical.spacing import (
     observed_spacing_evidence,
     sequence_conservation_evidence,
+    spacing_hypothesis,
 )
 from x5crop.detection.physical.separator.assignment import (
     assign_observation_to_boundary,
-    build_frame_boundaries,
     dimension_constrained_boundary,
 )
+from x5crop.detection.physical.sequence_solver import solve_frame_sequence
 from x5crop.detection.physical.separator.observations import (
     measure_focused_separator_band,
     measure_separator_bands,
@@ -32,7 +33,7 @@ from x5crop.domain import SeparatorBandObservation
 from x5crop.policies.parameters.separator import SeparatorObservationParameters
 from x5crop.domain import MeasurementProvenance
 from x5crop.domain import Box
-from x5crop.detection.geometry import CandidateGeometry
+from x5crop.detection.physical.model import SequenceSolution
 from x5crop.domain import CropEnvelope, VisibleSequenceSpan
 from tools.tests.physical_gate_support import (
     candidate_fixture,
@@ -42,7 +43,7 @@ from tools.tests.physical_gate_support import (
 from dataclasses import replace
 from x5crop.detection.evidence.frame_sequence import frame_sequence_evidence
 from x5crop.detection.physical.separator.assignment import frame_boundary_from_assignment
-from x5crop.domain import FrameDimensionEstimate
+from x5crop.domain import FrameDimensionPrior
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -95,14 +96,15 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
             start=160.0,
             end=190.0,
         )
-        result = build_frame_boundaries(
+        result = solve_frame_sequence(
             (observation,),
             (),
             VisibleSequenceSpan(Box(0, 0, 210, 100)),
             2,
-            FrameDimensionEstimate(
+            FrameDimensionPrior(
                 PixelInterval.exact(100.0),
                 PixelInterval.exact(100.0),
+                ((36.0, 24.0),),
                 "synthetic",
                 MeasurementProvenance(
                     "frame_dimensions",
@@ -117,7 +119,7 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
         self.assertFalse(result.assignments[0].used_for_boundary)
 
     def test_selected_observation_boundaries_are_monotonic(self) -> None:
-        result = build_frame_boundaries(
+        result = solve_frame_sequence(
             (
                 separator_observation(180.0, score=0.99, start=175.0, end=185.0),
                 separator_observation(120.0, score=0.80, start=115.0, end=125.0),
@@ -125,9 +127,10 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
             (),
             VisibleSequenceSpan(Box(0, 0, 300, 100)),
             3,
-            FrameDimensionEstimate(
+            FrameDimensionPrior(
                 PixelInterval(50.0, 150.0),
                 PixelInterval.exact(100.0),
+                ((36.0, 24.0),),
                 "synthetic",
                 MeasurementProvenance(
                     "frame_dimensions",
@@ -192,7 +195,7 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
         self.assertEqual(envelope, CropEnvelope(Box(9, 4, 191, 96)))
 
     def test_candidate_geometry_has_distinct_sequence_and_crop_fields(self) -> None:
-        names = {field.name for field in fields(CandidateGeometry)}
+        names = {field.name for field in fields(SequenceSolution)}
         self.assertIn("visible_sequence_span", names)
         self.assertIn("crop_envelope", names)
         self.assertNotIn("film" + "_span", names)
@@ -270,7 +273,7 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
         self.assertEqual(evidence.leading.state, EvidenceState.SUPPORTED)
         self.assertEqual(evidence.leading.hidden_width_px, PixelInterval.exact(6.0))
 
-    def test_missing_spacing_uses_adjacent_cut_equations_without_double_counting(self) -> None:
+    def test_missing_spacing_remains_an_explicit_hypothesis(self) -> None:
         candidate = candidate_fixture()
         observed = separator_observation(102.5, start=100.0, end=105.0)
         assignment = assign_observation_to_boundary(
@@ -303,16 +306,34 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
             frame_boundaries=boundaries,
             separator_observations=(observed,),
             separator_assignments=(assignment,),
-            frame_dimension_estimate=FrameDimensionEstimate(
+            frame_dimension_prior=FrameDimensionPrior(
                 PixelInterval.exact(100.0),
                 PixelInterval.exact(100.0),
+                ((36.0, 24.0),),
                 "test",
                 MeasurementProvenance("frame_dimensions", "test", ()),
+            ),
+            inter_frame_relations=(
+                observed_spacing_evidence(
+                    1,
+                    PixelInterval.exact(5.0),
+                    observed.provenance,
+                ),
+                spacing_hypothesis(
+                    2,
+                    PixelInterval.exact(10.0),
+                    MeasurementProvenance(
+                        "frame_geometry",
+                        "test_hypothesis",
+                        ("frame_dimensions",),
+                    ),
+                ),
             ),
         )
         evidence = frame_sequence_evidence(geometry)
         self.assertEqual(evidence.spacings[0].signed_width_px, PixelInterval.exact(5.0))
         self.assertEqual(evidence.spacings[1].signed_width_px, PixelInterval.exact(10.0))
+        self.assertEqual(evidence.spacings[1].state, EvidenceState.UNAVAILABLE)
 
 
 if __name__ == "__main__":

@@ -4,17 +4,15 @@ from dataclasses import dataclass
 from statistics import median
 from typing import TYPE_CHECKING
 
-from ...domain import FrameDimensionEstimate, MeasurementProvenance
+from ...domain import FrameDimensionPrior, MeasurementProvenance
 from ...formats import FormatPhysicalSpec
-from ...policies.parameters.separator import FrameDimensionEstimateParameters
 from ...units import ScanCalibration
 from x5crop.domain import EvidenceState
-from .boundary import HolderOcclusionEvidence
 from x5crop.domain import PixelInterval, VisibleSequenceSpan
 
 if TYPE_CHECKING:
     from ..evidence.separator_continuity import SeparatorContinuityEvidence
-    from ..geometry import CandidateGeometry
+    from .model import SequenceSolution
 
 
 def _width_cv(values: tuple[float, ...]) -> float | None:
@@ -46,17 +44,18 @@ class FrameDimensionEvidence:
     calibration_used: bool
 
 
-def frame_dimension_estimate(
+def frame_dimension_prior(
     span: VisibleSequenceSpan,
     physical_spec: FormatPhysicalSpec,
     calibration: ScanCalibration,
-    parameters: FrameDimensionEstimateParameters,
     *,
     layout: str,
-) -> FrameDimensionEstimate:
-    nominal = physical_spec.nominal_frame_size_mm
+) -> FrameDimensionPrior:
     short_axis = float(span.box.height)
-    aspect_width = short_axis * float(physical_spec.horizontal_content_aspect)
+    options = tuple(
+        (float(option.width_mm), float(option.height_mm))
+        for option in physical_spec.frame_size_mm_options
+    )
     long_ppm = calibration.px_per_mm("x" if layout == "horizontal" else "y")
     short_ppm = calibration.px_per_mm("y" if layout == "horizontal" else "x")
     calibrated = bool(
@@ -66,24 +65,24 @@ def frame_dimension_estimate(
         and long_ppm > 0.0
         and short_ppm > 0.0
     )
-    width = float(nominal.width_mm) * float(long_ppm) if calibrated else aspect_width
-    height = float(nominal.height_mm) * float(short_ppm) if calibrated else short_axis
-    tolerance = max(0.0, float(parameters.relative_tolerance))
-    return FrameDimensionEstimate(
-        width_px=PixelInterval(
-            max(1.0, width * (1.0 - tolerance)),
-            max(1.0, width * (1.0 + tolerance)),
-        ),
-        height_px=PixelInterval(
-            max(1.0, height * (1.0 - tolerance)),
-            max(1.0, height * (1.0 + tolerance)),
-        ),
+    if calibrated:
+        widths = tuple(width_mm * float(long_ppm) for width_mm, _ in options)
+        heights = tuple(height_mm * float(short_ppm) for _, height_mm in options)
+    else:
+        widths = tuple(
+            short_axis * width_mm / height_mm for width_mm, height_mm in options
+        )
+        heights = (short_axis,)
+    return FrameDimensionPrior(
+        width_px=PixelInterval(max(1.0, min(widths)), max(1.0, max(widths))),
+        height_px=PixelInterval(max(1.0, min(heights)), max(1.0, max(heights))),
+        frame_size_options_mm=options,
         source="scan_calibration" if calibrated else "short_axis_aspect",
         provenance=MeasurementProvenance(
             root_measurement=(
                 "scan_calibration" if calibrated else "physical_frame_aspect"
             ),
-            source="frame_dimension_estimate",
+            source="frame_dimension_prior",
             dependencies=(
                 "format_physical_spec",
                 "scan_calibration" if calibrated else "short_axis_boundaries",
@@ -106,9 +105,8 @@ def _continuity_supported(
 
 
 def _photo_widths(
-    geometry: CandidateGeometry,
+    geometry: SequenceSolution,
     continuity: SeparatorContinuityEvidence,
-    holder_occlusion: HolderOcclusionEvidence,
 ) -> tuple[tuple[float, ...], tuple[float, ...]]:
     assignments = tuple(
         sorted(
@@ -125,28 +123,11 @@ def _photo_widths(
             key=lambda assignment: assignment.boundary_index,
         )
     )
-    if len(assignments) != max(0, geometry.count - 1):
-        return (), tuple(
-            assignment.observation.width for assignment in assignments
-        )
-    span = geometry.visible_sequence_span.box
-    widths: list[float] = []
-    if assignments:
-        if holder_occlusion.leading.state != EvidenceState.SUPPORTED:
-            widths.append(assignments[0].observation.start - float(span.left))
-        widths.extend(
-            right.observation.start - left.observation.end
-            for left, right in zip(assignments[:-1], assignments[1:])
-        )
-        if holder_occlusion.trailing.state != EvidenceState.SUPPORTED:
-            widths.append(float(span.right) - assignments[-1].observation.end)
-    elif geometry.count == 1:
-        width = float(span.width)
-        if holder_occlusion.leading.state == EvidenceState.SUPPORTED:
-            width += holder_occlusion.leading.hidden_width_px.midpoint
-        if holder_occlusion.trailing.state == EvidenceState.SUPPORTED:
-            width += holder_occlusion.trailing.hidden_width_px.midpoint
-        widths.append(width)
+    widths = [
+        interval.width_px.midpoint
+        for interval in geometry.photo_intervals
+        if interval.provenance.root_measurement == "photo_edges"
+    ]
     return (
         tuple(width for width in widths if width > 0.0),
         tuple(assignment.observation.width for assignment in assignments),
@@ -154,11 +135,10 @@ def _photo_widths(
 
 
 def frame_dimension_evidence(
-    geometry: CandidateGeometry,
+    geometry: SequenceSolution,
     physical_spec: FormatPhysicalSpec,
     calibration: ScanCalibration,
     continuity: SeparatorContinuityEvidence,
-    holder_occlusion: HolderOcclusionEvidence,
     *,
     maximum_photo_width_cv: float,
     maximum_dimension_error_ratio: float,
@@ -167,9 +147,8 @@ def frame_dimension_evidence(
     photo_widths, separator_widths = _photo_widths(
         geometry,
         continuity,
-        holder_occlusion,
     )
-    target = geometry.frame_dimension_estimate.width_px.midpoint
+    target = geometry.frame_dimension_prior.width_px.midpoint
     photo_cv = _width_cv(photo_widths)
     separator_cv = _width_cv(separator_widths)
     errors = tuple(
@@ -202,22 +181,6 @@ def frame_dimension_evidence(
         and long_ppm > 0.0
         and short_ppm > 0.0
     )
-    boundary_by_side = {
-        observation.side: observation
-        for observation in geometry.boundary_observations
-    }
-    short_axis_boundaries_supported = all(
-        side in boundary_by_side
-        and boundary_by_side[side].kind != "canvas_clip"
-        for side in ("top", "bottom")
-    )
-    physical_dimension_model_supported = bool(
-        calibration_used
-        or (
-            geometry.frame_dimension_estimate.source == "short_axis_aspect"
-            and short_axis_boundaries_supported
-        )
-    )
     observed_width_mm = (
         float(observed_width) / float(long_ppm)
         if calibration_used and observed_width is not None
@@ -237,13 +200,6 @@ def frame_dimension_evidence(
     elif photo_widths:
         state = EvidenceState.SUPPORTED
         reason = "photo_dimensions_supported"
-    elif physical_dimension_model_supported:
-        state = EvidenceState.SUPPORTED
-        reason = (
-            "calibrated_frame_dimensions_supported"
-            if calibration_used
-            else "physical_aspect_dimensions_supported"
-        )
     else:
         state = EvidenceState.UNAVAILABLE
         reason = "independent_photo_edge_measurements_unavailable"

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .. import geometry as geometry_types
+from ..physical.model import SequenceSolution
 from .assessment.evidence_independence import EvidenceIndependenceEvidence
 from .assessment.separator_support import SeparatorSequenceEvidence
 from ..evidence.content.preservation import ContentPreservationEvidence
@@ -22,7 +22,7 @@ from .plan.count_hypotheses import CountHypothesis
 
 @dataclass(frozen=True)
 class BuiltCandidate:
-    geometry: geometry_types.CandidateGeometry
+    geometry: SequenceSolution
     count_hypothesis: CountHypothesis | None
     build_diagnostics: tuple[str, ...]
 
@@ -64,6 +64,6 @@ class CandidateAssessment:
 
 @dataclass(frozen=True)
 class AssessedCandidate:
-    geometry: geometry_types.CandidateGeometry
+    geometry: SequenceSolution
     count_hypothesis: CountHypothesis | None
     assessment: CandidateAssessment

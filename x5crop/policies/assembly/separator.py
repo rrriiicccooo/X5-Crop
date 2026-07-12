@@ -9,7 +9,7 @@ def separator_policy(
 ) -> SeparatorPolicy:
     return SeparatorPolicy(
         observation=params.separator.separator_observation,
-        frame_dimension_estimate=params.separator.frame_dimension_estimate,
+        frame_dimension_prior=params.separator.frame_dimension_prior,
         continuity=params.separator.separator_continuity,
         profile=params.separator.separator_profile,
     )

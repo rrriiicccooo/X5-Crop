@@ -65,8 +65,8 @@ def candidate_read_model(candidate: AssessedCandidate) -> dict[str, Any]:
         "separator_observations": typed_read_model(geometry.separator_observations),
         "separator_assignments": typed_read_model(geometry.separator_assignments),
         "frame_boundaries": typed_read_model(geometry.frame_boundaries),
-        "frame_dimension_estimate": typed_read_model(
-            geometry.frame_dimension_estimate
+        "frame_dimension_prior": typed_read_model(
+            geometry.frame_dimension_prior
         ),
         "frame_boxes": typed_read_model(geometry.frames),
         "lane_boxes": typed_read_model(geometry.lane_boxes),

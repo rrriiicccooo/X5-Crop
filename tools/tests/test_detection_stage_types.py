@@ -13,7 +13,7 @@ from x5crop.detection.candidate.model import (
     CandidateAssessment,
     CandidateEvidence,
 )
-from x5crop.detection.geometry import CandidateGeometry
+from x5crop.detection.physical.model import SequenceSolution
 from x5crop.detection.candidate.selection.model import SelectionResult
 from x5crop.detection.decision.model import DecisionGateAssessment, FinalDetection
 from x5crop.detection.candidate.assessment.candidate_gate import (
@@ -33,7 +33,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 class DetectionStageTypeContractTests(unittest.TestCase):
     def test_candidate_stages_are_immutable_and_separate(self) -> None:
-        geometry_fields = {field.name for field in fields(CandidateGeometry)}
+        geometry_fields = {field.name for field in fields(SequenceSolution)}
         built_fields = {field.name for field in fields(BuiltCandidate)}
         assessed_fields = {field.name for field in fields(AssessedCandidate)}
         final_fields = {field.name for field in fields(FinalDetection)}
@@ -49,7 +49,7 @@ class DetectionStageTypeContractTests(unittest.TestCase):
         )
         self.assertIn("evidence", CandidateAssessment.__dataclass_fields__)
         self.assertIn("frame_coverage", CandidateEvidence.__dataclass_fields__)
-        self.assertTrue(CandidateGeometry.__dataclass_params__.frozen)
+        self.assertTrue(SequenceSolution.__dataclass_params__.frozen)
         self.assertTrue(BuiltCandidate.__dataclass_params__.frozen)
         self.assertTrue(AssessedCandidate.__dataclass_params__.frozen)
         self.assertNotIn("status", final_fields)

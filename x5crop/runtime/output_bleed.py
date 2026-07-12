@@ -29,7 +29,7 @@ def prepare_output_bleed(
             axis=long_axis,
             reference_px=max(
                 1.0,
-                float(geometry.frame_dimension_estimate.width_px.midpoint),
+                float(geometry.frame_dimension_prior.width_px.midpoint),
             ),
         )
     )

@@ -7,7 +7,7 @@ from ....constants import CANDIDATE_SOURCE_FRAME_SEQUENCE
 from x5crop.domain import EvidenceState
 
 if TYPE_CHECKING:
-    from ...geometry import CandidateGeometry
+    from ...physical.model import SequenceSolution
 
 
 @dataclass(frozen=True)
@@ -19,7 +19,7 @@ class EvidenceIndependenceEvidence:
     cyclic_measurements: tuple[str, ...]
 
 def evidence_independence_evidence(
-    geometry: CandidateGeometry,
+    geometry: SequenceSolution,
 ) -> EvidenceIndependenceEvidence:
     if geometry.source != CANDIDATE_SOURCE_FRAME_SEQUENCE:
         return EvidenceIndependenceEvidence(
@@ -44,7 +44,7 @@ def evidence_independence_evidence(
     )
     sequence_root = geometry.sequence_provenance.root_measurement
     sequence_dependencies = set(geometry.sequence_provenance.dependencies)
-    dimension_provenance = geometry.frame_dimension_estimate.provenance
+    dimension_provenance = geometry.frame_dimension_prior.provenance
     measurement_roots = (
         hard_roots
         if hard_roots

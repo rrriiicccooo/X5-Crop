@@ -5,15 +5,12 @@ from ....domain import Box, MeasurementProvenance
 from ...context import DetectionContext
 from ...physical.boundary import canvas_boundary_observations
 from ...physical.boundary import HolderOcclusionEvidence
-from ...physical.photo_size import frame_dimension_estimate
-from ...physical.separator.assignment import (
-    build_frame_boundaries,
-    frames_from_boundaries,
-)
+from ...physical.photo_size import frame_dimension_prior
+from ...physical.sequence_solver import solve_frame_sequence
 from x5crop.domain import CropEnvelope, HolderSpan, VisibleSequenceSpan
 from ..model import BuiltCandidate
 from ..plan.count_hypotheses import CountHypothesis
-from ...geometry import CandidateGeometry
+from ...physical.model import SequenceSolution
 
 
 def hard_safety_candidate(
@@ -25,25 +22,20 @@ def hard_safety_candidate(
     count = max(1, int(count))
     span = Box(0, 0, work_width, work_height)
     visible_span = VisibleSequenceSpan(span)
-    dimensions = frame_dimension_estimate(
+    dimensions = frame_dimension_prior(
         visible_span,
         physical_spec,
         context.scan_calibration,
-        context.policy.separator.frame_dimension_estimate,
         layout=context.request.layout,
     )
-    boundary_result = build_frame_boundaries(
+    holder_occlusion = HolderOcclusionEvidence.unavailable()
+    solved = solve_frame_sequence(
         (),
         (),
         visible_span,
         count,
         dimensions,
-        HolderOcclusionEvidence.unavailable(),
-    )
-    frames = frames_from_boundaries(
-        visible_span,
-        boundary_result.boundaries,
-        count,
+        holder_occlusion,
     )
     hypothesis = CountHypothesis(
         count=count,
@@ -52,7 +44,7 @@ def hard_safety_candidate(
         allowed_by_physical_spec=count in physical_spec.allowed_counts,
     )
     return BuiltCandidate(
-        geometry=CandidateGeometry(
+        geometry=SequenceSolution(
             format_id=physical_spec.format_id,
             layout=context.request.layout,
             strip_mode=context.request.strip_mode,
@@ -60,11 +52,16 @@ def hard_safety_candidate(
             holder_span=HolderSpan(span),
             visible_sequence_span=visible_span,
             crop_envelope=CropEnvelope(span),
-            frames=frames,
+            photo_intervals=solved.photo_intervals,
+            frames=solved.frames,
             separator_observations=(),
             separator_assignments=(),
-            frame_boundaries=boundary_result.boundaries,
-            frame_dimension_estimate=dimensions,
+            frame_boundaries=solved.boundaries,
+            inter_frame_relations=solved.relations,
+            holder_occlusion=holder_occlusion,
+            frame_dimension_prior=dimensions,
+            residuals=solved.residuals,
+            search_exhausted=solved.search_exhausted,
             source=CANDIDATE_SOURCE_HARD_SAFETY,
             automatic_processing_supported=False,
             sequence_hypothesis_name="full_canvas_safety",

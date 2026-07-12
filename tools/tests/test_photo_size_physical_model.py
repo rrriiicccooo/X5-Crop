@@ -17,6 +17,7 @@ from x5crop.detection.physical.boundary import (
     holder_occlusion_evidence,
 )
 from x5crop.detection.physical.photo_size import frame_dimension_evidence
+from x5crop.detection.physical.model import PhotoInterval
 from x5crop.detection.physical.separator.assignment import (
     assign_observation_to_boundary,
     frame_boundary_from_assignment,
@@ -60,6 +61,11 @@ def _geometry(second_start: float = 205.0):
         for index, observation in enumerate(observations, start=1)
     )
     boundaries = tuple(frame_boundary_from_assignment(item) for item in assignments)
+    photo_edge_provenance = MeasurementProvenance(
+        "photo_edges",
+        "test_fixture",
+        ("separator_profile", "sequence_boundaries"),
+    )
     return replace(
         base,
         count=3,
@@ -68,6 +74,26 @@ def _geometry(second_start: float = 205.0):
         separator_observations=observations,
         separator_assignments=assignments,
         frame_boundaries=boundaries,
+        photo_intervals=(
+            PhotoInterval(
+                1,
+                PixelInterval.exact(0.0),
+                PixelInterval.exact(observations[0].start),
+                photo_edge_provenance,
+            ),
+            PhotoInterval(
+                2,
+                PixelInterval.exact(observations[0].end),
+                PixelInterval.exact(observations[1].start),
+                photo_edge_provenance,
+            ),
+            PhotoInterval(
+                3,
+                PixelInterval.exact(observations[1].end),
+                PixelInterval.exact(315.0),
+                photo_edge_provenance,
+            ),
+        ),
         frames=(
             replace(base.frames[0], right=103),
             replace(base.frames[0], left=103, right=210),
@@ -101,7 +127,7 @@ def _continuity(geometry) -> SeparatorContinuityEvidence:
 
 
 class PhotoSizePhysicalModelTest(unittest.TestCase):
-    def test_measured_short_axis_and_physical_aspect_support_dimensions_without_separators(self) -> None:
+    def test_physical_aspect_prior_does_not_become_dimension_evidence(self) -> None:
         base = candidate_fixture().geometry
         geometry = replace(
             base,
@@ -109,12 +135,13 @@ class PhotoSizePhysicalModelTest(unittest.TestCase):
             separator_observations=(),
             separator_assignments=(),
             frame_boundaries=(),
-            frame_dimension_estimate=replace(
-                base.frame_dimension_estimate,
+            photo_intervals=(),
+            frame_dimension_prior=replace(
+                base.frame_dimension_prior,
                 source="short_axis_aspect",
                 provenance=MeasurementProvenance(
                     "physical_frame_aspect",
-                    "frame_dimension_estimate",
+                    "frame_dimension_prior",
                     ("format_physical_spec", "short_axis_boundaries"),
                 ),
             ),
@@ -124,14 +151,16 @@ class PhotoSizePhysicalModelTest(unittest.TestCase):
             format_spec("135"),
             ScanCalibration(None, None, "unavailable", False),
             _continuity(geometry),
-            HolderOcclusionEvidence.not_applicable(),
             maximum_photo_width_cv=0.03,
             maximum_dimension_error_ratio=0.22,
         )
-        self.assertEqual(result.state, EvidenceState.SUPPORTED)
-        self.assertEqual(result.reason, "physical_aspect_dimensions_supported")
+        self.assertEqual(result.state, EvidenceState.UNAVAILABLE)
+        self.assertEqual(
+            result.reason,
+            "independent_photo_edge_measurements_unavailable",
+        )
 
-    def test_supported_edge_occlusion_restores_single_frame_physical_width(self) -> None:
+    def test_supported_edge_occlusion_does_not_self_prove_frame_dimensions(self) -> None:
         base = candidate_fixture().geometry
         geometry = replace(
             base,
@@ -144,6 +173,7 @@ class PhotoSizePhysicalModelTest(unittest.TestCase):
             separator_observations=(),
             separator_assignments=(),
             frame_boundaries=(),
+            photo_intervals=(),
         )
         boundary = BoundaryObservation(
             "leading",
@@ -167,12 +197,12 @@ class PhotoSizePhysicalModelTest(unittest.TestCase):
             format_spec("135"),
             ScanCalibration(None, None, "unavailable", False),
             _continuity(geometry),
-            occlusion,
             maximum_photo_width_cv=0.03,
             maximum_dimension_error_ratio=0.22,
         )
-        self.assertEqual(result.photo_widths_px, (100.0,))
-        self.assertEqual(result.state, EvidenceState.SUPPORTED)
+        self.assertEqual(occlusion.leading.state, EvidenceState.SUPPORTED)
+        self.assertEqual(result.photo_widths_px, ())
+        self.assertEqual(result.state, EvidenceState.UNAVAILABLE)
 
     def test_separator_width_variation_does_not_contradict_photo_size(self) -> None:
         geometry = _geometry()
@@ -181,7 +211,6 @@ class PhotoSizePhysicalModelTest(unittest.TestCase):
             format_spec("135"),
             ScanCalibration(None, None, "unavailable", False),
             _continuity(geometry),
-            HolderOcclusionEvidence.not_applicable(),
             maximum_photo_width_cv=0.03,
             maximum_dimension_error_ratio=0.22,
         )
@@ -196,7 +225,6 @@ class PhotoSizePhysicalModelTest(unittest.TestCase):
             format_spec("135"),
             ScanCalibration(None, None, "unavailable", False),
             _continuity(geometry),
-            HolderOcclusionEvidence.not_applicable(),
             maximum_photo_width_cv=0.03,
             maximum_dimension_error_ratio=0.22,
         )

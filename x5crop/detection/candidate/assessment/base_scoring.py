@@ -9,7 +9,6 @@ from ....geometry.detection_parameters import SeparatorContinuityParameters
 from ....policies.runtime.candidate import ScoringPolicy
 from ....units import ScanCalibration
 from ...evidence.frame_topology import FrameTopologyEvidence, frame_topology_evidence
-from ...evidence.frame_sequence import FrameSequenceEvidence
 from x5crop.domain import EvidenceState
 from ...evidence.separator_continuity import (
     SeparatorContinuityEvidence,
@@ -36,7 +35,6 @@ def base_physical_assessment(
     candidate: BuiltCandidate,
     physical_spec: FormatPhysicalSpec,
     calibration: ScanCalibration,
-    frame_sequence: FrameSequenceEvidence,
     scoring_policy: ScoringPolicy,
     separator_continuity_parameters: SeparatorContinuityParameters,
 ) -> BasePhysicalAssessment:
@@ -55,7 +53,6 @@ def base_physical_assessment(
         physical_spec,
         calibration,
         continuity,
-        frame_sequence.holder_occlusion,
         maximum_photo_width_cv=(
             scoring_policy.base_detection.maximum_photo_width_cv
         ),

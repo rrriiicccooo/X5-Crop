@@ -98,9 +98,10 @@ class PixelInterval:
 
 
 @dataclass(frozen=True)
-class FrameDimensionEstimate:
+class FrameDimensionPrior:
     width_px: PixelInterval
     height_px: PixelInterval
+    frame_size_options_mm: tuple[tuple[float, float], ...]
     source: str
     provenance: MeasurementProvenance
 

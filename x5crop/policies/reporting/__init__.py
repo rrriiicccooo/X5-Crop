@@ -49,7 +49,7 @@ def _physical_runtime_detail(policy: "DetectionPolicy") -> dict[str, Any]:
             "observation": _plain(policy.separator.observation),
             "profile": _plain(policy.separator.profile),
             "continuity": _plain(policy.separator.continuity),
-            "frame_dimensions": _plain(policy.separator.frame_dimension_estimate),
+            "frame_dimensions": _plain(policy.separator.frame_dimension_prior),
         },
         "content": {
             "evidence": _plain(policy.content.evidence),

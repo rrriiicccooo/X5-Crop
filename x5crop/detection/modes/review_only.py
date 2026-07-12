@@ -5,9 +5,10 @@ from ...domain import Box, MeasurementProvenance
 from ..candidate.model import BuiltCandidate
 from ..candidate.plan.count_hypotheses import CountHypothesis
 from ..context import DetectionContext
-from ..geometry import CandidateGeometry
+from ..physical.model import SequenceResiduals, SequenceSolution
+from ..physical.boundary import HolderOcclusionEvidence
 from ..physical.boundary import canvas_boundary_observations
-from ..physical.photo_size import frame_dimension_estimate
+from ..physical.photo_size import frame_dimension_prior
 from x5crop.domain import CropEnvelope, HolderSpan, VisibleSequenceSpan
 
 
@@ -22,15 +23,14 @@ def review_only_candidate(context: DetectionContext) -> BuiltCandidate:
     span = Box(0, 0, width, height)
     count = physical_spec.default_count
     visible_span = VisibleSequenceSpan(span)
-    dimensions = frame_dimension_estimate(
+    dimensions = frame_dimension_prior(
         visible_span,
         physical_spec,
         context.scan_calibration,
-        context.policy.separator.frame_dimension_estimate,
         layout=context.request.layout,
     )
     return BuiltCandidate(
-        geometry=CandidateGeometry(
+        geometry=SequenceSolution(
             format_id=physical_spec.format_id,
             layout=context.request.layout,
             strip_mode=context.request.strip_mode,
@@ -38,11 +38,16 @@ def review_only_candidate(context: DetectionContext) -> BuiltCandidate:
             holder_span=HolderSpan(span),
             visible_sequence_span=visible_span,
             crop_envelope=CropEnvelope(span),
+            photo_intervals=(),
             frames=(),
             separator_observations=(),
             separator_assignments=(),
             frame_boundaries=(),
-            frame_dimension_estimate=dimensions,
+            inter_frame_relations=(),
+            holder_occlusion=HolderOcclusionEvidence.unavailable(),
+            frame_dimension_prior=dimensions,
+            residuals=SequenceResiduals(None, None, 0.0),
+            search_exhausted=False,
             source=CANDIDATE_SOURCE_REVIEW_ONLY,
             automatic_processing_supported=False,
             sequence_hypothesis_name="review_only_canvas",

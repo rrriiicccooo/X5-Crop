@@ -16,7 +16,8 @@ from ..candidate.assessment.candidate import assess_candidate
 from ..candidate.selection.choose import select_candidates
 from ..candidate.selection.model import SelectionResult
 from ..context import DetectionContext
-from ..geometry import CandidateGeometry
+from ..physical.model import SequenceResiduals, SequenceSolution
+from ..physical.boundary import HolderOcclusionEvidence
 from ..physical.boundary import canvas_boundary_observations
 from x5crop.domain import CropEnvelope, HolderSpan, VisibleSequenceSpan
 from .dual_lane_split import LaneDividerProposal, lane_divider_proposals
@@ -124,7 +125,7 @@ def _parent_candidate(
     count = sum(candidate.geometry.count for candidate in lane_candidates)
     work_height, work_width = context.measurement_cache.gray_work.shape
     return BuiltCandidate(
-        geometry=CandidateGeometry(
+        geometry=SequenceSolution(
             format_id=physical_spec.format_id,
             layout=context.request.layout,
             strip_mode="full",
@@ -134,11 +135,16 @@ def _parent_candidate(
             ),
             visible_sequence_span=VisibleSequenceSpan(visible_sequence_span),
             crop_envelope=CropEnvelope(crop_envelope),
+            photo_intervals=(),
             frames=frames,
             separator_observations=tuple(observations),
             separator_assignments=(),
             frame_boundaries=(),
-            frame_dimension_estimate=lane_candidates[0].geometry.frame_dimension_estimate,
+            inter_frame_relations=(),
+            holder_occlusion=HolderOcclusionEvidence.not_applicable(),
+            frame_dimension_prior=lane_candidates[0].geometry.frame_dimension_prior,
+            residuals=SequenceResiduals(None, None, 0.0),
+            search_exhausted=False,
             source=CANDIDATE_SOURCE_DUAL_LANE,
             automatic_processing_supported=divider.source != "center_safety",
             sequence_hypothesis_name="measured_lane_divider",

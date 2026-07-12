@@ -6,7 +6,7 @@ import numpy as np
 
 from ...domain import Box
 from ...geometry.detection_parameters import SeparatorContinuityParameters
-from ..geometry import CandidateGeometry
+from ..physical.model import SequenceSolution
 from x5crop.domain import SeparatorBandObservation
 from x5crop.domain import EvidenceState
 
@@ -51,7 +51,7 @@ def _break_count(mask: np.ndarray) -> int:
 
 
 def _measurement_corridor(
-    geometry: CandidateGeometry,
+    geometry: SequenceSolution,
     observation: SeparatorBandObservation,
 ) -> Box:
     if observation.lane_box is not None:
@@ -68,7 +68,7 @@ def _measurement_corridor(
 
 def separator_cross_axis_continuity_evidence(
     gray_work: np.ndarray,
-    geometry: CandidateGeometry,
+    geometry: SequenceSolution,
     parameters: SeparatorContinuityParameters,
 ) -> SeparatorContinuityEvidence:
     records: list[SeparatorContinuityRecord] = []

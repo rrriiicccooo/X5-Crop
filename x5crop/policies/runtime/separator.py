@@ -7,7 +7,7 @@ from ...geometry.detection_parameters import (
     SeparatorProfileParameters,
 )
 from ..parameters.separator import (
-    FrameDimensionEstimateParameters,
+    FrameDimensionPriorParameters,
     SeparatorObservationParameters,
 )
 
@@ -15,6 +15,6 @@ from ..parameters.separator import (
 @dataclass(frozen=True)
 class SeparatorPolicy:
     observation: SeparatorObservationParameters
-    frame_dimension_estimate: FrameDimensionEstimateParameters
+    frame_dimension_prior: FrameDimensionPriorParameters
     continuity: SeparatorContinuityParameters
     profile: SeparatorProfileParameters

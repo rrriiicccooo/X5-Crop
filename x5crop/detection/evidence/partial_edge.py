@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ..geometry import CandidateGeometry
+from ..physical.model import SequenceSolution
 from ..physical.photo_size import FrameDimensionEvidence
 from .content.frame_support import FrameContentEvidence
 from .frame_coverage import FrameCoverageEvidence
@@ -23,7 +23,7 @@ class PartialEdgeSafetyEvidence:
     diagnostics: tuple[str, ...]
 
 def partial_edge_safety_evidence(
-    geometry: CandidateGeometry,
+    geometry: SequenceSolution,
     frame_coverage: FrameCoverageEvidence,
     frame_dimensions: FrameDimensionEvidence,
     frame_content: FrameContentEvidence,

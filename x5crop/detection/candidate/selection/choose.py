@@ -60,8 +60,8 @@ def geometry_distance(
         return None
     scale = max(
         1.0,
-        float(left_geometry.frame_dimension_estimate.width_px.midpoint),
-        float(right_geometry.frame_dimension_estimate.width_px.midpoint),
+        float(left_geometry.frame_dimension_prior.width_px.midpoint),
+        float(right_geometry.frame_dimension_prior.width_px.midpoint),
     )
     distances = [
         _box_edge_distance(

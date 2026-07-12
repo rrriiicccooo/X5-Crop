@@ -25,7 +25,7 @@ from .scoring import (
     ScoringCalibrationParameters,
 )
 from .separator import (
-    FrameDimensionEstimateParameters,
+    FrameDimensionPriorParameters,
     SeparatorObservationParameters,
 )
 
@@ -47,8 +47,8 @@ class SeparatorParameters:
     separator_observation: SeparatorObservationParameters = field(
         default_factory=SeparatorObservationParameters
     )
-    frame_dimension_estimate: FrameDimensionEstimateParameters = field(
-        default_factory=FrameDimensionEstimateParameters
+    frame_dimension_prior: FrameDimensionPriorParameters = field(
+        default_factory=FrameDimensionPriorParameters
     )
     separator_continuity: SeparatorContinuityParameters = field(
         default_factory=SeparatorContinuityParameters

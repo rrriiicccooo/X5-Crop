@@ -46,7 +46,11 @@ from x5crop.detection.evidence.separator_continuity import SeparatorContinuityEv
 from x5crop.domain import EvidenceState
 from x5crop.detection.evidence.transform_geometry import TransformGeometryEvidence
 from x5crop.detection.gate_checks import GateCheck
-from x5crop.detection.geometry import CandidateGeometry
+from x5crop.detection.physical.model import (
+    PhotoInterval,
+    SequenceResiduals,
+    SequenceSolution,
+)
 from x5crop.detection.physical.photo_size import FrameDimensionEvidence
 from x5crop.detection.physical.boundary import HolderOcclusionEvidence
 from x5crop.domain import PixelInterval
@@ -65,7 +69,7 @@ from x5crop.domain import (
     AxisBleedParameters,
     BoundaryPositionConstraint,
     Box,
-    FrameDimensionEstimate,
+    FrameDimensionPrior,
     MeasurementProvenance,
     OutputBleedPlan,
     SeparatorWidthConstraint,
@@ -346,7 +350,12 @@ def candidate_fixture(
     )
     assignment = replace(assignment, used_for_boundary=True)
     boundary = frame_boundary_from_assignment(assignment)
-    geometry = CandidateGeometry(
+    relation = observed_spacing_evidence(
+        1,
+        PixelInterval.exact(observation.width),
+        observation.provenance,
+    )
+    geometry = SequenceSolution(
         format_id="135",
         layout="horizontal",
         strip_mode="full",
@@ -354,13 +363,30 @@ def candidate_fixture(
         holder_span=HolderSpan(outer),
         visible_sequence_span=VisibleSequenceSpan(outer),
         crop_envelope=CropEnvelope(outer),
+        photo_intervals=(
+            PhotoInterval(
+                1,
+                PixelInterval.exact(0.0),
+                PixelInterval.exact(95.0),
+                MeasurementProvenance("photo_edges", "test_fixture", ("separator_profile",)),
+            ),
+            PhotoInterval(
+                2,
+                PixelInterval.exact(105.0),
+                PixelInterval.exact(200.0),
+                MeasurementProvenance("photo_edges", "test_fixture", ("separator_profile",)),
+            ),
+        ),
         frames=frames,
         separator_observations=(observation,),
         separator_assignments=(assignment,),
         frame_boundaries=(boundary,),
-        frame_dimension_estimate=FrameDimensionEstimate(
+        inter_frame_relations=(relation,),
+        holder_occlusion=HolderOcclusionEvidence.not_applicable(),
+        frame_dimension_prior=FrameDimensionPrior(
             PixelInterval.exact(100.0),
             PixelInterval.exact(100.0),
+            ((36.0, 24.0),),
             "test_fixture",
             MeasurementProvenance(
                 "frame_dimensions",
@@ -368,6 +394,8 @@ def candidate_fixture(
                 ("format_physical_spec",),
             ),
         ),
+        residuals=SequenceResiduals(0.05, 0.0, 0.0),
+        search_exhausted=False,
         source=CANDIDATE_SOURCE_FRAME_SEQUENCE,
         automatic_processing_supported=automatic_processing_supported,
         sequence_hypothesis_name="synthetic_sequence",

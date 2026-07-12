@@ -7,7 +7,7 @@ import numpy as np
 from ....cache import MeasurementCache
 from ....domain import Box
 from ....policies.parameters.content import ContentEvidenceParameters
-from ...geometry import CandidateGeometry
+from ...physical.model import SequenceSolution
 from x5crop.domain import EvidenceState
 from .frame_support import FrameContentEvidence
 
@@ -29,7 +29,7 @@ class HolderTextureEvidence:
     content_holder_coverage_contrast: float | None
 
 def holder_texture_evidence(
-    geometry: CandidateGeometry,
+    geometry: SequenceSolution,
     cache: MeasurementCache,
     frame_content: FrameContentEvidence,
     parameters: ContentEvidenceParameters,

@@ -27,15 +27,14 @@ from x5crop.detection.evidence.sequence_content_alignment import (
 from x5crop.detection.physical.boundary import HolderOcclusionEvidence
 from x5crop.detection.physical.separator.assignment import (
     assign_observation_to_boundary,
-    build_frame_boundaries,
-    frames_from_boundaries,
 )
+from x5crop.detection.physical.sequence_solver import solve_frame_sequence
 from x5crop.detection.physical.spacing import spacing_hypothesis
 from x5crop.domain import (
     AxisBleedParameters,
     Box,
     EvidenceState,
-    FrameDimensionEstimate,
+    FrameDimensionPrior,
     MeasurementProvenance,
     PixelInterval,
     VisibleSequenceSpan,
@@ -76,15 +75,16 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
         self.assertEqual(spacing.kind, "overlap")
         self.assertEqual(spacing.state, EvidenceState.UNAVAILABLE)
 
-    def test_boundary_builder_cannot_emit_non_monotonic_frames(self) -> None:
-        result = build_frame_boundaries(
+    def test_sequence_solver_cannot_emit_non_monotonic_frames(self) -> None:
+        result = solve_frame_sequence(
             (separator_observation(280.0, start=275.0, end=285.0),),
             (),
             VisibleSequenceSpan(Box(0, 0, 300, 100)),
             3,
-            FrameDimensionEstimate(
+            FrameDimensionPrior(
                 PixelInterval(10.0, 290.0),
                 PixelInterval.exact(100.0),
+                ((36.0, 24.0),),
                 "synthetic",
                 MeasurementProvenance(
                     "frame_dimensions",
@@ -94,14 +94,12 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
             ),
             HolderOcclusionEvidence.not_applicable(),
         )
-        frames = frames_from_boundaries(
-            VisibleSequenceSpan(Box(0, 0, 300, 100)),
-            result.boundaries,
-            3,
-        )
-        self.assertTrue(all(frame.valid() for frame in frames))
+        self.assertTrue(all(frame.valid() for frame in result.frames))
         self.assertTrue(
-            all(left.right <= right.left for left, right in zip(frames, frames[1:]))
+            all(
+                left.right <= right.left
+                for left, right in zip(result.frames, result.frames[1:])
+            )
         )
 
     def test_content_at_frame_edges_is_not_undercrop(self) -> None:
