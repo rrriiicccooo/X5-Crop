@@ -90,7 +90,7 @@ PARAMETER_GROUPS = (
     _group(BaseGrayParameters, ("red_weight", "green_weight", "blue_weight"), ParameterRole.STANDARD_TRANSFORM, "coefficient", "preprocess", "Standard linear-light luma transform."),
     _group(BaseGrayParameters, ("low_percentile", "high_percentile"), ParameterRole.ADAPTIVE_MEASUREMENT, "percentile", "preprocess", "Per-image intensity normalization."),
     _group(BaseGrayParameters, ("maximum_percentile_samples",), ParameterRole.ADAPTIVE_MEASUREMENT, "sample_count", "preprocess", "Deterministic percentile sampling support."),
-    _group(ImageMeasurementStatisticsParameters, ("intensity_percentiles", "noise_percentiles", "edge_intensity_percentiles", "edge_texture_percentiles"), ParameterRole.ADAPTIVE_MEASUREMENT, "percentile", "preprocess", "Robust image measurement statistics."),
+    _group(ImageMeasurementStatisticsParameters, ("intensity_percentiles", "noise_percentiles", "edge_texture_percentiles"), ParameterRole.ADAPTIVE_MEASUREMENT, "percentile", "preprocess", "Robust image measurement statistics."),
     _group(ImageMeasurementStatisticsParameters, ("edge_sample_ratio",), ParameterRole.ADAPTIVE_MEASUREMENT, "ratio", "preprocess", "Scale-independent edge sampling."),
     _group(ImageMeasurementStatisticsParameters, ("edge_sample_min_px",), ParameterRole.ADAPTIVE_MEASUREMENT, "px", "preprocess", "Minimum sampling support."),
     _group(ImageMeasurementStatisticsParameters, ("maximum_percentile_samples",), ParameterRole.ADAPTIVE_MEASUREMENT, "sample_count", "preprocess", "Deterministic percentile sampling support."),

@@ -18,7 +18,10 @@ def _axis_profiles(gray: np.ndarray, axis: int) -> tuple[np.ndarray, np.ndarray]
     gy = np.abs(np.diff(data, axis=0, prepend=data[:1, :]))
     texture = gx + gy
     reduction_axis = 0 if axis == 1 else 1
-    return data.mean(axis=reduction_axis), texture.mean(axis=reduction_axis)
+    return (
+        np.median(data, axis=reduction_axis),
+        np.median(texture, axis=reduction_axis),
+    )
 
 
 def _first_run(mask: np.ndarray) -> int | None:
@@ -39,7 +42,7 @@ def _reference_masks(
     texture_limit: float,
     parameters: BoundaryObservationParameters,
 ) -> tuple[np.ndarray, np.ndarray]:
-    edge_reference = float(np.median((intensity[0], intensity[-1])))
+    edge_reference = float(intensity[0])
     deviation = np.abs(intensity - edge_reference)
     tolerance = float(
         np.percentile(deviation, parameters.holder_reference_percentile)
@@ -92,42 +95,62 @@ def _observation(
     )
 
 
-def _four_side_observations(
-    column_mask: np.ndarray,
-    row_mask: np.ndarray,
-    column_profile: np.ndarray,
-    row_profile: np.ndarray,
+def _side_observations(
+    column_intensity: np.ndarray,
+    column_texture: np.ndarray,
+    row_intensity: np.ndarray,
+    row_texture: np.ndarray,
+    statistics: ImageMeasurementStatistics,
     kind: str,
-    *,
-    holder_transition: bool,
     parameters: BoundaryObservationParameters,
 ) -> tuple[BoundaryObservation, ...]:
-    find = _edge_transition if holder_transition else _first_run
-    width = int(column_mask.size)
-    height = int(row_mask.size)
-    leading = find(column_mask)
-    trailing_offset = find(column_mask[::-1])
-    top = find(row_mask)
-    bottom_offset = find(row_mask[::-1])
-    values = (
-        ("leading", leading, column_profile),
-        (
-            "trailing",
-            None if trailing_offset is None else width - trailing_offset,
-            column_profile,
-        ),
-        ("top", top, row_profile),
-        (
-            "bottom",
-            None if bottom_offset is None else height - bottom_offset,
-            row_profile,
-        ),
+    profiles = (
+        ("leading", column_intensity, column_texture, False),
+        ("trailing", column_intensity, column_texture, True),
+        ("top", row_intensity, row_texture, False),
+        ("bottom", row_intensity, row_texture, True),
     )
-    return tuple(
-        _observation(side, int(position), kind, profile, parameters)
-        for side, position, profile in values
-        if position not in {None, 0, len(profile)}
-    )
+    observations: list[BoundaryObservation] = []
+    for side, intensity, texture, reverse in profiles:
+        oriented_intensity = intensity[::-1] if reverse else intensity
+        oriented_texture = texture[::-1] if reverse else texture
+        holder, tonal = _reference_masks(
+            oriented_intensity,
+            oriented_texture,
+            statistics.edge_texture_limit,
+            parameters,
+        )
+        if kind == "white_holder_transition":
+            if float(oriented_intensity[0]) < float(statistics.intensity_high):
+                continue
+            offset = _edge_transition(holder)
+        elif kind == "tonal_transition":
+            offset = _first_run(tonal)
+        elif kind == "texture_transition":
+            offset = _first_run(
+                oriented_texture > float(statistics.edge_texture_limit)
+            )
+        else:
+            raise ValueError(f"unsupported boundary observation kind: {kind}")
+        position = (
+            None
+            if offset is None
+            else int(intensity.size) - offset
+            if reverse
+            else offset
+        )
+        if position in {None, 0, len(intensity)}:
+            continue
+        observations.append(
+            _observation(
+                side,
+                int(position),
+                kind,
+                intensity,
+                parameters,
+            )
+        )
+    return tuple(observations)
 
 
 def boundary_observation_groups(
@@ -137,55 +160,32 @@ def boundary_observation_groups(
 ) -> tuple[BoundaryObservationGroup, ...]:
     column_intensity, column_texture = _axis_profiles(gray, axis=1)
     row_intensity, row_texture = _axis_profiles(gray, axis=0)
-    texture_limit = statistics.edge_texture_limit
-    column_holder, column_tonal = _reference_masks(
+    white_holder = _side_observations(
         column_intensity,
         column_texture,
-        texture_limit,
-        parameters,
-    )
-    row_holder, row_tonal = _reference_masks(
         row_intensity,
         row_texture,
-        texture_limit,
+        statistics,
+        "white_holder_transition",
         parameters,
     )
-    column_texture_change = column_texture > texture_limit
-    row_texture_change = row_texture > texture_limit
-    edge_is_white_holder = bool(
-        statistics.intensity_low < statistics.edge_intensity_quantiles[1]
-        and statistics.edge_intensity_quantiles[1] >= statistics.intensity_high
-    )
-    white_holder = (
-        _four_side_observations(
-            column_holder,
-            row_holder,
-            column_intensity,
-            row_intensity,
-            "white_holder_transition",
-            holder_transition=True,
-            parameters=parameters,
-        )
-        if edge_is_white_holder
-        else ()
-    )
-    tonal = _four_side_observations(
-        column_tonal,
-        row_tonal,
+    tonal = _side_observations(
         column_intensity,
+        column_texture,
         row_intensity,
+        row_texture,
+        statistics,
         "tonal_transition",
-        holder_transition=False,
-        parameters=parameters,
+        parameters,
     )
-    texture = _four_side_observations(
-        column_texture_change,
-        row_texture_change,
+    texture = _side_observations(
+        column_intensity,
         column_texture,
+        row_intensity,
         row_texture,
+        statistics,
         "texture_transition",
-        holder_transition=False,
-        parameters=parameters,
+        parameters,
     )
     return (
         ("white_holder", white_holder),

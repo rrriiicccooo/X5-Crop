@@ -63,6 +63,26 @@ class BoundaryDetectionTests(unittest.TestCase):
         )
         self.assertTrue(all(observation.kind for observation in observations))
 
+    def test_mixed_white_and_dark_edges_are_classified_per_side(self) -> None:
+        gray = np.full((120, 240), 120, dtype=np.uint8)
+        gray[:, :30] = 255
+        gray[:, 210:] = 0
+        gray[:20, :] = 255
+        gray[100:, :] = 0
+
+        groups = dict(
+            boundary_observation_groups(
+                gray,
+                _statistics(gray),
+                BOUNDARY_PARAMETERS,
+            )
+        )
+
+        self.assertEqual(
+            {observation.side for observation in groups["white_holder"]},
+            {"leading", "top"},
+        )
+
     def test_sequence_hypothesis_carries_four_side_boundary_provenance(self) -> None:
         gray = np.full((120, 240), 255, dtype=np.uint8)
         gray[20:100, 40:200] = 120

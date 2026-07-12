@@ -11,6 +11,7 @@ from x5crop.domain import EvidenceState
 from x5crop.detection.physical.boundary import (
     BoundaryObservation,
     HolderOcclusionEvidence,
+    HolderOcclusionSideEvidence,
     visible_sequence_and_crop_envelope,
     holder_occlusion_evidence,
 )
@@ -22,6 +23,7 @@ from x5crop.detection.physical.spacing import (
 )
 from x5crop.detection.physical.separator.assignment import (
     assign_observation_to_boundary,
+    boundary_position_constraint,
     dimension_constrained_boundary,
 )
 from x5crop.detection.physical.sequence_solver import solve_frame_sequence
@@ -63,12 +65,65 @@ def _statistics() -> ImageMeasurementStatistics:
         gradient_mad=1.0,
         texture_quantiles=(0.0, 32.0, 128.0),
         texture_mad=1.0,
-        edge_intensity_quantiles=(32.0, 128.0, 224.0),
         edge_texture_quantiles=(0.0, 32.0, 128.0),
     )
 
 
 class FrameSequenceGeometryContractTests(unittest.TestCase):
+    def test_not_applicable_holder_occlusion_cannot_hide_frame_width(self) -> None:
+        with self.assertRaises(ValueError):
+            HolderOcclusionSideEvidence(
+                "leading",
+                EvidenceState.NOT_APPLICABLE,
+                PixelInterval(1.0, 2.0),
+                "invalid_not_applicable_occlusion",
+                None,
+            )
+
+    def test_nonintersecting_boundary_constraints_have_no_fabricated_midpoint(
+        self,
+    ) -> None:
+        boundary = BoundaryObservation(
+            "leading",
+            PixelInterval.exact(0.0),
+            "white_holder_transition",
+            MeasurementProvenance(
+                "holder_boundary_profile",
+                "synthetic",
+                ("gray_work",),
+            ),
+        )
+        occlusion = HolderOcclusionEvidence(
+            HolderOcclusionSideEvidence(
+                "leading",
+                EvidenceState.SUPPORTED,
+                PixelInterval.exact(1_000.0),
+                "synthetic_hidden_width",
+                boundary,
+            ),
+            HolderOcclusionEvidence.not_applicable().trailing,
+        )
+        dimensions = FrameDimensionPrior(
+            PixelInterval.exact(200.0),
+            PixelInterval.exact(100.0),
+            ((36.0, 24.0),),
+            "synthetic",
+            MeasurementProvenance(
+                "frame_dimensions",
+                "synthetic",
+                ("physical_frame_size",),
+            ),
+        )
+
+        with self.assertRaises(ValueError):
+            boundary_position_constraint(
+                VisibleSequenceSpan(Box(0, 0, 100, 100)),
+                1,
+                2,
+                dimensions,
+                occlusion,
+            )
+
     def test_separator_requires_a_connected_cross_axis_pixel_path(self) -> None:
         gray = np.full((100, 200), 128, dtype=np.uint8)
         gray[::2, 95] = 0

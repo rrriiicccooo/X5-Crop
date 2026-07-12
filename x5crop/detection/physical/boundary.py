@@ -23,11 +23,39 @@ class HolderOcclusionSideEvidence:
     reason: str
     boundary: BoundaryObservation | None
 
+    def __post_init__(self) -> None:
+        if self.side not in {"leading", "trailing"}:
+            raise ValueError("holder occlusion side must be leading or trailing")
+        if self.hidden_width_px.minimum < 0.0:
+            raise ValueError("holder occlusion width cannot be negative")
+        if not self.reason:
+            raise ValueError("holder occlusion evidence requires a reason")
+        if self.boundary is not None and self.boundary.side != self.side:
+            raise ValueError("holder occlusion boundary must match its side")
+        if self.state == EvidenceState.NOT_APPLICABLE:
+            if self.hidden_width_px != PixelInterval.zero():
+                raise ValueError("not-applicable holder occlusion has zero width")
+        elif self.state == EvidenceState.SUPPORTED:
+            if (
+                self.hidden_width_px.minimum <= 0.0
+                or self.boundary is None
+                or self.boundary.kind != "white_holder_transition"
+            ):
+                raise ValueError(
+                    "supported holder occlusion requires positive white-holder evidence"
+                )
+        elif self.state != EvidenceState.UNAVAILABLE:
+            raise ValueError("unsupported holder occlusion evidence state")
+
 
 @dataclass(frozen=True)
 class HolderOcclusionEvidence:
     leading: HolderOcclusionSideEvidence
     trailing: HolderOcclusionSideEvidence
+
+    def __post_init__(self) -> None:
+        if self.leading.side != "leading" or self.trailing.side != "trailing":
+            raise ValueError("holder occlusion evidence requires ordered edge sides")
 
     @classmethod
     def not_applicable(cls) -> "HolderOcclusionEvidence":

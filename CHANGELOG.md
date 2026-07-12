@@ -26,6 +26,10 @@ repository rules in `AGENTS.md`.
 - Global solver 保留同一 span/count 下所有最大 independent-anchor assignment 解，并输出
   `BoundaryAssignmentConsensus`。不同物理解的切线区间不相交时，`GeometryResolution` 保持
   unavailable，tonal strength 或先验位置只能选择 REVIEW representative，不能消除歧义。
+- Boundary observation 改为逐边独立 edge reference 和 scan direction；相对两端及四边不再
+  共享 white-holder 身份，左白右黑、上白下黑等真实 mixed boundary 可同时表达。
+- Holder occlusion 的 state、side、white-holder provenance 与 hidden-width interval 现在由 typed
+  invariant 约束；完全不相交的 boundary constraints 直接无解，不再伪造 midpoint。
 - 单个 separator 宽度上限由边界两侧照片的物理占位决定，不再被其他 boundary 的 overlap
   抵消。可信 calibration、两端实测边界与其余独立 spacing 唯一共同确定的负 residual 可形成
   `CorroboratedSpacingEvidence`，只保护相邻输出，不反向证明 conservation。
@@ -50,7 +54,7 @@ repository rules in `AGENTS.md`.
 - Cache reuse 不再从 report candidate 反向选择 configuration；output bleed layout 必须显式传入。
 - Diagnostics 参数不再使 detection analysis fingerprint 失效；无法测得的 content threshold 也只
   计算一次。Malformed current-schema record 现在返回 validation error，不再从 validator 抛异常。
-- 276 项测试、14 个 format/mode configuration、package/regression compile、launcher syntax、
+- 279 项测试、14 个 format/mode configuration、package/regression compile、launcher syntax、
   version 和 whitespace 检查通过。
 
 #### 物理序列求解与经验参数退场（2026-07-12）

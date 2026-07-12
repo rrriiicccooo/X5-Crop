@@ -28,7 +28,6 @@ class ImageMeasurementStatisticsParameters:
         98.0,
     )
     noise_percentiles: tuple[float, float, float] = (50.0, 90.0, 99.0)
-    edge_intensity_percentiles: tuple[float, float, float] = (10.0, 50.0, 90.0)
     edge_texture_percentiles: tuple[float, float, float] = (50.0, 90.0, 99.0)
     edge_sample_ratio: float = 0.05
     edge_sample_min_px: int = 8
@@ -44,11 +43,6 @@ class ImageMeasurementStatisticsParameters:
             (
                 "noise",
                 self.noise_percentiles,
-                DISTRIBUTION_QUANTILE_COUNT,
-            ),
-            (
-                "edge intensity",
-                self.edge_intensity_percentiles,
                 DISTRIBUTION_QUANTILE_COUNT,
             ),
             (
@@ -78,7 +72,6 @@ class ImageMeasurementStatistics:
     gradient_mad: float
     texture_quantiles: tuple[float, float, float]
     texture_mad: float
-    edge_intensity_quantiles: tuple[float, float, float]
     edge_texture_quantiles: tuple[float, float, float]
 
     @property
@@ -180,16 +173,7 @@ def image_measurement_statistics(
     edge_mask[-edge_band:, :] = True
     edge_mask[:, :edge_band] = True
     edge_mask[:, -edge_band:] = True
-    edge_intensity = data[edge_mask]
     edge_texture = texture[edge_mask]
-    edge_intensity_quantiles = tuple(
-        float(value)
-        for value in sampled_percentile(
-            edge_intensity,
-            parameters.edge_intensity_percentiles,
-            parameters.maximum_percentile_samples,
-        )
-    )
     edge_texture_quantiles = tuple(
         float(value)
         for value in sampled_percentile(
@@ -217,6 +201,5 @@ def image_measurement_statistics(
             texture_quantiles[0],
             parameters.maximum_percentile_samples,
         ),
-        edge_intensity_quantiles=edge_intensity_quantiles,
         edge_texture_quantiles=edge_texture_quantiles,
     )

@@ -67,9 +67,10 @@ physical spec 或普通参数对象，不反查 registry。
 | `VisibleSequenceSpan` | 源图中实际可见的照片序列范围。 |
 | `CropEnvelope` | 覆盖所有可见内容与 boundary uncertainty 的保守输出包络。 |
 
-每条边独立测量 white-holder、tonal、texture 或 canvas boundary interval。Base boundary
-不假设照片一定有黑边；黑边、白片夹和四边混合状态都可成为观测。Full canvas 只能作为
-保守 envelope，不能成为 count 或 boundary proof。
+每条边使用自己的 edge reference、scan direction 和 robust change-point measurement，独立测量
+white-holder、tonal、texture 或 canvas boundary interval。Base boundary 不合并相对两端的
+tonal identity，也不假设照片一定有黑边；左白右黑、上白下黑等四边混合状态都可成为观测。
+Full canvas 只能作为保守 envelope，不能成为 count 或 boundary proof。
 
 Content 只允许向外扩张 `CropEnvelope` 以保护可见内容。它不能收缩 sequence span、定义内部
 cut 或制造 frame count。
@@ -109,6 +110,8 @@ Sequence solver 同时求解所有内部 boundaries，不逐边贪心：
 - `PhotoInterval` 和 cuts 必须严格单调，不能产生零宽、负宽或倒序 frame。
 - Interior photos 服从同一 `FrameDimensionPrior` option。
 - Holder occlusion 只能作用于首张 leading edge 和末张 trailing edge。
+- Holder occlusion state、side 与 hidden-width interval 必须一致；无交集的 boundary constraints
+  是无解状态，不能用合成中点继续求解。
 - Position、width、sequence conservation 和 provenance 必须同时成立。
 - 同一 span/count 下所有最大独立-anchor 解都参与 `BoundaryAssignmentConsensus`；不同解的
   cut interval 没有共同交集时，assignment geometry 保持 unresolved。

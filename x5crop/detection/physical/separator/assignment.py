@@ -130,11 +130,9 @@ def boundary_position_constraint(
         float(span.box.right),
         max(leading.maximum, trailing.maximum),
     )
-    position = (
-        PixelInterval.exact(0.5 * (minimum + maximum))
-        if maximum < minimum
-        else PixelInterval(minimum, maximum)
-    )
+    if maximum < minimum:
+        raise ValueError("boundary position constraints do not intersect sequence span")
+    position = PixelInterval(minimum, maximum)
     return BoundaryPositionConstraint(
         boundary_index=int(boundary_index),
         position=position,
