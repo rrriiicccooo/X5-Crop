@@ -139,8 +139,9 @@ Enforcement and closure:
   candidate expansion. Optimize the latter two without moving decision authority.
 - Add a failing contract test for every newly found residue before fixing its root
   cause; search and remove the whole class of residue in the same change.
-- Early-stop only from explicit physical resolution or typed execution-budget
-  reliability. Keep physical resolution separate from CandidateGate and DecisionGate.
+- Early-stop only from explicit `GeometryResolution`. Execution-budget exhaustion
+  makes geometry unavailable; it is never a reliability signal. Keep physical
+  resolution separate from CandidateGate and DecisionGate.
 - Cache only exact, count/offset-independent measurements with typed keys. Never
   cache candidates, gates, decisions, final reasons, or approximate geometry.
 - Re-profile the same sample after each optimization wave, then run full contracts,

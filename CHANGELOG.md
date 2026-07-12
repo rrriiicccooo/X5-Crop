@@ -68,6 +68,8 @@ repository rules in `AGENTS.md`.
   DecisionGate 生成。
 - 同步修正文档中的 review-only assessment 描述，并用 current-schema contract 防止 marker payload
   说明回潮。
+- 删除协调规则中 execution-budget reliability 可触发 early-stop 的旧授权；只有
+  `GeometryResolution` 可以提前停止候选搜索。
 - Deskew measurement 与 transform evidence 删除自由 reason 字符串，统一使用 foundation-owned typed
   measurement outcome。
 - Boundary assignment consensus 删除 caller-supplied state/reason，改为 typed solver outcome；

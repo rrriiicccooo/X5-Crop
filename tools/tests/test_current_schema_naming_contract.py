@@ -271,6 +271,14 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
                     document,
                 )
 
+    def test_agents_grants_early_stop_only_to_geometry_resolution(self) -> None:
+        agents = (PROJECT_ROOT / "AGENTS.md").read_text(encoding="utf-8")
+        self.assertNotIn("or typed execution-budget", agents)
+        self.assertIn(
+            "`GeometryResolution` is the only early-stop input",
+            agents,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
