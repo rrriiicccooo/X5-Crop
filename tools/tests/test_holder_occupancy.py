@@ -3,7 +3,12 @@ from __future__ import annotations
 from dataclasses import replace
 import unittest
 
-from tools.tests.physical_gate_support import candidate_evidence_fixture, candidate_fixture, separator_observation
+from tools.tests.physical_gate_support import (
+    candidate_evidence_fixture,
+    candidate_fixture,
+    separator_constraints,
+    separator_observation,
+)
 from x5crop.detection.evidence.holder_occupancy import holder_occupancy_evidence
 from x5crop.detection.evidence.partial_edge import partial_edge_safety_evidence
 from x5crop.detection.physical.separator.assignment import (
@@ -36,9 +41,13 @@ class HolderOccupancyTests(unittest.TestCase):
                 assign_observation_to_boundary(
                     index,
                     observation,
-                    PixelInterval(
-                        observation.start - 10.0,
-                        observation.end + 10.0,
+                    *separator_constraints(
+                        index,
+                        PixelInterval(
+                            observation.start - 10.0,
+                            observation.end + 10.0,
+                        ),
+                        PixelInterval(0.0, 20.0),
                     ),
                 ),
                 used_for_boundary=True,

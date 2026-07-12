@@ -7,6 +7,7 @@ from ..detection.evidence.transform_geometry import TransformGeometryEvidence
 from ..detection.gate_checks import GateCheck
 from ..domain import (
     AxisBleedParameters,
+    BoundaryPositionConstraint,
     Box,
     CropEnvelope,
     DimensionConstrainedBoundary,
@@ -17,6 +18,7 @@ from ..domain import (
     PixelInterval,
     SeparatorAssignment,
     SeparatorBandObservation,
+    SeparatorWidthConstraint,
     VisibleSequenceSpan,
 )
 from ..output.model import OutputGeometry
@@ -69,7 +71,16 @@ def _assignment(value: dict[str, Any]) -> SeparatorAssignment:
     return SeparatorAssignment(
         boundary_index=int(value["boundary_index"]),
         observation=_observation(value["observation"]),
-        allowed_interval=_interval(value["allowed_interval"]),
+        position_constraint=BoundaryPositionConstraint(
+            boundary_index=int(value["position_constraint"]["boundary_index"]),
+            position=_interval(value["position_constraint"]["position"]),
+            provenance=_provenance(value["position_constraint"]["provenance"]),
+        ),
+        width_constraint=SeparatorWidthConstraint(
+            boundary_index=int(value["width_constraint"]["boundary_index"]),
+            width=_interval(value["width_constraint"]["width"]),
+            provenance=_provenance(value["width_constraint"]["provenance"]),
+        ),
         state=EvidenceState(str(value["state"])),
         geometry_dependent=bool(value["geometry_dependent"]),
         used_for_boundary=bool(value["used_for_boundary"]),

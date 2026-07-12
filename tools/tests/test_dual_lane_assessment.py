@@ -8,7 +8,7 @@ from x5crop.detection.candidate.assessment.dual_lane import assess_dual_lane_can
 from x5crop.detection.candidate.model import BuiltCandidate
 from x5crop.domain import EvidenceState
 from x5crop.domain import PixelInterval
-from x5crop.detection.physical.spacing import inter_frame_spacing_evidence
+from x5crop.detection.physical.spacing import observed_spacing_evidence
 from x5crop.domain import CropEnvelope, HolderSpan, VisibleSequenceSpan
 from x5crop.domain import Box, MeasurementProvenance
 
@@ -78,9 +78,14 @@ class DualLaneAssessmentTest(unittest.TestCase):
                     frame_sequence=replace(
                         second.assessment.evidence.frame_sequence,
                         spacings=(
-                            inter_frame_spacing_evidence(
+                            observed_spacing_evidence(
                                 1,
                                 PixelInterval.exact(-8.0),
+                                MeasurementProvenance(
+                                    "photo_edges",
+                                    "synthetic_overlap",
+                                    ("gray_work",),
+                                ),
                             ),
                         ),
                     ),

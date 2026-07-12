@@ -105,6 +105,20 @@ class FrameDimensionEstimate:
     provenance: MeasurementProvenance
 
 
+@dataclass(frozen=True)
+class BoundaryPositionConstraint:
+    boundary_index: int
+    position: PixelInterval
+    provenance: MeasurementProvenance
+
+
+@dataclass(frozen=True)
+class SeparatorWidthConstraint:
+    boundary_index: int
+    width: PixelInterval
+    provenance: MeasurementProvenance
+
+
 def sum_pixel_intervals(intervals: tuple[PixelInterval, ...]) -> PixelInterval:
     return PixelInterval(
         sum(interval.minimum for interval in intervals),
@@ -192,7 +206,8 @@ class SeparatorBandObservation:
 class SeparatorAssignment:
     boundary_index: int
     observation: SeparatorBandObservation
-    allowed_interval: PixelInterval
+    position_constraint: BoundaryPositionConstraint
+    width_constraint: SeparatorWidthConstraint
     state: EvidenceState
     geometry_dependent: bool
     used_for_boundary: bool

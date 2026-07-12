@@ -30,12 +30,6 @@ def content_preservation_evidence(
     if uncovered:
         state = EvidenceState.CONTRADICTED
         reason = "content_outside_frame_union"
-    elif frame_coverage.unexplained_content_region_count:
-        state = EvidenceState.CONTRADICTED
-        reason = "content_region_count_exceeds_frame_count"
-    elif contacts:
-        state = EvidenceState.CONTRADICTED
-        reason = "content_contacts_frame_boundary"
     elif confirmed_sides:
         state = EvidenceState.CONTRADICTED
         reason = "content_outside_visible_sequence_confirmed"

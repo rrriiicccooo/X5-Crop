@@ -15,7 +15,7 @@ from ...physical.boundary import (
 )
 from ...physical.photo_size import frame_dimension_estimate
 from ...physical.separator.assignment import (
-    allowed_boundary_interval,
+    boundary_position_constraint,
     build_frame_boundaries,
     frames_from_boundaries,
 )
@@ -99,13 +99,13 @@ def build_frame_sequence_geometry(
         if (
             observation := measure_focused_separator_band(
                 profile,
-                allowed_boundary_interval(
+                boundary_position_constraint(
                     visible_sequence_span,
                     boundary_index,
                     count,
                     dimensions,
                     holder_occlusion,
-                ),
+                ).position,
                 corridor_start=float(corridor.left),
                 parameters=separator_policy.observation,
             )

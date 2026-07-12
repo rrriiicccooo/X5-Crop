@@ -3,15 +3,17 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 
 from ....domain import (
+    BoundaryPositionConstraint,
     Box,
     DimensionConstrainedBoundary,
     EvidenceState,
-    FrameDimensionEstimate,
     FrameBoundary,
+    FrameDimensionEstimate,
     MeasurementProvenance,
     PixelInterval,
     SeparatorAssignment,
     SeparatorBandObservation,
+    SeparatorWidthConstraint,
     VisibleSequenceSpan,
 )
 from ..boundary import HolderOcclusionEvidence
@@ -26,29 +28,38 @@ class FrameBoundaryBuildResult:
 def assign_observation_to_boundary(
     boundary_index: int,
     observation: SeparatorBandObservation,
-    allowed_interval: PixelInterval,
+    position_constraint: BoundaryPositionConstraint,
+    width_constraint: SeparatorWidthConstraint,
 ) -> SeparatorAssignment:
-    observed = observation.interval
-    fully_contained = bool(
-        observed.minimum >= allowed_interval.minimum
-        and observed.maximum <= allowed_interval.maximum
+    position = position_constraint.position
+    width = float(observation.width)
+    width_supported = bool(
+        width_constraint.width.minimum <= width <= width_constraint.width.maximum
     )
-    if fully_contained:
+    center_supported = bool(
+        position.minimum <= observation.center <= position.maximum
+    )
+    if not width_supported:
+        state = EvidenceState.CONTRADICTED
+        geometry_dependent = False
+        reason = "separator_width_outside_physical_constraint"
+    elif center_supported:
         state = EvidenceState.SUPPORTED
         geometry_dependent = False
-        reason = "observation_inside_physical_interval"
-    elif observed.intersects(allowed_interval):
+        reason = "separator_position_and_width_supported"
+    elif observation.interval.intersects(position):
         state = EvidenceState.UNAVAILABLE
         geometry_dependent = True
-        reason = "observation_partially_intersects_physical_interval"
+        reason = "separator_position_geometry_dependent"
     else:
         state = EvidenceState.CONTRADICTED
         geometry_dependent = False
-        reason = "observation_outside_physical_interval"
+        reason = "separator_position_outside_physical_constraint"
     return SeparatorAssignment(
         boundary_index=int(boundary_index),
         observation=observation,
-        allowed_interval=allowed_interval,
+        position_constraint=position_constraint,
+        width_constraint=width_constraint,
         state=state,
         geometry_dependent=geometry_dependent,
         used_for_boundary=False,
@@ -94,23 +105,21 @@ def dimension_constrained_boundary(
     )
 
 
-def allowed_boundary_interval(
+def boundary_position_constraint(
     span: VisibleSequenceSpan,
     boundary_index: int,
     count: int,
     dimensions: FrameDimensionEstimate,
     holder_occlusion: HolderOcclusionEvidence,
-) -> PixelInterval:
+) -> BoundaryPositionConstraint:
     if not 0 < boundary_index < count:
         raise ValueError("frame boundary index must be internal to the sequence")
-    leading_hidden = holder_occlusion.leading.hidden_width_px
-    trailing_hidden = holder_occlusion.trailing.hidden_width_px
     leading = PixelInterval.exact(float(span.box.left)).plus(
         dimensions.width_px.scaled(float(boundary_index))
-    ).minus(leading_hidden)
+    ).minus(holder_occlusion.leading.hidden_width_px)
     trailing = PixelInterval.exact(float(span.box.right)).minus(
         dimensions.width_px.scaled(float(count - boundary_index))
-    ).plus(trailing_hidden)
+    ).plus(holder_occlusion.trailing.hidden_width_px)
     minimum = max(
         float(span.box.left),
         min(leading.minimum, trailing.minimum),
@@ -119,9 +128,73 @@ def allowed_boundary_interval(
         float(span.box.right),
         max(leading.maximum, trailing.maximum),
     )
+    position = (
+        PixelInterval.exact(0.5 * (minimum + maximum))
+        if maximum < minimum
+        else PixelInterval(minimum, maximum)
+    )
+    return BoundaryPositionConstraint(
+        boundary_index=int(boundary_index),
+        position=position,
+        provenance=MeasurementProvenance(
+            root_measurement="frame_dimensions",
+            source="boundary_position_constraint",
+            dependencies=(
+                dimensions.provenance.root_measurement,
+                "sequence_boundaries",
+                "holder_occlusion",
+            ),
+        ),
+    )
+
+
+def separator_width_constraint(
+    span: VisibleSequenceSpan,
+    boundary_index: int,
+    count: int,
+    dimensions: FrameDimensionEstimate,
+    holder_occlusion: HolderOcclusionEvidence,
+) -> SeparatorWidthConstraint:
+    if not 0 < boundary_index < count:
+        raise ValueError("separator width constraint index must be internal")
+    occlusion = holder_occlusion.leading.hidden_width_px.plus(
+        holder_occlusion.trailing.hidden_width_px
+    )
+    spacing_budget = PixelInterval.exact(float(span.box.width)).plus(
+        occlusion
+    ).minus(dimensions.width_px.scaled(float(count)))
+    return SeparatorWidthConstraint(
+        boundary_index=int(boundary_index),
+        width=PixelInterval(0.0, max(0.0, spacing_budget.maximum)),
+        provenance=MeasurementProvenance(
+            root_measurement="frame_dimensions",
+            source="separator_width_constraint",
+            dependencies=(
+                dimensions.provenance.root_measurement,
+                "sequence_boundaries",
+                "holder_occlusion",
+            ),
+        ),
+    )
+
+
+def _bounded_position(
+    constraint: BoundaryPositionConstraint,
+    previous_coordinate: float,
+    span: VisibleSequenceSpan,
+    boundary_index: int,
+    count: int,
+) -> PixelInterval:
+    lower = previous_coordinate + 1.0
+    upper = float(span.box.right - (count - boundary_index))
+    if upper < lower:
+        raise ValueError("frame sequence has no room for monotonic cuts")
+    minimum = max(lower, constraint.position.minimum)
+    maximum = min(upper, constraint.position.maximum)
     if maximum < minimum:
-        midpoint = 0.5 * (minimum + maximum)
-        return PixelInterval.exact(midpoint)
+        return PixelInterval.exact(
+            max(lower, min(upper, constraint.position.midpoint))
+        )
     return PixelInterval(minimum, maximum)
 
 
@@ -154,33 +227,50 @@ def build_frame_boundaries(
             state_rank,
             -abs(
                 assignment.observation.center
-                - assignment.allowed_interval.midpoint
+                - assignment.position_constraint.position.midpoint
             ),
             assignment.observation.score,
         )
 
     for boundary_index in range(1, count):
-        allowed = allowed_boundary_interval(
+        position_constraint = boundary_position_constraint(
             span,
             boundary_index,
             count,
             dimensions,
             holder_occlusion,
         )
-        candidates = []
+        width_constraint = separator_width_constraint(
+            span,
+            boundary_index,
+            count,
+            dimensions,
+            holder_occlusion,
+        )
+        bounded_position = _bounded_position(
+            position_constraint,
+            previous_coordinate,
+            span,
+            boundary_index,
+            count,
+        )
+        candidates: list[tuple[int, SeparatorAssignment]] = []
         for observation_index, observation in enumerate(observations):
             assignment = assign_observation_to_boundary(
                 boundary_index,
                 observation,
-                allowed,
+                position_constraint,
+                width_constraint,
             )
             current = best_by_observation.get(observation_index)
             if current is None or diagnostic_rank(assignment) > diagnostic_rank(current):
                 best_by_observation[observation_index] = assignment
             if (
                 observation_index in used
-                or observation.center <= previous_coordinate
-                or assignment.state == EvidenceState.CONTRADICTED
+                or not assignment.independent
+                or not bounded_position.minimum
+                <= observation.center
+                <= bounded_position.maximum
             ):
                 continue
             candidates.append((observation_index, assignment))
@@ -188,50 +278,45 @@ def build_frame_boundaries(
             observation_index, assignment = max(
                 candidates,
                 key=lambda item: (
-                    1 if item[1].independent else 0,
                     item[1].observation.score,
                     -abs(
                         item[1].observation.center
-                        - item[1].allowed_interval.midpoint
+                        - item[1].position_constraint.position.midpoint
                     ),
                 ),
             )
-            if assignment.independent:
-                selected = replace(assignment, used_for_boundary=True)
-                used.add(observation_index)
-                selected_by_observation[observation_index] = selected
-                boundary = frame_boundary_from_assignment(selected)
-                boundaries.append(boundary)
-                previous_coordinate = boundary.coordinate
-                continue
-            constrained = (observation_index, assignment)
-        else:
-            constrained = None
+            selected = replace(assignment, used_for_boundary=True)
+            used.add(observation_index)
+            selected_by_observation[observation_index] = selected
+            boundary = frame_boundary_from_assignment(selected)
+            boundaries.append(boundary)
+            previous_coordinate = boundary.coordinate
+            continue
+
         focused = focused_by_index.get(boundary_index)
+        constrained_assignment = None
         if focused is not None:
-            constrained_assignment = SeparatorAssignment(
-                boundary_index=boundary_index,
-                observation=focused,
-                allowed_interval=allowed,
-                state=EvidenceState.UNAVAILABLE,
+            measured = assign_observation_to_boundary(
+                boundary_index,
+                focused,
+                position_constraint,
+                width_constraint,
+            )
+            constrained_assignment = replace(
+                measured,
+                state=(
+                    EvidenceState.CONTRADICTED
+                    if measured.state == EvidenceState.CONTRADICTED
+                    else EvidenceState.UNAVAILABLE
+                ),
                 geometry_dependent=True,
                 used_for_boundary=True,
-                reason="focused_observation_depends_on_dimension_window",
+                reason="focused_observation_depends_on_dimension_constraint",
             )
             focused_assignments.append(constrained_assignment)
-        elif constrained is not None:
-            observation_index, assignment = constrained
-            constrained_assignment = replace(
-                assignment,
-                used_for_boundary=True,
-            )
-            used.add(observation_index)
-            selected_by_observation[observation_index] = constrained_assignment
-        else:
-            constrained_assignment = None
         boundary = dimension_constrained_boundary(
             boundary_index,
-            allowed,
+            bounded_position,
             MeasurementProvenance(
                 root_measurement="frame_dimensions",
                 source="bidirectional_boundary_constraint",
@@ -244,6 +329,7 @@ def build_frame_boundaries(
         )
         boundaries.append(boundary)
         previous_coordinate = boundary.coordinate
+
     assignments = tuple(
         selected_by_observation.get(index, best_by_observation[index])
         for index in range(len(observations))
@@ -266,6 +352,8 @@ def frames_from_boundaries(
         *(boundary.coordinate for boundary in ordered),
         float(span.box.right),
     )
+    if any(right <= left for left, right in zip(cuts[:-1], cuts[1:])):
+        raise ValueError("frame cuts must be strictly monotonic")
     return tuple(
         Box(
             int(round(left)),

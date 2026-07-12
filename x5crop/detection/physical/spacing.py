@@ -2,7 +2,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from x5crop.domain import EvidenceState, PixelInterval, sum_pixel_intervals
+from x5crop.domain import (
+    EvidenceState,
+    MeasurementProvenance,
+    PixelInterval,
+    sum_pixel_intervals,
+)
 from .boundary import HolderOcclusionEvidence
 
 
@@ -10,21 +15,26 @@ SPACING_KINDS = frozenset({"separator", "contact", "overlap", "unresolved"})
 
 
 @dataclass(frozen=True)
-class InterFrameSpacingEvidence:
+class InterFrameRelation:
     index: int
     state: EvidenceState
     kind: str
     signed_width_px: PixelInterval
+    provenance: MeasurementProvenance
     reason: str
     lane_index: int | None = None
 
     def __post_init__(self) -> None:
         if self.index <= 0:
-            raise ValueError("inter-frame spacing index must be positive")
+            raise ValueError("inter-frame relation index must be positive")
         if self.kind not in SPACING_KINDS:
-            raise ValueError(f"unsupported spacing kind: {self.kind}")
+            raise ValueError(f"unsupported inter-frame relation: {self.kind}")
         if self.lane_index is not None and self.lane_index <= 0:
             raise ValueError("lane index must be positive")
+
+    @property
+    def independently_observed(self) -> bool:
+        return self.state == EvidenceState.SUPPORTED
 
 
 @dataclass(frozen=True)
@@ -48,12 +58,13 @@ def _spacing_kind(interval: PixelInterval) -> str:
     return "unresolved"
 
 
-def inter_frame_spacing_evidence(
+def observed_spacing_evidence(
     index: int,
     signed_width_px: PixelInterval,
-) -> InterFrameSpacingEvidence:
+    provenance: MeasurementProvenance,
+) -> InterFrameRelation:
     kind = _spacing_kind(signed_width_px)
-    return InterFrameSpacingEvidence(
+    return InterFrameRelation(
         index=index,
         state=(
             EvidenceState.UNAVAILABLE
@@ -62,7 +73,24 @@ def inter_frame_spacing_evidence(
         ),
         kind=kind,
         signed_width_px=signed_width_px,
-        reason=f"{kind}_spacing",
+        provenance=provenance,
+        reason=f"observed_{kind}_spacing",
+    )
+
+
+def spacing_hypothesis(
+    index: int,
+    signed_width_px: PixelInterval,
+    provenance: MeasurementProvenance,
+) -> InterFrameRelation:
+    kind = _spacing_kind(signed_width_px)
+    return InterFrameRelation(
+        index=index,
+        state=EvidenceState.UNAVAILABLE,
+        kind=kind,
+        signed_width_px=signed_width_px,
+        provenance=provenance,
+        reason=f"{kind}_spacing_hypothesis",
     )
 
 
@@ -71,7 +99,7 @@ def sequence_conservation_evidence(
     visible_length_px: PixelInterval,
     count: int,
     frame_width_px: PixelInterval,
-    spacings: tuple[InterFrameSpacingEvidence, ...],
+    spacings: tuple[InterFrameRelation, ...],
     holder_occlusion: HolderOcclusionEvidence,
 ) -> SequenceConservationEvidence:
     if count <= 0 or len(spacings) != max(0, count - 1):

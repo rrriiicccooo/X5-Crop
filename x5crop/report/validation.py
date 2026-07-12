@@ -111,15 +111,16 @@ def _separator_assignment_valid(value: Any) -> bool:
         and {
             "boundary_index",
             "observation",
-            "allowed_interval",
+            "position_constraint",
+            "width_constraint",
             "state",
             "geometry_dependent",
             "used_for_boundary",
             "reason",
         }.issubset(value)
         and _separator_observation_valid(value["observation"])
-        and isinstance(value["allowed_interval"], dict)
-        and {"minimum", "maximum"}.issubset(value["allowed_interval"])
+        and isinstance(value["position_constraint"], dict)
+        and isinstance(value["width_constraint"], dict)
     )
 
 

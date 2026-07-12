@@ -91,12 +91,13 @@ def frame_coverage_evidence(
     elif uncovered:
         state = EvidenceState.CONTRADICTED
         reason = "content_outside_frame_union"
-    elif unexplained_region_count:
-        state = EvidenceState.CONTRADICTED
-        reason = "content_region_count_exceeds_frame_count"
     else:
         state = EvidenceState.SUPPORTED
-        reason = "content_runs_covered"
+        reason = (
+            "content_runs_covered_multiple_regions"
+            if unexplained_region_count
+            else "content_runs_covered"
+        )
     return FrameCoverageEvidence(
         state=state,
         reason=reason,

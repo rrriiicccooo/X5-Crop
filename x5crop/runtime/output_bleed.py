@@ -12,7 +12,11 @@ def prepare_output_bleed(
     base_bleed: AxisBleedParameters,
 ) -> OutputBleedPlan:
     spacings = candidate.assessment.evidence.frame_sequence.spacings
-    overlaps = tuple(spacing for spacing in spacings if spacing.kind == "overlap")
+    overlaps = tuple(
+        spacing
+        for spacing in spacings
+        if spacing.kind == "overlap" and spacing.independently_observed
+    )
     widest_overlap_band_px = max(
         (-float(spacing.signed_width_px.minimum) for spacing in overlaps),
         default=0.0,

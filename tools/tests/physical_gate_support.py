@@ -52,7 +52,7 @@ from x5crop.detection.physical.boundary import HolderOcclusionEvidence
 from x5crop.domain import PixelInterval
 from x5crop.detection.physical.spacing import (
     SequenceConservationEvidence,
-    inter_frame_spacing_evidence,
+    observed_spacing_evidence,
 )
 from x5crop.domain import BoundaryObservation
 from x5crop.domain import CropEnvelope, HolderSpan, VisibleSequenceSpan
@@ -63,10 +63,12 @@ from x5crop.detection.physical.separator.assignment import (
 from x5crop.domain import SeparatorBandObservation
 from x5crop.domain import (
     AxisBleedParameters,
+    BoundaryPositionConstraint,
     Box,
     FrameDimensionEstimate,
     MeasurementProvenance,
     OutputBleedPlan,
+    SeparatorWidthConstraint,
 )
 from x5crop.units import ScanCalibration
 
@@ -90,6 +92,22 @@ def separator_observation(
             dependencies=("gray_work",),
         ),
         tonal_evidence=score,
+    )
+
+
+def separator_constraints(
+    index: int,
+    position: PixelInterval,
+    width: PixelInterval = PixelInterval(0.0, 1000.0),
+) -> tuple[BoundaryPositionConstraint, SeparatorWidthConstraint]:
+    provenance = MeasurementProvenance(
+        "frame_dimensions",
+        "test_constraint",
+        ("physical_frame_size",),
+    )
+    return (
+        BoundaryPositionConstraint(index, position, provenance),
+        SeparatorWidthConstraint(index, width, provenance),
     )
 
 
@@ -169,7 +187,15 @@ def candidate_evidence_fixture(
         frame_sequence=FrameSequenceEvidence(
             holder_occlusion=HolderOcclusionEvidence.not_applicable(),
             spacings=(
-                inter_frame_spacing_evidence(1, PixelInterval.exact(0.0)),
+                observed_spacing_evidence(
+                    1,
+                    PixelInterval.exact(0.0),
+                    MeasurementProvenance(
+                        "separator_profile",
+                        "test_fixture",
+                        ("gray_work",),
+                    ),
+                ),
             ),
             conservation=SequenceConservationEvidence(
                 EvidenceState.SUPPORTED,
@@ -316,7 +342,7 @@ def candidate_fixture(
     assignment = assign_observation_to_boundary(
         1,
         observation,
-        PixelInterval(80.0, 120.0),
+        *separator_constraints(1, PixelInterval(80.0, 120.0)),
     )
     assignment = replace(assignment, used_for_boundary=True)
     boundary = frame_boundary_from_assignment(assignment)

@@ -3,7 +3,11 @@ from __future__ import annotations
 from dataclasses import replace
 import unittest
 
-from tools.tests.physical_gate_support import candidate_fixture, separator_observation
+from tools.tests.physical_gate_support import (
+    candidate_fixture,
+    separator_constraints,
+    separator_observation,
+)
 from x5crop.detection.evidence.separator_continuity import (
     SeparatorContinuityEvidence,
     SeparatorContinuityRecord,
@@ -42,7 +46,14 @@ def _geometry(second_start: float = 205.0):
             assign_observation_to_boundary(
                 index,
                 observation,
-                PixelInterval(observation.start - 5.0, observation.end + 5.0),
+                *separator_constraints(
+                    index,
+                    PixelInterval(
+                        observation.start - 5.0,
+                        observation.end + 5.0,
+                    ),
+                    PixelInterval(0.0, 20.0),
+                ),
             ),
             used_for_boundary=True,
         )

@@ -16,7 +16,7 @@ from x5crop.detection.physical.boundary import (
 )
 from x5crop.domain import PixelInterval
 from x5crop.detection.physical.spacing import (
-    inter_frame_spacing_evidence,
+    observed_spacing_evidence,
     sequence_conservation_evidence,
 )
 from x5crop.detection.physical.separator.assignment import (
@@ -34,7 +34,11 @@ from x5crop.domain import MeasurementProvenance
 from x5crop.domain import Box
 from x5crop.detection.geometry import CandidateGeometry
 from x5crop.domain import CropEnvelope, VisibleSequenceSpan
-from tools.tests.physical_gate_support import candidate_fixture, separator_observation
+from tools.tests.physical_gate_support import (
+    candidate_fixture,
+    separator_constraints,
+    separator_observation,
+)
 from dataclasses import replace
 from x5crop.detection.evidence.frame_sequence import frame_sequence_evidence
 from x5crop.detection.physical.separator.assignment import frame_boundary_from_assignment
@@ -75,10 +79,11 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
             ("gray_work",),
         )
         contained = SeparatorBandObservation(40.0, 50.0, 45.0, 0.9, provenance)
-        partial = SeparatorBandObservation(45.0, 65.0, 55.0, 0.9, provenance)
+        partial = SeparatorBandObservation(50.0, 70.0, 60.0, 0.9, provenance)
         allowed = PixelInterval(35.0, 55.0)
-        accepted = assign_observation_to_boundary(1, contained, allowed)
-        dependent = assign_observation_to_boundary(1, partial, allowed)
+        constraints = separator_constraints(1, allowed, PixelInterval(0.0, 25.0))
+        accepted = assign_observation_to_boundary(1, contained, *constraints)
+        dependent = assign_observation_to_boundary(1, partial, *constraints)
         self.assertTrue(accepted.independent)
         self.assertFalse(dependent.independent)
         self.assertTrue(dependent.geometry_dependent)
@@ -207,8 +212,16 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
             count=3,
             frame_width_px=PixelInterval.exact(100.0),
             spacings=(
-                inter_frame_spacing_evidence(1, PixelInterval.exact(5.0)),
-                inter_frame_spacing_evidence(2, PixelInterval.exact(10.0)),
+                observed_spacing_evidence(
+                    1,
+                    PixelInterval.exact(5.0),
+                    MeasurementProvenance("separator_profile", "synthetic", ()),
+                ),
+                observed_spacing_evidence(
+                    2,
+                    PixelInterval.exact(10.0),
+                    MeasurementProvenance("separator_profile", "synthetic", ()),
+                ),
             ),
             holder_occlusion=HolderOcclusionEvidence.not_applicable(),
         )
@@ -220,8 +233,16 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
             count=3,
             frame_width_px=PixelInterval.exact(100.0),
             spacings=(
-                inter_frame_spacing_evidence(1, PixelInterval.exact(5.0)),
-                inter_frame_spacing_evidence(2, PixelInterval.exact(-3.0)),
+                observed_spacing_evidence(
+                    1,
+                    PixelInterval.exact(5.0),
+                    MeasurementProvenance("separator_profile", "synthetic", ()),
+                ),
+                observed_spacing_evidence(
+                    2,
+                    PixelInterval.exact(-3.0),
+                    MeasurementProvenance("photo_edges", "synthetic", ()),
+                ),
             ),
             holder_occlusion=HolderOcclusionEvidence.not_applicable(),
         )
@@ -255,7 +276,11 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
         assignment = assign_observation_to_boundary(
             1,
             observed,
-            PixelInterval(95.0, 110.0),
+            *separator_constraints(
+                1,
+                PixelInterval(95.0, 110.0),
+                PixelInterval(0.0, 10.0),
+            ),
         )
         assignment = replace(assignment, used_for_boundary=True)
         boundaries = (

@@ -4,8 +4,10 @@ from ...constants import (
     FINAL_REASON_AUTOMATIC_PROCESSING_NOT_SUPPORTED,
     FINAL_REASON_BOUNDARY_EVIDENCE_INSUFFICIENT,
     FINAL_REASON_CONTENT_PRESERVATION_UNRESOLVED,
+    FINAL_REASON_COUNT_RESOLUTION_UNAVAILABLE,
     FINAL_REASON_EVIDENCE_INDEPENDENCE_FAILED,
     FINAL_REASON_FRAME_TOPOLOGY_INVALID,
+    FINAL_REASON_GEOMETRY_RESOLUTION_UNAVAILABLE,
     FINAL_REASON_FRAME_SEQUENCE_NOT_CONSERVED,
     FINAL_REASON_OUTPUT_BLEED_UNRESOLVED,
     FINAL_REASON_PHOTO_GEOMETRY_CONTRADICTED,
@@ -120,9 +122,21 @@ def decision_gate_assessment(
     selection_consensus: EvidenceState,
     output_bleed: EvidenceState,
     transform_geometry: TransformGeometryEvidence,
+    count_resolution: EvidenceState,
+    geometry_resolution: EvidenceState,
 ) -> DecisionGateAssessment:
     checks = (
         *_project_candidate_checks(candidate_gate),
+        _decision_check(
+            "count_resolution",
+            count_resolution,
+            FINAL_REASON_COUNT_RESOLUTION_UNAVAILABLE,
+        ),
+        _decision_check(
+            "geometry_resolution",
+            geometry_resolution,
+            FINAL_REASON_GEOMETRY_RESOLUTION_UNAVAILABLE,
+        ),
         _decision_check(
             "automatic_processing_eligibility",
             automatic_processing,
@@ -158,6 +172,7 @@ def apply_decision_gate(
 ) -> FinalDetection:
     selected = selection.selected
     candidate_gate = selected.assessment.gate
+    resolution = selection.geometry_resolution
     decision_gate = decision_gate_assessment(
         candidate_gate=candidate_gate,
         automatic_processing=(
@@ -176,6 +191,22 @@ def apply_decision_gate(
             else EvidenceState.CONTRADICTED
         ),
         transform_geometry=transform_geometry,
+        count_resolution=(
+            EvidenceState.SUPPORTED
+            if resolution.count_resolved
+            else EvidenceState.CONTRADICTED
+        ),
+        geometry_resolution=(
+            EvidenceState.SUPPORTED
+            if (
+                resolution.placement_resolved
+                and resolution.boundaries_resolved
+                and resolution.coverage_resolved
+                and resolution.larger_counts_evaluated
+                and resolution.alternative_geometries_resolved
+            )
+            else EvidenceState.CONTRADICTED
+        ),
     )
     geometry = OutputGeometry(
         crop_envelope=CropEnvelope(
