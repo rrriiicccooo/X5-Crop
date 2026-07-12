@@ -16,7 +16,9 @@ if TYPE_CHECKING:
     from .model import PhotoInterval, SequenceSolution
 
 
-def _width_cv(values: tuple[float, ...]) -> float | None:
+def width_coefficient_of_variation(
+    values: tuple[float, ...],
+) -> float | None:
     if len(values) < 2:
         return None
     mean = sum(values) / len(values)
@@ -56,9 +58,13 @@ class FrameDimensionEvidence:
             for value in (*self.photo_widths_px, *self.separator_widths_px)
         ):
             raise ValueError("measured frame and separator widths must be positive")
-        if self.photo_width_cv != _width_cv(self.photo_widths_px):
+        if self.photo_width_cv != width_coefficient_of_variation(
+            self.photo_widths_px
+        ):
             raise ValueError("photo width variation must derive from measurements")
-        if self.separator_width_cv != _width_cv(self.separator_widths_px):
+        if self.separator_width_cv != width_coefficient_of_variation(
+            self.separator_widths_px
+        ):
             raise ValueError("separator width variation must derive from measurements")
         if self.state == EvidenceState.SUPPORTED and not self.photo_widths_px:
             raise ValueError("supported frame dimensions require measured photo widths")
@@ -190,8 +196,8 @@ def frame_dimension_evidence(
         geometry,
     )
     target = geometry.frame_dimension_prior.width_px.midpoint
-    photo_cv = _width_cv(photo_widths)
-    separator_cv = _width_cv(separator_widths)
+    photo_cv = width_coefficient_of_variation(photo_widths)
+    separator_cv = width_coefficient_of_variation(separator_widths)
     errors = tuple(
         abs(width - target) / target for width in photo_widths
     )

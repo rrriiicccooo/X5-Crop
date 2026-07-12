@@ -17,6 +17,7 @@ class ArchitectureOwnershipContractTest(unittest.TestCase):
             "x5crop/debug/gaps.py",
             "x5crop/detection/evidence/count_planning.py",
             "x5crop/detection/evidence/exposure_overlap.py",
+            "x5crop/detection/candidate/assessment/physical_evidence.py",
             "x5crop/detection/physical/outer",
             "x5crop/detection/candidate/extension",
             "x5crop/output/geometry_adjustment.py",
@@ -116,6 +117,13 @@ class ArchitectureOwnershipContractTest(unittest.TestCase):
             if len(path.read_text(encoding="utf-8").splitlines()) > 800
         ]
         self.assertEqual(offenders, [])
+
+    def test_physical_aggregation_has_one_canonical_owner(self) -> None:
+        dual_lane = (
+            PROJECT_ROOT / "x5crop/detection/candidate/assessment/dual_lane.py"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn("def _width_cv", dual_lane)
+        self.assertIn("width_coefficient_of_variation", dual_lane)
 
     def test_regression_tools_are_current_schema_diff_auditors(self) -> None:
         source = (

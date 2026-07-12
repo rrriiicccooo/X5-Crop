@@ -18,7 +18,10 @@ from ...evidence.holder_occupancy import (
 from ...evidence.sequence_content_alignment import SequenceContentAlignmentEvidence
 from ...evidence.partial_edge import PartialEdgeSafetyEvidence
 from x5crop.domain import EvidenceState, FrameBoundaryReference
-from ...physical.photo_size import FrameDimensionEvidence
+from ...physical.photo_size import (
+    FrameDimensionEvidence,
+    width_coefficient_of_variation,
+)
 from ...physical.boundary import HolderOcclusionEvidence
 from x5crop.domain import PixelInterval
 from ...physical.spacing import SequenceConservationEvidence
@@ -36,16 +39,6 @@ from .candidate_gate import (
 )
 from .evidence_independence import EvidenceIndependenceEvidence
 from .separator_support import SeparatorSequenceEvidence
-
-
-def _width_cv(values: tuple[float, ...]) -> float | None:
-    if len(values) < 2:
-        return None
-    mean = sum(values) / len(values)
-    if mean <= 0.0:
-        return None
-    variance = sum((value - mean) ** 2 for value in values) / len(values)
-    return (variance ** 0.5) / mean
 
 
 def _combined_state(states: tuple[EvidenceState, ...]) -> EvidenceState:
@@ -178,9 +171,9 @@ def assess_dual_lane_candidate(
         nominal_height_mm=nominal.nominal_height_mm,
         nominal_aspect=nominal.nominal_aspect,
         photo_widths_px=widths,
-        photo_width_cv=_width_cv(widths),
+        photo_width_cv=width_coefficient_of_variation(widths),
         separator_widths_px=separator_widths,
-        separator_width_cv=_width_cv(separator_widths),
+        separator_width_cv=width_coefficient_of_variation(separator_widths),
         observed_width_mm=None,
         observed_height_mm=None,
         observed_aspect=None,

@@ -6,10 +6,12 @@ from ...evidence.content.holder_texture import holder_texture_evidence
 from ...evidence.content.preservation import content_preservation_evidence
 from ...evidence.frame_coverage import frame_coverage_evidence
 from ...evidence.frame_sequence import frame_sequence_evidence
+from ...evidence.frame_topology import frame_topology_evidence
 from ...evidence.holder_occupancy import holder_occupancy_evidence
 from ...evidence.sequence_content_alignment import sequence_content_alignment_evidence
 from ...evidence.partial_edge import partial_edge_safety_evidence
 from ...physical.model import SequenceSolution
+from ...physical.photo_size import frame_dimension_evidence
 from x5crop.domain import EvidenceState
 from ..model import (
     AssessedCandidate,
@@ -17,7 +19,6 @@ from ..model import (
     CandidateAssessment,
     CandidateEvidence,
 )
-from .physical_evidence import measure_core_physical_evidence
 from .candidate_gate import (
     BoundaryProofPath,
     CandidateGateInput,
@@ -149,8 +150,9 @@ def assess_candidate(
     if not isinstance(geometry, SequenceSolution):
         raise ValueError("standard candidate assessment requires sequence geometry")
     frame_sequence = frame_sequence_evidence(geometry)
-    core = measure_core_physical_evidence(
-        candidate,
+    frame_topology = frame_topology_evidence(geometry.frames, geometry.count)
+    frame_dimensions = frame_dimension_evidence(
+        geometry,
         physical_spec,
         context.scan_calibration,
     )
@@ -189,13 +191,13 @@ def assess_candidate(
         physical_spec=physical_spec,
         content_support_available=content.support_available,
         frame_coverage=coverage,
-        frame_dimensions=core.frame_dimensions,
+        frame_dimensions=frame_dimensions,
         calibration=context.scan_calibration,
     )
     partial_edge = partial_edge_safety_evidence(
         geometry,
         coverage,
-        core.frame_dimensions,
+        frame_dimensions,
         content,
         occupancy,
     )
@@ -207,11 +209,11 @@ def assess_candidate(
     )
     independence = evidence_independence_evidence(geometry)
     evidence = CandidateEvidence(
-        frame_topology=core.frame_topology,
+        frame_topology=frame_topology,
         frame_coverage=coverage,
         frame_sequence=frame_sequence,
         separator_sequence=sequence,
-        frame_dimensions=core.frame_dimensions,
+        frame_dimensions=frame_dimensions,
         frame_content=content,
         holder_texture=holder_texture,
         content_preservation=preservation,
