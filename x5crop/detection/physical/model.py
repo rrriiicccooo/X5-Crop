@@ -58,8 +58,8 @@ class PhotoInterval:
     def __post_init__(self) -> None:
         if self.index <= 0:
             raise ValueError("photo interval index must be positive")
-        if self.end.maximum <= self.start.minimum:
-            raise ValueError("photo interval must have positive possible width")
+        if self.end.minimum <= self.start.maximum:
+            raise ValueError("photo interval must have guaranteed positive width")
 
     @property
     def width_px(self) -> PixelInterval:
@@ -133,6 +133,14 @@ def photo_intervals_for_sequence(
             end = PixelInterval.exact(float(frame.right))
             end_provenance = generated_provenance
             end_observed = False
+        envelope_axis = PixelInterval(
+            float(frames[0].left),
+            float(frames[-1].right),
+        )
+        start = start.intersection(envelope_axis)
+        end = end.intersection(envelope_axis)
+        if start is None or end is None or end.minimum <= start.maximum:
+            raise ValueError("photo interval does not intersect the crop envelope")
         intervals.append(
             PhotoInterval(
                 index,

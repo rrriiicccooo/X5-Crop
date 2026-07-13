@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+from enum import Enum
 
 from ...domain import (
     BoundaryPathObservation,
@@ -56,6 +57,15 @@ class SequenceSolveResult:
     residuals: SequenceResiduals
     assignment_consensus: BoundaryAssignmentConsensus
     search_budget_exhausted: bool
+
+
+class SequenceSolveUnavailableReason(str, Enum):
+    GEOMETRY_CONSTRAINTS = "sequence_geometry_constraints_unresolved"
+
+
+@dataclass(frozen=True)
+class SequenceSolveUnavailable:
+    reason: SequenceSolveUnavailableReason
 
 
 @dataclass(frozen=True)
@@ -518,7 +528,7 @@ def _residuals(
     )
 
 
-def solve_frame_sequence(
+def _solve_frame_sequence(
     observations: tuple[SeparatorBandObservation, ...],
     focused_observations: tuple[tuple[int, SeparatorBandObservation], ...],
     span: VisibleSequenceSpan,
@@ -529,8 +539,6 @@ def solve_frame_sequence(
     *,
     edge_texture_limit: float,
 ) -> SequenceSolveResult:
-    if count <= 0:
-        raise ValueError("sequence count must be positive")
     occlusion_constraint = holder_occlusion_constraint(
         boundary_paths,
         dimensions.width_px,
@@ -538,7 +546,11 @@ def solve_frame_sequence(
     )
     if count == 1:
         frames = (span.box,)
-        intervals = photo_intervals_for_sequence((), frames, boundary_paths)
+        intervals = photo_intervals_for_sequence(
+            (),
+            frames,
+            boundary_paths,
+        )
         holder_occlusion = holder_occlusion_for_sequence(
             boundary_paths,
             span,
@@ -619,3 +631,35 @@ def solve_frame_sequence(
         ),
         search_budget_exhausted=search.budget_exhausted,
     )
+
+
+def solve_frame_sequence(
+    observations: tuple[SeparatorBandObservation, ...],
+    focused_observations: tuple[tuple[int, SeparatorBandObservation], ...],
+    span: VisibleSequenceSpan,
+    count: int,
+    dimensions: FrameDimensionPrior,
+    boundary_paths: tuple[BoundaryPathObservation, ...],
+    maximum_assignment_evaluations: int,
+    *,
+    edge_texture_limit: float,
+) -> SequenceSolveResult | SequenceSolveUnavailable:
+    if count <= 0:
+        raise ValueError("sequence count must be positive")
+    if maximum_assignment_evaluations <= 0:
+        raise ValueError("sequence solver evaluation budget must be positive")
+    try:
+        return _solve_frame_sequence(
+            observations,
+            focused_observations,
+            span,
+            count,
+            dimensions,
+            boundary_paths,
+            maximum_assignment_evaluations,
+            edge_texture_limit=edge_texture_limit,
+        )
+    except ValueError:
+        return SequenceSolveUnavailable(
+            SequenceSolveUnavailableReason.GEOMETRY_CONSTRAINTS
+        )

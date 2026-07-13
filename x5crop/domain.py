@@ -123,6 +123,11 @@ class PixelInterval:
     def intersects(self, other: "PixelInterval") -> bool:
         return max(self.minimum, other.minimum) <= min(self.maximum, other.maximum)
 
+    def intersection(self, other: "PixelInterval") -> "PixelInterval | None":
+        minimum = max(self.minimum, other.minimum)
+        maximum = min(self.maximum, other.maximum)
+        return None if maximum < minimum else PixelInterval(minimum, maximum)
+
     def plus(self, other: "PixelInterval") -> "PixelInterval":
         return PixelInterval(
             self.minimum + other.minimum,

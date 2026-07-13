@@ -39,7 +39,10 @@ from x5crop.detection.physical.separator.assignment import (
     assign_observation_to_boundary,
     separator_width_constraint,
 )
-from x5crop.detection.physical.sequence_solver import solve_frame_sequence
+from x5crop.detection.physical.sequence_solver import (
+    SequenceSolveUnavailable,
+    solve_frame_sequence,
+)
 from x5crop.detection.physical.spacing import (
     CorroboratedSpacingEvidence,
     ObservedSpacingEvidence,
@@ -249,19 +252,7 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
             10_000,
             edge_texture_limit=1.0,
         )
-        self.assertTrue(all(frame.valid() for frame in result.frames))
-        self.assertTrue(
-            all(interval.width_px.maximum > 0.0 for interval in result.photo_intervals)
-        )
-        selected = tuple(
-            assignment
-            for assignment in result.assignments
-            if assignment.used_for_boundary
-        )
-        self.assertFalse(
-            len(selected) == 2
-            and selected[0].observation.end > selected[1].observation.start
-        )
+        self.assertIsInstance(result, SequenceSolveUnavailable)
 
     def test_broad_tonal_band_cannot_become_independent_separator(self) -> None:
         observation = separator_observation(
@@ -612,13 +603,7 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
             10_000,
             edge_texture_limit=1.0,
         )
-        self.assertTrue(all(frame.valid() for frame in result.frames))
-        self.assertTrue(
-            all(
-                left.right <= right.left
-                for left, right in zip(result.frames, result.frames[1:])
-            )
-        )
+        self.assertIsInstance(result, SequenceSolveUnavailable)
 
     def test_content_at_frame_edges_is_not_undercrop(self) -> None:
         frame_content = FrameContentEvidence(

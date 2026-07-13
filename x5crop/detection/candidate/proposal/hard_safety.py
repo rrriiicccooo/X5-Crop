@@ -1,14 +1,29 @@
 from __future__ import annotations
 
-from ....domain import Box, MeasurementIdentity, MeasurementProvenance
+from ....domain import (
+    Box,
+    CropEnvelope,
+    HolderSpan,
+    MeasurementIdentity,
+    MeasurementProvenance,
+    VisibleSequenceSpan,
+)
 from ...context import DetectionContext
 from ...physical.boundary import canvas_boundary_paths
 from ...physical.photo_size import frame_dimension_priors
-from ...physical.sequence_solver import solve_frame_sequence
-from x5crop.domain import CropEnvelope, HolderSpan, VisibleSequenceSpan
+from ...physical.sequence_solver import (
+    SequenceSolveUnavailable,
+    solve_frame_sequence,
+)
 from ..model import BuiltCandidate
 from ..plan.count_hypotheses import CountHypothesis, CountHypothesisSource
-from ...physical.model import SequenceSolution
+from ...physical.model import (
+    AssignmentConsensusOutcome,
+    BoundaryAssignmentConsensus,
+    ReviewOnlyGeometry,
+    SequenceResiduals,
+    SequenceSolution,
+)
 
 
 def hard_safety_candidate(
@@ -34,6 +49,10 @@ def hard_safety_candidate(
         work_width,
         work_height,
     )
+    solver_budget = (
+        context.configuration.candidate_plan.sequence_solver
+        .maximum_assignment_evaluations
+    )
     solved = solve_frame_sequence(
         (),
         (),
@@ -41,13 +60,44 @@ def hard_safety_candidate(
         count,
         dimensions,
         boundary_paths,
-        context.configuration.candidate_plan.sequence_solver.maximum_assignment_evaluations,
+        solver_budget,
+        edge_texture_limit=context.measurement_cache.image_statistics.edge_texture_limit,
     )
     hypothesis = CountHypothesis(
         count=count,
         strip_mode=context.request.strip_mode,
         source=CountHypothesisSource.HARD_SAFETY,
     )
+    if isinstance(solved, SequenceSolveUnavailable):
+        return BuiltCandidate(
+            geometry=ReviewOnlyGeometry(
+                format_id=physical_spec.format_id,
+                layout=context.request.layout,
+                strip_mode=context.request.strip_mode,
+                count=count,
+                holder_span=HolderSpan(span),
+                visible_sequence_span=visible_span,
+                crop_envelope=CropEnvelope(span),
+                frame_dimension_prior=dimensions,
+                residuals=SequenceResiduals(None, None, 0.0),
+                assignment_consensus=BoundaryAssignmentConsensus(
+                    AssignmentConsensusOutcome.COMPONENT_UNRESOLVED,
+                    1,
+                    (),
+                ),
+                sequence_provenance=MeasurementProvenance(
+                    root_measurement=MeasurementIdentity.SAFETY_GEOMETRY_MODEL,
+                    source="unresolved_full_canvas_safety",
+                    dependencies=(
+                        MeasurementIdentity.CANVAS,
+                        MeasurementIdentity.COUNT,
+                    ),
+                ),
+                boundary_paths=boundary_paths,
+            ),
+            count_hypothesis=hypothesis,
+            build_diagnostics=(solved.reason.value,),
+        )
     return BuiltCandidate(
         geometry=SequenceSolution(
             format_id=physical_spec.format_id,

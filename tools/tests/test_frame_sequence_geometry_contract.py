@@ -36,7 +36,10 @@ from x5crop.detection.physical.separator.assignment import (
     boundary_position_constraint,
     dimension_constrained_boundary,
 )
-from x5crop.detection.physical.sequence_solver import solve_frame_sequence
+from x5crop.detection.physical.sequence_solver import (
+    SequenceSolveUnavailable,
+    solve_frame_sequence,
+)
 from x5crop.detection.physical.separator.observations import (
     measure_focused_separator_band,
     measure_separator_bands,
@@ -389,8 +392,7 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
             10_000,
             edge_texture_limit=1.0,
         )
-        coordinates = tuple(boundary.coordinate for boundary in result.boundaries)
-        self.assertEqual(coordinates, tuple(sorted(coordinates)))
+        self.assertIsInstance(result, SequenceSolveUnavailable)
 
     def test_focused_measurement_is_geometry_dependent_not_hard_evidence(self) -> None:
         profile = np.zeros(200, dtype=np.float32)

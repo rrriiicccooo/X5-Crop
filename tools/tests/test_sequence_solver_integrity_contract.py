@@ -14,6 +14,10 @@ from x5crop.detection.physical.boundary import (
     holder_occlusion_for_sequence,
 )
 from x5crop.detection.physical.sequence_solver import solve_frame_sequence
+from x5crop.detection.physical.model import (
+    PhotoInterval,
+    photo_intervals_for_sequence,
+)
 from x5crop.detection.physical.spacing import (
     CorroboratedSpacingEvidence,
     SpacingHypothesis,
@@ -37,6 +41,67 @@ from x5crop.domain import (
 
 
 class SequenceSolverIntegrityContractTest(unittest.TestCase):
+    def test_pixel_interval_intersection_is_explicit(self) -> None:
+        self.assertEqual(
+            PixelInterval(-10.0, 10.0).intersection(
+                PixelInterval(0.0, 100.0)
+            ),
+            PixelInterval(0.0, 10.0),
+        )
+        self.assertIsNone(
+            PixelInterval(-10.0, -1.0).intersection(
+                PixelInterval(0.0, 100.0)
+            )
+        )
+
+    def test_photo_interval_requires_guaranteed_positive_width(self) -> None:
+        provenance = MeasurementProvenance(
+            MeasurementIdentity.PHOTO_EDGES,
+            "synthetic",
+            (MeasurementIdentity.GRAY_WORK,),
+        )
+        with self.assertRaises(ValueError):
+            PhotoInterval(
+                1,
+                PixelInterval(0.0, 10.0),
+                PixelInterval(5.0, 20.0),
+                provenance,
+                provenance,
+                True,
+                True,
+            )
+
+    def test_photo_intervals_intersect_boundary_uncertainty_with_crop_envelope(
+        self,
+    ) -> None:
+        provenance = MeasurementProvenance(
+            MeasurementIdentity.HOLDER_BOUNDARY_PROFILE,
+            "synthetic",
+            (MeasurementIdentity.GRAY_WORK,),
+        )
+        paths = (
+            boundary_path_fixture(
+                BoundarySide.LEADING,
+                PixelInterval(-10.0, 10.0),
+                BoundaryKind.HOLDER_BOUNDARY_TRANSITION,
+                provenance,
+            ),
+            boundary_path_fixture(
+                BoundarySide.TRAILING,
+                PixelInterval(90.0, 110.0),
+                BoundaryKind.HOLDER_BOUNDARY_TRANSITION,
+                provenance,
+            ),
+        )
+        intervals = photo_intervals_for_sequence(
+            (),
+            (Box(0, 0, 100, 100),),
+            paths,
+        )
+
+        self.assertEqual(intervals[0].start, PixelInterval(0.0, 10.0))
+        self.assertEqual(intervals[0].end, PixelInterval(90.0, 100.0))
+
     def test_runtime_sequence_order_can_corroborate_one_missing_overlap(
         self,
     ) -> None:

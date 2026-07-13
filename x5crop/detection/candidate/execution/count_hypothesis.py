@@ -26,7 +26,7 @@ def _assess_sequence_plan(
             context.scan_calibration,
             layout=context.request.layout,
         ):
-            built = build_sequence_candidate(
+            outcome = build_sequence_candidate(
                 context.request,
                 context.configuration.physical_spec,
                 plan.count_hypothesis,
@@ -37,7 +37,8 @@ def _assess_sequence_plan(
                 solver_parameters=context.configuration.candidate_plan.sequence_solver,
                 planning_budget_exhausted=plan.search_budget_exhausted,
             )
-            assessed.append(assess_candidate(built, context))
+            if outcome.candidate is not None:
+                assessed.append(assess_candidate(outcome.candidate, context))
     return assessed
 
 

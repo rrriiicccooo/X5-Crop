@@ -24,6 +24,7 @@ from .context import DetectionContext
 from .modes.dual_lane import choose_dual_lane_detection
 from .modes.review_only import unresolved_dual_lane_candidate
 from .evidence.physical_scale import boundary_scale_observations
+from .physical.model import ReviewOnlyGeometry
 from ..units import ScanCalibrationResolution
 
 
@@ -136,7 +137,12 @@ def _choose_standard_detection(context: DetectionContext) -> SelectionResult:
     candidates = _candidate_pool_for_count_resolution(evaluations)
     if not candidates:
         built = hard_safety_candidate(context, plan.hard_safety_count)
-        candidates = (assess_candidate(built, context),)
+        assessed = (
+            assess_review_only_candidate(built)
+            if isinstance(built.geometry, ReviewOnlyGeometry)
+            else assess_candidate(built, context)
+        )
+        candidates = (assessed,)
     selection = select_candidates(
         candidates,
         larger_counts_evaluated=True,

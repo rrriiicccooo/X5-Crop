@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from ....cache import MeasurementCache
 from ....cache.separator import cached_separator_profile
 from ....domain import (
@@ -20,9 +22,22 @@ from ...physical.separator.observations import (
     measure_focused_separator_band,
     measure_separator_bands,
 )
-from ...physical.sequence_solver import solve_frame_sequence
+from ...physical.sequence_solver import (
+    SequenceSolveUnavailable,
+    solve_frame_sequence,
+)
 from ..model import BuiltCandidate
 from ..plan.count_hypotheses import CountHypothesis
+
+
+@dataclass(frozen=True)
+class SequenceCandidateBuildOutcome:
+    candidate: BuiltCandidate | None
+    unavailable: SequenceSolveUnavailable | None
+
+    def __post_init__(self) -> None:
+        if (self.candidate is None) == (self.unavailable is None):
+            raise ValueError("candidate build outcome requires exactly one result")
 
 
 def _separator_measurement_corridor(
@@ -51,7 +66,7 @@ def build_sequence_candidate(
     separator_configuration: SeparatorConfiguration,
     solver_parameters: SequenceSolverParameters,
     planning_budget_exhausted: bool,
-) -> BuiltCandidate:
+) -> SequenceCandidateBuildOutcome:
     if cache.layout != request.layout:
         raise ValueError("candidate build requires matching measurement cache")
     count = int(count_hypothesis.count)
@@ -111,34 +126,39 @@ def build_sequence_candidate(
         solver_parameters.maximum_assignment_evaluations,
         edge_texture_limit=cache.image_statistics.edge_texture_limit,
     )
-    return BuiltCandidate(
-        geometry=SequenceSolution(
-            format_id=fmt.format_id,
-            layout=request.layout,
-            strip_mode=count_hypothesis.strip_mode,
-            count=count,
-            holder_span=holder_span,
-            visible_sequence_span=visible_sequence_span,
-            crop_envelope=sequence_hypothesis.crop_envelope,
-            photo_intervals=solved.photo_intervals,
-            frames=solved.frames,
-            separator_observations=observations,
-            separator_assignments=solved.assignments,
-            frame_boundaries=solved.boundaries,
-            inter_frame_spacings=solved.relations,
-            holder_occlusion=solved.holder_occlusion,
-            frame_dimension_prior=dimensions,
-            residuals=solved.residuals,
-            assignment_consensus=solved.assignment_consensus,
-            search_budget_exhausted=bool(
-                planning_budget_exhausted
-                or observation_set.budget_exhausted
-                or solved.search_budget_exhausted
+    if isinstance(solved, SequenceSolveUnavailable):
+        return SequenceCandidateBuildOutcome(None, solved)
+    return SequenceCandidateBuildOutcome(
+        BuiltCandidate(
+            geometry=SequenceSolution(
+                format_id=fmt.format_id,
+                layout=request.layout,
+                strip_mode=count_hypothesis.strip_mode,
+                count=count,
+                holder_span=holder_span,
+                visible_sequence_span=visible_sequence_span,
+                crop_envelope=sequence_hypothesis.crop_envelope,
+                photo_intervals=solved.photo_intervals,
+                frames=solved.frames,
+                separator_observations=observations,
+                separator_assignments=solved.assignments,
+                frame_boundaries=solved.boundaries,
+                inter_frame_spacings=solved.relations,
+                holder_occlusion=solved.holder_occlusion,
+                frame_dimension_prior=dimensions,
+                residuals=solved.residuals,
+                assignment_consensus=solved.assignment_consensus,
+                search_budget_exhausted=bool(
+                    planning_budget_exhausted
+                    or observation_set.budget_exhausted
+                    or solved.search_budget_exhausted
+                ),
+                automatic_processing_supported=True,
+                sequence_provenance=sequence_hypothesis.provenance,
+                boundary_paths=sequence_hypothesis.boundary_paths,
             ),
-            automatic_processing_supported=True,
-            sequence_provenance=sequence_hypothesis.provenance,
-            boundary_paths=sequence_hypothesis.boundary_paths,
+            count_hypothesis=count_hypothesis,
+            build_diagnostics=(),
         ),
-        count_hypothesis=count_hypothesis,
-        build_diagnostics=(),
+        None,
     )
