@@ -1,0 +1,347 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from types import SimpleNamespace
+from tempfile import TemporaryDirectory
+import unittest
+from unittest.mock import patch
+
+import numpy as np
+
+from tools.tests.physical_gate_support import final_detection_fixture
+from tools.tests.physical_gate_support import (
+    decide_candidate,
+    frame_bleed_fixture,
+    selection_fixture,
+    transform_geometry_fixture,
+)
+from x5crop.configuration.bundle import DetectionConfigurationBundle
+from x5crop.configuration.registry import get_detection_configuration
+from x5crop.debug.status import debug_status_parts
+from x5crop.domain import WorkspaceExtent
+from x5crop.io.model import ImageProfile, TiffMetadata
+from x5crop.run_config import RunConfig
+from x5crop.run_status import RunTerminalOutcome
+from x5crop.runtime.app import run_runtime
+from x5crop.runtime.invocation import RuntimeInvocation
+from x5crop.runtime.manifest import (
+    RunManifestRecord,
+    append_run_manifest,
+)
+from x5crop.runtime.outcome import (
+    CompletedInput,
+    FailedInput,
+    FailureStage,
+)
+from x5crop.runtime.prepared_workspace import PreparedWorkspace
+from x5crop.runtime.workflow import process_one
+
+
+def _config(*, output_dir: Path) -> RunConfig:
+    return RunConfig(
+        input_path=Path("input.tif"),
+        output_dir=output_dir,
+        format_id="135",
+        layout_auto=False,
+        layout="horizontal",
+        strip_mode="full",
+        requested_count=None,
+        page=0,
+        bleed_x=20,
+        bleed_y=10,
+        deskew="off",
+        deskew_fallback="off",
+        deskew_min_angle=0.03,
+        deskew_max_angle=2.0,
+        review_dir=None,
+        copy_review_files=False,
+        export_review=False,
+        compression="same",
+        debug=False,
+        debug_analysis=False,
+        dry_run=True,
+        diagnostics=False,
+        overwrite=False,
+        report=True,
+        debug_errors=False,
+        reuse_analysis=False,
+        jobs=1,
+    )
+
+
+def _profile() -> ImageProfile:
+    return ImageProfile(
+        shape=(100, 200),
+        dtype="uint8",
+        axes="YX",
+        photometric="MINISBLACK",
+        compression="NONE",
+        sample_format=None,
+        bits_per_sample=8,
+        samples_per_pixel=1,
+        planar_config=None,
+        resolution=None,
+        resolution_unit=None,
+        icc_profile=None,
+        metadata=TiffMetadata(None, None, None, ()),
+    )
+
+
+class RuntimeManifestContractTest(unittest.TestCase):
+    def test_manifest_has_one_canonical_terminal_record_shape(self) -> None:
+        record = RunManifestRecord(
+            source="input.tif",
+            terminal_outcome=RunTerminalOutcome.RUNTIME_ERROR,
+            failure_stage=FailureStage.DETECTION,
+            error_code="ValueError",
+            error_message="measurement failed",
+            report_written=False,
+            debug_analysis=None,
+            output_files=(),
+        )
+
+        self.assertEqual(
+            record.as_record(),
+            {
+                "source": "input.tif",
+                "terminal_outcome": "runtime_error",
+                "failure_stage": "detection",
+                "error_code": "ValueError",
+                "error_message": "measurement failed",
+                "report_written": False,
+                "debug_analysis": None,
+                "output_files": [],
+            },
+        )
+
+    def test_parent_app_writes_exactly_one_manifest_record_per_input(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+            config = _config(output_dir=output_dir)
+            source = Path("input.tif")
+            invocation = RuntimeInvocation(
+                config,
+                (source,),
+                DetectionConfigurationBundle.for_format_mode("135", "full"),
+            )
+            result = SimpleNamespace(
+                record={
+                    "decision": {"status": "approved_auto"},
+                    "output": {"warnings": [], "output_files": ["frame.tif"]},
+                }
+            )
+            completed = CompletedInput(result=result, debug_analysis="debug.jpg")
+            with (
+                patch("x5crop.runtime.app.process_one", return_value=completed),
+                patch(
+                    "x5crop.runtime.app.write_report_outputs_for_result",
+                    return_value=True,
+                ),
+                patch("x5crop.runtime.app.append_run_manifest") as append_manifest,
+                patch("builtins.print"),
+            ):
+                self.assertEqual(run_runtime(invocation), 0)
+
+        append_manifest.assert_called_once()
+        manifest = append_manifest.call_args.args[2]
+        self.assertEqual(manifest.terminal_outcome, RunTerminalOutcome.COMPLETED)
+        self.assertTrue(manifest.report_written)
+        self.assertEqual(manifest.output_files, ("frame.tif",))
+
+    def test_failed_input_still_writes_one_terminal_manifest_record(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+            config = _config(output_dir=output_dir)
+            source = Path("input.tif")
+            invocation = RuntimeInvocation(
+                config,
+                (source,),
+                DetectionConfigurationBundle.for_format_mode("135", "full"),
+            )
+            failed = FailedInput(
+                source=source,
+                failure_stage=FailureStage.DETECTION,
+                error_code="ValueError",
+                error_message="measurement failed",
+                debug_analysis=None,
+                output_files=(),
+                traceback_text=None,
+            )
+            with (
+                patch("x5crop.runtime.app.process_one", return_value=failed),
+                patch("x5crop.runtime.app.append_run_manifest") as append_manifest,
+                patch("builtins.print"),
+            ):
+                self.assertEqual(run_runtime(invocation), 1)
+
+        append_manifest.assert_called_once()
+        manifest = append_manifest.call_args.args[2]
+        self.assertEqual(manifest.terminal_outcome, RunTerminalOutcome.RUNTIME_ERROR)
+        self.assertEqual(manifest.failure_stage, FailureStage.DETECTION)
+        self.assertFalse(manifest.report_written)
+
+    def test_runtime_error_debug_status_does_not_change_decision(self) -> None:
+        detection = final_detection_fixture()
+        style = get_detection_configuration("135", "full").diagnostics.style
+
+        status, detail, _ = debug_status_parts(
+            detection,
+            style,
+            RunTerminalOutcome.RUNTIME_ERROR,
+        )
+
+        self.assertEqual(status, "RUNTIME ERROR")
+        self.assertIn("terminal_outcome: runtime_error", detail)
+        self.assertEqual(detection.decision.status, "approved_auto")
+
+    def test_manifest_writer_appends_one_json_object_per_call(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+            config = _config(output_dir=output_dir)
+            record = RunManifestRecord(
+                source="input.tif",
+                terminal_outcome=RunTerminalOutcome.COMPLETED,
+                failure_stage=None,
+                error_code=None,
+                error_message=None,
+                report_written=True,
+                debug_analysis=None,
+                output_files=("frame.tif",),
+            )
+
+            path = append_run_manifest(Path("input.tif"), config, record)
+            append_run_manifest(Path("input.tif"), config, record)
+
+            lines = path.read_text(encoding="utf-8").splitlines()
+            self.assertEqual(len(lines), 2)
+            self.assertEqual(json.loads(lines[0]), record.as_record())
+
+    def test_report_validation_failure_rewrites_existing_debug_as_runtime_error(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            config = _config(output_dir=Path(temp_dir))
+            source = Path("input.tif")
+            profile = _profile()
+            pixels = np.zeros((100, 200), dtype=np.uint8)
+            selection = selection_fixture()
+            bleed = frame_bleed_fixture()
+            final_detection = final_detection_fixture()
+            workspace = PreparedWorkspace(
+                pixels=pixels,
+                gray=pixels,
+                extent=WorkspaceExtent(200, 100),
+                transform_geometry=transform_geometry_fixture(),
+            )
+            with (
+                patch(
+                    "x5crop.runtime.workflow.read_tiff_profile",
+                    return_value=(profile, []),
+                ),
+                patch(
+                    "x5crop.runtime.workflow.make_analysis_reuse_signature",
+                    return_value={},
+                ),
+                patch(
+                    "x5crop.runtime.workflow.result_from_reusable_analysis",
+                    return_value=None,
+                ),
+                patch(
+                    "x5crop.runtime.workflow.read_tiff",
+                    return_value=(pixels, profile, []),
+                ),
+                patch(
+                    "x5crop.runtime.workflow.make_base_gray_u8",
+                    return_value=pixels,
+                ),
+                patch(
+                    "x5crop.runtime.workflow.image_measurement_statistics",
+                    return_value=SimpleNamespace(),
+                ),
+                patch(
+                    "x5crop.runtime.workflow.apply_deskew",
+                    return_value=workspace,
+                ),
+                patch(
+                    "x5crop.runtime.workflow.make_measurement_cache",
+                    return_value=SimpleNamespace(layout="horizontal"),
+                ),
+                patch(
+                    "x5crop.runtime.workflow.choose_detection",
+                    return_value=selection,
+                ),
+                patch(
+                    "x5crop.runtime.workflow.prepare_frame_bleed",
+                    return_value=bleed,
+                ),
+                patch(
+                    "x5crop.runtime.workflow.apply_decision_gate",
+                    return_value=decide_candidate(),
+                ),
+                patch(
+                    "x5crop.runtime.workflow.finalization_plan_for_selection",
+                    return_value=final_detection.finalization_plan,
+                ),
+                patch(
+                    "x5crop.runtime.workflow.finalize_detection",
+                    return_value=final_detection,
+                ),
+                patch(
+                    "x5crop.runtime.workflow.copy_for_review_if_needed",
+                    return_value=None,
+                ),
+                patch(
+                    "x5crop.runtime.workflow.write_crops_if_allowed",
+                    return_value=[],
+                ),
+                patch(
+                    "x5crop.runtime.workflow.write_debug_outputs",
+                    side_effect=("debug.jpg", "debug.jpg"),
+                ) as write_debug,
+                patch(
+                    "x5crop.runtime.workflow.result_from_detection",
+                    side_effect=ValueError("invalid report"),
+                ),
+            ):
+                outcome = process_one(
+                    source,
+                    config,
+                    DetectionConfigurationBundle.for_format_mode("135", "full"),
+                )
+
+        self.assertIsInstance(outcome, FailedInput)
+        self.assertEqual(outcome.failure_stage, FailureStage.REPORT_VALIDATION)
+        self.assertEqual(outcome.debug_analysis, "debug.jpg")
+        self.assertEqual(write_debug.call_count, 2)
+        self.assertEqual(
+            write_debug.call_args_list[0].args[-1],
+            RunTerminalOutcome.COMPLETED,
+        )
+        self.assertEqual(
+            write_debug.call_args_list[1].args[-1],
+            RunTerminalOutcome.RUNTIME_ERROR,
+        )
+
+    def test_failure_before_final_detection_does_not_fabricate_debug(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            config = _config(output_dir=Path(temp_dir))
+            with (
+                patch(
+                    "x5crop.runtime.workflow.read_tiff_profile",
+                    side_effect=ValueError("profile failed"),
+                ),
+                patch("x5crop.runtime.workflow.write_debug_outputs") as write_debug,
+            ):
+                outcome = process_one(
+                    Path("input.tif"),
+                    config,
+                    DetectionConfigurationBundle.for_format_mode("135", "full"),
+                )
+
+        self.assertIsInstance(outcome, FailedInput)
+        self.assertEqual(outcome.failure_stage, FailureStage.INPUT_PROFILE)
+        self.assertIsNone(outcome.debug_analysis)
+        write_debug.assert_not_called()
+
+
+if __name__ == "__main__":
+    unittest.main()

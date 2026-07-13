@@ -34,6 +34,7 @@ from x5crop.report.read_models import typed_read_model
 from x5crop.report.record import report_record_for_final_detection
 from x5crop.report.restoration import final_detection_from_record
 from x5crop.report.validation import current_report_record_errors
+from x5crop.run_status import RunTerminalOutcome
 
 
 class UnresolvedOutputContractTest(unittest.TestCase):
@@ -117,7 +118,11 @@ class UnresolvedOutputContractTest(unittest.TestCase):
         )
         self.assertIn(
             "NOT EXPORTABLE",
-            debug_status_parts(detection, diagnostics.style)[1],
+            debug_status_parts(
+                detection,
+                diagnostics.style,
+                RunTerminalOutcome.COMPLETED,
+            )[1],
         )
 
         record = report_record_for_final_detection(

@@ -36,6 +36,7 @@ SOURCE_LAYER_PREFIXES: dict[str, tuple[str, ...]] = {
         "x5crop.app_info",
         "x5crop.domain",
         "x5crop.run_config",
+        "x5crop.run_status",
         "x5crop.strip_modes",
         "x5crop.units",
         "x5crop.utils",

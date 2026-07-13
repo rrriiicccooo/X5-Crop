@@ -107,7 +107,7 @@ def candidate_read_model(candidate: AssessedCandidate) -> dict[str, Any]:
         raise TypeError(f"unsupported candidate geometry: {type(geometry).__name__}")
     return {
         "geometry_kind": geometry_kind,
-        "candidate_geometry": typed_read_model(geometry),
+        "provisional_geometry": typed_read_model(geometry),
         "evidence_quality": typed_read_model(candidate.evidence_quality),
         "candidate_gate": candidate_gate_read_model(candidate),
         "count_hypothesis": typed_read_model(candidate.count_hypothesis),

@@ -6,13 +6,24 @@ from PIL import Image, ImageDraw
 from ..app_info import SCRIPT_NAME, VERSION
 from ..configuration.diagnostics import DebugStyleParameters
 from ..detection.final.model import FinalDetection
+from ..run_status import RunTerminalOutcome
 from ..utils import RGB_CHANNEL_COUNT
 
 
 def debug_status_parts(
     detection: FinalDetection,
     style: DebugStyleParameters,
+    terminal_outcome: RunTerminalOutcome,
 ) -> tuple[str, str, tuple[int, int, int]]:
+    if terminal_outcome == RunTerminalOutcome.RUNTIME_ERROR:
+        return (
+            "RUNTIME ERROR",
+            (
+                "terminal_outcome: runtime_error"
+                f" | decision_status: {detection.decision.status}"
+            ),
+            style.review_color,
+        )
     passed = detection.decision.status == "approved_auto"
     status = "PASS" if passed else "REVIEW"
     detail = f"status: {detection.decision.status}"
@@ -55,8 +66,13 @@ def add_status_bar(
     rgb: np.ndarray,
     detection: FinalDetection,
     style: DebugStyleParameters,
+    terminal_outcome: RunTerminalOutcome,
 ) -> np.ndarray:
-    status, detail, color = debug_status_parts(detection, style)
+    status, detail, color = debug_status_parts(
+        detection,
+        style,
+        terminal_outcome,
+    )
     detail = f"{SCRIPT_NAME} {VERSION} | {detail}"
     bar_h = style.status_bar_height
     h, w = rgb.shape[:2]

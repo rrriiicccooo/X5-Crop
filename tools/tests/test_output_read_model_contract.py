@@ -155,7 +155,7 @@ class OutputReadModelContractTest(unittest.TestCase):
 
     def test_candidate_report_owns_sequence_conservation_directly(self) -> None:
         candidate = _record()["selection"]["candidates"][0]
-        self.assertIn("inter_frame_spacings", candidate["candidate_geometry"])
+        self.assertIn("inter_frame_spacings", candidate["provisional_geometry"])
         self.assertIn("sequence_conservation", candidate["evidence"])
         self.assertNotIn("frame_sequence", candidate["evidence"])
 
@@ -411,7 +411,7 @@ class OutputReadModelContractTest(unittest.TestCase):
                 [],
             ),
             lambda record: record["selection"]["candidates"][0][
-                "candidate_geometry"
+                "provisional_geometry"
             ].__setitem__("outer_box", {}),
             lambda record: record["selection"]["candidates"][0][
                 "evidence"
@@ -440,7 +440,7 @@ class OutputReadModelContractTest(unittest.TestCase):
 
     def test_malformed_current_record_is_rejected_without_raising(self) -> None:
         record = _record()
-        record["selection"]["candidates"][0]["candidate_geometry"][
+        record["selection"]["candidates"][0]["provisional_geometry"][
             "count"
         ] = "not-an-integer"
         self.assertTrue(current_report_record_errors(record))
@@ -463,7 +463,7 @@ class OutputReadModelContractTest(unittest.TestCase):
                 "count_hypothesis"
             ].__setitem__("count", 1),
             lambda record: record["selection"]["candidates"][0][
-                "candidate_geometry"
+                "provisional_geometry"
             ].__setitem__("format_id", "half"),
             lambda record: record["analysis_reuse_signature"]["config"].__setitem__(
                 "format_id",
@@ -630,7 +630,7 @@ class OutputReadModelContractTest(unittest.TestCase):
     def test_cache_restoration_fields_are_required_by_current_schema(self) -> None:
         missing_provenance = _record()
         missing_provenance["selection"]["candidates"][0][
-            "candidate_geometry"
+            "provisional_geometry"
         ]["separator_observations"][0]["provenance"].pop("boundary_anchors")
         self.assertIn(
             "separator_observation_invalid",

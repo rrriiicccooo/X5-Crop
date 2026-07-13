@@ -7,6 +7,7 @@ from ..detection.candidate.model import AssessedCandidate
 from ..domain import CropEnvelope
 from ..geometry.boxes import map_work_box
 from ..output.model import OutputGeometry
+from ..run_status import RunTerminalOutcome
 from ..image.evidence import (
     SeparatorEvidenceImageParameters,
     make_separator_evidence_gray,
@@ -150,6 +151,7 @@ def make_debug_analysis_panel(
     selected_candidate: AssessedCandidate,
     diagnostics: DiagnosticsConfiguration,
     render_cache: DebugRenderCache,
+    terminal_outcome: RunTerminalOutcome,
 ) -> np.ndarray:
     separator_overlay = diagnostics.separator_overlay
     style = diagnostics.style
@@ -205,7 +207,12 @@ def make_debug_analysis_panel(
         horizontal=gray.shape[1] < gray.shape[0],
         style=style,
     )
-    return add_status_bar(canvas, detection, style)
+    return add_status_bar(
+        canvas,
+        detection,
+        style,
+        terminal_outcome,
+    )
 
 
 def stack_debug_panels(

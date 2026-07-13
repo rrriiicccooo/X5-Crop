@@ -185,6 +185,8 @@ x5_crop_output/_debug_analysis/
 
 - `PASS`: 会自动裁切。
 - `REVIEW`: 不会自动裁切，需要人工复核。
+- `RUNTIME ERROR`: 已产生检测结果，但后续运行阶段失败；manifest 会记录失败阶段，分析图不代表
+  可导出的最终结果。
 
 检查 Debug Analysis 时优先确认：
 
@@ -216,6 +218,7 @@ x5_crop_output/
   _debug_analysis/
   x5_crop_report.jsonl
   x5_crop_summary.csv
+  x5_crop_run_manifest.jsonl
 ```
 
 说明：
@@ -224,6 +227,7 @@ x5_crop_output/
 - `needs_review/` 存放需要人工处理的原 TIFF 副本。
 - `x5_crop_report.jsonl` 是机器可读报告。
 - `x5_crop_summary.csv` 是便于人工浏览的摘要表。
+- `x5_crop_run_manifest.jsonl` 为每个输入记录最终运行结果、失败阶段及实际写出的文件。
 - 普通启动器不会覆盖已有裁切 TIFF；命令行可用 `--overwrite` 覆盖。
 
 默认输出 bleed 为长轴 20px、短轴 10px。只有独立观测的 signed spacing 确认叠片时，
@@ -456,7 +460,8 @@ Detailed evidence, CandidateGate, and DecisionGate explanations are written to
 the report. Debug Analysis remains a fixed three-panel image for fast human review.
 
 `PASS` means the file will be cropped automatically. `REVIEW` means it needs
-manual review.
+manual review. `RUNTIME ERROR` means detection existed but a later runtime stage
+failed; the run manifest records the failing stage and actual outputs.
 
 ### Output And Review
 
@@ -477,7 +482,11 @@ x5_crop_output/
   _debug_analysis/
   x5_crop_report.jsonl
   x5_crop_summary.csv
+  x5_crop_run_manifest.jsonl
 ```
+
+`x5_crop_run_manifest.jsonl` contains one terminal record per input, including
+the report/debug/output files that were actually written.
 
 Default output bleed is 20px on the long axis and 10px on the short axis. Only
 independently observed overlap, or overlap uniquely corroborated by trusted

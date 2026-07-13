@@ -6,6 +6,7 @@ import numpy as np
 from ..detection.final.model import FinalDetection
 from ..detection.candidate.model import AssessedCandidate
 from ..configuration.diagnostics import DiagnosticsConfiguration
+from ..run_status import RunTerminalOutcome
 from .canvas import DebugRenderCache, write_rgb_jpeg
 from .panels import make_debug_analysis_panel, make_debug_preview_rgb
 from .status import add_status_bar
@@ -18,6 +19,7 @@ def write_debug_preview(
     output_path: Path,
     diagnostics: DiagnosticsConfiguration,
     render_cache: DebugRenderCache,
+    terminal_outcome: RunTerminalOutcome,
 ) -> None:
     rgb = add_status_bar(
         make_debug_preview_rgb(
@@ -29,6 +31,7 @@ def write_debug_preview(
         ),
         detection,
         diagnostics.style,
+        terminal_outcome,
     )
     write_rgb_jpeg(rgb, output_path, quality=diagnostics.style.jpeg_quality)
 
@@ -41,6 +44,7 @@ def write_debug_analysis(
     stem: str,
     diagnostics: DiagnosticsConfiguration,
     render_cache: DebugRenderCache,
+    terminal_outcome: RunTerminalOutcome,
 ) -> str:
     analysis_dir = output_dir / "_debug_analysis"
     panel_path = analysis_dir / f"{stem}_debug_analysis.jpg"
@@ -51,6 +55,7 @@ def write_debug_analysis(
             selected_candidate,
             diagnostics,
             render_cache,
+            terminal_outcome,
         ),
         panel_path,
         quality=diagnostics.style.jpeg_quality,

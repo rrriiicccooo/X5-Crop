@@ -249,7 +249,7 @@ def _separator_observation_valid(value: Any) -> bool:
     return _typed_value_valid(value, SeparatorBandObservation)
 
 
-def _candidate_geometry_from_read_model(kind: str, value: Any) -> Any:
+def _provisional_geometry_from_read_model(kind: str, value: Any) -> Any:
     model = {
         "sequence": SequenceSolution,
         "dual_lane": DualLaneSolution,
@@ -364,7 +364,7 @@ def decision_gate_from_read_model(value: Any) -> DecisionGateAssessment:
 def _candidate_from_read_model(value: Any) -> AssessedCandidate:
     expected = {
         "geometry_kind",
-        "candidate_geometry",
+        "provisional_geometry",
         "evidence_quality",
         "candidate_gate",
         "count_hypothesis",
@@ -373,9 +373,9 @@ def _candidate_from_read_model(value: Any) -> AssessedCandidate:
     if not isinstance(value, dict) or set(value) != expected:
         raise ValueError("candidate read model is incomplete")
     candidate = AssessedCandidate(
-        geometry=_candidate_geometry_from_read_model(
+        geometry=_provisional_geometry_from_read_model(
             str(value["geometry_kind"]),
-            value["candidate_geometry"],
+            value["provisional_geometry"],
         ),
         count_hypothesis=_typed_value_from_read_model(
             value["count_hypothesis"],
@@ -918,7 +918,7 @@ def current_report_record_errors(record: dict[str, Any]) -> list[str]:
             not _separator_observation_valid(observation)
             for candidate in candidates
             if isinstance(candidate, dict)
-            for observation in candidate.get("candidate_geometry", {}).get(
+            for observation in candidate.get("provisional_geometry", {}).get(
                 "separator_observations",
                 [],
             )

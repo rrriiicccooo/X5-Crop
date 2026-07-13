@@ -30,6 +30,10 @@ repository rules in `AGENTS.md`.
   frame dimensions 或 px/mm consensus。Full 模式的双 canvas endpoint 只为完整 independent separator
   sequence 提供范围，不自行形成 proof；mixed measured/canvas endpoint 仍保持 placement unresolved。
 - Current report identity 为 `detection_report / gray_sequence_integrity`，旧 schema 直接 cache miss。
+- Selection report 将候选裁切明确命名为 `provisional_geometry`；只有 output section 可以保存 final
+  geometry。Runtime 以 typed completed/failed outcome 汇总每个输入，并由父进程唯一写入
+  `x5_crop_run_manifest.jsonl`。Manifest 精确记录 terminal outcome、失败阶段、report/debug 与实际
+  output；report validation 失败会保留并重绘 `RUNTIME ERROR` Debug，更早失败不伪造分析图。
 
 #### 灰度外观语义与 separator sequence 收敛（2026-07-13）
 

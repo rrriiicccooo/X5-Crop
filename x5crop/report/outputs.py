@@ -26,7 +26,7 @@ def append_summary_csv(path: Path, result: ReportResult) -> None:
     output_files = record["output"]["output_files"]
     selection = record["selection"]
     selected = selection["candidates"][selection["selected_rank"] - 1]
-    geometry = selected["candidate_geometry"]
+    geometry = selected["provisional_geometry"]
     decision = record["decision"]
     path.parent.mkdir(parents=True, exist_ok=True)
     fields = [
@@ -64,9 +64,10 @@ def append_summary_csv(path: Path, result: ReportResult) -> None:
         )
 
 
-def write_report_outputs_for_result(result: ReportResult, config: RunConfig) -> None:
+def write_report_outputs_for_result(result: ReportResult, config: RunConfig) -> bool:
     if not config.report:
-        return
+        return False
     output_dir = output_directory_for(Path(result.record["source"]), config)
-    append_report_jsonl(output_dir / REPORT_JSONL_NAME, result)
     append_summary_csv(output_dir / SUMMARY_CSV_NAME, result)
+    append_report_jsonl(output_dir / REPORT_JSONL_NAME, result)
+    return True

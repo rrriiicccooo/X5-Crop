@@ -9,7 +9,14 @@ from ..app_info import SCRIPT_NAME, VERSION
 from ..report.model import ReportResult
 from ..report.outputs import write_report_outputs_for_result
 from ..run_config import RunConfig
+from ..run_status import RunTerminalOutcome
 from .invocation import RuntimeInvocation
+from .manifest import RunManifestRecord, append_run_manifest
+from .outcome import (
+    FailedInput,
+    FailureStage,
+    InputProcessingOutcome,
+)
 from .workflow import process_one
 
 
@@ -52,6 +59,85 @@ def print_report_result(result: ReportResult, config: RunConfig) -> None:
                 print(f"    {Path(out).name}")
 
 
+def _failed_input_from_exception(
+    source: Path,
+    stage: FailureStage,
+    exc: Exception,
+) -> FailedInput:
+    return FailedInput(
+        source=source,
+        failure_stage=stage,
+        error_code=type(exc).__name__,
+        error_message=str(exc),
+        debug_analysis=None,
+        output_files=(),
+        traceback_text=traceback.format_exc(),
+    )
+
+
+def _failure_manifest(failure: FailedInput) -> RunManifestRecord:
+    return RunManifestRecord(
+        source=str(failure.source),
+        terminal_outcome=RunTerminalOutcome.RUNTIME_ERROR,
+        failure_stage=failure.failure_stage,
+        error_code=failure.error_code,
+        error_message=failure.error_message,
+        report_written=False,
+        debug_analysis=failure.debug_analysis,
+        output_files=failure.output_files,
+    )
+
+
+def _handle_input_outcome(
+    source: Path,
+    outcome: InputProcessingOutcome,
+    config: RunConfig,
+) -> tuple[bool, str | None]:
+    if isinstance(outcome, FailedInput):
+        append_run_manifest(source, config, _failure_manifest(outcome))
+        print(f"  error: {outcome.error_message}", file=sys.stderr)
+        if config.debug_errors and outcome.traceback_text:
+            print(outcome.traceback_text, file=sys.stderr, end="")
+        return False, None
+
+    result = outcome.result
+    try:
+        report_written = write_report_outputs_for_result(result, config)
+    except Exception as exc:
+        failure = FailedInput(
+            source=source,
+            failure_stage=FailureStage.REPORT_WRITE,
+            error_code=type(exc).__name__,
+            error_message=str(exc),
+            debug_analysis=outcome.debug_analysis,
+            output_files=tuple(result.record["output"]["output_files"]),
+            traceback_text=traceback.format_exc(),
+        )
+        append_run_manifest(source, config, _failure_manifest(failure))
+        print(f"  error: {failure.error_message}", file=sys.stderr)
+        if config.debug_errors and failure.traceback_text:
+            print(failure.traceback_text, file=sys.stderr, end="")
+        return False, None
+
+    output_files = tuple(result.record["output"]["output_files"])
+    append_run_manifest(
+        source,
+        config,
+        RunManifestRecord(
+            source=str(source),
+            terminal_outcome=RunTerminalOutcome.COMPLETED,
+            failure_stage=None,
+            error_code=None,
+            error_message=None,
+            report_written=report_written,
+            debug_analysis=outcome.debug_analysis,
+            output_files=output_files,
+        ),
+    )
+    print_report_result(result, config)
+    return True, str(result.record["decision"]["status"])
+
+
 def process_parallel_files(
     invocation: RuntimeInvocation,
 ) -> tuple[int, int, int, int]:
@@ -81,21 +167,20 @@ def process_parallel_files(
             path = future_to_path[future]
             print(f"\n[{index}/{total}] {path.name}")
             try:
-                result = future.result()
-                ok += 1
-                approved += int(
-                    result.record["decision"]["status"] == "approved_auto"
-                )
-                review += int(
-                    result.record["decision"]["status"] == "needs_review"
-                )
-                write_report_outputs_for_result(result, config)
-                print_report_result(result, config)
+                outcome = future.result()
             except Exception as exc:
+                outcome = _failed_input_from_exception(
+                    path,
+                    FailureStage.WORKER,
+                    exc,
+                )
+            succeeded, status = _handle_input_outcome(path, outcome, config)
+            if succeeded:
+                ok += 1
+                approved += int(status == "approved_auto")
+                review += int(status == "needs_review")
+            else:
                 failed += 1
-                print(f"  error: {exc}", file=sys.stderr)
-                if config.debug_errors:
-                    traceback.print_exc()
     return ok, failed, approved, review
 
 
@@ -115,21 +200,20 @@ def run_runtime(invocation: RuntimeInvocation) -> int:
         for index, path in enumerate(files, start=1):
             print(f"\n[{index}/{total}] {path.name}")
             try:
-                result = process_one(path, config, invocation.configuration_bundle)
-                ok += 1
-                approved += int(
-                    result.record["decision"]["status"] == "approved_auto"
-                )
-                review += int(
-                    result.record["decision"]["status"] == "needs_review"
-                )
-                write_report_outputs_for_result(result, config)
-                print_report_result(result, config)
+                outcome = process_one(path, config, invocation.configuration_bundle)
             except Exception as exc:
+                outcome = _failed_input_from_exception(
+                    path,
+                    FailureStage.WORKER,
+                    exc,
+                )
+            succeeded, status = _handle_input_outcome(path, outcome, config)
+            if succeeded:
+                ok += 1
+                approved += int(status == "approved_auto")
+                review += int(status == "needs_review")
+            else:
                 failed += 1
-                print(f"  error: {exc}", file=sys.stderr)
-                if config.debug_errors:
-                    traceback.print_exc()
 
     print(f"\ndone: ok={ok} failed={failed} approved={approved} review={review}")
     return 0 if failed == 0 else 1

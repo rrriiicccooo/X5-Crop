@@ -10,6 +10,7 @@ from x5crop.configuration.bundle import DetectionConfigurationBundle
 from x5crop.run_config import RunConfig
 from x5crop.runtime.app import run_runtime
 from x5crop.runtime.invocation import RuntimeInvocation
+from x5crop.runtime.outcome import CompletedInput
 
 
 def _config() -> RunConfig:
@@ -58,15 +59,22 @@ class RuntimeConfigurationIdentityContractTest(unittest.TestCase):
             (Path("input.tif"),),
             DetectionConfigurationBundle.for_format_mode("135", "full"),
         )
-        result = SimpleNamespace(
-            record={
-                "decision": {"status": "approved_auto"},
-                "output": {"warnings": [], "output_files": []},
-            }
+        result = CompletedInput(
+            result=SimpleNamespace(
+                record={
+                    "decision": {"status": "approved_auto"},
+                    "output": {"warnings": [], "output_files": []},
+                }
+            ),
+            debug_analysis=None,
         )
         with (
             patch("x5crop.runtime.app.process_one", return_value=result) as process,
-            patch("x5crop.runtime.app.write_report_outputs_for_result"),
+            patch(
+                "x5crop.runtime.app.write_report_outputs_for_result",
+                return_value=True,
+            ),
+            patch("x5crop.runtime.app.append_run_manifest"),
             patch("builtins.print"),
         ):
             self.assertEqual(run_runtime(invocation), 0)

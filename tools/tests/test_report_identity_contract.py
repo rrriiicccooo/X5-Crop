@@ -158,7 +158,7 @@ class ReportIdentityContractTest(unittest.TestCase):
 
     def test_current_schema_rejects_photo_interval_geometry_drift(self) -> None:
         record = _record()
-        interval = record["selection"]["candidates"][0]["candidate_geometry"][
+        interval = record["selection"]["candidates"][0]["provisional_geometry"][
             "photo_intervals"
         ][0]
         interval["start"]["minimum"] += 10.0
@@ -171,7 +171,7 @@ class ReportIdentityContractTest(unittest.TestCase):
 
     def test_current_schema_binds_dimension_evidence_to_photo_intervals(self) -> None:
         record = _record()
-        interval = record["selection"]["candidates"][0]["candidate_geometry"][
+        interval = record["selection"]["candidates"][0]["provisional_geometry"][
             "photo_intervals"
         ][0]
         interval["end"]["minimum"] = 90.0
