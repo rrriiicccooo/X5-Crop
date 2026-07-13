@@ -208,6 +208,55 @@ def pass_through_classes() -> list[str]:
     return sorted(offenders)
 
 
+def pass_through_source_functions() -> list[str]:
+    offenders: list[str] = []
+    for module in source_modules().values():
+        for node in parsed_source(module).body:
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            if node.name.startswith("_") or node.name == "main":
+                continue
+            statements = [
+                statement
+                for statement in node.body
+                if not (
+                    isinstance(statement, ast.Expr)
+                    and isinstance(statement.value, ast.Constant)
+                    and isinstance(statement.value.value, str)
+                )
+            ]
+            if len(statements) != 1:
+                continue
+            statement = statements[0]
+            call = (
+                statement.value
+                if isinstance(statement, ast.Expr)
+                and isinstance(statement.value, ast.Call)
+                else statement.value
+                if isinstance(statement, ast.Return)
+                and isinstance(statement.value, ast.Call)
+                else None
+            )
+            if call is None or call.keywords:
+                continue
+            parameters = tuple(
+                argument.arg
+                for argument in (
+                    *node.args.posonlyargs,
+                    *node.args.args,
+                    *node.args.kwonlyargs,
+                )
+            )
+            forwarded = tuple(
+                argument.id
+                for argument in call.args
+                if isinstance(argument, ast.Name)
+            )
+            if len(forwarded) == len(call.args) and forwarded == parameters:
+                offenders.append(f"{module.name}:{node.lineno}:{node.name}")
+    return sorted(offenders)
+
+
 def duplicate_dataclass_models(
     left_prefix: str,
     right_prefix: str,
@@ -664,6 +713,32 @@ def unreferenced_tool_helpers() -> list[str]:
                 continue
             if (module.name, node.name) not in references:
                 offenders.append(f"{module.name}.{node.name}")
+    return sorted(offenders)
+
+
+def unreferenced_tool_assignments() -> list[str]:
+    modules = _tool_modules()
+    loaded_names: set[tuple[str, str]] = set()
+    for module in modules.values():
+        for node in ast.walk(parsed_source(module)):
+            if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load):
+                loaded_names.add((module.name, node.id))
+
+    offenders: list[str] = []
+    for module in modules.values():
+        for node in parsed_source(module).body:
+            targets: tuple[ast.expr, ...]
+            if isinstance(node, ast.Assign):
+                targets = tuple(node.targets)
+            elif isinstance(node, ast.AnnAssign):
+                targets = (node.target,)
+            else:
+                continue
+            for target in targets:
+                if not isinstance(target, ast.Name) or not target.id.startswith("_"):
+                    continue
+                if (module.name, target.id) not in loaded_names:
+                    offenders.append(f"{module.name}:{node.lineno}:{target.id}")
     return sorted(offenders)
 
 

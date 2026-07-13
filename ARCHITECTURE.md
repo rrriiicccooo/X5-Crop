@@ -12,7 +12,7 @@ entry
   -> PreparedWorkspace + DetectionContext + MeasurementCache
   -> gray boundary paths + separator bands + content observations
   -> count hypotheses + frame-dimension priors
-  -> global PhotoSequenceSolver -> PhotoSequenceSolution candidates
+  -> solve_photo_sequence -> PhotoSequenceSolution candidates
   -> physical evidence + CandidateGate
   -> GeometryResolution + deterministic selection
   -> FrameBleedPlan
@@ -68,7 +68,8 @@ runtime 与 export 数据流。
 
 每张照片由 leading、trailing、top、bottom 四个
 `PhotoApertureBoundaryResolution` 组成。每条边保存位置区间、evidence state、typed source 与
-measurement provenance。`PhotoSequenceEnvelope` 只是全部开口的派生外包络，不拥有检测权限。
+measurement provenance。`PhotoSequenceSolution.photo_sequence_envelope` 派生全部开口的外包络
+`Box`，不拥有检测权限。
 
 `HolderBoundaryObservation` 只描述 canvas 邻接片夹范围，用于约束搜索。它不能直接定义照片
 边界。`ContainmentFallback` 只给 REVIEW 与 Debug 提供安全范围，永远不是 resolved geometry。
@@ -116,9 +117,10 @@ observation，但不能成为 hard separator。Dimension-only edge 只是一条 
 只有独立 observation 或独立约束共同佐证的 overlap 才能触发输出保护；geometry equation
 推导的负值不能证明自身，也不能自动增加 bleed。
 
-### 2.4 Global PhotoSequenceSolver
+### 2.4 Global Photo Sequence Solving
 
-`PhotoSequenceSolution` solver 对每个允许 count 和 frame-size option 联合求解全部
+`solve_photo_sequence` 对每个允许 count 和 frame-size option 联合求解一个或多个
+`PhotoSequenceSolution`，每个结果包含全部
 `PhotoAperture`，不先确定一个 outer
 再补 separator：
 

@@ -51,7 +51,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--copy-review-files", dest="copy_review_files", action="store_true", default=True, help="Copy source TIFFs that require review to the review folder; default on.")
     parser.add_argument("--no-copy-review-files", dest="copy_review_files", action="store_false", help="Do not copy source TIFFs that require review.")
     parser.add_argument("--review-dir", default=None, help="Review folder; default output/needs_review.")
-    parser.add_argument("--export-review", action="store_true", help="Export crops even when the result requires review.")
+    parser.add_argument("--export-review", action="store_true", help="Export resolved REVIEW crops; unresolved provisional geometry is never exportable.")
     parser.add_argument("--dry-run", action="store_true", help="Detect only; do not write cropped TIFFs.")
     parser.add_argument("--overwrite", action="store_true", help="Overwrite existing outputs.")
     parser.add_argument("--report", action="store_true", help=f"Write {REPORT_JSONL_NAME} and {SUMMARY_CSV_NAME}.")

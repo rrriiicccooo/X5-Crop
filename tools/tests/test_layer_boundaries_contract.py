@@ -15,6 +15,7 @@ from tools.tests.architecture_contracts import (
     invalid_dataclass_default_factories,
     modules_with_export_lists,
     pass_through_classes,
+    pass_through_source_functions,
     pass_through_tool_functions,
     reachable_source_modules,
     source_import_graph,
@@ -30,6 +31,7 @@ from tools.tests.architecture_contracts import (
     unused_imports,
     unused_tool_imports,
     unreferenced_tool_helpers,
+    unreferenced_tool_assignments,
 )
 
 
@@ -108,15 +110,6 @@ class LayerBoundariesContractTest(unittest.TestCase):
             (
                 ("x5crop.detection.physical",),
                 (
-                    "x5crop.detection.guidance",
-                    "x5crop.detection.candidate",
-                    "x5crop.detection.decision",
-                    "x5crop.detection.final",
-                ),
-            ),
-            (
-                ("x5crop.detection.guidance",),
-                (
                     "x5crop.detection.candidate",
                     "x5crop.detection.decision",
                     "x5crop.detection.final",
@@ -184,9 +177,11 @@ class LayerBoundariesContractTest(unittest.TestCase):
         self.assertEqual(unused_imports(), [])
         self.assertEqual(modules_with_export_lists(), [])
         self.assertEqual(pass_through_classes(), [])
+        self.assertEqual(pass_through_source_functions(), [])
 
     def test_tools_and_tests_have_no_orphan_or_pass_through_helpers(self) -> None:
         self.assertEqual(unreferenced_tool_helpers(), [])
+        self.assertEqual(unreferenced_tool_assignments(), [])
         self.assertEqual(pass_through_tool_functions(), [])
         self.assertEqual(unused_tool_imports(), [])
 

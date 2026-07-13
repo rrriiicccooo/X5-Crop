@@ -11,7 +11,6 @@ from .identity import REPORT_SCHEMA_ID, REPORT_SCHEMA_REVISION
 from .read_models import (
     decision_gate_detail,
     frame_bleed_plan_read_model,
-    resolution_metadata_read_model,
     selection_read_model,
     typed_read_model,
 )
@@ -63,9 +62,7 @@ def report_record_for_final_detection(
         "input": {
             "profile": dict(profile),
             "workspace_extent": typed_read_model(workspace_extent),
-            "resolution_metadata": resolution_metadata_read_model(
-                resolution_metadata
-            ),
+            "resolution_metadata": typed_read_model(resolution_metadata),
             "transform_geometry": typed_read_model(transform_geometry),
         },
         "configuration": dict(configuration),

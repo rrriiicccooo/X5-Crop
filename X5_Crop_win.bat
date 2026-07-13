@@ -36,7 +36,7 @@ if not defined PYTHON (
 )
 if not defined PYTHON (
     echo A usable Python was not found.
-    echo The launcher needs Python with numpy, Pillow, and tifffile installed.
+    echo The launcher needs Python with numpy, Pillow, tifffile, and imagecodecs installed.
     echo Run install\X5_Crop_win_install.bat first, then try again.
     echo.
     echo Checked:
@@ -63,7 +63,7 @@ exit /b %EXITCODE%
 set "CANDIDATE=%*"
 if not defined CANDIDATE exit /b 1
 set "CHECKED_PYTHON=%CHECKED_PYTHON% %CANDIDATE%;"
-%CANDIDATE% -c "import numpy, PIL, tifffile" >nul 2>nul
+%CANDIDATE% -c "import numpy, PIL, tifffile, imagecodecs" >nul 2>nul
 if not "%errorlevel%"=="0" exit /b 1
 set "PYTHON=%CANDIDATE%"
 exit /b 0

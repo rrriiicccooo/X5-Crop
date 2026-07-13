@@ -281,9 +281,9 @@ Current state:
 - Active script is `X5_Crop.py` V4.9.
 - Runtime resolves one `DetectionConfiguration`; the superseded `x5crop.policies`
   topology and all compatibility surfaces are deleted.
-- Detection uses a global `PhotoSequenceSolution` solver. Each `PhotoAperture`
-  represents one visible real-photo opening; visible film base and internal
-  separator bands are excluded from ideal aperture geometry.
+- Detection uses `solve_photo_sequence` to produce `PhotoSequenceSolution`.
+  Each `PhotoAperture` represents one visible real-photo opening; visible film
+  base and internal separator bands are excluded from ideal aperture geometry.
 - Gray paths and separator bands are count-independent observations. Candidate
   assignment binds separator start/end to the trailing/leading edges of adjacent
   apertures; dimension-only boundaries remain provisional.

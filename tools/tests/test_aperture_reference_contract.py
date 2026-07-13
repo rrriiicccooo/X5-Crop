@@ -144,6 +144,20 @@ class ApertureReferenceContractTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             photo_aperture_reference_from_record(obsolete)
 
+    def test_reference_schema_rejects_nested_extra_fields_and_type_coercion(self) -> None:
+        report = _record()
+        extra = deepcopy(_reference_record(report))
+        extra["apertures"][0]["legacy_outer_box"] = {}
+        wrong_note = deepcopy(_reference_record(report))
+        wrong_note["notes"] = [7]
+        wrong_index = deepcopy(_reference_record(report))
+        wrong_index["apertures"][0]["index"] = "1"
+
+        for record in (extra, wrong_note, wrong_index):
+            with self.subTest(record=record):
+                with self.assertRaises(ValueError):
+                    photo_aperture_reference_from_record(record)
+
 
 if __name__ == "__main__":
     unittest.main()

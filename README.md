@@ -132,7 +132,8 @@ auto count 始终按 format 允许的张数从大到小求解。每个 count 都
 count-independent separator observations 构造 hypotheses，再由全局 solver 联合求解每张照片的
 `PhotoAperture`。只有 `GeometryResolution` 确认 count、placement、coverage 和替代几何都已解决，
 才停止搜索更小 count；即使最终结果仍需 REVIEW，也不会让 CandidateGate 或 confidence 代替这项
-物理解析。所有候选都完成相同的 evidence、CandidateGate 和 DecisionGate。
+物理解析。所有候选都完成相同的 evidence 和 CandidateGate；选中结果随后只进入一次
+DecisionGate。
 
 ### Format 和张数
 
@@ -299,7 +300,7 @@ python3 X5_Crop.py . --format 135 --strip full --deskew-fallback off
 python3 X5_Crop.py . --format 135 --strip full --jobs 1
 ```
 
-`REVIEW` 结果也强制导出：
+强制导出已经解决几何的 `REVIEW` 结果；未解决的 provisional geometry 永远不会导出：
 
 ```bash
 python3 X5_Crop.py . --format 135 --strip full --export-review
@@ -432,8 +433,11 @@ count uses the same per-side boundary measurements and count-independent separat
 observations. The global solver then resolves every photo's `PhotoAperture` jointly. Smaller
 counts are skipped only after `GeometryResolution` confirms count, placement,
 coverage, and alternative geometry resolution. CandidateGate and confidence never
-substitute for that physical resolution. Every candidate passes through the same
-evidence, CandidateGate, and DecisionGate.
+substitute for that physical resolution. All candidates pass CandidateGate; the
+selected candidate then passes DecisionGate exactly once.
+
+`--export-review` exports resolved REVIEW crops only. Unresolved provisional
+geometry is never exportable.
 
 ### Formats
 

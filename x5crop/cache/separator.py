@@ -7,13 +7,6 @@ from ..domain import Box
 from ..image.separator_profile import SeparatorProfileParameters, separator_profile
 
 
-def separator_profile_cache_key(
-    corridor: Box,
-    profile_parameters: SeparatorProfileParameters,
-) -> MeasurementRegionKey:
-    return MeasurementRegionKey(profile_parameters, corridor)
-
-
 def cached_separator_profile(
     cache: MeasurementCache,
     corridor: Box,
@@ -24,7 +17,7 @@ def cached_separator_profile(
     measured_corridor = corridor.clamp(width, height)
     if not measured_corridor.valid():
         raise ValueError("separator corridor does not intersect the workspace")
-    key = separator_profile_cache_key(measured_corridor, profile_parameters)
+    key = MeasurementRegionKey(profile_parameters, measured_corridor)
     found = key in cache.separator_profiles
     cache.lookup_statistics.record_lookup(found=found)
     if not found:

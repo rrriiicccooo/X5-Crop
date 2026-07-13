@@ -15,7 +15,6 @@ from ..detection.physical.model import (
 )
 from ..domain import InterPhotoSpacing
 from ..output.model import FrameBleedPlan
-from ..units import ResolutionMetadataObservation
 
 
 def typed_read_model(value: Any) -> Any:
@@ -133,12 +132,6 @@ def decision_gate_detail(gate: DecisionGateAssessment) -> dict[str, Any]:
             for check, reason in gate.reason_inputs
         ],
     }
-
-
-def resolution_metadata_read_model(
-    metadata: ResolutionMetadataObservation,
-) -> dict[str, Any]:
-    return typed_read_model(metadata)
 
 
 def frame_bleed_plan_read_model(plan: FrameBleedPlan) -> dict[str, Any]:

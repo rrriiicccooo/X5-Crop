@@ -69,7 +69,13 @@ class ReferenceValidationResult:
 def _interval_from_record(value: Any) -> PixelInterval:
     if not isinstance(value, dict) or set(value) != {"minimum", "maximum"}:
         raise ValueError("reference boundary requires minimum and maximum")
-    return PixelInterval(float(value["minimum"]), float(value["maximum"]))
+    bounds = (value["minimum"], value["maximum"])
+    if any(
+        isinstance(item, bool) or not isinstance(item, (int, float))
+        for item in bounds
+    ):
+        raise ValueError("reference boundary values must be numbers")
+    return PixelInterval(float(bounds[0]), float(bounds[1]))
 
 
 def photo_aperture_reference_from_record(record: dict[str, Any]) -> PhotoApertureReference:
@@ -93,14 +99,27 @@ def photo_aperture_reference_from_record(record: dict[str, Any]) -> PhotoApertur
     notes = record["notes"]
     if not isinstance(apertures, list) or not isinstance(notes, list):
         raise ValueError("photo aperture reference collections must be lists")
+    identity_values = tuple(
+        record[field] for field in ("source", "format_id", "strip_mode", "layout")
+    )
+    if any(not isinstance(value, str) or not value for value in identity_values):
+        raise ValueError("photo aperture reference identities must be strings")
+    if any(not isinstance(note, str) for note in notes):
+        raise ValueError("photo aperture reference notes must be strings")
+    aperture_fields = {"index", *BOUNDARY_SIDES}
+    for aperture in apertures:
+        if not isinstance(aperture, dict) or set(aperture) != aperture_fields:
+            raise ValueError("photo aperture reference aperture fields are invalid")
+        if isinstance(aperture["index"], bool) or not isinstance(aperture["index"], int):
+            raise ValueError("photo aperture reference index must be an integer")
     return PhotoApertureReference(
-        source=str(record["source"]),
-        format_id=str(record["format_id"]),
-        strip_mode=str(record["strip_mode"]),
-        layout=str(record["layout"]),
+        source=record["source"],
+        format_id=record["format_id"],
+        strip_mode=record["strip_mode"],
+        layout=record["layout"],
         apertures=tuple(
             PhotoApertureIntervalReference(
-                index=int(aperture["index"]),
+                index=aperture["index"],
                 **{
                     side: _interval_from_record(aperture[side])
                     for side in BOUNDARY_SIDES
@@ -108,7 +127,7 @@ def photo_aperture_reference_from_record(record: dict[str, Any]) -> PhotoApertur
             )
             for aperture in apertures
         ),
-        notes=tuple(str(note) for note in notes),
+        notes=tuple(notes),
     )
 
 

@@ -19,8 +19,10 @@ class CandidateLifecycleSourceContractTest(unittest.TestCase):
         for forbidden in ("assess_candidate", "select_candidates", "FinalDetection"):
             self.assertNotIn(forbidden, source)
 
-    def test_guidance_does_not_build_assess_or_decide(self) -> None:
-        source = "\n".join(path.read_text() for path in _sources(DETECTION_ROOT / "guidance"))
+    def test_content_evidence_does_not_build_assess_or_decide(self) -> None:
+        modules = _sources(DETECTION_ROOT / "evidence/content")
+        self.assertTrue(modules)
+        source = "\n".join(path.read_text() for path in modules)
         for forbidden in (
             "BuiltCandidate(",
             "CandidateGate",
@@ -72,7 +74,6 @@ class CandidateLifecycleSourceContractTest(unittest.TestCase):
         for root in (
             DETECTION_ROOT / "candidate",
             DETECTION_ROOT / "physical",
-            DETECTION_ROOT / "guidance",
             DETECTION_ROOT / "evidence",
             DETECTION_ROOT / "decision",
         ):

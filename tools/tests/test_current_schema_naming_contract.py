@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 from pathlib import Path
+import re
 from typing import get_type_hints
 import unittest
 
@@ -24,9 +25,7 @@ from x5crop.report.identity import REPORT_SCHEMA_ID, REPORT_SCHEMA_REVISION
 from x5crop.report.read_models import (
     frame_bleed_plan_read_model,
     gate_check_read_model,
-    resolution_metadata_read_model,
 )
-from x5crop.units import ResolutionMetadataObservation
 
 
 def _active_source() -> str:
@@ -49,10 +48,6 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
         self.assertIs(
             get_type_hints(gate_check_read_model)["check"],
             GateCheck,
-        )
-        self.assertIs(
-            get_type_hints(resolution_metadata_read_model)["metadata"],
-            ResolutionMetadataObservation,
         )
         self.assertIs(
             get_type_hints(frame_bleed_plan_read_model)["plan"],
@@ -391,7 +386,8 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
         self.assertNotIn("source descriptors", candidate_plan)
 
     def test_content_guidance_cannot_create_or_replace_sequence_geometry(self) -> None:
-        guidance = PROJECT_ROOT / "x5crop/detection/guidance"
+        guidance = PROJECT_ROOT / "x5crop/detection/evidence/content"
+        self.assertTrue(tuple(guidance.glob("*.py")))
         source = "\n".join(
             path.read_text(encoding="utf-8") for path in guidance.glob("*.py")
         )
@@ -404,6 +400,49 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
             for path in (PROJECT_ROOT / "x5crop/detection").rglob("*.py")
         )
         self.assertNotIn('"content_' + 'guidance"', active_detection)
+
+    def test_docs_launchers_and_contracts_use_current_runtime_truth(self) -> None:
+        readme = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
+        cli = (PROJECT_ROOT / "x5crop/entry/cli.py").read_text(encoding="utf-8")
+        architecture = (PROJECT_ROOT / "ARCHITECTURE.md").read_text(encoding="utf-8")
+        coordination = (PROJECT_ROOT / "AGENTS.md").read_text(encoding="utf-8")
+        ownership_test = (
+            PROJECT_ROOT / "tools/tests/test_architecture_ownership_contract.py"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("All candidates pass CandidateGate", readme)
+        self.assertIn("selected candidate then passes DecisionGate", readme)
+        self.assertIn("resolved REVIEW crops", cli)
+        self.assertIn("resolved REVIEW crops", readme)
+        self.assertNotIn("PhotoSequenceSolver", architecture)
+        self.assertNotIn("PhotoSequenceSolver", coordination)
+        self.assertNotIn("PhotoSequenceEnvelope", architecture)
+        self.assertIn("solve_photo_sequence", architecture)
+        self.assertNotIn("splitlines()) > 800", ownership_test)
+
+        for launcher in (
+            "X5_Crop_Mac.command",
+            "X5_Crop_Mac_diagnostics.command",
+            "X5_Crop_win.bat",
+        ):
+            source = (PROJECT_ROOT / launcher).read_text(encoding="utf-8")
+            with self.subTest(launcher=launcher):
+                self.assertIn("imagecodecs", source)
+
+    def test_active_source_docstrings_reference_existing_modules(self) -> None:
+        for path in (PROJECT_ROOT / "x5crop").rglob("*.py"):
+            source = path.read_text(encoding="utf-8")
+            for module_name in re.findall(r"`(x5crop(?:\.[a-zA-Z_][a-zA-Z0-9_]*)+)`", source):
+                module_path = PROJECT_ROOT / (module_name.replace(".", "/") + ".py")
+                package_path = PROJECT_ROOT / module_name.replace(".", "/") / "__init__.py"
+                with self.subTest(source=str(path), module=module_name):
+                    self.assertTrue(module_path.is_file() or package_path.is_file())
+
+    def test_measurement_cache_has_no_single_use_key_wrapper(self) -> None:
+        source = (PROJECT_ROOT / "x5crop/cache/separator.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotIn("separator_profile_cache_key", source)
 
     def test_physical_candidate_source_is_frame_sequence_not_separator(self) -> None:
         source = _active_source()

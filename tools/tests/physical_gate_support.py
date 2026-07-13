@@ -112,9 +112,7 @@ from x5crop.units import (
 
 
 _HOLDER_BOX = Box(0, 0, 310, 100)
-_FIRST_PHOTO = (0.0, 150.0)
 _SEPARATOR = (150.0, 160.0)
-_SECOND_PHOTO = (160.0, 310.0)
 
 
 def _appearance(

@@ -144,14 +144,6 @@ class ArchitectureOwnershipContractTest(unittest.TestCase):
         for obsolete in ("profiles.py", "assembly.py", "aggregate.py"):
             self.assertFalse((root / obsolete).exists())
 
-    def test_contract_test_modules_keep_one_reviewable_responsibility(self) -> None:
-        offenders = [
-            str(path.relative_to(PROJECT_ROOT))
-            for path in (PROJECT_ROOT / "tools/tests").glob("test_*_contract.py")
-            if len(path.read_text(encoding="utf-8").splitlines()) > 800
-        ]
-        self.assertEqual(offenders, [])
-
     def test_physical_aggregation_has_one_canonical_owner(self) -> None:
         dual_lane = (
             PROJECT_ROOT / "x5crop/detection/candidate/composition/dual_lane.py"

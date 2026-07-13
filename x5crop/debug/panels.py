@@ -186,13 +186,6 @@ def draw_evidence_context_overlay(
         )
 
 
-def make_separator_evidence_debug_gray(
-    gray: np.ndarray,
-    params: SeparatorEvidenceImageParameters,
-) -> np.ndarray:
-    return make_separator_evidence_gray(gray, params)
-
-
 def make_separator_evidence_debug_rgb(
     gray: np.ndarray,
     detection: FinalDetection,
@@ -203,7 +196,7 @@ def make_separator_evidence_debug_rgb(
     render_cache: DebugRenderCache,
 ) -> np.ndarray:
     geometry = debug_geometry(gray, detection, selected_candidate)
-    evidence = make_separator_evidence_debug_gray(
+    evidence = make_separator_evidence_gray(
         gray,
         params,
     )

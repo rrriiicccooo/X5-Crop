@@ -29,7 +29,7 @@ if [ ! -f "$SCRIPT" ]; then
 fi
 
 find_python() {
-    REQUIRED_IMPORTS="import numpy, PIL, tifffile"
+    REQUIRED_IMPORTS="import numpy, PIL, tifffile, imagecodecs"
     CHECKED=""
 
     try_python() {
@@ -63,7 +63,7 @@ $CANDIDATE"
 
 if ! find_python; then
     echo "A usable Python was not found."
-    echo "The launcher needs Python with numpy, Pillow, and tifffile installed."
+    echo "The launcher needs Python with numpy, Pillow, tifffile, and imagecodecs installed."
     echo "Run install/X5_Crop_Mac_install.command first, then try again."
     echo
     echo "Checked:"
