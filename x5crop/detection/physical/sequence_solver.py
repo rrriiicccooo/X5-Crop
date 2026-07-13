@@ -1003,6 +1003,13 @@ def _uncorroborated_overlap_extent(
     )
 
 
+def _strictly_dominates_measured_only_search(build: _SequenceBuild) -> bool:
+    return bool(
+        build.separator_assignments
+        and _uncorroborated_overlap_extent(build.spacings) == 0.0
+    )
+
+
 def _measured_sequence_build(
     constraints: tuple[_MeasuredApertureConstraint, ...],
     cross_axis: PhotoApertureCrossAxisHypothesis,
@@ -1699,7 +1706,11 @@ def solve_photo_sequence(
     measured_builds: tuple[_SequenceBuild, ...] = ()
     measured_evaluations = 0
     measured_budget_exhausted = False
-    if measured_budget > 0:
+    measured_search_dominated = any(
+        _strictly_dominates_measured_only_search(build)
+        for build in separator_builds
+    )
+    if measured_budget > 0 and not measured_search_dominated:
         (
             measured_builds,
             measured_evaluations,
