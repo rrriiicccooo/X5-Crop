@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ....cache import MeasurementCache
+from ....cache import MeasurementCache, MeasurementParametersKey
 from ....configuration.boundary import BoundaryPathParameters
 from ....domain import (
     BoundaryMeasurementSet,
@@ -16,15 +16,16 @@ def cached_boundary_measurements(
     cache: MeasurementCache,
     parameters: BoundaryPathParameters,
 ) -> BoundaryMeasurementSet:
-    found = parameters in cache.boundary_measurements
+    key = MeasurementParametersKey(parameters)
+    found = key in cache.boundary_measurements
     cache.lookup_statistics.record_lookup(found=found)
     if not found:
-        cache.boundary_measurements[parameters] = boundary_measurements(
+        cache.boundary_measurements[key] = boundary_measurements(
             cache.gray_work,
             cache.image_statistics,
             parameters,
         )
-    return cache.boundary_measurements[parameters]
+    return cache.boundary_measurements[key]
 
 
 def photo_sequence_search_scope(

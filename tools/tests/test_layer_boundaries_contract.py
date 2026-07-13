@@ -86,6 +86,7 @@ class LayerBoundariesContractTest(unittest.TestCase):
         self.assertEqual(
             forbidden_import_edges(
                 (
+                    "x5crop.cache",
                     "x5crop.geometry",
                     "x5crop.image",
                     "x5crop.io",

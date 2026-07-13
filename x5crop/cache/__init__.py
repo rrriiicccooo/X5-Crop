@@ -7,7 +7,6 @@ import numpy as np
 
 from .content_statistics import ContentColumnStatistics
 from ..domain import BoundaryMeasurementSet, Box
-from ..configuration.boundary import BoundaryPathParameters
 from ..image.statistics import ImageMeasurementStatistics
 from ..geometry.layout import require_work_layout
 
@@ -19,6 +18,14 @@ def _require_frozen_parameters(value: object) -> None:
     ):
         raise TypeError("measurement cache keys require frozen parameter objects")
     hash(value)
+
+
+@dataclass(frozen=True)
+class MeasurementParametersKey:
+    parameters: object
+
+    def __post_init__(self) -> None:
+        _require_frozen_parameters(self.parameters)
 
 
 @dataclass(frozen=True)
@@ -69,10 +76,9 @@ class MeasurementCache:
         default_factory=MeasurementCacheStatistics
     )
     separator_profiles: dict[MeasurementRegionKey, np.ndarray] = field(default_factory=dict)
-    boundary_measurements: dict[
-        BoundaryPathParameters,
-        BoundaryMeasurementSet,
-    ] = field(default_factory=dict)
+    boundary_measurements: dict[MeasurementParametersKey, BoundaryMeasurementSet] = field(
+        default_factory=dict
+    )
     content_evidence_thresholds: dict[MeasurementRegionKey, float | None] = field(default_factory=dict)
     content_column_statistics: dict[ThresholdedMeasurementRegionKey, ContentColumnStatistics] = field(
         default_factory=dict
