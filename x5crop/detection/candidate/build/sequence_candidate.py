@@ -86,6 +86,8 @@ def build_sequence_candidate(
     )
     cross_axis_plan = photo_aperture_cross_axis_plan(
         search_scope,
+        dimensions,
+        int(count_hypothesis.count),
         solver_parameters.maximum_dimension_hypotheses,
     )
     if not cross_axis_plan.hypotheses:

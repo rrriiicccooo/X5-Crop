@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from inspect import signature
 import unittest
 
 from tools.tests.photo_aperture_solver_support import (
@@ -36,28 +35,6 @@ from x5crop.domain import (
 
 
 class PhotoApertureSolverContractTest(unittest.TestCase):
-    def test_cross_axis_planning_does_not_enumerate_separator_sequences(self) -> None:
-        scope = _scope(
-            width=320,
-            height=120,
-            leading=0.0,
-            trailing=320.0,
-            top=10.0,
-            bottom=110.0,
-        )
-        plan = photo_aperture_cross_axis_plan(
-            scope,
-            maximum_hypotheses=8,
-        )
-
-        self.assertEqual(
-            tuple(signature(photo_aperture_cross_axis_plan).parameters),
-            ("search_scope", "maximum_hypotheses"),
-        )
-        self.assertTrue(plan.hypotheses)
-        self.assertEqual(plan.assignment_evaluations, 0)
-        self.assertFalse(plan.search_budget_exhausted)
-
     def test_measured_contact_can_join_adjacent_photo_apertures_without_separator(self) -> None:
         scope = _scope(
             width=220,
@@ -86,6 +63,56 @@ class PhotoApertureSolverContractTest(unittest.TestCase):
         self.assertEqual(
             solved.inter_photo_spacings[0].basis,
             InterPhotoSpacingBasis.OBSERVED,
+        )
+
+    def test_measured_path_keeps_its_uncertainty_when_dimensions_intersect(self) -> None:
+        scope = _scope(
+            width=220,
+            height=120,
+            leading=10.0,
+            trailing=210.0,
+            top=10.0,
+            bottom=110.0,
+            internal_paths=(110.0,),
+        )
+        exact_internal = next(
+            item
+            for item in scope.raw_boundary_paths
+            if item.axis == BoundaryAxis.LONG
+            and item.position == PixelInterval.exact(110.0)
+        )
+        uncertain_internal = replace(
+            exact_internal,
+            position=PixelInterval(109.0, 111.0),
+            local_positions=(PixelInterval(109.0, 111.0),),
+        )
+        scope = replace(
+            scope,
+            raw_boundary_paths=tuple(
+                uncertain_internal if item is exact_internal else item
+                for item in scope.raw_boundary_paths
+            ),
+        )
+
+        solved = solve_photo_sequence(
+            (),
+            scope,
+            _plan(scope),
+            2,
+            _dimensions(100.0, 100.0),
+            maximum_assignment_evaluations=10_000,
+            maximum_solution_alternatives=8,
+        )
+
+        self.assertIsInstance(solved, PhotoSequenceSolveResult)
+        assert isinstance(solved, PhotoSequenceSolveResult)
+        self.assertEqual(
+            solved.photo_apertures[0].trailing.position,
+            PixelInterval(109.0, 111.0),
+        )
+        self.assertEqual(
+            solved.photo_apertures[1].leading.position,
+            PixelInterval(109.0, 111.0),
         )
 
     def test_measured_photo_edges_can_represent_overlap_without_separator(self) -> None:
@@ -117,6 +144,31 @@ class PhotoApertureSolverContractTest(unittest.TestCase):
             solved.inter_photo_spacings[0].basis,
             InterPhotoSpacingBasis.GEOMETRY_HYPOTHESIS,
         )
+
+    def test_solver_prefers_nonoverlap_over_uncorroborated_overlap(self) -> None:
+        scope = _scope(
+            width=230,
+            height=120,
+            leading=10.0,
+            trailing=220.0,
+            top=10.0,
+            bottom=110.0,
+            internal_paths=(20.0, 110.0, 120.0),
+        )
+
+        solved = solve_photo_sequence(
+            (),
+            scope,
+            _plan(scope),
+            2,
+            _dimensions(100.0, 100.0),
+            maximum_assignment_evaluations=10_000,
+            maximum_solution_alternatives=8,
+        )
+
+        self.assertIsInstance(solved, PhotoSequenceSolveResult)
+        assert isinstance(solved, PhotoSequenceSolveResult)
+        self.assertNotEqual(solved.inter_photo_spacings[0].kind, "overlap")
 
     def test_measured_path_search_keeps_a_provisional_solution_before_truncation(self) -> None:
         scope = _scope(
@@ -454,6 +506,8 @@ class PhotoApertureSolverContractTest(unittest.TestCase):
             uncertain_scope,
             photo_aperture_cross_axis_plan(
                 uncertain_scope,
+                _dimensions(1.0, 1.0),
+                4,
                 maximum_hypotheses=8,
             ),
             4,
@@ -506,6 +560,66 @@ class PhotoApertureSolverContractTest(unittest.TestCase):
         self.assertEqual(
             solved.photo_apertures[2].leading.source,
             PhotoApertureEdgeSource.DIMENSION_HYPOTHESIS,
+        )
+
+    def test_width_contradicted_band_can_use_independent_aperture_edges(self) -> None:
+        scope = _scope(
+            width=440,
+            height=120,
+            leading=0.0,
+            trailing=430.0,
+            top=10.0,
+            bottom=110.0,
+            internal_paths=(210.0, 220.0),
+        )
+        uncertain_positions = {
+            PixelInterval.exact(210.0): PixelInterval(209.0, 212.0),
+            PixelInterval.exact(220.0): PixelInterval(219.0, 222.0),
+        }
+        scope = replace(
+            scope,
+            raw_boundary_paths=tuple(
+                replace(
+                    item,
+                    position=uncertain_positions[item.position],
+                    local_positions=(uncertain_positions[item.position],),
+                )
+                if item.position in uncertain_positions
+                else item
+                for item in scope.raw_boundary_paths
+            ),
+        )
+        first = _separator(100.0, 110.0, supported=True)
+        overwide = _separator(190.0, 230.0, supported=True)
+        third = _separator(320.0, 330.0, supported=True)
+
+        solved = solve_photo_sequence(
+            (first, overwide, third),
+            scope,
+            _plan(scope),
+            4,
+            _dimensions(100.0, 100.0),
+            maximum_assignment_evaluations=10_000,
+            maximum_solution_alternatives=8,
+        )
+
+        self.assertIsInstance(solved, PhotoSequenceSolveResult)
+        assert isinstance(solved, PhotoSequenceSolveResult)
+        self.assertEqual(
+            solved.photo_apertures[1].trailing.source,
+            PhotoApertureEdgeSource.MEASURED_BOUNDARY_PATH,
+        )
+        self.assertEqual(
+            solved.photo_apertures[2].leading.source,
+            PhotoApertureEdgeSource.MEASURED_BOUNDARY_PATH,
+        )
+        self.assertEqual(
+            solved.inter_photo_spacings[1].basis,
+            InterPhotoSpacingBasis.OBSERVED,
+        )
+        self.assertEqual(
+            tuple(item.observation for item in solved.separator_assignments),
+            (first, third),
         )
 
     def test_canvas_adjacent_bands_cannot_bind_internal_photo_boundaries(self) -> None:

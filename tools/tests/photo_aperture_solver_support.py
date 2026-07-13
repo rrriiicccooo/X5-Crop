@@ -186,6 +186,8 @@ def dimensions(width_mm: float, height_mm: float) -> FrameDimensionPrior:
 def plan(search_scope: PhotoSequenceSearchScope):
     return photo_aperture_cross_axis_plan(
         search_scope,
+        dimensions(1.0, 1.0),
+        1,
         maximum_hypotheses=8,
     )
 

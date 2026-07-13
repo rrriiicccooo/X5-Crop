@@ -162,7 +162,7 @@ class _SequenceBuild:
     photo_width_px: PixelInterval
     cross_axis: PhotoApertureCrossAxisHypothesis
     residuals: SequenceResiduals
-    rank: tuple[int, float, float, float, float, float]
+    rank: tuple[float, int, float, float, float, float, float]
 
 
 @dataclass(frozen=True)
@@ -267,19 +267,35 @@ def _interior_separator_observations(
 
 def photo_aperture_cross_axis_plan(
     search_scope: PhotoSequenceSearchScope,
+    dimensions: FrameDimensionPrior,
+    count: int,
     maximum_hypotheses: int,
 ) -> PhotoApertureCrossAxisPlan:
-    if maximum_hypotheses <= 0:
-        raise ValueError("cross-axis planning requires a positive budget")
+    if min(count, maximum_hypotheses) <= 0:
+        raise ValueError("cross-axis planning requires positive count and budget")
     all_hypotheses = _all_photo_aperture_cross_axis_hypotheses(search_scope)
+    holder_long_extent = float(search_scope.holder_span.box.width)
+
+    def rank(
+        hypothesis: PhotoApertureCrossAxisHypothesis,
+    ) -> tuple[float, float, float, float, float]:
+        photo_width = _cross_axis_width_constraint(hypothesis, dimensions)
+        nonoverlap_overrun = max(
+            0.0,
+            float(count) * photo_width.minimum - holder_long_extent,
+        ) / max(MINIMUM_POSITIVE_PIXEL_EXTENT, holder_long_extent)
+        return (
+            -nonoverlap_overrun,
+            hypothesis.height_px.minimum,
+            hypothesis.measurement_quality,
+            -hypothesis.uncertainty_px,
+            hypothesis.height_px.maximum,
+        )
+
     ranked = tuple(
         sorted(
             all_hypotheses,
-            key=lambda hypothesis: (
-                hypothesis.measurement_quality,
-                -hypothesis.uncertainty_px,
-                hypothesis.height_px.midpoint,
-            ),
+            key=rank,
             reverse=True,
         )[:maximum_hypotheses]
     )
@@ -334,16 +350,62 @@ def _observed_band_edges(
     )
 
 
+def _separator_band_edges(
+    edges: tuple[_EdgeConstraint, _EdgeConstraint],
+) -> bool:
+    return all(
+        edge.source == PhotoApertureEdgeSource.SEPARATOR_BAND_EDGE
+        for edge in edges
+    )
+
+
+def _measured_path_pairs_within_band(
+    observation: SeparatorBandObservation,
+    paths: tuple[GrayBoundaryPathObservation, ...],
+) -> tuple[tuple[_EdgeConstraint, _EdgeConstraint], ...]:
+    contained = tuple(
+        _external_constraint(path)
+        for path in paths
+        if path.position.minimum >= observation.start
+        and path.position.maximum <= observation.end
+    )
+    pairs = tuple(
+        (trailing, leading)
+        for trailing_index, trailing in enumerate(contained)
+        for leading in contained[trailing_index + 1 :]
+        if leading.position.minimum > trailing.position.maximum
+        and leading.provenance != trailing.provenance
+    )
+    return tuple(
+        sorted(
+            pairs,
+            key=lambda pair: (
+                sum(edge.measurement_quality for edge in pair),
+                -sum(
+                    edge.position.maximum - edge.position.minimum
+                    for edge in pair
+                ),
+                -pair[0].position.midpoint,
+                -pair[1].position.midpoint,
+            ),
+            reverse=True,
+        )
+    )
+
+
 def _band_edge_options(
     observation: SeparatorBandObservation,
     cross_axis: PhotoApertureCrossAxisHypothesis,
+    paths: tuple[GrayBoundaryPathObservation, ...],
 ) -> tuple[tuple[_EdgeConstraint, _EdgeConstraint], ...]:
     fallback = _dimension_band_constraint(observation, cross_axis)
     measurement = observation.cross_axis_measurement_for(cross_axis)
+    measured_paths = _measured_path_pairs_within_band(observation, paths)
     if measurement.state != EvidenceState.SUPPORTED:
-        return ((fallback, fallback),)
+        return (*measured_paths, (fallback, fallback))
     return (
         _observed_band_edges(observation, cross_axis),
+        *measured_paths,
         (fallback, fallback),
     )
 
@@ -381,7 +443,7 @@ def _supported_band_demotion_is_justified(
     measurement = band.cross_axis_measurement_for(cross_axis)
     if (
         measurement.state != EvidenceState.SUPPORTED
-        or all(edge.state == EvidenceState.SUPPORTED for edge in chosen)
+        or _separator_band_edges(chosen)
     ):
         return True
     observed = _observed_band_edges(band, cross_axis)
@@ -456,7 +518,7 @@ def _band_sequence_hypothesis(
         cross_axis=cross_axis,
         photo_width_px=photo_width_px,
         supported_band_count=sum(
-            all(edge.state == EvidenceState.SUPPORTED for edge in pair)
+            _separator_band_edges(pair)
             for pair in band_edges
         ),
         measurement_quality=sum(
@@ -514,8 +576,9 @@ def _band_sequence_hypotheses(
     evaluations = 0
     search_truncated = False
     physical_width = _cross_axis_width_constraint(cross_axis, dimensions)
+    long_paths = _axis_paths(search_scope, BoundaryAxis.LONG)
     edge_options = tuple(
-        _band_edge_options(item, cross_axis) for item in interior
+        _band_edge_options(item, cross_axis, long_paths) for item in interior
     )
 
     def search(
@@ -708,7 +771,7 @@ def _refine_dimension_constraint(
     if refined is None:
         return None
     if constraint.source != PhotoApertureEdgeSource.DIMENSION_HYPOTHESIS:
-        return constraint if constraint.position == refined else None
+        return constraint
     return _EdgeConstraint(
         position=refined,
         source=constraint.source,
@@ -869,18 +932,18 @@ def _measured_aperture_constraints(
     return tuple(constraints), evaluations, False
 
 
-def _measured_spacing(
+def _spacing_from_aperture_edges(
     boundary_index: int,
-    left: PhotoAperture,
-    right: PhotoAperture,
+    trailing: PhotoApertureBoundaryResolution,
+    leading: PhotoApertureBoundaryResolution,
 ) -> InterPhotoSpacing:
-    signed_width = right.leading.position.minus(left.trailing.position)
-    left_provenance = left.trailing.provenance
-    right_provenance = right.leading.provenance
+    signed_width = leading.position.minus(trailing.position)
+    trailing_provenance = trailing.provenance
+    leading_provenance = leading.provenance
     observed = bool(
         signed_width.minimum >= 0.0
-        and left.trailing.source == PhotoApertureEdgeSource.MEASURED_BOUNDARY_PATH
-        and right.leading.source == PhotoApertureEdgeSource.MEASURED_BOUNDARY_PATH
+        and trailing.source == PhotoApertureEdgeSource.MEASURED_BOUNDARY_PATH
+        and leading.source == PhotoApertureEdgeSource.MEASURED_BOUNDARY_PATH
     )
     provenance = MeasurementProvenance(
         root_measurement=(
@@ -896,14 +959,14 @@ def _measured_spacing(
         dependencies=tuple(
             dict.fromkeys(
                 (
-                    left_provenance.root_measurement,
-                    right_provenance.root_measurement,
+                    trailing_provenance.root_measurement,
+                    leading_provenance.root_measurement,
                 )
             )
         ),
         boundary_anchors=(
-            left_provenance.source,
-            right_provenance.source,
+            trailing_provenance.source,
+            leading_provenance.source,
         ),
     )
     return InterPhotoSpacing(
@@ -915,6 +978,28 @@ def _measured_spacing(
             if observed
             else InterPhotoSpacingBasis.GEOMETRY_HYPOTHESIS
         ),
+    )
+
+
+def _measured_spacing(
+    boundary_index: int,
+    left: PhotoAperture,
+    right: PhotoAperture,
+) -> InterPhotoSpacing:
+    return _spacing_from_aperture_edges(
+        boundary_index,
+        left.trailing,
+        right.leading,
+    )
+
+
+def _uncorroborated_overlap_extent(
+    spacings: tuple[InterPhotoSpacing, ...],
+) -> float:
+    return sum(
+        max(0.0, -spacing.signed_width_px.maximum)
+        for spacing in spacings
+        if spacing.basis == InterPhotoSpacingBasis.GEOMETRY_HYPOTHESIS
     )
 
 
@@ -997,6 +1082,7 @@ def _measured_sequence_build(
         cross_axis=cross_axis,
         residuals=residuals,
         rank=(
+            -_uncorroborated_overlap_extent(spacings),
             0,
             measurement_quality,
             -dimension_residual,
@@ -1189,6 +1275,8 @@ def _spacing_for_band(
         measurement.state == EvidenceState.SUPPORTED
         and trailing.state == EvidenceState.SUPPORTED
         and leading.state == EvidenceState.SUPPORTED
+        and trailing.source == PhotoApertureEdgeSource.SEPARATOR_BAND_EDGE
+        and leading.source == PhotoApertureEdgeSource.SEPARATOR_BAND_EDGE
     )
     assignment = (
         SeparatorBandAssignment(
@@ -1204,6 +1292,18 @@ def _spacing_for_band(
     if assignment is not None:
         provenance = band.provenance
         basis = InterPhotoSpacingBasis.OBSERVED
+    elif (
+        trailing.source == PhotoApertureEdgeSource.MEASURED_BOUNDARY_PATH
+        and leading.source == PhotoApertureEdgeSource.MEASURED_BOUNDARY_PATH
+    ):
+        return (
+            _spacing_from_aperture_edges(
+                boundary_index,
+                trailing,
+                leading,
+            ),
+            None,
+        )
     else:
         provenance = MeasurementProvenance(
             MeasurementIdentity.FRAME_GEOMETRY,
@@ -1380,6 +1480,7 @@ def _build_sequence(
         cross_axis=cross_axis,
         residuals=residuals,
         rank=(
+            -_uncorroborated_overlap_extent(tuple(spacings)),
             band_hypothesis.supported_band_count,
             band_hypothesis.measurement_quality,
             -float(max(band_hypothesis.width_residual, cross_axis_residual)),
