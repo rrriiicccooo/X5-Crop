@@ -43,7 +43,7 @@ class MeasurementIdentity(str, Enum):
     FRAME_DIMENSIONS = "frame_dimensions"
     FRAME_GEOMETRY = "frame_geometry"
     GRAY_WORK = "gray_work"
-    HOLDER_MATERIAL_PROFILE = "holder_material_profile"
+    HOLDER_BOUNDARY_PROFILE = "holder_boundary_profile"
     HOLDER_CANVAS = "holder_canvas"
     HOLDER_OCCLUSION = "holder_occlusion"
     IMAGE_MEASUREMENT_STATISTICS = "image_measurement_statistics"
@@ -243,7 +243,7 @@ class BoundarySide(str, Enum):
 
 
 class BoundaryKind(str, Enum):
-    HOLDER_MATERIAL_TRANSITION = "holder_material_transition"
+    HOLDER_BOUNDARY_TRANSITION = "holder_boundary_transition"
     TONAL_TRANSITION = "tonal_transition"
     TEXTURE_TRANSITION = "texture_transition"
     CANVAS_CLIP = "canvas_clip"
@@ -253,7 +253,7 @@ BOUNDARY_SIDES = frozenset(BoundarySide)
 
 
 class BoundaryPathSource(str, Enum):
-    HOLDER_MATERIAL = "holder_material"
+    HOLDER_BOUNDARY = "holder_boundary"
     TONAL = "tonal"
     TEXTURE = "texture"
     FULL_CANVAS = "full_canvas"
@@ -283,7 +283,7 @@ def gray_intensity_tail(
 
 
 @dataclass(frozen=True)
-class GrayMaterialObservation:
+class GrayAppearanceObservation:
     intensity_median: float
     intensity_mad: float
     texture_median: float
@@ -301,11 +301,11 @@ class GrayMaterialObservation:
             self.spatial_continuity,
         )
         if any(not math.isfinite(value) or value < 0.0 for value in values):
-            raise ValueError("gray material measurements must be finite and non-negative")
+            raise ValueError("gray appearance measurements must be finite and non-negative")
         if self.spatial_continuity > 1.0:
-            raise ValueError("gray material continuity must lie in [0, 1]")
+            raise ValueError("gray appearance continuity must lie in [0, 1]")
         if not isinstance(self.intensity_tail, GrayIntensityTail):
-            raise TypeError("gray material requires a typed intensity tail")
+            raise TypeError("gray appearance requires a typed intensity tail")
 
 
 @dataclass(frozen=True)
@@ -314,8 +314,8 @@ class BoundaryPathObservation:
     position: PixelInterval
     kind: BoundaryKind
     local_positions: tuple[PixelInterval, ...]
-    outer_material: GrayMaterialObservation | None
-    inner_material: GrayMaterialObservation | None
+    outer_appearance: GrayAppearanceObservation | None
+    inner_appearance: GrayAppearanceObservation | None
     provenance: MeasurementProvenance
 
     def __post_init__(self) -> None:
@@ -332,18 +332,18 @@ class BoundaryPathObservation:
         if self.position != envelope:
             raise ValueError("boundary path position must enclose its local measurements")
         if self.kind != BoundaryKind.CANVAS_CLIP and (
-            self.outer_material is None or self.inner_material is None
+            self.outer_appearance is None or self.inner_appearance is None
         ):
-            raise ValueError("measured boundary paths require outer and inner material")
+            raise ValueError("measured boundary paths require outer and inner appearance")
         if self.kind == BoundaryKind.CANVAS_CLIP and (
-            self.outer_material is not None or self.inner_material is not None
+            self.outer_appearance is not None or self.inner_appearance is not None
         ):
-            raise ValueError("canvas boundary paths cannot invent material observations")
+            raise ValueError("canvas boundary paths cannot invent appearance observations")
         if any(
-            material is not None and material.provenance != self.provenance
-            for material in (self.outer_material, self.inner_material)
+            appearance is not None and appearance.provenance != self.provenance
+            for appearance in (self.outer_appearance, self.inner_appearance)
         ):
-            raise ValueError("boundary materials must share path provenance")
+            raise ValueError("boundary appearances must share path provenance")
 
 
 @dataclass(frozen=True)
@@ -440,7 +440,7 @@ class SeparatorBandObservation:
     end: float
     center: float
     tonal_evidence: float
-    material: GrayMaterialObservation
+    appearance: GrayAppearanceObservation
     provenance: MeasurementProvenance
     cross_axis: SeparatorCrossAxisMeasurement
     lane_box: Box | None = None
@@ -450,8 +450,8 @@ class SeparatorBandObservation:
             raise ValueError("separator observation must have positive width")
         if not self.start <= self.center <= self.end:
             raise ValueError("separator center must lie inside its observed band")
-        if self.material.provenance != self.provenance:
-            raise ValueError("separator material must share band provenance")
+        if self.appearance.provenance != self.provenance:
+            raise ValueError("separator appearance must share band provenance")
         if self.provenance.root_measurement == MeasurementIdentity.FOCUSED_SEPARATOR_PROFILE:
             required = {
                 MeasurementIdentity.FRAME_DIMENSIONS,

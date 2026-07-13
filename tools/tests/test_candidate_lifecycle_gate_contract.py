@@ -35,7 +35,7 @@ def _gate(
             evidence_independence=evidence_independence,
             proof_paths=proof_paths
             or (
-                _path("film_structure_led", EvidenceState.SUPPORTED),
+                _path("separator_sequence_led", EvidenceState.SUPPORTED),
                 _path("geometry_led", EvidenceState.UNAVAILABLE),
                 _path("partial_occupancy_led", EvidenceState.NOT_APPLICABLE),
             ),
@@ -134,7 +134,7 @@ class CandidateLifecycleGateContractTest(unittest.TestCase):
     def test_one_supported_boundary_path_is_sufficient(self) -> None:
         gate = _gate(
             proof_paths=(
-                _path("film_structure_led", EvidenceState.UNAVAILABLE),
+                _path("separator_sequence_led", EvidenceState.UNAVAILABLE),
                 _path("geometry_led", EvidenceState.SUPPORTED),
                 _path("partial_occupancy_led", EvidenceState.NOT_APPLICABLE),
             )
@@ -144,7 +144,7 @@ class CandidateLifecycleGateContractTest(unittest.TestCase):
     def test_no_supported_boundary_path_blocks_once(self) -> None:
         gate = _gate(
             proof_paths=(
-                _path("film_structure_led", EvidenceState.UNAVAILABLE),
+                _path("separator_sequence_led", EvidenceState.UNAVAILABLE),
                 _path("geometry_led", EvidenceState.UNAVAILABLE),
                 _path("partial_occupancy_led", EvidenceState.NOT_APPLICABLE),
             )
@@ -159,7 +159,7 @@ class CandidateLifecycleGateContractTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             _gate(
                 proof_paths=(
-                    _path("film_structure_led", EvidenceState.SUPPORTED),
+                    _path("separator_sequence_led", EvidenceState.SUPPORTED),
                 )
             )
 

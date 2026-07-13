@@ -57,12 +57,12 @@ class PhysicalEvidenceIndependenceContractTest(unittest.TestCase):
         original_assignment = candidate.geometry.separator_assignments[0]
         provenance = replace(
             original_assignment.observation.provenance,
-            dependencies=(MeasurementIdentity.HOLDER_MATERIAL_PROFILE,),
+            dependencies=(MeasurementIdentity.HOLDER_BOUNDARY_PROFILE,),
         )
         observation = replace(
             original_assignment.observation,
-            material=replace(
-                original_assignment.observation.material,
+            appearance=replace(
+                original_assignment.observation.appearance,
                 provenance=provenance,
             ),
             provenance=provenance,

@@ -14,6 +14,22 @@ repository rules in `AGENTS.md`.
 
 ### V4.9 当前开发线
 
+#### 灰度外观语义与 separator sequence 收敛（2026-07-13）
+
+- 删除 `FilmBaseReference`、`FilmStructureEvidence`、`ApertureContactEvidence` 及材料一致性证明；
+  严重欠曝画面与片基可能具有相同灰度外观，appearance 不再授予材料身份或 Gate 权限。
+- `GrayAppearanceObservation` 统一保存 boundary outer/inner 与 separator 的灰度测量；
+  `CandidateEvidence` 直接持有 `SeparatorSequenceEvidence`，物理 proof path 改为
+  `separator_sequence_led`。
+- 短轴 scale 只在 top/bottom 内侧均有明确内容纹理时产生 px/mm 下限；低纹理内侧保持 unresolved，
+  不再产生片基假设对应的 scale 上限。
+- Current report identity 更新为 `detection_report / gray_sequence_resolution`；旧 schema 直接 cache
+  miss，不保留类型、字段、reason、alias、shim 或 reducer。
+- 验证通过 459 项测试和 14 组 format/mode configuration；真实 smoke 覆盖 `005`、`X5_00044`、
+  `X5_00021`、`X5_00006`、`X5_00001`、`120-67/full` 与 `120-66/partial auto`。七份 report 均通过
+  current-schema validation，并完成 cache reuse、review export、TIFF metadata 与三联 Debug Analysis
+  检查。完整 Architecture Audit A/B 留待独立任务。
+
 #### 灰度材料、Outer 与扫描比例物理化（2026-07-13）
 
 - Detection 固定只消费 canonical gray workspace；RGB/chroma/holder color 与 135 片孔不进入

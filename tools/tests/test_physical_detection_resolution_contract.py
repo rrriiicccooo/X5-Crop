@@ -39,12 +39,8 @@ from x5crop.detection.evidence.partial_edge import partial_edge_safety_evidence
 from x5crop.detection.evidence.frame_sequence import sequence_conservation_for_geometry
 from x5crop.detection.evidence.physical_scale import candidate_scan_calibration
 from x5crop.detection.evidence.holder_occupancy import holder_occupancy_evidence
-from x5crop.detection.evidence.film_structure import (
-    aperture_contact_evidence,
-    film_base_reference,
-    film_structure_evidence,
-)
-from x5crop.detection.evidence.holder_material import holder_material_evidence
+from x5crop.detection.evidence.separator_sequence import separator_sequence_evidence
+from x5crop.detection.evidence.holder_boundary import holder_boundary_evidence
 from x5crop.detection.physical.photo_size import frame_dimension_evidence
 from x5crop.domain import (
     BoundaryKind,
@@ -74,7 +70,7 @@ from x5crop.image.statistics import ImageMeasurementStatisticsParameters, image_
 def _single_frame_candidate(*, measured_boundaries: bool) -> BuiltCandidate:
     candidate = candidate_fixture()
     provenance = MeasurementProvenance(
-        MeasurementIdentity.HOLDER_MATERIAL_PROFILE,
+        MeasurementIdentity.HOLDER_BOUNDARY_PROFILE,
         "synthetic",
         (MeasurementIdentity.GRAY_WORK,),
     )
@@ -131,24 +127,15 @@ def _with_candidate_evidence(
         if count_hypothesis is None
         else count_hypothesis
     )
-    texture_limit = evidence.film_structure.film_base_reference.texture_limit
-    holder_material = holder_material_evidence(
+    texture_limit = evidence.holder_boundary.edge_texture_limit
+    holder_boundary = holder_boundary_evidence(
         resolved_geometry,
         texture_limit,
-    )
-    film_base = film_base_reference(
-        resolved_geometry,
-        holder_material,
-        edge_texture_limit=texture_limit,
-    )
-    aperture_contact = aperture_contact_evidence(
-        resolved_geometry,
-        film_base,
     )
     scan_calibration = candidate_scan_calibration(
         unavailable_calibration_fixture(),
         resolved_geometry,
-        aperture_contact,
+        holder_boundary,
     )
     dimensions = frame_dimension_evidence(
         resolved_geometry,
@@ -174,9 +161,8 @@ def _with_candidate_evidence(
             resolved_geometry
         ),
         frame_dimensions=dimensions,
-        holder_material=holder_material,
-        film_structure=film_structure_evidence(resolved_geometry, film_base),
-        aperture_contact=aperture_contact,
+        holder_boundary=holder_boundary,
+        separator_sequence=separator_sequence_evidence(resolved_geometry),
         scan_calibration=scan_calibration,
         holder_occupancy=holder_occupancy_evidence(
             layout=resolved_geometry.layout,
@@ -408,7 +394,7 @@ class PhysicalDetectionResolutionContractTest(unittest.TestCase):
 
         paths = boundary_proof_paths_for_geometry(built.geometry, evidence)
         separator_path = next(
-            path for path in paths if path.code == "film_structure_led"
+            path for path in paths if path.code == "separator_sequence_led"
         )
         self.assertEqual(separator_path.state, EvidenceState.SUPPORTED)
 
@@ -447,15 +433,12 @@ class PhysicalDetectionResolutionContractTest(unittest.TestCase):
         evidence = candidate_evidence_fixture()
         evidence = replace(
             evidence,
-            film_structure=replace(
-                evidence.film_structure,
-                separator_sequence=replace(
-                    evidence.film_structure.separator_sequence,
-                    hard_count=0,
-                    hard_boundaries=(),
-                    missing_boundaries=(FrameBoundaryReference(None, 1),),
-                    hard_tonal_evidence=(),
-                ),
+            separator_sequence=replace(
+                evidence.separator_sequence,
+                hard_count=0,
+                hard_boundaries=(),
+                missing_boundaries=(FrameBoundaryReference(None, 1),),
+                hard_tonal_evidence=(),
             ),
         )
         paths = boundary_proof_paths_for_geometry(built.geometry, evidence)
@@ -473,15 +456,15 @@ class PhysicalDetectionResolutionContractTest(unittest.TestCase):
                     if observation.side == BoundarySide.LEADING
                     else observation.kind
                 ),
-                outer_material=(
+                outer_appearance=(
                     None
                     if observation.side == BoundarySide.LEADING
-                    else observation.outer_material
+                    else observation.outer_appearance
                 ),
-                inner_material=(
+                inner_appearance=(
                     None
                     if observation.side == BoundarySide.LEADING
-                    else observation.inner_material
+                    else observation.inner_appearance
                 ),
             )
             for observation in candidate.geometry.boundary_paths
@@ -571,15 +554,12 @@ class PhysicalDetectionResolutionContractTest(unittest.TestCase):
         evidence = candidate_evidence_fixture()
         evidence = replace(
             evidence,
-            film_structure=replace(
-                evidence.film_structure,
-                separator_sequence=replace(
-                    evidence.film_structure.separator_sequence,
-                    hard_count=0,
-                    hard_boundaries=(),
-                    missing_boundaries=(FrameBoundaryReference(None, 1),),
-                    hard_tonal_evidence=(),
-                ),
+            separator_sequence=replace(
+                evidence.separator_sequence,
+                hard_count=0,
+                hard_boundaries=(),
+                missing_boundaries=(FrameBoundaryReference(None, 1),),
+                hard_tonal_evidence=(),
             ),
         )
         paths = boundary_proof_paths_for_geometry(built.geometry, evidence)

@@ -188,7 +188,7 @@ def _separator_dimension_hypotheses(
                                     MeasurementIdentity.SEPARATOR_PROFILE,
                                     dimensions.provenance.root_measurement,
                                 ),
-                                boundary_anchors=("film_structure",),
+                                boundary_anchors=("separator_sequence",),
                             ),
                             boundary_paths=_compatible_boundary_paths(
                                 source,

@@ -17,7 +17,7 @@ from x5crop.detection.candidate.selection.model import (
 )
 from x5crop.detection.geometry_resolution import GeometryResolution
 from x5crop.detection.decision.decision_gate import apply_decision_gate
-from x5crop.detection.evidence.film_structure import separator_sequence_evidence
+from x5crop.detection.evidence.separator_sequence import separator_sequence_evidence
 from x5crop.detection.candidate.selection.choose import select_candidates
 from x5crop.detection.candidate.selection.choose import geometry_clusters
 from x5crop.detection.candidate.assessment.candidate import (
@@ -62,7 +62,7 @@ def _candidate_with_geometry(candidate, geometry):
     scan_calibration = candidate_scan_calibration(
         unavailable_calibration_fixture(),
         geometry,
-        candidate.assessment.evidence.aperture_contact,
+        candidate.assessment.evidence.holder_boundary,
     )
     dimensions = frame_dimension_evidence(
         geometry,

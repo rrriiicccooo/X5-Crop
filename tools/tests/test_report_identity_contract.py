@@ -101,24 +101,22 @@ class ReportIdentityContractTest(unittest.TestCase):
             current_report_record_errors(record),
         )
 
-    def test_current_schema_rejects_forged_film_base_source(self) -> None:
+    def test_current_schema_binds_separator_sequence_to_geometry(self) -> None:
         record = _record()
-        reference = record["selection"]["candidates"][0]["evidence"][
-            "film_structure"
-        ]["film_base_reference"]
-        reference["source"] = "visible_film_base_tracks"
+        sequence = record["selection"]["candidates"][0]["evidence"][
+            "separator_sequence"
+        ]
+        sequence["hard_tonal_evidence"] = []
 
         self.assertTrue(current_report_record_errors(record))
 
-    def test_current_schema_binds_film_material_evidence_to_geometry(self) -> None:
+    def test_current_schema_binds_holder_boundary_to_geometry(self) -> None:
         record = _record()
-        observations = record["selection"]["candidates"][0]["evidence"][
-            "film_structure"
-        ]["film_base_reference"]["observations"]
-        observation = next(
-            item for item in observations if isinstance(item["location"], dict)
-        )
-        observation["location"]["boundary_index"] = 99
+        path = record["selection"]["candidates"][0]["evidence"][
+            "holder_boundary"
+        ]["paths"][0]
+        path["position"]["minimum"] += 1.0
+        path["position"]["maximum"] += 1.0
 
         self.assertTrue(current_report_record_errors(record))
 

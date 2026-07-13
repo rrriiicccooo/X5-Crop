@@ -263,10 +263,10 @@ class PhotoSizePhysicalModelTest(unittest.TestCase):
         boundary = boundary_path_fixture(
             BoundarySide.LEADING,
             PixelInterval.exact(0.0),
-            BoundaryKind.HOLDER_MATERIAL_TRANSITION,
+            BoundaryKind.HOLDER_BOUNDARY_TRANSITION,
             MeasurementProvenance(
-                MeasurementIdentity.HOLDER_MATERIAL_PROFILE,
-                "holder_material_transition",
+                MeasurementIdentity.HOLDER_BOUNDARY_PROFILE,
+                "holder_boundary_transition",
                 (MeasurementIdentity.GRAY_WORK,),
             ),
         )
@@ -281,7 +281,7 @@ class PhotoSizePhysicalModelTest(unittest.TestCase):
         photo_edges = MeasurementProvenance(
             MeasurementIdentity.PHOTO_EDGES,
             "test_fixture",
-            (MeasurementIdentity.HOLDER_MATERIAL_PROFILE,),
+            (MeasurementIdentity.HOLDER_BOUNDARY_PROFILE,),
         )
         geometry = replace(
             geometry,
@@ -322,13 +322,13 @@ class PhotoSizePhysicalModelTest(unittest.TestCase):
         leading = boundary_path_fixture(
             BoundarySide.LEADING,
             PixelInterval.exact(0.0),
-            BoundaryKind.HOLDER_MATERIAL_TRANSITION,
+            BoundaryKind.HOLDER_BOUNDARY_TRANSITION,
             provenance,
         )
         trailing = boundary_path_fixture(
             BoundarySide.TRAILING,
             PixelInterval.exact(315.0),
-            BoundaryKind.HOLDER_MATERIAL_TRANSITION,
+            BoundaryKind.HOLDER_BOUNDARY_TRANSITION,
             provenance,
         )
         occlusion = holder_occlusion_evidence(

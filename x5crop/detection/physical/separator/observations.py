@@ -7,7 +7,7 @@ import numpy as np
 
 from ....domain import (
     Box,
-    GrayMaterialObservation,
+    GrayAppearanceObservation,
     gray_intensity_tail,
     MeasurementIdentity,
     MeasurementProvenance,
@@ -150,7 +150,7 @@ def _cross_axis_measurement(
     )
 
 
-def _band_material_observation(
+def _band_appearance_observation(
     gray_work: np.ndarray,
     corridor: Box,
     start: float,
@@ -158,7 +158,7 @@ def _band_material_observation(
     statistics: ImageMeasurementStatistics,
     cross_axis: SeparatorCrossAxisMeasurement,
     provenance: MeasurementProvenance,
-) -> GrayMaterialObservation:
+) -> GrayAppearanceObservation:
     bounded = corridor.clamp(gray_work.shape[1], gray_work.shape[0])
     pixel_start = max(bounded.left, int(floor(start)))
     pixel_end = min(bounded.right, int(ceil(end)))
@@ -167,11 +167,11 @@ def _band_material_observation(
         pixel_start:pixel_end,
     ].astype(np.float32, copy=False)
     if not band.size:
-        raise ValueError("separator material requires a non-empty measured band")
+        raise ValueError("separator appearance requires a non-empty measured band")
     center = float(np.median(band))
     gx = np.abs(np.diff(band, axis=1, prepend=band[:, :1]))
     gy = np.abs(np.diff(band, axis=0, prepend=band[:1, :]))
-    return GrayMaterialObservation(
+    return GrayAppearanceObservation(
         intensity_median=center,
         intensity_mad=float(np.median(np.abs(band - center))),
         texture_median=float(np.median(gx + gy)),
@@ -263,7 +263,7 @@ def measure_focused_separator_band(
                 tonal_evidence=float(
                     max(0.0, focused[start:end].mean() - threshold) / spread
                 ),
-                material=_band_material_observation(
+                appearance=_band_appearance_observation(
                     gray_work,
                     corridor,
                     absolute_start,
@@ -332,7 +332,7 @@ def measure_separator_bands(
                     max(0.0, profile[local_start:local_end].mean() - threshold)
                     / spread
                 ),
-                material=_band_material_observation(
+                appearance=_band_appearance_observation(
                     gray_work,
                     corridor,
                     start,

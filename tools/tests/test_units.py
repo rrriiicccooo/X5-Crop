@@ -73,7 +73,7 @@ class UnitModelTests(unittest.TestCase):
             calibration.y.diagnostics,
         )
 
-    def test_visible_film_base_can_supply_an_upper_bound(self) -> None:
+    def test_unit_model_can_represent_an_independent_upper_bound(self) -> None:
         calibration = ScanCalibrationResolution.from_observations(
             ResolutionMetadataObservation(None, None),
             (

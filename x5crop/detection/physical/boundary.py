@@ -55,7 +55,7 @@ def holder_occlusion_constraint(
         observation = by_side.get(side)
         if (
             observation is None
-            or not boundary_supports_holder_material(
+            or not boundary_supports_holder_region(
                 observation,
                 edge_texture_limit,
             )
@@ -69,22 +69,22 @@ def holder_occlusion_constraint(
     )
 
 
-def boundary_supports_holder_material(
+def boundary_supports_holder_region(
     boundary: BoundaryPathObservation,
     edge_texture_limit: float,
 ) -> bool:
     if not math.isfinite(edge_texture_limit) or edge_texture_limit < 0.0:
-        raise ValueError("holder material texture limit must be finite and non-negative")
+        raise ValueError("holder boundary texture limit must be finite and non-negative")
     return bool(
         boundary.kind != BoundaryKind.CANVAS_CLIP
-        and boundary.outer_material is not None
-        and boundary.outer_material.texture_median <= float(edge_texture_limit)
+        and boundary.outer_appearance is not None
+        and boundary.outer_appearance.texture_median <= float(edge_texture_limit)
     )
 
 
 class HolderOcclusionSideOutcome(str, Enum):
     MEASUREMENT_UNAVAILABLE = "measurement_unavailable"
-    BOUNDARY_NOT_HOLDER_MATERIAL = "not_holder_material"
+    BOUNDARY_NOT_HOLDER_REGION = "not_holder_region"
     NO_FRAME_SHORTENING = "no_frame_shortening"
     SHORTENING_UNCERTAIN = "shortening_uncertain"
     OCCLUSION_SUPPORTED = "occlusion_supported"
@@ -109,10 +109,10 @@ class HolderOcclusionSideEvidence:
             raise ValueError("holder occlusion width cannot be negative")
         if self.boundary is not None and self.boundary.side != self.side:
             raise ValueError("holder occlusion boundary must match its side")
-        measured_material = bool(
+        measured_holder_region = bool(
             self.boundary is not None
             and self.boundary.kind != BoundaryKind.CANVAS_CLIP
-            and self.boundary.outer_material is not None
+            and self.boundary.outer_appearance is not None
         )
         if self.outcome == HolderOcclusionSideOutcome.MEASUREMENT_UNAVAILABLE:
             if (
@@ -123,7 +123,7 @@ class HolderOcclusionSideEvidence:
                 )
             ):
                 raise ValueError("unavailable occlusion has zero hidden width")
-        elif self.outcome == HolderOcclusionSideOutcome.BOUNDARY_NOT_HOLDER_MATERIAL:
+        elif self.outcome == HolderOcclusionSideOutcome.BOUNDARY_NOT_HOLDER_REGION:
             if (
                 self.hidden_width_px != PixelInterval.zero()
                 or self.boundary is None
@@ -132,11 +132,11 @@ class HolderOcclusionSideEvidence:
                     "non-holder outcome requires a measured non-holder boundary"
                 )
         elif self.outcome == HolderOcclusionSideOutcome.NO_FRAME_SHORTENING:
-            if self.hidden_width_px != PixelInterval.zero() or not measured_material:
-                raise ValueError("unshortened frame requires a holder-material boundary")
+            if self.hidden_width_px != PixelInterval.zero() or not measured_holder_region:
+                raise ValueError("unshortened frame requires a holder boundary")
         elif self.outcome == HolderOcclusionSideOutcome.SHORTENING_UNCERTAIN:
             if (
-                not measured_material
+                not measured_holder_region
                 or self.hidden_width_px.minimum > 0.0
                 or self.hidden_width_px.maximum <= 0.0
             ):
@@ -144,30 +144,30 @@ class HolderOcclusionSideEvidence:
                     "uncertain shortening requires a possible positive width"
                 )
         elif self.outcome == HolderOcclusionSideOutcome.OCCLUSION_SUPPORTED:
-            if not measured_material or self.hidden_width_px.minimum <= 0.0:
+            if not measured_holder_region or self.hidden_width_px.minimum <= 0.0:
                 raise ValueError(
-                    "supported occlusion requires positive holder-material evidence"
+                    "supported occlusion requires positive holder-boundary evidence"
                 )
         elif (
-            not measured_material
+            not measured_holder_region
             or self.hidden_width_px.minimum != 0.0
             or self.hidden_width_px.maximum <= 0.0
         ):
             raise ValueError(
-                "unresolved allocation requires a possible holder-material width"
+                "unresolved allocation requires a possible holder-boundary width"
             )
         state, reason = {
             HolderOcclusionSideOutcome.MEASUREMENT_UNAVAILABLE: (
                 EvidenceState.UNAVAILABLE,
                 "holder_occlusion_measurement_unavailable",
             ),
-            HolderOcclusionSideOutcome.BOUNDARY_NOT_HOLDER_MATERIAL: (
+            HolderOcclusionSideOutcome.BOUNDARY_NOT_HOLDER_REGION: (
                 EvidenceState.NOT_APPLICABLE,
-                "measured_edge_is_not_holder_material_occlusion",
+                "measured_edge_is_not_holder_region_occlusion",
             ),
             HolderOcclusionSideOutcome.NO_FRAME_SHORTENING: (
                 EvidenceState.NOT_APPLICABLE,
-                "holder_material_boundary_without_frame_shortening",
+                "holder_boundary_without_frame_shortening",
             ),
             HolderOcclusionSideOutcome.SHORTENING_UNCERTAIN: (
                 EvidenceState.UNAVAILABLE,
@@ -175,7 +175,7 @@ class HolderOcclusionSideEvidence:
             ),
             HolderOcclusionSideOutcome.OCCLUSION_SUPPORTED: (
                 EvidenceState.SUPPORTED,
-                "holder_material_occludes_edge_frame",
+                "holder_boundary_occludes_edge_frame",
             ),
             HolderOcclusionSideOutcome.ALLOCATION_UNRESOLVED: (
                 EvidenceState.UNAVAILABLE,
@@ -284,10 +284,10 @@ def _occlusion_side_evidence(
         )
     if boundary.side != side:
         raise ValueError(f"{side} occlusion requires a {side} boundary")
-    if not boundary_supports_holder_material(boundary, edge_texture_limit):
+    if not boundary_supports_holder_region(boundary, edge_texture_limit):
         return HolderOcclusionSideEvidence(
             side,
-            HolderOcclusionSideOutcome.BOUNDARY_NOT_HOLDER_MATERIAL,
+            HolderOcclusionSideOutcome.BOUNDARY_NOT_HOLDER_REGION,
             PixelInterval.zero(),
             boundary,
         )
@@ -361,11 +361,11 @@ def _single_frame_two_sided_occlusion(
     edge_texture_limit: float,
 ) -> HolderOcclusionEvidence | None:
     if (
-        not boundary_supports_holder_material(
+        not boundary_supports_holder_region(
             leading_boundary,
             edge_texture_limit,
         )
-        or not boundary_supports_holder_material(
+        or not boundary_supports_holder_region(
             trailing_boundary,
             edge_texture_limit,
         )
@@ -495,8 +495,8 @@ def canvas_boundary_paths(
             position=PixelInterval.exact(0.0),
             kind=BoundaryKind.CANVAS_CLIP,
             local_positions=(PixelInterval.exact(0.0),),
-            outer_material=None,
-            inner_material=None,
+            outer_appearance=None,
+            inner_appearance=None,
             provenance=provenance,
         ),
         BoundaryPathObservation(
@@ -504,8 +504,8 @@ def canvas_boundary_paths(
             position=PixelInterval.exact(float(width)),
             kind=BoundaryKind.CANVAS_CLIP,
             local_positions=(PixelInterval.exact(float(width)),),
-            outer_material=None,
-            inner_material=None,
+            outer_appearance=None,
+            inner_appearance=None,
             provenance=provenance,
         ),
         BoundaryPathObservation(
@@ -513,8 +513,8 @@ def canvas_boundary_paths(
             position=PixelInterval.exact(0.0),
             kind=BoundaryKind.CANVAS_CLIP,
             local_positions=(PixelInterval.exact(0.0),),
-            outer_material=None,
-            inner_material=None,
+            outer_appearance=None,
+            inner_appearance=None,
             provenance=provenance,
         ),
         BoundaryPathObservation(
@@ -522,8 +522,8 @@ def canvas_boundary_paths(
             position=PixelInterval.exact(float(height)),
             kind=BoundaryKind.CANVAS_CLIP,
             local_positions=(PixelInterval.exact(float(height)),),
-            outer_material=None,
-            inner_material=None,
+            outer_appearance=None,
+            inner_appearance=None,
             provenance=provenance,
         ),
     )

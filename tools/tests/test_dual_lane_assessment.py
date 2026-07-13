@@ -24,7 +24,7 @@ from x5crop.detection.candidate.model import (
 from x5crop.detection.evidence.frame_sequence import sequence_conservation_for_geometry
 from x5crop.detection.evidence.partial_edge import partial_edge_safety_evidence
 from x5crop.detection.physical.photo_size import frame_dimension_evidence
-from x5crop.detection.evidence.film_structure import (
+from x5crop.detection.evidence.separator_sequence import (
     SeparatorSequenceEvidence,
 )
 from x5crop.detection.candidate.model import BuiltCandidate
@@ -371,7 +371,7 @@ class DualLaneAssessmentTest(unittest.TestCase):
                     assessed.assessment.evidence.lane_evidence,
                     start=1,
                 )
-                for reference in evidence.film_structure.separator_sequence.hard_boundaries
+                for reference in evidence.separator_sequence.hard_boundaries
             },
             {(1, 1), (2, 1)},
         )

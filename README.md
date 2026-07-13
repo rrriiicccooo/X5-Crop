@@ -126,7 +126,8 @@ debug analysis? [y/n, return=no]:
 只有开启 partial mode 后才会询问 `count`。按 Return 或输入 `auto` 表示自动判断张数。
 Detection 始终在唯一灰度 workspace 中工作；片夹可亮、可暗或处于中间灰度。原始通道和色彩
 metadata 仅由 TIFF I/O 保存，Debug 只使用彩色标记解释灰度检测。TIFF DPI/PPI 只是声明，必须由
-独立物理尺寸观测确认后才用于检测。
+独立物理尺寸观测确认后才用于检测。灰度和纹理只描述像素外观，不会被当成“片基”或其它材料
+身份；边界与 separator 必须由空间拓扑和物理几何共同成立。
 auto count 始终按 format 允许的张数从大到小求解。每个 count 都从相同的逐边 boundary 与
 count-independent separator observations 构造 sequence hypotheses，再由全局单调 solver 求解
 frame geometry。只有 `GeometryResolution` 确认 count、placement、coverage 和替代几何都已解决，

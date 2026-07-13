@@ -287,13 +287,13 @@ Current state:
   conservation equation.
 - Count, boundary, dimension, calibration, and measurement-dependency authority
   use typed identities; descriptive provenance text cannot change physical proof.
-- Detection consumes one canonical grayscale workspace. Boundary paths carry
-  typed outer/inner gray materials; film-base support requires same-tail material
-  consensus at distinct track or separator locations. Color and perforation are
-  not detection concepts.
+- Detection consumes one canonical grayscale workspace. Boundary and separator
+  observations carry typed gray appearance measurements, never material identity.
+  Physical proof comes from spatial topology, geometry, and separator sequence;
+  color and perforation are not detection concepts.
 - TIFF resolution is metadata observation only. Per-axis physical scale requires
-  independent frame or aperture evidence; candidate-local scale never feeds back
-  into the same candidate's geometry or Gate.
+  independent frame or textured inner-boundary evidence; candidate-local scale
+  never feeds back into the same candidate's geometry or Gate.
 - Standard, dual-lane, and review-only candidates use distinct geometry types;
   review-only modes never masquerade as solved frame sequences.
 - Physical candidate assessment stores canonical evidence and `CandidateGate`;
@@ -301,7 +301,7 @@ Current state:
   for ordering and reporting. `GeometryResolution` is the only early-stop input.
 - Overlap protection uses a per-boundary `FrameBleedPlan`; unrelated frames are
   never expanded by a global maximum.
-- Current reports use `detection_report / gray_material_sequence_resolution` with
+- Current reports use `detection_report / gray_sequence_resolution` with
   canonical `input`, `configuration`, `selection`, `decision`, and `output`
   sections. Cache reuse accepts only this schema.
 - TIFF export preserves typed transferable metadata and verifies it after write;
@@ -312,10 +312,8 @@ Current state:
 
 Current verification state:
 
-- The grayscale material, boundary-path, film-structure, and physical-scale
-  refactor is implemented and verified. The suite contains 466 tests, 145
-  reachable active modules, 211 classified parameter contracts, and 14 valid
-  format/mode configurations.
+- The gray-appearance, boundary-path, separator-sequence, and physical-scale
+  refactor is implemented. Full verification is recorded in `CHANGELOG.md`.
 - Real smokes covered grayscale holder/contact examples `005`, `X5_00044`,
   `X5_00021`, and `X5_00006`, plus `120-66/partial auto`, `half/full`, and
   `120-67/full`; every current report validated successfully. `005` explicitly

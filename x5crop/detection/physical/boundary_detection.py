@@ -11,7 +11,7 @@ from ...domain import (
     BoundaryPathObservation,
     BoundaryPathSource,
     BoundarySide,
-    GrayMaterialObservation,
+    GrayAppearanceObservation,
     gray_intensity_tail,
     MeasurementIdentity,
     MeasurementProvenance,
@@ -125,7 +125,7 @@ def _source_interval(
 
 def _provenance(kind: BoundaryKind, side: BoundarySide) -> MeasurementProvenance:
     return MeasurementProvenance(
-        root_measurement=MeasurementIdentity.HOLDER_MATERIAL_PROFILE,
+        root_measurement=MeasurementIdentity.HOLDER_BOUNDARY_PROFILE,
         source=kind.value,
         dependencies=(
             MeasurementIdentity.GRAY_WORK,
@@ -135,7 +135,7 @@ def _provenance(kind: BoundaryKind, side: BoundarySide) -> MeasurementProvenance
     )
 
 
-def _material_observation(
+def _appearance_observation(
     intensities: list[float],
     mads: list[float],
     textures: list[float],
@@ -143,9 +143,9 @@ def _material_observation(
     support_ratio: float,
     provenance: MeasurementProvenance,
     statistics: ImageMeasurementStatistics,
-) -> GrayMaterialObservation:
+) -> GrayAppearanceObservation:
     intensity_median = float(median(intensities))
-    return GrayMaterialObservation(
+    return GrayAppearanceObservation(
         intensity_median=intensity_median,
         intensity_mad=float(median(mads)),
         texture_median=float(median(textures)),
@@ -169,10 +169,10 @@ def _path_for_side(
 ) -> BoundaryPathObservation | None:
     reverse = side in {BoundarySide.TRAILING, BoundarySide.BOTTOM}
     positions: list[PixelInterval] = []
-    material_intensity: list[float] = []
-    material_mad: list[float] = []
-    material_texture: list[float] = []
-    material_gradient: list[float] = []
+    outer_intensity_measurements: list[float] = []
+    outer_mad: list[float] = []
+    outer_texture_measurements: list[float] = []
+    outer_gradient_measurements: list[float] = []
     inner_intensity: list[float] = []
     inner_mad: list[float] = []
     inner_texture: list[float] = []
@@ -187,7 +187,7 @@ def _path_for_side(
             statistics.edge_texture_limit,
             parameters,
         )
-        if kind == BoundaryKind.HOLDER_MATERIAL_TRANSITION:
+        if kind == BoundaryKind.HOLDER_BOUNDARY_TRANSITION:
             if oriented_texture[0] > float(statistics.edge_texture_limit):
                 continue
             offset = _first_run(
@@ -244,10 +244,10 @@ def _path_for_side(
             np.diff(outer_intensity, prepend=outer_intensity[:1])
         )
         center = float(np.median(outer_intensity))
-        material_intensity.append(center)
-        material_mad.append(float(np.median(np.abs(outer_intensity - center))))
-        material_texture.append(float(np.median(outer_texture)))
-        material_gradient.append(float(np.median(outer_gradient)))
+        outer_intensity_measurements.append(center)
+        outer_mad.append(float(np.median(np.abs(outer_intensity - center))))
+        outer_texture_measurements.append(float(np.median(outer_texture)))
+        outer_gradient_measurements.append(float(np.median(outer_gradient)))
 
     support_ratio = len(positions) / float(len(profiles)) if profiles else 0.0
     if not positions or support_ratio < parameters.minimum_path_support_ratio:
@@ -257,16 +257,16 @@ def _path_for_side(
         max(item.maximum for item in positions),
     )
     provenance = _provenance(kind, side)
-    outer_material = _material_observation(
-        material_intensity,
-        material_mad,
-        material_texture,
-        material_gradient,
+    outer_appearance = _appearance_observation(
+        outer_intensity_measurements,
+        outer_mad,
+        outer_texture_measurements,
+        outer_gradient_measurements,
         support_ratio,
         provenance,
         statistics,
     )
-    inner_material = _material_observation(
+    inner_appearance = _appearance_observation(
         inner_intensity,
         inner_mad,
         inner_texture,
@@ -280,8 +280,8 @@ def _path_for_side(
         position=position,
         kind=kind,
         local_positions=tuple(positions),
-        outer_material=outer_material,
-        inner_material=inner_material,
+        outer_appearance=outer_appearance,
+        inner_appearance=inner_appearance,
         provenance=provenance,
     )
 
@@ -335,12 +335,12 @@ def boundary_path_groups(
     texture = _texture_image(gray)
     return (
         BoundaryPathGroup(
-            BoundaryPathSource.HOLDER_MATERIAL,
+            BoundaryPathSource.HOLDER_BOUNDARY,
             _paths_for_kind(
                 gray,
                 texture,
                 statistics,
-                BoundaryKind.HOLDER_MATERIAL_TRANSITION,
+                BoundaryKind.HOLDER_BOUNDARY_TRANSITION,
                 parameters,
             ),
         ),

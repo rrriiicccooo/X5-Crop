@@ -2,12 +2,8 @@ from __future__ import annotations
 
 from ...context import DetectionContext
 from ...evidence.content.frame_support import frame_content_evidence
-from ...evidence.film_structure import (
-    aperture_contact_evidence,
-    film_base_reference,
-    film_structure_evidence,
-)
-from ...evidence.holder_material import holder_material_evidence
+from ...evidence.separator_sequence import separator_sequence_evidence
+from ...evidence.holder_boundary import holder_boundary_evidence
 from ...evidence.frame_coverage import frame_coverage_evidence
 from ...evidence.frame_sequence import sequence_conservation_for_geometry
 from ...evidence.holder_occupancy import holder_occupancy_evidence
@@ -81,30 +77,21 @@ def assess_candidate(
         context.measurement_cache,
         context.configuration.content,
     )
-    holder_material = holder_material_evidence(
+    holder_boundary = holder_boundary_evidence(
         geometry,
         context.measurement_cache.image_statistics.edge_texture_limit,
-    )
-    film_base = film_base_reference(
-        geometry,
-        holder_material,
-        edge_texture_limit=context.measurement_cache.image_statistics.edge_texture_limit,
-    )
-    aperture_contact = aperture_contact_evidence(
-        geometry,
-        film_base,
     )
     scan_calibration = candidate_scan_calibration(
         context.scan_calibration,
         geometry,
-        aperture_contact,
+        holder_boundary,
     )
     alignment = sequence_content_alignment_evidence(
         geometry,
         context.measurement_cache,
         context.configuration.content.evidence,
     )
-    film_structure = film_structure_evidence(geometry, film_base)
+    separator_sequence = separator_sequence_evidence(geometry)
     occupancy = holder_occupancy_evidence(
         layout=geometry.layout,
         count=geometry.count,
@@ -129,11 +116,10 @@ def assess_candidate(
     evidence = CandidateEvidence(
         frame_coverage=coverage,
         sequence_conservation=sequence_conservation,
-        film_structure=film_structure,
+        separator_sequence=separator_sequence,
         frame_dimensions=frame_dimensions,
         frame_content=content,
-        holder_material=holder_material,
-        aperture_contact=aperture_contact,
+        holder_boundary=holder_boundary,
         scan_calibration=scan_calibration,
         sequence_content_alignment=alignment,
         holder_occupancy=occupancy,

@@ -272,10 +272,9 @@ class PhysicalModelInvariantTest(unittest.TestCase):
         evidence = candidate_fixture().assessment.evidence
         for derived in (
             evidence.frame_dimensions,
-            evidence.film_structure,
+            evidence.separator_sequence,
             evidence.frame_content,
-            evidence.holder_material,
-            evidence.aperture_contact,
+            evidence.holder_boundary,
             evidence.sequence_content_alignment,
             evidence.independence,
             evidence.sequence_conservation,
@@ -324,7 +323,7 @@ class PhysicalModelInvariantTest(unittest.TestCase):
                 state=EvidenceState.UNAVAILABLE,
             ),
             lambda: replace(
-                evidence.holder_material,
+                evidence.holder_boundary,
                 state=EvidenceState.SUPPORTED,
             ),
             lambda: replace(

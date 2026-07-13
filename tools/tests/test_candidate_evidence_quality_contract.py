@@ -15,11 +15,7 @@ from x5crop.detection.candidate.model import (
     BuiltCandidate,
     CandidateAssessment,
 )
-from x5crop.detection.evidence.film_structure import (
-    aperture_contact_evidence,
-    film_base_reference,
-    film_structure_evidence,
-)
+from x5crop.detection.evidence.separator_sequence import separator_sequence_evidence
 from x5crop.detection.evidence.partial_edge import partial_edge_safety_evidence
 from x5crop.detection.evidence.holder_occupancy import strip_completeness_evidence
 from x5crop.formats import format_spec
@@ -58,21 +54,13 @@ class CandidateEvidenceQualityContractTest(unittest.TestCase):
                 ),
             ),
         )
-        reference = film_base_reference(
-            geometry,
-            evidence.holder_material,
-            edge_texture_limit=(
-                evidence.film_structure.film_base_reference.texture_limit
-            ),
-        )
         updated_evidence = replace(
             evidence,
             frame_dimensions=replace(
                 evidence.frame_dimensions,
                 separator_widths_px=(),
             ),
-            film_structure=film_structure_evidence(geometry, reference),
-            aperture_contact=aperture_contact_evidence(geometry, reference),
+            separator_sequence=separator_sequence_evidence(geometry),
             holder_occupancy=replace(
                 evidence.holder_occupancy,
                 strip_completeness=strip_completeness_evidence(
@@ -107,8 +95,8 @@ class CandidateEvidenceQualityContractTest(unittest.TestCase):
             ),
         )
         quality = candidate.evidence_quality
-        self.assertNotIn("film_structure", quality.supported)
-        self.assertIn("film_structure", quality.unavailable)
+        self.assertNotIn("separator_sequence", quality.supported)
+        self.assertIn("separator_sequence", quality.unavailable)
 
 
 if __name__ == "__main__":

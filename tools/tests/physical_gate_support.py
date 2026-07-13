@@ -13,11 +13,7 @@ from x5crop.detection.candidate.assessment.evidence_independence import (
     EvidenceIndependenceEvidence,
     evidence_independence_evidence,
 )
-from x5crop.detection.evidence.film_structure import (
-    FilmBaseReference,
-    FilmBaseReferenceSource,
-    FilmBaseMaterialObservation,
-    FilmStructureEvidence,
+from x5crop.detection.evidence.separator_sequence import (
     SeparatorSequenceEvidence,
 )
 from x5crop.detection.candidate.model import (
@@ -47,13 +43,8 @@ from x5crop.detection.evidence.content.frame_support import (
     FrameContentEvidence,
     FrameContentObservation,
 )
-from x5crop.detection.evidence.film_structure import (
-    ApertureContactEvidence,
-    ApertureContactOutcome,
-    ApertureContactSideEvidence,
-)
-from x5crop.detection.evidence.holder_material import (
-    HolderMaterialEvidence,
+from x5crop.detection.evidence.holder_boundary import (
+    HolderBoundaryEvidence,
 )
 from x5crop.detection.evidence.frame_coverage import FrameCoverageEvidence
 from x5crop.detection.evidence.frame_sequence import sequence_conservation_for_geometry
@@ -101,7 +92,7 @@ from x5crop.domain import (
     BoundaryPathObservation,
     BoundarySide,
     GrayIntensityTail,
-    GrayMaterialObservation,
+    GrayAppearanceObservation,
 )
 from x5crop.domain import CropEnvelope, HolderSpan, VisibleSequenceSpan
 from x5crop.detection.physical.separator.assignment import (
@@ -138,13 +129,13 @@ def boundary_path_fixture(
     kind: BoundaryKind,
     provenance: MeasurementProvenance,
 ) -> BoundaryPathObservation:
-    outer_material = (
-        GrayMaterialObservation(
+    outer_appearance = (
+        GrayAppearanceObservation(
             intensity_median=0.0,
             intensity_mad=0.0,
             texture_median=(
                 0.0
-                if kind == BoundaryKind.HOLDER_MATERIAL_TRANSITION
+                if kind == BoundaryKind.HOLDER_BOUNDARY_TRANSITION
                 else 2.0
             ),
             gradient_median=0.0,
@@ -160,9 +151,9 @@ def boundary_path_fixture(
         position=position,
         kind=kind,
         local_positions=(position,),
-        outer_material=outer_material,
-        inner_material=(
-            GrayMaterialObservation(
+        outer_appearance=outer_appearance,
+        inner_appearance=(
+            GrayAppearanceObservation(
                 intensity_median=1.0,
                 intensity_mad=0.0,
                 texture_median=0.0,
@@ -183,9 +174,9 @@ def candidate_boundary_paths() -> tuple[BoundaryPathObservation, ...]:
         boundary_path_fixture(
             side,
             PixelInterval.exact(position),
-            BoundaryKind.HOLDER_MATERIAL_TRANSITION,
+            BoundaryKind.HOLDER_BOUNDARY_TRANSITION,
             MeasurementProvenance(
-                MeasurementIdentity.HOLDER_MATERIAL_PROFILE,
+                MeasurementIdentity.HOLDER_BOUNDARY_PROFILE,
                 "synthetic_boundary",
                 (MeasurementIdentity.GRAY_WORK,),
                 (side.value,),
@@ -260,7 +251,7 @@ def separator_observation(
         end=end,
         center=center,
         tonal_evidence=tonal_evidence,
-        material=GrayMaterialObservation(
+        appearance=GrayAppearanceObservation(
             intensity_median=0.0,
             intensity_mad=0.0,
             texture_median=0.0,
@@ -301,14 +292,14 @@ def holder_occlusion_not_applicable() -> HolderOcclusionEvidence:
             ),
             BoundaryKind.TONAL_TRANSITION,
             MeasurementProvenance(
-                MeasurementIdentity.HOLDER_MATERIAL_PROFILE,
-                "synthetic_non_holder_material_edge",
+                MeasurementIdentity.HOLDER_BOUNDARY_PROFILE,
+                "synthetic_non_holder_boundary_edge",
                 (MeasurementIdentity.GRAY_WORK,),
             ),
         )
         return HolderOcclusionSideEvidence(
             name,
-            HolderOcclusionSideOutcome.BOUNDARY_NOT_HOLDER_MATERIAL,
+            HolderOcclusionSideOutcome.BOUNDARY_NOT_HOLDER_REGION,
             PixelInterval.zero(),
             boundary,
         )
@@ -362,7 +353,7 @@ def candidate_gate_fixture(
     boundary_supported = passed or failed_check != "boundary_proof"
     proof_paths = (
         BoundaryProofPath(
-            code="film_structure_led",
+            code="separator_sequence_led",
             state=(
                 EvidenceState.SUPPORTED
                 if boundary_supported
@@ -419,7 +410,6 @@ def candidate_evidence_fixture(
         candidate_frame_count=2,
     )
     paths = candidate_boundary_paths()
-    paths_by_side = {path.side: path for path in paths}
     return CandidateEvidence(
         frame_coverage=coverage,
         sequence_conservation=SequenceConservationEvidence(
@@ -429,38 +419,13 @@ def candidate_evidence_fixture(
             PixelInterval.exact(10.0),
             SequenceConservationBasis.INDEPENDENT_SPACING,
         ),
-        film_structure=FilmStructureEvidence(
-            SeparatorSequenceEvidence(
-                1,
-                1,
-                0,
-                (FrameBoundaryReference(None, 1),),
-                (),
-                (1.0,),
-            ),
-            FilmBaseReference(
-                FilmBaseReferenceSource.COMBINED_STRUCTURE,
-                GrayIntensityTail.LOW,
-                (
-                    FilmBaseMaterialObservation(
-                        BoundarySide.TOP,
-                        paths_by_side[BoundarySide.TOP].inner_material,
-                    ),
-                    FilmBaseMaterialObservation(
-                        BoundarySide.BOTTOM,
-                        paths_by_side[BoundarySide.BOTTOM].inner_material,
-                    ),
-                    FilmBaseMaterialObservation(
-                        FrameBoundaryReference(None, 1),
-                        separator_observation(
-                            100.0,
-                            start=95.0,
-                            end=105.0,
-                        ).material,
-                    ),
-                ),
-                1.0,
-            ),
+        separator_sequence=SeparatorSequenceEvidence(
+            1,
+            1,
+            0,
+            (FrameBoundaryReference(None, 1),),
+            (),
+            (1.0,),
         ),
         frame_dimensions=FrameDimensionEvidence(
             frame_width_mm=36.0,
@@ -484,17 +449,7 @@ def candidate_evidence_fixture(
                 FrameContentObservation(2, 0.8, 0.8, True, ()),
             ),
         ),
-        holder_material=HolderMaterialEvidence(paths),
-        aperture_contact=ApertureContactEvidence(
-            tuple(
-                ApertureContactSideEvidence(
-                    path.side,
-                    ApertureContactOutcome.HOLDER_TO_FILM_BASE,
-                    path,
-                )
-                for path in paths
-            )
-        ),
+        holder_boundary=HolderBoundaryEvidence(paths, 1.0),
         scan_calibration=unavailable_calibration_fixture(),
         sequence_content_alignment=SequenceContentAlignmentEvidence(
             sequence_box,
@@ -520,7 +475,7 @@ def candidate_evidence_fixture(
             diagnostics=(),
         ),
         independence=EvidenceIndependenceEvidence(
-            MeasurementIdentity.HOLDER_MATERIAL_PROFILE,
+            MeasurementIdentity.HOLDER_BOUNDARY_PROFILE,
             (MeasurementIdentity.SEPARATOR_PROFILE,),
             (),
             True,
@@ -615,7 +570,7 @@ def candidate_fixture(
         search_budget_exhausted=False,
         automatic_processing_supported=automatic_processing_supported,
         sequence_provenance=MeasurementProvenance(
-            MeasurementIdentity.HOLDER_MATERIAL_PROFILE,
+            MeasurementIdentity.HOLDER_BOUNDARY_PROFILE,
             "synthetic_sequence_boundary",
             (MeasurementIdentity.GRAY_WORK,),
             ("leading", "trailing"),
@@ -645,7 +600,7 @@ def candidate_fixture(
         scan_calibration=candidate_scan_calibration(
             unavailable_calibration_fixture(),
             geometry,
-            evidence.aperture_contact,
+            evidence.holder_boundary,
         ),
         partial_edge_safety=partial_edge_safety_evidence(
             geometry,

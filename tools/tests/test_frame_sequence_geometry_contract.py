@@ -46,7 +46,7 @@ from x5crop.configuration.separator import SeparatorObservationParameters
 from x5crop.domain import MeasurementProvenance
 from x5crop.domain import Box
 from x5crop.detection.physical.model import PhotoInterval, SequenceSolution
-from x5crop.detection.evidence.film_structure import (
+from x5crop.detection.evidence.separator_sequence import (
     separator_sequence_evidence,
 )
 from x5crop.image.statistics import (
@@ -117,7 +117,7 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
             VisibleSequenceSpan(box),
             CropEnvelope(box),
             MeasurementProvenance(
-                MeasurementIdentity.HOLDER_MATERIAL_PROFILE,
+                MeasurementIdentity.HOLDER_BOUNDARY_PROFILE,
                 "synthetic",
                 (MeasurementIdentity.GRAY_WORK,),
             ),
@@ -158,7 +158,7 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             HolderOcclusionSideEvidence(
                 BoundarySide.LEADING,
-                HolderOcclusionSideOutcome.BOUNDARY_NOT_HOLDER_MATERIAL,
+                HolderOcclusionSideOutcome.BOUNDARY_NOT_HOLDER_REGION,
                 PixelInterval(1.0, 2.0),
                 None,
             )
@@ -317,13 +317,13 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
         contained_source = separator_observation(45.0, start=40.0, end=50.0)
         contained = replace(
             contained_source,
-            material=replace(contained_source.material, provenance=provenance),
+            appearance=replace(contained_source.appearance, provenance=provenance),
             provenance=provenance,
         )
         partial_source = separator_observation(60.0, start=50.0, end=70.0)
         partial = replace(
             partial_source,
-            material=replace(partial_source.material, provenance=provenance),
+            appearance=replace(partial_source.appearance, provenance=provenance),
             provenance=provenance,
         )
         allowed = PixelInterval(35.0, 55.0)
@@ -461,13 +461,13 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
 
     def test_boundary_uncertainty_separates_visible_span_and_crop_envelope(self) -> None:
         provenance = MeasurementProvenance(
-            MeasurementIdentity.HOLDER_MATERIAL_PROFILE,
+            MeasurementIdentity.HOLDER_BOUNDARY_PROFILE,
             "synthetic",
             (MeasurementIdentity.GRAY_WORK,),
         )
         observations = (
-            boundary_path_fixture(BoundarySide.LEADING, PixelInterval(9.0, 11.0), BoundaryKind.HOLDER_MATERIAL_TRANSITION, provenance),
-            boundary_path_fixture(BoundarySide.TRAILING, PixelInterval(189.0, 191.0), BoundaryKind.HOLDER_MATERIAL_TRANSITION, provenance),
+            boundary_path_fixture(BoundarySide.LEADING, PixelInterval(9.0, 11.0), BoundaryKind.HOLDER_BOUNDARY_TRANSITION, provenance),
+            boundary_path_fixture(BoundarySide.TRAILING, PixelInterval(189.0, 191.0), BoundaryKind.HOLDER_BOUNDARY_TRANSITION, provenance),
             boundary_path_fixture(BoundarySide.TOP, PixelInterval(4.0, 6.0), BoundaryKind.TONAL_TRANSITION, provenance),
             boundary_path_fixture(BoundarySide.BOTTOM, PixelInterval(94.0, 96.0), BoundaryKind.TONAL_TRANSITION, provenance),
         )
@@ -556,10 +556,10 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
         boundary = boundary_path_fixture(
             side=BoundarySide.LEADING,
             position=PixelInterval.exact(20.0),
-            kind=BoundaryKind.HOLDER_MATERIAL_TRANSITION,
+            kind=BoundaryKind.HOLDER_BOUNDARY_TRANSITION,
             provenance=MeasurementProvenance(
-                MeasurementIdentity.HOLDER_MATERIAL_PROFILE,
-                "holder_material_transition",
+                MeasurementIdentity.HOLDER_BOUNDARY_PROFILE,
+                "holder_boundary_transition",
                 (MeasurementIdentity.GRAY_WORK,),
                 ("leading",),
             ),
@@ -579,8 +579,8 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
         self,
     ) -> None:
         provenance = MeasurementProvenance(
-            MeasurementIdentity.HOLDER_MATERIAL_PROFILE,
-            "holder_material_transition",
+            MeasurementIdentity.HOLDER_BOUNDARY_PROFILE,
+            "holder_boundary_transition",
             (MeasurementIdentity.GRAY_WORK,),
         )
         evidence = holder_occlusion_for_sequence(
@@ -588,13 +588,13 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
                 boundary_path_fixture(
                     BoundarySide.LEADING,
                     PixelInterval.exact(0.0),
-                    BoundaryKind.HOLDER_MATERIAL_TRANSITION,
+                    BoundaryKind.HOLDER_BOUNDARY_TRANSITION,
                     provenance,
                 ),
                 boundary_path_fixture(
                     BoundarySide.TRAILING,
                     PixelInterval.exact(94.0),
-                    BoundaryKind.HOLDER_MATERIAL_TRANSITION,
+                    BoundaryKind.HOLDER_BOUNDARY_TRANSITION,
                     provenance,
                 ),
             ),
@@ -610,13 +610,13 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
         self.assertEqual(evidence.trailing.hidden_width_px, PixelInterval(0.0, 6.0))
         self.assertEqual(evidence.combined_hidden_width_px, PixelInterval.exact(6.0))
 
-    def test_high_texture_edge_rules_out_holder_material_occlusion(self) -> None:
+    def test_high_texture_edge_rules_out_holder_boundary_occlusion(self) -> None:
         boundary_source = boundary_path_fixture(
             side=BoundarySide.LEADING,
             position=PixelInterval.exact(20.0),
             kind=BoundaryKind.TEXTURE_TRANSITION,
             provenance=MeasurementProvenance(
-                MeasurementIdentity.HOLDER_MATERIAL_PROFILE,
+                MeasurementIdentity.HOLDER_BOUNDARY_PROFILE,
                 "texture_transition",
                 (MeasurementIdentity.GRAY_WORK,),
                 ("leading",),
@@ -624,8 +624,8 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
         )
         boundary = replace(
             boundary_source,
-            outer_material=replace(
-                boundary_source.outer_material,
+            outer_appearance=replace(
+                boundary_source.outer_appearance,
                 texture_median=2.0,
             ),
         )

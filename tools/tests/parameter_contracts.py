@@ -404,22 +404,6 @@ CONSTANT_PARAMETER_CONTRACTS = (
         "fixed_by_contract",
     ),
     ParameterContract(
-        "x5crop.detection.evidence.film_structure.MINIMUM_SAME_SOURCE_MATERIAL_OBSERVATIONS",
-        ParameterRole.PHYSICAL_FACT,
-        "observation_count",
-        "film_structure_evidence",
-        "A single material region cannot establish a same-source film-base consensus.",
-        "fixed_by_contract",
-    ),
-    ParameterContract(
-        "x5crop.detection.evidence.film_structure.MINIMUM_CROSS_SOURCE_MATERIAL_OBSERVATIONS",
-        ParameterRole.PHYSICAL_FACT,
-        "observation_count_per_source",
-        "film_structure_evidence",
-        "Combined film-base support requires both a visible track and an internal separator.",
-        "fixed_by_contract",
-    ),
-    ParameterContract(
         "x5crop.detection.evidence.physical_scale.MINIMUM_FRAME_DIMENSION_CONSENSUS_OBSERVATIONS",
         ParameterRole.PHYSICAL_FACT,
         "frame_count",

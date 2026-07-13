@@ -439,7 +439,7 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
             separator_observation(92.5, start=90.0, end=95.0),
         )
         edge_provenance = MeasurementProvenance(
-            MeasurementIdentity.HOLDER_MATERIAL_PROFILE,
+            MeasurementIdentity.HOLDER_BOUNDARY_PROFILE,
             "synthetic_edges",
             (MeasurementIdentity.GRAY_WORK,),
         )
@@ -536,7 +536,7 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
         self,
     ) -> None:
         edge_provenance = MeasurementProvenance(
-            MeasurementIdentity.HOLDER_MATERIAL_PROFILE,
+            MeasurementIdentity.HOLDER_BOUNDARY_PROFILE,
             "synthetic",
             (MeasurementIdentity.GRAY_WORK,),
         )
@@ -545,13 +545,13 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
             boundary_path_fixture(
                 BoundarySide.LEADING,
                 PixelInterval(0.0, 10.0),
-                BoundaryKind.HOLDER_MATERIAL_TRANSITION,
+                BoundaryKind.HOLDER_BOUNDARY_TRANSITION,
                 edge_provenance,
             ),
             boundary_path_fixture(
                 BoundarySide.TRAILING,
                 PixelInterval(280.0, 330.0),
-                BoundaryKind.HOLDER_MATERIAL_TRANSITION,
+                BoundaryKind.HOLDER_BOUNDARY_TRANSITION,
                 edge_provenance,
             ),
         )

@@ -41,7 +41,7 @@ class SequenceSolverIntegrityContractTest(unittest.TestCase):
         self,
     ) -> None:
         edge_provenance = MeasurementProvenance(
-            MeasurementIdentity.HOLDER_MATERIAL_PROFILE,
+            MeasurementIdentity.HOLDER_BOUNDARY_PROFILE,
             "synthetic",
             (MeasurementIdentity.GRAY_WORK,),
         )
@@ -85,11 +85,11 @@ class SequenceSolverIntegrityContractTest(unittest.TestCase):
             CorroboratedSpacingEvidence,
         )
 
-    def test_holder_material_occlusion_expands_sequence_search_without_becoming_evidence(
+    def test_holder_boundary_occlusion_expands_sequence_search_without_becoming_evidence(
         self,
     ) -> None:
         edge_provenance = MeasurementProvenance(
-            MeasurementIdentity.HOLDER_MATERIAL_PROFILE,
+            MeasurementIdentity.HOLDER_BOUNDARY_PROFILE,
             "synthetic",
             (MeasurementIdentity.GRAY_WORK,),
         )
@@ -97,7 +97,7 @@ class SequenceSolverIntegrityContractTest(unittest.TestCase):
             boundary_path_fixture(
                 BoundarySide.LEADING,
                 PixelInterval.exact(0.0),
-                BoundaryKind.HOLDER_MATERIAL_TRANSITION,
+                BoundaryKind.HOLDER_BOUNDARY_TRANSITION,
                 edge_provenance,
             ),
             boundary_path_fixture(
@@ -245,7 +245,7 @@ class SequenceSolverIntegrityContractTest(unittest.TestCase):
 
     def test_holder_occlusion_allocation_has_typed_outcome(self) -> None:
         provenance = MeasurementProvenance(
-            MeasurementIdentity.HOLDER_MATERIAL_PROFILE,
+            MeasurementIdentity.HOLDER_BOUNDARY_PROFILE,
             "synthetic",
             (MeasurementIdentity.GRAY_WORK,),
         )
@@ -253,13 +253,13 @@ class SequenceSolverIntegrityContractTest(unittest.TestCase):
             boundary_path_fixture(
                 BoundarySide.LEADING,
                 PixelInterval.exact(0.0),
-                BoundaryKind.HOLDER_MATERIAL_TRANSITION,
+                BoundaryKind.HOLDER_BOUNDARY_TRANSITION,
                 provenance,
             ),
             boundary_path_fixture(
                 BoundarySide.TRAILING,
                 PixelInterval.exact(80.0),
-                BoundaryKind.HOLDER_MATERIAL_TRANSITION,
+                BoundaryKind.HOLDER_BOUNDARY_TRANSITION,
                 provenance,
             ),
         )

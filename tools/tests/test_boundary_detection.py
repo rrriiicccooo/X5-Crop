@@ -59,7 +59,7 @@ class BoundaryDetectionTests(unittest.TestCase):
         self.assertEqual(
             tuple(group.source.value for group in results),
             (
-                "holder_material",
+                "holder_boundary",
                 "tonal",
                 "texture",
                 "full_canvas",
@@ -92,8 +92,8 @@ class BoundaryDetectionTests(unittest.TestCase):
             for path in paths
         )
         self.assertTrue(measured)
-        self.assertTrue(all(path.outer_material is not None for path in measured))
-        self.assertTrue(all(path.inner_material is not None for path in measured))
+        self.assertTrue(all(path.outer_appearance is not None for path in measured))
+        self.assertTrue(all(path.inner_appearance is not None for path in measured))
 
     def test_mixed_light_and_dark_holder_edges_share_one_material_family(self) -> None:
         gray = np.full((120, 240), 120, dtype=np.uint8)
@@ -105,11 +105,11 @@ class BoundaryDetectionTests(unittest.TestCase):
         groups = _groups_by_source(gray)
 
         self.assertEqual(
-            {observation.side for observation in groups["holder_material"]},
+            {observation.side for observation in groups["holder_boundary"]},
             {"leading", "trailing", "top", "bottom"},
         )
 
-    def test_holder_gradient_does_not_move_the_aperture_into_holder_material(self) -> None:
+    def test_holder_gradient_does_not_move_the_aperture_into_holder_boundary(self) -> None:
         gray = np.full((120, 240), 120, dtype=np.uint8)
         gray[:, :40] = np.linspace(240, 250, 40, dtype=np.uint8)
         gray[:, 200:] = np.linspace(250, 240, 40, dtype=np.uint8)
@@ -117,7 +117,7 @@ class BoundaryDetectionTests(unittest.TestCase):
         gray[100:, :] = 245
 
         groups = _groups_by_source(gray)
-        paths = {path.side: path for path in groups["holder_material"]}
+        paths = {path.side: path for path in groups["holder_boundary"]}
 
         self.assertEqual(paths["leading"].position.midpoint, 40.0)
         self.assertEqual(paths["trailing"].position.midpoint, 201.0)
@@ -160,10 +160,10 @@ class BoundaryDetectionTests(unittest.TestCase):
             (0, 0, 240, 120),
         )
 
-    def test_uniform_edge_does_not_invent_holder_material_transition(self) -> None:
+    def test_uniform_edge_does_not_invent_holder_boundary_transition(self) -> None:
         gray = np.full((120, 240), 80, dtype=np.uint8)
         groups = _groups_by_source(gray)
-        self.assertEqual(groups["holder_material"], ())
+        self.assertEqual(groups["holder_boundary"], ())
 
     def test_uniform_canvas_has_no_invented_pixel_transition(self) -> None:
         for value in (0, 255):
@@ -188,7 +188,7 @@ class BoundaryDetectionTests(unittest.TestCase):
             visible_sequence_span=VisibleSequenceSpan(physical_box),
             crop_envelope=CropEnvelope(physical_box),
             provenance=MeasurementProvenance(
-                MeasurementIdentity.HOLDER_MATERIAL_PROFILE,
+                MeasurementIdentity.HOLDER_BOUNDARY_PROFILE,
                 "synthetic",
                 (MeasurementIdentity.GRAY_WORK,),
             ),

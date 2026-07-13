@@ -6,78 +6,55 @@ from pathlib import Path
 import unittest
 from typing import get_type_hints
 
-from tools.tests.physical_gate_support import (
-    boundary_path_fixture,
-    candidate_fixture,
-)
-from x5crop.detection.evidence.film_structure import (
-    ApertureContactEvidence,
-    ApertureContactOutcome,
-    ApertureContactSideEvidence,
-)
+from tools.tests.physical_gate_support import candidate_boundary_paths, candidate_fixture
+from x5crop.detection.evidence.holder_boundary import HolderBoundaryEvidence
+from x5crop.detection.evidence.holder_occupancy import holder_occupancy_evidence
 from x5crop.detection.evidence.physical_scale import (
     boundary_scale_observations,
     candidate_scan_calibration,
     candidate_scale_observations_match_geometry,
     physical_scale_observations,
 )
-from x5crop.detection.evidence.holder_occupancy import holder_occupancy_evidence
 from x5crop.domain import (
-    BoundaryKind,
     BoundaryPathGroup,
     BoundaryPathSource,
     BoundarySide,
-    GrayIntensityTail,
     MeasurementIdentity,
     MeasurementProvenance,
-    PixelInterval,
 )
 from x5crop.formats import format_spec
 from x5crop.units import (
     PhysicalScaleObservation,
     PhysicalScaleScope,
     PhysicalScaleSource,
+    ResolutionMetadataObservation,
+    ScanCalibrationResolution,
 )
-from x5crop.units import ResolutionMetadataObservation, ScanCalibrationResolution
 
 
-def _contacts(outcome: ApertureContactOutcome) -> ApertureContactEvidence:
-    provenance = MeasurementProvenance(
-        MeasurementIdentity.HOLDER_MATERIAL_PROFILE,
-        "synthetic_holder_contact",
-        (MeasurementIdentity.GRAY_WORK,),
-    )
-    sides = []
-    for side in BoundarySide:
-        path = boundary_path_fixture(
-            side,
-            PixelInterval.exact(
-                0.0
-                if side in {BoundarySide.LEADING, BoundarySide.TOP}
-                else 200.0
+def _holder_boundary(
+    textured_inner_sides: frozenset[BoundarySide] = frozenset(),
+) -> HolderBoundaryEvidence:
+    paths = tuple(
+        replace(
+            path,
+            inner_appearance=(
+                replace(path.inner_appearance, texture_median=2.0)
+                if path.side in textured_inner_sides
+                and path.inner_appearance is not None
+                else path.inner_appearance
             ),
-            BoundaryKind.HOLDER_MATERIAL_TRANSITION,
-            provenance,
         )
-        if outcome == ApertureContactOutcome.HOLDER_TO_IMAGE:
-            path = replace(
-                path,
-                inner_material=replace(
-                    path.inner_material,
-                    texture_median=2.0,
-                    intensity_tail=GrayIntensityTail.MIDRANGE,
-                ),
-            )
-        sides.append(ApertureContactSideEvidence(side, outcome, path))
-    return ApertureContactEvidence(tuple(sides))
+        for path in candidate_boundary_paths()
+    )
+    return HolderBoundaryEvidence(paths, 1.0)
 
 
 class PhysicalScaleEvidenceTests(unittest.TestCase):
-    def test_root_boundary_scale_has_no_unreachable_film_base_branch(self) -> None:
-        self.assertNotIn(
-            "HOLDER_TO_FILM_BASE",
-            inspect.getsource(boundary_scale_observations),
-        )
+    def test_scale_model_has_no_film_base_identity_or_upper_bound_branch(self) -> None:
+        source = inspect.getsource(physical_scale_observations)
+        self.assertNotIn("FILM_BASE", source)
+        self.assertNotIn("ApertureContact", source)
 
     def test_active_scale_model_uses_supported_not_legacy_trusted_identity(self) -> None:
         root = Path(__file__).resolve().parents[2] / "x5crop"
@@ -113,35 +90,64 @@ class PhysicalScaleEvidenceTests(unittest.TestCase):
                 ),
             )
 
-    def test_holder_to_image_short_axis_is_a_lower_bound(self) -> None:
+    def test_two_textured_inner_edges_produce_only_a_short_axis_lower_bound(self) -> None:
         geometry = candidate_fixture().geometry
         observations = physical_scale_observations(
             geometry,
-            _contacts(ApertureContactOutcome.HOLDER_TO_IMAGE),
+            _holder_boundary(frozenset({BoundarySide.TOP, BoundarySide.BOTTOM})),
         )
         short_axis = next(
             item
             for item in observations
             if item.source == PhysicalScaleSource.FRAME_SHORT_AXIS
         )
-
         self.assertEqual(short_axis.axis, "y")
         self.assertEqual(short_axis.minimum_px_per_mm, 100.0 / 24.0)
         self.assertIsNone(short_axis.maximum_px_per_mm)
 
+    def test_low_texture_inner_edges_do_not_invent_physical_scale(self) -> None:
+        observations = physical_scale_observations(
+            candidate_fixture().geometry,
+            _holder_boundary(),
+        )
+        self.assertFalse(
+            any(
+                item.source == PhysicalScaleSource.FRAME_SHORT_AXIS
+                for item in observations
+            )
+        )
+
+    def test_one_textured_inner_edge_is_not_a_short_axis_measurement(self) -> None:
+        observations = physical_scale_observations(
+            candidate_fixture().geometry,
+            _holder_boundary(frozenset({BoundarySide.TOP})),
+        )
+        self.assertFalse(
+            any(
+                item.source == PhysicalScaleSource.FRAME_SHORT_AXIS
+                for item in observations
+            )
+        )
+
     def test_boundary_scale_precedes_candidate_geometry(self) -> None:
-        contacts = _contacts(ApertureContactOutcome.HOLDER_TO_IMAGE)
-        paths = tuple(item.path for item in contacts.sides if item.path is not None)
+        holder_boundary = _holder_boundary(
+            frozenset({BoundarySide.TOP, BoundarySide.BOTTOM})
+        )
         observations = boundary_scale_observations(
-            (BoundaryPathGroup(BoundaryPathSource.HOLDER_MATERIAL, paths),),
+            (
+                BoundaryPathGroup(
+                    BoundaryPathSource.HOLDER_BOUNDARY,
+                    holder_boundary.paths,
+                ),
+            ),
             format_spec("135"),
             "horizontal",
             edge_texture_limit=1.0,
         )
-
         self.assertEqual(len(observations), 1)
         self.assertEqual(observations[0].axis, "y")
-        self.assertEqual(observations[0].minimum_px_per_mm, 200.0 / 24.0)
+        self.assertEqual(observations[0].minimum_px_per_mm, 100.0 / 24.0)
+        self.assertIsNone(observations[0].maximum_px_per_mm)
 
     def test_candidate_calibration_preserves_root_scale_observations(self) -> None:
         root = PhysicalScaleObservation(
@@ -163,9 +169,8 @@ class PhysicalScaleEvidenceTests(unittest.TestCase):
         candidate = candidate_scan_calibration(
             context_calibration,
             candidate_fixture().geometry,
-            _contacts(ApertureContactOutcome.UNRESOLVED),
+            _holder_boundary(),
         )
-
         self.assertIn(root, candidate.physical_observations)
         self.assertIn(
             "tiff_resolution_contradicted_by_physical_scale",
@@ -174,48 +179,37 @@ class PhysicalScaleEvidenceTests(unittest.TestCase):
 
     def test_candidate_scale_observations_remain_bound_to_geometry(self) -> None:
         candidate = candidate_fixture()
+        evidence = candidate.assessment.evidence
         calibration = candidate_scan_calibration(
             ScanCalibrationResolution.from_observations(
                 ResolutionMetadataObservation(None, None),
                 (),
             ),
             candidate.geometry,
-            candidate.assessment.evidence.aperture_contact,
-        )
-        candidate = replace(
-            candidate,
-            assessment=replace(
-                candidate.assessment,
-                evidence=replace(
-                    candidate.assessment.evidence,
-                    scan_calibration=calibration,
-                ),
-            ),
+            evidence.holder_boundary,
         )
         first = calibration.physical_observations[0]
-        forged_observation = replace(
-            first,
-            minimum_px_per_mm=(first.minimum_px_per_mm or 0.0) + 1.0,
-            maximum_px_per_mm=(first.maximum_px_per_mm or 0.0) + 1.0,
-        )
         forged = ScanCalibrationResolution.from_observations(
             calibration.metadata,
-            (forged_observation, *calibration.physical_observations[1:]),
+            (
+                replace(
+                    first,
+                    minimum_px_per_mm=(first.minimum_px_per_mm or 0.0) + 1.0,
+                    maximum_px_per_mm=(first.maximum_px_per_mm or 0.0) + 1.0,
+                ),
+                *calibration.physical_observations[1:],
+            ),
         )
-
         with self.assertRaises(ValueError):
             replace(
                 candidate,
                 assessment=replace(
                     candidate.assessment,
-                    evidence=replace(
-                        candidate.assessment.evidence,
-                        scan_calibration=forged,
-                    ),
+                    evidence=replace(evidence, scan_calibration=forged),
                 ),
             )
 
-    def test_candidate_scale_identity_does_not_depend_on_provenance_text(self) -> None:
+    def test_candidate_scale_identity_ignores_provenance_description_text(self) -> None:
         candidate = candidate_fixture()
         evidence = candidate.assessment.evidence
         renamed = ScanCalibrationResolution.from_observations(
@@ -234,42 +228,25 @@ class PhysicalScaleEvidenceTests(unittest.TestCase):
                 )
             ),
         )
-
         self.assertTrue(
             candidate_scale_observations_match_geometry(
                 candidate.geometry,
-                evidence.aperture_contact,
+                evidence.holder_boundary,
                 renamed,
             )
         )
-
-    def test_holder_to_film_base_short_axis_is_an_upper_bound(self) -> None:
-        geometry = candidate_fixture().geometry
-        observations = physical_scale_observations(
-            geometry,
-            _contacts(ApertureContactOutcome.HOLDER_TO_FILM_BASE),
-        )
-        short_axis = next(
-            item
-            for item in observations
-            if item.source == PhysicalScaleSource.FRAME_SHORT_AXIS
-        )
-
-        self.assertIsNone(short_axis.minimum_px_per_mm)
-        self.assertEqual(short_axis.maximum_px_per_mm, 100.0 / 24.0)
 
     def test_independent_photo_intervals_produce_bounded_long_axis_scale(self) -> None:
         candidate = candidate_fixture()
         observations = physical_scale_observations(
             candidate.geometry,
-            candidate.assessment.evidence.aperture_contact,
+            candidate.assessment.evidence.holder_boundary,
         )
         long_axis = next(
             item
             for item in observations
             if item.source == PhysicalScaleSource.FRAME_DIMENSION_CONSENSUS
         )
-
         self.assertEqual(long_axis.axis, "x")
         self.assertEqual(long_axis.minimum_px_per_mm, 95.0 / 36.0)
         self.assertEqual(long_axis.maximum_px_per_mm, 95.0 / 36.0)
@@ -293,12 +270,10 @@ class PhysicalScaleEvidenceTests(unittest.TestCase):
                 ),
             ),
         )
-
         observations = physical_scale_observations(
             geometry,
-            candidate.assessment.evidence.aperture_contact,
+            candidate.assessment.evidence.holder_boundary,
         )
-
         self.assertFalse(
             any(
                 item.source == PhysicalScaleSource.FRAME_DIMENSION_CONSENSUS
@@ -310,23 +285,23 @@ class PhysicalScaleEvidenceTests(unittest.TestCase):
         candidate = candidate_fixture()
         geometry = candidate.geometry
         evidence = candidate.assessment.evidence
-        x_scale = PhysicalScaleObservation(
-            "x",
-            10.0,
-            10.0,
-            PhysicalScaleSource.FRAME_DIMENSION_CONSENSUS,
-            PhysicalScaleScope.ROOT_MEASUREMENT,
-            MeasurementProvenance(
-                MeasurementIdentity.PHOTO_EDGES,
-                "long_axis_consensus",
-                (MeasurementIdentity.SEPARATOR_PROFILE,),
-            ),
-        )
         calibration = ScanCalibrationResolution.from_observations(
             ResolutionMetadataObservation(10.0, None),
-            (x_scale,),
+            (
+                PhysicalScaleObservation(
+                    "x",
+                    10.0,
+                    10.0,
+                    PhysicalScaleSource.FRAME_DIMENSION_CONSENSUS,
+                    PhysicalScaleScope.ROOT_MEASUREMENT,
+                    MeasurementProvenance(
+                        MeasurementIdentity.PHOTO_EDGES,
+                        "long_axis_consensus",
+                        (MeasurementIdentity.SEPARATOR_PROFILE,),
+                    ),
+                ),
+            ),
         )
-
         occupancy = holder_occupancy_evidence(
             layout=geometry.layout,
             count=geometry.count,
@@ -341,37 +316,8 @@ class PhysicalScaleEvidenceTests(unittest.TestCase):
             frame_dimensions=evidence.frame_dimensions,
             calibration=calibration,
         )
-
         self.assertFalse(calibration.fully_supported)
         self.assertEqual(occupancy.long_axis_px_per_mm, 10.0)
-
-    def test_mixed_short_axis_contacts_do_not_invent_scale(self) -> None:
-        contacts = _contacts(ApertureContactOutcome.HOLDER_TO_IMAGE)
-        mixed = replace(
-            contacts,
-            sides=tuple(
-                replace(
-                    item,
-                    outcome=(
-                        ApertureContactOutcome.HOLDER_TO_FILM_BASE
-                        if item.side == BoundarySide.BOTTOM
-                        else item.outcome
-                    ),
-                )
-                for item in contacts.sides
-            ),
-        )
-        observations = physical_scale_observations(
-            candidate_fixture().geometry,
-            mixed,
-        )
-
-        self.assertFalse(
-            any(
-                item.source == PhysicalScaleSource.FRAME_SHORT_AXIS
-                for item in observations
-            )
-        )
 
 
 if __name__ == "__main__":
