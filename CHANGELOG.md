@@ -39,6 +39,13 @@ repository rules in `AGENTS.md`.
 - Manifest 新增只读运行指标：input processing / detection 时间、assessed candidates、assignment
   evaluations 与 exact measurement-cache hits/misses。Dual-lane 的 lane cache 共用同一统计 owner；
   指标不参与 detection、Gate、early-stop 或输出决策。
+- 修复后以 113 张 TIFF 重跑默认 diagnostics：113/113 完成、113/113 写入 terminal manifest、合法
+  `gray_sequence_integrity` report 与三联 Debug Analysis，0 runtime exception，0 unresolved frame
+  export。全部候选目前仍为 unresolved REVIEW，留待独立 calibration；本轮不通过放宽 Gate 获得
+  PASS。累计记录 818 个 assessed candidates、896,652 次 assignment evaluations 和
+  3,334/1,458 次 exact measurement-cache hit/miss；`half/full` 的 sequence search 是后续明确性能热点。
+- 另验证 unresolved `--export-review` 禁止 provisional frame、current-schema cache reuse、真实双进程
+  metrics 回传和 Debug `NOT EXPORTABLE` 标记。完整 Architecture Audit A/B 仍留待独立任务。
 
 #### 灰度外观语义与 separator sequence 收敛（2026-07-13）
 

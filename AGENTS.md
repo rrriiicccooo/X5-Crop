@@ -312,16 +312,21 @@ Current state:
 
 Current verification state:
 
-- The gray-appearance, boundary-path, separator-sequence, and physical-scale
-  refactor is implemented. Full verification is recorded in `CHANGELOG.md`.
-- Real smokes covered grayscale holder/contact examples `005`, `X5_00044`,
-  `X5_00021`, and `X5_00006`, plus `120-66/partial auto`, `half/full`, and
-  `120-67/full`; every current report validated successfully. `005` explicitly
-  contradicted its 300 DPI metadata with a physical short-axis lower bound.
-- Cache reuse, review export, a real two-process run, TIFF metadata preservation,
-  and the three-panel Debug Analysis were verified.
+- The full-integrity root fixes and runtime metrics are implemented; the suite
+  contains 482 tests and 14 valid format/mode configurations.
+- A 113-TIFF diagnostics rerun completed without runtime exceptions. Every input
+  produced a terminal manifest record, valid `gray_sequence_integrity` report,
+  and three-panel Debug Analysis. All geometry remained unresolved, so no final
+  geometry or frame output was produced, including with `--export-review`.
+- Cache reuse, unresolved review-export protection, a real two-process run,
+  TIFF metadata preservation, and the three-panel `NOT EXPORTABLE` Debug state
+  were verified. Runtime metrics recorded 818 assessed candidates, 896,652
+  assignment evaluations, and 3,334/1,458 exact measurement-cache hits/misses.
+- `half/full` sequence search is the measured performance hotspot. Performance
+  work must profile a fixed sample and preserve GeometryResolution ownership.
 - Architecture closure audits are intentionally deferred. Audit A and an
   independent fresh-context Audit B must restart from zero before a new closure
   candidate can be recorded.
 - Current PASS/REVIEW outcomes and adaptive measurement values remain calibration
-  material for the separate real-sample project.
+  material for the separate real-sample project; do not loosen Gate rules to
+  manufacture PASS from the current unresolved results.
