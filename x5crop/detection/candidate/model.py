@@ -31,9 +31,9 @@ from ..evidence.holder_boundary import (
     HolderBoundaryEvidence,
     holder_boundary_evidence,
 )
-from ..evidence.photo_sequence_coverage import (
-    PhotoSequenceCoverageEvidence,
-    photo_sequence_coverage_matches_geometry,
+from ..evidence.photo_aperture_coverage import (
+    PhotoApertureCoverageEvidence,
+    photo_aperture_coverage_matches_geometry,
 )
 from ..evidence.aperture_sequence import sequence_conservation_for_geometry
 from ..evidence.physical_scale import candidate_scale_observations_match_geometry
@@ -77,7 +77,7 @@ class BuiltCandidate:
 
 @dataclass(frozen=True)
 class CandidateEvidence:
-    photo_sequence_coverage: PhotoSequenceCoverageEvidence
+    photo_aperture_coverage: PhotoApertureCoverageEvidence
     sequence_conservation: PhotoSequenceConservationEvidence
     separator_sequence: SeparatorSequenceEvidence
     frame_dimensions: FrameDimensionEvidence
@@ -93,7 +93,7 @@ class CandidateEvidence:
     @property
     def content_preservation_state(self) -> EvidenceState:
         return content_preservation_state(
-            self.photo_sequence_coverage,
+            self.photo_aperture_coverage,
             self.inter_photo_boundary_preservation,
             self.external_aperture_preservation,
             self.partial_edge_safety,
@@ -130,12 +130,12 @@ CandidateEvidenceModel = CandidateEvidence | DualLaneEvidence | ReviewOnlyEviden
 
 
 def content_preservation_state(
-    photo_sequence_coverage: PhotoSequenceCoverageEvidence,
+    photo_aperture_coverage: PhotoApertureCoverageEvidence,
     internal_boundaries: InterPhotoBoundaryPreservationEvidence,
     external_boundaries: ExternalAperturePreservationEvidence,
     partial_edge: PartialEdgeSafetyEvidence,
 ) -> EvidenceState:
-    if photo_sequence_coverage.state == EvidenceState.CONTRADICTED:
+    if photo_aperture_coverage.state == EvidenceState.CONTRADICTED:
         return EvidenceState.CONTRADICTED
     if internal_boundaries.state == EvidenceState.CONTRADICTED:
         return EvidenceState.CONTRADICTED
@@ -149,7 +149,7 @@ def content_preservation_state(
     }
     if (
         internal_boundaries_preserved
-        and photo_sequence_coverage.state == EvidenceState.SUPPORTED
+        and photo_aperture_coverage.state == EvidenceState.SUPPORTED
     ):
         return EvidenceState.SUPPORTED
     return EvidenceState.UNAVAILABLE
@@ -388,9 +388,9 @@ def _candidate_evidence_matches_geometry(
     )
     expected_source_axis = "x" if is_horizontal_layout(geometry.layout) else "y"
     return bool(
-        photo_sequence_coverage_matches_geometry(
+        photo_aperture_coverage_matches_geometry(
             geometry,
-            evidence.photo_sequence_coverage,
+            evidence.photo_aperture_coverage,
         )
         and evidence.sequence_conservation
         == sequence_conservation_for_geometry(geometry)
@@ -407,8 +407,8 @@ def _candidate_evidence_matches_geometry(
         and evidence.holder_occupancy.source_long_axis == expected_source_axis
         and evidence.holder_occupancy.content_support_available
         == evidence.photo_content.support_available
-        and evidence.holder_occupancy.photo_sequence_coverage_state
-        == evidence.photo_sequence_coverage.state
+        and evidence.holder_occupancy.photo_aperture_coverage_state
+        == evidence.photo_aperture_coverage.state
         and evidence.holder_occupancy.frame_dimension_state
         == evidence.frame_dimensions.state
         and completeness.count == geometry.count
@@ -427,7 +427,7 @@ def _candidate_evidence_matches_geometry(
         and evidence.partial_edge_safety
         == partial_edge_safety_evidence(
             geometry,
-            evidence.photo_sequence_coverage,
+            evidence.photo_aperture_coverage,
             evidence.frame_dimensions,
             evidence.photo_content,
         )
@@ -579,8 +579,8 @@ class AssessedCandidate:
                 (f"{prefix}{code}", state)
                 for code, state in (
                     (
-                        "photo_sequence_coverage",
-                        evidence.photo_sequence_coverage.state,
+                        "photo_aperture_coverage",
+                        evidence.photo_aperture_coverage.state,
                     ),
                     (
                         "frame_sequence_conservation",
@@ -605,11 +605,11 @@ class AssessedCandidate:
             )
             content_total += sum(
                 max(0, int(end) - int(start))
-                for start, end in evidence.photo_sequence_coverage.content_runs
+                for start, end in evidence.photo_aperture_coverage.content_runs
             )
             uncovered += sum(
                 max(0, int(end) - int(start))
-                for start, end in evidence.photo_sequence_coverage.uncovered_content
+                for start, end in evidence.photo_aperture_coverage.uncovered_content
             )
         gate = self.assessment.gate
         if gate is None:

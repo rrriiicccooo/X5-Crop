@@ -8,8 +8,8 @@ from tools.tests.physical_gate_support import (
     supported_calibration_fixture,
     unavailable_calibration_fixture,
 )
-from x5crop.detection.evidence.photo_sequence_coverage import (
-    PhotoSequenceCoverageEvidence,
+from x5crop.detection.evidence.photo_aperture_coverage import (
+    PhotoApertureCoverageEvidence,
 )
 from x5crop.detection.evidence.content.photo_content import (
     PhotoContentEvidence,
@@ -158,11 +158,11 @@ def _underfilled_geometry() -> PhotoSequenceSolution:
 
 
 def _evidence(geometry: PhotoSequenceSolution):
-    coverage = PhotoSequenceCoverageEvidence(
+    coverage = PhotoApertureCoverageEvidence(
         holder_long_axis_interval=(0, 400),
-        photo_sequence_interval=(30, 360),
         photo_aperture_intervals=((30, 135), (145, 245), (255, 360)),
         content_runs=((40, 125), (155, 235), (265, 350)),
+        content_position_uncertainty_px=0,
     )
     dimensions = frame_dimension_evidence(
         geometry,
@@ -193,7 +193,7 @@ class HolderOccupancyTests(unittest.TestCase):
             separator_assignments=geometry.separator_assignments,
             physical_spec=format_spec("120-66"),
             content_support_available=True,
-            photo_sequence_coverage=coverage,
+            photo_aperture_coverage=coverage,
             frame_dimensions=dimensions,
             calibration=unavailable_calibration_fixture(),
         )
@@ -222,7 +222,7 @@ class HolderOccupancyTests(unittest.TestCase):
             separator_assignments=geometry.separator_assignments,
             physical_spec=format_spec("135"),
             content_support_available=True,
-            photo_sequence_coverage=coverage,
+            photo_aperture_coverage=coverage,
             frame_dimensions=dimensions,
             calibration=unavailable_calibration_fixture(),
         )
@@ -239,7 +239,7 @@ class HolderOccupancyTests(unittest.TestCase):
             separator_assignments=geometry.separator_assignments,
             physical_spec=format_spec("120-66"),
             content_support_available=True,
-            photo_sequence_coverage=coverage,
+            photo_aperture_coverage=coverage,
             frame_dimensions=dimensions,
             calibration=supported_calibration_fixture(10.0, 20.0),
         )

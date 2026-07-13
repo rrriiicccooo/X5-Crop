@@ -19,9 +19,14 @@ repository rules in `AGENTS.md`.
 - 理想裁切几何收敛为逐张 `PhotoAperture`；可见片基与内部 separator 不进入照片开口。
   `PhotoSequenceSolution` 联合求解照片四边、separator 双边、signed spacing、count 与物理守恒，
   full-canvas containment 和 dimension-only edge 只能保持 provisional。
-- Content preservation 拆成整段 sequence coverage、内部 boundary preservation 与外部 aperture
-  preservation。Content 只反证漏图；单个像素不能改写 aperture，measured edge 与 content 冲突时
-  保留 typed conflict 而不删除 measurement。
+- Content preservation 拆成逐张 aperture-union coverage、内部 boundary preservation 与外部
+  aperture preservation。`PhotoApertureCoverageEvidence` 只按 content-profile 平滑半窗表达位置
+  不确定度；未落入任何 aperture 的可见内容不能再由整个 sequence 外包络伪装成已覆盖。
+  Content 只反证漏图；单个像素不能改写 aperture，measured edge 与 content 冲突时保留 typed
+  conflict 而不删除 measurement。
+- Partial auto count 不再把“更大 count 已运行但未求解”误写成“更大 count 已被物理排除”。
+  `GeometryResolution.larger_count_hypotheses_resolved` 只有在更大 count ambiguity 确实消失时成立，
+  防止空片夹 aperture 替代仍未覆盖的真实照片并获得自动输出权限。
 - `SeparatorBandObservation` 只保存 start/end，中点改为派生属性；删除可能与两端漂移的第三状态。
 - Report identity 破坏性更新为
   `detection_report / photo_aperture_sequence_resolution`，旧 schema 只会 cache miss。

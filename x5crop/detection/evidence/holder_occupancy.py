@@ -14,7 +14,7 @@ from ...domain import (
     PhotoAperture,
     SeparatorBandAssignment,
 )
-from .photo_sequence_coverage import PhotoSequenceCoverageEvidence
+from .photo_aperture_coverage import PhotoApertureCoverageEvidence
 
 
 @dataclass(frozen=True)
@@ -56,7 +56,7 @@ class StripCompletenessEvidence:
 class HolderOccupancyEvidence:
     strip_completeness: StripCompletenessEvidence
     content_support_available: bool
-    photo_sequence_coverage_state: EvidenceState
+    photo_aperture_coverage_state: EvidenceState
     frame_dimension_state: EvidenceState
     complete_strip_can_be_underfilled: bool
     holder_span: HolderSpan
@@ -116,7 +116,7 @@ class HolderOccupancyEvidence:
                 self.complete_strip_can_be_underfilled
                 and self.strip_completeness.aperture_sequence_complete
                 and self.content_support_available
-                and self.photo_sequence_coverage_state == EvidenceState.SUPPORTED
+                and self.photo_aperture_coverage_state == EvidenceState.SUPPORTED
                 and self.frame_dimension_state == EvidenceState.SUPPORTED
                 and underfilled
             ),
@@ -158,7 +158,7 @@ def holder_occupancy_evidence(
     separator_assignments: tuple[SeparatorBandAssignment, ...],
     physical_spec: FormatPhysicalSpec,
     content_support_available: bool,
-    photo_sequence_coverage: PhotoSequenceCoverageEvidence,
+    photo_aperture_coverage: PhotoApertureCoverageEvidence,
     frame_dimensions: FrameDimensionEvidence,
     calibration: ScanCalibrationResolution,
 ) -> HolderOccupancyEvidence:
@@ -172,7 +172,7 @@ def holder_occupancy_evidence(
     return HolderOccupancyEvidence(
         strip_completeness=completeness,
         content_support_available=content_support_available,
-        photo_sequence_coverage_state=photo_sequence_coverage.state,
+        photo_aperture_coverage_state=photo_aperture_coverage.state,
         frame_dimension_state=frame_dimensions.state,
         complete_strip_can_be_underfilled=(
             physical_spec.complete_strip_can_be_underfilled

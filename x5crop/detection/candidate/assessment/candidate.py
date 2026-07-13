@@ -7,7 +7,7 @@ from ...evidence.content.internal_boundaries import (
 )
 from ...evidence.separator_sequence import separator_sequence_evidence
 from ...evidence.holder_boundary import holder_boundary_evidence
-from ...evidence.photo_sequence_coverage import photo_sequence_coverage_evidence
+from ...evidence.photo_aperture_coverage import photo_aperture_coverage_evidence
 from ...evidence.aperture_sequence import sequence_conservation_for_geometry
 from ...evidence.holder_occupancy import holder_occupancy_evidence
 from ...evidence.content.external_boundaries import (
@@ -70,7 +70,7 @@ def assess_candidate(
         geometry,
         context.scan_calibration,
     )
-    coverage = photo_sequence_coverage_evidence(
+    coverage = photo_aperture_coverage_evidence(
         geometry,
         context.measurement_cache,
         context.configuration.content,
@@ -109,7 +109,7 @@ def assess_candidate(
         separator_assignments=geometry.separator_assignments,
         physical_spec=physical_spec,
         content_support_available=content.support_available,
-        photo_sequence_coverage=coverage,
+        photo_aperture_coverage=coverage,
         frame_dimensions=frame_dimensions,
         calibration=context.scan_calibration,
     )
@@ -121,7 +121,7 @@ def assess_candidate(
     )
     independence = evidence_independence_evidence(geometry)
     evidence = CandidateEvidence(
-        photo_sequence_coverage=coverage,
+        photo_aperture_coverage=coverage,
         sequence_conservation=sequence_conservation,
         separator_sequence=separator_sequence,
         frame_dimensions=frame_dimensions,

@@ -173,6 +173,14 @@ PARAMETER_GROUPS = (
 
 CONSTANT_PARAMETER_CONTRACTS = (
     ParameterContract(
+        "x5crop.detection.evidence.content.regions.CONTENT_SMOOTHING_WINDOW_ENDPOINT_COUNT",
+        ParameterRole.NUMERICAL_SAFETY,
+        "endpoint_count",
+        "content_guidance",
+        "Converts the symmetric content-profile smoothing window to one-sided positional uncertainty.",
+        "fixed_by_contract",
+    ),
+    ParameterContract(
         "x5crop.detection.physical.sequence_solver.MINIMUM_POSITIVE_PIXEL_EXTENT",
         ParameterRole.NUMERICAL_SAFETY,
         "px",

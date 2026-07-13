@@ -214,7 +214,7 @@ def geometry_resolution_for_selection(
     )
     automatic_count_supported = bool(
         all(
-            item.photo_sequence_coverage.state == EvidenceState.SUPPORTED
+            item.photo_aperture_coverage.state == EvidenceState.SUPPORTED
             for item in evidence
         )
         and all(
@@ -256,7 +256,7 @@ def geometry_resolution_for_selection(
     boundaries_resolved = aperture_boundaries_resolved
     content_preservation_compatible = bool(
         all(
-            item.photo_sequence_coverage.state != EvidenceState.CONTRADICTED
+            item.photo_aperture_coverage.state != EvidenceState.CONTRADICTED
             for item in evidence
         )
         and all(

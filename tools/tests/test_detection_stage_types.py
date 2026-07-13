@@ -160,7 +160,7 @@ class DetectionStageTypeContractTests(unittest.TestCase):
         )
         self.assertIn("evidence", CandidateAssessment.__dataclass_fields__)
         self.assertIn(
-            "photo_sequence_coverage",
+            "photo_aperture_coverage",
             CandidateEvidence.__dataclass_fields__,
         )
         self.assertNotIn("frame_topology", CandidateEvidence.__dataclass_fields__)

@@ -287,7 +287,7 @@ class PhysicalScaleEvidenceTests(unittest.TestCase):
             separator_assignments=geometry.separator_assignments,
             physical_spec=format_spec("135"),
             content_support_available=evidence.photo_content.support_available,
-            photo_sequence_coverage=evidence.photo_sequence_coverage,
+            photo_aperture_coverage=evidence.photo_aperture_coverage,
             frame_dimensions=evidence.frame_dimensions,
             calibration=calibration,
         )

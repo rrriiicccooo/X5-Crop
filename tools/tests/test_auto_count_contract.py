@@ -240,7 +240,7 @@ class AutoCountContractTest(unittest.TestCase):
             candidate.assessment.evidence,
             partial_edge_safety=partial_edge_safety_evidence(
                 geometry,
-                candidate.assessment.evidence.photo_sequence_coverage,
+                candidate.assessment.evidence.photo_aperture_coverage,
                 candidate.assessment.evidence.frame_dimensions,
                 candidate.assessment.evidence.photo_content,
             ),

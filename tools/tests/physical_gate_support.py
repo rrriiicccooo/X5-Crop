@@ -31,8 +31,8 @@ from x5crop.detection.evidence.content.external_boundaries import (
     ExternalApertureBoundaryObservation,
     ExternalAperturePreservationEvidence,
 )
-from x5crop.detection.evidence.photo_sequence_coverage import (
-    PhotoSequenceCoverageEvidence,
+from x5crop.detection.evidence.photo_aperture_coverage import (
+    PhotoApertureCoverageEvidence,
 )
 from x5crop.detection.evidence.aperture_sequence import (
     sequence_conservation_for_geometry,
@@ -502,17 +502,14 @@ def candidate_evidence_fixture(
             (first_start, min(next_start, aperture_intervals[0][1] + 5)),
             *supported_content_runs[1:],
         )
-    coverage = PhotoSequenceCoverageEvidence(
+    coverage = PhotoApertureCoverageEvidence(
         holder_long_axis_interval=(
             geometry.holder_span.box.left,
             geometry.holder_span.box.right,
         ),
-        photo_sequence_interval=(
-            geometry.photo_sequence_envelope.left,
-            geometry.photo_sequence_envelope.right,
-        ),
         photo_aperture_intervals=aperture_intervals,
         content_runs=content_runs,
+        content_position_uncertainty_px=0,
     )
     content = PhotoContentEvidence(
         0.5,
@@ -601,7 +598,7 @@ def candidate_evidence_fixture(
                 )
             )
     return CandidateEvidence(
-        photo_sequence_coverage=coverage,
+        photo_aperture_coverage=coverage,
         sequence_conservation=sequence_conservation_for_geometry(geometry),
         separator_sequence=separator_sequence_evidence(geometry),
         frame_dimensions=dimensions,
@@ -626,7 +623,7 @@ def candidate_evidence_fixture(
         holder_occupancy=HolderOccupancyEvidence(
             strip_completeness=completeness,
             content_support_available=content.support_available,
-            photo_sequence_coverage_state=coverage.state,
+            photo_aperture_coverage_state=coverage.state,
             frame_dimension_state=dimensions.state,
             complete_strip_can_be_underfilled=False,
             holder_span=geometry.holder_span,

@@ -146,7 +146,8 @@ Partial auto count 从允许的较大 count 向较小 count 求解。XPAN 与 12
 
 Standard candidate 的 canonical evidence 包括：
 
-- `PhotoSequenceCoverageEvidence`：整段照片序列是否覆盖可见内容；separator 空隙不是 undercrop。
+- `PhotoApertureCoverageEvidence`：逐张 aperture 并集是否覆盖可见内容；content profile 的平滑半窗
+  只形成位置不确定度，不能让未分配给任何照片的内容藏在 sequence 外包络内。
 - external aperture preservation：首张 leading、末张 trailing，以及逐照片 top/bottom 的外边界安全。
 - inter-photo boundary preservation：每条内部边界是否由 separator、contact 或 overlap 解释。
 - separator sequence、photo dimensions 与 sequence conservation。

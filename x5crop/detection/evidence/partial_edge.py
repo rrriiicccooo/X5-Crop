@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from ..physical.model import PhotoSequenceSolution
 from ..physical.photo_size import FrameDimensionEvidence
 from .content.photo_content import PhotoContentEvidence
-from .photo_sequence_coverage import PhotoSequenceCoverageEvidence
+from .photo_aperture_coverage import PhotoApertureCoverageEvidence
 from x5crop.domain import EvidenceState
 
 
@@ -14,7 +14,7 @@ class PartialEdgeSafetyEvidence:
     is_partial: bool
     hard_separator_count: int
     expected_separator_count: int
-    photo_sequence_coverage_state: EvidenceState
+    photo_aperture_coverage_state: EvidenceState
     frame_dimension_state: EvidenceState
     edge_apertures_supported: bool
     diagnostics: tuple[str, ...]
@@ -37,13 +37,13 @@ class PartialEdgeSafetyEvidence:
             and self.expected_separator_count > 0
             and self.hard_separator_count == self.expected_separator_count
             and self.frame_dimension_state == EvidenceState.SUPPORTED
-            and self.photo_sequence_coverage_state == EvidenceState.SUPPORTED
+            and self.photo_aperture_coverage_state == EvidenceState.SUPPORTED
             and self.edge_apertures_supported
         )
         if not self.is_partial:
             state = EvidenceState.NOT_APPLICABLE
             reason = "not_partial"
-        elif self.photo_sequence_coverage_state == EvidenceState.CONTRADICTED:
+        elif self.photo_aperture_coverage_state == EvidenceState.CONTRADICTED:
             state = EvidenceState.CONTRADICTED
             reason = "content_outside_aperture_union"
         elif boundary_support:
@@ -59,7 +59,7 @@ class PartialEdgeSafetyEvidence:
 
 def partial_edge_safety_evidence(
     geometry: PhotoSequenceSolution,
-    photo_sequence_coverage: PhotoSequenceCoverageEvidence,
+    photo_aperture_coverage: PhotoApertureCoverageEvidence,
     frame_dimensions: FrameDimensionEvidence,
     photo_content: PhotoContentEvidence,
 ) -> PartialEdgeSafetyEvidence:
@@ -76,7 +76,7 @@ def partial_edge_safety_evidence(
         is_partial=geometry.strip_mode == "partial",
         hard_separator_count=hard_count,
         expected_separator_count=expected,
-        photo_sequence_coverage_state=photo_sequence_coverage.state,
+        photo_aperture_coverage_state=photo_aperture_coverage.state,
         frame_dimension_state=frame_dimensions.state,
         edge_apertures_supported=bool(
             geometry.photo_apertures[0].leading.independently_observed

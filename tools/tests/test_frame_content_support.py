@@ -11,8 +11,8 @@ from x5crop.detection.candidate.model import content_preservation_state
 from x5crop.detection.evidence.content.external_boundaries import (
     external_aperture_preservation_evidence,
 )
-from x5crop.detection.evidence.photo_sequence_coverage import (
-    PhotoSequenceCoverageEvidence,
+from x5crop.detection.evidence.photo_aperture_coverage import (
+    PhotoApertureCoverageEvidence,
 )
 from x5crop.detection.evidence.content.internal_boundaries import (
     inter_photo_boundary_preservation_evidence,
@@ -277,7 +277,7 @@ class FrameContentSupportTest(unittest.TestCase):
         self.assertEqual(crossing.state, EvidenceState.CONTRADICTED)
         self.assertEqual(
             content_preservation_state(
-                evidence.photo_sequence_coverage,
+                evidence.photo_aperture_coverage,
                 evidence.inter_photo_boundary_preservation,
                 crossing,
                 evidence.partial_edge_safety,
@@ -353,23 +353,36 @@ class FrameContentSupportTest(unittest.TestCase):
 
         self.assertNotEqual(preservation.state, EvidenceState.CONTRADICTED)
 
-    def test_separator_gap_inside_sequence_is_not_external_undercrop(self) -> None:
-        coverage = PhotoSequenceCoverageEvidence(
+    def test_content_run_smoothing_uncertainty_can_span_a_separator(self) -> None:
+        coverage = PhotoApertureCoverageEvidence(
             holder_long_axis_interval=(0, 310),
-            photo_sequence_interval=(0, 310),
             photo_aperture_intervals=((0, 150), (160, 310)),
             content_runs=((25, 285),),
+            content_position_uncertainty_px=5,
         )
 
         self.assertEqual(coverage.state, EvidenceState.SUPPORTED)
         self.assertEqual(coverage.uncovered_content, ())
 
+    def test_content_between_apertures_is_not_covered_by_their_outer_envelope(
+        self,
+    ) -> None:
+        coverage = PhotoApertureCoverageEvidence(
+            holder_long_axis_interval=(0, 1000),
+            photo_aperture_intervals=((0, 100), (900, 1000)),
+            content_runs=((200, 800),),
+            content_position_uncertainty_px=5,
+        )
+
+        self.assertEqual(coverage.state, EvidenceState.CONTRADICTED)
+        self.assertEqual(coverage.uncovered_content, ((200, 800),))
+
     def test_overlapping_photo_apertures_are_valid_sequence_coverage(self) -> None:
-        coverage = PhotoSequenceCoverageEvidence(
+        coverage = PhotoApertureCoverageEvidence(
             holder_long_axis_interval=(0, 310),
-            photo_sequence_interval=(0, 310),
             photo_aperture_intervals=((0, 160), (150, 310)),
             content_runs=((25, 285),),
+            content_position_uncertainty_px=0,
         )
 
         self.assertEqual(coverage.state, EvidenceState.SUPPORTED)

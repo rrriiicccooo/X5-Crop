@@ -81,7 +81,7 @@ class PhotoApertureArchitectureContractTest(unittest.TestCase):
             field.name for field in fields(candidate_model.CandidateEvidence)
         }
 
-        self.assertIn("photo_sequence_coverage", evidence_fields)
+        self.assertIn("photo_aperture_coverage", evidence_fields)
         self.assertIn("external_aperture_preservation", evidence_fields)
         self.assertNotIn("aperture_coverage", evidence_fields)
         self.assertNotIn("aperture_content_alignment", evidence_fields)
@@ -112,6 +112,15 @@ class PhotoApertureArchitectureContractTest(unittest.TestCase):
                 offenders[module_name] = found
 
         self.assertEqual(offenders, {})
+
+    def test_sequence_envelope_coverage_vocabulary_is_absent(self) -> None:
+        offenders: list[str] = []
+        for module_name, module in source_modules().items():
+            source = module.path.read_text(encoding="utf-8")
+            if "photo sequence coverage" in source.lower():
+                offenders.append(module_name)
+
+        self.assertEqual(offenders, [])
 
 
 if __name__ == "__main__":
