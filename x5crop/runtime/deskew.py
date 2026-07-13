@@ -28,6 +28,7 @@ from ..image.statistics import (
 )
 from ..utils import clamp_float
 from ..run_config import RunConfig
+from .prepared_workspace import PreparedWorkspace, workspace_extent_for_gray
 
 
 def _deskew_measurement_preference(
@@ -93,14 +94,19 @@ def apply_deskew(
     preprocess: PreprocessConfiguration,
     measurement_statistics: ImageMeasurementStatistics,
     warnings: list[str],
-) -> tuple[np.ndarray, np.ndarray, TransformGeometryEvidence]:
+) -> PreparedWorkspace:
     deskew = preprocess.deskew
     if config.deskew == "off":
-        return arr, gray, TransformGeometryEvidence(
-            outcome=TransformOutcome.DISABLED,
-            estimated_angle_degrees=0.0,
-            span_px=None,
-            span_threshold_px=None,
+        return PreparedWorkspace(
+            pixels=arr,
+            gray=gray,
+            extent=workspace_extent_for_gray(gray),
+            transform_geometry=TransformGeometryEvidence(
+                outcome=TransformOutcome.DISABLED,
+                estimated_angle_degrees=0.0,
+                span_px=None,
+                span_threshold_px=None,
+            ),
         )
 
     measurement = _select_deskew_measurement(
@@ -134,10 +140,15 @@ def apply_deskew(
         warnings.append(f"deskew applied: {-angle:.4f} degrees")
     else:
         outcome = TransformOutcome.ANGLE_OUT_OF_RANGE
-    return arr, gray, TransformGeometryEvidence(
-        outcome=outcome,
-        estimated_angle_degrees=float(angle),
-        span_px=float(deskew_span),
-        span_threshold_px=float(deskew_span_threshold),
-        measurement_outcome=measurement.outcome,
+    return PreparedWorkspace(
+        pixels=arr,
+        gray=gray,
+        extent=workspace_extent_for_gray(gray),
+        transform_geometry=TransformGeometryEvidence(
+            outcome=outcome,
+            estimated_angle_degrees=float(angle),
+            span_px=float(deskew_span),
+            span_threshold_px=float(deskew_span_threshold),
+            measurement_outcome=measurement.outcome,
+        ),
     )

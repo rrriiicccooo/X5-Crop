@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ...domain import Box, CropEnvelope
+from ...domain import Box, CropEnvelope, WorkspaceExtent
 from ...geometry.boxes import map_work_box
 from ...output.model import FrameBleedPlan, OutputGeometry
 from ..candidate.selection.model import SelectionResult
@@ -58,10 +58,11 @@ def finalization_plan_for_selection(
     selection: SelectionResult,
     frame_bleed_plan: FrameBleedPlan,
     *,
-    image_width: int,
-    image_height: int,
+    workspace_extent: WorkspaceExtent,
 ) -> FinalizationPlan:
     geometry = selection.selected.geometry
+    image_width = workspace_extent.width
+    image_height = workspace_extent.height
     decision_geometry = OutputGeometry(
         crop_envelope=CropEnvelope(
             map_work_box(

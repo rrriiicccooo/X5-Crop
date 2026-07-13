@@ -333,7 +333,7 @@ Current report identity：
 
 ```text
 schema_id: detection_report
-schema_revision: gray_sequence_resolution
+schema_revision: gray_sequence_integrity
 ```
 
 Canonical sections：

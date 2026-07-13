@@ -30,6 +30,7 @@ from x5crop.report.record import report_record_for_final_detection
 from x5crop.report.read_models import typed_read_model
 from x5crop.report.restoration import final_detection_from_record
 from x5crop.report.validation import current_report_record_errors
+from x5crop.domain import WorkspaceExtent
 from tools.regression.compare import DEFAULT_FIELDS
 
 
@@ -97,6 +98,7 @@ def _record() -> dict:
         selection_fixture(),
         source="input.tif",
         profile=typed_read_model(_profile()),
+        workspace_extent=WorkspaceExtent(200, 100),
         output_files=[],
         review_copy=None,
         warnings=[],
@@ -305,8 +307,7 @@ class OutputReadModelContractTest(unittest.TestCase):
             finalization_plan_for_selection(
                 selection,
                 bleed,
-                image_width=240,
-                image_height=120,
+                workspace_extent=WorkspaceExtent(240, 120),
             ),
         )
         self.assertEqual(
@@ -318,6 +319,7 @@ class OutputReadModelContractTest(unittest.TestCase):
             selection,
             source="synthetic.tif",
             profile=typed_read_model(profile),
+            workspace_extent=WorkspaceExtent(240, 120),
             output_files=[],
             review_copy=None,
             warnings=[],
@@ -540,6 +542,7 @@ class OutputReadModelContractTest(unittest.TestCase):
             selection_fixture(),
             source="input.tif",
             profile=typed_read_model(_profile()),
+            workspace_extent=WorkspaceExtent(200, 100),
             output_files=[],
             review_copy=None,
             warnings=[],
@@ -664,7 +667,7 @@ class OutputReadModelContractTest(unittest.TestCase):
         self.assertEqual(record["schema_id"], "detection_report")
         self.assertEqual(
             record["schema_revision"],
-            "gray_sequence_resolution",
+            "gray_sequence_integrity",
         )
         self.assertNotIn("v4", record["schema_revision"])
 

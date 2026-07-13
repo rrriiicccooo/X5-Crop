@@ -58,7 +58,7 @@ from x5crop.detection.evidence.partial_edge import (
     PartialEdgeSafetyEvidence,
     partial_edge_safety_evidence,
 )
-from x5crop.domain import EvidenceState, FrameBoundaryReference
+from x5crop.domain import EvidenceState, FrameBoundaryReference, WorkspaceExtent
 from x5crop.detection.evidence.transform_geometry import (
     TransformGeometryEvidence,
     TransformOutcome,
@@ -728,7 +728,6 @@ def final_detection_fixture(
         finalization_plan_for_selection(
             selection,
             bleed,
-            image_width=200,
-            image_height=100,
+            workspace_extent=WorkspaceExtent(200, 100),
         ),
     )

@@ -24,9 +24,45 @@ from x5crop.report.configuration import detection_configuration_read_model
 from x5crop.report.read_models import typed_read_model
 from x5crop.report.record import report_record_for_final_detection
 from x5crop.report.validation import current_report_record_errors
+from x5crop.domain import WorkspaceExtent
 
 
 class ReportIdentityContractTest(unittest.TestCase):
+    def test_deskew_workspace_extent_owns_output_identity(self) -> None:
+        selection = selection_fixture()
+        frame_bleed = frame_bleed_fixture()
+        transform = transform_geometry_fixture(EvidenceState.SUPPORTED)
+        final_detection = finalize_detection(
+            apply_decision_gate(selection, frame_bleed, transform),
+            finalization_plan_for_selection(
+                selection,
+                frame_bleed,
+                workspace_extent=WorkspaceExtent(220, 120),
+            ),
+        )
+        record = report_record_for_final_detection(
+            final_detection,
+            selection,
+            source="input.tif",
+            profile=typed_read_model(_profile()),
+            workspace_extent=WorkspaceExtent(220, 120),
+            output_files=[],
+            review_copy=None,
+            warnings=[],
+            configuration=detection_configuration_read_model(
+                get_detection_configuration("135", "full")
+            ),
+            resolution_metadata=unavailable_calibration_fixture().metadata,
+            transform_geometry=transform,
+            analysis_reuse_signature=_analysis_reuse_signature(),
+        )
+
+        self.assertEqual(
+            record["input"]["workspace_extent"],
+            {"width": 220, "height": 120},
+        )
+        self.assertEqual(current_report_record_errors(record), [])
+
     def test_current_schema_rejects_incomplete_decision_gate(self) -> None:
         record = _record()
         record["decision"]["gate"]["checks"] = record["decision"]["gate"][
@@ -44,8 +80,7 @@ class ReportIdentityContractTest(unittest.TestCase):
             finalization_plan_for_selection(
                 selection,
                 frame_bleed,
-                image_width=200,
-                image_height=100,
+                workspace_extent=WorkspaceExtent(200, 100),
             ),
         )
         record = report_record_for_final_detection(
@@ -53,6 +88,7 @@ class ReportIdentityContractTest(unittest.TestCase):
             selection,
             source="input.tif",
             profile=typed_read_model(_profile()),
+            workspace_extent=WorkspaceExtent(200, 100),
             output_files=[],
             review_copy=None,
             warnings=[],

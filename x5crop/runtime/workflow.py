@@ -87,7 +87,7 @@ def process_one(
         profile.resolution_unit,
     )
 
-    arr, gray, transform_geometry = apply_deskew(
+    workspace = apply_deskew(
         arr,
         gray,
         profile,
@@ -96,6 +96,9 @@ def process_one(
         measurement_statistics,
         warnings,
     )
+    arr = workspace.pixels
+    gray = workspace.gray
+    transform_geometry = workspace.transform_geometry
     if transform_geometry.applied:
         measurement_statistics = image_measurement_statistics(
             work_gray(gray, config.layout),
@@ -147,8 +150,7 @@ def process_one(
     finalization_plan = finalization_plan_for_selection(
         selection,
         prepared_frame_bleed,
-        image_width=int(gray.shape[1]),
-        image_height=int(gray.shape[0]),
+        workspace_extent=workspace.extent,
     )
     detection = finalize_detection(
         decided_detection,
@@ -181,6 +183,7 @@ def process_one(
         detection,
         selection,
         profile,
+        workspace.extent,
         output_files,
         review_copy,
         warnings,

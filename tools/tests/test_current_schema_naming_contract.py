@@ -142,7 +142,7 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
 
     def test_report_schema_identity_is_descriptive(self) -> None:
         self.assertEqual(REPORT_SCHEMA_ID, "detection_report")
-        self.assertEqual(REPORT_SCHEMA_REVISION, "gray_sequence_resolution")
+        self.assertEqual(REPORT_SCHEMA_REVISION, "gray_sequence_integrity")
         self.assertNotIn("v4", REPORT_SCHEMA_REVISION)
 
     def test_active_source_uses_configuration_and_parameter_vocabulary(self) -> None:
@@ -202,7 +202,7 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
             "physical" + "_resolution",
         ):
             self.assertNotIn(removed, coordination)
-        self.assertIn("gray_sequence_resolution", coordination)
+        self.assertIn("gray_sequence_integrity", coordination)
 
         architecture = (PROJECT_ROOT / "ARCHITECTURE.md").read_text(
             encoding="utf-8"

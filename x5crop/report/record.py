@@ -4,6 +4,7 @@ from ..app_info import VERSION
 from ..detection.final.model import FinalDetection
 from ..detection.candidate.selection.model import SelectionResult
 from ..detection.evidence.transform_geometry import TransformGeometryEvidence
+from ..domain import WorkspaceExtent
 from ..output.model import OutputGeometry
 from ..units import ResolutionMetadataObservation
 from .identity import REPORT_SCHEMA_ID, REPORT_SCHEMA_REVISION
@@ -42,6 +43,7 @@ def report_record_for_final_detection(
     *,
     source: str,
     profile: dict,
+    workspace_extent: WorkspaceExtent,
     output_files: list[str],
     review_copy: str | None,
     warnings: list[str],
@@ -57,6 +59,7 @@ def report_record_for_final_detection(
         "source": str(source),
         "input": {
             "profile": dict(profile),
+            "workspace_extent": typed_read_model(workspace_extent),
             "resolution_metadata": resolution_metadata_read_model(
                 resolution_metadata
             ),

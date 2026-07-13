@@ -6,6 +6,7 @@ from typing import Any, Optional
 from ..detection.final.model import FinalDetection
 from ..detection.candidate.selection.model import SelectionResult
 from ..detection.evidence.transform_geometry import TransformGeometryEvidence
+from ..domain import WorkspaceExtent
 from ..io.model import ImageProfile
 from ..units import ResolutionMetadataObservation
 from .model import ReportResult
@@ -18,6 +19,7 @@ def result_from_detection(
     detection: FinalDetection,
     selection: SelectionResult,
     profile: ImageProfile,
+    workspace_extent: WorkspaceExtent,
     output_files: list[str],
     review_copy: Optional[str],
     warnings: list[str],
@@ -32,6 +34,7 @@ def result_from_detection(
         selection,
         source=str(input_file),
         profile=typed_read_model(profile),
+        workspace_extent=workspace_extent,
         output_files=output_files,
         review_copy=review_copy,
         warnings=warnings,

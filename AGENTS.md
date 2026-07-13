@@ -301,7 +301,7 @@ Current state:
   for ordering and reporting. `GeometryResolution` is the only early-stop input.
 - Overlap protection uses a per-boundary `FrameBleedPlan`; unrelated frames are
   never expanded by a global maximum.
-- Current reports use `detection_report / gray_sequence_resolution` with
+- Current reports use `detection_report / gray_sequence_integrity` with
   canonical `input`, `configuration`, `selection`, `decision`, and `output`
   sections. Cache reuse accepts only this schema.
 - TIFF export preserves typed transferable metadata and verifies it after write;

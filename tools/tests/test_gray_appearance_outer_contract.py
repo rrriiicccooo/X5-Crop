@@ -205,8 +205,8 @@ class GrayAppearanceOuterContractTests(unittest.TestCase):
                 offenders.append(relative)
         self.assertEqual(offenders, [])
 
-    def test_current_schema_names_gray_sequence_resolution(self) -> None:
-        self.assertEqual(REPORT_SCHEMA_REVISION, "gray_sequence_resolution")
+    def test_current_schema_names_gray_sequence_integrity(self) -> None:
+        self.assertEqual(REPORT_SCHEMA_REVISION, "gray_sequence_integrity")
 
     def test_boundary_path_groups_have_one_typed_canonical_model(self) -> None:
         import x5crop.domain as domain

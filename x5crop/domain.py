@@ -31,6 +31,17 @@ class Box:
             max(0, min(height, self.bottom)),
         )
 
+
+@dataclass(frozen=True)
+class WorkspaceExtent:
+    width: int
+    height: int
+
+    def __post_init__(self) -> None:
+        if self.width <= 0 or self.height <= 0:
+            raise ValueError("workspace extent must have positive dimensions")
+
+
 class MeasurementIdentity(str, Enum):
     BOUNDARY_PATHS = "boundary_paths"
     BOUNDARY_CORRIDOR = "boundary_corridor"

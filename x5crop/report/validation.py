@@ -48,13 +48,18 @@ from ..detection.physical.spacing import (
     ObservedSpacingEvidence,
     SpacingHypothesis,
 )
-from ..domain import Box, CropEnvelope, EvidenceState, SeparatorBandObservation
+from ..domain import (
+    Box,
+    CropEnvelope,
+    EvidenceState,
+    SeparatorBandObservation,
+    WorkspaceExtent,
+)
 from ..io.model import ImageProfile
 from ..formats import FrameSizeMm
 from ..output.frame_bleed import apply_frame_bleed
 from ..output.model import FrameBleedPlan, OutputGeometry
 from ..units import ResolutionMetadataObservation
-from ..utils import spatial_shape_from_shape
 from .identity import REPORT_SCHEMA_ID, REPORT_SCHEMA_REVISION
 from .read_models import typed_read_model
 
@@ -583,10 +588,12 @@ def _input_valid(value: Any) -> bool:
         isinstance(value, dict)
         and set(value) == {
             "profile",
+            "workspace_extent",
             "resolution_metadata",
             "transform_geometry",
         }
         and _typed_value_valid(value["profile"], ImageProfile)
+        and _typed_value_valid(value["workspace_extent"], WorkspaceExtent)
         and _typed_value_valid(
             value["resolution_metadata"], ResolutionMetadataObservation
         )
@@ -799,13 +806,14 @@ def _record_identities_valid(
     plan = finalization_plan_from_read_model(
         record["output"]["finalization_plan"]
     )
-    profile = _typed_value_from_read_model(input_profile, ImageProfile)
-    image_height, image_width = spatial_shape_from_shape(profile.shape)
+    workspace_extent = _typed_value_from_read_model(
+        record["input"]["workspace_extent"],
+        WorkspaceExtent,
+    )
     expected_plan = finalization_plan_for_selection(
         selection,
         plan.frame_bleed_plan,
-        image_width=image_width,
-        image_height=image_height,
+        workspace_extent=workspace_extent,
     )
     selected = selection.selected.geometry
     return bool(
