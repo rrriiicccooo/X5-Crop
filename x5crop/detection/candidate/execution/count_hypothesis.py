@@ -47,7 +47,7 @@ def evaluate_count_hypothesis(
     context: DetectionContext,
     hypothesis: CountHypothesis,
     *,
-    larger_counts_evaluated: bool,
+    larger_count_hypotheses_resolved: bool,
 ) -> CountHypothesisEvaluation:
     sequence_plan = photo_sequence_plan(
         context.request,
@@ -59,7 +59,9 @@ def evaluate_count_hypothesis(
     selection = (
         select_candidates(
             tuple(candidates),
-            larger_counts_evaluated=larger_counts_evaluated,
+            larger_count_hypotheses_resolved=(
+                larger_count_hypotheses_resolved
+            ),
         )
         if candidates
         else None

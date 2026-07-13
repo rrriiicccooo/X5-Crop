@@ -112,7 +112,10 @@ def apply_decision_gate(
     if final_stage_applicable:
         count_resolution_state = (
             EvidenceState.SUPPORTED
-            if resolution.count_resolved and resolution.larger_counts_evaluated
+            if (
+                resolution.count_resolved
+                and resolution.larger_count_hypotheses_resolved
+            )
             else EvidenceState.CONTRADICTED
         )
         if (

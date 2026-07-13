@@ -147,7 +147,7 @@ class AutoCountContractTest(unittest.TestCase):
         evaluations = tuple(
             SimpleNamespace(
                 hypothesis=hypothesis,
-                geometry_resolved=hypothesis.count == 2,
+                geometry_resolved=hypothesis.count == 3,
             )
             for hypothesis in hypotheses
         )
@@ -159,9 +159,52 @@ class AutoCountContractTest(unittest.TestCase):
         ) as evaluate_one:
             completed, stopped_after_count = evaluate(object(), plan)
 
-        self.assertEqual(completed, evaluations[:2])
-        self.assertEqual(stopped_after_count, 2)
-        self.assertEqual(evaluate_one.call_count, 2)
+        self.assertEqual(completed, evaluations[:1])
+        self.assertEqual(stopped_after_count, 3)
+        self.assertEqual(evaluate_one.call_count, 1)
+
+    def test_unresolved_larger_count_prevents_smaller_count_resolution(self) -> None:
+        hypotheses = tuple(
+            CountHypothesis(count, "partial", CountHypothesisSource.AUTOMATIC)
+            for count in (3, 2, 1)
+        )
+        plan = CountHypothesisPlan(hypotheses, True, None)
+        larger_count_states: list[bool] = []
+
+        def evaluate_one(
+            _context,
+            hypothesis,
+            *,
+            larger_count_hypotheses_resolved,
+        ):
+            larger_count_states.append(larger_count_hypotheses_resolved)
+            return SimpleNamespace(
+                hypothesis=hypothesis,
+                geometry_resolved=hypothesis.count == 2,
+            )
+
+        evaluate = getattr(detection_pipeline, "_evaluate_count_hypotheses")
+        with patch.object(
+            detection_pipeline,
+            "evaluate_count_hypothesis",
+            side_effect=evaluate_one,
+        ):
+            completed, stopped_after_count = evaluate(object(), plan)
+
+        self.assertEqual(completed, tuple(
+            SimpleNamespace(
+                hypothesis=hypothesis,
+                geometry_resolved=hypothesis.count == 2,
+            )
+            for hypothesis in hypotheses
+        ))
+        self.assertEqual(larger_count_states, [True, False, False])
+        self.assertIsNone(stopped_after_count)
+
+    def test_geometry_resolution_names_larger_count_resolution(self) -> None:
+        fields = GeometryResolution.__dataclass_fields__
+        self.assertIn("larger_count_hypotheses_resolved", fields)
+        self.assertNotIn("larger_counts_evaluated", fields)
 
     def test_geometry_resolution_names_resolved_alternatives(self) -> None:
         fields = GeometryResolution.__dataclass_fields__
@@ -179,7 +222,7 @@ class AutoCountContractTest(unittest.TestCase):
         )
         resolution = select_candidates(
             (candidate,),
-            larger_counts_evaluated=True,
+            larger_count_hypotheses_resolved=True,
         ).geometry_resolution
         self.assertTrue(resolution.count_resolved)
         self.assertFalse(resolution.placement_resolved)
@@ -215,7 +258,7 @@ class AutoCountContractTest(unittest.TestCase):
         )
         resolution = select_candidates(
             (candidate,),
-            larger_counts_evaluated=True,
+            larger_count_hypotheses_resolved=True,
         ).geometry_resolution
         self.assertTrue(resolution.count_resolved)
         self.assertFalse(resolution.placement_resolved)

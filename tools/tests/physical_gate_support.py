@@ -705,7 +705,7 @@ def selection_fixture(
             placement_resolved=True,
             boundaries_resolved=True,
             content_preservation_compatible=True,
-            larger_counts_evaluated=True,
+            larger_count_hypotheses_resolved=True,
             alternative_geometries_resolved=not geometry_disagreement,
             assignment_geometry_resolved=True,
             search_budget_exhausted=False,

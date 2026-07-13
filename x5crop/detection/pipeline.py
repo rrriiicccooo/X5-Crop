@@ -79,16 +79,24 @@ def _evaluate_count_hypotheses(
 ) -> tuple[tuple[CountHypothesisEvaluation, ...], int | None]:
     evaluations: list[CountHypothesisEvaluation] = []
     stopped_after_count: int | None = None
+    larger_count_hypotheses_resolved = True
     for hypothesis in plan.hypotheses:
         evaluation = evaluate_count_hypothesis(
             context,
             hypothesis,
-            larger_counts_evaluated=True,
+            larger_count_hypotheses_resolved=(
+                larger_count_hypotheses_resolved
+            ),
         )
         evaluations.append(evaluation)
-        if plan.automatic and evaluation.geometry_resolved:
+        if (
+            plan.automatic
+            and larger_count_hypotheses_resolved
+            and evaluation.geometry_resolved
+        ):
             stopped_after_count = hypothesis.count
             break
+        larger_count_hypotheses_resolved = False
     return tuple(evaluations), stopped_after_count
 
 
@@ -146,7 +154,9 @@ def _choose_standard_detection(context: DetectionContext) -> SelectionResult:
         candidates = (assessed,)
     selection = select_candidates(
         candidates,
-        larger_counts_evaluated=True,
+        larger_count_hypotheses_resolved=bool(
+            not plan.automatic or stopped_after_count is not None
+        ),
     )
     count_resolution = _count_resolution(
         selection,
@@ -176,7 +186,7 @@ def choose_detection(context: DetectionContext) -> SelectionResult:
         )
         selection = select_candidates(
             (assessed,),
-            larger_counts_evaluated=True,
+            larger_count_hypotheses_resolved=True,
         )
         context.execution_statistics.record_assessed_candidate()
     else:

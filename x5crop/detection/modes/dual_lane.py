@@ -175,5 +175,5 @@ def choose_dual_lane_detection(
         context.execution_statistics.record_assessed_candidate()
     return select_candidates(
         tuple(parent_candidates),
-        larger_counts_evaluated=True,
+        larger_count_hypotheses_resolved=True,
     )

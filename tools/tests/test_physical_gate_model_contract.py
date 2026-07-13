@@ -205,7 +205,7 @@ class PhysicalGateModelContractTest(unittest.TestCase):
         )
         result = select_candidates(
             (candidate, corroborating_candidate),
-            larger_counts_evaluated=True,
+            larger_count_hypotheses_resolved=True,
         )
         self.assertEqual(result.consensus, SelectionConsensus.AGREED)
         self.assertEqual(len(result.clusters), 1)
@@ -222,7 +222,7 @@ class PhysicalGateModelContractTest(unittest.TestCase):
         )
         result = select_candidates(
             (good, bad),
-            larger_counts_evaluated=True,
+            larger_count_hypotheses_resolved=True,
         )
         self.assertNotEqual(result.consensus, SelectionConsensus.DISAGREED)
 
@@ -272,7 +272,7 @@ class PhysicalGateModelContractTest(unittest.TestCase):
         )
         result = select_candidates(
             (selected, alternative),
-            larger_counts_evaluated=True,
+            larger_count_hypotheses_resolved=True,
         )
         self.assertEqual(result.consensus, SelectionConsensus.DISAGREED)
         self.assertFalse(result.geometry_resolution.alternative_geometries_resolved)

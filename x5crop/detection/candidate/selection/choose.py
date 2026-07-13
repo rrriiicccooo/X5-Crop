@@ -165,7 +165,7 @@ def geometry_resolution_for_selection(
     selected: AssessedCandidate,
     *,
     consensus: SelectionConsensus,
-    larger_counts_evaluated: bool,
+    larger_count_hypotheses_resolved: bool,
 ) -> GeometryResolution:
     evidence_model = selected.assessment.evidence
     if isinstance(evidence_model, ReviewOnlyEvidence):
@@ -174,7 +174,9 @@ def geometry_resolution_for_selection(
             placement_resolved=False,
             boundaries_resolved=False,
             content_preservation_compatible=False,
-            larger_counts_evaluated=larger_counts_evaluated,
+            larger_count_hypotheses_resolved=(
+                larger_count_hypotheses_resolved
+            ),
             alternative_geometries_resolved=(
                 consensus != SelectionConsensus.DISAGREED
             ),
@@ -270,7 +272,7 @@ def geometry_resolution_for_selection(
         placement_resolved=placement_resolved,
         boundaries_resolved=boundaries_resolved,
         content_preservation_compatible=content_preservation_compatible,
-        larger_counts_evaluated=larger_counts_evaluated,
+        larger_count_hypotheses_resolved=larger_count_hypotheses_resolved,
         alternative_geometries_resolved=alternative_geometries_resolved,
         assignment_geometry_resolved=assignment_geometry_resolved,
         search_budget_exhausted=selected.geometry.search_budget_exhausted,
@@ -280,7 +282,7 @@ def geometry_resolution_for_selection(
 def select_candidates(
     candidates: tuple[AssessedCandidate, ...],
     *,
-    larger_counts_evaluated: bool,
+    larger_count_hypotheses_resolved: bool,
 ) -> SelectionResult:
     if not candidates:
         raise ValueError("candidate selection requires at least one candidate")
@@ -310,7 +312,7 @@ def select_candidates(
     resolution = geometry_resolution_for_selection(
         selected,
         consensus=consensus,
-        larger_counts_evaluated=larger_counts_evaluated,
+        larger_count_hypotheses_resolved=larger_count_hypotheses_resolved,
     )
     return SelectionResult(
         selected=selected,
