@@ -145,17 +145,15 @@ def apply_decision_gate(
             if resolution.count_resolved and resolution.larger_counts_evaluated
             else EvidenceState.CONTRADICTED
         )
-        geometry_resolution_state = (
-            EvidenceState.NOT_APPLICABLE
-            if count_resolution_state != EvidenceState.SUPPORTED
-            else EvidenceState.SUPPORTED
-            if (
-                resolution.placement_resolved
-                and resolution.boundaries_resolved
-                and resolution.content_preservation_compatible
-            )
-            else EvidenceState.CONTRADICTED
-        )
+        if (
+            count_resolution_state != EvidenceState.SUPPORTED
+            or selection.consensus == SelectionConsensus.DISAGREED
+        ):
+            geometry_resolution_state = EvidenceState.NOT_APPLICABLE
+        elif resolution.state == EvidenceState.SUPPORTED:
+            geometry_resolution_state = EvidenceState.SUPPORTED
+        else:
+            geometry_resolution_state = EvidenceState.CONTRADICTED
         selection_consensus_state = (
             EvidenceState.CONTRADICTED
             if selection.consensus == SelectionConsensus.DISAGREED

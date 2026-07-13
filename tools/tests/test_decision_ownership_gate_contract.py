@@ -8,11 +8,16 @@ from tools.tests.physical_gate_support import (
     candidate_gate_fixture,
     decide_candidate,
     final_detection_fixture,
+    frame_bleed_fixture,
+    selection_fixture,
+    transform_geometry_fixture,
 )
+from x5crop.detection.decision.decision_gate import apply_decision_gate
 from x5crop.detection.decision.vocabulary import (
     FINAL_REASON_AUTOMATIC_PROCESSING_NOT_SUPPORTED,
     FINAL_REASON_BOUNDARY_EVIDENCE_INSUFFICIENT,
     FINAL_REASON_CONTENT_PRESERVATION_UNRESOLVED,
+    FINAL_REASON_GEOMETRY_RESOLUTION_UNAVAILABLE,
     FINAL_REASON_OUTPUT_PROTECTION_UNRESOLVED,
     FINAL_REASON_SELECTION_GEOMETRY_DISAGREEMENT,
     FINAL_REASON_TRANSFORM_GEOMETRY_UNCERTAIN,
@@ -119,6 +124,31 @@ class DecisionOwnershipGateContractTest(unittest.TestCase):
             FINAL_REASON_SELECTION_GEOMETRY_DISAGREEMENT,
             decided.final_review_reasons,
         )
+
+    def test_decision_consumes_complete_geometry_resolution(self) -> None:
+        base = selection_fixture()
+        unresolved = (
+            replace(
+                base.geometry_resolution,
+                assignment_geometry_resolved=False,
+            ),
+            replace(
+                base.geometry_resolution,
+                search_budget_exhausted=True,
+            ),
+        )
+        for resolution in unresolved:
+            with self.subTest(reasons=resolution.reasons):
+                decided = apply_decision_gate(
+                    replace(base, geometry_resolution=resolution),
+                    frame_bleed_fixture(),
+                    transform_geometry_fixture(),
+                )
+                self.assertEqual(decided.status, "needs_review")
+                self.assertIn(
+                    FINAL_REASON_GEOMETRY_RESOLUTION_UNAVAILABLE,
+                    decided.final_review_reasons,
+                )
 
     def test_feasible_overlap_protection_does_not_block(self) -> None:
         self.assertEqual(

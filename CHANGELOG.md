@@ -16,6 +16,9 @@ repository rules in `AGENTS.md`.
 
 #### 封口参数与几何解析契约（2026-07-12）
 
+- DecisionGate 现在直接消费完整 `GeometryResolution.state`，assignment consensus 与 search-budget
+  exhaustion 不再因下游只重算部分字段而漏过最终 Gate；实质 selection disagreement 继续独占其
+  具体 final reason，不重复产生 aggregate geometry reason。
 - Focused separator measurement 现在使用独立的 typed measurement identity，并由 provenance
   直接派生 geometry dependency；sequence solver 不再覆盖 assignment 的派生 state/reason，真实
   runtime 与 synthetic contract 共享同一条非独立证据路径。
