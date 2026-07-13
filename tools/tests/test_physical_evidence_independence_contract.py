@@ -55,12 +55,17 @@ class PhysicalEvidenceIndependenceContractTest(unittest.TestCase):
     def test_sequence_root_reused_by_separator_dependency_is_contradicted(self) -> None:
         candidate = candidate_fixture()
         original_assignment = candidate.geometry.separator_assignments[0]
+        provenance = replace(
+            original_assignment.observation.provenance,
+            dependencies=(MeasurementIdentity.HOLDER_MATERIAL_PROFILE,),
+        )
         observation = replace(
             original_assignment.observation,
-            provenance=replace(
-                original_assignment.observation.provenance,
-                dependencies=(MeasurementIdentity.HOLDER_BOUNDARY_PROFILE,),
+            material=replace(
+                original_assignment.observation.material,
+                provenance=provenance,
             ),
+            provenance=provenance,
         )
         assignment = replace(original_assignment, observation=observation)
         boundary = replace(

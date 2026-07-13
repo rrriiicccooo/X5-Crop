@@ -7,6 +7,7 @@ from pathlib import Path
 import unittest
 
 from tools.tests.physical_gate_support import (
+    boundary_path_fixture,
     candidate_fixture,
     frame_bleed_fixture,
     holder_occlusion_not_applicable,
@@ -15,7 +16,7 @@ from tools.tests.physical_gate_support import (
     separator_observation,
     transform_geometry_fixture,
 )
-from x5crop.detection.candidate.selection.model import GeometryResolution
+from x5crop.detection.geometry_resolution import GeometryResolution
 from x5crop.detection.candidate.selection.choose import select_candidates
 from x5crop.detection.candidate.model import content_preservation_state
 from x5crop.detection.decision.decision_gate import apply_decision_gate
@@ -50,7 +51,6 @@ from x5crop.detection.physical.spacing import (
 )
 from x5crop.domain import (
     BoundaryKind,
-    BoundaryObservation,
     BoundarySide,
     Box,
     EvidenceState,
@@ -161,7 +161,7 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
         )
         self.assertGreaterEqual(len(calls), 1)
         self.assertEqual(
-            {len(call.args) for call in calls},
+            {len(call.args) + len(call.keywords) for call in calls},
             {len(signature(solve_frame_sequence).parameters)},
         )
 
@@ -219,6 +219,7 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
             ),
             (),
             1,
+            edge_texture_limit=1.0,
         )
         self.assertTrue(result.search_budget_exhausted)
 
@@ -246,6 +247,7 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
             ),
             (),
             10_000,
+            edge_texture_limit=1.0,
         )
         self.assertTrue(all(frame.valid() for frame in result.frames))
         self.assertTrue(
@@ -342,6 +344,7 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
             ),
             (),
             100,
+            edge_texture_limit=1.0,
         )
 
         self.assertEqual(
@@ -417,6 +420,7 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
             ),
             (),
             100,
+            edge_texture_limit=1.0,
         )
 
         self.assertTrue(
@@ -435,7 +439,7 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
             separator_observation(92.5, start=90.0, end=95.0),
         )
         edge_provenance = MeasurementProvenance(
-            MeasurementIdentity.HOLDER_BOUNDARY_PROFILE,
+            MeasurementIdentity.HOLDER_MATERIAL_PROFILE,
             "synthetic_edges",
             (MeasurementIdentity.GRAY_WORK,),
         )
@@ -459,13 +463,13 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
                 ),
             ),
             (
-                BoundaryObservation(
+                boundary_path_fixture(
                     BoundarySide.LEADING,
                     PixelInterval.exact(0.0),
                     BoundaryKind.TEXTURE_TRANSITION,
                     edge_provenance,
                 ),
-                BoundaryObservation(
+                boundary_path_fixture(
                     BoundarySide.TRAILING,
                     PixelInterval.exact(285.0),
                     BoundaryKind.TEXTURE_TRANSITION,
@@ -473,6 +477,7 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
                 ),
             ),
             100,
+            edge_texture_limit=1.0,
         )
 
         overlap = result.relations[1]
@@ -509,6 +514,7 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
             ),
             (),
             100,
+            edge_texture_limit=1.0,
         )
 
         self.assertIsInstance(result.relations[1], SpacingHypothesis)
@@ -530,22 +536,22 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
         self,
     ) -> None:
         edge_provenance = MeasurementProvenance(
-            MeasurementIdentity.HOLDER_BOUNDARY_PROFILE,
+            MeasurementIdentity.HOLDER_MATERIAL_PROFILE,
             "synthetic",
             (MeasurementIdentity.GRAY_WORK,),
         )
         span = VisibleSequenceSpan(Box(5, 0, 305, 100))
         boundaries = (
-            BoundaryObservation(
+            boundary_path_fixture(
                 BoundarySide.LEADING,
                 PixelInterval(0.0, 10.0),
-                BoundaryKind.WHITE_HOLDER_TRANSITION,
+                BoundaryKind.HOLDER_MATERIAL_TRANSITION,
                 edge_provenance,
             ),
-            BoundaryObservation(
+            boundary_path_fixture(
                 BoundarySide.TRAILING,
                 PixelInterval(280.0, 330.0),
-                BoundaryKind.WHITE_HOLDER_TRANSITION,
+                BoundaryKind.HOLDER_MATERIAL_TRANSITION,
                 edge_provenance,
             ),
         )
@@ -571,7 +577,7 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
                 ),
             ),
             holder_occlusion=holder_occlusion_not_applicable(),
-            boundary_observations=boundaries,
+            boundary_paths=boundaries,
             dimension_source=FrameDimensionPriorSource.SCAN_CALIBRATION,
         )
         self.assertEqual(visible_length, PixelInterval(270.0, 330.0))
@@ -604,6 +610,7 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
             ),
             (),
             10_000,
+            edge_texture_limit=1.0,
         )
         self.assertTrue(all(frame.valid() for frame in result.frames))
         self.assertTrue(

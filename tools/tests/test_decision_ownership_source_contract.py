@@ -96,7 +96,12 @@ class DecisionOwnershipSourceContractTest(unittest.TestCase):
         self.assertNotIn("class DecisionResult", model_source)
         self.assertNotIn("class FinalDetection", model_source)
         self.assertIn("class FinalDetection", final_model_source)
-        self.assertIn("_CANDIDATE_REASON_BY_CHECK", gate_source)
+        self.assertIn("DECISION_GATE_REASON_BY_CODE", model_source)
+        self.assertIn(
+            "from .model import DECISION_GATE_REASON_BY_CODE",
+            gate_source,
+        )
+        self.assertNotIn("_CANDIDATE_REASON_BY_CHECK", gate_source)
         self.assertNotIn("report_detail", gate_source)
         self.assertNotIn(".detail", gate_source)
 

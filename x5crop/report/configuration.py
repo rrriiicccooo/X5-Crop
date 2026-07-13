@@ -28,6 +28,7 @@ def detection_configuration_read_model(
             ),
         },
         "measurement": {
+            "boundary_path": typed_read_model(configuration.boundary_path),
             "preprocess": typed_read_model(configuration.preprocess),
             "separator": typed_read_model(configuration.separator),
             "content": typed_read_model(configuration.content),

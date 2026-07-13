@@ -8,26 +8,53 @@ from x5crop.domain import (
     EvidenceState,
     MeasurementIdentity,
 )
+from ...geometry.layout import is_horizontal_layout
 
 from ..physical.model import (
     CandidateGeometry,
     DualLaneSolution,
+    GeometryIdentityError,
     ReviewOnlyGeometry,
     SequenceSolution,
 )
-from .assessment.evidence_independence import EvidenceIndependenceEvidence
-from .assessment.separator_support import SeparatorSequenceEvidence
+from .assessment.evidence_independence import (
+    EvidenceIndependenceEvidence,
+    evidence_independence_evidence,
+)
+from ..evidence.film_structure import (
+    ApertureContactEvidence,
+    FilmStructureEvidence,
+    aperture_contact_evidence,
+    film_base_reference,
+    film_structure_evidence,
+)
 from ..evidence.content.frame_support import FrameContentEvidence
-from ..evidence.content.holder_texture import HolderTextureEvidence
-from ..evidence.frame_coverage import FrameCoverageEvidence
+from ..evidence.holder_material import (
+    HolderMaterialEvidence,
+    holder_material_evidence,
+)
+from ..evidence.frame_coverage import (
+    FrameCoverageEvidence,
+    frame_coverage_matches_geometry,
+)
+from ..evidence.frame_sequence import sequence_conservation_for_geometry
+from ..evidence.physical_scale import candidate_scale_observations_match_geometry
 from ..evidence.holder_occupancy import HolderOccupancyEvidence
 from ..evidence.sequence_content_alignment import SequenceContentAlignmentEvidence
-from ..evidence.partial_edge import PartialEdgeSafetyEvidence
-from ..physical.photo_size import FrameDimensionEvidence
+from ..evidence.partial_edge import (
+    PartialEdgeSafetyEvidence,
+    partial_edge_safety_evidence,
+)
+from ..physical.photo_size import (
+    FrameDimensionEvidence,
+    frame_dimension_measurements_match_geometry,
+)
 from .assessment.candidate_gate import BoundaryProofPath, CandidateGateAssessment
 from .plan.count_hypotheses import CountHypothesis
 from ..physical.model import SequenceResiduals
 from ..physical.spacing import SequenceConservationEvidence
+from ..geometry_resolution import GeometryResolution
+from ...units import ScanCalibrationResolution
 
 
 @dataclass(frozen=True)
@@ -52,10 +79,12 @@ class BuiltCandidate:
 class CandidateEvidence:
     frame_coverage: FrameCoverageEvidence
     sequence_conservation: SequenceConservationEvidence
-    separator_sequence: SeparatorSequenceEvidence
+    film_structure: FilmStructureEvidence
     frame_dimensions: FrameDimensionEvidence
     frame_content: FrameContentEvidence
-    holder_texture: HolderTextureEvidence
+    holder_material: HolderMaterialEvidence
+    aperture_contact: ApertureContactEvidence
+    scan_calibration: ScanCalibrationResolution
     sequence_content_alignment: SequenceContentAlignmentEvidence
     holder_occupancy: HolderOccupancyEvidence
     partial_edge_safety: PartialEdgeSafetyEvidence
@@ -74,7 +103,7 @@ class CandidateEvidence:
 class DualLaneEvidence:
     lane_evidence: tuple[CandidateEvidence, ...]
     lane_gates: tuple[CandidateGateAssessment, ...]
-    lane_geometry_resolved: tuple[bool, ...]
+    lane_geometry_resolutions: tuple[GeometryResolution, ...]
 
     def __post_init__(self) -> None:
         lane_count = len(self.lane_evidence)
@@ -82,7 +111,7 @@ class DualLaneEvidence:
             raise ValueError("dual-lane evidence requires multiple lane evidence sets")
         if (
             len(self.lane_gates) != lane_count
-            or len(self.lane_geometry_resolved) != lane_count
+            or len(self.lane_geometry_resolutions) != lane_count
         ):
             raise ValueError(
                 "dual-lane evidence requires one gate and resolution per lane"
@@ -124,7 +153,7 @@ def boundary_proof_paths_for_geometry(
 ) -> tuple[BoundaryProofPath, ...]:
     boundary_by_side = {
         observation.side: observation
-        for observation in geometry.boundary_observations
+        for observation in geometry.boundary_paths
     }
     sequence_boundary_supported = bool(
         geometry.sequence_provenance.root_measurement
@@ -145,12 +174,12 @@ def boundary_proof_paths_for_geometry(
         and evidence.independence.state
         in {EvidenceState.SUPPORTED, EvidenceState.NOT_APPLICABLE}
     )
-    separator_led = bool(
+    film_structure_led = bool(
         geometry.count > 1
         and common
-        and evidence.separator_sequence.state == EvidenceState.SUPPORTED
+        and evidence.film_structure.state == EvidenceState.SUPPORTED
     )
-    hard_anchor_count = evidence.separator_sequence.hard_count
+    hard_anchor_count = evidence.film_structure.separator_sequence.hard_count
     single_frame_physical_boundaries = bool(
         geometry.count == 1
         and sequence_boundary_supported
@@ -171,16 +200,16 @@ def boundary_proof_paths_for_geometry(
     )
     return (
         BoundaryProofPath(
-            "separator_led",
+            "film_structure_led",
             (
                 EvidenceState.SUPPORTED
-                if separator_led
+                if film_structure_led
                 else EvidenceState.UNAVAILABLE
             ),
             (
                 "complete_hard_separator_sequence",
                 "cross_axis_separator_pixel_paths",
-                "frame_union_content_coverage",
+                "film_base_material_consensus",
             ),
         ),
         BoundaryProofPath(
@@ -226,7 +255,10 @@ def boundary_proof_paths_for_dual_lane(
     composition_supported = bool(
         geometry.lane_divider.state == EvidenceState.SUPPORTED
         and all(gate.passed for gate in evidence.lane_gates)
-        and all(evidence.lane_geometry_resolved)
+        and all(
+            resolution.supported
+            for resolution in evidence.lane_geometry_resolutions
+        )
     )
     return (
         BoundaryProofPath(
@@ -250,6 +282,8 @@ def _combined_evidence_state(states: tuple[EvidenceState, ...]) -> EvidenceState
         return EvidenceState.CONTRADICTED
     if states and all(state == EvidenceState.SUPPORTED for state in states):
         return EvidenceState.SUPPORTED
+    if states and all(state == EvidenceState.NOT_APPLICABLE for state in states):
+        return EvidenceState.NOT_APPLICABLE
     return EvidenceState.UNAVAILABLE
 
 
@@ -311,6 +345,85 @@ class CandidateAssessment:
                 raise ValueError("CandidateGate checks must match candidate evidence")
 
 
+def _film_material_evidence_matches_geometry(
+    geometry: SequenceSolution,
+    evidence: CandidateEvidence,
+) -> bool:
+    reference = evidence.film_structure.film_base_reference
+    expected_holder = holder_material_evidence(
+        geometry,
+        reference.texture_limit,
+    )
+    expected_reference = film_base_reference(
+        geometry,
+        expected_holder,
+        edge_texture_limit=reference.texture_limit,
+    )
+    return bool(
+        evidence.holder_material == expected_holder
+        and reference == expected_reference
+        and evidence.film_structure
+        == film_structure_evidence(geometry, expected_reference)
+        and evidence.aperture_contact
+        == aperture_contact_evidence(geometry, expected_reference)
+    )
+
+
+def _candidate_evidence_matches_geometry(
+    geometry: SequenceSolution,
+    evidence: CandidateEvidence,
+) -> bool:
+    content_indexes = tuple(
+        observation.index for observation in evidence.frame_content.observations
+    )
+    completeness = evidence.holder_occupancy.strip_completeness
+    independent_separator_count = sum(
+        assignment.used_for_boundary and assignment.independent
+        for assignment in geometry.separator_assignments
+    )
+    expected_source_axis = "x" if is_horizontal_layout(geometry.layout) else "y"
+    return bool(
+        frame_coverage_matches_geometry(geometry, evidence.frame_coverage)
+        and evidence.sequence_conservation
+        == sequence_conservation_for_geometry(geometry)
+        and (
+            not content_indexes
+            or content_indexes == tuple(range(1, geometry.count + 1))
+        )
+        and evidence.sequence_content_alignment.visible_sequence_span
+        == geometry.visible_sequence_span.box
+        and evidence.holder_occupancy.holder_span == geometry.holder_span
+        and evidence.holder_occupancy.visible_sequence_span
+        == geometry.visible_sequence_span
+        and evidence.holder_occupancy.source_long_axis == expected_source_axis
+        and evidence.holder_occupancy.content_support_available
+        == evidence.frame_content.support_available
+        and evidence.holder_occupancy.frame_coverage_state
+        == evidence.frame_coverage.state
+        and evidence.holder_occupancy.frame_dimension_state
+        == evidence.frame_dimensions.state
+        and completeness.count == geometry.count
+        and completeness.valid_frame_count
+        == sum(frame.valid() for frame in geometry.frames)
+        and completeness.resolved_boundary_count == len(geometry.frame_boundaries)
+        and completeness.independent_separator_count
+        == independent_separator_count
+        and evidence.partial_edge_safety
+        == partial_edge_safety_evidence(
+            geometry,
+            evidence.frame_coverage,
+            evidence.frame_dimensions,
+            evidence.frame_content,
+        )
+        and evidence.independence == evidence_independence_evidence(geometry)
+        and candidate_scale_observations_match_geometry(
+            geometry,
+            evidence.aperture_contact,
+            evidence.scan_calibration,
+        )
+    )
+
+
 @dataclass(frozen=True)
 class AssessedCandidate:
     geometry: CandidateGeometry
@@ -333,6 +446,27 @@ class AssessedCandidate:
         if not isinstance(self.assessment.evidence, expected_evidence):
             raise ValueError("candidate geometry and evidence model must match")
         if isinstance(self.geometry, SequenceSolution):
+            if not _candidate_evidence_matches_geometry(
+                self.geometry,
+                self.assessment.evidence,
+            ):
+                raise GeometryIdentityError(
+                    "candidate evidence must match geometry"
+                )
+            if not frame_dimension_measurements_match_geometry(
+                self.geometry,
+                self.assessment.evidence.frame_dimensions,
+            ):
+                raise GeometryIdentityError(
+                    "candidate frame dimension evidence must match geometry"
+                )
+            if not _film_material_evidence_matches_geometry(
+                self.geometry,
+                self.assessment.evidence,
+            ):
+                raise GeometryIdentityError(
+                    "candidate film material evidence must match geometry"
+                )
             gate = self.assessment.gate
             if gate is None or gate.proof_paths != boundary_proof_paths_for_geometry(
                 self.geometry,
@@ -354,6 +488,27 @@ class AssessedCandidate:
                 evidence.lane_gates,
                 strict=True,
             ):
+                if not _candidate_evidence_matches_geometry(
+                    lane_geometry,
+                    lane_evidence,
+                ):
+                    raise GeometryIdentityError(
+                        "dual-lane evidence must match lane geometry"
+                    )
+                if not frame_dimension_measurements_match_geometry(
+                    lane_geometry,
+                    lane_evidence.frame_dimensions,
+                ):
+                    raise GeometryIdentityError(
+                        "dual-lane frame dimension evidence must match lane geometry"
+                    )
+                if not _film_material_evidence_matches_geometry(
+                    lane_geometry,
+                    lane_evidence,
+                ):
+                    raise GeometryIdentityError(
+                        "dual-lane film material evidence must match lane geometry"
+                    )
                 CandidateAssessment(lane_evidence, lane_gate)
                 if lane_gate.proof_paths != boundary_proof_paths_for_geometry(
                     lane_geometry,
@@ -405,10 +560,11 @@ class AssessedCandidate:
                         "frame_sequence_conservation",
                         evidence.sequence_conservation.state,
                     ),
-                    ("separator_sequence", evidence.separator_sequence.state),
+                    ("film_structure", evidence.film_structure.state),
                     ("frame_dimensions", evidence.frame_dimensions.state),
                     ("frame_content", evidence.frame_content.state),
-                    ("holder_texture", evidence.holder_texture.state),
+                    ("holder_material", evidence.holder_material.state),
+                    ("aperture_contact", evidence.aperture_contact.state),
                     ("content_preservation", evidence.content_preservation_state),
                     (
                         "sequence_content_alignment",

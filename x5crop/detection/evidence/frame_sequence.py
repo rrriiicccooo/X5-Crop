@@ -16,7 +16,7 @@ def sequence_conservation_for_geometry(
     return sequence_conservation_evidence(
         visible_length_px=visible_sequence_length_interval(
             geometry.visible_sequence_span,
-            geometry.boundary_observations,
+            geometry.boundary_paths,
         ),
         count=geometry.count,
         frame_width_px=geometry.frame_dimension_prior.width_px,

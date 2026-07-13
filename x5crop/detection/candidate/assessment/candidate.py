@@ -2,12 +2,18 @@ from __future__ import annotations
 
 from ...context import DetectionContext
 from ...evidence.content.frame_support import frame_content_evidence
-from ...evidence.content.holder_texture import holder_texture_evidence
+from ...evidence.film_structure import (
+    aperture_contact_evidence,
+    film_base_reference,
+    film_structure_evidence,
+)
+from ...evidence.holder_material import holder_material_evidence
 from ...evidence.frame_coverage import frame_coverage_evidence
 from ...evidence.frame_sequence import sequence_conservation_for_geometry
 from ...evidence.holder_occupancy import holder_occupancy_evidence
 from ...evidence.sequence_content_alignment import sequence_content_alignment_evidence
 from ...evidence.partial_edge import partial_edge_safety_evidence
+from ...evidence.physical_scale import candidate_scan_calibration
 from ...physical.model import SequenceSolution
 from ...physical.photo_size import frame_dimension_evidence
 from ....domain import EvidenceState
@@ -24,7 +30,6 @@ from .candidate_gate import (
     candidate_gate_assessment,
 )
 from .evidence_independence import evidence_independence_evidence
-from .separator_support import separator_sequence_evidence
 
 
 def candidate_gate_for_evidence(
@@ -76,17 +81,30 @@ def assess_candidate(
         context.measurement_cache,
         context.configuration.content,
     )
-    holder_texture = holder_texture_evidence(
+    holder_material = holder_material_evidence(
         geometry,
-        context.measurement_cache,
-        content,
+        context.measurement_cache.image_statistics.edge_texture_limit,
+    )
+    film_base = film_base_reference(
+        geometry,
+        holder_material,
+        edge_texture_limit=context.measurement_cache.image_statistics.edge_texture_limit,
+    )
+    aperture_contact = aperture_contact_evidence(
+        geometry,
+        film_base,
+    )
+    scan_calibration = candidate_scan_calibration(
+        context.scan_calibration,
+        geometry,
+        aperture_contact,
     )
     alignment = sequence_content_alignment_evidence(
         geometry,
         context.measurement_cache,
         context.configuration.content.evidence,
     )
-    sequence = separator_sequence_evidence(geometry)
+    film_structure = film_structure_evidence(geometry, film_base)
     occupancy = holder_occupancy_evidence(
         layout=geometry.layout,
         count=geometry.count,
@@ -111,10 +129,12 @@ def assess_candidate(
     evidence = CandidateEvidence(
         frame_coverage=coverage,
         sequence_conservation=sequence_conservation,
-        separator_sequence=sequence,
+        film_structure=film_structure,
         frame_dimensions=frame_dimensions,
         frame_content=content,
-        holder_texture=holder_texture,
+        holder_material=holder_material,
+        aperture_contact=aperture_contact,
+        scan_calibration=scan_calibration,
         sequence_content_alignment=alignment,
         holder_occupancy=occupancy,
         partial_edge_safety=partial_edge,
@@ -126,8 +146,6 @@ def assess_candidate(
         diagnostics.append("sequence_span_overcontains_holder_area")
     if content.state == EvidenceState.UNAVAILABLE:
         diagnostics.append("frame_content_unavailable")
-    if holder_texture.state == EvidenceState.CONTRADICTED:
-        diagnostics.append("content_like_signal_in_holder_slack")
     gate = candidate_gate_for_evidence(
         candidate,
         evidence,

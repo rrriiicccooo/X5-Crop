@@ -12,7 +12,7 @@ from tools.tests.architecture_contracts import (
     parsed_source,
     source_modules,
 )
-from x5crop.configuration.boundary import BoundaryObservationParameters
+from x5crop.configuration.boundary import BoundaryPathParameters
 from x5crop.configuration.candidate import (
     DualLaneDividerParameters,
     SequenceHypothesisParameters,
@@ -119,6 +119,7 @@ PARAMETER_GROUPS = (
     _group(SeparatorObservationParameters, ("minimum_profile_range",), ParameterRole.NUMERICAL_SAFETY, "normalized", "separator_observation", "Rejects numerically flat profiles."),
     _group(SeparatorObservationParameters, ("minimum_run_px",), ParameterRole.ADAPTIVE_MEASUREMENT, "px", "separator_observation", "Minimum measured separator support."),
     _group(SeparatorObservationParameters, ("maximum_observations",), ParameterRole.EXECUTION_BUDGET, "count", "candidate_plan", "Bounds observation expansion."),
+    _group(SeparatorObservationParameters, ("maximum_cross_axis_break_ratio",), ParameterRole.ADAPTIVE_MEASUREMENT, "ratio", "separator_observation", "Maximum locally bridgeable cross-axis interruption."),
     _group(ContentEvidenceParameters, ("activation_percentile",), ParameterRole.ADAPTIVE_MEASUREMENT, "percentile", "content_evidence", "Adaptive content activation."),
     _group(ContentEvidenceParameters, ("minimum_evidence_range",), ParameterRole.NUMERICAL_SAFETY, "normalized", "content_evidence", "Rejects numerically flat evidence."),
     _group(ContentEvidenceParameters, ("minimum_active_pixels",), ParameterRole.ADAPTIVE_MEASUREMENT, "pixel_count", "content_evidence", "Minimum active-pixel support for content measurement."),
@@ -135,7 +136,9 @@ PARAMETER_GROUPS = (
     _group(DualLaneDividerParameters, ("proposal_count",), ParameterRole.EXECUTION_BUDGET, "count", "dual_lane_measurement", "Bounds lane-divider candidate expansion."),
     _group(SequenceHypothesisParameters, ("observation_budget", "maximum_hypotheses"), ParameterRole.EXECUTION_BUDGET, "count", "candidate_plan", "Bounds sequence hypothesis expansion."),
     _group(SequenceSolverParameters, ("maximum_assignment_evaluations",), ParameterRole.EXECUTION_BUDGET, "count", "sequence_solver", "Bounds global assignment search."),
-    _group(BoundaryObservationParameters, ("holder_reference_percentile", "change_point_percentile"), ParameterRole.ADAPTIVE_MEASUREMENT, "percentile", "boundary_observation", "Robust per-image holder and change-point measurement."),
+    _group(BoundaryPathParameters, ("holder_reference_percentile", "change_point_percentile"), ParameterRole.ADAPTIVE_MEASUREMENT, "percentile", "boundary_path", "Robust per-image holder and change-point measurement."),
+    _group(BoundaryPathParameters, ("cross_section_margin_ratio", "minimum_path_support_ratio", "inner_sample_ratio"), ParameterRole.ADAPTIVE_MEASUREMENT, "ratio", "boundary_path", "Scale-independent local boundary-path sampling and aggregation."),
+    _group(BoundaryPathParameters, ("cross_sections",), ParameterRole.ADAPTIVE_MEASUREMENT, "section_count", "boundary_path", "Number of local cross-sections used to measure one spatial boundary path."),
     _group(DeskewParameters, ("min_footprint_width", "sample_width_px", "residual_min", "fit_tolerance_min", "span_skip_min", "span_skip_max"), ParameterRole.ADAPTIVE_MEASUREMENT, "px", "deskew", "Deskew footprint, fit-residual, and application-span measurements."),
     _group(DeskewParameters, ("footprint_min_fraction", "min_col_content_ratio", "residual_height_ratio", "fit_tolerance_multiplier", "span_skip_ratio"), ParameterRole.ADAPTIVE_MEASUREMENT, "ratio", "deskew", "Scale-relative deskew sampling and fit support."),
     _group(DeskewParameters, ("min_samples", "max_samples", "min_col_content", "fit_min_points"), ParameterRole.ADAPTIVE_MEASUREMENT, "sample_count", "deskew", "Deskew sampling and robust-fit support counts."),
@@ -168,6 +171,22 @@ PARAMETER_GROUPS = (
 
 
 CONSTANT_PARAMETER_CONTRACTS = (
+    ParameterContract(
+        "x5crop.configuration.boundary.MAX_CROSS_SECTION_MARGIN_RATIO",
+        ParameterRole.NUMERICAL_SAFETY,
+        "ratio",
+        "boundary_path",
+        "Leaves a non-empty interior corridor around both cross-section margins.",
+        "fixed_by_contract",
+    ),
+    ParameterContract(
+        "x5crop.units.CALIBRATION_INTERVAL_ENDPOINT_COUNT",
+        ParameterRole.NUMERICAL_SAFETY,
+        "endpoint_count",
+        "units",
+        "Defines the two endpoints of a bounded calibration interval.",
+        "fixed_by_contract",
+    ),
     ParameterContract(
         "x5crop.debug.canvas.FRAME_FILL_COLORS",
         ParameterRole.DIAGNOSTICS_ONLY,
@@ -382,6 +401,30 @@ CONSTANT_PARAMETER_CONTRACTS = (
         "frame_count",
         "separator_assignment",
         "Each internal separator boundary must leave one physical frame on both sides.",
+        "fixed_by_contract",
+    ),
+    ParameterContract(
+        "x5crop.detection.evidence.film_structure.MINIMUM_SAME_SOURCE_MATERIAL_OBSERVATIONS",
+        ParameterRole.PHYSICAL_FACT,
+        "observation_count",
+        "film_structure_evidence",
+        "A single material region cannot establish a same-source film-base consensus.",
+        "fixed_by_contract",
+    ),
+    ParameterContract(
+        "x5crop.detection.evidence.film_structure.MINIMUM_CROSS_SOURCE_MATERIAL_OBSERVATIONS",
+        ParameterRole.PHYSICAL_FACT,
+        "observation_count_per_source",
+        "film_structure_evidence",
+        "Combined film-base support requires both a visible track and an internal separator.",
+        "fixed_by_contract",
+    ),
+    ParameterContract(
+        "x5crop.detection.evidence.physical_scale.MINIMUM_FRAME_DIMENSION_CONSENSUS_OBSERVATIONS",
+        ParameterRole.PHYSICAL_FACT,
+        "frame_count",
+        "physical_scale_evidence",
+        "Dimension consensus requires independently bounded measurements from multiple frames.",
         "fixed_by_contract",
     ),
     ParameterContract(

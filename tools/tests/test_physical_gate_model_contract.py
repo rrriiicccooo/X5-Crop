@@ -10,23 +10,90 @@ from tools.tests.physical_gate_support import (
     frame_bleed_fixture,
     selection_fixture,
     transform_geometry_fixture,
+    unavailable_calibration_fixture,
 )
 from x5crop.detection.candidate.selection.model import (
-    GeometryResolution,
     SelectionConsensus,
 )
+from x5crop.detection.geometry_resolution import GeometryResolution
 from x5crop.detection.decision.decision_gate import apply_decision_gate
-from x5crop.detection.candidate.assessment.separator_support import separator_sequence_evidence
+from x5crop.detection.evidence.film_structure import separator_sequence_evidence
 from x5crop.detection.candidate.selection.choose import select_candidates
 from x5crop.detection.candidate.selection.choose import geometry_clusters
-from x5crop.domain import EvidenceState, PixelInterval
+from x5crop.detection.candidate.assessment.candidate import (
+    candidate_gate_for_evidence,
+)
+from x5crop.detection.candidate.assessment.evidence_independence import (
+    evidence_independence_evidence,
+)
+from x5crop.detection.candidate.model import (
+    AssessedCandidate,
+    BuiltCandidate,
+    CandidateAssessment,
+)
+from x5crop.domain import (
+    EvidenceState,
+    MeasurementIdentity,
+    MeasurementProvenance,
+    PixelInterval,
+)
 from x5crop.detection.physical.model import SequenceResiduals
+from x5crop.detection.physical.photo_size import frame_dimension_evidence
+from x5crop.detection.evidence.frame_sequence import sequence_conservation_for_geometry
+from x5crop.detection.evidence.physical_scale import candidate_scan_calibration
+from x5crop.detection.evidence.partial_edge import partial_edge_safety_evidence
 from x5crop.entry.cli import build_parser
 from x5crop.run_config import RunConfig
 from x5crop.runtime.options import RuntimeOptions
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _independent_photo_edge(source: str) -> MeasurementProvenance:
+    return MeasurementProvenance(
+        MeasurementIdentity.PHOTO_EDGES,
+        source,
+        (MeasurementIdentity.GRAY_WORK,),
+    )
+
+
+def _candidate_with_geometry(candidate, geometry):
+    scan_calibration = candidate_scan_calibration(
+        unavailable_calibration_fixture(),
+        geometry,
+        candidate.assessment.evidence.aperture_contact,
+    )
+    dimensions = frame_dimension_evidence(
+        geometry,
+        scan_calibration,
+    )
+    evidence = replace(
+        candidate.assessment.evidence,
+        sequence_conservation=sequence_conservation_for_geometry(geometry),
+        frame_dimensions=dimensions,
+        scan_calibration=scan_calibration,
+        holder_occupancy=replace(
+            candidate.assessment.evidence.holder_occupancy,
+            frame_dimension_state=dimensions.state,
+        ),
+        partial_edge_safety=partial_edge_safety_evidence(
+            geometry,
+            candidate.assessment.evidence.frame_coverage,
+            dimensions,
+            candidate.assessment.evidence.frame_content,
+        ),
+        independence=evidence_independence_evidence(geometry),
+    )
+    built = BuiltCandidate(geometry, candidate.count_hypothesis, ())
+    return AssessedCandidate(
+        geometry,
+        candidate.count_hypothesis,
+        CandidateAssessment(
+            evidence,
+            candidate_gate_for_evidence(built, evidence),
+        ),
+    )
 
 
 class PhysicalGateModelContractTest(unittest.TestCase):
@@ -122,14 +189,17 @@ class PhysicalGateModelContractTest(unittest.TestCase):
         bad = candidate_fixture(
             failed_candidate_check="boundary_proof",
         )
-        bad = replace(
+        bad = _candidate_with_geometry(
             bad,
-            geometry=replace(
+            replace(
                 bad.geometry,
                 photo_intervals=(
                     replace(
                         bad.geometry.photo_intervals[0],
                         start=PixelInterval(10.0, 20.0),
+                        start_provenance=_independent_photo_edge(
+                            "failed_candidate_leading_edge"
+                        ),
                     ),
                     *bad.geometry.photo_intervals[1:],
                 ),
@@ -143,40 +213,49 @@ class PhysicalGateModelContractTest(unittest.TestCase):
 
     def test_geometry_cluster_requires_common_interval_consensus(self) -> None:
         center = candidate_fixture()
-        left = replace(
+        left = _candidate_with_geometry(
             center,
-            geometry=replace(
+            replace(
                 center.geometry,
                 photo_intervals=(
                     replace(
                         center.geometry.photo_intervals[0],
-                        start=PixelInterval(-5.0, 1.0),
+                        start=PixelInterval(0.0, 4.0),
+                        start_provenance=_independent_photo_edge(
+                            "left_geometry_leading_edge"
+                        ),
                     ),
                     *center.geometry.photo_intervals[1:],
                 ),
             ),
         )
-        right = replace(
+        right = _candidate_with_geometry(
             center,
-            geometry=replace(
+            replace(
                 center.geometry,
                 photo_intervals=(
                     replace(
                         center.geometry.photo_intervals[0],
-                        start=PixelInterval(9.0, 15.0),
+                        start=PixelInterval(12.0, 16.0),
+                        start_provenance=_independent_photo_edge(
+                            "right_geometry_leading_edge"
+                        ),
                     ),
                     *center.geometry.photo_intervals[1:],
                 ),
             ),
         )
-        bridge = replace(
+        bridge = _candidate_with_geometry(
             center,
-            geometry=replace(
+            replace(
                 center.geometry,
                 photo_intervals=(
                     replace(
                         center.geometry.photo_intervals[0],
-                        start=PixelInterval(0.0, 10.0),
+                        start=PixelInterval(3.0, 13.0),
+                        start_provenance=_independent_photo_edge(
+                            "bridge_geometry_leading_edge"
+                        ),
                     ),
                     *center.geometry.photo_intervals[1:],
                 ),
@@ -186,9 +265,9 @@ class PhysicalGateModelContractTest(unittest.TestCase):
 
     def test_non_dominated_geometry_tradeoff_remains_disagreed(self) -> None:
         selected = candidate_fixture()
-        alternative = replace(
+        alternative = _candidate_with_geometry(
             selected,
-            geometry=replace(
+            replace(
                 selected.geometry,
                 photo_intervals=(
                     replace(

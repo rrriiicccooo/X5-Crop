@@ -75,7 +75,7 @@ class ArchitectureOwnershipContractTest(unittest.TestCase):
                 "physical_spec",
                 "strip_mode",
                 "preprocess",
-                "boundary",
+                "boundary_path",
                 "separator",
                 "content",
                 "candidate_plan",
@@ -152,7 +152,7 @@ class ArchitectureOwnershipContractTest(unittest.TestCase):
 
     def test_physical_aggregation_has_one_canonical_owner(self) -> None:
         dual_lane = (
-            PROJECT_ROOT / "x5crop/detection/candidate/assessment/dual_lane.py"
+            PROJECT_ROOT / "x5crop/detection/candidate/composition/dual_lane.py"
         ).read_text(encoding="utf-8")
         self.assertNotIn("def _width_cv", dual_lane)
         self.assertNotIn("width_coefficient_of_variation", dual_lane)

@@ -8,14 +8,14 @@ from ...gate_checks import GateCheck, GateStage
 
 BOUNDARY_PROOF_PATH_CODES = frozenset(
     {
-        "separator_led",
+        "film_structure_led",
         "geometry_led",
         "partial_occupancy_led",
         "mode_composition",
     }
 )
 STANDARD_BOUNDARY_PROOF_PATH_CODES = (
-    "separator_led",
+    "film_structure_led",
     "geometry_led",
     "partial_occupancy_led",
 )

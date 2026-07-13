@@ -8,11 +8,13 @@ from types import UnionType
 from typing import Any, Union, get_args, get_origin, get_type_hints
 
 from ..configuration.candidate import CandidatePlanParameters
+from ..configuration.boundary import BoundaryPathParameters
 from ..configuration.content import ContentConfiguration
 from ..configuration.diagnostics import DiagnosticsConfiguration
 from ..configuration.preprocess import PreprocessConfiguration
 from ..configuration.separator import SeparatorConfiguration
 from ..detection.decision.vocabulary import FINAL_REVIEW_REASONS
+from ..detection.decision.decision_gate import decision_gate_matches_inputs
 from ..detection.candidate.assessment.candidate_gate import (
     BoundaryProofPath,
     CandidateGateAssessment,
@@ -27,10 +29,11 @@ from ..detection.candidate.plan.count_hypotheses import CountHypothesis
 from ..detection.candidate.selection.model import (
     CountResolution,
     GeometryCluster,
-    GeometryResolution,
     SelectionConsensus,
     SelectionResult,
 )
+from ..detection.geometry_resolution import GeometryResolution
+from ..detection.final.finalize import finalization_plan_for_selection
 from ..detection.final.model import FinalizationPlan
 from ..detection.gate_checks import GateCheck, GateStage
 from ..detection.evidence.transform_geometry import TransformGeometryEvidence
@@ -38,6 +41,7 @@ from ..detection.physical.model import (
     DualLaneSolution,
     ReviewOnlyGeometry,
     SequenceSolution,
+    GeometryIdentityError,
 )
 from ..detection.physical.spacing import (
     CorroboratedSpacingEvidence,
@@ -49,7 +53,8 @@ from ..io.model import ImageProfile
 from ..formats import FrameSizeMm
 from ..output.frame_bleed import apply_frame_bleed
 from ..output.model import FrameBleedPlan, OutputGeometry
-from ..units import ScanCalibration
+from ..units import ResolutionMetadataObservation
+from ..utils import spatial_shape_from_shape
 from .identity import REPORT_SCHEMA_ID, REPORT_SCHEMA_REVISION
 from .read_models import typed_read_model
 
@@ -456,7 +461,10 @@ def _selection_from_read_model(value: Any) -> SelectionResult:
     )
 
 
-def _decision_consistent(value: Any, errors: list[str]) -> None:
+def _decision_consistent(
+    value: Any,
+    errors: list[str],
+) -> None:
     if not (
         isinstance(value, dict)
         and set(value) == {"status", "final_review_reasons", "gate"}
@@ -467,6 +475,9 @@ def _decision_consistent(value: Any, errors: list[str]) -> None:
     ):
         errors.append("decision_incomplete")
         return
+    for reason in value["final_review_reasons"]:
+        if reason not in FINAL_REVIEW_REASONS:
+            errors.append(f"unknown_final_review_reason:{reason}")
     try:
         gate = decision_gate_from_read_model(value["gate"])
     except (KeyError, TypeError, ValueError):
@@ -485,9 +496,6 @@ def _decision_consistent(value: Any, errors: list[str]) -> None:
     ]
     if gate_read_model["reason_inputs"] != reason_inputs:
         errors.append("decision_gate_reason_inputs_mismatch")
-    for reason in value["final_review_reasons"]:
-        if reason not in FINAL_REVIEW_REASONS:
-            errors.append(f"unknown_final_review_reason:{reason}")
 
 
 def finalization_plan_from_read_model(value: Any) -> FinalizationPlan:
@@ -575,11 +583,13 @@ def _input_valid(value: Any) -> bool:
         isinstance(value, dict)
         and set(value) == {
             "profile",
-            "scan_calibration",
+            "resolution_metadata",
             "transform_geometry",
         }
         and _typed_value_valid(value["profile"], ImageProfile)
-        and _typed_value_valid(value["scan_calibration"], ScanCalibration)
+        and _typed_value_valid(
+            value["resolution_metadata"], ResolutionMetadataObservation
+        )
         and _typed_value_valid(
             value["transform_geometry"],
             TransformGeometryEvidence,
@@ -608,7 +618,12 @@ def _configuration_valid(value: Any) -> bool:
         "aspect_source",
         "complete_strip_can_be_underfilled",
     }
-    measurement_fields = {"preprocess", "separator", "content"}
+    measurement_fields = {
+        "boundary_path",
+        "preprocess",
+        "separator",
+        "content",
+    }
     execution_fields = {"detector_kind", "candidate_plan"}
     if not isinstance(value, dict) or set(value) != top_fields:
         return False
@@ -666,6 +681,10 @@ def _configuration_valid(value: Any) -> bool:
         and isinstance(physical["complete_strip_can_be_underfilled"], bool)
         and isinstance(measurement, dict)
         and set(measurement) == measurement_fields
+        and _typed_value_valid(
+            measurement["boundary_path"],
+            BoundaryPathParameters,
+        )
         and _typed_value_valid(measurement["preprocess"], PreprocessConfiguration)
         and _typed_value_valid(measurement["separator"], SeparatorConfiguration)
         and _typed_value_valid(measurement["content"], ContentConfiguration)
@@ -780,6 +799,14 @@ def _record_identities_valid(
     plan = finalization_plan_from_read_model(
         record["output"]["finalization_plan"]
     )
+    profile = _typed_value_from_read_model(input_profile, ImageProfile)
+    image_height, image_width = spatial_shape_from_shape(profile.shape)
+    expected_plan = finalization_plan_for_selection(
+        selection,
+        plan.frame_bleed_plan,
+        image_width=image_width,
+        image_height=image_height,
+    )
     selected = selection.selected.geometry
     return bool(
         signature_config["format_id"] == format_id
@@ -797,8 +824,7 @@ def _record_identities_valid(
             for candidate in selection.ranked_candidates
         )
         and (requested_count is None or selected.count == requested_count)
-        and plan.layout == selected.layout
-        and len(plan.decision_geometry.frames) == len(selected.frames)
+        and plan == expected_plan
     )
 
 
@@ -822,14 +848,18 @@ def current_report_record_errors(record: dict[str, Any]) -> list[str]:
     if not isinstance(record["source"], str):
         errors.append("source_invalid")
     input_detail = record["input"]
-    if not _input_valid(input_detail):
+    input_valid = _input_valid(input_detail)
+    if not input_valid:
         errors.append("input_incomplete")
     configuration = record["configuration"]
-    if not _configuration_valid(configuration):
+    configuration_valid = _configuration_valid(configuration)
+    if not configuration_valid:
         errors.append("configuration_incomplete")
     selection_result: SelectionResult | None = None
     try:
         selection_result = _selection_from_read_model(record["selection"])
+    except GeometryIdentityError:
+        errors.append("record_identity_mismatch")
     except (KeyError, TypeError, ValueError):
         candidates = (
             record["selection"].get("candidates", [])
@@ -850,7 +880,6 @@ def current_report_record_errors(record: dict[str, Any]) -> list[str]:
             if invalid_observation
             else "selection_incomplete"
         )
-    _decision_consistent(record["decision"], errors)
     selection = record["selection"]
     selected_kind = None
     if (
@@ -871,20 +900,36 @@ def current_report_record_errors(record: dict[str, Any]) -> list[str]:
         selected_kind == "review_only"
         and decision.get("status") == "needs_review"
     )
-    if not _output_valid(
+    output_valid = _output_valid(
         record["output"],
         allow_empty_frames=allow_empty_frames,
-    ):
+    )
+    if not output_valid:
         errors.append("output_incomplete")
+    if selection_result is not None and input_valid and output_valid:
+        try:
+            plan = finalization_plan_from_read_model(
+                record["output"]["finalization_plan"]
+            )
+            transform = transform_geometry_from_read_model(
+                input_detail["transform_geometry"]
+            )
+            if not decision_gate_matches_inputs(
+                decision_gate_from_read_model(record["decision"]["gate"]),
+                selection_result,
+                plan.frame_bleed_plan,
+                transform,
+            ):
+                errors.append("decision_gate_identity_mismatch")
+        except (KeyError, TypeError, ValueError):
+            errors.append("decision_gate_identity_mismatch")
+    _decision_consistent(record["decision"], errors)
     if not _analysis_reuse_signature_valid(record["analysis_reuse_signature"]):
         errors.append("analysis_reuse_signature_invalid")
     elif (
         selection_result is not None
-        and _configuration_valid(configuration)
-        and _output_valid(
-            record["output"],
-            allow_empty_frames=allow_empty_frames,
-        )
+        and configuration_valid
+        and output_valid
     ):
         try:
             identities_valid = _record_identities_valid(

@@ -4,6 +4,7 @@ from dataclasses import replace
 import unittest
 
 from tools.tests.physical_gate_support import (
+    boundary_path_fixture,
     candidate_fixture,
     holder_occlusion_not_applicable,
     separator_observation,
@@ -22,7 +23,6 @@ from x5crop.detection.physical.spacing import (
 )
 from x5crop.domain import (
     BoundaryKind,
-    BoundaryObservation,
     BoundarySide,
     Box,
     EvidenceState,
@@ -41,18 +41,18 @@ class SequenceSolverIntegrityContractTest(unittest.TestCase):
         self,
     ) -> None:
         edge_provenance = MeasurementProvenance(
-            MeasurementIdentity.HOLDER_BOUNDARY_PROFILE,
+            MeasurementIdentity.HOLDER_MATERIAL_PROFILE,
             "synthetic",
             (MeasurementIdentity.GRAY_WORK,),
         )
         boundaries = (
-            BoundaryObservation(
+            boundary_path_fixture(
                 BoundarySide.LEADING,
                 PixelInterval.exact(0.0),
                 BoundaryKind.TONAL_TRANSITION,
                 edge_provenance,
             ),
-            BoundaryObservation(
+            boundary_path_fixture(
                 BoundarySide.TRAILING,
                 PixelInterval.exact(290.0),
                 BoundaryKind.TONAL_TRANSITION,
@@ -77,6 +77,7 @@ class SequenceSolverIntegrityContractTest(unittest.TestCase):
             ),
             boundaries,
             10_000,
+            edge_texture_limit=1.0,
         )
 
         self.assertIsInstance(
@@ -84,22 +85,22 @@ class SequenceSolverIntegrityContractTest(unittest.TestCase):
             CorroboratedSpacingEvidence,
         )
 
-    def test_white_holder_occlusion_expands_sequence_search_without_becoming_evidence(
+    def test_holder_material_occlusion_expands_sequence_search_without_becoming_evidence(
         self,
     ) -> None:
         edge_provenance = MeasurementProvenance(
-            MeasurementIdentity.HOLDER_BOUNDARY_PROFILE,
+            MeasurementIdentity.HOLDER_MATERIAL_PROFILE,
             "synthetic",
             (MeasurementIdentity.GRAY_WORK,),
         )
         observations = (
-            BoundaryObservation(
+            boundary_path_fixture(
                 BoundarySide.LEADING,
                 PixelInterval.exact(0.0),
-                BoundaryKind.WHITE_HOLDER_TRANSITION,
+                BoundaryKind.HOLDER_MATERIAL_TRANSITION,
                 edge_provenance,
             ),
-            BoundaryObservation(
+            boundary_path_fixture(
                 BoundarySide.TRAILING,
                 PixelInterval.exact(192.0),
                 BoundaryKind.TONAL_TRANSITION,
@@ -126,6 +127,7 @@ class SequenceSolverIntegrityContractTest(unittest.TestCase):
             ),
             observations,
             10_000,
+            edge_texture_limit=1.0,
         )
 
         self.assertTrue(solved.assignments[0].independent)
@@ -157,13 +159,13 @@ class SequenceSolverIntegrityContractTest(unittest.TestCase):
             ),
         )
         edge_observations = (
-            BoundaryObservation(
+            boundary_path_fixture(
                 BoundarySide.LEADING,
                 PixelInterval.exact(0.0),
                 BoundaryKind.TONAL_TRANSITION,
                 provenance,
             ),
-            BoundaryObservation(
+            boundary_path_fixture(
                 BoundarySide.TRAILING,
                 PixelInterval.exact(100.0),
                 BoundaryKind.TONAL_TRANSITION,
@@ -177,7 +179,7 @@ class SequenceSolverIntegrityContractTest(unittest.TestCase):
             frame_width_px=PixelInterval.exact(100.0),
             spacings=spacings,
             holder_occlusion=holder_occlusion_not_applicable(),
-            boundary_observations=edge_observations,
+            boundary_paths=edge_observations,
             dimension_source=FrameDimensionPriorSource.SCAN_CALIBRATION,
         )
 
@@ -243,21 +245,21 @@ class SequenceSolverIntegrityContractTest(unittest.TestCase):
 
     def test_holder_occlusion_allocation_has_typed_outcome(self) -> None:
         provenance = MeasurementProvenance(
-            MeasurementIdentity.HOLDER_BOUNDARY_PROFILE,
+            MeasurementIdentity.HOLDER_MATERIAL_PROFILE,
             "synthetic",
             (MeasurementIdentity.GRAY_WORK,),
         )
         boundaries = (
-            BoundaryObservation(
+            boundary_path_fixture(
                 BoundarySide.LEADING,
                 PixelInterval.exact(0.0),
-                BoundaryKind.WHITE_HOLDER_TRANSITION,
+                BoundaryKind.HOLDER_MATERIAL_TRANSITION,
                 provenance,
             ),
-            BoundaryObservation(
+            boundary_path_fixture(
                 BoundarySide.TRAILING,
                 PixelInterval.exact(80.0),
-                BoundaryKind.WHITE_HOLDER_TRANSITION,
+                BoundaryKind.HOLDER_MATERIAL_TRANSITION,
                 provenance,
             ),
         )
@@ -266,6 +268,7 @@ class SequenceSolverIntegrityContractTest(unittest.TestCase):
             VisibleSequenceSpan(Box(0, 0, 80, 100)),
             (),
             PixelInterval.exact(100.0),
+            edge_texture_limit=1.0,
         )
 
         self.assertEqual(

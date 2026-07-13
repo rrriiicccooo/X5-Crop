@@ -5,13 +5,16 @@ from enum import Enum
 import math
 
 from ...domain import (
-    BoundaryObservation,
+    BoundaryKind,
+    BoundaryPathObservation,
+    BoundarySide,
     Box,
     CropEnvelope,
     FrameBoundary,
     FrameBoundaryReference,
     FrameDimensionPrior,
     HolderSpan,
+    MeasurementIdentity,
     MeasurementProvenance,
     PixelInterval,
     SeparatorAssignment,
@@ -24,6 +27,10 @@ from ...strip_modes import FULL, PARTIAL
 from .boundary import HolderOcclusionEvidence
 from .lane_divider import LaneDividerEvidence
 from .spacing import InterFrameSpacing
+
+
+class GeometryIdentityError(ValueError):
+    code = "geometry_identity_mismatch"
 
 
 def _validate_geometry_identity(
@@ -64,6 +71,179 @@ class PhotoInterval:
             self.start_independently_observed
             and self.end_independently_observed
         )
+
+
+def photo_intervals_for_sequence(
+    boundaries: tuple[FrameBoundary, ...],
+    frames: tuple[Box, ...],
+    boundary_paths: tuple[BoundaryPathObservation, ...],
+) -> tuple[PhotoInterval, ...]:
+    by_index = {boundary.boundary_index: boundary for boundary in boundaries}
+    sequence_edges = {
+        observation.side: observation
+        for observation in boundary_paths
+        if observation.side in {BoundarySide.LEADING, BoundarySide.TRAILING}
+    }
+    generated_provenance = MeasurementProvenance(
+        root_measurement=MeasurementIdentity.FRAME_GEOMETRY,
+        source="sequence_photo_interval",
+        dependencies=(MeasurementIdentity.SEQUENCE_CUTS,),
+    )
+    intervals: list[PhotoInterval] = []
+    for index, frame in enumerate(frames, start=1):
+        previous = by_index.get(index - 1)
+        following = by_index.get(index)
+        leading = sequence_edges.get(BoundarySide.LEADING) if index == 1 else None
+        trailing = (
+            sequence_edges.get(BoundarySide.TRAILING)
+            if index == len(frames)
+            else None
+        )
+        if previous is not None and previous.hard_separator:
+            assert previous.assignment is not None
+            start = PixelInterval.exact(previous.assignment.observation.end)
+            start_provenance = previous.assignment.observation.provenance
+            start_observed = True
+        elif previous is not None:
+            start = previous.position
+            start_provenance = previous.provenance
+            start_observed = False
+        elif leading is not None:
+            start = leading.position
+            start_provenance = leading.provenance
+            start_observed = leading.kind != BoundaryKind.CANVAS_CLIP
+        else:
+            start = PixelInterval.exact(float(frame.left))
+            start_provenance = generated_provenance
+            start_observed = False
+        if following is not None and following.hard_separator:
+            assert following.assignment is not None
+            end = PixelInterval.exact(following.assignment.observation.start)
+            end_provenance = following.assignment.observation.provenance
+            end_observed = True
+        elif following is not None:
+            end = following.position
+            end_provenance = following.provenance
+            end_observed = False
+        elif trailing is not None:
+            end = trailing.position
+            end_provenance = trailing.provenance
+            end_observed = trailing.kind != BoundaryKind.CANVAS_CLIP
+        else:
+            end = PixelInterval.exact(float(frame.right))
+            end_provenance = generated_provenance
+            end_observed = False
+        intervals.append(
+            PhotoInterval(
+                index,
+                start,
+                end,
+                start_provenance,
+                end_provenance,
+                start_observed,
+                end_observed,
+            )
+        )
+    return tuple(intervals)
+
+
+def photo_intervals_match_sequence(
+    photo_intervals: tuple[PhotoInterval, ...],
+    boundaries: tuple[FrameBoundary, ...],
+    frames: tuple[Box, ...],
+    boundary_paths: tuple[BoundaryPathObservation, ...],
+    crop_envelope: CropEnvelope,
+) -> bool:
+    if len(photo_intervals) != len(frames):
+        return False
+    by_index = {boundary.boundary_index: boundary for boundary in boundaries}
+    sequence_edges = {
+        observation.side: observation
+        for observation in boundary_paths
+        if observation.side in {BoundarySide.LEADING, BoundarySide.TRAILING}
+    }
+    envelope = crop_envelope.box
+    for index, (photo, frame) in enumerate(
+        zip(photo_intervals, frames, strict=True),
+        start=1,
+    ):
+        if (
+            photo.index != index
+            or photo.start.minimum < float(envelope.left)
+            or photo.end.maximum > float(envelope.right)
+            or photo.end.maximum <= float(frame.left)
+            or photo.start.minimum >= float(frame.right)
+        ):
+            return False
+        previous = by_index.get(index - 1)
+        following = by_index.get(index)
+        if previous is not None and previous.hard_separator:
+            assert previous.assignment is not None
+            observation = previous.assignment.observation
+            if photo.start_independently_observed:
+                if photo.start.minimum < observation.end:
+                    return False
+            elif (
+                photo.start != PixelInterval.exact(observation.end)
+                or photo.start_provenance != observation.provenance
+            ):
+                return False
+        elif previous is not None and not photo.start_independently_observed:
+            if (
+                photo.start != previous.position
+                or photo.start_provenance != previous.provenance
+            ):
+                return False
+        elif previous is None:
+            leading = sequence_edges.get(BoundarySide.LEADING)
+            if leading is not None and photo.start_provenance == leading.provenance:
+                if (
+                    photo.start != leading.position
+                    or photo.start_independently_observed
+                    != (leading.kind != BoundaryKind.CANVAS_CLIP)
+                ):
+                    return False
+            elif not photo.start_independently_observed and (
+                photo.start != PixelInterval.exact(float(frame.left))
+            ):
+                return False
+        if following is not None and following.hard_separator:
+            assert following.assignment is not None
+            observation = following.assignment.observation
+            if photo.end_independently_observed:
+                if photo.end.maximum > observation.start:
+                    return False
+            elif (
+                photo.end != PixelInterval.exact(observation.start)
+                or photo.end_provenance != observation.provenance
+            ):
+                return False
+        elif following is not None and not photo.end_independently_observed:
+            if (
+                photo.end != following.position
+                or photo.end_provenance != following.provenance
+            ):
+                return False
+        elif following is None:
+            trailing = sequence_edges.get(BoundarySide.TRAILING)
+            if trailing is not None and photo.end_provenance == trailing.provenance:
+                if (
+                    photo.end != trailing.position
+                    or photo.end_independently_observed
+                    != (trailing.kind != BoundaryKind.CANVAS_CLIP)
+                ):
+                    return False
+            elif not photo.end_independently_observed and (
+                photo.end != PixelInterval.exact(float(frame.right))
+            ):
+                return False
+    return bool(
+        all(
+            left.start.midpoint <= right.start.midpoint
+            and left.end.midpoint <= right.end.midpoint
+            for left, right in zip(photo_intervals, photo_intervals[1:])
+        )
+    )
 
 
 @dataclass(frozen=True)
@@ -179,7 +359,7 @@ class SequenceSolution:
     search_budget_exhausted: bool
     automatic_processing_supported: bool
     sequence_provenance: MeasurementProvenance
-    boundary_observations: tuple[BoundaryObservation, ...]
+    boundary_paths: tuple[BoundaryPathObservation, ...]
 
     def __post_init__(self) -> None:
         _validate_geometry_identity(self.format_id, self.layout, self.strip_mode)
@@ -226,6 +406,16 @@ class SequenceSolution:
             range(1, self.count + 1)
         ):
             raise ValueError("photo interval indexes must be complete and ordered")
+        if not photo_intervals_match_sequence(
+            self.photo_intervals,
+            self.frame_boundaries,
+            self.frames,
+            self.boundary_paths,
+            self.crop_envelope,
+        ):
+            raise GeometryIdentityError(
+                "photo intervals must match sequence measurements"
+            )
         expected_boundaries = tuple(range(1, self.count))
         if (
             tuple(
@@ -471,7 +661,7 @@ class ReviewOnlyGeometry:
     residuals: SequenceResiduals
     assignment_consensus: BoundaryAssignmentConsensus
     sequence_provenance: MeasurementProvenance
-    boundary_observations: tuple[BoundaryObservation, ...]
+    boundary_paths: tuple[BoundaryPathObservation, ...]
     photo_intervals: tuple[PhotoInterval, ...] = ()
     frames: tuple[Box, ...] = ()
     separator_observations: tuple[SeparatorBandObservation, ...] = ()

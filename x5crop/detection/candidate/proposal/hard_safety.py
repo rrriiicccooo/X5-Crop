@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from ....domain import Box, MeasurementIdentity, MeasurementProvenance
 from ...context import DetectionContext
-from ...physical.boundary import canvas_boundary_observations
+from ...physical.boundary import canvas_boundary_paths
 from ...physical.photo_size import frame_dimension_priors
 from ...physical.sequence_solver import solve_frame_sequence
 from x5crop.domain import CropEnvelope, HolderSpan, VisibleSequenceSpan
@@ -30,7 +30,7 @@ def hard_safety_candidate(
         context.scan_calibration,
         layout=context.request.layout,
     )[0]
-    boundary_observations = canvas_boundary_observations(
+    boundary_paths = canvas_boundary_paths(
         work_width,
         work_height,
     )
@@ -40,7 +40,7 @@ def hard_safety_candidate(
         visible_span,
         count,
         dimensions,
-        boundary_observations,
+        boundary_paths,
         context.configuration.candidate_plan.sequence_solver.maximum_assignment_evaluations,
     )
     hypothesis = CountHypothesis(
@@ -77,7 +77,7 @@ def hard_safety_candidate(
                     MeasurementIdentity.COUNT,
                 ),
             ),
-            boundary_observations=boundary_observations,
+            boundary_paths=boundary_paths,
         ),
         count_hypothesis=hypothesis,
         build_diagnostics=(

@@ -31,7 +31,8 @@ from x5crop.report.result_builder import result_from_detection
 from x5crop.report.record import report_record_for_final_detection
 from x5crop.domain import Box, CropEnvelope
 from x5crop.output.model import OutputGeometry
-from x5crop.units import ScanCalibration, ScanCalibrationSource
+from tools.tests.physical_gate_support import unavailable_calibration_fixture
+from x5crop.units import CalibrationState, PhysicalScaleObservation, PhysicalScaleSource
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -48,12 +49,7 @@ class DetectionStageTypeContractTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             DetectionRequest("horizontal", "partial", 0)
 
-        calibration = ScanCalibration(
-            None,
-            None,
-            ScanCalibrationSource.UNAVAILABLE,
-            False,
-        )
+        calibration = unavailable_calibration_fixture()
         full = get_detection_configuration("135", "full")
         dual = get_detection_configuration("135-dual", "full")
         lane = get_detection_configuration("135", "full")
@@ -107,7 +103,7 @@ class DetectionStageTypeContractTests(unittest.TestCase):
             MeasurementIdentity,
             MeasurementProvenance,
         )
-        from x5crop.units import ScanCalibration, ScanCalibrationSource
+        from x5crop.units import CalibrationAxisResolution
 
         self.assertIs(
             get_type_hints(CountHypothesis)["source"],
@@ -122,8 +118,12 @@ class DetectionStageTypeContractTests(unittest.TestCase):
             FrameDimensionPriorSource,
         )
         self.assertIs(
-            get_type_hints(ScanCalibration)["source"],
-            ScanCalibrationSource,
+            get_type_hints(PhysicalScaleObservation)["source"],
+            PhysicalScaleSource,
+        )
+        self.assertIs(
+            get_type_hints(CalibrationAxisResolution)["state"],
+            CalibrationState,
         )
         provenance_hints = get_type_hints(MeasurementProvenance)
         self.assertIs(provenance_hints["root_measurement"], MeasurementIdentity)
@@ -325,7 +325,7 @@ class DetectionStageTypeContractTests(unittest.TestCase):
             "sequence_hypothesis_name",
             "sequence_hypothesis_strategy",
             "sequence_provenance",
-            "boundary_observations",
+            "boundary_paths",
         ):
             self.assertNotIn(duplicated_field, parameters)
 

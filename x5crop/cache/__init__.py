@@ -7,6 +7,8 @@ import numpy as np
 
 from .content_statistics import ContentColumnStatistics
 from ..domain import Box
+from ..domain import BoundaryPathGroup
+from ..configuration.boundary import BoundaryPathParameters
 from ..image.statistics import ImageMeasurementStatistics
 from ..geometry.layout import require_work_layout
 
@@ -53,6 +55,10 @@ class MeasurementCache:
     content_evidence_float_work: np.ndarray
     image_statistics: ImageMeasurementStatistics
     separator_profiles: dict[MeasurementRegionKey, np.ndarray] = field(default_factory=dict)
+    boundary_path_groups: dict[
+        BoundaryPathParameters,
+        tuple[BoundaryPathGroup, ...],
+    ] = field(default_factory=dict)
     content_evidence_thresholds: dict[MeasurementRegionKey, float | None] = field(default_factory=dict)
     content_column_statistics: dict[ThresholdedMeasurementRegionKey, ContentColumnStatistics] = field(
         default_factory=dict

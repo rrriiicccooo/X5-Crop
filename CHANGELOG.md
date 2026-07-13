@@ -14,6 +14,46 @@ repository rules in `AGENTS.md`.
 
 ### V4.9 当前开发线
 
+#### 灰度材料、Outer 与扫描比例物理化（2026-07-13）
+
+- Detection 固定只消费 canonical gray workspace；RGB/chroma/holder color 与 135 片孔不进入
+  runtime、cache、proof path 或 report schema，原始通道与 ICC 继续由 TIFF I/O/export 保存。
+- `GrayMaterialObservation` 成为 boundary outer/inner material 与 separator material 的唯一灰度材料
+  类型，并以 typed low/high/midrange tail 取代布尔材料标签。Boundary path 使用多截面、极性无关的
+  纹理/change-point 观测；proposal family 名不再授予 holder 身份，渐变、灰尘和混合明暗片夹可
+  保持同一数据流。
+- `FilmBaseReference + FilmStructureEvidence` 取代 separator-only proof identity；只有完整 hard
+  sequence 与 distinct typed locations 上的同尾部、低纹理材料共识才能形成 `film_structure_led`；
+  单个区域、重复位置或高纹理 track/separator 不能伪装成片基材料。
+- TIFF resolution 改为未经物理确认的 `ResolutionMetadataObservation`。逐候选
+  `PhysicalScaleObservation` 使用 typed provenance 表达 photo-edge 有界比例、holder-to-image 下限或
+  holder-to-film-base 上限；long-axis dimension consensus 至少需要两张独立照片，逐轴 supported 状态
+  可独立消费。冲突 metadata 只保留 diagnostic，calibration unavailable 不阻断 normalized detection。
+- Current report identity 更新为
+  `detection_report / gray_material_sequence_resolution`；input 只保存 resolution metadata，候选
+  evidence 保存解析后的逐轴 calibration，configuration 完整保存 boundary-path measurement 参数。
+  旧 schema 或不完整 configuration 直接 cache miss，不保留投影或 alias。
+- Boundary path groups 按完整参数对象 exact cache 并跨 auto-count hypotheses 复用；候选、Gate、
+  GeometryResolution、DecisionGate 与 final reasons 仍不缓存。
+- Cross-axis separator path 允许显式参数控制的小范围局部中断，但不能跨到远处内容边缘；该参数
+  属于全局 adaptive measurement，不是 format profile。
+- `FilmBaseReference` 在 typed model 内强制 adaptive texture limit、来源/位置类型和最小共识数量，
+  `AssessedCandidate` 还把 holder material、film-base、film structure 与 aperture contact 精确绑定回
+  同一 geometry；report restoration 无法再用伪造 source、boundary 或材料构造 supported reference。
+- `DecisionGateAssessment` 强制 canonical check order 与唯一 reason ownership；current report validator
+  精确验证 selection/output/transform 对应的 DecisionGate，以及 selected geometry 到
+  `FinalizationPlan` 和 final geometry 的完整身份链。
+- Boundary-side 几何逻辑统一使用 `BoundarySide`，不再依赖其 `str` 子类兼容；candidate 之前的 root
+  scale 删除不可达的 film-base 上限分支，只有 candidate-local aperture evidence 可产生该上限。
+- `PhotoInterval`、frame dimensions、coverage、conservation、occupancy、partial-edge、independence、
+  film material 与 candidate-local scale observations 全部绑定到同一 candidate geometry；合法的独立
+  photo-edge uncertainty 可以变化，但陈旧或伪造的 evidence projection 会在 typed model 边界被拒绝。
+- Physical scale 使用 typed root/candidate scope；`provenance.source` 只作说明，不能改变 observation
+  所属阶段或绕过 candidate geometry identity。
+- Dual-lane composition 直接消费每条 lane 的 canonical `SelectionResult`，保留 child
+  `GeometryResolution`；没有实测 divider 的 full dual-lane 使用 `ReviewOnlyGeometry`，不再生成伪造的
+  standard sequence。
+
 #### 封口参数与几何解析契约（2026-07-12）
 
 - `62e47cd2` 已通过同一冻结清单下的 Audit A 与全新上下文 Audit B，作为
@@ -290,7 +330,7 @@ repository rules in `AGENTS.md`.
 #### Frame Sequence 物理模型重构（2026-07-11）
 
 - Detection 采用
-  `BoundaryObservation -> SequenceHypothesis -> CandidateGeometry -> CandidateEvidence -> CandidateGate -> GeometryResolution -> DecisionGate`
+  `BoundaryPathObservation -> SequenceHypothesis -> CandidateGeometry -> CandidateEvidence -> CandidateGate -> GeometryResolution -> DecisionGate`
   的 immutable typed data flow。
 - 普通物理候选的 canonical source 统一为 `frame_sequence`；boundary、separator 和 dimensions
   只作为 observation/proof provenance。

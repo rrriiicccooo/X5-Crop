@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 from ...cache import MeasurementCache
 from ...domain import Box
@@ -8,6 +9,9 @@ from ...configuration.content import ContentConfiguration
 from x5crop.domain import VisibleSequenceSpan, HolderSpan
 from .content.regions import content_region_runs
 from x5crop.domain import EvidenceState
+
+if TYPE_CHECKING:
+    from ..physical.model import SequenceSolution
 
 
 @dataclass(frozen=True)
@@ -130,4 +134,24 @@ def frame_coverage_evidence(
         frame_intervals=frame_intervals,
         content_runs=tuple(runs),
         candidate_frame_count=len(frames),
+    )
+
+
+def frame_coverage_matches_geometry(
+    geometry: SequenceSolution,
+    evidence: FrameCoverageEvidence,
+) -> bool:
+    holder = geometry.holder_span.box
+    expected_intervals = _merged_intervals(
+        [
+            (max(holder.left, frame.left), min(holder.right, frame.right))
+            for frame in geometry.frames
+        ]
+    )
+    visible = geometry.visible_sequence_span.box
+    return bool(
+        evidence.holder_long_axis_interval == (holder.left, holder.right)
+        and evidence.visible_sequence_interval == (visible.left, visible.right)
+        and evidence.frame_intervals == expected_intervals
+        and evidence.candidate_frame_count == geometry.count
     )

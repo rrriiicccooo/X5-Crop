@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from x5crop.domain import EvidenceState
+from ...geometry_resolution import GeometryResolution
 from ...physical.model import SequenceSolution
 from ..model import (
     AssessedCandidate,
@@ -11,7 +12,6 @@ from ..model import (
 from ..plan.count_hypotheses import CountHypothesisSource
 from .model import (
     GeometryCluster,
-    GeometryResolution,
     SelectionConsensus,
     SelectionResult,
 )

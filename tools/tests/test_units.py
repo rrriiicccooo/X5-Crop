@@ -2,85 +2,99 @@ from __future__ import annotations
 
 import unittest
 
+from x5crop.domain import (
+    MeasurementIdentity,
+    MeasurementProvenance,
+)
+
 from x5crop.units import (
-    ScanCalibration,
-    ScanCalibrationSource,
-    scan_calibration_after_rotation,
-    scan_calibration_from_resolution,
+    CalibrationState,
+    PhysicalScaleObservation,
+    PhysicalScaleScope,
+    PhysicalScaleSource,
+    ResolutionMetadataObservation,
+    ScanCalibrationResolution,
+    resolution_metadata_observation,
 )
 
 
 class UnitModelTests(unittest.TestCase):
-    def test_scan_calibration_has_no_candidate_inference_residue(self) -> None:
-        calibration = scan_calibration_from_resolution(None, None)
+    def test_resolution_metadata_is_an_observation_not_trusted_calibration(self) -> None:
+        observation = resolution_metadata_observation((300.0, 300.0), 2)
 
-        self.assertNotIn(
-            "inferred_from_frame_short_axis",
-            calibration.__dataclass_fields__,
+        self.assertIsInstance(observation, ResolutionMetadataObservation)
+        self.assertAlmostEqual(observation.x_px_per_mm or 0.0, 300.0 / 25.4)
+        self.assertAlmostEqual(observation.y_px_per_mm or 0.0, 300.0 / 25.4)
+        self.assertNotIn("trusted", observation.__dataclass_fields__)
+
+    def test_metadata_alone_leaves_calibration_unavailable(self) -> None:
+        observation = resolution_metadata_observation((300.0, 300.0), 2)
+        calibration = ScanCalibrationResolution.from_observations(
+            observation,
+            (),
         )
-        self.assertEqual(calibration.source, "unavailable")
 
-    def test_scan_calibration_from_inch_resolution(self) -> None:
-        calibration = scan_calibration_from_resolution((300.0, 300.0), 2)
-        self.assertTrue(calibration.trusted)
-        self.assertEqual(
-            calibration.source,
-            ScanCalibrationSource.TIFF_RESOLUTION,
+        self.assertEqual(calibration.x.state, CalibrationState.UNAVAILABLE)
+        self.assertEqual(calibration.y.state, CalibrationState.UNAVAILABLE)
+
+    def test_missing_or_invalid_resolution_stays_in_metadata_diagnostics(self) -> None:
+        missing = resolution_metadata_observation(None, None)
+        invalid = resolution_metadata_observation((300.0, 300.0), 1)
+        unsupported = resolution_metadata_observation((300.0, 300.0), 99)
+
+        self.assertIn("missing_tiff_resolution", missing.diagnostics)
+        self.assertIn("resolution_unit_has_no_absolute_length", invalid.diagnostics)
+        self.assertIn("unsupported_resolution_unit:99", unsupported.diagnostics)
+
+    def test_holder_clipping_produces_only_an_approximate_lower_bound(self) -> None:
+        metadata = resolution_metadata_observation((300.0, 300.0), 2)
+        calibration = ScanCalibrationResolution.from_observations(
+            metadata,
+            (
+                PhysicalScaleObservation(
+                    "y",
+                    100.0,
+                    None,
+                    PhysicalScaleSource.FRAME_SHORT_AXIS,
+                    PhysicalScaleScope.ROOT_MEASUREMENT,
+                    MeasurementProvenance(
+                        MeasurementIdentity.SHORT_AXIS_BOUNDARIES,
+                        "test_scale",
+                        (MeasurementIdentity.BOUNDARY_PATHS,),
+                    ),
+                ),
+            ),
         )
-        self.assertAlmostEqual(calibration.x_px_per_mm or 0.0, 300.0 / 25.4)
-        self.assertAlmostEqual(calibration.y_px_per_mm or 0.0, 300.0 / 25.4)
 
-    def test_scan_calibration_from_centimeter_resolution(self) -> None:
-        calibration = scan_calibration_from_resolution((120.0, 120.0), 3)
-        self.assertTrue(calibration.trusted)
-        self.assertAlmostEqual(calibration.x_px_per_mm or 0.0, 12.0)
-        self.assertAlmostEqual(calibration.y_px_per_mm or 0.0, 12.0)
-
-    def test_scan_calibration_rejects_missing_or_invalid_units(self) -> None:
-        missing = scan_calibration_from_resolution(None, None)
-        invalid = scan_calibration_from_resolution((300.0, 300.0), 1)
-        unsupported = scan_calibration_from_resolution((300.0, 300.0), 99)
-
-        self.assertFalse(missing.trusted)
-        self.assertIn("missing_tiff_resolution", missing.warnings)
-        self.assertFalse(invalid.trusted)
-        self.assertIn("resolution_unit_has_no_absolute_length", invalid.warnings)
-        self.assertFalse(unsupported.trusted)
-        self.assertIn("unsupported_resolution_unit:99", unsupported.warnings)
-
-    def test_valid_anisotropic_resolution_is_preserved_per_axis(self) -> None:
-        calibration = scan_calibration_from_resolution((300.0, 1200.0), 2)
-        self.assertTrue(calibration.trusted)
-        self.assertAlmostEqual(calibration.x_px_per_mm or 0.0, 300.0 / 25.4)
-        self.assertAlmostEqual(calibration.y_px_per_mm or 0.0, 1200.0 / 25.4)
-
-    def test_rotation_invalidates_axis_aligned_anisotropic_calibration(self) -> None:
-        calibration = ScanCalibration(
-            10.0,
-            20.0,
-            ScanCalibrationSource.TIFF_RESOLUTION,
-            True,
-        )
-        rotated = scan_calibration_after_rotation(calibration, 0.5)
-        self.assertFalse(rotated.trusted)
-        self.assertIsNone(rotated.x_px_per_mm)
-        self.assertIsNone(rotated.y_px_per_mm)
+        self.assertEqual(calibration.y.state, CalibrationState.APPROXIMATE)
+        self.assertIsNone(calibration.y.px_per_mm)
         self.assertIn(
-            "anisotropic_resolution_invalid_after_rotation",
-            rotated.warnings,
+            "tiff_resolution_contradicted_by_physical_scale",
+            calibration.y.diagnostics,
         )
 
-    def test_rotation_preserves_isotropic_calibration(self) -> None:
-        calibration = ScanCalibration(
-            10.0,
-            10.0,
-            ScanCalibrationSource.TIFF_RESOLUTION,
-            True,
+    def test_visible_film_base_can_supply_an_upper_bound(self) -> None:
+        calibration = ScanCalibrationResolution.from_observations(
+            ResolutionMetadataObservation(None, None),
+            (
+                PhysicalScaleObservation(
+                    "y",
+                    None,
+                    120.0,
+                    PhysicalScaleSource.FRAME_SHORT_AXIS,
+                    PhysicalScaleScope.ROOT_MEASUREMENT,
+                    MeasurementProvenance(
+                        MeasurementIdentity.SHORT_AXIS_BOUNDARIES,
+                        "test_scale",
+                        (MeasurementIdentity.BOUNDARY_PATHS,),
+                    ),
+                ),
+            ),
         )
-        self.assertEqual(
-            scan_calibration_after_rotation(calibration, 0.5),
-            calibration,
-        )
+
+        self.assertEqual(calibration.y.state, CalibrationState.APPROXIMATE)
+        self.assertIsNone(calibration.y.minimum_px_per_mm)
+        self.assertEqual(calibration.y.maximum_px_per_mm, 120.0)
 
 if __name__ == "__main__":
     unittest.main()

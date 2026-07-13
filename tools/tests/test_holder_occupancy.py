@@ -9,6 +9,8 @@ from tools.tests.physical_gate_support import (
     candidate_fixture,
     separator_constraints,
     separator_observation,
+    supported_calibration_fixture,
+    unavailable_calibration_fixture,
 )
 from x5crop.detection.evidence.holder_occupancy import holder_occupancy_evidence
 from x5crop.detection.evidence.partial_edge import partial_edge_safety_evidence
@@ -28,7 +30,6 @@ from x5crop.domain import (
 from x5crop.domain import VisibleSequenceSpan, HolderSpan
 from x5crop.domain import Box
 from x5crop.formats import format_spec
-from x5crop.units import ScanCalibration, ScanCalibrationSource
 
 
 class HolderOccupancyTests(unittest.TestCase):
@@ -90,14 +91,21 @@ class HolderOccupancyTests(unittest.TestCase):
             photo_intervals=tuple(
                 PhotoInterval(
                     index,
-                    PixelInterval.exact(frame.left),
-                    PixelInterval.exact(frame.right),
+                    PixelInterval.exact(start),
+                    PixelInterval.exact(end),
                     photo_edge_provenance,
                     photo_edge_provenance,
                     True,
                     True,
                 )
-                for index, frame in enumerate(frames, start=1)
+                for index, (start, end) in enumerate(
+                    (
+                        (30.0, observations[0].start),
+                        (observations[0].end, observations[1].start),
+                        (observations[1].end, 360.0),
+                    ),
+                    start=1,
+                )
             ),
             separator_observations=observations,
             separator_assignments=assignments,
@@ -148,12 +156,7 @@ class HolderOccupancyTests(unittest.TestCase):
             content_support_available=True,
             frame_coverage=coverage,
             frame_dimensions=dimensions,
-            calibration=ScanCalibration(
-                None,
-                None,
-                ScanCalibrationSource.UNAVAILABLE,
-                False,
-            ),
+            calibration=unavailable_calibration_fixture(),
         )
         self.assertTrue(occupancy.underfilled)
         self.assertTrue(occupancy.complete_underfilled_strip)
@@ -172,12 +175,7 @@ class HolderOccupancyTests(unittest.TestCase):
             content_support_available=True,
             frame_coverage=coverage,
             frame_dimensions=dimensions,
-            calibration=ScanCalibration(
-                None,
-                None,
-                ScanCalibrationSource.UNAVAILABLE,
-                False,
-            ),
+            calibration=unavailable_calibration_fixture(),
         )
         partial = partial_edge_safety_evidence(
             geometry,
@@ -202,12 +200,7 @@ class HolderOccupancyTests(unittest.TestCase):
             content_support_available=True,
             frame_coverage=coverage,
             frame_dimensions=dimensions,
-            calibration=ScanCalibration(
-                None,
-                None,
-                ScanCalibrationSource.UNAVAILABLE,
-                False,
-            ),
+            calibration=unavailable_calibration_fixture(),
         )
         self.assertFalse(occupancy.complete_underfilled_strip)
 
@@ -225,12 +218,7 @@ class HolderOccupancyTests(unittest.TestCase):
             content_support_available=True,
             frame_coverage=coverage,
             frame_dimensions=dimensions,
-            calibration=ScanCalibration(
-                10.0,
-                20.0,
-                ScanCalibrationSource.TIFF_RESOLUTION,
-                True,
-            ),
+            calibration=supported_calibration_fixture(10.0, 20.0),
         )
 
         self.assertEqual(occupancy.leading_slack_mm, 1.5)
@@ -251,12 +239,7 @@ class HolderOccupancyTests(unittest.TestCase):
             content_support_available=True,
             frame_coverage=coverage,
             frame_dimensions=dimensions,
-            calibration=ScanCalibration(
-                None,
-                None,
-                ScanCalibrationSource.UNAVAILABLE,
-                False,
-            ),
+            calibration=unavailable_calibration_fixture(),
         )
         self.assertFalse(occupancy.underfilled)
 

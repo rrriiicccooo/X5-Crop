@@ -3,9 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 
 from ...domain import (
-    BoundaryKind,
-    BoundaryObservation,
-    BoundarySide,
+    BoundaryPathObservation,
     Box,
     EvidenceState,
     FrameBoundary,
@@ -30,6 +28,7 @@ from .model import (
     BoundaryAssignmentConsensus,
     PhotoInterval,
     SequenceResiduals,
+    photo_intervals_for_sequence,
 )
 from .separator.assignment import (
     assign_observation_to_boundary,
@@ -321,7 +320,7 @@ def _solve_assignment_states(
     dimensions: FrameDimensionPrior,
     holder_occlusion: HolderOcclusionConstraint,
     focused: dict[int, SeparatorBandObservation],
-    boundary_observations: tuple[BoundaryObservation, ...],
+    boundary_paths: tuple[BoundaryPathObservation, ...],
 ) -> tuple[_SolvedAssignmentState, ...]:
     assignment_counts = sorted(
         {len(state.selections) for state in states},
@@ -342,10 +341,10 @@ def _solve_assignment_states(
                     focused,
                 )
                 frames = _frames(span, boundaries, count)
-                photo_intervals = _photo_intervals(
+                photo_intervals = photo_intervals_for_sequence(
                     boundaries,
                     frames,
-                    boundary_observations,
+                    boundary_paths,
                 )
             except ValueError:
                 continue
@@ -432,82 +431,12 @@ def _frames(
     )
 
 
-def _photo_intervals(
-    boundaries: tuple[FrameBoundary, ...],
-    frames: tuple[Box, ...],
-    boundary_observations: tuple[BoundaryObservation, ...],
-) -> tuple[PhotoInterval, ...]:
-    by_index = {boundary.boundary_index: boundary for boundary in boundaries}
-    sequence_edges = {
-        observation.side: observation
-        for observation in boundary_observations
-        if observation.side in {BoundarySide.LEADING, BoundarySide.TRAILING}
-    }
-    generated_provenance = MeasurementProvenance(
-        root_measurement=MeasurementIdentity.FRAME_GEOMETRY,
-        source="sequence_photo_interval",
-        dependencies=(MeasurementIdentity.SEQUENCE_CUTS,),
-    )
-    intervals: list[PhotoInterval] = []
-    for index, frame in enumerate(frames, start=1):
-        previous = by_index.get(index - 1)
-        following = by_index.get(index)
-        leading = sequence_edges.get("leading") if index == 1 else None
-        trailing = sequence_edges.get("trailing") if index == len(frames) else None
-        if previous is not None and previous.hard_separator:
-            assert previous.assignment is not None
-            start = PixelInterval.exact(previous.assignment.observation.end)
-            start_provenance = previous.assignment.observation.provenance
-            start_observed = True
-        elif previous is not None:
-            start = previous.position
-            start_provenance = previous.provenance
-            start_observed = False
-        elif leading is not None:
-            start = leading.position
-            start_provenance = leading.provenance
-            start_observed = leading.kind != BoundaryKind.CANVAS_CLIP
-        else:
-            start = PixelInterval.exact(float(frame.left))
-            start_provenance = generated_provenance
-            start_observed = False
-        if following is not None and following.hard_separator:
-            assert following.assignment is not None
-            end = PixelInterval.exact(following.assignment.observation.start)
-            end_provenance = following.assignment.observation.provenance
-            end_observed = True
-        elif following is not None:
-            end = following.position
-            end_provenance = following.provenance
-            end_observed = False
-        elif trailing is not None:
-            end = trailing.position
-            end_provenance = trailing.provenance
-            end_observed = trailing.kind != BoundaryKind.CANVAS_CLIP
-        else:
-            end = PixelInterval.exact(float(frame.right))
-            end_provenance = generated_provenance
-            end_observed = False
-        intervals.append(
-            PhotoInterval(
-                index,
-                start,
-                end,
-                start_provenance,
-                end_provenance,
-                start_observed,
-                end_observed,
-            )
-        )
-    return tuple(intervals)
-
-
 def _relations(
     boundaries: tuple[FrameBoundary, ...],
     dimensions: FrameDimensionPrior,
     span: VisibleSequenceSpan,
     holder_occlusion: HolderOcclusionEvidence,
-    boundary_observations: tuple[BoundaryObservation, ...],
+    boundary_paths: tuple[BoundaryPathObservation, ...],
 ) -> tuple[InterFrameSpacing, ...]:
     relations: list[InterFrameSpacing] = []
     for boundary in boundaries:
@@ -550,13 +479,13 @@ def _relations(
     return corroborate_single_missing_overlap(
         visible_length_px=visible_sequence_length_interval(
             span,
-            boundary_observations,
+            boundary_paths,
         ),
         count=len(boundaries) + 1,
         frame_width_px=dimensions.width_px,
         spacings=tuple(relations),
         holder_occlusion=holder_occlusion,
-        boundary_observations=boundary_observations,
+        boundary_paths=boundary_paths,
         dimension_source=dimensions.source,
     )
 
@@ -595,23 +524,27 @@ def solve_frame_sequence(
     span: VisibleSequenceSpan,
     count: int,
     dimensions: FrameDimensionPrior,
-    boundary_observations: tuple[BoundaryObservation, ...],
+    boundary_paths: tuple[BoundaryPathObservation, ...],
     maximum_assignment_evaluations: int,
+    *,
+    edge_texture_limit: float,
 ) -> SequenceSolveResult:
     if count <= 0:
         raise ValueError("sequence count must be positive")
     occlusion_constraint = holder_occlusion_constraint(
-        boundary_observations,
+        boundary_paths,
         dimensions.width_px,
+        edge_texture_limit,
     )
     if count == 1:
         frames = (span.box,)
-        intervals = _photo_intervals((), frames, boundary_observations)
+        intervals = photo_intervals_for_sequence((), frames, boundary_paths)
         holder_occlusion = holder_occlusion_for_sequence(
-            boundary_observations,
+            boundary_paths,
             span,
             (),
             dimensions.width_px,
+            edge_texture_limit,
         )
         return SequenceSolveResult(
             intervals,
@@ -643,7 +576,7 @@ def solve_frame_sequence(
         dimensions,
         occlusion_constraint,
         dict(focused_observations),
-        boundary_observations,
+        boundary_paths,
     )
     representative = max(solved_states, key=lambda item: item.state.rank)
     selected = _selected_assignments(representative.state)
@@ -659,17 +592,18 @@ def solve_frame_sequence(
     frames = representative.frames
     intervals = representative.photo_intervals
     holder_occlusion = holder_occlusion_for_sequence(
-        boundary_observations,
+        boundary_paths,
         span,
         boundaries,
         dimensions.width_px,
+        edge_texture_limit,
     )
     relations = _relations(
         boundaries,
         dimensions,
         span,
         holder_occlusion,
-        boundary_observations,
+        boundary_paths,
     )
     return SequenceSolveResult(
         photo_intervals=intervals,

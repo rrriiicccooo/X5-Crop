@@ -27,6 +27,7 @@ REFLECTED_READ_MODEL_PREFIXES = (
     "x5crop.detection.physical",
     "x5crop.detection.candidate.assessment",
     "x5crop.detection.candidate.selection.model",
+    "x5crop.detection.geometry_resolution",
 )
 
 SOURCE_LAYER_PREFIXES: dict[str, tuple[str, ...]] = {

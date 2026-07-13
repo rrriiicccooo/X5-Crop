@@ -3,18 +3,17 @@ from __future__ import annotations
 from collections.abc import Iterable
 
 import numpy as np
-
-from ...configuration.boundary import BoundaryObservationParameters
 from ...domain import (
     BoundaryKind,
-    BoundaryObservation,
+    BoundaryPathGroup,
+    BoundaryPathObservation,
+    BoundaryPathSource,
+    BoundarySide,
     MeasurementIdentity,
     MeasurementProvenance,
     SequenceHypothesis,
 )
-from ...image.statistics import ImageMeasurementStatistics
 from .boundary import visible_sequence_and_crop_envelope
-from .boundary_detection import boundary_observation_groups
 
 
 def unique_sequence_hypotheses(
@@ -39,14 +38,14 @@ def unique_sequence_hypotheses(
     return result
 
 
-def _proposal_from_observations(
-    name: str,
-    observations: tuple[BoundaryObservation, ...],
+def _proposal_from_paths(
+    source: str,
+    paths: tuple[BoundaryPathObservation, ...],
     gray: np.ndarray,
 ) -> SequenceHypothesis | None:
     try:
         visible, envelope = visible_sequence_and_crop_envelope(
-            observations,
+            paths,
             canvas_width=gray.shape[1],
             canvas_height=gray.shape[0],
         )
@@ -54,47 +53,49 @@ def _proposal_from_observations(
         return None
     roots = tuple(
         dict.fromkeys(
-            observation.provenance.root_measurement
-            for observation in observations
+            path.provenance.root_measurement
+            for path in paths
         )
     )
     return SequenceHypothesis(
         visible_sequence_span=visible,
         crop_envelope=envelope,
         provenance=MeasurementProvenance(
-            root_measurement=MeasurementIdentity.BOUNDARY_OBSERVATIONS,
-            source=name,
+            root_measurement=MeasurementIdentity.BOUNDARY_PATHS,
+            source=source,
             dependencies=roots,
-            boundary_anchors=tuple(observation.side for observation in observations),
+            boundary_anchors=tuple(path.side for path in paths),
         ),
-        boundary_observations=observations,
+        boundary_paths=paths,
     )
 
 
-def _mixed_safe_observations(
-    groups: tuple[tuple[str, tuple[BoundaryObservation, ...]], ...],
-) -> tuple[BoundaryObservation, ...]:
+def _mixed_safe_paths(
+    groups: tuple[BoundaryPathGroup, ...],
+) -> tuple[BoundaryPathObservation, ...]:
     measured = [
-        observations for name, observations in groups if name != "full_canvas"
+        group.paths
+        for group in groups
+        if group.source != BoundaryPathSource.FULL_CANVAS
     ]
     canvas = {
-        observation.side: observation
-        for name, observations in groups
-        if name == "full_canvas"
-        for observation in observations
+        path.side: path
+        for group in groups
+        if group.source == BoundaryPathSource.FULL_CANVAS
+        for path in group.paths
     }
-    result: list[BoundaryObservation] = []
-    for side in ("leading", "trailing", "top", "bottom"):
+    result: list[BoundaryPathObservation] = []
+    for side in BoundarySide:
         candidates = tuple(
-            observation
-            for observations in measured
-            for observation in observations
-            if observation.side == side
+            path
+            for paths in measured
+            for path in paths
+            if path.side == side
         )
         if not candidates:
             result.append(canvas[side])
             continue
-        if side in {"leading", "top"}:
+        if side in {BoundarySide.LEADING, BoundarySide.TOP}:
             result.append(
                 min(candidates, key=lambda item: item.position.minimum)
             )
@@ -107,30 +108,28 @@ def _mixed_safe_observations(
 
 def base_sequence_span_candidates(
     gray: np.ndarray,
-    statistics: ImageMeasurementStatistics,
-    parameters: BoundaryObservationParameters,
+    groups: tuple[BoundaryPathGroup, ...],
 ) -> list[SequenceHypothesis]:
-    groups = boundary_observation_groups(gray, statistics, parameters)
     proposals = [
         proposal
-        for name, observations in groups
+        for group in groups
         if (
-            proposal := _proposal_from_observations(
-                name,
-                observations,
+            proposal := _proposal_from_paths(
+                group.source.value,
+                group.paths,
                 gray,
             )
         )
         is not None
     ]
-    mixed = _proposal_from_observations(
+    mixed = _proposal_from_paths(
         "mixed_safe_overcontain",
-        _mixed_safe_observations(groups),
+        _mixed_safe_paths(groups),
         gray,
     )
     if mixed is not None and any(
         observation.kind != BoundaryKind.CANVAS_CLIP
-        for observation in mixed.boundary_observations
+        for observation in mixed.boundary_paths
     ):
         proposals.append(mixed)
     return unique_sequence_hypotheses(proposals)

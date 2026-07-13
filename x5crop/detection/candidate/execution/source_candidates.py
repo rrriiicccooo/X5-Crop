@@ -6,10 +6,10 @@ from ....cache import MeasurementCache
 from ....domain import SequenceHypothesis
 from ....formats import FormatPhysicalSpec
 from ....configuration.content import ContentConfiguration
-from ....configuration.boundary import BoundaryObservationParameters
+from ....configuration.boundary import BoundaryPathParameters
 from ....configuration.separator import SeparatorConfiguration
 from ....configuration.candidate import SequenceHypothesisParameters
-from ....units import ScanCalibration
+from ....units import ScanCalibrationResolution
 from ...context import DetectionRequest
 from ..plan.count_hypotheses import CountHypothesis
 from ..proposal.sequence import sequence_hypotheses
@@ -28,11 +28,11 @@ def frame_sequence_plan(
     count_hypothesis: CountHypothesis,
     *,
     cache: MeasurementCache,
-    boundary_parameters: BoundaryObservationParameters,
+    boundary_parameters: BoundaryPathParameters,
     content_configuration: ContentConfiguration,
     separator_configuration: SeparatorConfiguration,
     hypothesis_parameters: SequenceHypothesisParameters,
-    scan_calibration: ScanCalibration,
+    scan_calibration: ScanCalibrationResolution,
 ) -> FrameSequencePlan:
     if cache.layout != request.layout:
         raise ValueError("sequence planning requires matching measurement cache")

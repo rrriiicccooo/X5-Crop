@@ -19,6 +19,10 @@ from x5crop.configuration.registry import get_detection_configuration
 from x5crop.detection.evidence.content.frame_support import frame_content_evidence
 from tools.tests.physical_gate_support import candidate_fixture
 from x5crop.runtime.analysis_reuse import analysis_configuration_fingerprint
+from x5crop.configuration.boundary import BoundaryPathParameters
+from x5crop.detection.candidate.proposal.sequence import (
+    cached_boundary_path_groups,
+)
 
 
 def _cache() -> MeasurementCache:
@@ -147,6 +151,18 @@ class DetectionCachePerformanceContractTest(unittest.TestCase):
         ) as measurement:
             first = cached_separator_profile(cache, corridor, parameters)
             second = cached_separator_profile(cache, corridor, parameters)
+        self.assertIs(first, second)
+        measurement.assert_called_once()
+
+    def test_boundary_paths_are_measured_once_across_count_hypotheses(self) -> None:
+        cache = _cache()
+        parameters = BoundaryPathParameters()
+        with patch(
+            "x5crop.detection.candidate.proposal.sequence.boundary_path_groups",
+            return_value=(),
+        ) as measurement:
+            first = cached_boundary_path_groups(cache, parameters)
+            second = cached_boundary_path_groups(cache, parameters)
         self.assertIs(first, second)
         measurement.assert_called_once()
 

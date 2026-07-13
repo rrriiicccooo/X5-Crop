@@ -19,7 +19,7 @@ from ..detection.physical.spacing import (
     SpacingHypothesis,
 )
 from ..output.model import FrameBleedPlan
-from ..units import ScanCalibration
+from ..units import ResolutionMetadataObservation
 
 
 def typed_read_model(value: Any) -> Any:
@@ -152,8 +152,10 @@ def decision_gate_detail(gate: DecisionGateAssessment) -> dict[str, Any]:
     }
 
 
-def scan_calibration_read_model(calibration: ScanCalibration) -> dict[str, Any]:
-    return typed_read_model(calibration)
+def resolution_metadata_read_model(
+    metadata: ResolutionMetadataObservation,
+) -> dict[str, Any]:
+    return typed_read_model(metadata)
 
 
 def frame_bleed_plan_read_model(plan: FrameBleedPlan) -> dict[str, Any]:

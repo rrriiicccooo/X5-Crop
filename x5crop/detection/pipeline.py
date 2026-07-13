@@ -7,6 +7,7 @@ from .candidate.assessment.review_only import assess_review_only_candidate
 from .candidate.execution.count_hypothesis import evaluate_count_hypothesis
 from .candidate.execution.model import CountHypothesisEvaluation
 from .candidate.model import AssessedCandidate
+from .candidate.proposal.sequence import cached_boundary_path_groups
 from .candidate.plan.count_hypotheses import (
     CountHypothesisPlan,
     CountHypothesisSource,
@@ -21,7 +22,38 @@ from .candidate.selection.model import (
 )
 from .context import DetectionContext
 from .modes.dual_lane import choose_dual_lane_detection
-from .modes.review_only import review_only_candidate
+from .modes.review_only import unresolved_dual_lane_candidate
+from .evidence.physical_scale import boundary_scale_observations
+from ..units import ScanCalibrationResolution
+
+
+def _context_with_root_physical_scale(
+    context: DetectionContext,
+) -> DetectionContext:
+    groups = cached_boundary_path_groups(
+        context.measurement_cache,
+        context.configuration.boundary_path,
+    )
+    observations = tuple(
+        dict.fromkeys(
+            (
+                *context.scan_calibration.physical_observations,
+                *boundary_scale_observations(
+                    groups,
+                    context.configuration.physical_spec,
+                    context.request.layout,
+                    edge_texture_limit=(
+                        context.measurement_cache.image_statistics.edge_texture_limit
+                    ),
+                ),
+            )
+        )
+    )
+    calibration = ScanCalibrationResolution.from_observations(
+        context.scan_calibration.metadata,
+        observations,
+    )
+    return replace(context, scan_calibration=calibration)
 
 
 def _candidate_pool_for_count_resolution(
@@ -91,6 +123,7 @@ def _count_resolution(
 
 
 def _choose_standard_detection(context: DetectionContext) -> SelectionResult:
+    context = _context_with_root_physical_scale(context)
     configuration = context.configuration
     physical_spec = configuration.physical_spec
     plan = count_hypothesis_plan(
@@ -128,7 +161,12 @@ def choose_detection(context: DetectionContext) -> SelectionResult:
             _choose_standard_detection,
         )
     elif configuration.detector_kind == "review_only":
-        assessed = assess_review_only_candidate(review_only_candidate(context))
+        assessed = assess_review_only_candidate(
+            unresolved_dual_lane_candidate(
+                context,
+                "dual_lane_partial_not_supported",
+            )
+        )
         selection = select_candidates(
             (assessed,),
             larger_counts_evaluated=True,

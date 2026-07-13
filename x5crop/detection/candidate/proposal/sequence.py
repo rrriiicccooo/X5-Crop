@@ -9,6 +9,8 @@ import numpy as np
 from ....cache import MeasurementCache
 from ....cache.separator import cached_separator_profile
 from ....domain import (
+    BoundaryPathGroup,
+    BoundaryPathObservation,
     BoundarySide,
     Box,
     CropEnvelope,
@@ -20,15 +22,16 @@ from ....domain import (
 )
 from ....formats import FormatPhysicalSpec
 from ....configuration.content import ContentConfiguration
-from ....configuration.boundary import BoundaryObservationParameters
+from ....configuration.boundary import BoundaryPathParameters
 from ....configuration.separator import SeparatorConfiguration
 from ....configuration.candidate import SequenceHypothesisParameters
-from ....units import ScanCalibration
+from ....units import ScanCalibrationResolution
 from ...guidance.content_crop_envelope import expand_crop_envelopes_for_content
 from ...physical.sequence import (
     base_sequence_span_candidates,
     unique_sequence_hypotheses,
 )
+from ...physical.boundary_detection import boundary_path_groups
 from ...physical.photo_size import frame_dimension_priors
 from ...physical.separator.observations import measure_separator_bands
 
@@ -37,6 +40,21 @@ from ...physical.separator.observations import measure_separator_bands
 class SequenceHypothesisSet:
     hypotheses: tuple[SequenceHypothesis, ...]
     budget_exhausted: bool
+
+
+def cached_boundary_path_groups(
+    cache: MeasurementCache,
+    parameters: BoundaryPathParameters,
+) -> tuple[BoundaryPathGroup, ...]:
+    groups = cache.boundary_path_groups.get(parameters)
+    if groups is None:
+        groups = boundary_path_groups(
+            cache.gray_work,
+            cache.image_statistics,
+            parameters,
+        )
+        cache.boundary_path_groups[parameters] = groups
+    return groups
 
 
 def _measurement_corridor(
@@ -49,16 +67,21 @@ def _measurement_corridor(
     return corridor if corridor.valid() else Box(0, 0, width, height)
 
 
-def _compatible_boundary_observations(
+def _compatible_boundary_paths(
     source: SequenceHypothesis,
     box: Box,
-) -> tuple:
+) -> tuple[BoundaryPathObservation, ...]:
     compatible = []
-    for observation in source.boundary_observations:
+    for observation in source.boundary_paths:
         if observation.side in {BoundarySide.TOP, BoundarySide.BOTTOM}:
             compatible.append(observation)
             continue
-        coordinate = float(box.left if observation.side == "leading" else box.right)
+        if observation.side == BoundarySide.LEADING:
+            coordinate = float(box.left)
+        elif observation.side == BoundarySide.TRAILING:
+            coordinate = float(box.right)
+        else:
+            raise ValueError("sequence boundary path has an unknown side")
         if observation.position.minimum <= coordinate <= observation.position.maximum:
             compatible.append(observation)
     return tuple(compatible)
@@ -69,7 +92,7 @@ def _separator_dimension_hypotheses(
     fmt: FormatPhysicalSpec,
     count: int,
     cache: MeasurementCache,
-    calibration: ScanCalibration,
+    calibration: ScanCalibrationResolution,
     layout: str,
     separator_configuration: SeparatorConfiguration,
     hypothesis_parameters: SequenceHypothesisParameters,
@@ -165,9 +188,9 @@ def _separator_dimension_hypotheses(
                                     MeasurementIdentity.SEPARATOR_PROFILE,
                                     dimensions.provenance.root_measurement,
                                 ),
-                                boundary_anchors=("separator_sequence",),
+                                boundary_anchors=("film_structure",),
                             ),
-                            boundary_observations=_compatible_boundary_observations(
+                            boundary_paths=_compatible_boundary_paths(
                                 source,
                                 box,
                             ),
@@ -192,10 +215,10 @@ def sequence_hypotheses(
     fmt: FormatPhysicalSpec,
     count: int,
     cache: MeasurementCache,
-    calibration: ScanCalibration,
+    calibration: ScanCalibrationResolution,
     layout: str,
     *,
-    boundary_parameters: BoundaryObservationParameters,
+    boundary_parameters: BoundaryPathParameters,
     content_configuration: ContentConfiguration,
     separator_configuration: SeparatorConfiguration,
     hypothesis_parameters: SequenceHypothesisParameters,
@@ -204,8 +227,7 @@ def sequence_hypotheses(
         raise ValueError("sequence proposal requires the context measurement workspace")
     base = base_sequence_span_candidates(
         gray_work,
-        cache.image_statistics,
-        boundary_parameters,
+        cached_boundary_path_groups(cache, boundary_parameters),
     )
     separator_dimension = _separator_dimension_hypotheses(
         base,

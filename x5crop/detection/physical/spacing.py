@@ -5,7 +5,7 @@ from enum import Enum
 
 from x5crop.domain import (
     BoundaryKind,
-    BoundaryObservation,
+    BoundaryPathObservation,
     BoundarySide,
     EvidenceState,
     FrameBoundaryReference,
@@ -230,14 +230,14 @@ def corroborate_single_missing_overlap(
     frame_width_px: PixelInterval,
     spacings: tuple[InterFrameSpacing, ...],
     holder_occlusion: HolderOcclusionEvidence,
-    boundary_observations: tuple[BoundaryObservation, ...],
+    boundary_paths: tuple[BoundaryPathObservation, ...],
     dimension_source: FrameDimensionPriorSource,
 ) -> tuple[InterFrameSpacing, ...]:
     if dimension_source != FrameDimensionPriorSource.SCAN_CALIBRATION:
         return spacings
     edge_observations = {
         observation.side: observation
-        for observation in boundary_observations
+        for observation in boundary_paths
         if observation.side in {BoundarySide.LEADING, BoundarySide.TRAILING}
     }
     if any(

@@ -14,15 +14,15 @@ from ...domain import (
 from ...geometry.boxes import translate_box
 from ...geometry.layout import HORIZONTAL, is_horizontal_layout
 from ...image.statistics import image_measurement_statistics
-from ...units import ScanCalibration
-from ..candidate.assessment.dual_lane import assess_dual_lane_candidate
+from ...units import ScanCalibrationResolution, transposed_scan_calibration
+from ..candidate.composition.dual_lane import compose_dual_lane_candidate
 from ..candidate.model import BuiltCandidate
 from ..candidate.plan.count_hypotheses import CountHypothesis, CountHypothesisSource
-from ..candidate.proposal.hard_safety import hard_safety_candidate
-from ..candidate.assessment.candidate import assess_candidate
+from ..candidate.assessment.review_only import assess_review_only_candidate
 from ..candidate.selection.choose import select_candidates
 from ..candidate.selection.model import SelectionResult
 from ..context import DetectionContext
+from .review_only import unresolved_dual_lane_candidate
 from ..physical.model import (
     combined_assignment_consensus,
     combined_sequence_residuals,
@@ -39,17 +39,11 @@ from ..physical.lane_divider import (
 StandardDetector = Callable[[DetectionContext], SelectionResult]
 
 
-def _lane_calibration(context: DetectionContext) -> ScanCalibration:
+def _lane_calibration(context: DetectionContext) -> ScanCalibrationResolution:
     calibration = context.scan_calibration
     if is_horizontal_layout(context.request.layout):
         return calibration
-    return ScanCalibration(
-        x_px_per_mm=calibration.y_px_per_mm,
-        y_px_per_mm=calibration.x_px_per_mm,
-        source=calibration.source,
-        trusted=calibration.trusted,
-        warnings=calibration.warnings,
-    )
+    return transposed_scan_calibration(calibration)
 
 
 def _lane_context(
@@ -199,23 +193,18 @@ def choose_dual_lane_detection(
             divider_evidence.budget_exhausted,
         )
         parent_candidates.append(
-            assess_dual_lane_candidate(
+            compose_dual_lane_candidate(
                 built,
-                tuple(selection.selected for selection in lane_selections),
-                lane_geometry_resolved=tuple(
-                    selection.geometry_resolution.supported
-                    for selection in lane_selections
-                ),
+                lane_selections,
             )
         )
     if not parent_candidates:
         parent_candidates.append(
-            assess_candidate(
-                hard_safety_candidate(
+            assess_review_only_candidate(
+                unresolved_dual_lane_candidate(
                     context,
-                    physical_spec.default_count,
-                ),
-                context,
+                    "lane_divider_unavailable",
+                )
             )
         )
     return select_candidates(

@@ -24,22 +24,19 @@ from x5crop.detection.decision.vocabulary import (
 )
 from x5crop.domain import EvidenceState
 from x5crop.detection.decision.model import DecisionGateAssessment
-from x5crop.detection.gate_checks import GateCheck, GateStage
 
 
 class DecisionOwnershipGateContractTest(unittest.TestCase):
     def test_decision_gate_rejects_unowned_final_reason(self) -> None:
+        gate = decide_candidate()
+        forged = tuple(
+            replace(check, final_review_reason="unowned_final_reason")
+            if check.code == "count_resolution"
+            else check
+            for check in gate.checks
+        )
         with self.assertRaises(ValueError):
-            DecisionGateAssessment(
-                (
-                    GateCheck(
-                        "synthetic",
-                        GateStage.DECISION,
-                        EvidenceState.CONTRADICTED,
-                        "unowned_final_reason",
-                    ),
-                )
-            )
+            DecisionGateAssessment(forged)
 
     def test_decision_gate_rejects_candidate_stage_checks(self) -> None:
         with self.assertRaises(ValueError):

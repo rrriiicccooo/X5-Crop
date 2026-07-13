@@ -5,7 +5,7 @@ import math
 
 from ...formats import FormatPhysicalSpec
 from ...geometry.layout import is_horizontal_layout
-from ...units import ScanCalibration
+from ...units import ScanCalibrationResolution
 from ..physical.photo_size import FrameDimensionEvidence
 from ...domain import (
     Box,
@@ -159,7 +159,7 @@ def holder_occupancy_evidence(
     content_support_available: bool,
     frame_coverage: FrameCoverageEvidence,
     frame_dimensions: FrameDimensionEvidence,
-    calibration: ScanCalibration,
+    calibration: ScanCalibrationResolution,
 ) -> HolderOccupancyEvidence:
     completeness = strip_completeness_evidence(
         count=count,
@@ -182,7 +182,5 @@ def holder_occupancy_evidence(
         source_long_axis=source_long_axis,
         long_axis_px_per_mm=(
             calibration.px_per_mm(source_long_axis)
-            if calibration.trusted
-            else None
         ),
     )

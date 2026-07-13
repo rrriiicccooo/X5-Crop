@@ -14,6 +14,7 @@ from tools.tests.physical_gate_support import (
     final_detection_fixture,
     selection_fixture,
     transform_geometry_fixture,
+    unavailable_calibration_fixture,
 )
 from x5crop.detection.final.model import FinalDetection
 from x5crop.detection.evidence.transform_geometry import (
@@ -30,7 +31,6 @@ from x5crop.report.read_models import typed_read_model
 from x5crop.report.restoration import final_detection_from_record
 from x5crop.report.validation import current_report_record_errors
 from tools.regression.compare import DEFAULT_FIELDS
-from x5crop.units import ScanCalibration, ScanCalibrationSource
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -38,7 +38,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 def _profile() -> ImageProfile:
     return ImageProfile(
-        shape=(120, 240),
+        shape=(100, 200),
         dtype="uint8",
         axes="YX",
         photometric="MINISBLACK",
@@ -58,6 +58,7 @@ def _analysis_reuse_signature(
     format_id: str = "135",
     strip_mode: str = "full",
     source_name: str = "input.tif",
+    shape: tuple[int, int] = (100, 200),
 ) -> dict:
     return {
         "script": "X5_Crop.py",
@@ -68,7 +69,7 @@ def _analysis_reuse_signature(
             "mtime_ns": 1,
             "content_sha256": "0" * 64,
             "page": 0,
-            "shape": [120, 240],
+            "shape": list(shape),
             "dtype": "uint8",
             "axes": "YX",
             "photometric": "MINISBLACK",
@@ -102,12 +103,7 @@ def _record() -> dict:
         configuration=detection_configuration_read_model(
             get_detection_configuration("135", "full")
         ),
-        scan_calibration=ScanCalibration(
-            None,
-            None,
-            ScanCalibrationSource.UNAVAILABLE,
-            False,
-        ),
+        resolution_metadata=unavailable_calibration_fixture().metadata,
         transform_geometry=transform_geometry_fixture(),
         analysis_reuse_signature=_analysis_reuse_signature(),
     )
@@ -122,6 +118,31 @@ class OutputReadModelContractTest(unittest.TestCase):
         record = _record()
         self.assertIn("transform_geometry", record["input"])
         self.assertNotIn("diagnostics", record)
+
+    def test_input_records_resolution_metadata_not_candidate_calibration(self) -> None:
+        input_detail = _record()["input"]
+        self.assertIn("resolution_metadata", input_detail)
+        self.assertNotIn("scan_calibration", input_detail)
+        candidate = _record()["selection"]["candidates"][0]
+        self.assertIn("scan_calibration", candidate["evidence"])
+
+    def test_configuration_report_includes_boundary_path_measurements(self) -> None:
+        configuration = get_detection_configuration("135", "full")
+        detail = detection_configuration_read_model(configuration)
+
+        self.assertEqual(
+            detail["measurement"]["boundary_path"],
+            typed_read_model(configuration.boundary_path),
+        )
+
+    def test_current_schema_rejects_missing_or_changed_boundary_path_parameters(self) -> None:
+        missing = _record()
+        missing["configuration"]["measurement"].pop("boundary_path", None)
+        self.assertTrue(current_report_record_errors(missing))
+
+        changed = _record()
+        changed["configuration"]["measurement"]["boundary_path"] = {}
+        self.assertTrue(current_report_record_errors(changed))
 
     def test_output_has_one_canonical_finalization_plan(self) -> None:
         output = _record()["output"]
@@ -248,12 +269,7 @@ class OutputReadModelContractTest(unittest.TestCase):
             metadata=TiffMetadata(None, None, None, ()),
         )
         context = DetectionContext(
-            scan_calibration=ScanCalibration(
-                None,
-                None,
-                ScanCalibrationSource.UNAVAILABLE,
-                False,
-            ),
+            scan_calibration=unavailable_calibration_fixture(),
             request=DetectionRequest("horizontal", "partial", None),
             configuration=configuration,
             lane_configuration=None,
@@ -306,12 +322,13 @@ class OutputReadModelContractTest(unittest.TestCase):
             review_copy=None,
             warnings=[],
             configuration=detection_configuration_read_model(configuration),
-            scan_calibration=context.scan_calibration,
+            resolution_metadata=context.scan_calibration.metadata,
             transform_geometry=transform_geometry_fixture(),
             analysis_reuse_signature=_analysis_reuse_signature(
                 "135-dual",
                 "partial",
                 "synthetic.tif",
+                (120, 240),
             ),
         )
         self.assertEqual(current_report_record_errors(record), [])
@@ -529,12 +546,7 @@ class OutputReadModelContractTest(unittest.TestCase):
             configuration=detection_configuration_read_model(
                 get_detection_configuration("135", "full")
             ),
-            scan_calibration=ScanCalibration(
-                None,
-                None,
-                ScanCalibrationSource.UNAVAILABLE,
-                False,
-            ),
+            resolution_metadata=unavailable_calibration_fixture().metadata,
             transform_geometry=transform,
             analysis_reuse_signature=_analysis_reuse_signature(),
         )
@@ -652,7 +664,7 @@ class OutputReadModelContractTest(unittest.TestCase):
         self.assertEqual(record["schema_id"], "detection_report")
         self.assertEqual(
             record["schema_revision"],
-            "physical_sequence_resolution",
+            "gray_material_sequence_resolution",
         )
         self.assertNotIn("v4", record["schema_revision"])
 

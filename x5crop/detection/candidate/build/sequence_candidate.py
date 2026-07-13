@@ -76,8 +76,9 @@ def build_sequence_candidate(
     )
     observations = observation_set.observations
     occlusion_constraint = holder_occlusion_constraint(
-        sequence_hypothesis.boundary_observations,
+        sequence_hypothesis.boundary_paths,
         dimensions.width_px,
+        cache.image_statistics.edge_texture_limit,
     )
     focused_observations = tuple(
         (boundary_index, observation)
@@ -106,8 +107,9 @@ def build_sequence_candidate(
         visible_sequence_span,
         count,
         dimensions,
-        sequence_hypothesis.boundary_observations,
+        sequence_hypothesis.boundary_paths,
         solver_parameters.maximum_assignment_evaluations,
+        edge_texture_limit=cache.image_statistics.edge_texture_limit,
     )
     return BuiltCandidate(
         geometry=SequenceSolution(
@@ -135,7 +137,7 @@ def build_sequence_candidate(
             ),
             automatic_processing_supported=True,
             sequence_provenance=sequence_hypothesis.provenance,
-            boundary_observations=sequence_hypothesis.boundary_observations,
+            boundary_paths=sequence_hypothesis.boundary_paths,
         ),
         count_hypothesis=count_hypothesis,
         build_diagnostics=(),

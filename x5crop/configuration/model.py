@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 from ..formats import FormatPhysicalSpec
 from ..strip_modes import FULL, PARTIAL
-from .boundary import BoundaryObservationParameters
+from .boundary import BoundaryPathParameters
 from .candidate import CandidatePlanParameters
 from .content import ContentConfiguration
 from .diagnostics import DiagnosticsConfiguration
@@ -17,7 +17,7 @@ class DetectionConfiguration:
     physical_spec: FormatPhysicalSpec
     strip_mode: str
     preprocess: PreprocessConfiguration
-    boundary: BoundaryObservationParameters
+    boundary_path: BoundaryPathParameters
     separator: SeparatorConfiguration
     content: ContentConfiguration
     candidate_plan: CandidatePlanParameters

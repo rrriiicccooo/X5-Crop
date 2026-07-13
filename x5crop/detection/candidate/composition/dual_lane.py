@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 from ...physical.model import DualLaneSolution
+from ..assessment.candidate_gate import (
+    CandidateGateInput,
+    candidate_gate_assessment,
+)
 from ..model import (
     AssessedCandidate,
     BuiltCandidate,
@@ -10,27 +14,23 @@ from ..model import (
     _combined_evidence_state,
     boundary_proof_paths_for_dual_lane,
 )
-from .candidate_gate import (
-    CandidateGateInput,
-    candidate_gate_assessment,
-)
+from ..selection.model import SelectionResult
 
 
-def assess_dual_lane_candidate(
+def compose_dual_lane_candidate(
     candidate: BuiltCandidate,
-    lanes: tuple[AssessedCandidate, ...],
-    *,
-    lane_geometry_resolved: tuple[bool, ...],
+    lane_selections: tuple[SelectionResult, ...],
 ) -> AssessedCandidate:
     geometry = candidate.geometry
     if not isinstance(geometry, DualLaneSolution):
-        raise ValueError("dual-lane assessment requires dual-lane geometry")
-    if len(lanes) <= 1 or len(lane_geometry_resolved) != len(lanes):
-        raise ValueError("dual-lane assessment requires one resolution per lane")
+        raise ValueError("dual-lane composition requires dual-lane geometry")
+    if len(lane_selections) <= 1:
+        raise ValueError("dual-lane composition requires multiple lane selections")
+    lanes = tuple(selection.selected for selection in lane_selections)
     if len(geometry.lane_solutions) != len(lanes):
-        raise ValueError("dual-lane assessment must match component geometry")
+        raise ValueError("dual-lane composition must match component geometry")
     if tuple(lane.geometry for lane in lanes) != geometry.lane_solutions:
-        raise ValueError("dual-lane assessment requires exact component geometry")
+        raise ValueError("dual-lane composition requires exact component geometry")
     lane_evidence = tuple(lane.assessment.evidence for lane in lanes)
     lane_gates = tuple(lane.assessment.gate for lane in lanes)
     if not all(isinstance(evidence, CandidateEvidence) for evidence in lane_evidence):
@@ -44,7 +44,7 @@ def assess_dual_lane_candidate(
     dual_lane_evidence = DualLaneEvidence(
         physical_evidence,
         physical_gates,
-        lane_geometry_resolved,
+        tuple(selection.geometry_resolution for selection in lane_selections),
     )
     diagnostics = tuple(
         dict.fromkeys(
@@ -63,10 +63,7 @@ def assess_dual_lane_candidate(
                 tuple(item.frame_dimensions.state for item in physical_evidence)
             ),
             sequence_conservation=_combined_evidence_state(
-                tuple(
-                    item.sequence_conservation.state
-                    for item in physical_evidence
-                )
+                tuple(item.sequence_conservation.state for item in physical_evidence)
             ),
             evidence_independence=_combined_evidence_state(
                 tuple(item.independence.state for item in physical_evidence)

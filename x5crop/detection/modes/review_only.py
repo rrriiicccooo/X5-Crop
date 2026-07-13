@@ -17,17 +17,19 @@ from ..physical.model import (
     ReviewOnlyGeometry,
     SequenceResiduals,
 )
-from ..physical.boundary import canvas_boundary_observations
+from ..physical.boundary import canvas_boundary_paths
 from ..physical.photo_size import frame_dimension_priors
 
 
-def review_only_candidate(context: DetectionContext) -> BuiltCandidate:
+def unresolved_dual_lane_candidate(
+    context: DetectionContext,
+    diagnostic: str,
+) -> BuiltCandidate:
     physical_spec = context.configuration.physical_spec
-    if (
-        physical_spec.physical_layout != "dual_lane"
-        or context.request.strip_mode != "partial"
-    ):
-        raise ValueError("review-only mode requires dual-lane partial input")
+    if physical_spec.physical_layout != "dual_lane":
+        raise ValueError("unresolved dual-lane geometry requires dual-lane input")
+    if not diagnostic:
+        raise ValueError("unresolved dual-lane geometry requires a diagnostic")
     height, width = context.measurement_cache.gray_work.shape
     span = Box(0, 0, width, height)
     count = physical_spec.default_count
@@ -59,7 +61,7 @@ def review_only_candidate(context: DetectionContext) -> BuiltCandidate:
                 source="review_only_canvas",
                 dependencies=(MeasurementIdentity.CANVAS,),
             ),
-            boundary_observations=canvas_boundary_observations(width, height),
+            boundary_paths=canvas_boundary_paths(width, height),
         ),
         count_hypothesis=CountHypothesis(
             count=count,
@@ -67,7 +69,7 @@ def review_only_candidate(context: DetectionContext) -> BuiltCandidate:
             source=CountHypothesisSource.MODE_CONTRACT,
         ),
         build_diagnostics=(
-            "dual_lane_partial_not_supported",
+            diagnostic,
             "automatic_processing_not_supported",
         ),
     )

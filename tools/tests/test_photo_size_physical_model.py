@@ -5,26 +5,36 @@ from dataclasses import fields
 import unittest
 
 from tools.tests.physical_gate_support import (
+    boundary_path_fixture,
     candidate_fixture,
     separator_constraints,
     separator_observation,
+    supported_calibration_fixture,
+    unavailable_calibration_fixture,
 )
 from x5crop.detection.physical.boundary import (
+    canvas_boundary_paths,
     holder_occlusion_evidence,
 )
 from x5crop.detection.physical.photo_size import (
     frame_dimension_evidence,
     frame_dimension_priors,
 )
-from x5crop.detection.physical.model import PhotoInterval
-from x5crop.detection.physical.spacing import observed_spacing_evidence
+from x5crop.detection.physical.model import (
+    PhotoInterval,
+    photo_intervals_for_sequence,
+)
+from x5crop.detection.physical.spacing import (
+    observed_spacing_evidence,
+    spacing_hypothesis,
+)
 from x5crop.detection.physical.separator.assignment import (
     assign_observation_to_boundary,
+    dimension_constrained_boundary,
     frame_boundary_from_assignment,
 )
 from x5crop.domain import (
     BoundaryKind,
-    BoundaryObservation,
     BoundarySide,
     EvidenceState,
     FrameBoundaryReference,
@@ -34,7 +44,6 @@ from x5crop.domain import (
     PixelInterval,
 )
 from x5crop.formats import format_spec
-from x5crop.units import ScanCalibration, ScanCalibrationSource
 
 
 def _geometry(second_start: float = 205.0):
@@ -78,6 +87,7 @@ def _geometry(second_start: float = 205.0):
     )
     return replace(
         base,
+        format_id="120-66",
         count=3,
         visible_sequence_span=replace(base.visible_sequence_span, box=replace(base.visible_sequence_span.box, right=315)),
         crop_envelope=replace(base.crop_envelope, box=replace(base.crop_envelope.box, right=315)),
@@ -126,6 +136,12 @@ def _geometry(second_start: float = 205.0):
             replace(base.frames[0], left=first_cut, right=second_cut),
             replace(base.frames[0], left=second_cut, right=315),
         ),
+        frame_dimension_prior=replace(
+            base.frame_dimension_prior,
+            width_px=PixelInterval.exact(100.0),
+            height_px=PixelInterval.exact(100.0),
+            frame_size_mm=(56.0, 56.0),
+        ),
     )
 
 
@@ -135,12 +151,7 @@ class PhotoSizePhysicalModelTest(unittest.TestCase):
         priors = frame_dimension_priors(
             base.visible_sequence_span,
             format_spec("120-66"),
-            ScanCalibration(
-                10.0,
-                10.0,
-                ScanCalibrationSource.TIFF_RESOLUTION,
-                True,
-            ),
+            supported_calibration_fixture(10.0, 10.0),
             layout="horizontal",
         )
         self.assertEqual(
@@ -158,7 +169,7 @@ class PhotoSizePhysicalModelTest(unittest.TestCase):
         uncalibrated = frame_dimension_priors(
             base.visible_sequence_span,
             format_spec("120-66"),
-            ScanCalibration(None, None, ScanCalibrationSource.UNAVAILABLE, False),
+            unavailable_calibration_fixture(),
             layout="horizontal",
         )
         self.assertEqual(len(uncalibrated), 1)
@@ -175,17 +186,30 @@ class PhotoSizePhysicalModelTest(unittest.TestCase):
 
     def test_physical_aspect_prior_does_not_become_dimension_evidence(self) -> None:
         base = candidate_fixture().geometry
+        provenance = base.frame_dimension_prior.provenance
+        boundary = dimension_constrained_boundary(
+            1,
+            PixelInterval.exact(100.0),
+            provenance,
+        )
+        boundary_paths = canvas_boundary_paths(200, 100)
         geometry = replace(
             base,
-            photo_intervals=tuple(
-                replace(
-                    interval,
-                    start_provenance=base.frame_dimension_prior.provenance,
-                    end_provenance=base.frame_dimension_prior.provenance,
-                    start_independently_observed=False,
-                    end_independently_observed=False,
-                )
-                for interval in base.photo_intervals
+            separator_observations=(),
+            separator_assignments=(),
+            frame_boundaries=(boundary,),
+            inter_frame_spacings=(
+                spacing_hypothesis(
+                    FrameBoundaryReference(None, 1),
+                    PixelInterval.zero(),
+                    provenance,
+                ),
+            ),
+            boundary_paths=boundary_paths,
+            photo_intervals=photo_intervals_for_sequence(
+                (boundary,),
+                base.frames,
+                boundary_paths,
             ),
             frame_dimension_prior=replace(
                 base.frame_dimension_prior,
@@ -202,7 +226,7 @@ class PhotoSizePhysicalModelTest(unittest.TestCase):
         )
         result = frame_dimension_evidence(
             geometry,
-            ScanCalibration(None, None, ScanCalibrationSource.UNAVAILABLE, False),
+            unavailable_calibration_fixture(),
         )
         self.assertEqual(result.state, EvidenceState.UNAVAILABLE)
         self.assertEqual(
@@ -236,13 +260,13 @@ class PhotoSizePhysicalModelTest(unittest.TestCase):
                 ),
             ),
         )
-        boundary = BoundaryObservation(
+        boundary = boundary_path_fixture(
             BoundarySide.LEADING,
             PixelInterval.exact(0.0),
-            BoundaryKind.WHITE_HOLDER_TRANSITION,
+            BoundaryKind.HOLDER_MATERIAL_TRANSITION,
             MeasurementProvenance(
-                MeasurementIdentity.HOLDER_BOUNDARY_PROFILE,
-                "white_holder_transition",
+                MeasurementIdentity.HOLDER_MATERIAL_PROFILE,
+                "holder_material_transition",
                 (MeasurementIdentity.GRAY_WORK,),
             ),
         )
@@ -252,11 +276,12 @@ class PhotoSizePhysicalModelTest(unittest.TestCase):
             leading_visible_frame_width=PixelInterval.exact(94.0),
             trailing_visible_frame_width=None,
             frame_width_px=PixelInterval.exact(100.0),
+            edge_texture_limit=1.0,
         )
         photo_edges = MeasurementProvenance(
             MeasurementIdentity.PHOTO_EDGES,
             "test_fixture",
-            (MeasurementIdentity.HOLDER_BOUNDARY_PROFILE,),
+            (MeasurementIdentity.HOLDER_MATERIAL_PROFILE,),
         )
         geometry = replace(
             geometry,
@@ -273,7 +298,7 @@ class PhotoSizePhysicalModelTest(unittest.TestCase):
         )
         result = frame_dimension_evidence(
             geometry,
-            ScanCalibration(None, None, ScanCalibrationSource.UNAVAILABLE, False),
+            unavailable_calibration_fixture(),
         )
         self.assertEqual(occlusion.leading.state, EvidenceState.SUPPORTED)
         self.assertEqual(result.photo_widths_px, ())
@@ -283,7 +308,7 @@ class PhotoSizePhysicalModelTest(unittest.TestCase):
         geometry = _geometry()
         result = frame_dimension_evidence(
             geometry,
-            ScanCalibration(None, None, ScanCalibrationSource.UNAVAILABLE, False),
+            unavailable_calibration_fixture(),
         )
         self.assertEqual(result.photo_widths_px, (100.0, 100.0, 100.0))
         self.assertGreater(result.separator_width_cv or 0.0, 0.0)
@@ -294,16 +319,16 @@ class PhotoSizePhysicalModelTest(unittest.TestCase):
     ) -> None:
         geometry = _geometry()
         provenance = geometry.photo_intervals[0].start_provenance
-        leading = BoundaryObservation(
+        leading = boundary_path_fixture(
             BoundarySide.LEADING,
             PixelInterval.exact(0.0),
-            BoundaryKind.WHITE_HOLDER_TRANSITION,
+            BoundaryKind.HOLDER_MATERIAL_TRANSITION,
             provenance,
         )
-        trailing = BoundaryObservation(
+        trailing = boundary_path_fixture(
             BoundarySide.TRAILING,
             PixelInterval.exact(315.0),
-            BoundaryKind.WHITE_HOLDER_TRANSITION,
+            BoundaryKind.HOLDER_MATERIAL_TRANSITION,
             provenance,
         )
         occlusion = holder_occlusion_evidence(
@@ -312,6 +337,7 @@ class PhotoSizePhysicalModelTest(unittest.TestCase):
             leading_visible_frame_width=PixelInterval.exact(90.0),
             trailing_visible_frame_width=PixelInterval.exact(90.0),
             frame_width_px=PixelInterval.exact(100.0),
+            edge_texture_limit=1.0,
         )
         geometry = replace(
             geometry,
@@ -331,7 +357,7 @@ class PhotoSizePhysicalModelTest(unittest.TestCase):
 
         result = frame_dimension_evidence(
             geometry,
-            ScanCalibration(None, None, ScanCalibrationSource.UNAVAILABLE, False),
+            unavailable_calibration_fixture(),
         )
 
         self.assertEqual(result.photo_widths_px, (100.0,))
@@ -341,7 +367,7 @@ class PhotoSizePhysicalModelTest(unittest.TestCase):
         geometry = _geometry(second_start=225.0)
         result = frame_dimension_evidence(
             geometry,
-            ScanCalibration(None, None, ScanCalibrationSource.UNAVAILABLE, False),
+            unavailable_calibration_fixture(),
         )
         self.assertEqual(result.state, EvidenceState.CONTRADICTED)
         self.assertEqual(result.reason, "physical_frame_dimensions_contradicted")

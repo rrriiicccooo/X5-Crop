@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from ...cache import MeasurementCache
-from ...domain import Box, EvidenceState
+from ...domain import BoundarySide, Box, EvidenceState
 from ...configuration.content import ContentEvidenceParameters
 from ..guidance.content_crop_envelope import measured_content_span
 
@@ -18,7 +18,7 @@ class SequenceContentAlignmentEvidence:
     content_span: Box | None
     state: EvidenceState = field(init=False)
     reason: str = field(init=False)
-    content_outside_sides: tuple[str, ...] = field(init=False)
+    content_outside_sides: tuple[BoundarySide, ...] = field(init=False)
     overcontains_long_axis: bool = field(init=False)
     overcontains_short_axis: bool = field(init=False)
     leading_slack_px: int = field(init=False)
@@ -32,16 +32,16 @@ class SequenceContentAlignmentEvidence:
         if not sequence.valid() or content is None or not content.valid():
             state = EvidenceState.UNAVAILABLE
             reason = "content_span_unavailable"
-            outside: tuple[str, ...] = ()
+            outside: tuple[BoundarySide, ...] = ()
             leading_slack = trailing_slack = top_slack = bottom_slack = 0
         else:
             outside = tuple(
                 side
                 for side, present in (
-                    ("leading", content.left < sequence.left),
-                    ("trailing", content.right > sequence.right),
-                    ("top", content.top < sequence.top),
-                    ("bottom", content.bottom > sequence.bottom),
+                    (BoundarySide.LEADING, content.left < sequence.left),
+                    (BoundarySide.TRAILING, content.right > sequence.right),
+                    (BoundarySide.TOP, content.top < sequence.top),
+                    (BoundarySide.BOTTOM, content.bottom > sequence.bottom),
                 )
                 if present
             )

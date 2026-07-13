@@ -2,11 +2,17 @@ from __future__ import annotations
 
 from dataclasses import fields, replace
 from enum import Enum
+import ast
 import math
+from pathlib import Path
 from typing import get_type_hints
 import unittest
 
-from tools.tests.physical_gate_support import candidate_fixture, selection_fixture
+from tools.tests.physical_gate_support import (
+    candidate_fixture,
+    selection_fixture,
+    supported_calibration_fixture,
+)
 from x5crop.detection.candidate.execution.model import CountHypothesisEvaluation
 from x5crop.detection.candidate.model import AssessedCandidate, BuiltCandidate
 from x5crop.detection.candidate.plan.count_hypotheses import (
@@ -16,9 +22,9 @@ from x5crop.detection.candidate.plan.count_hypotheses import (
 from x5crop.detection.candidate.selection.model import (
     CountResolution,
     GeometryCluster,
-    GeometryResolution,
     SelectionResult,
 )
+from x5crop.detection.geometry_resolution import GeometryResolution
 from x5crop.detection.candidate.model import ReviewOnlyEvidence
 from x5crop.detection.physical.model import (
     BoundaryAssignmentConsensus,
@@ -42,7 +48,7 @@ from x5crop.detection.evidence.transform_geometry import (
 )
 from x5crop.domain import (
     BoundaryPositionConstraint,
-    BoundaryObservation,
+    BoundaryPathObservation,
     Box,
     CropEnvelope,
     EvidenceState,
@@ -67,7 +73,6 @@ from x5crop.output.model import (
     FrameSideBleed,
     OutputGeometry,
 )
-from x5crop.units import ScanCalibration, ScanCalibrationSource
 
 
 def _provenance() -> MeasurementProvenance:
@@ -79,8 +84,136 @@ def _provenance() -> MeasurementProvenance:
 
 
 class PhysicalModelInvariantTest(unittest.TestCase):
+    def test_sequence_solution_rejects_photo_intervals_detached_from_geometry(
+        self,
+    ) -> None:
+        geometry = candidate_fixture().geometry
+        first = geometry.photo_intervals[0]
+        with self.assertRaises(ValueError):
+            replace(
+                geometry,
+                photo_intervals=(
+                    replace(
+                        first,
+                        start=PixelInterval(
+                            first.start.minimum + 10.0,
+                            first.start.maximum + 10.0,
+                        ),
+                    ),
+                    *geometry.photo_intervals[1:],
+                ),
+            )
+
+    def test_assessed_candidate_binds_dimension_evidence_to_geometry(self) -> None:
+        candidate = candidate_fixture()
+        geometry = replace(
+            candidate.geometry,
+            photo_intervals=(
+                replace(
+                    candidate.geometry.photo_intervals[0],
+                    end=PixelInterval.exact(90.0),
+                ),
+                *candidate.geometry.photo_intervals[1:],
+            ),
+        )
+
+        with self.assertRaises(ValueError):
+            replace(candidate, geometry=geometry)
+
+    def test_assessed_candidate_binds_all_geometry_derived_evidence(self) -> None:
+        candidate = candidate_fixture()
+        evidence = candidate.assessment.evidence
+        mutations = {
+            "frame_coverage": replace(
+                evidence,
+                frame_coverage=replace(
+                    evidence.frame_coverage,
+                    candidate_frame_count=1,
+                ),
+            ),
+            "sequence_conservation": replace(
+                evidence,
+                sequence_conservation=replace(
+                    evidence.sequence_conservation,
+                    visible_length_px=PixelInterval.exact(201.0),
+                    frame_total_px=PixelInterval.exact(201.0),
+                ),
+            ),
+            "frame_content": replace(
+                evidence,
+                frame_content=replace(
+                    evidence.frame_content,
+                    observations=(
+                        replace(
+                            evidence.frame_content.observations[0],
+                            index=99,
+                        ),
+                        *evidence.frame_content.observations[1:],
+                    ),
+                ),
+            ),
+            "sequence_content_alignment": replace(
+                evidence,
+                sequence_content_alignment=replace(
+                    evidence.sequence_content_alignment,
+                    visible_sequence_span=Box(0, 0, 199, 100),
+                ),
+            ),
+            "holder_occupancy": replace(
+                evidence,
+                holder_occupancy=replace(
+                    evidence.holder_occupancy,
+                    holder_span=HolderSpan(Box(0, 0, 201, 100)),
+                ),
+            ),
+            "partial_edge_safety": replace(
+                evidence,
+                partial_edge_safety=replace(
+                    evidence.partial_edge_safety,
+                    hard_separator_count=0,
+                ),
+            ),
+            "evidence_independence": replace(
+                evidence,
+                independence=replace(
+                    evidence.independence,
+                    supporting_root_measurements=(
+                        MeasurementIdentity.FOCUSED_SEPARATOR_PROFILE,
+                    ),
+                ),
+            ),
+        }
+
+        for name, mutated in mutations.items():
+            with self.subTest(name=name), self.assertRaises(ValueError):
+                replace(
+                    candidate,
+                    assessment=replace(
+                        candidate.assessment,
+                        evidence=mutated,
+                    ),
+                )
+
+    def test_detection_geometry_uses_typed_boundary_sides(self) -> None:
+        detection_root = Path(__file__).resolve().parents[2] / "x5crop/detection"
+        side_literals = {"leading", "trailing", "top", "bottom"}
+        offenders: list[str] = []
+        for path in detection_root.rglob("*.py"):
+            source = path.read_text(encoding="utf-8")
+            if "BoundarySide" not in source:
+                continue
+            tree = ast.parse(source, filename=str(path))
+            if any(
+                isinstance(node, ast.Constant)
+                and node.value in side_literals
+                for node in ast.walk(tree)
+            ):
+                offenders.append(path.relative_to(detection_root.parent.parent).as_posix())
+
+        self.assertEqual(offenders, [])
+
     def test_boundary_observation_identity_is_typed(self) -> None:
-        hints = get_type_hints(BoundaryObservation)
+        hints = get_type_hints(BoundaryPathObservation)
         for field_name in ("side", "kind"):
             with self.subTest(field=field_name):
                 annotation = hints[field_name]
@@ -139,9 +272,10 @@ class PhysicalModelInvariantTest(unittest.TestCase):
         evidence = candidate_fixture().assessment.evidence
         for derived in (
             evidence.frame_dimensions,
-            evidence.separator_sequence,
+            evidence.film_structure,
             evidence.frame_content,
-            evidence.holder_texture,
+            evidence.holder_material,
+            evidence.aperture_contact,
             evidence.sequence_content_alignment,
             evidence.independence,
             evidence.sequence_conservation,
@@ -190,7 +324,7 @@ class PhysicalModelInvariantTest(unittest.TestCase):
                 state=EvidenceState.UNAVAILABLE,
             ),
             lambda: replace(
-                evidence.holder_texture,
+                evidence.holder_material,
                 state=EvidenceState.SUPPORTED,
             ),
             lambda: replace(
@@ -447,15 +581,8 @@ class PhysicalModelInvariantTest(unittest.TestCase):
                 ),
             )
 
-    def test_scan_calibration_rejects_impossible_trusted_state_and_axis(self) -> None:
-        with self.assertRaises(ValueError):
-            ScanCalibration(None, None, ScanCalibrationSource.TIFF_RESOLUTION, True)
-        calibration = ScanCalibration(
-            10.0,
-            10.0,
-            ScanCalibrationSource.TIFF_RESOLUTION,
-            True,
-        )
+    def test_scan_calibration_rejects_unknown_axis(self) -> None:
+        calibration = supported_calibration_fixture(10.0, 10.0)
         with self.assertRaises(ValueError):
             calibration.px_per_mm("long")
 

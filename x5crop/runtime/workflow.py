@@ -31,8 +31,9 @@ from ..report.configuration import detection_configuration_read_model
 from ..configuration.bundle import DetectionConfigurationBundle
 from ..report.result_builder import result_from_detection
 from ..units import (
-    scan_calibration_after_rotation,
-    scan_calibration_from_resolution,
+    ScanCalibrationResolution,
+    resolution_metadata_after_rotation,
+    resolution_metadata_observation,
 )
 from ..utils import spatial_shape_from_shape
 
@@ -81,7 +82,7 @@ def process_one(
         work_gray(gray, config.layout),
         initial_configuration.preprocess.image_statistics,
     )
-    scan_calibration = scan_calibration_from_resolution(
+    resolution_metadata = resolution_metadata_observation(
         profile.resolution,
         profile.resolution_unit,
     )
@@ -100,10 +101,14 @@ def process_one(
             work_gray(gray, config.layout),
             initial_configuration.preprocess.image_statistics,
         )
-        scan_calibration = scan_calibration_after_rotation(
-            scan_calibration,
+        resolution_metadata = resolution_metadata_after_rotation(
+            resolution_metadata,
             transform_geometry.applied_angle_degrees,
         )
+    scan_calibration = ScanCalibrationResolution.from_observations(
+        resolution_metadata,
+        (),
+    )
     measurement_cache = make_measurement_cache(
         gray,
         config.layout,
@@ -180,7 +185,7 @@ def process_one(
         review_copy,
         warnings,
         configuration_detail=configuration_detail,
-        scan_calibration=scan_calibration,
+        resolution_metadata=scan_calibration.metadata,
         transform_geometry=transform_geometry,
         analysis_reuse_signature=analysis_reuse_signature,
     )

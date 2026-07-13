@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from ..formats import FORMAT_CHOICES, format_spec
 from ..strip_modes import STRIP_MODES
-from .boundary import BoundaryObservationParameters
+from .boundary import BoundaryPathParameters
 from .candidate import CandidatePlanParameters
 from .content import ContentConfiguration
 from .diagnostics import DiagnosticsConfiguration
@@ -23,7 +23,7 @@ def get_detection_configuration(
         physical_spec=spec,
         strip_mode=strip_mode,
         preprocess=PreprocessConfiguration(),
-        boundary=BoundaryObservationParameters(),
+        boundary_path=BoundaryPathParameters(),
         separator=SeparatorConfiguration(),
         content=ContentConfiguration(),
         candidate_plan=CandidatePlanParameters(),

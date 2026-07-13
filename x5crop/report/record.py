@@ -5,12 +5,12 @@ from ..detection.final.model import FinalDetection
 from ..detection.candidate.selection.model import SelectionResult
 from ..detection.evidence.transform_geometry import TransformGeometryEvidence
 from ..output.model import OutputGeometry
-from ..units import ScanCalibration
+from ..units import ResolutionMetadataObservation
 from .identity import REPORT_SCHEMA_ID, REPORT_SCHEMA_REVISION
 from .read_models import (
     decision_gate_detail,
     frame_bleed_plan_read_model,
-    scan_calibration_read_model,
+    resolution_metadata_read_model,
     selection_read_model,
     typed_read_model,
 )
@@ -46,7 +46,7 @@ def report_record_for_final_detection(
     review_copy: str | None,
     warnings: list[str],
     configuration: dict,
-    scan_calibration: ScanCalibration,
+    resolution_metadata: ResolutionMetadataObservation,
     transform_geometry: TransformGeometryEvidence,
     analysis_reuse_signature: dict,
 ) -> dict:
@@ -57,8 +57,8 @@ def report_record_for_final_detection(
         "source": str(source),
         "input": {
             "profile": dict(profile),
-            "scan_calibration": scan_calibration_read_model(
-                scan_calibration
+            "resolution_metadata": resolution_metadata_read_model(
+                resolution_metadata
             ),
             "transform_geometry": typed_read_model(transform_geometry),
         },

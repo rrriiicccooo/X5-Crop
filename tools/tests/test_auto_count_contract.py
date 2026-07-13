@@ -24,7 +24,8 @@ from x5crop.detection.candidate.plan.count_hypotheses import (
     count_hypothesis_plan,
 )
 from x5crop.detection.candidate.selection.choose import select_candidates
-from x5crop.detection.candidate.selection.model import GeometryResolution
+from x5crop.detection.geometry_resolution import GeometryResolution
+from x5crop.detection.evidence.partial_edge import partial_edge_safety_evidence
 from x5crop.formats import format_spec
 
 
@@ -137,14 +138,23 @@ class AutoCountContractTest(unittest.TestCase):
             CountHypothesisSource.REQUESTED,
         )
         built = BuiltCandidate(geometry, hypothesis, ())
+        evidence = replace(
+            candidate.assessment.evidence,
+            partial_edge_safety=partial_edge_safety_evidence(
+                geometry,
+                candidate.assessment.evidence.frame_coverage,
+                candidate.assessment.evidence.frame_dimensions,
+                candidate.assessment.evidence.frame_content,
+            ),
+        )
         candidate = AssessedCandidate(
             geometry,
             hypothesis,
             CandidateAssessment(
-                candidate.assessment.evidence,
+                evidence,
                 candidate_gate_for_evidence(
                     built,
-                    candidate.assessment.evidence,
+                    evidence,
                 ),
             ),
         )

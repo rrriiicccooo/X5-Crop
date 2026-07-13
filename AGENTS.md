@@ -269,7 +269,7 @@ unless the edit changes commands or release behavior.
 
 ## Current Handoff
 
-Date: 2026-07-12
+Date: 2026-07-13
 Computer: primary macOS machine
 Branch: main
 Latest documentation state: root documents have distinct responsibilities.
@@ -287,6 +287,13 @@ Current state:
   conservation equation.
 - Count, boundary, dimension, calibration, and measurement-dependency authority
   use typed identities; descriptive provenance text cannot change physical proof.
+- Detection consumes one canonical grayscale workspace. Boundary paths carry
+  typed outer/inner gray materials; film-base support requires same-tail material
+  consensus at distinct track or separator locations. Color and perforation are
+  not detection concepts.
+- TIFF resolution is metadata observation only. Per-axis physical scale requires
+  independent frame or aperture evidence; candidate-local scale never feeds back
+  into the same candidate's geometry or Gate.
 - Standard, dual-lane, and review-only candidates use distinct geometry types;
   review-only modes never masquerade as solved frame sequences.
 - Physical candidate assessment stores canonical evidence and `CandidateGate`;
@@ -294,7 +301,7 @@ Current state:
   for ordering and reporting. `GeometryResolution` is the only early-stop input.
 - Overlap protection uses a per-boundary `FrameBleedPlan`; unrelated frames are
   never expanded by a global maximum.
-- Current reports use `detection_report / physical_sequence_resolution` with
+- Current reports use `detection_report / gray_material_sequence_resolution` with
   canonical `input`, `configuration`, `selection`, `decision`, and `output`
   sections. Cache reuse accepts only this schema.
 - TIFF export preserves typed transferable metadata and verifies it after write;
@@ -303,18 +310,20 @@ Current state:
 - Version history and validation summaries live in `CHANGELOG.md`.
 - User setup and usage live in `README.md` and `快速启动_Quick_Start.md`.
 
-Recent verified baseline:
+Current verification state:
 
-- Commit `62e47cd2` is the current `architecture closure candidate`.
-- Audit A and an independent fresh-context Audit B both found zero violations of
-  the frozen contract at that commit. The suite contains 413 tests, 142 reachable
-  active modules, 201 classified parameter contracts, and 14 valid format/mode
-  configurations.
-- Real smokes covered `135/full`, `135/partial auto`, `120-66/partial auto`,
-  `half/full`, and `120-67/full`; current reports validated successfully.
+- The grayscale material, boundary-path, film-structure, and physical-scale
+  refactor is implemented and verified. The suite contains 466 tests, 145
+  reachable active modules, 211 classified parameter contracts, and 14 valid
+  format/mode configurations.
+- Real smokes covered grayscale holder/contact examples `005`, `X5_00044`,
+  `X5_00021`, and `X5_00006`, plus `120-66/partial auto`, `half/full`, and
+  `120-67/full`; every current report validated successfully. `005` explicitly
+  contradicted its 300 DPI metadata with a physical short-axis lower bound.
 - Cache reuse, review export, a real two-process run, TIFF metadata preservation,
   and the three-panel Debug Analysis were verified.
-- Architecture is not formally closed. A new Codex task must rerun the same frozen
-  Audit A/B plan from the candidate commit before marking `architecture closed`.
+- Architecture closure audits are intentionally deferred. Audit A and an
+  independent fresh-context Audit B must restart from zero before a new closure
+  candidate can be recorded.
 - Current PASS/REVIEW outcomes and adaptive measurement values remain calibration
   material for the separate real-sample project.

@@ -7,6 +7,8 @@ import numpy as np
 
 from ....domain import (
     Box,
+    GrayMaterialObservation,
+    gray_intensity_tail,
     MeasurementIdentity,
     MeasurementProvenance,
     PixelInterval,
@@ -42,18 +44,39 @@ def _break_count(mask: np.ndarray) -> int:
     return int(max(0, np.count_nonzero(transitions == 1) - 1))
 
 
-def _cross_axis_path_exists(mask: np.ndarray) -> bool:
+def _cross_axis_path_exists(
+    mask: np.ndarray,
+    maximum_break_ratio: float,
+) -> bool:
     if mask.ndim != 2 or not mask.shape[0] or not mask.shape[1]:
         return False
-    reachable = mask[0].astype(bool, copy=True)
-    for row in mask[1:]:
+    maximum_break = int(round(mask.shape[0] * float(maximum_break_ratio)))
+    reachable: np.ndarray | None = None
+    break_length = 0
+    for row in mask:
+        row = row.astype(bool, copy=False)
+        if reachable is None:
+            if row.any():
+                reachable = row.copy()
+                break_length = 0
+            else:
+                break_length += 1
+                if break_length > maximum_break:
+                    return False
+            continue
         adjacent = reachable.copy()
         adjacent[1:] |= reachable[:-1]
         adjacent[:-1] |= reachable[1:]
-        reachable = row.astype(bool, copy=False) & adjacent
-        if not reachable.any():
+        continuation = row & adjacent
+        if continuation.any():
+            reachable = continuation
+            break_length = 0
+        elif not row.any() and break_length < maximum_break:
+            reachable = adjacent
+            break_length += 1
+        else:
             return False
-    return bool(reachable.any())
+    return bool(reachable is not None and break_length <= maximum_break)
 
 
 def _cross_axis_measurement(
@@ -62,6 +85,7 @@ def _cross_axis_measurement(
     start: float,
     end: float,
     statistics: ImageMeasurementStatistics,
+    parameters: SeparatorObservationParameters,
 ) -> SeparatorCrossAxisMeasurement:
     bounded = corridor.clamp(gray_work.shape[1], gray_work.shape[0])
     pixel_start = max(bounded.left, int(floor(start)))
@@ -109,7 +133,10 @@ def _cross_axis_measurement(
         if row_centers
         else 0.0
     )
-    supported = _cross_axis_path_exists(extreme)
+    supported = _cross_axis_path_exists(
+        extreme,
+        parameters.maximum_cross_axis_break_ratio,
+    )
     return SeparatorCrossAxisMeasurement(
         (
             SeparatorCrossAxisOutcome.PATH_SUPPORTED
@@ -120,6 +147,42 @@ def _cross_axis_measurement(
         continuity,
         _break_count(row_support),
         straightness,
+    )
+
+
+def _band_material_observation(
+    gray_work: np.ndarray,
+    corridor: Box,
+    start: float,
+    end: float,
+    statistics: ImageMeasurementStatistics,
+    cross_axis: SeparatorCrossAxisMeasurement,
+    provenance: MeasurementProvenance,
+) -> GrayMaterialObservation:
+    bounded = corridor.clamp(gray_work.shape[1], gray_work.shape[0])
+    pixel_start = max(bounded.left, int(floor(start)))
+    pixel_end = min(bounded.right, int(ceil(end)))
+    band = gray_work[
+        bounded.top : bounded.bottom,
+        pixel_start:pixel_end,
+    ].astype(np.float32, copy=False)
+    if not band.size:
+        raise ValueError("separator material requires a non-empty measured band")
+    center = float(np.median(band))
+    gx = np.abs(np.diff(band, axis=1, prepend=band[:, :1]))
+    gy = np.abs(np.diff(band, axis=0, prepend=band[:1, :]))
+    return GrayMaterialObservation(
+        intensity_median=center,
+        intensity_mad=float(np.median(np.abs(band - center))),
+        texture_median=float(np.median(gx + gy)),
+        gradient_median=float(np.median(np.maximum(gx, gy))),
+        spatial_continuity=float(cross_axis.continuity_ratio or 0.0),
+        intensity_tail=gray_intensity_tail(
+            center,
+            statistics.intensity_low,
+            statistics.intensity_high,
+        ),
+        provenance=provenance,
     )
 
 
@@ -175,6 +238,23 @@ def measure_focused_separator_band(
             continue
         absolute_start = float(corridor.left + local_start + start)
         absolute_end = float(corridor.left + local_start + end)
+        provenance = MeasurementProvenance(
+            root_measurement=MeasurementIdentity.FOCUSED_SEPARATOR_PROFILE,
+            source="focused_dimension_window",
+            dependencies=(
+                MeasurementIdentity.GRAY_WORK,
+                MeasurementIdentity.FRAME_DIMENSIONS,
+                MeasurementIdentity.SEQUENCE_BOUNDARIES,
+            ),
+        )
+        cross_axis = _cross_axis_measurement(
+            gray_work,
+            corridor,
+            absolute_start,
+            absolute_end,
+            statistics,
+            parameters,
+        )
         measured.append(
             SeparatorBandObservation(
                 start=absolute_start,
@@ -183,22 +263,17 @@ def measure_focused_separator_band(
                 tonal_evidence=float(
                     max(0.0, focused[start:end].mean() - threshold) / spread
                 ),
-                provenance=MeasurementProvenance(
-                    root_measurement=MeasurementIdentity.FOCUSED_SEPARATOR_PROFILE,
-                    source="focused_dimension_window",
-                    dependencies=(
-                        MeasurementIdentity.GRAY_WORK,
-                        MeasurementIdentity.FRAME_DIMENSIONS,
-                        MeasurementIdentity.SEQUENCE_BOUNDARIES,
-                    ),
-                ),
-                cross_axis=_cross_axis_measurement(
+                material=_band_material_observation(
                     gray_work,
                     corridor,
                     absolute_start,
                     absolute_end,
                     statistics,
+                    cross_axis,
+                    provenance,
                 ),
+                provenance=provenance,
+                cross_axis=cross_axis,
             )
         )
     return max(
@@ -232,6 +307,22 @@ def measure_separator_bands(
         start = float(corridor.left) + float(local_start)
         end = float(corridor.left) + float(local_end)
         center = 0.5 * (start + end)
+        provenance = MeasurementProvenance(
+            root_measurement=MeasurementIdentity.SEPARATOR_PROFILE,
+            source="observed_separator_band",
+            dependencies=(
+                MeasurementIdentity.GRAY_WORK,
+                MeasurementIdentity.BOUNDARY_CORRIDOR,
+            ),
+        )
+        cross_axis = _cross_axis_measurement(
+            gray_work,
+            corridor,
+            start,
+            end,
+            statistics,
+            parameters,
+        )
         measured.append(
             SeparatorBandObservation(
                 start=start,
@@ -241,21 +332,17 @@ def measure_separator_bands(
                     max(0.0, profile[local_start:local_end].mean() - threshold)
                     / spread
                 ),
-                provenance=MeasurementProvenance(
-                    root_measurement=MeasurementIdentity.SEPARATOR_PROFILE,
-                    source="observed_separator_band",
-                    dependencies=(
-                        MeasurementIdentity.GRAY_WORK,
-                        MeasurementIdentity.BOUNDARY_CORRIDOR,
-                    ),
-                ),
-                cross_axis=_cross_axis_measurement(
+                material=_band_material_observation(
                     gray_work,
                     corridor,
                     start,
                     end,
                     statistics,
+                    cross_axis,
+                    provenance,
                 ),
+                provenance=provenance,
+                cross_axis=cross_axis,
             )
         )
     budget = int(parameters.maximum_observations)

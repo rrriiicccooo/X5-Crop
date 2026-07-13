@@ -1,46 +1,23 @@
 from __future__ import annotations
 
-from .vocabulary import (
-    FINAL_REASON_AUTOMATIC_PROCESSING_NOT_SUPPORTED,
-    FINAL_REASON_BOUNDARY_EVIDENCE_INSUFFICIENT,
-    FINAL_REASON_CONTENT_PRESERVATION_UNRESOLVED,
-    FINAL_REASON_COUNT_RESOLUTION_UNAVAILABLE,
-    FINAL_REASON_EVIDENCE_INDEPENDENCE_FAILED,
-    FINAL_REASON_GEOMETRY_RESOLUTION_UNAVAILABLE,
-    FINAL_REASON_FRAME_SEQUENCE_NOT_CONSERVED,
-    FINAL_REASON_OUTPUT_PROTECTION_UNRESOLVED,
-    FINAL_REASON_PHOTO_GEOMETRY_CONTRADICTED,
-    FINAL_REASON_SELECTION_GEOMETRY_DISAGREEMENT,
-    FINAL_REASON_TRANSFORM_GEOMETRY_UNCERTAIN,
-)
 from ...output.model import FrameBleedPlan
 from ..candidate.assessment.candidate_gate import CandidateGateAssessment
 from ..candidate.selection.model import SelectionConsensus, SelectionResult
 from x5crop.domain import EvidenceState
 from ..gate_checks import GateCheck, GateStage
 from ..evidence.transform_geometry import TransformGeometryEvidence
-from .model import DecisionGateAssessment
-
-
-_CANDIDATE_REASON_BY_CHECK = {
-    "content_preservation": FINAL_REASON_CONTENT_PRESERVATION_UNRESOLVED,
-    "photo_geometry_consistency": FINAL_REASON_PHOTO_GEOMETRY_CONTRADICTED,
-    "frame_sequence_conservation": FINAL_REASON_FRAME_SEQUENCE_NOT_CONSERVED,
-    "evidence_independence": FINAL_REASON_EVIDENCE_INDEPENDENCE_FAILED,
-    "boundary_proof": FINAL_REASON_BOUNDARY_EVIDENCE_INSUFFICIENT,
-}
+from .model import DECISION_GATE_REASON_BY_CODE, DecisionGateAssessment
 
 
 def _decision_check(
     code: str,
     state: EvidenceState,
-    final_reason: str,
 ) -> GateCheck:
     return GateCheck(
         code=code,
         stage=GateStage.DECISION,
         state=state,
-        final_review_reason=final_reason,
+        final_review_reason=DECISION_GATE_REASON_BY_CODE[code],
     )
 
 
@@ -51,14 +28,13 @@ def _project_candidate_checks(
     for check in candidate_gate.checks:
         if not check.blocks:
             continue
-        final_reason = _CANDIDATE_REASON_BY_CHECK.get(check.code)
-        if final_reason is None:
+        code = f"candidate_{check.code}"
+        if code not in DECISION_GATE_REASON_BY_CODE:
             raise ValueError(f"unowned candidate gate check: {check.code}")
         checks.append(
             _decision_check(
-                f"candidate_{check.code}",
+                code,
                 EvidenceState.CONTRADICTED,
-                final_reason,
             )
         )
     return tuple(checks)
@@ -90,32 +66,26 @@ def decision_gate_assessment(
         _decision_check(
             "count_resolution",
             count_resolution,
-            FINAL_REASON_COUNT_RESOLUTION_UNAVAILABLE,
         ),
         _decision_check(
             "geometry_resolution",
             geometry_resolution,
-            FINAL_REASON_GEOMETRY_RESOLUTION_UNAVAILABLE,
         ),
         _decision_check(
             "automatic_processing_eligibility",
             automatic_processing,
-            FINAL_REASON_AUTOMATIC_PROCESSING_NOT_SUPPORTED,
         ),
         _decision_check(
             "selection_geometry_consensus",
             selection_consensus,
-            FINAL_REASON_SELECTION_GEOMETRY_DISAGREEMENT,
         ),
         _decision_check(
             "output_content_protection",
             output_protection,
-            FINAL_REASON_OUTPUT_PROTECTION_UNRESOLVED,
         ),
         _decision_check(
             "transform_geometry_integrity",
             transform_geometry,
-            FINAL_REASON_TRANSFORM_GEOMETRY_UNCERTAIN,
         ),
     )
     return DecisionGateAssessment(checks=checks)
@@ -181,3 +151,16 @@ def apply_decision_gate(
         geometry_resolution=geometry_resolution_state,
     )
     return decision_gate
+
+
+def decision_gate_matches_inputs(
+    gate: DecisionGateAssessment,
+    selection: SelectionResult,
+    frame_bleed_plan: FrameBleedPlan,
+    transform_geometry: TransformGeometryEvidence,
+) -> bool:
+    return gate == apply_decision_gate(
+        selection,
+        frame_bleed_plan,
+        transform_geometry,
+    )

@@ -13,7 +13,7 @@ from ...domain import (
 )
 from ...formats import FormatPhysicalSpec
 from ...geometry.layout import is_horizontal_layout
-from ...units import ScanCalibration
+from ...units import ScanCalibrationResolution
 from x5crop.domain import EvidenceState
 from x5crop.domain import PixelInterval, VisibleSequenceSpan
 
@@ -134,13 +134,13 @@ class FrameDimensionEvidence:
             ):
                 raise ValueError("calibrated dimensions require millimeter measurements")
         elif self.observed_width_mm is not None or self.observed_height_mm is not None:
-            raise ValueError("millimeter dimensions require trusted calibration")
+            raise ValueError("millimeter dimensions require supported calibration")
 
 
 def frame_dimension_priors(
     span: VisibleSequenceSpan,
     physical_spec: FormatPhysicalSpec,
-    calibration: ScanCalibration,
+    calibration: ScanCalibrationResolution,
     *,
     layout: str,
 ) -> tuple[FrameDimensionPrior, ...]:
@@ -153,7 +153,7 @@ def frame_dimension_priors(
     long_ppm = calibration.px_per_mm("x" if horizontal else "y")
     short_ppm = calibration.px_per_mm("y" if horizontal else "x")
     calibrated = bool(
-        calibration.trusted
+        calibration.fully_supported
         and long_ppm is not None
         and short_ppm is not None
         and long_ppm > 0.0
@@ -249,7 +249,7 @@ def _dimension_photo_intervals(
 
 def frame_dimension_evidence(
     geometry: SequenceSolution,
-    calibration: ScanCalibration,
+    calibration: ScanCalibrationResolution,
 ) -> FrameDimensionEvidence:
     horizontal = is_horizontal_layout(geometry.layout)
     frame_width_mm, frame_height_mm = geometry.frame_dimension_prior.frame_size_mm
@@ -276,7 +276,7 @@ def frame_dimension_evidence(
         "y" if horizontal else "x"
     )
     calibration_used = bool(
-        calibration.trusted
+        calibration.fully_supported
         and long_ppm is not None
         and short_ppm is not None
         and long_ppm > 0.0
@@ -304,4 +304,19 @@ def frame_dimension_evidence(
         observed_aspect=observed_aspect,
         aspect_error_ratio=aspect_error,
         calibration_used=calibration_used,
+    )
+
+
+def frame_dimension_measurements_match_geometry(
+    geometry: SequenceSolution,
+    evidence: FrameDimensionEvidence,
+) -> bool:
+    _, separator_widths = _photo_widths(geometry)
+    observed_intervals = tuple(
+        interval.width_px for interval in _dimension_photo_intervals(geometry)
+    )
+    return bool(
+        evidence.photo_width_intervals_px == observed_intervals
+        and evidence.separator_widths_px
+        == tuple(float(width) for width in separator_widths)
     )

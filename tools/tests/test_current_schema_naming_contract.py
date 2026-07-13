@@ -17,9 +17,9 @@ from x5crop.report.identity import REPORT_SCHEMA_ID, REPORT_SCHEMA_REVISION
 from x5crop.report.read_models import (
     frame_bleed_plan_read_model,
     gate_check_read_model,
-    scan_calibration_read_model,
+    resolution_metadata_read_model,
 )
-from x5crop.units import ScanCalibration
+from x5crop.units import ResolutionMetadataObservation
 
 
 def _active_source() -> str:
@@ -44,8 +44,8 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
             GateCheck,
         )
         self.assertIs(
-            get_type_hints(scan_calibration_read_model)["calibration"],
-            ScanCalibration,
+            get_type_hints(resolution_metadata_read_model)["metadata"],
+            ResolutionMetadataObservation,
         )
         self.assertIs(
             get_type_hints(frame_bleed_plan_read_model)["plan"],
@@ -69,6 +69,7 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
                 "end",
                 "center",
                 "tonal_evidence",
+                "material",
                 "provenance",
                 "cross_axis",
                 "lane_box",
@@ -141,7 +142,7 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
 
     def test_report_schema_identity_is_descriptive(self) -> None:
         self.assertEqual(REPORT_SCHEMA_ID, "detection_report")
-        self.assertEqual(REPORT_SCHEMA_REVISION, "physical_sequence_resolution")
+        self.assertEqual(REPORT_SCHEMA_REVISION, "gray_material_sequence_resolution")
         self.assertNotIn("v4", REPORT_SCHEMA_REVISION)
 
     def test_active_source_uses_configuration_and_parameter_vocabulary(self) -> None:
@@ -201,7 +202,7 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
             "physical" + "_resolution",
         ):
             self.assertNotIn(removed, coordination)
-        self.assertIn("physical_sequence_resolution", coordination)
+        self.assertIn("gray_material_sequence_resolution", coordination)
 
         architecture = (PROJECT_ROOT / "ARCHITECTURE.md").read_text(
             encoding="utf-8"

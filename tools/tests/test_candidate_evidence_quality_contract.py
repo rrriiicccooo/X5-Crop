@@ -7,12 +7,30 @@ from tools.tests.physical_gate_support import candidate_fixture
 from x5crop.detection.candidate.assessment.candidate import (
     candidate_gate_for_evidence,
 )
+from x5crop.detection.candidate.assessment.evidence_independence import (
+    evidence_independence_evidence,
+)
 from x5crop.detection.candidate.model import (
     AssessedCandidate,
     BuiltCandidate,
     CandidateAssessment,
 )
-from x5crop.domain import FrameBoundaryReference
+from x5crop.detection.evidence.film_structure import (
+    aperture_contact_evidence,
+    film_base_reference,
+    film_structure_evidence,
+)
+from x5crop.detection.evidence.partial_edge import partial_edge_safety_evidence
+from x5crop.detection.evidence.holder_occupancy import strip_completeness_evidence
+from x5crop.formats import format_spec
+from x5crop.detection.physical.separator.assignment import (
+    dimension_constrained_boundary,
+)
+from x5crop.domain import (
+    MeasurementIdentity,
+    MeasurementProvenance,
+    PixelInterval,
+)
 
 
 class CandidateEvidenceQualityContractTest(unittest.TestCase):
@@ -22,39 +40,63 @@ class CandidateEvidenceQualityContractTest(unittest.TestCase):
             {"evidence", "gate"},
         )
 
-    def test_separator_width_variation_does_not_change_evidence_quality(self) -> None:
+    def test_dimension_constrained_boundaries_do_not_become_supported_proof(self) -> None:
         candidate = candidate_fixture()
         evidence = candidate.assessment.evidence
-        variable = replace(
-            candidate,
-            assessment=replace(
-                candidate.assessment,
-                evidence=replace(
-                    evidence,
-                    frame_dimensions=replace(
-                        evidence.frame_dimensions,
-                        separator_widths_px=(1.0, 39.0),
+        geometry = replace(
+            candidate.geometry,
+            separator_assignments=(),
+            frame_boundaries=(
+                dimension_constrained_boundary(
+                    1,
+                    PixelInterval.exact(100.0),
+                    MeasurementProvenance(
+                        MeasurementIdentity.FRAME_DIMENSIONS,
+                        "dimension_constrained_test",
+                        (MeasurementIdentity.FORMAT_PHYSICAL_SPEC,),
                     ),
                 ),
             ),
         )
-        self.assertEqual(candidate.evidence_quality, variable.evidence_quality)
-
-    def test_dimension_constrained_boundaries_do_not_become_supported_proof(self) -> None:
-        candidate = candidate_fixture()
-        evidence = candidate.assessment.evidence
-        constrained = replace(
-            evidence.separator_sequence,
-            hard_count=0,
-            dimension_constrained_count=1,
-            hard_boundaries=(),
-            missing_boundaries=(FrameBoundaryReference(None, 1),),
-            hard_tonal_evidence=(),
+        reference = film_base_reference(
+            geometry,
+            evidence.holder_material,
+            edge_texture_limit=(
+                evidence.film_structure.film_base_reference.texture_limit
+            ),
         )
-        updated_evidence = replace(evidence, separator_sequence=constrained)
-        built = BuiltCandidate(candidate.geometry, candidate.count_hypothesis, ())
+        updated_evidence = replace(
+            evidence,
+            frame_dimensions=replace(
+                evidence.frame_dimensions,
+                separator_widths_px=(),
+            ),
+            film_structure=film_structure_evidence(geometry, reference),
+            aperture_contact=aperture_contact_evidence(geometry, reference),
+            holder_occupancy=replace(
+                evidence.holder_occupancy,
+                strip_completeness=strip_completeness_evidence(
+                    count=geometry.count,
+                    frames=geometry.frames,
+                    frame_boundaries=geometry.frame_boundaries,
+                    separator_assignments=geometry.separator_assignments,
+                    physical_spec=format_spec(geometry.format_id),
+                ),
+            ),
+            partial_edge_safety=partial_edge_safety_evidence(
+                geometry,
+                evidence.frame_coverage,
+                replace(
+                    evidence.frame_dimensions,
+                    separator_widths_px=(),
+                ),
+                evidence.frame_content,
+            ),
+            independence=evidence_independence_evidence(geometry),
+        )
+        built = BuiltCandidate(geometry, candidate.count_hypothesis, ())
         candidate = AssessedCandidate(
-            candidate.geometry,
+            geometry,
             candidate.count_hypothesis,
             CandidateAssessment(
                 updated_evidence,
@@ -65,8 +107,8 @@ class CandidateEvidenceQualityContractTest(unittest.TestCase):
             ),
         )
         quality = candidate.evidence_quality
-        self.assertNotIn("separator_sequence", quality.supported)
-        self.assertIn("separator_sequence", quality.unavailable)
+        self.assertNotIn("film_structure", quality.supported)
+        self.assertIn("film_structure", quality.unavailable)
 
 
 if __name__ == "__main__":

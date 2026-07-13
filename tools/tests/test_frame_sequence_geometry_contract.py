@@ -18,7 +18,6 @@ from x5crop.domain import (
     MeasurementIdentity,
 )
 from x5crop.detection.physical.boundary import (
-    BoundaryObservation,
     HolderOcclusionConstraint,
     HolderOcclusionSideEvidence,
     HolderOcclusionSideOutcome,
@@ -47,7 +46,7 @@ from x5crop.configuration.separator import SeparatorObservationParameters
 from x5crop.domain import MeasurementProvenance
 from x5crop.domain import Box
 from x5crop.detection.physical.model import PhotoInterval, SequenceSolution
-from x5crop.detection.candidate.assessment.separator_support import (
+from x5crop.detection.evidence.film_structure import (
     separator_sequence_evidence,
 )
 from x5crop.image.statistics import (
@@ -55,10 +54,12 @@ from x5crop.image.statistics import (
 )
 from x5crop.domain import CropEnvelope, VisibleSequenceSpan
 from tools.tests.physical_gate_support import (
+    boundary_path_fixture,
     candidate_fixture,
     holder_occlusion_not_applicable,
     separator_constraints,
     separator_observation,
+    unavailable_calibration_fixture,
 )
 from dataclasses import replace
 from x5crop.detection.evidence.frame_sequence import (
@@ -80,7 +81,6 @@ from x5crop.image.statistics import (
     ImageMeasurementStatisticsParameters,
     image_measurement_statistics,
 )
-from x5crop.units import ScanCalibration, ScanCalibrationSource
 from x5crop.domain import SequenceHypothesis
 
 
@@ -117,7 +117,7 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
             VisibleSequenceSpan(box),
             CropEnvelope(box),
             MeasurementProvenance(
-                MeasurementIdentity.HOLDER_BOUNDARY_PROFILE,
+                MeasurementIdentity.HOLDER_MATERIAL_PROFILE,
                 "synthetic",
                 (MeasurementIdentity.GRAY_WORK,),
             ),
@@ -142,12 +142,7 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
                 format_spec("135"),
                 3,
                 cache,
-                ScanCalibration(
-                    None,
-                    None,
-                    ScanCalibrationSource.UNAVAILABLE,
-                    False,
-                ),
+                unavailable_calibration_fixture(),
                 "horizontal",
                 SeparatorConfiguration(),
                 SequenceHypothesisParameters(
@@ -163,7 +158,7 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             HolderOcclusionSideEvidence(
                 BoundarySide.LEADING,
-                HolderOcclusionSideOutcome.NOT_WHITE_HOLDER,
+                HolderOcclusionSideOutcome.BOUNDARY_NOT_HOLDER_MATERIAL,
                 PixelInterval(1.0, 2.0),
                 None,
             )
@@ -233,6 +228,28 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
         assert observation is not None
         self.assertEqual(observation.cross_axis.state, EvidenceState.SUPPORTED)
 
+    def test_separator_path_allows_small_blank_interruptions_without_jumping(self) -> None:
+        gray = np.full((100, 200), 128, dtype=np.uint8)
+        gray[:, 100] = 0
+        gray[49:51, 100] = 128
+        profile = np.zeros(200, dtype=np.float32)
+        profile[95:105] = 1.0
+        observation = measure_focused_separator_band(
+            profile,
+            PixelInterval(95.0, 105.0),
+            gray_work=gray,
+            corridor=Box(0, 0, 200, 100),
+            statistics=_statistics(),
+            parameters=SeparatorObservationParameters(
+                activation_percentile=99.0,
+                minimum_run_px=1,
+                maximum_observations=8,
+                maximum_cross_axis_break_ratio=0.03,
+            ),
+        )
+        assert observation is not None
+        self.assertEqual(observation.cross_axis.state, EvidenceState.SUPPORTED)
+
     def test_unused_weak_band_does_not_reduce_selected_separator_proof(self) -> None:
         geometry = candidate_fixture().geometry
         unused = separator_observation(
@@ -297,12 +314,16 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
             "synthetic",
             (MeasurementIdentity.GRAY_WORK,),
         )
+        contained_source = separator_observation(45.0, start=40.0, end=50.0)
         contained = replace(
-            separator_observation(45.0, start=40.0, end=50.0),
+            contained_source,
+            material=replace(contained_source.material, provenance=provenance),
             provenance=provenance,
         )
+        partial_source = separator_observation(60.0, start=50.0, end=70.0)
         partial = replace(
-            separator_observation(60.0, start=50.0, end=70.0),
+            partial_source,
+            material=replace(partial_source.material, provenance=provenance),
             provenance=provenance,
         )
         allowed = PixelInterval(35.0, 55.0)
@@ -338,6 +359,7 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
             ),
             (),
             10_000,
+            edge_texture_limit=1.0,
         )
         self.assertEqual(len(result.assignments), 1)
         self.assertEqual(result.assignments[0].state, EvidenceState.CONTRADICTED)
@@ -365,6 +387,7 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
             ),
             (),
             10_000,
+            edge_texture_limit=1.0,
         )
         coordinates = tuple(boundary.coordinate for boundary in result.boundaries)
         self.assertEqual(coordinates, tuple(sorted(coordinates)))
@@ -409,6 +432,7 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
             ),
             (),
             10_000,
+            edge_texture_limit=1.0,
         )
         self.assertEqual(len(result.assignments), 1)
         self.assertEqual(result.assignments[0].state, EvidenceState.UNAVAILABLE)
@@ -437,15 +461,15 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
 
     def test_boundary_uncertainty_separates_visible_span_and_crop_envelope(self) -> None:
         provenance = MeasurementProvenance(
-            MeasurementIdentity.HOLDER_BOUNDARY_PROFILE,
+            MeasurementIdentity.HOLDER_MATERIAL_PROFILE,
             "synthetic",
             (MeasurementIdentity.GRAY_WORK,),
         )
         observations = (
-            BoundaryObservation(BoundarySide.LEADING, PixelInterval(9.0, 11.0), BoundaryKind.WHITE_HOLDER_TRANSITION, provenance),
-            BoundaryObservation(BoundarySide.TRAILING, PixelInterval(189.0, 191.0), BoundaryKind.WHITE_HOLDER_TRANSITION, provenance),
-            BoundaryObservation(BoundarySide.TOP, PixelInterval(4.0, 6.0), BoundaryKind.TONAL_TRANSITION, provenance),
-            BoundaryObservation(BoundarySide.BOTTOM, PixelInterval(94.0, 96.0), BoundaryKind.TONAL_TRANSITION, provenance),
+            boundary_path_fixture(BoundarySide.LEADING, PixelInterval(9.0, 11.0), BoundaryKind.HOLDER_MATERIAL_TRANSITION, provenance),
+            boundary_path_fixture(BoundarySide.TRAILING, PixelInterval(189.0, 191.0), BoundaryKind.HOLDER_MATERIAL_TRANSITION, provenance),
+            boundary_path_fixture(BoundarySide.TOP, PixelInterval(4.0, 6.0), BoundaryKind.TONAL_TRANSITION, provenance),
+            boundary_path_fixture(BoundarySide.BOTTOM, PixelInterval(94.0, 96.0), BoundaryKind.TONAL_TRANSITION, provenance),
         )
         visible, envelope = visible_sequence_and_crop_envelope(
             observations,
@@ -529,13 +553,13 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
         self.assertEqual(evidence.state, EvidenceState.SUPPORTED)
 
     def test_leading_holder_occlusion_explains_short_visible_edge_frame(self) -> None:
-        boundary = BoundaryObservation(
+        boundary = boundary_path_fixture(
             side=BoundarySide.LEADING,
             position=PixelInterval.exact(20.0),
-            kind=BoundaryKind.WHITE_HOLDER_TRANSITION,
+            kind=BoundaryKind.HOLDER_MATERIAL_TRANSITION,
             provenance=MeasurementProvenance(
-                MeasurementIdentity.HOLDER_BOUNDARY_PROFILE,
-                "white_holder_transition",
+                MeasurementIdentity.HOLDER_MATERIAL_PROFILE,
+                "holder_material_transition",
                 (MeasurementIdentity.GRAY_WORK,),
                 ("leading",),
             ),
@@ -546,6 +570,7 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
             leading_visible_frame_width=PixelInterval.exact(94.0),
             trailing_visible_frame_width=None,
             frame_width_px=PixelInterval.exact(100.0),
+            edge_texture_limit=1.0,
         )
         self.assertEqual(evidence.leading.state, EvidenceState.SUPPORTED)
         self.assertEqual(evidence.leading.hidden_width_px, PixelInterval.exact(6.0))
@@ -554,28 +579,29 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
         self,
     ) -> None:
         provenance = MeasurementProvenance(
-            MeasurementIdentity.HOLDER_BOUNDARY_PROFILE,
-            "white_holder_transition",
+            MeasurementIdentity.HOLDER_MATERIAL_PROFILE,
+            "holder_material_transition",
             (MeasurementIdentity.GRAY_WORK,),
         )
         evidence = holder_occlusion_for_sequence(
             (
-                BoundaryObservation(
+                boundary_path_fixture(
                     BoundarySide.LEADING,
                     PixelInterval.exact(0.0),
-                    BoundaryKind.WHITE_HOLDER_TRANSITION,
+                    BoundaryKind.HOLDER_MATERIAL_TRANSITION,
                     provenance,
                 ),
-                BoundaryObservation(
+                boundary_path_fixture(
                     BoundarySide.TRAILING,
                     PixelInterval.exact(94.0),
-                    BoundaryKind.WHITE_HOLDER_TRANSITION,
+                    BoundaryKind.HOLDER_MATERIAL_TRANSITION,
                     provenance,
                 ),
             ),
             VisibleSequenceSpan(Box(0, 0, 94, 100)),
             (),
             PixelInterval.exact(100.0),
+            edge_texture_limit=1.0,
         )
 
         self.assertEqual(evidence.leading.state, EvidenceState.UNAVAILABLE)
@@ -584,16 +610,23 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
         self.assertEqual(evidence.trailing.hidden_width_px, PixelInterval(0.0, 6.0))
         self.assertEqual(evidence.combined_hidden_width_px, PixelInterval.exact(6.0))
 
-    def test_measured_non_white_edge_rules_out_white_holder_occlusion(self) -> None:
-        boundary = BoundaryObservation(
+    def test_high_texture_edge_rules_out_holder_material_occlusion(self) -> None:
+        boundary_source = boundary_path_fixture(
             side=BoundarySide.LEADING,
             position=PixelInterval.exact(20.0),
             kind=BoundaryKind.TEXTURE_TRANSITION,
             provenance=MeasurementProvenance(
-                MeasurementIdentity.HOLDER_BOUNDARY_PROFILE,
+                MeasurementIdentity.HOLDER_MATERIAL_PROFILE,
                 "texture_transition",
                 (MeasurementIdentity.GRAY_WORK,),
                 ("leading",),
+            ),
+        )
+        boundary = replace(
+            boundary_source,
+            outer_material=replace(
+                boundary_source.outer_material,
+                texture_median=2.0,
             ),
         )
 
@@ -603,6 +636,7 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
             leading_visible_frame_width=PixelInterval.exact(94.0),
             trailing_visible_frame_width=None,
             frame_width_px=PixelInterval.exact(100.0),
+            edge_texture_limit=1.0,
         )
 
         self.assertEqual(evidence.leading.state, EvidenceState.NOT_APPLICABLE)

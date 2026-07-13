@@ -57,8 +57,8 @@ class CandidateLifecycleSourceContractTest(unittest.TestCase):
         ):
             self.assertNotIn(forbidden, source)
 
-    def test_separator_support_is_independent_of_confidence(self) -> None:
-        source = (CANDIDATE_ROOT / "assessment/separator_support.py").read_text()
+    def test_film_structure_evidence_is_independent_of_confidence(self) -> None:
+        source = (DETECTION_ROOT / "evidence/film_structure.py").read_text()
         self.assertNotIn("confidence", source)
         self.assertNotIn("joint_score", source)
 
