@@ -33,6 +33,7 @@ class ExternalApertureBoundaryObservation:
     crossing_track_count: int
     minimum_active_pixels: int
     minimum_crossing_tracks: int
+    content_crossing_detected: bool = field(init=False)
     state: EvidenceState = field(init=False)
     reason: str = field(init=False)
 
@@ -52,14 +53,16 @@ class ExternalApertureBoundaryObservation:
         if min(self.minimum_active_pixels, self.minimum_crossing_tracks) <= 0:
             raise ValueError("external aperture support requirements must be positive")
 
+        crossing_detected = bool(
+            self.outside_region is not None
+            and self.active_inside_pixels >= self.minimum_active_pixels
+            and self.active_outside_pixels >= self.minimum_active_pixels
+            and self.crossing_track_count >= self.minimum_crossing_tracks
+        )
         if self.outside_region is None:
             state = EvidenceState.NOT_APPLICABLE
             reason = "external_aperture_edge_is_canvas_adjacent"
-        elif (
-            self.active_inside_pixels >= self.minimum_active_pixels
-            and self.active_outside_pixels >= self.minimum_active_pixels
-            and self.crossing_track_count >= self.minimum_crossing_tracks
-        ):
+        elif crossing_detected:
             if self.boundary_source == PhotoApertureEdgeSource.DIMENSION_HYPOTHESIS:
                 state = EvidenceState.CONTRADICTED
                 reason = "continuous_content_crosses_provisional_aperture"
@@ -69,6 +72,7 @@ class ExternalApertureBoundaryObservation:
         else:
             state = EvidenceState.UNAVAILABLE
             reason = "external_content_crossing_not_corroborated"
+        object.__setattr__(self, "content_crossing_detected", crossing_detected)
         object.__setattr__(self, "state", state)
         object.__setattr__(self, "reason", reason)
 
@@ -80,6 +84,7 @@ class ExternalAperturePreservationEvidence:
     photo_count: int
     observations: tuple[ExternalApertureBoundaryObservation, ...]
     threshold: float | None
+    measured_boundary_conflict: bool = field(init=False)
     state: EvidenceState = field(init=False)
     reason: str = field(init=False)
 
@@ -121,6 +126,11 @@ class ExternalAperturePreservationEvidence:
                 "external aperture evidence requires every photo cross-axis edge "
                 "and only the sequence endpoint long-axis edges"
             )
+        measured_boundary_conflict = any(
+            item.content_crossing_detected
+            and item.boundary_source != PhotoApertureEdgeSource.DIMENSION_HYPOTHESIS
+            for item in self.observations
+        )
         if any(
             item.state == EvidenceState.CONTRADICTED
             for item in self.observations
@@ -146,6 +156,11 @@ class ExternalAperturePreservationEvidence:
                 )
                 else "external_content_crossing_not_observed"
             )
+        object.__setattr__(
+            self,
+            "measured_boundary_conflict",
+            measured_boundary_conflict,
+        )
         object.__setattr__(self, "state", state)
         object.__setattr__(self, "reason", reason)
 

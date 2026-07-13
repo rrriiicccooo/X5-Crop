@@ -14,6 +14,7 @@ from x5crop.domain import (
     EvidenceState,
     MeasurementIdentity,
     MeasurementProvenance,
+    ObservationId,
     PhotoApertureEdgeSource,
 )
 
@@ -25,13 +26,15 @@ def _geometry_with_measured_internal_edges():
     geometry = candidate_fixture().geometry
     left_provenance = MeasurementProvenance(
         MeasurementIdentity.PHOTO_EDGES,
-        "measured_internal_trailing_edge",
+        ObservationId("measured_internal_trailing_edge"),
         (MeasurementIdentity.GRAY_WORK,),
+        "measured internal trailing edge",
     )
     right_provenance = MeasurementProvenance(
         MeasurementIdentity.PHOTO_EDGES,
-        "measured_internal_leading_edge",
+        ObservationId("measured_internal_leading_edge"),
         (MeasurementIdentity.GRAY_WORK,),
+        "measured internal leading edge",
     )
     left = replace(
         geometry.photo_apertures[0],

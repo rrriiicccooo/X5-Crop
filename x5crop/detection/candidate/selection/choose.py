@@ -19,7 +19,7 @@ from .model import (
 
 def candidate_rank(
     candidate: AssessedCandidate,
-) -> tuple[int, int, int, int, int, int, int, float, float, float]:
+) -> tuple[int, int, int, int, int, int, int, float, float]:
     quality = candidate.evidence_quality
     internal_boundary_contradictions = sum(
         code.rsplit(":", 1)[-1] == "inter_photo_boundary_preservation"
@@ -40,11 +40,6 @@ def candidate_rank(
         if residuals is not None and residuals.dimension is not None
         else float("inf")
     )
-    conservation_residual = (
-        residuals.conservation
-        if residuals is not None and residuals.conservation is not None
-        else float("inf")
-    )
     boundary_residual = (
         residuals.boundary_uncertainty
         if residuals is not None
@@ -59,7 +54,6 @@ def candidate_rank(
         len(quality.supported_proof_paths),
         1 if candidate.geometry.automatic_processing_supported else 0,
         -float(dimension_residual),
-        -float(conservation_residual),
         -float(boundary_residual),
     )
 

@@ -69,16 +69,28 @@ class MeasurementIdentity(str, Enum):
     TIFF_RESOLUTION = "tiff_resolution"
 
 
+class ObservationId(str):
+    def __new__(cls, value: str) -> "ObservationId":
+        if not isinstance(value, str) or not value:
+            raise ValueError("observation identity must be a non-empty string")
+        return str.__new__(cls, value)
+
+
 @dataclass(frozen=True)
 class MeasurementProvenance:
     root_measurement: MeasurementIdentity
-    source: str
+    observation_id: ObservationId
     dependencies: tuple[MeasurementIdentity, ...]
-    boundary_anchors: tuple[str, ...] = ()
+    description: str
+    boundary_anchors: tuple[ObservationId, ...] = ()
 
     def __post_init__(self) -> None:
-        if not isinstance(self.root_measurement, MeasurementIdentity) or not self.source:
-            raise ValueError("measurement provenance requires root and source identity")
+        if not isinstance(self.root_measurement, MeasurementIdentity):
+            raise ValueError("measurement provenance requires a typed root identity")
+        if not isinstance(self.observation_id, ObservationId):
+            raise ValueError("measurement provenance requires a typed observation identity")
+        if not self.description:
+            raise ValueError("measurement provenance requires a description")
         if any(
             not isinstance(dependency, MeasurementIdentity)
             for dependency in self.dependencies
@@ -86,6 +98,13 @@ class MeasurementProvenance:
             raise ValueError("measurement dependencies require typed identities")
         if len(set(self.dependencies)) != len(self.dependencies):
             raise ValueError("measurement dependencies must be unique")
+        if any(
+            not isinstance(anchor, ObservationId)
+            for anchor in self.boundary_anchors
+        ):
+            raise ValueError("boundary anchors require typed observation identities")
+        if len(set(self.boundary_anchors)) != len(self.boundary_anchors):
+            raise ValueError("boundary anchors must be unique")
 
 
 class EvidenceState(str, Enum):

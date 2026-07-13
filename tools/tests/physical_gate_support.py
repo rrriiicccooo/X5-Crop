@@ -88,6 +88,7 @@ from x5crop.domain import (
     InterPhotoSpacingBasis,
     MeasurementIdentity,
     MeasurementProvenance,
+    ObservationId,
     PhotoAperture,
     PhotoApertureBoundaryResolution,
     PhotoApertureCrossAxisHypothesis,
@@ -168,9 +169,9 @@ def candidate_boundary_paths() -> tuple[GrayBoundaryPathObservation, ...]:
             BoundaryKind.EDGE_ADJACENT_TRANSITION,
             MeasurementProvenance(
                 MeasurementIdentity.BOUNDARY_PATHS,
-                "synthetic_holder_boundary",
+                ObservationId(f"synthetic_holder_boundary:{side.value}"),
                 (MeasurementIdentity.GRAY_WORK,),
-                (side.value,),
+                "synthetic holder boundary",
             ),
         )
         for side, position in (
@@ -203,8 +204,9 @@ def supported_calibration_fixture(
             PhysicalScaleScope.ROOT_MEASUREMENT,
             MeasurementProvenance(
                 MeasurementIdentity.SHORT_AXIS_BOUNDARIES,
-                "test_scale",
+                ObservationId(f"test_scale:{axis}"),
                 (MeasurementIdentity.BOUNDARY_PATHS,),
+                "synthetic scale observation",
             ),
         )
         for axis, value in (("x", x_px_per_mm), ("y", y_px_per_mm))
@@ -225,8 +227,9 @@ def separator_observation(
     end = float(center + 1.0 if end is None else end)
     provenance = MeasurementProvenance(
         MeasurementIdentity.SEPARATOR_PROFILE,
-        "synthetic_separator_band",
+        ObservationId(f"synthetic_separator_band:{start:.6f}:{end:.6f}"),
         (MeasurementIdentity.GRAY_WORK,),
+        "synthetic separator band",
     )
     if aperture_cross_axis is None:
         paths = candidate_boundary_paths()
@@ -387,13 +390,14 @@ def _candidate_geometry(
             source=FrameDimensionPriorSource.PHYSICAL_ASPECT,
             provenance=MeasurementProvenance(
                 MeasurementIdentity.PHYSICAL_FRAME_ASPECT,
-                "synthetic_frame_dimension_prior",
+                ObservationId("synthetic_frame_dimension_prior"),
                 (MeasurementIdentity.FORMAT_PHYSICAL_SPEC,),
+                "synthetic frame dimension prior",
             ),
         ),
         photo_width_constraint_px=PixelInterval.exact(150.0),
         photo_height_constraint_px=PixelInterval.exact(100.0),
-        residuals=SequenceResiduals(0.0, 0.0, 0.0),
+        residuals=SequenceResiduals(0.0, 0.0),
         assignment_consensus=BoundaryAssignmentConsensus(
             AssignmentConsensusOutcome.UNCONTESTED,
             1,
@@ -403,9 +407,10 @@ def _candidate_geometry(
         automatic_processing_supported=automatic_processing_supported,
         sequence_provenance=MeasurementProvenance(
             MeasurementIdentity.BOUNDARY_PATHS,
-            "synthetic_photo_aperture_sequence",
+            ObservationId("synthetic_photo_aperture_sequence"),
             (MeasurementIdentity.GRAY_WORK,),
-            ("leading", "trailing", "top", "bottom"),
+            "synthetic photo aperture sequence",
+            tuple(path.provenance.observation_id for path in paths),
         ),
         raw_boundary_paths=paths,
         holder_boundaries=tuple(

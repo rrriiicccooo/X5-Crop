@@ -100,7 +100,7 @@ def _overlap_requirements(
                 physically_supported=relation.supports_output_protection,
                 provenance=(
                     f"{relation.provenance.root_measurement.value}:"
-                    f"{relation.provenance.source}"
+                    f"{relation.provenance.observation_id}"
                 ),
             )
         )

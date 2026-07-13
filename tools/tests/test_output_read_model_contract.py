@@ -358,6 +358,7 @@ class OutputReadModelContractTest(unittest.TestCase):
             FrameDimensionPriorSource,
             MeasurementIdentity,
             MeasurementProvenance,
+            ObservationId,
             PixelInterval,
         )
         from x5crop.report.read_models import typed_read_model
@@ -367,8 +368,9 @@ class OutputReadModelContractTest(unittest.TestCase):
             source=FrameDimensionPriorSource.PHYSICAL_ASPECT,
             provenance=MeasurementProvenance(
                 MeasurementIdentity.PHYSICAL_FRAME_ASPECT,
-                "test",
+                ObservationId("test"),
                 (),
+                "test provenance",
             ),
         )
         self.assertEqual(

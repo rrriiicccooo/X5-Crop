@@ -6,6 +6,7 @@ from ...domain import (
     HolderBoundaryObservation,
     MeasurementIdentity,
     MeasurementProvenance,
+    ObservationId,
 )
 from ...formats import FormatPhysicalSpec
 from ...geometry.layout import is_horizontal_layout
@@ -63,11 +64,18 @@ def boundary_scale_observations(
                     PhysicalScaleSource.HOLDER_SHORT_AXIS,
                     PhysicalScaleScope.ROOT_MEASUREMENT,
                     MeasurementProvenance(
-                        MeasurementIdentity.SHORT_AXIS_BOUNDARIES,
-                        "textured_inner_boundary_scale_lower_bound",
-                        (
+                        root_measurement=MeasurementIdentity.SHORT_AXIS_BOUNDARIES,
+                        observation_id=ObservationId(
+                            "holder_aperture_short_axis_lower_bound"
+                        ),
+                        dependencies=(
                             MeasurementIdentity.BOUNDARY_PATHS,
                             MeasurementIdentity.FORMAT_PHYSICAL_SPEC,
+                        ),
+                        description="textured inner boundary scale lower bound",
+                        boundary_anchors=(
+                            top.provenance.observation_id,
+                            bottom.provenance.observation_id,
                         ),
                     ),
                 )
@@ -102,9 +110,11 @@ def _dimension_consensus_observations(
             source=PhysicalScaleSource.PHOTO_APERTURE_DIMENSION_CONSENSUS,
             scope=PhysicalScaleScope.CANDIDATE_GEOMETRY,
             provenance=MeasurementProvenance(
-                MeasurementIdentity.PHOTO_EDGES,
-                "frame_dimension_scale_observation",
-                tuple(
+                root_measurement=MeasurementIdentity.PHOTO_EDGES,
+                observation_id=ObservationId(
+                    f"photo_aperture_dimension_scale:{aperture.index}"
+                ),
+                dependencies=tuple(
                     dict.fromkeys(
                         (
                             MeasurementIdentity.FORMAT_PHYSICAL_SPEC,
@@ -113,9 +123,10 @@ def _dimension_consensus_observations(
                         )
                     )
                 ),
-                (
-                    f"photo:{aperture.index}:leading",
-                    f"photo:{aperture.index}:trailing",
+                description="photo aperture dimension scale observation",
+                boundary_anchors=(
+                    aperture.leading.provenance.observation_id,
+                    aperture.trailing.provenance.observation_id,
                 ),
             ),
         )
@@ -160,11 +171,18 @@ def _short_axis_observation(
         source=PhysicalScaleSource.PHOTO_APERTURE_SHORT_AXIS,
         scope=PhysicalScaleScope.CANDIDATE_GEOMETRY,
         provenance=MeasurementProvenance(
-            MeasurementIdentity.SHORT_AXIS_BOUNDARIES,
-            "textured_inner_short_axis_scale_lower_bound",
-            (
+            root_measurement=MeasurementIdentity.SHORT_AXIS_BOUNDARIES,
+            observation_id=ObservationId(
+                "photo_aperture_short_axis_scale_lower_bound"
+            ),
+            dependencies=(
                 MeasurementIdentity.BOUNDARY_PATHS,
                 MeasurementIdentity.FORMAT_PHYSICAL_SPEC,
+            ),
+            description="textured inner short-axis scale lower bound",
+            boundary_anchors=(
+                boundaries[BoundarySide.TOP].provenance.observation_id,
+                boundaries[BoundarySide.BOTTOM].provenance.observation_id,
             ),
         ),
     )
@@ -199,6 +217,7 @@ def candidate_scale_observations_match_geometry(
             observation.source,
             observation.scope,
             provenance.root_measurement,
+            provenance.observation_id,
             provenance.dependencies,
             provenance.boundary_anchors,
         )

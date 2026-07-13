@@ -16,7 +16,7 @@ from x5crop.detection.candidate.model import (
     CandidateAssessment,
     CandidateEvidence,
 )
-from x5crop.detection.physical.model import PhotoSequenceSolution
+from x5crop.detection.physical.model import PhotoSequenceSolution, SequenceResiduals
 import x5crop.detection.physical.model as physical_model
 from x5crop.detection.decision.model import DecisionGateAssessment
 from x5crop.detection.final.model import FinalDetection
@@ -46,6 +46,12 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 class DetectionStageTypeContractTests(unittest.TestCase):
+    def test_sequence_residuals_do_not_duplicate_conservation_evidence(self) -> None:
+        self.assertEqual(
+            tuple(field.name for field in fields(SequenceResiduals)),
+            ("dimension", "boundary_uncertainty"),
+        )
+
     def test_detection_request_and_context_reject_identity_drift(self) -> None:
         from x5crop.configuration.registry import get_detection_configuration
 
@@ -111,6 +117,7 @@ class DetectionStageTypeContractTests(unittest.TestCase):
             FrameDimensionPriorSource,
             MeasurementIdentity,
             MeasurementProvenance,
+            ObservationId,
             PhotoApertureBoundaryResolution,
             PhotoApertureEdgeSource,
         )
@@ -138,9 +145,14 @@ class DetectionStageTypeContractTests(unittest.TestCase):
         )
         provenance_hints = get_type_hints(MeasurementProvenance)
         self.assertIs(provenance_hints["root_measurement"], MeasurementIdentity)
+        self.assertIs(provenance_hints["observation_id"], ObservationId)
         self.assertEqual(
             provenance_hints["dependencies"],
             tuple[MeasurementIdentity, ...],
+        )
+        self.assertEqual(
+            provenance_hints["boundary_anchors"],
+            tuple[ObservationId, ...],
         )
 
     def test_candidate_stages_are_immutable_and_separate(self) -> None:

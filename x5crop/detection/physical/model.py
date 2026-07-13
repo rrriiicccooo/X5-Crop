@@ -48,7 +48,6 @@ def _validate_geometry_identity(
 @dataclass(frozen=True)
 class SequenceResiduals:
     dimension: float | None
-    conservation: float | None
     boundary_uncertainty: float
 
     def __post_init__(self) -> None:
@@ -56,7 +55,6 @@ class SequenceResiduals:
             value
             for value in (
                 self.dimension,
-                self.conservation,
                 self.boundary_uncertainty,
             )
             if value is not None
@@ -282,7 +280,6 @@ def combined_sequence_residuals(
 
     return SequenceResiduals(
         dimension=maximum("dimension"),
-        conservation=maximum("conservation"),
         boundary_uncertainty=max(
             lane.residuals.boundary_uncertainty for lane in lane_solutions
         ),

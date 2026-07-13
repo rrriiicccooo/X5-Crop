@@ -34,6 +34,7 @@ from x5crop.domain import (
     EvidenceState,
     MeasurementIdentity,
     MeasurementProvenance,
+    ObservationId,
     PixelInterval,
     PhotoApertureEdgeSource,
 )
@@ -49,8 +50,9 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 def _independent_photo_edge(source: str) -> MeasurementProvenance:
     return MeasurementProvenance(
         MeasurementIdentity.PHOTO_EDGES,
-        source,
+        ObservationId(source),
         (MeasurementIdentity.GRAY_WORK,),
+        "synthetic independent photo edge",
     )
 
 
@@ -199,7 +201,10 @@ class PhysicalGateModelContractTest(unittest.TestCase):
                 candidate.geometry,
                 sequence_provenance=replace(
                     candidate.geometry.sequence_provenance,
-                    source="equivalent_independent_candidate",
+                    observation_id=ObservationId(
+                        "equivalent_independent_candidate"
+                    ),
+                    description="equivalent independent candidate",
                 ),
             ),
         )
@@ -254,14 +259,14 @@ class PhysicalGateModelContractTest(unittest.TestCase):
             alternative,
             geometry=replace(
                 alternative.geometry,
-                residuals=SequenceResiduals(0.10, 0.0, 0.01),
+                residuals=SequenceResiduals(0.10, 0.01),
             ),
         )
         selected = replace(
             selected,
             geometry=replace(
                 selected.geometry,
-                residuals=SequenceResiduals(0.01, 0.0, 0.10),
+                residuals=SequenceResiduals(0.01, 0.10),
             ),
         )
         self.assertEqual(

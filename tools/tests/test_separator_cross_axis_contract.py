@@ -20,6 +20,7 @@ from x5crop.domain import (
     GrayIntensityTail,
     MeasurementIdentity,
     MeasurementProvenance,
+    ObservationId,
     PhotoApertureCrossAxisHypothesis,
 )
 from x5crop.image.statistics import (
@@ -36,8 +37,9 @@ def _textured_workspace(height: int = 120, width: int = 240) -> np.ndarray:
 def _cross_axis(height: int) -> PhotoApertureCrossAxisHypothesis:
     provenance = MeasurementProvenance(
         MeasurementIdentity.BOUNDARY_PATHS,
-        "synthetic_short_axis",
+        ObservationId("synthetic_short_axis"),
         (MeasurementIdentity.GRAY_WORK,),
+        "synthetic short axis",
     )
     appearance = GrayAppearanceObservation(
         intensity_median=128.0,

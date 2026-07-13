@@ -7,6 +7,7 @@ from ....domain import (
     HolderSpan,
     MeasurementIdentity,
     MeasurementProvenance,
+    ObservationId,
     PhotoSequenceSearchScope,
 )
 from ...physical.boundary_detection import boundary_measurements
@@ -40,13 +41,14 @@ def photo_sequence_search_scope(
         containment_fallback=measured.containment_fallback,
         provenance=MeasurementProvenance(
             root_measurement=MeasurementIdentity.BOUNDARY_PATHS,
-            source="count_independent_photo_aperture_search_scope",
+            observation_id=ObservationId("photo_aperture_search_scope"),
             dependencies=(
                 MeasurementIdentity.GRAY_WORK,
                 MeasurementIdentity.IMAGE_MEASUREMENT_STATISTICS,
             ),
+            description="count-independent photo aperture search scope",
             boundary_anchors=tuple(
-                f"{item.side.value}:{item.position.midpoint:.3f}"
+                item.provenance.observation_id
                 for item in measured.holder_boundaries
             ),
         ),

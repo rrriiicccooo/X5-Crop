@@ -40,8 +40,14 @@ from x5crop.detection.physical.model import (
     combined_assignment_consensus,
     combined_sequence_residuals,
 )
-from x5crop.domain import Box, EvidenceState, HolderSpan, MeasurementIdentity
-from x5crop.domain import MeasurementProvenance
+from x5crop.domain import (
+    Box,
+    EvidenceState,
+    HolderSpan,
+    MeasurementIdentity,
+    MeasurementProvenance,
+    ObservationId,
+)
 from x5crop.image.statistics import image_measurement_statistics
 
 
@@ -69,8 +75,9 @@ def _parent(lane):
             normalized_lane_residuals=(1.0, 1.0),
             provenance=MeasurementProvenance(
                 MeasurementIdentity.LANE_DIVIDER_PROFILE,
-                "measured_gutter",
+                ObservationId("measured_gutter"),
                 (MeasurementIdentity.CONTENT_EVIDENCE_IMAGE,),
+                "measured dual-lane gutter",
             ),
         ),
         lane_solutions=lane_solutions,
@@ -228,7 +235,7 @@ class DualLaneAssessmentTest(unittest.TestCase):
         )
         geometry = _parent(candidate_fixture()).geometry
         with self.assertRaises(ValueError):
-            replace(geometry, residuals=SequenceResiduals(None, None, 0.5))
+            replace(geometry, residuals=SequenceResiduals(None, 0.5))
         with self.assertRaises(ValueError):
             replace(
                 geometry,

@@ -11,6 +11,7 @@ from ....domain import (
     gray_intensity_tail,
     MeasurementIdentity,
     MeasurementProvenance,
+    ObservationId,
     PhotoApertureCrossAxisHypothesis,
     SeparatorBandObservation,
     SeparatorCrossAxisMeasurement,
@@ -289,11 +290,14 @@ def propose_separator_bands(
         end = float(corridor.left) + float(local_end)
         provenance = MeasurementProvenance(
             root_measurement=MeasurementIdentity.SEPARATOR_PROFILE,
-            source="observed_separator_band",
+            observation_id=ObservationId(
+                f"separator_band:{start:.6f}:{end:.6f}"
+            ),
             dependencies=(
                 MeasurementIdentity.GRAY_WORK,
                 MeasurementIdentity.BOUNDARY_CORRIDOR,
             ),
+            description="observed separator band",
         )
         row_measurements = _band_row_measurements(
             gray_work,

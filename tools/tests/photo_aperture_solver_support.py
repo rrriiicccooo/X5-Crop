@@ -20,6 +20,7 @@ from x5crop.domain import (
     HolderSpan,
     MeasurementIdentity,
     MeasurementProvenance,
+    ObservationId,
     PhotoApertureCrossAxisHypothesis,
     PhotoSequenceSearchScope,
     PixelInterval,
@@ -33,7 +34,12 @@ def provenance(
     identity: MeasurementIdentity,
     source: str,
 ) -> MeasurementProvenance:
-    return MeasurementProvenance(identity, source, (MeasurementIdentity.GRAY_WORK,))
+    return MeasurementProvenance(
+        identity,
+        ObservationId(source),
+        (MeasurementIdentity.GRAY_WORK,),
+        "synthetic solver observation",
+    )
 
 
 def appearance(provenance: MeasurementProvenance) -> GrayAppearanceObservation:
@@ -159,14 +165,16 @@ def scope(
             Box(0, 0, width, height),
             MeasurementProvenance(
                 MeasurementIdentity.HOLDER_CANVAS,
-                "synthetic_containment",
+                ObservationId("synthetic_containment"),
                 (MeasurementIdentity.CANVAS,),
+                "synthetic containment fallback",
             ),
         ),
         provenance=MeasurementProvenance(
             MeasurementIdentity.BOUNDARY_CORRIDOR,
-            "synthetic_search_scope",
+            ObservationId("synthetic_search_scope"),
             (MeasurementIdentity.BOUNDARY_PATHS,),
+            "synthetic search scope",
         ),
     )
 
@@ -177,8 +185,9 @@ def dimensions(width_mm: float, height_mm: float) -> FrameDimensionPrior:
         source=FrameDimensionPriorSource.PHYSICAL_ASPECT,
         provenance=MeasurementProvenance(
             MeasurementIdentity.FORMAT_PHYSICAL_SPEC,
-            "synthetic_dimensions",
+            ObservationId("synthetic_dimensions"),
             (),
+            "synthetic physical dimensions",
         ),
     )
 

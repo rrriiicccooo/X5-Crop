@@ -39,6 +39,7 @@ from x5crop.domain import (
     InterPhotoSpacingBasis,
     MeasurementIdentity,
     MeasurementProvenance,
+    ObservationId,
     PhotoAperture,
     PhotoApertureBoundaryResolution,
     PhotoApertureEdgeSource,
@@ -51,8 +52,9 @@ from x5crop.formats import format_spec
 def _underfilled_geometry() -> PhotoSequenceSolution:
     provenance = MeasurementProvenance(
         MeasurementIdentity.PHOTO_EDGES,
-        "synthetic_underfilled_apertures",
+        ObservationId("synthetic_underfilled_apertures"),
         (MeasurementIdentity.GRAY_WORK,),
+        "synthetic underfilled apertures",
     )
     observations = (
         separator_observation(140.0, start=135.0, end=145.0),
@@ -140,13 +142,14 @@ def _underfilled_geometry() -> PhotoSequenceSolution:
             FrameDimensionPriorSource.PHYSICAL_ASPECT,
             MeasurementProvenance(
                 MeasurementIdentity.PHYSICAL_FRAME_ASPECT,
-                "synthetic_square_prior",
+                ObservationId("synthetic_square_prior"),
                 (MeasurementIdentity.FORMAT_PHYSICAL_SPEC,),
+                "synthetic square prior",
             ),
         ),
         photo_width_constraint_px=PixelInterval.exact(100.0),
         photo_height_constraint_px=PixelInterval.exact(100.0),
-        residuals=SequenceResiduals(0.0, 0.0, 0.0),
+        residuals=SequenceResiduals(0.0, 0.0),
         assignment_consensus=BoundaryAssignmentConsensus(
             AssignmentConsensusOutcome.UNCONTESTED,
             1,

@@ -11,6 +11,7 @@ from ...domain import (
     EvidenceState,
     MeasurementIdentity,
     MeasurementProvenance,
+    ObservationId,
 )
 from ...utils import clamp_int
 
@@ -95,8 +96,9 @@ def _divider_evidence(
         ),
         provenance=MeasurementProvenance(
             root_measurement=MeasurementIdentity.LANE_DIVIDER_PROFILE,
-            source=source,
+            observation_id=ObservationId(source),
             dependencies=(MeasurementIdentity.CONTENT_EVIDENCE_IMAGE,),
+            description="measured lane divider proposal",
         ),
     )
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 import unittest
 
 import numpy as np
@@ -41,6 +42,7 @@ from x5crop.domain import (
     InterPhotoSpacingBasis,
     MeasurementIdentity,
     MeasurementProvenance,
+    ObservationId,
     PhotoAperture,
     PhotoApertureBoundaryResolution,
     PhotoApertureEdgeSource,
@@ -73,8 +75,9 @@ def _single_aperture_geometry(
 ) -> PhotoSequenceSolution:
     provenance = MeasurementProvenance(
         MeasurementIdentity.PHOTO_EDGES,
-        "synthetic_single_aperture",
+        ObservationId("synthetic_single_aperture"),
         (MeasurementIdentity.GRAY_WORK,),
+        "synthetic single-aperture measurement",
     )
 
     def edge(side: BoundarySide, position: float):
@@ -118,13 +121,14 @@ def _single_aperture_geometry(
             FrameDimensionPriorSource.PHYSICAL_ASPECT,
             MeasurementProvenance(
                 MeasurementIdentity.PHYSICAL_FRAME_ASPECT,
-                "synthetic_frame_prior",
+                ObservationId("synthetic_frame_prior"),
                 (MeasurementIdentity.FORMAT_PHYSICAL_SPEC,),
+                "synthetic physical frame prior",
             ),
         ),
         photo_width_constraint_px=PixelInterval.exact(float(box.width)),
         photo_height_constraint_px=PixelInterval.exact(float(box.height)),
-        residuals=SequenceResiduals(0.0, 0.0, 0.0),
+        residuals=SequenceResiduals(0.0, 0.0),
         assignment_consensus=BoundaryAssignmentConsensus(
             AssignmentConsensusOutcome.UNCONTESTED,
             1,
@@ -152,8 +156,9 @@ def _measured_apertures_for_spacing(spacing_px: float) -> tuple[PhotoAperture, .
             PhotoApertureEdgeSource.MEASURED_BOUNDARY_PATH,
             MeasurementProvenance(
                 MeasurementIdentity.BOUNDARY_PATHS,
-                f"synthetic_photo_{photo_index}_{side.value}",
+                ObservationId(f"synthetic_photo_{photo_index}_{side.value}"),
                 (MeasurementIdentity.GRAY_WORK,),
+                "synthetic measured aperture edge",
             ),
         )
 
@@ -190,8 +195,9 @@ class FrameContentSupportTest(unittest.TestCase):
         boundary = InterPhotoBoundaryReference(None, 1)
         provenance = MeasurementProvenance(
             MeasurementIdentity.PHOTO_EDGES,
-            "synthetic_spacing",
+            ObservationId("synthetic_spacing"),
             (MeasurementIdentity.GRAY_WORK,),
+            "synthetic inter-photo spacing",
         )
         cases = (
             (
@@ -248,6 +254,54 @@ class FrameContentSupportTest(unittest.TestCase):
                         evidence.observations[0].spacing_evidence.basis,
                         InterPhotoSpacingBasis.CORROBORATED_OVERLAP,
                     )
+
+    def test_description_text_cannot_create_independent_overlap_evidence(self) -> None:
+        geometry = candidate_fixture().geometry
+        crossing = PhotoContentEvidence(
+            0.5,
+            (
+                PhotoContentObservation(1, 0.8, 0.8, True, ("right",)),
+                PhotoContentObservation(2, 0.8, 0.8, True, ("left",)),
+            ),
+        )
+        apertures = _measured_apertures_for_spacing(-5.0)
+        shared = ObservationId("shared_boundary_observation")
+        first = replace(
+            apertures[0],
+            trailing=replace(
+                apertures[0].trailing,
+                provenance=replace(
+                    apertures[0].trailing.provenance,
+                    observation_id=shared,
+                    description="left description",
+                ),
+            ),
+        )
+        second = replace(
+            apertures[1],
+            leading=replace(
+                apertures[1].leading,
+                provenance=replace(
+                    apertures[1].leading.provenance,
+                    observation_id=shared,
+                    description="right description",
+                ),
+            ),
+        )
+        spacing = replace(
+            geometry.inter_photo_spacings[0],
+            signed_width_px=PixelInterval.exact(-5.0),
+            basis=InterPhotoSpacingBasis.GEOMETRY_HYPOTHESIS,
+        )
+
+        evidence = inter_photo_boundary_preservation_evidence(
+            2,
+            (first, second),
+            (spacing,),
+            crossing,
+        )
+
+        self.assertEqual(evidence.state, EvidenceState.CONTRADICTED)
 
     def test_undersized_sample_cannot_satisfy_content_support(self) -> None:
         self.assertFalse(
@@ -336,6 +390,16 @@ class FrameContentSupportTest(unittest.TestCase):
         self.assertEqual(
             preservation.reason,
             "external_aperture_measurement_conflict",
+        )
+        evidence = candidate_evidence_fixture()
+        self.assertEqual(
+            content_preservation_state(
+                evidence.photo_aperture_coverage,
+                evidence.inter_photo_boundary_preservation,
+                preservation,
+                evidence.partial_edge_safety,
+            ),
+            EvidenceState.UNAVAILABLE,
         )
         self.assertEqual(geometry.photo_apertures[0].frame_crop_envelope.box, Box(250, 0, 650, 120))
 

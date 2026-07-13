@@ -11,6 +11,7 @@ from x5crop.domain import (
     InterPhotoSpacingBasis,
     MeasurementIdentity,
     MeasurementProvenance,
+    ObservationId,
     PhotoApertureEdgeSource,
 )
 
@@ -28,8 +29,9 @@ class CandidateEvidenceQualityContractTest(unittest.TestCase):
         geometry = candidate_fixture().geometry
         provenance = MeasurementProvenance(
             MeasurementIdentity.FRAME_GEOMETRY,
-            "dimension_only_internal_boundary",
+            ObservationId("dimension_only_internal_boundary"),
             (MeasurementIdentity.FRAME_DIMENSIONS,),
+            "dimension-only internal boundary",
         )
         first = replace(
             geometry.photo_apertures[0],

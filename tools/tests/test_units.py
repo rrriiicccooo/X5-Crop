@@ -5,6 +5,7 @@ import unittest
 from x5crop.domain import (
     MeasurementIdentity,
     MeasurementProvenance,
+    ObservationId,
 )
 
 from x5crop.units import (
@@ -59,8 +60,9 @@ class UnitModelTests(unittest.TestCase):
                     PhysicalScaleScope.ROOT_MEASUREMENT,
                     MeasurementProvenance(
                         MeasurementIdentity.SHORT_AXIS_BOUNDARIES,
-                        "test_scale",
+                        ObservationId("test_scale_lower_bound"),
                         (MeasurementIdentity.BOUNDARY_PATHS,),
+                        "test scale lower bound",
                     ),
                 ),
             ),
@@ -85,8 +87,9 @@ class UnitModelTests(unittest.TestCase):
                     PhysicalScaleScope.ROOT_MEASUREMENT,
                     MeasurementProvenance(
                         MeasurementIdentity.SHORT_AXIS_BOUNDARIES,
-                        "test_scale",
+                        ObservationId("test_scale_upper_bound"),
                         (MeasurementIdentity.BOUNDARY_PATHS,),
+                        "test scale upper bound",
                     ),
                 ),
             ),

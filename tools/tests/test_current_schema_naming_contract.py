@@ -79,7 +79,13 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
         self.assertTrue(SeparatorBandObservation.__dataclass_params__.frozen)
         self.assertEqual(
             tuple(MeasurementProvenance.__dataclass_fields__),
-            ("root_measurement", "source", "dependencies", "boundary_anchors"),
+            (
+                "root_measurement",
+                "observation_id",
+                "dependencies",
+                "description",
+                "boundary_anchors",
+            ),
         )
 
     def test_debug_legend_is_derived_from_canonical_diagnostics_style(self) -> None:

@@ -27,6 +27,7 @@ from x5crop.domain import (
     FrameDimensionPriorSource,
     InterPhotoSpacingBasis,
     MeasurementIdentity,
+    ObservationId,
     PhotoApertureEdgeSource,
     PhotoApertureCrossAxisHypothesis,
     PixelInterval,
@@ -193,7 +194,8 @@ class PhotoApertureSolverContractTest(unittest.TestCase):
                 path,
                 position=(position := (
                     PixelInterval(0.0, 100.0)
-                    if path.provenance.source == "leading_aperture_path"
+                    if path.provenance.observation_id
+                    == ObservationId("leading_aperture_path")
                     else PixelInterval(100.0, 200.0)
                 )),
                 local_positions=(position,),
@@ -351,12 +353,14 @@ class PhotoApertureSolverContractTest(unittest.TestCase):
         top_path = next(
             path
             for path in scope.raw_boundary_paths
-            if path.provenance.source == "top_aperture_path"
+            if path.provenance.observation_id
+            == ObservationId("top_aperture_path")
         )
         bottom_path = next(
             path
             for path in scope.raw_boundary_paths
-            if path.provenance.source == "bottom_aperture_path"
+            if path.provenance.observation_id
+            == ObservationId("bottom_aperture_path")
         )
         uncertain_top = replace(
             top_path,

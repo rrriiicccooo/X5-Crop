@@ -20,6 +20,7 @@ from x5crop.domain import (
     HolderSpan,
     MeasurementIdentity,
     MeasurementProvenance,
+    ObservationId,
     PhotoApertureEdgeSource,
     PixelInterval,
 )
@@ -120,8 +121,9 @@ class PhotoSizePhysicalModelTest(unittest.TestCase):
         geometry = candidate_fixture().geometry
         provenance = MeasurementProvenance(
             MeasurementIdentity.FRAME_GEOMETRY,
-            "dimension_only_aperture",
+            ObservationId("dimension_only_aperture"),
             (MeasurementIdentity.FORMAT_PHYSICAL_SPEC,),
+            "dimension-only aperture",
         )
         apertures = tuple(
             replace(

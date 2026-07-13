@@ -41,7 +41,7 @@ def unresolved_dual_lane_candidate(
             holder_span=scope.holder_span,
             containment_fallback=scope.containment_fallback,
             frame_dimension_prior=dimensions,
-            residuals=SequenceResiduals(None, None, 0.0),
+            residuals=SequenceResiduals(None, 0.0),
             assignment_consensus=BoundaryAssignmentConsensus(
                 AssignmentConsensusOutcome.NOT_APPLICABLE,
                 0,

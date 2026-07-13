@@ -18,6 +18,7 @@ from ...domain import (
     HolderBoundaryObservation,
     MeasurementIdentity,
     MeasurementProvenance,
+    ObservationId,
     PixelInterval,
     boundary_axis_for_side,
     gray_intensity_tail,
@@ -317,12 +318,12 @@ def _provenance(
         source = f"{source}:scan_from_{scan_origin.value}"
     return MeasurementProvenance(
         root_measurement=MeasurementIdentity.HOLDER_BOUNDARY_PROFILE,
-        source=source,
+        observation_id=ObservationId(source),
         dependencies=(
             MeasurementIdentity.GRAY_WORK,
             MeasurementIdentity.IMAGE_MEASUREMENT_STATISTICS,
         ),
-        boundary_anchors=(axis.value,),
+        description="measured gray boundary path",
     )
 
 
@@ -499,8 +500,9 @@ def boundary_measurements(
             Box(0, 0, width, height),
             MeasurementProvenance(
                 root_measurement=MeasurementIdentity.CANVAS,
-                source="workspace_containment_fallback",
+                observation_id=ObservationId("workspace_containment_fallback"),
                 dependencies=(MeasurementIdentity.GRAY_WORK,),
+                description="workspace containment fallback",
             ),
         ),
     )

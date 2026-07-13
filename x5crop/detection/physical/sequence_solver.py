@@ -13,6 +13,7 @@ from ...domain import (
     InterPhotoSpacingBasis,
     MeasurementIdentity,
     MeasurementProvenance,
+    ObservationId,
     PhotoAperture,
     PhotoApertureBoundaryResolution,
     PhotoApertureCrossAxisHypothesis,
@@ -193,7 +194,7 @@ def _axis_paths(
                 path.position.midpoint,
                 path.position.maximum - path.position.minimum,
                 path.kind.value,
-                path.provenance.source,
+                path.provenance.observation_id,
             ),
         )
     )
@@ -254,7 +255,7 @@ def _interior_separator_observations(
             key=lambda observation: (
                 observation.start,
                 observation.end,
-                observation.provenance.source,
+                observation.provenance.observation_id,
             ),
         )
     )
@@ -946,10 +947,10 @@ def _spacing_from_aperture_edges(
             if observed
             else MeasurementIdentity.FRAME_GEOMETRY
         ),
-        source=(
-            "measured_inter_photo_spacing"
-            if observed
-            else "overlap_spacing_hypothesis"
+        observation_id=ObservationId(
+            f"inter_photo_spacing:{boundary_index}:"
+            f"{trailing_provenance.observation_id}:"
+            f"{leading_provenance.observation_id}"
         ),
         dependencies=tuple(
             dict.fromkeys(
@@ -959,9 +960,18 @@ def _spacing_from_aperture_edges(
                 )
             )
         ),
-        boundary_anchors=(
-            trailing_provenance.source,
-            leading_provenance.source,
+        description=(
+            "measured inter-photo spacing"
+            if observed
+            else "inter-photo spacing hypothesis"
+        ),
+        boundary_anchors=tuple(
+            dict.fromkeys(
+                (
+                    trailing_provenance.observation_id,
+                    leading_provenance.observation_id,
+                )
+            )
         ),
     )
     return InterPhotoSpacing(
@@ -1066,7 +1076,6 @@ def _measured_sequence_build(
     )
     residuals = SequenceResiduals(
         dimension=dimension_residual,
-        conservation=None,
         boundary_uncertainty=uncertainty_px
         / max(MINIMUM_POSITIVE_PIXEL_EXTENT, float(holder_extent)),
     )
@@ -1308,9 +1317,13 @@ def _spacing_for_band(
         )
     else:
         provenance = MeasurementProvenance(
-            MeasurementIdentity.FRAME_GEOMETRY,
-            "dimension_constrained_inter_photo_spacing",
-            tuple(
+            root_measurement=MeasurementIdentity.FRAME_GEOMETRY,
+            observation_id=ObservationId(
+                f"dimension_spacing:{boundary_index}:"
+                f"{trailing.provenance.observation_id}:"
+                f"{leading.provenance.observation_id}"
+            ),
+            dependencies=tuple(
                 dict.fromkeys(
                     (
                         MeasurementIdentity.FRAME_DIMENSIONS,
@@ -1318,9 +1331,14 @@ def _spacing_for_band(
                     )
                 )
             ),
-            (
-                f"photo:{boundary_index}:trailing",
-                f"photo:{boundary_index + 1}:leading",
+            description="dimension-constrained inter-photo spacing",
+            boundary_anchors=tuple(
+                dict.fromkeys(
+                    (
+                        trailing.provenance.observation_id,
+                        leading.provenance.observation_id,
+                    )
+                )
             ),
         )
         basis = InterPhotoSpacingBasis.GEOMETRY_HYPOTHESIS
@@ -1465,7 +1483,6 @@ def _build_sequence(
     )
     residuals = SequenceResiduals(
         dimension=float(max(dimension_residual, cross_axis_residual)),
-        conservation=None,
         boundary_uncertainty=float(uncertainty_px)
         / max(MINIMUM_POSITIVE_PIXEL_EXTENT, float(holder_extent)),
     )

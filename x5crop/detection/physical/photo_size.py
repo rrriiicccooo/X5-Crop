@@ -10,6 +10,7 @@ from ...domain import (
     FrameDimensionPriorSource,
     MeasurementIdentity,
     MeasurementProvenance,
+    ObservationId,
 )
 from ...formats import FormatPhysicalSpec
 from ...geometry.layout import is_horizontal_layout
@@ -164,7 +165,7 @@ def frame_dimension_priors(
             if calibrated
             else MeasurementIdentity.PHYSICAL_FRAME_ASPECT
         ),
-        source="frame_dimension_prior",
+        observation_id=ObservationId("frame_dimension_prior"),
         dependencies=(
             MeasurementIdentity.FORMAT_PHYSICAL_SPEC,
             *(
@@ -173,6 +174,7 @@ def frame_dimension_priors(
                 else ()
             ),
         ),
+        description="physical frame dimension prior",
     )
     priors: list[FrameDimensionPrior] = []
     seen_sizes: set[tuple[float, float]] = set()

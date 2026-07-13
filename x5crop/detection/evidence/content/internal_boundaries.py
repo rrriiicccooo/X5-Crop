@@ -9,6 +9,7 @@ from ....domain import (
     InterPhotoSpacingBasis,
     MeasurementIdentity,
     MeasurementProvenance,
+    ObservationId,
     PhotoAperture,
     PhotoApertureEdgeSource,
 )
@@ -57,7 +58,8 @@ def _content_corroborated_spacing(
         and continuous_content_crossing
         and left.trailing.source == PhotoApertureEdgeSource.MEASURED_BOUNDARY_PATH
         and right.leading.source == PhotoApertureEdgeSource.MEASURED_BOUNDARY_PATH
-        and left.trailing.provenance != right.leading.provenance
+        and left.trailing.provenance.observation_id
+        != right.leading.provenance.observation_id
     )
     if not measured_overlap_edges:
         return spacing
@@ -75,11 +77,16 @@ def _content_corroborated_spacing(
         basis=InterPhotoSpacingBasis.CORROBORATED_OVERLAP,
         provenance=MeasurementProvenance(
             root_measurement=MeasurementIdentity.CONTENT_EVIDENCE_IMAGE,
-            source="content_corroborated_inter_photo_overlap",
+            observation_id=ObservationId(
+                f"content_overlap:{spacing.boundary.boundary_index}:"
+                f"{left.trailing.provenance.observation_id}:"
+                f"{right.leading.provenance.observation_id}"
+            ),
             dependencies=dependencies,
+            description="content-corroborated inter-photo overlap",
             boundary_anchors=(
-                left.trailing.provenance.source,
-                right.leading.provenance.source,
+                left.trailing.provenance.observation_id,
+                right.leading.provenance.observation_id,
             ),
         ),
     )

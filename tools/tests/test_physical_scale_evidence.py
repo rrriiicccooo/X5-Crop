@@ -21,6 +21,7 @@ from x5crop.domain import (
     InterPhotoSpacingBasis,
     MeasurementIdentity,
     MeasurementProvenance,
+    ObservationId,
     PhotoApertureEdgeSource,
 )
 from x5crop.formats import format_spec
@@ -88,16 +89,18 @@ class PhysicalScaleEvidenceTests(unittest.TestCase):
                 PhysicalScaleScope.CANDIDATE_GEOMETRY,
                 MeasurementProvenance(
                     MeasurementIdentity.SHORT_AXIS_BOUNDARIES,
-                    "wrong_root",
+                    ObservationId("wrong_root"),
                     (),
+                    "wrong root fixture",
                 ),
             )
 
     def test_scale_source_has_one_legal_scope(self) -> None:
         provenance = MeasurementProvenance(
             MeasurementIdentity.PHOTO_EDGES,
-            "candidate_dimension_scale",
+            ObservationId("candidate_dimension_scale"),
             (MeasurementIdentity.FRAME_DIMENSIONS,),
+            "candidate dimension scale",
         )
         with self.assertRaises(ValueError):
             PhysicalScaleObservation(
@@ -118,8 +121,9 @@ class PhysicalScaleEvidenceTests(unittest.TestCase):
             PhysicalScaleScope.CANDIDATE_GEOMETRY,
             MeasurementProvenance(
                 MeasurementIdentity.PHOTO_EDGES,
-                "candidate_dimension_scale",
+                ObservationId("candidate_dimension_scale"),
                 (MeasurementIdentity.FRAME_DIMENSIONS,),
+                "candidate dimension scale",
             ),
         )
         with self.assertRaises(ValueError):
@@ -169,8 +173,9 @@ class PhysicalScaleEvidenceTests(unittest.TestCase):
                 geometry.holder_span.box,
                 MeasurementProvenance(
                     MeasurementIdentity.HOLDER_CANVAS,
-                    "test_containment",
+                    ObservationId("test_containment"),
                     (MeasurementIdentity.CANVAS,),
+                    "test containment",
                 ),
             ),
         )
@@ -192,7 +197,7 @@ class PhysicalScaleEvidenceTests(unittest.TestCase):
                 observation,
                 provenance=replace(
                     observation.provenance,
-                    source=f"description_{index}",
+                    description=f"description_{index}",
                 ),
             )
             for index, observation in enumerate(
@@ -230,8 +235,9 @@ class PhysicalScaleEvidenceTests(unittest.TestCase):
         geometry = candidate.geometry
         provenance = MeasurementProvenance(
             MeasurementIdentity.FRAME_GEOMETRY,
-            "unobserved_second_photo_edge",
+            ObservationId("unobserved_second_photo_edge"),
             (MeasurementIdentity.FRAME_DIMENSIONS,),
+            "unobserved second photo edge",
         )
         second = replace(
             geometry.photo_apertures[1],
