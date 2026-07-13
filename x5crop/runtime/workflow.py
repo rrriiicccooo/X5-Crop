@@ -185,7 +185,7 @@ def process_one(
 
         failure_stage = FailureStage.DECISION
         prepared_frame_bleed = prepare_frame_bleed(
-            selected_candidate,
+            selection,
             AxisBleedParameters(
                 long_axis=int(config.bleed_x),
                 short_axis=int(config.bleed_y),

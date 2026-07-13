@@ -47,7 +47,7 @@ class SeparatorProfileParameters:
 
 @dataclass(frozen=True)
 class SeparatorProfileSignals:
-    cross_axis_extreme: np.ndarray
+    tonal_tail_continuity: np.ndarray
     tonal_uniformity: np.ndarray
     transition_uniformity: np.ndarray
 
@@ -63,7 +63,7 @@ def vertical_profile_sample(
     return crop[y0:y1, :]
 
 
-def _cross_axis_extreme_score(
+def _tonal_tail_continuity_score(
     middle: np.ndarray,
     statistics: ImageMeasurementStatistics,
     parameters: SeparatorProfileParameters,
@@ -129,7 +129,7 @@ def separator_profile_signals(
         uniformity,
     ).astype(np.float32)
     return SeparatorProfileSignals(
-        cross_axis_extreme=_cross_axis_extreme_score(
+        tonal_tail_continuity=_tonal_tail_continuity_score(
             middle,
             statistics,
             parameters,
@@ -142,7 +142,7 @@ def separator_profile_signals(
 def combined_separator_profile_score(signals: SeparatorProfileSignals) -> np.ndarray:
     return np.maximum.reduce(
         (
-            signals.cross_axis_extreme,
+            signals.tonal_tail_continuity,
             signals.tonal_uniformity,
             signals.transition_uniformity,
         )

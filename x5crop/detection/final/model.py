@@ -13,7 +13,7 @@ class FinalizationPlan:
     layout: str
     image_width: int
     image_height: int
-    decision_geometry: OutputGeometry
+    base_geometry: OutputGeometry
 
     def __post_init__(self) -> None:
         require_work_layout(self.layout)
@@ -31,7 +31,7 @@ class FinalDetection:
         plan = self.finalization_plan
         if plan is None and self.decision.status == "approved_auto":
             raise ValueError("approved detection requires resolved final geometry")
-        if plan is not None and len(plan.decision_geometry.frames) != len(
+        if plan is not None and len(plan.base_geometry.frame_crop_envelopes) != len(
             self.frame_bleed_plan.frame_sides
         ):
             raise ValueError("final detection must preserve frame identity")
@@ -42,7 +42,7 @@ class FinalDetection:
         if plan is None:
             return None
         return apply_frame_bleed(
-            plan.decision_geometry,
+            plan.base_geometry,
             self.frame_bleed_plan,
             layout=plan.layout,
             image_width=plan.image_width,

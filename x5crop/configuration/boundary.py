@@ -16,6 +16,10 @@ class BoundaryPathParameters:
     cross_section_margin_ratio: float = 0.10
     minimum_path_support_ratio: float = 0.60
     inner_sample_ratio: float = 0.01
+    path_cluster_tolerance_ratio: float = 0.005
+    path_cluster_tolerance_min_px: int = 2
+    maximum_change_points_per_section: int = 24
+    maximum_paths_per_axis: int = 32
 
     def __post_init__(self) -> None:
         require_percentile(
@@ -42,3 +46,19 @@ class BoundaryPathParameters:
         require_unit_interval("boundary inner sample ratio", self.inner_sample_ratio)
         if self.inner_sample_ratio <= 0.0:
             raise ValueError("boundary inner sample ratio must be positive")
+        require_unit_interval(
+            "boundary path cluster tolerance",
+            self.path_cluster_tolerance_ratio,
+        )
+        require_positive(
+            "boundary path cluster minimum",
+            self.path_cluster_tolerance_min_px,
+        )
+        require_positive(
+            "boundary change-point budget",
+            self.maximum_change_points_per_section,
+        )
+        require_positive(
+            "boundary path budget",
+            self.maximum_paths_per_axis,
+        )

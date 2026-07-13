@@ -19,8 +19,10 @@ from .read_models import (
 
 def _geometry_read_model(geometry: OutputGeometry) -> dict[str, object]:
     return {
-        "crop_envelope": typed_read_model(geometry.crop_envelope.box),
-        "frame_boxes": typed_read_model(geometry.frames),
+        "frame_crop_envelopes": typed_read_model(
+            geometry.frame_crop_envelopes
+        ),
+        "final_boxes": typed_read_model(geometry.final_boxes),
     }
 
 
@@ -33,7 +35,7 @@ def _finalization_plan_read_model(
         "layout": plan.layout,
         "image_width": int(plan.image_width),
         "image_height": int(plan.image_height),
-        "decision_geometry": _geometry_read_model(plan.decision_geometry),
+        "base_geometry": _geometry_read_model(plan.base_geometry),
     }
 
 

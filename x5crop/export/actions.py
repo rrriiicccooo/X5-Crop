@@ -56,7 +56,7 @@ def write_crops_if_allowed(
         arr,
         source_arr,
         profile,
-        output_geometry.frames,
+        output_geometry.final_boxes,
         config,
         deskew_applied,
         output_dir,

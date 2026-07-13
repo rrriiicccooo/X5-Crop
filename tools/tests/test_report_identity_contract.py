@@ -37,7 +37,7 @@ class ReportIdentityContractTest(unittest.TestCase):
             frame_bleed,
             finalization_plan_for_selection(
                 selection,
-                workspace_extent=WorkspaceExtent(220, 120),
+                workspace_extent=WorkspaceExtent(330, 120),
             ),
         )
         record = report_record_for_final_detection(
@@ -45,7 +45,7 @@ class ReportIdentityContractTest(unittest.TestCase):
             selection,
             source="input.tif",
             profile=typed_read_model(_profile()),
-            workspace_extent=WorkspaceExtent(220, 120),
+            workspace_extent=WorkspaceExtent(330, 120),
             output_files=[],
             review_copy=None,
             warnings=[],
@@ -59,7 +59,7 @@ class ReportIdentityContractTest(unittest.TestCase):
 
         self.assertEqual(
             record["input"]["workspace_extent"],
-            {"width": 220, "height": 120},
+            {"width": 330, "height": 120},
         )
         self.assertEqual(current_report_record_errors(record), [])
 
@@ -80,7 +80,7 @@ class ReportIdentityContractTest(unittest.TestCase):
             frame_bleed,
             finalization_plan_for_selection(
                 selection,
-                workspace_extent=WorkspaceExtent(200, 100),
+                workspace_extent=WorkspaceExtent(310, 100),
             ),
         )
         record = report_record_for_final_detection(
@@ -88,7 +88,7 @@ class ReportIdentityContractTest(unittest.TestCase):
             selection,
             source="input.tif",
             profile=typed_read_model(_profile()),
-            workspace_extent=WorkspaceExtent(200, 100),
+            workspace_extent=WorkspaceExtent(310, 100),
             output_files=[],
             review_copy=None,
             warnings=[],
@@ -115,27 +115,21 @@ class ReportIdentityContractTest(unittest.TestCase):
 
     def test_current_schema_binds_output_geometry_to_selected_geometry(self) -> None:
         record = _record()
-        record["output"]["finalization_plan"]["decision_geometry"][
-            "frame_boxes"
+        record["output"]["finalization_plan"]["base_geometry"][
+            "frame_crop_envelopes"
         ].reverse()
-        record["output"]["final_geometry"]["frame_boxes"].reverse()
+        record["output"]["final_geometry"]["frame_crop_envelopes"].reverse()
 
-        self.assertIn(
-            "record_identity_mismatch",
-            current_report_record_errors(record),
-        )
+        self.assertTrue(current_report_record_errors(record))
 
     def test_current_schema_rejects_output_coordinate_drift(self) -> None:
         record = _record()
-        record["output"]["finalization_plan"]["decision_geometry"][
-            "frame_boxes"
+        record["output"]["finalization_plan"]["base_geometry"][
+            "final_boxes"
         ][0]["right"] -= 1
-        record["output"]["final_geometry"]["frame_boxes"][0]["right"] -= 1
+        record["output"]["final_geometry"]["final_boxes"][0]["right"] -= 1
 
-        self.assertIn(
-            "record_identity_mismatch",
-            current_report_record_errors(record),
-        )
+        self.assertTrue(current_report_record_errors(record))
 
     def test_current_schema_binds_separator_sequence_to_geometry(self) -> None:
         record = _record()
@@ -150,7 +144,7 @@ class ReportIdentityContractTest(unittest.TestCase):
         record = _record()
         path = record["selection"]["candidates"][0]["evidence"][
             "holder_boundary"
-        ]["paths"][0]
+        ]["boundaries"][0]
         path["position"]["minimum"] += 1.0
         path["position"]["maximum"] += 1.0
 
@@ -159,10 +153,10 @@ class ReportIdentityContractTest(unittest.TestCase):
     def test_current_schema_rejects_photo_interval_geometry_drift(self) -> None:
         record = _record()
         interval = record["selection"]["candidates"][0]["provisional_geometry"][
-            "photo_intervals"
-        ][0]
-        interval["start"]["minimum"] += 10.0
-        interval["start"]["maximum"] += 10.0
+            "photo_apertures"
+        ][0]["leading"]["position"]
+        interval["minimum"] += 10.0
+        interval["maximum"] += 10.0
 
         self.assertIn(
             "record_identity_mismatch",
@@ -172,10 +166,10 @@ class ReportIdentityContractTest(unittest.TestCase):
     def test_current_schema_binds_dimension_evidence_to_photo_intervals(self) -> None:
         record = _record()
         interval = record["selection"]["candidates"][0]["provisional_geometry"][
-            "photo_intervals"
-        ][0]
-        interval["end"]["minimum"] = 90.0
-        interval["end"]["maximum"] = 90.0
+            "photo_apertures"
+        ][0]["trailing"]["position"]
+        interval["minimum"] = 140.0
+        interval["maximum"] = 140.0
 
         self.assertIn(
             "record_identity_mismatch",

@@ -36,14 +36,16 @@ class ArchitectureOwnershipContractTest(unittest.TestCase):
 
     def test_candidate_evidence_owns_sequence_conservation_directly(self) -> None:
         from x5crop.detection.candidate.model import CandidateEvidence
-        from x5crop.detection.physical.spacing import SequenceConservationEvidence
-        import x5crop.detection.evidence.frame_sequence as frame_sequence
+        from x5crop.detection.evidence.aperture_sequence import (
+            PhotoSequenceConservationEvidence,
+        )
+        import x5crop.detection.evidence.aperture_sequence as aperture_sequence
 
         self.assertIs(
             get_type_hints(CandidateEvidence)["sequence_conservation"],
-            SequenceConservationEvidence,
+            PhotoSequenceConservationEvidence,
         )
-        self.assertFalse(hasattr(frame_sequence, "FrameSequenceEvidence"))
+        self.assertFalse(hasattr(aperture_sequence, "FrameSequenceEvidence"))
 
     def test_removed_architecture_surfaces_do_not_exist(self) -> None:
         removed = (
@@ -89,7 +91,7 @@ class ArchitectureOwnershipContractTest(unittest.TestCase):
 
         self.assertEqual(
             tuple(CandidatePlanParameters.__dataclass_fields__),
-            ("sequence_hypotheses", "sequence_solver", "dual_lane_divider"),
+            ("sequence_solver", "dual_lane_divider"),
         )
 
     def test_configuration_identity_is_derived_from_format_and_mode(self) -> None:

@@ -68,7 +68,7 @@ class AutoCountContractTest(unittest.TestCase):
         smaller_safe = candidate(2)
         larger_with_internal_cut = candidate(
             5,
-            contradicted=("internal_boundary_preservation",),
+            contradicted=("inter_photo_boundary_preservation",),
         )
         larger_with_less_coverage = candidate(5, covered=99)
 
@@ -197,9 +197,9 @@ class AutoCountContractTest(unittest.TestCase):
             candidate.assessment.evidence,
             partial_edge_safety=partial_edge_safety_evidence(
                 geometry,
-                candidate.assessment.evidence.frame_coverage,
+                candidate.assessment.evidence.photo_sequence_coverage,
                 candidate.assessment.evidence.frame_dimensions,
-                candidate.assessment.evidence.frame_content,
+                candidate.assessment.evidence.photo_content,
             ),
         )
         candidate = AssessedCandidate(

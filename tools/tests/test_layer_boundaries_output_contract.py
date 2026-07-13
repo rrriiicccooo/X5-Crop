@@ -53,8 +53,7 @@ class LayerBoundariesOutputContractTest(unittest.TestCase):
         )
         self.assertNotIn("FinalDetection", source)
         self.assertIn("separator_observations", source)
-        self.assertIn("geometry.inter_frame_spacings", source)
-        self.assertNotIn("frame_sequence.spacings", source)
+        self.assertIn("solution.inter_photo_spacings", source)
         self.assertNotIn(".detail", source)
 
     def test_separator_overlay_uses_explicit_workspace_extent(self) -> None:
@@ -101,12 +100,12 @@ class LayerBoundariesOutputContractTest(unittest.TestCase):
         self.assertTrue(mark_box.called)
         self.assertEqual(mark_box.call_args.args[-3:], (67, 33, "horizontal"))
 
-    def test_output_bleed_reads_canonical_geometry_spacing(self) -> None:
+    def test_output_bleed_reads_assessed_spacing_evidence(self) -> None:
         source = (PROJECT_ROOT / "x5crop/runtime/frame_bleed.py").read_text(
             encoding="utf-8"
         )
-        self.assertIn("geometry.inter_frame_spacings", source)
-        self.assertNotIn("frame_sequence.spacings", source)
+        self.assertIn("inter_photo_boundary_preservation", source)
+        self.assertNotIn("geometry.inter_photo_spacings", source)
 
     def test_debug_analysis_has_one_fixed_three_panel_contract(self) -> None:
         import x5crop.configuration.diagnostics as diagnostics_model
@@ -170,7 +169,7 @@ class LayerBoundariesOutputContractTest(unittest.TestCase):
         )
         self.assertEqual(
             tuple(signature(prepare_frame_bleed).parameters),
-            ("candidate", "user_bleed"),
+            ("selection", "user_bleed"),
         )
 
     def test_workflow_orders_bleed_decision_and_finalization_once(self) -> None:

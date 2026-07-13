@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from ..domain import Box, CropEnvelope, FrameBoundaryReference
+from ..domain import Box, FrameCropEnvelope, InterPhotoBoundaryReference
 
 
 @dataclass(frozen=True)
@@ -17,26 +17,36 @@ class AxisBleedParameters:
 
 @dataclass(frozen=True)
 class OutputGeometry:
-    crop_envelope: CropEnvelope
-    frames: tuple[Box, ...]
+    frame_crop_envelopes: tuple[FrameCropEnvelope, ...]
+    final_boxes: tuple[Box, ...]
 
     def __post_init__(self) -> None:
-        envelope = self.crop_envelope.box
-        for frame in self.frames:
-            if not frame.valid():
-                raise ValueError("output frames must have positive extent")
+        if len(self.frame_crop_envelopes) != len(self.final_boxes):
+            raise ValueError("output geometry requires one final box per photo envelope")
+        if tuple(item.photo_index for item in self.frame_crop_envelopes) != tuple(
+            range(1, len(self.frame_crop_envelopes) + 1)
+        ):
+            raise ValueError("output photo envelopes must be complete and ordered")
+        for envelope, final_box in zip(
+            self.frame_crop_envelopes,
+            self.final_boxes,
+            strict=True,
+        ):
+            if not final_box.valid():
+                raise ValueError("final output boxes must have positive extent")
+            aperture_box = envelope.box
             if not (
-                envelope.left <= frame.left
-                and envelope.top <= frame.top
-                and envelope.right >= frame.right
-                and envelope.bottom >= frame.bottom
+                final_box.left <= aperture_box.left
+                and final_box.top <= aperture_box.top
+                and final_box.right >= aperture_box.right
+                and final_box.bottom >= aperture_box.bottom
             ):
-                raise ValueError("output frames must remain inside the crop envelope")
+                raise ValueError("final output boxes must contain photo envelopes")
 
 
 @dataclass(frozen=True)
 class FrameOverlapRequirement:
-    boundary: FrameBoundaryReference
+    boundary: InterPhotoBoundaryReference
     left_frame_index: int
     right_frame_index: int
     required_px: int
@@ -70,7 +80,7 @@ class FrameSideBleed:
 
 @dataclass(frozen=True)
 class BoundaryOverlapProtection:
-    boundary: FrameBoundaryReference
+    boundary: InterPhotoBoundaryReference
     left_frame_index: int
     right_frame_index: int
     required_px: int
@@ -108,7 +118,7 @@ class FrameBleedPlan:
     frame_output_bounds: tuple[Box, ...]
     frame_sides: tuple[FrameSideBleed, ...]
     overlap_protection: tuple[BoundaryOverlapProtection, ...]
-    unresolved_overlap_boundaries: tuple[FrameBoundaryReference, ...]
+    unresolved_overlap_boundaries: tuple[InterPhotoBoundaryReference, ...]
     feasible: bool = field(init=False)
     reason: str = field(init=False)
 

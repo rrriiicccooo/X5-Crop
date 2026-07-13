@@ -1,0 +1,647 @@
+from __future__ import annotations
+
+from dataclasses import replace
+from inspect import signature
+import unittest
+
+from tools.tests.photo_aperture_solver_support import (
+    dimensions as _dimensions,
+    geometry as _geometry,
+    plan as _plan,
+    provenance as _provenance,
+    scope as _scope,
+    separator as _separator,
+)
+from x5crop.detection.physical.sequence_solver import (
+    PhotoSequenceSolveResult,
+    photo_aperture_cross_axis_plan,
+    solve_photo_sequence,
+)
+from x5crop.detection.physical.model import PhotoSequenceSolution
+from x5crop.report.read_models import typed_read_model
+from x5crop.report.validation import _typed_value_from_read_model
+from x5crop.domain import (
+    BoundaryAxis,
+    BoundarySide,
+    EvidenceState,
+    FrameDimensionPrior,
+    FrameDimensionPriorSource,
+    InterPhotoSpacingBasis,
+    MeasurementIdentity,
+    PhotoApertureEdgeSource,
+    PhotoApertureCrossAxisHypothesis,
+    PixelInterval,
+    SeparatorBandAssignment,
+)
+
+
+class PhotoApertureSolverContractTest(unittest.TestCase):
+    def test_cross_axis_planning_does_not_enumerate_separator_sequences(self) -> None:
+        scope = _scope(
+            width=320,
+            height=120,
+            leading=0.0,
+            trailing=320.0,
+            top=10.0,
+            bottom=110.0,
+        )
+        plan = photo_aperture_cross_axis_plan(
+            scope,
+            maximum_hypotheses=8,
+        )
+
+        self.assertEqual(
+            tuple(signature(photo_aperture_cross_axis_plan).parameters),
+            ("search_scope", "maximum_hypotheses"),
+        )
+        self.assertTrue(plan.hypotheses)
+        self.assertEqual(plan.assignment_evaluations, 0)
+        self.assertFalse(plan.search_budget_exhausted)
+
+    def test_measured_contact_can_join_adjacent_photo_apertures_without_separator(self) -> None:
+        scope = _scope(
+            width=220,
+            height=120,
+            leading=10.0,
+            trailing=210.0,
+            top=10.0,
+            bottom=110.0,
+            internal_paths=(110.0,),
+        )
+        dimensions = _dimensions(100.0, 100.0)
+
+        solved = solve_photo_sequence(
+            (),
+            scope,
+            _plan(scope),
+            2,
+            dimensions,
+            maximum_assignment_evaluations=10_000,
+            maximum_solution_alternatives=8,
+        )
+
+        self.assertIsInstance(solved, PhotoSequenceSolveResult)
+        assert isinstance(solved, PhotoSequenceSolveResult)
+        self.assertEqual(solved.inter_photo_spacings[0].kind, "contact")
+        self.assertEqual(
+            solved.inter_photo_spacings[0].basis,
+            InterPhotoSpacingBasis.OBSERVED,
+        )
+
+    def test_measured_photo_edges_can_represent_overlap_without_separator(self) -> None:
+        scope = _scope(
+            width=220,
+            height=120,
+            leading=10.0,
+            trailing=200.0,
+            top=10.0,
+            bottom=110.0,
+            internal_paths=(100.0, 110.0),
+        )
+        dimensions = _dimensions(100.0, 100.0)
+
+        solved = solve_photo_sequence(
+            (),
+            scope,
+            _plan(scope),
+            2,
+            dimensions,
+            maximum_assignment_evaluations=10_000,
+            maximum_solution_alternatives=8,
+        )
+
+        self.assertIsInstance(solved, PhotoSequenceSolveResult)
+        assert isinstance(solved, PhotoSequenceSolveResult)
+        self.assertEqual(solved.inter_photo_spacings[0].kind, "overlap")
+        self.assertEqual(
+            solved.inter_photo_spacings[0].basis,
+            InterPhotoSpacingBasis.GEOMETRY_HYPOTHESIS,
+        )
+
+    def test_measured_path_search_keeps_a_provisional_solution_before_truncation(self) -> None:
+        scope = _scope(
+            width=320,
+            height=120,
+            leading=0.0,
+            trailing=320.0,
+            top=10.0,
+            bottom=110.0,
+            internal_paths=tuple(float(value) for value in range(10, 320, 10)),
+        )
+        dimensions = _dimensions(100.0, 100.0)
+
+        solved = solve_photo_sequence(
+            (),
+            scope,
+            _plan(scope),
+            3,
+            dimensions,
+            maximum_assignment_evaluations=200,
+            maximum_solution_alternatives=1,
+        )
+
+        self.assertIsInstance(solved, PhotoSequenceSolveResult)
+        assert isinstance(solved, PhotoSequenceSolveResult)
+        self.assertEqual(len(solved.photo_apertures), 3)
+        self.assertTrue(solved.search_budget_exhausted)
+
+    def test_separator_search_prunes_noise_before_combination_budget_is_exhausted(self) -> None:
+        scope = _scope(
+            width=650,
+            height=120,
+            leading=0.0,
+            trailing=650.0,
+            top=10.0,
+            bottom=110.0,
+        )
+        supported = tuple(
+            _separator(float(start), float(start + 10), supported=True)
+            for start in (100, 210, 320, 430, 540)
+        )
+        noise = tuple(
+            _separator(float(start), float(start + 5))
+            for start in range(20, 620, 20)
+            if start not in {100, 320, 540}
+        )
+
+        solved = solve_photo_sequence(
+            (*noise, *supported),
+            scope,
+            _plan(scope),
+            6,
+            _dimensions(100.0, 100.0),
+            maximum_assignment_evaluations=200,
+            maximum_solution_alternatives=1,
+        )
+
+        self.assertIsInstance(solved, PhotoSequenceSolveResult)
+        assert isinstance(solved, PhotoSequenceSolveResult)
+        self.assertEqual(
+            tuple(
+                assignment.observation
+                for assignment in solved.separator_assignments
+            ),
+            supported,
+        )
+        self.assertLess(solved.assignment_evaluations, 200)
+
+    def test_impossible_measured_aperture_chain_is_rejected_without_exhaustive_search(self) -> None:
+        scope = _scope(
+            width=200,
+            height=120,
+            leading=0.0,
+            trailing=200.0,
+            top=10.0,
+            bottom=110.0,
+            internal_paths=(0.0,) * 120 + (100.0,) * 120,
+        )
+
+        solved = solve_photo_sequence(
+            (),
+            scope,
+            _plan(scope),
+            12,
+            _dimensions(100.0, 100.0),
+            maximum_assignment_evaluations=5_000,
+            maximum_solution_alternatives=8,
+        )
+
+        self.assertNotIsInstance(solved, PhotoSequenceSolveResult)
+        self.assertLess(solved.assignment_evaluations, 5_000)
+
+    def test_uncertain_edges_must_guarantee_positive_aperture_width(self) -> None:
+        scope = _scope(
+            width=200,
+            height=120,
+            leading=0.0,
+            trailing=200.0,
+            top=10.0,
+            bottom=110.0,
+        )
+        paths = tuple(
+            replace(
+                path,
+                position=(position := (
+                    PixelInterval(0.0, 100.0)
+                    if path.provenance.source == "leading_aperture_path"
+                    else PixelInterval(100.0, 200.0)
+                )),
+                local_positions=(position,),
+            )
+            if path.axis == BoundaryAxis.LONG
+            else path
+            for path in scope.raw_boundary_paths
+        )
+        uncertain_scope = replace(scope, raw_boundary_paths=paths)
+
+        solved = solve_photo_sequence(
+            (),
+            uncertain_scope,
+            _plan(uncertain_scope),
+            1,
+            _dimensions(100.0, 100.0),
+            maximum_assignment_evaluations=100,
+            maximum_solution_alternatives=8,
+        )
+
+        self.assertNotIsInstance(solved, PhotoSequenceSolveResult)
+
+    def test_separator_assignment_edges_must_match_observed_band_edges(self) -> None:
+        scope = _scope(
+            width=210,
+            height=120,
+            leading=0.0,
+            trailing=210.0,
+            top=10.0,
+            bottom=110.0,
+            internal_paths=(100.0, 110.0),
+        )
+        observation = _separator(100.0, 110.0, supported=True)
+        dimensions = _dimensions(100.0, 100.0)
+        solved = solve_photo_sequence(
+            (observation,),
+            scope,
+            _plan(scope),
+            2,
+            dimensions,
+            maximum_assignment_evaluations=10_000,
+            maximum_solution_alternatives=8,
+        )
+
+        self.assertIsInstance(solved, PhotoSequenceSolveResult)
+        assert isinstance(solved, PhotoSequenceSolveResult)
+        assignment = solved.separator_assignments[0]
+        with self.assertRaisesRegex(ValueError, "observed band edges"):
+            SeparatorBandAssignment(
+                assignment.boundary_index,
+                assignment.observation,
+                assignment.cross_axis_measurement,
+                replace(
+                    assignment.preceding_trailing_edge,
+                    position=PixelInterval.exact(observation.start - 1.0),
+                ),
+                assignment.following_leading_edge,
+            )
+
+    def test_weak_separator_can_only_form_provisional_aperture_edges(self) -> None:
+        scope = _scope(
+            width=210,
+            height=120,
+            leading=5.0,
+            trailing=205.0,
+            top=10.0,
+            bottom=110.0,
+        )
+        dimensions = _dimensions(95.0, 100.0)
+
+        observations = (_separator(100.0, 110.0),)
+        solved = solve_photo_sequence(
+            observations,
+            scope,
+            _plan(scope),
+            2,
+            dimensions,
+            maximum_assignment_evaluations=10_000,
+            maximum_solution_alternatives=8,
+        )
+
+        self.assertIsInstance(solved, PhotoSequenceSolveResult)
+        assert isinstance(solved, PhotoSequenceSolveResult)
+        self.assertEqual(solved.separator_assignments, ())
+        self.assertEqual(
+            solved.photo_apertures[0].trailing.source,
+            PhotoApertureEdgeSource.DIMENSION_HYPOTHESIS,
+        )
+        self.assertEqual(
+            solved.photo_apertures[1].leading.source,
+            PhotoApertureEdgeSource.DIMENSION_HYPOTHESIS,
+        )
+        self.assertEqual(
+            solved.photo_apertures[0].trailing.state,
+            EvidenceState.UNAVAILABLE,
+        )
+        self.assertEqual(
+            solved.inter_photo_spacings[0].basis,
+            InterPhotoSpacingBasis.GEOMETRY_HYPOTHESIS,
+        )
+        geometry = _geometry(scope, observations, dimensions, solved)
+        self.assertEqual(len(geometry.inter_photo_spacings), geometry.count - 1)
+        self.assertEqual(
+            _typed_value_from_read_model(
+                typed_read_model(geometry),
+                PhotoSequenceSolution,
+            ),
+            geometry,
+        )
+
+    def test_global_photo_width_consensus_skips_extra_tonal_band(self) -> None:
+        scope = _scope(
+            width=330,
+            height=120,
+            leading=0.0,
+            trailing=320.0,
+            top=10.0,
+            bottom=110.0,
+            internal_paths=(100.0, 110.0, 210.0, 220.0),
+        )
+        first = _separator(100.0, 110.0, supported=True)
+        unrelated = _separator(145.0, 200.0, supported=True)
+        second = _separator(210.0, 220.0, supported=True)
+
+        observations = (first, unrelated, second)
+        dimensions = _dimensions(100.0, 100.0)
+        solved = solve_photo_sequence(
+            observations,
+            scope,
+            _plan(scope),
+            3,
+            dimensions,
+            maximum_assignment_evaluations=10_000,
+            maximum_solution_alternatives=8,
+        )
+
+        self.assertIsInstance(solved, PhotoSequenceSolveResult)
+        assert isinstance(solved, PhotoSequenceSolveResult)
+        selected_bands = {
+            assignment.observation for assignment in solved.separator_assignments
+        }
+        self.assertIn(first, selected_bands)
+        self.assertIn(second, selected_bands)
+        self.assertNotIn(unrelated, selected_bands)
+
+    def test_photo_width_measurements_share_a_physical_interval_not_one_exact_pixel_width(self) -> None:
+        scope = _scope(
+            width=460,
+            height=120,
+            leading=0.0,
+            trailing=460.0,
+            top=0.0,
+            bottom=120.0,
+        )
+        top_path = next(
+            path
+            for path in scope.raw_boundary_paths
+            if path.provenance.source == "top_aperture_path"
+        )
+        bottom_path = next(
+            path
+            for path in scope.raw_boundary_paths
+            if path.provenance.source == "bottom_aperture_path"
+        )
+        uncertain_top = replace(
+            top_path,
+            position=PixelInterval(0.0, 10.0),
+            local_positions=(PixelInterval(0.0, 10.0),),
+        )
+        uncertain_bottom = replace(
+            bottom_path,
+            position=PixelInterval(110.0, 120.0),
+            local_positions=(PixelInterval(110.0, 120.0),),
+        )
+        uncertain_scope = replace(
+            scope,
+            raw_boundary_paths=tuple(
+                uncertain_top
+                if path is top_path
+                else uncertain_bottom
+                if path is bottom_path
+                else path
+                for path in scope.raw_boundary_paths
+            ),
+        )
+        cross_axis = PhotoApertureCrossAxisHypothesis(
+            uncertain_top,
+            uncertain_bottom,
+        )
+        observations = (
+            _separator(100.0, 110.0, supported=True, cross_axis=cross_axis),
+            _separator(215.0, 225.0, supported=True, cross_axis=cross_axis),
+            _separator(340.0, 350.0, supported=True, cross_axis=cross_axis),
+        )
+
+        solved = solve_photo_sequence(
+            observations,
+            uncertain_scope,
+            photo_aperture_cross_axis_plan(
+                uncertain_scope,
+                maximum_hypotheses=8,
+            ),
+            4,
+            _dimensions(1.0, 1.0),
+            maximum_assignment_evaluations=10_000,
+            maximum_solution_alternatives=8,
+        )
+
+        self.assertIsInstance(solved, PhotoSequenceSolveResult)
+        assert isinstance(solved, PhotoSequenceSolveResult)
+        self.assertEqual(len(solved.separator_assignments), 3)
+        self.assertEqual(
+            solved.photo_width_constraint_px,
+            PixelInterval(100.0, 120.0),
+        )
+
+    def test_width_contradicted_tonal_band_becomes_dimension_constrained(self) -> None:
+        scope = _scope(
+            width=440,
+            height=120,
+            leading=0.0,
+            trailing=440.0,
+            top=10.0,
+            bottom=110.0,
+        )
+        first = _separator(100.0, 110.0, supported=True)
+        overwide = _separator(190.0, 230.0, supported=True)
+        third = _separator(330.0, 340.0, supported=True)
+
+        solved = solve_photo_sequence(
+            (first, overwide, third),
+            scope,
+            _plan(scope),
+            4,
+            _dimensions(100.0, 100.0),
+            maximum_assignment_evaluations=10_000,
+            maximum_solution_alternatives=8,
+        )
+
+        self.assertIsInstance(solved, PhotoSequenceSolveResult)
+        assert isinstance(solved, PhotoSequenceSolveResult)
+        self.assertEqual(
+            tuple(item.observation for item in solved.separator_assignments),
+            (first, third),
+        )
+        self.assertEqual(
+            solved.photo_apertures[1].trailing.source,
+            PhotoApertureEdgeSource.DIMENSION_HYPOTHESIS,
+        )
+        self.assertEqual(
+            solved.photo_apertures[2].leading.source,
+            PhotoApertureEdgeSource.DIMENSION_HYPOTHESIS,
+        )
+
+    def test_canvas_adjacent_bands_cannot_bind_internal_photo_boundaries(self) -> None:
+        scope = _scope(
+            width=210,
+            height=120,
+            leading=5.0,
+            trailing=205.0,
+            top=10.0,
+            bottom=110.0,
+            internal_paths=(100.0, 110.0),
+        )
+        leading_holder_band = _separator(0.0, 5.0, supported=True)
+        internal = _separator(100.0, 110.0, supported=True)
+        trailing_holder_band = _separator(205.0, 210.0, supported=True)
+
+        observations = (leading_holder_band, internal, trailing_holder_band)
+        dimensions = _dimensions(95.0, 100.0)
+        solved = solve_photo_sequence(
+            observations,
+            scope,
+            _plan(scope),
+            2,
+            dimensions,
+            maximum_assignment_evaluations=10_000,
+            maximum_solution_alternatives=8,
+        )
+
+        self.assertIsInstance(solved, PhotoSequenceSolveResult)
+        assert isinstance(solved, PhotoSequenceSolveResult)
+        self.assertEqual(
+            tuple(item.observation for item in solved.separator_assignments),
+            (internal,),
+        )
+
+    def test_positive_separator_band_cannot_produce_overlap_spacing(self) -> None:
+        scope = _scope(
+            width=310,
+            height=120,
+            leading=10.0,
+            trailing=300.0,
+            top=10.0,
+            bottom=110.0,
+            internal_paths=(100.0, 200.0),
+        )
+        observations = (
+            _separator(100.0, 110.0, supported=True),
+            _separator(200.0, 210.0, supported=True),
+        )
+        dimensions = FrameDimensionPrior(
+            frame_size_mm=(1.0, 1.0),
+            source=FrameDimensionPriorSource.SCAN_CALIBRATION,
+            provenance=_provenance(
+                MeasurementIdentity.SCAN_CALIBRATION,
+                "synthetic_calibrated_dimensions",
+            ),
+            calibrated_width_px=PixelInterval(90.0, 110.0),
+            calibrated_height_px=PixelInterval.exact(100.0),
+        )
+
+        solved = solve_photo_sequence(
+            observations,
+            scope,
+            _plan(scope),
+            3,
+            dimensions,
+            maximum_assignment_evaluations=10_000,
+            maximum_solution_alternatives=8,
+        )
+
+        self.assertIsInstance(solved, PhotoSequenceSolveResult)
+        assert isinstance(solved, PhotoSequenceSolveResult)
+        self.assertTrue(
+            all(
+                spacing.signed_width_px.maximum >= 0.0
+                for spacing in solved.inter_photo_spacings
+            )
+        )
+
+    def test_holder_clipped_edge_photos_need_not_match_full_photo_width(self) -> None:
+        scope = _scope(
+            width=310,
+            height=120,
+            leading=15.0,
+            trailing=295.0,
+            top=10.0,
+            bottom=110.0,
+            internal_paths=(100.0, 110.0, 200.0, 210.0),
+            holder_sides=(BoundarySide.LEADING, BoundarySide.TRAILING),
+        )
+        observations = (
+            _separator(100.0, 110.0, supported=True),
+            _separator(200.0, 210.0, supported=True),
+        )
+        dimensions = FrameDimensionPrior(
+            frame_size_mm=(1.0, 1.0),
+            source=FrameDimensionPriorSource.SCAN_CALIBRATION,
+            provenance=_provenance(
+                MeasurementIdentity.SCAN_CALIBRATION,
+                "synthetic_calibrated_dimensions",
+            ),
+            calibrated_width_px=PixelInterval.exact(90.0),
+            calibrated_height_px=PixelInterval.exact(100.0),
+        )
+        solved = solve_photo_sequence(
+            observations,
+            scope,
+            _plan(scope),
+            3,
+            dimensions,
+            maximum_assignment_evaluations=10_000,
+            maximum_solution_alternatives=8,
+        )
+
+        self.assertIsInstance(solved, PhotoSequenceSolveResult)
+        assert isinstance(solved, PhotoSequenceSolveResult)
+        geometry = _geometry(scope, observations, dimensions, solved)
+
+        self.assertLess(
+            geometry.photo_apertures[0].trailing.position.midpoint
+            - geometry.photo_apertures[0].leading.position.midpoint,
+            geometry.photo_width_constraint_px.minimum,
+        )
+        self.assertTrue(
+            geometry.photo_apertures[1].trailing.position.minus(
+                geometry.photo_apertures[1].leading.position
+            ).intersects(geometry.photo_width_constraint_px)
+        )
+
+    def test_short_edge_photos_without_holder_contact_are_not_physical(self) -> None:
+        scope = _scope(
+            width=310,
+            height=120,
+            leading=15.0,
+            trailing=295.0,
+            top=10.0,
+            bottom=110.0,
+            internal_paths=(100.0, 110.0, 200.0, 210.0),
+        )
+        observations = (
+            _separator(100.0, 110.0, supported=True),
+            _separator(200.0, 210.0, supported=True),
+        )
+        dimensions = FrameDimensionPrior(
+            frame_size_mm=(1.0, 1.0),
+            source=FrameDimensionPriorSource.SCAN_CALIBRATION,
+            provenance=_provenance(
+                MeasurementIdentity.SCAN_CALIBRATION,
+                "synthetic_calibrated_dimensions",
+            ),
+            calibrated_width_px=PixelInterval.exact(90.0),
+            calibrated_height_px=PixelInterval.exact(100.0),
+        )
+
+        solved = solve_photo_sequence(
+            observations,
+            scope,
+            _plan(scope),
+            3,
+            dimensions,
+            maximum_assignment_evaluations=10_000,
+            maximum_solution_alternatives=8,
+        )
+
+        self.assertNotIsInstance(solved, PhotoSequenceSolveResult)
+
+
+if __name__ == "__main__":
+    unittest.main()

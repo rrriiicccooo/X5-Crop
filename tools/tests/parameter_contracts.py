@@ -15,7 +15,6 @@ from tools.tests.architecture_contracts import (
 from x5crop.configuration.boundary import BoundaryPathParameters
 from x5crop.configuration.candidate import (
     DualLaneDividerParameters,
-    SequenceHypothesisParameters,
     SequenceSolverParameters,
 )
 from x5crop.configuration.content import (
@@ -134,11 +133,13 @@ PARAMETER_GROUPS = (
     _group(DualLaneDividerParameters, ("numerical_floor",), ParameterRole.NUMERICAL_SAFETY, "normalized", "dual_lane_measurement", "Numerical division floor."),
     _group(DualLaneDividerParameters, ("band_width_min_px", "band_width_max_px"), ParameterRole.ADAPTIVE_MEASUREMENT, "px", "dual_lane_measurement", "Gutter measurement support bounds."),
     _group(DualLaneDividerParameters, ("proposal_count",), ParameterRole.EXECUTION_BUDGET, "count", "dual_lane_measurement", "Bounds lane-divider candidate expansion."),
-    _group(SequenceHypothesisParameters, ("observation_budget", "maximum_hypotheses"), ParameterRole.EXECUTION_BUDGET, "count", "candidate_plan", "Bounds sequence hypothesis expansion."),
-    _group(SequenceSolverParameters, ("maximum_assignment_evaluations",), ParameterRole.EXECUTION_BUDGET, "count", "sequence_solver", "Bounds global assignment search."),
+    _group(SequenceSolverParameters, ("maximum_assignment_evaluations", "maximum_dimension_hypotheses", "maximum_solution_alternatives"), ParameterRole.EXECUTION_BUDGET, "count", "sequence_solver", "Bounds global aperture assignment and alternative search."),
     _group(BoundaryPathParameters, ("holder_reference_percentile", "change_point_percentile"), ParameterRole.ADAPTIVE_MEASUREMENT, "percentile", "boundary_path", "Robust per-image holder and change-point measurement."),
     _group(BoundaryPathParameters, ("cross_section_margin_ratio", "minimum_path_support_ratio", "inner_sample_ratio"), ParameterRole.ADAPTIVE_MEASUREMENT, "ratio", "boundary_path", "Scale-independent local boundary-path sampling and aggregation."),
     _group(BoundaryPathParameters, ("cross_sections",), ParameterRole.ADAPTIVE_MEASUREMENT, "section_count", "boundary_path", "Number of local cross-sections used to measure one spatial boundary path."),
+    _group(BoundaryPathParameters, ("path_cluster_tolerance_ratio",), ParameterRole.ADAPTIVE_MEASUREMENT, "ratio", "boundary_path", "Scale-relative clustering tolerance for local change points."),
+    _group(BoundaryPathParameters, ("path_cluster_tolerance_min_px",), ParameterRole.ADAPTIVE_MEASUREMENT, "px", "boundary_path", "Minimum clustering tolerance for local change points."),
+    _group(BoundaryPathParameters, ("maximum_change_points_per_section", "maximum_paths_per_axis"), ParameterRole.EXECUTION_BUDGET, "count", "boundary_path", "Bounds raw change-point and path expansion."),
     _group(DeskewParameters, ("min_footprint_width", "sample_width_px", "residual_min", "fit_tolerance_min", "span_skip_min", "span_skip_max"), ParameterRole.ADAPTIVE_MEASUREMENT, "px", "deskew", "Deskew footprint, fit-residual, and application-span measurements."),
     _group(DeskewParameters, ("footprint_min_fraction", "min_col_content_ratio", "residual_height_ratio", "fit_tolerance_multiplier", "span_skip_ratio"), ParameterRole.ADAPTIVE_MEASUREMENT, "ratio", "deskew", "Scale-relative deskew sampling and fit support."),
     _group(DeskewParameters, ("min_samples", "max_samples", "min_col_content", "fit_min_points"), ParameterRole.ADAPTIVE_MEASUREMENT, "sample_count", "deskew", "Deskew sampling and robust-fit support counts."),
@@ -146,7 +147,7 @@ PARAMETER_GROUPS = (
     _group(SeparatorOverlayParameters, ("tick_length_ratio",), ParameterRole.DIAGNOSTICS_ONLY, "ratio", "debug", "Debug-only separator tick length ratio."),
     _group(SeparatorOverlayParameters, ("tick_length_min", "observed_line_width", "dimension_line_width", "overlap_line_width"), ParameterRole.DIAGNOSTICS_ONLY, "px", "debug", "Debug-only separator mark dimensions."),
     _group(DebugStyleParameters, ("frame_fill_alpha",), ParameterRole.DIAGNOSTICS_ONLY, "ratio", "debug", "Debug-only frame fill opacity."),
-    _group(DebugStyleParameters, ("crop_envelope_color", "text_color", "accepted_separator_color", "unselected_separator_color", "overlap_boundary_color", "dimension_boundary_color", "pass_color", "review_color"), ParameterRole.DIAGNOSTICS_ONLY, "rgb_byte_triplet", "debug", "Debug-only RGB colors."),
+    _group(DebugStyleParameters, ("crop_envelope_color", "frame_output_color", "holder_boundary_color", "text_color", "accepted_separator_color", "unselected_separator_color", "overlap_boundary_color", "dimension_boundary_color", "pass_color", "review_color"), ParameterRole.DIAGNOSTICS_ONLY, "rgb_byte_triplet", "debug", "Debug-only RGB colors."),
     _group(DebugStyleParameters, ("panel_background", "dark_background"), ParameterRole.DIAGNOSTICS_ONLY, "uint8_value", "debug", "Debug-only grayscale backgrounds."),
     _group(DebugStyleParameters, ("label_origin", "text_fallback_size", "status_origin"), ParameterRole.DIAGNOSTICS_ONLY, "px_pair", "debug", "Debug-only text coordinates and fallback dimensions."),
     _group(DebugStyleParameters, ("preview_max_side", "frame_line_width", "crop_envelope_line_width", "evidence_envelope_line_width", "panel_spacing", "label_height", "status_bar_height", "status_outline_width", "status_text_stroke_width", "detail_gap", "detail_baseline"), ParameterRole.DIAGNOSTICS_ONLY, "px", "debug", "Debug-only canvas and stroke dimensions."),
@@ -171,6 +172,30 @@ PARAMETER_GROUPS = (
 
 
 CONSTANT_PARAMETER_CONTRACTS = (
+    ParameterContract(
+        "x5crop.detection.physical.sequence_solver.MINIMUM_POSITIVE_PIXEL_EXTENT",
+        ParameterRole.NUMERICAL_SAFETY,
+        "px",
+        "sequence_solver",
+        "Defines the smallest meaningful positive aperture extent.",
+        "fixed_by_contract",
+    ),
+    ParameterContract(
+        "x5crop.detection.physical.sequence_solver.MINIMUM_COUNT_WITH_INTERIOR_PHOTO",
+        ParameterRole.PHYSICAL_FACT,
+        "photo_count",
+        "sequence_solver",
+        "At least three photos are required for an aperture unaffected by either holder end.",
+        "fixed_by_contract",
+    ),
+    ParameterContract(
+        "x5crop.detection.physical.sequence_solver.BIDIRECTIONAL_REFINEMENT_PASSES",
+        ParameterRole.NUMERICAL_SAFETY,
+        "pass_count",
+        "sequence_solver",
+        "Runs one forward and one reverse dimension-constraint propagation pass.",
+        "fixed_by_contract",
+    ),
     ParameterContract(
         "x5crop.configuration.boundary.MAX_CROSS_SECTION_MARGIN_RATIO",
         ParameterRole.NUMERICAL_SAFETY,
@@ -393,14 +418,6 @@ CONSTANT_PARAMETER_CONTRACTS = (
         "lane_count",
         "dual_lane_measurement",
         "Canonical lane count supported by dual-lane physical composition.",
-        "fixed_by_contract",
-    ),
-    ParameterContract(
-        "x5crop.detection.physical.separator.assignment.BOUNDARY_ADJACENT_FRAME_COUNT",
-        ParameterRole.PHYSICAL_FACT,
-        "frame_count",
-        "separator_assignment",
-        "Each internal separator boundary must leave one physical frame on both sides.",
         "fixed_by_contract",
     ),
     ParameterContract(

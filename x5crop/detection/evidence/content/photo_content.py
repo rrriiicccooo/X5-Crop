@@ -7,34 +7,21 @@ import numpy as np
 
 from ....cache import (
     MeasurementCache,
-    MeasurementRegionKey,
     ThresholdedMeasurementRegionKey,
 )
 from ....cache.content_statistics import ContentColumnStatistics
 from ....domain import Box
 from ....configuration.content import ContentEvidenceParameters
 from ....configuration.content import ContentConfiguration
-from ....image.evidence import adaptive_activation_threshold
 from x5crop.domain import EvidenceState
+from .activation import cached_content_evidence_threshold, sample_supports_content
 
 if TYPE_CHECKING:
-    from ...physical.model import SequenceSolution
-
-
-def content_evidence_threshold(
-    evidence_float: np.ndarray,
-    parameters: ContentEvidenceParameters,
-) -> float | None:
-    return adaptive_activation_threshold(
-        evidence_float,
-        parameters.activation_percentile,
-        parameters.minimum_evidence_range,
-        parameters.maximum_percentile_samples,
-    )
+    from ...physical.model import PhotoSequenceSolution
 
 
 @dataclass(frozen=True)
-class FrameContentObservation:
+class PhotoContentObservation:
     index: int
     mean: float
     coverage: float
@@ -43,9 +30,9 @@ class FrameContentObservation:
 
 
 @dataclass(frozen=True)
-class FrameContentEvidence:
+class PhotoContentEvidence:
     threshold: float | None
-    observations: tuple[FrameContentObservation, ...]
+    observations: tuple[PhotoContentObservation, ...]
     unavailable_reason: str | None = None
     state: EvidenceState = field(init=False)
     reason: str = field(init=False)
@@ -56,7 +43,7 @@ class FrameContentEvidence:
         if self.observations:
             if self.threshold is None or self.unavailable_reason is not None:
                 raise ValueError(
-                    "frame content observations require a threshold without an unavailable reason"
+                    "photo content observations require a threshold without an unavailable reason"
                 )
             state = (
                 EvidenceState.SUPPORTED
@@ -79,7 +66,7 @@ class FrameContentEvidence:
         else:
             if not self.unavailable_reason:
                 raise ValueError(
-                    "frame content without observations requires an unavailable reason"
+                    "photo content without observations requires an unavailable reason"
                 )
             state = EvidenceState.UNAVAILABLE
             reason = self.unavailable_reason
@@ -93,23 +80,6 @@ class FrameContentEvidence:
     @property
     def support_available(self) -> bool:
         return self.state == EvidenceState.SUPPORTED
-
-
-def _cached_content_evidence_threshold(
-    cache: MeasurementCache,
-    evidence: np.ndarray,
-    sequence_box: Box,
-    parameters: ContentEvidenceParameters,
-) -> float | None:
-    key = MeasurementRegionKey(parameters, sequence_box)
-    found = key in cache.content_evidence_thresholds
-    cache.lookup_statistics.record_lookup(found=found)
-    if not found:
-        cache.content_evidence_thresholds[key] = content_evidence_threshold(
-            evidence,
-            parameters,
-        )
-    return cache.content_evidence_thresholds[key]
 
 
 def _boundary_contact_sides(
@@ -132,7 +102,7 @@ def _boundary_contact_sides(
     return tuple(
         side
         for side, sample in samples.items()
-        if _sample_supports_content(
+        if sample_supports_content(
             sample,
             threshold,
             parameters.minimum_active_pixels,
@@ -140,61 +110,48 @@ def _boundary_contact_sides(
     )
 
 
-def _sample_supports_content(
-    sample: np.ndarray,
-    threshold: float,
-    minimum_active_pixels: int,
-) -> bool:
-    required = int(minimum_active_pixels)
-    return bool(
-        sample.size >= required
-        and int(np.count_nonzero(sample >= threshold)) >= required
-    )
-
-
-def frame_content_evidence(
-    geometry: SequenceSolution,
+def photo_content_evidence(
+    geometry: PhotoSequenceSolution,
     cache: MeasurementCache,
     configuration: ContentConfiguration,
-) -> FrameContentEvidence:
+) -> PhotoContentEvidence:
     if cache.layout != geometry.layout:
         raise ValueError("content evidence requires matching analysis cache")
-    sequence_box = geometry.visible_sequence_span.box.clamp(
+    aperture_union_box = geometry.photo_sequence_envelope.clamp(
         cache.gray_work.shape[1],
         cache.gray_work.shape[0],
     )
-    if not sequence_box.valid():
-        return FrameContentEvidence(
+    if not aperture_union_box.valid():
+        return PhotoContentEvidence(
             None,
             (),
-            "invalid_visible_sequence_span",
+            "invalid_photo_aperture_union",
         )
     evidence = cache.content_evidence_float_work[
-        sequence_box.top : sequence_box.bottom,
-        sequence_box.left : sequence_box.right,
+        aperture_union_box.top : aperture_union_box.bottom,
+        aperture_union_box.left : aperture_union_box.right,
     ]
     if not evidence.size:
-        return FrameContentEvidence(
+        return PhotoContentEvidence(
             None,
             (),
-            "empty_visible_sequence_span",
+            "empty_photo_aperture_union",
         )
     parameters = configuration.evidence
-    threshold = _cached_content_evidence_threshold(
+    threshold = cached_content_evidence_threshold(
         cache,
-        evidence,
-        sequence_box,
+        aperture_union_box,
         parameters,
     )
     if threshold is None:
-        return FrameContentEvidence(
+        return PhotoContentEvidence(
             None,
             (),
             "content_evidence_has_no_dynamic_range",
         )
     statistics_key = ThresholdedMeasurementRegionKey(
         parameters,
-        sequence_box,
+        aperture_union_box,
         float(threshold),
     )
     found = statistics_key in cache.content_column_statistics
@@ -205,17 +162,18 @@ def frame_content_evidence(
         )
     statistics = cache.content_column_statistics[statistics_key]
 
-    observations: list[FrameContentObservation] = []
-    for index, frame in enumerate(geometry.frames, start=1):
-        absolute = frame.clamp(
+    observations: list[PhotoContentObservation] = []
+    for envelope in geometry.frame_crop_envelopes:
+        index = envelope.photo_index
+        absolute = envelope.box.clamp(
             cache.gray_work.shape[1],
             cache.gray_work.shape[0],
         )
         relative = Box(
-            max(0, absolute.left - sequence_box.left),
-            max(0, absolute.top - sequence_box.top),
-            min(sequence_box.width, absolute.right - sequence_box.left),
-            min(sequence_box.height, absolute.bottom - sequence_box.top),
+            max(0, absolute.left - aperture_union_box.left),
+            max(0, absolute.top - aperture_union_box.top),
+            min(aperture_union_box.width, absolute.right - aperture_union_box.left),
+            min(aperture_union_box.height, absolute.bottom - aperture_union_box.top),
         )
         if not relative.valid():
             continue
@@ -225,18 +183,18 @@ def frame_content_evidence(
         ]
         if not crop.size:
             continue
-        if relative.top == 0 and relative.bottom == sequence_box.height:
+        if relative.top == 0 and relative.bottom == aperture_union_box.height:
             mean, coverage = statistics.interval(relative.left, relative.right)
         else:
             mean = float(crop.mean())
             coverage = float((crop >= threshold).mean())
-        content_present = _sample_supports_content(
+        content_present = sample_supports_content(
             crop,
             threshold,
             parameters.minimum_active_pixels,
         )
         observations.append(
-            FrameContentObservation(
+            PhotoContentObservation(
                 index=index,
                 mean=float(mean),
                 coverage=float(coverage),
@@ -249,8 +207,8 @@ def frame_content_evidence(
             )
         )
 
-    return FrameContentEvidence(
+    return PhotoContentEvidence(
         threshold=float(threshold),
         observations=tuple(observations),
-        unavailable_reason=None if observations else "no_valid_frames",
+        unavailable_reason=None if observations else "no_valid_photo_apertures",
     )

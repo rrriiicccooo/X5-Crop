@@ -9,15 +9,11 @@ from ..detection.decision.model import DecisionGateAssessment
 from ..detection.gate_checks import GateCheck
 from ..detection.candidate.selection.model import SelectionResult
 from ..detection.physical.model import (
-    DualLaneSolution,
-    ReviewOnlyGeometry,
-    SequenceSolution,
+    DualLanePhotoSolution,
+    ReviewOnlyContainment,
+    PhotoSequenceSolution,
 )
-from ..detection.physical.spacing import (
-    CorroboratedSpacingEvidence,
-    ObservedSpacingEvidence,
-    SpacingHypothesis,
-)
+from ..domain import InterPhotoSpacing
 from ..output.model import FrameBleedPlan
 from ..units import ResolutionMetadataObservation
 
@@ -27,22 +23,9 @@ def typed_read_model(value: Any) -> Any:
         return f"<bytes:{len(value)}>"
     if isinstance(value, Enum):
         return value.value
-    if isinstance(
-        value,
-        (
-            ObservedSpacingEvidence,
-            CorroboratedSpacingEvidence,
-            SpacingHypothesis,
-        ),
-    ):
+    if isinstance(value, InterPhotoSpacing):
         return {
-            "measurement_kind": (
-                "observed"
-                if isinstance(value, ObservedSpacingEvidence)
-                else "corroborated"
-                if isinstance(value, CorroboratedSpacingEvidence)
-                else "hypothesis"
-            ),
+            "measurement_basis": value.basis.value,
             "boundary": typed_read_model(value.boundary),
             "state": value.state.value,
             "kind": value.kind,
@@ -97,11 +80,11 @@ def candidate_evidence_read_model(candidate: AssessedCandidate) -> dict[str, Any
 
 def candidate_read_model(candidate: AssessedCandidate) -> dict[str, Any]:
     geometry = candidate.geometry
-    if isinstance(geometry, SequenceSolution):
+    if isinstance(geometry, PhotoSequenceSolution):
         geometry_kind = "sequence"
-    elif isinstance(geometry, DualLaneSolution):
+    elif isinstance(geometry, DualLanePhotoSolution):
         geometry_kind = "dual_lane"
-    elif isinstance(geometry, ReviewOnlyGeometry):
+    elif isinstance(geometry, ReviewOnlyContainment):
         geometry_kind = "review_only"
     else:
         raise TypeError(f"unsupported candidate geometry: {type(geometry).__name__}")

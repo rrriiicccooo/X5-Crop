@@ -71,7 +71,7 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
                 "tonal_evidence",
                 "appearance",
                 "provenance",
-                "cross_axis",
+                "cross_axis_measurements",
                 "lane_box",
             ),
         )
@@ -142,7 +142,10 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
 
     def test_report_schema_identity_is_descriptive(self) -> None:
         self.assertEqual(REPORT_SCHEMA_ID, "detection_report")
-        self.assertEqual(REPORT_SCHEMA_REVISION, "gray_sequence_integrity")
+        self.assertEqual(
+            REPORT_SCHEMA_REVISION,
+            "photo_aperture_sequence_resolution",
+        )
         self.assertNotIn("v4", REPORT_SCHEMA_REVISION)
 
     def test_active_source_uses_configuration_and_parameter_vocabulary(self) -> None:

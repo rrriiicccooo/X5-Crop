@@ -16,8 +16,8 @@ from x5crop.detection.candidate.assessment.candidate import (
 )
 from x5crop.detection.candidate.model import BuiltCandidate
 from x5crop.detection.evidence.separator_sequence import SeparatorSequenceEvidence
-from x5crop.detection.physical.boundary_detection import boundary_path_groups
-from x5crop.domain import BoundaryKind, EvidenceState, FrameBoundaryReference
+from x5crop.detection.physical.boundary_detection import boundary_measurements
+from x5crop.domain import BoundaryKind, EvidenceState, InterPhotoBoundaryReference
 from x5crop.image.statistics import (
     ImageMeasurementStatisticsParameters,
     image_measurement_statistics,
@@ -27,35 +27,26 @@ from tools.tests.physical_gate_support import candidate_fixture
 
 
 class GrayAppearanceOuterContractTests(unittest.TestCase):
-    def _groups(self, gray: np.ndarray):
+    def _measurements(self, gray: np.ndarray):
         statistics = image_measurement_statistics(
             gray,
             ImageMeasurementStatisticsParameters(),
         )
-        return {
-            group.source.value: group.paths
-            for group in boundary_path_groups(
-                gray,
-                statistics,
-                BoundaryPathParameters(),
-            )
-        }
+        return boundary_measurements(
+            gray,
+            statistics,
+            BoundaryPathParameters(),
+        )
 
     def test_gray_appearance_is_the_only_canonical_pixel_observation(self) -> None:
         import x5crop.domain as domain
 
         self.assertTrue(hasattr(domain, "GrayAppearanceObservation"))
         self.assertFalse(hasattr(domain, "GrayMaterialObservation"))
-        boundary_fields = get_type_hints(domain.BoundaryPathObservation)
+        boundary_fields = get_type_hints(domain.GrayBoundaryPathObservation)
         separator_fields = get_type_hints(domain.SeparatorBandObservation)
-        self.assertEqual(
-            boundary_fields["outer_appearance"],
-            domain.GrayAppearanceObservation | None,
-        )
-        self.assertEqual(
-            boundary_fields["inner_appearance"],
-            domain.GrayAppearanceObservation | None,
-        )
+        self.assertIs(boundary_fields["lower_appearance"], domain.GrayAppearanceObservation)
+        self.assertIs(boundary_fields["upper_appearance"], domain.GrayAppearanceObservation)
         self.assertIs(
             separator_fields["appearance"],
             domain.GrayAppearanceObservation,
@@ -81,7 +72,7 @@ class GrayAppearanceOuterContractTests(unittest.TestCase):
             {
                 "expected_count",
                 "hard_count",
-                "dimension_constrained_count",
+                "provisional_boundary_count",
                 "hard_boundaries",
                 "missing_boundaries",
                 "hard_tonal_evidence",
@@ -93,7 +84,7 @@ class GrayAppearanceOuterContractTests(unittest.TestCase):
             1,
             1,
             0,
-            (FrameBoundaryReference(None, 1),),
+            (InterPhotoBoundaryReference(None, 1),),
             (),
             (0.0,),
         )
@@ -154,15 +145,21 @@ class GrayAppearanceOuterContractTests(unittest.TestCase):
         self.assertEqual(offenders, {word: () for word in banned})
 
     def test_holder_boundary_has_no_fixed_gray_polarity(self) -> None:
-        self.assertNotIn("WHITE_HOLDER_TRANSITION", BoundaryKind.__members__)
-        self.assertIn("HOLDER_BOUNDARY_TRANSITION", BoundaryKind.__members__)
+        self.assertEqual(
+            set(BoundaryKind.__members__),
+            {
+                "EDGE_ADJACENT_TRANSITION",
+                "TONAL_TRANSITION",
+                "TEXTURE_TRANSITION",
+            },
+        )
 
     def test_light_and_dark_holder_edges_share_one_observation_family(self) -> None:
         for holder, image in ((250, 100), (5, 150)):
             with self.subTest(holder=holder, image=image):
                 gray = np.full((120, 240), holder, dtype=np.uint8)
                 gray[20:100, 40:200] = image
-                observations = self._groups(gray)["holder_boundary"]
+                observations = self._measurements(gray).holder_boundaries
                 self.assertEqual(
                     {observation.side.value for observation in observations},
                     {"leading", "trailing", "top", "bottom"},
@@ -205,16 +202,25 @@ class GrayAppearanceOuterContractTests(unittest.TestCase):
                 offenders.append(relative)
         self.assertEqual(offenders, [])
 
-    def test_current_schema_names_gray_sequence_integrity(self) -> None:
-        self.assertEqual(REPORT_SCHEMA_REVISION, "gray_sequence_integrity")
+    def test_current_schema_names_photo_aperture_resolution(self) -> None:
+        self.assertEqual(
+            REPORT_SCHEMA_REVISION,
+            "photo_aperture_sequence_resolution",
+        )
 
-    def test_boundary_path_groups_have_one_typed_canonical_model(self) -> None:
+    def test_boundary_measurements_have_one_typed_canonical_model(self) -> None:
         import x5crop.domain as domain
 
-        self.assertTrue(is_dataclass(domain.BoundaryPathGroup))
-        self.assertTrue(issubclass(domain.BoundaryPathSource, str))
-        annotations = get_type_hints(domain.BoundaryPathGroup)
-        self.assertIs(annotations["source"], domain.BoundaryPathSource)
+        self.assertTrue(is_dataclass(domain.BoundaryMeasurementSet))
+        annotations = get_type_hints(domain.BoundaryMeasurementSet)
+        self.assertEqual(
+            annotations["raw_paths"],
+            tuple[domain.GrayBoundaryPathObservation, ...],
+        )
+        self.assertEqual(
+            annotations["holder_boundaries"],
+            tuple[domain.HolderBoundaryObservation, ...],
+        )
 
     def test_holder_boundary_measurement_has_one_owner(self) -> None:
         root = Path(__file__).resolve().parents[2]

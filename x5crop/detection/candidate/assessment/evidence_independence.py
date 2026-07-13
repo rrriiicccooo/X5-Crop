@@ -3,10 +3,15 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from x5crop.domain import EvidenceState, MeasurementIdentity
+from x5crop.domain import (
+    EvidenceState,
+    MeasurementIdentity,
+    MeasurementProvenance,
+    PhotoApertureEdgeSource,
+)
 
 if TYPE_CHECKING:
-    from ...physical.model import SequenceSolution
+    from ...physical.model import PhotoSequenceSolution
 
 
 @dataclass(frozen=True)
@@ -41,22 +46,67 @@ class EvidenceIndependenceEvidence:
             reason = "automatic_processing_not_supported"
         elif root_reused:
             state = EvidenceState.CONTRADICTED
-            reason = "sequence_and_separator_share_root_measurement"
+            reason = "sequence_and_boundary_share_root_measurement"
         elif self.cyclic_measurements:
             state = EvidenceState.CONTRADICTED
-            reason = "sequence_and_separator_share_measurement_dependency"
+            reason = "sequence_and_boundary_share_measurement_dependency"
         elif not self.supporting_root_measurements:
             state = EvidenceState.UNAVAILABLE
-            reason = "independent_separator_measurement_unavailable"
+            reason = "independent_boundary_measurement_unavailable"
         else:
             state = EvidenceState.SUPPORTED
-            reason = "independent_sequence_and_separator_measurements"
+            reason = "independent_sequence_and_boundary_measurements"
         object.__setattr__(self, "state", state)
         object.__setattr__(self, "reason", reason)
 
 
+def _measured_internal_boundary_provenances(
+    geometry: PhotoSequenceSolution,
+) -> tuple[MeasurementProvenance, ...]:
+    if geometry.count == 1:
+        aperture = geometry.photo_apertures[0]
+        boundaries = (aperture.leading, aperture.trailing)
+        return (
+            tuple(item.provenance for item in boundaries)
+            if all(
+                item.source == PhotoApertureEdgeSource.MEASURED_BOUNDARY_PATH
+                and item.independently_observed
+                for item in boundaries
+            )
+            else ()
+        )
+    provenances: list[MeasurementProvenance] = []
+    for left, right in zip(
+        geometry.photo_apertures,
+        geometry.photo_apertures[1:],
+    ):
+        boundaries = (left.trailing, right.leading)
+        if all(
+            item.source == PhotoApertureEdgeSource.MEASURED_BOUNDARY_PATH
+            and item.independently_observed
+            for item in boundaries
+        ):
+            provenances.extend(item.provenance for item in boundaries)
+    return tuple(dict.fromkeys(provenances))
+
+
+def _supporting_boundary_provenances(
+    geometry: PhotoSequenceSolution,
+) -> tuple[MeasurementProvenance, ...]:
+    separator_provenances = tuple(
+        assignment.observation.provenance
+        for assignment in geometry.separator_assignments
+        if assignment.independent
+    )
+    return tuple(
+        dict.fromkeys(
+            (*separator_provenances, *_measured_internal_boundary_provenances(geometry))
+        )
+    )
+
+
 def evidence_independence_evidence(
-    geometry: SequenceSolution,
+    geometry: PhotoSequenceSolution,
 ) -> EvidenceIndependenceEvidence:
     if not geometry.automatic_processing_supported:
         return EvidenceIndependenceEvidence(
@@ -65,27 +115,23 @@ def evidence_independence_evidence(
             (),
             False,
         )
-    hard_observations = tuple(
-        assignment.observation
-        for assignment in geometry.separator_assignments
-        if assignment.used_for_boundary and assignment.independent
-    )
-    hard_roots = tuple(
+    supporting_provenances = _supporting_boundary_provenances(geometry)
+    supporting_roots = tuple(
         sorted(
             {
-                observation.provenance.root_measurement
-                for observation in hard_observations
+                provenance.root_measurement
+                for provenance in supporting_provenances
             },
             key=lambda item: item.value,
         )
     )
     sequence_root = geometry.sequence_provenance.root_measurement
     sequence_dependencies = set(geometry.sequence_provenance.dependencies)
-    measurement_roots = hard_roots
+    measurement_roots = supporting_roots
     measurement_dependencies = {
         dependency
-        for observation in hard_observations
-        for dependency in observation.provenance.dependencies
+        for provenance in supporting_provenances
+        for dependency in provenance.dependencies
     }
     dependency_cycle = {
         dependency

@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 import numpy as np
 
 from ..detection.final.model import FinalDetection
 from ..detection.candidate.model import AssessedCandidate
-from ..domain import CropEnvelope
+from ..domain import Box, FrameCropEnvelope
+from ..detection.physical.model import ReviewOnlyContainment
 from ..geometry.boxes import map_work_box
-from ..output.model import OutputGeometry
 from ..run_status import RunTerminalOutcome
 from ..image.evidence import (
     SeparatorEvidenceImageParameters,
@@ -45,64 +46,140 @@ def make_debug_preview_rgb(
         gray,
         style.preview_max_side,
     )
-    for index, box in enumerate(geometry.frames):
+    display_boxes = geometry.final_boxes or tuple(
+        item.box for item in geometry.frame_crop_envelopes
+    )
+    for index, box in enumerate(display_boxes):
         color = FRAME_FILL_COLORS[index % len(FRAME_FILL_COLORS)]
         fill_preview_rect(rgb, box, scale, color, style.frame_fill_alpha)
-        draw_preview_rect(rgb, box, scale, color, style.frame_line_width)
-    draw_preview_rect(
-        rgb,
-        geometry.crop_envelope.box,
-        scale,
-        style.crop_envelope_color,
-        style.crop_envelope_line_width,
-    )
+        draw_preview_rect(
+            rgb,
+            box,
+            scale,
+            style.frame_output_color,
+            style.frame_line_width,
+        )
+    for box in geometry.photo_aperture_boxes:
+        draw_preview_rect(
+            rgb,
+            box,
+            scale,
+            style.crop_envelope_color,
+            style.crop_envelope_line_width,
+        )
+    if geometry.containment_fallback is not None:
+        draw_preview_rect(
+            rgb,
+            geometry.containment_fallback,
+            scale,
+            style.unselected_separator_color,
+            style.evidence_envelope_line_width,
+        )
     return rgb
+
+
+@dataclass(frozen=True)
+class DebugGeometry:
+    photo_aperture_boxes: tuple[Box, ...]
+    frame_crop_envelopes: tuple[FrameCropEnvelope, ...]
+    final_boxes: tuple[Box, ...]
+    containment_fallback: Box | None
+
+
+def _map_envelopes(
+    envelopes: tuple[FrameCropEnvelope, ...],
+    layout: str,
+    image_width: int,
+    image_height: int,
+) -> tuple[FrameCropEnvelope, ...]:
+    return tuple(
+        FrameCropEnvelope(
+            item.photo_index,
+            map_work_box(item.box, layout, image_width, image_height),
+        )
+        for item in envelopes
+    )
 
 
 def debug_geometry(
     gray: np.ndarray,
     detection: FinalDetection,
     selected_candidate: AssessedCandidate,
-) -> OutputGeometry:
+) -> DebugGeometry:
     final_geometry = detection.output_geometry
     if final_geometry is not None:
-        return final_geometry
+        return DebugGeometry(
+            photo_aperture_boxes=tuple(
+                item.box for item in final_geometry.frame_crop_envelopes
+            ),
+            frame_crop_envelopes=final_geometry.frame_crop_envelopes,
+            final_boxes=final_geometry.final_boxes,
+            containment_fallback=None,
+        )
     candidate_geometry = selected_candidate.geometry
     image_height, image_width = gray.shape
-    return OutputGeometry(
-        crop_envelope=CropEnvelope(
-            map_work_box(
-                candidate_geometry.crop_envelope.box,
+    if isinstance(candidate_geometry, ReviewOnlyContainment):
+        return DebugGeometry(
+            photo_aperture_boxes=(),
+            frame_crop_envelopes=(),
+            final_boxes=(),
+            containment_fallback=map_work_box(
+                candidate_geometry.containment_fallback.box,
                 candidate_geometry.layout,
                 image_width,
                 image_height,
-            )
-        ),
-        frames=tuple(
-            map_work_box(
-                frame,
-                candidate_geometry.layout,
-                image_width,
-                image_height,
-            )
-            for frame in candidate_geometry.frames
-        ),
+            ),
+        )
+    mapped_envelopes = _map_envelopes(
+        candidate_geometry.frame_crop_envelopes,
+        candidate_geometry.layout,
+        image_width,
+        image_height,
+    )
+    aperture_boxes = tuple(
+        map_work_box(
+            Box(
+                int(round(aperture.leading.position.midpoint)),
+                int(round(aperture.top.position.midpoint)),
+                int(round(aperture.trailing.position.midpoint)),
+                int(round(aperture.bottom.position.midpoint)),
+            ),
+            candidate_geometry.layout,
+            image_width,
+            image_height,
+        )
+        for aperture in candidate_geometry.photo_apertures
+    )
+    return DebugGeometry(
+        photo_aperture_boxes=aperture_boxes,
+        frame_crop_envelopes=mapped_envelopes,
+        final_boxes=(),
+        containment_fallback=None,
     )
 
 
 def draw_evidence_context_overlay(
     rgb: np.ndarray,
-    geometry: OutputGeometry,
+    geometry: DebugGeometry,
     scale: float,
     style: DebugStyleParameters,
 ) -> None:
-    draw_preview_rect(
-        rgb,
-        geometry.crop_envelope.box,
-        scale,
-        style.crop_envelope_color,
-        style.evidence_envelope_line_width,
-    )
+    for envelope in geometry.frame_crop_envelopes:
+        draw_preview_rect(
+            rgb,
+            envelope.box,
+            scale,
+            style.frame_output_color,
+            style.evidence_envelope_line_width,
+        )
+    if geometry.containment_fallback is not None:
+        draw_preview_rect(
+            rgb,
+            geometry.containment_fallback,
+            scale,
+            style.unselected_separator_color,
+            style.evidence_envelope_line_width,
+        )
 
 
 def make_separator_evidence_debug_gray(

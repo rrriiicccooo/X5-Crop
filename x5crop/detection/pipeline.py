@@ -7,7 +7,7 @@ from .candidate.assessment.review_only import assess_review_only_candidate
 from .candidate.execution.count_hypothesis import evaluate_count_hypothesis
 from .candidate.execution.model import CountHypothesisEvaluation
 from .candidate.model import AssessedCandidate
-from .candidate.proposal.sequence import cached_boundary_path_groups
+from .candidate.proposal.sequence import cached_boundary_measurements
 from .candidate.plan.count_hypotheses import (
     CountHypothesisPlan,
     CountHypothesisSource,
@@ -24,14 +24,14 @@ from .context import DetectionContext
 from .modes.dual_lane import choose_dual_lane_detection
 from .modes.review_only import unresolved_dual_lane_candidate
 from .evidence.physical_scale import boundary_scale_observations
-from .physical.model import ReviewOnlyGeometry
+from .physical.model import ReviewOnlyContainment
 from ..units import ScanCalibrationResolution
 
 
 def _context_with_root_physical_scale(
     context: DetectionContext,
 ) -> DetectionContext:
-    groups = cached_boundary_path_groups(
+    measurements = cached_boundary_measurements(
         context.measurement_cache,
         context.configuration.boundary_path,
     )
@@ -40,7 +40,7 @@ def _context_with_root_physical_scale(
             (
                 *context.scan_calibration.physical_observations,
                 *boundary_scale_observations(
-                    groups,
+                    measurements,
                     context.configuration.physical_spec,
                     context.request.layout,
                     edge_texture_limit=(
@@ -139,7 +139,7 @@ def _choose_standard_detection(context: DetectionContext) -> SelectionResult:
         built = hard_safety_candidate(context, plan.hard_safety_count)
         assessed = (
             assess_review_only_candidate(built)
-            if isinstance(built.geometry, ReviewOnlyGeometry)
+            if isinstance(built.geometry, ReviewOnlyContainment)
             else assess_candidate(built, context)
         )
         context.execution_statistics.record_assessed_candidate()

@@ -20,7 +20,6 @@ from x5crop.image.evidence import (
 from x5crop.image.deskew_parameters import DeskewParameters
 from x5crop.configuration.content import ContentEvidenceParameters
 from x5crop.configuration.candidate import (
-    SequenceHypothesisParameters,
     SequenceSolverParameters,
 )
 from x5crop.configuration.separator import SeparatorObservationParameters
@@ -59,7 +58,6 @@ class ParameterLegitimacyContractTest(unittest.TestCase):
             lambda: SeparatorProfileParameters(segments=0),
             lambda: SeparatorObservationParameters(minimum_run_px=0),
             lambda: SeparatorObservationParameters(maximum_observations=0),
-            lambda: SequenceHypothesisParameters(maximum_hypotheses=0),
             lambda: SequenceSolverParameters(maximum_assignment_evaluations=0),
             lambda: ContentEvidenceImageParameters(
                 minimum_consensus_channels=5,

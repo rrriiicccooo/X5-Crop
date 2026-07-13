@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ...physical.model import DualLaneSolution
+from ...physical.model import DualLanePhotoSolution
 from ..assessment.candidate_gate import (
     CandidateGateInput,
     candidate_gate_assessment,
@@ -22,7 +22,7 @@ def compose_dual_lane_candidate(
     lane_selections: tuple[SelectionResult, ...],
 ) -> AssessedCandidate:
     geometry = candidate.geometry
-    if not isinstance(geometry, DualLaneSolution):
+    if not isinstance(geometry, DualLanePhotoSolution):
         raise ValueError("dual-lane composition requires dual-lane geometry")
     if len(lane_selections) <= 1:
         raise ValueError("dual-lane composition requires multiple lane selections")

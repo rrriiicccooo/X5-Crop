@@ -1,27 +1,34 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
-from ....domain import EvidenceState, FrameBoundary, FrameBoundaryReference
-from ...physical.spacing import InterFrameSpacing, ObservedSpacingEvidence
-from .frame_support import FrameContentEvidence
+from ....domain import (
+    EvidenceState,
+    InterPhotoBoundaryReference,
+    InterPhotoSpacing,
+    InterPhotoSpacingBasis,
+    MeasurementIdentity,
+    MeasurementProvenance,
+    PhotoAperture,
+    PhotoApertureEdgeSource,
+)
+from .photo_content import PhotoContentEvidence
 
 
 @dataclass(frozen=True)
 class InternalBoundaryObservation:
-    boundary: FrameBoundaryReference
-    separator_supported: bool
-    contact_supported: bool
-    overlap_supported: bool
+    boundary: InterPhotoBoundaryReference
+    spacing_evidence: InterPhotoSpacing
     continuous_content_crossing: bool
     state: EvidenceState = field(init=False)
     reason: str = field(init=False)
 
     def __post_init__(self) -> None:
+        if self.spacing_evidence.boundary != self.boundary:
+            raise ValueError("internal boundary spacing must preserve boundary identity")
         explained = bool(
-            self.separator_supported
-            or self.contact_supported
-            or self.overlap_supported
+            self.spacing_evidence.state == EvidenceState.SUPPORTED
+            and self.spacing_evidence.kind in {"separator", "contact", "overlap"}
         )
         if explained:
             state = EvidenceState.SUPPORTED
@@ -31,13 +38,55 @@ class InternalBoundaryObservation:
             reason = "continuous_content_crosses_unexplained_boundary"
         else:
             state = EvidenceState.UNAVAILABLE
-            reason = "internal_boundary_preservation_unresolved"
+            reason = "inter_photo_boundary_preservation_unresolved"
         object.__setattr__(self, "state", state)
         object.__setattr__(self, "reason", reason)
 
 
+def _content_corroborated_spacing(
+    spacing: InterPhotoSpacing,
+    left: PhotoAperture,
+    right: PhotoAperture,
+    continuous_content_crossing: bool,
+) -> InterPhotoSpacing:
+    if spacing.supports_output_protection:
+        return spacing
+    measured_overlap_edges = bool(
+        spacing.kind == "overlap"
+        and spacing.basis == InterPhotoSpacingBasis.GEOMETRY_HYPOTHESIS
+        and continuous_content_crossing
+        and left.trailing.source == PhotoApertureEdgeSource.MEASURED_BOUNDARY_PATH
+        and right.leading.source == PhotoApertureEdgeSource.MEASURED_BOUNDARY_PATH
+        and left.trailing.provenance != right.leading.provenance
+    )
+    if not measured_overlap_edges:
+        return spacing
+    dependencies = tuple(
+        dict.fromkeys(
+            (
+                spacing.provenance.root_measurement,
+                left.trailing.provenance.root_measurement,
+                right.leading.provenance.root_measurement,
+            )
+        )
+    )
+    return replace(
+        spacing,
+        basis=InterPhotoSpacingBasis.CORROBORATED_OVERLAP,
+        provenance=MeasurementProvenance(
+            root_measurement=MeasurementIdentity.CONTENT_EVIDENCE_IMAGE,
+            source="content_corroborated_inter_photo_overlap",
+            dependencies=dependencies,
+            boundary_anchors=(
+                left.trailing.provenance.source,
+                right.leading.provenance.source,
+            ),
+        ),
+    )
+
+
 @dataclass(frozen=True)
-class InternalBoundaryPreservationEvidence:
+class InterPhotoBoundaryPreservationEvidence:
     observations: tuple[InternalBoundaryObservation, ...]
     state: EvidenceState = field(init=False)
     reason: str = field(init=False)
@@ -60,27 +109,27 @@ class InternalBoundaryPreservationEvidence:
             reason = "internal_boundaries_preserve_content"
         else:
             state = EvidenceState.UNAVAILABLE
-            reason = "internal_boundary_preservation_unresolved"
+            reason = "inter_photo_boundary_preservation_unresolved"
         object.__setattr__(self, "state", state)
         object.__setattr__(self, "reason", reason)
 
 
-def internal_boundary_preservation_evidence(
+def inter_photo_boundary_preservation_evidence(
     count: int,
-    frame_boundaries: tuple[FrameBoundary, ...],
-    spacings: tuple[InterFrameSpacing, ...],
-    frame_content: FrameContentEvidence,
-) -> InternalBoundaryPreservationEvidence:
+    photo_apertures: tuple[PhotoAperture, ...],
+    spacings: tuple[InterPhotoSpacing, ...],
+    photo_content: PhotoContentEvidence,
+) -> InterPhotoBoundaryPreservationEvidence:
     if count <= 0:
         raise ValueError("internal boundary evidence requires a positive count")
     expected = tuple(range(1, count))
-    if tuple(boundary.boundary_index for boundary in frame_boundaries) != expected:
-        raise ValueError("internal boundary evidence requires complete boundaries")
+    if tuple(item.index for item in photo_apertures) != tuple(range(1, count + 1)):
+        raise ValueError("internal boundary evidence requires complete apertures")
     if tuple(spacing.boundary.boundary_index for spacing in spacings) != expected:
         raise ValueError("internal boundary evidence requires complete spacing")
     content = {
         observation.index: observation
-        for observation in frame_content.observations
+        for observation in photo_content.observations
     }
 
     def content_contacts(frame_index: int, side: str) -> bool:
@@ -90,26 +139,24 @@ def internal_boundary_preservation_evidence(
             and side in observation.boundary_contact_sides
         )
 
-    observations = tuple(
-        InternalBoundaryObservation(
-            boundary=FrameBoundaryReference(None, boundary_index),
-            separator_supported=frame_boundary.hard_separator,
-            contact_supported=bool(
-                isinstance(spacing, ObservedSpacingEvidence)
-                and spacing.kind == "contact"
-                and spacing.independently_observed
-            ),
-            overlap_supported=bool(
-                spacing.kind == "overlap" and spacing.supports_output_protection
-            ),
-            continuous_content_crossing=bool(
-                content_contacts(boundary_index, "right")
-                and content_contacts(boundary_index + 1, "left")
-            ),
+    observations: list[InternalBoundaryObservation] = []
+    for boundary_index, spacing in enumerate(spacings, start=1):
+        left = photo_apertures[boundary_index - 1]
+        right = photo_apertures[boundary_index]
+        crossing = bool(
+            content_contacts(boundary_index, "right")
+            and content_contacts(boundary_index + 1, "left")
         )
-        for boundary_index, (frame_boundary, spacing) in enumerate(
-            zip(frame_boundaries, spacings, strict=True),
-            start=1,
+        observations.append(
+            InternalBoundaryObservation(
+                boundary=InterPhotoBoundaryReference(None, boundary_index),
+                spacing_evidence=_content_corroborated_spacing(
+                    spacing,
+                    left,
+                    right,
+                    crossing,
+                ),
+                continuous_content_crossing=crossing,
+            )
         )
-    )
-    return InternalBoundaryPreservationEvidence(observations)
+    return InterPhotoBoundaryPreservationEvidence(tuple(observations))

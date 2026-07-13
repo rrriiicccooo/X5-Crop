@@ -15,10 +15,11 @@ from ...formats import FormatPhysicalSpec
 from ...geometry.layout import is_horizontal_layout
 from ...units import ScanCalibrationResolution
 from x5crop.domain import EvidenceState
-from x5crop.domain import PixelInterval, VisibleSequenceSpan
+from x5crop.domain import PixelInterval
 
 if TYPE_CHECKING:
-    from .model import PhotoInterval, SequenceSolution
+    from .model import PhotoSequenceSolution
+    from ...domain import PhotoAperture
 
 
 def width_coefficient_of_variation(
@@ -138,14 +139,12 @@ class FrameDimensionEvidence:
 
 
 def frame_dimension_priors(
-    span: VisibleSequenceSpan,
     physical_spec: FormatPhysicalSpec,
     calibration: ScanCalibrationResolution,
     *,
     layout: str,
 ) -> tuple[FrameDimensionPrior, ...]:
     horizontal = is_horizontal_layout(layout)
-    short_axis = float(span.box.height)
     options = tuple(
         (float(option.width_mm), float(option.height_mm))
         for option in physical_spec.frame_size_mm_options
@@ -168,60 +167,55 @@ def frame_dimension_priors(
         source="frame_dimension_prior",
         dependencies=(
             MeasurementIdentity.FORMAT_PHYSICAL_SPEC,
-            (
-                MeasurementIdentity.SCAN_CALIBRATION
+            *(
+                (MeasurementIdentity.SCAN_CALIBRATION,)
                 if calibrated
-                else MeasurementIdentity.SHORT_AXIS_BOUNDARIES
+                else ()
             ),
         ),
     )
     priors: list[FrameDimensionPrior] = []
-    seen_pixel_sizes: set[tuple[PixelInterval, PixelInterval]] = set()
+    seen_sizes: set[tuple[float, float]] = set()
     for width_mm, height_mm in options:
-        width_px = PixelInterval.exact(
-            width_mm * float(long_ppm)
-            if calibrated
-            else short_axis * width_mm / height_mm
-        )
-        height_px = PixelInterval.exact(
-            height_mm * float(short_ppm) if calibrated else short_axis
-        )
-        pixel_size = (width_px, height_px)
-        if pixel_size in seen_pixel_sizes:
+        if (width_mm, height_mm) in seen_sizes:
             continue
-        seen_pixel_sizes.add(pixel_size)
+        seen_sizes.add((width_mm, height_mm))
         priors.append(
             FrameDimensionPrior(
-                width_px=width_px,
-                height_px=height_px,
                 frame_size_mm=(width_mm, height_mm),
                 source=(
                     FrameDimensionPriorSource.SCAN_CALIBRATION
                     if calibrated
-                    else FrameDimensionPriorSource.SHORT_AXIS_ASPECT
+                    else FrameDimensionPriorSource.PHYSICAL_ASPECT
                 ),
                 provenance=provenance,
+                calibrated_width_px=(
+                    PixelInterval.exact(width_mm * float(long_ppm))
+                    if calibrated
+                    else None
+                ),
+                calibrated_height_px=(
+                    PixelInterval.exact(height_mm * float(short_ppm))
+                    if calibrated
+                    else None
+                ),
             )
         )
     return tuple(priors)
 
 
 def _photo_widths(
-    geometry: SequenceSolution,
+    geometry: PhotoSequenceSolution,
 ) -> tuple[tuple[float, ...], tuple[float, ...]]:
     assignments = tuple(
         sorted(
-            (
-                assignment
-                for assignment in geometry.separator_assignments
-                if assignment.used_for_boundary and assignment.independent
-            ),
+            geometry.separator_assignments,
             key=lambda assignment: assignment.boundary_index,
         )
     )
     widths = [
-        interval.width_px.midpoint
-        for interval in dimension_photo_intervals(geometry)
+        aperture.trailing.position.minus(aperture.leading.position).midpoint
+        for aperture in dimension_photo_apertures(geometry)
     ]
     return (
         tuple(width for width in widths if width > 0.0),
@@ -229,36 +223,26 @@ def _photo_widths(
     )
 
 
-def dimension_photo_intervals(
-    geometry: SequenceSolution,
-) -> tuple[PhotoInterval, ...]:
-    holder = geometry.holder_span.box
-    visible = geometry.visible_sequence_span.box
-    leading_occluded = (
-        geometry.holder_occlusion.leading.hidden_width_px.maximum > 0.0
-    )
-    trailing_occluded = (
-        geometry.holder_occlusion.trailing.hidden_width_px.maximum > 0.0
-    )
-    leading_slack = visible.left > holder.left
-    trailing_slack = visible.right < holder.right
+def dimension_photo_apertures(
+    geometry: PhotoSequenceSolution,
+) -> tuple[PhotoAperture, ...]:
+    width_prior = geometry.photo_width_constraint_px
     return tuple(
-        interval
-        for interval in geometry.photo_intervals
-        if interval.independently_observed
-        and not (
-            interval.index == 1
-            and (leading_occluded or leading_slack)
-        )
-        and not (
-            interval.index == geometry.count
-            and (trailing_occluded or trailing_slack)
+        aperture
+        for aperture in geometry.photo_apertures
+        if aperture.leading.independently_observed
+        and aperture.trailing.independently_observed
+        and (
+            1 < aperture.index < geometry.count
+            or aperture.trailing.position.minus(aperture.leading.position).intersects(
+                width_prior
+            )
         )
     )
 
 
 def frame_dimension_evidence(
-    geometry: SequenceSolution,
+    geometry: PhotoSequenceSolution,
     calibration: ScanCalibrationResolution,
 ) -> FrameDimensionEvidence:
     horizontal = is_horizontal_layout(geometry.layout)
@@ -267,10 +251,16 @@ def frame_dimension_evidence(
         geometry,
     )
     observed_width = median(photo_widths) if photo_widths else None
-    observed_height = float(geometry.visible_sequence_span.box.height)
+    measured_heights = tuple(
+        aperture.bottom.position.minus(aperture.top.position).midpoint
+        for aperture in geometry.photo_apertures
+        if aperture.top.independently_observed
+        and aperture.bottom.independently_observed
+    )
+    observed_height = median(measured_heights) if measured_heights else None
     observed_aspect = (
         float(observed_width) / observed_height
-        if observed_width is not None
+        if observed_width is not None and observed_height is not None
         else None
     )
     frame_aspect = float(frame_width_mm) / float(frame_height_mm)
@@ -291,6 +281,7 @@ def frame_dimension_evidence(
         and short_ppm is not None
         and long_ppm > 0.0
         and short_ppm > 0.0
+        and observed_height is not None
     )
     observed_width_mm = (
         float(observed_width) / float(long_ppm)
@@ -298,15 +289,18 @@ def frame_dimension_evidence(
         else None
     )
     observed_height_mm = (
-        observed_height / float(short_ppm) if calibration_used else None
+        observed_height / float(short_ppm)
+        if calibration_used and observed_height is not None
+        else None
     )
     observed_intervals = tuple(
-        interval.width_px for interval in dimension_photo_intervals(geometry)
+        aperture.trailing.position.minus(aperture.leading.position)
+        for aperture in dimension_photo_apertures(geometry)
     )
     return FrameDimensionEvidence(
         frame_width_mm=float(frame_width_mm),
         frame_height_mm=float(frame_height_mm),
-        frame_width_prior_px=geometry.frame_dimension_prior.width_px,
+        frame_width_prior_px=geometry.photo_width_constraint_px,
         photo_width_intervals_px=observed_intervals,
         separator_widths_px=tuple(float(width) for width in separator_widths),
         observed_width_mm=observed_width_mm,
@@ -318,12 +312,13 @@ def frame_dimension_evidence(
 
 
 def frame_dimension_measurements_match_geometry(
-    geometry: SequenceSolution,
+    geometry: PhotoSequenceSolution,
     evidence: FrameDimensionEvidence,
 ) -> bool:
     _, separator_widths = _photo_widths(geometry)
     observed_intervals = tuple(
-        interval.width_px for interval in dimension_photo_intervals(geometry)
+        aperture.trailing.position.minus(aperture.leading.position)
+        for aperture in dimension_photo_apertures(geometry)
     )
     return bool(
         evidence.photo_width_intervals_px == observed_intervals

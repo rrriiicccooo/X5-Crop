@@ -38,20 +38,17 @@ from ..detection.final.model import FinalizationPlan
 from ..detection.gate_checks import GateCheck, GateStage
 from ..detection.evidence.transform_geometry import TransformGeometryEvidence
 from ..detection.physical.model import (
-    DualLaneSolution,
-    ReviewOnlyGeometry,
-    SequenceSolution,
+    DualLanePhotoSolution,
+    ReviewOnlyContainment,
+    PhotoSequenceSolution,
     GeometryIdentityError,
-)
-from ..detection.physical.spacing import (
-    CorroboratedSpacingEvidence,
-    ObservedSpacingEvidence,
-    SpacingHypothesis,
 )
 from ..domain import (
     Box,
-    CropEnvelope,
+    FrameCropEnvelope,
     EvidenceState,
+    InterPhotoSpacing,
+    InterPhotoSpacingBasis,
     SeparatorBandObservation,
     WorkspaceExtent,
 )
@@ -79,13 +76,6 @@ CURRENT_REPORT_SECTIONS = (
 )
 
 
-_SPACING_MODELS = {
-    "observed": ObservedSpacingEvidence,
-    "corroborated": CorroboratedSpacingEvidence,
-    "hypothesis": SpacingHypothesis,
-}
-
-
 @lru_cache(maxsize=None)
 def _model_hints(model: type) -> dict[str, Any]:
     return get_type_hints(model)
@@ -94,26 +84,25 @@ def _model_hints(model: type) -> dict[str, Any]:
 def _spacing_from_read_model(value: Any) -> Any:
     if not isinstance(value, dict):
         raise TypeError("spacing read model must be a mapping")
-    model = _SPACING_MODELS.get(value.get("measurement_kind"))
-    if model is None:
-        raise ValueError("unknown spacing measurement kind")
-    model_fields = {field.name for field in fields(model)}
-    expected = model_fields | {
-        "measurement_kind",
+    model_fields = {field.name for field in fields(InterPhotoSpacing)}
+    expected = (model_fields - {"basis"}) | {
+        "measurement_basis",
         "state",
         "kind",
         "reason",
         "independently_observed",
         "supports_output_protection",
     }
-    hints = _model_hints(model)
+    hints = _model_hints(InterPhotoSpacing)
     if set(value) != expected:
         raise ValueError("spacing read model fields are incomplete")
-    spacing = model(
+    spacing = InterPhotoSpacing(
         **{
             name: _typed_value_from_read_model(value[name], hints[name])
             for name in model_fields
-        }
+            if name != "basis"
+        },
+        basis=InterPhotoSpacingBasis(value["measurement_basis"]),
     )
     if (
         value["state"] != spacing.state.value
@@ -130,6 +119,8 @@ def _spacing_from_read_model(value: Any) -> Any:
 def _typed_value_from_read_model(value: Any, annotation: Any) -> Any:
     if annotation is Any:
         return value
+    if annotation is InterPhotoSpacing:
+        return _spacing_from_read_model(value)
     if annotation is type(None):
         if value is not None:
             raise TypeError("expected null")
@@ -166,8 +157,6 @@ def _typed_value_from_read_model(value: Any, annotation: Any) -> Any:
     origin = get_origin(annotation)
     arguments = get_args(annotation)
     if origin in {UnionType, Union}:
-        if isinstance(value, dict) and "measurement_kind" in value:
-            return _spacing_from_read_model(value)
         for item in arguments:
             try:
                 return _typed_value_from_read_model(value, item)
@@ -251,9 +240,9 @@ def _separator_observation_valid(value: Any) -> bool:
 
 def _provisional_geometry_from_read_model(kind: str, value: Any) -> Any:
     model = {
-        "sequence": SequenceSolution,
-        "dual_lane": DualLaneSolution,
-        "review_only": ReviewOnlyGeometry,
+        "sequence": PhotoSequenceSolution,
+        "dual_lane": DualLanePhotoSolution,
+        "review_only": ReviewOnlyContainment,
     }.get(kind)
     if model is None:
         raise ValueError(f"unknown candidate geometry kind: {kind}")
@@ -508,7 +497,7 @@ def finalization_plan_from_read_model(value: Any) -> FinalizationPlan:
         "layout",
         "image_width",
         "image_height",
-        "decision_geometry",
+        "base_geometry",
     }
     if not isinstance(value, dict) or set(value) != expected:
         raise ValueError("finalization plan read model is incomplete")
@@ -516,8 +505,8 @@ def finalization_plan_from_read_model(value: Any) -> FinalizationPlan:
         layout=_typed_value_from_read_model(value["layout"], str),
         image_width=_typed_value_from_read_model(value["image_width"], int),
         image_height=_typed_value_from_read_model(value["image_height"], int),
-        decision_geometry=output_geometry_from_read_model(
-            value["decision_geometry"]
+        base_geometry=output_geometry_from_read_model(
+            value["base_geometry"]
         ),
     )
 
@@ -529,17 +518,19 @@ def frame_bleed_plan_from_read_model(value: Any) -> FrameBleedPlan:
 def output_geometry_from_read_model(value: Any) -> OutputGeometry:
     if not (
         isinstance(value, dict)
-        and set(value) == {"crop_envelope", "frame_boxes"}
-        and isinstance(value["frame_boxes"], list)
+        and set(value) == {"frame_crop_envelopes", "final_boxes"}
+        and isinstance(value["frame_crop_envelopes"], list)
+        and isinstance(value["final_boxes"], list)
     ):
         raise ValueError("output geometry read model is incomplete")
     return OutputGeometry(
-        crop_envelope=CropEnvelope(
-            _typed_value_from_read_model(value["crop_envelope"], Box)
+        frame_crop_envelopes=tuple(
+            _typed_value_from_read_model(item, FrameCropEnvelope)
+            for item in value["frame_crop_envelopes"]
         ),
-        frames=tuple(
+        final_boxes=tuple(
             _typed_value_from_read_model(frame, Box)
-            for frame in value["frame_boxes"]
+            for frame in value["final_boxes"]
         ),
     )
 
@@ -585,10 +576,10 @@ def _output_valid(value: Any, *, geometry_resolved: bool) -> bool:
             )
         except (KeyError, TypeError, ValueError):
             return False
-        if not final_geometry.frames:
+        if not final_geometry.final_boxes:
             return False
         expected_geometry = apply_frame_bleed(
-            plan.decision_geometry,
+            plan.base_geometry,
             frame_bleed_plan,
             layout=plan.layout,
             image_width=plan.image_width,

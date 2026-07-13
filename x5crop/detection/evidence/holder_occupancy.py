@@ -10,58 +10,57 @@ from ..physical.photo_size import FrameDimensionEvidence
 from ...domain import (
     Box,
     EvidenceState,
-    FrameBoundary,
     HolderSpan,
-    SeparatorAssignment,
-    VisibleSequenceSpan,
+    PhotoAperture,
+    SeparatorBandAssignment,
 )
-from .frame_coverage import FrameCoverageEvidence
+from .photo_sequence_coverage import PhotoSequenceCoverageEvidence
 
 
 @dataclass(frozen=True)
 class StripCompletenessEvidence:
     count: int
     nominal_count: int
-    valid_frame_count: int
-    resolved_boundary_count: int
+    valid_aperture_count: int
+    resolved_inter_photo_boundary_count: int
     independent_separator_count: int
-    frame_count_complete: bool = field(init=False)
-    frame_sequence_complete: bool = field(init=False)
-    expected_internal_boundary_count: int = field(init=False)
+    photo_count_complete: bool = field(init=False)
+    aperture_sequence_complete: bool = field(init=False)
+    expected_inter_photo_boundary_count: int = field(init=False)
 
     def __post_init__(self) -> None:
         if min(self.count, self.nominal_count) <= 0:
             raise ValueError("strip counts must be positive")
         expected = self.count - 1
-        if not 0 <= self.valid_frame_count <= self.count:
-            raise ValueError("valid frame count must fit the candidate count")
-        if not 0 <= self.resolved_boundary_count <= expected:
+        if not 0 <= self.valid_aperture_count <= self.count:
+            raise ValueError("valid aperture count must fit the candidate count")
+        if not 0 <= self.resolved_inter_photo_boundary_count <= expected:
             raise ValueError("resolved boundaries must fit the candidate count")
-        if not 0 <= self.independent_separator_count <= self.resolved_boundary_count:
+        if not 0 <= self.independent_separator_count <= self.resolved_inter_photo_boundary_count:
             raise ValueError("independent separators must resolve candidate boundaries")
-        frame_count_complete = self.count == self.nominal_count
-        object.__setattr__(self, "frame_count_complete", frame_count_complete)
+        photo_count_complete = self.count == self.nominal_count
+        object.__setattr__(self, "photo_count_complete", photo_count_complete)
         object.__setattr__(
             self,
-            "frame_sequence_complete",
+            "aperture_sequence_complete",
             bool(
-                frame_count_complete
-                and self.valid_frame_count == self.count
-                and self.resolved_boundary_count == expected
+                photo_count_complete
+                and self.valid_aperture_count == self.count
+                and self.resolved_inter_photo_boundary_count == expected
             ),
         )
-        object.__setattr__(self, "expected_internal_boundary_count", expected)
+        object.__setattr__(self, "expected_inter_photo_boundary_count", expected)
 
 
 @dataclass(frozen=True)
 class HolderOccupancyEvidence:
     strip_completeness: StripCompletenessEvidence
     content_support_available: bool
-    frame_coverage_state: EvidenceState
+    photo_sequence_coverage_state: EvidenceState
     frame_dimension_state: EvidenceState
     complete_strip_can_be_underfilled: bool
     holder_span: HolderSpan
-    visible_sequence_span: VisibleSequenceSpan
+    photo_sequence_envelope: Box
     source_long_axis: str
     long_axis_px_per_mm: float | None
     observed_sequence_span_px: float = field(init=False)
@@ -82,12 +81,12 @@ class HolderOccupancyEvidence:
             raise ValueError("holder occupancy calibration must be finite and positive")
 
         holder = self.holder_span.box
-        sequence = self.visible_sequence_span.box
+        sequence = self.photo_sequence_envelope
         if not (
             holder.left <= sequence.left < sequence.right <= holder.right
             and holder.top <= sequence.top < sequence.bottom <= holder.bottom
         ):
-            raise ValueError("visible sequence span must be contained by holder span")
+            raise ValueError("photo sequence envelope must be contained by holder span")
         holder_start, holder_end = holder.left, holder.right
         sequence_start, sequence_end = sequence.left, sequence.right
         holder_length = float(holder_end - holder_start)
@@ -115,9 +114,9 @@ class HolderOccupancyEvidence:
             "complete_underfilled_strip",
             bool(
                 self.complete_strip_can_be_underfilled
-                and self.strip_completeness.frame_sequence_complete
+                and self.strip_completeness.aperture_sequence_complete
                 and self.content_support_available
-                and self.frame_coverage_state == EvidenceState.SUPPORTED
+                and self.photo_sequence_coverage_state == EvidenceState.SUPPORTED
                 and self.frame_dimension_state == EvidenceState.SUPPORTED
                 and underfilled
             ),
@@ -128,19 +127,23 @@ class HolderOccupancyEvidence:
 def strip_completeness_evidence(
     *,
     count: int,
-    frames: tuple[Box, ...],
-    frame_boundaries: tuple[FrameBoundary, ...],
-    separator_assignments: tuple[SeparatorAssignment, ...],
+    photo_apertures: tuple[PhotoAperture, ...],
+    separator_assignments: tuple[SeparatorBandAssignment, ...],
     physical_spec: FormatPhysicalSpec,
 ) -> StripCompletenessEvidence:
-    valid_frame_count = sum(1 for frame in frames if frame.valid())
+    valid_aperture_count = len(photo_apertures)
+    resolved_boundaries = sum(
+        left.trailing.independently_observed
+        and right.leading.independently_observed
+        for left, right in zip(photo_apertures, photo_apertures[1:])
+    )
     return StripCompletenessEvidence(
         count=int(count),
         nominal_count=int(physical_spec.default_count),
-        valid_frame_count=int(valid_frame_count),
-        resolved_boundary_count=len(frame_boundaries),
+        valid_aperture_count=int(valid_aperture_count),
+        resolved_inter_photo_boundary_count=int(resolved_boundaries),
         independent_separator_count=sum(
-            assignment.used_for_boundary and assignment.independent
+            assignment.independent
             for assignment in separator_assignments
         ),
     )
@@ -151,20 +154,17 @@ def holder_occupancy_evidence(
     layout: str,
     count: int,
     holder_span: HolderSpan,
-    visible_sequence_span: VisibleSequenceSpan,
-    frames: tuple[Box, ...],
-    frame_boundaries: tuple[FrameBoundary, ...],
-    separator_assignments: tuple[SeparatorAssignment, ...],
+    photo_apertures: tuple[PhotoAperture, ...],
+    separator_assignments: tuple[SeparatorBandAssignment, ...],
     physical_spec: FormatPhysicalSpec,
     content_support_available: bool,
-    frame_coverage: FrameCoverageEvidence,
+    photo_sequence_coverage: PhotoSequenceCoverageEvidence,
     frame_dimensions: FrameDimensionEvidence,
     calibration: ScanCalibrationResolution,
 ) -> HolderOccupancyEvidence:
     completeness = strip_completeness_evidence(
         count=count,
-        frames=frames,
-        frame_boundaries=frame_boundaries,
+        photo_apertures=photo_apertures,
         separator_assignments=separator_assignments,
         physical_spec=physical_spec,
     )
@@ -172,13 +172,18 @@ def holder_occupancy_evidence(
     return HolderOccupancyEvidence(
         strip_completeness=completeness,
         content_support_available=content_support_available,
-        frame_coverage_state=frame_coverage.state,
+        photo_sequence_coverage_state=photo_sequence_coverage.state,
         frame_dimension_state=frame_dimensions.state,
         complete_strip_can_be_underfilled=(
             physical_spec.complete_strip_can_be_underfilled
         ),
         holder_span=holder_span,
-        visible_sequence_span=visible_sequence_span,
+        photo_sequence_envelope=Box(
+            min(item.frame_crop_envelope.box.left for item in photo_apertures),
+            min(item.frame_crop_envelope.box.top for item in photo_apertures),
+            max(item.frame_crop_envelope.box.right for item in photo_apertures),
+            max(item.frame_crop_envelope.box.bottom for item in photo_apertures),
+        ),
         source_long_axis=source_long_axis,
         long_axis_px_per_mm=(
             calibration.px_per_mm(source_long_axis)

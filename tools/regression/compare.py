@@ -16,8 +16,8 @@ DEFAULT_FIELDS = (
     "decision.final_review_reasons",
     "selection.selected_rank",
     "selection.geometry_resolution",
-    "output.final_geometry.crop_envelope",
-    "output.final_geometry.frame_boxes",
+    "output.final_geometry.frame_crop_envelopes",
+    "output.final_geometry.final_boxes",
 )
 
 

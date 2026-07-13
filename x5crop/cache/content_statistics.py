@@ -4,6 +4,8 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from ..image.evidence import activation_mask
+
 
 @dataclass(frozen=True)
 class ContentColumnStatistics:
@@ -22,7 +24,10 @@ class ContentColumnStatistics:
             raise ValueError("content evidence must be a two-dimensional array")
         rows, columns = evidence.shape
         mean_sums = evidence.sum(axis=0, dtype=np.float64)
-        coverage_sums = (evidence >= float(threshold)).sum(axis=0, dtype=np.float64)
+        coverage_sums = activation_mask(evidence, threshold).sum(
+            axis=0,
+            dtype=np.float64,
+        )
         return cls(
             mean_prefix=np.concatenate(
                 (np.zeros(1, dtype=np.float64), np.cumsum(mean_sums, dtype=np.float64))

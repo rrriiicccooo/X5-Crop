@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 from ...domain import (
-    BoundaryKind,
-    BoundaryPathGroup,
-    BoundaryPathObservation,
+    BoundaryMeasurementSet,
     BoundarySide,
+    HolderBoundaryObservation,
     MeasurementIdentity,
     MeasurementProvenance,
 )
@@ -16,8 +15,7 @@ from ...units import (
     PhysicalScaleSource,
     ScanCalibrationResolution,
 )
-from ..physical.model import SequenceSolution
-from ..physical.photo_size import dimension_photo_intervals
+from ..physical.model import PhotoSequenceSolution
 from .holder_boundary import HolderBoundaryEvidence
 
 
@@ -25,21 +23,18 @@ MINIMUM_FRAME_DIMENSION_CONSENSUS_OBSERVATIONS = 2
 
 
 def _path_has_clear_inner_content(
-    path: BoundaryPathObservation | None,
+    boundary: HolderBoundaryObservation | None,
     edge_texture_limit: float,
 ) -> bool:
     return bool(
-        path is not None
-        and path.kind != BoundaryKind.CANVAS_CLIP
-        and path.outer_appearance is not None
-        and path.inner_appearance is not None
-        and path.outer_appearance.texture_median <= edge_texture_limit
-        and path.inner_appearance.texture_median > edge_texture_limit
+        boundary is not None
+        and boundary.outer_appearance.texture_median <= edge_texture_limit
+        and boundary.inner_appearance.texture_median > edge_texture_limit
     )
 
 
 def boundary_scale_observations(
-    groups: tuple[BoundaryPathGroup, ...],
+    measurements: BoundaryMeasurementSet,
     physical_spec: FormatPhysicalSpec,
     layout: str,
     *,
@@ -50,54 +45,61 @@ def boundary_scale_observations(
     )
     source_axis = "y" if is_horizontal_layout(layout) else "x"
     observations: list[PhysicalScaleObservation] = []
-    for group in groups:
-        by_side = {path.side: path for path in group.paths}
-        top = by_side.get(BoundarySide.TOP)
-        bottom = by_side.get(BoundarySide.BOTTOM)
-        if not (
-            _path_has_clear_inner_content(top, edge_texture_limit)
-            and _path_has_clear_inner_content(bottom, edge_texture_limit)
-        ):
-            continue
-        if top is None or bottom is None:
-            continue
+    boundaries = {item.side: item for item in measurements.holder_boundaries}
+    top = boundaries.get(BoundarySide.TOP)
+    bottom = boundaries.get(BoundarySide.BOTTOM)
+    if _path_has_clear_inner_content(
+        top,
+        edge_texture_limit,
+    ) and _path_has_clear_inner_content(bottom, edge_texture_limit):
+        assert top is not None and bottom is not None
         span = bottom.position.minus(top.position)
         lower = max(0.0, span.minimum) / max(frame_heights)
-        if lower <= 0.0:
-            continue
-        observations.append(
-            PhysicalScaleObservation(
-                source_axis,
-                lower,
-                None,
-                PhysicalScaleSource.FRAME_SHORT_AXIS,
-                PhysicalScaleScope.ROOT_MEASUREMENT,
-                MeasurementProvenance(
-                    MeasurementIdentity.SHORT_AXIS_BOUNDARIES,
-                    "textured_inner_boundary_scale_lower_bound",
-                    (
-                        MeasurementIdentity.BOUNDARY_PATHS,
-                        MeasurementIdentity.FORMAT_PHYSICAL_SPEC,
+        if lower > 0.0:
+            observations.append(
+                PhysicalScaleObservation(
+                    source_axis,
+                    lower,
+                    None,
+                    PhysicalScaleSource.FRAME_SHORT_AXIS,
+                    PhysicalScaleScope.ROOT_MEASUREMENT,
+                    MeasurementProvenance(
+                        MeasurementIdentity.SHORT_AXIS_BOUNDARIES,
+                        "textured_inner_boundary_scale_lower_bound",
+                        (
+                            MeasurementIdentity.BOUNDARY_PATHS,
+                            MeasurementIdentity.FORMAT_PHYSICAL_SPEC,
+                        ),
                     ),
-                ),
+                )
             )
-        )
     return tuple(dict.fromkeys(observations))
 
 
 def _dimension_consensus_observations(
-    geometry: SequenceSolution,
+    geometry: PhotoSequenceSolution,
 ) -> tuple[PhysicalScaleObservation, ...]:
     frame_width_mm = float(geometry.frame_dimension_prior.frame_size_mm[0])
     long_axis = "x" if is_horizontal_layout(geometry.layout) else "y"
-    intervals = dimension_photo_intervals(geometry)
-    if len(intervals) < MINIMUM_FRAME_DIMENSION_CONSENSUS_OBSERVATIONS:
+    apertures = tuple(
+        item
+        for item in geometry.photo_apertures
+        if item.leading.independently_observed
+        and item.trailing.independently_observed
+    )
+    if len(apertures) < MINIMUM_FRAME_DIMENSION_CONSENSUS_OBSERVATIONS:
         return ()
     return tuple(
         PhysicalScaleObservation(
             axis=long_axis,
-            minimum_px_per_mm=interval.width_px.minimum / frame_width_mm,
-            maximum_px_per_mm=interval.width_px.maximum / frame_width_mm,
+            minimum_px_per_mm=(
+                aperture.trailing.position.minus(aperture.leading.position).minimum
+                / frame_width_mm
+            ),
+            maximum_px_per_mm=(
+                aperture.trailing.position.minus(aperture.leading.position).maximum
+                / frame_width_mm
+            ),
             source=PhysicalScaleSource.FRAME_DIMENSION_CONSENSUS,
             scope=PhysicalScaleScope.CANDIDATE_GEOMETRY,
             provenance=MeasurementProvenance(
@@ -107,39 +109,49 @@ def _dimension_consensus_observations(
                     dict.fromkeys(
                         (
                             MeasurementIdentity.FORMAT_PHYSICAL_SPEC,
-                            interval.start_provenance.root_measurement,
-                            interval.end_provenance.root_measurement,
+                            aperture.leading.provenance.root_measurement,
+                            aperture.trailing.provenance.root_measurement,
                         )
                     )
                 ),
                 (
-                    f"frame:{interval.index}:start",
-                    f"frame:{interval.index}:end",
+                    f"photo:{aperture.index}:leading",
+                    f"photo:{aperture.index}:trailing",
                 ),
             ),
         )
-        for interval in intervals
+        for aperture in apertures
     )
 
 
 def _short_axis_observation(
-    geometry: SequenceSolution,
+    geometry: PhotoSequenceSolution,
     holder_boundary: HolderBoundaryEvidence,
 ) -> PhysicalScaleObservation | None:
-    paths = {path.side: path for path in holder_boundary.paths}
+    boundaries = {
+        boundary.side: boundary for boundary in holder_boundary.boundaries
+    }
     if not (
         _path_has_clear_inner_content(
-            paths.get(BoundarySide.TOP),
+            boundaries.get(BoundarySide.TOP),
             holder_boundary.edge_texture_limit,
         )
         and _path_has_clear_inner_content(
-            paths.get(BoundarySide.BOTTOM),
+            boundaries.get(BoundarySide.BOTTOM),
             holder_boundary.edge_texture_limit,
         )
     ):
         return None
     frame_height_mm = float(geometry.frame_dimension_prior.frame_size_mm[1])
-    visible_short_axis_px = float(geometry.visible_sequence_span.box.height)
+    measured_heights = tuple(
+        aperture.bottom.position.minus(aperture.top.position).midpoint
+        for aperture in geometry.photo_apertures
+        if aperture.top.independently_observed
+        and aperture.bottom.independently_observed
+    )
+    if not measured_heights:
+        return None
+    visible_short_axis_px = sum(measured_heights) / len(measured_heights)
     scale = visible_short_axis_px / frame_height_mm
     source_axis = "y" if is_horizontal_layout(geometry.layout) else "x"
     return PhysicalScaleObservation(
@@ -160,7 +172,7 @@ def _short_axis_observation(
 
 
 def physical_scale_observations(
-    geometry: SequenceSolution,
+    geometry: PhotoSequenceSolution,
     holder_boundary: HolderBoundaryEvidence,
 ) -> tuple[PhysicalScaleObservation, ...]:
     dimension_observations = _dimension_consensus_observations(geometry)
@@ -174,7 +186,7 @@ def physical_scale_observations(
 
 def candidate_scan_calibration(
     context_calibration: ScanCalibrationResolution,
-    geometry: SequenceSolution,
+    geometry: PhotoSequenceSolution,
     holder_boundary: HolderBoundaryEvidence,
 ) -> ScanCalibrationResolution:
     observations = tuple(
@@ -192,7 +204,7 @@ def candidate_scan_calibration(
 
 
 def candidate_scale_observations_match_geometry(
-    geometry: SequenceSolution,
+    geometry: PhotoSequenceSolution,
     holder_boundary: HolderBoundaryEvidence,
     calibration: ScanCalibrationResolution,
 ) -> bool:

@@ -52,7 +52,7 @@ class UnresolvedOutputContractTest(unittest.TestCase):
             bleed,
             finalization_plan_for_selection(
                 selection,
-                workspace_extent=WorkspaceExtent(200, 100),
+                workspace_extent=WorkspaceExtent(310, 100),
             ),
         )
         with patch(
@@ -61,8 +61,8 @@ class UnresolvedOutputContractTest(unittest.TestCase):
         ) as writer:
             outputs = write_crops_if_allowed(
                 Path("input.tif"),
-                np.zeros((100, 200), dtype=np.uint8),
-                np.zeros((100, 200), dtype=np.uint8),
+                np.zeros((100, 310), dtype=np.uint8),
+                np.zeros((100, 310), dtype=np.uint8),
                 _profile(),
                 detection,
                 SimpleNamespace(export_review=True, dry_run=False),
@@ -89,14 +89,14 @@ class UnresolvedOutputContractTest(unittest.TestCase):
             bleed,
             finalization_plan_for_selection(
                 selection,
-                workspace_extent=WorkspaceExtent(200, 100),
+                workspace_extent=WorkspaceExtent(310, 100),
             ),
         )
         with patch("x5crop.export.actions.write_crops") as writer:
             outputs = write_crops_if_allowed(
                 Path("input.tif"),
-                np.zeros((100, 200), dtype=np.uint8),
-                np.zeros((100, 200), dtype=np.uint8),
+                np.zeros((100, 310), dtype=np.uint8),
+                np.zeros((100, 310), dtype=np.uint8),
                 _profile(),
                 detection,
                 SimpleNamespace(export_review=True, dry_run=False),
@@ -108,14 +108,16 @@ class UnresolvedOutputContractTest(unittest.TestCase):
         writer.assert_not_called()
 
         diagnostics = get_detection_configuration("135", "full").diagnostics
-        self.assertEqual(
-            debug_geometry(
-                np.zeros((100, 200), dtype=np.uint8),
-                detection,
-                selection.selected,
-            ).frames,
-            selection.selected.geometry.frames,
+        geometry = debug_geometry(
+            np.zeros((100, 310), dtype=np.uint8),
+            detection,
+            selection.selected,
         )
+        self.assertEqual(
+            tuple(item.box for item in geometry.frame_crop_envelopes),
+            tuple(item.box for item in selection.selected.geometry.frame_crop_envelopes),
+        )
+        self.assertEqual(geometry.final_boxes, ())
         self.assertIn(
             "NOT EXPORTABLE",
             debug_status_parts(
@@ -130,7 +132,7 @@ class UnresolvedOutputContractTest(unittest.TestCase):
             selection,
             source="input.tif",
             profile=typed_read_model(_profile()),
-            workspace_extent=WorkspaceExtent(200, 100),
+            workspace_extent=WorkspaceExtent(310, 100),
             output_files=outputs,
             review_copy=None,
             warnings=[],

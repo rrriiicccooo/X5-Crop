@@ -3,14 +3,22 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 import math
 
-from ...domain import BoundaryPathObservation, EvidenceState
-from ..physical.boundary import boundary_supports_holder_region
-from ..physical.model import SequenceSolution
+from ...domain import EvidenceState, HolderBoundaryObservation
+from ..physical.model import PhotoSequenceSolution
+
+
+def boundary_supports_holder_region(
+    boundary: HolderBoundaryObservation,
+    edge_texture_limit: float,
+) -> bool:
+    if not math.isfinite(edge_texture_limit) or edge_texture_limit < 0.0:
+        raise ValueError("holder boundary texture limit must be finite and non-negative")
+    return boundary.outer_appearance.texture_median <= float(edge_texture_limit)
 
 
 @dataclass(frozen=True)
 class HolderBoundaryEvidence:
-    paths: tuple[BoundaryPathObservation, ...]
+    boundaries: tuple[HolderBoundaryObservation, ...]
     edge_texture_limit: float
     state: EvidenceState = field(init=False)
     reason: str = field(init=False)
@@ -19,32 +27,32 @@ class HolderBoundaryEvidence:
         if not math.isfinite(self.edge_texture_limit) or self.edge_texture_limit < 0.0:
             raise ValueError("holder boundary texture limit must be finite and non-negative")
         if any(
-            not boundary_supports_holder_region(path, self.edge_texture_limit)
-            for path in self.paths
+            not boundary_supports_holder_region(boundary, self.edge_texture_limit)
+            for boundary in self.boundaries
         ):
-            raise ValueError("holder boundary evidence accepts measured paths only")
-        state = EvidenceState.SUPPORTED if self.paths else EvidenceState.UNAVAILABLE
+            raise ValueError("holder boundary evidence accepts supported boundaries only")
+        state = EvidenceState.SUPPORTED if self.boundaries else EvidenceState.UNAVAILABLE
         object.__setattr__(self, "state", state)
         object.__setattr__(
             self,
             "reason",
             (
                 "edge_adjacent_holder_boundary_observed"
-                if self.paths
+                if self.boundaries
                 else "holder_boundary_observation_unavailable"
             ),
         )
 
 
 def holder_boundary_evidence(
-    geometry: SequenceSolution,
+    geometry: PhotoSequenceSolution,
     edge_texture_limit: float,
 ) -> HolderBoundaryEvidence:
     return HolderBoundaryEvidence(
         tuple(
-            path
-            for path in geometry.boundary_paths
-            if boundary_supports_holder_region(path, edge_texture_limit)
+            boundary
+            for boundary in geometry.holder_boundaries
+            if boundary_supports_holder_region(boundary, edge_texture_limit)
         ),
         edge_texture_limit,
     )

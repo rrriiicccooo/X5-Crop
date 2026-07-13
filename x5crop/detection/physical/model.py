@@ -5,28 +5,28 @@ from enum import Enum
 import math
 
 from ...domain import (
-    BoundaryKind,
-    BoundaryPathObservation,
     BoundarySide,
     Box,
-    CropEnvelope,
-    FrameBoundary,
-    FrameBoundaryReference,
-    FrameDimensionPrior,
-    HolderSpan,
-    MeasurementIdentity,
-    MeasurementProvenance,
-    PixelInterval,
-    SeparatorAssignment,
-    SeparatorBandObservation,
-    VisibleSequenceSpan,
+    ContainmentFallback,
     EvidenceState,
+    FrameCropEnvelope,
+    FrameDimensionPrior,
+    GrayBoundaryPathObservation,
+    HolderBoundaryObservation,
+    HolderSpan,
+    InterPhotoBoundaryReference,
+    InterPhotoSpacing,
+    MeasurementProvenance,
+    PhotoAperture,
+    PhotoApertureEdgeAssignment,
+    PhotoApertureBoundaryResolution,
+    PixelInterval,
+    SeparatorBandAssignment,
+    SeparatorBandObservation,
 )
 from ...geometry.layout import HORIZONTAL, require_work_layout
 from ...strip_modes import FULL, PARTIAL
-from .boundary import HolderOcclusionEvidence
 from .lane_divider import LaneDividerEvidence
-from .spacing import InterFrameSpacing
 
 
 class GeometryIdentityError(ValueError):
@@ -43,223 +43,6 @@ def _validate_geometry_identity(
     require_work_layout(layout)
     if strip_mode not in {FULL, PARTIAL}:
         raise ValueError(f"unsupported candidate geometry mode: {strip_mode}")
-
-
-@dataclass(frozen=True)
-class PhotoInterval:
-    index: int
-    start: PixelInterval
-    end: PixelInterval
-    start_provenance: MeasurementProvenance
-    end_provenance: MeasurementProvenance
-    start_independently_observed: bool
-    end_independently_observed: bool
-
-    def __post_init__(self) -> None:
-        if self.index <= 0:
-            raise ValueError("photo interval index must be positive")
-        if self.end.minimum <= self.start.maximum:
-            raise ValueError("photo interval must have guaranteed positive width")
-
-    @property
-    def width_px(self) -> PixelInterval:
-        return self.end.minus(self.start)
-
-    @property
-    def independently_observed(self) -> bool:
-        return bool(
-            self.start_independently_observed
-            and self.end_independently_observed
-        )
-
-
-def photo_intervals_for_sequence(
-    boundaries: tuple[FrameBoundary, ...],
-    frames: tuple[Box, ...],
-    boundary_paths: tuple[BoundaryPathObservation, ...],
-) -> tuple[PhotoInterval, ...]:
-    by_index = {boundary.boundary_index: boundary for boundary in boundaries}
-    sequence_edges = {
-        observation.side: observation
-        for observation in boundary_paths
-        if observation.side in {BoundarySide.LEADING, BoundarySide.TRAILING}
-    }
-    generated_provenance = MeasurementProvenance(
-        root_measurement=MeasurementIdentity.FRAME_GEOMETRY,
-        source="sequence_photo_interval",
-        dependencies=(MeasurementIdentity.SEQUENCE_CUTS,),
-    )
-    intervals: list[PhotoInterval] = []
-    for index, frame in enumerate(frames, start=1):
-        previous = by_index.get(index - 1)
-        following = by_index.get(index)
-        leading = sequence_edges.get(BoundarySide.LEADING) if index == 1 else None
-        trailing = (
-            sequence_edges.get(BoundarySide.TRAILING)
-            if index == len(frames)
-            else None
-        )
-        if previous is not None and previous.hard_separator:
-            assert previous.assignment is not None
-            start = PixelInterval.exact(previous.assignment.observation.end)
-            start_provenance = previous.assignment.observation.provenance
-            start_observed = True
-        elif previous is not None:
-            start = previous.position
-            start_provenance = previous.provenance
-            start_observed = False
-        elif leading is not None:
-            start = leading.position
-            start_provenance = leading.provenance
-            start_observed = leading.kind != BoundaryKind.CANVAS_CLIP
-        else:
-            start = PixelInterval.exact(float(frame.left))
-            start_provenance = generated_provenance
-            start_observed = False
-        if following is not None and following.hard_separator:
-            assert following.assignment is not None
-            end = PixelInterval.exact(following.assignment.observation.start)
-            end_provenance = following.assignment.observation.provenance
-            end_observed = True
-        elif following is not None:
-            end = following.position
-            end_provenance = following.provenance
-            end_observed = False
-        elif trailing is not None:
-            end = trailing.position
-            end_provenance = trailing.provenance
-            end_observed = trailing.kind != BoundaryKind.CANVAS_CLIP
-        else:
-            end = PixelInterval.exact(float(frame.right))
-            end_provenance = generated_provenance
-            end_observed = False
-        envelope_axis = PixelInterval(
-            float(frames[0].left),
-            float(frames[-1].right),
-        )
-        start = start.intersection(envelope_axis)
-        end = end.intersection(envelope_axis)
-        if start is None or end is None or end.minimum <= start.maximum:
-            raise ValueError("photo interval does not intersect the crop envelope")
-        intervals.append(
-            PhotoInterval(
-                index,
-                start,
-                end,
-                start_provenance,
-                end_provenance,
-                start_observed,
-                end_observed,
-            )
-        )
-    return tuple(intervals)
-
-
-def photo_intervals_match_sequence(
-    photo_intervals: tuple[PhotoInterval, ...],
-    boundaries: tuple[FrameBoundary, ...],
-    frames: tuple[Box, ...],
-    boundary_paths: tuple[BoundaryPathObservation, ...],
-    crop_envelope: CropEnvelope,
-) -> bool:
-    if len(photo_intervals) != len(frames):
-        return False
-    by_index = {boundary.boundary_index: boundary for boundary in boundaries}
-    sequence_edges = {
-        observation.side: observation
-        for observation in boundary_paths
-        if observation.side in {BoundarySide.LEADING, BoundarySide.TRAILING}
-    }
-    sequence_axis = PixelInterval(
-        float(frames[0].left),
-        float(frames[-1].right),
-    )
-
-    def normalized(interval: PixelInterval) -> PixelInterval | None:
-        return interval.intersection(sequence_axis)
-
-    envelope = crop_envelope.box
-    for index, (photo, frame) in enumerate(
-        zip(photo_intervals, frames, strict=True),
-        start=1,
-    ):
-        if (
-            photo.index != index
-            or photo.start.minimum < float(envelope.left)
-            or photo.end.maximum > float(envelope.right)
-            or photo.end.maximum <= float(frame.left)
-            or photo.start.minimum >= float(frame.right)
-        ):
-            return False
-        previous = by_index.get(index - 1)
-        following = by_index.get(index)
-        if previous is not None and previous.hard_separator:
-            assert previous.assignment is not None
-            observation = previous.assignment.observation
-            if photo.start_independently_observed:
-                if photo.start.minimum < observation.end:
-                    return False
-            elif (
-                photo.start != normalized(PixelInterval.exact(observation.end))
-                or photo.start_provenance != observation.provenance
-            ):
-                return False
-        elif previous is not None and not photo.start_independently_observed:
-            if (
-                photo.start != normalized(previous.position)
-                or photo.start_provenance != previous.provenance
-            ):
-                return False
-        elif previous is None:
-            leading = sequence_edges.get(BoundarySide.LEADING)
-            if leading is not None and photo.start_provenance == leading.provenance:
-                if (
-                    photo.start != normalized(leading.position)
-                    or photo.start_independently_observed
-                    != (leading.kind != BoundaryKind.CANVAS_CLIP)
-                ):
-                    return False
-            elif not photo.start_independently_observed and (
-                photo.start != PixelInterval.exact(float(frame.left))
-            ):
-                return False
-        if following is not None and following.hard_separator:
-            assert following.assignment is not None
-            observation = following.assignment.observation
-            if photo.end_independently_observed:
-                if photo.end.maximum > observation.start:
-                    return False
-            elif (
-                photo.end != normalized(PixelInterval.exact(observation.start))
-                or photo.end_provenance != observation.provenance
-            ):
-                return False
-        elif following is not None and not photo.end_independently_observed:
-            if (
-                photo.end != normalized(following.position)
-                or photo.end_provenance != following.provenance
-            ):
-                return False
-        elif following is None:
-            trailing = sequence_edges.get(BoundarySide.TRAILING)
-            if trailing is not None and photo.end_provenance == trailing.provenance:
-                if (
-                    photo.end != normalized(trailing.position)
-                    or photo.end_independently_observed
-                    != (trailing.kind != BoundaryKind.CANVAS_CLIP)
-                ):
-                    return False
-            elif not photo.end_independently_observed and (
-                photo.end != PixelInterval.exact(float(frame.right))
-            ):
-                return False
-    return bool(
-        all(
-            left.start.midpoint <= right.start.midpoint
-            and left.end.midpoint <= right.end.midpoint
-            for left, right in zip(photo_intervals, photo_intervals[1:])
-        )
-    )
 
 
 @dataclass(frozen=True)
@@ -284,6 +67,7 @@ class SequenceResiduals:
 
 class AssignmentConsensusOutcome(str, Enum):
     NOT_APPLICABLE = "not_applicable"
+    UNCONTESTED = "uncontested"
     AGREED = "agreed"
     DISAGREED = "disagreed"
     BUDGET_EXHAUSTED = "budget_exhausted"
@@ -294,7 +78,7 @@ class AssignmentConsensusOutcome(str, Enum):
 class BoundaryAssignmentConsensus:
     outcome: AssignmentConsensusOutcome
     solution_count: int
-    conflicting_boundary_indexes: tuple[int, ...]
+    conflicting_photo_indexes: tuple[int, ...]
     state: EvidenceState = field(init=False)
     reason: str = field(init=False)
 
@@ -302,31 +86,27 @@ class BoundaryAssignmentConsensus:
         if not isinstance(self.outcome, AssignmentConsensusOutcome):
             raise TypeError("assignment consensus requires a typed outcome")
         if self.solution_count < 0:
-            raise ValueError("boundary assignment solution count cannot be negative")
+            raise ValueError("assignment solution count cannot be negative")
         if self.outcome == AssignmentConsensusOutcome.NOT_APPLICABLE:
-            if self.solution_count != 0 or self.conflicting_boundary_indexes:
-                raise ValueError(
-                    "not-applicable assignment consensus has no solution"
-                )
+            if self.solution_count != 0 or self.conflicting_photo_indexes:
+                raise ValueError("not-applicable consensus cannot contain solutions")
         elif self.solution_count == 0:
             raise ValueError("assignment consensus requires a solution")
-        if any(index <= 0 for index in self.conflicting_boundary_indexes):
-            raise ValueError("conflicting boundary indexes must be positive")
-        if len(set(self.conflicting_boundary_indexes)) != len(
-            self.conflicting_boundary_indexes
+        if any(index <= 0 for index in self.conflicting_photo_indexes):
+            raise ValueError("conflicting photo indexes must be positive")
+        if len(set(self.conflicting_photo_indexes)) != len(
+            self.conflicting_photo_indexes
         ):
-            raise ValueError("conflicting boundary indexes must be unique")
+            raise ValueError("conflicting photo indexes must be unique")
         if (
             self.outcome == AssignmentConsensusOutcome.AGREED
-            and self.conflicting_boundary_indexes
+            and self.conflicting_photo_indexes
         ):
-            raise ValueError("agreed assignment consensus cannot contain conflicts")
+            raise ValueError("agreed consensus cannot contain conflicts")
         if self.outcome == AssignmentConsensusOutcome.DISAGREED and (
-            self.solution_count <= 1 or not self.conflicting_boundary_indexes
+            self.solution_count <= 1 or not self.conflicting_photo_indexes
         ):
-            raise ValueError(
-                "disagreed assignment consensus requires conflicting alternatives"
-            )
+            raise ValueError("disagreed consensus requires conflicting alternatives")
         state, reason = {
             AssignmentConsensusOutcome.NOT_APPLICABLE: (
                 EvidenceState.NOT_APPLICABLE,
@@ -334,136 +114,160 @@ class BoundaryAssignmentConsensus:
             ),
             AssignmentConsensusOutcome.AGREED: (
                 EvidenceState.SUPPORTED,
-                "separator_assignment_geometry_agrees",
+                "aperture_assignment_geometry_agrees",
+            ),
+            AssignmentConsensusOutcome.UNCONTESTED: (
+                EvidenceState.SUPPORTED,
+                "aperture_assignment_geometry_uncontested",
             ),
             AssignmentConsensusOutcome.DISAGREED: (
                 EvidenceState.UNAVAILABLE,
-                "alternative_separator_assignments_disagree",
+                "alternative_aperture_assignments_disagree",
             ),
             AssignmentConsensusOutcome.BUDGET_EXHAUSTED: (
                 EvidenceState.UNAVAILABLE,
-                "assignment_search_budget_exhausted",
+                "aperture_assignment_search_budget_exhausted",
             ),
             AssignmentConsensusOutcome.COMPONENT_UNRESOLVED: (
                 EvidenceState.UNAVAILABLE,
-                "component_assignment_geometry_unresolved",
+                "component_aperture_geometry_unresolved",
             ),
         }[self.outcome]
         object.__setattr__(self, "state", state)
         object.__setattr__(self, "reason", reason)
 
 
+def _spacing_matches_apertures(
+    spacing: InterPhotoSpacing,
+    left: PhotoAperture,
+    right: PhotoAperture,
+) -> bool:
+    return bool(
+        spacing.boundary.lane_index is None
+        and spacing.boundary.boundary_index == left.index
+        and right.index == left.index + 1
+        and spacing.signed_width_px
+        == right.leading.position.minus(left.trailing.position)
+    )
+
+
 @dataclass(frozen=True)
-class SequenceSolution:
+class PhotoSequenceSolution:
     format_id: str
     layout: str
     strip_mode: str
     count: int
     holder_span: HolderSpan
-    visible_sequence_span: VisibleSequenceSpan
-    crop_envelope: CropEnvelope
-    photo_intervals: tuple[PhotoInterval, ...]
-    frames: tuple[Box, ...]
+    photo_apertures: tuple[PhotoAperture, ...]
+    aperture_edge_assignments: tuple[PhotoApertureEdgeAssignment, ...]
     separator_observations: tuple[SeparatorBandObservation, ...]
-    separator_assignments: tuple[SeparatorAssignment, ...]
-    frame_boundaries: tuple[FrameBoundary, ...]
-    inter_frame_spacings: tuple[InterFrameSpacing, ...]
-    holder_occlusion: HolderOcclusionEvidence
+    separator_assignments: tuple[SeparatorBandAssignment, ...]
+    inter_photo_spacings: tuple[InterPhotoSpacing, ...]
     frame_dimension_prior: FrameDimensionPrior
+    photo_width_constraint_px: PixelInterval
+    photo_height_constraint_px: PixelInterval
     residuals: SequenceResiduals
     assignment_consensus: BoundaryAssignmentConsensus
     search_budget_exhausted: bool
     automatic_processing_supported: bool
     sequence_provenance: MeasurementProvenance
-    boundary_paths: tuple[BoundaryPathObservation, ...]
+    raw_boundary_paths: tuple[GrayBoundaryPathObservation, ...]
+    holder_boundaries: tuple[HolderBoundaryObservation, ...]
 
     def __post_init__(self) -> None:
         _validate_geometry_identity(self.format_id, self.layout, self.strip_mode)
         if self.count <= 0:
-            raise ValueError("sequence solution count must be positive")
-        if len(self.frames) != self.count:
-            raise ValueError("sequence solution requires one frame per count")
-        if len(self.photo_intervals) != self.count:
-            raise ValueError("sequence solution requires one photo interval per frame")
-        if len(self.frame_boundaries) != max(0, self.count - 1):
-            raise ValueError("sequence solution has incomplete frame boundaries")
-        if len(self.inter_frame_spacings) != max(0, self.count - 1):
-            raise ValueError("sequence solution has incomplete inter-frame spacing")
-        if any(not frame.valid() for frame in self.frames):
-            raise ValueError("sequence solution frames must have positive extent")
-        if any(
-            left.right > right.left
-            for left, right in zip(self.frames, self.frames[1:])
-        ):
-            raise ValueError("sequence solution frames must be monotonic")
-        visible = self.visible_sequence_span.box
-        envelope = self.crop_envelope.box
-        if not (
-            envelope.left <= visible.left
-            and envelope.top <= visible.top
-            and envelope.right >= visible.right
-            and envelope.bottom >= visible.bottom
-        ):
-            raise ValueError("sequence crop envelope must contain the visible span")
-        if (
-            self.frames[0].left != visible.left
-            or self.frames[-1].right != visible.right
-            or any(
-                frame.top != visible.top or frame.bottom != visible.bottom
-                for frame in self.frames
-            )
-            or any(
-                left.right != right.left
-                for left, right in zip(self.frames, self.frames[1:])
-            )
-        ):
-            raise ValueError("sequence frames must partition the visible span")
-        if tuple(photo.index for photo in self.photo_intervals) != tuple(
+            raise ValueError("photo sequence count must be positive")
+        if len(self.photo_apertures) != self.count:
+            raise ValueError("photo sequence requires one aperture per count")
+        if tuple(item.index for item in self.photo_apertures) != tuple(
             range(1, self.count + 1)
         ):
-            raise ValueError("photo interval indexes must be complete and ordered")
-        if not photo_intervals_match_sequence(
-            self.photo_intervals,
-            self.frame_boundaries,
-            self.frames,
-            self.boundary_paths,
-            self.crop_envelope,
+            raise ValueError("photo aperture indexes must be complete and ordered")
+        if (
+            self.photo_width_constraint_px.minimum <= 0.0
+            or self.photo_height_constraint_px.minimum <= 0.0
+        ):
+            raise ValueError("photo aperture dimension constraints must be positive")
+        interior_apertures = self.photo_apertures[1:-1]
+        if any(
+            not aperture.trailing.position.minus(
+                aperture.leading.position
+            ).intersects(self.photo_width_constraint_px)
+            for aperture in interior_apertures
+        ) or any(
+            not aperture.bottom.position.minus(
+                aperture.top.position
+            ).intersects(self.photo_height_constraint_px)
+            for aperture in self.photo_apertures
+        ):
+            raise ValueError("photo apertures must satisfy physical dimension constraints")
+        if any(
+            right.leading.position.minimum <= left.leading.position.maximum
+            or right.trailing.position.minimum <= left.trailing.position.maximum
+            for left, right in zip(self.photo_apertures, self.photo_apertures[1:])
+        ):
+            raise ValueError("photo aperture order must be strictly monotonic")
+        if len(self.inter_photo_spacings) != max(0, self.count - 1):
+            raise ValueError("photo sequence has incomplete inter-photo spacing")
+        if any(
+            not _spacing_matches_apertures(spacing, left, right)
+            for spacing, left, right in zip(
+                self.inter_photo_spacings,
+                self.photo_apertures[:-1],
+                self.photo_apertures[1:],
+                strict=True,
+            )
         ):
             raise GeometryIdentityError(
-                "photo intervals must match sequence measurements"
+                "inter-photo spacing must derive from adjacent aperture edges"
             )
-        expected_boundaries = tuple(range(1, self.count))
-        if (
-            tuple(
-                boundary.boundary_index
-                for boundary in self.frame_boundaries
+        if any(
+            item.path not in self.raw_boundary_paths
+            for item in self.holder_boundaries
+        ):
+            raise GeometryIdentityError(
+                "holder boundaries must preserve raw path identity"
             )
-            != expected_boundaries
-        ):
-            raise ValueError("sequence solution boundary indexes must be complete and ordered")
         if any(
-            int(round(boundary.coordinate)) != self.frames[index - 1].right
-            for index, boundary in enumerate(self.frame_boundaries, start=1)
+            item.observation not in self.raw_boundary_paths
+            for item in self.aperture_edge_assignments
         ):
-            raise ValueError("frame boundaries must define the frame partition")
-        if any(
-            boundary.assignment is not None
-            and boundary.assignment not in self.separator_assignments
-            for boundary in self.frame_boundaries
-        ):
-            raise ValueError("selected boundary assignments must share one identity")
-        if tuple(
-            spacing.boundary.boundary_index
-            for spacing in self.inter_frame_spacings
-        ) != expected_boundaries or any(
-            spacing.boundary.lane_index is not None
-            for spacing in self.inter_frame_spacings
-        ):
-            raise ValueError("sequence spacing references must match frame boundaries")
+            raise GeometryIdentityError(
+                "aperture edge assignments must preserve raw path identity"
+            )
+        selected = {item.boundary_index: item for item in self.separator_assignments}
+        for boundary_index in range(1, self.count):
+            assignment = selected.get(boundary_index)
+            if assignment is None:
+                continue
+            left = self.photo_apertures[boundary_index - 1]
+            right = self.photo_apertures[boundary_index]
+            if (
+                left.trailing != assignment.preceding_trailing_edge
+                or right.leading != assignment.following_leading_edge
+            ):
+                raise GeometryIdentityError(
+                    "separator band edges must bind adjacent photo apertures"
+                )
+
+    @property
+    def frame_crop_envelopes(self) -> tuple[FrameCropEnvelope, ...]:
+        return tuple(item.frame_crop_envelope for item in self.photo_apertures)
+
+    @property
+    def photo_sequence_envelope(self) -> Box:
+        boxes = tuple(item.box for item in self.frame_crop_envelopes)
+        return Box(
+            min(item.left for item in boxes),
+            min(item.top for item in boxes),
+            max(item.right for item in boxes),
+            max(item.bottom for item in boxes),
+        )
 
 
 def combined_sequence_residuals(
-    lane_solutions: tuple[SequenceSolution, ...],
+    lane_solutions: tuple[PhotoSequenceSolution, ...],
 ) -> SequenceResiduals:
     if not lane_solutions:
         raise ValueError("combined residuals require lane solutions")
@@ -486,7 +290,7 @@ def combined_sequence_residuals(
 
 
 def combined_assignment_consensus(
-    lane_solutions: tuple[SequenceSolution, ...],
+    lane_solutions: tuple[PhotoSequenceSolution, ...],
 ) -> BoundaryAssignmentConsensus:
     if not lane_solutions:
         raise ValueError("combined assignment consensus requires lane solutions")
@@ -507,23 +311,46 @@ def combined_assignment_consensus(
     )
 
 
+def _translate_boundary(
+    boundary: PhotoApertureBoundaryResolution,
+    lane_box: Box,
+) -> PhotoApertureBoundaryResolution:
+    offset = (
+        lane_box.left
+        if boundary.side in {BoundarySide.LEADING, BoundarySide.TRAILING}
+        else lane_box.top
+    )
+    return replace(
+        boundary,
+        position=boundary.position.plus(
+            type(boundary.position).exact(float(offset))
+        ),
+    )
+
+
+def _translate_aperture(aperture: PhotoAperture, lane_box: Box) -> PhotoAperture:
+    return PhotoAperture(
+        aperture.index,
+        _translate_boundary(aperture.leading, lane_box),
+        _translate_boundary(aperture.trailing, lane_box),
+        _translate_boundary(aperture.top, lane_box),
+        _translate_boundary(aperture.bottom, lane_box),
+    )
+
+
 @dataclass(frozen=True)
-class DualLaneSolution:
+class DualLanePhotoSolution:
     format_id: str
     layout: str
     strip_mode: str
     count: int
     holder_span: HolderSpan
-    visible_sequence_span: VisibleSequenceSpan
-    crop_envelope: CropEnvelope
-    frames: tuple[Box, ...]
     residuals: SequenceResiduals
     assignment_consensus: BoundaryAssignmentConsensus
     search_budget_exhausted: bool
     lane_divider: LaneDividerEvidence
-    lane_solutions: tuple[SequenceSolution, ...]
+    lane_solutions: tuple[PhotoSequenceSolution, ...]
     lane_boxes: tuple[Box, ...]
-    lane_crop_envelopes: tuple[CropEnvelope, ...]
 
     @property
     def automatic_processing_supported(self) -> bool:
@@ -534,177 +361,97 @@ class DualLaneSolution:
         return self.lane_divider.provenance
 
     @property
-    def inter_frame_spacings(self) -> tuple[InterFrameSpacing, ...]:
+    def photo_apertures(self) -> tuple[PhotoAperture, ...]:
+        apertures: list[PhotoAperture] = []
+        next_index = 1
+        for lane_box, lane in zip(self.lane_boxes, self.lane_solutions, strict=True):
+            for aperture in lane.photo_apertures:
+                apertures.append(
+                    replace(
+                        _translate_aperture(aperture, lane_box),
+                        index=next_index,
+                        leading=replace(
+                            _translate_boundary(aperture.leading, lane_box),
+                            photo_index=next_index,
+                        ),
+                        trailing=replace(
+                            _translate_boundary(aperture.trailing, lane_box),
+                            photo_index=next_index,
+                        ),
+                        top=replace(
+                            _translate_boundary(aperture.top, lane_box),
+                            photo_index=next_index,
+                        ),
+                        bottom=replace(
+                            _translate_boundary(aperture.bottom, lane_box),
+                            photo_index=next_index,
+                        ),
+                    )
+                )
+                next_index += 1
+        return tuple(apertures)
+
+    @property
+    def frame_crop_envelopes(self) -> tuple[FrameCropEnvelope, ...]:
+        return tuple(item.frame_crop_envelope for item in self.photo_apertures)
+
+    @property
+    def inter_photo_spacings(self) -> tuple[InterPhotoSpacing, ...]:
         return tuple(
             replace(
                 spacing,
-                boundary=FrameBoundaryReference(
+                boundary=InterPhotoBoundaryReference(
                     lane_index,
                     spacing.boundary.boundary_index,
                 ),
             )
             for lane_index, lane in enumerate(self.lane_solutions, start=1)
-            for spacing in lane.inter_frame_spacings
+            for spacing in lane.inter_photo_spacings
         )
 
     def __post_init__(self) -> None:
         _validate_geometry_identity(self.format_id, self.layout, self.strip_mode)
-
-        def translated(box: Box, lane_box: Box) -> Box:
-            return Box(
-                box.left + lane_box.left,
-                box.top + lane_box.top,
-                box.right + lane_box.left,
-                box.bottom + lane_box.top,
-            )
-
-        def enclosing(boxes: tuple[Box, ...]) -> Box:
-            return Box(
-                min(box.left for box in boxes),
-                min(box.top for box in boxes),
-                max(box.right for box in boxes),
-                max(box.bottom for box in boxes),
-            )
-
         lane_count = len(self.lane_solutions)
-        if lane_count <= 1:
-            raise ValueError("dual-lane solution requires multiple lane sequences")
-        if (
-            len(self.lane_boxes) != lane_count
-            or len(self.lane_crop_envelopes) != lane_count
-        ):
-            raise ValueError("dual-lane solution requires one box and envelope per lane")
-        if any(not lane.valid() for lane in self.lane_boxes):
-            raise ValueError("dual-lane solution requires valid lane boxes")
-        if self.lane_divider.gutter.left != 0 or (
-            self.lane_divider.gutter.right != self.holder_span.box.width
-            or self.lane_divider.gutter.bottom > self.holder_span.box.height
-        ):
-            raise ValueError("lane divider evidence must use holder coordinates")
-        if tuple(
-            self.lane_divider.lane_boxes(
-                self.holder_span.box.width,
-                self.holder_span.box.height,
-            )
-        ) != self.lane_boxes:
-            raise ValueError("dual-lane boxes must be derived from divider evidence")
-        if any(
-            lane.holder_span.box
-            != Box(0, 0, lane_box.width, lane_box.height)
-            for lane_box, lane in zip(
-                self.lane_boxes,
-                self.lane_solutions,
-                strict=True,
-            )
-        ):
-            raise ValueError("dual-lane component holder spans must match lane boxes")
-        if self.holder_span != HolderSpan(enclosing(self.lane_boxes)):
-            raise ValueError("dual-lane holder span must enclose the lane boxes")
-        if self.count != sum(lane.count for lane in self.lane_solutions):
-            raise ValueError("dual-lane count must equal component sequence counts")
-        if (
-            len(self.frames) != self.count
-            or any(not frame.valid() for frame in self.frames)
-        ):
-            raise ValueError("dual-lane solution requires one valid frame per count")
-        if any(lane.layout != HORIZONTAL for lane in self.lane_solutions):
-            raise ValueError("dual-lane components must use horizontal lane workspace")
-        expected_frames = tuple(
-            translated(frame, lane_box)
-            for lane_box, lane in zip(
-                self.lane_boxes,
-                self.lane_solutions,
-                strict=True,
-            )
-            for frame in lane.frames
-        )
-        if self.frames != expected_frames:
-            raise ValueError("dual-lane frames must be the exact lane projections")
-        expected_lane_envelopes = tuple(
-            CropEnvelope(translated(lane.crop_envelope.box, lane_box))
-            for lane_box, lane in zip(
-                self.lane_boxes,
-                self.lane_solutions,
-                strict=True,
-            )
-        )
-        if self.lane_crop_envelopes != expected_lane_envelopes:
-            raise ValueError(
-                "dual-lane crop envelopes must be the exact lane projections"
-            )
-        expected_visible_span = VisibleSequenceSpan(
-            enclosing(
-                tuple(
-                    translated(lane.visible_sequence_span.box, lane_box)
-                    for lane_box, lane in zip(
-                        self.lane_boxes,
-                        self.lane_solutions,
-                        strict=True,
-                    )
-                )
-            )
-        )
-        if self.visible_sequence_span != expected_visible_span:
-            raise ValueError(
-                "dual-lane visible span must be the exact lane projection"
-            )
-        if self.crop_envelope != CropEnvelope(
-            enclosing(tuple(item.box for item in expected_lane_envelopes))
-        ):
-            raise ValueError(
-                "dual-lane crop envelope must enclose the exact lane projections"
-            )
+        if lane_count <= 1 or len(self.lane_boxes) != lane_count:
+            raise ValueError("dual-lane geometry requires one box per lane solution")
+        if any(not item.valid() for item in self.lane_boxes):
+            raise ValueError("dual-lane boxes must have positive extent")
+        if self.count != sum(item.count for item in self.lane_solutions):
+            raise ValueError("dual-lane count must equal component counts")
+        if any(item.layout != HORIZONTAL for item in self.lane_solutions):
+            raise ValueError("dual-lane components use horizontal lane workspaces")
         if self.residuals != combined_sequence_residuals(self.lane_solutions):
-            raise ValueError("dual-lane residuals must be derived from lane solutions")
+            raise ValueError("dual-lane residuals must derive from lane solutions")
         if self.assignment_consensus != combined_assignment_consensus(
             self.lane_solutions
         ):
-            raise ValueError(
-                "dual-lane assignment consensus must be derived from lane solutions"
-            )
+            raise ValueError("dual-lane consensus must derive from lane solutions")
 
 
 @dataclass(frozen=True)
-class ReviewOnlyGeometry:
+class ReviewOnlyContainment:
     format_id: str
     layout: str
     strip_mode: str
     count: int
     holder_span: HolderSpan
-    visible_sequence_span: VisibleSequenceSpan
-    crop_envelope: CropEnvelope
+    containment_fallback: ContainmentFallback
     frame_dimension_prior: FrameDimensionPrior
     residuals: SequenceResiduals
     assignment_consensus: BoundaryAssignmentConsensus
     sequence_provenance: MeasurementProvenance
-    boundary_paths: tuple[BoundaryPathObservation, ...]
-    photo_intervals: tuple[PhotoInterval, ...] = ()
-    frames: tuple[Box, ...] = ()
-    separator_observations: tuple[SeparatorBandObservation, ...] = ()
-    separator_assignments: tuple[SeparatorAssignment, ...] = ()
-    frame_boundaries: tuple[FrameBoundary, ...] = ()
-    inter_frame_spacings: tuple[InterFrameSpacing, ...] = ()
-    holder_occlusion: HolderOcclusionEvidence = HolderOcclusionEvidence.unavailable()
+    raw_boundary_paths: tuple[GrayBoundaryPathObservation, ...]
     search_budget_exhausted: bool = False
     automatic_processing_supported: bool = False
 
     def __post_init__(self) -> None:
         _validate_geometry_identity(self.format_id, self.layout, self.strip_mode)
         if self.count <= 0:
-            raise ValueError("review-only geometry count must be positive")
-        if any(
-            (
-                self.frames,
-                self.photo_intervals,
-                self.separator_observations,
-                self.separator_assignments,
-                self.frame_boundaries,
-                self.inter_frame_spacings,
-            )
-        ):
-            raise ValueError("review-only geometry cannot contain solved geometry")
+            raise ValueError("review-only count must be positive")
         if self.automatic_processing_supported:
-            raise ValueError("review-only geometry cannot support automatic processing")
+            raise ValueError("review-only containment cannot support automatic output")
 
 
-CandidateGeometry = SequenceSolution | DualLaneSolution | ReviewOnlyGeometry
+CandidateGeometry = (
+    PhotoSequenceSolution | DualLanePhotoSolution | ReviewOnlyContainment
+)

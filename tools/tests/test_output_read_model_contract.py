@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 import numpy as np
-from dataclasses import fields, replace
+from dataclasses import fields
 
 from tools.tests.physical_gate_support import (
     final_detection_fixture,
@@ -39,7 +39,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 def _profile() -> ImageProfile:
     return ImageProfile(
-        shape=(100, 200),
+        shape=(100, 310),
         dtype="uint8",
         axes="YX",
         photometric="MINISBLACK",
@@ -59,7 +59,7 @@ def _analysis_reuse_signature(
     format_id: str = "135",
     strip_mode: str = "full",
     source_name: str = "input.tif",
-    shape: tuple[int, int] = (100, 200),
+    shape: tuple[int, int] = (100, 310),
 ) -> dict:
     return {
         "script": "X5_Crop.py",
@@ -98,7 +98,7 @@ def _record() -> dict:
         selection_fixture(),
         source="input.tif",
         profile=typed_read_model(_profile()),
-        workspace_extent=WorkspaceExtent(200, 100),
+        workspace_extent=WorkspaceExtent(310, 100),
         output_files=[],
         review_copy=None,
         warnings=[],
@@ -155,7 +155,7 @@ class OutputReadModelContractTest(unittest.TestCase):
 
     def test_candidate_report_owns_sequence_conservation_directly(self) -> None:
         candidate = _record()["selection"]["candidates"][0]
-        self.assertIn("inter_frame_spacings", candidate["provisional_geometry"])
+        self.assertIn("inter_photo_spacings", candidate["provisional_geometry"])
         self.assertIn("sequence_conservation", candidate["evidence"])
         self.assertNotIn("frame_sequence", candidate["evidence"])
 
@@ -163,7 +163,7 @@ class OutputReadModelContractTest(unittest.TestCase):
         self,
     ) -> None:
         record = _record()
-        record["output"]["final_geometry"]["frame_boxes"][0]["left"] -= 1
+        record["output"]["final_geometry"]["final_boxes"][0]["left"] -= 1
         with self.assertRaises(ValueError):
             final_detection_from_record(record)
 
@@ -287,22 +287,19 @@ class OutputReadModelContractTest(unittest.TestCase):
         )
         selection = choose_detection(context)
         from x5crop.detection.candidate.model import ReviewOnlyEvidence
-        from x5crop.detection.physical.model import ReviewOnlyGeometry
-        from tools.tests.physical_gate_support import separator_observation
-
-        self.assertIsInstance(selection.selected.geometry, ReviewOnlyGeometry)
+        from x5crop.detection.physical.model import ReviewOnlyContainment
+        self.assertIsInstance(selection.selected.geometry, ReviewOnlyContainment)
         self.assertIsInstance(
             selection.selected.assessment.evidence,
             ReviewOnlyEvidence,
         )
         self.assertIsNone(selection.selected.assessment.gate)
-        with self.assertRaises(ValueError):
-            replace(
-                selection.selected.geometry,
-                separator_observations=(separator_observation(120.0),),
-            )
+        self.assertNotIn(
+            "separator_observations",
+            selection.selected.geometry.__dataclass_fields__,
+        )
         bleed = prepare_frame_bleed(
-            selection.selected,
+            selection,
             AxisBleedParameters(20, 10),
         )
         detection = apply_decision_gate(
@@ -366,12 +363,10 @@ class OutputReadModelContractTest(unittest.TestCase):
         from x5crop.report.read_models import typed_read_model
 
         value = FrameDimensionPrior(
-            width_px=PixelInterval.exact(100.0),
-            height_px=PixelInterval.exact(80.0),
             frame_size_mm=(36.0, 24.0),
-            source=FrameDimensionPriorSource.SHORT_AXIS_ASPECT,
+            source=FrameDimensionPriorSource.PHYSICAL_ASPECT,
             provenance=MeasurementProvenance(
-                MeasurementIdentity.FRAME_DIMENSIONS,
+                MeasurementIdentity.PHYSICAL_FRAME_ASPECT,
                 "test",
                 (),
             ),
@@ -488,7 +483,7 @@ class OutputReadModelContractTest(unittest.TestCase):
                 "name",
                 "other.tif",
             ),
-            lambda record: record["output"]["final_geometry"]["frame_boxes"][0].__setitem__(
+            lambda record: record["output"]["final_geometry"]["final_boxes"][0].__setitem__(
                 "left",
                 1,
             ),
@@ -550,7 +545,7 @@ class OutputReadModelContractTest(unittest.TestCase):
             selection_fixture(),
             source="input.tif",
             profile=typed_read_model(_profile()),
-            workspace_extent=WorkspaceExtent(200, 100),
+            workspace_extent=WorkspaceExtent(310, 100),
             output_files=[],
             review_copy=None,
             warnings=[],
@@ -673,7 +668,7 @@ class OutputReadModelContractTest(unittest.TestCase):
         self.assertEqual(record["schema_id"], "detection_report")
         self.assertEqual(
             record["schema_revision"],
-            "gray_sequence_integrity",
+            "photo_aperture_sequence_resolution",
         )
         self.assertNotIn("v4", record["schema_revision"])
 
@@ -698,8 +693,8 @@ class OutputReadModelContractTest(unittest.TestCase):
                 "decision.final_review_reasons",
                 "selection.selected_rank",
                 "selection.geometry_resolution",
-                "output.final_geometry.crop_envelope",
-                "output.final_geometry.frame_boxes",
+                "output.final_geometry.frame_crop_envelopes",
+                "output.final_geometry.final_boxes",
             ),
         )
 
@@ -721,8 +716,8 @@ class OutputReadModelContractTest(unittest.TestCase):
             tuple(record["decision"]["final_review_reasons"]),
         )
         self.assertEqual(
-            detection.output_geometry.frames,
-            final_detection_fixture().output_geometry.frames,
+            detection.output_geometry,
+            final_detection_fixture().output_geometry,
         )
 
         source = (PROJECT_ROOT / "x5crop/runtime/analysis_reuse.py").read_text()

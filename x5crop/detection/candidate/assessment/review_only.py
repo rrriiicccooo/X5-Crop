@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ...physical.model import ReviewOnlyGeometry
+from ...physical.model import ReviewOnlyContainment
 from ..model import (
     AssessedCandidate,
     BuiltCandidate,
@@ -12,7 +12,7 @@ def assess_review_only_candidate(
     candidate: BuiltCandidate,
 ) -> AssessedCandidate:
     geometry = candidate.geometry
-    if not isinstance(geometry, ReviewOnlyGeometry):
+    if not isinstance(geometry, ReviewOnlyContainment):
         raise ValueError("review-only assessment requires review-only geometry")
     return AssessedCandidate(
         geometry=geometry,

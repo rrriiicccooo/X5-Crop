@@ -4,19 +4,18 @@ from dataclasses import dataclass, field
 
 from ...domain import (
     EvidenceState,
-    FrameBoundaryReference,
-    FrameBoundarySource,
+    InterPhotoBoundaryReference,
 )
-from ..physical.model import SequenceSolution
+from ..physical.model import PhotoSequenceSolution
 
 
 @dataclass(frozen=True)
 class SeparatorSequenceEvidence:
     expected_count: int
     hard_count: int
-    dimension_constrained_count: int
-    hard_boundaries: tuple[FrameBoundaryReference, ...]
-    missing_boundaries: tuple[FrameBoundaryReference, ...]
+    provisional_boundary_count: int
+    hard_boundaries: tuple[InterPhotoBoundaryReference, ...]
+    missing_boundaries: tuple[InterPhotoBoundaryReference, ...]
     hard_tonal_evidence: tuple[float, ...]
     state: EvidenceState = field(init=False)
     reason: str = field(init=False)
@@ -25,7 +24,7 @@ class SeparatorSequenceEvidence:
         if min(
             self.expected_count,
             self.hard_count,
-            self.dimension_constrained_count,
+            self.provisional_boundary_count,
         ) < 0:
             raise ValueError("separator sequence counts cannot be negative")
         if self.hard_count != len(self.hard_boundaries):
@@ -58,38 +57,26 @@ class SeparatorSequenceEvidence:
 
 
 def separator_sequence_evidence(
-    geometry: SequenceSolution,
+    geometry: PhotoSequenceSolution,
 ) -> SeparatorSequenceEvidence:
     expected = max(0, geometry.count - 1)
-    accepted = tuple(
-        boundary
-        for boundary in geometry.frame_boundaries
-        if boundary.hard_separator
-        and boundary.assignment is not None
-        and boundary.assignment.observation.cross_axis.state
-        == EvidenceState.SUPPORTED
-    )
-    indexes = tuple(sorted(boundary.boundary_index for boundary in accepted))
+    accepted = geometry.separator_assignments
+    indexes = tuple(sorted(item.boundary_index for item in accepted))
     missing = tuple(
         index for index in range(1, expected + 1) if index not in indexes
-    )
-    dimension_count = sum(
-        boundary.source == FrameBoundarySource.DIMENSION_CONSTRAINED
-        for boundary in geometry.frame_boundaries
     )
     return SeparatorSequenceEvidence(
         expected_count=expected,
         hard_count=len(accepted),
-        dimension_constrained_count=dimension_count,
+        provisional_boundary_count=expected - len(accepted),
         hard_boundaries=tuple(
-            FrameBoundaryReference(None, index) for index in indexes
+            InterPhotoBoundaryReference(None, index) for index in indexes
         ),
         missing_boundaries=tuple(
-            FrameBoundaryReference(None, index) for index in missing
+            InterPhotoBoundaryReference(None, index) for index in missing
         ),
         hard_tonal_evidence=tuple(
-            float(boundary.assignment.observation.tonal_evidence)
-            for boundary in accepted
-            if boundary.assignment is not None
+            float(assignment.observation.tonal_evidence)
+            for assignment in accepted
         ),
     )

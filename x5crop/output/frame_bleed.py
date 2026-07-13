@@ -2,8 +2,7 @@ from __future__ import annotations
 
 from ..domain import (
     Box,
-    CropEnvelope,
-    FrameBoundaryReference,
+    InterPhotoBoundaryReference,
 )
 from ..geometry.boxes import map_work_box, original_box_to_work
 from ..geometry.layout import is_horizontal_layout
@@ -60,7 +59,7 @@ def frame_bleed_plan(
     leading = [int(user_bleed.long_axis) for _frame in frames]
     trailing = [int(user_bleed.long_axis) for _frame in frames]
     protections: list[BoundaryOverlapProtection] = []
-    unresolved: list[FrameBoundaryReference] = []
+    unresolved: list[InterPhotoBoundaryReference] = []
 
     for requirement in overlap_requirements:
         if requirement.right_frame_index >= len(frames):
@@ -139,24 +138,30 @@ def apply_frame_bleed(
     image_width: int,
     image_height: int,
 ) -> OutputGeometry:
-    if len(frame_bleed_plan.frame_sides) != len(geometry.frames):
+    envelopes = geometry.frame_crop_envelopes
+    if len(frame_bleed_plan.frame_sides) != len(envelopes):
         raise ValueError("frame bleed plan does not match output geometry")
     if tuple(side.frame_index for side in frame_bleed_plan.frame_sides) != tuple(
-        range(len(geometry.frames))
+        range(len(envelopes))
     ):
         raise ValueError("frame bleed plan indexes must match output frames")
-    if len(frame_bleed_plan.frame_output_bounds) != len(geometry.frames):
+    if len(frame_bleed_plan.frame_output_bounds) != len(envelopes):
         raise ValueError("frame output bounds do not match output geometry")
     work_frames = tuple(
         _expand_frame(
-            original_box_to_work(frame, layout, image_width, image_height),
+            original_box_to_work(
+                envelope.box,
+                layout,
+                image_width,
+                image_height,
+            ),
             leading_px=side.leading_px,
             trailing_px=side.trailing_px,
             short_axis_px=side.short_axis_px,
             envelope=bound,
         )
-        for frame, side, bound in zip(
-            geometry.frames,
+        for envelope, side, bound in zip(
+            envelopes,
             frame_bleed_plan.frame_sides,
             frame_bleed_plan.frame_output_bounds,
             strict=True,
@@ -168,13 +173,7 @@ def apply_frame_bleed(
         map_work_box(frame, layout, image_width, image_height)
         for frame in work_frames
     )
-    envelope = Box(
-        min(frame.left for frame in frames),
-        min(frame.top for frame in frames),
-        max(frame.right for frame in frames),
-        max(frame.bottom for frame in frames),
-    )
     return OutputGeometry(
-        crop_envelope=CropEnvelope(envelope),
-        frames=frames,
+        frame_crop_envelopes=geometry.frame_crop_envelopes,
+        final_boxes=frames,
     )

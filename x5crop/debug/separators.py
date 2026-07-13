@@ -2,67 +2,144 @@ from __future__ import annotations
 
 import numpy as np
 
-from ..detection.candidate.model import AssessedCandidate
-from ..detection.physical.model import DualLaneSolution, SequenceSolution
 from ..configuration.diagnostics import DebugStyleParameters, SeparatorOverlayParameters
-from ..domain import Box, FrameBoundarySource, SeparatorBandObservation
+from ..detection.candidate.model import AssessedCandidate
+from ..detection.physical.model import DualLanePhotoSolution, PhotoSequenceSolution
+from ..domain import (
+    BoundaryAxis,
+    BoundarySide,
+    Box,
+    PhotoApertureBoundaryResolution,
+    PhotoApertureEdgeSource,
+    SeparatorBandObservation,
+)
 from ..geometry.boxes import map_work_box
 from .canvas import draw_preview_line, draw_preview_mark
 
 
-def separator_mark_box(
-    observation: SeparatorBandObservation,
-    corridor: Box,
-    long_axis_offset: int,
+def _mapped_work_mark(
+    work_box: Box,
+    *,
+    x_offset: int,
+    y_offset: int,
     image_width: int,
     image_height: int,
     layout: str,
 ) -> Box:
-    start = int(round(observation.start + long_axis_offset))
-    end = max(start + 1, int(round(observation.end + long_axis_offset)))
     return map_work_box(
-        Box(start, corridor.top, end, corridor.bottom),
+        Box(
+            work_box.left + x_offset,
+            work_box.top + y_offset,
+            work_box.right + x_offset,
+            work_box.bottom + y_offset,
+        ),
         layout,
         image_width,
         image_height,
     )
 
 
-def _boundary_ticks(
+def separator_mark_box(
+    observation: SeparatorBandObservation,
     corridor: Box,
-    center: float,
-    overlay: SeparatorOverlayParameters,
+    x_offset: int,
+    y_offset: int,
     image_width: int,
     image_height: int,
     layout: str,
-) -> tuple[Box, Box]:
-    tick = max(
-        int(overlay.tick_length_min),
-        int(round(corridor.height * float(overlay.tick_length_ratio))),
+) -> Box:
+    start = int(round(observation.start))
+    end = max(start + 1, int(round(observation.end)))
+    return _mapped_work_mark(
+        Box(start, corridor.top, end, corridor.bottom),
+        x_offset=x_offset,
+        y_offset=y_offset,
+        image_width=image_width,
+        image_height=image_height,
+        layout=layout,
     )
-    x = int(round(center))
-    work_ticks = (
-        Box(x, corridor.top, x + 1, min(corridor.bottom, corridor.top + tick)),
-        Box(x, max(corridor.top, corridor.bottom - tick), x + 1, corridor.bottom),
+
+
+def _boundary_mark_box(
+    side: BoundarySide,
+    position: float,
+    corridor: Box,
+    *,
+    x_offset: int,
+    y_offset: int,
+    image_width: int,
+    image_height: int,
+    layout: str,
+) -> Box:
+    coordinate = int(round(position))
+    work_box = (
+        Box(coordinate, corridor.top, coordinate + 1, corridor.bottom)
+        if side in {BoundarySide.LEADING, BoundarySide.TRAILING}
+        else Box(corridor.left, coordinate, corridor.right, coordinate + 1)
     )
-    return tuple(
-        map_work_box(
-            box,
-            layout,
-            image_width,
-            image_height,
-        )
-        for box in work_ticks
+    return _mapped_work_mark(
+        work_box,
+        x_offset=x_offset,
+        y_offset=y_offset,
+        image_width=image_width,
+        image_height=image_height,
+        layout=layout,
+    )
+
+
+def _axis_mark_box(
+    axis: BoundaryAxis,
+    position: float,
+    corridor: Box,
+    **mapping: int | str,
+) -> Box:
+    side = (
+        BoundarySide.LEADING
+        if axis == BoundaryAxis.LONG
+        else BoundarySide.TOP
+    )
+    return _boundary_mark_box(side, position, corridor, **mapping)
+
+
+def _draw_boundary(
+    rgb: np.ndarray,
+    boundary: PhotoApertureBoundaryResolution,
+    corridor: Box,
+    *,
+    x_offset: int,
+    y_offset: int,
+    scale: float,
+    color: tuple[int, int, int],
+    width: int,
+    image_width: int,
+    image_height: int,
+    layout: str,
+) -> None:
+    draw_preview_line(
+        rgb,
+        _boundary_mark_box(
+            boundary.side,
+            boundary.position.midpoint,
+            corridor,
+            x_offset=x_offset,
+            y_offset=y_offset,
+            image_width=image_width,
+            image_height=image_height,
+            layout=layout,
+        ),
+        scale,
+        color,
+        width,
     )
 
 
 def _draw_sequence_overlay(
     rgb: np.ndarray,
-    solution: SequenceSolution,
+    solution: PhotoSequenceSolution,
     corridor: Box,
-    lane_index: int | None,
-    long_axis_offset: int,
-    overlap_boundaries: set[tuple[int | None, int]],
+    *,
+    x_offset: int,
+    y_offset: int,
     scale: float,
     overlay: SeparatorOverlayParameters,
     style: DebugStyleParameters,
@@ -70,58 +147,115 @@ def _draw_sequence_overlay(
     image_height: int,
     layout: str,
 ) -> None:
-    accepted = {
-        id(assignment.observation)
-        for assignment in solution.separator_assignments
-        if assignment.used_for_boundary and assignment.independent
-    }
+    for path in solution.raw_boundary_paths:
+        draw_preview_line(
+            rgb,
+            _axis_mark_box(
+                path.axis,
+                path.position.midpoint,
+                corridor,
+                x_offset=x_offset,
+                y_offset=y_offset,
+                image_width=image_width,
+                image_height=image_height,
+                layout=layout,
+            ),
+            scale,
+            style.unselected_separator_color,
+            overlay.observed_line_width,
+        )
+    for holder_boundary in solution.holder_boundaries:
+        draw_preview_line(
+            rgb,
+            _boundary_mark_box(
+                holder_boundary.side,
+                holder_boundary.position.midpoint,
+                corridor,
+                x_offset=x_offset,
+                y_offset=y_offset,
+                image_width=image_width,
+                image_height=image_height,
+                layout=layout,
+            ),
+            scale,
+            style.holder_boundary_color,
+            overlay.observed_line_width,
+        )
     for observation in solution.separator_observations:
         draw_preview_mark(
             rgb,
             separator_mark_box(
                 observation,
                 corridor,
-                long_axis_offset,
+                x_offset,
+                y_offset,
                 image_width,
                 image_height,
                 layout,
             ),
             scale,
-            (
-                style.accepted_separator_color
-                if id(observation) in accepted
-                else style.unselected_separator_color
-            ),
+            style.unselected_separator_color,
             overlay.observed_line_width,
         )
-    for boundary in solution.frame_boundaries:
-        identity = (lane_index, boundary.boundary_index)
-        overlap = identity in overlap_boundaries
-        if boundary.source == FrameBoundarySource.OBSERVED_SEPARATOR and not overlap:
-            continue
-        for tick in _boundary_ticks(
-            corridor,
-            boundary.coordinate + long_axis_offset,
-            overlay,
-            image_width,
-            image_height,
-            layout,
+    for aperture in solution.photo_apertures:
+        for boundary in (
+            aperture.leading,
+            aperture.trailing,
+            aperture.top,
+            aperture.bottom,
         ):
-            draw_preview_line(
-                rgb,
-                tick,
-                scale,
-                (
-                    style.overlap_boundary_color
-                    if overlap
-                    else style.dimension_boundary_color
-                ),
-                (
-                    overlay.overlap_line_width
-                    if overlap
-                    else overlay.dimension_line_width
-                ),
-            )
+            if boundary.source == PhotoApertureEdgeSource.DIMENSION_HYPOTHESIS:
+                _draw_boundary(
+                    rgb,
+                    boundary,
+                    corridor,
+                    x_offset=x_offset,
+                    y_offset=y_offset,
+                    scale=scale,
+                    color=style.dimension_boundary_color,
+                    width=overlay.dimension_line_width,
+                    image_width=image_width,
+                    image_height=image_height,
+                    layout=layout,
+                )
+            elif boundary.independently_observed:
+                _draw_boundary(
+                    rgb,
+                    boundary,
+                    corridor,
+                    x_offset=x_offset,
+                    y_offset=y_offset,
+                    scale=scale,
+                    color=style.accepted_separator_color,
+                    width=overlay.observed_line_width,
+                    image_width=image_width,
+                    image_height=image_height,
+                    layout=layout,
+                )
+    for index, spacing in enumerate(solution.inter_photo_spacings):
+        if not spacing.supports_output_protection:
+            continue
+        left = solution.photo_apertures[index]
+        right = solution.photo_apertures[index + 1]
+        overlap_position = 0.5 * (
+            left.trailing.position.midpoint + right.leading.position.midpoint
+        )
+        draw_preview_line(
+            rgb,
+            _boundary_mark_box(
+                BoundarySide.TRAILING,
+                overlap_position,
+                corridor,
+                x_offset=x_offset,
+                y_offset=y_offset,
+                image_width=image_width,
+                image_height=image_height,
+                layout=layout,
+            ),
+            scale,
+            style.overlap_boundary_color,
+            overlay.overlap_line_width,
+        )
 
 
 def draw_separator_overlay(
@@ -134,50 +268,36 @@ def draw_separator_overlay(
     image_height: int,
 ) -> None:
     geometry = selected_candidate.geometry
-    overlap_boundaries = {
-        (
-            spacing.boundary.lane_index,
-            spacing.boundary.boundary_index,
-        )
-        for spacing in geometry.inter_frame_spacings
-        if spacing.kind == "overlap"
-    }
-    if isinstance(geometry, SequenceSolution):
+    if isinstance(geometry, PhotoSequenceSolution):
         _draw_sequence_overlay(
             rgb,
             geometry,
-            geometry.crop_envelope.box,
-            None,
-            0,
-            overlap_boundaries,
-            scale,
-            overlay,
-            style,
-            image_width,
-            image_height,
-            geometry.layout,
+            geometry.holder_span.box,
+            x_offset=0,
+            y_offset=0,
+            scale=scale,
+            overlay=overlay,
+            style=style,
+            image_width=image_width,
+            image_height=image_height,
+            layout=geometry.layout,
         )
-    elif isinstance(geometry, DualLaneSolution):
-        for lane_index, (lane, lane_solution, lane_envelope) in enumerate(
-            zip(
-                geometry.lane_boxes,
-                geometry.lane_solutions,
-                geometry.lane_crop_envelopes,
-                strict=True,
-            ),
-            start=1,
+    elif isinstance(geometry, DualLanePhotoSolution):
+        for lane, lane_solution in zip(
+            geometry.lane_boxes,
+            geometry.lane_solutions,
+            strict=True,
         ):
             _draw_sequence_overlay(
                 rgb,
                 lane_solution,
-                lane_envelope.box,
-                lane_index,
-                lane.left,
-                overlap_boundaries,
-                scale,
-                overlay,
-                style,
-                image_width,
-                image_height,
-                geometry.layout,
+                lane_solution.holder_span.box,
+                x_offset=lane.left,
+                y_offset=lane.top,
+                scale=scale,
+                overlay=overlay,
+                style=style,
+                image_width=image_width,
+                image_height=image_height,
+                layout=geometry.layout,
             )

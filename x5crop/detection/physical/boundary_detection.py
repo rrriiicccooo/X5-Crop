@@ -1,25 +1,43 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from statistics import median
 
 import numpy as np
 
 from ...configuration.boundary import BoundaryPathParameters
 from ...domain import (
+    BoundaryAxis,
     BoundaryKind,
-    BoundaryPathGroup,
-    BoundaryPathObservation,
-    BoundaryPathSource,
+    BoundaryMeasurementSet,
     BoundarySide,
+    Box,
+    ContainmentFallback,
     GrayAppearanceObservation,
-    gray_intensity_tail,
+    GrayBoundaryPathObservation,
+    HolderBoundaryObservation,
     MeasurementIdentity,
     MeasurementProvenance,
     PixelInterval,
+    boundary_axis_for_side,
+    gray_intensity_tail,
 )
 from ...image.statistics import ImageMeasurementStatistics
 from ...utils import runs_from_mask
-from .boundary import canvas_boundary_paths
+
+
+@dataclass(frozen=True)
+class _LocalPathSample:
+    section_index: int
+    position: PixelInterval
+    lower_intensity: float
+    lower_mad: float
+    lower_texture: float
+    lower_gradient: float
+    upper_intensity: float
+    upper_mad: float
+    upper_texture: float
+    upper_gradient: float
 
 
 def _texture_image(gray: np.ndarray) -> np.ndarray:
@@ -62,52 +80,65 @@ def _cross_section_profiles(
     return tuple(profiles)
 
 
-def _first_run(mask: np.ndarray) -> int | None:
-    return next((int(start) for start, end in runs_from_mask(mask) if end > start), None)
-
-
-def _edge_transition(holder_mask: np.ndarray) -> int | None:
-    holder = holder_mask.astype(bool)
-    if not holder.size or not bool(holder[0]):
-        return None
-    non_holder = np.flatnonzero(~holder)
-    return None if not non_holder.size else int(non_holder[0])
-
-
-def _reference_masks(
+def _edge_reference_mask(
     intensity: np.ndarray,
     texture: np.ndarray,
     texture_limit: float,
     parameters: BoundaryPathParameters,
-) -> tuple[np.ndarray, np.ndarray]:
-    edge_reference = float(intensity[0])
-    deviation = np.abs(intensity - edge_reference)
+) -> np.ndarray:
+    deviation = np.abs(intensity - float(intensity[0]))
     tolerance = float(
         np.percentile(deviation, parameters.holder_reference_percentile)
     )
-    holder = (deviation <= tolerance) & (texture <= float(texture_limit))
-    return holder, deviation > tolerance
+    return (deviation <= tolerance) & (texture <= float(texture_limit))
 
 
-def _change_point_interval(
-    profile: np.ndarray,
-    position: int,
+def _edge_adjacent_transition(
+    intensity: np.ndarray,
+    texture: np.ndarray,
+    texture_limit: float,
     parameters: BoundaryPathParameters,
-) -> PixelInterval:
-    if profile.size <= 1:
-        return PixelInterval.exact(float(position))
-    change = np.abs(np.diff(profile, prepend=profile[:1]))
+) -> tuple[PixelInterval, ...]:
+    if not intensity.size or float(texture[0]) > float(texture_limit):
+        return ()
+    reference = _edge_reference_mask(
+        intensity,
+        texture,
+        texture_limit,
+        parameters,
+    )
+    if not bool(reference[0]):
+        return ()
+    exits = np.flatnonzero(~reference)
+    if not exits.size or int(exits[0]) <= 0:
+        return ()
+    return (PixelInterval.exact(float(exits[0])),)
+
+
+def _adaptive_change_points(
+    signal: np.ndarray,
+    parameters: BoundaryPathParameters,
+) -> tuple[PixelInterval, ...]:
+    if signal.size <= 1:
+        return ()
+    change = np.abs(np.diff(signal, prepend=signal[:1]))
     threshold = float(np.percentile(change, parameters.change_point_percentile))
     if threshold <= 0.0:
-        return PixelInterval.exact(float(position))
-    runs = tuple(runs_from_mask(change >= threshold))
-    if not runs:
-        return PixelInterval.exact(float(position))
-    start, end = min(
-        runs,
-        key=lambda run: abs(float(sum(run)) / float(len(run)) - float(position)),
+        return ()
+    runs = tuple(
+        (start, end)
+        for start, end in runs_from_mask(change >= threshold)
+        if start > 0 and end > start and start < signal.size
     )
-    return PixelInterval(float(start), float(max(start + 1, end)))
+    ranked = sorted(
+        runs,
+        key=lambda run: float(np.max(change[run[0] : run[1]])),
+        reverse=True,
+    )[: parameters.maximum_change_points_per_section]
+    return tuple(
+        PixelInterval(float(start), float(max(start + 1, end)))
+        for start, end in sorted(ranked)
+    )
 
 
 def _source_interval(
@@ -123,36 +154,194 @@ def _source_interval(
     )
 
 
-def _provenance(kind: BoundaryKind, side: BoundarySide) -> MeasurementProvenance:
+def _window_statistics(
+    intensity: np.ndarray,
+    texture: np.ndarray,
+    start: int,
+    end: int,
+) -> tuple[float, float, float, float]:
+    values = intensity[start:end]
+    texture_values = texture[start:end]
+    if not values.size:
+        raise ValueError("boundary appearance window must be non-empty")
+    center = float(np.median(values))
+    gradient = np.abs(np.diff(values, prepend=values[:1]))
+    return (
+        center,
+        float(np.median(np.abs(values - center))),
+        float(np.median(texture_values)),
+        float(np.median(gradient)),
+    )
+
+
+def _local_sample(
+    section_index: int,
+    position: PixelInterval,
+    intensity: np.ndarray,
+    texture: np.ndarray,
+    reverse: bool,
+    parameters: BoundaryPathParameters,
+) -> _LocalPathSample | None:
+    coordinate = int(round(position.midpoint))
+    extent = len(intensity)
+    if coordinate <= 0 or coordinate >= extent:
+        return None
+    sample_width = max(1, int(round(extent * parameters.inner_sample_ratio)))
+    outer_start = max(0, coordinate - sample_width)
+    inner_end = min(extent, coordinate + sample_width)
+    if outer_start >= coordinate or inner_end <= coordinate:
+        return None
+    outward = _window_statistics(
+        intensity,
+        texture,
+        outer_start,
+        coordinate,
+    )
+    inward = _window_statistics(
+        intensity,
+        texture,
+        coordinate,
+        inner_end,
+    )
+    lower, upper = (outward, inward) if not reverse else (inward, outward)
+    return _LocalPathSample(
+        section_index=section_index,
+        position=_source_interval(position, extent, reverse),
+        lower_intensity=lower[0],
+        lower_mad=lower[1],
+        lower_texture=lower[2],
+        lower_gradient=lower[3],
+        upper_intensity=upper[0],
+        upper_mad=upper[1],
+        upper_texture=upper[2],
+        upper_gradient=upper[3],
+    )
+
+
+def _local_samples_for_kind(
+    profiles: tuple[tuple[np.ndarray, np.ndarray], ...],
+    side: BoundarySide,
+    kind: BoundaryKind,
+    statistics: ImageMeasurementStatistics,
+    parameters: BoundaryPathParameters,
+) -> tuple[_LocalPathSample, ...]:
+    reverse = side in {BoundarySide.TRAILING, BoundarySide.BOTTOM}
+    samples: list[_LocalPathSample] = []
+    for section_index, (source_intensity, source_texture) in enumerate(profiles):
+        intensity = source_intensity[::-1] if reverse else source_intensity
+        texture = source_texture[::-1] if reverse else source_texture
+        if kind == BoundaryKind.EDGE_ADJACENT_TRANSITION:
+            positions = _edge_adjacent_transition(
+                intensity,
+                texture,
+                statistics.edge_texture_limit,
+                parameters,
+            )
+        elif kind == BoundaryKind.TONAL_TRANSITION:
+            positions = _adaptive_change_points(intensity, parameters)
+        elif kind == BoundaryKind.TEXTURE_TRANSITION:
+            positions = _adaptive_change_points(texture, parameters)
+        else:
+            raise ValueError(f"unsupported boundary path kind: {kind}")
+        for position in positions:
+            sample = _local_sample(
+                section_index,
+                position,
+                intensity,
+                texture,
+                reverse,
+                parameters,
+            )
+            if sample is not None:
+                samples.append(sample)
+    return tuple(samples)
+
+
+def _cluster_samples(
+    samples: tuple[_LocalPathSample, ...],
+    extent: int,
+    parameters: BoundaryPathParameters,
+) -> tuple[tuple[_LocalPathSample, ...], ...]:
+    tolerance = max(
+        float(parameters.path_cluster_tolerance_min_px),
+        float(extent) * float(parameters.path_cluster_tolerance_ratio),
+    )
+    clusters: list[list[_LocalPathSample]] = []
+    for sample in sorted(samples, key=lambda item: item.position.midpoint):
+        eligible = tuple(
+            (abs(sample.position.midpoint - median(
+                item.position.midpoint for item in cluster
+            )), index)
+            for index, cluster in enumerate(clusters)
+            if sample.section_index not in {item.section_index for item in cluster}
+            and abs(
+                sample.position.midpoint
+                - median(item.position.midpoint for item in cluster)
+            )
+            <= tolerance
+        )
+        if eligible:
+            clusters[min(eligible)[1]].append(sample)
+        else:
+            clusters.append([sample])
+    minimum_support = max(
+        1,
+        int(np.ceil(parameters.cross_sections * parameters.minimum_path_support_ratio)),
+    )
+    supported = tuple(
+        tuple(cluster)
+        for cluster in clusters
+        if len({item.section_index for item in cluster}) >= minimum_support
+    )
+    return tuple(
+        sorted(
+            supported,
+            key=lambda cluster: (
+                -len(cluster),
+                max(item.position.maximum for item in cluster)
+                - min(item.position.minimum for item in cluster),
+                median(item.position.midpoint for item in cluster),
+            ),
+        )[: parameters.maximum_paths_per_axis]
+    )
+
+
+def _provenance(
+    kind: BoundaryKind,
+    axis: BoundaryAxis,
+    path_index: int,
+    scan_origin: BoundarySide | None,
+) -> MeasurementProvenance:
+    source = f"{kind.value}:{axis.value}:{path_index}"
+    if scan_origin is not None:
+        source = f"{source}:scan_from_{scan_origin.value}"
     return MeasurementProvenance(
         root_measurement=MeasurementIdentity.HOLDER_BOUNDARY_PROFILE,
-        source=kind.value,
+        source=source,
         dependencies=(
             MeasurementIdentity.GRAY_WORK,
             MeasurementIdentity.IMAGE_MEASUREMENT_STATISTICS,
         ),
-        boundary_anchors=(side.value,),
+        boundary_anchors=(axis.value,),
     )
 
 
-def _appearance_observation(
-    intensities: list[float],
-    mads: list[float],
-    textures: list[float],
-    gradients: list[float],
-    support_ratio: float,
+def _appearance(
+    cluster: tuple[_LocalPathSample, ...],
+    prefix: str,
     provenance: MeasurementProvenance,
     statistics: ImageMeasurementStatistics,
+    support_ratio: float,
 ) -> GrayAppearanceObservation:
-    intensity_median = float(median(intensities))
+    intensity = float(median(getattr(item, f"{prefix}_intensity") for item in cluster))
     return GrayAppearanceObservation(
-        intensity_median=intensity_median,
-        intensity_mad=float(median(mads)),
-        texture_median=float(median(textures)),
-        gradient_median=float(median(gradients)),
-        spatial_continuity=float(support_ratio),
+        intensity_median=intensity,
+        intensity_mad=float(median(getattr(item, f"{prefix}_mad") for item in cluster)),
+        texture_median=float(median(getattr(item, f"{prefix}_texture") for item in cluster)),
+        gradient_median=float(median(getattr(item, f"{prefix}_gradient") for item in cluster)),
+        spatial_continuity=support_ratio,
         intensity_tail=gray_intensity_tail(
-            intensity_median,
+            intensity,
             statistics.intensity_low,
             statistics.intensity_high,
         ),
@@ -160,139 +349,100 @@ def _appearance_observation(
     )
 
 
-def _path_for_side(
-    side: BoundarySide,
+def _paths_for_axis(
+    axis: BoundaryAxis,
     profiles: tuple[tuple[np.ndarray, np.ndarray], ...],
     statistics: ImageMeasurementStatistics,
     kind: BoundaryKind,
     parameters: BoundaryPathParameters,
-) -> BoundaryPathObservation | None:
-    reverse = side in {BoundarySide.TRAILING, BoundarySide.BOTTOM}
-    positions: list[PixelInterval] = []
-    outer_intensity_measurements: list[float] = []
-    outer_mad: list[float] = []
-    outer_texture_measurements: list[float] = []
-    outer_gradient_measurements: list[float] = []
-    inner_intensity: list[float] = []
-    inner_mad: list[float] = []
-    inner_texture: list[float] = []
-    inner_gradient: list[float] = []
-
-    for intensity, texture in profiles:
-        oriented_intensity = intensity[::-1] if reverse else intensity
-        oriented_texture = texture[::-1] if reverse else texture
-        holder, tonal = _reference_masks(
-            oriented_intensity,
-            oriented_texture,
-            statistics.edge_texture_limit,
+    *,
+    scan_origin: BoundarySide | None = None,
+) -> tuple[GrayBoundaryPathObservation, ...]:
+    if scan_origin is not None and boundary_axis_for_side(scan_origin) != axis:
+        raise ValueError("boundary scan origin must lie on the measured axis")
+    oriented_side = scan_origin or (
+        BoundarySide.LEADING if axis == BoundaryAxis.LONG else BoundarySide.TOP
+    )
+    extent = len(profiles[0][0]) if profiles else 0
+    clusters = _cluster_samples(
+        _local_samples_for_kind(
+            profiles,
+            oriented_side,
+            kind,
+            statistics,
             parameters,
+        ),
+        extent,
+        parameters,
+    )
+    paths: list[GrayBoundaryPathObservation] = []
+    for path_index, cluster in enumerate(clusters):
+        local_positions = tuple(item.position for item in cluster)
+        position = PixelInterval(
+            min(item.minimum for item in local_positions),
+            max(item.maximum for item in local_positions),
         )
-        if kind == BoundaryKind.HOLDER_BOUNDARY_TRANSITION:
-            if oriented_texture[0] > float(statistics.edge_texture_limit):
-                continue
-            offset = _first_run(
-                oriented_texture > float(statistics.edge_texture_limit)
-            )
-            if offset is None:
-                offset = _edge_transition(holder)
-        elif kind == BoundaryKind.TONAL_TRANSITION:
-            offset = _first_run(tonal)
-        elif kind == BoundaryKind.TEXTURE_TRANSITION:
-            offset = _first_run(
-                oriented_texture > float(statistics.edge_texture_limit)
-            )
-        else:
-            raise ValueError(f"unsupported boundary path kind: {kind}")
-        if offset in {None, 0, len(oriented_intensity)}:
-            continue
-        oriented_interval = _change_point_interval(
-            oriented_intensity,
-            int(offset),
-            parameters,
-        )
-        positions.append(
-            _source_interval(oriented_interval, len(oriented_intensity), reverse)
-        )
-        inner_end = min(
-            len(oriented_texture),
-            int(offset)
-            + max(1, int(round(len(oriented_texture) * parameters.inner_sample_ratio))),
-        )
-        inner_intensity_values = oriented_intensity[int(offset):inner_end]
-        inner_texture_values = oriented_texture[int(offset):inner_end]
-        inner_center = float(np.median(inner_intensity_values))
-        inner_intensity.append(inner_center)
-        inner_mad.append(
-            float(np.median(np.abs(inner_intensity_values - inner_center)))
-        )
-        inner_texture.append(float(np.median(inner_texture_values)))
-        inner_gradient.append(
-            float(
-                np.median(
-                    np.abs(
-                        np.diff(
-                            inner_intensity_values,
-                            prepend=inner_intensity_values[:1],
-                        )
-                    )
-                )
+        provenance = _provenance(kind, axis, path_index, scan_origin)
+        support_ratio = len(cluster) / float(len(profiles))
+        paths.append(
+            GrayBoundaryPathObservation(
+                axis=axis,
+                position=position,
+                kind=kind,
+                local_positions=local_positions,
+                lower_appearance=_appearance(
+                    cluster,
+                    "lower",
+                    provenance,
+                    statistics,
+                    support_ratio,
+                ),
+                upper_appearance=_appearance(
+                    cluster,
+                    "upper",
+                    provenance,
+                    statistics,
+                    support_ratio,
+                ),
+                provenance=provenance,
             )
         )
-        outer_intensity = oriented_intensity[: int(offset)]
-        outer_texture = oriented_texture[: int(offset)]
-        outer_gradient = np.abs(
-            np.diff(outer_intensity, prepend=outer_intensity[:1])
-        )
-        center = float(np.median(outer_intensity))
-        outer_intensity_measurements.append(center)
-        outer_mad.append(float(np.median(np.abs(outer_intensity - center))))
-        outer_texture_measurements.append(float(np.median(outer_texture)))
-        outer_gradient_measurements.append(float(np.median(outer_gradient)))
+    return tuple(paths)
 
-    support_ratio = len(positions) / float(len(profiles)) if profiles else 0.0
-    if not positions or support_ratio < parameters.minimum_path_support_ratio:
+
+def _holder_boundary(
+    side: BoundarySide,
+    candidates: tuple[GrayBoundaryPathObservation, ...],
+) -> HolderBoundaryObservation | None:
+    if not candidates:
         return None
-    position = PixelInterval(
-        min(item.minimum for item in positions),
-        max(item.maximum for item in positions),
+    wrapped = tuple(
+        HolderBoundaryObservation(side, path.position, path) for path in candidates
     )
-    provenance = _provenance(kind, side)
-    outer_appearance = _appearance_observation(
-        outer_intensity_measurements,
-        outer_mad,
-        outer_texture_measurements,
-        outer_gradient_measurements,
-        support_ratio,
-        provenance,
-        statistics,
+    best_support = max(item.outer_appearance.spatial_continuity for item in wrapped)
+    best = tuple(
+        item
+        for item in wrapped
+        if item.outer_appearance.spatial_continuity == best_support
     )
-    inner_appearance = _appearance_observation(
-        inner_intensity,
-        inner_mad,
-        inner_texture,
-        inner_gradient,
-        support_ratio,
-        provenance,
-        statistics,
-    )
-    return BoundaryPathObservation(
-        side=side,
-        position=position,
-        kind=kind,
-        local_positions=tuple(positions),
-        outer_appearance=outer_appearance,
-        inner_appearance=inner_appearance,
-        provenance=provenance,
+    if len(best) > 1 and any(
+        not best[0].position.intersects(item.position) for item in best[1:]
+    ):
+        return None
+    return min(
+        best,
+        key=lambda item: item.position.maximum - item.position.minimum,
     )
 
 
-def _paths_for_kind(
+def boundary_measurements(
     gray: np.ndarray,
-    texture: np.ndarray,
     statistics: ImageMeasurementStatistics,
-    kind: BoundaryKind,
     parameters: BoundaryPathParameters,
-) -> tuple[BoundaryPathObservation, ...]:
+) -> BoundaryMeasurementSet:
+    if gray.ndim != 2 or not gray.size:
+        raise ValueError("boundary measurement requires non-empty grayscale")
+    texture = _texture_image(gray)
     long_axis_profiles = _cross_section_profiles(
         gray,
         texture,
@@ -305,67 +455,52 @@ def _paths_for_kind(
         scan_axis=0,
         parameters=parameters,
     )
-    paths = tuple(
+    profiles_by_axis = {
+        BoundaryAxis.LONG: long_axis_profiles,
+        BoundaryAxis.SHORT: short_axis_profiles,
+    }
+    generic_paths = tuple(
         path
-        for side, profiles in (
-            (BoundarySide.LEADING, long_axis_profiles),
-            (BoundarySide.TRAILING, long_axis_profiles),
-            (BoundarySide.TOP, short_axis_profiles),
-            (BoundarySide.BOTTOM, short_axis_profiles),
+        for axis, profiles in profiles_by_axis.items()
+        for kind in (BoundaryKind.TONAL_TRANSITION, BoundaryKind.TEXTURE_TRANSITION)
+        for path in _paths_for_axis(
+            axis,
+            profiles,
+            statistics,
+            kind,
+            parameters,
         )
-        if (
-            path := _path_for_side(
-                side,
-                profiles,
-                statistics,
-                kind,
-                parameters,
-            )
-        )
-        is not None
     )
-    return paths
-
-
-def boundary_path_groups(
-    gray: np.ndarray,
-    statistics: ImageMeasurementStatistics,
-    parameters: BoundaryPathParameters,
-) -> tuple[BoundaryPathGroup, ...]:
-    texture = _texture_image(gray)
-    return (
-        BoundaryPathGroup(
-            BoundaryPathSource.HOLDER_BOUNDARY,
-            _paths_for_kind(
-                gray,
-                texture,
-                statistics,
-                BoundaryKind.HOLDER_BOUNDARY_TRANSITION,
-                parameters,
+    edge_paths_by_side = {
+        side: _paths_for_axis(
+            boundary_axis_for_side(side),
+            profiles_by_axis[boundary_axis_for_side(side)],
+            statistics,
+            BoundaryKind.EDGE_ADJACENT_TRANSITION,
+            parameters,
+            scan_origin=side,
+        )
+        for side in BoundarySide
+    }
+    edge_paths = tuple(
+        path for paths in edge_paths_by_side.values() for path in paths
+    )
+    raw_paths = (*generic_paths, *edge_paths)
+    holder_boundaries = tuple(
+        boundary
+        for side, paths in edge_paths_by_side.items()
+        if (boundary := _holder_boundary(side, paths)) is not None
+    )
+    height, width = gray.shape
+    return BoundaryMeasurementSet(
+        raw_paths=raw_paths,
+        holder_boundaries=holder_boundaries,
+        containment_fallback=ContainmentFallback(
+            Box(0, 0, width, height),
+            MeasurementProvenance(
+                root_measurement=MeasurementIdentity.CANVAS,
+                source="workspace_containment_fallback",
+                dependencies=(MeasurementIdentity.GRAY_WORK,),
             ),
-        ),
-        BoundaryPathGroup(
-            BoundaryPathSource.TONAL,
-            _paths_for_kind(
-                gray,
-                texture,
-                statistics,
-                BoundaryKind.TONAL_TRANSITION,
-                parameters,
-            ),
-        ),
-        BoundaryPathGroup(
-            BoundaryPathSource.TEXTURE,
-            _paths_for_kind(
-                gray,
-                texture,
-                statistics,
-                BoundaryKind.TEXTURE_TRANSITION,
-                parameters,
-            ),
-        ),
-        BoundaryPathGroup(
-            BoundaryPathSource.FULL_CANVAS,
-            canvas_boundary_paths(gray.shape[1], gray.shape[0]),
         ),
     )

@@ -6,12 +6,9 @@ from typing import Callable
 from ...cache.analysis import make_measurement_cache
 from ...domain import (
     Box,
-    CropEnvelope,
     EvidenceState,
     HolderSpan,
-    VisibleSequenceSpan,
 )
-from ...geometry.boxes import translate_box
 from ...geometry.layout import HORIZONTAL, is_horizontal_layout
 from ...image.statistics import image_measurement_statistics
 from ...units import ScanCalibrationResolution, transposed_scan_calibration
@@ -26,8 +23,8 @@ from .review_only import unresolved_dual_lane_candidate
 from ..physical.model import (
     combined_assignment_consensus,
     combined_sequence_residuals,
-    DualLaneSolution,
-    SequenceSolution,
+    DualLanePhotoSolution,
+    PhotoSequenceSolution,
 )
 from ..physical.lane_divider import (
     DUAL_LANE_COUNT,
@@ -90,43 +87,14 @@ def _parent_candidate(
     physical_spec = context.configuration.physical_spec
     lane_candidates = tuple(selection.selected for selection in lanes)
     lane_solutions = tuple(candidate.geometry for candidate in lane_candidates)
-    if not all(isinstance(solution, SequenceSolution) for solution in lane_solutions):
+    if not all(isinstance(solution, PhotoSequenceSolution) for solution in lane_solutions):
         raise ValueError("dual-lane components require solved lane sequences")
-    frames = tuple(
-        translate_box(frame, lane.left, lane.top)
-        for lane, candidate in zip(lane_boxes, lane_candidates, strict=True)
-        for frame in candidate.geometry.frames
-    )
-    film_boxes = tuple(
-        translate_box(
-            candidate.geometry.visible_sequence_span.box,
-            lane.left,
-            lane.top,
-        )
-        for lane, candidate in zip(lane_boxes, lane_candidates, strict=True)
-    )
-    visible_sequence_span = Box(
-        min(box.left for box in film_boxes),
-        min(box.top for box in film_boxes),
-        max(box.right for box in film_boxes),
-        max(box.bottom for box in film_boxes),
-    )
-    crop_boxes = tuple(
-        translate_box(candidate.geometry.crop_envelope.box, lane.left, lane.top)
-        for lane, candidate in zip(lane_boxes, lane_candidates, strict=True)
-    )
-    crop_envelope = Box(
-        min(box.left for box in crop_boxes),
-        min(box.top for box in crop_boxes),
-        max(box.right for box in crop_boxes),
-        max(box.bottom for box in crop_boxes),
-    )
     count = sum(candidate.geometry.count for candidate in lane_candidates)
     if count not in physical_spec.allowed_counts:
         raise ValueError("dual-lane total count must be physically allowed")
     work_height, work_width = context.measurement_cache.gray_work.shape
     return BuiltCandidate(
-        geometry=DualLaneSolution(
+        geometry=DualLanePhotoSolution(
             format_id=physical_spec.format_id,
             layout=context.request.layout,
             strip_mode="full",
@@ -134,9 +102,6 @@ def _parent_candidate(
             holder_span=HolderSpan(
                 Box(0, 0, work_width, work_height)
             ),
-            visible_sequence_span=VisibleSequenceSpan(visible_sequence_span),
-            crop_envelope=CropEnvelope(crop_envelope),
-            frames=frames,
             residuals=combined_sequence_residuals(lane_solutions),
             assignment_consensus=combined_assignment_consensus(lane_solutions),
             search_budget_exhausted=bool(
@@ -146,9 +111,6 @@ def _parent_candidate(
             lane_divider=divider,
             lane_solutions=lane_solutions,
             lane_boxes=lane_boxes,
-            lane_crop_envelopes=tuple(
-                CropEnvelope(box) for box in crop_boxes
-            ),
         ),
         count_hypothesis=CountHypothesis(
             count=count,

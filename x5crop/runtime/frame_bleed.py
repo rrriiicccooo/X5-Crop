@@ -1,21 +1,24 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from math import ceil
 
-from ..detection.candidate.model import AssessedCandidate
-from ..domain import Box
+from ..detection.candidate.model import CandidateEvidence, DualLaneEvidence
+from ..detection.candidate.selection.model import SelectionResult
+from ..domain import Box, InterPhotoBoundaryReference
 from ..output.frame_bleed import frame_bleed_plan
 from ..output.model import AxisBleedParameters, FrameBleedPlan, FrameOverlapRequirement
-from ..detection.physical.model import DualLaneSolution
+from ..detection.physical.model import DualLanePhotoSolution
 
 
-def _frame_output_bounds(candidate: AssessedCandidate) -> tuple[Box, ...]:
-    geometry = candidate.geometry
-    if not isinstance(geometry, DualLaneSolution):
-        return (geometry.holder_span.box,) * len(geometry.frames)
+def _frame_output_bounds(selection: SelectionResult) -> tuple[Box, ...]:
+    geometry = selection.selected.geometry
+    envelopes = geometry.frame_crop_envelopes
+    if not isinstance(geometry, DualLanePhotoSolution):
+        return (geometry.holder_span.box,) * len(envelopes)
     bounds: list[Box] = []
-    for frame in geometry.frames:
-        center_y = 0.5 * float(frame.top + frame.bottom)
+    for envelope in envelopes:
+        center_y = 0.5 * float(envelope.box.top + envelope.box.bottom)
         matches = tuple(
             lane
             for lane in geometry.lane_boxes
@@ -27,13 +30,14 @@ def _frame_output_bounds(candidate: AssessedCandidate) -> tuple[Box, ...]:
     return tuple(bounds)
 
 
-def _lane_frame_indexes(candidate: AssessedCandidate) -> tuple[tuple[int, ...], ...]:
-    geometry = candidate.geometry
-    if not isinstance(geometry, DualLaneSolution):
-        return (tuple(range(len(geometry.frames))),)
+def _lane_frame_indexes(selection: SelectionResult) -> tuple[tuple[int, ...], ...]:
+    geometry = selection.selected.geometry
+    envelopes = geometry.frame_crop_envelopes
+    if not isinstance(geometry, DualLanePhotoSolution):
+        return (tuple(range(len(envelopes))),)
     lane_indexes: list[list[int]] = [[] for _lane in geometry.lane_boxes]
-    for frame_index, frame in enumerate(geometry.frames):
-        center_y = 0.5 * float(frame.top + frame.bottom)
+    for frame_index, envelope in enumerate(envelopes):
+        center_y = 0.5 * float(envelope.box.top + envelope.box.bottom)
         matches = tuple(
             lane_index
             for lane_index, lane in enumerate(geometry.lane_boxes)
@@ -46,13 +50,37 @@ def _lane_frame_indexes(candidate: AssessedCandidate) -> tuple[tuple[int, ...], 
 
 
 def _overlap_requirements(
-    candidate: AssessedCandidate,
+    selection: SelectionResult,
 ) -> tuple[FrameOverlapRequirement, ...]:
-    geometry = candidate.geometry
-    lane_indexes = _lane_frame_indexes(candidate)
+    evidence = selection.selected.assessment.evidence
+    if isinstance(evidence, CandidateEvidence):
+        relations = tuple(
+            observation.spacing_evidence
+            for observation in evidence.inter_photo_boundary_preservation.observations
+        )
+    elif isinstance(evidence, DualLaneEvidence):
+        relations = tuple(
+            replace(
+                observation.spacing_evidence,
+                boundary=InterPhotoBoundaryReference(
+                    lane_index,
+                    observation.boundary.boundary_index,
+                ),
+            )
+            for lane_index, lane_evidence in enumerate(
+                evidence.lane_evidence,
+                start=1,
+            )
+            for observation in (
+                lane_evidence.inter_photo_boundary_preservation.observations
+            )
+        )
+    else:
+        relations = ()
+    lane_indexes = _lane_frame_indexes(selection)
     requirements: list[FrameOverlapRequirement] = []
-    for relation in geometry.inter_frame_spacings:
-        if relation.signed_width_px.minimum >= 0.0:
+    for relation in relations:
+        if relation.kind != "overlap":
             continue
         boundary = relation.boundary
         lane_index = 0 if boundary.lane_index is None else boundary.lane_index - 1
@@ -80,13 +108,23 @@ def _overlap_requirements(
 
 
 def prepare_frame_bleed(
-    candidate: AssessedCandidate,
+    selection: SelectionResult,
     user_bleed: AxisBleedParameters,
 ) -> FrameBleedPlan:
+    geometry = selection.selected.geometry
+    if not selection.geometry_resolution.supported:
+        return frame_bleed_plan(
+            frames=(),
+            frame_output_bounds=(),
+            overlap_requirements=(),
+            user_bleed=user_bleed,
+            layout=geometry.layout,
+        )
+    frames = tuple(item.box for item in geometry.frame_crop_envelopes)
     return frame_bleed_plan(
-        frames=candidate.geometry.frames,
-        frame_output_bounds=_frame_output_bounds(candidate),
-        overlap_requirements=_overlap_requirements(candidate),
+        frames=frames,
+        frame_output_bounds=_frame_output_bounds(selection),
+        overlap_requirements=_overlap_requirements(selection),
         user_bleed=user_bleed,
-        layout=candidate.geometry.layout,
+        layout=geometry.layout,
     )

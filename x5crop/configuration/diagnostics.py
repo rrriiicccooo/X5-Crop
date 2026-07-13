@@ -23,6 +23,8 @@ class DebugStyleParameters:
     crop_envelope_line_width: int = 3
     evidence_envelope_line_width: int = 2
     crop_envelope_color: tuple[int, int, int] = (0, 255, 0)
+    frame_output_color: tuple[int, int, int] = (40, 120, 255)
+    holder_boundary_color: tuple[int, int, int] = (255, 255, 255)
     panel_spacing: int = 12
     panel_background: int = 32
     dark_background: int = 18
@@ -65,6 +67,8 @@ class DebugStyleParameters:
             raise ValueError("debug JPEG quality exceeds the standard maximum")
         colors = (
             self.crop_envelope_color,
+            self.frame_output_color,
+            self.holder_boundary_color,
             self.text_color,
             self.accepted_separator_color,
             self.unselected_separator_color,

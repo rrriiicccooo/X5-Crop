@@ -16,13 +16,11 @@ from x5crop.geometry.layout import work_gray
 from x5crop.image.statistics import ImageMeasurementStatisticsParameters, image_measurement_statistics
 from x5crop.configuration.bundle import DetectionConfigurationBundle
 from x5crop.configuration.registry import get_detection_configuration
-from x5crop.detection.evidence.content.frame_support import frame_content_evidence
+from x5crop.detection.evidence.content.photo_content import photo_content_evidence
 from tools.tests.physical_gate_support import candidate_fixture
 from x5crop.runtime.analysis_reuse import analysis_configuration_fingerprint
 from x5crop.configuration.boundary import BoundaryPathParameters
-from x5crop.detection.candidate.proposal.sequence import (
-    cached_boundary_path_groups,
-)
+from x5crop.detection.candidate.proposal.sequence import cached_boundary_measurements
 
 
 def _cache() -> MeasurementCache:
@@ -83,11 +81,11 @@ class DetectionCachePerformanceContractTest(unittest.TestCase):
         geometry = candidate_fixture().geometry
         configuration = get_detection_configuration("135", "full").content
         with patch(
-            "x5crop.detection.evidence.content.frame_support.content_evidence_threshold",
+            "x5crop.detection.evidence.content.activation.content_evidence_threshold",
             return_value=None,
         ) as measurement:
-            frame_content_evidence(geometry, cache, configuration)
-            frame_content_evidence(geometry, cache, configuration)
+            photo_content_evidence(geometry, cache, configuration)
+            photo_content_evidence(geometry, cache, configuration)
         measurement.assert_called_once()
 
     def test_diagnostics_do_not_invalidate_detection_analysis(self) -> None:
@@ -169,11 +167,10 @@ class DetectionCachePerformanceContractTest(unittest.TestCase):
         cache = _cache()
         parameters = BoundaryPathParameters()
         with patch(
-            "x5crop.detection.candidate.proposal.sequence.boundary_path_groups",
-            return_value=(),
+            "x5crop.detection.candidate.proposal.sequence.boundary_measurements",
         ) as measurement:
-            first = cached_boundary_path_groups(cache, parameters)
-            second = cached_boundary_path_groups(cache, parameters)
+            first = cached_boundary_measurements(cache, parameters)
+            second = cached_boundary_measurements(cache, parameters)
         self.assertIs(first, second)
         measurement.assert_called_once()
 

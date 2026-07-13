@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from x5crop.domain import EvidenceState
 from ...geometry_resolution import GeometryResolution
-from ...physical.model import SequenceSolution
+from ...physical.model import PhotoSequenceSolution, ReviewOnlyContainment
 from ..model import (
     AssessedCandidate,
     CandidateEvidence,
@@ -22,7 +22,7 @@ def candidate_rank(
 ) -> tuple[int, int, int, int, int, int, int, float, float, float]:
     quality = candidate.evidence_quality
     internal_boundary_contradictions = sum(
-        code.rsplit(":", 1)[-1] == "internal_boundary_preservation"
+        code.rsplit(":", 1)[-1] == "inter_photo_boundary_preservation"
         for code in quality.contradicted
     )
     other_contradictions = (
@@ -88,25 +88,54 @@ def geometry_equivalent(
 ) -> bool:
     left_geometry = left.geometry
     right_geometry = right.geometry
+    if isinstance(left_geometry, ReviewOnlyContainment) or isinstance(
+        right_geometry,
+        ReviewOnlyContainment,
+    ):
+        return bool(
+            isinstance(left_geometry, ReviewOnlyContainment)
+            and isinstance(right_geometry, ReviewOnlyContainment)
+            and left_geometry.count == right_geometry.count
+            and left_geometry.strip_mode == right_geometry.strip_mode
+            and left_geometry.containment_fallback
+            == right_geometry.containment_fallback
+        )
     if (
         left_geometry.count != right_geometry.count
         or left_geometry.strip_mode != right_geometry.strip_mode
-        or len(left_geometry.frames) != len(right_geometry.frames)
+        or len(left_geometry.photo_apertures) != len(right_geometry.photo_apertures)
     ):
         return False
-    if isinstance(left_geometry, SequenceSolution) and isinstance(
+    if isinstance(left_geometry, PhotoSequenceSolution) and isinstance(
         right_geometry,
-        SequenceSolution,
+        PhotoSequenceSolution,
     ):
         return all(
-            left_photo.start.intersects(right_photo.start)
-            and left_photo.end.intersects(right_photo.end)
+            all(
+                left_edge.position.intersects(right_edge.position)
+                for left_edge, right_edge in zip(
+                    (
+                        left_photo.leading,
+                        left_photo.trailing,
+                        left_photo.top,
+                        left_photo.bottom,
+                    ),
+                    (
+                        right_photo.leading,
+                        right_photo.trailing,
+                        right_photo.top,
+                        right_photo.bottom,
+                    ),
+                    strict=True,
+                )
+            )
             for left_photo, right_photo in zip(
-                left_geometry.photo_intervals,
-                right_geometry.photo_intervals,
+                left_geometry.photo_apertures,
+                right_geometry.photo_apertures,
+                strict=True,
             )
         )
-    return left_geometry.frames == right_geometry.frames
+    return left_geometry.photo_apertures == right_geometry.photo_apertures
 
 
 def geometry_clusters(
@@ -166,7 +195,7 @@ def geometry_resolution_for_selection(
     gate = selected.assessment.gate
     if gate is None:
         raise ValueError("physical selection requires CandidateGate")
-    boundary_supported = any(
+    proof_path_supported = any(
         path.state == EvidenceState.SUPPORTED
         for path in gate.proof_paths
     )
@@ -183,7 +212,7 @@ def geometry_resolution_for_selection(
     )
     automatic_count_supported = bool(
         all(
-            item.frame_coverage.state == EvidenceState.SUPPORTED
+            item.photo_sequence_coverage.state == EvidenceState.SUPPORTED
             for item in evidence
         )
         and all(
@@ -195,26 +224,37 @@ def geometry_resolution_for_selection(
             item.content_preservation_state == EvidenceState.SUPPORTED
             for item in evidence
         )
-        and boundary_supported
+        and proof_path_supported
         and assignment_geometry_resolved
         and not selected.geometry.search_budget_exhausted
     )
     count_resolved = bool(
         fixed_count or automatic_count_supported
     )
+    aperture_boundaries_resolved = bool(
+        selected.geometry.photo_apertures
+        and all(
+            aperture.all_boundaries_supported
+            for aperture in selected.geometry.photo_apertures
+        )
+    )
     placement_resolved = bool(
         count_resolved
-        and selected.geometry.visible_sequence_span.box.valid()
-        and len(selected.geometry.frames) == selected.geometry.count
-        and boundary_supported
+        and len(selected.geometry.photo_apertures) == selected.geometry.count
+        and all(
+            envelope.box.valid()
+            for envelope in selected.geometry.frame_crop_envelopes
+        )
+        and aperture_boundaries_resolved
+        and proof_path_supported
         and conservation_not_contradicted
         and assignment_geometry_resolved
         and not selected.geometry.search_budget_exhausted
     )
-    boundaries_resolved = bool(boundary_supported)
+    boundaries_resolved = aperture_boundaries_resolved
     content_preservation_compatible = bool(
         all(
-            item.frame_coverage.state != EvidenceState.CONTRADICTED
+            item.photo_sequence_coverage.state != EvidenceState.CONTRADICTED
             for item in evidence
         )
         and all(
