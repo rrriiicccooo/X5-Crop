@@ -17,6 +17,7 @@ STANDALONE_ROOTS = frozenset({"x5crop.configuration.consistency"})
 STANDALONE_TOOL_ROOTS = frozenset(
     {
         "tools.build_standalone",
+        "tools.regression.aperture_reference",
         "tools.regression.compare",
     }
 )
