@@ -305,12 +305,16 @@ Current state:
 
 Recent verified baseline:
 
-- Physical sequence, adaptive measurement, per-frame overlap protection, runtime
-  configuration, and current report schema refactors have been implemented.
-- `135/full` completed with a valid current-schema report; a second run reused the
-  report and exported review crops through the shared output actions.
-- The generated Debug Analysis was visually confirmed as a three-panel image.
-- Architecture is not closed. Restart the frozen two-audit closure plan from the
-  final commit produced by this refactor.
-- Current PASS/REVIEW outcomes are calibration material and do not block this
-  structural project.
+- Commit `62e47cd2` is the current `architecture closure candidate`.
+- Audit A and an independent fresh-context Audit B both found zero violations of
+  the frozen contract at that commit. The suite contains 413 tests, 142 reachable
+  active modules, 201 classified parameter contracts, and 14 valid format/mode
+  configurations.
+- Real smokes covered `135/full`, `135/partial auto`, `120-66/partial auto`,
+  `half/full`, and `120-67/full`; current reports validated successfully.
+- Cache reuse, review export, a real two-process run, TIFF metadata preservation,
+  and the three-panel Debug Analysis were verified.
+- Architecture is not formally closed. A new Codex task must rerun the same frozen
+  Audit A/B plan from the candidate commit before marking `architecture closed`.
+- Current PASS/REVIEW outcomes and adaptive measurement values remain calibration
+  material for the separate real-sample project.

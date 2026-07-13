@@ -16,6 +16,11 @@ repository rules in `AGENTS.md`.
 
 #### 封口参数与几何解析契约（2026-07-12）
 
+- `62e47cd2` 已通过同一冻结清单下的 Audit A 与全新上下文 Audit B，作为
+  `architecture closure candidate`；正式关闭仍等待新的 Codex 任务完整重跑双轮审核。
+- 最终验证覆盖 413 项测试、142 个可达 active modules、201 个已分类参数 contract、14 个
+  format/mode configuration，以及五类真实 TIFF smoke、current report validation、cache reuse、
+  review export、双进程、TIFF metadata 和三联 Debug Analysis。
 - DecisionGate 现在直接消费完整 `GeometryResolution.state`，assignment consensus 与 search-budget
   exhaustion 不再因下游只重算部分字段而漏过最终 Gate；实质 selection disagreement 继续独占其
   具体 final reason，不重复产生 aggregate geometry reason。
