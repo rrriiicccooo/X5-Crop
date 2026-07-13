@@ -324,6 +324,27 @@ def normalize_score_image(
     return np.clip(data / hi, 0.0, 1.0)
 
 
+def _four_component_consensus(
+    components: tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray],
+    minimum_channels: int,
+) -> np.ndarray:
+    if minimum_channels < 1 or minimum_channels > len(components):
+        raise ValueError("content consensus channel count must be between one and four")
+    first_low = np.minimum(components[0], components[1])
+    first_high = np.maximum(components[0], components[1])
+    second_low = np.minimum(components[2], components[3])
+    second_high = np.maximum(components[2], components[3])
+    middle_a = np.maximum(first_low, second_low)
+    middle_b = np.minimum(first_high, second_high)
+    ordered = (
+        np.maximum(first_high, second_high),
+        np.maximum(middle_a, middle_b),
+        np.minimum(middle_a, middle_b),
+        np.minimum(first_low, second_low),
+    )
+    return ordered[minimum_channels - 1]
+
+
 def make_content_evidence_gray(
     gray: np.ndarray,
     statistics: ImageMeasurementStatistics,
@@ -385,9 +406,10 @@ def make_content_evidence_gray(
         params.numerical_floor,
         params.maximum_percentile_samples,
     )
-    stack = np.stack((gradient, texture, local_contrast, tonal_presence), axis=0)
-    consensus_index = -int(params.minimum_consensus_channels)
-    evidence = np.partition(stack, consensus_index, axis=0)[consensus_index]
+    evidence = _four_component_consensus(
+        (gradient, texture, local_contrast, tonal_presence),
+        int(params.minimum_consensus_channels),
+    )
     evidence = np.clip(evidence, 0.0, 1.0)
     return (
         evidence * UINT8_MAX_VALUE + UINT8_ROUNDING_OFFSET

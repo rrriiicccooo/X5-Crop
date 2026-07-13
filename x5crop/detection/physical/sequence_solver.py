@@ -576,10 +576,24 @@ def _band_sequence_hypotheses(
                         or not measured_width.intersects(physical_width)
                     ):
                         continue
+                next_bands = (*selected_bands, observation)
+                next_edges = (*selected_edges, edges)
+                resolved_neighbor_index = len(selected_bands) - 1
+                if (
+                    selected_bands
+                    and not _supported_band_demotion_is_justified(
+                        resolved_neighbor_index,
+                        next_bands,
+                        next_edges,
+                        cross_axis,
+                        physical_width,
+                    )
+                ):
+                    continue
                 search(
                     observation_index + 1,
-                    (*selected_bands, observation),
-                    (*selected_edges, edges),
+                    next_bands,
+                    next_edges,
                 )
                 if search_truncated:
                     return

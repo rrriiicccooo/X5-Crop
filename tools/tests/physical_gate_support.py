@@ -552,56 +552,54 @@ def candidate_evidence_fixture(
         sequence.right + 1,
         sequence.bottom + 1,
     )
-    external_observations = (
-        ExternalApertureBoundaryObservation(
-            BoundarySide.LEADING,
-            PhotoApertureEdgeSource.MEASURED_BOUNDARY_PATH,
-            Box(sequence.left, sequence.top, sequence.left + 1, sequence.bottom),
-            None,
-            0,
-            0,
-            0,
-            16,
-            4,
-        ),
-        ExternalApertureBoundaryObservation(
-            BoundarySide.TRAILING,
-            (
-                PhotoApertureEdgeSource.DIMENSION_HYPOTHESIS
-                if content_preservation == EvidenceState.CONTRADICTED
-                else PhotoApertureEdgeSource.MEASURED_BOUNDARY_PATH
-            ),
-            Box(sequence.right - 1, sequence.top, sequence.right, sequence.bottom),
-            Box(sequence.right, sequence.top, sequence.right + 1, sequence.bottom),
-            16 if content_preservation == EvidenceState.CONTRADICTED else 0,
-            16 if content_preservation == EvidenceState.CONTRADICTED else 0,
-            4 if content_preservation == EvidenceState.CONTRADICTED else 0,
-            16,
-            4,
-        ),
-        ExternalApertureBoundaryObservation(
+    external_observations: list[ExternalApertureBoundaryObservation] = []
+    for aperture in geometry.photo_apertures:
+        box = aperture.frame_crop_envelope.box
+        sides = (
+            *((BoundarySide.LEADING,) if aperture.index == 1 else ()),
             BoundarySide.TOP,
-            PhotoApertureEdgeSource.MEASURED_BOUNDARY_PATH,
-            Box(sequence.left, sequence.top, sequence.right, sequence.top + 1),
-            None,
-            0,
-            0,
-            0,
-            16,
-            4,
-        ),
-        ExternalApertureBoundaryObservation(
             BoundarySide.BOTTOM,
-            PhotoApertureEdgeSource.MEASURED_BOUNDARY_PATH,
-            Box(sequence.left, sequence.bottom - 1, sequence.right, sequence.bottom),
-            Box(sequence.left, sequence.bottom, sequence.right, sequence.bottom + 1),
-            0,
-            0,
-            0,
-            16,
-            4,
-        ),
-    )
+            *(
+                (BoundarySide.TRAILING,)
+                if aperture.index == geometry.count
+                else ()
+            ),
+        )
+        for side in sides:
+            if side == BoundarySide.LEADING:
+                inside = Box(box.left, box.top, box.left + 1, box.bottom)
+                outside = None
+            elif side == BoundarySide.TRAILING:
+                inside = Box(box.right - 1, box.top, box.right, box.bottom)
+                outside = Box(box.right, box.top, box.right + 1, box.bottom)
+            elif side == BoundarySide.TOP:
+                inside = Box(box.left, box.top, box.right, box.top + 1)
+                outside = None
+            else:
+                inside = Box(box.left, box.bottom - 1, box.right, box.bottom)
+                outside = Box(box.left, box.bottom, box.right, box.bottom + 1)
+            contradicted = bool(
+                content_preservation == EvidenceState.CONTRADICTED
+                and side == BoundarySide.TRAILING
+            )
+            external_observations.append(
+                ExternalApertureBoundaryObservation(
+                    aperture.index,
+                    side,
+                    (
+                        PhotoApertureEdgeSource.DIMENSION_HYPOTHESIS
+                        if contradicted
+                        else PhotoApertureEdgeSource.MEASURED_BOUNDARY_PATH
+                    ),
+                    inside,
+                    outside,
+                    16 if contradicted else 0,
+                    16 if contradicted else 0,
+                    4 if contradicted else 0,
+                    16,
+                    4,
+                )
+            )
     return CandidateEvidence(
         photo_sequence_coverage=coverage,
         sequence_conservation=sequence_conservation_for_geometry(geometry),
@@ -621,7 +619,8 @@ def candidate_evidence_fixture(
         external_aperture_preservation=ExternalAperturePreservationEvidence(
             workspace,
             sequence,
-            external_observations,
+            geometry.count,
+            tuple(external_observations),
             0.5,
         ),
         holder_occupancy=HolderOccupancyEvidence(

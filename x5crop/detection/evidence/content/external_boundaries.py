@@ -12,7 +12,6 @@ from ....domain import (
     BoundarySide,
     Box,
     EvidenceState,
-    PhotoApertureBoundaryResolution,
     PhotoApertureEdgeSource,
 )
 from ....image.evidence import activation_mask
@@ -24,6 +23,7 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class ExternalApertureBoundaryObservation:
+    photo_index: int
     side: BoundarySide
     boundary_source: PhotoApertureEdgeSource
     inside_region: Box
@@ -37,6 +37,8 @@ class ExternalApertureBoundaryObservation:
     reason: str = field(init=False)
 
     def __post_init__(self) -> None:
+        if self.photo_index <= 0:
+            raise ValueError("external aperture observation requires a photo index")
         if not self.inside_region.valid():
             raise ValueError("external aperture observation requires an inside region")
         if self.outside_region is not None and not self.outside_region.valid():
@@ -75,12 +77,15 @@ class ExternalApertureBoundaryObservation:
 class ExternalAperturePreservationEvidence:
     workspace_extent: Box
     photo_sequence_envelope: Box
+    photo_count: int
     observations: tuple[ExternalApertureBoundaryObservation, ...]
     threshold: float | None
     state: EvidenceState = field(init=False)
     reason: str = field(init=False)
 
     def __post_init__(self) -> None:
+        if self.photo_count <= 0:
+            raise ValueError("external aperture evidence requires a photo count")
         if not self.workspace_extent.valid():
             raise ValueError("external aperture evidence requires a valid workspace")
         if not self.photo_sequence_envelope.valid():
@@ -92,8 +97,30 @@ class ExternalAperturePreservationEvidence:
             and workspace.top <= sequence.top < sequence.bottom <= workspace.bottom
         ):
             raise ValueError("photo sequence envelope must fit the workspace")
-        if tuple(item.side for item in self.observations) != tuple(BoundarySide):
-            raise ValueError("external aperture evidence requires all four ordered sides")
+        if not self.observations:
+            raise ValueError("external aperture evidence requires aperture observations")
+        expected = tuple(
+            (photo_index, side)
+            for photo_index in range(1, self.photo_count + 1)
+            for side in (
+                *((BoundarySide.LEADING,) if photo_index == 1 else ()),
+                BoundarySide.TOP,
+                BoundarySide.BOTTOM,
+                *(
+                    (BoundarySide.TRAILING,)
+                    if photo_index == self.photo_count
+                    else ()
+                ),
+            )
+        )
+        observed = tuple(
+            (item.photo_index, item.side) for item in self.observations
+        )
+        if observed != expected:
+            raise ValueError(
+                "external aperture evidence requires every photo cross-axis edge "
+                "and only the sequence endpoint long-axis edges"
+            )
         if any(
             item.state == EvidenceState.CONTRADICTED
             for item in self.observations
@@ -228,27 +255,6 @@ def _crossing_track_count(
     )
 
 
-def _external_resolution(
-    geometry: PhotoSequenceSolution,
-    side: BoundarySide,
-) -> PhotoApertureBoundaryResolution:
-    if side == BoundarySide.LEADING:
-        return geometry.photo_apertures[0].leading
-    if side == BoundarySide.TRAILING:
-        return geometry.photo_apertures[-1].trailing
-    if side == BoundarySide.TOP:
-        return min(
-            (item.top for item in geometry.photo_apertures),
-            key=lambda item: item.position.minimum,
-        )
-    if side == BoundarySide.BOTTOM:
-        return max(
-            (item.bottom for item in geometry.photo_apertures),
-            key=lambda item: item.position.maximum,
-        )
-    raise ValueError(f"unsupported external aperture side: {side}")
-
-
 def external_aperture_preservation_evidence(
     geometry: PhotoSequenceSolution,
     cache: MeasurementCache,
@@ -274,35 +280,51 @@ def external_aperture_preservation_evidence(
     minimum_active = int(parameters.minimum_active_pixels)
     minimum_tracks = max(1, int(math.ceil(math.sqrt(minimum_active))))
     observations: list[ExternalApertureBoundaryObservation] = []
-    for side in BoundarySide:
-        resolution = _external_resolution(geometry, side)
-        inside, outside = _boundary_regions(sequence, side, band, workspace)
-        inside_active = _active_region(active, inside)
-        outside_active = (
-            np.empty((0, 0), dtype=bool)
-            if outside is None
-            else _active_region(active, outside)
+    last_index = len(geometry.photo_apertures)
+    for aperture in geometry.photo_apertures:
+        aperture_box = aperture.frame_crop_envelope.box.clamp(width, height)
+        sides = (
+            *((BoundarySide.LEADING,) if aperture.index == 1 else ()),
+            BoundarySide.TOP,
+            BoundarySide.BOTTOM,
+            *((BoundarySide.TRAILING,) if aperture.index == last_index else ()),
         )
-        observations.append(
-            ExternalApertureBoundaryObservation(
-                side=side,
-                boundary_source=resolution.source,
-                inside_region=inside,
-                outside_region=outside,
-                active_inside_pixels=int(np.count_nonzero(inside_active)),
-                active_outside_pixels=int(np.count_nonzero(outside_active)),
-                crossing_track_count=(
-                    0
-                    if outside is None or threshold is None
-                    else _crossing_track_count(active, inside, outside, side)
-                ),
-                minimum_active_pixels=minimum_active,
-                minimum_crossing_tracks=minimum_tracks,
+        for side in sides:
+            resolution = getattr(aperture, side.value)
+            inside, outside = _boundary_regions(
+                aperture_box,
+                side,
+                band,
+                workspace,
             )
-        )
+            inside_active = _active_region(active, inside)
+            outside_active = (
+                np.empty((0, 0), dtype=bool)
+                if outside is None
+                else _active_region(active, outside)
+            )
+            observations.append(
+                ExternalApertureBoundaryObservation(
+                    photo_index=aperture.index,
+                    side=side,
+                    boundary_source=resolution.source,
+                    inside_region=inside,
+                    outside_region=outside,
+                    active_inside_pixels=int(np.count_nonzero(inside_active)),
+                    active_outside_pixels=int(np.count_nonzero(outside_active)),
+                    crossing_track_count=(
+                        0
+                        if outside is None or threshold is None
+                        else _crossing_track_count(active, inside, outside, side)
+                    ),
+                    minimum_active_pixels=minimum_active,
+                    minimum_crossing_tracks=minimum_tracks,
+                )
+            )
     return ExternalAperturePreservationEvidence(
         workspace,
         sequence,
+        geometry.count,
         tuple(observations),
         threshold,
     )

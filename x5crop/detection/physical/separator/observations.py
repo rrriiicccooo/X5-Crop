@@ -94,39 +94,24 @@ def _break_count(mask: np.ndarray) -> int:
     return int(max(0, np.count_nonzero(transitions == 1) - 1))
 
 
-def _cross_axis_path_exists(
+def _cross_axis_support_is_continuous(
     mask: np.ndarray,
-    maximum_break_ratio: float,
+    maximum_break_rows: int,
 ) -> bool:
-    if mask.ndim != 2 or not mask.shape[0] or not mask.shape[1]:
+    if mask.ndim != 1:
+        raise ValueError("cross-axis row support must be one-dimensional")
+    if maximum_break_rows < 0:
+        raise ValueError("maximum cross-axis break must be non-negative")
+    supported_rows = np.flatnonzero(mask)
+    if not supported_rows.size:
         return False
-    maximum_break = int(round(mask.shape[0] * float(maximum_break_ratio)))
-    reachable: np.ndarray | None = None
-    break_length = 0
-    for row in mask:
-        row = row.astype(bool, copy=False)
-        if reachable is None:
-            if row.any():
-                reachable = row.copy()
-                break_length = 0
-            else:
-                break_length += 1
-                if break_length > maximum_break:
-                    return False
-            continue
-        adjacent = reachable.copy()
-        adjacent[1:] |= reachable[:-1]
-        adjacent[:-1] |= reachable[1:]
-        continuation = row & adjacent
-        if continuation.any():
-            reachable = continuation
-            break_length = 0
-        elif not row.any() and break_length < maximum_break:
-            reachable = adjacent
-            break_length += 1
-        else:
-            return False
-    return bool(reachable is not None and break_length <= maximum_break)
+    internal_breaks = np.diff(supported_rows) - 1
+    longest_break = max(
+        int(supported_rows[0]),
+        int(mask.size - 1 - supported_rows[-1]),
+        int(internal_breaks.max()) if internal_breaks.size else 0,
+    )
+    return longest_break <= maximum_break_rows
 
 
 def _cross_axis_measurement(
@@ -208,9 +193,12 @@ def _cross_axis_measurement(
     longest_supported = (
         float(_longest_true_run(row_support)) / float(max(1, len(row_support)))
     )
-    supported = _cross_axis_path_exists(
-        row_support[:, np.newaxis],
-        parameters.maximum_cross_axis_break_ratio,
+    maximum_break_rows = int(
+        round(row_support.size * parameters.maximum_cross_axis_break_ratio)
+    )
+    supported = _cross_axis_support_is_continuous(
+        row_support,
+        maximum_break_rows,
     )
     return SeparatorCrossAxisMeasurement(
         aperture_cross_axis,

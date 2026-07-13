@@ -185,6 +185,36 @@ class PhotoApertureSolverContractTest(unittest.TestCase):
         )
         self.assertLess(solved.assignment_evaluations, 200)
 
+    def test_supported_band_demotion_is_pruned_when_neighbors_are_known(self) -> None:
+        scope = _scope(
+            width=1310,
+            height=120,
+            leading=0.0,
+            trailing=1310.0,
+            top=10.0,
+            bottom=110.0,
+        )
+        separators = tuple(
+            _separator(float(start), float(start + 10), supported=True)
+            for start in range(100, 1210, 110)
+        )
+
+        solved = solve_photo_sequence(
+            separators,
+            scope,
+            _plan(scope),
+            12,
+            _dimensions(100.0, 100.0),
+            maximum_assignment_evaluations=500,
+            maximum_solution_alternatives=64,
+        )
+
+        self.assertIsInstance(solved, PhotoSequenceSolveResult)
+        assert isinstance(solved, PhotoSequenceSolveResult)
+        self.assertFalse(solved.search_budget_exhausted)
+        self.assertEqual(len(solved.separator_assignments), 11)
+        self.assertLess(solved.assignment_evaluations, 100)
+
     def test_impossible_measured_aperture_chain_is_rejected_without_exhaustive_search(self) -> None:
         scope = _scope(
             width=200,

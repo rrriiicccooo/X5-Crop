@@ -269,6 +269,7 @@ class DetectionStageTypeContractTests(unittest.TestCase):
         preservation_fields = set(
             ExternalAperturePreservationEvidence.__dataclass_fields__
         )
+        self.assertIn("photo_count", preservation_fields)
         self.assertIn("observations", preservation_fields)
         self.assertIn("workspace_extent", preservation_fields)
         self.assertIn("photo_sequence_envelope", preservation_fields)

@@ -400,6 +400,7 @@ def _candidate_evidence_matches_geometry(
         )
         and evidence.external_aperture_preservation.photo_sequence_envelope
         == geometry.photo_sequence_envelope
+        and evidence.external_aperture_preservation.photo_count == geometry.count
         and evidence.holder_occupancy.holder_span == geometry.holder_span
         and evidence.holder_occupancy.photo_sequence_envelope
         == geometry.photo_sequence_envelope

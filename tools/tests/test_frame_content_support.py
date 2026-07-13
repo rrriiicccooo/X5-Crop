@@ -285,6 +285,29 @@ class FrameContentSupportTest(unittest.TestCase):
             EvidenceState.CONTRADICTED,
         )
 
+    def test_external_preservation_keeps_each_photo_cross_axis_edges(self) -> None:
+        geometry = candidate_fixture().geometry
+        preservation = external_aperture_preservation_evidence(
+            geometry,
+            _cache(np.full((100, 310), 255, dtype=np.uint8)),
+            get_detection_configuration("135", "full").content.evidence,
+        )
+
+        self.assertEqual(
+            tuple(
+                (item.photo_index, item.side)
+                for item in preservation.observations
+            ),
+            (
+                (1, BoundarySide.LEADING),
+                (1, BoundarySide.TOP),
+                (1, BoundarySide.BOTTOM),
+                (2, BoundarySide.TOP),
+                (2, BoundarySide.BOTTOM),
+                (2, BoundarySide.TRAILING),
+            ),
+        )
+
     def test_empty_aperture_is_not_content_damage(self) -> None:
         geometry = candidate_fixture().geometry
         gray = np.full((100, 310), 255, dtype=np.uint8)

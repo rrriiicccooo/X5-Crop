@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from pathlib import Path
 import unittest
 
 import numpy as np
 
 from x5crop.configuration.separator import SeparatorObservationParameters
+from x5crop.detection.physical.separator import observations as separator_observations
 from x5crop.detection.physical.separator.observations import (
     measure_separator_cross_axis_support,
     propose_separator_bands,
@@ -94,6 +96,37 @@ def _measure(gray: np.ndarray, start: int, end: int):
 
 
 class SeparatorCrossAxisContractTest(unittest.TestCase):
+    def test_row_continuity_uses_the_exact_maximum_break_invariant(self) -> None:
+        continuity = getattr(
+            separator_observations,
+            "_cross_axis_support_is_continuous",
+            None,
+        )
+        self.assertIsNotNone(continuity)
+
+        self.assertFalse(continuity(np.zeros(8, dtype=bool), 2))
+        self.assertTrue(continuity(np.ones(8, dtype=bool), 0))
+        self.assertTrue(
+            continuity(
+                np.array([False, False, True, True, False, False, True]),
+                2,
+            )
+        )
+        self.assertFalse(
+            continuity(
+                np.array([True, False, False, False, True]),
+                2,
+            )
+        )
+
+    def test_cross_axis_measurement_does_not_reinflate_row_support_to_2d(self) -> None:
+        source = separator_observations.__file__
+        assert source is not None
+        text = Path(source).read_text(encoding="utf-8")
+
+        self.assertNotIn("row_support[:, np.newaxis]", text)
+        self.assertNotIn("def _cross_axis_path_exists", text)
+
     def test_coherent_separator_is_independent_of_gray_polarity(self) -> None:
         states = []
         for value in (16, 128, 240):
