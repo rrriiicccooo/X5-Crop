@@ -54,12 +54,9 @@ class DecisionOwnershipGateContractTest(unittest.TestCase):
             ),
             lambda: replace(
                 detection,
-                finalization_plan=replace(
-                    detection.finalization_plan,
-                    frame_bleed_plan=replace(
-                        detection.finalization_plan.frame_bleed_plan,
-                        frame_sides=(),
-                    ),
+                frame_bleed_plan=replace(
+                    detection.frame_bleed_plan,
+                    frame_sides=(),
                 ),
             ),
         )

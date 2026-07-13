@@ -29,6 +29,7 @@ def write_debug_outputs(
         write_debug_preview(
             gray,
             detection,
+            selected_candidate,
             debug_path,
             diagnostics,
             render_cache,

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from ..app_info import VERSION
-from ..detection.final.model import FinalDetection
+from ..detection.final.model import FinalDetection, FinalizationPlan
 from ..detection.candidate.selection.model import SelectionResult
 from ..detection.evidence.transform_geometry import TransformGeometryEvidence
 from ..domain import WorkspaceExtent
@@ -24,16 +24,16 @@ def _geometry_read_model(geometry: OutputGeometry) -> dict[str, object]:
     }
 
 
-def _finalization_plan_read_model(detection: FinalDetection) -> dict[str, object]:
-    plan = detection.finalization_plan
+def _finalization_plan_read_model(
+    plan: FinalizationPlan | None,
+) -> dict[str, object] | None:
+    if plan is None:
+        return None
     return {
         "layout": plan.layout,
         "image_width": int(plan.image_width),
         "image_height": int(plan.image_height),
         "decision_geometry": _geometry_read_model(plan.decision_geometry),
-        "frame_bleed_plan": frame_bleed_plan_read_model(
-            plan.frame_bleed_plan
-        ),
     }
 
 
@@ -52,6 +52,7 @@ def report_record_for_final_detection(
     transform_geometry: TransformGeometryEvidence,
     analysis_reuse_signature: dict,
 ) -> dict:
+    output_geometry = detection.output_geometry
     record = {
         "schema_id": REPORT_SCHEMA_ID,
         "schema_revision": REPORT_SCHEMA_REVISION,
@@ -75,8 +76,21 @@ def report_record_for_final_detection(
             "gate": decision_gate_detail(detection.decision),
         },
         "output": {
-            "finalization_plan": _finalization_plan_read_model(detection),
-            "final_geometry": _geometry_read_model(detection.output_geometry),
+            "frame_bleed_plan": frame_bleed_plan_read_model(
+                detection.frame_bleed_plan
+            ),
+            "finalization_plan": _finalization_plan_read_model(
+                detection.finalization_plan
+            ),
+            "final_geometry": (
+                None
+                if output_geometry is None
+                else _geometry_read_model(output_geometry)
+            ),
+            "export_eligibility": {
+                "frame_export_eligible": detection.frame_export_eligible,
+                "reason": detection.frame_export_reason,
+            },
             "output_files": list(output_files),
             "review_copy": review_copy,
             "warnings": list(warnings),

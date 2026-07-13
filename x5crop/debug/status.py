@@ -20,6 +20,8 @@ def debug_status_parts(
     reasons = detection.decision.final_review_reasons
     if reasons:
         detail += " | " + ",".join(reasons[: style.reason_display_limit])
+    if not detection.frame_export_eligible:
+        detail += " | NOT EXPORTABLE"
     return status, detail, color
 
 

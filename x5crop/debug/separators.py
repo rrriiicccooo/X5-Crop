@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import numpy as np
 
-from ..detection.final.model import FinalDetection
 from ..detection.candidate.model import AssessedCandidate
 from ..detection.physical.model import DualLaneSolution, SequenceSolution
 from ..configuration.diagnostics import DebugStyleParameters, SeparatorOverlayParameters
@@ -12,30 +11,30 @@ from .canvas import draw_preview_line, draw_preview_mark
 
 
 def separator_mark_box(
-    detection: FinalDetection,
     observation: SeparatorBandObservation,
     corridor: Box,
     long_axis_offset: int,
     image_width: int,
     image_height: int,
+    layout: str,
 ) -> Box:
     start = int(round(observation.start + long_axis_offset))
     end = max(start + 1, int(round(observation.end + long_axis_offset)))
     return map_work_box(
         Box(start, corridor.top, end, corridor.bottom),
-        detection.finalization_plan.layout,
+        layout,
         image_width,
         image_height,
     )
 
 
 def _boundary_ticks(
-    detection: FinalDetection,
     corridor: Box,
     center: float,
     overlay: SeparatorOverlayParameters,
     image_width: int,
     image_height: int,
+    layout: str,
 ) -> tuple[Box, Box]:
     tick = max(
         int(overlay.tick_length_min),
@@ -49,7 +48,7 @@ def _boundary_ticks(
     return tuple(
         map_work_box(
             box,
-            detection.finalization_plan.layout,
+            layout,
             image_width,
             image_height,
         )
@@ -59,7 +58,6 @@ def _boundary_ticks(
 
 def _draw_sequence_overlay(
     rgb: np.ndarray,
-    detection: FinalDetection,
     solution: SequenceSolution,
     corridor: Box,
     lane_index: int | None,
@@ -70,6 +68,7 @@ def _draw_sequence_overlay(
     style: DebugStyleParameters,
     image_width: int,
     image_height: int,
+    layout: str,
 ) -> None:
     accepted = {
         id(assignment.observation)
@@ -80,12 +79,12 @@ def _draw_sequence_overlay(
         draw_preview_mark(
             rgb,
             separator_mark_box(
-                detection,
                 observation,
                 corridor,
                 long_axis_offset,
                 image_width,
                 image_height,
+                layout,
             ),
             scale,
             (
@@ -101,12 +100,12 @@ def _draw_sequence_overlay(
         if boundary.source == FrameBoundarySource.OBSERVED_SEPARATOR and not overlap:
             continue
         for tick in _boundary_ticks(
-            detection,
             corridor,
             boundary.coordinate + long_axis_offset,
             overlay,
             image_width,
             image_height,
+            layout,
         ):
             draw_preview_line(
                 rgb,
@@ -127,15 +126,14 @@ def _draw_sequence_overlay(
 
 def draw_separator_overlay(
     rgb: np.ndarray,
-    detection: FinalDetection,
     selected_candidate: AssessedCandidate,
     scale: float,
     overlay: SeparatorOverlayParameters,
     style: DebugStyleParameters,
+    image_width: int,
+    image_height: int,
 ) -> None:
     geometry = selected_candidate.geometry
-    image_width = detection.finalization_plan.image_width
-    image_height = detection.finalization_plan.image_height
     overlap_boundaries = {
         (
             spacing.boundary.lane_index,
@@ -147,7 +145,6 @@ def draw_separator_overlay(
     if isinstance(geometry, SequenceSolution):
         _draw_sequence_overlay(
             rgb,
-            detection,
             geometry,
             geometry.crop_envelope.box,
             None,
@@ -158,6 +155,7 @@ def draw_separator_overlay(
             style,
             image_width,
             image_height,
+            geometry.layout,
         )
     elif isinstance(geometry, DualLaneSolution):
         for lane_index, (lane, lane_solution, lane_envelope) in enumerate(
@@ -171,7 +169,6 @@ def draw_separator_overlay(
         ):
             _draw_sequence_overlay(
                 rgb,
-                detection,
                 lane_solution,
                 lane_envelope.box,
                 lane_index,
@@ -182,4 +179,5 @@ def draw_separator_overlay(
                 style,
                 image_width,
                 image_height,
+                geometry.layout,
             )

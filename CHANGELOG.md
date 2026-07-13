@@ -23,6 +23,9 @@ repository rules in `AGENTS.md`.
 - `InternalBoundaryPreservationEvidence` 逐条验证内部切线。Frame union coverage 不再替代切线安全；
   连续内容跨越没有 independent separator、measured contact 或 corroborated overlap 的切线会明确
   contradict candidate content preservation。
+- `FrameBleedPlan` 与 optional `FinalizationPlan` 已拆开：GeometryResolution 未解决时 report 明确保存
+  `finalization_plan=null`、`final_geometry=null` 和不可导出状态；`--export-review` 不能写出 provisional
+  frames，三联 Debug 仍可用诊断样式展示它们。
 - Current report identity 为 `detection_report / gray_sequence_integrity`，旧 schema 直接 cache miss。
 
 #### 灰度外观语义与 separator sequence 收敛（2026-07-13）

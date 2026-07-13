@@ -51,16 +51,15 @@ class LayerBoundariesOutputContractTest(unittest.TestCase):
         source = (PROJECT_ROOT / "x5crop/debug/separators.py").read_text(
             encoding="utf-8"
         )
-        self.assertIn("FinalDetection", source)
+        self.assertNotIn("FinalDetection", source)
         self.assertIn("separator_observations", source)
         self.assertIn("geometry.inter_frame_spacings", source)
         self.assertNotIn("frame_sequence.spacings", source)
         self.assertNotIn(".detail", source)
 
-    def test_separator_overlay_uses_finalization_coordinate_context(self) -> None:
+    def test_separator_overlay_uses_explicit_workspace_extent(self) -> None:
         from tools.tests.physical_gate_support import (
             candidate_fixture,
-            final_detection_fixture,
         )
         from x5crop.configuration.registry import get_detection_configuration
         from x5crop.debug.separators import draw_separator_overlay
@@ -68,17 +67,17 @@ class LayerBoundariesOutputContractTest(unittest.TestCase):
         diagnostics = get_detection_configuration("135", "full").diagnostics
         draw_separator_overlay(
             np.zeros((100, 200, 3), dtype=np.uint8),
-            final_detection_fixture(),
             candidate_fixture(),
             1.0,
             diagnostics.separator_overlay,
             diagnostics.style,
+            200,
+            100,
         )
 
     def test_separator_overlay_never_reverse_engineers_source_dimensions(self) -> None:
         from tools.tests.physical_gate_support import (
             candidate_fixture,
-            final_detection_fixture,
         )
         from x5crop.configuration.registry import get_detection_configuration
         from x5crop.debug.separators import draw_separator_overlay
@@ -91,15 +90,16 @@ class LayerBoundariesOutputContractTest(unittest.TestCase):
         ) as mark_box:
             draw_separator_overlay(
                 np.zeros((33, 67, 3), dtype=np.uint8),
-                final_detection_fixture(),
                 candidate_fixture(),
                 1.0 / 3.0,
                 diagnostics.separator_overlay,
                 diagnostics.style,
+                67,
+                33,
             )
 
         self.assertTrue(mark_box.called)
-        self.assertEqual(mark_box.call_args.args[-2:], (200, 100))
+        self.assertEqual(mark_box.call_args.args[-3:], (67, 33, "horizontal"))
 
     def test_output_bleed_reads_canonical_geometry_spacing(self) -> None:
         source = (PROJECT_ROOT / "x5crop/runtime/frame_bleed.py").read_text(

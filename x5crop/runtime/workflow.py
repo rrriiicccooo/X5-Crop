@@ -149,11 +149,11 @@ def process_one(
     configuration_detail = detection_configuration_read_model(initial_configuration)
     finalization_plan = finalization_plan_for_selection(
         selection,
-        prepared_frame_bleed,
         workspace_extent=workspace.extent,
     )
     detection = finalize_detection(
         decided_detection,
+        prepared_frame_bleed,
         finalization_plan,
     )
     review_copy = copy_for_review_if_needed(input_file, output_dir, config, detection, warnings)

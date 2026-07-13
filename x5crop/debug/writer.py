@@ -14,12 +14,19 @@ from .status import add_status_bar
 def write_debug_preview(
     gray: np.ndarray,
     detection: FinalDetection,
+    selected_candidate: AssessedCandidate,
     output_path: Path,
     diagnostics: DiagnosticsConfiguration,
     render_cache: DebugRenderCache,
 ) -> None:
     rgb = add_status_bar(
-        make_debug_preview_rgb(gray, detection, diagnostics.style, render_cache),
+        make_debug_preview_rgb(
+            gray,
+            detection,
+            selected_candidate,
+            diagnostics.style,
+            render_cache,
+        ),
         detection,
         diagnostics.style,
     )

@@ -47,13 +47,16 @@ def write_crops_if_allowed(
     ) and not config.dry_run
     if not should_export:
         return []
+    output_geometry = detection.output_geometry
+    if output_geometry is None:
+        return []
     output_dir = output_surface.ensure_root()
     return write_crops(
         input_file,
         arr,
         source_arr,
         profile,
-        detection.output_geometry.frames,
+        output_geometry.frames,
         config,
         deskew_applied,
         output_dir,

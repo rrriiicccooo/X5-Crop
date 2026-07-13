@@ -509,7 +509,6 @@ def finalization_plan_from_read_model(value: Any) -> FinalizationPlan:
         "image_width",
         "image_height",
         "decision_geometry",
-        "frame_bleed_plan",
     }
     if not isinstance(value, dict) or set(value) != expected:
         raise ValueError("finalization plan read model is incomplete")
@@ -520,11 +519,11 @@ def finalization_plan_from_read_model(value: Any) -> FinalizationPlan:
         decision_geometry=output_geometry_from_read_model(
             value["decision_geometry"]
         ),
-        frame_bleed_plan=_typed_value_from_read_model(
-            value["frame_bleed_plan"],
-            FrameBleedPlan,
-        ),
     )
+
+
+def frame_bleed_plan_from_read_model(value: Any) -> FrameBleedPlan:
+    return _typed_value_from_read_model(value, FrameBleedPlan)
 
 
 def output_geometry_from_read_model(value: Any) -> OutputGeometry:
@@ -549,10 +548,12 @@ def transform_geometry_from_read_model(value: Any) -> TransformGeometryEvidence:
     return _typed_value_from_read_model(value, TransformGeometryEvidence)
 
 
-def _output_valid(value: Any, *, allow_empty_frames: bool) -> bool:
+def _output_valid(value: Any, *, geometry_resolved: bool) -> bool:
     expected = {
+        "frame_bleed_plan",
         "finalization_plan",
         "final_geometry",
+        "export_eligibility",
         "output_files",
         "review_copy",
         "warnings",
@@ -560,21 +561,48 @@ def _output_valid(value: Any, *, allow_empty_frames: bool) -> bool:
     if not isinstance(value, dict) or set(value) != expected:
         return False
     try:
-        plan = finalization_plan_from_read_model(value["finalization_plan"])
-        final_geometry = output_geometry_from_read_model(value["final_geometry"])
+        frame_bleed_plan = frame_bleed_plan_from_read_model(
+            value["frame_bleed_plan"]
+        )
     except (KeyError, TypeError, ValueError):
         return False
-    if not allow_empty_frames and not final_geometry.frames:
+    eligibility = value["export_eligibility"]
+    expected_eligibility = {
+        "frame_export_eligible": geometry_resolved,
+        "reason": (
+            "geometry_resolved"
+            if geometry_resolved
+            else "geometry_resolution_unavailable"
+        ),
+    }
+    if eligibility != expected_eligibility:
         return False
-    expected_geometry = apply_frame_bleed(
-        plan.decision_geometry,
-        plan.frame_bleed_plan,
-        layout=plan.layout,
-        image_width=plan.image_width,
-        image_height=plan.image_height,
-    )
+    if geometry_resolved:
+        try:
+            plan = finalization_plan_from_read_model(value["finalization_plan"])
+            final_geometry = output_geometry_from_read_model(
+                value["final_geometry"]
+            )
+        except (KeyError, TypeError, ValueError):
+            return False
+        if not final_geometry.frames:
+            return False
+        expected_geometry = apply_frame_bleed(
+            plan.decision_geometry,
+            frame_bleed_plan,
+            layout=plan.layout,
+            image_width=plan.image_width,
+            image_height=plan.image_height,
+        )
+        geometry_valid = final_geometry == expected_geometry
+    else:
+        geometry_valid = bool(
+            value["finalization_plan"] is None
+            and value["final_geometry"] is None
+            and value["output_files"] == []
+        )
     return bool(
-        final_geometry == expected_geometry
+        geometry_valid
         and isinstance(value["output_files"], list)
         and all(isinstance(path, str) for path in value["output_files"])
         and (value["review_copy"] is None or isinstance(value["review_copy"], str))
@@ -803,8 +831,12 @@ def _record_identities_valid(
     layout = signature_config["layout"]
     allowed_counts = set(physical["allowed_counts"])
     requested_count = signature_config["requested_count"]
-    plan = finalization_plan_from_read_model(
-        record["output"]["finalization_plan"]
+    plan = (
+        finalization_plan_from_read_model(
+            record["output"]["finalization_plan"]
+        )
+        if record["output"]["finalization_plan"] is not None
+        else None
     )
     workspace_extent = _typed_value_from_read_model(
         record["input"]["workspace_extent"],
@@ -812,7 +844,6 @@ def _record_identities_valid(
     )
     expected_plan = finalization_plan_for_selection(
         selection,
-        plan.frame_bleed_plan,
         workspace_extent=workspace_extent,
     )
     selected = selection.selected.geometry
@@ -833,6 +864,15 @@ def _record_identities_valid(
         )
         and (requested_count is None or selected.count == requested_count)
         and plan == expected_plan
+        and record["output"]["export_eligibility"]
+        == {
+            "frame_export_eligible": selection.geometry_resolution.supported,
+            "reason": (
+                "geometry_resolved"
+                if selection.geometry_resolution.supported
+                else "geometry_resolution_unavailable"
+            ),
+        }
     )
 
 
@@ -888,36 +928,20 @@ def current_report_record_errors(record: dict[str, Any]) -> list[str]:
             if invalid_observation
             else "selection_incomplete"
         )
-    selection = record["selection"]
-    selected_kind = None
-    if (
-        isinstance(selection, dict)
-        and isinstance(selection.get("candidates"), list)
-        and selection["candidates"]
-    ):
-        selected_rank = _integer(selection.get("selected_rank"))
-        if (
-            selected_rank is not None
-            and 1 <= selected_rank <= len(selection["candidates"])
-        ):
-            selected_candidate = selection["candidates"][selected_rank - 1]
-            if isinstance(selected_candidate, dict):
-                selected_kind = selected_candidate.get("geometry_kind")
-    decision = record["decision"] if isinstance(record["decision"], dict) else {}
-    allow_empty_frames = bool(
-        selected_kind == "review_only"
-        and decision.get("status") == "needs_review"
+    geometry_resolved = bool(
+        selection_result is not None
+        and selection_result.geometry_resolution.supported
     )
     output_valid = _output_valid(
         record["output"],
-        allow_empty_frames=allow_empty_frames,
+        geometry_resolved=geometry_resolved,
     )
     if not output_valid:
         errors.append("output_incomplete")
     if selection_result is not None and input_valid and output_valid:
         try:
-            plan = finalization_plan_from_read_model(
-                record["output"]["finalization_plan"]
+            frame_bleed_plan = frame_bleed_plan_from_read_model(
+                record["output"]["frame_bleed_plan"]
             )
             transform = transform_geometry_from_read_model(
                 input_detail["transform_geometry"]
@@ -925,7 +949,7 @@ def current_report_record_errors(record: dict[str, Any]) -> list[str]:
             if not decision_gate_matches_inputs(
                 decision_gate_from_read_model(record["decision"]["gate"]),
                 selection_result,
-                plan.frame_bleed_plan,
+                frame_bleed_plan,
                 transform,
             ):
                 errors.append("decision_gate_identity_mismatch")

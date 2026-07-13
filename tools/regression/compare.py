@@ -57,6 +57,8 @@ class ReportDiff:
 def field_value(row: dict[str, Any], field: str) -> Any:
     value: Any = row
     for part in str(field).split("."):
+        if value is None:
+            return None
         if not isinstance(value, dict) or part not in value:
             raise ValueError(f"Current report field is missing: {field}")
         value = value[part]

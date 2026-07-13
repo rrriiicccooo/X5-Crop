@@ -4,6 +4,9 @@ import numpy as np
 
 from ..detection.final.model import FinalDetection
 from ..detection.candidate.model import AssessedCandidate
+from ..domain import CropEnvelope
+from ..geometry.boxes import map_work_box
+from ..output.model import OutputGeometry
 from ..image.evidence import (
     SeparatorEvidenceImageParameters,
     make_separator_evidence_gray,
@@ -30,22 +33,24 @@ from .status import add_status_bar
 def make_debug_preview_rgb(
     gray: np.ndarray,
     detection: FinalDetection,
+    selected_candidate: AssessedCandidate,
     style: DebugStyleParameters,
     render_cache: DebugRenderCache,
 ) -> np.ndarray:
+    geometry = debug_geometry(gray, detection, selected_candidate)
     rgb, scale = cached_preview_gray(
         render_cache,
         "original_gray",
         gray,
         style.preview_max_side,
     )
-    for index, box in enumerate(detection.output_geometry.frames):
+    for index, box in enumerate(geometry.frames):
         color = FRAME_FILL_COLORS[index % len(FRAME_FILL_COLORS)]
         fill_preview_rect(rgb, box, scale, color, style.frame_fill_alpha)
         draw_preview_rect(rgb, box, scale, color, style.frame_line_width)
     draw_preview_rect(
         rgb,
-        detection.output_geometry.crop_envelope.box,
+        geometry.crop_envelope.box,
         scale,
         style.crop_envelope_color,
         style.crop_envelope_line_width,
@@ -53,15 +58,46 @@ def make_debug_preview_rgb(
     return rgb
 
 
+def debug_geometry(
+    gray: np.ndarray,
+    detection: FinalDetection,
+    selected_candidate: AssessedCandidate,
+) -> OutputGeometry:
+    final_geometry = detection.output_geometry
+    if final_geometry is not None:
+        return final_geometry
+    candidate_geometry = selected_candidate.geometry
+    image_height, image_width = gray.shape
+    return OutputGeometry(
+        crop_envelope=CropEnvelope(
+            map_work_box(
+                candidate_geometry.crop_envelope.box,
+                candidate_geometry.layout,
+                image_width,
+                image_height,
+            )
+        ),
+        frames=tuple(
+            map_work_box(
+                frame,
+                candidate_geometry.layout,
+                image_width,
+                image_height,
+            )
+            for frame in candidate_geometry.frames
+        ),
+    )
+
+
 def draw_evidence_context_overlay(
     rgb: np.ndarray,
-    detection: FinalDetection,
+    geometry: OutputGeometry,
     scale: float,
     style: DebugStyleParameters,
 ) -> None:
     draw_preview_rect(
         rgb,
-        detection.output_geometry.crop_envelope.box,
+        geometry.crop_envelope.box,
         scale,
         style.crop_envelope_color,
         style.evidence_envelope_line_width,
@@ -84,6 +120,7 @@ def make_separator_evidence_debug_rgb(
     style: DebugStyleParameters,
     render_cache: DebugRenderCache,
 ) -> np.ndarray:
+    geometry = debug_geometry(gray, detection, selected_candidate)
     evidence = make_separator_evidence_debug_gray(
         gray,
         params,
@@ -94,14 +131,15 @@ def make_separator_evidence_debug_rgb(
         evidence,
         style.preview_max_side,
     )
-    draw_evidence_context_overlay(rgb, detection, scale, style)
+    draw_evidence_context_overlay(rgb, geometry, scale, style)
     draw_separator_overlay(
         rgb,
-        detection,
         selected_candidate,
         scale,
         separator_overlay,
         style,
+        gray.shape[1],
+        gray.shape[0],
     )
     return rgb
 
@@ -127,8 +165,18 @@ def make_debug_analysis_panel(
         style.text_color,
     )[0]
     debug_boxes = add_panel_label(
-        make_debug_preview_rgb(gray, detection, style, render_cache),
-        "Debug boxes",
+        make_debug_preview_rgb(
+            gray,
+            detection,
+            selected_candidate,
+            style,
+            render_cache,
+        ),
+        (
+            "Debug boxes"
+            if detection.frame_export_eligible
+            else "Provisional boxes - NOT EXPORTABLE"
+        ),
         height=style.label_height,
         origin=style.label_origin,
         background=style.dark_background,

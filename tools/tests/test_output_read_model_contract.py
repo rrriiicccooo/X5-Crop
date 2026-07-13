@@ -149,8 +149,9 @@ class OutputReadModelContractTest(unittest.TestCase):
     def test_output_has_one_canonical_finalization_plan(self) -> None:
         output = _record()["output"]
         self.assertIn("finalization_plan", output)
+        self.assertIn("frame_bleed_plan", output)
         self.assertNotIn("decision_geometry", output)
-        self.assertNotIn("frame_bleed_plan", output)
+        self.assertNotIn("frame_bleed_plan", output["finalization_plan"])
 
     def test_candidate_report_owns_sequence_conservation_directly(self) -> None:
         candidate = _record()["selection"]["candidates"][0]
@@ -304,9 +305,9 @@ class OutputReadModelContractTest(unittest.TestCase):
         )
         detection = finalize_detection(
             detection,
+            bleed,
             finalization_plan_for_selection(
                 selection,
-                bleed,
                 workspace_extent=WorkspaceExtent(240, 120),
             ),
         )
@@ -415,9 +416,9 @@ class OutputReadModelContractTest(unittest.TestCase):
             lambda record: record["selection"]["candidates"][0][
                 "evidence"
             ].__setitem__("risk_summary", {}),
-            lambda record: record["output"]["finalization_plan"][
-                "frame_bleed_plan"
-            ].__setitem__("global_overlap_bleed", 0),
+            lambda record: record["output"]["frame_bleed_plan"].__setitem__(
+                "global_overlap_bleed", 0
+            ),
         )
         baseline = _record()
         for mutation in mutations:
@@ -644,9 +645,7 @@ class OutputReadModelContractTest(unittest.TestCase):
         )
 
         missing_frame_sides = _record()
-        missing_frame_sides["output"]["finalization_plan"][
-            "frame_bleed_plan"
-        ].pop("frame_sides")
+        missing_frame_sides["output"]["frame_bleed_plan"].pop("frame_sides")
         self.assertIn(
             "output_incomplete",
             current_report_record_errors(missing_frame_sides),

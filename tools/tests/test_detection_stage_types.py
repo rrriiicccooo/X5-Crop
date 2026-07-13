@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import fields
+from dataclasses import fields, replace
 from pathlib import Path
 import inspect
 from types import SimpleNamespace
@@ -31,7 +31,10 @@ from x5crop.report.result_builder import result_from_detection
 from x5crop.report.record import report_record_for_final_detection
 from x5crop.domain import Box, CropEnvelope
 from x5crop.output.model import OutputGeometry
-from tools.tests.physical_gate_support import unavailable_calibration_fixture
+from tools.tests.physical_gate_support import (
+    selection_fixture,
+    unavailable_calibration_fixture,
+)
 from x5crop.units import CalibrationState, PhysicalScaleObservation, PhysicalScaleSource
 
 
@@ -166,7 +169,7 @@ class DetectionStageTypeContractTests(unittest.TestCase):
             self.assertNotIn(candidate_stage_field, final_fields)
         self.assertEqual(
             final_fields,
-            {"decision", "finalization_plan"},
+            {"decision", "frame_bleed_plan", "finalization_plan"},
         )
 
     def test_typed_results_do_not_store_report_only_identity_copies(self) -> None:
@@ -217,7 +220,7 @@ class DetectionStageTypeContractTests(unittest.TestCase):
         )
         self.assertEqual(
             {field.name for field in fields(FinalDetection)},
-            {"decision", "finalization_plan"},
+            {"decision", "frame_bleed_plan", "finalization_plan"},
         )
         self.assertNotEqual(decision_model.DecisionGateAssessment, FinalDetection)
 
@@ -368,7 +371,7 @@ class DetectionStageTypeContractTests(unittest.TestCase):
 
         self.assertEqual(
             {field.name for field in fields(FinalDetection)},
-            {"decision", "finalization_plan"},
+            {"decision", "frame_bleed_plan", "finalization_plan"},
         )
         self.assertIsInstance(FinalDetection.output_geometry, property)
         self.assertEqual(
@@ -378,8 +381,28 @@ class DetectionStageTypeContractTests(unittest.TestCase):
                 "image_width",
                 "image_height",
                 "decision_geometry",
-                "frame_bleed_plan",
             },
+        )
+
+    def test_unresolved_geometry_has_no_finalization_plan(self) -> None:
+        from x5crop.detection.final.finalize import (
+            finalization_plan_for_selection,
+        )
+        from x5crop.domain import WorkspaceExtent
+
+        selection = selection_fixture()
+        unresolved = replace(
+            selection,
+            geometry_resolution=replace(
+                selection.geometry_resolution,
+                count_resolved=False,
+            ),
+        )
+        self.assertIsNone(
+            finalization_plan_for_selection(
+                unresolved,
+                workspace_extent=WorkspaceExtent(200, 100),
+            )
         )
 
     def test_export_surfaces_preserve_canonical_array_and_frame_types(self) -> None:

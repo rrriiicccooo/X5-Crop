@@ -592,7 +592,7 @@ class PhysicalDetectionResolutionContractTest(unittest.TestCase):
         self.assertNotIn("gray", parameters)
         self.assertEqual(
             tuple(parameters),
-            ("decision", "finalization_plan"),
+            ("decision", "frame_bleed_plan", "finalization_plan"),
         )
 
     def test_content_region_measurement_is_count_independent(self) -> None:

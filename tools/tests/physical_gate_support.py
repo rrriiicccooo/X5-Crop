@@ -741,9 +741,9 @@ def final_detection_fixture(
     )
     return finalize_detection(
         decision,
+        bleed,
         finalization_plan_for_selection(
             selection,
-            bleed,
             workspace_extent=WorkspaceExtent(200, 100),
         ),
     )

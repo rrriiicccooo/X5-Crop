@@ -56,10 +56,11 @@ def _crop_envelope_frames(selection: SelectionResult) -> tuple[Box, ...]:
 
 def finalization_plan_for_selection(
     selection: SelectionResult,
-    frame_bleed_plan: FrameBleedPlan,
     *,
     workspace_extent: WorkspaceExtent,
-) -> FinalizationPlan:
+) -> FinalizationPlan | None:
+    if not selection.geometry_resolution.supported:
+        return None
     geometry = selection.selected.geometry
     image_width = workspace_extent.width
     image_height = workspace_extent.height
@@ -87,15 +88,16 @@ def finalization_plan_for_selection(
         image_width=image_width,
         image_height=image_height,
         decision_geometry=decision_geometry,
-        frame_bleed_plan=frame_bleed_plan,
     )
 
 
 def finalize_detection(
     decision: DecisionGateAssessment,
-    finalization_plan: FinalizationPlan,
+    frame_bleed_plan: FrameBleedPlan,
+    finalization_plan: FinalizationPlan | None,
 ) -> FinalDetection:
     return FinalDetection(
         decision=decision,
+        frame_bleed_plan=frame_bleed_plan,
         finalization_plan=finalization_plan,
     )

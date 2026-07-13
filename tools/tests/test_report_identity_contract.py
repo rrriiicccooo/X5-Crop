@@ -34,9 +34,9 @@ class ReportIdentityContractTest(unittest.TestCase):
         transform = transform_geometry_fixture(EvidenceState.SUPPORTED)
         final_detection = finalize_detection(
             apply_decision_gate(selection, frame_bleed, transform),
+            frame_bleed,
             finalization_plan_for_selection(
                 selection,
-                frame_bleed,
                 workspace_extent=WorkspaceExtent(220, 120),
             ),
         )
@@ -77,9 +77,9 @@ class ReportIdentityContractTest(unittest.TestCase):
         transform = transform_geometry_fixture(EvidenceState.CONTRADICTED)
         final_detection = finalize_detection(
             apply_decision_gate(selection, frame_bleed, transform),
+            frame_bleed,
             finalization_plan_for_selection(
                 selection,
-                frame_bleed,
                 workspace_extent=WorkspaceExtent(200, 100),
             ),
         )
