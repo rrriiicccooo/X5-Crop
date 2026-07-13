@@ -126,7 +126,7 @@ class OutputReadModelContractTest(unittest.TestCase):
         self.assertIn("resolution_metadata", input_detail)
         self.assertNotIn("scan_calibration", input_detail)
         candidate = _record()["selection"]["candidates"][0]
-        self.assertIn("scan_calibration", candidate["evidence"])
+        self.assertIn("physical_scale_observations", candidate["evidence"])
 
     def test_configuration_report_includes_boundary_path_measurements(self) -> None:
         configuration = get_detection_configuration("135", "full")

@@ -55,7 +55,7 @@ class UnitModelTests(unittest.TestCase):
                     "y",
                     100.0,
                     None,
-                    PhysicalScaleSource.FRAME_SHORT_AXIS,
+                    PhysicalScaleSource.HOLDER_SHORT_AXIS,
                     PhysicalScaleScope.ROOT_MEASUREMENT,
                     MeasurementProvenance(
                         MeasurementIdentity.SHORT_AXIS_BOUNDARIES,
@@ -81,7 +81,7 @@ class UnitModelTests(unittest.TestCase):
                     "y",
                     None,
                     120.0,
-                    PhysicalScaleSource.FRAME_SHORT_AXIS,
+                    PhysicalScaleSource.HOLDER_SHORT_AXIS,
                     PhysicalScaleScope.ROOT_MEASUREMENT,
                     MeasurementProvenance(
                         MeasurementIdentity.SHORT_AXIS_BOUNDARIES,

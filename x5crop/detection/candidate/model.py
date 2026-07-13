@@ -5,7 +5,6 @@ from dataclasses import dataclass
 from x5crop.domain import (
     EvidenceState,
 )
-from ...geometry.layout import is_horizontal_layout
 
 from ..physical.model import (
     CandidateGeometry,
@@ -54,7 +53,7 @@ from .plan.count_hypotheses import CountHypothesis
 from ..physical.model import SequenceResiduals
 from ..evidence.aperture_sequence import PhotoSequenceConservationEvidence
 from ..geometry_resolution import GeometryResolution
-from ...units import ScanCalibrationResolution
+from ...units import PhysicalScaleObservation
 
 
 @dataclass(frozen=True)
@@ -84,7 +83,7 @@ class CandidateEvidence:
     photo_content: PhotoContentEvidence
     inter_photo_boundary_preservation: InterPhotoBoundaryPreservationEvidence
     holder_boundary: HolderBoundaryEvidence
-    scan_calibration: ScanCalibrationResolution
+    physical_scale_observations: tuple[PhysicalScaleObservation, ...]
     external_aperture_preservation: ExternalAperturePreservationEvidence
     holder_occupancy: HolderOccupancyEvidence
     partial_edge_safety: PartialEdgeSafetyEvidence
@@ -386,7 +385,6 @@ def _candidate_evidence_matches_geometry(
         assignment.independent
         for assignment in geometry.separator_assignments
     )
-    expected_source_axis = "x" if is_horizontal_layout(geometry.layout) else "y"
     return bool(
         photo_aperture_coverage_matches_geometry(
             geometry,
@@ -404,7 +402,6 @@ def _candidate_evidence_matches_geometry(
         and evidence.holder_occupancy.holder_span == geometry.holder_span
         and evidence.holder_occupancy.photo_sequence_envelope
         == geometry.photo_sequence_envelope
-        and evidence.holder_occupancy.source_long_axis == expected_source_axis
         and evidence.holder_occupancy.content_support_available
         == evidence.photo_content.support_available
         and evidence.holder_occupancy.photo_aperture_coverage_state
@@ -442,7 +439,7 @@ def _candidate_evidence_matches_geometry(
         and candidate_scale_observations_match_geometry(
             geometry,
             evidence.holder_boundary,
-            evidence.scan_calibration,
+            evidence.physical_scale_observations,
         )
     )
 

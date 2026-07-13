@@ -4,13 +4,12 @@ import os
 from pathlib import Path
 
 import numpy as np
-import tifffile
 
 from ..run_config import RunConfig
 from ..domain import Box
 from ..io.model import ImageProfile
 from ..image.crop_pixels import crop_array, validate_source_crop_pixels
-from ..io.tiff import tiff_write_kwargs, validate_written_tiff
+from ..io.tiff import write_validated_tiff
 
 
 def write_crops(
@@ -37,8 +36,7 @@ def write_crops(
         if tmp.exists():
             tmp.unlink()
         try:
-            tifffile.imwrite(tmp, cropped, **tiff_write_kwargs(profile, config.compression))
-            validate_written_tiff(tmp, cropped, profile, config.compression)
+            write_validated_tiff(tmp, cropped, profile, config.compression)
             os.replace(tmp, out_path)
         except Exception:
             if tmp.exists():

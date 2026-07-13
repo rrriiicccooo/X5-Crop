@@ -20,8 +20,9 @@ class CalibrationState(str, Enum):
 
 
 class PhysicalScaleSource(str, Enum):
-    FRAME_SHORT_AXIS = "frame_short_axis"
-    FRAME_DIMENSION_CONSENSUS = "frame_dimension_consensus"
+    HOLDER_SHORT_AXIS = "holder_short_axis"
+    PHOTO_APERTURE_SHORT_AXIS = "photo_aperture_short_axis"
+    PHOTO_APERTURE_DIMENSION_CONSENSUS = "photo_aperture_dimension_consensus"
 
 
 class PhysicalScaleScope(str, Enum):
@@ -70,16 +71,24 @@ class PhysicalScaleObservation:
             raise TypeError("physical scale observation requires a typed scope")
         if not isinstance(self.provenance, MeasurementProvenance):
             raise TypeError("physical scale observation requires typed provenance")
-        expected_root = {
-            PhysicalScaleSource.FRAME_SHORT_AXIS: (
-                MeasurementIdentity.SHORT_AXIS_BOUNDARIES
+        expected_root, expected_scope = {
+            PhysicalScaleSource.HOLDER_SHORT_AXIS: (
+                MeasurementIdentity.SHORT_AXIS_BOUNDARIES,
+                PhysicalScaleScope.ROOT_MEASUREMENT,
             ),
-            PhysicalScaleSource.FRAME_DIMENSION_CONSENSUS: (
-                MeasurementIdentity.PHOTO_EDGES
+            PhysicalScaleSource.PHOTO_APERTURE_SHORT_AXIS: (
+                MeasurementIdentity.SHORT_AXIS_BOUNDARIES,
+                PhysicalScaleScope.CANDIDATE_GEOMETRY,
+            ),
+            PhysicalScaleSource.PHOTO_APERTURE_DIMENSION_CONSENSUS: (
+                MeasurementIdentity.PHOTO_EDGES,
+                PhysicalScaleScope.CANDIDATE_GEOMETRY,
             ),
         }[self.source]
         if self.provenance.root_measurement != expected_root:
             raise ValueError("physical scale source must match measurement provenance")
+        if self.scope != expected_scope:
+            raise ValueError("physical scale source must have one canonical scope")
         values = (self.minimum_px_per_mm, self.maximum_px_per_mm)
         if any(
             value is not None
@@ -161,6 +170,11 @@ class ScanCalibrationResolution:
     y: CalibrationAxisResolution
 
     def __post_init__(self) -> None:
+        if any(
+            observation.scope != PhysicalScaleScope.ROOT_MEASUREMENT
+            for observation in self.physical_observations
+        ):
+            raise ValueError("scan calibration accepts root measurements only")
         if self.x.axis != "x" or self.y.axis != "y":
             raise ValueError("scan calibration requires ordered x/y resolutions")
         expected_x = _resolve_axis("x", self.metadata, self.physical_observations)

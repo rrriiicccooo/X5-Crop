@@ -14,7 +14,7 @@ from ...evidence.content.external_boundaries import (
     external_aperture_preservation_evidence,
 )
 from ...evidence.partial_edge import partial_edge_safety_evidence
-from ...evidence.physical_scale import candidate_scan_calibration
+from ...evidence.physical_scale import physical_scale_observations
 from ...physical.model import PhotoSequenceSolution
 from ...physical.photo_size import frame_dimension_evidence
 from ....domain import EvidenceState
@@ -90,8 +90,7 @@ def assess_candidate(
         geometry,
         context.measurement_cache.image_statistics.edge_texture_limit,
     )
-    scan_calibration = candidate_scan_calibration(
-        context.scan_calibration,
+    candidate_scale = physical_scale_observations(
         geometry,
         holder_boundary,
     )
@@ -102,7 +101,6 @@ def assess_candidate(
     )
     separator_sequence = separator_sequence_evidence(geometry)
     occupancy = holder_occupancy_evidence(
-        layout=geometry.layout,
         count=geometry.count,
         holder_span=geometry.holder_span,
         photo_apertures=geometry.photo_apertures,
@@ -111,7 +109,6 @@ def assess_candidate(
         content_support_available=content.support_available,
         photo_aperture_coverage=coverage,
         frame_dimensions=frame_dimensions,
-        calibration=context.scan_calibration,
     )
     partial_edge = partial_edge_safety_evidence(
         geometry,
@@ -128,7 +125,7 @@ def assess_candidate(
         photo_content=content,
         inter_photo_boundary_preservation=internal_boundaries,
         holder_boundary=holder_boundary,
-        scan_calibration=scan_calibration,
+        physical_scale_observations=candidate_scale,
         external_aperture_preservation=external_preservation,
         holder_occupancy=occupancy,
         partial_edge_safety=partial_edge,

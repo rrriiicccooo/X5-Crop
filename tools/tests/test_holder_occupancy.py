@@ -1,11 +1,11 @@
 from __future__ import annotations
 
+from dataclasses import fields
 from inspect import signature
 import unittest
 
 from tools.tests.physical_gate_support import (
     separator_observation,
-    supported_calibration_fixture,
     unavailable_calibration_fixture,
 )
 from x5crop.detection.evidence.photo_aperture_coverage import (
@@ -15,7 +15,10 @@ from x5crop.detection.evidence.content.photo_content import (
     PhotoContentEvidence,
     PhotoContentObservation,
 )
-from x5crop.detection.evidence.holder_occupancy import holder_occupancy_evidence
+from x5crop.detection.evidence.holder_occupancy import (
+    HolderOccupancyEvidence,
+    holder_occupancy_evidence,
+)
 from x5crop.detection.evidence.partial_edge import partial_edge_safety_evidence
 from x5crop.detection.physical.model import (
     AssignmentConsensusOutcome,
@@ -182,11 +185,21 @@ class HolderOccupancyTests(unittest.TestCase):
     def test_occupancy_measurement_does_not_accept_user_strip_mode(self) -> None:
         self.assertNotIn("strip_mode", signature(holder_occupancy_evidence).parameters)
 
+    def test_occupancy_has_no_unreachable_long_axis_calibration_surface(self) -> None:
+        self.assertNotIn("calibration", signature(holder_occupancy_evidence).parameters)
+        self.assertTrue(
+            {
+                "long_axis_px_per_mm",
+                "leading_slack_mm",
+                "trailing_slack_mm",
+                "calibration_used",
+            }.isdisjoint(field.name for field in fields(HolderOccupancyEvidence))
+        )
+
     def test_medium_square_partial_can_be_complete_underfilled(self) -> None:
         geometry = _underfilled_geometry()
         coverage, dimensions, _ = _evidence(geometry)
         occupancy = holder_occupancy_evidence(
-            layout="horizontal",
             count=geometry.count,
             holder_span=geometry.holder_span,
             photo_apertures=geometry.photo_apertures,
@@ -195,7 +208,6 @@ class HolderOccupancyTests(unittest.TestCase):
             content_support_available=True,
             photo_aperture_coverage=coverage,
             frame_dimensions=dimensions,
-            calibration=unavailable_calibration_fixture(),
         )
         self.assertTrue(occupancy.underfilled)
         self.assertTrue(occupancy.complete_underfilled_strip)
@@ -215,7 +227,6 @@ class HolderOccupancyTests(unittest.TestCase):
         geometry = _underfilled_geometry()
         coverage, dimensions, _ = _evidence(geometry)
         occupancy = holder_occupancy_evidence(
-            layout="horizontal",
             count=geometry.count,
             holder_span=geometry.holder_span,
             photo_apertures=geometry.photo_apertures,
@@ -224,27 +235,8 @@ class HolderOccupancyTests(unittest.TestCase):
             content_support_available=True,
             photo_aperture_coverage=coverage,
             frame_dimensions=dimensions,
-            calibration=unavailable_calibration_fixture(),
         )
         self.assertFalse(occupancy.complete_underfilled_strip)
-
-    def test_vertical_holder_slack_uses_source_y_calibration(self) -> None:
-        geometry = _underfilled_geometry()
-        coverage, dimensions, _ = _evidence(geometry)
-        occupancy = holder_occupancy_evidence(
-            layout="vertical",
-            count=geometry.count,
-            holder_span=geometry.holder_span,
-            photo_apertures=geometry.photo_apertures,
-            separator_assignments=geometry.separator_assignments,
-            physical_spec=format_spec("120-66"),
-            content_support_available=True,
-            photo_aperture_coverage=coverage,
-            frame_dimensions=dimensions,
-            calibration=supported_calibration_fixture(10.0, 20.0),
-        )
-        self.assertEqual(occupancy.leading_slack_mm, 1.5)
-        self.assertEqual(occupancy.trailing_slack_mm, 2.0)
 
 
 if __name__ == "__main__":

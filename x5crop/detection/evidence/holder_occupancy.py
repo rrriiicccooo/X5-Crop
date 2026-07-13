@@ -1,11 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-import math
 
 from ...formats import FormatPhysicalSpec
-from ...geometry.layout import is_horizontal_layout
-from ...units import ScanCalibrationResolution
 from ..physical.photo_size import FrameDimensionEvidence
 from ...domain import (
     Box,
@@ -61,25 +58,14 @@ class HolderOccupancyEvidence:
     complete_strip_can_be_underfilled: bool
     holder_span: HolderSpan
     photo_sequence_envelope: Box
-    source_long_axis: str
-    long_axis_px_per_mm: float | None
     observed_sequence_span_px: float = field(init=False)
     leading_slack_px: float = field(init=False)
     trailing_slack_px: float = field(init=False)
-    leading_slack_mm: float | None = field(init=False)
-    trailing_slack_mm: float | None = field(init=False)
     holder_fill_ratio: float = field(init=False)
     underfilled: bool = field(init=False)
     complete_underfilled_strip: bool = field(init=False)
-    calibration_used: bool = field(init=False)
 
     def __post_init__(self) -> None:
-        if self.source_long_axis not in {"x", "y"}:
-            raise ValueError("holder occupancy requires a source long axis")
-        scale = self.long_axis_px_per_mm
-        if scale is not None and (not math.isfinite(scale) or scale <= 0.0):
-            raise ValueError("holder occupancy calibration must be finite and positive")
-
         holder = self.holder_span.box
         sequence = self.photo_sequence_envelope
         if not (
@@ -97,16 +83,6 @@ class HolderOccupancyEvidence:
         object.__setattr__(self, "observed_sequence_span_px", sequence_length)
         object.__setattr__(self, "leading_slack_px", leading_slack)
         object.__setattr__(self, "trailing_slack_px", trailing_slack)
-        object.__setattr__(
-            self,
-            "leading_slack_mm",
-            None if scale is None else leading_slack / scale,
-        )
-        object.__setattr__(
-            self,
-            "trailing_slack_mm",
-            None if scale is None else trailing_slack / scale,
-        )
         object.__setattr__(self, "holder_fill_ratio", sequence_length / holder_length)
         object.__setattr__(self, "underfilled", underfilled)
         object.__setattr__(
@@ -121,7 +97,6 @@ class HolderOccupancyEvidence:
                 and underfilled
             ),
         )
-        object.__setattr__(self, "calibration_used", scale is not None)
 
 
 def strip_completeness_evidence(
@@ -151,7 +126,6 @@ def strip_completeness_evidence(
 
 def holder_occupancy_evidence(
     *,
-    layout: str,
     count: int,
     holder_span: HolderSpan,
     photo_apertures: tuple[PhotoAperture, ...],
@@ -160,7 +134,6 @@ def holder_occupancy_evidence(
     content_support_available: bool,
     photo_aperture_coverage: PhotoApertureCoverageEvidence,
     frame_dimensions: FrameDimensionEvidence,
-    calibration: ScanCalibrationResolution,
 ) -> HolderOccupancyEvidence:
     completeness = strip_completeness_evidence(
         count=count,
@@ -168,7 +141,6 @@ def holder_occupancy_evidence(
         separator_assignments=separator_assignments,
         physical_spec=physical_spec,
     )
-    source_long_axis = "x" if is_horizontal_layout(layout) else "y"
     return HolderOccupancyEvidence(
         strip_completeness=completeness,
         content_support_available=content_support_available,
@@ -183,9 +155,5 @@ def holder_occupancy_evidence(
             min(item.frame_crop_envelope.box.top for item in photo_apertures),
             max(item.frame_crop_envelope.box.right for item in photo_apertures),
             max(item.frame_crop_envelope.box.bottom for item in photo_apertures),
-        ),
-        source_long_axis=source_long_axis,
-        long_axis_px_per_mm=(
-            calibration.px_per_mm(source_long_axis)
         ),
     )

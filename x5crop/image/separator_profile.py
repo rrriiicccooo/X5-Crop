@@ -108,7 +108,7 @@ def separator_profile_signals(
     )
     texture_scale = max(
         floor,
-        statistics.texture_quantiles[1],
+        statistics.texture_signal,
         statistics.texture_mad,
     )
     tonal_deviation = np.clip(
@@ -121,7 +121,7 @@ def separator_profile_signals(
     gradient = np.abs(np.diff(data, axis=1, prepend=data[:, :1])).mean(axis=0)
     gradient_scale = max(
         floor,
-        statistics.gradient_quantiles[1],
+        statistics.gradient_signal,
         statistics.gradient_mad,
     )
     transition_uniformity = np.minimum(

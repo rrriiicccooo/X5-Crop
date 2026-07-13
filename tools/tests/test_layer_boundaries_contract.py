@@ -13,6 +13,7 @@ from tools.tests.architecture_contracts import (
     functions_with_unused_parameters,
     functions_with_untyped_parameters,
     invalid_dataclass_default_factories,
+    modules_importing_external,
     modules_with_export_lists,
     pass_through_classes,
     pass_through_source_functions,
@@ -104,6 +105,26 @@ class LayerBoundariesContractTest(unittest.TestCase):
             ),
             [],
         )
+        self.assertEqual(
+            forbidden_import_edges(("x5crop.io",), ("x5crop.run_config",)),
+            [],
+        )
+
+    def test_tiff_library_and_metadata_semantics_have_one_io_owner(self) -> None:
+        self.assertEqual(modules_importing_external("tifffile"), ["x5crop.io.tiff"])
+
+        io_source = (PROJECT_ROOT / "x5crop/io/tiff.py").read_text(encoding="utf-8")
+        bootstrap_source = (PROJECT_ROOT / "x5crop/runtime/bootstrap.py").read_text(
+            encoding="utf-8"
+        )
+        export_source = (PROJECT_ROOT / "x5crop/export/crops.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("def read_tiff_page_shape", io_source)
+        self.assertIn("def write_validated_tiff", io_source)
+        self.assertIn("read_tiff_page_shape", bootstrap_source)
+        self.assertIn("write_validated_tiff", export_source)
+        self.assertNotIn("run_config", io_source)
 
     def test_detection_stages_follow_one_way_ownership(self) -> None:
         contracts = (

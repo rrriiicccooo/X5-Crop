@@ -5,7 +5,8 @@ from .options import DEFAULT_OUTPUT_BLEED
 from ..configuration.bundle import DetectionConfigurationBundle
 from ..run_config import RunConfig
 from .app import print_run_header, run_runtime
-from .input_probe import first_tiff_shape, iter_input_files
+from .input_probe import iter_input_files
+from ..io.tiff import read_tiff_page_shape
 from .invocation import RuntimeInvocation
 from .limits import DIAGNOSTICS_JOB_LIMIT, STANDARD_JOB_LIMIT
 from .options import RuntimeOptions
@@ -17,7 +18,7 @@ def runtime_invocation_from_options(options: RuntimeOptions) -> RuntimeInvocatio
     if first_file is None:
         raise ValueError(f"No TIFF files found: {options.input_path}")
 
-    height, width = first_tiff_shape(first_file, options.page)
+    height, width = read_tiff_page_shape(first_file, options.page)
     configuration_bundle = DetectionConfigurationBundle.for_format_mode(
         options.format_id,
         options.strip_mode,

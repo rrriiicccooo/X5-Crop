@@ -11,6 +11,34 @@ from tools.tests.architecture_contracts import (
 
 
 class ArchitectureOwnershipContractTest(unittest.TestCase):
+    def test_image_statistics_expose_only_consumed_named_measurements(self) -> None:
+        from x5crop.image.statistics import (
+            ImageMeasurementStatistics,
+            ImageMeasurementStatisticsParameters,
+        )
+
+        self.assertEqual(
+            tuple(field.name for field in fields(ImageMeasurementStatistics)),
+            (
+                "intensity_low",
+                "intensity_median",
+                "intensity_high",
+                "intensity_mad",
+                "gradient_baseline",
+                "gradient_signal",
+                "gradient_mad",
+                "texture_signal",
+                "texture_mad",
+                "edge_texture_limit",
+            ),
+        )
+        parameter_fields = tuple(
+            field.name for field in fields(ImageMeasurementStatisticsParameters)
+        )
+        self.assertNotIn("intensity_percentiles", parameter_fields)
+        self.assertNotIn("noise_percentiles", parameter_fields)
+        self.assertNotIn("edge_texture_percentiles", parameter_fields)
+
     def test_frame_topology_is_a_geometry_invariant_not_duplicate_evidence(self) -> None:
         from x5crop.detection.candidate.assessment.candidate_gate import (
             CANDIDATE_GATE_CHECK_CODES,

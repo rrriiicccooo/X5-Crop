@@ -7,12 +7,12 @@ import numpy as np
 import tifffile
 
 from .model import ImageProfile, TiffExtraTag, TiffMetadata
-from ..run_config import CompressionMode
 from ..utils import (
     enum_name,
     infer_axes,
     infer_axes_from_shape,
     planar_config_name,
+    spatial_shape_from_shape,
 )
 
 
@@ -158,6 +158,21 @@ def read_tiff_profile(path: Path, page_index: int) -> tuple[ImageProfile, list[s
     return profile, warnings
 
 
+def read_tiff_page_shape(path: Path, page_index: int) -> tuple[int, int]:
+    if page_index < 0:
+        raise ValueError("--page must be 0 or greater")
+    with tifffile.TiffFile(path) as tif:
+        if not tif.pages:
+            raise ValueError(f"TIFF has no pages: {path}")
+        if page_index >= len(tif.pages):
+            raise ValueError(
+                f"--page {page_index} is out of range; "
+                f"TIFF has {len(tif.pages)} pages"
+            )
+        shape = tuple(int(value) for value in tif.pages[page_index].shape)
+    return spatial_shape_from_shape(shape)
+
+
 def read_tiff(path: Path, page_index: int) -> tuple[np.ndarray, ImageProfile, list[str]]:
     warnings: list[str] = []
     with tifffile.TiffFile(path) as tif:
@@ -176,7 +191,7 @@ def read_tiff(path: Path, page_index: int) -> tuple[np.ndarray, ImageProfile, li
 
 def compression_for_write(
     profile: ImageProfile,
-    mode: CompressionMode,
+    mode: str,
 ) -> str | None:
     if mode not in {"none", "same"}:
         raise ValueError(f"Unsupported TIFF compression mode: {mode}")
@@ -198,7 +213,7 @@ def compression_for_write(
 
 def tiff_write_kwargs(
     profile: ImageProfile,
-    compression_mode: CompressionMode,
+    compression_mode: str,
 ) -> dict[str, Any]:
     kwargs: dict[str, Any] = {"metadata": None}
     photometric = profile.photometric.lower()
@@ -287,7 +302,7 @@ def validate_written_tiff(
     out_path: Path,
     expected_array: np.ndarray,
     source_profile: ImageProfile,
-    compression_mode: CompressionMode,
+    compression_mode: str,
 ) -> None:
     problems: list[str] = []
     with tifffile.TiffFile(out_path) as tif:
@@ -364,3 +379,17 @@ def validate_written_tiff(
 
     if problems:
         raise RuntimeError("Output TIFF validation failed for " + str(out_path) + ":\n  - " + "\n  - ".join(problems))
+
+
+def write_validated_tiff(
+    path: Path,
+    pixels: np.ndarray,
+    source_profile: ImageProfile,
+    compression_mode: str,
+) -> None:
+    tifffile.imwrite(
+        path,
+        pixels,
+        **tiff_write_kwargs(source_profile, compression_mode),
+    )
+    validate_written_tiff(path, pixels, source_profile, compression_mode)

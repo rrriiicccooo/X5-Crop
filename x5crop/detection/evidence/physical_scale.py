@@ -13,13 +13,12 @@ from ...units import (
     PhysicalScaleObservation,
     PhysicalScaleScope,
     PhysicalScaleSource,
-    ScanCalibrationResolution,
 )
 from ..physical.model import PhotoSequenceSolution
 from .holder_boundary import HolderBoundaryEvidence
 
 
-MINIMUM_FRAME_DIMENSION_CONSENSUS_OBSERVATIONS = 2
+MINIMUM_PHOTO_APERTURE_DIMENSION_CONSENSUS_OBSERVATIONS = 2
 
 
 def _path_has_clear_inner_content(
@@ -61,7 +60,7 @@ def boundary_scale_observations(
                     source_axis,
                     lower,
                     None,
-                    PhysicalScaleSource.FRAME_SHORT_AXIS,
+                    PhysicalScaleSource.HOLDER_SHORT_AXIS,
                     PhysicalScaleScope.ROOT_MEASUREMENT,
                     MeasurementProvenance(
                         MeasurementIdentity.SHORT_AXIS_BOUNDARIES,
@@ -87,7 +86,7 @@ def _dimension_consensus_observations(
         if item.leading.independently_observed
         and item.trailing.independently_observed
     )
-    if len(apertures) < MINIMUM_FRAME_DIMENSION_CONSENSUS_OBSERVATIONS:
+    if len(apertures) < MINIMUM_PHOTO_APERTURE_DIMENSION_CONSENSUS_OBSERVATIONS:
         return ()
     return tuple(
         PhysicalScaleObservation(
@@ -100,7 +99,7 @@ def _dimension_consensus_observations(
                 aperture.trailing.position.minus(aperture.leading.position).maximum
                 / frame_width_mm
             ),
-            source=PhysicalScaleSource.FRAME_DIMENSION_CONSENSUS,
+            source=PhysicalScaleSource.PHOTO_APERTURE_DIMENSION_CONSENSUS,
             scope=PhysicalScaleScope.CANDIDATE_GEOMETRY,
             provenance=MeasurementProvenance(
                 MeasurementIdentity.PHOTO_EDGES,
@@ -158,7 +157,7 @@ def _short_axis_observation(
         axis=source_axis,
         minimum_px_per_mm=scale,
         maximum_px_per_mm=None,
-        source=PhysicalScaleSource.FRAME_SHORT_AXIS,
+        source=PhysicalScaleSource.PHOTO_APERTURE_SHORT_AXIS,
         scope=PhysicalScaleScope.CANDIDATE_GEOMETRY,
         provenance=MeasurementProvenance(
             MeasurementIdentity.SHORT_AXIS_BOUNDARIES,
@@ -184,35 +183,11 @@ def physical_scale_observations(
     )
 
 
-def candidate_scan_calibration(
-    context_calibration: ScanCalibrationResolution,
-    geometry: PhotoSequenceSolution,
-    holder_boundary: HolderBoundaryEvidence,
-) -> ScanCalibrationResolution:
-    observations = tuple(
-        dict.fromkeys(
-            (
-                *context_calibration.physical_observations,
-                *physical_scale_observations(geometry, holder_boundary),
-            )
-        )
-    )
-    return ScanCalibrationResolution.from_observations(
-        context_calibration.metadata,
-        observations,
-    )
-
-
 def candidate_scale_observations_match_geometry(
     geometry: PhotoSequenceSolution,
     holder_boundary: HolderBoundaryEvidence,
-    calibration: ScanCalibrationResolution,
+    observations: tuple[PhysicalScaleObservation, ...],
 ) -> bool:
-    actual = tuple(
-        observation
-        for observation in calibration.physical_observations
-        if observation.scope == PhysicalScaleScope.CANDIDATE_GEOMETRY
-    )
     expected = physical_scale_observations(geometry, holder_boundary)
 
     def identity(observation: PhysicalScaleObservation) -> tuple[object, ...]:
@@ -228,4 +203,4 @@ def candidate_scale_observations_match_geometry(
             provenance.boundary_anchors,
         )
 
-    return tuple(map(identity, actual)) == tuple(map(identity, expected))
+    return tuple(map(identity, observations)) == tuple(map(identity, expected))

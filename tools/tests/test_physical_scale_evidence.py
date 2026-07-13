@@ -8,10 +8,8 @@ from typing import get_type_hints
 
 from tools.tests.physical_gate_support import candidate_fixture
 from x5crop.detection.evidence.holder_boundary import HolderBoundaryEvidence
-from x5crop.detection.evidence.holder_occupancy import holder_occupancy_evidence
 from x5crop.detection.evidence.physical_scale import (
     boundary_scale_observations,
-    candidate_scan_calibration,
     candidate_scale_observations_match_geometry,
     physical_scale_observations,
 )
@@ -86,13 +84,48 @@ class PhysicalScaleEvidenceTests(unittest.TestCase):
                 "x",
                 1.0,
                 1.0,
-                PhysicalScaleSource.FRAME_DIMENSION_CONSENSUS,
+                PhysicalScaleSource.PHOTO_APERTURE_DIMENSION_CONSENSUS,
                 PhysicalScaleScope.CANDIDATE_GEOMETRY,
                 MeasurementProvenance(
                     MeasurementIdentity.SHORT_AXIS_BOUNDARIES,
                     "wrong_root",
                     (),
                 ),
+            )
+
+    def test_scale_source_has_one_legal_scope(self) -> None:
+        provenance = MeasurementProvenance(
+            MeasurementIdentity.PHOTO_EDGES,
+            "candidate_dimension_scale",
+            (MeasurementIdentity.FRAME_DIMENSIONS,),
+        )
+        with self.assertRaises(ValueError):
+            PhysicalScaleObservation(
+                "x",
+                10.0,
+                10.0,
+                PhysicalScaleSource.PHOTO_APERTURE_DIMENSION_CONSENSUS,
+                PhysicalScaleScope.ROOT_MEASUREMENT,
+                provenance,
+            )
+
+    def test_root_calibration_rejects_candidate_scale_observations(self) -> None:
+        observation = PhysicalScaleObservation(
+            "x",
+            10.0,
+            10.0,
+            PhysicalScaleSource.PHOTO_APERTURE_DIMENSION_CONSENSUS,
+            PhysicalScaleScope.CANDIDATE_GEOMETRY,
+            MeasurementProvenance(
+                MeasurementIdentity.PHOTO_EDGES,
+                "candidate_dimension_scale",
+                (MeasurementIdentity.FRAME_DIMENSIONS,),
+            ),
+        )
+        with self.assertRaises(ValueError):
+            ScanCalibrationResolution.from_observations(
+                ResolutionMetadataObservation(None, None),
+                (observation,),
             )
 
     def test_two_textured_inner_edges_produce_short_axis_lower_bound(self) -> None:
@@ -104,7 +137,7 @@ class PhysicalScaleEvidenceTests(unittest.TestCase):
         short_axis = next(
             item
             for item in observations
-            if item.source == PhysicalScaleSource.FRAME_SHORT_AXIS
+            if item.source == PhysicalScaleSource.PHOTO_APERTURE_SHORT_AXIS
         )
         self.assertEqual(short_axis.axis, "y")
         self.assertEqual(short_axis.minimum_px_per_mm, 100.0 / 24.0)
@@ -119,7 +152,7 @@ class PhysicalScaleEvidenceTests(unittest.TestCase):
                 )
                 self.assertFalse(
                     any(
-                        item.source == PhysicalScaleSource.FRAME_SHORT_AXIS
+                        item.source == PhysicalScaleSource.PHOTO_APERTURE_SHORT_AXIS
                         for item in observations
                     )
                 )
@@ -151,48 +184,21 @@ class PhysicalScaleEvidenceTests(unittest.TestCase):
         self.assertEqual(observations[0].scope, PhysicalScaleScope.ROOT_MEASUREMENT)
         self.assertIsNone(observations[0].maximum_px_per_mm)
 
-    def test_candidate_calibration_preserves_root_observations(self) -> None:
-        root = PhysicalScaleObservation(
-            "y",
-            80.0,
-            None,
-            PhysicalScaleSource.FRAME_SHORT_AXIS,
-            PhysicalScaleScope.ROOT_MEASUREMENT,
-            MeasurementProvenance(
-                MeasurementIdentity.SHORT_AXIS_BOUNDARIES,
-                "root_boundary_scale",
-                (MeasurementIdentity.BOUNDARY_PATHS,),
-            ),
-        )
-        context = ScanCalibrationResolution.from_observations(
-            ResolutionMetadataObservation(10.0, 10.0),
-            (root,),
-        )
-        candidate = candidate_scan_calibration(
-            context,
-            candidate_fixture().geometry,
-            _holder_boundary(frozenset()),
-        )
-        self.assertIn(root, candidate.physical_observations)
-
     def test_candidate_scale_identity_ignores_description_text(self) -> None:
         candidate = candidate_fixture()
         evidence = candidate.assessment.evidence
-        renamed = ScanCalibrationResolution.from_observations(
-            evidence.scan_calibration.metadata,
-            tuple(
-                replace(
-                    observation,
-                    provenance=replace(
-                        observation.provenance,
-                        source=f"description_{index}",
-                    ),
-                )
-                for index, observation in enumerate(
-                    evidence.scan_calibration.physical_observations,
-                    start=1,
-                )
-            ),
+        renamed = tuple(
+            replace(
+                observation,
+                provenance=replace(
+                    observation.provenance,
+                    source=f"description_{index}",
+                ),
+            )
+            for index, observation in enumerate(
+                evidence.physical_scale_observations,
+                start=1,
+            )
         )
         self.assertTrue(
             candidate_scale_observations_match_geometry(
@@ -211,7 +217,8 @@ class PhysicalScaleEvidenceTests(unittest.TestCase):
         long_axis = tuple(
             item
             for item in observations
-            if item.source == PhysicalScaleSource.FRAME_DIMENSION_CONSENSUS
+            if item.source
+            == PhysicalScaleSource.PHOTO_APERTURE_DIMENSION_CONSENSUS
         )
         self.assertEqual(len(long_axis), 2)
         self.assertTrue(
@@ -253,46 +260,11 @@ class PhysicalScaleEvidenceTests(unittest.TestCase):
         )
         self.assertFalse(
             any(
-                item.source == PhysicalScaleSource.FRAME_DIMENSION_CONSENSUS
+                item.source
+                == PhysicalScaleSource.PHOTO_APERTURE_DIMENSION_CONSENSUS
                 for item in observations
             )
         )
-
-    def test_holder_occupancy_uses_supported_long_axis_independently(self) -> None:
-        candidate = candidate_fixture()
-        geometry = candidate.geometry
-        evidence = candidate.assessment.evidence
-        calibration = ScanCalibrationResolution.from_observations(
-            ResolutionMetadataObservation(10.0, None),
-            (
-                PhysicalScaleObservation(
-                    "x",
-                    10.0,
-                    10.0,
-                    PhysicalScaleSource.FRAME_DIMENSION_CONSENSUS,
-                    PhysicalScaleScope.ROOT_MEASUREMENT,
-                    MeasurementProvenance(
-                        MeasurementIdentity.PHOTO_EDGES,
-                        "long_axis_consensus",
-                        (MeasurementIdentity.SEPARATOR_PROFILE,),
-                    ),
-                ),
-            ),
-        )
-        occupancy = holder_occupancy_evidence(
-            layout=geometry.layout,
-            count=geometry.count,
-            holder_span=geometry.holder_span,
-            photo_apertures=geometry.photo_apertures,
-            separator_assignments=geometry.separator_assignments,
-            physical_spec=format_spec("135"),
-            content_support_available=evidence.photo_content.support_available,
-            photo_aperture_coverage=evidence.photo_aperture_coverage,
-            frame_dimensions=evidence.frame_dimensions,
-            calibration=calibration,
-        )
-        self.assertFalse(calibration.fully_supported)
-        self.assertEqual(occupancy.long_axis_px_per_mm, 10.0)
 
     def test_active_scale_model_has_no_legacy_trust_wording(self) -> None:
         root = Path(__file__).resolve().parents[2] / "x5crop"

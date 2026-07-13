@@ -50,7 +50,7 @@ from x5crop.detection.evidence.holder_occupancy import (
     StripCompletenessEvidence,
 )
 from x5crop.detection.evidence.partial_edge import partial_edge_safety_evidence
-from x5crop.detection.evidence.physical_scale import candidate_scan_calibration
+from x5crop.detection.evidence.physical_scale import physical_scale_observations
 from x5crop.detection.evidence.separator_sequence import separator_sequence_evidence
 from x5crop.detection.evidence.transform_geometry import (
     TransformGeometryEvidence,
@@ -199,12 +199,12 @@ def supported_calibration_fixture(
             axis,
             value,
             value,
-            PhysicalScaleSource.FRAME_DIMENSION_CONSENSUS,
+            PhysicalScaleSource.HOLDER_SHORT_AXIS,
             PhysicalScaleScope.ROOT_MEASUREMENT,
             MeasurementProvenance(
-                MeasurementIdentity.PHOTO_EDGES,
+                MeasurementIdentity.SHORT_AXIS_BOUNDARIES,
                 "test_scale",
-                (MeasurementIdentity.FORMAT_PHYSICAL_SPEC,),
+                (MeasurementIdentity.BOUNDARY_PATHS,),
             ),
         )
         for axis, value in (("x", x_px_per_mm), ("y", y_px_per_mm))
@@ -521,8 +521,7 @@ def candidate_evidence_fixture(
         unavailable_calibration_fixture(),
     )
     holder = holder_boundary_evidence(geometry, 1.0)
-    scan_calibration = candidate_scan_calibration(
-        unavailable_calibration_fixture(),
+    candidate_scale = physical_scale_observations(
         geometry,
         holder,
     )
@@ -610,7 +609,7 @@ def candidate_evidence_fixture(
             )
         ),
         holder_boundary=holder,
-        scan_calibration=scan_calibration,
+        physical_scale_observations=candidate_scale,
         external_aperture_preservation=ExternalAperturePreservationEvidence(
             workspace,
             sequence,
@@ -626,8 +625,6 @@ def candidate_evidence_fixture(
             complete_strip_can_be_underfilled=False,
             holder_span=geometry.holder_span,
             photo_sequence_envelope=geometry.photo_sequence_envelope,
-            source_long_axis="x",
-            long_axis_px_per_mm=None,
         ),
         partial_edge_safety=partial_edge_safety_evidence(
             geometry,

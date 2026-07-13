@@ -149,8 +149,8 @@ def _cross_axis_measurement(
         )
     measurement_floor = float(parameters.minimum_profile_range)
     if (
-        float(statistics.gradient_quantiles[1]) <= measurement_floor
-        and float(statistics.texture_quantiles[1]) <= measurement_floor
+        float(statistics.gradient_signal) <= measurement_floor
+        and float(statistics.texture_signal) <= measurement_floor
     ):
         return SeparatorCrossAxisMeasurement(
             aperture_cross_axis,
@@ -164,7 +164,7 @@ def _cross_axis_measurement(
     appearance_center = float(np.median(row_appearance))
     appearance_scale = max(
         measurement_floor,
-        float(statistics.gradient_quantiles[0]),
+        float(statistics.gradient_baseline),
         float(statistics.gradient_mad),
         float(statistics.texture_mad),
     )
@@ -174,7 +174,7 @@ def _cross_axis_measurement(
     row_texture = row_measurements.row_texture[row_start:row_end]
     texture_supported = row_texture <= max(
         measurement_floor,
-        float(statistics.texture_quantiles[1]),
+        float(statistics.texture_signal),
     )
     flank_references = tuple(
         reference[row_start:row_end]
@@ -184,7 +184,7 @@ def _cross_axis_measurement(
         np.maximum.reduce(
             tuple(np.abs(row_appearance - reference) for reference in flank_references)
         )
-        >= max(measurement_floor, float(statistics.gradient_quantiles[1]))
+        >= max(measurement_floor, float(statistics.gradient_signal))
         if flank_references
         else np.zeros_like(appearance_coherent, dtype=bool)
     )

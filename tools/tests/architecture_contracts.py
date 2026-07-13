@@ -139,6 +139,28 @@ def source_import_graph() -> dict[str, frozenset[str]]:
     }
 
 
+def modules_importing_external(package_name: str) -> list[str]:
+    importers: list[str] = []
+    for module in source_modules().values():
+        for node in ast.walk(parsed_source(module)):
+            imported = False
+            if isinstance(node, ast.Import):
+                imported = any(
+                    alias.name == package_name
+                    or alias.name.startswith(f"{package_name}.")
+                    for alias in node.names
+                )
+            elif isinstance(node, ast.ImportFrom) and node.level == 0:
+                imported = bool(
+                    node.module == package_name
+                    or (node.module or "").startswith(f"{package_name}.")
+                )
+            if imported:
+                importers.append(module.name)
+                break
+    return sorted(importers)
+
+
 def source_layer_import_graph() -> dict[str, frozenset[str]]:
     graph: dict[str, set[str]] = {
         layer: set() for layer in SOURCE_LAYER_PREFIXES
