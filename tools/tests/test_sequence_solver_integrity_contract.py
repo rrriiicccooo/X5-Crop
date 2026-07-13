@@ -17,6 +17,7 @@ from x5crop.detection.physical.sequence_solver import solve_frame_sequence
 from x5crop.detection.physical.model import (
     PhotoInterval,
     photo_intervals_for_sequence,
+    photo_intervals_match_sequence,
 )
 from x5crop.detection.physical.spacing import (
     CorroboratedSpacingEvidence,
@@ -29,6 +30,7 @@ from x5crop.domain import (
     BoundaryKind,
     BoundarySide,
     Box,
+    CropEnvelope,
     EvidenceState,
     FrameBoundaryReference,
     FrameDimensionPrior,
@@ -101,6 +103,15 @@ class SequenceSolverIntegrityContractTest(unittest.TestCase):
 
         self.assertEqual(intervals[0].start, PixelInterval(0.0, 10.0))
         self.assertEqual(intervals[0].end, PixelInterval(90.0, 100.0))
+        self.assertTrue(
+            photo_intervals_match_sequence(
+                intervals,
+                (),
+                (Box(0, 0, 100, 100),),
+                paths,
+                CropEnvelope(Box(0, 0, 100, 100)),
+            )
+        )
 
     def test_runtime_sequence_order_can_corroborate_one_missing_overlap(
         self,

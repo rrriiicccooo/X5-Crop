@@ -170,6 +170,14 @@ def photo_intervals_match_sequence(
         for observation in boundary_paths
         if observation.side in {BoundarySide.LEADING, BoundarySide.TRAILING}
     }
+    sequence_axis = PixelInterval(
+        float(frames[0].left),
+        float(frames[-1].right),
+    )
+
+    def normalized(interval: PixelInterval) -> PixelInterval | None:
+        return interval.intersection(sequence_axis)
+
     envelope = crop_envelope.box
     for index, (photo, frame) in enumerate(
         zip(photo_intervals, frames, strict=True),
@@ -192,13 +200,13 @@ def photo_intervals_match_sequence(
                 if photo.start.minimum < observation.end:
                     return False
             elif (
-                photo.start != PixelInterval.exact(observation.end)
+                photo.start != normalized(PixelInterval.exact(observation.end))
                 or photo.start_provenance != observation.provenance
             ):
                 return False
         elif previous is not None and not photo.start_independently_observed:
             if (
-                photo.start != previous.position
+                photo.start != normalized(previous.position)
                 or photo.start_provenance != previous.provenance
             ):
                 return False
@@ -206,7 +214,7 @@ def photo_intervals_match_sequence(
             leading = sequence_edges.get(BoundarySide.LEADING)
             if leading is not None and photo.start_provenance == leading.provenance:
                 if (
-                    photo.start != leading.position
+                    photo.start != normalized(leading.position)
                     or photo.start_independently_observed
                     != (leading.kind != BoundaryKind.CANVAS_CLIP)
                 ):
@@ -222,13 +230,13 @@ def photo_intervals_match_sequence(
                 if photo.end.maximum > observation.start:
                     return False
             elif (
-                photo.end != PixelInterval.exact(observation.start)
+                photo.end != normalized(PixelInterval.exact(observation.start))
                 or photo.end_provenance != observation.provenance
             ):
                 return False
         elif following is not None and not photo.end_independently_observed:
             if (
-                photo.end != following.position
+                photo.end != normalized(following.position)
                 or photo.end_provenance != following.provenance
             ):
                 return False
@@ -236,7 +244,7 @@ def photo_intervals_match_sequence(
             trailing = sequence_edges.get(BoundarySide.TRAILING)
             if trailing is not None and photo.end_provenance == trailing.provenance:
                 if (
-                    photo.end != trailing.position
+                    photo.end != normalized(trailing.position)
                     or photo.end_independently_observed
                     != (trailing.kind != BoundaryKind.CANVAS_CLIP)
                 ):

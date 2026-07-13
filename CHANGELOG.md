@@ -20,6 +20,8 @@ repository rules in `AGENTS.md`.
   finalization、report identity 与 cache restoration 不再回退到原始 TIFF shape。
 - Sequence solver 将 boundary uncertainty 与可见 sequence interval 规范求交；无正宽、非单调或非法
   geometry 返回 typed unavailable，不再形成非法 `SequenceSolution` 或图片级 runtime exception。
+- PhotoInterval identity validation 统一复用 canonical interval factory；删除用未求交 boundary path
+  重复推导 identity 的平行校验，`X5_00017` 与 `X5_00026` 不再发生自相矛盾的 geometry exception。
 - `InternalBoundaryPreservationEvidence` 逐条验证内部切线。Frame union coverage 不再替代切线安全；
   连续内容跨越没有 independent separator、measured contact 或 corroborated overlap 的切线会明确
   contradict candidate content preservation。
