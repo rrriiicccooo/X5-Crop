@@ -9,6 +9,20 @@ from ..strip_modes import FULL, PARTIAL
 from ..units import ScanCalibrationResolution
 
 
+@dataclass
+class DetectionExecutionStatistics:
+    assessed_candidates: int = 0
+    assignment_evaluations: int = 0
+
+    def record_assessed_candidate(self) -> None:
+        self.assessed_candidates += 1
+
+    def record_assignment_evaluations(self, count: int) -> None:
+        if count < 0:
+            raise ValueError("assignment evaluation count cannot be negative")
+        self.assignment_evaluations += count
+
+
 @dataclass(frozen=True)
 class DetectionRequest:
     layout: str
@@ -30,6 +44,7 @@ class DetectionContext:
     configuration: DetectionConfiguration
     lane_configuration: DetectionConfiguration | None
     measurement_cache: MeasurementCache
+    execution_statistics: DetectionExecutionStatistics
 
     def __post_init__(self) -> None:
         if self.request.strip_mode != self.configuration.strip_mode:

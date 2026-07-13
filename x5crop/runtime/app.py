@@ -16,6 +16,7 @@ from .outcome import (
     FailedInput,
     FailureStage,
     InputProcessingOutcome,
+    RuntimeMetrics,
 )
 from .workflow import process_one
 
@@ -72,6 +73,7 @@ def _failed_input_from_exception(
         debug_analysis=None,
         output_files=(),
         traceback_text=traceback.format_exc(),
+        metrics=RuntimeMetrics.unavailable(),
     )
 
 
@@ -85,6 +87,7 @@ def _failure_manifest(failure: FailedInput) -> RunManifestRecord:
         report_written=False,
         debug_analysis=failure.debug_analysis,
         output_files=failure.output_files,
+        metrics=failure.metrics,
     )
 
 
@@ -112,6 +115,7 @@ def _handle_input_outcome(
             debug_analysis=outcome.debug_analysis,
             output_files=tuple(result.record["output"]["output_files"]),
             traceback_text=traceback.format_exc(),
+            metrics=outcome.metrics,
         )
         append_run_manifest(source, config, _failure_manifest(failure))
         print(f"  error: {failure.error_message}", file=sys.stderr)
@@ -132,6 +136,7 @@ def _handle_input_outcome(
             report_written=report_written,
             debug_analysis=outcome.debug_analysis,
             output_files=output_files,
+            metrics=outcome.metrics,
         ),
     )
     print_report_result(result, config)

@@ -37,8 +37,12 @@ def _assess_sequence_plan(
                 solver_parameters=context.configuration.candidate_plan.sequence_solver,
                 planning_budget_exhausted=plan.search_budget_exhausted,
             )
+            context.execution_statistics.record_assignment_evaluations(
+                outcome.assignment_evaluations
+            )
             if outcome.candidate is not None:
                 assessed.append(assess_candidate(outcome.candidate, context))
+                context.execution_statistics.record_assessed_candidate()
     return assessed
 
 

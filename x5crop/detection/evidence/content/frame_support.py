@@ -102,7 +102,9 @@ def _cached_content_evidence_threshold(
     parameters: ContentEvidenceParameters,
 ) -> float | None:
     key = MeasurementRegionKey(parameters, sequence_box)
-    if key not in cache.content_evidence_thresholds:
+    found = key in cache.content_evidence_thresholds
+    cache.lookup_statistics.record_lookup(found=found)
+    if not found:
         cache.content_evidence_thresholds[key] = content_evidence_threshold(
             evidence,
             parameters,
@@ -195,10 +197,13 @@ def frame_content_evidence(
         sequence_box,
         float(threshold),
     )
-    statistics = cache.content_column_statistics.get(statistics_key)
-    if statistics is None:
-        statistics = ContentColumnStatistics.from_evidence(evidence, threshold)
-        cache.content_column_statistics[statistics_key] = statistics
+    found = statistics_key in cache.content_column_statistics
+    cache.lookup_statistics.record_lookup(found=found)
+    if not found:
+        cache.content_column_statistics[statistics_key] = (
+            ContentColumnStatistics.from_evidence(evidence, threshold)
+        )
+    statistics = cache.content_column_statistics[statistics_key]
 
     observations: list[FrameContentObservation] = []
     for index, frame in enumerate(geometry.frames, start=1):

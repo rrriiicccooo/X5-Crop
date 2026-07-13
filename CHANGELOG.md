@@ -36,6 +36,9 @@ repository rules in `AGENTS.md`.
   geometry。Runtime 以 typed completed/failed outcome 汇总每个输入，并由父进程唯一写入
   `x5_crop_run_manifest.jsonl`。Manifest 精确记录 terminal outcome、失败阶段、report/debug 与实际
   output；report validation 失败会保留并重绘 `RUNTIME ERROR` Debug，更早失败不伪造分析图。
+- Manifest 新增只读运行指标：input processing / detection 时间、assessed candidates、assignment
+  evaluations 与 exact measurement-cache hits/misses。Dual-lane 的 lane cache 共用同一统计 owner；
+  指标不参与 detection、Gate、early-stop 或输出决策。
 
 #### 灰度外观语义与 separator sequence 收敛（2026-07-13）
 

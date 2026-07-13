@@ -11,7 +11,7 @@ from ..image.statistics import (
     ImageMeasurementStatistics,
 )
 from ..image.constants import UINT8_MAX_VALUE
-from . import MeasurementCache
+from . import MeasurementCache, MeasurementCacheStatistics
 
 
 def make_measurement_cache(
@@ -19,6 +19,7 @@ def make_measurement_cache(
     layout: str,
     content_evidence_params: ContentEvidenceImageParameters,
     image_statistics: ImageMeasurementStatistics,
+    lookup_statistics: MeasurementCacheStatistics,
 ) -> MeasurementCache:
     gray_work = work_gray(gray, layout)
     content_evidence = make_content_evidence_gray(
@@ -34,4 +35,5 @@ def make_measurement_cache(
             content_evidence.astype(np.float32) / UINT8_MAX_VALUE
         ),
         image_statistics=image_statistics,
+        lookup_statistics=lookup_statistics,
     )

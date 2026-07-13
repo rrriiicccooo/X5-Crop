@@ -154,6 +154,17 @@ class DetectionCachePerformanceContractTest(unittest.TestCase):
         self.assertIs(first, second)
         measurement.assert_called_once()
 
+    def test_measurement_cache_reports_exact_lookup_hits_and_misses(self) -> None:
+        cache = _cache()
+        corridor = Box(0, 10, 240, 70)
+        parameters = SeparatorProfileParameters()
+
+        cached_separator_profile(cache, corridor, parameters)
+        cached_separator_profile(cache, corridor, parameters)
+
+        self.assertEqual(cache.lookup_statistics.hits, 1)
+        self.assertEqual(cache.lookup_statistics.misses, 1)
+
     def test_boundary_paths_are_measured_once_across_count_hypotheses(self) -> None:
         cache = _cache()
         parameters = BoundaryPathParameters()

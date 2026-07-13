@@ -51,10 +51,15 @@ from x5crop.detection.physical.spacing import (
 from x5crop.domain import CropEnvelope, HolderSpan, VisibleSequenceSpan
 from x5crop.domain import Box, MeasurementProvenance
 from x5crop.configuration.candidate import DualLaneDividerParameters
+from x5crop.cache import MeasurementCacheStatistics
 from x5crop.cache.analysis import make_measurement_cache
 from x5crop.configuration.registry import get_detection_configuration
-from x5crop.detection.context import DetectionContext, DetectionRequest
-from x5crop.detection.modes.dual_lane import choose_dual_lane_detection
+from x5crop.detection.context import (
+    DetectionContext,
+    DetectionExecutionStatistics,
+    DetectionRequest,
+)
+from x5crop.detection.modes.dual_lane import _lane_context, choose_dual_lane_detection
 from x5crop.detection.physical.lane_divider import LaneDividerEvidenceSet
 from x5crop.detection.physical.model import ReviewOnlyGeometry
 from x5crop.image.statistics import image_measurement_statistics
@@ -190,6 +195,36 @@ def _candidate_with_geometry(candidate, geometry):
 
 
 class DualLaneAssessmentTest(unittest.TestCase):
+    def test_lane_caches_share_one_run_lookup_statistics_owner(self) -> None:
+        configuration = get_detection_configuration("135-dual", "full")
+        lane_configuration = get_detection_configuration("135", "full")
+        gray = np.full((120, 240), 128, dtype=np.uint8)
+        statistics = image_measurement_statistics(
+            gray,
+            configuration.preprocess.image_statistics,
+        )
+        context = DetectionContext(
+            scan_calibration=unavailable_calibration_fixture(),
+            request=DetectionRequest("horizontal", "full", None),
+            configuration=configuration,
+            lane_configuration=lane_configuration,
+            measurement_cache=make_measurement_cache(
+                gray,
+                "horizontal",
+                configuration.preprocess.content_evidence_image,
+                statistics,
+                MeasurementCacheStatistics(),
+            ),
+            execution_statistics=DetectionExecutionStatistics(),
+        )
+
+        lane_context = _lane_context(context, Box(0, 0, 240, 60))
+
+        self.assertIs(
+            lane_context.measurement_cache.lookup_statistics,
+            context.measurement_cache.lookup_statistics,
+        )
+
     def test_dual_lane_assessment_consumes_canonical_lane_selections(self) -> None:
         parameters = inspect.signature(compose_dual_lane_candidate).parameters
         self.assertIn("lane_selections", parameters)
@@ -213,7 +248,9 @@ class DualLaneAssessmentTest(unittest.TestCase):
                 "horizontal",
                 configuration.preprocess.content_evidence_image,
                 statistics,
+                MeasurementCacheStatistics(),
             ),
+            execution_statistics=DetectionExecutionStatistics(),
         )
 
         with patch(

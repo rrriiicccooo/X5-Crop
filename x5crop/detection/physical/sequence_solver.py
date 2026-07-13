@@ -56,7 +56,12 @@ class SequenceSolveResult:
     holder_occlusion: HolderOcclusionEvidence
     residuals: SequenceResiduals
     assignment_consensus: BoundaryAssignmentConsensus
+    assignment_evaluations: int
     search_budget_exhausted: bool
+
+    def __post_init__(self) -> None:
+        if self.assignment_evaluations < 0:
+            raise ValueError("assignment evaluation count cannot be negative")
 
 
 class SequenceSolveUnavailableReason(str, Enum):
@@ -66,6 +71,11 @@ class SequenceSolveUnavailableReason(str, Enum):
 @dataclass(frozen=True)
 class SequenceSolveUnavailable:
     reason: SequenceSolveUnavailableReason
+    assignment_evaluations: int
+
+    def __post_init__(self) -> None:
+        if self.assignment_evaluations < 0:
+            raise ValueError("assignment evaluation count cannot be negative")
 
 
 @dataclass(frozen=True)
@@ -79,6 +89,7 @@ class _AssignmentSearchResult:
     states: tuple[_AssignmentState, ...]
     diagnostic: dict[int, SeparatorAssignment]
     budget_exhausted: bool
+    assignment_evaluations: int
 
 
 @dataclass(frozen=True)
@@ -230,7 +241,12 @@ def _monotonic_assignment_solutions(
     visit(1, 0, ())
     if not terminal:
         terminal.append(_AssignmentState(_assignment_rank(()), ()))
-    return _AssignmentSearchResult(tuple(terminal), diagnostic, exhausted)
+    return _AssignmentSearchResult(
+        tuple(terminal),
+        diagnostic,
+        exhausted,
+        evaluations,
+    )
 
 
 def _cuts(
@@ -538,7 +554,7 @@ def _solve_frame_sequence(
     maximum_assignment_evaluations: int,
     *,
     edge_texture_limit: float,
-) -> SequenceSolveResult:
+) -> SequenceSolveResult | SequenceSolveUnavailable:
     occlusion_constraint = holder_occlusion_constraint(
         boundary_paths,
         dimensions.width_px,
@@ -559,19 +575,20 @@ def _solve_frame_sequence(
             edge_texture_limit,
         )
         return SequenceSolveResult(
-            intervals,
-            frames,
-            (),
-            (),
-            (),
-            holder_occlusion,
-            _residuals(span, intervals, (), dimensions),
-            BoundaryAssignmentConsensus(
+            photo_intervals=intervals,
+            frames=frames,
+            assignments=(),
+            boundaries=(),
+            relations=(),
+            holder_occlusion=holder_occlusion,
+            residuals=_residuals(span, intervals, (), dimensions),
+            assignment_consensus=BoundaryAssignmentConsensus(
                 AssignmentConsensusOutcome.AGREED,
                 1,
                 (),
             ),
-            False,
+            assignment_evaluations=0,
+            search_budget_exhausted=False,
         )
     search = _monotonic_assignment_solutions(
         observations,
@@ -581,56 +598,63 @@ def _solve_frame_sequence(
         occlusion_constraint,
         maximum_assignment_evaluations,
     )
-    solved_states = _solve_assignment_states(
-        search.states,
-        span,
-        count,
-        dimensions,
-        occlusion_constraint,
-        dict(focused_observations),
-        boundary_paths,
-    )
-    representative = max(solved_states, key=lambda item: item.state.rank)
-    selected = _selected_assignments(representative.state)
-    boundaries = representative.boundaries
-    focused_assignments = representative.focused_assignments
-    selected_observations = {
-        id(assignment.observation): assignment for assignment in selected.values()
-    }
-    assignments = tuple(
-        selected_observations.get(id(observation), search.diagnostic[id_index])
-        for id_index, observation in enumerate(observations)
-    ) + focused_assignments
-    frames = representative.frames
-    intervals = representative.photo_intervals
-    holder_occlusion = holder_occlusion_for_sequence(
-        boundary_paths,
-        span,
-        boundaries,
-        dimensions.width_px,
-        edge_texture_limit,
-    )
-    relations = _relations(
-        boundaries,
-        dimensions,
-        span,
-        holder_occlusion,
-        boundary_paths,
-    )
-    return SequenceSolveResult(
-        photo_intervals=intervals,
-        frames=frames,
-        assignments=assignments,
-        boundaries=boundaries,
-        relations=relations,
-        holder_occlusion=holder_occlusion,
-        residuals=_residuals(span, intervals, boundaries, dimensions),
-        assignment_consensus=_assignment_consensus(
-            solved_states,
-            budget_exhausted=search.budget_exhausted,
-        ),
-        search_budget_exhausted=search.budget_exhausted,
-    )
+    try:
+        solved_states = _solve_assignment_states(
+            search.states,
+            span,
+            count,
+            dimensions,
+            occlusion_constraint,
+            dict(focused_observations),
+            boundary_paths,
+        )
+        representative = max(solved_states, key=lambda item: item.state.rank)
+        selected = _selected_assignments(representative.state)
+        boundaries = representative.boundaries
+        focused_assignments = representative.focused_assignments
+        selected_observations = {
+            id(assignment.observation): assignment for assignment in selected.values()
+        }
+        assignments = tuple(
+            selected_observations.get(id(observation), search.diagnostic[id_index])
+            for id_index, observation in enumerate(observations)
+        ) + focused_assignments
+        frames = representative.frames
+        intervals = representative.photo_intervals
+        holder_occlusion = holder_occlusion_for_sequence(
+            boundary_paths,
+            span,
+            boundaries,
+            dimensions.width_px,
+            edge_texture_limit,
+        )
+        relations = _relations(
+            boundaries,
+            dimensions,
+            span,
+            holder_occlusion,
+            boundary_paths,
+        )
+        return SequenceSolveResult(
+            photo_intervals=intervals,
+            frames=frames,
+            assignments=assignments,
+            boundaries=boundaries,
+            relations=relations,
+            holder_occlusion=holder_occlusion,
+            residuals=_residuals(span, intervals, boundaries, dimensions),
+            assignment_consensus=_assignment_consensus(
+                solved_states,
+                budget_exhausted=search.budget_exhausted,
+            ),
+            assignment_evaluations=search.assignment_evaluations,
+            search_budget_exhausted=search.budget_exhausted,
+        )
+    except ValueError:
+        return SequenceSolveUnavailable(
+            SequenceSolveUnavailableReason.GEOMETRY_CONSTRAINTS,
+            search.assignment_evaluations,
+        )
 
 
 def solve_frame_sequence(
@@ -661,5 +685,6 @@ def solve_frame_sequence(
         )
     except ValueError:
         return SequenceSolveUnavailable(
-            SequenceSolveUnavailableReason.GEOMETRY_CONSTRAINTS
+            SequenceSolveUnavailableReason.GEOMETRY_CONSTRAINTS,
+            0,
         )

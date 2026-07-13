@@ -227,7 +227,8 @@ x5_crop_output/
 - `needs_review/` 存放需要人工处理的原 TIFF 副本。
 - `x5_crop_report.jsonl` 是机器可读报告。
 - `x5_crop_summary.csv` 是便于人工浏览的摘要表。
-- `x5_crop_run_manifest.jsonl` 为每个输入记录最终运行结果、失败阶段及实际写出的文件。
+- `x5_crop_run_manifest.jsonl` 为每个输入记录最终运行结果、失败阶段、实际写出的文件，以及
+  input processing / detection 时间、assessed candidates、solver evaluations 和精确测量 cache 命中。
 - 普通启动器不会覆盖已有裁切 TIFF；命令行可用 `--overwrite` 覆盖。
 
 默认输出 bleed 为长轴 20px、短轴 10px。只有独立观测的 signed spacing 确认叠片时，
@@ -486,7 +487,9 @@ x5_crop_output/
 ```
 
 `x5_crop_run_manifest.jsonl` contains one terminal record per input, including
-the report/debug/output files that were actually written.
+the report/debug/output files that were actually written and read-only runtime
+metrics for processing, detection, assessed candidates, solver evaluations, and
+exact measurement-cache lookups.
 
 Default output bleed is 20px on the long axis and 10px on the short axis. Only
 independently observed overlap, or overlap uniquely corroborated by trusted

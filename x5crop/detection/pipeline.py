@@ -142,6 +142,7 @@ def _choose_standard_detection(context: DetectionContext) -> SelectionResult:
             if isinstance(built.geometry, ReviewOnlyGeometry)
             else assess_candidate(built, context)
         )
+        context.execution_statistics.record_assessed_candidate()
         candidates = (assessed,)
     selection = select_candidates(
         candidates,
@@ -177,6 +178,7 @@ def choose_detection(context: DetectionContext) -> SelectionResult:
             (assessed,),
             larger_counts_evaluated=True,
         )
+        context.execution_statistics.record_assessed_candidate()
     else:
         selection = _choose_standard_detection(context)
     return selection

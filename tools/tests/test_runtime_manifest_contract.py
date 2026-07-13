@@ -33,6 +33,7 @@ from x5crop.runtime.outcome import (
     CompletedInput,
     FailedInput,
     FailureStage,
+    RuntimeMetrics,
 )
 from x5crop.runtime.prepared_workspace import PreparedWorkspace
 from x5crop.runtime.workflow import process_one
@@ -88,7 +89,32 @@ def _profile() -> ImageProfile:
     )
 
 
+def _metrics() -> RuntimeMetrics:
+    return RuntimeMetrics(1.0, 0.5, 3, 21, 4, 6)
+
+
 class RuntimeManifestContractTest(unittest.TestCase):
+    def test_manifest_owns_runtime_performance_metrics(self) -> None:
+        self.assertIn("metrics", RunManifestRecord.__dataclass_fields__)
+
+    def test_completed_manifest_requires_complete_runtime_metrics(self) -> None:
+        with self.assertRaises(ValueError):
+            RunManifestRecord(
+                source="input.tif",
+                terminal_outcome=RunTerminalOutcome.COMPLETED,
+                failure_stage=None,
+                error_code=None,
+                error_message=None,
+                report_written=True,
+                debug_analysis=None,
+                output_files=(),
+                metrics=RuntimeMetrics.unavailable(),
+            )
+
+    def test_detection_duration_cannot_exceed_input_processing_duration(self) -> None:
+        with self.assertRaises(ValueError):
+            RuntimeMetrics(0.5, 1.0, 1, 1, 0, 0)
+
     def test_manifest_has_one_canonical_terminal_record_shape(self) -> None:
         record = RunManifestRecord(
             source="input.tif",
@@ -99,6 +125,7 @@ class RuntimeManifestContractTest(unittest.TestCase):
             report_written=False,
             debug_analysis=None,
             output_files=(),
+            metrics=_metrics(),
         )
 
         self.assertEqual(
@@ -112,6 +139,14 @@ class RuntimeManifestContractTest(unittest.TestCase):
                 "report_written": False,
                 "debug_analysis": None,
                 "output_files": [],
+                "metrics": {
+                    "processing_seconds": 1.0,
+                    "detection_seconds": 0.5,
+                    "assessed_candidates": 3,
+                    "assignment_evaluations": 21,
+                    "measurement_cache_hits": 4,
+                    "measurement_cache_misses": 6,
+                },
             },
         )
 
@@ -131,7 +166,11 @@ class RuntimeManifestContractTest(unittest.TestCase):
                     "output": {"warnings": [], "output_files": ["frame.tif"]},
                 }
             )
-            completed = CompletedInput(result=result, debug_analysis="debug.jpg")
+            completed = CompletedInput(
+                result=result,
+                debug_analysis="debug.jpg",
+                metrics=_metrics(),
+            )
             with (
                 patch("x5crop.runtime.app.process_one", return_value=completed),
                 patch(
@@ -148,6 +187,7 @@ class RuntimeManifestContractTest(unittest.TestCase):
         self.assertEqual(manifest.terminal_outcome, RunTerminalOutcome.COMPLETED)
         self.assertTrue(manifest.report_written)
         self.assertEqual(manifest.output_files, ("frame.tif",))
+        self.assertEqual(manifest.metrics, _metrics())
 
     def test_failed_input_still_writes_one_terminal_manifest_record(self) -> None:
         with TemporaryDirectory() as temp_dir:
@@ -167,6 +207,7 @@ class RuntimeManifestContractTest(unittest.TestCase):
                 debug_analysis=None,
                 output_files=(),
                 traceback_text=None,
+                metrics=_metrics(),
             )
             with (
                 patch("x5crop.runtime.app.process_one", return_value=failed),
@@ -208,6 +249,7 @@ class RuntimeManifestContractTest(unittest.TestCase):
                 report_written=True,
                 debug_analysis=None,
                 output_files=("frame.tif",),
+                metrics=_metrics(),
             )
 
             path = append_run_manifest(Path("input.tif"), config, record)
@@ -263,7 +305,10 @@ class RuntimeManifestContractTest(unittest.TestCase):
                 ),
                 patch(
                     "x5crop.runtime.workflow.make_measurement_cache",
-                    return_value=SimpleNamespace(layout="horizontal"),
+                    return_value=SimpleNamespace(
+                        layout="horizontal",
+                        lookup_statistics=SimpleNamespace(hits=0, misses=0),
+                    ),
                 ),
                 patch(
                     "x5crop.runtime.workflow.choose_detection",

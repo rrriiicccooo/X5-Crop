@@ -376,7 +376,9 @@ selected geometry -> optional FinalizationPlan -> optional final geometry 的精
 未知 section 或 restoration 失败都会使 cache miss 并重新检测。
 Workflow 对每个输入返回 typed completed/failed outcome。父 runtime 是 report 与
 `x5_crop_run_manifest.jsonl` 的唯一写入者；每个输入恰有一条 terminal manifest record，明确记录
-`completed | runtime_error`、失败阶段、report/debug/output 状态。FinalDetection 已存在但 report
+`completed | runtime_error`、失败阶段、report/debug/output 状态及只读运行指标。Measurement cache
+只统计 exact lookup，sequence solver 只报告实际 assignment evaluations；这些指标不进入 evidence、
+selection、Gate、early-stop 或 output。FinalDetection 已存在但 report
 validation 失败时，现有 Debug Analysis 会以 `RUNTIME ERROR` terminal status 重绘；更早阶段失败不
 伪造 Debug。Completed outcome 内的 report-owned `ReportResult` 在构造时验证 current schema。共享 domain
 不保存 report record、TIFF profile 或用户 bleed 偏好，后者由 `x5crop.output` 独占。

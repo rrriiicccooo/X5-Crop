@@ -2,14 +2,20 @@ from __future__ import annotations
 
 from dataclasses import replace
 from pathlib import Path
+from time import perf_counter
 import traceback
 
 from .analysis_reuse import (
     make_analysis_reuse_signature,
     result_from_reusable_analysis,
 )
+from ..cache import MeasurementCache, MeasurementCacheStatistics
 from ..cache.analysis import make_measurement_cache
-from ..detection.context import DetectionContext, DetectionRequest
+from ..detection.context import (
+    DetectionContext,
+    DetectionExecutionStatistics,
+    DetectionRequest,
+)
 from ..run_config import RunConfig
 from ..run_status import RunTerminalOutcome
 from .frame_bleed import prepare_frame_bleed
@@ -42,6 +48,7 @@ from .outcome import (
     FailedInput,
     FailureStage,
     InputProcessingOutcome,
+    RuntimeMetrics,
 )
 
 
@@ -50,6 +57,11 @@ def process_one(
     config: RunConfig,
     configuration_bundle: DetectionConfigurationBundle,
 ) -> InputProcessingOutcome:
+    started_at = perf_counter()
+    detection_seconds = 0.0
+    execution_statistics = DetectionExecutionStatistics()
+    measurement_cache_statistics = MeasurementCacheStatistics()
+    measurement_cache: MeasurementCache | None = None
     failure_stage = FailureStage.INPUT_PROFILE
     output_surface = output_surface_for_input(input_file, config)
     output_dir = output_surface.root
@@ -85,6 +97,12 @@ def process_one(
             return CompletedInput(
                 result=cached_result,
                 debug_analysis=None,
+                metrics=_runtime_metrics(
+                    started_at,
+                    detection_seconds,
+                    execution_statistics,
+                    measurement_cache,
+                ),
             )
 
         failure_stage = FailureStage.IMAGE_READ
@@ -138,6 +156,7 @@ def process_one(
             config.layout,
             initial_configuration.preprocess.content_evidence_image,
             measurement_statistics,
+            measurement_cache_statistics,
         )
         detection_context = DetectionContext(
             scan_calibration=scan_calibration,
@@ -153,10 +172,15 @@ def process_one(
                 else configuration_bundle.configuration_for(fmt.lane_format_id, "full")
             ),
             measurement_cache=measurement_cache,
+            execution_statistics=execution_statistics,
         )
 
         failure_stage = FailureStage.DETECTION
-        selection = choose_detection(detection_context)
+        detection_started_at = perf_counter()
+        try:
+            selection = choose_detection(detection_context)
+        finally:
+            detection_seconds += perf_counter() - detection_started_at
         selected_candidate = selection.selected
 
         failure_stage = FailureStage.DECISION
@@ -235,6 +259,12 @@ def process_one(
         return CompletedInput(
             result=result,
             debug_analysis=debug_analysis,
+            metrics=_runtime_metrics(
+                started_at,
+                detection_seconds,
+                execution_statistics,
+                measurement_cache,
+            ),
         )
     except Exception as exc:
         traceback_text = traceback.format_exc()
@@ -266,8 +296,35 @@ def process_one(
             debug_analysis=debug_analysis,
             output_files=tuple(output_files),
             traceback_text=traceback_text,
+            metrics=_runtime_metrics(
+                started_at,
+                detection_seconds,
+                execution_statistics,
+                measurement_cache,
+            ),
         )
 
 
 def _extend_unique(items: list[str], additions: list[str]) -> None:
     items.extend(item for item in additions if item not in items)
+
+
+def _runtime_metrics(
+    started_at: float,
+    detection_seconds: float,
+    execution_statistics: DetectionExecutionStatistics,
+    measurement_cache: MeasurementCache | None,
+) -> RuntimeMetrics:
+    cache_hits = 0
+    cache_misses = 0
+    if measurement_cache is not None:
+        cache_hits = measurement_cache.lookup_statistics.hits
+        cache_misses = measurement_cache.lookup_statistics.misses
+    return RuntimeMetrics(
+        processing_seconds=perf_counter() - started_at,
+        detection_seconds=detection_seconds,
+        assessed_candidates=execution_statistics.assessed_candidates,
+        assignment_evaluations=execution_statistics.assignment_evaluations,
+        measurement_cache_hits=cache_hits,
+        measurement_cache_misses=cache_misses,
+    )

@@ -68,6 +68,7 @@ def _lane_context(
             lane_gray,
             lane_configuration.preprocess.image_statistics,
         ),
+        context.measurement_cache.lookup_statistics,
     )
     return DetectionContext(
         scan_calibration=_lane_calibration(context),
@@ -75,6 +76,7 @@ def _lane_context(
         configuration=lane_configuration,
         lane_configuration=None,
         measurement_cache=cache,
+        execution_statistics=context.execution_statistics,
     )
 
 
@@ -198,6 +200,7 @@ def choose_dual_lane_detection(
                 lane_selections,
             )
         )
+        context.execution_statistics.record_assessed_candidate()
     if not parent_candidates:
         parent_candidates.append(
             assess_review_only_candidate(
@@ -207,6 +210,7 @@ def choose_dual_lane_detection(
                 )
             )
         )
+        context.execution_statistics.record_assessed_candidate()
     return select_candidates(
         tuple(parent_candidates),
         larger_counts_evaluated=True,

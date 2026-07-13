@@ -46,15 +46,15 @@ def cached_boundary_path_groups(
     cache: MeasurementCache,
     parameters: BoundaryPathParameters,
 ) -> tuple[BoundaryPathGroup, ...]:
-    groups = cache.boundary_path_groups.get(parameters)
-    if groups is None:
-        groups = boundary_path_groups(
+    found = parameters in cache.boundary_path_groups
+    cache.lookup_statistics.record_lookup(found=found)
+    if not found:
+        cache.boundary_path_groups[parameters] = boundary_path_groups(
             cache.gray_work,
             cache.image_statistics,
             parameters,
         )
-        cache.boundary_path_groups[parameters] = groups
-    return groups
+    return cache.boundary_path_groups[parameters]
 
 
 def _measurement_corridor(

@@ -227,8 +227,13 @@ class OutputReadModelContractTest(unittest.TestCase):
 
     def test_review_only_pipeline_produces_valid_current_report(self) -> None:
         from x5crop.cache.analysis import make_measurement_cache
+        from x5crop.cache import MeasurementCacheStatistics
         from x5crop.configuration.registry import get_detection_configuration
-        from x5crop.detection.context import DetectionContext, DetectionRequest
+        from x5crop.detection.context import (
+            DetectionContext,
+            DetectionExecutionStatistics,
+            DetectionRequest,
+        )
         from x5crop.detection.decision.decision_gate import apply_decision_gate
         from x5crop.detection.final.finalize import (
             finalization_plan_for_selection,
@@ -255,6 +260,7 @@ class OutputReadModelContractTest(unittest.TestCase):
             "horizontal",
             configuration.preprocess.content_evidence_image,
             statistics,
+            MeasurementCacheStatistics(),
         )
         profile = ImageProfile(
             shape=gray.shape,
@@ -277,6 +283,7 @@ class OutputReadModelContractTest(unittest.TestCase):
             configuration=configuration,
             lane_configuration=None,
             measurement_cache=cache,
+            execution_statistics=DetectionExecutionStatistics(),
         )
         selection = choose_detection(context)
         from x5crop.detection.candidate.model import ReviewOnlyEvidence

@@ -34,10 +34,13 @@ from ..plan.count_hypotheses import CountHypothesis
 class SequenceCandidateBuildOutcome:
     candidate: BuiltCandidate | None
     unavailable: SequenceSolveUnavailable | None
+    assignment_evaluations: int
 
     def __post_init__(self) -> None:
         if (self.candidate is None) == (self.unavailable is None):
             raise ValueError("candidate build outcome requires exactly one result")
+        if self.assignment_evaluations < 0:
+            raise ValueError("candidate build assignment evaluations cannot be negative")
 
 
 def _separator_measurement_corridor(
@@ -127,7 +130,11 @@ def build_sequence_candidate(
         edge_texture_limit=cache.image_statistics.edge_texture_limit,
     )
     if isinstance(solved, SequenceSolveUnavailable):
-        return SequenceCandidateBuildOutcome(None, solved)
+        return SequenceCandidateBuildOutcome(
+            None,
+            solved,
+            solved.assignment_evaluations,
+        )
     return SequenceCandidateBuildOutcome(
         BuiltCandidate(
             geometry=SequenceSolution(
@@ -161,4 +168,5 @@ def build_sequence_candidate(
             build_diagnostics=(),
         ),
         None,
+        solved.assignment_evaluations,
     )

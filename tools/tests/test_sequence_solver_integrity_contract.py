@@ -160,6 +160,9 @@ class SequenceSolverIntegrityContractTest(unittest.TestCase):
             solved.relations[1],
             CorroboratedSpacingEvidence,
         )
+        self.assertGreater(solved.assignment_evaluations, 0)
+        with self.assertRaises(ValueError):
+            replace(solved, assignment_evaluations=-1)
 
     def test_holder_boundary_occlusion_expands_sequence_search_without_becoming_evidence(
         self,

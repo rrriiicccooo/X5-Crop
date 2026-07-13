@@ -48,12 +48,27 @@ class ThresholdedMeasurementRegionKey:
 
 
 @dataclass
+class MeasurementCacheStatistics:
+    hits: int = 0
+    misses: int = 0
+
+    def record_lookup(self, *, found: bool) -> None:
+        if found:
+            self.hits += 1
+        else:
+            self.misses += 1
+
+
+@dataclass
 class MeasurementCache:
     layout: str
     gray_work: np.ndarray
     content_evidence_work: np.ndarray
     content_evidence_float_work: np.ndarray
     image_statistics: ImageMeasurementStatistics
+    lookup_statistics: MeasurementCacheStatistics = field(
+        default_factory=MeasurementCacheStatistics
+    )
     separator_profiles: dict[MeasurementRegionKey, np.ndarray] = field(default_factory=dict)
     boundary_path_groups: dict[
         BoundaryPathParameters,

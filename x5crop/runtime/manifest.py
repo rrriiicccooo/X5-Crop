@@ -9,7 +9,7 @@ from ..app_info import RUN_MANIFEST_JSONL_NAME
 from ..output.surface import output_directory_for
 from ..run_config import RunConfig
 from ..run_status import RunTerminalOutcome
-from .outcome import FailureStage
+from .outcome import FailureStage, RuntimeMetrics
 
 
 @dataclass(frozen=True)
@@ -22,6 +22,7 @@ class RunManifestRecord:
     report_written: bool
     debug_analysis: str | None
     output_files: tuple[str, ...]
+    metrics: RuntimeMetrics
 
     def __post_init__(self) -> None:
         failure_values = (
@@ -32,6 +33,8 @@ class RunManifestRecord:
         if self.terminal_outcome == RunTerminalOutcome.COMPLETED:
             if any(value is not None for value in failure_values):
                 raise ValueError("Completed manifest record cannot contain failure detail")
+            if not self.metrics.available:
+                raise ValueError("Completed manifest record requires runtime metrics")
             return
         if any(value is None for value in failure_values):
             raise ValueError("Runtime-error manifest record requires complete failure detail")
@@ -48,6 +51,7 @@ class RunManifestRecord:
             "report_written": self.report_written,
             "debug_analysis": self.debug_analysis,
             "output_files": list(self.output_files),
+            "metrics": self.metrics.as_record(),
         }
 
 

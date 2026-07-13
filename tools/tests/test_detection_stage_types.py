@@ -20,7 +20,11 @@ from x5crop.detection.physical.model import SequenceSolution
 import x5crop.detection.physical.model as physical_model
 from x5crop.detection.decision.model import DecisionGateAssessment
 from x5crop.detection.final.model import FinalDetection
-from x5crop.detection.context import DetectionContext, DetectionRequest
+from x5crop.detection.context import (
+    DetectionContext,
+    DetectionExecutionStatistics,
+    DetectionRequest,
+)
 from x5crop.detection.candidate.assessment.candidate_gate import (
     CandidateGateAssessment,
 )
@@ -63,6 +67,7 @@ class DetectionStageTypeContractTests(unittest.TestCase):
                 full,
                 None,
                 SimpleNamespace(layout="horizontal"),
+                DetectionExecutionStatistics(),
             ),
             lambda: DetectionContext(
                 calibration,
@@ -70,6 +75,7 @@ class DetectionStageTypeContractTests(unittest.TestCase):
                 full,
                 None,
                 SimpleNamespace(layout="horizontal"),
+                DetectionExecutionStatistics(),
             ),
             lambda: DetectionContext(
                 calibration,
@@ -77,6 +83,7 @@ class DetectionStageTypeContractTests(unittest.TestCase):
                 full,
                 lane,
                 SimpleNamespace(layout="horizontal"),
+                DetectionExecutionStatistics(),
             ),
             lambda: DetectionContext(
                 calibration,
@@ -84,6 +91,7 @@ class DetectionStageTypeContractTests(unittest.TestCase):
                 dual,
                 None,
                 SimpleNamespace(layout="horizontal"),
+                DetectionExecutionStatistics(),
             ),
         )
         for factory in invalid_contexts:

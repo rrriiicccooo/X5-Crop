@@ -63,6 +63,9 @@ def hard_safety_candidate(
         solver_budget,
         edge_texture_limit=context.measurement_cache.image_statistics.edge_texture_limit,
     )
+    context.execution_statistics.record_assignment_evaluations(
+        solved.assignment_evaluations
+    )
     hypothesis = CountHypothesis(
         count=count,
         strip_mode=context.request.strip_mode,
