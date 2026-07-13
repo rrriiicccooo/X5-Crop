@@ -155,6 +155,30 @@ class PhotoApertureSolverContractTest(unittest.TestCase):
         self.assertNotIsInstance(solved, PhotoSequenceSolveResult)
         self.assertLess(solved.assignment_evaluations, 5_000)
 
+    def test_unavailable_solution_preserves_search_budget_exhaustion(self) -> None:
+        scope = _scope(
+            width=200,
+            height=120,
+            leading=0.0,
+            trailing=200.0,
+            top=10.0,
+            bottom=110.0,
+            internal_paths=tuple(float(value) for value in range(5, 195, 5)),
+        )
+
+        solved = solve_photo_sequence(
+            (),
+            scope,
+            _plan(scope),
+            12,
+            _dimensions(100.0, 100.0),
+            maximum_assignment_evaluations=1,
+            maximum_solution_alternatives=1,
+        )
+
+        self.assertNotIsInstance(solved, PhotoSequenceSolveResult)
+        self.assertTrue(solved.search_budget_exhausted)
+
     def test_uncertain_edges_must_guarantee_positive_aperture_width(self) -> None:
         scope = _scope(
             width=200,

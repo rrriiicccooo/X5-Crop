@@ -351,7 +351,11 @@ class DetectionStageTypeContractTests(unittest.TestCase):
 
         self.assertEqual(
             set(SequenceCandidateBuildOutcome.__dataclass_fields__),
-            {"candidate", "unavailable", "assignment_evaluations"},
+            {
+                "candidate",
+                "assignment_evaluations",
+                "search_budget_exhausted",
+            },
         )
 
     def test_removed_gap_and_outer_modules_do_not_exist(self) -> None:

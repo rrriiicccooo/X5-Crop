@@ -12,6 +12,7 @@ class CountHypothesisEvaluation:
     hypothesis: CountHypothesis
     candidates: tuple[AssessedCandidate, ...]
     selection: SelectionResult | None
+    search_budget_exhausted: bool
 
     def __post_init__(self) -> None:
         if any(
@@ -27,6 +28,12 @@ class CountHypothesisEvaluation:
             id(candidate) for candidate in self.selection.ranked_candidates
         } != {id(candidate) for candidate in self.candidates}:
             raise ValueError("count evaluation selection must cover its candidates")
+        if (
+            self.selection is not None
+            and self.selection.geometry_resolution.search_budget_exhausted
+            != self.search_budget_exhausted
+        ):
+            raise ValueError("count evaluation budget state must match its selection")
 
     @property
     def geometry_resolved(self) -> bool:

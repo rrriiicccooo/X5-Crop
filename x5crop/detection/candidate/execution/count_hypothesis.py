@@ -17,8 +17,8 @@ from .model import CountHypothesisEvaluation
 def _assess_sequence_plan(
     context: DetectionContext,
     plan: PhotoSequencePlan,
-) -> list[AssessedCandidate]:
-    assessed: list[AssessedCandidate] = []
+) -> tuple[list[AssessedCandidate], bool]:
+    outcomes = []
     for dimensions in frame_dimension_priors(
         context.configuration.physical_spec,
         context.scan_calibration,
@@ -37,10 +37,16 @@ def _assess_sequence_plan(
         context.execution_statistics.record_assignment_evaluations(
             outcome.assignment_evaluations
         )
+        outcomes.append(outcome)
+    search_budget_exhausted = any(
+        outcome.search_budget_exhausted for outcome in outcomes
+    )
+    assessed: list[AssessedCandidate] = []
+    for outcome in outcomes:
         if outcome.candidate is not None:
             assessed.append(assess_candidate(outcome.candidate, context))
             context.execution_statistics.record_assessed_candidate()
-    return assessed
+    return assessed, search_budget_exhausted
 
 
 def evaluate_count_hypothesis(
@@ -55,13 +61,17 @@ def evaluate_count_hypothesis(
         cache=context.measurement_cache,
         boundary_parameters=context.configuration.boundary_path,
     )
-    candidates = _assess_sequence_plan(context, sequence_plan)
+    candidates, search_budget_exhausted = _assess_sequence_plan(
+        context,
+        sequence_plan,
+    )
     selection = (
         select_candidates(
             tuple(candidates),
             larger_count_hypotheses_resolved=(
                 larger_count_hypotheses_resolved
             ),
+            candidate_search_budget_exhausted=search_budget_exhausted,
         )
         if candidates
         else None
@@ -70,4 +80,5 @@ def evaluate_count_hypothesis(
         hypothesis=hypothesis,
         candidates=tuple(candidates),
         selection=selection,
+        search_budget_exhausted=search_budget_exhausted,
     )

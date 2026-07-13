@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
 
 from ...domain import (
     BoundaryAxis,
@@ -59,14 +58,10 @@ class PhotoSequenceSolveResult:
             raise ValueError("photo height constraint must be positive")
 
 
-class PhotoSequenceSolveUnavailableReason(str, Enum):
-    GEOMETRY_CONSTRAINTS = "photo_aperture_geometry_unresolved"
-
-
 @dataclass(frozen=True)
 class PhotoSequenceSolveUnavailable:
-    reason: PhotoSequenceSolveUnavailableReason
     assignment_evaluations: int
+    search_budget_exhausted: bool
 
     def __post_init__(self) -> None:
         if self.assignment_evaluations < 0:
@@ -1645,8 +1640,8 @@ def solve_photo_sequence(
     cross_axis_hypotheses = cross_axis_plan.hypotheses
     if not cross_axis_hypotheses:
         return PhotoSequenceSolveUnavailable(
-            PhotoSequenceSolveUnavailableReason.GEOMETRY_CONSTRAINTS,
             cross_axis_plan.assignment_evaluations,
+            cross_axis_plan.search_budget_exhausted,
         )
     expected_measurements = tuple(
         measurement.aperture_cross_axis
@@ -1736,8 +1731,8 @@ def solve_photo_sequence(
     )
     if not builds:
         return PhotoSequenceSolveUnavailable(
-            PhotoSequenceSolveUnavailableReason.GEOMETRY_CONSTRAINTS,
             total_evaluations,
+            budget_exhausted,
         )
 
     best_rank = max(build.rank for build in builds)

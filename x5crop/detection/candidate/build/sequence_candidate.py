@@ -20,7 +20,6 @@ from ...physical.separator.observations import (
     propose_separator_bands,
 )
 from ...physical.sequence_solver import (
-    PhotoSequenceSolveUnavailableReason,
     PhotoSequenceSolveUnavailable,
     photo_aperture_cross_axis_plan,
     solve_photo_sequence,
@@ -32,14 +31,18 @@ from ..plan.count_hypotheses import CountHypothesis
 @dataclass(frozen=True)
 class SequenceCandidateBuildOutcome:
     candidate: BuiltCandidate | None
-    unavailable: PhotoSequenceSolveUnavailable | None
     assignment_evaluations: int
+    search_budget_exhausted: bool
 
     def __post_init__(self) -> None:
-        if (self.candidate is None) == (self.unavailable is None):
-            raise ValueError("candidate build outcome requires exactly one result")
         if self.assignment_evaluations < 0:
             raise ValueError("candidate build assignment evaluations cannot be negative")
+        if (
+            self.candidate is not None
+            and self.candidate.geometry.search_budget_exhausted
+            != self.search_budget_exhausted
+        ):
+            raise ValueError("candidate build budget state must match its geometry")
 
 
 def _separator_measurement_corridor(
@@ -92,13 +95,13 @@ def build_sequence_candidate(
     )
     if not cross_axis_plan.hypotheses:
         unavailable = PhotoSequenceSolveUnavailable(
-            PhotoSequenceSolveUnavailableReason.GEOMETRY_CONSTRAINTS,
             cross_axis_plan.assignment_evaluations,
+            cross_axis_plan.search_budget_exhausted,
         )
         return SequenceCandidateBuildOutcome(
             None,
-            unavailable,
             unavailable.assignment_evaluations,
+            unavailable.search_budget_exhausted,
         )
     observation_set = measure_separator_cross_axis_support(
         proposed,
@@ -120,8 +123,8 @@ def build_sequence_candidate(
     if isinstance(solved, PhotoSequenceSolveUnavailable):
         return SequenceCandidateBuildOutcome(
             None,
-            solved,
             solved.assignment_evaluations,
+            solved.search_budget_exhausted,
         )
     geometry = PhotoSequenceSolution(
         format_id=fmt.format_id,
@@ -154,6 +157,6 @@ def build_sequence_candidate(
             count_hypothesis=count_hypothesis,
             build_diagnostics=(),
         ),
-        None,
         solved.assignment_evaluations,
+        solved.search_budget_exhausted,
     )

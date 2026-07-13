@@ -176,4 +176,8 @@ def choose_dual_lane_detection(
     return select_candidates(
         tuple(parent_candidates),
         larger_count_hypotheses_resolved=True,
+        candidate_search_budget_exhausted=any(
+            candidate.geometry.search_budget_exhausted
+            for candidate in parent_candidates
+        ),
     )

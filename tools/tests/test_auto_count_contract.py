@@ -130,11 +130,13 @@ class AutoCountContractTest(unittest.TestCase):
             candidate.count_hypothesis,
             (candidate,),
             selection_fixture(candidate, geometry_disagreement=True),
+            search_budget_exhausted=False,
         )
         resolved = CountHypothesisEvaluation(
             candidate.count_hypothesis,
             (candidate,),
             selection_fixture(candidate),
+            search_budget_exhausted=False,
         )
         self.assertFalse(unresolved.geometry_resolved)
         self.assertTrue(resolved.geometry_resolved)
@@ -210,6 +212,41 @@ class AutoCountContractTest(unittest.TestCase):
         fields = GeometryResolution.__dataclass_fields__
         self.assertIn("alternative_geometries_resolved", fields)
 
+    def test_empty_candidate_pool_preserves_search_budget_exhaustion(self) -> None:
+        hypothesis = CountHypothesis(
+            5,
+            "partial",
+            CountHypothesisSource.AUTOMATIC,
+        )
+        evaluation = CountHypothesisEvaluation(
+            hypothesis,
+            (),
+            None,
+            search_budget_exhausted=True,
+        )
+
+        candidates, budget_exhausted = getattr(
+            detection_pipeline,
+            "_candidate_pool_for_count_resolution",
+        )((evaluation,))
+
+        self.assertEqual(candidates, ())
+        self.assertTrue(budget_exhausted)
+
+    def test_count_search_exhaustion_does_not_rewrite_candidate_geometry(self) -> None:
+        candidate = candidate_fixture()
+        self.assertFalse(candidate.geometry.search_budget_exhausted)
+
+        selection = select_candidates(
+            (candidate,),
+            larger_count_hypotheses_resolved=True,
+            candidate_search_budget_exhausted=True,
+        )
+
+        self.assertFalse(candidate.geometry.search_budget_exhausted)
+        self.assertTrue(selection.geometry_resolution.search_budget_exhausted)
+        self.assertFalse(selection.geometry_resolution.supported)
+
     def test_full_format_count_is_resolved_independently_of_placement(self) -> None:
         candidate = candidate_fixture(failed_candidate_check="boundary_proof")
         candidate = replace(
@@ -223,6 +260,7 @@ class AutoCountContractTest(unittest.TestCase):
         resolution = select_candidates(
             (candidate,),
             larger_count_hypotheses_resolved=True,
+            candidate_search_budget_exhausted=False,
         ).geometry_resolution
         self.assertTrue(resolution.count_resolved)
         self.assertFalse(resolution.placement_resolved)
@@ -259,6 +297,7 @@ class AutoCountContractTest(unittest.TestCase):
         resolution = select_candidates(
             (candidate,),
             larger_count_hypotheses_resolved=True,
+            candidate_search_budget_exhausted=False,
         ).geometry_resolution
         self.assertTrue(resolution.count_resolved)
         self.assertFalse(resolution.placement_resolved)

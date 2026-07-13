@@ -59,17 +59,20 @@ def _context_with_root_physical_scale(
 
 def _candidate_pool_for_count_resolution(
     evaluations: tuple[CountHypothesisEvaluation, ...],
-) -> tuple[AssessedCandidate, ...]:
+) -> tuple[tuple[AssessedCandidate, ...], bool]:
     resolved = next(
         (evaluation for evaluation in evaluations if evaluation.geometry_resolved),
         None,
     )
     if resolved is not None:
-        return resolved.candidates
-    return tuple(
-        candidate
-        for evaluation in evaluations
-        for candidate in evaluation.candidates
+        return resolved.candidates, resolved.search_budget_exhausted
+    return (
+        tuple(
+            candidate
+            for evaluation in evaluations
+            for candidate in evaluation.candidates
+        ),
+        any(evaluation.search_budget_exhausted for evaluation in evaluations),
     )
 
 
@@ -142,9 +145,15 @@ def _choose_standard_detection(context: DetectionContext) -> SelectionResult:
     )
     evaluations, stopped_after_count = _evaluate_count_hypotheses(context, plan)
 
-    candidates = _candidate_pool_for_count_resolution(evaluations)
+    candidates, search_budget_exhausted = _candidate_pool_for_count_resolution(
+        evaluations
+    )
     if not candidates:
-        built = hard_safety_candidate(context, plan.hard_safety_count)
+        built = hard_safety_candidate(
+            context,
+            plan.hard_safety_count,
+            search_budget_exhausted=search_budget_exhausted,
+        )
         assessed = (
             assess_review_only_candidate(built)
             if isinstance(built.geometry, ReviewOnlyContainment)
@@ -157,6 +166,7 @@ def _choose_standard_detection(context: DetectionContext) -> SelectionResult:
         larger_count_hypotheses_resolved=bool(
             not plan.automatic or stopped_after_count is not None
         ),
+        candidate_search_budget_exhausted=search_budget_exhausted,
     )
     count_resolution = _count_resolution(
         selection,
@@ -187,6 +197,9 @@ def choose_detection(context: DetectionContext) -> SelectionResult:
         selection = select_candidates(
             (assessed,),
             larger_count_hypotheses_resolved=True,
+            candidate_search_budget_exhausted=(
+                assessed.geometry.search_budget_exhausted
+            ),
         )
         context.execution_statistics.record_assessed_candidate()
     else:

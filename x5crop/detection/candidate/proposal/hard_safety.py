@@ -16,6 +16,8 @@ from ...physical.model import (
 def hard_safety_candidate(
     context: DetectionContext,
     count: int,
+    *,
+    search_budget_exhausted: bool,
 ) -> BuiltCandidate:
     physical_spec = context.configuration.physical_spec
     if count <= 0:
@@ -49,6 +51,7 @@ def hard_safety_candidate(
             ),
             sequence_provenance=scope.provenance,
             raw_boundary_paths=scope.raw_boundary_paths,
+            search_budget_exhausted=search_budget_exhausted,
         ),
         count_hypothesis=CountHypothesis(
             count=count,
@@ -57,6 +60,11 @@ def hard_safety_candidate(
         ),
         build_diagnostics=(
             "photo_aperture_geometry_unresolved",
+            *(
+                ("search_budget_exhausted",)
+                if search_budget_exhausted
+                else ()
+            ),
             "automatic_processing_not_supported",
         ),
     )
