@@ -139,6 +139,7 @@ def choose_dual_lane_detection(
         context.configuration.candidate_plan.dual_lane_divider,
     )
     parent_candidates = []
+    lane_geometry_unresolved = False
     for divider in divider_evidence.candidates:
         lanes = divider.lane_boxes(
             context.measurement_cache.gray_work.shape[1],
@@ -149,6 +150,12 @@ def choose_dual_lane_detection(
         lane_selections = tuple(
             standard_detector(_lane_context(context, lane)) for lane in lanes
         )
+        if any(
+            not isinstance(selection.selected.geometry, PhotoSequenceSolution)
+            for selection in lane_selections
+        ):
+            lane_geometry_unresolved = True
+            continue
         built = _parent_candidate(
             context,
             divider,
@@ -168,7 +175,11 @@ def choose_dual_lane_detection(
             assess_review_only_candidate(
                 unresolved_dual_lane_candidate(
                     context,
-                    "lane_divider_unavailable",
+                    (
+                        "lane_sequence_unresolved"
+                        if lane_geometry_unresolved
+                        else "lane_divider_unavailable"
+                    ),
                 )
             )
         )

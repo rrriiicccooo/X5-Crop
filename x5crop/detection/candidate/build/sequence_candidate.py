@@ -158,5 +158,5 @@ def build_sequence_candidate(
             build_diagnostics=(),
         ),
         solved.assignment_evaluations,
-        solved.search_budget_exhausted,
+        geometry.search_budget_exhausted,
     )

@@ -19,7 +19,12 @@ from x5crop.configuration.registry import get_detection_configuration
 from x5crop.detection.candidate.composition.dual_lane import (
     compose_dual_lane_candidate,
 )
+from x5crop.detection.candidate.assessment.review_only import (
+    assess_review_only_candidate,
+)
 from x5crop.detection.candidate.model import BuiltCandidate, DualLaneEvidence
+from x5crop.detection.candidate.proposal.hard_safety import hard_safety_candidate
+from x5crop.detection.candidate.selection.choose import select_candidates
 from x5crop.detection.context import (
     DetectionContext,
     DetectionExecutionStatistics,
@@ -169,6 +174,57 @@ class DualLaneAssessmentTest(unittest.TestCase):
                 context,
                 lambda _: self.fail("lane detector must not run without a divider"),
             )
+
+        self.assertIsInstance(selection.selected.geometry, ReviewOnlyContainment)
+
+    def test_unresolved_lane_keeps_dual_lane_result_review_only(self) -> None:
+        configuration = get_detection_configuration("135-dual", "full")
+        lane_configuration = get_detection_configuration("135", "full")
+        gray = np.full((120, 240), 128, dtype=np.uint8)
+        statistics = image_measurement_statistics(
+            gray,
+            configuration.preprocess.image_statistics,
+        )
+        context = DetectionContext(
+            unavailable_calibration_fixture(),
+            DetectionRequest("horizontal", "full", None),
+            configuration,
+            lane_configuration,
+            make_measurement_cache(
+                gray,
+                "horizontal",
+                configuration.preprocess.content_evidence_image,
+                statistics,
+                MeasurementCacheStatistics(),
+            ),
+            DetectionExecutionStatistics(),
+        )
+        divider_evidence = measure_lane_dividers(
+            np.zeros((120, 240), dtype=np.float32),
+            DualLaneDividerParameters(proposal_count=1),
+        )
+        self.assertTrue(divider_evidence.candidates)
+
+        def unresolved_lane(lane_context: DetectionContext):
+            count = lane_context.configuration.physical_spec.default_count
+            assessed = assess_review_only_candidate(
+                hard_safety_candidate(
+                    lane_context,
+                    count,
+                    search_budget_exhausted=False,
+                )
+            )
+            return select_candidates(
+                (assessed,),
+                larger_count_hypotheses_resolved=True,
+                candidate_search_budget_exhausted=False,
+            )
+
+        with patch(
+            "x5crop.detection.modes.dual_lane.measure_lane_dividers",
+            return_value=divider_evidence,
+        ):
+            selection = choose_dual_lane_detection(context, unresolved_lane)
 
         self.assertIsInstance(selection.selected.geometry, ReviewOnlyContainment)
 

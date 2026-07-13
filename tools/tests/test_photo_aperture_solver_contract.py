@@ -13,10 +13,14 @@ from tools.tests.photo_aperture_solver_support import (
 )
 from x5crop.detection.physical.sequence_solver import (
     PhotoSequenceSolveResult,
+    _measured_aperture_constraints,
     photo_aperture_cross_axis_plan,
     solve_photo_sequence,
 )
-from x5crop.detection.physical.model import PhotoSequenceSolution
+from x5crop.detection.physical.model import (
+    AssignmentConsensusOutcome,
+    PhotoSequenceSolution,
+)
 from x5crop.report.read_models import typed_read_model
 from x5crop.report.validation import _typed_value_from_read_model
 from x5crop.domain import (
@@ -36,6 +40,28 @@ from x5crop.domain import (
 
 
 class PhotoApertureSolverContractTest(unittest.TestCase):
+    def test_exact_measured_option_capacity_is_not_search_exhaustion(self) -> None:
+        scope = _scope(
+            width=100,
+            height=120,
+            leading=0.0,
+            trailing=100.0,
+            top=10.0,
+            bottom=110.0,
+        )
+        cross_axis = _plan(scope).hypotheses[0]
+
+        options, _evaluations, exhausted = _measured_aperture_constraints(
+            scope,
+            cross_axis,
+            _dimensions(100.0, 100.0),
+            evaluation_budget=100,
+            maximum_options=1,
+        )
+
+        self.assertEqual(len(options), 1)
+        self.assertFalse(exhausted)
+
     def test_separator_search_prunes_noise_before_combination_budget_is_exhausted(self) -> None:
         scope = _scope(
             width=650,
@@ -76,7 +102,7 @@ class PhotoApertureSolverContractTest(unittest.TestCase):
         )
         self.assertLess(solved.assignment_evaluations, 200)
 
-    def test_hard_separator_upper_bound_skips_inferior_measured_only_search(self) -> None:
+    def test_separator_solution_does_not_hide_conflicting_measured_apertures(self) -> None:
         scope = _scope(
             width=210,
             height=120,
@@ -84,7 +110,7 @@ class PhotoApertureSolverContractTest(unittest.TestCase):
             trailing=210.0,
             top=10.0,
             bottom=110.0,
-            internal_paths=tuple(float(value) for value in range(5, 205, 5)),
+            internal_paths=(5.0, 105.0, 110.0),
         )
 
         solved = solve_photo_sequence(
@@ -94,12 +120,17 @@ class PhotoApertureSolverContractTest(unittest.TestCase):
             2,
             _dimensions(100.0, 100.0),
             maximum_assignment_evaluations=2_000,
-            maximum_solution_alternatives=1,
+            maximum_solution_alternatives=16,
         )
 
         self.assertIsInstance(solved, PhotoSequenceSolveResult)
         assert isinstance(solved, PhotoSequenceSolveResult)
         self.assertEqual(len(solved.separator_assignments), 1)
+        self.assertEqual(
+            solved.assignment_consensus.outcome,
+            AssignmentConsensusOutcome.DISAGREED,
+        )
+        self.assertTrue(solved.assignment_consensus.conflicting_photo_indexes)
         self.assertFalse(solved.search_budget_exhausted)
 
     def test_supported_band_demotion_is_pruned_when_neighbors_are_known(self) -> None:

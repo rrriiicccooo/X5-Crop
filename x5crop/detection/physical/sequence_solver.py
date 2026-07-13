@@ -923,8 +923,8 @@ def _measured_aperture_constraints(
                     ),
                 )
             )
-            if len(constraints) >= maximum_options:
-                return tuple(constraints), evaluations, True
+            if len(constraints) > maximum_options:
+                return tuple(constraints[:maximum_options]), evaluations, True
     return tuple(constraints), evaluations, False
 
 
@@ -1005,13 +1005,6 @@ def _uncorroborated_overlap_extent(
         max(0.0, -spacing.signed_width_px.maximum)
         for spacing in spacings
         if spacing.basis == InterPhotoSpacingBasis.GEOMETRY_HYPOTHESIS
-    )
-
-
-def _strictly_dominates_measured_only_search(build: _SequenceBuild) -> bool:
-    return bool(
-        build.separator_assignments
-        and _uncorroborated_overlap_extent(build.spacings) == 0.0
     )
 
 
@@ -1718,11 +1711,7 @@ def solve_photo_sequence(
     measured_builds: tuple[_SequenceBuild, ...] = ()
     measured_evaluations = 0
     measured_budget_exhausted = False
-    measured_search_dominated = any(
-        _strictly_dominates_measured_only_search(build)
-        for build in separator_builds
-    )
-    if measured_budget > 0 and not measured_search_dominated:
+    if measured_budget > 0:
         (
             measured_builds,
             measured_evaluations,
@@ -1779,7 +1768,7 @@ def solve_photo_sequence(
         photo_height_constraint_px=representative.cross_axis.height_px,
         residuals=representative.residuals,
         assignment_consensus=_assignment_consensus(
-            best,
+            builds,
             budget_exhausted=budget_exhausted,
         ),
         assignment_evaluations=total_evaluations,
