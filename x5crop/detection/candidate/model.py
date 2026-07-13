@@ -26,6 +26,10 @@ from ..evidence.separator_sequence import (
     separator_sequence_evidence,
 )
 from ..evidence.content.frame_support import FrameContentEvidence
+from ..evidence.content.internal_boundaries import (
+    InternalBoundaryPreservationEvidence,
+    internal_boundary_preservation_evidence,
+)
 from ..evidence.holder_boundary import (
     HolderBoundaryEvidence,
     holder_boundary_evidence,
@@ -79,6 +83,7 @@ class CandidateEvidence:
     separator_sequence: SeparatorSequenceEvidence
     frame_dimensions: FrameDimensionEvidence
     frame_content: FrameContentEvidence
+    internal_boundary_preservation: InternalBoundaryPreservationEvidence
     holder_boundary: HolderBoundaryEvidence
     scan_calibration: ScanCalibrationResolution
     sequence_content_alignment: SequenceContentAlignmentEvidence
@@ -90,6 +95,7 @@ class CandidateEvidence:
     def content_preservation_state(self) -> EvidenceState:
         return content_preservation_state(
             self.frame_coverage,
+            self.internal_boundary_preservation,
             self.sequence_content_alignment,
             self.partial_edge_safety,
         )
@@ -126,16 +132,23 @@ CandidateEvidenceModel = CandidateEvidence | DualLaneEvidence | ReviewOnlyEviden
 
 def content_preservation_state(
     frame_coverage: FrameCoverageEvidence,
+    internal_boundaries: InternalBoundaryPreservationEvidence,
     sequence_alignment: SequenceContentAlignmentEvidence,
     partial_edge: PartialEdgeSafetyEvidence,
 ) -> EvidenceState:
     if frame_coverage.state == EvidenceState.CONTRADICTED:
         return EvidenceState.CONTRADICTED
+    if internal_boundaries.state == EvidenceState.CONTRADICTED:
+        return EvidenceState.CONTRADICTED
     if sequence_alignment.content_outside_sides:
         return EvidenceState.UNAVAILABLE
     if partial_edge.state == EvidenceState.CONTRADICTED:
         return EvidenceState.CONTRADICTED
-    if (
+    internal_boundaries_preserved = internal_boundaries.state in {
+        EvidenceState.SUPPORTED,
+        EvidenceState.NOT_APPLICABLE,
+    }
+    if internal_boundaries_preserved and (
         frame_coverage.state == EvidenceState.SUPPORTED
         or sequence_alignment.state == EvidenceState.SUPPORTED
     ):
@@ -401,6 +414,13 @@ def _candidate_evidence_matches_geometry(
             evidence.frame_dimensions,
             evidence.frame_content,
         )
+        and evidence.internal_boundary_preservation
+        == internal_boundary_preservation_evidence(
+            geometry.count,
+            geometry.frame_boundaries,
+            geometry.inter_frame_spacings,
+            evidence.frame_content,
+        )
         and evidence.independence == evidence_independence_evidence(geometry)
         and candidate_scale_observations_match_geometry(
             geometry,
@@ -549,6 +569,10 @@ class AssessedCandidate:
                     ("separator_sequence", evidence.separator_sequence.state),
                     ("frame_dimensions", evidence.frame_dimensions.state),
                     ("frame_content", evidence.frame_content.state),
+                    (
+                        "internal_boundary_preservation",
+                        evidence.internal_boundary_preservation.state,
+                    ),
                     ("holder_boundary", evidence.holder_boundary.state),
                     ("content_preservation", evidence.content_preservation_state),
                     (

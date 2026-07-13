@@ -8,6 +8,7 @@ import unittest
 
 from tools.tests.physical_gate_support import (
     boundary_path_fixture,
+    candidate_evidence_fixture,
     candidate_fixture,
     frame_bleed_fixture,
     holder_occlusion_not_applicable,
@@ -634,6 +635,7 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
         )
         state = content_preservation_state(
             coverage,
+            candidate_evidence_fixture().internal_boundary_preservation,
             alignment,
             partial,
         )

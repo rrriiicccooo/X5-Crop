@@ -17,6 +17,9 @@ from x5crop.detection.candidate.model import (
 )
 from x5crop.detection.evidence.separator_sequence import separator_sequence_evidence
 from x5crop.detection.evidence.partial_edge import partial_edge_safety_evidence
+from x5crop.detection.evidence.content.internal_boundaries import (
+    internal_boundary_preservation_evidence,
+)
 from x5crop.detection.evidence.holder_occupancy import strip_completeness_evidence
 from x5crop.formats import format_spec
 from x5crop.detection.physical.separator.assignment import (
@@ -78,6 +81,12 @@ class CandidateEvidenceQualityContractTest(unittest.TestCase):
                     evidence.frame_dimensions,
                     separator_widths_px=(),
                 ),
+                evidence.frame_content,
+            ),
+            internal_boundary_preservation=internal_boundary_preservation_evidence(
+                geometry.count,
+                geometry.frame_boundaries,
+                geometry.inter_frame_spacings,
                 evidence.frame_content,
             ),
             independence=evidence_independence_evidence(geometry),

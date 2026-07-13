@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from ...context import DetectionContext
 from ...evidence.content.frame_support import frame_content_evidence
+from ...evidence.content.internal_boundaries import (
+    internal_boundary_preservation_evidence,
+)
 from ...evidence.separator_sequence import separator_sequence_evidence
 from ...evidence.holder_boundary import holder_boundary_evidence
 from ...evidence.frame_coverage import frame_coverage_evidence
@@ -77,6 +80,12 @@ def assess_candidate(
         context.measurement_cache,
         context.configuration.content,
     )
+    internal_boundaries = internal_boundary_preservation_evidence(
+        geometry.count,
+        geometry.frame_boundaries,
+        geometry.inter_frame_spacings,
+        content,
+    )
     holder_boundary = holder_boundary_evidence(
         geometry,
         context.measurement_cache.image_statistics.edge_texture_limit,
@@ -119,6 +128,7 @@ def assess_candidate(
         separator_sequence=separator_sequence,
         frame_dimensions=frame_dimensions,
         frame_content=content,
+        internal_boundary_preservation=internal_boundaries,
         holder_boundary=holder_boundary,
         scan_calibration=scan_calibration,
         sequence_content_alignment=alignment,

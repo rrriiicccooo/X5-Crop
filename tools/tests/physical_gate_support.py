@@ -43,6 +43,10 @@ from x5crop.detection.evidence.content.frame_support import (
     FrameContentEvidence,
     FrameContentObservation,
 )
+from x5crop.detection.evidence.content.internal_boundaries import (
+    InternalBoundaryObservation,
+    InternalBoundaryPreservationEvidence,
+)
 from x5crop.detection.evidence.holder_boundary import (
     HolderBoundaryEvidence,
 )
@@ -410,6 +414,13 @@ def candidate_evidence_fixture(
         candidate_frame_count=2,
     )
     paths = candidate_boundary_paths()
+    content = FrameContentEvidence(
+        0.5,
+        (
+            FrameContentObservation(1, 0.8, 0.8, True, ()),
+            FrameContentObservation(2, 0.8, 0.8, True, ()),
+        ),
+    )
     return CandidateEvidence(
         frame_coverage=coverage,
         sequence_conservation=SequenceConservationEvidence(
@@ -442,12 +453,17 @@ def candidate_evidence_fixture(
             aspect_error_ratio=0.0,
             calibration_used=False,
         ),
-        frame_content=FrameContentEvidence(
-            0.5,
+        frame_content=content,
+        internal_boundary_preservation=InternalBoundaryPreservationEvidence(
             (
-                FrameContentObservation(1, 0.8, 0.8, True, ()),
-                FrameContentObservation(2, 0.8, 0.8, True, ()),
-            ),
+                InternalBoundaryObservation(
+                    FrameBoundaryReference(None, 1),
+                    True,
+                    False,
+                    False,
+                    False,
+                ),
+            )
         ),
         holder_boundary=HolderBoundaryEvidence(paths, 1.0),
         scan_calibration=unavailable_calibration_fixture(),

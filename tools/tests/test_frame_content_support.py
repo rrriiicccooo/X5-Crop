@@ -11,13 +11,23 @@ from tools.tests.physical_gate_support import (
 )
 from x5crop.cache import MeasurementCache
 from x5crop.detection.candidate.model import content_preservation_state
-from x5crop.detection.evidence.content.frame_support import frame_content_evidence
-from x5crop.detection.evidence.content.frame_support import _sample_supports_content
-from x5crop.detection.evidence.sequence_content_alignment import sequence_content_alignment_evidence
+from x5crop.detection.evidence.content.frame_support import (
+    FrameContentEvidence,
+    FrameContentObservation,
+    _sample_supports_content,
+    frame_content_evidence,
+)
+from x5crop.detection.evidence.content.internal_boundaries import (
+    internal_boundary_preservation_evidence,
+)
+from x5crop.detection.evidence.sequence_content_alignment import (
+    sequence_content_alignment_evidence,
+)
 from x5crop.domain import (
     Box,
     CropEnvelope,
     EvidenceState,
+    FrameBoundaryReference,
     HolderSpan,
     MeasurementIdentity,
     MeasurementProvenance,
@@ -25,6 +35,14 @@ from x5crop.domain import (
     VisibleSequenceSpan,
 )
 from x5crop.detection.physical.model import PhotoInterval
+from x5crop.detection.physical.separator.assignment import (
+    dimension_constrained_boundary,
+)
+from x5crop.detection.physical.spacing import (
+    CorroboratedSpacingEvidence,
+    observed_spacing_evidence,
+    spacing_hypothesis,
+)
 from x5crop.configuration.registry import get_detection_configuration
 from x5crop.image.statistics import ImageMeasurementStatisticsParameters, image_measurement_statistics
 
@@ -73,6 +91,71 @@ def _single_frame_geometry(box: Box):
 
 
 class FrameContentSupportTest(unittest.TestCase):
+    def test_internal_content_crossing_requires_a_physical_boundary_explanation(
+        self,
+    ) -> None:
+        geometry = candidate_fixture().geometry
+        provenance = MeasurementProvenance(
+            MeasurementIdentity.PHOTO_EDGES,
+            "synthetic_internal_boundary",
+            (MeasurementIdentity.GRAY_WORK,),
+        )
+        model_boundary = dimension_constrained_boundary(
+            1,
+            PixelInterval.exact(100.0),
+            provenance,
+            None,
+        )
+        crossing = FrameContentEvidence(
+            0.5,
+            (
+                FrameContentObservation(1, 0.8, 0.8, True, ("right",)),
+                FrameContentObservation(2, 0.8, 0.8, True, ("left",)),
+            ),
+        )
+        boundary = FrameBoundaryReference(None, 1)
+        cases = (
+            (
+                "unexplained",
+                (model_boundary,),
+                (spacing_hypothesis(boundary, PixelInterval.zero(), provenance),),
+                EvidenceState.CONTRADICTED,
+            ),
+            (
+                "separator",
+                geometry.frame_boundaries,
+                geometry.inter_frame_spacings,
+                EvidenceState.SUPPORTED,
+            ),
+            (
+                "contact",
+                (model_boundary,),
+                (observed_spacing_evidence(boundary, PixelInterval.zero(), provenance),),
+                EvidenceState.SUPPORTED,
+            ),
+            (
+                "overlap",
+                (model_boundary,),
+                (
+                    CorroboratedSpacingEvidence(
+                        boundary,
+                        PixelInterval.exact(-5.0),
+                        provenance,
+                    ),
+                ),
+                EvidenceState.SUPPORTED,
+            ),
+        )
+        for label, boundaries, spacings, expected in cases:
+            with self.subTest(label=label):
+                evidence = internal_boundary_preservation_evidence(
+                    2,
+                    boundaries,
+                    spacings,
+                    crossing,
+                )
+                self.assertEqual(evidence.state, expected)
+
     def test_undersized_sample_cannot_satisfy_minimum_content_support(self) -> None:
         sample = np.ones((1, 1), dtype=np.float32)
         self.assertFalse(
@@ -91,6 +174,7 @@ class FrameContentSupportTest(unittest.TestCase):
         )
         state = content_preservation_state(
             evidence.frame_coverage,
+            evidence.internal_boundary_preservation,
             alignment,
             evidence.partial_edge_safety,
         )

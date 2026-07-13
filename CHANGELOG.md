@@ -14,6 +14,17 @@ repository rules in `AGENTS.md`.
 
 ### V4.9 当前开发线
 
+#### 全量实测完整性根因修复（2026-07-13）
+
+- Preprocess 现在产出带 canonical `WorkspaceExtent` 的 `PreparedWorkspace`；deskew 扩张 canvas 后，
+  finalization、report identity 与 cache restoration 不再回退到原始 TIFF shape。
+- Sequence solver 将 boundary uncertainty 与可见 sequence interval 规范求交；无正宽、非单调或非法
+  geometry 返回 typed unavailable，不再形成非法 `SequenceSolution` 或图片级 runtime exception。
+- `InternalBoundaryPreservationEvidence` 逐条验证内部切线。Frame union coverage 不再替代切线安全；
+  连续内容跨越没有 independent separator、measured contact 或 corroborated overlap 的切线会明确
+  contradict candidate content preservation。
+- Current report identity 为 `detection_report / gray_sequence_integrity`，旧 schema 直接 cache miss。
+
 #### 灰度外观语义与 separator sequence 收敛（2026-07-13）
 
 - 删除 `FilmBaseReference`、`FilmStructureEvidence`、`ApertureContactEvidence` 及材料一致性证明；

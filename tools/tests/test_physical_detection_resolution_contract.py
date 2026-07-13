@@ -36,6 +36,9 @@ from x5crop.detection.candidate.model import (
 from x5crop.detection.candidate.selection.choose import select_candidates
 from x5crop.detection.evidence.partial_edge import PartialEdgeSafetyEvidence
 from x5crop.detection.evidence.partial_edge import partial_edge_safety_evidence
+from x5crop.detection.evidence.content.internal_boundaries import (
+    internal_boundary_preservation_evidence,
+)
 from x5crop.detection.evidence.frame_sequence import sequence_conservation_for_geometry
 from x5crop.detection.evidence.physical_scale import candidate_scan_calibration
 from x5crop.detection.evidence.holder_occupancy import holder_occupancy_evidence
@@ -185,6 +188,12 @@ def _with_candidate_evidence(
             frame_content,
         ),
         frame_content=frame_content,
+        internal_boundary_preservation=internal_boundary_preservation_evidence(
+            resolved_geometry.count,
+            resolved_geometry.frame_boundaries,
+            resolved_geometry.inter_frame_spacings,
+            frame_content,
+        ),
         sequence_content_alignment=replace(
             evidence.sequence_content_alignment,
             visible_sequence_span=visible,

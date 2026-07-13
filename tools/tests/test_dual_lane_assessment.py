@@ -22,6 +22,9 @@ from x5crop.detection.candidate.model import (
     CandidateAssessment,
 )
 from x5crop.detection.evidence.frame_sequence import sequence_conservation_for_geometry
+from x5crop.detection.evidence.content.internal_boundaries import (
+    internal_boundary_preservation_evidence,
+)
 from x5crop.detection.evidence.partial_edge import partial_edge_safety_evidence
 from x5crop.detection.physical.photo_size import frame_dimension_evidence
 from x5crop.detection.evidence.separator_sequence import (
@@ -165,6 +168,12 @@ def _candidate_with_geometry(candidate, geometry):
             geometry,
             candidate.assessment.evidence.frame_coverage,
             dimensions,
+            candidate.assessment.evidence.frame_content,
+        ),
+        internal_boundary_preservation=internal_boundary_preservation_evidence(
+            geometry.count,
+            geometry.frame_boundaries,
+            geometry.inter_frame_spacings,
             candidate.assessment.evidence.frame_content,
         ),
         independence=evidence_independence_evidence(geometry),
