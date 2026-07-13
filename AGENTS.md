@@ -236,8 +236,8 @@ decision.status
 decision.final_review_reasons
 selection.selected_rank
 selection.geometry_resolution
-output.final_geometry.crop_envelope
-output.final_geometry.frame_boxes
+output.final_geometry.frame_crop_envelopes
+output.final_geometry.final_boxes
 ```
 
 Local `Test/` fixtures are untracked and their directory layout is not a source
@@ -281,10 +281,12 @@ Current state:
 - Active script is `X5_Crop.py` V4.9.
 - Runtime resolves one `DetectionConfiguration`; the superseded `x5crop.policies`
   topology and all compatibility surfaces are deleted.
-- Detection uses a global monotonic `SequenceSolution` solver with separate
-  observed spacing, independently corroborated overlap, and geometry spacing
-  hypotheses. Corroborated overlap can protect output but cannot prove its own
-  conservation equation.
+- Detection uses a global `PhotoSequenceSolution` solver. Each `PhotoAperture`
+  represents one visible real-photo opening; visible film base and internal
+  separator bands are excluded from ideal aperture geometry.
+- Gray paths and separator bands are count-independent observations. Candidate
+  assignment binds separator start/end to the trailing/leading edges of adjacent
+  apertures; dimension-only boundaries remain provisional.
 - Count, boundary, dimension, calibration, and measurement-dependency authority
   use typed identities; descriptive provenance text cannot change physical proof.
 - Detection consumes one canonical grayscale workspace. Boundary and separator
@@ -301,7 +303,7 @@ Current state:
   for ordering and reporting. `GeometryResolution` is the only early-stop input.
 - Overlap protection uses a per-boundary `FrameBleedPlan`; unrelated frames are
   never expanded by a global maximum.
-- Current reports use `detection_report / gray_sequence_integrity` with
+- Current reports use `detection_report / photo_aperture_sequence_resolution` with
   canonical `input`, `configuration`, `selection`, `decision`, and `output`
   sections. Cache reuse accepts only this schema.
 - TIFF export preserves typed transferable metadata and verifies it after write;
@@ -312,18 +314,15 @@ Current state:
 
 Current verification state:
 
-- The full-integrity root fixes and runtime metrics are implemented; the suite
-  contains 482 tests and 14 valid format/mode configurations.
-- A 113-TIFF diagnostics rerun completed without runtime exceptions. Every input
-  produced a terminal manifest record, valid `gray_sequence_integrity` report,
-  and three-panel Debug Analysis. All geometry remained unresolved, so no final
-  geometry or frame output was produced, including with `--export-review`.
-- Cache reuse, unresolved review-export protection, a real two-process run,
-  TIFF metadata preservation, and the three-panel `NOT EXPORTABLE` Debug state
-  were verified. Runtime metrics recorded 818 assessed candidates, 896,652
-  assignment evaluations, and 3,334/1,458 exact measurement-cache hits/misses.
-- `half/full` sequence search is the measured performance hotspot. Performance
-  work must profile a fixed sample and preserve GeometryResolution ownership.
+- The photo-aperture joint solver and local external-content preservation model
+  are implemented. Debug distinguishes ideal apertures, output envelopes, raw
+  observations, measured edges, provisional edges, holder boundaries, and
+  corroborated overlap through one diagnostics-owned legend.
+- The previous 113-TIFF run in `Test/test 2` remains an immutable visual baseline.
+  A new full run must be written to `Test/test 3` after performance profiling and
+  representative-sample calibration.
+- `half/full` remains the measured performance hotspot. Performance work must
+  profile one fixed sample and preserve GeometryResolution ownership.
 - Architecture closure audits are intentionally deferred. Audit A and an
   independent fresh-context Audit B must restart from zero before a new closure
   candidate can be recorded.

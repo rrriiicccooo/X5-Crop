@@ -16,14 +16,21 @@ JPEG_QUALITY_MAX = 100
 
 
 @dataclass(frozen=True)
+class DebugLegendEntry:
+    label: str
+    color: tuple[int, int, int]
+    dashed: bool
+
+
+@dataclass(frozen=True)
 class DebugStyleParameters:
     preview_max_side: int = 1800
     frame_fill_alpha: float = 0.26
-    frame_line_width: int = 1
-    crop_envelope_line_width: int = 3
-    evidence_envelope_line_width: int = 2
-    crop_envelope_color: tuple[int, int, int] = (0, 255, 0)
-    frame_output_color: tuple[int, int, int] = (40, 120, 255)
+    frame_crop_envelope_line_width: int = 1
+    photo_aperture_line_width: int = 3
+    containment_fallback_line_width: int = 2
+    photo_aperture_color: tuple[int, int, int] = (0, 255, 0)
+    frame_crop_envelope_color: tuple[int, int, int] = (40, 120, 255)
     holder_boundary_color: tuple[int, int, int] = (255, 255, 255)
     panel_spacing: int = 12
     panel_background: int = 32
@@ -32,10 +39,15 @@ class DebugStyleParameters:
     label_origin: tuple[int, int] = (12, 9)
     text_color: tuple[int, int, int] = (245, 245, 245)
     jpeg_quality: int = 92
-    accepted_separator_color: tuple[int, int, int] = (255, 0, 0)
-    unselected_separator_color: tuple[int, int, int] = (255, 170, 0)
-    overlap_boundary_color: tuple[int, int, int] = (0, 220, 255)
-    dimension_boundary_color: tuple[int, int, int] = (190, 80, 255)
+    measured_boundary_color: tuple[int, int, int] = (255, 0, 0)
+    raw_observation_color: tuple[int, int, int] = (255, 170, 0)
+    corroborated_overlap_color: tuple[int, int, int] = (0, 220, 255)
+    dimension_hypothesis_color: tuple[int, int, int] = (190, 80, 255)
+    line_dash_length: int = 8
+    line_dash_gap: int = 5
+    legend_row_height: int = 20
+    legend_sample_width: int = 32
+    legend_text_gap: int = 8
     pass_color: tuple[int, int, int] = (40, 180, 90)
     review_color: tuple[int, int, int] = (230, 80, 70)
     reason_display_limit: int = 3
@@ -50,9 +62,15 @@ class DebugStyleParameters:
     def __post_init__(self) -> None:
         for name, value in (
             ("debug preview size", self.preview_max_side),
-            ("debug frame line width", self.frame_line_width),
-            ("debug crop line width", self.crop_envelope_line_width),
-            ("debug evidence line width", self.evidence_envelope_line_width),
+            (
+                "debug frame crop envelope line width",
+                self.frame_crop_envelope_line_width,
+            ),
+            ("debug photo aperture line width", self.photo_aperture_line_width),
+            (
+                "debug containment fallback line width",
+                self.containment_fallback_line_width,
+            ),
             ("debug panel spacing", self.panel_spacing),
             ("debug label height", self.label_height),
             ("debug JPEG quality", self.jpeg_quality),
@@ -60,20 +78,25 @@ class DebugStyleParameters:
             ("debug status bar height", self.status_bar_height),
             ("debug status outline width", self.status_outline_width),
             ("debug status text stroke width", self.status_text_stroke_width),
+            ("debug line dash length", self.line_dash_length),
+            ("debug line dash gap", self.line_dash_gap),
+            ("debug legend row height", self.legend_row_height),
+            ("debug legend sample width", self.legend_sample_width),
+            ("debug legend text gap", self.legend_text_gap),
         ):
             require_positive(name, value)
         require_unit_interval("debug frame fill alpha", self.frame_fill_alpha)
         if self.jpeg_quality > JPEG_QUALITY_MAX:
             raise ValueError("debug JPEG quality exceeds the standard maximum")
         colors = (
-            self.crop_envelope_color,
-            self.frame_output_color,
+            self.photo_aperture_color,
+            self.frame_crop_envelope_color,
             self.holder_boundary_color,
             self.text_color,
-            self.accepted_separator_color,
-            self.unselected_separator_color,
-            self.overlap_boundary_color,
-            self.dimension_boundary_color,
+            self.measured_boundary_color,
+            self.raw_observation_color,
+            self.corroborated_overlap_color,
+            self.dimension_hypothesis_color,
             self.pass_color,
             self.review_color,
         )
@@ -118,3 +141,32 @@ class DiagnosticsConfiguration:
         default_factory=SeparatorEvidenceImageParameters
     )
     style: DebugStyleParameters = field(default_factory=DebugStyleParameters)
+
+    @property
+    def legend_entries(self) -> tuple[DebugLegendEntry, ...]:
+        style = self.style
+        return (
+            DebugLegendEntry("Holder boundary", style.holder_boundary_color, True),
+            DebugLegendEntry("Raw observation", style.raw_observation_color, False),
+            DebugLegendEntry(
+                "Measured aperture / separator edge",
+                style.measured_boundary_color,
+                False,
+            ),
+            DebugLegendEntry(
+                "Dimension-only provisional edge",
+                style.dimension_hypothesis_color,
+                True,
+            ),
+            DebugLegendEntry(
+                "Corroborated overlap",
+                style.corroborated_overlap_color,
+                False,
+            ),
+            DebugLegendEntry("PhotoAperture", style.photo_aperture_color, False),
+            DebugLegendEntry(
+                "FrameCropEnvelope / protected output",
+                style.frame_crop_envelope_color,
+                True,
+            ),
+        )

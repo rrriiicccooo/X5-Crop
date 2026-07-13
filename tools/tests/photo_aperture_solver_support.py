@@ -88,7 +88,6 @@ def separator(
     return SeparatorBandObservation(
         start=start,
         end=end,
-        center=0.5 * (start + end),
         tonal_evidence=1.0,
         appearance=appearance(measurement_provenance),
         provenance=measurement_provenance,

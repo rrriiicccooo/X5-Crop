@@ -626,7 +626,6 @@ class SeparatorCrossAxisMeasurement:
 class SeparatorBandObservation:
     start: float
     end: float
-    center: float
     tonal_evidence: float
     appearance: GrayAppearanceObservation
     provenance: MeasurementProvenance
@@ -636,8 +635,6 @@ class SeparatorBandObservation:
     def __post_init__(self) -> None:
         if self.end <= self.start:
             raise ValueError("separator observation must have positive width")
-        if not self.start <= self.center <= self.end:
-            raise ValueError("separator center must lie inside its observed band")
         if self.appearance.provenance != self.provenance:
             raise ValueError("separator appearance must share band provenance")
         hypotheses = tuple(
@@ -655,6 +652,10 @@ class SeparatorBandObservation:
     @property
     def interval(self) -> PixelInterval:
         return PixelInterval(float(self.start), float(self.end))
+
+    @property
+    def midpoint(self) -> float:
+        return 0.5 * (float(self.start) + float(self.end))
 
     def cross_axis_measurement_for(
         self,

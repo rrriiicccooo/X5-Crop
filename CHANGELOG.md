@@ -14,6 +14,25 @@ repository rules in `AGENTS.md`.
 
 ### V4.9 当前开发线
 
+#### Photo Aperture 联合求解与 Debug 可见性（2026-07-13）
+
+- 理想裁切几何收敛为逐张 `PhotoAperture`；可见片基与内部 separator 不进入照片开口。
+  `PhotoSequenceSolution` 联合求解照片四边、separator 双边、signed spacing、count 与物理守恒，
+  full-canvas containment 和 dimension-only edge 只能保持 provisional。
+- Content preservation 拆成整段 sequence coverage、内部 boundary preservation 与外部 aperture
+  preservation。Content 只反证漏图；单个像素不能改写 aperture，measured edge 与 content 冲突时
+  保留 typed conflict 而不删除 measurement。
+- `SeparatorBandObservation` 只保存 start/end，中点改为派生属性；删除可能与两端漂移的第三状态。
+- Report identity 破坏性更新为
+  `detection_report / photo_aperture_sequence_resolution`，旧 schema 只会 cache miss。
+- Debug Analysis 仍为三联图，图例由 diagnostics configuration 唯一生成。绿色表示理想
+  `PhotoAperture`，蓝色虚线表示 `FrameCropEnvelope` 或 protected output；holder、raw observation、
+  measured edge、dimension hypothesis 与 corroborated overlap 各有固定标记。横纵 boundary renderer
+  现在遵守同一轴向不变量，Debug 不再从 output envelope 伪造 aperture。
+- `ARCHITECTURE.md` 已按当前物理数据流重写；`README.md` 与 `AGENTS.md` 同步 current schema、
+  Debug 图例和 handoff。当前 397 项测试、14 组 format/mode configuration、compile、launcher 与一张
+  `half/full` 真实三联图验证通过。
+
 #### 全量实测完整性根因修复（2026-07-13）
 
 - Preprocess 现在产出带 canonical `WorkspaceExtent` 的 `PreparedWorkspace`；deskew 扩张 canvas 后，

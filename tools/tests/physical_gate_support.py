@@ -253,7 +253,6 @@ def separator_observation(
     return SeparatorBandObservation(
         start=start,
         end=end,
-        center=float(center),
         tonal_evidence=float(tonal_evidence),
         appearance=_appearance(provenance, texture=0.0),
         provenance=provenance,

@@ -5,12 +5,19 @@ from pathlib import Path
 from typing import get_type_hints
 import unittest
 
+import numpy as np
+
 from tools.tests.architecture_contracts import PROJECT_ROOT
-from x5crop.configuration.diagnostics import SeparatorOverlayParameters
+from x5crop.configuration.diagnostics import (
+    DebugStyleParameters,
+    DiagnosticsConfiguration,
+    SeparatorOverlayParameters,
+)
+from x5crop.debug import canvas as debug_canvas
 from x5crop.debug.panels import make_separator_evidence_debug_rgb
 from x5crop.debug.separators import draw_separator_overlay
 from x5crop.detection.gate_checks import GateCheck
-from x5crop.domain import MeasurementProvenance, SeparatorBandObservation
+from x5crop.domain import Box, MeasurementProvenance, SeparatorBandObservation
 from x5crop.io.model import ImageProfile
 from x5crop.output.model import FrameBleedPlan
 from x5crop.report.identity import REPORT_SCHEMA_ID, REPORT_SCHEMA_REVISION
@@ -67,7 +74,6 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
             (
                 "start",
                 "end",
-                "center",
                 "tonal_evidence",
                 "appearance",
                 "provenance",
@@ -79,6 +85,127 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
         self.assertEqual(
             tuple(MeasurementProvenance.__dataclass_fields__),
             ("root_measurement", "source", "dependencies", "boundary_anchors"),
+        )
+
+    def test_debug_legend_is_derived_from_canonical_diagnostics_style(self) -> None:
+        diagnostics = DiagnosticsConfiguration()
+
+        self.assertEqual(
+            tuple(entry.label for entry in diagnostics.legend_entries),
+            (
+                "Holder boundary",
+                "Raw observation",
+                "Measured aperture / separator edge",
+                "Dimension-only provisional edge",
+                "Corroborated overlap",
+                "PhotoAperture",
+                "FrameCropEnvelope / protected output",
+            ),
+        )
+        self.assertEqual(
+            tuple(entry.dashed for entry in diagnostics.legend_entries),
+            (True, False, False, True, False, False, True),
+        )
+        self.assertEqual(
+            tuple(entry.color for entry in diagnostics.legend_entries),
+            (
+                diagnostics.style.holder_boundary_color,
+                diagnostics.style.raw_observation_color,
+                diagnostics.style.measured_boundary_color,
+                diagnostics.style.dimension_hypothesis_color,
+                diagnostics.style.corroborated_overlap_color,
+                diagnostics.style.photo_aperture_color,
+                diagnostics.style.frame_crop_envelope_color,
+            ),
+        )
+
+    def test_debug_style_has_only_current_physical_overlay_names(self) -> None:
+        fields = set(DebugStyleParameters.__dataclass_fields__)
+
+        self.assertNotIn("crop_envelope_color", fields)
+        self.assertNotIn("frame_output_color", fields)
+        self.assertNotIn("accepted_separator_color", fields)
+        self.assertNotIn("unselected_separator_color", fields)
+        self.assertNotIn("overlap_boundary_color", fields)
+        self.assertNotIn("dimension_boundary_color", fields)
+        self.assertTrue(
+            {
+                "photo_aperture_color",
+                "frame_crop_envelope_color",
+                "measured_boundary_color",
+                "raw_observation_color",
+                "corroborated_overlap_color",
+                "dimension_hypothesis_color",
+            }.issubset(fields)
+        )
+
+    def test_debug_line_renderer_preserves_both_axis_orientations(self) -> None:
+        vertical = np.zeros((12, 12, 3), dtype=np.uint8)
+        horizontal = np.zeros((12, 12, 3), dtype=np.uint8)
+
+        debug_canvas.draw_preview_line(
+            vertical, Box(5, 1, 6, 11), 1.0, (255, 0, 0), 1
+        )
+        debug_canvas.draw_preview_line(
+            horizontal, Box(1, 5, 11, 6), 1.0, (255, 0, 0), 1
+        )
+
+        self.assertEqual(np.count_nonzero(vertical[:, :, 0]), 10)
+        self.assertEqual(np.count_nonzero(horizontal[:, :, 0]), 10)
+
+    def test_debug_dashed_line_renderer_is_axis_symmetric(self) -> None:
+        renderer = getattr(debug_canvas, "draw_preview_dashed_line", None)
+        self.assertIsNotNone(renderer)
+        vertical = np.zeros((24, 24, 3), dtype=np.uint8)
+        horizontal = np.zeros((24, 24, 3), dtype=np.uint8)
+
+        renderer(
+            vertical,
+            Box(10, 2, 11, 22),
+            1.0,
+            (255, 0, 0),
+            1,
+            dash_length=3,
+            dash_gap=2,
+        )
+        renderer(
+            horizontal,
+            Box(2, 10, 22, 11),
+            1.0,
+            (255, 0, 0),
+            1,
+            dash_length=3,
+            dash_gap=2,
+        )
+
+        vertical_pixels = np.count_nonzero(vertical[:, :, 0])
+        horizontal_pixels = np.count_nonzero(horizontal[:, :, 0])
+        self.assertEqual(vertical_pixels, horizontal_pixels)
+        self.assertGreater(vertical_pixels, 0)
+        self.assertLess(vertical_pixels, 20)
+
+    def test_debug_line_renderer_keeps_subpixel_source_edges_visible(self) -> None:
+        vertical = np.zeros((12, 12, 3), dtype=np.uint8)
+        horizontal = np.zeros((12, 12, 3), dtype=np.uint8)
+
+        debug_canvas.draw_preview_line(
+            vertical, Box(50, 10, 51, 110), 0.1, (255, 0, 0), 1
+        )
+        debug_canvas.draw_preview_line(
+            horizontal, Box(10, 50, 110, 51), 0.1, (255, 0, 0), 1
+        )
+
+        self.assertGreater(np.count_nonzero(vertical[:, :, 0]), 0)
+        self.assertGreater(np.count_nonzero(horizontal[:, :, 0]), 0)
+
+    def test_debug_never_reconstructs_apertures_from_output_envelopes(self) -> None:
+        source = (PROJECT_ROOT / "x5crop/debug/panels.py").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertNotIn(
+            "item.box for item in final_geometry.frame_crop_envelopes",
+            source,
         )
 
     def test_removed_gap_grid_and_correction_vocabularies_are_absent(self) -> None:
@@ -181,7 +308,7 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
         self.assertNotIn("OuterProposal", source)
         self.assertNotIn("FilmSpan", source)
 
-    def test_current_coordination_and_test_fixtures_use_sequence_vocabulary(self) -> None:
+    def test_current_coordination_and_test_fixtures_use_aperture_vocabulary(self) -> None:
         removed_terms = (
             "film" + "_span_overcontains_holder_area",
             "independent_" + "outer_and_separator_measurements",
@@ -205,13 +332,22 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
             "physical" + "_resolution",
         ):
             self.assertNotIn(removed, coordination)
-        self.assertIn("gray_sequence_integrity", coordination)
+        self.assertNotIn("`SequenceSolution`", coordination)
+        self.assertNotIn("gray_sequence_integrity", coordination)
+        self.assertIn("`PhotoSequenceSolution`", coordination)
+        self.assertIn("photo_aperture_sequence_resolution", coordination)
 
         architecture = (PROJECT_ROOT / "ARCHITECTURE.md").read_text(
             encoding="utf-8"
         )
         self.assertNotIn("Boundary、Sequence 与 Outer", architecture)
         self.assertNotIn("旧 generic outer", architecture)
+        self.assertNotIn("`VisibleSequenceSpan`", architecture)
+        self.assertNotIn("`SequenceSolution`", architecture)
+        self.assertNotIn("`CropEnvelope`", architecture)
+        self.assertIn("`PhotoAperture`", architecture)
+        self.assertIn("`PhotoSequenceSolution`", architecture)
+        self.assertIn("photo_aperture_sequence_resolution", architecture)
 
     def test_user_docs_describe_current_sequence_and_bleed_model(self) -> None:
         quick_start = (PROJECT_ROOT / "快速启动_Quick_Start.md").read_text(
@@ -226,7 +362,19 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
             "Capacity is resolved from trusted scan calibration",
             readme,
         )
-        self.assertIn("CropEnvelope", readme)
+        self.assertNotRegex(readme, r"(?<!Frame)\bCropEnvelope\b")
+        self.assertIn("PhotoAperture", readme)
+        self.assertIn("FrameCropEnvelope", readme)
+        for legend_label in (
+            "Holder boundary",
+            "Raw observation",
+            "Measured aperture / separator edge",
+            "Dimension-only provisional edge",
+            "Corroborated overlap",
+            "PhotoAperture",
+            "FrameCropEnvelope / protected output",
+        ):
+            self.assertIn(legend_label, readme)
         for stale in (
             "observed-width evidence",
             "content position",

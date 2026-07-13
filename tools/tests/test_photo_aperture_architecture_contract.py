@@ -58,6 +58,18 @@ class PhotoApertureArchitectureContractTest(unittest.TestCase):
         self.assertNotIn("crop_envelope", solution_fields)
         self.assertNotIn("frame_boundaries", solution_fields)
 
+    def test_separator_band_midpoint_is_derived_from_its_endpoints(self) -> None:
+        observation_fields = {
+            field.name for field in fields(domain.SeparatorBandObservation)
+        }
+
+        self.assertNotIn("center", observation_fields)
+        self.assertNotIn("midpoint", observation_fields)
+        self.assertIsInstance(
+            domain.SeparatorBandObservation.midpoint,
+            property,
+        )
+
     def test_output_geometry_uses_per_photo_crop_envelopes(self) -> None:
         output_fields = {field.name for field in fields(output_model.OutputGeometry)}
 

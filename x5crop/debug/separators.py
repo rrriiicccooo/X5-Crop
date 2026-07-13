@@ -14,7 +14,7 @@ from ..domain import (
     SeparatorBandObservation,
 )
 from ..geometry.boxes import map_work_box
-from .canvas import draw_preview_line, draw_preview_mark
+from .canvas import draw_preview_dashed_line, draw_preview_line, draw_preview_mark
 
 
 def _mapped_work_mark(
@@ -161,11 +161,11 @@ def _draw_sequence_overlay(
                 layout=layout,
             ),
             scale,
-            style.unselected_separator_color,
+            style.raw_observation_color,
             overlay.observed_line_width,
         )
     for holder_boundary in solution.holder_boundaries:
-        draw_preview_line(
+        draw_preview_dashed_line(
             rgb,
             _boundary_mark_box(
                 holder_boundary.side,
@@ -180,6 +180,8 @@ def _draw_sequence_overlay(
             scale,
             style.holder_boundary_color,
             overlay.observed_line_width,
+            dash_length=style.line_dash_length,
+            dash_gap=style.line_dash_gap,
         )
     for observation in solution.separator_observations:
         draw_preview_mark(
@@ -194,7 +196,7 @@ def _draw_sequence_overlay(
                 layout,
             ),
             scale,
-            style.unselected_separator_color,
+            style.raw_observation_color,
             overlay.observed_line_width,
         )
     for aperture in solution.photo_apertures:
@@ -205,18 +207,23 @@ def _draw_sequence_overlay(
             aperture.bottom,
         ):
             if boundary.source == PhotoApertureEdgeSource.DIMENSION_HYPOTHESIS:
-                _draw_boundary(
+                draw_preview_dashed_line(
                     rgb,
-                    boundary,
-                    corridor,
-                    x_offset=x_offset,
-                    y_offset=y_offset,
-                    scale=scale,
-                    color=style.dimension_boundary_color,
-                    width=overlay.dimension_line_width,
-                    image_width=image_width,
-                    image_height=image_height,
-                    layout=layout,
+                    _boundary_mark_box(
+                        boundary.side,
+                        boundary.position.midpoint,
+                        corridor,
+                        x_offset=x_offset,
+                        y_offset=y_offset,
+                        image_width=image_width,
+                        image_height=image_height,
+                        layout=layout,
+                    ),
+                    scale,
+                    style.dimension_hypothesis_color,
+                    overlay.dimension_line_width,
+                    dash_length=style.line_dash_length,
+                    dash_gap=style.line_dash_gap,
                 )
             elif boundary.independently_observed:
                 _draw_boundary(
@@ -226,7 +233,7 @@ def _draw_sequence_overlay(
                     x_offset=x_offset,
                     y_offset=y_offset,
                     scale=scale,
-                    color=style.accepted_separator_color,
+                    color=style.measured_boundary_color,
                     width=overlay.observed_line_width,
                     image_width=image_width,
                     image_height=image_height,
@@ -253,7 +260,7 @@ def _draw_sequence_overlay(
                 layout=layout,
             ),
             scale,
-            style.overlap_boundary_color,
+            style.corroborated_overlap_color,
             overlay.overlap_line_width,
         )
 

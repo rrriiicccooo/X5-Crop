@@ -7,6 +7,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageDraw
 
+from ..configuration.diagnostics import DebugLegendEntry
 from ..domain import Box
 from ..image.constants import UINT8_MAX_VALUE
 from ..utils import RGB_CHANNEL_COUNT
@@ -151,13 +152,95 @@ def draw_preview_line(
     thickness: int,
 ) -> None:
     h, w = rgb.shape[:2]
-    x = max(0, min(w - 1, int(round(box.left * scale))))
+    vertical = box.height >= box.width
+    left = max(0, min(w - 1, int(round(box.left * scale))))
+    right = max(0, min(w, int(round(box.right * scale))))
     top = max(0, min(h - 1, int(round(box.top * scale))))
     bottom = max(0, min(h, int(round(box.bottom * scale))))
-    if bottom <= top:
-        return
     t = max(1, int(thickness))
-    rgb[top:bottom, max(0, x - t // 2):min(w, x + (t + 1) // 2)] = color
+    if vertical:
+        if bottom <= top:
+            return
+        x = left
+        rgb[
+            top:bottom,
+            max(0, x - t // 2):min(w, x + (t + 1) // 2),
+        ] = color
+        return
+    if right <= left:
+        return
+    y = top
+    rgb[
+        max(0, y - t // 2):min(h, y + (t + 1) // 2),
+        left:right,
+    ] = color
+
+
+def draw_preview_dashed_line(
+    rgb: np.ndarray,
+    box: Box,
+    scale: float,
+    color: tuple[int, int, int],
+    thickness: int,
+    *,
+    dash_length: int,
+    dash_gap: int,
+) -> None:
+    h, w = rgb.shape[:2]
+    vertical = box.height >= box.width
+    left = max(0, min(w - 1, int(round(box.left * scale))))
+    right = max(0, min(w, int(round(box.right * scale))))
+    top = max(0, min(h - 1, int(round(box.top * scale))))
+    bottom = max(0, min(h, int(round(box.bottom * scale))))
+    dash = max(1, int(dash_length))
+    period = dash + max(1, int(dash_gap))
+    t = max(1, int(thickness))
+    if vertical:
+        if bottom <= top:
+            return
+        x = left
+        for start in range(top, bottom, period):
+            rgb[
+                start:min(bottom, start + dash),
+                max(0, x - t // 2):min(w, x + (t + 1) // 2),
+        ] = color
+        return
+    if right <= left:
+        return
+    y = top
+    for start in range(left, right, period):
+        rgb[
+            max(0, y - t // 2):min(h, y + (t + 1) // 2),
+            start:min(right, start + dash),
+        ] = color
+
+
+def draw_preview_dashed_rect(
+    rgb: np.ndarray,
+    box: Box,
+    scale: float,
+    color: tuple[int, int, int],
+    thickness: int,
+    *,
+    dash_length: int,
+    dash_gap: int,
+) -> None:
+    edges = (
+        Box(box.left, box.top, box.right, box.top + 1),
+        Box(box.left, box.bottom - 1, box.right, box.bottom),
+        Box(box.left, box.top, box.left + 1, box.bottom),
+        Box(box.right - 1, box.top, box.right, box.bottom),
+    )
+    for edge in edges:
+        draw_preview_dashed_line(
+            rgb,
+            edge,
+            scale,
+            color,
+            thickness,
+            dash_length=dash_length,
+            dash_gap=dash_gap,
+        )
 
 
 def draw_preview_mark(
@@ -192,6 +275,85 @@ def add_panel_label(
     image = Image.fromarray(panel, mode="RGB")
     draw = ImageDraw.Draw(image)
     draw.text(origin, label, fill=text_color)
+    return np.asarray(image)
+
+
+def add_panel_label_with_legend(
+    rgb: np.ndarray,
+    label: str,
+    entries: tuple[DebugLegendEntry, ...],
+    *,
+    label_height: int,
+    label_origin: tuple[int, int],
+    legend_row_height: int,
+    legend_sample_width: int,
+    legend_text_gap: int,
+    background: int,
+    text_color: tuple[int, int, int],
+    line_width: int,
+    dash_length: int,
+    dash_gap: int,
+) -> np.ndarray:
+    measurement_image = Image.new("RGB", (1, 1))
+    measurement_draw = ImageDraw.Draw(measurement_image)
+    text_widths = tuple(
+        measurement_draw.textbbox((0, 0), entry.label)[2]
+        for entry in entries
+    )
+    title_width = measurement_draw.textbbox((0, 0), label)[2]
+    horizontal_margin = label_origin[0] + label_origin[0]
+    required_width = max(
+        title_width + horizontal_margin,
+        (
+            max(text_widths, default=0)
+            + horizontal_margin
+            + legend_sample_width
+            + legend_text_gap
+        ),
+    )
+    h, w = rgb.shape[:2]
+    header_height = label_height + legend_row_height * len(entries)
+    panel = np.full(
+        (h + header_height, max(w, required_width), RGB_CHANNEL_COUNT),
+        background,
+        dtype=np.uint8,
+    )
+    panel[header_height:, :w, :] = rgb
+    image = Image.fromarray(panel, mode="RGB")
+    draw = ImageDraw.Draw(image)
+    draw.text(label_origin, label, fill=text_color)
+    sample_left = label_origin[0]
+    sample_right = sample_left + legend_sample_width
+    text_left = sample_right + legend_text_gap
+    for index, entry in enumerate(entries):
+        row_top = label_height + index * legend_row_height
+        row_center = row_top + legend_row_height // 2
+        if entry.dashed:
+            period = dash_length + dash_gap
+            for start in range(sample_left, sample_right, period):
+                draw.line(
+                    (
+                        start,
+                        row_center,
+                        min(sample_right, start + dash_length),
+                        row_center,
+                    ),
+                    fill=entry.color,
+                    width=line_width,
+                )
+        else:
+            draw.line(
+                (sample_left, row_center, sample_right, row_center),
+                fill=entry.color,
+                width=line_width,
+            )
+        text_box = draw.textbbox((0, 0), entry.label)
+        text_height = text_box[3] - text_box[1]
+        draw.text(
+            (text_left, row_top + max(0, (legend_row_height - text_height) // 2)),
+            entry.label,
+            fill=text_color,
+        )
     return np.asarray(image)
 
 

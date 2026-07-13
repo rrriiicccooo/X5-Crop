@@ -23,8 +23,10 @@ from .canvas import (
     DebugRenderCache,
     FRAME_FILL_COLORS,
     add_panel_label,
+    add_panel_label_with_legend,
     cached_labeled_preview_gray,
     cached_preview_gray,
+    draw_preview_dashed_rect,
     draw_preview_rect,
     fill_preview_rect,
 )
@@ -52,28 +54,30 @@ def make_debug_preview_rgb(
     for index, box in enumerate(display_boxes):
         color = FRAME_FILL_COLORS[index % len(FRAME_FILL_COLORS)]
         fill_preview_rect(rgb, box, scale, color, style.frame_fill_alpha)
-        draw_preview_rect(
+        draw_preview_dashed_rect(
             rgb,
             box,
             scale,
-            style.frame_output_color,
-            style.frame_line_width,
+            style.frame_crop_envelope_color,
+            style.frame_crop_envelope_line_width,
+            dash_length=style.line_dash_length,
+            dash_gap=style.line_dash_gap,
         )
     for box in geometry.photo_aperture_boxes:
         draw_preview_rect(
             rgb,
             box,
             scale,
-            style.crop_envelope_color,
-            style.crop_envelope_line_width,
+            style.photo_aperture_color,
+            style.photo_aperture_line_width,
         )
     if geometry.containment_fallback is not None:
         draw_preview_rect(
             rgb,
             geometry.containment_fallback,
             scale,
-            style.unselected_separator_color,
-            style.evidence_envelope_line_width,
+            style.raw_observation_color,
+            style.containment_fallback_line_width,
         )
     return rgb
 
@@ -106,16 +110,6 @@ def debug_geometry(
     detection: FinalDetection,
     selected_candidate: AssessedCandidate,
 ) -> DebugGeometry:
-    final_geometry = detection.output_geometry
-    if final_geometry is not None:
-        return DebugGeometry(
-            photo_aperture_boxes=tuple(
-                item.box for item in final_geometry.frame_crop_envelopes
-            ),
-            frame_crop_envelopes=final_geometry.frame_crop_envelopes,
-            final_boxes=final_geometry.final_boxes,
-            containment_fallback=None,
-        )
     candidate_geometry = selected_candidate.geometry
     image_height, image_width = gray.shape
     if isinstance(candidate_geometry, ReviewOnlyContainment):
@@ -130,12 +124,6 @@ def debug_geometry(
                 image_height,
             ),
         )
-    mapped_envelopes = _map_envelopes(
-        candidate_geometry.frame_crop_envelopes,
-        candidate_geometry.layout,
-        image_width,
-        image_height,
-    )
     aperture_boxes = tuple(
         map_work_box(
             Box(
@@ -149,6 +137,20 @@ def debug_geometry(
             image_height,
         )
         for aperture in candidate_geometry.photo_apertures
+    )
+    final_geometry = detection.output_geometry
+    if final_geometry is not None:
+        return DebugGeometry(
+            photo_aperture_boxes=aperture_boxes,
+            frame_crop_envelopes=final_geometry.frame_crop_envelopes,
+            final_boxes=final_geometry.final_boxes,
+            containment_fallback=None,
+        )
+    mapped_envelopes = _map_envelopes(
+        candidate_geometry.frame_crop_envelopes,
+        candidate_geometry.layout,
+        image_width,
+        image_height,
     )
     return DebugGeometry(
         photo_aperture_boxes=aperture_boxes,
@@ -165,20 +167,22 @@ def draw_evidence_context_overlay(
     style: DebugStyleParameters,
 ) -> None:
     for envelope in geometry.frame_crop_envelopes:
-        draw_preview_rect(
+        draw_preview_dashed_rect(
             rgb,
             envelope.box,
             scale,
-            style.frame_output_color,
-            style.evidence_envelope_line_width,
+            style.frame_crop_envelope_color,
+            style.frame_crop_envelope_line_width,
+            dash_length=style.line_dash_length,
+            dash_gap=style.line_dash_gap,
         )
     if geometry.containment_fallback is not None:
         draw_preview_rect(
             rgb,
             geometry.containment_fallback,
             scale,
-            style.unselected_separator_color,
-            style.evidence_envelope_line_width,
+            style.raw_observation_color,
+            style.containment_fallback_line_width,
         )
 
 
@@ -252,16 +256,16 @@ def make_debug_analysis_panel(
             render_cache,
         ),
         (
-            "Debug boxes"
+            "Photo aperture geometry"
             if detection.frame_export_eligible
-            else "Provisional boxes - NOT EXPORTABLE"
+            else "Provisional photo apertures - NOT EXPORTABLE"
         ),
         height=style.label_height,
         origin=style.label_origin,
         background=style.dark_background,
         text_color=style.text_color,
     )
-    separator_evidence = add_panel_label(
+    separator_evidence = add_panel_label_with_legend(
         make_separator_evidence_debug_rgb(
             gray,
             detection,
@@ -271,11 +275,18 @@ def make_debug_analysis_panel(
             style,
             render_cache,
         ),
-        "Separator evidence",
-        height=style.label_height,
-        origin=style.label_origin,
+        "Boundary and separator evidence",
+        diagnostics.legend_entries,
+        label_height=style.label_height,
+        label_origin=style.label_origin,
+        legend_row_height=style.legend_row_height,
+        legend_sample_width=style.legend_sample_width,
+        legend_text_gap=style.legend_text_gap,
         background=style.dark_background,
         text_color=style.text_color,
+        line_width=separator_overlay.observed_line_width,
+        dash_length=style.line_dash_length,
+        dash_gap=style.line_dash_gap,
     )
     canvas = stack_debug_panels(
         original_gray,

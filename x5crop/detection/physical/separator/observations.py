@@ -299,7 +299,6 @@ def propose_separator_bands(
             continue
         start = float(corridor.left) + float(local_start)
         end = float(corridor.left) + float(local_end)
-        center = 0.5 * (start + end)
         provenance = MeasurementProvenance(
             root_measurement=MeasurementIdentity.SEPARATOR_PROFILE,
             source="observed_separator_band",
@@ -318,7 +317,6 @@ def propose_separator_bands(
             SeparatorBandObservation(
                 start=start,
                 end=end,
-                center=center,
                 tonal_evidence=float(
                     max(0.0, profile[local_start:local_end].mean() - threshold)
                     / spread
@@ -344,7 +342,7 @@ def propose_separator_bands(
     )[:budget]
     return SeparatorObservationSet(
         observations=tuple(
-            sorted(strongest, key=lambda observation: observation.center)
+            sorted(strongest, key=lambda observation: observation.midpoint)
         ),
         budget_exhausted=len(measured) > budget,
     )
