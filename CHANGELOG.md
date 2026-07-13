@@ -26,6 +26,9 @@ repository rules in `AGENTS.md`.
 - `FrameBleedPlan` 与 optional `FinalizationPlan` 已拆开：GeometryResolution 未解决时 report 明确保存
   `finalization_plan=null`、`final_geometry=null` 和不可导出状态；`--export-review` 不能写出 provisional
   frames，三联 Debug 仍可用诊断样式展示它们。
+- Partial auto count matrix 保持物理 trait 驱动；holder slack 和已确认 edge occlusion 都不会进入首尾
+  frame dimensions 或 px/mm consensus。Full 模式的双 canvas endpoint 只为完整 independent separator
+  sequence 提供范围，不自行形成 proof；mixed measured/canvas endpoint 仍保持 placement unresolved。
 - Current report identity 为 `detection_report / gray_sequence_integrity`，旧 schema 直接 cache miss。
 
 #### 灰度外观语义与 separator sequence 收敛（2026-07-13）

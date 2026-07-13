@@ -455,6 +455,30 @@ class PhysicalDetectionResolutionContractTest(unittest.TestCase):
             any(path.state == EvidenceState.SUPPORTED for path in paths)
         )
 
+    def test_full_canvas_endpoints_allow_complete_separator_sequence_proof(
+        self,
+    ) -> None:
+        candidate = candidate_fixture()
+        geometry = replace(
+            candidate.geometry,
+            sequence_provenance=MeasurementProvenance(
+                MeasurementIdentity.HOLDER_CANVAS,
+                "full_canvas_endpoint_range",
+                (MeasurementIdentity.CANVAS,),
+            ),
+            boundary_paths=canvas_boundary_paths(200, 100),
+        )
+        separator_path = next(
+            path
+            for path in boundary_proof_paths_for_geometry(
+                geometry,
+                candidate.assessment.evidence,
+            )
+            if path.code == "separator_sequence_led"
+        )
+
+        self.assertEqual(separator_path.state, EvidenceState.SUPPORTED)
+
     def test_one_canvas_sequence_edge_cannot_prove_placement(self) -> None:
         candidate = candidate_fixture()
         observations = tuple(

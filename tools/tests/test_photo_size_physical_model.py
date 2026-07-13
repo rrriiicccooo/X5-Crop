@@ -20,6 +20,9 @@ from x5crop.detection.physical.photo_size import (
     frame_dimension_evidence,
     frame_dimension_priors,
 )
+from x5crop.detection.evidence.physical_scale import (
+    physical_scale_observations,
+)
 from x5crop.detection.physical.model import (
     PhotoInterval,
     photo_intervals_for_sequence,
@@ -36,14 +39,17 @@ from x5crop.detection.physical.separator.assignment import (
 from x5crop.domain import (
     BoundaryKind,
     BoundarySide,
+    Box,
     EvidenceState,
     FrameBoundaryReference,
     FrameDimensionPriorSource,
     MeasurementIdentity,
     MeasurementProvenance,
     PixelInterval,
+    HolderSpan,
 )
 from x5crop.formats import format_spec
+from x5crop.units import PhysicalScaleSource
 
 
 def _geometry(second_start: float = 205.0):
@@ -146,6 +152,31 @@ def _geometry(second_start: float = 205.0):
 
 
 class PhotoSizePhysicalModelTest(unittest.TestCase):
+    def test_holder_slack_is_not_frame_dimension_or_scale_evidence(self) -> None:
+        candidate = candidate_fixture()
+        geometry = replace(
+            candidate.geometry,
+            holder_span=HolderSpan(Box(0, 0, 240, 100)),
+        )
+
+        dimensions = frame_dimension_evidence(
+            geometry,
+            unavailable_calibration_fixture(),
+        )
+        scales = physical_scale_observations(
+            geometry,
+            candidate.assessment.evidence.holder_boundary,
+        )
+
+        self.assertEqual(dimensions.photo_widths_px, (95.0,))
+        self.assertFalse(
+            any(
+                observation.source
+                == PhysicalScaleSource.FRAME_DIMENSION_CONSENSUS
+                for observation in scales
+            )
+        )
+
     def test_discrete_frame_sizes_produce_discrete_dimension_priors(self) -> None:
         base = candidate_fixture().geometry
         priors = frame_dimension_priors(

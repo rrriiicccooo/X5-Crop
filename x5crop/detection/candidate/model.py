@@ -164,7 +164,7 @@ def boundary_proof_paths_for_geometry(
         observation.side: observation
         for observation in geometry.boundary_paths
     }
-    sequence_boundary_supported = bool(
+    measured_sequence_boundaries = bool(
         geometry.sequence_provenance.root_measurement
         not in {
             MeasurementIdentity.HOLDER_CANVAS,
@@ -177,35 +177,58 @@ def boundary_proof_paths_for_geometry(
             for side in (BoundarySide.LEADING, BoundarySide.TRAILING)
         )
     )
-    common = bool(
-        sequence_boundary_supported
-        and evidence.sequence_conservation.state != EvidenceState.CONTRADICTED
+    endpoint_range_available = all(
+        side in boundary_by_side
+        for side in (BoundarySide.LEADING, BoundarySide.TRAILING)
+    )
+    full_canvas_endpoint_range = bool(
+        geometry.strip_mode == "full"
+        and endpoint_range_available
+        and all(
+            boundary_by_side[side].kind == BoundaryKind.CANVAS_CLIP
+            for side in (BoundarySide.LEADING, BoundarySide.TRAILING)
+        )
+    )
+    conservation_and_independence = bool(
+        evidence.sequence_conservation.state != EvidenceState.CONTRADICTED
         and evidence.independence.state
         in {EvidenceState.SUPPORTED, EvidenceState.NOT_APPLICABLE}
     )
+    separator_sequence_context = bool(
+        conservation_and_independence
+        and (
+            measured_sequence_boundaries
+            or full_canvas_endpoint_range
+        )
+    )
     separator_sequence_led = bool(
         geometry.count > 1
-        and common
+        and separator_sequence_context
         and evidence.separator_sequence.state == EvidenceState.SUPPORTED
     )
     hard_anchor_count = evidence.separator_sequence.hard_count
     single_frame_physical_boundaries = bool(
         geometry.count == 1
-        and sequence_boundary_supported
+        and measured_sequence_boundaries
         and evidence.frame_dimensions.state == EvidenceState.SUPPORTED
     )
     geometry_led = bool(
         evidence.frame_dimensions.state == EvidenceState.SUPPORTED
         and (
             single_frame_physical_boundaries
-            or (common and geometry.count > 1 and hard_anchor_count >= 1)
+            or (
+                separator_sequence_context
+                and geometry.count > 1
+                and hard_anchor_count >= 1
+            )
         )
     )
     partial_occupancy_led = bool(
         geometry.strip_mode == "partial"
         and evidence.partial_edge_safety.state == EvidenceState.SUPPORTED
         and evidence.holder_occupancy.underfilled
-        and common
+        and measured_sequence_boundaries
+        and conservation_and_independence
     )
     return (
         BoundaryProofPath(

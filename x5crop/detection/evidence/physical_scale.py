@@ -17,6 +17,7 @@ from ...units import (
     ScanCalibrationResolution,
 )
 from ..physical.model import SequenceSolution
+from ..physical.photo_size import dimension_photo_intervals
 from .holder_boundary import HolderBoundaryEvidence
 
 
@@ -89,19 +90,7 @@ def _dimension_consensus_observations(
 ) -> tuple[PhysicalScaleObservation, ...]:
     frame_width_mm = float(geometry.frame_dimension_prior.frame_size_mm[0])
     long_axis = "x" if is_horizontal_layout(geometry.layout) else "y"
-    leading_occluded = (
-        geometry.holder_occlusion.leading.hidden_width_px.maximum > 0.0
-    )
-    trailing_occluded = (
-        geometry.holder_occlusion.trailing.hidden_width_px.maximum > 0.0
-    )
-    intervals = tuple(
-        interval
-        for interval in geometry.photo_intervals
-        if interval.independently_observed
-        and not (interval.index == 1 and leading_occluded)
-        and not (interval.index == geometry.count and trailing_occluded)
-    )
+    intervals = dimension_photo_intervals(geometry)
     if len(intervals) < MINIMUM_FRAME_DIMENSION_CONSENSUS_OBSERVATIONS:
         return ()
     return tuple(

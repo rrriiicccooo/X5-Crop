@@ -95,8 +95,9 @@ Detection 只消费二维灰度 workspace。原 TIFF 通道、ICC 和色彩 meta
 `GrayAppearanceObservation` 类型的 `outer_appearance` 与 `inner_appearance`。灰度、纹理、梯度、
 连续性和 intensity tail 只描述像素外观，不能证明区域是片基、画面或其它材料。Base boundary
 不假设照片一定有黑边，也不命名内侧材料；四边分别定位 edge-adjacent holder region 到内部可见
-区域的 path，无法区分时保持 unresolved。Full canvas 只能作为保守 envelope，不能成为 count 或
-boundary proof。
+区域的 path，无法区分时保持 unresolved。Full canvas 本身不能证明 count 或 boundary；但在 full
+模式下，两端 canvas clip 可以作为完整 independent separator sequence 的端点范围，proof 仍由内部
+separator sequence 提供。
 
 Content 只允许向外扩张 `CropEnvelope` 以保护可见内容。它不能收缩 sequence span、定义内部
 cut 或制造 frame count。
@@ -154,6 +155,8 @@ Sequence solver 同时求解所有内部 boundaries，不逐边贪心：
 - Holder occlusion 只能作用于首张 leading edge 和末张 trailing edge。
 - 已确认遮挡的首尾可见宽度不参与普通 photo-dimension contradiction；尺寸一致性只使用未遮挡、
   independently observed 的 frame。
+- HolderSpan 超出 VisibleSequenceSpan 的 leading/trailing slack 同样不能成为首尾 photo-dimension
+  或 px/mm consensus；有 slack 的对应 edge frame 从尺寸测量集合排除。
 - 单张照片两端同时接片夹时，`combined_hidden_width_px` 保存总遮挡区间；leading/trailing
   分配保持 unavailable，不能把同一缺失宽度计算两次。
 - Holder occlusion state、side 与 hidden-width interval 必须一致；无交集的 boundary constraints
@@ -197,6 +200,8 @@ filled/underfilled 状态；slack、fill ratio 与 calibration projection 都是
 确定性派生值。
 一旦最高的 physically resolved count 出现，最终 candidate pool 只包含该 count 的候选；此前
 已评估但 unresolved 的较大 count 保留在 count audit detail 中，不能重新赢回 selection。
+没有任何 count resolved 时，provisional ranking 依次最大化可见内容保护、最小化无解释内部切线、
+最小化其它物理矛盾，再优先较大 partial-auto count；proof 与 residual 只在这些事实之后排序。
 `CountResolution` 使用 typed outcome 表达 requested/default/resolved/fallback selection，不保存
 自由 reason 字符串。
 

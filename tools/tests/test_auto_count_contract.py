@@ -16,6 +16,7 @@ from x5crop.detection.candidate.model import (
     AssessedCandidate,
     BuiltCandidate,
     CandidateAssessment,
+    EvidenceQuality,
 )
 from x5crop.detection.candidate.plan.count_hypotheses import (
     CountHypothesis,
@@ -23,13 +24,67 @@ from x5crop.detection.candidate.plan.count_hypotheses import (
     CountHypothesisSource,
     count_hypothesis_plan,
 )
-from x5crop.detection.candidate.selection.choose import select_candidates
+from x5crop.detection.candidate.selection.choose import (
+    candidate_rank,
+    select_candidates,
+)
 from x5crop.detection.geometry_resolution import GeometryResolution
 from x5crop.detection.evidence.partial_edge import partial_edge_safety_evidence
 from x5crop.formats import format_spec
 
 
 class AutoCountContractTest(unittest.TestCase):
+    def test_unresolved_rank_protects_content_before_preferring_larger_count(
+        self,
+    ) -> None:
+        def candidate(
+            count: int,
+            *,
+            covered: int = 100,
+            contradicted: tuple[str, ...] = (),
+        ) -> SimpleNamespace:
+            return SimpleNamespace(
+                evidence_quality=EvidenceQuality(
+                    supported=(),
+                    contradicted=contradicted,
+                    unavailable=(),
+                    covered_content_px=covered,
+                    uncovered_content_px=0,
+                    supported_proof_paths=(),
+                    physical_residuals=None,
+                ),
+                geometry=SimpleNamespace(
+                    count=count,
+                    strip_mode="partial",
+                    automatic_processing_supported=False,
+                ),
+                count_hypothesis=CountHypothesis(
+                    count,
+                    "partial",
+                    CountHypothesisSource.AUTOMATIC,
+                ),
+            )
+
+        smaller_safe = candidate(2)
+        larger_with_internal_cut = candidate(
+            5,
+            contradicted=("internal_boundary_preservation",),
+        )
+        larger_with_less_coverage = candidate(5, covered=99)
+
+        self.assertGreater(
+            candidate_rank(smaller_safe),
+            candidate_rank(larger_with_internal_cut),
+        )
+        self.assertGreater(
+            candidate_rank(smaller_safe),
+            candidate_rank(larger_with_less_coverage),
+        )
+        self.assertGreater(
+            candidate_rank(candidate(5)),
+            candidate_rank(smaller_safe),
+        )
+
     def _plan(self, format_id: str, requested_count: int | None = None):
         return count_hypothesis_plan(
             strip_mode="partial",

@@ -221,7 +221,7 @@ def _photo_widths(
     )
     widths = [
         interval.width_px.midpoint
-        for interval in _dimension_photo_intervals(geometry)
+        for interval in dimension_photo_intervals(geometry)
     ]
     return (
         tuple(width for width in widths if width > 0.0),
@@ -229,21 +229,31 @@ def _photo_widths(
     )
 
 
-def _dimension_photo_intervals(
+def dimension_photo_intervals(
     geometry: SequenceSolution,
 ) -> tuple[PhotoInterval, ...]:
+    holder = geometry.holder_span.box
+    visible = geometry.visible_sequence_span.box
     leading_occluded = (
         geometry.holder_occlusion.leading.hidden_width_px.maximum > 0.0
     )
     trailing_occluded = (
         geometry.holder_occlusion.trailing.hidden_width_px.maximum > 0.0
     )
+    leading_slack = visible.left > holder.left
+    trailing_slack = visible.right < holder.right
     return tuple(
         interval
         for interval in geometry.photo_intervals
         if interval.independently_observed
-        and not (interval.index == 1 and leading_occluded)
-        and not (interval.index == geometry.count and trailing_occluded)
+        and not (
+            interval.index == 1
+            and (leading_occluded or leading_slack)
+        )
+        and not (
+            interval.index == geometry.count
+            and (trailing_occluded or trailing_slack)
+        )
     )
 
 
@@ -291,7 +301,7 @@ def frame_dimension_evidence(
         observed_height / float(short_ppm) if calibration_used else None
     )
     observed_intervals = tuple(
-        interval.width_px for interval in _dimension_photo_intervals(geometry)
+        interval.width_px for interval in dimension_photo_intervals(geometry)
     )
     return FrameDimensionEvidence(
         frame_width_mm=float(frame_width_mm),
@@ -313,7 +323,7 @@ def frame_dimension_measurements_match_geometry(
 ) -> bool:
     _, separator_widths = _photo_widths(geometry)
     observed_intervals = tuple(
-        interval.width_px for interval in _dimension_photo_intervals(geometry)
+        interval.width_px for interval in dimension_photo_intervals(geometry)
     )
     return bool(
         evidence.photo_width_intervals_px == observed_intervals
