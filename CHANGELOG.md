@@ -14,6 +14,15 @@ repository rules in `AGENTS.md`.
 
 ### V4.9 当前开发线
 
+#### Cross-axis 无效分支归约（2026-07-14）
+
+- Cross-axis planning 现在会在 separator sequence 搜索前排除不能保证至少一个有效像素高度或
+  物理宽度的 aperture 假设。此类局部 path 组合属于不可行测量，不再进入 hypothesis 构造并令整张
+  TIFF 以 `separator sequence photo width must be positive` 失败。
+- 新增永久 synthetic contract 覆盖 subpixel aperture extent。`135/full 003.tif` 现在正常产生
+  unresolved REVIEW、current-schema report 与三联 Debug，而不是图片级 runtime error；无效分支
+  没有被 clamp 成虚构 geometry。
+
 #### Boundary observation 代表性校准（2026-07-14）
 
 - 每个局部 cross-section 保留的 adaptive change-point 候选由 24 增至 64。较弱但跨照片一致的

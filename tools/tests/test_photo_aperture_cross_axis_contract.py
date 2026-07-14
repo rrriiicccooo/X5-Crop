@@ -85,6 +85,26 @@ class PhotoApertureCrossAxisContractTest(unittest.TestCase):
 
         self.assertTrue(plan.search_outcome.budget_exhausted)
 
+    def test_cross_axis_plan_rejects_subpixel_photo_extent(self) -> None:
+        search_scope = _scope(
+            width=320,
+            height=20,
+            leading=0.0,
+            trailing=320.0,
+            top=10.0,
+            bottom=10.5,
+        )
+
+        plan = photo_aperture_cross_axis_plan(
+            search_scope,
+            _dimensions(3.0, 2.0),
+            6,
+            maximum_hypotheses=8,
+        )
+
+        self.assertFalse(plan.hypotheses)
+        self.assertFalse(plan.search_outcome.budget_exhausted)
+
     def test_cross_axis_planning_does_not_enumerate_separator_sequences(self) -> None:
         scope = _scope(
             width=320,

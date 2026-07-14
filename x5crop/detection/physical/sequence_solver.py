@@ -423,7 +423,13 @@ def photo_aperture_cross_axis_plan(
 ) -> PhotoApertureCrossAxisPlan:
     if min(count, maximum_hypotheses) <= 0:
         raise ValueError("cross-axis planning requires positive count and budget")
-    all_hypotheses = _all_photo_aperture_cross_axis_hypotheses(search_scope)
+    all_hypotheses = tuple(
+        hypothesis
+        for hypothesis in _all_photo_aperture_cross_axis_hypotheses(search_scope)
+        if hypothesis.height_px.minimum >= MINIMUM_POSITIVE_PIXEL_EXTENT
+        and _cross_axis_width_constraint(hypothesis, dimensions).minimum
+        >= MINIMUM_POSITIVE_PIXEL_EXTENT
+    )
     holder_long_extent = float(search_scope.holder_span.box.width)
 
     def rank(
