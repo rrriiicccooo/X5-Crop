@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 from inspect import signature
 import unittest
 from unittest.mock import patch
@@ -10,6 +11,35 @@ from tools.tests.architecture_contracts import PROJECT_ROOT, forbidden_import_ed
 
 
 class LayerBoundariesOutputContractTest(unittest.TestCase):
+    def test_output_layer_is_geometry_and_path_only(self) -> None:
+        mutating_calls = {
+            "mkdir",
+            "rename",
+            "replace",
+            "rmdir",
+            "touch",
+            "unlink",
+            "write_bytes",
+            "write_text",
+        }
+        offenders = []
+        for path in (PROJECT_ROOT / "x5crop/output").glob("*.py"):
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            offenders.extend(
+                f"{path.relative_to(PROJECT_ROOT)}:{node.lineno}:{node.func.attr}"
+                for node in ast.walk(tree)
+                if isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr in mutating_calls
+            )
+        self.assertEqual(offenders, [])
+
+    def test_output_surface_is_a_path_model_without_side_effect_methods(self) -> None:
+        from x5crop.output.surface import OutputSurface
+
+        self.assertEqual(set(OutputSurface.__dataclass_fields__), {"root"})
+        self.assertFalse(hasattr(OutputSurface, "ensure_root"))
+
     def test_report_validation_is_the_only_schema_deserializer(self) -> None:
         reuse = (PROJECT_ROOT / "x5crop/runtime/analysis_reuse.py").read_text(
             encoding="utf-8"

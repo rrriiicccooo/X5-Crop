@@ -49,6 +49,7 @@ def unresolved_dual_lane_candidate(
             ),
             sequence_provenance=scope.provenance,
             raw_boundary_paths=scope.raw_boundary_paths,
+            search_budget_exhausted=scope.measurement_budget_exhausted,
         ),
         count_hypothesis=CountHypothesis(
             count=count,

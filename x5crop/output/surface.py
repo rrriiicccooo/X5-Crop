@@ -10,10 +10,6 @@ from ..run_config import RunConfig
 class OutputSurface:
     root: Path
 
-    def ensure_root(self) -> Path:
-        self.root.mkdir(parents=True, exist_ok=True)
-        return self.root
-
 
 def output_directory_for(input_file: Path, config: RunConfig) -> Path:
     if config.output_dir is not None:

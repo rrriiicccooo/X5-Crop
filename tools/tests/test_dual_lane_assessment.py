@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import fields, replace
+from dataclasses import MISSING, fields, replace
 import inspect
 import unittest
 from unittest.mock import patch
@@ -24,6 +24,7 @@ from x5crop.detection.candidate.assessment.review_only import (
 )
 from x5crop.detection.candidate.model import BuiltCandidate, DualLaneEvidence
 from x5crop.detection.candidate.proposal.hard_safety import hard_safety_candidate
+from x5crop.detection.candidate.proposal.sequence import photo_sequence_search_scope
 from x5crop.detection.candidate.selection.choose import select_candidates
 from x5crop.detection.context import (
     DetectionContext,
@@ -166,9 +167,19 @@ class DualLaneAssessmentTest(unittest.TestCase):
             ),
             DetectionExecutionStatistics(),
         )
+        search_scope = replace(
+            photo_sequence_search_scope(
+                context.measurement_cache,
+                context.configuration.boundary_path,
+            ),
+            measurement_budget_exhausted=True,
+        )
         with patch(
             "x5crop.detection.modes.dual_lane.measure_lane_dividers",
             return_value=LaneDividerEvidenceSet((), False),
+        ), patch(
+            "x5crop.detection.modes.review_only.photo_sequence_search_scope",
+            return_value=search_scope,
         ):
             selection = choose_dual_lane_detection(
                 context,
@@ -176,6 +187,13 @@ class DualLaneAssessmentTest(unittest.TestCase):
             )
 
         self.assertIsInstance(selection.selected.geometry, ReviewOnlyContainment)
+        self.assertTrue(selection.selected.geometry.search_budget_exhausted)
+
+    def test_review_only_budget_state_has_no_silent_default(self) -> None:
+        self.assertIs(
+            ReviewOnlyContainment.__dataclass_fields__["search_budget_exhausted"].default,
+            MISSING,
+        )
 
     def test_unresolved_lane_keeps_dual_lane_result_review_only(self) -> None:
         configuration = get_detection_configuration("135-dual", "full")

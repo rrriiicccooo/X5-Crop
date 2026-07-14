@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
@@ -29,6 +30,7 @@ from x5crop.debug.status import debug_status_parts
 from x5crop.domain import WorkspaceExtent
 from x5crop.image.workspace import WorkspaceIdentity
 from x5crop.output.model import AxisBleedParameters
+from x5crop.output.surface import OutputSurface
 from x5crop.runtime.frame_bleed import prepare_frame_bleed
 from x5crop.export.actions import write_crops_if_allowed
 from x5crop.report.configuration import detection_configuration_read_model
@@ -57,10 +59,11 @@ class UnresolvedOutputContractTest(unittest.TestCase):
                 workspace_extent=WorkspaceExtent(310, 100),
             ),
         )
-        with patch(
+        with TemporaryDirectory() as temporary_directory, patch(
             "x5crop.export.actions.write_crops",
             return_value=["output/frame.tif"],
         ) as writer:
+            output_root = Path(temporary_directory) / "output"
             outputs = write_crops_if_allowed(
                 Path("input.tif"),
                 np.zeros((100, 310), dtype=np.uint8),
@@ -69,8 +72,9 @@ class UnresolvedOutputContractTest(unittest.TestCase):
                 detection,
                 SimpleNamespace(export_review=True, dry_run=False),
                 False,
-                SimpleNamespace(ensure_root=lambda: Path("output")),
+                OutputSurface(output_root),
             )
+            self.assertTrue(output_root.is_dir())
 
         self.assertEqual(outputs, ["output/frame.tif"])
         writer.assert_called_once()
@@ -103,7 +107,7 @@ class UnresolvedOutputContractTest(unittest.TestCase):
                 detection,
                 SimpleNamespace(export_review=True, dry_run=False),
                 False,
-                SimpleNamespace(ensure_root=lambda: Path("output")),
+                OutputSurface(Path("output")),
             )
 
         self.assertEqual(outputs, [])

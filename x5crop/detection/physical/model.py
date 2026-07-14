@@ -438,7 +438,7 @@ class ReviewOnlyContainment:
     assignment_consensus: BoundaryAssignmentConsensus
     sequence_provenance: MeasurementProvenance
     raw_boundary_paths: tuple[GrayBoundaryPathObservation, ...]
-    search_budget_exhausted: bool = False
+    search_budget_exhausted: bool
     automatic_processing_supported: bool = False
 
     def __post_init__(self) -> None:

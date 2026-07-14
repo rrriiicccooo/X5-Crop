@@ -56,7 +56,8 @@ def write_crops_if_allowed(
     output_geometry = detection.output_geometry
     if output_geometry is None:
         return []
-    output_dir = output_surface.ensure_root()
+    output_dir = output_surface.root
+    output_dir.mkdir(parents=True, exist_ok=True)
     return write_crops(
         input_file,
         arr,
