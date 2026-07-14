@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from typing import get_type_hints
 import unittest
 
 import numpy as np
@@ -189,13 +190,35 @@ def _measured_apertures_for_spacing(spacing_px: float) -> tuple[PhotoAperture, .
 
 
 class FrameContentSupportTest(unittest.TestCase):
+    def test_photo_content_uses_canonical_photo_and_boundary_identities(self) -> None:
+        annotations = get_type_hints(PhotoContentObservation)
+
+        self.assertIn("photo_index", annotations)
+        self.assertNotIn("index", annotations)
+        self.assertEqual(
+            annotations["boundary_contact_sides"],
+            tuple[BoundarySide, ...],
+        )
+
     def test_internal_content_crossing_requires_physical_spacing_evidence(self) -> None:
         geometry = candidate_fixture().geometry
         crossing = PhotoContentEvidence(
             0.5,
             (
-                PhotoContentObservation(1, 0.8, 0.8, True, ("right",)),
-                PhotoContentObservation(2, 0.8, 0.8, True, ("left",)),
+                PhotoContentObservation(
+                    1,
+                    0.8,
+                    0.8,
+                    True,
+                    (BoundarySide.TRAILING,),
+                ),
+                PhotoContentObservation(
+                    2,
+                    0.8,
+                    0.8,
+                    True,
+                    (BoundarySide.LEADING,),
+                ),
             ),
         )
         boundary = InterPhotoBoundaryReference(None, 1)
@@ -266,8 +289,20 @@ class FrameContentSupportTest(unittest.TestCase):
         crossing = PhotoContentEvidence(
             0.5,
             (
-                PhotoContentObservation(1, 0.8, 0.8, True, ("right",)),
-                PhotoContentObservation(2, 0.8, 0.8, True, ("left",)),
+                PhotoContentObservation(
+                    1,
+                    0.8,
+                    0.8,
+                    True,
+                    (BoundarySide.TRAILING,),
+                ),
+                PhotoContentObservation(
+                    2,
+                    0.8,
+                    0.8,
+                    True,
+                    (BoundarySide.LEADING,),
+                ),
             ),
         )
         apertures = _measured_apertures_for_spacing(-5.0)

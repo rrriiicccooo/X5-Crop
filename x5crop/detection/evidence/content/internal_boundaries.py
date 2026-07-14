@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 
 from ....domain import (
+    BoundarySide,
     EvidenceState,
     InterPhotoBoundaryReference,
     InterPhotoSpacing,
@@ -135,11 +136,11 @@ def inter_photo_boundary_preservation_evidence(
     if tuple(spacing.boundary.boundary_index for spacing in spacings) != expected:
         raise ValueError("internal boundary evidence requires complete spacing")
     content = {
-        observation.index: observation
+        observation.photo_index: observation
         for observation in photo_content.observations
     }
 
-    def content_contacts(frame_index: int, side: str) -> bool:
+    def content_contacts(frame_index: int, side: BoundarySide) -> bool:
         observation = content.get(frame_index)
         return bool(
             observation is not None
@@ -151,8 +152,8 @@ def inter_photo_boundary_preservation_evidence(
         left = photo_apertures[boundary_index - 1]
         right = photo_apertures[boundary_index]
         crossing = bool(
-            content_contacts(boundary_index, "right")
-            and content_contacts(boundary_index + 1, "left")
+            content_contacts(boundary_index, BoundarySide.TRAILING)
+            and content_contacts(boundary_index + 1, BoundarySide.LEADING)
         )
         observations.append(
             InternalBoundaryObservation(

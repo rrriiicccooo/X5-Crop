@@ -10,10 +10,8 @@ from ....cache import (
     ThresholdedMeasurementRegionKey,
 )
 from ....cache.content_statistics import ContentColumnStatistics
-from ....domain import Box
-from ....configuration.content import ContentEvidenceParameters
-from ....configuration.content import ContentConfiguration
-from x5crop.domain import EvidenceState
+from ....configuration.content import ContentConfiguration, ContentEvidenceParameters
+from ....domain import BoundarySide, Box, EvidenceState
 from .activation import cached_content_evidence_threshold, sample_supports_content
 
 if TYPE_CHECKING:
@@ -22,11 +20,11 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class PhotoContentObservation:
-    index: int
+    photo_index: int
     mean: float
     coverage: float
     content_present: bool
-    boundary_contact_sides: tuple[str, ...]
+    boundary_contact_sides: tuple[BoundarySide, ...]
 
 
 @dataclass(frozen=True)
@@ -86,7 +84,7 @@ def _boundary_contact_sides(
     crop: np.ndarray,
     threshold: float,
     parameters: ContentEvidenceParameters,
-) -> tuple[str, ...]:
+) -> tuple[BoundarySide, ...]:
     band = max(
         int(parameters.boundary_band_min_px),
         int(round(min(crop.shape) * float(parameters.boundary_band_ratio))),
@@ -94,10 +92,10 @@ def _boundary_contact_sides(
     band_y = min(crop.shape[0], band)
     band_x = min(crop.shape[1], band)
     samples = {
-        "left": crop[:, :band_x],
-        "right": crop[:, crop.shape[1] - band_x :],
-        "top": crop[:band_y, :],
-        "bottom": crop[crop.shape[0] - band_y :, :],
+        BoundarySide.LEADING: crop[:, :band_x],
+        BoundarySide.TRAILING: crop[:, crop.shape[1] - band_x :],
+        BoundarySide.TOP: crop[:band_y, :],
+        BoundarySide.BOTTOM: crop[crop.shape[0] - band_y :, :],
     }
     return tuple(
         side
@@ -195,7 +193,7 @@ def photo_content_evidence(
         )
         observations.append(
             PhotoContentObservation(
-                index=index,
+                photo_index=index,
                 mean=float(mean),
                 coverage=float(coverage),
                 content_present=content_present,

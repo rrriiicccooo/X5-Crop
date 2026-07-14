@@ -392,7 +392,8 @@ def _candidate_evidence_matches_geometry(
     evidence: CandidateEvidence,
 ) -> bool:
     content_indexes = tuple(
-        observation.index for observation in evidence.photo_content.observations
+        observation.photo_index
+        for observation in evidence.photo_content.observations
     )
     completeness = evidence.holder_occupancy.strip_completeness
     independent_separator_count = sum(

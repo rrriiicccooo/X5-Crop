@@ -34,6 +34,8 @@ repository rules in `AGENTS.md`.
 - Raw tonal、texture 与 edge-adjacent paths 的 measurement identity 统一为 `BOUNDARY_PATHS`；删除
   assignment 前误称 holder 的 `HOLDER_BOUNDARY_PROFILE` 和 `holder_reference_percentile`，canvas-edge
   adaptive reference 不再偷带片夹身份。
+- `PhotoContentObservation` 统一使用 `photo_index` 与 typed `BoundarySide`；删除泛化 `index` 和
+  `left/right` 字符串侧名，content crossing、assessment 与 current report 共享同一照片/边界身份。
 - Sequence conservation 收敛为 `PhotoSequenceSolution` 的构造不变量。相邻 spacing 已由 aperture
   edge 差值唯一决定，不再把同一几何恒等式重复包装成 evidence、CandidateGate check、final reason
   或 report 字段，避免 geometry 自证。
