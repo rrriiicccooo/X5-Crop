@@ -7,7 +7,10 @@ from .candidate.assessment.review_only import assess_review_only_candidate
 from .candidate.execution.count_hypothesis import evaluate_count_hypothesis
 from .candidate.execution.model import CountHypothesisEvaluation
 from .candidate.model import AssessedCandidate
-from .candidate.proposal.sequence import cached_boundary_measurements
+from .candidate.proposal.sequence import (
+    cached_boundary_measurements,
+    photo_sequence_search_scope,
+)
 from .candidate.plan.counts import count_hypothesis_plan
 from .candidate.plan.model import (
     CountHypothesisPlan,
@@ -23,9 +26,11 @@ from .candidate.selection.model import (
 from .context import DetectionContext
 from .modes.dual_lane import choose_dual_lane_detection
 from .modes.review_only import unresolved_dual_lane_candidate
+from .evidence.content.regions import cached_content_region_observation
 from .evidence.physical_scale import boundary_scale_observations
 from .physical.model import ReviewOnlyContainment
-from ..domain import EvidenceState
+from ..domain import EvidenceState, PhotoSequenceSearchScope
+from ..image.content import ContentRegionObservation
 from ..units import ScanCalibrationResolution
 
 
@@ -80,6 +85,8 @@ def _candidate_pool_for_count_resolution(
 def _evaluate_count_hypotheses(
     context: DetectionContext,
     plan: CountHypothesisPlan,
+    search_scope: PhotoSequenceSearchScope,
+    visible_content: ContentRegionObservation,
 ) -> tuple[tuple[CountHypothesisEvaluation, ...], int | None]:
     evaluations: list[CountHypothesisEvaluation] = []
     stopped_after_count: int | None = None
@@ -88,6 +95,8 @@ def _evaluate_count_hypotheses(
         evaluation = evaluate_count_hypothesis(
             context,
             hypothesis,
+            search_scope=search_scope,
+            visible_content=visible_content,
             larger_count_hypotheses_resolved=(
                 larger_count_hypotheses_resolved
             ),
@@ -140,12 +149,26 @@ def _choose_standard_detection(context: DetectionContext) -> SelectionResult:
     context = _context_with_root_physical_scale(context)
     configuration = context.configuration
     physical_spec = configuration.physical_spec
+    search_scope = photo_sequence_search_scope(
+        context.measurement_cache,
+        configuration.boundary_path,
+    )
+    visible_content = cached_content_region_observation(
+        context.measurement_cache,
+        search_scope.holder_span.box,
+        configuration.content,
+    )
     plan = count_hypothesis_plan(
         strip_mode=context.request.strip_mode,
         requested_count=context.request.requested_count,
         fmt=physical_spec,
     )
-    evaluations, stopped_after_count = _evaluate_count_hypotheses(context, plan)
+    evaluations, stopped_after_count = _evaluate_count_hypotheses(
+        context,
+        plan,
+        search_scope,
+        visible_content,
+    )
 
     candidates, search_budget_exhausted = _candidate_pool_for_count_resolution(
         evaluations
@@ -154,6 +177,7 @@ def _choose_standard_detection(context: DetectionContext) -> SelectionResult:
         built = hard_safety_candidate(
             context,
             plan.hard_safety_count,
+            search_scope,
             search_budget_exhausted=search_budget_exhausted,
         )
         assessed = (

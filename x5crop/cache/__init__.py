@@ -7,6 +7,7 @@ import numpy as np
 
 from .content_statistics import ContentColumnStatistics
 from ..domain import BoundaryMeasurementSet, Box
+from ..image.content import ContentRegionObservation
 from ..image.statistics import ImageMeasurementStatistics
 from ..geometry.layout import require_work_layout
 
@@ -80,6 +81,10 @@ class MeasurementCache:
         default_factory=dict
     )
     content_evidence_thresholds: dict[MeasurementRegionKey, float | None] = field(default_factory=dict)
+    content_region_observations: dict[
+        MeasurementRegionKey,
+        ContentRegionObservation,
+    ] = field(default_factory=dict)
     content_column_statistics: dict[ThresholdedMeasurementRegionKey, ContentColumnStatistics] = field(
         default_factory=dict
     )

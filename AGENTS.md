@@ -287,6 +287,10 @@ Current state:
 - Gray paths and separator bands are count-independent observations. Candidate
   assignment binds separator start/end to the trailing/leading edges of adjacent
   apertures; dimension-only boundaries remain provisional.
+- Count-independent content observations are cached once and may only reject
+  geometry alternatives that omit measured visible content. They never create,
+  move, or shrink aperture edges; the same observation and coverage calculation
+  feed final evidence.
 - Gray boundary paths preserve typed local samples across the orthogonal axis.
   Short-axis aperture edges are resolved within each photo's own long-axis span.
   Raw channels remain visible, while geometry-equivalent paths form one solver
@@ -322,19 +326,20 @@ Current verification state:
   are implemented. Debug distinguishes ideal apertures, output envelopes, raw
   observations, measured edges, provisional edges, holder boundaries, and
   corroborated overlap through one diagnostics-owned legend.
-- The current suite contains 472 tests and 14 valid format/mode configurations.
+- The current suite contains 475 tests and 14 valid format/mode configurations.
   On `135/full 005.tif`, separator-bound path ownership reduced assignment
   evaluations to 4,264 without search-budget exhaustion. Geometry remains
-  unresolved because independent measured aperture alternatives disagree; this
-  is calibration/audit material, not an execution-budget failure.
+  unresolved because 72 independent measured aperture alternatives all cover
+  the currently measured content runs but disagree on placement; this is
+  calibration/audit material, not a Gate or execution-budget failure.
 - The previous 113-TIFF run in `Test/test 2` remains an immutable visual baseline.
   A new full run must be written to `Test/test 3` after performance profiling and
   representative-sample calibration.
 - `half/full` remains the measured performance hotspot. Performance work must
   profile one fixed sample and preserve GeometryResolution ownership.
-- Architecture closure audits are intentionally deferred. Audit A and an
-  independent fresh-context Audit B must restart from zero before a new closure
-  candidate can be recorded.
+- Audit A restarted after the content counter-evidence root fix. Any further
+  finding must still receive a failing permanent contract before repair; an
+  independent fresh-context Audit B follows only after Audit A reaches zero.
 - Current PASS/REVIEW outcomes and adaptive measurement values remain calibration
   material for the separate real-sample project; do not loosen Gate rules to
   manufacture PASS from the current unresolved results.

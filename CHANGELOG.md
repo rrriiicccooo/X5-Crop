@@ -16,6 +16,10 @@ repository rules in `AGENTS.md`.
 
 #### Photo Aperture 联合求解与 Debug 可见性（2026-07-13）
 
+- Solver 现在显式消费一次缓存的 count-independent content observation，仅用它剔除漏掉已测可见
+  内容的 geometry alternatives；content 不能生成、移动或收缩 aperture edge。若全部 alternatives
+  都存在 coverage contradiction，solver 保留原始几何并交给 canonical evidence 报告，避免用
+  content 反向伪造边界。Solver 与 `PhotoApertureCoverageEvidence` 共享同一 observation 和覆盖算法。
 - Boundary observation 破坏性升级为真正的二维 path：每个 local sample 保存 orthogonal interval
   与位置不确定度，top/bottom aperture edge 按每张照片自己的长轴范围解析。Raw channel 仍完整
   报告，solver 只合并几何等价 hypotheses；与内部 separator band 关联的 path 由 band 双边解释

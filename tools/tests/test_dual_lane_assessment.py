@@ -229,6 +229,10 @@ class DualLaneAssessmentTest(unittest.TestCase):
                 hard_safety_candidate(
                     lane_context,
                     count,
+                    photo_sequence_search_scope(
+                        lane_context.measurement_cache,
+                        lane_context.configuration.boundary_path,
+                    ),
                     search_budget_exhausted=False,
                 )
             )

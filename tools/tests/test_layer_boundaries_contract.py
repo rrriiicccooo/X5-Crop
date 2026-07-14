@@ -182,6 +182,21 @@ class LayerBoundariesContractTest(unittest.TestCase):
         ]
         self.assertEqual(offenders, [])
 
+    def test_count_independent_observations_precede_candidate_execution(self) -> None:
+        self.assertEqual(
+            forbidden_import_edges(
+                ("x5crop.detection.candidate.execution",),
+                ("x5crop.detection.evidence",),
+            ),
+            [],
+        )
+        self.assertFalse(
+            (
+                PROJECT_ROOT
+                / "x5crop/detection/candidate/execution/source_candidates.py"
+            ).exists()
+        )
+
     def test_report_restoration_depends_on_models_not_computation_stages(self) -> None:
         self.assertEqual(
             forbidden_import_edges(

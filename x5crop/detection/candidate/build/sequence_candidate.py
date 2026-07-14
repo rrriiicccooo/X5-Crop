@@ -13,6 +13,7 @@ from ....domain import (
     PhotoSequenceSearchScope,
 )
 from ....formats import FormatPhysicalSpec
+from ....image.content import ContentRegionObservation
 from ...context import DetectionRequest
 from ...physical.model import PhotoSequenceSolution
 from ...physical.separator.observations import (
@@ -67,6 +68,7 @@ def build_sequence_candidate(
     count_hypothesis: CountHypothesis,
     search_scope: PhotoSequenceSearchScope,
     dimensions: FrameDimensionPrior,
+    visible_content: ContentRegionObservation,
     *,
     cache: MeasurementCache,
     separator_configuration: SeparatorConfiguration,
@@ -117,6 +119,7 @@ def build_sequence_candidate(
         cross_axis_plan,
         int(count_hypothesis.count),
         dimensions,
+        visible_content,
         solver_parameters.maximum_assignment_evaluations,
         solver_parameters.maximum_solution_alternatives,
     )

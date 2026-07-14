@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from math import isfinite
+from math import ceil, floor, isfinite
 
 from ...domain import (
     BoundaryAxis,
@@ -28,6 +28,7 @@ from ...domain import (
     SeparatorWidthConstraint,
     SeparatorCrossAxisMeasurement,
 )
+from ...image.content import ContentRegionObservation
 from .model import (
     AssignmentConsensusOutcome,
     BoundaryAssignmentConsensus,
@@ -1866,12 +1867,35 @@ def _assignment_consensus(
     return BoundaryAssignmentConsensus(outcome, len(builds), conflicting)
 
 
+def _build_preserves_visible_content(
+    build: _SequenceBuild,
+    visible_content: ContentRegionObservation,
+) -> bool:
+    intervals = tuple(
+        (
+            max(
+                visible_content.region.left,
+                int(floor(aperture.leading.position.minimum)),
+            ),
+            min(
+                visible_content.region.right,
+                int(ceil(aperture.trailing.position.maximum)),
+            ),
+        )
+        for aperture in build.apertures
+    )
+    if any(end <= start for start, end in intervals):
+        return False
+    return not visible_content.uncovered_by(intervals)
+
+
 def solve_photo_sequence(
     supports: tuple[SeparatorBandCrossAxisSupport, ...],
     search_scope: PhotoSequenceSearchScope,
     cross_axis_plan: PhotoApertureCrossAxisPlan,
     count: int,
     dimensions: FrameDimensionPrior,
+    visible_content: ContentRegionObservation,
     maximum_assignment_evaluations: int,
     maximum_solution_alternatives: int,
 ) -> PhotoSequenceSolveResult | PhotoSequenceSolveUnavailable:
@@ -1976,6 +2000,14 @@ def solve_photo_sequence(
             total_evaluations,
             budget_exhausted,
         )
+
+    content_preserving_builds = tuple(
+        build
+        for build in builds
+        if _build_preserves_visible_content(build, visible_content)
+    )
+    if content_preserving_builds:
+        builds = content_preserving_builds
 
     non_dominated = _non_dominated_builds(builds)
     best_objectives = max(

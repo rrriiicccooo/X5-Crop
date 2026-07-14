@@ -32,6 +32,7 @@ from x5crop.image.statistics import (
     ImageMeasurementStatisticsParameters,
     image_measurement_statistics,
 )
+from x5crop.image.content import ContentRegionObservation
 
 
 class SequenceCandidateBuildContractTest(unittest.TestCase):
@@ -58,6 +59,7 @@ class SequenceCandidateBuildContractTest(unittest.TestCase):
             cross_axis_plan,
             2,
             frame_dimensions,
+            ContentRegionObservation(search_scope.holder_span.box, (), 0),
             maximum_assignment_evaluations=1_000,
             maximum_solution_alternatives=16,
         )
@@ -109,6 +111,7 @@ class SequenceCandidateBuildContractTest(unittest.TestCase):
                 ),
                 search_scope,
                 frame_dimensions,
+                ContentRegionObservation(search_scope.holder_span.box, (), 0),
                 cache=cache,
                 separator_configuration=configuration.separator,
                 solver_parameters=configuration.candidate_plan.sequence_solver,

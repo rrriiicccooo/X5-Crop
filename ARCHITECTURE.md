@@ -147,6 +147,9 @@ observation，但不能成为 hard separator。Dimension-only edge 只是一条 
 - interior photo dimensions 服从同一物理尺寸 option；
 - holder occlusion 只允许作用于首张 leading 与末张 trailing；
 - separator start/end 分别绑定相邻 aperture edge；
+- count-independent content runs 只作为反证过滤明显漏掉已测可见内容的 solver alternatives；
+  它们不能生成、移动或收缩任何 aperture edge。若所有 alternatives 都与 content 冲突，solver
+  保留这些几何并由后续 evidence 明确报告 contradiction，而不是用 content 伪造新边界；
 - content coverage 必须与逐张 aperture 一致；spacing 与相邻 aperture edge 的
   守恒关系由 `PhotoSequenceSolution` 构造不变量保证，不再包装成独立 evidence 或 Gate；
 - supporting measurement 可以被 geometry 消费；只有 measurement 反向依赖 `FRAME_GEOMETRY`
@@ -178,7 +181,9 @@ Standard candidate 的 canonical evidence 包括：
 
 Content evidence 只由局部 gradient、texture 与 contrast 共识生成，不把全局明暗位置当成内容。
 它只提供遗漏内容反证与 preservation measurement，不能定义精确 aperture edge、制造 frame
-count，或无条件扩张物理几何。External crossing 测量排除相邻 aperture boundary 的 uncertainty
+count，或无条件扩张物理几何。同一份 count-independent content observation 由 measurement cache
+保存一次，并同时供 solver 反证与最终 aperture coverage evidence 使用，避免两套覆盖事实漂移。
+External crossing 测量排除相邻 aperture boundary 的 uncertainty
 区域和 evidence kernel footprint，避免垂直边角或卷积邻域伪造跨界内容。单个 content/noise pixel
 不得改写 aperture；独立 measured edge 与 content measurement 冲突时保留 conflict，不静默删除
 measured geometry。

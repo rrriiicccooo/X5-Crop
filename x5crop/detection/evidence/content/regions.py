@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-
 import numpy as np
 
-from ....domain import Box
+from ....cache import MeasurementCache, MeasurementRegionKey
 from ....configuration.content import ContentConfiguration
+from ....domain import Box
+from ....image.content import ContentRegionObservation
 from ....image.evidence import (
     activation_mask,
     adaptive_activation_threshold,
@@ -16,18 +16,6 @@ from ....utils import runs_from_mask, smooth_1d
 
 
 CONTENT_SMOOTHING_WINDOW_ENDPOINT_COUNT = 2
-
-
-@dataclass(frozen=True)
-class ContentRegionObservation:
-    runs: tuple[tuple[int, int], ...]
-    position_uncertainty_px: int
-
-    def __post_init__(self) -> None:
-        if self.position_uncertainty_px < 0:
-            raise ValueError("content position uncertainty must be non-negative")
-        if any(end <= start for start, end in self.runs):
-            raise ValueError("content runs must have positive extent")
 
 
 def content_region_observation(
@@ -48,7 +36,7 @@ def content_region_observation(
         np.float32
     ) / UINT8_MAX_VALUE
     if crop.size == 0:
-        return ContentRegionObservation((), position_uncertainty_px)
+        return ContentRegionObservation(region, (), position_uncertainty_px)
     evidence_threshold = adaptive_activation_threshold(
         crop,
         content_configuration.evidence.activation_percentile,
@@ -56,7 +44,7 @@ def content_region_observation(
         content_configuration.evidence.maximum_percentile_samples,
     )
     if evidence_threshold is None:
-        return ContentRegionObservation((), position_uncertainty_px)
+        return ContentRegionObservation(region, (), position_uncertainty_px)
     spatial_support = spatially_supported_activation_mask(
         crop,
         evidence_threshold,
@@ -71,9 +59,10 @@ def content_region_observation(
         content_configuration.evidence.maximum_percentile_samples,
     )
     if threshold is None:
-        return ContentRegionObservation((), position_uncertainty_px)
+        return ContentRegionObservation(region, (), position_uncertainty_px)
     minimum_width = int(parameters.min_run_width_px)
     return ContentRegionObservation(
+        region,
         tuple(
             (region.left + start, region.left + end)
             for start, end in runs_from_mask(activation_mask(smoothed, threshold))
@@ -81,3 +70,23 @@ def content_region_observation(
         ),
         position_uncertainty_px,
     )
+
+
+def cached_content_region_observation(
+    cache: MeasurementCache,
+    region: Box,
+    configuration: ContentConfiguration,
+) -> ContentRegionObservation:
+    absolute = region.clamp(cache.gray_work.shape[1], cache.gray_work.shape[0])
+    if not absolute.valid():
+        raise ValueError("content observation requires a valid workspace region")
+    key = MeasurementRegionKey(configuration, absolute)
+    found = key in cache.content_region_observations
+    cache.lookup_statistics.record_lookup(found=found)
+    if not found:
+        cache.content_region_observations[key] = content_region_observation(
+            cache.content_evidence_work,
+            absolute,
+            content_configuration=configuration,
+        )
+    return cache.content_region_observations[key]

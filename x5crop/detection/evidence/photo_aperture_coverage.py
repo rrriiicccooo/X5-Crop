@@ -6,7 +6,8 @@ from typing import TYPE_CHECKING
 from ...cache import MeasurementCache
 from ...configuration.content import ContentConfiguration
 from ...domain import EvidenceState
-from .content.regions import content_region_observation
+from ...image.content import uncovered_content_runs
+from .content.regions import cached_content_region_observation
 
 if TYPE_CHECKING:
     from ..physical.model import PhotoSequenceSolution
@@ -47,15 +48,11 @@ class PhotoApertureCoverageEvidence:
             if not holder_start <= start < end <= holder_end:
                 raise ValueError("content intervals must fit the holder")
 
-        coverage = _merged_aperture_coverage(
+        uncovered = uncovered_content_runs(
+            self.content_runs,
             self.photo_aperture_intervals,
-            self.content_position_uncertainty_px,
-            self.holder_long_axis_interval,
-        )
-        uncovered = tuple(
-            segment
-            for run in self.content_runs
-            for segment in _interval_remainder(run, coverage)
+            position_uncertainty_px=self.content_position_uncertainty_px,
+            bounds=self.holder_long_axis_interval,
         )
         if not self.content_runs:
             state = EvidenceState.UNAVAILABLE
@@ -87,47 +84,6 @@ def _aperture_intervals(
     return intervals
 
 
-def _merged_aperture_coverage(
-    intervals: tuple[tuple[int, int], ...],
-    uncertainty_px: int,
-    holder: tuple[int, int],
-) -> tuple[tuple[int, int], ...]:
-    holder_start, holder_end = holder
-    merged: list[tuple[int, int]] = []
-    for start, end in intervals:
-        expanded = (
-            max(holder_start, start - uncertainty_px),
-            min(holder_end, end + uncertainty_px),
-        )
-        if merged and expanded[0] <= merged[-1][1]:
-            merged[-1] = (merged[-1][0], max(merged[-1][1], expanded[1]))
-        else:
-            merged.append(expanded)
-    return tuple(merged)
-
-
-def _interval_remainder(
-    interval: tuple[int, int],
-    coverage: tuple[tuple[int, int], ...],
-) -> tuple[tuple[int, int], ...]:
-    start, end = interval
-    cursor = start
-    remainder: list[tuple[int, int]] = []
-    for covered_start, covered_end in coverage:
-        if covered_end <= cursor:
-            continue
-        if covered_start >= end:
-            break
-        if covered_start > cursor:
-            remainder.append((cursor, min(end, covered_start)))
-        cursor = max(cursor, covered_end)
-        if cursor >= end:
-            break
-    if cursor < end:
-        remainder.append((cursor, end))
-    return tuple(remainder)
-
-
 def photo_aperture_coverage_evidence(
     geometry: PhotoSequenceSolution,
     cache: MeasurementCache,
@@ -138,10 +94,10 @@ def photo_aperture_coverage_evidence(
         cache.gray_work.shape[0],
     )
     aperture_intervals = _aperture_intervals(geometry)
-    content = content_region_observation(
-        cache.content_evidence_work,
+    content = cached_content_region_observation(
+        cache,
         holder,
-        content_configuration=content_configuration,
+        content_configuration,
     )
     return PhotoApertureCoverageEvidence(
         holder_long_axis_interval=(holder.left, holder.right),

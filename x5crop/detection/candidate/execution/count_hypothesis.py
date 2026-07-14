@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ....domain import PhotoSequenceSearchScope
+from ....image.content import ContentRegionObservation
 from ...context import DetectionContext
 from ..assessment.candidate import assess_candidate
 from ..build.sequence_candidate import build_sequence_candidate
@@ -7,16 +9,14 @@ from ..model import AssessedCandidate
 from ..plan.model import CountHypothesis
 from ..selection.choose import select_candidates
 from ...physical.photo_size import frame_dimension_priors
-from .source_candidates import (
-    PhotoSequencePlan,
-    photo_sequence_plan,
-)
 from .model import CountHypothesisEvaluation
 
 
-def _assess_sequence_plan(
+def _assess_count_hypothesis(
     context: DetectionContext,
-    plan: PhotoSequencePlan,
+    hypothesis: CountHypothesis,
+    search_scope: PhotoSequenceSearchScope,
+    visible_content: ContentRegionObservation,
 ) -> tuple[list[AssessedCandidate], bool]:
     outcomes = []
     for dimensions in frame_dimension_priors(
@@ -27,9 +27,10 @@ def _assess_sequence_plan(
         outcome = build_sequence_candidate(
             context.request,
             context.configuration.physical_spec,
-            plan.count_hypothesis,
-            plan.search_scope,
+            hypothesis,
+            search_scope,
             dimensions,
+            visible_content,
             cache=context.measurement_cache,
             separator_configuration=context.configuration.separator,
             solver_parameters=context.configuration.candidate_plan.sequence_solver,
@@ -53,17 +54,15 @@ def evaluate_count_hypothesis(
     context: DetectionContext,
     hypothesis: CountHypothesis,
     *,
+    search_scope: PhotoSequenceSearchScope,
+    visible_content: ContentRegionObservation,
     larger_count_hypotheses_resolved: bool,
 ) -> CountHypothesisEvaluation:
-    sequence_plan = photo_sequence_plan(
-        context.request,
-        hypothesis,
-        cache=context.measurement_cache,
-        boundary_parameters=context.configuration.boundary_path,
-    )
-    candidates, search_budget_exhausted = _assess_sequence_plan(
+    candidates, search_budget_exhausted = _assess_count_hypothesis(
         context,
-        sequence_plan,
+        hypothesis,
+        search_scope,
+        visible_content,
     )
     selection = (
         select_candidates(

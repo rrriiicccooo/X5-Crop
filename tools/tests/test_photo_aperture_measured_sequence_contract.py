@@ -13,6 +13,7 @@ from x5crop.detection.physical.sequence_solver import (
     PhotoSequenceSolveResult,
     solve_photo_sequence,
 )
+from x5crop.image.content import ContentRegionObservation
 from x5crop.detection.physical.model import AssignmentConsensusOutcome
 from x5crop.domain import (
     BoundaryAxis,
@@ -38,6 +39,7 @@ class PhotoApertureMeasuredSequenceContractTest(unittest.TestCase):
             _plan(scope),
             2,
             _dimensions(100.0, 100.0),
+            ContentRegionObservation(scope.holder_span.box, (), 0),
             maximum_assignment_evaluations=10_000,
             maximum_solution_alternatives=8,
         )
@@ -90,6 +92,7 @@ class PhotoApertureMeasuredSequenceContractTest(unittest.TestCase):
             _plan(scope),
             2,
             _dimensions(100.0, 100.0),
+            ContentRegionObservation(scope.holder_span.box, (), 0),
             maximum_assignment_evaluations=10_000,
             maximum_solution_alternatives=8,
         )
@@ -121,6 +124,7 @@ class PhotoApertureMeasuredSequenceContractTest(unittest.TestCase):
             _plan(scope),
             2,
             _dimensions(100.0, 100.0),
+            ContentRegionObservation(scope.holder_span.box, (), 0),
             maximum_assignment_evaluations=10_000,
             maximum_solution_alternatives=8,
         )
@@ -150,6 +154,7 @@ class PhotoApertureMeasuredSequenceContractTest(unittest.TestCase):
             _plan(scope),
             2,
             _dimensions(100.0, 100.0),
+            ContentRegionObservation(scope.holder_span.box, (), 0),
             maximum_assignment_evaluations=10_000,
             maximum_solution_alternatives=8,
         )
@@ -175,6 +180,7 @@ class PhotoApertureMeasuredSequenceContractTest(unittest.TestCase):
             _plan(scope),
             2,
             _dimensions(100.0, 100.0),
+            ContentRegionObservation(scope.holder_span.box, (), 0),
             maximum_assignment_evaluations=10_000,
             maximum_solution_alternatives=8,
         )
@@ -203,6 +209,7 @@ class PhotoApertureMeasuredSequenceContractTest(unittest.TestCase):
             _plan(scope),
             3,
             _dimensions(100.0, 100.0),
+            ContentRegionObservation(scope.holder_span.box, (), 0),
             maximum_assignment_evaluations=200,
             maximum_solution_alternatives=1,
         )
@@ -238,6 +245,7 @@ class PhotoApertureMeasuredSequenceContractTest(unittest.TestCase):
             plan,
             2,
             _dimensions(100.0, 100.0),
+            ContentRegionObservation(scope.holder_span.box, (), 0),
             maximum_assignment_evaluations=16,
             maximum_solution_alternatives=8,
         )

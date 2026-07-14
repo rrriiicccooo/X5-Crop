@@ -1,10 +1,10 @@
 from __future__ import annotations
 
+from ....domain import PhotoSequenceSearchScope
 from ...context import DetectionContext
 from ...physical.photo_size import frame_dimension_priors
 from ..model import BuiltCandidate
 from ..plan.model import CountHypothesis, CountHypothesisSource
-from .sequence import photo_sequence_search_scope
 from ...physical.model import (
     AssignmentConsensusOutcome,
     BoundaryAssignmentConsensus,
@@ -16,6 +16,7 @@ from ...physical.model import (
 def hard_safety_candidate(
     context: DetectionContext,
     count: int,
+    search_scope: PhotoSequenceSearchScope,
     *,
     search_budget_exhausted: bool,
 ) -> BuiltCandidate:
@@ -25,10 +26,6 @@ def hard_safety_candidate(
     count = int(count)
     if count not in physical_spec.allowed_counts:
         raise ValueError("hard-safety candidate count must be physically allowed")
-    scope = photo_sequence_search_scope(
-        context.measurement_cache,
-        context.configuration.boundary_path,
-    )
     dimensions = frame_dimension_priors(
         physical_spec,
         context.scan_calibration,
@@ -40,8 +37,8 @@ def hard_safety_candidate(
             layout=context.request.layout,
             strip_mode=context.request.strip_mode,
             count=count,
-            holder_span=scope.holder_span,
-            containment_fallback=scope.containment_fallback,
+            holder_span=search_scope.holder_span,
+            containment_fallback=search_scope.containment_fallback,
             frame_dimension_prior=dimensions,
             residuals=SequenceResiduals(None, 0.0),
             assignment_consensus=BoundaryAssignmentConsensus(
@@ -49,8 +46,8 @@ def hard_safety_candidate(
                 1,
                 (),
             ),
-            sequence_provenance=scope.provenance,
-            raw_boundary_paths=scope.raw_boundary_paths,
+            sequence_provenance=search_scope.provenance,
+            raw_boundary_paths=search_scope.raw_boundary_paths,
             search_budget_exhausted=search_budget_exhausted,
         ),
         count_hypothesis=CountHypothesis(

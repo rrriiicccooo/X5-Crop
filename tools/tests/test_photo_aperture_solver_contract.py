@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import fields, replace
+from inspect import signature
 import unittest
 
 from tools.tests.photo_aperture_solver_support import (
@@ -18,6 +19,7 @@ from x5crop.detection.physical.sequence_solver import (
     solve_photo_sequence,
 )
 from x5crop.detection.physical import sequence_solver
+from x5crop.image.content import ContentRegionObservation
 from x5crop.detection.physical.model import (
     AssignmentConsensusOutcome,
     PhotoSequenceSolution,
@@ -41,6 +43,12 @@ from x5crop.domain import (
 
 
 class PhotoApertureSolverContractTest(unittest.TestCase):
+    def test_solver_accepts_count_independent_visible_content_constraints(self) -> None:
+        self.assertIn(
+            "visible_content",
+            signature(solve_photo_sequence).parameters,
+        )
+
     def test_solver_build_objectives_have_one_named_physical_semantics(self) -> None:
         objective_type = getattr(sequence_solver, "_SequenceBuildObjectives", None)
         self.assertIsNotNone(objective_type)
@@ -135,6 +143,7 @@ class PhotoApertureSolverContractTest(unittest.TestCase):
             _plan(scope),
             6,
             _dimensions(100.0, 100.0),
+            ContentRegionObservation(scope.holder_span.box, (), 0),
             maximum_assignment_evaluations=200,
             maximum_solution_alternatives=1,
         )
@@ -167,6 +176,7 @@ class PhotoApertureSolverContractTest(unittest.TestCase):
             _plan(scope),
             2,
             _dimensions(100.0, 100.0),
+            ContentRegionObservation(scope.holder_span.box, (), 0),
             maximum_assignment_evaluations=2_000,
             maximum_solution_alternatives=16,
         )
@@ -180,6 +190,45 @@ class PhotoApertureSolverContractTest(unittest.TestCase):
         )
         self.assertTrue(solved.assignment_consensus.conflicting_photo_indexes)
         self.assertFalse(solved.search_budget_exhausted)
+
+    def test_visible_content_only_prunes_geometry_that_omits_measured_runs(self) -> None:
+        scope = _scope(
+            width=210,
+            height=120,
+            leading=0.0,
+            trailing=210.0,
+            top=10.0,
+            bottom=110.0,
+            internal_paths=(5.0, 105.0, 110.0),
+        )
+
+        solved = solve_photo_sequence(
+            (_separator(100.0, 110.0, supported=True),),
+            scope,
+            _plan(scope),
+            2,
+            _dimensions(100.0, 100.0),
+            ContentRegionObservation(scope.holder_span.box, ((0, 100), (110, 210)), 0),
+            maximum_assignment_evaluations=2_000,
+            maximum_solution_alternatives=16,
+        )
+
+        self.assertIsInstance(solved, PhotoSequenceSolveResult)
+        assert isinstance(solved, PhotoSequenceSolveResult)
+        self.assertEqual(
+            solved.assignment_consensus.outcome,
+            AssignmentConsensusOutcome.UNCONTESTED,
+        )
+        self.assertEqual(
+            tuple(
+                (aperture.leading.position, aperture.trailing.position)
+                for aperture in solved.photo_apertures
+            ),
+            (
+                (PixelInterval.exact(0.0), PixelInterval.exact(100.0)),
+                (PixelInterval.exact(110.0), PixelInterval.exact(210.0)),
+            ),
+        )
 
     def test_dimension_fallback_is_pruned_when_supported_band_fits_neighbors(self) -> None:
         scope = _scope(
@@ -201,6 +250,7 @@ class PhotoApertureSolverContractTest(unittest.TestCase):
             _plan(scope),
             12,
             _dimensions(100.0, 100.0),
+            ContentRegionObservation(scope.holder_span.box, (), 0),
             maximum_assignment_evaluations=500,
             maximum_solution_alternatives=64,
         )
@@ -228,6 +278,7 @@ class PhotoApertureSolverContractTest(unittest.TestCase):
             _plan(scope),
             12,
             _dimensions(100.0, 100.0),
+            ContentRegionObservation(scope.holder_span.box, (), 0),
             maximum_assignment_evaluations=5_000,
             maximum_solution_alternatives=8,
         )
@@ -252,6 +303,7 @@ class PhotoApertureSolverContractTest(unittest.TestCase):
             _plan(scope),
             12,
             _dimensions(100.0, 100.0),
+            ContentRegionObservation(scope.holder_span.box, (), 0),
             maximum_assignment_evaluations=1,
             maximum_solution_alternatives=1,
         )
@@ -296,6 +348,7 @@ class PhotoApertureSolverContractTest(unittest.TestCase):
             _plan(uncertain_scope),
             1,
             _dimensions(100.0, 100.0),
+            ContentRegionObservation(uncertain_scope.holder_span.box, (), 0),
             maximum_assignment_evaluations=100,
             maximum_solution_alternatives=8,
         )
@@ -320,6 +373,7 @@ class PhotoApertureSolverContractTest(unittest.TestCase):
             _plan(scope),
             2,
             dimensions,
+            ContentRegionObservation(scope.holder_span.box, (), 0),
             maximum_assignment_evaluations=10_000,
             maximum_solution_alternatives=8,
         )
@@ -360,6 +414,7 @@ class PhotoApertureSolverContractTest(unittest.TestCase):
             _plan(scope),
             2,
             dimensions,
+            ContentRegionObservation(scope.holder_span.box, (), 0),
             maximum_assignment_evaluations=10_000,
             maximum_solution_alternatives=8,
         )
@@ -415,6 +470,7 @@ class PhotoApertureSolverContractTest(unittest.TestCase):
             _plan(scope),
             3,
             dimensions,
+            ContentRegionObservation(scope.holder_span.box, (), 0),
             maximum_assignment_evaluations=10_000,
             maximum_solution_alternatives=8,
         )
@@ -495,6 +551,7 @@ class PhotoApertureSolverContractTest(unittest.TestCase):
             ),
             4,
             _dimensions(1.0, 1.0),
+            ContentRegionObservation(uncertain_scope.holder_span.box, (), 0),
             maximum_assignment_evaluations=10_000,
             maximum_solution_alternatives=8,
         )
@@ -526,6 +583,7 @@ class PhotoApertureSolverContractTest(unittest.TestCase):
             _plan(scope),
             4,
             _dimensions(100.0, 100.0),
+            ContentRegionObservation(scope.holder_span.box, (), 0),
             maximum_assignment_evaluations=10_000,
             maximum_solution_alternatives=8,
         )
@@ -562,6 +620,7 @@ class PhotoApertureSolverContractTest(unittest.TestCase):
             _plan(scope),
             2,
             _dimensions(100.0, 100.0),
+            ContentRegionObservation(scope.holder_span.box, (), 0),
             maximum_assignment_evaluations=10_000,
             maximum_solution_alternatives=8,
         )
@@ -620,6 +679,7 @@ class PhotoApertureSolverContractTest(unittest.TestCase):
             _plan(scope),
             4,
             _dimensions(100.0, 100.0),
+            ContentRegionObservation(scope.holder_span.box, (), 0),
             maximum_assignment_evaluations=10_000,
             maximum_solution_alternatives=8,
         )
@@ -665,6 +725,7 @@ class PhotoApertureSolverContractTest(unittest.TestCase):
             _plan(scope),
             2,
             dimensions,
+            ContentRegionObservation(scope.holder_span.box, (), 0),
             maximum_assignment_evaluations=10_000,
             maximum_solution_alternatives=8,
         )
@@ -707,6 +768,7 @@ class PhotoApertureSolverContractTest(unittest.TestCase):
             _plan(scope),
             3,
             dimensions,
+            ContentRegionObservation(scope.holder_span.box, (), 0),
             maximum_assignment_evaluations=10_000,
             maximum_solution_alternatives=8,
         )
@@ -751,6 +813,7 @@ class PhotoApertureSolverContractTest(unittest.TestCase):
             _plan(scope),
             3,
             dimensions,
+            ContentRegionObservation(scope.holder_span.box, (), 0),
             maximum_assignment_evaluations=10_000,
             maximum_solution_alternatives=8,
         )
@@ -801,6 +864,7 @@ class PhotoApertureSolverContractTest(unittest.TestCase):
             _plan(scope),
             3,
             dimensions,
+            ContentRegionObservation(scope.holder_span.box, (), 0),
             maximum_assignment_evaluations=10_000,
             maximum_solution_alternatives=8,
         )

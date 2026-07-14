@@ -222,7 +222,12 @@ class AutoCountContractTest(unittest.TestCase):
             "evaluate_count_hypothesis",
             side_effect=evaluations,
         ) as evaluate_one:
-            completed, stopped_after_count = evaluate(object(), plan)
+            completed, stopped_after_count = evaluate(
+                object(),
+                plan,
+                object(),
+                object(),
+            )
 
         self.assertEqual(completed, evaluations[:1])
         self.assertEqual(stopped_after_count, 3)
@@ -235,13 +240,19 @@ class AutoCountContractTest(unittest.TestCase):
         )
         plan = CountHypothesisPlan(hypotheses, True, None)
         larger_count_states: list[bool] = []
+        expected_scope = object()
+        expected_content = object()
 
         def evaluate_one(
             _context,
             hypothesis,
             *,
+            search_scope,
+            visible_content,
             larger_count_hypotheses_resolved,
         ):
+            self.assertIs(search_scope, expected_scope)
+            self.assertIs(visible_content, expected_content)
             larger_count_states.append(larger_count_hypotheses_resolved)
             return SimpleNamespace(
                 hypothesis=hypothesis,
@@ -255,7 +266,12 @@ class AutoCountContractTest(unittest.TestCase):
             "evaluate_count_hypothesis",
             side_effect=evaluate_one,
         ):
-            completed, stopped_after_count = evaluate(object(), plan)
+            completed, stopped_after_count = evaluate(
+                object(),
+                plan,
+                expected_scope,
+                expected_content,
+            )
 
         self.assertEqual(completed, tuple(
             SimpleNamespace(
@@ -275,13 +291,19 @@ class AutoCountContractTest(unittest.TestCase):
         )
         plan = CountHypothesisPlan(hypotheses, True, None)
         larger_count_states: list[bool] = []
+        expected_scope = object()
+        expected_content = object()
 
         def evaluate_one(
             _context,
             hypothesis,
             *,
+            search_scope,
+            visible_content,
             larger_count_hypotheses_resolved,
         ):
+            self.assertIs(search_scope, expected_scope)
+            self.assertIs(visible_content, expected_content)
             larger_count_states.append(larger_count_hypotheses_resolved)
             supported = hypothesis.count == 2
             return SimpleNamespace(
@@ -300,7 +322,12 @@ class AutoCountContractTest(unittest.TestCase):
             "evaluate_count_hypothesis",
             side_effect=evaluate_one,
         ) as evaluate_one_mock:
-            completed, stopped_after_count = evaluate(object(), plan)
+            completed, stopped_after_count = evaluate(
+                object(),
+                plan,
+                expected_scope,
+                expected_content,
+            )
 
         self.assertEqual(tuple(item.hypothesis.count for item in completed), (3, 2))
         self.assertEqual(larger_count_states, [True, True])
