@@ -663,6 +663,7 @@ def candidate_evidence_fixture(
                 geometry.photo_apertures,
                 geometry.inter_photo_spacings,
                 content,
+                coverage,
             )
         ),
         holder_boundary=holder,

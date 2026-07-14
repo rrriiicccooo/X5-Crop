@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import math
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -12,10 +13,36 @@ from ....cache import (
 from ....cache.content_statistics import ContentColumnStatistics
 from ....configuration.content import ContentConfiguration, ContentEvidenceParameters
 from ....domain import BoundarySide, Box, EvidenceState
+from ....image.evidence import activation_mask
+from ....utils import runs_from_mask
 from .activation import cached_content_evidence_threshold, sample_supports_content
 
 if TYPE_CHECKING:
     from ...physical.model import PhotoSequenceSolution
+
+
+@dataclass(frozen=True)
+class PhotoBoundaryContentTrace:
+    side: BoundarySide
+    boundary_parallel_runs: tuple[tuple[int, int], ...]
+    minimum_crossing_tracks: int
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.side, BoundarySide):
+            raise TypeError("photo boundary content trace requires a typed side")
+        if self.side not in {BoundarySide.LEADING, BoundarySide.TRAILING}:
+            raise ValueError("photo content traces only describe inter-photo edges")
+        if not self.boundary_parallel_runs:
+            raise ValueError("photo boundary content trace requires measured runs")
+        if self.minimum_crossing_tracks <= 0:
+            raise ValueError("photo boundary content trace requires positive support")
+        previous_end: int | None = None
+        for start, end in self.boundary_parallel_runs:
+            if start < 0 or end <= start:
+                raise ValueError("photo boundary content runs require positive extent")
+            if previous_end is not None and start < previous_end:
+                raise ValueError("photo boundary content runs must be ordered")
+            previous_end = end
 
 
 @dataclass(frozen=True)
@@ -24,7 +51,14 @@ class PhotoContentObservation:
     mean: float
     coverage: float
     content_present: bool
-    boundary_contact_sides: tuple[BoundarySide, ...]
+    boundary_traces: tuple[PhotoBoundaryContentTrace, ...]
+
+    def __post_init__(self) -> None:
+        if self.photo_index <= 0:
+            raise ValueError("photo content observation requires a photo index")
+        sides = tuple(trace.side for trace in self.boundary_traces)
+        if len(sides) != len(set(sides)):
+            raise ValueError("photo content observation requires unique boundary traces")
 
 
 @dataclass(frozen=True)
@@ -80,32 +114,56 @@ class PhotoContentEvidence:
         return self.state == EvidenceState.SUPPORTED
 
 
-def _boundary_contact_sides(
+def _boundary_content_traces(
     crop: np.ndarray,
+    cross_axis_offset: int,
     threshold: float,
     parameters: ContentEvidenceParameters,
-) -> tuple[BoundarySide, ...]:
+) -> tuple[PhotoBoundaryContentTrace, ...]:
     band = max(
         int(parameters.boundary_band_min_px),
         int(round(min(crop.shape) * float(parameters.boundary_band_ratio))),
     )
-    band_y = min(crop.shape[0], band)
     band_x = min(crop.shape[1], band)
     samples = {
-        BoundarySide.LEADING: crop[:, :band_x],
-        BoundarySide.TRAILING: crop[:, crop.shape[1] - band_x :],
-        BoundarySide.TOP: crop[:band_y, :],
-        BoundarySide.BOTTOM: crop[crop.shape[0] - band_y :, :],
+        BoundarySide.LEADING: (crop[:, :band_x], cross_axis_offset),
+        BoundarySide.TRAILING: (
+            crop[:, crop.shape[1] - band_x :],
+            cross_axis_offset,
+        ),
     }
-    return tuple(
-        side
-        for side, sample in samples.items()
-        if sample_supports_content(
+    minimum_tracks = max(
+        1,
+        int(math.ceil(math.sqrt(parameters.minimum_active_pixels))),
+    )
+    traces: list[PhotoBoundaryContentTrace] = []
+    for side, (sample, coordinate_offset) in samples.items():
+        if not sample_supports_content(
             sample,
             threshold,
             parameters.minimum_active_pixels,
+        ):
+            continue
+        active = activation_mask(sample, threshold)
+        normal_extent = active.shape[1]
+        minimum_normal_support = min(normal_extent, minimum_tracks)
+        parallel_support = (
+            np.count_nonzero(active, axis=1) >= minimum_normal_support
         )
-    )
+        runs = tuple(
+            (coordinate_offset + start, coordinate_offset + end)
+            for start, end in runs_from_mask(parallel_support)
+            if end - start >= minimum_tracks
+        )
+        if runs:
+            traces.append(
+                PhotoBoundaryContentTrace(
+                    side,
+                    runs,
+                    minimum_tracks,
+                )
+            )
+    return tuple(traces)
 
 
 def photo_content_evidence(
@@ -197,8 +255,9 @@ def photo_content_evidence(
                 mean=float(mean),
                 coverage=float(coverage),
                 content_present=content_present,
-                boundary_contact_sides=_boundary_contact_sides(
+                boundary_traces=_boundary_content_traces(
                     crop,
+                    absolute.top,
                     threshold,
                     parameters,
                 ),

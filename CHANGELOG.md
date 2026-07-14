@@ -16,6 +16,9 @@ repository rules in `AGENTS.md`.
 
 #### Photo Aperture 联合求解与 Debug 可见性（2026-07-13）
 
+- Internal-boundary content evidence 现在保留逐照片 leading/trailing edge 的短轴空间轨迹。只有同一
+  短轴轨迹在相邻照片两侧重合，且 count-independent content run 同时贯穿长轴 boundary interval，
+  才能反证未解释切线或佐证 measured-edge overlap；上下错位的独立纹理不再触发自动 overlap bleed。
 - Solver 现在显式消费一次缓存的 count-independent content observation，仅用它剔除漏掉已测可见
   内容的 geometry alternatives；content 不能生成、移动或收缩 aperture edge。若全部 alternatives
   都存在 coverage contradiction，solver 保留原始几何并交给 canonical evidence 报告，避免用

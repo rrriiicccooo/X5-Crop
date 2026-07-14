@@ -33,6 +33,7 @@ from x5crop.detection.evidence.content.internal_boundaries import (
     inter_photo_boundary_preservation_evidence,
 )
 from x5crop.detection.evidence.content.photo_content import (
+    PhotoBoundaryContentTrace,
     PhotoContentEvidence,
     PhotoContentObservation,
     photo_content_evidence,
@@ -240,37 +241,141 @@ def _measured_apertures_for_spacing(spacing_px: float) -> tuple[PhotoAperture, .
     )
 
 
+def _coverage_for_apertures(
+    apertures: tuple[PhotoAperture, ...],
+    content_runs: tuple[tuple[int, int], ...],
+) -> PhotoApertureCoverageEvidence:
+    intervals = tuple(
+        (
+            item.frame_crop_envelope.box.left,
+            item.frame_crop_envelope.box.right,
+        )
+        for item in apertures
+    )
+    return PhotoApertureCoverageEvidence(
+        (min(start for start, _ in intervals), max(end for _, end in intervals)),
+        intervals,
+        content_runs,
+        0,
+    )
+
+
+def _content_at_internal_boundary(
+    left_runs: tuple[tuple[int, int], ...],
+    right_runs: tuple[tuple[int, int], ...],
+) -> PhotoContentEvidence:
+    return PhotoContentEvidence(
+        0.5,
+        (
+            PhotoContentObservation(
+                1,
+                0.8,
+                0.8,
+                True,
+                (
+                    PhotoBoundaryContentTrace(
+                        BoundarySide.TRAILING,
+                        left_runs,
+                        4,
+                    ),
+                ),
+            ),
+            PhotoContentObservation(
+                2,
+                0.8,
+                0.8,
+                True,
+                (
+                    PhotoBoundaryContentTrace(
+                        BoundarySide.LEADING,
+                        right_runs,
+                        4,
+                    ),
+                ),
+            ),
+        ),
+    )
+
+
 class FrameContentSupportTest(unittest.TestCase):
+    def test_photo_content_measurement_preserves_boundary_parallel_tracks(self) -> None:
+        geometry = candidate_fixture().geometry
+        gray = np.full((100, 310), 255, dtype=np.uint8)
+        gray[20:80, 145:165] = 0
+
+        evidence = photo_content_evidence(
+            geometry,
+            _cache(gray),
+            get_detection_configuration("135", "full").content,
+        )
+
+        self.assertEqual(
+            evidence.observations[0].boundary_traces[-1],
+            PhotoBoundaryContentTrace(
+                BoundarySide.TRAILING,
+                ((20, 80),),
+                4,
+            ),
+        )
+        self.assertEqual(
+            evidence.observations[1].boundary_traces[0],
+            PhotoBoundaryContentTrace(
+                BoundarySide.LEADING,
+                ((20, 80),),
+                4,
+            ),
+        )
+
+    def test_internal_crossing_requires_one_spatial_track_across_the_boundary(self) -> None:
+        content = _content_at_internal_boundary(
+            ((0, 20),),
+            ((80, 100),),
+        )
+        coverage = PhotoApertureCoverageEvidence(
+            (0, 210),
+            ((0, 100), (110, 210)),
+            ((90, 120),),
+            0,
+        )
+        spacing = InterPhotoSpacing(
+            InterPhotoBoundaryReference(None, 1),
+            PixelInterval.exact(10.0),
+            MeasurementProvenance(
+                MeasurementIdentity.FRAME_GEOMETRY,
+                ObservationId("synthetic_unobserved_spacing"),
+                (MeasurementIdentity.FRAME_DIMENSIONS,),
+                "synthetic spacing hypothesis",
+            ),
+            InterPhotoSpacingBasis.GEOMETRY_HYPOTHESIS,
+        )
+
+        evidence = inter_photo_boundary_preservation_evidence(
+            2,
+            _measured_apertures_for_spacing(10.0),
+            (spacing,),
+            content,
+            coverage,
+        )
+
+        self.assertFalse(evidence.observations[0].continuous_content_crossing)
+        self.assertEqual(evidence.state, EvidenceState.UNAVAILABLE)
+
     def test_photo_content_uses_canonical_photo_and_boundary_identities(self) -> None:
         annotations = get_type_hints(PhotoContentObservation)
 
         self.assertIn("photo_index", annotations)
         self.assertNotIn("index", annotations)
+        self.assertNotIn("boundary_contact_sides", annotations)
         self.assertEqual(
-            annotations["boundary_contact_sides"],
-            tuple[BoundarySide, ...],
+            annotations["boundary_traces"],
+            tuple[PhotoBoundaryContentTrace, ...],
         )
 
     def test_internal_content_crossing_requires_physical_spacing_evidence(self) -> None:
         geometry = candidate_fixture().geometry
-        crossing = PhotoContentEvidence(
-            0.5,
-            (
-                PhotoContentObservation(
-                    1,
-                    0.8,
-                    0.8,
-                    True,
-                    (BoundarySide.TRAILING,),
-                ),
-                PhotoContentObservation(
-                    2,
-                    0.8,
-                    0.8,
-                    True,
-                    (BoundarySide.LEADING,),
-                ),
-            ),
+        crossing = _content_at_internal_boundary(
+            ((20, 80),),
+            ((20, 80),),
         )
         boundary = InterPhotoBoundaryReference(None, 1)
         provenance = MeasurementProvenance(
@@ -320,13 +425,18 @@ class FrameContentSupportTest(unittest.TestCase):
         )
         for spacing, expected in cases:
             with self.subTest(basis=spacing.basis):
+                apertures = _measured_apertures_for_spacing(
+                    spacing.signed_width_px.midpoint,
+                )
                 evidence = inter_photo_boundary_preservation_evidence(
                     2,
-                    _measured_apertures_for_spacing(
-                        spacing.signed_width_px.midpoint,
-                    ),
+                    apertures,
                     (spacing,),
                     crossing,
+                    _coverage_for_apertures(
+                        apertures,
+                        ((90, 120),),
+                    ),
                 )
                 self.assertEqual(evidence.state, expected)
                 if spacing.kind == InterPhotoSpacingKind.OVERLAP:
@@ -337,24 +447,9 @@ class FrameContentSupportTest(unittest.TestCase):
 
     def test_description_text_cannot_create_independent_overlap_evidence(self) -> None:
         geometry = candidate_fixture().geometry
-        crossing = PhotoContentEvidence(
-            0.5,
-            (
-                PhotoContentObservation(
-                    1,
-                    0.8,
-                    0.8,
-                    True,
-                    (BoundarySide.TRAILING,),
-                ),
-                PhotoContentObservation(
-                    2,
-                    0.8,
-                    0.8,
-                    True,
-                    (BoundarySide.LEADING,),
-                ),
-            ),
+        crossing = _content_at_internal_boundary(
+            ((20, 80),),
+            ((20, 80),),
         )
         apertures = _measured_apertures_for_spacing(-5.0)
         shared = ObservationId("shared_boundary_observation")
@@ -391,6 +486,10 @@ class FrameContentSupportTest(unittest.TestCase):
             (first, second),
             (spacing,),
             crossing,
+            _coverage_for_apertures(
+                (first, second),
+                ((90, 110),),
+            ),
         )
 
         self.assertEqual(evidence.state, EvidenceState.CONTRADICTED)

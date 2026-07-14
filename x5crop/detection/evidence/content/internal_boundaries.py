@@ -15,20 +15,36 @@ from ....domain import (
     PhotoAperture,
     PhotoApertureEdgeSource,
 )
-from .photo_content import PhotoContentEvidence
+from ..photo_aperture_coverage import PhotoApertureCoverageEvidence
+from .photo_content import (
+    PhotoBoundaryContentTrace,
+    PhotoContentEvidence,
+    PhotoContentObservation,
+)
 
 
 @dataclass(frozen=True)
 class InternalBoundaryObservation:
     boundary: InterPhotoBoundaryReference
     spacing_evidence: InterPhotoSpacing
-    continuous_content_crossing: bool
+    shared_content_track_count: int
+    minimum_shared_content_tracks: int
+    long_axis_content_spans_boundary: bool
+    continuous_content_crossing: bool = field(init=False)
     state: EvidenceState = field(init=False)
     reason: str = field(init=False)
 
     def __post_init__(self) -> None:
         if self.spacing_evidence.boundary != self.boundary:
             raise ValueError("internal boundary spacing must preserve boundary identity")
+        if self.shared_content_track_count < 0:
+            raise ValueError("shared content track count must be non-negative")
+        if self.minimum_shared_content_tracks <= 0:
+            raise ValueError("shared content track requirement must be positive")
+        crossing = bool(
+            self.long_axis_content_spans_boundary
+            and self.shared_content_track_count >= self.minimum_shared_content_tracks
+        )
         explained = bool(
             self.spacing_evidence.state == EvidenceState.SUPPORTED
             and self.spacing_evidence.kind
@@ -41,14 +57,71 @@ class InternalBoundaryObservation:
         if explained:
             state = EvidenceState.SUPPORTED
             reason = "internal_boundary_physically_explained"
-        elif self.continuous_content_crossing:
+        elif crossing:
             state = EvidenceState.CONTRADICTED
             reason = "continuous_content_crosses_unexplained_boundary"
         else:
             state = EvidenceState.UNAVAILABLE
             reason = "inter_photo_boundary_preservation_unresolved"
+        object.__setattr__(self, "continuous_content_crossing", crossing)
         object.__setattr__(self, "state", state)
         object.__setattr__(self, "reason", reason)
+
+
+def _boundary_trace(
+    observation: PhotoContentObservation | None,
+    side: BoundarySide,
+) -> PhotoBoundaryContentTrace | None:
+    if observation is None:
+        return None
+    return next(
+        (trace for trace in observation.boundary_traces if trace.side == side),
+        None,
+    )
+
+
+def _shared_track_count(
+    left: PhotoBoundaryContentTrace | None,
+    right: PhotoBoundaryContentTrace | None,
+) -> tuple[int, int]:
+    if left is None or right is None:
+        return 0, 1
+    shared = 0
+    left_index = 0
+    right_index = 0
+    while (
+        left_index < len(left.boundary_parallel_runs)
+        and right_index < len(right.boundary_parallel_runs)
+    ):
+        left_start, left_end = left.boundary_parallel_runs[left_index]
+        right_start, right_end = right.boundary_parallel_runs[right_index]
+        shared += max(0, min(left_end, right_end) - max(left_start, right_start))
+        if left_end <= right_end:
+            left_index += 1
+        else:
+            right_index += 1
+    return shared, max(
+        left.minimum_crossing_tracks,
+        right.minimum_crossing_tracks,
+    )
+
+
+def _content_spans_boundary(
+    coverage: PhotoApertureCoverageEvidence,
+    left: PhotoAperture,
+    right: PhotoAperture,
+) -> bool:
+    lower = min(left.trailing.position.minimum, right.leading.position.minimum)
+    upper = max(left.trailing.position.maximum, right.leading.position.maximum)
+    if upper <= lower:
+        return any(
+            start <= lower < end
+            for start, end in coverage.content_runs
+        )
+    return any(
+        start <= lower and end >= upper
+        for start, end in coverage.content_runs
+    )
 
 
 def _content_corroborated_spacing(
@@ -133,6 +206,7 @@ def inter_photo_boundary_preservation_evidence(
     photo_apertures: tuple[PhotoAperture, ...],
     spacings: tuple[InterPhotoSpacing, ...],
     photo_content: PhotoContentEvidence,
+    photo_aperture_coverage: PhotoApertureCoverageEvidence,
 ) -> InterPhotoBoundaryPreservationEvidence:
     if count <= 0:
         raise ValueError("internal boundary evidence requires a positive count")
@@ -146,20 +220,27 @@ def inter_photo_boundary_preservation_evidence(
         for observation in photo_content.observations
     }
 
-    def content_contacts(frame_index: int, side: BoundarySide) -> bool:
-        observation = content.get(frame_index)
-        return bool(
-            observation is not None
-            and side in observation.boundary_contact_sides
-        )
-
     observations: list[InternalBoundaryObservation] = []
     for boundary_index, spacing in enumerate(spacings, start=1):
         left = photo_apertures[boundary_index - 1]
         right = photo_apertures[boundary_index]
+        shared_tracks, minimum_shared_tracks = _shared_track_count(
+            _boundary_trace(
+                content.get(boundary_index),
+                BoundarySide.TRAILING,
+            ),
+            _boundary_trace(
+                content.get(boundary_index + 1),
+                BoundarySide.LEADING,
+            ),
+        )
+        long_axis_span = _content_spans_boundary(
+            photo_aperture_coverage,
+            left,
+            right,
+        )
         crossing = bool(
-            content_contacts(boundary_index, BoundarySide.TRAILING)
-            and content_contacts(boundary_index + 1, BoundarySide.LEADING)
+            long_axis_span and shared_tracks >= minimum_shared_tracks
         )
         observations.append(
             InternalBoundaryObservation(
@@ -170,7 +251,9 @@ def inter_photo_boundary_preservation_evidence(
                     right,
                     crossing,
                 ),
-                continuous_content_crossing=crossing,
+                shared_content_track_count=shared_tracks,
+                minimum_shared_content_tracks=minimum_shared_tracks,
+                long_axis_content_spans_boundary=long_axis_span,
             )
         )
     return InterPhotoBoundaryPreservationEvidence(tuple(observations))

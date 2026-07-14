@@ -291,6 +291,9 @@ Current state:
   geometry alternatives that omit measured visible content. They never create,
   move, or shrink aperture edges; the same observation and coverage calculation
   feed final evidence.
+- Internal content crossing requires overlapping short-axis content tracks on
+  both adjacent photo edges plus a count-independent long-axis run spanning the
+  boundary. Aggregate edge-contact booleans cannot corroborate overlap bleed.
 - Gray boundary paths preserve typed local samples across the orthogonal axis.
   Short-axis aperture edges are resolved within each photo's own long-axis span.
   Raw channels remain visible, while geometry-equivalent paths form one solver
@@ -326,7 +329,7 @@ Current verification state:
   are implemented. Debug distinguishes ideal apertures, output envelopes, raw
   observations, measured edges, provisional edges, holder boundaries, and
   corroborated overlap through one diagnostics-owned legend.
-- The current suite contains 475 tests and 14 valid format/mode configurations.
+- The current suite contains 477 tests and 14 valid format/mode configurations.
   On `135/full 005.tif`, separator-bound path ownership reduced assignment
   evaluations to 4,264 without search-budget exhaustion. Geometry remains
   unresolved because 72 independent measured aperture alternatives all cover

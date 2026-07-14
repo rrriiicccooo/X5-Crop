@@ -186,7 +186,9 @@ count，或无条件扩张物理几何。同一份 count-independent content obs
 External crossing 测量排除相邻 aperture boundary 的 uncertainty
 区域和 evidence kernel footprint，避免垂直边角或卷积邻域伪造跨界内容。单个 content/noise pixel
 不得改写 aperture；独立 measured edge 与 content measurement 冲突时保留 conflict，不静默删除
-measured geometry。
+measured geometry。Internal crossing 必须同时具有左右 aperture edge 上重合的短轴 content tracks，
+以及一条贯穿该 boundary interval 的 count-independent 长轴 content run；两个互不相交的边缘纹理
+不能佐证 overlap 或反证内部切线。
 
 ### 3.2 CandidateGate 与 GeometryResolution
 

@@ -82,6 +82,7 @@ def assess_candidate(
         geometry.photo_apertures,
         geometry.inter_photo_spacings,
         content,
+        coverage,
     )
     holder_boundary = holder_boundary_evidence(
         geometry,

@@ -447,6 +447,7 @@ def _candidate_evidence_matches_geometry(
             geometry.photo_apertures,
             geometry.inter_photo_spacings,
             evidence.photo_content,
+            evidence.photo_aperture_coverage,
         )
         and evidence.independence == evidence_independence_evidence(geometry)
         and candidate_scale_observations_match_geometry(
