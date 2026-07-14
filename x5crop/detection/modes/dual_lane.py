@@ -8,6 +8,9 @@ from ...domain import (
     Box,
     EvidenceState,
     HolderSpan,
+    PhysicalSearchFact,
+    PhysicalSearchOutcome,
+    combined_physical_search_outcome,
 )
 from ...geometry.layout import HORIZONTAL, is_horizontal_layout
 from ...image.statistics import image_measurement_statistics
@@ -82,7 +85,6 @@ def _parent_candidate(
     divider: LaneDividerEvidence,
     lane_boxes: tuple[Box, Box],
     lanes: tuple[SelectionResult, SelectionResult],
-    proposal_budget_exhausted: bool,
 ) -> BuiltCandidate:
     physical_spec = context.configuration.physical_spec
     lane_candidates = tuple(selection.selected for selection in lanes)
@@ -104,10 +106,6 @@ def _parent_candidate(
             ),
             residuals=combined_sequence_residuals(lane_solutions),
             assignment_consensus=combined_assignment_consensus(lane_solutions),
-            search_budget_exhausted=bool(
-                proposal_budget_exhausted
-                or any(solution.search_budget_exhausted for solution in lane_solutions)
-            ),
             lane_divider=divider,
             lane_solutions=lane_solutions,
             lane_boxes=lane_boxes,
@@ -139,6 +137,7 @@ def choose_dual_lane_detection(
         context.configuration.candidate_plan.dual_lane_divider,
     )
     parent_candidates = []
+    search_outcomes: list[PhysicalSearchOutcome] = []
     lane_geometry_unresolved = False
     for divider in divider_evidence.candidates:
         lanes = divider.lane_boxes(
@@ -149,6 +148,14 @@ def choose_dual_lane_detection(
             continue
         lane_selections = tuple(
             standard_detector(_lane_context(context, lane)) for lane in lanes
+        )
+        search_outcomes.append(
+            combined_physical_search_outcome(
+                tuple(
+                    selection.geometry_resolution.physical_search
+                    for selection in lane_selections
+                )
+            )
         )
         if any(
             not isinstance(selection.selected.geometry, PhotoSequenceSolution)
@@ -161,7 +168,6 @@ def choose_dual_lane_detection(
             divider,
             lanes,
             lane_selections,
-            divider_evidence.budget_exhausted,
         )
         parent_candidates.append(
             compose_dual_lane_candidate(
@@ -184,11 +190,25 @@ def choose_dual_lane_detection(
             )
         )
         context.execution_statistics.record_assessed_candidate()
+    if search_outcomes:
+        physical_search = combined_physical_search_outcome(
+            tuple(search_outcomes)
+        )
+    else:
+        physical_search = PhysicalSearchOutcome(
+            (PhysicalSearchFact.MEASUREMENTS_UNAVAILABLE,),
+        )
+    if divider_evidence.budget_exhausted:
+        physical_search = combined_physical_search_outcome(
+            (
+                physical_search,
+                PhysicalSearchOutcome(
+                    (PhysicalSearchFact.EXECUTION_BUDGET_EXHAUSTED,),
+                ),
+            )
+        )
     return select_candidates(
         tuple(parent_candidates),
         larger_count_hypotheses_resolved=True,
-        candidate_search_budget_exhausted=any(
-            candidate.geometry.search_budget_exhausted
-            for candidate in parent_candidates
-        ),
+        physical_search=physical_search,
     )

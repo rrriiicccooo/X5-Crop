@@ -29,7 +29,13 @@ from .modes.review_only import unresolved_dual_lane_candidate
 from .evidence.content.regions import cached_content_region_observation
 from .evidence.physical_scale import boundary_scale_observations
 from .physical.model import ReviewOnlyContainment
-from ..domain import EvidenceState, PhotoSequenceSearchScope
+from ..domain import (
+    EvidenceState,
+    PhotoSequenceSearchScope,
+    PhysicalSearchFact,
+    PhysicalSearchOutcome,
+    combined_physical_search_outcome,
+)
 from ..image.content import ContentRegionObservation
 from ..units import ScanCalibrationResolution
 
@@ -65,20 +71,22 @@ def _context_with_root_physical_scale(
 
 def _candidate_pool_for_count_resolution(
     evaluations: tuple[CountHypothesisEvaluation, ...],
-) -> tuple[tuple[AssessedCandidate, ...], bool]:
+) -> tuple[tuple[AssessedCandidate, ...], PhysicalSearchOutcome]:
     resolved = next(
         (evaluation for evaluation in evaluations if evaluation.geometry_resolved),
         None,
     )
     if resolved is not None:
-        return resolved.candidates, resolved.search_budget_exhausted
+        return resolved.candidates, resolved.physical_search
     return (
         tuple(
             candidate
             for evaluation in evaluations
             for candidate in evaluation.candidates
         ),
-        any(evaluation.search_budget_exhausted for evaluation in evaluations),
+        combined_physical_search_outcome(
+            tuple(evaluation.physical_search for evaluation in evaluations)
+        ),
     )
 
 
@@ -170,7 +178,7 @@ def _choose_standard_detection(context: DetectionContext) -> SelectionResult:
         visible_content,
     )
 
-    candidates, search_budget_exhausted = _candidate_pool_for_count_resolution(
+    candidates, physical_search = _candidate_pool_for_count_resolution(
         evaluations
     )
     if not candidates:
@@ -178,7 +186,7 @@ def _choose_standard_detection(context: DetectionContext) -> SelectionResult:
             context,
             plan.hard_safety_count,
             search_scope,
-            search_budget_exhausted=search_budget_exhausted,
+            physical_search=physical_search,
         )
         assessed = (
             assess_review_only_candidate(built)
@@ -192,7 +200,7 @@ def _choose_standard_detection(context: DetectionContext) -> SelectionResult:
         larger_count_hypotheses_resolved=bool(
             not plan.automatic or stopped_after_count is not None
         ),
-        candidate_search_budget_exhausted=search_budget_exhausted,
+        physical_search=physical_search,
     )
     count_resolution = _count_resolution(
         selection,
@@ -223,8 +231,8 @@ def choose_detection(context: DetectionContext) -> SelectionResult:
         selection = select_candidates(
             (assessed,),
             larger_count_hypotheses_resolved=True,
-            candidate_search_budget_exhausted=(
-                assessed.geometry.search_budget_exhausted
+            physical_search=PhysicalSearchOutcome(
+                (PhysicalSearchFact.MEASUREMENTS_UNAVAILABLE,),
             ),
         )
         context.execution_statistics.record_assessed_candidate()

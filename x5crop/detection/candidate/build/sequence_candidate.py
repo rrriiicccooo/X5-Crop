@@ -9,8 +9,12 @@ from ....configuration.separator import SeparatorConfiguration
 from ....domain import (
     BoundarySide,
     Box,
+    EvidenceState,
     FrameDimensionPrior,
     PhotoSequenceSearchScope,
+    PhysicalSearchFact,
+    PhysicalSearchOutcome,
+    combined_physical_search_outcome,
 )
 from ....formats import FormatPhysicalSpec
 from ....image.content import ContentRegionObservation
@@ -21,7 +25,7 @@ from ...physical.separator.observations import (
     propose_separator_bands,
 )
 from ...physical.sequence_solver import (
-    PhotoSequenceSolveUnavailable,
+    PhotoSequenceSolveFailure,
     photo_aperture_cross_axis_plan,
     solve_photo_sequence,
 )
@@ -32,18 +36,22 @@ from ..plan.model import CountHypothesis
 @dataclass(frozen=True)
 class SequenceCandidateBuildOutcome:
     candidate: BuiltCandidate | None
+    physical_search: PhysicalSearchOutcome
     assignment_evaluations: int
-    search_budget_exhausted: bool
 
     def __post_init__(self) -> None:
         if self.assignment_evaluations < 0:
-            raise ValueError("candidate build assignment evaluations cannot be negative")
+            raise ValueError("candidate build evaluation count cannot be negative")
         if (
-            self.candidate is not None
-            and self.candidate.geometry.search_budget_exhausted
-            != self.search_budget_exhausted
+            self.physical_search.state == EvidenceState.CONTRADICTED
+            and self.candidate is not None
+        ) or (
+            self.physical_search.state == EvidenceState.SUPPORTED
+            and self.candidate is None
         ):
-            raise ValueError("candidate build budget state must match its geometry")
+            raise ValueError(
+                "candidate availability must match its physical search outcome"
+            )
 
 
 def _separator_measurement_corridor(
@@ -96,14 +104,10 @@ def build_sequence_candidate(
         solver_parameters.maximum_dimension_hypotheses,
     )
     if not cross_axis_plan.hypotheses:
-        unavailable = PhotoSequenceSolveUnavailable(
-            cross_axis_plan.assignment_evaluations,
-            cross_axis_plan.search_budget_exhausted,
-        )
         return SequenceCandidateBuildOutcome(
             None,
-            unavailable.assignment_evaluations,
-            unavailable.search_budget_exhausted,
+            cross_axis_plan.search_outcome,
+            0,
         )
     support_set = measure_separator_cross_axis_support(
         proposed,
@@ -123,11 +127,21 @@ def build_sequence_candidate(
         solver_parameters.maximum_assignment_evaluations,
         solver_parameters.maximum_solution_alternatives,
     )
-    if isinstance(solved, PhotoSequenceSolveUnavailable):
+    if isinstance(solved, PhotoSequenceSolveFailure):
         return SequenceCandidateBuildOutcome(
             None,
+            solved.search_outcome,
             solved.assignment_evaluations,
-            solved.search_budget_exhausted,
+        )
+    physical_search = solved.search_outcome
+    if support_set.budget_exhausted:
+        physical_search = combined_physical_search_outcome(
+            (
+                physical_search,
+                PhysicalSearchOutcome(
+                    (PhysicalSearchFact.EXECUTION_BUDGET_EXHAUSTED,),
+                ),
+            )
         )
     geometry = PhotoSequenceSolution(
         format_id=fmt.format_id,
@@ -147,10 +161,6 @@ def build_sequence_candidate(
         photo_height_constraint_px=solved.photo_height_constraint_px,
         residuals=solved.residuals,
         assignment_consensus=solved.assignment_consensus,
-        search_budget_exhausted=bool(
-            support_set.budget_exhausted
-            or solved.search_budget_exhausted
-        ),
         raw_boundary_paths=search_scope.raw_boundary_paths,
         holder_boundaries=search_scope.holder_boundaries,
     )
@@ -160,6 +170,6 @@ def build_sequence_candidate(
             count_hypothesis=count_hypothesis,
             build_diagnostics=(),
         ),
+        physical_search,
         solved.assignment_evaluations,
-        geometry.search_budget_exhausted,
     )

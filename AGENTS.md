@@ -347,26 +347,30 @@ Current verification state:
   are implemented. Debug distinguishes ideal apertures, output envelopes, raw
   observations, measured edges, provisional edges, holder boundaries, and
   corroborated overlap through one diagnostics-owned legend.
-- The current suite contains 494 tests and 14 valid format/mode configurations.
-  On `135/full 005.tif`, current verification completed in about 4.97 seconds,
-  retained 54 non-dominated assignment alternatives, and honestly reported
+- The current suite contains 504 tests and 14 valid format/mode configurations.
+  Physical search now distinguishes a complete contradiction from unavailable
+  measurements and execution-budget exhaustion; search state no longer lives in
+  candidate geometry. On `135/full 005.tif`, current verification completed in
+  about 4.74 seconds with 2,300 assignment evaluations and honestly reported
   search-budget exhaustion. Geometry remains unresolved because admissible
-  aperture placements and content preservation disagree; this is
-  audit/calibration material, not permission to loosen a Gate.
+  aperture placements and content preservation disagree; this is audit/calibration
+  material, not permission to loosen a Gate.
 - The previous 113-TIFF run in `Test/test 2` remains an immutable visual baseline.
   A new full run must be written to `Test/test 3` after performance profiling and
   representative-sample calibration.
 - `half/full X5_00050` remains the fixed performance sample. A profiled Pareto
   frontier, canonical long-axis paths, and solve-local exact boundary-path fits
-  reduced runtime from about 90.38 seconds to 11.27 seconds without deleting
-  observations. It retains 340 non-dominated alternatives and still honestly
-  reports search-budget exhaustion and unresolved geometry.
+  reduced runtime from about 90.38 seconds to 11.06 seconds without deleting
+  observations. It evaluates 36,254 assignments, retains 340 non-dominated
+  alternatives, and still honestly reports search-budget exhaustion and
+  unresolved geometry.
 - Audit A restarted after making build dominance transitive, preventing broad
   uncertainty from erasing disjoint geometry, and removing repeated exact path
   fitting. It has since removed duplicate CandidateGate/proof projections from
   physical evidence ranking. Any further finding must still receive a failing
   permanent contract before repair; an independent fresh-context Audit B follows
-  only after Audit A reaches zero.
+  only after Audit A reaches zero. The typed physical-search repair resets the
+  Audit A zero-violation count again.
 - Current PASS/REVIEW outcomes and adaptive measurement values remain calibration
   material for the separate real-sample project; do not loosen Gate rules to
   manufacture PASS from the current unresolved results.

@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from ..domain import EvidenceState
+from ..domain import (
+    EvidenceState,
+    PhysicalSearchFact,
+    PhysicalSearchOutcome,
+)
 
 
 @dataclass(frozen=True)
@@ -14,7 +18,7 @@ class GeometryResolution:
     larger_count_hypotheses_resolved: bool
     alternative_geometries_resolved: bool
     assignment_geometry_resolved: bool
-    search_budget_exhausted: bool
+    physical_search: PhysicalSearchOutcome
     state: EvidenceState = field(init=False)
     reasons: tuple[str, ...] = field(init=False)
 
@@ -29,7 +33,7 @@ class GeometryResolution:
                 self.alternative_geometries_resolved,
                 self.assignment_geometry_resolved,
             )
-        ) and not self.search_budget_exhausted
+        ) and self.physical_search.state == EvidenceState.SUPPORTED
         reasons: list[str] = []
         if not self.count_resolved:
             reasons.append("count_unresolved")
@@ -45,7 +49,11 @@ class GeometryResolution:
             reasons.append("geometry_clusters_disagree")
         if not self.assignment_geometry_resolved:
             reasons.append("separator_assignment_geometry_unresolved")
-        if self.search_budget_exhausted:
+        if self.physical_search.state == EvidenceState.CONTRADICTED:
+            reasons.append("physical_constraints_contradicted")
+        if PhysicalSearchFact.MEASUREMENTS_UNAVAILABLE in self.physical_search.facts:
+            reasons.append("physical_measurements_unavailable")
+        if PhysicalSearchFact.EXECUTION_BUDGET_EXHAUSTED in self.physical_search.facts:
             reasons.append("search_budget_exhausted")
         object.__setattr__(
             self,

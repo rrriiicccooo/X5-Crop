@@ -30,11 +30,21 @@ from x5crop.detection.candidate.selection.choose import (
 )
 from x5crop.detection.geometry_resolution import GeometryResolution
 from x5crop.detection.evidence.partial_edge import partial_edge_safety_evidence
-from x5crop.domain import EvidenceState
+from x5crop.domain import (
+    EvidenceState,
+    PhysicalSearchFact,
+    PhysicalSearchOutcome,
+)
 from x5crop.formats import format_spec
 
 
 class AutoCountContractTest(unittest.TestCase):
+    @staticmethod
+    def _physical_search(
+        *facts: PhysicalSearchFact,
+    ) -> PhysicalSearchOutcome:
+        return PhysicalSearchOutcome(facts)
+
     def test_unresolved_rank_protects_content_before_preferring_larger_count(
         self,
     ) -> None:
@@ -191,13 +201,13 @@ class AutoCountContractTest(unittest.TestCase):
             candidate.count_hypothesis,
             (candidate,),
             selection_fixture(candidate, geometry_disagreement=True),
-            search_budget_exhausted=False,
+            self._physical_search(PhysicalSearchFact.SOLUTION_FOUND),
         )
         resolved = CountHypothesisEvaluation(
             candidate.count_hypothesis,
             (candidate,),
             selection_fixture(candidate),
-            search_budget_exhausted=False,
+            self._physical_search(PhysicalSearchFact.SOLUTION_FOUND),
         )
         self.assertFalse(unresolved.geometry_resolved)
         self.assertTrue(resolved.geometry_resolved)
@@ -353,16 +363,18 @@ class AutoCountContractTest(unittest.TestCase):
             hypothesis,
             (),
             None,
-            search_budget_exhausted=True,
+            self._physical_search(
+                PhysicalSearchFact.EXECUTION_BUDGET_EXHAUSTED,
+            ),
         )
 
-        candidates, budget_exhausted = getattr(
+        candidates, physical_search = getattr(
             detection_pipeline,
             "_candidate_pool_for_count_resolution",
         )((evaluation,))
 
         self.assertEqual(candidates, ())
-        self.assertTrue(budget_exhausted)
+        self.assertTrue(physical_search.budget_exhausted)
         self.assertEqual(evaluation.hypothesis_state, EvidenceState.UNAVAILABLE)
 
     def test_exhaustive_empty_count_hypothesis_is_physically_contradicted(self) -> None:
@@ -374,23 +386,32 @@ class AutoCountContractTest(unittest.TestCase):
             ),
             (),
             None,
-            search_budget_exhausted=False,
+            self._physical_search(
+                PhysicalSearchFact.CONSTRAINTS_CONTRADICTED,
+            ),
         )
 
         self.assertEqual(evaluation.hypothesis_state, EvidenceState.CONTRADICTED)
 
     def test_count_search_exhaustion_does_not_rewrite_candidate_geometry(self) -> None:
         candidate = candidate_fixture()
-        self.assertFalse(candidate.geometry.search_budget_exhausted)
+        self.assertNotIn(
+            "search_budget_exhausted",
+            candidate.geometry.__dataclass_fields__,
+        )
 
         selection = select_candidates(
             (candidate,),
             larger_count_hypotheses_resolved=True,
-            candidate_search_budget_exhausted=True,
+            physical_search=self._physical_search(
+                PhysicalSearchFact.SOLUTION_FOUND,
+                PhysicalSearchFact.EXECUTION_BUDGET_EXHAUSTED,
+            ),
         )
 
-        self.assertFalse(candidate.geometry.search_budget_exhausted)
-        self.assertTrue(selection.geometry_resolution.search_budget_exhausted)
+        self.assertTrue(
+            selection.geometry_resolution.physical_search.budget_exhausted
+        )
         self.assertFalse(selection.geometry_resolution.supported)
 
     def test_full_format_count_is_resolved_independently_of_placement(self) -> None:
@@ -406,7 +427,9 @@ class AutoCountContractTest(unittest.TestCase):
         resolution = select_candidates(
             (candidate,),
             larger_count_hypotheses_resolved=True,
-            candidate_search_budget_exhausted=False,
+            physical_search=self._physical_search(
+                PhysicalSearchFact.SOLUTION_FOUND,
+            ),
         ).geometry_resolution
         self.assertTrue(resolution.count_resolved)
         self.assertFalse(resolution.placement_resolved)
@@ -443,7 +466,9 @@ class AutoCountContractTest(unittest.TestCase):
         resolution = select_candidates(
             (candidate,),
             larger_count_hypotheses_resolved=True,
-            candidate_search_budget_exhausted=False,
+            physical_search=self._physical_search(
+                PhysicalSearchFact.SOLUTION_FOUND,
+            ),
         ).geometry_resolution
         self.assertTrue(resolution.count_resolved)
         self.assertFalse(resolution.placement_resolved)

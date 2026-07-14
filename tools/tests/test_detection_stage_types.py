@@ -375,8 +375,8 @@ class DetectionStageTypeContractTests(unittest.TestCase):
             set(SequenceCandidateBuildOutcome.__dataclass_fields__),
             {
                 "candidate",
+                "physical_search",
                 "assignment_evaluations",
-                "search_budget_exhausted",
             },
         )
 

@@ -38,6 +38,8 @@ from x5crop.domain import (
     ObservationId,
     PixelInterval,
     PhotoApertureEdgeSource,
+    PhysicalSearchFact,
+    PhysicalSearchOutcome,
 )
 from x5crop.detection.physical.model import SequenceResiduals
 from x5crop.entry.cli import build_parser
@@ -166,7 +168,9 @@ class PhysicalGateModelContractTest(unittest.TestCase):
                 True,
                 True,
                 True,
-                False,
+                PhysicalSearchOutcome(
+                    (PhysicalSearchFact.SOLUTION_FOUND,),
+                ),
             )
         )
         self.assertEqual(
@@ -184,7 +188,9 @@ class PhysicalGateModelContractTest(unittest.TestCase):
                 True,
                 False,
                 True,
-                False,
+                PhysicalSearchOutcome(
+                    (PhysicalSearchFact.SOLUTION_FOUND,),
+                ),
             ),
             consensus=SelectionConsensus.DISAGREED,
         )
@@ -217,7 +223,9 @@ class PhysicalGateModelContractTest(unittest.TestCase):
         result = select_candidates(
             (candidate, corroborating_candidate),
             larger_count_hypotheses_resolved=True,
-            candidate_search_budget_exhausted=False,
+            physical_search=PhysicalSearchOutcome(
+                (PhysicalSearchFact.SOLUTION_FOUND,),
+            ),
         )
         self.assertEqual(result.consensus, SelectionConsensus.AGREED)
         self.assertEqual(len(result.clusters), 1)
@@ -235,7 +243,9 @@ class PhysicalGateModelContractTest(unittest.TestCase):
         result = select_candidates(
             (good, bad),
             larger_count_hypotheses_resolved=True,
-            candidate_search_budget_exhausted=False,
+            physical_search=PhysicalSearchOutcome(
+                (PhysicalSearchFact.SOLUTION_FOUND,),
+            ),
         )
         self.assertNotEqual(result.consensus, SelectionConsensus.DISAGREED)
 
@@ -286,7 +296,9 @@ class PhysicalGateModelContractTest(unittest.TestCase):
         result = select_candidates(
             (selected, alternative),
             larger_count_hypotheses_resolved=True,
-            candidate_search_budget_exhausted=False,
+            physical_search=PhysicalSearchOutcome(
+                (PhysicalSearchFact.SOLUTION_FOUND,),
+            ),
         )
         self.assertEqual(result.consensus, SelectionConsensus.DISAGREED)
         self.assertFalse(result.geometry_resolution.alternative_geometries_resolved)

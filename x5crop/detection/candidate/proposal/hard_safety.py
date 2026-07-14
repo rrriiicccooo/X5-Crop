@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-from ....domain import PhotoSequenceSearchScope
+from ....domain import (
+    PhotoSequenceSearchScope,
+    PhysicalSearchFact,
+    PhysicalSearchOutcome,
+)
 from ...context import DetectionContext
 from ...physical.photo_size import frame_dimension_priors
 from ..model import BuiltCandidate
@@ -18,7 +22,7 @@ def hard_safety_candidate(
     count: int,
     search_scope: PhotoSequenceSearchScope,
     *,
-    search_budget_exhausted: bool,
+    physical_search: PhysicalSearchOutcome,
 ) -> BuiltCandidate:
     physical_spec = context.configuration.physical_spec
     if count <= 0:
@@ -48,7 +52,6 @@ def hard_safety_candidate(
             ),
             sequence_provenance=search_scope.provenance,
             raw_boundary_paths=search_scope.raw_boundary_paths,
-            search_budget_exhausted=search_budget_exhausted,
         ),
         count_hypothesis=CountHypothesis(
             count=count,
@@ -59,7 +62,8 @@ def hard_safety_candidate(
             "photo_aperture_geometry_unresolved",
             *(
                 ("search_budget_exhausted",)
-                if search_budget_exhausted
+                if PhysicalSearchFact.EXECUTION_BUDGET_EXHAUSTED
+                in physical_search.facts
                 else ()
             ),
             "automatic_processing_not_supported",

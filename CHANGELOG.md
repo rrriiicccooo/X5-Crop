@@ -30,6 +30,12 @@ repository rules in `AGENTS.md`.
   `separator_observation_invalid`。
 - Candidate `EvidenceQuality` 只统计叶子物理证据；`content_preservation` 和 `partial_edge_safety` 作为
   CandidateGate/proof projection 不再与 coverage、boundary、dimension 组成项重复计数和重复影响排序。
+- Physical search 现在以 canonical typed facts 区分“找到解”“完整搜索确认约束矛盾”“必要测量不可用”
+  和“execution budget 耗尽”。空 candidate 不再自动等于 count contradiction；任一 frame-size option
+  尚不可判时，partial auto 的较大 count 继续保持 unresolved，不能让较小 count 错误 early-stop。
+- Search completeness 从 `PhotoSequenceSolution`、dual-lane geometry 与 review-only containment 中移除，
+  只由 candidate execution 聚合并进入 `GeometryResolution`。Assignment evaluation count 留在 runtime
+  metrics 与 solver/build result，不再污染物理结论或 report identity。
 
 #### Photo Aperture 联合求解与 Debug 可见性（2026-07-13）
 

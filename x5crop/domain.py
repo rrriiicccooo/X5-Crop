@@ -105,6 +105,81 @@ class EvidenceState(str, Enum):
     NOT_APPLICABLE = "not_applicable"
 
 
+class PhysicalSearchFact(str, Enum):
+    SOLUTION_FOUND = "solution_found"
+    CONSTRAINTS_CONTRADICTED = "constraints_contradicted"
+    MEASUREMENTS_UNAVAILABLE = "measurements_unavailable"
+    EXECUTION_BUDGET_EXHAUSTED = "execution_budget_exhausted"
+
+
+@dataclass(frozen=True)
+class PhysicalSearchOutcome:
+    facts: tuple[PhysicalSearchFact, ...]
+
+    def __post_init__(self) -> None:
+        if not self.facts:
+            raise ValueError("physical search outcome requires at least one fact")
+        if any(not isinstance(fact, PhysicalSearchFact) for fact in self.facts):
+            raise TypeError("physical search facts must be typed")
+        if len(set(self.facts)) != len(self.facts):
+            raise ValueError("physical search facts must be unique")
+        if (
+            PhysicalSearchFact.CONSTRAINTS_CONTRADICTED in self.facts
+            and len(self.facts) != 1
+        ):
+            raise ValueError(
+                "global physical contradiction cannot coexist with other search facts"
+            )
+        object.__setattr__(
+            self,
+            "facts",
+            tuple(fact for fact in PhysicalSearchFact if fact in self.facts),
+        )
+
+    @property
+    def state(self) -> EvidenceState:
+        if any(
+            fact
+            in {
+                PhysicalSearchFact.MEASUREMENTS_UNAVAILABLE,
+                PhysicalSearchFact.EXECUTION_BUDGET_EXHAUSTED,
+            }
+            for fact in self.facts
+        ):
+            return EvidenceState.UNAVAILABLE
+        if PhysicalSearchFact.SOLUTION_FOUND in self.facts:
+            return EvidenceState.SUPPORTED
+        return EvidenceState.CONTRADICTED
+
+    @property
+    def budget_exhausted(self) -> bool:
+        return PhysicalSearchFact.EXECUTION_BUDGET_EXHAUSTED in self.facts
+
+
+def combined_physical_search_outcome(
+    outcomes: tuple[PhysicalSearchOutcome, ...],
+) -> PhysicalSearchOutcome:
+    if not outcomes:
+        raise ValueError("physical search outcome aggregation requires inputs")
+    observed = {
+        fact
+        for outcome in outcomes
+        for fact in outcome.facts
+    }
+    facts = tuple(
+        fact
+        for fact in (
+            PhysicalSearchFact.SOLUTION_FOUND,
+            PhysicalSearchFact.MEASUREMENTS_UNAVAILABLE,
+            PhysicalSearchFact.EXECUTION_BUDGET_EXHAUSTED,
+        )
+        if fact in observed
+    )
+    return PhysicalSearchOutcome(
+        facts or (PhysicalSearchFact.CONSTRAINTS_CONTRADICTED,)
+    )
+
+
 @dataclass(frozen=True, order=True)
 class PixelInterval:
     minimum: float

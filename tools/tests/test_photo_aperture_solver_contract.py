@@ -199,7 +199,7 @@ class PhotoApertureSolverContractTest(unittest.TestCase):
             AssignmentConsensusOutcome.DISAGREED,
         )
         self.assertTrue(solved.assignment_consensus.conflicting_photo_indexes)
-        self.assertFalse(solved.search_budget_exhausted)
+        self.assertFalse(solved.search_outcome.budget_exhausted)
 
     def test_visible_content_only_prunes_geometry_that_omits_measured_runs(self) -> None:
         scope = _scope(
@@ -267,7 +267,7 @@ class PhotoApertureSolverContractTest(unittest.TestCase):
 
         self.assertIsInstance(solved, PhotoSequenceSolveResult)
         assert isinstance(solved, PhotoSequenceSolveResult)
-        self.assertFalse(solved.search_budget_exhausted)
+        self.assertFalse(solved.search_outcome.budget_exhausted)
         self.assertEqual(len(solved.separator_assignments), 11)
         self.assertLess(solved.assignment_evaluations, 100)
 
@@ -319,7 +319,7 @@ class PhotoApertureSolverContractTest(unittest.TestCase):
         )
 
         self.assertNotIsInstance(solved, PhotoSequenceSolveResult)
-        self.assertTrue(solved.search_budget_exhausted)
+        self.assertTrue(solved.search_outcome.budget_exhausted)
 
     def test_uncertain_edges_must_guarantee_positive_aperture_width(self) -> None:
         scope = _scope(

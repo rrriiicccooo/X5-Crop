@@ -98,6 +98,8 @@ from x5crop.domain import (
     PhotoApertureEdgeAssignment,
     PhotoApertureEdgeSource,
     PixelInterval,
+    PhysicalSearchFact,
+    PhysicalSearchOutcome,
     SeparatorBandAssignment,
     SeparatorWidthConstraint,
     SeparatorBandObservation,
@@ -465,7 +467,6 @@ def _candidate_geometry(
             1,
             (),
         ),
-        search_budget_exhausted=False,
         raw_boundary_paths=paths,
         holder_boundaries=tuple(
             HolderBoundaryObservation(side, path.position, path)
@@ -753,7 +754,6 @@ def review_only_candidate_fixture() -> AssessedCandidate:
         ),
         sequence_provenance=source.sequence_provenance,
         raw_boundary_paths=source.raw_boundary_paths,
-        search_budget_exhausted=False,
     )
     return assess_review_only_candidate(
         BuiltCandidate(
@@ -793,7 +793,9 @@ def selection_fixture(
             larger_count_hypotheses_resolved=True,
             alternative_geometries_resolved=not geometry_disagreement,
             assignment_geometry_resolved=geometry_resolved,
-            search_budget_exhausted=False,
+            physical_search=PhysicalSearchOutcome(
+                (PhysicalSearchFact.SOLUTION_FOUND,),
+            ),
         ),
     )
 

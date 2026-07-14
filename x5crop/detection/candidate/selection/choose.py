@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from x5crop.domain import EvidenceState
+from x5crop.domain import EvidenceState, PhysicalSearchOutcome
 from ...geometry_resolution import GeometryResolution
 from ...physical.model import PhotoSequenceSolution, ReviewOnlyContainment
 from ..model import (
@@ -153,13 +153,8 @@ def geometry_resolution_for_selection(
     *,
     consensus: SelectionConsensus,
     larger_count_hypotheses_resolved: bool,
-    candidate_search_budget_exhausted: bool,
+    physical_search: PhysicalSearchOutcome,
 ) -> GeometryResolution:
-    if (
-        selected.geometry.search_budget_exhausted
-        and not candidate_search_budget_exhausted
-    ):
-        raise ValueError("candidate search must include selected geometry exhaustion")
     evidence_model = selected.assessment.evidence
     if isinstance(evidence_model, ReviewOnlyEvidence):
         return GeometryResolution(
@@ -174,7 +169,7 @@ def geometry_resolution_for_selection(
                 consensus != SelectionConsensus.DISAGREED
             ),
             assignment_geometry_resolved=False,
-            search_budget_exhausted=candidate_search_budget_exhausted,
+            physical_search=physical_search,
         )
     evidence_sets = (
         evidence_model.lane_evidence
@@ -216,7 +211,7 @@ def geometry_resolution_for_selection(
         )
         and proof_path_supported
         and assignment_geometry_resolved
-        and not candidate_search_budget_exhausted
+        and physical_search.state == EvidenceState.SUPPORTED
     )
     count_resolved = bool(
         fixed_count or automatic_count_supported
@@ -238,7 +233,7 @@ def geometry_resolution_for_selection(
         and aperture_boundaries_resolved
         and proof_path_supported
         and assignment_geometry_resolved
-        and not candidate_search_budget_exhausted
+        and physical_search.state == EvidenceState.SUPPORTED
     )
     boundaries_resolved = aperture_boundaries_resolved
     content_preservation_compatible = bool(
@@ -262,7 +257,7 @@ def geometry_resolution_for_selection(
         larger_count_hypotheses_resolved=larger_count_hypotheses_resolved,
         alternative_geometries_resolved=alternative_geometries_resolved,
         assignment_geometry_resolved=assignment_geometry_resolved,
-        search_budget_exhausted=candidate_search_budget_exhausted,
+        physical_search=physical_search,
     )
 
 
@@ -270,7 +265,7 @@ def select_candidates(
     candidates: tuple[AssessedCandidate, ...],
     *,
     larger_count_hypotheses_resolved: bool,
-    candidate_search_budget_exhausted: bool,
+    physical_search: PhysicalSearchOutcome,
 ) -> SelectionResult:
     if not candidates:
         raise ValueError("candidate selection requires at least one candidate")
@@ -301,7 +296,7 @@ def select_candidates(
         selected,
         consensus=consensus,
         larger_count_hypotheses_resolved=larger_count_hypotheses_resolved,
-        candidate_search_budget_exhausted=candidate_search_budget_exhausted,
+        physical_search=physical_search,
     )
     return SelectionResult(
         selected=selected,

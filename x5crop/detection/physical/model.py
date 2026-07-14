@@ -252,7 +252,6 @@ class PhotoSequenceSolution:
     photo_height_constraint_px: PixelInterval
     residuals: SequenceResiduals
     assignment_consensus: BoundaryAssignmentConsensus
-    search_budget_exhausted: bool
     raw_boundary_paths: tuple[GrayBoundaryPathObservation, ...]
     holder_boundaries: tuple[HolderBoundaryObservation, ...]
     sequence_provenance: MeasurementProvenance = field(init=False)
@@ -507,7 +506,6 @@ class DualLanePhotoSolution:
     holder_span: HolderSpan
     residuals: SequenceResiduals
     assignment_consensus: BoundaryAssignmentConsensus
-    search_budget_exhausted: bool
     lane_divider: LaneDividerEvidence
     lane_solutions: tuple[PhotoSequenceSolution, ...]
     lane_boxes: tuple[Box, ...]
@@ -611,7 +609,6 @@ class ReviewOnlyContainment:
     assignment_consensus: BoundaryAssignmentConsensus
     sequence_provenance: MeasurementProvenance
     raw_boundary_paths: tuple[GrayBoundaryPathObservation, ...]
-    search_budget_exhausted: bool
 
     def __post_init__(self) -> None:
         _validate_geometry_identity(self.format_id, self.layout, self.strip_mode)

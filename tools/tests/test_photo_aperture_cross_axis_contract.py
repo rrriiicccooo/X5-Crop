@@ -85,7 +85,7 @@ class PhotoApertureCrossAxisContractTest(unittest.TestCase):
             maximum_hypotheses=8,
         )
 
-        self.assertTrue(plan.search_budget_exhausted)
+        self.assertTrue(plan.search_outcome.budget_exhausted)
 
     def test_cross_axis_planning_does_not_enumerate_separator_sequences(self) -> None:
         scope = _scope(
@@ -108,8 +108,7 @@ class PhotoApertureCrossAxisContractTest(unittest.TestCase):
             ("search_scope", "dimensions", "count", "maximum_hypotheses"),
         )
         self.assertTrue(plan.hypotheses)
-        self.assertEqual(plan.assignment_evaluations, 0)
-        self.assertFalse(plan.search_budget_exhausted)
+        self.assertFalse(plan.search_outcome.budget_exhausted)
 
     def test_cross_axis_budget_does_not_reward_taller_aperture_extent(self) -> None:
         search_scope = _scope(
@@ -159,7 +158,7 @@ class PhotoApertureCrossAxisContractTest(unittest.TestCase):
         )
 
         self.assertEqual(plan.hypotheses[0].height_px, PixelInterval.exact(90.0))
-        self.assertTrue(plan.search_budget_exhausted)
+        self.assertTrue(plan.search_outcome.budget_exhausted)
 
     def test_cross_axis_budget_uses_calibrated_photo_height(self) -> None:
         search_scope = _scope(
@@ -212,7 +211,7 @@ class PhotoApertureCrossAxisContractTest(unittest.TestCase):
         )
 
         self.assertEqual(plan.hypotheses[0].height_px, PixelInterval.exact(90.0))
-        self.assertTrue(plan.search_budget_exhausted)
+        self.assertTrue(plan.search_outcome.budget_exhausted)
 
     def test_cross_axis_budget_prioritizes_nonoverlap_feasible_dimensions(self) -> None:
         search_scope = _scope(
@@ -244,7 +243,7 @@ class PhotoApertureCrossAxisContractTest(unittest.TestCase):
         )
 
         self.assertEqual(plan.hypotheses[0].height_px, PixelInterval.exact(150.0))
-        self.assertTrue(plan.search_budget_exhausted)
+        self.assertTrue(plan.search_outcome.budget_exhausted)
 
     def test_equivalent_gray_paths_do_not_multiply_physical_hypotheses(self) -> None:
         search_scope = _scope(
@@ -282,7 +281,7 @@ class PhotoApertureCrossAxisContractTest(unittest.TestCase):
         )
 
         self.assertEqual(len(plan.hypotheses), 1)
-        self.assertFalse(plan.search_budget_exhausted)
+        self.assertFalse(plan.search_outcome.budget_exhausted)
 
     def test_broad_holder_uncertainty_cannot_hide_distinct_aperture_paths(self) -> None:
         search_scope = _scope(

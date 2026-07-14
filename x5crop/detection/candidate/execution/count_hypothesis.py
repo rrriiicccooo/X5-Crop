@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-from ....domain import PhotoSequenceSearchScope
+from ....domain import (
+    PhotoSequenceSearchScope,
+    PhysicalSearchOutcome,
+    combined_physical_search_outcome,
+)
 from ....image.content import ContentRegionObservation
 from ...context import DetectionContext
 from ..assessment.candidate import assess_candidate
@@ -17,7 +21,7 @@ def _assess_count_hypothesis(
     hypothesis: CountHypothesis,
     search_scope: PhotoSequenceSearchScope,
     visible_content: ContentRegionObservation,
-) -> tuple[list[AssessedCandidate], bool]:
+) -> tuple[list[AssessedCandidate], PhysicalSearchOutcome]:
     outcomes = []
     for dimensions in frame_dimension_priors(
         context.configuration.physical_spec,
@@ -39,15 +43,15 @@ def _assess_count_hypothesis(
             outcome.assignment_evaluations
         )
         outcomes.append(outcome)
-    search_budget_exhausted = any(
-        outcome.search_budget_exhausted for outcome in outcomes
+    physical_search = combined_physical_search_outcome(
+        tuple(outcome.physical_search for outcome in outcomes)
     )
     assessed: list[AssessedCandidate] = []
     for outcome in outcomes:
         if outcome.candidate is not None:
             assessed.append(assess_candidate(outcome.candidate, context))
             context.execution_statistics.record_assessed_candidate()
-    return assessed, search_budget_exhausted
+    return assessed, physical_search
 
 
 def evaluate_count_hypothesis(
@@ -58,7 +62,7 @@ def evaluate_count_hypothesis(
     visible_content: ContentRegionObservation,
     larger_count_hypotheses_resolved: bool,
 ) -> CountHypothesisEvaluation:
-    candidates, search_budget_exhausted = _assess_count_hypothesis(
+    candidates, physical_search = _assess_count_hypothesis(
         context,
         hypothesis,
         search_scope,
@@ -70,7 +74,7 @@ def evaluate_count_hypothesis(
             larger_count_hypotheses_resolved=(
                 larger_count_hypotheses_resolved
             ),
-            candidate_search_budget_exhausted=search_budget_exhausted,
+            physical_search=physical_search,
         )
         if candidates
         else None
@@ -79,5 +83,5 @@ def evaluate_count_hypothesis(
         hypothesis=hypothesis,
         candidates=tuple(candidates),
         selection=selection,
-        search_budget_exhausted=search_budget_exhausted,
+        physical_search=physical_search,
     )

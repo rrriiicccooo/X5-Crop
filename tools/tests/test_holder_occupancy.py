@@ -200,7 +200,6 @@ def _underfilled_geometry() -> PhotoSequenceSolution:
             1,
             (),
         ),
-        search_budget_exhausted=False,
         raw_boundary_paths=raw_paths,
         holder_boundaries=(),
     )

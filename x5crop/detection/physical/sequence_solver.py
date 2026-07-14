@@ -22,6 +22,8 @@ from ...domain import (
     PhotoApertureEdgeAssignment,
     PhotoApertureEdgeSource,
     PhotoSequenceSearchScope,
+    PhysicalSearchFact,
+    PhysicalSearchOutcome,
     PixelInterval,
     SeparatorBandAssignment,
     SeparatorBandCrossAxisSupport,
@@ -52,12 +54,14 @@ class PhotoSequenceSolveResult:
     photo_height_constraint_px: PixelInterval
     residuals: SequenceResiduals
     assignment_consensus: BoundaryAssignmentConsensus
+    search_outcome: PhysicalSearchOutcome
     assignment_evaluations: int
-    search_budget_exhausted: bool
 
     def __post_init__(self) -> None:
         if self.assignment_evaluations < 0:
             raise ValueError("assignment evaluation count cannot be negative")
+        if PhysicalSearchFact.SOLUTION_FOUND not in self.search_outcome.facts:
+            raise ValueError("photo sequence result requires a found solution")
         if self.photo_width_constraint_px.minimum <= 0.0:
             raise ValueError("photo width constraint must be positive")
         if self.photo_height_constraint_px.minimum <= 0.0:
@@ -65,24 +69,26 @@ class PhotoSequenceSolveResult:
 
 
 @dataclass(frozen=True)
-class PhotoSequenceSolveUnavailable:
+class PhotoSequenceSolveFailure:
+    search_outcome: PhysicalSearchOutcome
     assignment_evaluations: int
-    search_budget_exhausted: bool
 
     def __post_init__(self) -> None:
         if self.assignment_evaluations < 0:
             raise ValueError("assignment evaluation count cannot be negative")
+        if PhysicalSearchFact.SOLUTION_FOUND in self.search_outcome.facts:
+            raise ValueError("photo sequence failure cannot contain a solution")
 
 
 @dataclass(frozen=True)
 class PhotoApertureCrossAxisPlan:
     hypotheses: tuple[PhotoApertureCrossAxisHypothesis, ...]
-    assignment_evaluations: int
-    search_budget_exhausted: bool
+    search_outcome: PhysicalSearchOutcome
 
     def __post_init__(self) -> None:
-        if self.assignment_evaluations < 0:
-            raise ValueError("cross-axis plan evaluation count cannot be negative")
+        solution_found = PhysicalSearchFact.SOLUTION_FOUND in self.search_outcome.facts
+        if solution_found != bool(self.hypotheses):
+            raise ValueError("cross-axis search facts must match its hypotheses")
 
 
 @dataclass(frozen=True)
@@ -421,13 +427,20 @@ def photo_aperture_cross_axis_plan(
             reverse=True,
         )[:maximum_hypotheses]
     )
+    budget_exhausted = bool(
+        search_scope.measurement_budget_exhausted
+        or len(all_hypotheses) > maximum_hypotheses
+    )
+    facts: list[PhysicalSearchFact] = []
+    if ranked:
+        facts.append(PhysicalSearchFact.SOLUTION_FOUND)
+    if budget_exhausted:
+        facts.append(PhysicalSearchFact.EXECUTION_BUDGET_EXHAUSTED)
+    elif not ranked:
+        facts.append(PhysicalSearchFact.MEASUREMENTS_UNAVAILABLE)
     return PhotoApertureCrossAxisPlan(
         ranked,
-        0,
-        bool(
-            search_scope.measurement_budget_exhausted
-            or len(all_hypotheses) > maximum_hypotheses
-        ),
+        PhysicalSearchOutcome(tuple(facts)),
     )
 
 
@@ -1967,7 +1980,7 @@ def solve_photo_sequence(
     visible_content: ContentRegionObservation,
     maximum_assignment_evaluations: int,
     maximum_solution_alternatives: int,
-) -> PhotoSequenceSolveResult | PhotoSequenceSolveUnavailable:
+) -> PhotoSequenceSolveResult | PhotoSequenceSolveFailure:
     if count <= 0:
         raise ValueError("photo sequence count must be positive")
     if min(
@@ -1977,10 +1990,7 @@ def solve_photo_sequence(
         raise ValueError("photo sequence solver budgets must be positive")
     cross_axis_hypotheses = cross_axis_plan.hypotheses
     if not cross_axis_hypotheses:
-        return PhotoSequenceSolveUnavailable(
-            cross_axis_plan.assignment_evaluations,
-            cross_axis_plan.search_budget_exhausted,
-        )
+        return PhotoSequenceSolveFailure(cross_axis_plan.search_outcome, 0)
     expected_measurements = tuple(
         measurement.aperture_cross_axis
         for support in supports
@@ -2002,8 +2012,8 @@ def solve_photo_sequence(
     )
     long_paths = _axis_paths(search_scope, BoundaryAxis.LONG)
     band_hypotheses: list[_BandSequenceHypothesis] = []
-    band_evaluations = cross_axis_plan.assignment_evaluations
-    band_budget_exhausted = cross_axis_plan.search_budget_exhausted
+    band_evaluations = 0
+    band_budget_exhausted = cross_axis_plan.search_outcome.budget_exhausted
     for cross_axis in cross_axis_hypotheses if supports and count > 1 else ():
         remaining_band_budget = maximum_assignment_evaluations - band_evaluations
         if remaining_band_budget <= 0:
@@ -2078,9 +2088,15 @@ def solve_photo_sequence(
         or measured_budget_exhausted
     )
     if not builds:
-        return PhotoSequenceSolveUnavailable(
+        return PhotoSequenceSolveFailure(
+            PhysicalSearchOutcome(
+                (
+                    PhysicalSearchFact.EXECUTION_BUDGET_EXHAUSTED
+                    if budget_exhausted
+                    else PhysicalSearchFact.CONSTRAINTS_CONTRADICTED,
+                ),
+            ),
             total_evaluations,
-            budget_exhausted,
         )
 
     content_preserving_builds = tuple(
@@ -2128,6 +2144,15 @@ def solve_photo_sequence(
             non_dominated,
             budget_exhausted=budget_exhausted,
         ),
+        search_outcome=PhysicalSearchOutcome(
+            (
+                PhysicalSearchFact.SOLUTION_FOUND,
+                *(
+                    (PhysicalSearchFact.EXECUTION_BUDGET_EXHAUSTED,)
+                    if budget_exhausted
+                    else ()
+                ),
+            ),
+        ),
         assignment_evaluations=total_evaluations,
-        search_budget_exhausted=budget_exhausted,
     )

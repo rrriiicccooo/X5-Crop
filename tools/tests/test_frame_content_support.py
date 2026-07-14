@@ -195,7 +195,6 @@ def _single_aperture_geometry(
             1,
             (),
         ),
-        search_budget_exhausted=False,
         raw_boundary_paths=raw_paths,
         holder_boundaries=(),
     )

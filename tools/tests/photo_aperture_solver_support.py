@@ -237,7 +237,6 @@ def geometry(
         photo_height_constraint_px=solved.photo_height_constraint_px,
         residuals=solved.residuals,
         assignment_consensus=solved.assignment_consensus,
-        search_budget_exhausted=solved.search_budget_exhausted,
         raw_boundary_paths=search_scope.raw_boundary_paths,
         holder_boundaries=search_scope.holder_boundaries,
     )

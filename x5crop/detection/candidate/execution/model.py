@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ....domain import EvidenceState
+from ....domain import EvidenceState, PhysicalSearchOutcome
 from ..model import AssessedCandidate
 from ..plan.model import CountHypothesis
 from ..selection.model import SelectionResult
@@ -13,7 +13,7 @@ class CountHypothesisEvaluation:
     hypothesis: CountHypothesis
     candidates: tuple[AssessedCandidate, ...]
     selection: SelectionResult | None
-    search_budget_exhausted: bool
+    physical_search: PhysicalSearchOutcome
 
     def __post_init__(self) -> None:
         if any(
@@ -31,10 +31,10 @@ class CountHypothesisEvaluation:
             raise ValueError("count evaluation selection must cover its candidates")
         if (
             self.selection is not None
-            and self.selection.geometry_resolution.search_budget_exhausted
-            != self.search_budget_exhausted
+            and self.selection.geometry_resolution.physical_search
+            != self.physical_search
         ):
-            raise ValueError("count evaluation budget state must match its selection")
+            raise ValueError("count evaluation search state must match its selection")
 
     @property
     def geometry_resolved(self) -> bool:
@@ -47,6 +47,9 @@ class CountHypothesisEvaluation:
     def hypothesis_state(self) -> EvidenceState:
         if self.geometry_resolved:
             return EvidenceState.SUPPORTED
-        if not self.candidates and not self.search_budget_exhausted:
+        if (
+            not self.candidates
+            and self.physical_search.state == EvidenceState.CONTRADICTED
+        ):
             return EvidenceState.CONTRADICTED
         return EvidenceState.UNAVAILABLE

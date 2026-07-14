@@ -28,6 +28,7 @@ from x5crop.detection.physical.sequence_solver import (
     PhotoSequenceSolveResult,
     solve_photo_sequence,
 )
+from x5crop.domain import EvidenceState
 from x5crop.image.statistics import (
     ImageMeasurementStatisticsParameters,
     image_measurement_statistics,
@@ -65,7 +66,7 @@ class SequenceCandidateBuildContractTest(unittest.TestCase):
         )
         self.assertIsInstance(solved, PhotoSequenceSolveResult)
         assert isinstance(solved, PhotoSequenceSolveResult)
-        self.assertFalse(solved.search_budget_exhausted)
+        self.assertEqual(solved.search_outcome.state, EvidenceState.SUPPORTED)
 
         gray = np.zeros((120, 210), dtype=np.uint8)
         cache = MeasurementCache(
@@ -119,8 +120,11 @@ class SequenceCandidateBuildContractTest(unittest.TestCase):
 
         self.assertIsNotNone(outcome.candidate)
         assert outcome.candidate is not None
-        self.assertTrue(outcome.candidate.geometry.search_budget_exhausted)
-        self.assertTrue(outcome.search_budget_exhausted)
+        self.assertNotIn(
+            "search_budget_exhausted",
+            outcome.candidate.geometry.__dataclass_fields__,
+        )
+        self.assertTrue(outcome.physical_search.budget_exhausted)
 
 
 if __name__ == "__main__":

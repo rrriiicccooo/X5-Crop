@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import MISSING, fields, replace
+from dataclasses import fields, replace
 import inspect
 import unittest
 from unittest.mock import patch
@@ -53,6 +53,8 @@ from x5crop.domain import (
     MeasurementIdentity,
     MeasurementProvenance,
     ObservationId,
+    PhysicalSearchFact,
+    PhysicalSearchOutcome,
 )
 from x5crop.image.statistics import image_measurement_statistics
 
@@ -73,7 +75,6 @@ def _parent(lane):
         holder_span=HolderSpan(Box(0, 0, lane_width, 2 * lane_height)),
         residuals=combined_sequence_residuals(lane_solutions),
         assignment_consensus=combined_assignment_consensus(lane_solutions),
-        search_budget_exhausted=False,
         lane_divider=LaneDividerEvidence(
             center=lane_height,
             gutter=Box(0, lane_height - 1, lane_width, lane_height + 1),
@@ -187,12 +188,13 @@ class DualLaneAssessmentTest(unittest.TestCase):
             )
 
         self.assertIsInstance(selection.selected.geometry, ReviewOnlyContainment)
-        self.assertTrue(selection.selected.geometry.search_budget_exhausted)
-
-    def test_review_only_budget_state_has_no_silent_default(self) -> None:
-        self.assertIs(
-            ReviewOnlyContainment.__dataclass_fields__["search_budget_exhausted"].default,
-            MISSING,
+        self.assertEqual(
+            selection.geometry_resolution.physical_search.state,
+            EvidenceState.UNAVAILABLE,
+        )
+        self.assertIn(
+            PhysicalSearchFact.MEASUREMENTS_UNAVAILABLE,
+            selection.geometry_resolution.physical_search.facts,
         )
 
     def test_unresolved_lane_keeps_dual_lane_result_review_only(self) -> None:
@@ -233,13 +235,17 @@ class DualLaneAssessmentTest(unittest.TestCase):
                         lane_context.measurement_cache,
                         lane_context.configuration.boundary_path,
                     ),
-                    search_budget_exhausted=False,
+                    physical_search=PhysicalSearchOutcome(
+                        (PhysicalSearchFact.MEASUREMENTS_UNAVAILABLE,),
+                    ),
                 )
             )
             return select_candidates(
                 (assessed,),
                 larger_count_hypotheses_resolved=True,
-                candidate_search_budget_exhausted=False,
+                physical_search=PhysicalSearchOutcome(
+                    (PhysicalSearchFact.MEASUREMENTS_UNAVAILABLE,),
+                ),
             )
 
         with patch(
@@ -305,7 +311,6 @@ class DualLaneAssessmentTest(unittest.TestCase):
                 "holder_span",
                 "residuals",
                 "assignment_consensus",
-                "search_budget_exhausted",
                 "lane_divider",
                 "lane_solutions",
                 "lane_boxes",

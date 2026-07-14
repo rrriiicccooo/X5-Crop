@@ -221,7 +221,7 @@ class PhotoApertureMeasuredSequenceContractTest(unittest.TestCase):
         self.assertIsInstance(solved, PhotoSequenceSolveResult)
         assert isinstance(solved, PhotoSequenceSolveResult)
         self.assertEqual(len(solved.photo_apertures), 3)
-        self.assertTrue(solved.search_budget_exhausted)
+        self.assertTrue(solved.search_outcome.budget_exhausted)
 
     def test_exact_budget_consumption_does_not_hide_unexamined_cross_axis_hypotheses(self) -> None:
         scope = _scope(
@@ -254,7 +254,7 @@ class PhotoApertureMeasuredSequenceContractTest(unittest.TestCase):
             maximum_solution_alternatives=8,
         )
 
-        self.assertTrue(solved.search_budget_exhausted)
+        self.assertTrue(solved.search_outcome.budget_exhausted)
 
 
 if __name__ == "__main__":
