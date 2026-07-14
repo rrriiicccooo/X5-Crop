@@ -48,6 +48,7 @@ from .outcome import (
     FailedInput,
     FailureStage,
     InputProcessingOutcome,
+    RuntimeArtifacts,
     RuntimeMetrics,
 )
 
@@ -65,8 +66,7 @@ def process_one(
     failure_stage = FailureStage.INPUT_PROFILE
     output_surface = output_surface_for_input(input_file, config)
     output_dir = output_surface.root
-    output_files: list[str] = []
-    debug_analysis: str | None = None
+    artifacts = RuntimeArtifacts.empty()
     gray = None
     detection = None
     selected_candidate = None
@@ -140,8 +140,8 @@ def process_one(
         )
         if cached_result is not None:
             return CompletedInput(
-                result=cached_result,
-                debug_analysis=None,
+                result=cached_result.result,
+                artifacts=cached_result.artifacts,
                 metrics=_runtime_metrics(
                     started_at,
                     detection_seconds,
@@ -220,6 +220,7 @@ def process_one(
             detection,
             warnings,
         )
+        artifacts = replace(artifacts, review_copy=review_copy)
         output_files = write_crops_if_allowed(
             input_file,
             arr,
@@ -230,6 +231,7 @@ def process_one(
             transform_geometry.applied,
             output_surface,
         )
+        artifacts = replace(artifacts, frame_outputs=tuple(output_files))
 
         failure_stage = FailureStage.DEBUG
         debug_analysis = write_debug_outputs(
@@ -243,6 +245,7 @@ def process_one(
             initial_configuration.diagnostics,
             RunTerminalOutcome.COMPLETED,
         )
+        artifacts = replace(artifacts, debug_analysis=debug_analysis)
 
         failure_stage = FailureStage.REPORT_VALIDATION
         result = result_from_detection(
@@ -251,8 +254,8 @@ def process_one(
             selection,
             profile,
             workspace.identity,
-            output_files,
-            review_copy,
+            list(artifacts.frame_outputs),
+            artifacts.review_copy,
             warnings,
             configuration_detail=configuration_detail,
             resolution_metadata=scan_calibration.metadata,
@@ -261,7 +264,7 @@ def process_one(
         )
         return CompletedInput(
             result=result,
-            debug_analysis=debug_analysis,
+            artifacts=artifacts,
             metrics=_runtime_metrics(
                 started_at,
                 detection_seconds,
@@ -289,6 +292,10 @@ def process_one(
                     initial_configuration.diagnostics,
                     RunTerminalOutcome.RUNTIME_ERROR,
                 )
+                artifacts = replace(
+                    artifacts,
+                    debug_analysis=debug_analysis,
+                )
             except Exception:
                 pass
         return FailedInput(
@@ -296,8 +303,7 @@ def process_one(
             failure_stage=failure_stage,
             error_code=type(exc).__name__,
             error_message=str(exc),
-            debug_analysis=debug_analysis,
-            output_files=tuple(output_files),
+            artifacts=artifacts,
             traceback_text=traceback_text,
             metrics=_runtime_metrics(
                 started_at,

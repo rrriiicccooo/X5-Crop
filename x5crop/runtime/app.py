@@ -16,6 +16,7 @@ from .outcome import (
     FailedInput,
     FailureStage,
     InputProcessingOutcome,
+    RuntimeArtifacts,
     RuntimeMetrics,
 )
 from .workflow import process_one
@@ -47,12 +48,16 @@ def print_run_header(invocation: RuntimeInvocation) -> None:
         print(f"output: {config.output_dir}")
 
 
-def print_report_result(result: ReportResult, config: RunConfig) -> None:
+def print_report_result(
+    result: ReportResult,
+    artifacts: RuntimeArtifacts,
+    config: RunConfig,
+) -> None:
     record = result.record
     print(f"  status={record['decision']['status']}")
     for warning in record["output"]["warnings"]:
         print(f"  info: {warning}")
-    output_files = record["output"]["output_files"]
+    output_files = artifacts.frame_outputs
     if output_files:
         print(f"  wrote: {len(output_files)} TIFF files")
         if config.output_dir is not None:
@@ -70,8 +75,7 @@ def _failed_input_from_exception(
         failure_stage=stage,
         error_code=type(exc).__name__,
         error_message=str(exc),
-        debug_analysis=None,
-        output_files=(),
+        artifacts=RuntimeArtifacts.empty(),
         traceback_text=traceback.format_exc(),
         metrics=RuntimeMetrics.unavailable(),
     )
@@ -85,8 +89,7 @@ def _failure_manifest(failure: FailedInput) -> RunManifestRecord:
         error_code=failure.error_code,
         error_message=failure.error_message,
         report_written=False,
-        debug_analysis=failure.debug_analysis,
-        output_files=failure.output_files,
+        artifacts=failure.artifacts,
         metrics=failure.metrics,
     )
 
@@ -112,8 +115,7 @@ def _handle_input_outcome(
             failure_stage=FailureStage.REPORT_WRITE,
             error_code=type(exc).__name__,
             error_message=str(exc),
-            debug_analysis=outcome.debug_analysis,
-            output_files=tuple(result.record["output"]["output_files"]),
+            artifacts=outcome.artifacts,
             traceback_text=traceback.format_exc(),
             metrics=outcome.metrics,
         )
@@ -123,7 +125,6 @@ def _handle_input_outcome(
             print(failure.traceback_text, file=sys.stderr, end="")
         return False, None
 
-    output_files = tuple(result.record["output"]["output_files"])
     append_run_manifest(
         source,
         config,
@@ -134,12 +135,11 @@ def _handle_input_outcome(
             error_code=None,
             error_message=None,
             report_written=report_written,
-            debug_analysis=outcome.debug_analysis,
-            output_files=output_files,
+            artifacts=outcome.artifacts,
             metrics=outcome.metrics,
         ),
     )
-    print_report_result(result, config)
+    print_report_result(result, outcome.artifacts, config)
     return True, str(result.record["decision"]["status"])
 
 

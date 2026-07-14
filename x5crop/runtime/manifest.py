@@ -9,7 +9,7 @@ from ..app_info import RUN_MANIFEST_JSONL_NAME
 from ..output.surface import output_directory_for
 from ..run_config import RunConfig
 from ..run_status import RunTerminalOutcome
-from .outcome import FailureStage, RuntimeMetrics
+from .outcome import FailureStage, RuntimeArtifacts, RuntimeMetrics
 
 
 @dataclass(frozen=True)
@@ -20,8 +20,7 @@ class RunManifestRecord:
     error_code: str | None
     error_message: str | None
     report_written: bool
-    debug_analysis: str | None
-    output_files: tuple[str, ...]
+    artifacts: RuntimeArtifacts
     metrics: RuntimeMetrics
 
     def __post_init__(self) -> None:
@@ -49,8 +48,7 @@ class RunManifestRecord:
             "error_code": self.error_code,
             "error_message": self.error_message,
             "report_written": self.report_written,
-            "debug_analysis": self.debug_analysis,
-            "output_files": list(self.output_files),
+            "artifacts": self.artifacts.as_record(),
             "metrics": self.metrics.as_record(),
         }
 

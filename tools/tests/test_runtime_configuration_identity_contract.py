@@ -10,7 +10,7 @@ from x5crop.configuration.bundle import DetectionConfigurationBundle
 from x5crop.run_config import RunConfig
 from x5crop.runtime.app import run_runtime
 from x5crop.runtime.invocation import RuntimeInvocation
-from x5crop.runtime.outcome import CompletedInput, RuntimeMetrics
+from x5crop.runtime.outcome import CompletedInput, RuntimeArtifacts, RuntimeMetrics
 
 
 def _config() -> RunConfig:
@@ -66,7 +66,7 @@ class RuntimeConfigurationIdentityContractTest(unittest.TestCase):
                     "output": {"warnings": [], "output_files": []},
                 }
             ),
-            debug_analysis=None,
+            artifacts=RuntimeArtifacts.empty(),
             metrics=RuntimeMetrics(1.0, 0.5, 2, 10, 1, 2),
         )
         with (

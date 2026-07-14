@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from hashlib import file_digest, sha256
 import json
 from pathlib import Path
@@ -23,10 +23,17 @@ from ..report.validation import current_report_record_errors
 from ..report.result_builder import result_from_cached_record
 from ..run_config import RunConfig
 from .implementation import active_implementation_fingerprint
+from .outcome import RuntimeArtifacts
 from .prepared_workspace import PreparedWorkspace
 
 
 _REPORT_RECORD_CACHE: dict[Path, tuple[int, int, list[dict[str, Any]]]] = {}
+
+
+@dataclass(frozen=True)
+class ReusedAnalysis:
+    result: ReportResult
+    artifacts: RuntimeArtifacts
 
 
 def source_cache_signature(input_file: Path, profile: ImageProfile, page_index: int) -> dict[str, Any]:
@@ -169,7 +176,7 @@ def result_from_reusable_analysis(
     analysis_reuse_signature: dict[str, Any],
     workspace: PreparedWorkspace,
     source_pixels: np.ndarray,
-) -> ReportResult | None:
+) -> ReusedAnalysis | None:
     if not (
         config.reuse_analysis
         and not config.dry_run
@@ -199,13 +206,16 @@ def result_from_reusable_analysis(
     )
     if detection.decision.status == "needs_review" and not config.export_review:
         warnings.append("cached status is needs_review; crop export not requested")
-        return result_from_cached_record(
-            input_file,
-            cached_record,
-            profile,
-            warnings,
-            output_files=[],
-            review_copy=review_copy,
+        return ReusedAnalysis(
+            result=result_from_cached_record(
+                input_file,
+                cached_record,
+                profile,
+                warnings,
+                output_files=[],
+                review_copy=review_copy,
+            ),
+            artifacts=RuntimeArtifacts((), review_copy, None),
         )
 
     output_files = write_crops_if_allowed(
@@ -218,11 +228,14 @@ def result_from_reusable_analysis(
         workspace.transform_geometry.applied,
         output_surface,
     )
-    return result_from_cached_record(
-        input_file,
-        cached_record,
-        profile,
-        warnings,
-        output_files=output_files,
-        review_copy=review_copy,
+    return ReusedAnalysis(
+        result=result_from_cached_record(
+            input_file,
+            cached_record,
+            profile,
+            warnings,
+            output_files=output_files,
+            review_copy=review_copy,
+        ),
+        artifacts=RuntimeArtifacts(tuple(output_files), review_copy, None),
     )

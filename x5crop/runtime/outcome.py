@@ -80,9 +80,35 @@ class RuntimeMetrics:
 
 
 @dataclass(frozen=True)
+class RuntimeArtifacts:
+    frame_outputs: tuple[str, ...]
+    review_copy: str | None
+    debug_analysis: str | None
+
+    def __post_init__(self) -> None:
+        if any(not isinstance(path, str) or not path for path in self.frame_outputs):
+            raise ValueError("runtime frame outputs must be nonempty paths")
+        if self.review_copy is not None and not self.review_copy:
+            raise ValueError("runtime review copy must be a nonempty path")
+        if self.debug_analysis is not None and not self.debug_analysis:
+            raise ValueError("runtime debug analysis must be a nonempty path")
+
+    @classmethod
+    def empty(cls) -> RuntimeArtifacts:
+        return cls((), None, None)
+
+    def as_record(self) -> dict[str, Any]:
+        return {
+            "frame_outputs": list(self.frame_outputs),
+            "review_copy": self.review_copy,
+            "debug_analysis": self.debug_analysis,
+        }
+
+
+@dataclass(frozen=True)
 class CompletedInput:
     result: ReportResult
-    debug_analysis: str | None
+    artifacts: RuntimeArtifacts
     metrics: RuntimeMetrics
 
 
@@ -92,8 +118,7 @@ class FailedInput:
     failure_stage: FailureStage
     error_code: str
     error_message: str
-    debug_analysis: str | None
-    output_files: tuple[str, ...]
+    artifacts: RuntimeArtifacts
     traceback_text: str | None
     metrics: RuntimeMetrics
 

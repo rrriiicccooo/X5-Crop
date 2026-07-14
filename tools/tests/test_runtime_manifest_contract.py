@@ -32,6 +32,7 @@ from x5crop.runtime.outcome import (
     CompletedInput,
     FailedInput,
     FailureStage,
+    RuntimeArtifacts,
     RuntimeMetrics,
 )
 from x5crop.runtime.prepared_workspace import PreparedWorkspace
@@ -93,6 +94,22 @@ def _metrics() -> RuntimeMetrics:
 
 
 class RuntimeManifestContractTest(unittest.TestCase):
+    def test_outcomes_own_one_typed_runtime_artifact_record(self) -> None:
+        self.assertEqual(
+            set(RuntimeArtifacts.__dataclass_fields__),
+            {"frame_outputs", "review_copy", "debug_analysis"},
+        )
+        self.assertIn("artifacts", CompletedInput.__dataclass_fields__)
+        self.assertIn("artifacts", FailedInput.__dataclass_fields__)
+        self.assertNotIn("output_files", FailedInput.__dataclass_fields__)
+        self.assertNotIn("debug_analysis", FailedInput.__dataclass_fields__)
+
+    def test_parent_manifest_never_reverse_reads_report_artifacts(self) -> None:
+        source = (Path(__file__).resolve().parents[2] / "x5crop/runtime/app.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotIn('result.record["output"]["output_files"]', source)
+
     def test_manifest_owns_runtime_performance_metrics(self) -> None:
         self.assertIn("metrics", RunManifestRecord.__dataclass_fields__)
 
@@ -105,8 +122,7 @@ class RuntimeManifestContractTest(unittest.TestCase):
                 error_code=None,
                 error_message=None,
                 report_written=True,
-                debug_analysis=None,
-                output_files=(),
+                artifacts=RuntimeArtifacts.empty(),
                 metrics=RuntimeMetrics.unavailable(),
             )
 
@@ -122,8 +138,7 @@ class RuntimeManifestContractTest(unittest.TestCase):
             error_code="ValueError",
             error_message="measurement failed",
             report_written=False,
-            debug_analysis=None,
-            output_files=(),
+            artifacts=RuntimeArtifacts.empty(),
             metrics=_metrics(),
         )
 
@@ -136,8 +151,11 @@ class RuntimeManifestContractTest(unittest.TestCase):
                 "error_code": "ValueError",
                 "error_message": "measurement failed",
                 "report_written": False,
-                "debug_analysis": None,
-                "output_files": [],
+                "artifacts": {
+                    "frame_outputs": [],
+                    "review_copy": None,
+                    "debug_analysis": None,
+                },
                 "metrics": {
                     "processing_seconds": 1.0,
                     "detection_seconds": 0.5,
@@ -167,7 +185,7 @@ class RuntimeManifestContractTest(unittest.TestCase):
             )
             completed = CompletedInput(
                 result=result,
-                debug_analysis="debug.jpg",
+                artifacts=RuntimeArtifacts(("frame.tif",), None, "debug.jpg"),
                 metrics=_metrics(),
             )
             with (
@@ -185,7 +203,8 @@ class RuntimeManifestContractTest(unittest.TestCase):
         manifest = append_manifest.call_args.args[2]
         self.assertEqual(manifest.terminal_outcome, RunTerminalOutcome.COMPLETED)
         self.assertTrue(manifest.report_written)
-        self.assertEqual(manifest.output_files, ("frame.tif",))
+        self.assertEqual(manifest.artifacts.frame_outputs, ("frame.tif",))
+        self.assertEqual(manifest.artifacts.debug_analysis, "debug.jpg")
         self.assertEqual(manifest.metrics, _metrics())
 
     def test_failed_input_still_writes_one_terminal_manifest_record(self) -> None:
@@ -203,8 +222,7 @@ class RuntimeManifestContractTest(unittest.TestCase):
                 failure_stage=FailureStage.DETECTION,
                 error_code="ValueError",
                 error_message="measurement failed",
-                debug_analysis=None,
-                output_files=(),
+                artifacts=RuntimeArtifacts.empty(),
                 traceback_text=None,
                 metrics=_metrics(),
             )
@@ -246,8 +264,7 @@ class RuntimeManifestContractTest(unittest.TestCase):
                 error_code=None,
                 error_message=None,
                 report_written=True,
-                debug_analysis=None,
-                output_files=("frame.tif",),
+                artifacts=RuntimeArtifacts(("frame.tif",), None, None),
                 metrics=_metrics(),
             )
 
@@ -330,11 +347,11 @@ class RuntimeManifestContractTest(unittest.TestCase):
                 ),
                 patch(
                     "x5crop.runtime.workflow.copy_for_review_if_needed",
-                    return_value=None,
+                    return_value="review/input.tif",
                 ),
                 patch(
                     "x5crop.runtime.workflow.write_crops_if_allowed",
-                    return_value=[],
+                    return_value=["output/frame.tif"],
                 ),
                 patch(
                     "x5crop.runtime.workflow.write_debug_outputs",
@@ -353,7 +370,9 @@ class RuntimeManifestContractTest(unittest.TestCase):
 
         self.assertIsInstance(outcome, FailedInput)
         self.assertEqual(outcome.failure_stage, FailureStage.REPORT_VALIDATION)
-        self.assertEqual(outcome.debug_analysis, "debug.jpg")
+        self.assertEqual(outcome.artifacts.debug_analysis, "debug.jpg")
+        self.assertEqual(outcome.artifacts.review_copy, "review/input.tif")
+        self.assertEqual(outcome.artifacts.frame_outputs, ("output/frame.tif",))
         self.assertEqual(write_debug.call_count, 2)
         self.assertEqual(
             write_debug.call_args_list[0].args[-1],
@@ -382,7 +401,7 @@ class RuntimeManifestContractTest(unittest.TestCase):
 
         self.assertIsInstance(outcome, FailedInput)
         self.assertEqual(outcome.failure_stage, FailureStage.INPUT_PROFILE)
-        self.assertIsNone(outcome.debug_analysis)
+        self.assertIsNone(outcome.artifacts.debug_analysis)
         write_debug.assert_not_called()
 
 

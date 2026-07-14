@@ -27,7 +27,13 @@ def copy_for_review_if_needed(
     )
     if not config.copy_review_files:
         return None
-    review_copy = str(copy_for_review(input_file, review_directory_for(output_dir, config)))
+    review_copy = str(
+        copy_for_review(
+            input_file,
+            review_directory_for(output_dir, config),
+            overwrite=config.overwrite,
+        )
+    )
     warnings.append(f"review copy: {review_copy}")
     return review_copy
 
