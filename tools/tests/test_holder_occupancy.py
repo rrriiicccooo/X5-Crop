@@ -48,6 +48,7 @@ from x5crop.domain import (
     PhotoApertureEdgeSource,
     PixelInterval,
     SeparatorBandAssignment,
+    SeparatorWidthConstraint,
 )
 from x5crop.formats import format_spec
 
@@ -119,6 +120,7 @@ def _underfilled_geometry() -> PhotoSequenceSolution:
             separator_cross_axis_measurement(observation, cross_axis),
             apertures[index - 1].trailing,
             apertures[index].leading,
+            SeparatorWidthConstraint(PixelInterval.exact(100.0)),
         )
         for index, observation in enumerate(observations, start=1)
     )

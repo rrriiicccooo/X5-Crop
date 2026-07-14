@@ -308,6 +308,7 @@ class PhotoApertureSolverContractTest(unittest.TestCase):
                     ),
                 ),
                 assignment.following_leading_edge,
+                assignment.width_constraint,
             )
 
     def test_weak_separator_can_only_form_provisional_aperture_edges(self) -> None:
@@ -506,6 +507,39 @@ class PhotoApertureSolverContractTest(unittest.TestCase):
         )
         self.assertEqual(
             solved.photo_apertures[2].leading.source,
+            PhotoApertureEdgeSource.DIMENSION_HYPOTHESIS,
+        )
+
+    def test_band_wide_enough_for_a_photo_is_not_a_hard_separator(self) -> None:
+        scope = _scope(
+            width=350,
+            height=120,
+            leading=0.0,
+            trailing=350.0,
+            top=10.0,
+            bottom=110.0,
+        )
+        overwide = _separator(100.0, 250.0, supported=True)
+
+        solved = solve_photo_sequence(
+            (overwide,),
+            scope,
+            _plan(scope),
+            2,
+            _dimensions(100.0, 100.0),
+            maximum_assignment_evaluations=10_000,
+            maximum_solution_alternatives=8,
+        )
+
+        self.assertIsInstance(solved, PhotoSequenceSolveResult)
+        assert isinstance(solved, PhotoSequenceSolveResult)
+        self.assertEqual(solved.separator_assignments, ())
+        self.assertEqual(
+            solved.photo_apertures[0].trailing.source,
+            PhotoApertureEdgeSource.DIMENSION_HYPOTHESIS,
+        )
+        self.assertEqual(
+            solved.photo_apertures[1].leading.source,
             PhotoApertureEdgeSource.DIMENSION_HYPOTHESIS,
         )
 

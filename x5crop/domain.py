@@ -785,12 +785,25 @@ class InterPhotoSpacing:
 
 
 @dataclass(frozen=True)
+class SeparatorWidthConstraint:
+    adjacent_photo_width_px: PixelInterval
+
+    def __post_init__(self) -> None:
+        if self.adjacent_photo_width_px.minimum <= 0.0:
+            raise ValueError("separator width constraint requires positive photo width")
+
+    def permits(self, observation: SeparatorBandObservation) -> bool:
+        return observation.width < self.adjacent_photo_width_px.minimum
+
+
+@dataclass(frozen=True)
 class SeparatorBandAssignment:
     boundary_index: int
     observation: SeparatorBandObservation
     cross_axis_measurement: SeparatorCrossAxisMeasurement
     preceding_trailing_edge: PhotoApertureBoundaryResolution
     following_leading_edge: PhotoApertureBoundaryResolution
+    width_constraint: SeparatorWidthConstraint
 
     def __post_init__(self) -> None:
         if self.boundary_index <= 0:
@@ -802,6 +815,10 @@ class SeparatorBandAssignment:
             raise ValueError("separator assignment measurement must belong to its band")
         if self.cross_axis_measurement.state != EvidenceState.SUPPORTED:
             raise ValueError("assigned separator requires cross-axis support")
+        if not self.width_constraint.permits(self.observation):
+            raise ValueError(
+                "assigned separator must be narrower than one adjacent photo"
+            )
         if (
             self.preceding_trailing_edge.photo_index != self.boundary_index
             or self.preceding_trailing_edge.side != BoundarySide.TRAILING

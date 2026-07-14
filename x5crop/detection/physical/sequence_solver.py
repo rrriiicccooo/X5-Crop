@@ -25,6 +25,7 @@ from ...domain import (
     SeparatorBandAssignment,
     SeparatorBandCrossAxisSupport,
     SeparatorBandObservation,
+    SeparatorWidthConstraint,
     SeparatorCrossAxisMeasurement,
 )
 from .model import (
@@ -441,12 +442,16 @@ def _band_edge_options(
     support: SeparatorBandCrossAxisSupport,
     cross_axis: PhotoApertureCrossAxisHypothesis,
     paths: tuple[GrayBoundaryPathObservation, ...],
+    width_constraint: SeparatorWidthConstraint,
 ) -> tuple[tuple[_EdgeConstraint, _EdgeConstraint], ...]:
     observation = support.observation
     fallback = _dimension_band_constraint(support, cross_axis)
     measurement = support.measurement_for(cross_axis)
     measured_paths = _measured_path_pairs_within_band(observation, paths)
-    if measurement.state != EvidenceState.SUPPORTED:
+    if (
+        measurement.state != EvidenceState.SUPPORTED
+        or not width_constraint.permits(observation)
+    ):
         return (*measured_paths, (fallback, fallback))
     return (
         _observed_band_edges(support, cross_axis),
@@ -487,9 +492,11 @@ def _supported_band_demotion_is_justified(
     band = support.observation
     chosen = selected_edges[band_index]
     measurement = support.measurement_for(cross_axis)
+    width_constraint = SeparatorWidthConstraint(physical_width)
     if (
         measurement.state != EvidenceState.SUPPORTED
         or _separator_band_edges(chosen)
+        or not width_constraint.permits(band)
     ):
         return True
     observed = _observed_band_edges(support, cross_axis)
@@ -622,9 +629,11 @@ def _band_sequence_hypotheses(
     evaluations = 0
     search_truncated = False
     physical_width = _cross_axis_width_constraint(cross_axis, dimensions)
+    width_constraint = SeparatorWidthConstraint(physical_width)
     long_paths = _axis_paths(search_scope, BoundaryAxis.LONG)
     edge_options = tuple(
-        _band_edge_options(item, cross_axis, long_paths) for item in interior
+        _band_edge_options(item, cross_axis, long_paths, width_constraint)
+        for item in interior
     )
 
     def search(
@@ -1333,6 +1342,7 @@ def _spacing_for_band(
     cross_axis: PhotoApertureCrossAxisHypothesis,
     trailing: PhotoApertureBoundaryResolution,
     leading: PhotoApertureBoundaryResolution,
+    width_constraint: SeparatorWidthConstraint,
 ) -> tuple[InterPhotoSpacing, SeparatorBandAssignment | None]:
     band = support.observation
     measurement = support.measurement_for(cross_axis)
@@ -1350,6 +1360,7 @@ def _spacing_for_band(
             measurement,
             trailing,
             leading,
+            width_constraint,
         )
         if supported
         else None
@@ -1491,6 +1502,7 @@ def _build_sequence(
 
     spacings: list[InterPhotoSpacing] = []
     separator_assignments: list[SeparatorBandAssignment] = []
+    width_constraint = SeparatorWidthConstraint(photo_width)
     for boundary_index, support in enumerate(band_hypothesis.supports, start=1):
         signed_width = apertures[boundary_index].leading.position.minus(
             apertures[boundary_index - 1].trailing.position
@@ -1503,6 +1515,7 @@ def _build_sequence(
             cross_axis,
             apertures[boundary_index - 1].trailing,
             apertures[boundary_index].leading,
+            width_constraint,
         )
         spacings.append(spacing)
         if assignment is not None:

@@ -19,6 +19,7 @@ from ...domain import (
     MeasurementProvenance,
     PhotoAperture,
     PhotoApertureEdgeAssignment,
+    SeparatorWidthConstraint,
     PhotoApertureBoundaryResolution,
     PixelInterval,
     SeparatorBandAssignment,
@@ -234,6 +235,16 @@ class PhotoSequenceSolution:
                 "aperture edge assignments must preserve raw path identity"
             )
         selected = {item.boundary_index: item for item in self.separator_assignments}
+        expected_separator_width = SeparatorWidthConstraint(
+            self.photo_width_constraint_px
+        )
+        if any(
+            item.width_constraint != expected_separator_width
+            for item in self.separator_assignments
+        ):
+            raise GeometryIdentityError(
+                "separator assignments must preserve the sequence width constraint"
+            )
         for boundary_index in range(1, self.count):
             assignment = selected.get(boundary_index)
             if assignment is None:

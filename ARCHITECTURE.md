@@ -106,7 +106,9 @@ band.end   -> next photo leading edge
 Candidate-specific `SeparatorBandAssignment` 必须同时满足：
 
 - boundary position constraint；
-- physical separator width constraint；
+- physical separator width constraint：band 必须窄于相邻照片的最小可行长轴宽度；若一个空白区
+  已足以容纳一张完整照片，它只能保持 raw observation 或 dimension-dependent hypothesis，不能被
+  命名为单个 hard separator；
 - 跨短轴连续性；
 - 单调 aperture order；
 - measurement provenance 独立性。

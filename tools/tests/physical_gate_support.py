@@ -98,6 +98,7 @@ from x5crop.domain import (
     PhotoApertureEdgeSource,
     PixelInterval,
     SeparatorBandAssignment,
+    SeparatorWidthConstraint,
     SeparatorBandObservation,
     SeparatorCrossAxisMeasurement,
     SeparatorCrossAxisOutcome,
@@ -364,6 +365,7 @@ def _candidate_geometry(
                 separator_measurement,
                 first_trailing,
                 second_leading,
+                SeparatorWidthConstraint(PixelInterval.exact(150.0)),
             ),
         )
         if boundary_proof_supported
