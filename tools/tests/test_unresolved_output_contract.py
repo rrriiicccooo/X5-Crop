@@ -10,7 +10,6 @@ import numpy as np
 
 from tools.tests.physical_gate_support import (
     candidate_fixture,
-    frame_bleed_fixture,
     selection_fixture,
     transform_geometry_fixture,
     unavailable_calibration_fixture,
@@ -28,6 +27,9 @@ from x5crop.detection.final.finalize import (
 from x5crop.debug.panels import debug_geometry
 from x5crop.debug.status import debug_status_parts
 from x5crop.domain import WorkspaceExtent
+from x5crop.image.workspace import WorkspaceIdentity
+from x5crop.output.model import AxisBleedParameters
+from x5crop.runtime.frame_bleed import prepare_frame_bleed
 from x5crop.export.actions import write_crops_if_allowed
 from x5crop.report.configuration import detection_configuration_read_model
 from x5crop.report.read_models import typed_read_model
@@ -42,7 +44,7 @@ class UnresolvedOutputContractTest(unittest.TestCase):
         selection = selection_fixture(
             candidate_fixture(failed_candidate_check="boundary_proof")
         )
-        bleed = frame_bleed_fixture()
+        bleed = prepare_frame_bleed(selection, AxisBleedParameters(20, 10))
         detection = finalize_detection(
             apply_decision_gate(
                 selection,
@@ -82,7 +84,7 @@ class UnresolvedOutputContractTest(unittest.TestCase):
                 count_resolved=False,
             ),
         )
-        bleed = frame_bleed_fixture()
+        bleed = prepare_frame_bleed(selection, AxisBleedParameters(20, 10))
         transform = transform_geometry_fixture()
         detection = finalize_detection(
             apply_decision_gate(selection, bleed, transform),
@@ -132,7 +134,7 @@ class UnresolvedOutputContractTest(unittest.TestCase):
             selection,
             source="input.tif",
             profile=typed_read_model(_profile()),
-            workspace_extent=WorkspaceExtent(310, 100),
+            workspace_identity=WorkspaceIdentity(WorkspaceExtent(310, 100), "0" * 64),
             output_files=outputs,
             review_copy=None,
             warnings=[],

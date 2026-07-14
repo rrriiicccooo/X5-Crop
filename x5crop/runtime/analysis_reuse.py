@@ -9,24 +9,21 @@ from typing import Any
 import numpy as np
 
 from ..app_info import REPORT_JSONL_NAME, SCRIPT_NAME, VERSION
-from ..detection.evidence.transform_geometry import TransformGeometryEvidence
+from ..image.workspace import WorkspaceIdentity
 from ..io.model import ImageProfile
 from ..report.model import ReportResult
 from ..export.actions import copy_for_review_if_needed, write_crops_if_allowed
 from ..output.surface import OutputSurface
-from ..image.transforms import (
-    photometric_background_value,
-    rotate_array_expand,
-)
-from ..io.tiff import read_tiff
 from ..configuration.bundle import DetectionConfigurationBundle
 from ..report.restoration import (
     final_detection_from_record as _final_detection_from_record,
-    transform_geometry_from_record as _transform_geometry_from_record,
 )
+from ..report.read_models import typed_read_model
 from ..report.validation import current_report_record_errors
 from ..report.result_builder import result_from_cached_record
 from ..run_config import RunConfig
+from .implementation import active_implementation_fingerprint
+from .prepared_workspace import PreparedWorkspace
 
 
 _REPORT_RECORD_CACHE: dict[Path, tuple[int, int, list[dict[str, Any]]]] = {}
@@ -88,15 +85,18 @@ def make_analysis_reuse_signature(
     profile: ImageProfile,
     config: RunConfig,
     configuration_bundle: DetectionConfigurationBundle,
+    workspace_identity: WorkspaceIdentity,
 ) -> dict[str, Any]:
     return {
         "script": SCRIPT_NAME,
         "script_version": VERSION,
+        "implementation_fingerprint": active_implementation_fingerprint(),
         "source": source_cache_signature(input_file, profile, config.page),
         "config": config_cache_signature(config),
         "configuration_fingerprint": analysis_configuration_fingerprint(
             configuration_bundle
         ),
+        "workspace_identity": typed_read_model(workspace_identity),
     }
 
 
@@ -160,26 +160,6 @@ def find_reusable_analysis(
     return None
 
 
-def apply_cached_transform(
-    arr: np.ndarray,
-    axes: str,
-    photometric: str,
-    transform_geometry: TransformGeometryEvidence,
-    warnings: list[str],
-) -> tuple[np.ndarray, bool]:
-    if not transform_geometry.applied:
-        return arr, False
-    angle = float(transform_geometry.applied_angle_degrees)
-    arr = rotate_array_expand(
-        arr,
-        angle,
-        axes,
-        background_value=photometric_background_value(arr, photometric),
-    )
-    warnings.append(f"reused deskew: {angle:.4f} degrees")
-    return arr, True
-
-
 def result_from_reusable_analysis(
     input_file: Path,
     config: RunConfig,
@@ -187,6 +167,8 @@ def result_from_reusable_analysis(
     profile: ImageProfile,
     warnings: list[str],
     analysis_reuse_signature: dict[str, Any],
+    workspace: PreparedWorkspace,
+    source_pixels: np.ndarray,
 ) -> ReportResult | None:
     if not (
         config.reuse_analysis
@@ -226,25 +208,14 @@ def result_from_reusable_analysis(
             review_copy=review_copy,
         )
 
-    arr, profile, page_warnings = read_tiff(input_file, config.page)
-    warnings.extend(warning for warning in page_warnings if warning not in warnings)
-    source_arr = arr
-    transform_geometry = _transform_geometry_from_record(cached_record)
-    arr, deskew_applied = apply_cached_transform(
-        arr,
-        profile.axes,
-        profile.photometric,
-        transform_geometry,
-        warnings,
-    )
     output_files = write_crops_if_allowed(
         input_file,
-        arr,
-        source_arr,
+        workspace.pixels,
+        source_pixels,
         profile,
         detection,
         config,
-        deskew_applied,
+        workspace.transform_geometry.applied,
         output_surface,
     )
     return result_from_cached_record(

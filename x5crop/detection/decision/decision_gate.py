@@ -154,16 +154,3 @@ def apply_decision_gate(
         geometry_resolution=geometry_resolution_state,
     )
     return decision_gate
-
-
-def decision_gate_matches_inputs(
-    gate: DecisionGateAssessment,
-    selection: SelectionResult,
-    frame_bleed_plan: FrameBleedPlan,
-    transform_geometry: TransformGeometryEvidence,
-) -> bool:
-    return gate == apply_decision_gate(
-        selection,
-        frame_bleed_plan,
-        transform_geometry,
-    )

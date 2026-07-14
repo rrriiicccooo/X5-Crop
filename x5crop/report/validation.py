@@ -14,7 +14,6 @@ from ..configuration.diagnostics import DiagnosticsConfiguration
 from ..configuration.preprocess import PreprocessConfiguration
 from ..configuration.separator import SeparatorConfiguration
 from ..detection.decision.vocabulary import FINAL_REVIEW_REASONS
-from ..detection.decision.decision_gate import decision_gate_matches_inputs
 from ..detection.candidate.assessment.candidate_gate import (
     BoundaryProofPath,
     CandidateGateAssessment,
@@ -33,7 +32,6 @@ from ..detection.candidate.selection.model import (
     SelectionResult,
 )
 from ..detection.geometry_resolution import GeometryResolution
-from ..detection.final.finalize import finalization_plan_for_selection
 from ..detection.final.model import FinalizationPlan
 from ..detection.gate_checks import GateCheck, GateStage
 from ..detection.evidence.transform_geometry import TransformGeometryEvidence
@@ -50,14 +48,17 @@ from ..domain import (
     InterPhotoSpacing,
     InterPhotoSpacingBasis,
     SeparatorBandObservation,
-    WorkspaceExtent,
 )
+from ..image.workspace import WorkspaceIdentity
 from ..io.model import ImageProfile
 from ..formats import FrameSizeMm
-from ..output.frame_bleed import apply_frame_bleed
 from ..output.model import FrameBleedPlan, OutputGeometry
 from ..units import ResolutionMetadataObservation
-from .identity import REPORT_SCHEMA_ID, REPORT_SCHEMA_REVISION
+from .identity import (
+    REPORT_SCHEMA_ID,
+    REPORT_SCHEMA_REVISION,
+    runtime_facts_sha256,
+)
 from .read_models import typed_read_model
 
 
@@ -73,6 +74,7 @@ CURRENT_REPORT_SECTIONS = (
     "output",
     "analysis_reuse_signature",
     "analysis_reuse",
+    "runtime_facts_sha256",
 )
 
 
@@ -535,10 +537,6 @@ def output_geometry_from_read_model(value: Any) -> OutputGeometry:
     )
 
 
-def transform_geometry_from_read_model(value: Any) -> TransformGeometryEvidence:
-    return _typed_value_from_read_model(value, TransformGeometryEvidence)
-
-
 def _output_valid(value: Any, *, geometry_resolved: bool) -> bool:
     expected = {
         "frame_bleed_plan",
@@ -576,16 +574,13 @@ def _output_valid(value: Any, *, geometry_resolved: bool) -> bool:
             )
         except (KeyError, TypeError, ValueError):
             return False
-        if not final_geometry.final_boxes:
-            return False
-        expected_geometry = apply_frame_bleed(
-            plan.base_geometry,
-            frame_bleed_plan,
-            layout=plan.layout,
-            image_width=plan.image_width,
-            image_height=plan.image_height,
+        geometry_valid = bool(
+            final_geometry.final_boxes
+            and final_geometry.frame_crop_envelopes
+            == plan.base_geometry.frame_crop_envelopes
+            and len(final_geometry.final_boxes)
+            == len(frame_bleed_plan.frame_sides)
         )
-        geometry_valid = final_geometry == expected_geometry
     else:
         geometry_valid = bool(
             value["finalization_plan"] is None
@@ -607,12 +602,12 @@ def _input_valid(value: Any) -> bool:
         isinstance(value, dict)
         and set(value) == {
             "profile",
-            "workspace_extent",
+            "workspace_identity",
             "resolution_metadata",
             "transform_geometry",
         }
         and _typed_value_valid(value["profile"], ImageProfile)
-        and _typed_value_valid(value["workspace_extent"], WorkspaceExtent)
+        and _typed_value_valid(value["workspace_identity"], WorkspaceIdentity)
         and _typed_value_valid(
             value["resolution_metadata"], ResolutionMetadataObservation
         )
@@ -730,9 +725,11 @@ def _analysis_reuse_signature_valid(value: Any) -> bool:
     top_fields = {
         "script",
         "script_version",
+        "implementation_fingerprint",
         "source",
         "config",
         "configuration_fingerprint",
+        "workspace_identity",
     }
     source_fields = {
         "name",
@@ -765,7 +762,11 @@ def _analysis_reuse_signature_valid(value: Any) -> bool:
     return bool(
         isinstance(value["script"], str)
         and isinstance(value["script_version"], str)
+        and isinstance(value["implementation_fingerprint"], str)
+        and len(value["implementation_fingerprint"]) == 64
         and isinstance(value["configuration_fingerprint"], str)
+        and len(value["configuration_fingerprint"]) == 64
+        and _typed_value_valid(value["workspace_identity"], WorkspaceIdentity)
         and isinstance(source, dict)
         and set(source) == source_fields
         and isinstance(source["name"], str)
@@ -829,19 +830,56 @@ def _record_identities_valid(
         if record["output"]["finalization_plan"] is not None
         else None
     )
-    workspace_extent = _typed_value_from_read_model(
-        record["input"]["workspace_extent"],
-        WorkspaceExtent,
+    workspace_identity = _typed_value_from_read_model(
+        record["input"]["workspace_identity"],
+        WorkspaceIdentity,
     )
-    expected_plan = finalization_plan_for_selection(
-        selection,
-        workspace_extent=workspace_extent,
+    frame_bleed_plan = frame_bleed_plan_from_read_model(
+        record["output"]["frame_bleed_plan"]
+    )
+    final_geometry = (
+        None
+        if record["output"]["final_geometry"] is None
+        else output_geometry_from_read_model(record["output"]["final_geometry"])
     )
     selected = selection.selected.geometry
+    resolved = selection.geometry_resolution.supported
+    frame_plan_matches_resolution = bool(
+        (
+            len(frame_bleed_plan.frame_sides) == selected.count
+            and len(frame_bleed_plan.frame_output_bounds) == selected.count
+        )
+        if resolved
+        else (
+            not frame_bleed_plan.frame_sides
+            and not frame_bleed_plan.frame_output_bounds
+        )
+    )
+    output_identity_valid = bool(
+        (plan is None) == (not resolved)
+        and (final_geometry is None) == (not resolved)
+        and frame_plan_matches_resolution
+        and frame_bleed_plan.user_bleed.long_axis
+        == signature_config["bleed_x"]
+        and frame_bleed_plan.user_bleed.short_axis
+        == signature_config["bleed_y"]
+    )
+    if plan is not None and final_geometry is not None:
+        output_identity_valid = bool(
+            output_identity_valid
+            and plan.layout == selected.layout
+            and plan.image_width == workspace_identity.extent.width
+            and plan.image_height == workspace_identity.extent.height
+            and len(plan.base_geometry.frame_crop_envelopes) == selected.count
+            and final_geometry.frame_crop_envelopes
+            == plan.base_geometry.frame_crop_envelopes
+        )
     return bool(
         signature_config["format_id"] == format_id
         and signature_config["strip_mode"] == strip_mode
         and signature_source["name"] == Path(record["source"]).name
+        and record["analysis_reuse_signature"]["workspace_identity"]
+        == record["input"]["workspace_identity"]
         and all(
             signature_source[name] == input_profile[name]
             for name in ("shape", "dtype", "axes", "photometric")
@@ -854,7 +892,7 @@ def _record_identities_valid(
             for candidate in selection.ranked_candidates
         )
         and (requested_count is None or selected.count == requested_count)
-        and plan == expected_plan
+        and output_identity_valid
         and record["output"]["export_eligibility"]
         == {
             "frame_export_eligible": selection.geometry_resolution.supported,
@@ -929,23 +967,6 @@ def current_report_record_errors(record: dict[str, Any]) -> list[str]:
     )
     if not output_valid:
         errors.append("output_incomplete")
-    if selection_result is not None and input_valid and output_valid:
-        try:
-            frame_bleed_plan = frame_bleed_plan_from_read_model(
-                record["output"]["frame_bleed_plan"]
-            )
-            transform = transform_geometry_from_read_model(
-                input_detail["transform_geometry"]
-            )
-            if not decision_gate_matches_inputs(
-                decision_gate_from_read_model(record["decision"]["gate"]),
-                selection_result,
-                frame_bleed_plan,
-                transform,
-            ):
-                errors.append("decision_gate_identity_mismatch")
-        except (KeyError, TypeError, ValueError):
-            errors.append("decision_gate_identity_mismatch")
     _decision_consistent(record["decision"], errors)
     if not _analysis_reuse_signature_valid(record["analysis_reuse_signature"]):
         errors.append("analysis_reuse_signature_invalid")
@@ -969,6 +990,16 @@ def current_report_record_errors(record: dict[str, Any]) -> list[str]:
         and isinstance(record["analysis_reuse"]["used"], bool)
     ):
         errors.append("analysis_reuse_invalid")
+    fingerprint = record["runtime_facts_sha256"]
+    if not isinstance(fingerprint, str) or len(fingerprint) != 64:
+        errors.append("runtime_facts_fingerprint_invalid")
+    else:
+        try:
+            expected_fingerprint = runtime_facts_sha256(record)
+        except (KeyError, TypeError, ValueError):
+            expected_fingerprint = None
+        if fingerprint != expected_fingerprint:
+            errors.append("runtime_facts_fingerprint_mismatch")
     return errors
 
 

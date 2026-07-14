@@ -6,9 +6,10 @@ from typing import Any, Optional
 from ..detection.final.model import FinalDetection
 from ..detection.candidate.selection.model import SelectionResult
 from ..detection.evidence.transform_geometry import TransformGeometryEvidence
-from ..domain import WorkspaceExtent
+from ..image.workspace import WorkspaceIdentity
 from ..io.model import ImageProfile
 from ..units import ResolutionMetadataObservation
+from .identity import bind_runtime_facts
 from .model import ReportResult
 from .read_models import typed_read_model
 from .record import report_record_for_final_detection
@@ -19,7 +20,7 @@ def result_from_detection(
     detection: FinalDetection,
     selection: SelectionResult,
     profile: ImageProfile,
-    workspace_extent: WorkspaceExtent,
+    workspace_identity: WorkspaceIdentity,
     output_files: list[str],
     review_copy: Optional[str],
     warnings: list[str],
@@ -34,7 +35,7 @@ def result_from_detection(
         selection,
         source=str(input_file),
         profile=typed_read_model(profile),
-        workspace_extent=workspace_extent,
+        workspace_identity=workspace_identity,
         output_files=output_files,
         review_copy=review_copy,
         warnings=warnings,
@@ -66,4 +67,5 @@ def result_from_cached_record(
     output_detail["review_copy"] = review_copy
     output_detail["warnings"] = list(warnings)
     report_record["output"] = output_detail
+    bind_runtime_facts(report_record)
     return ReportResult(record=report_record)

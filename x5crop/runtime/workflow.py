@@ -77,34 +77,6 @@ def process_one(
         config = replace(config, layout=layout)
         initial_configuration = configuration_bundle.initial_configuration
         fmt = initial_configuration.physical_spec
-        analysis_reuse_signature = make_analysis_reuse_signature(
-            input_file,
-            profile,
-            config,
-            configuration_bundle,
-        )
-
-        failure_stage = FailureStage.ANALYSIS_REUSE
-        cached_result = result_from_reusable_analysis(
-            input_file,
-            config,
-            output_surface,
-            profile,
-            warnings,
-            analysis_reuse_signature,
-        )
-        if cached_result is not None:
-            return CompletedInput(
-                result=cached_result,
-                debug_analysis=None,
-                metrics=_runtime_metrics(
-                    started_at,
-                    detection_seconds,
-                    execution_statistics,
-                    measurement_cache,
-                ),
-            )
-
         failure_stage = FailureStage.IMAGE_READ
         arr, profile, page_warnings = read_tiff(input_file, config.page)
         source_arr = arr
@@ -147,6 +119,37 @@ def process_one(
                 resolution_metadata,
                 transform_geometry.applied_angle_degrees,
             )
+
+        analysis_reuse_signature = make_analysis_reuse_signature(
+            input_file,
+            profile,
+            config,
+            configuration_bundle,
+            workspace.identity,
+        )
+        failure_stage = FailureStage.ANALYSIS_REUSE
+        cached_result = result_from_reusable_analysis(
+            input_file,
+            config,
+            output_surface,
+            profile,
+            warnings,
+            analysis_reuse_signature,
+            workspace,
+            source_arr,
+        )
+        if cached_result is not None:
+            return CompletedInput(
+                result=cached_result,
+                debug_analysis=None,
+                metrics=_runtime_metrics(
+                    started_at,
+                    detection_seconds,
+                    execution_statistics,
+                    measurement_cache,
+                ),
+            )
+
         scan_calibration = ScanCalibrationResolution.from_observations(
             resolution_metadata,
             (),
@@ -201,7 +204,7 @@ def process_one(
         configuration_detail = detection_configuration_read_model(initial_configuration)
         finalization_plan = finalization_plan_for_selection(
             selection,
-            workspace_extent=workspace.extent,
+            workspace_extent=workspace.identity.extent,
         )
         detection = finalize_detection(
             decided_detection,
@@ -247,7 +250,7 @@ def process_one(
             detection,
             selection,
             profile,
-            workspace.extent,
+            workspace.identity,
             output_files,
             review_copy,
             warnings,

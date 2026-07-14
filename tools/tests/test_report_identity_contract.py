@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import unittest
 
+import numpy as np
+
 from tools.tests.physical_gate_support import (
     frame_bleed_fixture,
     selection_fixture,
@@ -25,9 +27,38 @@ from x5crop.report.read_models import typed_read_model
 from x5crop.report.record import report_record_for_final_detection
 from x5crop.report.validation import current_report_record_errors
 from x5crop.domain import WorkspaceExtent
+from x5crop.image.workspace import WorkspaceIdentity
 
 
 class ReportIdentityContractTest(unittest.TestCase):
+    def test_prepared_workspace_owns_exact_gray_identity(self) -> None:
+        from x5crop.runtime.prepared_workspace import PreparedWorkspace
+
+        transform = transform_geometry_fixture()
+        first = PreparedWorkspace(
+            pixels=np.zeros((2, 3), dtype=np.uint8),
+            gray=np.zeros((2, 3), dtype=np.uint8),
+            transform_geometry=transform,
+        )
+        changed = PreparedWorkspace(
+            pixels=np.zeros((2, 3), dtype=np.uint8),
+            gray=np.array(((0, 0, 0), (0, 0, 1)), dtype=np.uint8),
+            transform_geometry=transform,
+        )
+
+        self.assertEqual(first.identity.extent, WorkspaceExtent(3, 2))
+        self.assertNotEqual(first.identity.gray_sha256, changed.identity.gray_sha256)
+
+    def test_implementation_fingerprint_covers_source_bytes(self) -> None:
+        from x5crop.runtime.implementation import (
+            implementation_fingerprint_for_sources,
+        )
+
+        first = implementation_fingerprint_for_sources({"x5crop.a": "value = 1\n"})
+        changed = implementation_fingerprint_for_sources({"x5crop.a": "value = 2\n"})
+
+        self.assertNotEqual(first, changed)
+
     def test_deskew_workspace_extent_owns_output_identity(self) -> None:
         selection = selection_fixture()
         frame_bleed = frame_bleed_fixture()
@@ -45,7 +76,7 @@ class ReportIdentityContractTest(unittest.TestCase):
             selection,
             source="input.tif",
             profile=typed_read_model(_profile()),
-            workspace_extent=WorkspaceExtent(330, 120),
+            workspace_identity=WorkspaceIdentity(WorkspaceExtent(330, 120), "0" * 64),
             output_files=[],
             review_copy=None,
             warnings=[],
@@ -54,14 +85,26 @@ class ReportIdentityContractTest(unittest.TestCase):
             ),
             resolution_metadata=unavailable_calibration_fixture().metadata,
             transform_geometry=transform,
-            analysis_reuse_signature=_analysis_reuse_signature(),
+            analysis_reuse_signature=_analysis_reuse_signature(
+                workspace_shape=(120, 330)
+            ),
         )
 
         self.assertEqual(
-            record["input"]["workspace_extent"],
+            record["input"]["workspace_identity"]["extent"],
             {"width": 330, "height": 120},
         )
         self.assertEqual(current_report_record_errors(record), [])
+
+    def test_report_has_one_runtime_fact_fingerprint(self) -> None:
+        record = _record()
+
+        self.assertEqual(len(record["runtime_facts_sha256"]), 64)
+        record["decision"]["status"] = "needs_review"
+        self.assertIn(
+            "runtime_facts_fingerprint_mismatch",
+            current_report_record_errors(record),
+        )
 
     def test_current_schema_rejects_incomplete_decision_gate(self) -> None:
         record = _record()
@@ -88,7 +131,7 @@ class ReportIdentityContractTest(unittest.TestCase):
             selection,
             source="input.tif",
             profile=typed_read_model(_profile()),
-            workspace_extent=WorkspaceExtent(310, 100),
+            workspace_identity=WorkspaceIdentity(WorkspaceExtent(310, 100), "0" * 64),
             output_files=[],
             review_copy=None,
             warnings=[],

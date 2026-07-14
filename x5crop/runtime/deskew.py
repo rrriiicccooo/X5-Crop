@@ -28,7 +28,7 @@ from ..image.statistics import (
 )
 from ..utils import clamp_float
 from ..run_config import RunConfig
-from .prepared_workspace import PreparedWorkspace, workspace_extent_for_gray
+from .prepared_workspace import PreparedWorkspace
 
 
 def _deskew_measurement_preference(
@@ -100,7 +100,6 @@ def apply_deskew(
         return PreparedWorkspace(
             pixels=arr,
             gray=gray,
-            extent=workspace_extent_for_gray(gray),
             transform_geometry=TransformGeometryEvidence(
                 outcome=TransformOutcome.DISABLED,
                 estimated_angle_degrees=0.0,
@@ -143,7 +142,6 @@ def apply_deskew(
     return PreparedWorkspace(
         pixels=arr,
         gray=gray,
-        extent=workspace_extent_for_gray(gray),
         transform_geometry=TransformGeometryEvidence(
             outcome=outcome,
             estimated_angle_degrees=float(angle),

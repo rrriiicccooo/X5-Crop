@@ -10,7 +10,6 @@ from tools.regression.aperture_reference import (
     photo_aperture_reference_from_record,
 )
 from tools.tests.physical_gate_support import (
-    frame_bleed_fixture,
     selection_fixture,
     transform_geometry_fixture,
     unavailable_calibration_fixture,
@@ -27,6 +26,9 @@ from x5crop.detection.final.finalize import (
     finalize_detection,
 )
 from x5crop.domain import WorkspaceExtent
+from x5crop.image.workspace import WorkspaceIdentity
+from x5crop.output.model import AxisBleedParameters
+from x5crop.runtime.frame_bleed import prepare_frame_bleed
 from x5crop.report.configuration import detection_configuration_read_model
 from x5crop.report.read_models import typed_read_model
 from x5crop.report.record import report_record_for_final_detection
@@ -69,7 +71,7 @@ def _unresolved_record() -> dict:
             placement_resolved=False,
         ),
     )
-    bleed = frame_bleed_fixture()
+    bleed = prepare_frame_bleed(selection, AxisBleedParameters(20, 10))
     transform = transform_geometry_fixture()
     detection = finalize_detection(
         apply_decision_gate(selection, bleed, transform),
@@ -84,7 +86,7 @@ def _unresolved_record() -> dict:
         selection,
         source="input.tif",
         profile=typed_read_model(_profile()),
-        workspace_extent=WorkspaceExtent(310, 100),
+        workspace_identity=WorkspaceIdentity(WorkspaceExtent(310, 100), "0" * 64),
         output_files=[],
         review_copy=None,
         warnings=[],

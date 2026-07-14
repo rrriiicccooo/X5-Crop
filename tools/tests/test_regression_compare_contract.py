@@ -9,6 +9,7 @@ from tools.regression.compare import (
     report_key,
 )
 from tools.tests.test_output_read_model_contract import _record
+from x5crop.report.identity import bind_runtime_facts
 
 
 class RegressionCompareContractTest(unittest.TestCase):
@@ -17,8 +18,10 @@ class RegressionCompareContractTest(unittest.TestCase):
         second_page = deepcopy(first)
         second_page["analysis_reuse_signature"]["source"]["page"] = 1
         second_page["analysis_reuse_signature"]["config"]["page"] = 1
+        bind_runtime_facts(second_page)
         second_deskew = deepcopy(first)
         second_deskew["analysis_reuse_signature"]["config"]["deskew"] = "on"
+        bind_runtime_facts(second_deskew)
 
         identities = {
             report_key(first),

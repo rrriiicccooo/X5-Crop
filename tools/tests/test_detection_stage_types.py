@@ -192,7 +192,12 @@ class DetectionStageTypeContractTests(unittest.TestCase):
             self.assertNotIn(candidate_stage_field, final_fields)
         self.assertEqual(
             final_fields,
-            {"decision", "frame_bleed_plan", "finalization_plan"},
+            {
+                "decision",
+                "frame_bleed_plan",
+                "finalization_plan",
+                "output_geometry",
+            },
         )
 
     def test_typed_results_do_not_store_report_only_identity_copies(self) -> None:
@@ -240,7 +245,12 @@ class DetectionStageTypeContractTests(unittest.TestCase):
         )
         self.assertEqual(
             {field.name for field in fields(FinalDetection)},
-            {"decision", "frame_bleed_plan", "finalization_plan"},
+            {
+                "decision",
+                "frame_bleed_plan",
+                "finalization_plan",
+                "output_geometry",
+            },
         )
         self.assertNotEqual(decision_model.DecisionGateAssessment, FinalDetection)
 
@@ -399,9 +409,13 @@ class DetectionStageTypeContractTests(unittest.TestCase):
 
         self.assertEqual(
             {field.name for field in fields(FinalDetection)},
-            {"decision", "frame_bleed_plan", "finalization_plan"},
+            {
+                "decision",
+                "frame_bleed_plan",
+                "finalization_plan",
+                "output_geometry",
+            },
         )
-        self.assertIsInstance(FinalDetection.output_geometry, property)
         self.assertEqual(
             {field.name for field in fields(FinalizationPlan)},
             {

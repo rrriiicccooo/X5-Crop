@@ -4,10 +4,10 @@ from ..app_info import VERSION
 from ..detection.final.model import FinalDetection, FinalizationPlan
 from ..detection.candidate.selection.model import SelectionResult
 from ..detection.evidence.transform_geometry import TransformGeometryEvidence
-from ..domain import WorkspaceExtent
+from ..image.workspace import WorkspaceIdentity
 from ..output.model import OutputGeometry
 from ..units import ResolutionMetadataObservation
-from .identity import REPORT_SCHEMA_ID, REPORT_SCHEMA_REVISION
+from .identity import REPORT_SCHEMA_ID, REPORT_SCHEMA_REVISION, bind_runtime_facts
 from .read_models import (
     decision_gate_detail,
     frame_bleed_plan_read_model,
@@ -44,7 +44,7 @@ def report_record_for_final_detection(
     *,
     source: str,
     profile: dict,
-    workspace_extent: WorkspaceExtent,
+    workspace_identity: WorkspaceIdentity,
     output_files: list[str],
     review_copy: str | None,
     warnings: list[str],
@@ -61,7 +61,7 @@ def report_record_for_final_detection(
         "source": str(source),
         "input": {
             "profile": dict(profile),
-            "workspace_extent": typed_read_model(workspace_extent),
+            "workspace_identity": typed_read_model(workspace_identity),
             "resolution_metadata": typed_read_model(resolution_metadata),
             "transform_geometry": typed_read_model(transform_geometry),
         },
@@ -97,4 +97,4 @@ def report_record_for_final_detection(
         "analysis_reuse_signature": dict(analysis_reuse_signature),
         "analysis_reuse": {"used": False},
     }
-    return record
+    return bind_runtime_facts(record)

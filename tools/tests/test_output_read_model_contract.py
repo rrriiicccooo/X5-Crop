@@ -31,6 +31,8 @@ from x5crop.report.read_models import typed_read_model
 from x5crop.report.restoration import final_detection_from_record
 from x5crop.report.validation import current_report_record_errors
 from x5crop.domain import WorkspaceExtent
+from x5crop.image.workspace import WorkspaceIdentity
+from x5crop.runtime.prepared_workspace import PreparedWorkspace
 from tools.regression.compare import DEFAULT_FIELDS
 
 
@@ -60,10 +62,17 @@ def _analysis_reuse_signature(
     strip_mode: str = "full",
     source_name: str = "input.tif",
     shape: tuple[int, int] = (100, 310),
+    workspace_shape: tuple[int, int] | None = None,
 ) -> dict:
+    workspace_shape = shape if workspace_shape is None else workspace_shape
+    workspace_identity = WorkspaceIdentity(
+        WorkspaceExtent(workspace_shape[1], workspace_shape[0]),
+        "0" * 64,
+    )
     return {
         "script": "X5_Crop.py",
         "script_version": "4.9",
+        "implementation_fingerprint": "0" * 64,
         "source": {
             "name": source_name,
             "size": 1,
@@ -89,6 +98,7 @@ def _analysis_reuse_signature(
             "bleed_y": 10,
         },
         "configuration_fingerprint": "0" * 64,
+        "workspace_identity": typed_read_model(workspace_identity),
     }
 
 
@@ -98,7 +108,7 @@ def _record() -> dict:
         selection_fixture(),
         source="input.tif",
         profile=typed_read_model(_profile()),
-        workspace_extent=WorkspaceExtent(310, 100),
+        workspace_identity=WorkspaceIdentity(WorkspaceExtent(310, 100), "0" * 64),
         output_files=[],
         review_copy=None,
         warnings=[],
@@ -186,6 +196,8 @@ class OutputReadModelContractTest(unittest.TestCase):
                         None,
                         [],
                         {},
+                        None,
+                        None,
                     )
                 )
 
@@ -324,7 +336,7 @@ class OutputReadModelContractTest(unittest.TestCase):
             selection,
             source="synthetic.tif",
             profile=typed_read_model(profile),
-            workspace_extent=WorkspaceExtent(240, 120),
+            workspace_identity=WorkspaceIdentity(WorkspaceExtent(240, 120), "0" * 64),
             output_files=[],
             review_copy=None,
             warnings=[],
@@ -532,6 +544,12 @@ class OutputReadModelContractTest(unittest.TestCase):
                     _profile(),
                     [],
                     _analysis_reuse_signature(),
+                    PreparedWorkspace(
+                        pixels=np.zeros((100, 310), dtype=np.uint8),
+                        gray=np.zeros((100, 310), dtype=np.uint8),
+                        transform_geometry=transform_geometry_fixture(),
+                    ),
+                    np.zeros((100, 310), dtype=np.uint8),
                 )
             )
 
@@ -547,7 +565,7 @@ class OutputReadModelContractTest(unittest.TestCase):
             selection_fixture(),
             source="input.tif",
             profile=typed_read_model(_profile()),
-            workspace_extent=WorkspaceExtent(310, 100),
+            workspace_identity=WorkspaceIdentity(WorkspaceExtent(310, 100), "0" * 64),
             output_files=[],
             review_copy=None,
             warnings=[],
@@ -704,6 +722,15 @@ class OutputReadModelContractTest(unittest.TestCase):
         source = (PROJECT_ROOT / "x5crop/runtime/analysis_reuse.py").read_text()
         self.assertIn("current_report_record_errors(record)", source)
         self.assertNotIn('"review_reasons"', source)
+
+    def test_cache_reuse_signature_binds_implementation_and_workspace(self) -> None:
+        signature = _record()["analysis_reuse_signature"]
+
+        self.assertEqual(len(signature["implementation_fingerprint"]), 64)
+        self.assertEqual(
+            signature["workspace_identity"],
+            _record()["input"]["workspace_identity"],
+        )
 
     def test_cache_reuse_restores_final_detection_for_shared_output_actions(self) -> None:
         record = _record()

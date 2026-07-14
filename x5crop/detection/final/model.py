@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from ...geometry.layout import require_work_layout
-from ...output.frame_bleed import apply_frame_bleed
 from ...output.model import FrameBleedPlan, OutputGeometry
 from ..decision.model import DecisionGateAssessment
 
@@ -26,28 +25,25 @@ class FinalDetection:
     decision: DecisionGateAssessment
     frame_bleed_plan: FrameBleedPlan
     finalization_plan: FinalizationPlan | None
+    output_geometry: OutputGeometry | None
 
     def __post_init__(self) -> None:
         plan = self.finalization_plan
         if plan is None and self.decision.status == "approved_auto":
             raise ValueError("approved detection requires resolved final geometry")
+        if (plan is None) != (self.output_geometry is None):
+            raise ValueError("finalization plan and output geometry must resolve together")
+        if plan is None and self.frame_bleed_plan.frame_sides:
+            raise ValueError("unresolved geometry cannot carry frame output bleed")
         if plan is not None and len(plan.base_geometry.frame_crop_envelopes) != len(
             self.frame_bleed_plan.frame_sides
         ):
             raise ValueError("final detection must preserve frame identity")
-
-    @property
-    def output_geometry(self) -> OutputGeometry | None:
-        plan = self.finalization_plan
-        if plan is None:
-            return None
-        return apply_frame_bleed(
-            plan.base_geometry,
-            self.frame_bleed_plan,
-            layout=plan.layout,
-            image_width=plan.image_width,
-            image_height=plan.image_height,
-        )
+        if plan is not None and (
+            self.output_geometry.frame_crop_envelopes
+            != plan.base_geometry.frame_crop_envelopes
+        ):
+            raise ValueError("final output must preserve photo aperture identity")
 
     @property
     def frame_export_eligible(self) -> bool:

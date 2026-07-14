@@ -19,7 +19,6 @@ from tools.tests.physical_gate_support import (
 from x5crop.configuration.bundle import DetectionConfigurationBundle
 from x5crop.configuration.registry import get_detection_configuration
 from x5crop.debug.status import debug_status_parts
-from x5crop.domain import WorkspaceExtent
 from x5crop.io.model import ImageProfile, TiffMetadata
 from x5crop.run_config import RunConfig
 from x5crop.run_status import RunTerminalOutcome
@@ -271,7 +270,6 @@ class RuntimeManifestContractTest(unittest.TestCase):
             workspace = PreparedWorkspace(
                 pixels=pixels,
                 gray=pixels,
-                extent=WorkspaceExtent(200, 100),
                 transform_geometry=transform_geometry_fixture(),
             )
             with (

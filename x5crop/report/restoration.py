@@ -2,25 +2,15 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..detection.final.finalize import finalize_detection
+from ..detection.final.finalize import final_detection_from_facts
 from ..detection.final.model import FinalDetection
-from ..detection.evidence.transform_geometry import TransformGeometryEvidence
 from .validation import (
     current_report_record_errors,
     decision_gate_from_read_model,
     frame_bleed_plan_from_read_model,
     finalization_plan_from_read_model,
     output_geometry_from_read_model,
-    transform_geometry_from_read_model,
 )
-
-
-def transform_geometry_from_record(
-    record: dict[str, Any],
-) -> TransformGeometryEvidence:
-    return transform_geometry_from_read_model(
-        record["input"]["transform_geometry"]
-    )
 
 
 def final_detection_from_record(record: dict[str, Any]) -> FinalDetection:
@@ -35,16 +25,14 @@ def final_detection_from_record(record: dict[str, Any]) -> FinalDetection:
     frame_bleed_plan = frame_bleed_plan_from_read_model(
         output["frame_bleed_plan"]
     )
-    detection = finalize_detection(
-        decision_gate_from_read_model(decision["gate"]),
-        frame_bleed_plan,
-        finalization_plan,
-    )
     restored_geometry = (
         None
         if output["final_geometry"] is None
         else output_geometry_from_read_model(output["final_geometry"])
     )
-    if detection.output_geometry != restored_geometry:
-        raise ValueError("cached final geometry does not match finalization plan")
-    return detection
+    return final_detection_from_facts(
+        decision=decision_gate_from_read_model(decision["gate"]),
+        frame_bleed_plan=frame_bleed_plan,
+        finalization_plan=finalization_plan,
+        output_geometry=restored_geometry,
+    )

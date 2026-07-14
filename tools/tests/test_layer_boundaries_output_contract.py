@@ -186,7 +186,7 @@ class LayerBoundariesOutputContractTest(unittest.TestCase):
             for path in final_root.glob("*.py")
             if "apply_frame_bleed" in path.read_text(encoding="utf-8")
         )
-        self.assertEqual(owners, ("x5crop/detection/final/model.py",))
+        self.assertEqual(owners, ("x5crop/detection/final/finalize.py",))
         source = "\n".join(
             path.read_text(encoding="utf-8")
             for path in final_root.glob("*.py")
@@ -225,6 +225,18 @@ class LayerBoundariesOutputContractTest(unittest.TestCase):
                 / "x5crop/detection/candidate/assessment/quality.py"
             ).exists()
         )
+
+    def test_report_validation_only_validates_serialized_facts(self) -> None:
+        source = (PROJECT_ROOT / "x5crop/report/validation.py").read_text(
+            encoding="utf-8"
+        )
+        for runtime_factory in (
+            "decision_gate_matches_inputs",
+            "finalization_plan_for_selection",
+            "apply_frame_bleed",
+        ):
+            with self.subTest(runtime_factory=runtime_factory):
+                self.assertNotIn(runtime_factory, source)
 
 
 if __name__ == "__main__":
