@@ -369,6 +369,9 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
         )
         self.assertNotIn("检查外框", quick_start)
         self.assertNotIn("inspect the outer box", quick_start)
+        self.assertNotIn("可见序列边界", quick_start)
+        self.assertNotIn("visible-sequence boundaries", quick_start)
+        self.assertIn("PhotoAperture", quick_start)
 
         readme = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
         self.assertNotIn("可用容量由可信 scan calibration", readme)
