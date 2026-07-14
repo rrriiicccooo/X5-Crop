@@ -73,7 +73,6 @@ class AssignmentConsensusOutcome(str, Enum):
     UNCONTESTED = "uncontested"
     AGREED = "agreed"
     DISAGREED = "disagreed"
-    BUDGET_EXHAUSTED = "budget_exhausted"
     COMPONENT_UNRESOLVED = "component_unresolved"
 
 
@@ -126,10 +125,6 @@ class BoundaryAssignmentConsensus:
             AssignmentConsensusOutcome.DISAGREED: (
                 EvidenceState.UNAVAILABLE,
                 "alternative_aperture_assignments_disagree",
-            ),
-            AssignmentConsensusOutcome.BUDGET_EXHAUSTED: (
-                EvidenceState.UNAVAILABLE,
-                "aperture_assignment_search_budget_exhausted",
             ),
             AssignmentConsensusOutcome.COMPONENT_UNRESOLVED: (
                 EvidenceState.UNAVAILABLE,

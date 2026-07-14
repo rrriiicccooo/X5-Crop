@@ -1934,13 +1934,9 @@ def _non_dominated_builds(
 
 def _assignment_consensus(
     builds: tuple[_SequenceBuild, ...],
-    *,
-    budget_exhausted: bool,
 ) -> BoundaryAssignmentConsensus:
     conflicting = _conflicting_photo_indexes(builds)
-    if budget_exhausted:
-        outcome = AssignmentConsensusOutcome.BUDGET_EXHAUSTED
-    elif conflicting:
+    if conflicting:
         outcome = AssignmentConsensusOutcome.DISAGREED
     elif len(builds) == 1:
         outcome = AssignmentConsensusOutcome.UNCONTESTED
@@ -2142,7 +2138,6 @@ def solve_photo_sequence(
         residuals=representative.residuals,
         assignment_consensus=_assignment_consensus(
             non_dominated,
-            budget_exhausted=budget_exhausted,
         ),
         search_outcome=PhysicalSearchOutcome(
             (

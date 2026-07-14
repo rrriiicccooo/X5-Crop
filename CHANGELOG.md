@@ -36,6 +36,8 @@ repository rules in `AGENTS.md`.
 - Search completeness 从 `PhotoSequenceSolution`、dual-lane geometry 与 review-only containment 中移除，
   只由 candidate execution 聚合并进入 `GeometryResolution`。Assignment evaluation count 留在 runtime
   metrics 与 solver/build result，不再污染物理结论或 report identity。
+- `BoundaryAssignmentConsensus` 删除 execution-budget outcome，只描述已评估 aperture alternatives 的
+  几何共识。搜索是否完整由 `PhysicalSearchOutcome` 单独表达并阻止 unresolved geometry early-stop。
 
 #### Photo Aperture 联合求解与 Debug 可见性（2026-07-13）
 

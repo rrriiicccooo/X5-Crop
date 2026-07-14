@@ -12,6 +12,7 @@ from x5crop.detection.candidate.plan.model import (
 )
 from x5crop.detection.candidate.selection.choose import select_candidates
 from x5crop.detection.physical.model import (
+    AssignmentConsensusOutcome,
     DualLanePhotoSolution,
     PhotoSequenceSolution,
     ReviewOnlyContainment,
@@ -254,6 +255,10 @@ class PhysicalSearchOutcomeContractTest(unittest.TestCase):
                     "search_budget_exhausted",
                     geometry_type.__dataclass_fields__,
                 )
+        self.assertNotIn(
+            "budget_exhausted",
+            {outcome.value for outcome in AssignmentConsensusOutcome},
+        )
 
 
 if __name__ == "__main__":

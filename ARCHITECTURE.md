@@ -158,7 +158,9 @@ observation，但不能成为 hard separator。Dimension-only edge 只是一条 
   holder boundary 佐证的 clipped endpoint 都必须进入全局求解；dimension residual 只能决定探索
   次序，不能在 geometry consensus 前选出唯一 outer；
 - assignment consensus 要求每张照片的每条 aperture edge 在全部非支配解之间存在同一个共同
-  interval。仅由一条宽 uncertainty 分别接触两组互斥边界，不构成 geometry agreement；
+  interval。它只描述已评估几何是否一致；execution budget 的完整性只由
+  `PhysicalSearchOutcome` 表达。仅由一条宽 uncertainty 分别接触两组互斥边界，不构成
+  geometry agreement；
 - Pareto 支配只允许更优目标且逐边 interval 是另一解的细化。未经佐证的 overlap 可以在兼容
   geometry 内参与目标排序，但不能淘汰另一组 geometry；归约只比较仍存活的 frontier alternatives；
 - cross-axis hypothesis 的搜索顺序不奖励更高的 aperture。可信 calibration 存在时使用照片短轴

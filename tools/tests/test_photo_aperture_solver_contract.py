@@ -952,7 +952,6 @@ class PhotoApertureSolverContractTest(unittest.TestCase):
                 with_leading_interval(PixelInterval(0.0, 4.0)),
                 with_leading_interval(PixelInterval(6.0, 10.0)),
             ),
-            budget_exhausted=False,
         )
 
         self.assertEqual(consensus.outcome, AssignmentConsensusOutcome.DISAGREED)
