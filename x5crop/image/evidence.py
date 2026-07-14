@@ -20,10 +20,10 @@ from ..utils import (
     sampled_percentile,
     smooth_1d,
 )
-from .statistics import ImageMeasurementStatistics
 
 
-CONTENT_EVIDENCE_COMPONENT_COUNT = 4
+CONTENT_EVIDENCE_COMPONENT_COUNT = 3
+CONTENT_EVIDENCE_NEIGHBORHOOD_RADIUS_PX = 1
 
 
 @dataclass(frozen=True)
@@ -131,7 +131,6 @@ class ContentEvidenceImageParameters:
     gradient_percentile: float = 99.2
     texture_percentile: float = 99.2
     local_contrast_percentile: float = 99.0
-    tonal_presence_percentile: float = 99.0
     numerical_floor: float = 1e-6
     maximum_percentile_samples: int = 1_000_000
     minimum_consensus_channels: int = 2
@@ -141,7 +140,6 @@ class ContentEvidenceImageParameters:
             ("content gradient percentile", self.gradient_percentile),
             ("content texture percentile", self.texture_percentile),
             ("content local-contrast percentile", self.local_contrast_percentile),
-            ("content tonal-presence percentile", self.tonal_presence_percentile),
         ):
             require_percentile(name, value)
         require_positive("content evidence numerical floor", self.numerical_floor)
@@ -324,30 +322,24 @@ def normalize_score_image(
     return np.clip(data / hi, 0.0, 1.0)
 
 
-def _four_component_consensus(
-    components: tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray],
+def _three_component_consensus(
+    components: tuple[np.ndarray, np.ndarray, np.ndarray],
     minimum_channels: int,
 ) -> np.ndarray:
     if minimum_channels < 1 or minimum_channels > len(components):
-        raise ValueError("content consensus channel count must be between one and four")
+        raise ValueError("content consensus channel count must be between one and three")
     first_low = np.minimum(components[0], components[1])
     first_high = np.maximum(components[0], components[1])
-    second_low = np.minimum(components[2], components[3])
-    second_high = np.maximum(components[2], components[3])
-    middle_a = np.maximum(first_low, second_low)
-    middle_b = np.minimum(first_high, second_high)
     ordered = (
-        np.maximum(first_high, second_high),
-        np.maximum(middle_a, middle_b),
-        np.minimum(middle_a, middle_b),
-        np.minimum(first_low, second_low),
+        np.maximum(first_high, components[2]),
+        np.maximum(first_low, np.minimum(first_high, components[2])),
+        np.minimum(first_low, components[2]),
     )
     return ordered[minimum_channels - 1]
 
 
 def make_content_evidence_gray(
     gray: np.ndarray,
-    statistics: ImageMeasurementStatistics,
     params: ContentEvidenceImageParameters,
 ) -> np.ndarray:
     data = gray.astype(np.float32, copy=False) / UINT8_MAX_VALUE
@@ -398,16 +390,8 @@ def make_content_evidence_gray(
         params.maximum_percentile_samples,
     )
 
-    tonal_presence = normalize_score_image(
-        np.abs(
-            data - float(statistics.intensity_median) / UINT8_MAX_VALUE
-        ),
-        params.tonal_presence_percentile,
-        params.numerical_floor,
-        params.maximum_percentile_samples,
-    )
-    evidence = _four_component_consensus(
-        (gradient, texture, local_contrast, tonal_presence),
+    evidence = _three_component_consensus(
+        (gradient, texture, local_contrast),
         int(params.minimum_consensus_channels),
     )
     evidence = np.clip(evidence, 0.0, 1.0)

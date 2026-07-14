@@ -8,6 +8,7 @@ from x5crop.detection.physical.sequence_solver import (
 from x5crop.domain import (
     BoundaryAxis,
     BoundaryKind,
+    BoundaryPathSample,
     BoundarySide,
     Box,
     ContainmentFallback,
@@ -61,15 +62,20 @@ def path(
     source: str,
     *,
     kind: BoundaryKind = BoundaryKind.TONAL_TRANSITION,
+    orthogonal_extent: float = 1_000_000.0,
 ) -> GrayBoundaryPathObservation:
     measurement_provenance = provenance(MeasurementIdentity.BOUNDARY_PATHS, source)
     interval = PixelInterval.exact(position)
     measurement_appearance = appearance(measurement_provenance)
     return GrayBoundaryPathObservation(
         axis=axis,
-        position=interval,
         kind=kind,
-        local_positions=(interval,),
+        samples=(
+            BoundaryPathSample(
+                PixelInterval(0.0, orthogonal_extent),
+                interval,
+            ),
+        ),
         lower_appearance=measurement_appearance,
         upper_appearance=measurement_appearance,
         provenance=measurement_provenance,

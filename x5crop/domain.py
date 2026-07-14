@@ -297,33 +297,121 @@ class GrayAppearanceObservation:
 
 
 @dataclass(frozen=True)
+class BoundaryPathSample:
+    orthogonal_interval: PixelInterval
+    position: PixelInterval
+
+    def __post_init__(self) -> None:
+        if (
+            self.orthogonal_interval.maximum
+            <= self.orthogonal_interval.minimum
+        ):
+            raise ValueError("boundary path sample requires positive orthogonal extent")
+
+
+def _fitted_path_interval(
+    samples: tuple[BoundaryPathSample, ...],
+    orthogonal_interval: PixelInterval,
+) -> PixelInterval:
+    if len(samples) == 1:
+        return samples[0].position
+    coordinates = tuple(
+        sample.orthogonal_interval.midpoint for sample in samples
+    )
+    center = sum(coordinates) / float(len(coordinates))
+    denominator = sum((coordinate - center) ** 2 for coordinate in coordinates)
+    if denominator <= 0.0:
+        return PixelInterval(
+            min(sample.position.minimum for sample in samples),
+            max(sample.position.maximum for sample in samples),
+        )
+
+    def fitted_bounds(attribute: str) -> tuple[float, float]:
+        values = tuple(
+            float(getattr(sample.position, attribute)) for sample in samples
+        )
+        value_center = sum(values) / float(len(values))
+        slope = sum(
+            (coordinate - center) * (value - value_center)
+            for coordinate, value in zip(coordinates, values, strict=True)
+        ) / denominator
+        intercept = value_center - slope * center
+        residual = max(
+            abs(value - (intercept + slope * coordinate))
+            for coordinate, value in zip(coordinates, values, strict=True)
+        )
+        predictions = (
+            intercept + slope * orthogonal_interval.minimum,
+            intercept + slope * orthogonal_interval.maximum,
+        )
+        return min(predictions) - residual, max(predictions) + residual
+
+    minimum_lower, minimum_upper = fitted_bounds("minimum")
+    maximum_lower, maximum_upper = fitted_bounds("maximum")
+    return PixelInterval(
+        min(minimum_lower, maximum_lower),
+        max(minimum_upper, maximum_upper),
+    )
+
+
+@dataclass(frozen=True)
 class GrayBoundaryPathObservation:
     axis: BoundaryAxis
-    position: PixelInterval
     kind: BoundaryKind
-    local_positions: tuple[PixelInterval, ...]
+    samples: tuple[BoundaryPathSample, ...]
     lower_appearance: GrayAppearanceObservation
     upper_appearance: GrayAppearanceObservation
     provenance: MeasurementProvenance
+    position: PixelInterval = field(init=False)
 
     def __post_init__(self) -> None:
         if not isinstance(self.axis, BoundaryAxis):
             raise TypeError("boundary observation requires a typed axis")
         if not isinstance(self.kind, BoundaryKind):
             raise TypeError("boundary observation requires a typed kind")
-        if not self.local_positions:
-            raise ValueError("boundary path requires local positions")
-        envelope = PixelInterval(
-            min(item.minimum for item in self.local_positions),
-            max(item.maximum for item in self.local_positions),
+        if not self.samples:
+            raise ValueError("boundary path requires local samples")
+        sample_coordinates = tuple(
+            sample.orthogonal_interval.midpoint for sample in self.samples
         )
-        if self.position != envelope:
-            raise ValueError("boundary path position must enclose its local measurements")
+        if tuple(sorted(sample_coordinates)) != sample_coordinates or len(
+            set(sample_coordinates)
+        ) != len(sample_coordinates):
+            raise ValueError(
+                "boundary path samples must have unique ordered coordinates"
+            )
+        orthogonal_extent = PixelInterval(
+            min(sample.orthogonal_interval.minimum for sample in self.samples),
+            max(sample.orthogonal_interval.maximum for sample in self.samples),
+        )
+        object.__setattr__(
+            self,
+            "position",
+            _fitted_path_interval(self.samples, orthogonal_extent),
+        )
         if any(
             appearance.provenance != self.provenance
             for appearance in (self.lower_appearance, self.upper_appearance)
         ):
             raise ValueError("boundary appearances must share path provenance")
+
+    @property
+    def orthogonal_extent(self) -> PixelInterval:
+        return PixelInterval(
+            min(sample.orthogonal_interval.minimum for sample in self.samples),
+            max(sample.orthogonal_interval.maximum for sample in self.samples),
+        )
+
+    def position_within(
+        self,
+        orthogonal_interval: PixelInterval,
+    ) -> PixelInterval | None:
+        measured_interval = self.orthogonal_extent.intersection(
+            orthogonal_interval
+        )
+        if measured_interval is None:
+            return None
+        return _fitted_path_interval(self.samples, measured_interval)
 
 
 @dataclass(frozen=True)

@@ -269,7 +269,7 @@ unless the edit changes commands or release behavior.
 
 ## Current Handoff
 
-Date: 2026-07-13
+Date: 2026-07-14
 Computer: primary macOS machine
 Branch: main
 Latest documentation state: root documents have distinct responsibilities.
@@ -287,6 +287,10 @@ Current state:
 - Gray paths and separator bands are count-independent observations. Candidate
   assignment binds separator start/end to the trailing/leading edges of adjacent
   apertures; dimension-only boundaries remain provisional.
+- Gray boundary paths preserve typed local samples across the orthogonal axis.
+  Short-axis aperture edges are resolved within each photo's own long-axis span.
+  Raw channels remain visible, while geometry-equivalent paths form one solver
+  hypothesis and separator-bound paths do not reenter generic aperture search.
 - Count, boundary, dimension, calibration, and measurement-dependency authority
   use typed identities; descriptive provenance text cannot change physical proof.
 - Detection consumes one canonical grayscale workspace. Boundary and separator
@@ -318,6 +322,11 @@ Current verification state:
   are implemented. Debug distinguishes ideal apertures, output envelopes, raw
   observations, measured edges, provisional edges, holder boundaries, and
   corroborated overlap through one diagnostics-owned legend.
+- The current suite contains 472 tests and 14 valid format/mode configurations.
+  On `135/full 005.tif`, separator-bound path ownership reduced assignment
+  evaluations to 4,264 without search-budget exhaustion. Geometry remains
+  unresolved because independent measured aperture alternatives disagree; this
+  is calibration/audit material, not an execution-budget failure.
 - The previous 113-TIFF run in `Test/test 2` remains an immutable visual baseline.
   A new full run must be written to `Test/test 3` after performance profiling and
   representative-sample calibration.

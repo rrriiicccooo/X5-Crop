@@ -22,6 +22,7 @@ from x5crop.detection.candidate.assessment.model import (
 )
 from x5crop.detection.candidate.model import content_preservation_state
 from x5crop.detection.evidence.content.external_boundaries import (
+    _boundary_regions,
     _crossing_track_count,
     external_aperture_preservation_evidence,
 )
@@ -414,6 +415,56 @@ class FrameContentSupportTest(unittest.TestCase):
                 Box(0, 5, 5, 10),
                 Box(0, 0, 5, 5),
                 BoundarySide.TOP,
+                boundary_halo_px=0,
+            ),
+            0,
+        )
+
+    def test_perpendicular_corner_edge_is_not_a_side_crossing(self) -> None:
+        active = np.zeros((20, 20), dtype=bool)
+        active[:, 5] = True
+        aperture = _single_aperture_geometry(
+            Box(5, 5, 15, 15)
+        ).photo_apertures[0]
+        aperture = replace(
+            aperture,
+            leading=replace(
+                aperture.leading,
+                position=PixelInterval(5.0, 8.0),
+            ),
+        )
+        inside, outside = _boundary_regions(
+            aperture,
+            BoundarySide.BOTTOM,
+            2,
+            Box(0, 0, 20, 20),
+        )
+        assert outside is not None
+
+        self.assertEqual(inside.left, 10)
+
+        self.assertEqual(
+            _crossing_track_count(
+                active,
+                inside,
+                outside,
+                BoundarySide.BOTTOM,
+                boundary_halo_px=0,
+            ),
+            0,
+        )
+
+    def test_content_evidence_boundary_halo_is_not_a_crossing(self) -> None:
+        active = np.zeros((10, 5), dtype=bool)
+        active[4:6, :] = True
+
+        self.assertEqual(
+            _crossing_track_count(
+                active,
+                Box(0, 5, 5, 10),
+                Box(0, 0, 5, 5),
+                BoundarySide.TOP,
+                boundary_halo_px=1,
             ),
             0,
         )

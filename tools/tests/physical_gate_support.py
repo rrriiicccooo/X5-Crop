@@ -74,6 +74,7 @@ from x5crop.detection.physical.photo_size import frame_dimension_evidence
 from x5crop.domain import (
     BoundaryAxis,
     BoundaryKind,
+    BoundaryPathSample,
     BoundarySide,
     Box,
     ContainmentFallback,
@@ -155,9 +156,20 @@ def boundary_path_fixture(
     )
     return GrayBoundaryPathObservation(
         axis=axis,
-        position=position,
         kind=kind,
-        local_positions=(position,),
+        samples=(
+            BoundaryPathSample(
+                PixelInterval(
+                    0.0,
+                    float(
+                        _HOLDER_BOX.width
+                        if axis == BoundaryAxis.SHORT
+                        else _HOLDER_BOX.height
+                    ),
+                ),
+                position,
+            ),
+        ),
         lower_appearance=lower,
         upper_appearance=upper,
         provenance=provenance,

@@ -12,9 +12,13 @@ from ....domain import (
     BoundarySide,
     Box,
     EvidenceState,
+    PhotoAperture,
     PhotoApertureEdgeSource,
 )
-from ....image.evidence import activation_mask
+from ....image.evidence import (
+    CONTENT_EVIDENCE_NEIGHBORHOOD_RADIUS_PX,
+    activation_mask,
+)
 from .activation import cached_content_evidence_threshold
 
 if TYPE_CHECKING:
@@ -149,76 +153,118 @@ class ExternalAperturePreservationEvidence:
 
 
 def _boundary_regions(
-    sequence: Box,
+    aperture: PhotoAperture,
     side: BoundarySide,
     band: int,
     workspace: Box,
 ) -> tuple[Box, Box | None]:
+    sequence = aperture.frame_crop_envelope.box.clamp(
+        workspace.right,
+        workspace.bottom,
+    )
+
+    def measured_middle(
+        start: int,
+        end: int,
+        lower_uncertainty: float,
+        upper_uncertainty: float,
+    ) -> tuple[int, int]:
+        measured_start = max(start, int(math.ceil(lower_uncertainty)) + band)
+        measured_end = min(end, int(math.floor(upper_uncertainty)) - band)
+        if measured_end > measured_start:
+            return measured_start, measured_end
+        midpoint = max(start, min(end - 1, (start + end) // 2))
+        return midpoint, midpoint + 1
+
     if side == BoundarySide.LEADING:
+        orthogonal_start, orthogonal_end = measured_middle(
+            sequence.top,
+            sequence.bottom,
+            aperture.top.position.maximum,
+            aperture.bottom.position.minimum,
+        )
         inside = Box(
             sequence.left,
-            sequence.top,
+            orthogonal_start,
             min(sequence.right, sequence.left + band),
-            sequence.bottom,
+            orthogonal_end,
         )
         outside = (
             None
             if sequence.left <= workspace.left
             else Box(
                 max(workspace.left, sequence.left - band),
-                sequence.top,
+                orthogonal_start,
                 sequence.left,
-                sequence.bottom,
+                orthogonal_end,
             )
         )
     elif side == BoundarySide.TRAILING:
+        orthogonal_start, orthogonal_end = measured_middle(
+            sequence.top,
+            sequence.bottom,
+            aperture.top.position.maximum,
+            aperture.bottom.position.minimum,
+        )
         inside = Box(
             max(sequence.left, sequence.right - band),
-            sequence.top,
+            orthogonal_start,
             sequence.right,
-            sequence.bottom,
+            orthogonal_end,
         )
         outside = (
             None
             if sequence.right >= workspace.right
             else Box(
                 sequence.right,
-                sequence.top,
+                orthogonal_start,
                 min(workspace.right, sequence.right + band),
-                sequence.bottom,
+                orthogonal_end,
             )
         )
     elif side == BoundarySide.TOP:
-        inside = Box(
+        orthogonal_start, orthogonal_end = measured_middle(
             sequence.left,
-            sequence.top,
             sequence.right,
+            aperture.leading.position.maximum,
+            aperture.trailing.position.minimum,
+        )
+        inside = Box(
+            orthogonal_start,
+            sequence.top,
+            orthogonal_end,
             min(sequence.bottom, sequence.top + band),
         )
         outside = (
             None
             if sequence.top <= workspace.top
             else Box(
-                sequence.left,
+                orthogonal_start,
                 max(workspace.top, sequence.top - band),
-                sequence.right,
+                orthogonal_end,
                 sequence.top,
             )
         )
     elif side == BoundarySide.BOTTOM:
-        inside = Box(
+        orthogonal_start, orthogonal_end = measured_middle(
             sequence.left,
-            max(sequence.top, sequence.bottom - band),
             sequence.right,
+            aperture.leading.position.maximum,
+            aperture.trailing.position.minimum,
+        )
+        inside = Box(
+            orthogonal_start,
+            max(sequence.top, sequence.bottom - band),
+            orthogonal_end,
             sequence.bottom,
         )
         outside = (
             None
             if sequence.bottom >= workspace.bottom
             else Box(
-                sequence.left,
+                orthogonal_start,
                 sequence.bottom,
-                sequence.right,
+                orthogonal_end,
                 min(workspace.bottom, sequence.bottom + band),
             )
         )
@@ -236,21 +282,33 @@ def _crossing_track_count(
     inside: Box,
     outside: Box,
     side: BoundarySide,
+    boundary_halo_px: int,
 ) -> int:
+    if boundary_halo_px < 0:
+        raise ValueError("content crossing boundary halo cannot be negative")
     inside_active = _active_region(active, inside)
     outside_active = _active_region(active, outside)
+    sample_offset = int(boundary_halo_px)
     if side == BoundarySide.LEADING:
-        inside_tracks = inside_active[:, 0]
-        outside_tracks = outside_active[:, -1]
+        if min(inside_active.shape[1], outside_active.shape[1]) <= sample_offset:
+            return 0
+        inside_tracks = inside_active[:, sample_offset]
+        outside_tracks = outside_active[:, -(sample_offset + 1)]
     elif side == BoundarySide.TRAILING:
-        inside_tracks = inside_active[:, -1]
-        outside_tracks = outside_active[:, 0]
+        if min(inside_active.shape[1], outside_active.shape[1]) <= sample_offset:
+            return 0
+        inside_tracks = inside_active[:, -(sample_offset + 1)]
+        outside_tracks = outside_active[:, sample_offset]
     elif side == BoundarySide.TOP:
-        inside_tracks = inside_active[0, :]
-        outside_tracks = outside_active[-1, :]
+        if min(inside_active.shape[0], outside_active.shape[0]) <= sample_offset:
+            return 0
+        inside_tracks = inside_active[sample_offset, :]
+        outside_tracks = outside_active[-(sample_offset + 1), :]
     elif side == BoundarySide.BOTTOM:
-        inside_tracks = inside_active[-1, :]
-        outside_tracks = outside_active[0, :]
+        if min(inside_active.shape[0], outside_active.shape[0]) <= sample_offset:
+            return 0
+        inside_tracks = inside_active[-(sample_offset + 1), :]
+        outside_tracks = outside_active[sample_offset, :]
     else:
         raise ValueError(f"unsupported external aperture side: {side}")
     track_count = min(inside_tracks.size, outside_tracks.size)
@@ -288,7 +346,6 @@ def external_aperture_preservation_evidence(
     observations: list[ExternalApertureBoundaryObservation] = []
     last_index = len(geometry.photo_apertures)
     for aperture in geometry.photo_apertures:
-        aperture_box = aperture.frame_crop_envelope.box.clamp(width, height)
         sides = (
             *((BoundarySide.LEADING,) if aperture.index == 1 else ()),
             BoundarySide.TOP,
@@ -298,7 +355,7 @@ def external_aperture_preservation_evidence(
         for side in sides:
             resolution = getattr(aperture, side.value)
             inside, outside = _boundary_regions(
-                aperture_box,
+                aperture,
                 side,
                 band,
                 workspace,
@@ -321,7 +378,13 @@ def external_aperture_preservation_evidence(
                     crossing_track_count=(
                         0
                         if outside is None or threshold is None
-                        else _crossing_track_count(active, inside, outside, side)
+                        else _crossing_track_count(
+                            active,
+                            inside,
+                            outside,
+                            side,
+                            CONTENT_EVIDENCE_NEIGHBORHOOD_RADIUS_PX,
+                        )
                     ),
                     minimum_active_pixels=minimum_active,
                     minimum_crossing_tracks=minimum_tracks,

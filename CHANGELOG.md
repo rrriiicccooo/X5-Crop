@@ -16,6 +16,19 @@ repository rules in `AGENTS.md`.
 
 #### Photo Aperture 联合求解与 Debug 可见性（2026-07-13）
 
+- Boundary observation 破坏性升级为真正的二维 path：每个 local sample 保存 orthogonal interval
+  与位置不确定度，top/bottom aperture edge 按每张照片自己的长轴范围解析。Raw channel 仍完整
+  报告，solver 只合并几何等价 hypotheses；与内部 separator band 关联的 path 由 band 双边解释
+  唯一消费，不再通过 generic measured-path 分支重复扩展候选。
+- Separator band 对 measured aperture edge 的归属由 interval 相交且 path midpoint 位于 band 内共同
+  决定，不再要求整个 uncertainty interval 被 band 完全包含。Band start/end 与独立 measured edges
+  若给出不同照片开口，assignment consensus 保留冲突；geometry-equivalent observation 不重复制造
+  `budget_exhausted`。
+- Content evidence 删除全局 tonal-position component，只保留 gradient、texture 与 local-contrast
+  共识。External aperture preservation 排除相邻边界 uncertainty 和一像素 evidence kernel halo，
+  垂直边角活动不再伪装成照片跨越另一条边界。
+- Boundary local strongest-change selection 明确归 adaptive measurement，不再被误报为 execution
+  budget exhaustion；真实预算只来自 path 数量和 solver search 上限。
 - 理想裁切几何收敛为逐张 `PhotoAperture`；可见片基与内部 separator 不进入照片开口。
   `PhotoSequenceSolution` 联合求解照片四边、separator 双边、signed spacing、count 与物理守恒，
   full-canvas containment 和 dimension-only edge 只能保持 provisional。

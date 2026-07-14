@@ -15,6 +15,7 @@ from x5crop.domain import Box, EvidenceState, PixelInterval
 from x5crop.domain import (
     BoundaryAxis,
     BoundaryKind,
+    BoundaryPathSample,
     GrayAppearanceObservation,
     GrayBoundaryPathObservation,
     GrayIntensityTail,
@@ -55,9 +56,8 @@ def _cross_axis(height: int) -> PhotoApertureCrossAxisHypothesis:
         interval = PixelInterval.exact(position)
         return GrayBoundaryPathObservation(
             BoundaryAxis.SHORT,
-            interval,
             BoundaryKind.TONAL_TRANSITION,
-            (interval,),
+            (BoundaryPathSample(PixelInterval(0.0, 240.0), interval),),
             appearance,
             appearance,
             provenance,

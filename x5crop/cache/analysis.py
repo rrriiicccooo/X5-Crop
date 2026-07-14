@@ -24,7 +24,6 @@ def make_measurement_cache(
     gray_work = work_gray(gray, layout)
     content_evidence = make_content_evidence_gray(
         gray_work,
-        image_statistics,
         content_evidence_params,
     )
     return MeasurementCache(

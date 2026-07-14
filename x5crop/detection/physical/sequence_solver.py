@@ -222,18 +222,68 @@ def _axis_paths(
     search_scope: PhotoSequenceSearchScope,
     axis: BoundaryAxis,
 ) -> tuple[GrayBoundaryPathObservation, ...]:
+    paths = tuple(
+        dict.fromkeys(
+            path
+            for path in search_scope.raw_boundary_paths
+            if path.axis == axis
+        )
+    )
+    holder_paths = {item.path for item in search_scope.holder_boundaries}
+    ranked = sorted(
+        paths,
+        key=lambda path: (
+            -(path in holder_paths),
+            -(
+                path.orthogonal_extent.maximum
+                - path.orthogonal_extent.minimum
+            ),
+            -min(
+                path.lower_appearance.spatial_continuity,
+                path.upper_appearance.spatial_continuity,
+            ),
+            path.position.maximum - path.position.minimum,
+            path.kind.value,
+            path.provenance.observation_id,
+        ),
+    )
+    canonical: list[GrayBoundaryPathObservation] = []
+    for path in ranked:
+        if any(_paths_geometrically_equivalent(path, item) for item in canonical):
+            continue
+        canonical.append(path)
     return tuple(
         sorted(
-            dict.fromkeys(
-                path
-                for path in search_scope.raw_boundary_paths
-                if path.axis == axis
-            ),
+            canonical,
             key=lambda path: (
                 path.position.midpoint,
                 path.position.maximum - path.position.minimum,
                 path.kind.value,
                 path.provenance.observation_id,
+            ),
+        )
+    )
+
+
+def _paths_geometrically_equivalent(
+    left: GrayBoundaryPathObservation,
+    right: GrayBoundaryPathObservation,
+) -> bool:
+    if left.axis != right.axis:
+        return False
+    shared = left.orthogonal_extent.intersection(right.orthogonal_extent)
+    if shared is None or shared.maximum <= shared.minimum:
+        return False
+    coordinates = (shared.minimum, shared.midpoint, shared.maximum)
+    return all(
+        left_position is not None
+        and right_position is not None
+        and left_position.intersects(right_position)
+        for coordinate in coordinates
+        for left_position, right_position in (
+            (
+                left.position_within(PixelInterval.exact(coordinate)),
+                right.position_within(PixelInterval.exact(coordinate)),
             ),
         )
     )
@@ -404,6 +454,25 @@ def _separator_band_edges(
     )
 
 
+def _measured_path_edges(
+    edges: tuple[_EdgeConstraint, _EdgeConstraint],
+) -> bool:
+    return all(
+        edge.source == PhotoApertureEdgeSource.MEASURED_BOUNDARY_PATH
+        for edge in edges
+    )
+
+
+def _path_associated_with_band(
+    path: GrayBoundaryPathObservation,
+    observation: SeparatorBandObservation,
+) -> bool:
+    return bool(
+        path.position.intersects(observation.interval)
+        and observation.start <= path.position.midpoint <= observation.end
+    )
+
+
 def _measured_path_pairs_within_band(
     observation: SeparatorBandObservation,
     paths: tuple[GrayBoundaryPathObservation, ...],
@@ -411,8 +480,7 @@ def _measured_path_pairs_within_band(
     contained = tuple(
         _external_constraint(path)
         for path in paths
-        if path.position.minimum >= observation.start
-        and path.position.maximum <= observation.end
+        if _path_associated_with_band(path, observation)
     )
     pairs = tuple(
         (trailing, leading)
@@ -481,7 +549,7 @@ def _interval_distance(left: PixelInterval, right: PixelInterval) -> float:
     return left.minimum - right.maximum
 
 
-def _supported_band_demotion_is_justified(
+def _band_edge_interpretation_is_admissible(
     band_index: int,
     supports: tuple[SeparatorBandCrossAxisSupport, ...],
     selected_edges: tuple[tuple[_EdgeConstraint, _EdgeConstraint], ...],
@@ -496,6 +564,7 @@ def _supported_band_demotion_is_justified(
     if (
         measurement.state != EvidenceState.SUPPORTED
         or _separator_band_edges(chosen)
+        or _measured_path_edges(chosen)
         or not width_constraint.permits(band)
     ):
         return True
@@ -646,7 +715,7 @@ def _band_sequence_hypotheses(
             return
         if len(selected_supports) == required:
             if not all(
-                _supported_band_demotion_is_justified(
+                _band_edge_interpretation_is_admissible(
                     band_index,
                     selected_supports,
                     selected_edges,
@@ -700,7 +769,7 @@ def _band_sequence_hypotheses(
                 resolved_neighbor_index = len(selected_supports) - 1
                 if (
                     selected_supports
-                    and not _supported_band_demotion_is_justified(
+                    and not _band_edge_interpretation_is_admissible(
                         resolved_neighbor_index,
                         next_supports,
                         next_edges,
@@ -904,11 +973,18 @@ def _short_axis_resolution(
     photo_index: int,
     side: BoundarySide,
     path: GrayBoundaryPathObservation,
-) -> tuple[PhotoApertureBoundaryResolution, PhotoApertureEdgeAssignment]:
+    long_axis_interval: PixelInterval,
+) -> tuple[
+    PhotoApertureBoundaryResolution,
+    PhotoApertureEdgeAssignment,
+] | None:
+    position = path.position_within(long_axis_interval)
+    if position is None:
+        return None
     resolution = PhotoApertureBoundaryResolution(
         photo_index=photo_index,
         side=side,
-        position=path.position,
+        position=position,
         state=EvidenceState.SUPPORTED,
         source=PhotoApertureEdgeSource.MEASURED_BOUNDARY_PATH,
         provenance=path.provenance,
@@ -928,11 +1004,19 @@ def _measured_aperture_constraints(
     search_scope: PhotoSequenceSearchScope,
     cross_axis: PhotoApertureCrossAxisHypothesis,
     dimensions: FrameDimensionPrior,
+    excluded_separator_bands: tuple[SeparatorBandObservation, ...],
     evaluation_budget: int,
     maximum_options: int,
 ) -> tuple[tuple[_MeasuredApertureConstraint, ...], int, bool]:
     photo_width = _cross_axis_width_constraint(cross_axis, dimensions)
-    paths = _axis_paths(search_scope, BoundaryAxis.LONG)
+    paths = tuple(
+        path
+        for path in _axis_paths(search_scope, BoundaryAxis.LONG)
+        if not any(
+            _path_associated_with_band(path, observation)
+            for observation in excluded_separator_bands
+        )
+    )
     holder_provenance = {
         item.side: item.provenance for item in search_scope.holder_boundaries
     }
@@ -1073,7 +1157,7 @@ def _measured_sequence_build(
     cross_axis: PhotoApertureCrossAxisHypothesis,
     photo_width: PixelInterval,
     holder_extent: int,
-) -> _SequenceBuild:
+) -> _SequenceBuild | None:
     apertures: list[PhotoAperture] = []
     assignments: list[PhotoApertureEdgeAssignment] = []
     for photo_index, constraint in enumerate(constraints, start=1):
@@ -1087,16 +1171,26 @@ def _measured_sequence_build(
             BoundarySide.TRAILING,
             constraint.trailing,
         )
-        top, top_assignment = _short_axis_resolution(
+        long_axis_interval = PixelInterval(
+            leading.position.minimum,
+            trailing.position.maximum,
+        )
+        top_result = _short_axis_resolution(
             photo_index,
             BoundarySide.TOP,
             cross_axis.top_path,
+            long_axis_interval,
         )
-        bottom, bottom_assignment = _short_axis_resolution(
+        bottom_result = _short_axis_resolution(
             photo_index,
             BoundarySide.BOTTOM,
             cross_axis.bottom_path,
+            long_axis_interval,
         )
+        if top_result is None or bottom_result is None:
+            return None
+        top, top_assignment = top_result
+        bottom, bottom_assignment = bottom_result
         assignments.extend(
             (
                 leading_assignment,
@@ -1279,6 +1373,7 @@ def _measured_aperture_sequences(
 
 def _measured_path_builds(
     search_scope: PhotoSequenceSearchScope,
+    separator_supports: tuple[SeparatorBandCrossAxisSupport, ...],
     cross_axis_hypotheses: tuple[PhotoApertureCrossAxisHypothesis, ...],
     dimensions: FrameDimensionPrior,
     count: int,
@@ -1286,6 +1381,13 @@ def _measured_path_builds(
     maximum_solution_alternatives: int,
 ) -> tuple[tuple[_SequenceBuild, ...], int, bool]:
     holder = search_scope.holder_span.box
+    excluded_separator_bands = tuple(
+        support.observation
+        for support in _interior_separator_supports(
+            separator_supports,
+            search_scope,
+        )
+    )
     builds: list[_SequenceBuild] = []
     evaluations = 0
     search_truncated = False
@@ -1297,6 +1399,7 @@ def _measured_path_builds(
             search_scope,
             cross_axis,
             dimensions,
+            excluded_separator_bands,
             remaining,
             count * (maximum_solution_alternatives + 1),
         )
@@ -1318,15 +1421,20 @@ def _measured_path_builds(
         evaluations += state_evaluations
         search_truncated = search_truncated or states_truncated
         photo_width = _cross_axis_width_constraint(cross_axis, dimensions)
-        builds.extend(
-            _measured_sequence_build(
-                state,
-                cross_axis,
-                photo_width,
-                holder.width + holder.height,
-            )
+        measured_builds = tuple(
+            build
             for state in states
+            if (
+                build := _measured_sequence_build(
+                    state,
+                    cross_axis,
+                    photo_width,
+                    holder.width + holder.height,
+                )
+            )
+            is not None
         )
+        builds.extend(measured_builds)
         if evaluations >= evaluation_budget:
             search_truncated = bool(
                 search_truncated
@@ -1478,16 +1586,26 @@ def _build_sequence(
             BoundarySide.TRAILING,
             refined_trailing,
         )
-        top, top_assignment = _short_axis_resolution(
+        long_axis_interval = PixelInterval(
+            leading.position.minimum,
+            trailing.position.maximum,
+        )
+        top_result = _short_axis_resolution(
             photo_index,
             BoundarySide.TOP,
             cross_axis.top_path,
+            long_axis_interval,
         )
-        bottom, bottom_assignment = _short_axis_resolution(
+        bottom_result = _short_axis_resolution(
             photo_index,
             BoundarySide.BOTTOM,
             cross_axis.bottom_path,
+            long_axis_interval,
         )
+        if top_result is None or bottom_result is None:
+            return None
+        top, top_assignment = top_result
+        bottom, bottom_assignment = bottom_result
         assignments.extend(
             item
             for item in (
@@ -1835,6 +1953,7 @@ def solve_photo_sequence(
             measured_budget_exhausted,
         ) = _measured_path_builds(
             search_scope,
+            supports,
             cross_axis_hypotheses,
             dimensions,
             count,

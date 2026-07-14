@@ -16,7 +16,12 @@ from x5crop.detection.candidate.assessment.candidate import (
 )
 from x5crop.detection.candidate.model import BuiltCandidate
 from x5crop.detection.evidence.separator_sequence import SeparatorSequenceEvidence
-from x5crop.detection.physical.boundary_detection import boundary_measurements
+from x5crop.detection.physical.boundary_detection import (
+    _adaptive_change_points,
+    _cross_section_profiles,
+    _texture_image,
+    boundary_measurements,
+)
 from x5crop.domain import BoundaryKind, EvidenceState, InterPhotoBoundaryReference
 from x5crop.image.statistics import (
     ImageMeasurementStatisticsParameters,
@@ -230,26 +235,46 @@ class GrayAppearanceOuterContractTests(unittest.TestCase):
         self.assertIn("boundary_supports_holder_region", evidence_source)
         self.assertNotIn("film_base", evidence_source)
 
-    def test_change_point_budget_exhaustion_is_explicit(self) -> None:
-        gray = np.tile(
-            np.asarray(([0] * 5 + [255] * 5) * 20, dtype=np.uint8),
-            (120, 1),
-        )
-        statistics = image_measurement_statistics(
-            gray,
-            ImageMeasurementStatisticsParameters(),
-        )
-        measurements = boundary_measurements(
-            gray,
-            statistics,
+    def test_local_change_point_selection_is_not_an_execution_budget(self) -> None:
+        points = _adaptive_change_points(
+            np.asarray(([0.0] * 5 + [1.0] * 5) * 20, dtype=np.float32),
             replace(
                 BoundaryPathParameters(),
-                maximum_change_points_per_section=1,
-                maximum_paths_per_axis=64,
+                strongest_change_points_per_section=1,
             ),
         )
 
-        self.assertTrue(measurements.measurement_budget_exhausted)
+        self.assertEqual(len(points), 1)
+
+    def test_short_axis_paths_sample_the_full_long_axis_at_local_density(self) -> None:
+        gray = np.zeros((100, 1_000), dtype=np.uint8)
+        profiles = _cross_section_profiles(
+            gray,
+            _texture_image(gray),
+            scan_axis=0,
+            parameters=BoundaryPathParameters(),
+        )
+
+        self.assertEqual(profiles[0].orthogonal_interval.minimum, 0.0)
+        self.assertEqual(profiles[-1].orthogonal_interval.maximum, 1_000.0)
+        self.assertGreater(len(profiles), 5)
+
+    def test_one_sloped_rectangle_edge_has_one_canonical_path_per_side(self) -> None:
+        height, width = 120, 1_000
+        gray = np.full((height, width), 255, dtype=np.uint8)
+        for x in range(20, width - 20):
+            top = 10 + x // 100
+            bottom = 90 + x // 100
+            gray[top:bottom, x] = 100
+
+        measurements = self._measurements(gray)
+        edge_paths = tuple(
+            path
+            for path in measurements.raw_paths
+            if path.kind == BoundaryKind.EDGE_ADJACENT_TRANSITION
+        )
+
+        self.assertEqual(len(edge_paths), 4)
 
     def test_path_budget_exhaustion_is_explicit(self) -> None:
         gray = np.tile(
@@ -265,7 +290,7 @@ class GrayAppearanceOuterContractTests(unittest.TestCase):
             statistics,
             replace(
                 BoundaryPathParameters(),
-                maximum_change_points_per_section=64,
+                strongest_change_points_per_section=64,
                 maximum_paths_per_axis=1,
             ),
         )

@@ -10,6 +10,7 @@ from ...domain import (
     BoundaryAxis,
     BoundaryKind,
     BoundaryMeasurementSet,
+    BoundaryPathSample,
     BoundarySide,
     Box,
     ContainmentFallback,
@@ -28,8 +29,16 @@ from ...utils import runs_from_mask
 
 
 @dataclass(frozen=True)
+class _CrossSectionProfile:
+    orthogonal_interval: PixelInterval
+    intensity: np.ndarray
+    texture: np.ndarray
+
+
+@dataclass(frozen=True)
 class _LocalPathSample:
     section_index: int
+    orthogonal_interval: PixelInterval
     position: PixelInterval
     lower_intensity: float
     lower_mad: float
@@ -54,13 +63,22 @@ def _cross_section_profiles(
     *,
     scan_axis: int,
     parameters: BoundaryPathParameters,
-) -> tuple[tuple[np.ndarray, np.ndarray], ...]:
+) -> tuple[_CrossSectionProfile, ...]:
     orthogonal_extent = gray.shape[0] if scan_axis == 1 else gray.shape[1]
-    margin = int(round(orthogonal_extent * parameters.cross_section_margin_ratio))
-    start = max(0, min(orthogonal_extent - 1, margin))
-    end = max(start + 1, min(orthogonal_extent, orthogonal_extent - margin))
-    edges = np.linspace(start, end, int(parameters.cross_sections) + 1)
-    profiles: list[tuple[np.ndarray, np.ndarray]] = []
+    scan_extent = gray.shape[1] if scan_axis == 1 else gray.shape[0]
+    maximum_section_width = max(
+        1.0,
+        float(scan_extent)
+        * float(parameters.maximum_section_width_ratio_to_scan_extent),
+    )
+    section_count = max(
+        int(parameters.minimum_cross_sections),
+        int(np.ceil(float(orthogonal_extent) / maximum_section_width)),
+    )
+    start = 0
+    end = orthogonal_extent
+    edges = np.linspace(start, end, section_count + 1)
+    profiles: list[_CrossSectionProfile] = []
     for left, right in zip(edges[:-1], edges[1:], strict=True):
         section_start = max(start, min(end - 1, int(round(left))))
         section_end = max(section_start + 1, min(end, int(round(right))))
@@ -73,9 +91,19 @@ def _cross_section_profiles(
             texture_section = texture[:, section_start:section_end]
             reduction_axis = 1
         profiles.append(
-            (
-                np.median(intensity_section, axis=reduction_axis).astype(np.float32),
-                np.median(texture_section, axis=reduction_axis).astype(np.float32),
+            _CrossSectionProfile(
+                orthogonal_interval=PixelInterval(
+                    float(section_start),
+                    float(section_end),
+                ),
+                intensity=np.median(
+                    intensity_section,
+                    axis=reduction_axis,
+                ).astype(np.float32),
+                texture=np.median(
+                    texture_section,
+                    axis=reduction_axis,
+                ).astype(np.float32),
             )
         )
     return tuple(profiles)
@@ -119,13 +147,13 @@ def _edge_adjacent_transition(
 def _adaptive_change_points(
     signal: np.ndarray,
     parameters: BoundaryPathParameters,
-) -> tuple[tuple[PixelInterval, ...], bool]:
+) -> tuple[PixelInterval, ...]:
     if signal.size <= 1:
-        return (), False
+        return ()
     change = np.abs(np.diff(signal, prepend=signal[:1]))
     threshold = float(np.percentile(change, parameters.change_point_percentile))
     if threshold <= 0.0:
-        return (), False
+        return ()
     runs = tuple(
         (start, end)
         for start, end in runs_from_mask(change >= threshold)
@@ -136,11 +164,11 @@ def _adaptive_change_points(
         key=lambda run: float(np.max(change[run[0] : run[1]])),
         reverse=True,
     )
-    selected = ranked[: parameters.maximum_change_points_per_section]
+    selected = ranked[: parameters.strongest_change_points_per_section]
     return tuple(
         PixelInterval(float(start), float(max(start + 1, end)))
         for start, end in sorted(selected)
-    ), len(ranked) > parameters.maximum_change_points_per_section
+    )
 
 
 def _source_interval(
@@ -178,6 +206,7 @@ def _window_statistics(
 
 def _local_sample(
     section_index: int,
+    orthogonal_interval: PixelInterval,
     position: PixelInterval,
     intensity: np.ndarray,
     texture: np.ndarray,
@@ -208,6 +237,7 @@ def _local_sample(
     lower, upper = (outward, inward) if not reverse else (inward, outward)
     return _LocalPathSample(
         section_index=section_index,
+        orthogonal_interval=orthogonal_interval,
         position=_source_interval(position, extent, reverse),
         lower_intensity=lower[0],
         lower_mad=lower[1],
@@ -221,16 +251,17 @@ def _local_sample(
 
 
 def _local_samples_for_kind(
-    profiles: tuple[tuple[np.ndarray, np.ndarray], ...],
+    profiles: tuple[_CrossSectionProfile, ...],
     side: BoundarySide,
     kind: BoundaryKind,
     statistics: ImageMeasurementStatistics,
     parameters: BoundaryPathParameters,
-) -> tuple[tuple[_LocalPathSample, ...], bool]:
+) -> tuple[_LocalPathSample, ...]:
     reverse = side in {BoundarySide.TRAILING, BoundarySide.BOTTOM}
     samples: list[_LocalPathSample] = []
-    budget_exhausted = False
-    for section_index, (source_intensity, source_texture) in enumerate(profiles):
+    for section_index, profile in enumerate(profiles):
+        source_intensity = profile.intensity
+        source_texture = profile.texture
         intensity = source_intensity[::-1] if reverse else source_intensity
         texture = source_texture[::-1] if reverse else source_texture
         if kind == BoundaryKind.EDGE_ADJACENT_TRANSITION:
@@ -241,16 +272,15 @@ def _local_samples_for_kind(
                 parameters,
             )
         elif kind == BoundaryKind.TONAL_TRANSITION:
-            positions, truncated = _adaptive_change_points(intensity, parameters)
-            budget_exhausted = budget_exhausted or truncated
+            positions = _adaptive_change_points(intensity, parameters)
         elif kind == BoundaryKind.TEXTURE_TRANSITION:
-            positions, truncated = _adaptive_change_points(texture, parameters)
-            budget_exhausted = budget_exhausted or truncated
+            positions = _adaptive_change_points(texture, parameters)
         else:
             raise ValueError(f"unsupported boundary path kind: {kind}")
         for position in positions:
             sample = _local_sample(
                 section_index,
+                profile.orthogonal_interval,
                 position,
                 intensity,
                 texture,
@@ -259,59 +289,182 @@ def _local_samples_for_kind(
             )
             if sample is not None:
                 samples.append(sample)
-    return tuple(samples), budget_exhausted
+    return tuple(samples)
 
 
 def _cluster_samples(
     samples: tuple[_LocalPathSample, ...],
     extent: int,
+    section_count: int,
     parameters: BoundaryPathParameters,
 ) -> tuple[tuple[tuple[_LocalPathSample, ...], ...], bool]:
     tolerance = max(
         float(parameters.path_cluster_tolerance_min_px),
         float(extent) * float(parameters.path_cluster_tolerance_ratio),
     )
-    clusters: list[list[_LocalPathSample]] = []
-    for sample in sorted(samples, key=lambda item: item.position.midpoint):
-        eligible = tuple(
-            (abs(sample.position.midpoint - median(
-                item.position.midpoint for item in cluster
-            )), index)
-            for index, cluster in enumerate(clusters)
-            if sample.section_index not in {item.section_index for item in cluster}
-            and abs(
-                sample.position.midpoint
-                - median(item.position.midpoint for item in cluster)
-            )
-            <= tolerance
-        )
-        if eligible:
-            clusters[min(eligible)[1]].append(sample)
-        else:
-            clusters.append([sample])
     minimum_support = max(
         1,
-        int(np.ceil(parameters.cross_sections * parameters.minimum_path_support_ratio)),
+        int(np.ceil(section_count * parameters.minimum_path_support_ratio)),
     )
+    by_section = {
+        section_index: tuple(
+            sample for sample in samples if sample.section_index == section_index
+        )
+        for section_index in sorted({sample.section_index for sample in samples})
+    }
+    tracks: dict[
+        tuple[tuple[int, float, float], ...],
+        tuple[_LocalPathSample, ...],
+    ] = {}
+
+    def track_key(
+        track: tuple[_LocalPathSample, ...],
+    ) -> tuple[tuple[int, float, float], ...]:
+        return tuple(
+            (
+                sample.section_index,
+                sample.position.minimum,
+                sample.position.maximum,
+            )
+            for sample in track
+        )
+
+    def prediction(
+        track: tuple[_LocalPathSample, ...],
+        coordinate: float,
+    ) -> float:
+        if len(track) == 1:
+            return track[0].position.midpoint
+        coordinates = tuple(
+            sample.orthogonal_interval.midpoint for sample in track
+        )
+        positions = tuple(sample.position.midpoint for sample in track)
+        coordinate_center = sum(coordinates) / float(len(coordinates))
+        position_center = sum(positions) / float(len(positions))
+        denominator = sum(
+            (item - coordinate_center) ** 2 for item in coordinates
+        )
+        if denominator <= 0.0:
+            return position_center
+        slope = sum(
+            (item - coordinate_center) * (position - position_center)
+            for item, position in zip(coordinates, positions, strict=True)
+        ) / denominator
+        return position_center + slope * (coordinate - coordinate_center)
+
+    active_tracks: tuple[tuple[_LocalPathSample, ...], ...] = ()
+    for section_index in range(section_count):
+        section_samples = by_section.get(section_index, ())
+        next_tracks: dict[
+            tuple[tuple[int, float, float], ...],
+            tuple[_LocalPathSample, ...],
+        ] = {}
+        for track in active_tracks:
+            gap = section_index - track[-1].section_index
+            if gap <= 0 or gap > parameters.maximum_path_section_gap + 1:
+                continue
+            if section_samples:
+                closest = min(
+                    section_samples,
+                    key=lambda sample: abs(
+                        sample.position.midpoint
+                        - prediction(
+                            track,
+                            sample.orthogonal_interval.midpoint,
+                        )
+                    ),
+                )
+                residual = abs(
+                    closest.position.midpoint
+                    - prediction(
+                        track,
+                        closest.orthogonal_interval.midpoint,
+                    )
+                )
+                if residual <= tolerance * float(gap):
+                    extended = (*track, closest)
+                    next_tracks[track_key(extended)] = extended
+                    tracks[track_key(extended)] = extended
+                    continue
+            if gap <= parameters.maximum_path_section_gap:
+                next_tracks[track_key(track)] = track
+        for sample in section_samples:
+            track = (sample,)
+            next_tracks[track_key(track)] = track
+            tracks[track_key(track)] = track
+        active_tracks = tuple(next_tracks.values())
+
+    def fit_residual(cluster: tuple[_LocalPathSample, ...]) -> float:
+        coordinates = tuple(
+            item.orthogonal_interval.midpoint for item in cluster
+        )
+        positions = tuple(item.position.midpoint for item in cluster)
+        coordinate_center = sum(coordinates) / float(len(coordinates))
+        position_center = sum(positions) / float(len(positions))
+        denominator = sum(
+            (coordinate - coordinate_center) ** 2 for coordinate in coordinates
+        )
+        if denominator <= 0.0:
+            return max(positions) - min(positions)
+        slope = sum(
+            (coordinate - coordinate_center) * (position - position_center)
+            for coordinate, position in zip(coordinates, positions, strict=True)
+        ) / denominator
+        intercept = position_center - slope * coordinate_center
+        return max(
+            abs(position - (intercept + slope * coordinate))
+            for coordinate, position in zip(coordinates, positions, strict=True)
+        )
+
     supported = tuple(
-        tuple(cluster)
-        for cluster in clusters
-        if len({item.section_index for item in cluster}) >= minimum_support
+        track for track in tracks.values() if len(track) >= minimum_support
     )
     ranked = tuple(
         sorted(
             supported,
             key=lambda cluster: (
                 -len(cluster),
+                fit_residual(cluster),
                 max(item.position.maximum for item in cluster)
                 - min(item.position.minimum for item in cluster),
                 median(item.position.midpoint for item in cluster),
             ),
         )
     )
+    canonical: list[tuple[_LocalPathSample, ...]] = []
+
+    def same_path(
+        left: tuple[_LocalPathSample, ...],
+        right: tuple[_LocalPathSample, ...],
+    ) -> bool:
+        overlap_start = max(
+            left[0].orthogonal_interval.minimum,
+            right[0].orthogonal_interval.minimum,
+        )
+        overlap_end = min(
+            left[-1].orthogonal_interval.maximum,
+            right[-1].orthogonal_interval.maximum,
+        )
+        if overlap_end <= overlap_start:
+            return False
+        coordinates = (
+            overlap_start,
+            0.5 * (overlap_start + overlap_end),
+            overlap_end,
+        )
+        return all(
+            abs(prediction(left, coordinate) - prediction(right, coordinate))
+            <= tolerance
+            for coordinate in coordinates
+        )
+
+    for cluster in ranked:
+        if any(same_path(cluster, accepted) for accepted in canonical):
+            continue
+        canonical.append(cluster)
     return (
-        ranked[: parameters.maximum_paths_per_axis],
-        len(ranked) > parameters.maximum_paths_per_axis,
+        tuple(canonical[: parameters.maximum_paths_per_axis]),
+        len(canonical) > parameters.maximum_paths_per_axis,
     )
 
 
@@ -360,7 +513,7 @@ def _appearance(
 
 def _paths_for_axis(
     axis: BoundaryAxis,
-    profiles: tuple[tuple[np.ndarray, np.ndarray], ...],
+    profiles: tuple[_CrossSectionProfile, ...],
     statistics: ImageMeasurementStatistics,
     kind: BoundaryKind,
     parameters: BoundaryPathParameters,
@@ -372,8 +525,8 @@ def _paths_for_axis(
     oriented_side = scan_origin or (
         BoundarySide.LEADING if axis == BoundaryAxis.LONG else BoundarySide.TOP
     )
-    extent = len(profiles[0][0]) if profiles else 0
-    local_samples, change_point_budget_exhausted = _local_samples_for_kind(
+    extent = len(profiles[0].intensity) if profiles else 0
+    local_samples = _local_samples_for_kind(
         profiles,
         oriented_side,
         kind,
@@ -383,23 +536,22 @@ def _paths_for_axis(
     clusters, path_budget_exhausted = _cluster_samples(
         local_samples,
         extent,
+        len(profiles),
         parameters,
     )
     paths: list[GrayBoundaryPathObservation] = []
     for path_index, cluster in enumerate(clusters):
-        local_positions = tuple(item.position for item in cluster)
-        position = PixelInterval(
-            min(item.minimum for item in local_positions),
-            max(item.maximum for item in local_positions),
+        samples = tuple(
+            BoundaryPathSample(item.orthogonal_interval, item.position)
+            for item in cluster
         )
         provenance = _provenance(kind, axis, path_index, scan_origin)
         support_ratio = len(cluster) / float(len(profiles))
         paths.append(
             GrayBoundaryPathObservation(
                 axis=axis,
-                position=position,
                 kind=kind,
-                local_positions=local_positions,
+                samples=samples,
                 lower_appearance=_appearance(
                     cluster,
                     "lower",
@@ -417,9 +569,7 @@ def _paths_for_axis(
                 provenance=provenance,
             )
         )
-    return tuple(paths), bool(
-        change_point_budget_exhausted or path_budget_exhausted
-    )
+    return tuple(paths), path_budget_exhausted
 
 
 def _holder_boundary(

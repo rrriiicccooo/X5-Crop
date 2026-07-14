@@ -59,8 +59,10 @@ def _geometry_with_measured_internal_edges():
     def path_for(resolution, provenance):
         return replace(
             template,
-            position=resolution.position,
-            local_positions=(resolution.position,),
+            samples=tuple(
+                replace(sample, position=resolution.position)
+                for sample in template.samples
+            ),
             lower_appearance=replace(
                 template.lower_appearance,
                 provenance=provenance,

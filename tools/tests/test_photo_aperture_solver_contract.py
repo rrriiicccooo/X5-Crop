@@ -77,11 +77,37 @@ class PhotoApertureSolverContractTest(unittest.TestCase):
             scope,
             cross_axis,
             _dimensions(100.0, 100.0),
+            excluded_separator_bands=(),
             evaluation_budget=100,
             maximum_options=1,
         )
 
         self.assertEqual(len(options), 1)
+        self.assertFalse(exhausted)
+
+    def test_separator_bound_paths_do_not_reenter_generic_aperture_search(self) -> None:
+        scope = _scope(
+            width=210,
+            height=120,
+            leading=0.0,
+            trailing=210.0,
+            top=10.0,
+            bottom=110.0,
+            internal_paths=(100.0, 110.0),
+        )
+        cross_axis = _plan(scope).hypotheses[0]
+        support = _separator(100.0, 110.0, supported=True)
+
+        options, _evaluations, exhausted = _measured_aperture_constraints(
+            scope,
+            cross_axis,
+            _dimensions(100.0, 100.0),
+            excluded_separator_bands=(support.observation,),
+            evaluation_budget=100,
+            maximum_options=8,
+        )
+
+        self.assertEqual(options, ())
         self.assertFalse(exhausted)
 
     def test_separator_search_prunes_noise_before_combination_budget_is_exhausted(self) -> None:
@@ -155,7 +181,7 @@ class PhotoApertureSolverContractTest(unittest.TestCase):
         self.assertTrue(solved.assignment_consensus.conflicting_photo_indexes)
         self.assertFalse(solved.search_budget_exhausted)
 
-    def test_supported_band_demotion_is_pruned_when_neighbors_are_known(self) -> None:
+    def test_dimension_fallback_is_pruned_when_supported_band_fits_neighbors(self) -> None:
         scope = _scope(
             width=1310,
             height=120,
@@ -245,13 +271,18 @@ class PhotoApertureSolverContractTest(unittest.TestCase):
         paths = tuple(
             replace(
                 path,
-                position=(position := (
-                    PixelInterval(0.0, 100.0)
-                    if path.provenance.observation_id
-                    == ObservationId("leading_aperture_path")
-                    else PixelInterval(100.0, 200.0)
-                )),
-                local_positions=(position,),
+                samples=tuple(
+                    replace(
+                        sample,
+                        position=(
+                            PixelInterval(0.0, 100.0)
+                            if path.provenance.observation_id
+                            == ObservationId("leading_aperture_path")
+                            else PixelInterval(100.0, 200.0)
+                        ),
+                    )
+                    for sample in path.samples
+                ),
             )
             if path.axis == BoundaryAxis.LONG
             else path
@@ -420,13 +451,17 @@ class PhotoApertureSolverContractTest(unittest.TestCase):
         )
         uncertain_top = replace(
             top_path,
-            position=PixelInterval(0.0, 10.0),
-            local_positions=(PixelInterval(0.0, 10.0),),
+            samples=tuple(
+                replace(sample, position=PixelInterval(0.0, 10.0))
+                for sample in top_path.samples
+            ),
         )
         uncertain_bottom = replace(
             bottom_path,
-            position=PixelInterval(110.0, 120.0),
-            local_positions=(PixelInterval(110.0, 120.0),),
+            samples=tuple(
+                replace(sample, position=PixelInterval(110.0, 120.0))
+                for sample in bottom_path.samples
+            ),
         )
         uncertain_scope = replace(
             scope,
@@ -543,7 +578,7 @@ class PhotoApertureSolverContractTest(unittest.TestCase):
             PhotoApertureEdgeSource.DIMENSION_HYPOTHESIS,
         )
 
-    def test_width_contradicted_band_can_use_independent_aperture_edges(self) -> None:
+    def test_width_contradicted_band_keeps_intersecting_aperture_edges(self) -> None:
         scope = _scope(
             width=440,
             height=120,
@@ -554,16 +589,21 @@ class PhotoApertureSolverContractTest(unittest.TestCase):
             internal_paths=(210.0, 220.0),
         )
         uncertain_positions = {
-            PixelInterval.exact(210.0): PixelInterval(209.0, 212.0),
-            PixelInterval.exact(220.0): PixelInterval(219.0, 222.0),
+            PixelInterval.exact(210.0): PixelInterval(189.0, 211.0),
+            PixelInterval.exact(220.0): PixelInterval(219.0, 231.0),
         }
         scope = replace(
             scope,
             raw_boundary_paths=tuple(
                 replace(
                     item,
-                    position=uncertain_positions[item.position],
-                    local_positions=(uncertain_positions[item.position],),
+                    samples=tuple(
+                        replace(
+                            sample,
+                            position=uncertain_positions[item.position],
+                        )
+                        for sample in item.samples
+                    ),
                 )
                 if item.position in uncertain_positions
                 else item

@@ -68,8 +68,13 @@ class PhotoApertureMeasuredSequenceContractTest(unittest.TestCase):
         )
         uncertain_internal = replace(
             exact_internal,
-            position=PixelInterval(109.0, 111.0),
-            local_positions=(PixelInterval(109.0, 111.0),),
+            samples=tuple(
+                replace(
+                    sample,
+                    position=PixelInterval(109.0, 111.0),
+                )
+                for sample in exact_internal.samples
+            ),
         )
         scope = replace(
             scope,

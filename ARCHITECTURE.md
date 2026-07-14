@@ -84,15 +84,23 @@ assignment，不能只靠 source 标签伪造实测几何。
 Detection 只消费二维灰度 workspace。原 TIFF 通道、ICC 和色彩 metadata 由 I/O 与 export
 保存，不形成 RGB、holder color 或片孔检测旁路。
 
-每个 cross-section 提取 adaptive change points，再按坐标邻近、路径连续性与 robust inlier
-支持聚合成 `GrayBoundaryPathObservation`。灰度中位数、MAD、纹理、梯度、连续性和 intensity
-tail 只描述像素外观，不能证明区域是片夹、片基、照片或 separator。
+每个 cross-section 保留最强的一组 adaptive change points，再按坐标邻近、跨 section 连续性与
+二维路径拟合聚合成 `GrayBoundaryPathObservation`。每个 local sample 保存自己的 orthogonal
+区间和位置不确定度；solver 在逐张照片长轴范围内解析 top/bottom path，而不是把全图 path
+压成一个固定短轴坐标。灰度中位数、MAD、纹理、梯度、连续性和 intensity tail 只描述像素
+外观，不能证明区域是片夹、片基、照片或 separator。局部 strongest-change 选择属于 adaptive
+measurement；只有 path 数量或 solver search 的显式上限耗尽才产生 execution-budget unavailable。
 
 Raw path 的物理解释只发生在 candidate-specific assignment：
 
 - 可与 canvas 邻接形成 holder boundary constraint。
 - 可分配为某张照片某一侧的 measured aperture edge。
 - 可保留为未分配 observation diagnostic。
+
+不同 observation channel 的 raw paths 完整保留在 report 中。几何等价 paths 在 solver 入口只形成
+一个 hypothesis；已与内部 separator band 相交且中点位于 band 内的 path 由该 band 的双边解释
+唯一消费，不再同时进入 generic aperture-pair 搜索。Band 边缘与独立 measured aperture edges 若
+产生不同几何，冲突仍保留到 assignment consensus，不能用去重静默消失。
 
 ### 2.3 Separator 双边模型
 
@@ -168,9 +176,12 @@ Standard candidate 的 canonical evidence 包括：
 - holder boundary、holder occupancy、partial edge safety 与 physical scale。
 - measurement independence。
 
-Content 只提供遗漏内容反证与 preservation measurement。它不能定义精确 aperture edge、制造
-frame count，或无条件扩张物理几何。单个 content/noise pixel 不得改写 aperture；独立 measured
-edge 与 content measurement 冲突时保留 conflict，不静默删除 measured geometry。
+Content evidence 只由局部 gradient、texture 与 contrast 共识生成，不把全局明暗位置当成内容。
+它只提供遗漏内容反证与 preservation measurement，不能定义精确 aperture edge、制造 frame
+count，或无条件扩张物理几何。External crossing 测量排除相邻 aperture boundary 的 uncertainty
+区域和 evidence kernel footprint，避免垂直边角或卷积邻域伪造跨界内容。单个 content/noise pixel
+不得改写 aperture；独立 measured edge 与 content measurement 冲突时保留 conflict，不静默删除
+measured geometry。
 
 ### 3.2 CandidateGate 与 GeometryResolution
 
