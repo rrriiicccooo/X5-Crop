@@ -294,6 +294,9 @@ Current state:
 - Internal content crossing requires overlapping short-axis content tracks on
   both adjacent photo edges plus a count-independent long-axis run spanning the
   boundary. Aggregate edge-contact booleans cannot corroborate overlap bleed.
+- Aperture extent is not a solver quality objective. Once measured visible
+  content is covered, a wider aperture cannot dominate another geometry merely
+  by including more film base or holder slack.
 - Gray boundary paths preserve typed local samples across the orthogonal axis.
   Short-axis aperture edges are resolved within each photo's own long-axis span.
   Raw channels remain visible, while geometry-equivalent paths form one solver
@@ -329,7 +332,7 @@ Current verification state:
   are implemented. Debug distinguishes ideal apertures, output envelopes, raw
   observations, measured edges, provisional edges, holder boundaries, and
   corroborated overlap through one diagnostics-owned legend.
-- The current suite contains 477 tests and 14 valid format/mode configurations.
+- The current suite contains 478 tests and 14 valid format/mode configurations.
   On `135/full 005.tif`, separator-bound path ownership reduced assignment
   evaluations to 4,264 without search-budget exhaustion. Geometry remains
   unresolved because 72 independent measured aperture alternatives all cover
@@ -340,7 +343,7 @@ Current verification state:
   representative-sample calibration.
 - `half/full` remains the measured performance hotspot. Performance work must
   profile one fixed sample and preserve GeometryResolution ownership.
-- Audit A restarted after the content counter-evidence root fix. Any further
+- Audit A restarted after removing aperture extent from physical ranking. Any further
   finding must still receive a failing permanent contract before repair; an
   independent fresh-context Audit B follows only after Audit A reaches zero.
 - Current PASS/REVIEW outcomes and adaptive measurement values remain calibration

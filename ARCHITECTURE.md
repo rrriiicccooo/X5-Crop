@@ -150,6 +150,8 @@ observation，但不能成为 hard separator。Dimension-only edge 只是一条 
 - count-independent content runs 只作为反证过滤明显漏掉已测可见内容的 solver alternatives；
   它们不能生成、移动或收缩任何 aperture edge。若所有 alternatives 都与 content 冲突，solver
   保留这些几何并由后续 evidence 明确报告 contradiction，而不是用 content 伪造新边界；
+- aperture 总宽不是物理质量指标；在可见内容已经覆盖后，更宽的几何不能仅凭多包含片基或片夹
+  余量支配另一组边界，实质不同的 alternatives 必须继续进入 geometry consensus；
 - content coverage 必须与逐张 aperture 一致；spacing 与相邻 aperture edge 的
   守恒关系由 `PhotoSequenceSolution` 构造不变量保证，不再包装成独立 evidence 或 Gate；
 - supporting measurement 可以被 geometry 消费；只有 measurement 反向依赖 `FRAME_GEOMETRY`

@@ -161,7 +161,6 @@ class _SequenceBuildObjectives:
     dimension_residual: float
     external_boundary_measurement_quality: float
     boundary_uncertainty_ratio: float
-    visible_aperture_coverage_px: float
 
     def __post_init__(self) -> None:
         measurements = (
@@ -170,14 +169,13 @@ class _SequenceBuildObjectives:
             self.dimension_residual,
             self.external_boundary_measurement_quality,
             self.boundary_uncertainty_ratio,
-            self.visible_aperture_coverage_px,
         )
         if any(not isfinite(value) or value < 0.0 for value in measurements):
             raise ValueError("sequence build objectives must be finite and non-negative")
         if self.supported_separator_count < 0:
             raise ValueError("supported separator count cannot be negative")
 
-    def ranking_key(self) -> tuple[float, int, float, float, float, float, float]:
+    def ranking_key(self) -> tuple[float, int, float, float, float, float]:
         return (
             -self.uncorroborated_overlap_extent_px,
             self.supported_separator_count,
@@ -185,7 +183,6 @@ class _SequenceBuildObjectives:
             -self.dimension_residual,
             self.external_boundary_measurement_quality,
             -self.boundary_uncertainty_ratio,
-            self.visible_aperture_coverage_px,
         )
 
 
@@ -1236,7 +1233,6 @@ def _measured_sequence_build(
         + constraints[-1].trailing.measurement_quality
         + cross_axis.measurement_quality
     )
-    visible_coverage = sum(item.width_px.midpoint for item in constraints)
     return _SequenceBuild(
         apertures=tuple(apertures),
         edge_assignments=tuple(assignments),
@@ -1252,7 +1248,6 @@ def _measured_sequence_build(
             dimension_residual=dimension_residual,
             external_boundary_measurement_quality=external_boundary_quality,
             boundary_uncertainty_ratio=residuals.boundary_uncertainty,
-            visible_aperture_coverage_px=visible_coverage,
         ),
     )
 
@@ -1675,7 +1670,6 @@ def _build_sequence(
     endpoint_quality = (
         leading_endpoint.measurement_quality + trailing_endpoint.measurement_quality
     )
-    visible_coverage = sum(width.midpoint for width in photo_widths)
     return _SequenceBuild(
         apertures=tuple(apertures),
         edge_assignments=tuple(assignments),
@@ -1699,7 +1693,6 @@ def _build_sequence(
                 endpoint_quality + cross_axis.measurement_quality
             ),
             boundary_uncertainty_ratio=float(residuals.boundary_uncertainty),
-            visible_aperture_coverage_px=float(visible_coverage),
         ),
     )
 

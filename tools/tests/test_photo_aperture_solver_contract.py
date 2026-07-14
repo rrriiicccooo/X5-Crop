@@ -43,6 +43,15 @@ from x5crop.domain import (
 
 
 class PhotoApertureSolverContractTest(unittest.TestCase):
+    def test_aperture_extent_is_not_a_physical_ranking_objective(self) -> None:
+        objective_type = getattr(sequence_solver, "_SequenceBuildObjectives", None)
+        self.assertIsNotNone(objective_type)
+        assert objective_type is not None
+        self.assertNotIn(
+            "visible_aperture_coverage_px",
+            tuple(field.name for field in fields(objective_type)),
+        )
+
     def test_solver_accepts_count_independent_visible_content_constraints(self) -> None:
         self.assertIn(
             "visible_content",
@@ -62,7 +71,6 @@ class PhotoApertureSolverContractTest(unittest.TestCase):
                 "dimension_residual",
                 "external_boundary_measurement_quality",
                 "boundary_uncertainty_ratio",
-                "visible_aperture_coverage_px",
             ),
         )
         self.assertNotIn(
