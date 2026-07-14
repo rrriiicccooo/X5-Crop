@@ -587,9 +587,9 @@ def _holder_boundary(
         for item in wrapped
         if item.outer_appearance.spatial_continuity == best_support
     )
-    if len(best) > 1 and any(
-        not best[0].position.intersects(item.position) for item in best[1:]
-    ):
+    if PixelInterval.common_intersection(
+        tuple(item.position for item in best)
+    ) is None:
         return None
     return min(
         best,

@@ -1814,21 +1814,11 @@ def _conflicting_photo_indexes(
             for aperture in apertures
         )
         if any(
-            not _intervals_share_position(tuple(intervals))
+            PixelInterval.common_intersection(tuple(intervals)) is None
             for intervals in zip(*edges, strict=True)
         ):
             conflicts.append(photo_index)
     return tuple(conflicts)
-
-
-def _intervals_share_position(intervals: tuple[PixelInterval, ...]) -> bool:
-    shared = intervals[0]
-    for interval in intervals[1:]:
-        intersection = shared.intersection(interval)
-        if intersection is None:
-            return False
-        shared = intersection
-    return True
 
 
 def _build_dominates(left: _SequenceBuild, right: _SequenceBuild) -> bool:

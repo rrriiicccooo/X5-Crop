@@ -1,16 +1,24 @@
 from __future__ import annotations
 
+from dataclasses import replace
 import unittest
 
 import numpy as np
 
 from x5crop.configuration.boundary import BoundaryPathParameters
-from x5crop.detection.physical.boundary_detection import boundary_measurements
+from tools.tests.photo_aperture_solver_support import path as _path
+from x5crop.detection.physical.boundary_detection import (
+    _holder_boundary,
+    boundary_measurements,
+)
 from x5crop.domain import (
+    BoundaryAxis,
     BoundaryKind,
+    BoundaryPathSample,
     BoundarySide,
     Box,
     MeasurementIdentity,
+    PixelInterval,
 )
 from x5crop.image.statistics import (
     ImageMeasurementStatisticsParameters,
@@ -120,6 +128,42 @@ class BoundaryDetectionTests(unittest.TestCase):
         parameters = BoundaryPathParameters()
         self.assertTrue(hasattr(parameters, "edge_reference_percentile"))
         self.assertFalse(hasattr(parameters, "holder_reference_percentile"))
+
+    def test_holder_boundary_requires_one_shared_position_interval(self) -> None:
+        broad = _path(
+            BoundaryAxis.SHORT,
+            10.0,
+            "broad_holder_path",
+            kind=BoundaryKind.EDGE_ADJACENT_TRANSITION,
+        )
+        broad = replace(
+            broad,
+            samples=(
+                BoundaryPathSample(
+                    broad.orthogonal_extent,
+                    PixelInterval(10.0, 20.0),
+                ),
+            ),
+        )
+        leading_alternative = _path(
+            BoundaryAxis.SHORT,
+            10.0,
+            "leading_holder_alternative",
+            kind=BoundaryKind.EDGE_ADJACENT_TRANSITION,
+        )
+        trailing_alternative = _path(
+            BoundaryAxis.SHORT,
+            20.0,
+            "trailing_holder_alternative",
+            kind=BoundaryKind.EDGE_ADJACENT_TRANSITION,
+        )
+
+        self.assertIsNone(
+            _holder_boundary(
+                BoundarySide.TOP,
+                (broad, leading_alternative, trailing_alternative),
+            )
+        )
 
 
 if __name__ == "__main__":

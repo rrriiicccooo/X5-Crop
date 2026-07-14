@@ -28,6 +28,9 @@ repository rules in `AGENTS.md`.
   uncertainty 不再吞掉两条互斥的窄 outer observations；相交但不同的 measurements 保留到 global
   consensus。该修复使 `half/full X5_00050` 暴露原有搜索热点并诚实耗尽预算，后续只可通过可行性
   剪枝优化，不能恢复删除物理 alternatives 的旧捷径。
+- Holder boundary measurement 与 assignment consensus 统一使用 `PixelInterval.common_intersection()`。
+  多条最高支持 edge-adjacent paths 没有全体共同位置时，holder identity 保持 unavailable，不再由一条
+  宽 path 桥接两组互斥 transition 后任选最窄边界。
 - Internal-boundary content evidence 现在保留逐照片 leading/trailing edge 的短轴空间轨迹。只有同一
   短轴轨迹在相邻照片两侧重合，且 count-independent content run 同时贯穿长轴 boundary interval，
   才能反证未解释切线或佐证 measured-edge overlap；上下错位的独立纹理不再触发自动 overlap bleed。

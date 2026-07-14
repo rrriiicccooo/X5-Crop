@@ -120,6 +120,19 @@ class PixelInterval:
     def exact(cls, value: float) -> "PixelInterval":
         return cls(float(value), float(value))
 
+    @staticmethod
+    def common_intersection(
+        intervals: tuple["PixelInterval", ...],
+    ) -> "PixelInterval | None":
+        if not intervals:
+            raise ValueError("common intersection requires at least one interval")
+        shared = intervals[0]
+        for interval in intervals[1:]:
+            shared = shared.intersection(interval)
+            if shared is None:
+                return None
+        return shared
+
     @property
     def midpoint(self) -> float:
         return 0.5 * (self.minimum + self.maximum)
