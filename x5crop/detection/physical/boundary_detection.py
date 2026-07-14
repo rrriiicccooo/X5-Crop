@@ -437,25 +437,17 @@ def _cluster_samples(
         left: tuple[_LocalPathSample, ...],
         right: tuple[_LocalPathSample, ...],
     ) -> bool:
-        overlap_start = max(
-            left[0].orthogonal_interval.minimum,
-            right[0].orthogonal_interval.minimum,
-        )
-        overlap_end = min(
-            left[-1].orthogonal_interval.maximum,
-            right[-1].orthogonal_interval.maximum,
-        )
-        if overlap_end <= overlap_start:
+        left_by_section = {sample.section_index: sample for sample in left}
+        right_by_section = {sample.section_index: sample for sample in right}
+        shared_sections = left_by_section.keys() & right_by_section.keys()
+        if len(shared_sections) != min(len(left), len(right)):
             return False
-        coordinates = (
-            overlap_start,
-            0.5 * (overlap_start + overlap_end),
-            overlap_end,
-        )
         return all(
-            abs(prediction(left, coordinate) - prediction(right, coordinate))
-            <= tolerance
-            for coordinate in coordinates
+            left_by_section[section].orthogonal_interval
+            == right_by_section[section].orthogonal_interval
+            and left_by_section[section].position
+            == right_by_section[section].position
+            for section in shared_sections
         )
 
     for cluster in ranked:

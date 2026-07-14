@@ -8,6 +8,8 @@ import numpy as np
 from x5crop.configuration.boundary import BoundaryPathParameters
 from tools.tests.photo_aperture_solver_support import path as _path
 from x5crop.detection.physical.boundary_detection import (
+    _LocalPathSample,
+    _cluster_samples,
     _holder_boundary,
     boundary_measurements,
 )
@@ -38,6 +40,46 @@ def _measure(gray: np.ndarray):
 
 
 class BoundaryDetectionTests(unittest.TestCase):
+    def test_nearby_distinct_raw_paths_are_not_merged_by_cluster_tolerance(
+        self,
+    ) -> None:
+        samples = tuple(
+            _LocalPathSample(
+                section_index=section_index,
+                orthogonal_interval=PixelInterval(
+                    float(section_index * 10),
+                    float((section_index + 1) * 10),
+                ),
+                position=PixelInterval.exact(position),
+                lower_intensity=20.0,
+                lower_mad=0.0,
+                lower_texture=0.0,
+                lower_gradient=0.0,
+                upper_intensity=200.0,
+                upper_mad=0.0,
+                upper_texture=0.0,
+                upper_gradient=0.0,
+            )
+            for section_index in range(5)
+            for position in (100.0, 103.0)
+        )
+
+        clusters, budget_exhausted = _cluster_samples(
+            samples,
+            extent=1_000,
+            section_count=5,
+            parameters=BoundaryPathParameters(),
+        )
+
+        self.assertFalse(budget_exhausted)
+        self.assertEqual(
+            {tuple(sample.position for sample in cluster) for cluster in clusters},
+            {
+                (PixelInterval.exact(100.0),) * 5,
+                (PixelInterval.exact(103.0),) * 5,
+            },
+        )
+
     def test_edge_adjacent_paths_locate_all_four_holder_contacts(self) -> None:
         gray = np.full((120, 240), 255, dtype=np.uint8)
         gray[20:100, 40:200] = 120
