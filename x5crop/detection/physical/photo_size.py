@@ -7,14 +7,11 @@ from typing import TYPE_CHECKING
 
 from ...domain import (
     FrameDimensionPrior,
-    FrameDimensionPriorSource,
     MeasurementIdentity,
     MeasurementProvenance,
     ObservationId,
 )
 from ...formats import FormatPhysicalSpec
-from ...geometry.layout import is_horizontal_layout
-from ...units import ScanCalibrationResolution
 from x5crop.domain import EvidenceState
 from x5crop.domain import PixelInterval
 
@@ -42,11 +39,8 @@ class FrameDimensionEvidence:
     frame_width_prior_px: PixelInterval
     photo_width_intervals_px: tuple[PixelInterval, ...]
     separator_widths_px: tuple[float, ...]
-    observed_width_mm: float | None
-    observed_height_mm: float | None
     observed_aspect: float | None
     aspect_error_ratio: float | None
-    calibration_used: bool
     state: EvidenceState = field(init=False)
     reason: str = field(init=False)
     frame_aspect: float = field(init=False)
@@ -112,8 +106,6 @@ class FrameDimensionEvidence:
         )
         object.__setattr__(self, "dimension_residual_max", dimension_residual)
         optional_nonnegative = (
-            self.observed_width_mm,
-            self.observed_height_mm,
             self.observed_aspect,
             self.aspect_error_ratio,
             dimension_residual,
@@ -130,50 +122,19 @@ class FrameDimensionEvidence:
             )
             if self.aspect_error_ratio != expected_error:
                 raise ValueError("frame aspect error must derive from measured aspect")
-        if self.calibration_used:
-            if self.observed_height_mm is None or (
-                photo_widths and self.observed_width_mm is None
-            ):
-                raise ValueError("calibrated dimensions require millimeter measurements")
-        elif self.observed_width_mm is not None or self.observed_height_mm is not None:
-            raise ValueError("millimeter dimensions require supported calibration")
 
 
 def frame_dimension_priors(
     physical_spec: FormatPhysicalSpec,
-    calibration: ScanCalibrationResolution,
-    *,
-    layout: str,
 ) -> tuple[FrameDimensionPrior, ...]:
-    horizontal = is_horizontal_layout(layout)
     options = tuple(
         (float(option.width_mm), float(option.height_mm))
         for option in physical_spec.frame_size_mm_options
     )
-    long_ppm = calibration.px_per_mm("x" if horizontal else "y")
-    short_ppm = calibration.px_per_mm("y" if horizontal else "x")
-    calibrated = bool(
-        calibration.fully_supported
-        and long_ppm is not None
-        and short_ppm is not None
-        and long_ppm > 0.0
-        and short_ppm > 0.0
-    )
     provenance = MeasurementProvenance(
-        root_measurement=(
-            MeasurementIdentity.SCAN_CALIBRATION
-            if calibrated
-            else MeasurementIdentity.PHYSICAL_FRAME_ASPECT
-        ),
+        root_measurement=MeasurementIdentity.PHYSICAL_FRAME_ASPECT,
         observation_id=ObservationId("frame_dimension_prior"),
-        dependencies=(
-            MeasurementIdentity.FORMAT_PHYSICAL_SPEC,
-            *(
-                (MeasurementIdentity.SCAN_CALIBRATION,)
-                if calibrated
-                else ()
-            ),
-        ),
+        dependencies=(MeasurementIdentity.FORMAT_PHYSICAL_SPEC,),
         description="physical frame dimension prior",
     )
     priors: list[FrameDimensionPrior] = []
@@ -185,22 +146,7 @@ def frame_dimension_priors(
         priors.append(
             FrameDimensionPrior(
                 frame_size_mm=(width_mm, height_mm),
-                source=(
-                    FrameDimensionPriorSource.SCAN_CALIBRATION
-                    if calibrated
-                    else FrameDimensionPriorSource.PHYSICAL_ASPECT
-                ),
                 provenance=provenance,
-                calibrated_width_px=(
-                    PixelInterval.exact(width_mm * float(long_ppm))
-                    if calibrated
-                    else None
-                ),
-                calibrated_height_px=(
-                    PixelInterval.exact(height_mm * float(short_ppm))
-                    if calibrated
-                    else None
-                ),
             )
         )
     return tuple(priors)
@@ -245,9 +191,7 @@ def dimension_photo_apertures(
 
 def frame_dimension_evidence(
     geometry: PhotoSequenceSolution,
-    calibration: ScanCalibrationResolution,
 ) -> FrameDimensionEvidence:
-    horizontal = is_horizontal_layout(geometry.layout)
     frame_width_mm, frame_height_mm = geometry.frame_dimension_prior.frame_size_mm
     photo_widths, separator_widths = _photo_widths(
         geometry,
@@ -271,30 +215,6 @@ def frame_dimension_evidence(
         if observed_aspect is not None
         else None
     )
-    long_ppm = calibration.px_per_mm(
-        "x" if horizontal else "y"
-    )
-    short_ppm = calibration.px_per_mm(
-        "y" if horizontal else "x"
-    )
-    calibration_used = bool(
-        calibration.fully_supported
-        and long_ppm is not None
-        and short_ppm is not None
-        and long_ppm > 0.0
-        and short_ppm > 0.0
-        and observed_height is not None
-    )
-    observed_width_mm = (
-        float(observed_width) / float(long_ppm)
-        if calibration_used and observed_width is not None
-        else None
-    )
-    observed_height_mm = (
-        observed_height / float(short_ppm)
-        if calibration_used and observed_height is not None
-        else None
-    )
     observed_intervals = tuple(
         aperture.trailing.position.minus(aperture.leading.position)
         for aperture in dimension_photo_apertures(geometry)
@@ -305,11 +225,8 @@ def frame_dimension_evidence(
         frame_width_prior_px=geometry.photo_width_constraint_px,
         photo_width_intervals_px=observed_intervals,
         separator_widths_px=tuple(float(width) for width in separator_widths),
-        observed_width_mm=observed_width_mm,
-        observed_height_mm=observed_height_mm,
         observed_aspect=observed_aspect,
         aspect_error_ratio=aspect_error,
-        calibration_used=calibration_used,
     )
 
 

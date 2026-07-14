@@ -8,28 +8,19 @@ from typing import get_type_hints
 
 from tools.tests.physical_gate_support import candidate_fixture
 from x5crop.detection.evidence.holder_boundary import HolderBoundaryEvidence
-from x5crop.detection.evidence.physical_scale import (
-    boundary_scale_observations,
-    candidate_scale_observations_match_geometry,
-    physical_scale_observations,
+from x5crop.detection.evidence.photo_scale import (
+    PhotoScaleObservation,
+    PhotoScaleSource,
+    photo_scale_observations,
+    photo_scale_observations_match_geometry,
 )
 from x5crop.domain import (
-    BoundaryMeasurementSet,
     BoundarySide,
-    ContainmentFallback,
     EvidenceState,
     MeasurementIdentity,
     MeasurementProvenance,
     ObservationId,
     PhotoApertureEdgeSource,
-)
-from x5crop.formats import format_spec
-from x5crop.units import (
-    PhysicalScaleObservation,
-    PhysicalScaleScope,
-    PhysicalScaleSource,
-    ResolutionMetadataObservation,
-    ScanCalibrationResolution,
 )
 
 
@@ -64,30 +55,31 @@ def _holder_boundary(
     return HolderBoundaryEvidence(tuple(boundaries), 1.0)
 
 
-class PhysicalScaleEvidenceTests(unittest.TestCase):
+class PhotoScaleEvidenceTests(unittest.TestCase):
+    def test_photo_scale_sources_name_measurements_not_uncomputed_consensus(
+        self,
+    ) -> None:
+        self.assertIn("APERTURE_DIMENSION_INTERVAL", PhotoScaleSource.__members__)
+        self.assertNotIn("APERTURE_DIMENSION_CONSENSUS", PhotoScaleSource.__members__)
+
     def test_scale_model_has_no_material_identity_branch(self) -> None:
-        source = inspect.getsource(physical_scale_observations)
+        source = inspect.getsource(photo_scale_observations)
         self.assertNotIn("FILM_BASE", source)
         self.assertNotIn("ApertureContact", source)
 
     def test_scale_observation_carries_typed_provenance(self) -> None:
         self.assertIs(
-            get_type_hints(PhysicalScaleObservation)["scope"],
-            PhysicalScaleScope,
-        )
-        self.assertIs(
-            get_type_hints(PhysicalScaleObservation)["provenance"],
+            get_type_hints(PhotoScaleObservation)["provenance"],
             MeasurementProvenance,
         )
 
     def test_scale_source_cannot_disagree_with_measurement_root(self) -> None:
         with self.assertRaises(ValueError):
-            PhysicalScaleObservation(
+            PhotoScaleObservation(
                 "x",
                 1.0,
                 1.0,
-                PhysicalScaleSource.PHOTO_APERTURE_DIMENSION_CONSENSUS,
-                PhysicalScaleScope.CANDIDATE_GEOMETRY,
+                PhotoScaleSource.APERTURE_DIMENSION_INTERVAL,
                 MeasurementProvenance(
                     MeasurementIdentity.SHORT_AXIS_BOUNDARIES,
                     ObservationId("wrong_root"),
@@ -96,53 +88,44 @@ class PhysicalScaleEvidenceTests(unittest.TestCase):
                 ),
             )
 
-    def test_scale_source_has_one_legal_scope(self) -> None:
-        provenance = MeasurementProvenance(
-            MeasurementIdentity.PHOTO_EDGES,
-            ObservationId("candidate_dimension_scale"),
-            (MeasurementIdentity.FRAME_DIMENSIONS,),
-            "candidate dimension scale",
-        )
+    def test_scale_bounds_match_their_physical_source(self) -> None:
         with self.assertRaises(ValueError):
-            PhysicalScaleObservation(
+            PhotoScaleObservation(
+                "y",
+                10.0,
+                10.0,
+                PhotoScaleSource.SHORT_AXIS_LOWER_BOUND,
+                MeasurementProvenance(
+                    MeasurementIdentity.SHORT_AXIS_BOUNDARIES,
+                    ObservationId("invalid_exact_short_axis"),
+                    (),
+                    "invalid exact short-axis scale",
+                ),
+            )
+        with self.assertRaises(ValueError):
+            PhotoScaleObservation(
                 "x",
                 10.0,
-                10.0,
-                PhysicalScaleSource.PHOTO_APERTURE_DIMENSION_CONSENSUS,
-                PhysicalScaleScope.ROOT_MEASUREMENT,
-                provenance,
-            )
-
-    def test_root_calibration_rejects_candidate_scale_observations(self) -> None:
-        observation = PhysicalScaleObservation(
-            "x",
-            10.0,
-            10.0,
-            PhysicalScaleSource.PHOTO_APERTURE_DIMENSION_CONSENSUS,
-            PhysicalScaleScope.CANDIDATE_GEOMETRY,
-            MeasurementProvenance(
-                MeasurementIdentity.PHOTO_EDGES,
-                ObservationId("candidate_dimension_scale"),
-                (MeasurementIdentity.FRAME_DIMENSIONS,),
-                "candidate dimension scale",
-            ),
-        )
-        with self.assertRaises(ValueError):
-            ScanCalibrationResolution.from_observations(
-                ResolutionMetadataObservation(None, None),
-                (observation,),
+                None,
+                PhotoScaleSource.APERTURE_DIMENSION_INTERVAL,
+                MeasurementProvenance(
+                    MeasurementIdentity.PHOTO_EDGES,
+                    ObservationId("invalid_unbounded_dimension_consensus"),
+                    (),
+                    "invalid unbounded dimension consensus",
+                ),
             )
 
     def test_two_textured_inner_edges_produce_short_axis_lower_bound(self) -> None:
         geometry = candidate_fixture().geometry
-        observations = physical_scale_observations(
+        observations = photo_scale_observations(
             geometry,
             _holder_boundary(frozenset({BoundarySide.TOP, BoundarySide.BOTTOM})),
         )
         short_axis = next(
             item
             for item in observations
-            if item.source == PhysicalScaleSource.PHOTO_APERTURE_SHORT_AXIS
+            if item.source == PhotoScaleSource.SHORT_AXIS_LOWER_BOUND
         )
         self.assertEqual(short_axis.axis, "y")
         self.assertEqual(short_axis.minimum_px_per_mm, 100.0 / 24.0)
@@ -151,49 +134,16 @@ class PhysicalScaleEvidenceTests(unittest.TestCase):
     def test_incomplete_texture_support_does_not_invent_short_axis_scale(self) -> None:
         for sides in (frozenset(), frozenset({BoundarySide.TOP})):
             with self.subTest(sides=sides):
-                observations = physical_scale_observations(
+                observations = photo_scale_observations(
                     candidate_fixture().geometry,
                     _holder_boundary(sides),
                 )
                 self.assertFalse(
                     any(
-                        item.source == PhysicalScaleSource.PHOTO_APERTURE_SHORT_AXIS
+                        item.source == PhotoScaleSource.SHORT_AXIS_LOWER_BOUND
                         for item in observations
                     )
                 )
-
-    def test_boundary_scale_precedes_candidate_geometry(self) -> None:
-        geometry = candidate_fixture().geometry
-        holder = _holder_boundary(
-            frozenset({BoundarySide.TOP, BoundarySide.BOTTOM})
-        )
-        measurements = BoundaryMeasurementSet(
-            raw_paths=tuple(
-                path
-                for item in holder.boundaries
-                for path in item.supporting_paths
-            ),
-            holder_boundaries=holder.boundaries,
-            containment_fallback=ContainmentFallback(
-                geometry.holder_span.box,
-                MeasurementProvenance(
-                    MeasurementIdentity.CANVAS,
-                    ObservationId("test_containment"),
-                    (MeasurementIdentity.CANVAS,),
-                    "test containment",
-                ),
-            ),
-            measurement_budget_exhausted=False,
-        )
-        observations = boundary_scale_observations(
-            measurements,
-            format_spec("135"),
-            "horizontal",
-            edge_texture_limit=1.0,
-        )
-        self.assertEqual(len(observations), 1)
-        self.assertEqual(observations[0].scope, PhysicalScaleScope.ROOT_MEASUREMENT)
-        self.assertIsNone(observations[0].maximum_px_per_mm)
 
     def test_candidate_scale_identity_ignores_description_text(self) -> None:
         candidate = candidate_fixture()
@@ -207,12 +157,12 @@ class PhysicalScaleEvidenceTests(unittest.TestCase):
                 ),
             )
             for index, observation in enumerate(
-                evidence.physical_scale_observations,
+                evidence.photo_scale_observations,
                 start=1,
             )
         )
         self.assertTrue(
-            candidate_scale_observations_match_geometry(
+            photo_scale_observations_match_geometry(
                 candidate.geometry,
                 evidence.holder_boundary,
                 renamed,
@@ -221,7 +171,7 @@ class PhysicalScaleEvidenceTests(unittest.TestCase):
 
     def test_two_independent_apertures_produce_long_axis_consensus(self) -> None:
         candidate = candidate_fixture()
-        observations = physical_scale_observations(
+        observations = photo_scale_observations(
             candidate.geometry,
             candidate.assessment.evidence.holder_boundary,
         )
@@ -229,12 +179,9 @@ class PhysicalScaleEvidenceTests(unittest.TestCase):
             item
             for item in observations
             if item.source
-            == PhysicalScaleSource.PHOTO_APERTURE_DIMENSION_CONSENSUS
+            == PhotoScaleSource.APERTURE_DIMENSION_INTERVAL
         )
         self.assertEqual(len(long_axis), 2)
-        self.assertTrue(
-            all(item.scope == PhysicalScaleScope.CANDIDATE_GEOMETRY for item in long_axis)
-        )
 
     def test_one_independent_aperture_is_not_dimension_consensus(self) -> None:
         candidate = candidate_fixture()
@@ -263,14 +210,14 @@ class PhysicalScaleEvidenceTests(unittest.TestCase):
                 if assignment.resolution != geometry.photo_apertures[1].trailing
             ),
         )
-        observations = physical_scale_observations(
+        observations = photo_scale_observations(
             provisional,
             candidate.assessment.evidence.holder_boundary,
         )
         self.assertFalse(
             any(
                 item.source
-                == PhysicalScaleSource.PHOTO_APERTURE_DIMENSION_CONSENSUS
+                == PhotoScaleSource.APERTURE_DIMENSION_INTERVAL
                 for item in observations
             )
         )

@@ -32,8 +32,6 @@ def hard_safety_candidate(
         raise ValueError("hard-safety candidate count must be physically allowed")
     dimensions = frame_dimension_priors(
         physical_spec,
-        context.scan_calibration,
-        layout=context.request.layout,
     )[0]
     return BuiltCandidate(
         geometry=ReviewOnlyContainment(

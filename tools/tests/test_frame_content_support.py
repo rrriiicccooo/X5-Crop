@@ -51,7 +51,6 @@ from x5crop.domain import (
     Box,
     EvidenceState,
     FrameDimensionPrior,
-    FrameDimensionPriorSource,
     HolderSpan,
     InterPhotoBoundaryReference,
     InterPhotoSpacing,
@@ -179,7 +178,6 @@ def _single_aperture_geometry(
         inter_photo_spacings=(),
         frame_dimension_prior=FrameDimensionPrior(
             (42.0, 56.0),
-            FrameDimensionPriorSource.PHYSICAL_ASPECT,
             MeasurementProvenance(
                 MeasurementIdentity.PHYSICAL_FRAME_ASPECT,
                 ObservationId("synthetic_frame_prior"),

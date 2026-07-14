@@ -231,14 +231,6 @@ CONSTANT_PARAMETER_CONTRACTS = (
         "fixed_by_algorithm",
     ),
     ParameterContract(
-        "x5crop.units.CALIBRATION_INTERVAL_ENDPOINT_COUNT",
-        ParameterRole.NUMERICAL_SAFETY,
-        "endpoint_count",
-        "units",
-        "Defines the two endpoints of a bounded calibration interval.",
-        "fixed_by_contract",
-    ),
-    ParameterContract(
         "x5crop.debug.canvas.FRAME_FILL_COLORS",
         ParameterRole.DIAGNOSTICS_ONLY,
         "rgb",
@@ -431,10 +423,10 @@ CONSTANT_PARAMETER_CONTRACTS = (
         "fixed_by_contract",
     ),
     ParameterContract(
-        "x5crop.detection.evidence.physical_scale.MINIMUM_PHOTO_APERTURE_DIMENSION_CONSENSUS_OBSERVATIONS",
+        "x5crop.detection.evidence.photo_scale.MINIMUM_APERTURE_DIMENSION_OBSERVATIONS",
         ParameterRole.PHYSICAL_FACT,
         "frame_count",
-        "physical_scale_evidence",
+        "photo_scale_evidence",
         "Dimension consensus requires independently bounded measurements from multiple frames.",
         "fixed_by_contract",
     ),

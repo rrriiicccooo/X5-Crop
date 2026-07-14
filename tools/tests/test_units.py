@@ -2,24 +2,20 @@ from __future__ import annotations
 
 import unittest
 
-from x5crop.domain import (
-    MeasurementIdentity,
-    MeasurementProvenance,
-    ObservationId,
-)
+import x5crop.units as units
 
 from x5crop.units import (
-    CalibrationState,
-    PhysicalScaleObservation,
-    PhysicalScaleScope,
-    PhysicalScaleSource,
     ResolutionMetadataObservation,
-    ScanCalibrationResolution,
     resolution_metadata_observation,
 )
 
 
 class UnitModelTests(unittest.TestCase):
+    def test_units_has_no_unreachable_scan_calibration_model(self) -> None:
+        self.assertFalse(hasattr(units, "ScanCalibrationResolution"))
+        self.assertFalse(hasattr(units, "CalibrationAxisResolution"))
+        self.assertFalse(hasattr(units, "resolution_metadata_after_rotation"))
+
     def test_resolution_metadata_is_an_observation_not_trusted_calibration(self) -> None:
         observation = resolution_metadata_observation((300.0, 300.0), 2)
 
@@ -27,16 +23,6 @@ class UnitModelTests(unittest.TestCase):
         self.assertAlmostEqual(observation.x_px_per_mm or 0.0, 300.0 / 25.4)
         self.assertAlmostEqual(observation.y_px_per_mm or 0.0, 300.0 / 25.4)
         self.assertNotIn("trusted", observation.__dataclass_fields__)
-
-    def test_metadata_alone_leaves_calibration_unavailable(self) -> None:
-        observation = resolution_metadata_observation((300.0, 300.0), 2)
-        calibration = ScanCalibrationResolution.from_observations(
-            observation,
-            (),
-        )
-
-        self.assertEqual(calibration.x.state, CalibrationState.UNAVAILABLE)
-        self.assertEqual(calibration.y.state, CalibrationState.UNAVAILABLE)
 
     def test_missing_or_invalid_resolution_stays_in_metadata_diagnostics(self) -> None:
         missing = resolution_metadata_observation(None, None)
@@ -46,58 +32,6 @@ class UnitModelTests(unittest.TestCase):
         self.assertIn("missing_tiff_resolution", missing.diagnostics)
         self.assertIn("resolution_unit_has_no_absolute_length", invalid.diagnostics)
         self.assertIn("unsupported_resolution_unit:99", unsupported.diagnostics)
-
-    def test_holder_clipping_produces_only_an_approximate_lower_bound(self) -> None:
-        metadata = resolution_metadata_observation((300.0, 300.0), 2)
-        calibration = ScanCalibrationResolution.from_observations(
-            metadata,
-            (
-                PhysicalScaleObservation(
-                    "y",
-                    100.0,
-                    None,
-                    PhysicalScaleSource.HOLDER_SHORT_AXIS,
-                    PhysicalScaleScope.ROOT_MEASUREMENT,
-                    MeasurementProvenance(
-                        MeasurementIdentity.SHORT_AXIS_BOUNDARIES,
-                        ObservationId("test_scale_lower_bound"),
-                        (MeasurementIdentity.BOUNDARY_PATHS,),
-                        "test scale lower bound",
-                    ),
-                ),
-            ),
-        )
-
-        self.assertEqual(calibration.y.state, CalibrationState.APPROXIMATE)
-        self.assertIsNone(calibration.y.px_per_mm)
-        self.assertIn(
-            "tiff_resolution_contradicted_by_physical_scale",
-            calibration.y.diagnostics,
-        )
-
-    def test_unit_model_can_represent_an_independent_upper_bound(self) -> None:
-        calibration = ScanCalibrationResolution.from_observations(
-            ResolutionMetadataObservation(None, None),
-            (
-                PhysicalScaleObservation(
-                    "y",
-                    None,
-                    120.0,
-                    PhysicalScaleSource.HOLDER_SHORT_AXIS,
-                    PhysicalScaleScope.ROOT_MEASUREMENT,
-                    MeasurementProvenance(
-                        MeasurementIdentity.SHORT_AXIS_BOUNDARIES,
-                        ObservationId("test_scale_upper_bound"),
-                        (MeasurementIdentity.BOUNDARY_PATHS,),
-                        "test scale upper bound",
-                    ),
-                ),
-            ),
-        )
-
-        self.assertEqual(calibration.y.state, CalibrationState.APPROXIMATE)
-        self.assertIsNone(calibration.y.minimum_px_per_mm)
-        self.assertEqual(calibration.y.maximum_px_per_mm, 120.0)
 
 if __name__ == "__main__":
     unittest.main()

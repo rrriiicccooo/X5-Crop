@@ -51,8 +51,8 @@ Runtime 从 `FormatPhysicalSpec + strip_mode` 创建唯一 `DetectionConfigurati
 
 Lower layers 只接收显式 physical spec、configuration group 或普通参数对象。它们不查询 registry，
 不根据 mode 字符串发明默认参数。`DetectionContext` 保存检测请求、已解析 configuration、
-metadata calibration observation 和 exact measurement cache；TIFF `ImageProfile` 停留在 I/O、
-runtime 与 export 数据流。
+exact measurement cache 和 execution statistics；TIFF resolution metadata 与 `ImageProfile` 停留在
+I/O、runtime、report 与 export 数据流，不进入 detection context。
 
 ## 2. Photo Aperture 物理模型
 
@@ -132,7 +132,7 @@ Candidate-specific `SeparatorBandAssignment` 必须同时满足：
 observation，但不能成为 hard separator。Dimension-only edge 只是一条 provisional hypothesis，
 不能增加 hard separator 数量或单独证明 count。
 `count=1` 没有内部照片边界，因此不会进入 separator-sequence hypothesis builder；它只能由两侧
-独立 aperture boundary measurement 或可信 calibration 与独立边界共同求解。
+独立 aperture boundary measurement 求解。
 
 相邻照片的 signed `InterPhotoSpacing`：正值表示 separator，零表示 contact，负值表示 overlap；
 `InterPhotoSpacingKind` 是该状态的唯一 typed identity，runtime/evidence/output 不比较裸字符串。
@@ -165,9 +165,8 @@ observation，但不能成为 hard separator。Dimension-only edge 只是一条 
   geometry agreement；
 - Pareto 支配只允许更优目标且逐边 interval 是另一解的细化。未经佐证的 overlap 可以在兼容
   geometry 内参与目标排序，但不能淘汰另一组 geometry；归约只比较仍存活的 frontier alternatives；
-- cross-axis hypothesis 的搜索顺序不奖励更高的 aperture。可信 calibration 存在时使用照片短轴
-  尺寸残差；否则只使用 count/aspect 可行性、测量质量、uncertainty 与稳定坐标顺序。被预算截断
-  的 alternatives 仍使 geometry unavailable；
+- cross-axis hypothesis 的搜索顺序不奖励更高的 aperture，只使用 physical aspect 可行性、测量
+  质量、uncertainty 与稳定坐标顺序。被预算截断的 alternatives 仍使 geometry unavailable；
 - raw boundary paths 只有在共享轨迹上的位置 uncertainty 完全相同时才是 geometry-equivalent。
   区间相交只表示 alternatives 可能一致，必须留给全局 consensus；一条宽 path 不能删除两条互斥
   的窄 aperture observations；
@@ -187,10 +186,10 @@ observation，但不能成为 hard separator。Dimension-only edge 只是一条 
   `PhotoSequenceSolution`、`PhysicalSearchOutcome` 或物理证据；
 - search budget exhaustion 只产生 unresolved。
 
-`FrameDimensionPrior` 由 mm/aspect/calibration 约束搜索，不是 measurement evidence。只有独立
-photo edge measurement 可以形成 `FrameDimensionEvidence`。TIFF X/Y resolution 只是 metadata
-observation，必须与独立物理观测一致才可成为 supported calibration；缺失或冲突 calibration
-不会阻断 normalized detection。
+`FrameDimensionPrior` 只由 frame mm option 与 derived aspect 约束搜索，不是 measurement evidence。
+只有独立 photo edge measurement 可以形成 `FrameDimensionEvidence`。TIFF X/Y resolution 只是
+runtime/report metadata，不进入候选几何或 Gate。候选 `PhotoScaleObservation` 只解释已测 aperture
+对应的比例区间，不反向参与同一候选的求解或证明。
 
 Partial auto count 从允许的较大 count 向较小 count 求解。XPAN 与 120-66 可由 physical trait
 包含 nominal count，以表达完整胶片未铺满片夹；该 trait 只改变 count availability 与 occupancy
@@ -207,7 +206,7 @@ Standard candidate 的 canonical evidence 包括：
 - external aperture preservation：首张 leading、末张 trailing，以及逐照片 top/bottom 的外边界安全。
 - inter-photo boundary preservation：每条内部边界是否由 separator、contact 或 overlap 解释。
 - separator sequence 与 photo dimensions；spacing conservation 是 geometry invariant，不是独立证明。
-- holder boundary、holder occupancy、partial edge safety 与 physical scale。
+- holder boundary、holder occupancy、partial edge safety 与只读 photo-scale observations。
 - measurement independence。
 
 Content evidence 只由局部 gradient、texture 与 contrast 共识生成，不把全局明暗位置当成内容。

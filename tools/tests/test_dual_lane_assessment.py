@@ -10,7 +10,6 @@ import numpy as np
 from tools.tests.physical_gate_support import (
     candidate_fixture,
     selection_fixture,
-    unavailable_calibration_fixture,
 )
 from x5crop.cache import MeasurementCacheStatistics
 from x5crop.cache.analysis import make_measurement_cache
@@ -120,7 +119,6 @@ class DualLaneAssessmentTest(unittest.TestCase):
             configuration.preprocess.image_statistics,
         )
         context = DetectionContext(
-            unavailable_calibration_fixture(),
             DetectionRequest("horizontal", "full", None),
             configuration,
             lane_configuration,
@@ -155,7 +153,6 @@ class DualLaneAssessmentTest(unittest.TestCase):
             configuration.preprocess.image_statistics,
         )
         context = DetectionContext(
-            unavailable_calibration_fixture(),
             DetectionRequest("horizontal", "full", None),
             configuration,
             lane_configuration,
@@ -206,7 +203,6 @@ class DualLaneAssessmentTest(unittest.TestCase):
             configuration.preprocess.image_statistics,
         )
         context = DetectionContext(
-            unavailable_calibration_fixture(),
             DetectionRequest("horizontal", "full", None),
             configuration,
             lane_configuration,

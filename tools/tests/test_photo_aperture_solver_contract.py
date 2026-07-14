@@ -9,7 +9,6 @@ from tools.tests.photo_aperture_solver_support import (
     geometry as _geometry,
     path as _path,
     plan as _plan,
-    provenance as _provenance,
     scope as _scope,
     separator as _separator,
 )
@@ -33,11 +32,8 @@ from x5crop.domain import (
     BoundaryPathSample,
     BoundarySide,
     EvidenceState,
-    FrameDimensionPrior,
-    FrameDimensionPriorSource,
     HolderBoundaryObservation,
     InterPhotoSpacingBasis,
-    MeasurementIdentity,
     ObservationId,
     PhotoApertureEdgeSource,
     PhotoApertureCrossAxisHypothesis,
@@ -845,16 +841,7 @@ class PhotoApertureSolverContractTest(unittest.TestCase):
             _separator(100.0, 110.0, supported=True),
             _separator(200.0, 210.0, supported=True),
         )
-        dimensions = FrameDimensionPrior(
-            frame_size_mm=(1.0, 1.0),
-            source=FrameDimensionPriorSource.SCAN_CALIBRATION,
-            provenance=_provenance(
-                MeasurementIdentity.SCAN_CALIBRATION,
-                "synthetic_calibrated_dimensions",
-            ),
-            calibrated_width_px=PixelInterval(90.0, 110.0),
-            calibrated_height_px=PixelInterval.exact(100.0),
-        )
+        dimensions = _dimensions(0.9, 1.0)
 
         solved = solve_photo_sequence(
             observations,
@@ -891,16 +878,7 @@ class PhotoApertureSolverContractTest(unittest.TestCase):
             _separator(100.0, 110.0, supported=True),
             _separator(200.0, 210.0, supported=True),
         )
-        dimensions = FrameDimensionPrior(
-            frame_size_mm=(1.0, 1.0),
-            source=FrameDimensionPriorSource.SCAN_CALIBRATION,
-            provenance=_provenance(
-                MeasurementIdentity.SCAN_CALIBRATION,
-                "synthetic_calibrated_dimensions",
-            ),
-            calibrated_width_px=PixelInterval.exact(90.0),
-            calibrated_height_px=PixelInterval.exact(100.0),
-        )
+        dimensions = _dimensions(0.9, 1.0)
         solved = solve_photo_sequence(
             observations,
             scope,
@@ -942,16 +920,7 @@ class PhotoApertureSolverContractTest(unittest.TestCase):
             _separator(100.0, 110.0, supported=True),
             _separator(200.0, 210.0, supported=True),
         )
-        dimensions = FrameDimensionPrior(
-            frame_size_mm=(1.0, 1.0),
-            source=FrameDimensionPriorSource.SCAN_CALIBRATION,
-            provenance=_provenance(
-                MeasurementIdentity.SCAN_CALIBRATION,
-                "synthetic_calibrated_dimensions",
-            ),
-            calibrated_width_px=PixelInterval.exact(90.0),
-            calibrated_height_px=PixelInterval.exact(100.0),
-        )
+        dimensions = _dimensions(0.9, 1.0)
 
         solved = solve_photo_sequence(
             observations,
@@ -1055,16 +1024,7 @@ class PhotoApertureSolverContractTest(unittest.TestCase):
             _separator(100.0, 110.0, supported=True),
             _separator(200.0, 210.0, supported=True),
         )
-        dimensions = FrameDimensionPrior(
-            frame_size_mm=(1.0, 1.0),
-            source=FrameDimensionPriorSource.SCAN_CALIBRATION,
-            provenance=_provenance(
-                MeasurementIdentity.SCAN_CALIBRATION,
-                "synthetic_calibrated_dimensions",
-            ),
-            calibrated_width_px=PixelInterval.exact(90.0),
-            calibrated_height_px=PixelInterval.exact(100.0),
-        )
+        dimensions = _dimensions(0.9, 1.0)
 
         solved = solve_photo_sequence(
             observations,

@@ -34,7 +34,10 @@ from ..evidence.photo_aperture_coverage import (
     PhotoApertureCoverageEvidence,
     photo_aperture_coverage_matches_geometry,
 )
-from ..evidence.physical_scale import candidate_scale_observations_match_geometry
+from ..evidence.photo_scale import (
+    PhotoScaleObservation,
+    photo_scale_observations_match_geometry,
+)
 from ..evidence.holder_occupancy import HolderOccupancyEvidence
 from ..evidence.content.external_boundaries import (
     ExternalAperturePreservationEvidence,
@@ -51,7 +54,6 @@ from .assessment.model import BoundaryProofPath, CandidateGateAssessment
 from .plan.model import CountHypothesis
 from ..physical.model import SequenceResiduals
 from ..geometry_resolution import GeometryResolution
-from ...units import PhysicalScaleObservation
 
 
 @dataclass(frozen=True)
@@ -80,7 +82,7 @@ class CandidateEvidence:
     photo_content: PhotoContentEvidence
     inter_photo_boundary_preservation: InterPhotoBoundaryPreservationEvidence
     holder_boundary: HolderBoundaryEvidence
-    physical_scale_observations: tuple[PhysicalScaleObservation, ...]
+    photo_scale_observations: tuple[PhotoScaleObservation, ...]
     external_aperture_preservation: ExternalAperturePreservationEvidence
     holder_occupancy: HolderOccupancyEvidence
     partial_edge_safety: PartialEdgeSafetyEvidence
@@ -230,9 +232,7 @@ def boundary_proof_paths_for_geometry(
             (
                 "physical_frame_dimensions",
                 (
-                    "calibrated_two_side_photo_boundaries"
-                    if evidence.frame_dimensions.calibration_used
-                    else "independent_two_side_photo_boundaries"
+                    "independent_two_side_photo_boundaries"
                     if single_frame_physical_boundaries
                     else "independent_separator_anchor"
                     if hard_anchor_count
@@ -450,10 +450,10 @@ def _candidate_evidence_matches_geometry(
             evidence.photo_aperture_coverage,
         )
         and evidence.independence == evidence_independence_evidence(geometry)
-        and candidate_scale_observations_match_geometry(
+        and photo_scale_observations_match_geometry(
             geometry,
             evidence.holder_boundary,
-            evidence.physical_scale_observations,
+            evidence.photo_scale_observations,
         )
     )
 

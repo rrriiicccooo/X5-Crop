@@ -35,7 +35,6 @@ from x5crop.run_config import RunConfig
 from x5crop.runtime.options import RuntimeOptions
 from x5crop.utils import bbox_from_mask, sampled_percentile
 from inspect import signature
-import x5crop.units as units
 
 
 class ParameterLegitimacyContractTest(unittest.TestCase):
@@ -206,9 +205,6 @@ class ParameterLegitimacyContractTest(unittest.TestCase):
             "separator_evidence_image",
             PreprocessConfiguration.__dataclass_fields__,
         )
-
-    def test_scan_calibration_has_no_empirical_axis_ratio_gate(self) -> None:
-        self.assertFalse(hasattr(units, "ScanCalibrationTrustParameters"))
 
     def test_content_guidance_uses_owned_numerical_floor(self) -> None:
         source = (

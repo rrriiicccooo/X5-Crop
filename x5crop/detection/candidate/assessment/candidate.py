@@ -13,7 +13,7 @@ from ...evidence.content.external_boundaries import (
     external_aperture_preservation_evidence,
 )
 from ...evidence.partial_edge import partial_edge_safety_evidence
-from ...evidence.physical_scale import physical_scale_observations
+from ...evidence.photo_scale import photo_scale_observations
 from ...physical.model import PhotoSequenceSolution
 from ...physical.photo_size import frame_dimension_evidence
 from ....domain import EvidenceState
@@ -63,10 +63,7 @@ def assess_candidate(
     geometry = candidate.geometry
     if not isinstance(geometry, PhotoSequenceSolution):
         raise ValueError("standard candidate assessment requires sequence geometry")
-    frame_dimensions = frame_dimension_evidence(
-        geometry,
-        context.scan_calibration,
-    )
+    frame_dimensions = frame_dimension_evidence(geometry)
     coverage = photo_aperture_coverage_evidence(
         geometry,
         context.measurement_cache,
@@ -88,7 +85,7 @@ def assess_candidate(
         geometry,
         context.measurement_cache.image_statistics.edge_texture_limit,
     )
-    candidate_scale = physical_scale_observations(
+    candidate_scale = photo_scale_observations(
         geometry,
         holder_boundary,
     )
@@ -122,7 +119,7 @@ def assess_candidate(
         photo_content=content,
         inter_photo_boundary_preservation=internal_boundaries,
         holder_boundary=holder_boundary,
-        physical_scale_observations=candidate_scale,
+        photo_scale_observations=candidate_scale,
         external_aperture_preservation=external_preservation,
         holder_occupancy=occupancy,
         partial_edge_safety=partial_edge,

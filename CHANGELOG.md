@@ -14,6 +14,18 @@ repository rules in `AGENTS.md`.
 
 ### V4.9 当前开发线
 
+#### Scan metadata 与照片比例权限收敛（2026-07-14）
+
+- 删除运行时不可达的 exact scan-calibration 权限。TIFF resolution metadata 现在只停留在
+  runtime/report；`DetectionContext`、sequence solver、CandidateGate 与 DecisionGate 不再接收或
+  派生 scan calibration。
+- `FrameDimensionPrior` 只保存 physical frame mm option 与 provenance，cross-axis 和 long-axis 搜索
+  统一使用 derived aspect、独立 aperture measurements 与几何不变量，不再保留 calibrated pixel
+  dimensions 或 calibration-backed proof vocabulary。
+- Candidate-local 比例诊断收敛为 evidence-owned `PhotoScaleObservation`。短轴只能形成 lower bound，
+  多张独立 aperture edge 可形成 long-axis interval；两者只进入 current report，不反向参与同一候选
+  的 geometry、Gate 或 early-stop。旧 calibration type、root/candidate scope、字段和 schema 名已删除。
+
 #### Solver 物理归约与性能封口（2026-07-14）
 
 - Sequence build 的 Pareto 支配改为可传递的 geometry refinement：更优解必须逐边收窄另一解的

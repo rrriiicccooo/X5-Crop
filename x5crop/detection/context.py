@@ -6,7 +6,6 @@ from ..cache import MeasurementCache
 from ..configuration.model import DetectionConfiguration
 from ..geometry.layout import require_work_layout
 from ..strip_modes import FULL, PARTIAL
-from ..units import ScanCalibrationResolution
 
 
 @dataclass
@@ -39,7 +38,6 @@ class DetectionRequest:
 
 @dataclass(frozen=True)
 class DetectionContext:
-    scan_calibration: ScanCalibrationResolution
     request: DetectionRequest
     configuration: DetectionConfiguration
     lane_configuration: DetectionConfiguration | None

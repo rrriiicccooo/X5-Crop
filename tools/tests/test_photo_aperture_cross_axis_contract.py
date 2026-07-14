@@ -21,8 +21,6 @@ from x5crop.domain import (
     BoundaryKind,
     BoundaryPathFit,
     BoundarySide,
-    FrameDimensionPrior,
-    FrameDimensionPriorSource,
     GrayBoundaryPathObservation,
     MeasurementIdentity,
     PixelInterval,
@@ -153,59 +151,6 @@ class PhotoApertureCrossAxisContractTest(unittest.TestCase):
         plan = photo_aperture_cross_axis_plan(
             search_scope,
             _dimensions(1.0, 1.0),
-            1,
-            maximum_hypotheses=1,
-        )
-
-        self.assertEqual(plan.hypotheses[0].height_px, PixelInterval.exact(90.0))
-        self.assertTrue(plan.search_outcome.budget_exhausted)
-
-    def test_cross_axis_budget_uses_calibrated_photo_height(self) -> None:
-        search_scope = _scope(
-            width=320,
-            height=120,
-            leading=0.0,
-            trailing=320.0,
-            top=10.0,
-            bottom=110.0,
-        )
-        calibrated_bottom = _path(
-            BoundaryAxis.SHORT,
-            100.0,
-            "calibrated_photo_bottom",
-        )
-        calibrated_bottom = replace(
-            calibrated_bottom,
-            lower_appearance=replace(
-                calibrated_bottom.lower_appearance,
-                spatial_continuity=0.8,
-            ),
-            upper_appearance=replace(
-                calibrated_bottom.upper_appearance,
-                spatial_continuity=0.8,
-            ),
-        )
-        search_scope = replace(
-            search_scope,
-            raw_boundary_paths=(
-                *search_scope.raw_boundary_paths,
-                calibrated_bottom,
-            ),
-        )
-        dimensions = FrameDimensionPrior(
-            frame_size_mm=(1.0, 1.0),
-            source=FrameDimensionPriorSource.SCAN_CALIBRATION,
-            provenance=_provenance(
-                MeasurementIdentity.SCAN_CALIBRATION,
-                "calibrated_photo_dimensions",
-            ),
-            calibrated_width_px=PixelInterval.exact(90.0),
-            calibrated_height_px=PixelInterval.exact(90.0),
-        )
-
-        plan = photo_aperture_cross_axis_plan(
-            search_scope,
-            dimensions,
             1,
             maximum_hypotheses=1,
         )

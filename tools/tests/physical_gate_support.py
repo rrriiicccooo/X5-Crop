@@ -50,7 +50,7 @@ from x5crop.detection.evidence.holder_occupancy import (
     StripCompletenessEvidence,
 )
 from x5crop.detection.evidence.partial_edge import partial_edge_safety_evidence
-from x5crop.detection.evidence.physical_scale import physical_scale_observations
+from x5crop.detection.evidence.photo_scale import photo_scale_observations
 from x5crop.detection.evidence.separator_sequence import separator_sequence_evidence
 from x5crop.detection.evidence.transform_geometry import (
     TransformGeometryEvidence,
@@ -80,7 +80,6 @@ from x5crop.domain import (
     ContainmentFallback,
     EvidenceState,
     FrameDimensionPrior,
-    FrameDimensionPriorSource,
     GrayAppearanceObservation,
     GrayBoundaryPathObservation,
     GrayIntensityTail,
@@ -109,13 +108,7 @@ from x5crop.domain import (
 )
 from x5crop.image.deskew import DeskewMeasurementOutcome
 from x5crop.output.model import AxisBleedParameters, FrameBleedPlan, FrameSideBleed
-from x5crop.units import (
-    PhysicalScaleObservation,
-    PhysicalScaleScope,
-    PhysicalScaleSource,
-    ResolutionMetadataObservation,
-    ScanCalibrationResolution,
-)
+from x5crop.units import ResolutionMetadataObservation
 
 
 _HOLDER_BOX = Box(0, 0, 310, 100)
@@ -200,35 +193,12 @@ def candidate_boundary_paths() -> tuple[GrayBoundaryPathObservation, ...]:
     )
 
 
-def unavailable_calibration_fixture() -> ScanCalibrationResolution:
-    return ScanCalibrationResolution.from_observations(
-        ResolutionMetadataObservation(None, None, ("test_metadata_unavailable",)),
-        (),
+def unavailable_resolution_metadata_fixture() -> ResolutionMetadataObservation:
+    return ResolutionMetadataObservation(
+        None,
+        None,
+        ("test_metadata_unavailable",),
     )
-
-
-def supported_calibration_fixture(
-    x_px_per_mm: float,
-    y_px_per_mm: float,
-) -> ScanCalibrationResolution:
-    metadata = ResolutionMetadataObservation(x_px_per_mm, y_px_per_mm)
-    observations = tuple(
-        PhysicalScaleObservation(
-            axis,
-            value,
-            value,
-            PhysicalScaleSource.HOLDER_SHORT_AXIS,
-            PhysicalScaleScope.ROOT_MEASUREMENT,
-            MeasurementProvenance(
-                MeasurementIdentity.SHORT_AXIS_BOUNDARIES,
-                ObservationId(f"test_scale:{axis}"),
-                (MeasurementIdentity.BOUNDARY_PATHS,),
-                "synthetic scale observation",
-            ),
-        )
-        for axis, value in (("x", x_px_per_mm), ("y", y_px_per_mm))
-    )
-    return ScanCalibrationResolution.from_observations(metadata, observations)
 
 
 def separator_observation(
@@ -451,7 +421,6 @@ def _candidate_geometry(
         inter_photo_spacings=(spacing,),
         frame_dimension_prior=FrameDimensionPrior(
             frame_size_mm=(36.0, 24.0),
-            source=FrameDimensionPriorSource.PHYSICAL_ASPECT,
             provenance=MeasurementProvenance(
                 MeasurementIdentity.PHYSICAL_FRAME_ASPECT,
                 ObservationId("synthetic_frame_dimension_prior"),
@@ -575,12 +544,9 @@ def candidate_evidence_fixture(
             for index in range(1, geometry.count + 1)
         ),
     )
-    dimensions = frame_dimension_evidence(
-        geometry,
-        unavailable_calibration_fixture(),
-    )
+    dimensions = frame_dimension_evidence(geometry)
     holder = holder_boundary_evidence(geometry, 1.0)
-    candidate_scale = physical_scale_observations(
+    candidate_scale = photo_scale_observations(
         geometry,
         holder,
     )
@@ -668,7 +634,7 @@ def candidate_evidence_fixture(
             )
         ),
         holder_boundary=holder,
-        physical_scale_observations=candidate_scale,
+        photo_scale_observations=candidate_scale,
         external_aperture_preservation=ExternalAperturePreservationEvidence(
             workspace,
             sequence,

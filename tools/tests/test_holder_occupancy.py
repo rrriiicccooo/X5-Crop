@@ -9,7 +9,6 @@ from tools.tests.physical_gate_support import (
     candidate_boundary_paths,
     separator_cross_axis_measurement,
     separator_observation,
-    unavailable_calibration_fixture,
 )
 from x5crop.detection.evidence.photo_aperture_coverage import (
     PhotoApertureCoverageEvidence,
@@ -36,7 +35,6 @@ from x5crop.domain import (
     Box,
     EvidenceState,
     FrameDimensionPrior,
-    FrameDimensionPriorSource,
     HolderSpan,
     InterPhotoBoundaryReference,
     InterPhotoSpacing,
@@ -184,7 +182,6 @@ def _underfilled_geometry() -> PhotoSequenceSolution:
         inter_photo_spacings=spacings,
         frame_dimension_prior=FrameDimensionPrior(
             (56.0, 56.0),
-            FrameDimensionPriorSource.PHYSICAL_ASPECT,
             MeasurementProvenance(
                 MeasurementIdentity.PHYSICAL_FRAME_ASPECT,
                 ObservationId("synthetic_square_prior"),
@@ -212,10 +209,7 @@ def _evidence(geometry: PhotoSequenceSolution):
         content_runs=((40, 125), (155, 235), (265, 350)),
         content_position_uncertainty_px=0,
     )
-    dimensions = frame_dimension_evidence(
-        geometry,
-        unavailable_calibration_fixture(),
-    )
+    dimensions = frame_dimension_evidence(geometry)
     content = PhotoContentEvidence(
         0.5,
         tuple(

@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import fields, replace
+from inspect import signature
 import unittest
 
 from tools.tests.physical_gate_support import (
     candidate_fixture,
-    supported_calibration_fixture,
-    unavailable_calibration_fixture,
 )
-from x5crop.detection.evidence.physical_scale import physical_scale_observations
+from x5crop.detection.evidence.photo_scale import photo_scale_observations
 from x5crop.detection.physical.photo_size import (
     FrameDimensionEvidence,
     frame_dimension_evidence,
@@ -17,7 +16,7 @@ from x5crop.detection.physical.photo_size import (
 from x5crop.domain import (
     BoundarySide,
     EvidenceState,
-    FrameDimensionPriorSource,
+    FrameDimensionPrior,
     HolderSpan,
     MeasurementIdentity,
     MeasurementProvenance,
@@ -38,15 +37,32 @@ def _dimension_evidence(
         frame_width_prior_px=PixelInterval(95.0, 105.0),
         photo_width_intervals_px=widths,
         separator_widths_px=separator_widths,
-        observed_width_mm=None,
-        observed_height_mm=None,
         observed_aspect=1.0,
         aspect_error_ratio=0.0,
-        calibration_used=False,
     )
 
 
 class PhotoSizePhysicalModelTest(unittest.TestCase):
+    def test_frame_dimension_prior_requires_physical_spec_provenance(self) -> None:
+        with self.assertRaises(ValueError):
+            FrameDimensionPrior(
+                (36.0, 24.0),
+                MeasurementProvenance(
+                    MeasurementIdentity.PHOTO_EDGES,
+                    ObservationId("invalid_dimension_prior"),
+                    (),
+                    "invalid dimension prior",
+                ),
+            )
+
+    def test_candidate_geometry_has_no_unreachable_exact_calibration_path(self) -> None:
+        self.assertEqual(
+            tuple(field.name for field in fields(FrameDimensionPrior)),
+            ("frame_size_mm", "provenance"),
+        )
+        self.assertNotIn("calibration", signature(frame_dimension_priors).parameters)
+        self.assertNotIn("calibration", signature(frame_dimension_evidence).parameters)
+
     def test_holder_slack_is_not_dimension_or_scale_evidence(self) -> None:
         candidate = candidate_fixture()
         geometry = candidate.geometry
@@ -58,21 +74,15 @@ class PhotoSizePhysicalModelTest(unittest.TestCase):
         )
 
         self.assertEqual(
-            frame_dimension_evidence(
-                geometry,
-                unavailable_calibration_fixture(),
-            ),
-            frame_dimension_evidence(
-                expanded_holder,
-                unavailable_calibration_fixture(),
-            ),
+            frame_dimension_evidence(geometry),
+            frame_dimension_evidence(expanded_holder),
         )
         self.assertEqual(
-            physical_scale_observations(
+            photo_scale_observations(
                 geometry,
                 candidate.assessment.evidence.holder_boundary,
             ),
-            physical_scale_observations(
+            photo_scale_observations(
                 expanded_holder,
                 candidate.assessment.evidence.holder_boundary,
             ),
@@ -81,34 +91,17 @@ class PhotoSizePhysicalModelTest(unittest.TestCase):
     def test_discrete_frame_sizes_produce_discrete_priors(self) -> None:
         priors = frame_dimension_priors(
             format_spec("120-66"),
-            supported_calibration_fixture(10.0, 10.0),
-            layout="horizontal",
-        )
-        self.assertEqual(
-            tuple(prior.frame_size_mm for prior in priors),
-            ((56.0, 56.0), (54.0, 54.0)),
-        )
-        self.assertEqual(
-            tuple(prior.calibrated_width_px for prior in priors),
-            (PixelInterval.exact(560.0), PixelInterval.exact(540.0)),
-        )
-        self.assertNotIn(
-            PixelInterval.exact(550.0),
-            tuple(prior.calibrated_width_px for prior in priors),
-        )
-
-    def test_uncalibrated_priors_preserve_every_physical_size_option(self) -> None:
-        priors = frame_dimension_priors(
-            format_spec("120-66"),
-            unavailable_calibration_fixture(),
-            layout="horizontal",
         )
         self.assertEqual(
             tuple(prior.frame_size_mm for prior in priors),
             ((56.0, 56.0), (54.0, 54.0)),
         )
         self.assertTrue(
-            all(prior.source == FrameDimensionPriorSource.PHYSICAL_ASPECT for prior in priors)
+            all(
+                prior.provenance.root_measurement
+                == MeasurementIdentity.PHYSICAL_FRAME_ASPECT
+                for prior in priors
+            )
         )
 
     def test_dimension_evidence_names_selected_physical_size(self) -> None:
@@ -155,10 +148,7 @@ class PhotoSizePhysicalModelTest(unittest.TestCase):
             separator_assignments=(),
         )
 
-        evidence = frame_dimension_evidence(
-            provisional,
-            unavailable_calibration_fixture(),
-        )
+        evidence = frame_dimension_evidence(provisional)
 
         self.assertEqual(evidence.state, EvidenceState.UNAVAILABLE)
         self.assertEqual(evidence.photo_widths_px, ())

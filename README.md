@@ -125,9 +125,10 @@ debug analysis? [y/n, return=no]:
 
 只有开启 partial mode 后才会询问 `count`。按 Return 或输入 `auto` 表示自动判断张数。
 Detection 始终在唯一灰度 workspace 中工作；片夹可亮、可暗或处于中间灰度。原始通道和色彩
-metadata 仅由 TIFF I/O 保存，Debug 只使用彩色标记解释灰度检测。TIFF DPI/PPI 只是声明，必须由
-独立物理尺寸观测确认后才用于检测。灰度和纹理只描述像素外观，不会被当成“片基”或其它材料
-身份；边界与 separator 必须由空间拓扑和物理几何共同成立。
+metadata 仅由 TIFF I/O 保存，Debug 只使用彩色标记解释灰度检测。TIFF DPI/PPI 只作为输入声明
+保存到 report，不参与候选几何或 Gate。照片的 mm 规格提供 aspect 和尺寸关系先验；候选中独立
+测得的照片边界可生成只读比例诊断，但不会反向证明同一候选。灰度和纹理只描述像素外观，不会
+被当成“片基”或其它材料身份；边界与 separator 必须由空间拓扑和物理几何共同成立。
 auto count 始终按 format 允许的张数从大到小求解。每个 count 都从相同的逐边 boundary 与
 count-independent separator observations 构造 hypotheses，再由全局 solver 联合求解每张照片的
 `PhotoAperture`。只有 `GeometryResolution` 确认 count、placement、coverage 和替代几何都已解决，
@@ -520,9 +521,9 @@ metrics for processing, detection, assessed candidates, solver evaluations, and
 exact measurement-cache lookups.
 
 Default output bleed is 20px on the long axis and 10px on the short axis. Only
-independently observed overlap, or overlap uniquely corroborated by trusted
-calibration, measured sequence edges, and the remaining observed spacings, can
-expand the corresponding sides of the two adjacent frames. Corroborated overlap
+independently observed overlap, or overlap uniquely corroborated by measured
+sequence edges and the remaining observed spacings, can expand the corresponding
+sides of the two adjacent frames. Corroborated overlap
 cannot prove its own conservation equation. Available protection is the actual geometric slack between
 each base frame and its holder or lane `frame_output_bounds`. `FrameCropEnvelope`
 is the conservative uncertainty envelope around one `PhotoAperture`, before user

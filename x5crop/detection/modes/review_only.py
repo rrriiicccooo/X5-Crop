@@ -29,8 +29,6 @@ def unresolved_dual_lane_candidate(
     count = physical_spec.default_count
     dimensions = frame_dimension_priors(
         physical_spec,
-        context.scan_calibration,
-        layout=context.request.layout,
     )[0]
     return BuiltCandidate(
         geometry=ReviewOnlyContainment(

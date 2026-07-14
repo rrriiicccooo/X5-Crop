@@ -7,10 +7,7 @@ from .candidate.assessment.review_only import assess_review_only_candidate
 from .candidate.execution.count_hypothesis import evaluate_count_hypothesis
 from .candidate.execution.model import CountHypothesisEvaluation
 from .candidate.model import AssessedCandidate
-from .candidate.proposal.sequence import (
-    cached_boundary_measurements,
-    photo_sequence_search_scope,
-)
+from .candidate.proposal.sequence import photo_sequence_search_scope
 from .candidate.plan.counts import count_hypothesis_plan
 from .candidate.plan.model import (
     CountHypothesisPlan,
@@ -27,7 +24,6 @@ from .context import DetectionContext
 from .modes.dual_lane import choose_dual_lane_detection
 from .modes.review_only import unresolved_dual_lane_candidate
 from .evidence.content.regions import cached_content_region_observation
-from .evidence.physical_scale import boundary_scale_observations
 from .physical.model import ReviewOnlyContainment
 from ..domain import (
     EvidenceState,
@@ -37,36 +33,6 @@ from ..domain import (
     combined_physical_search_outcome,
 )
 from ..image.content import ContentRegionObservation
-from ..units import ScanCalibrationResolution
-
-
-def _context_with_root_physical_scale(
-    context: DetectionContext,
-) -> DetectionContext:
-    measurements = cached_boundary_measurements(
-        context.measurement_cache,
-        context.configuration.boundary_path,
-    )
-    observations = tuple(
-        dict.fromkeys(
-            (
-                *context.scan_calibration.physical_observations,
-                *boundary_scale_observations(
-                    measurements,
-                    context.configuration.physical_spec,
-                    context.request.layout,
-                    edge_texture_limit=(
-                        context.measurement_cache.image_statistics.edge_texture_limit
-                    ),
-                ),
-            )
-        )
-    )
-    calibration = ScanCalibrationResolution.from_observations(
-        context.scan_calibration.metadata,
-        observations,
-    )
-    return replace(context, scan_calibration=calibration)
 
 
 def _candidate_pool_for_count_resolution(
@@ -154,7 +120,6 @@ def _count_resolution(
 
 
 def _choose_standard_detection(context: DetectionContext) -> SelectionResult:
-    context = _context_with_root_physical_scale(context)
     configuration = context.configuration
     physical_spec = configuration.physical_spec
     search_scope = photo_sequence_search_scope(

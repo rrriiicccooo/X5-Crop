@@ -15,7 +15,7 @@ from tools.tests.physical_gate_support import (
     final_detection_fixture,
     selection_fixture,
     transform_geometry_fixture,
-    unavailable_calibration_fixture,
+    unavailable_resolution_metadata_fixture,
 )
 from x5crop.detection.final.model import FinalDetection
 from x5crop.detection.evidence.transform_geometry import (
@@ -116,7 +116,7 @@ def _record() -> dict:
         configuration=detection_configuration_read_model(
             get_detection_configuration("135", "full")
         ),
-        resolution_metadata=unavailable_calibration_fixture().metadata,
+        resolution_metadata=unavailable_resolution_metadata_fixture(),
         transform_geometry=transform_geometry_fixture(),
         analysis_reuse_signature=_analysis_reuse_signature(),
     )
@@ -137,7 +137,7 @@ class OutputReadModelContractTest(unittest.TestCase):
         self.assertIn("resolution_metadata", input_detail)
         self.assertNotIn("scan_calibration", input_detail)
         candidate = _record()["selection"]["candidates"][0]
-        self.assertIn("physical_scale_observations", candidate["evidence"])
+        self.assertIn("photo_scale_observations", candidate["evidence"])
 
     def test_configuration_report_includes_boundary_path_measurements(self) -> None:
         configuration = get_detection_configuration("135", "full")
@@ -291,7 +291,6 @@ class OutputReadModelContractTest(unittest.TestCase):
             metadata=TiffMetadata(None, None, None, ()),
         )
         context = DetectionContext(
-            scan_calibration=unavailable_calibration_fixture(),
             request=DetectionRequest("horizontal", "partial", None),
             configuration=configuration,
             lane_configuration=None,
@@ -342,7 +341,7 @@ class OutputReadModelContractTest(unittest.TestCase):
             review_copy=None,
             warnings=[],
             configuration=detection_configuration_read_model(configuration),
-            resolution_metadata=context.scan_calibration.metadata,
+            resolution_metadata=unavailable_resolution_metadata_fixture(),
             transform_geometry=transform_geometry_fixture(),
             analysis_reuse_signature=_analysis_reuse_signature(
                 "135-dual",
@@ -368,7 +367,6 @@ class OutputReadModelContractTest(unittest.TestCase):
     def test_typed_read_model_serializes_every_typed_result_field(self) -> None:
         from x5crop.domain import (
             FrameDimensionPrior,
-            FrameDimensionPriorSource,
             MeasurementIdentity,
             MeasurementProvenance,
             ObservationId,
@@ -378,11 +376,10 @@ class OutputReadModelContractTest(unittest.TestCase):
 
         value = FrameDimensionPrior(
             frame_size_mm=(36.0, 24.0),
-            source=FrameDimensionPriorSource.PHYSICAL_ASPECT,
             provenance=MeasurementProvenance(
                 MeasurementIdentity.PHYSICAL_FRAME_ASPECT,
                 ObservationId("test"),
-                (),
+                (MeasurementIdentity.FORMAT_PHYSICAL_SPEC,),
                 "test provenance",
             ),
         )
@@ -578,7 +575,7 @@ class OutputReadModelContractTest(unittest.TestCase):
             configuration=detection_configuration_read_model(
                 get_detection_configuration("135", "full")
             ),
-            resolution_metadata=unavailable_calibration_fixture().metadata,
+            resolution_metadata=unavailable_resolution_metadata_fixture(),
             transform_geometry=transform,
             analysis_reuse_signature=_analysis_reuse_signature(),
         )

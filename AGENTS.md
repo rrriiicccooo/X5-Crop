@@ -303,9 +303,9 @@ Current state:
 - Assignment consensus requires one shared interval for every aperture edge
   across all non-dominated solutions. A broad uncertainty interval cannot bridge
   two mutually exclusive outer placements and call them agreed.
-- Cross-axis planning never rewards a taller aperture. Trusted calibration uses
-  physical photo-height residual; normalized search uses feasibility,
-  measurement quality, uncertainty, and deterministic coordinates.
+- Cross-axis planning never rewards a taller aperture. It uses physical aspect
+  feasibility, measurement quality, uncertainty, and deterministic coordinates;
+  TIFF resolution metadata never enters candidate geometry.
 - Boundary paths are solver-equivalent only when their position intervals match
   across the shared track. Mere overlap remains a geometry alternative for
   global consensus; broad uncertainty cannot erase disjoint narrow paths.
@@ -316,15 +316,15 @@ Current state:
   Short-axis aperture edges are resolved within each photo's own long-axis span.
   Raw channels remain visible, while geometry-equivalent paths form one solver
   hypothesis and separator-bound paths do not reenter generic aperture search.
-- Count, boundary, dimension, calibration, and measurement-dependency authority
-  use typed identities; descriptive provenance text cannot change physical proof.
+- Count, boundary, dimension, and measurement-dependency authority use typed
+  identities; descriptive provenance text cannot change physical proof.
 - Detection consumes one canonical grayscale workspace. Boundary and separator
   observations carry typed gray appearance measurements, never material identity.
   Physical proof comes from spatial topology, geometry, and separator sequence;
   color and perforation are not detection concepts.
-- TIFF resolution is metadata observation only. Per-axis physical scale requires
-  independent frame or textured inner-boundary evidence; candidate-local scale
-  never feeds back into the same candidate's geometry or Gate.
+- TIFF resolution is runtime/report metadata only. Candidate-local
+  `PhotoScaleObservation` requires independent aperture boundaries and never
+  feeds back into the same candidate's geometry or Gate.
 - Standard, dual-lane, and review-only candidates use distinct geometry types;
   review-only modes never masquerade as solved frame sequences.
 - Physical candidate assessment stores canonical evidence and `CandidateGate`;
@@ -347,7 +347,7 @@ Current verification state:
   are implemented. Debug distinguishes ideal apertures, output envelopes, raw
   observations, measured edges, provisional edges, holder boundaries, and
   corroborated overlap through one diagnostics-owned legend.
-- The current suite contains 508 tests and 14 valid format/mode configurations.
+- The current suite contains 505 tests and 14 valid format/mode configurations.
   Physical search now distinguishes a complete contradiction from unavailable
   measurements and execution-budget exhaustion; search state no longer lives in
   candidate geometry. On `135/full 005.tif`, current verification completed in
@@ -364,11 +364,11 @@ Current verification state:
   observations. It evaluates 36,254 assignments, retains 340 non-dominated
   alternatives, and still honestly reports search-budget exhaustion and
   unresolved geometry.
-- Audit A restarted after binding all content activation thresholds to the
-  count-independent `HolderSpan` measurement region. Candidate apertures now only
-  query that fixed surface and cannot define their own evidence scale. Any further
-  finding must still receive a failing permanent contract before repair; an
-  independent fresh-context Audit B follows only after Audit A reaches zero.
+- Audit A restarted after removing the unreachable exact scan-calibration path.
+  TIFF resolution metadata now remains outside detection; frame mm/aspect priors
+  and candidate-local photo-scale diagnostics have no calibration authority. Any
+  further finding must still receive a failing permanent contract before repair;
+  an independent fresh-context Audit B follows only after Audit A reaches zero.
 - Current PASS/REVIEW outcomes and adaptive measurement values remain calibration
   material for the separate real-sample project; do not loosen Gate rules to
   manufacture PASS from the current unresolved results.

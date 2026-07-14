@@ -13,7 +13,6 @@ from x5crop.domain import (
     Box,
     ContainmentFallback,
     FrameDimensionPrior,
-    FrameDimensionPriorSource,
     GrayAppearanceObservation,
     GrayBoundaryPathObservation,
     GrayIntensityTail,
@@ -198,11 +197,10 @@ def scope(
 def dimensions(width_mm: float, height_mm: float) -> FrameDimensionPrior:
     return FrameDimensionPrior(
         frame_size_mm=(width_mm, height_mm),
-        source=FrameDimensionPriorSource.PHYSICAL_ASPECT,
         provenance=MeasurementProvenance(
-            MeasurementIdentity.FORMAT_PHYSICAL_SPEC,
+            MeasurementIdentity.PHYSICAL_FRAME_ASPECT,
             ObservationId("synthetic_dimensions"),
-            (),
+            (MeasurementIdentity.FORMAT_PHYSICAL_SPEC,),
             "synthetic physical dimensions",
         ),
     )

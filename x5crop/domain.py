@@ -55,7 +55,6 @@ class MeasurementIdentity(str, Enum):
     LANE_DIVIDER_PROFILE = "lane_divider_profile"
     PHYSICAL_FRAME_ASPECT = "physical_frame_aspect"
     PHOTO_EDGES = "photo_edges"
-    SCAN_CALIBRATION = "scan_calibration"
     SEPARATOR_PROFILE = "separator_profile"
     SHORT_AXIS_BOUNDARIES = "short_axis_boundaries"
 
@@ -238,18 +237,10 @@ class PixelInterval:
         return PixelInterval(min(low, high), max(low, high))
 
 
-class FrameDimensionPriorSource(str, Enum):
-    SCAN_CALIBRATION = "scan_calibration"
-    PHYSICAL_ASPECT = "physical_aspect"
-
-
 @dataclass(frozen=True)
 class FrameDimensionPrior:
     frame_size_mm: tuple[float, float]
-    source: FrameDimensionPriorSource
     provenance: MeasurementProvenance
-    calibrated_width_px: PixelInterval | None = None
-    calibrated_height_px: PixelInterval | None = None
 
     def __post_init__(self) -> None:
         width_mm, height_mm = self.frame_size_mm
@@ -260,22 +251,20 @@ class FrameDimensionPrior:
             or not math.isfinite(height_mm)
         ):
             raise ValueError("frame dimension prior requires a physical size")
-        if not isinstance(self.source, FrameDimensionPriorSource):
-            raise ValueError("frame dimension prior requires a typed source")
-        calibrated = self.source == FrameDimensionPriorSource.SCAN_CALIBRATION
-        intervals = (self.calibrated_width_px, self.calibrated_height_px)
-        if calibrated != all(item is not None for item in intervals):
-            raise ValueError("calibrated dimension prior requires both pixel axes")
-        if any(item is not None and item.minimum <= 0.0 for item in intervals):
-            raise ValueError("calibrated dimension intervals must be positive")
+        if (
+            not isinstance(self.provenance, MeasurementProvenance)
+            or self.provenance.root_measurement
+            != MeasurementIdentity.PHYSICAL_FRAME_ASPECT
+            or MeasurementIdentity.FORMAT_PHYSICAL_SPEC
+            not in self.provenance.dependencies
+        ):
+            raise ValueError(
+                "frame dimension prior requires physical-spec aspect provenance"
+            )
 
     @property
     def aspect(self) -> float:
         return float(self.frame_size_mm[0]) / float(self.frame_size_mm[1])
-
-    @property
-    def calibrated(self) -> bool:
-        return self.source == FrameDimensionPriorSource.SCAN_CALIBRATION
 
 
 @dataclass(frozen=True)

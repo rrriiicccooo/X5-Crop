@@ -25,8 +25,6 @@ def _assess_count_hypothesis(
     outcomes = []
     for dimensions in frame_dimension_priors(
         context.configuration.physical_spec,
-        context.scan_calibration,
-        layout=context.request.layout,
     ):
         outcome = build_sequence_candidate(
             context.request,

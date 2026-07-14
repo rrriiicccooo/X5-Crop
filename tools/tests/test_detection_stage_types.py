@@ -37,9 +37,11 @@ from x5crop.domain import Box, FrameCropEnvelope
 from x5crop.output.model import OutputGeometry
 from tools.tests.physical_gate_support import (
     selection_fixture,
-    unavailable_calibration_fixture,
 )
-from x5crop.units import CalibrationState, PhysicalScaleObservation, PhysicalScaleSource
+from x5crop.detection.evidence.photo_scale import (
+    PhotoScaleObservation,
+    PhotoScaleSource,
+)
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -62,13 +64,11 @@ class DetectionStageTypeContractTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             DetectionRequest("horizontal", "partial", 0)
 
-        calibration = unavailable_calibration_fixture()
         full = get_detection_configuration("135", "full")
         dual = get_detection_configuration("135-dual", "full")
         lane = get_detection_configuration("135", "full")
         invalid_contexts = (
             lambda: DetectionContext(
-                calibration,
                 DetectionRequest("horizontal", "partial", None),
                 full,
                 None,
@@ -76,7 +76,6 @@ class DetectionStageTypeContractTests(unittest.TestCase):
                 DetectionExecutionStatistics(),
             ),
             lambda: DetectionContext(
-                calibration,
                 DetectionRequest("vertical", "full", None),
                 full,
                 None,
@@ -84,7 +83,6 @@ class DetectionStageTypeContractTests(unittest.TestCase):
                 DetectionExecutionStatistics(),
             ),
             lambda: DetectionContext(
-                calibration,
                 DetectionRequest("horizontal", "full", None),
                 full,
                 lane,
@@ -92,7 +90,6 @@ class DetectionStageTypeContractTests(unittest.TestCase):
                 DetectionExecutionStatistics(),
             ),
             lambda: DetectionContext(
-                calibration,
                 DetectionRequest("horizontal", "full", None),
                 dual,
                 None,
@@ -107,22 +104,23 @@ class DetectionStageTypeContractTests(unittest.TestCase):
     def test_detection_context_contains_no_tiff_io_profile(self) -> None:
         self.assertNotIn("image_profile", DetectionContext.__dataclass_fields__)
 
+    def test_resolution_metadata_stays_outside_detection_context(self) -> None:
+        context_fields = DetectionContext.__dataclass_fields__
+        self.assertNotIn("scan_calibration", context_fields)
+        self.assertNotIn("resolution_metadata", context_fields)
+
     def test_physical_authority_discriminators_are_typed(self) -> None:
         from x5crop.detection.candidate.plan.model import (
             CountHypothesis,
             CountHypothesisSource,
         )
         from x5crop.domain import (
-            FrameDimensionPrior,
-            FrameDimensionPriorSource,
             MeasurementIdentity,
             MeasurementProvenance,
             ObservationId,
             PhotoApertureBoundaryResolution,
             PhotoApertureEdgeSource,
         )
-        from x5crop.units import CalibrationAxisResolution
-
         self.assertIs(
             get_type_hints(CountHypothesis)["source"],
             CountHypothesisSource,
@@ -132,16 +130,8 @@ class DetectionStageTypeContractTests(unittest.TestCase):
             PhotoApertureEdgeSource,
         )
         self.assertIs(
-            get_type_hints(FrameDimensionPrior)["source"],
-            FrameDimensionPriorSource,
-        )
-        self.assertIs(
-            get_type_hints(PhysicalScaleObservation)["source"],
-            PhysicalScaleSource,
-        )
-        self.assertIs(
-            get_type_hints(CalibrationAxisResolution)["state"],
-            CalibrationState,
+            get_type_hints(PhotoScaleObservation)["source"],
+            PhotoScaleSource,
         )
         provenance_hints = get_type_hints(MeasurementProvenance)
         self.assertIs(provenance_hints["root_measurement"], MeasurementIdentity)

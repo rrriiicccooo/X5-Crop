@@ -12,9 +12,8 @@ from ...domain import (
     PhysicalSearchOutcome,
     combined_physical_search_outcome,
 )
-from ...geometry.layout import HORIZONTAL, is_horizontal_layout
+from ...geometry.layout import HORIZONTAL
 from ...image.statistics import image_measurement_statistics
-from ...units import ScanCalibrationResolution, transposed_scan_calibration
 from ..candidate.composition.dual_lane import compose_dual_lane_candidate
 from ..candidate.model import BuiltCandidate
 from ..candidate.plan.model import CountHypothesis, CountHypothesisSource
@@ -37,13 +36,6 @@ from ..physical.lane_divider import (
 
 
 StandardDetector = Callable[[DetectionContext], SelectionResult]
-
-
-def _lane_calibration(context: DetectionContext) -> ScanCalibrationResolution:
-    calibration = context.scan_calibration
-    if is_horizontal_layout(context.request.layout):
-        return calibration
-    return transposed_scan_calibration(calibration)
 
 
 def _lane_context(
@@ -71,7 +63,6 @@ def _lane_context(
         context.measurement_cache.lookup_statistics,
     )
     return DetectionContext(
-        scan_calibration=_lane_calibration(context),
         request=lane_request,
         configuration=lane_configuration,
         lane_configuration=None,

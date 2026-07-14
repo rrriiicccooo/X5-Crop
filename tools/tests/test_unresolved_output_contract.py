@@ -13,7 +13,7 @@ from tools.tests.physical_gate_support import (
     candidate_fixture,
     selection_fixture,
     transform_geometry_fixture,
-    unavailable_calibration_fixture,
+    unavailable_resolution_metadata_fixture,
 )
 from tools.tests.test_output_read_model_contract import (
     _analysis_reuse_signature,
@@ -145,7 +145,7 @@ class UnresolvedOutputContractTest(unittest.TestCase):
             configuration=detection_configuration_read_model(
                 get_detection_configuration("135", "full")
             ),
-            resolution_metadata=unavailable_calibration_fixture().metadata,
+            resolution_metadata=unavailable_resolution_metadata_fixture(),
             transform_geometry=transform,
             analysis_reuse_signature=_analysis_reuse_signature(),
         )

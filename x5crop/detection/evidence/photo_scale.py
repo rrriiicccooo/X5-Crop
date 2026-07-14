@@ -1,25 +1,76 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+from enum import Enum
+import math
+
 from ...domain import (
-    BoundaryMeasurementSet,
     BoundarySide,
     HolderBoundaryObservation,
     MeasurementIdentity,
     MeasurementProvenance,
     ObservationId,
 )
-from ...formats import FormatPhysicalSpec
 from ...geometry.layout import is_horizontal_layout
-from ...units import (
-    PhysicalScaleObservation,
-    PhysicalScaleScope,
-    PhysicalScaleSource,
-)
 from ..physical.model import PhotoSequenceSolution
 from .holder_boundary import HolderBoundaryEvidence
 
 
-MINIMUM_PHOTO_APERTURE_DIMENSION_CONSENSUS_OBSERVATIONS = 2
+MINIMUM_APERTURE_DIMENSION_OBSERVATIONS = 2
+
+
+class PhotoScaleSource(str, Enum):
+    SHORT_AXIS_LOWER_BOUND = "short_axis_lower_bound"
+    APERTURE_DIMENSION_INTERVAL = "aperture_dimension_interval"
+
+
+@dataclass(frozen=True)
+class PhotoScaleObservation:
+    axis: str
+    minimum_px_per_mm: float
+    maximum_px_per_mm: float | None
+    source: PhotoScaleSource
+    provenance: MeasurementProvenance
+
+    def __post_init__(self) -> None:
+        if self.axis not in {"x", "y"}:
+            raise ValueError("photo scale observation axis must be x or y")
+        if not isinstance(self.source, PhotoScaleSource):
+            raise TypeError("photo scale observation requires a typed source")
+        if not isinstance(self.provenance, MeasurementProvenance):
+            raise TypeError("photo scale observation requires typed provenance")
+        values = (self.minimum_px_per_mm, self.maximum_px_per_mm)
+        if any(
+            value is not None
+            and (not math.isfinite(value) or value <= 0.0)
+            for value in values
+        ):
+            raise ValueError("photo scale must be finite and positive")
+        if (
+            self.maximum_px_per_mm is not None
+            and self.maximum_px_per_mm < self.minimum_px_per_mm
+        ):
+            raise ValueError("photo scale maximum must not be below minimum")
+        expected_root = {
+            PhotoScaleSource.SHORT_AXIS_LOWER_BOUND: (
+                MeasurementIdentity.SHORT_AXIS_BOUNDARIES
+            ),
+            PhotoScaleSource.APERTURE_DIMENSION_INTERVAL: (
+                MeasurementIdentity.PHOTO_EDGES
+            ),
+        }[self.source]
+        if self.provenance.root_measurement != expected_root:
+            raise ValueError("photo scale source must match measurement provenance")
+        if (
+            self.source == PhotoScaleSource.SHORT_AXIS_LOWER_BOUND
+            and self.maximum_px_per_mm is not None
+        ):
+            raise ValueError("short-axis photo scale is a lower bound")
+        if (
+            self.source == PhotoScaleSource.APERTURE_DIMENSION_INTERVAL
+            and self.maximum_px_per_mm is None
+        ):
+            raise ValueError("dimension consensus requires a bounded scale")
 
 
 def _path_has_clear_inner_content(
@@ -39,59 +90,9 @@ def _path_has_clear_inner_content(
     )
 
 
-def boundary_scale_observations(
-    measurements: BoundaryMeasurementSet,
-    physical_spec: FormatPhysicalSpec,
-    layout: str,
-    *,
-    edge_texture_limit: float,
-) -> tuple[PhysicalScaleObservation, ...]:
-    frame_heights = tuple(
-        float(option.height_mm) for option in physical_spec.frame_size_mm_options
-    )
-    source_axis = "y" if is_horizontal_layout(layout) else "x"
-    observations: list[PhysicalScaleObservation] = []
-    boundaries = {item.side: item for item in measurements.holder_boundaries}
-    top = boundaries.get(BoundarySide.TOP)
-    bottom = boundaries.get(BoundarySide.BOTTOM)
-    if _path_has_clear_inner_content(
-        top,
-        edge_texture_limit,
-    ) and _path_has_clear_inner_content(bottom, edge_texture_limit):
-        assert top is not None and bottom is not None
-        span = bottom.position.minus(top.position)
-        lower = max(0.0, span.minimum) / max(frame_heights)
-        if lower > 0.0:
-            observations.append(
-                PhysicalScaleObservation(
-                    source_axis,
-                    lower,
-                    None,
-                    PhysicalScaleSource.HOLDER_SHORT_AXIS,
-                    PhysicalScaleScope.ROOT_MEASUREMENT,
-                    MeasurementProvenance(
-                        root_measurement=MeasurementIdentity.SHORT_AXIS_BOUNDARIES,
-                        observation_id=ObservationId(
-                            "holder_aperture_short_axis_lower_bound"
-                        ),
-                        dependencies=(
-                            MeasurementIdentity.BOUNDARY_PATHS,
-                            MeasurementIdentity.FORMAT_PHYSICAL_SPEC,
-                        ),
-                        description="textured inner boundary scale lower bound",
-                        boundary_anchors=(
-                            top.provenance.observation_id,
-                            bottom.provenance.observation_id,
-                        ),
-                    ),
-                )
-            )
-    return tuple(dict.fromkeys(observations))
-
-
-def _dimension_consensus_observations(
+def _aperture_dimension_observations(
     geometry: PhotoSequenceSolution,
-) -> tuple[PhysicalScaleObservation, ...]:
+) -> tuple[PhotoScaleObservation, ...]:
     frame_width_mm = float(geometry.frame_dimension_prior.frame_size_mm[0])
     long_axis = "x" if is_horizontal_layout(geometry.layout) else "y"
     apertures = tuple(
@@ -100,10 +101,10 @@ def _dimension_consensus_observations(
         if item.leading.independently_observed
         and item.trailing.independently_observed
     )
-    if len(apertures) < MINIMUM_PHOTO_APERTURE_DIMENSION_CONSENSUS_OBSERVATIONS:
+    if len(apertures) < MINIMUM_APERTURE_DIMENSION_OBSERVATIONS:
         return ()
     return tuple(
-        PhysicalScaleObservation(
+        PhotoScaleObservation(
             axis=long_axis,
             minimum_px_per_mm=(
                 aperture.trailing.position.minus(aperture.leading.position).minimum
@@ -113,8 +114,7 @@ def _dimension_consensus_observations(
                 aperture.trailing.position.minus(aperture.leading.position).maximum
                 / frame_width_mm
             ),
-            source=PhysicalScaleSource.PHOTO_APERTURE_DIMENSION_CONSENSUS,
-            scope=PhysicalScaleScope.CANDIDATE_GEOMETRY,
+            source=PhotoScaleSource.APERTURE_DIMENSION_INTERVAL,
             provenance=MeasurementProvenance(
                 root_measurement=MeasurementIdentity.PHOTO_EDGES,
                 observation_id=ObservationId(
@@ -143,7 +143,7 @@ def _dimension_consensus_observations(
 def _short_axis_observation(
     geometry: PhotoSequenceSolution,
     holder_boundary: HolderBoundaryEvidence,
-) -> PhysicalScaleObservation | None:
+) -> PhotoScaleObservation | None:
     boundaries = {
         boundary.side: boundary for boundary in holder_boundary.boundaries
     }
@@ -170,12 +170,11 @@ def _short_axis_observation(
     visible_short_axis_px = sum(measured_heights) / len(measured_heights)
     scale = visible_short_axis_px / frame_height_mm
     source_axis = "y" if is_horizontal_layout(geometry.layout) else "x"
-    return PhysicalScaleObservation(
+    return PhotoScaleObservation(
         axis=source_axis,
         minimum_px_per_mm=scale,
         maximum_px_per_mm=None,
-        source=PhysicalScaleSource.PHOTO_APERTURE_SHORT_AXIS,
-        scope=PhysicalScaleScope.CANDIDATE_GEOMETRY,
+        source=PhotoScaleSource.SHORT_AXIS_LOWER_BOUND,
         provenance=MeasurementProvenance(
             root_measurement=MeasurementIdentity.SHORT_AXIS_BOUNDARIES,
             observation_id=ObservationId(
@@ -194,11 +193,11 @@ def _short_axis_observation(
     )
 
 
-def physical_scale_observations(
+def photo_scale_observations(
     geometry: PhotoSequenceSolution,
     holder_boundary: HolderBoundaryEvidence,
-) -> tuple[PhysicalScaleObservation, ...]:
-    dimension_observations = _dimension_consensus_observations(geometry)
+) -> tuple[PhotoScaleObservation, ...]:
+    dimension_observations = _aperture_dimension_observations(geometry)
     short_axis = _short_axis_observation(geometry, holder_boundary)
     return (
         dimension_observations
@@ -207,21 +206,20 @@ def physical_scale_observations(
     )
 
 
-def candidate_scale_observations_match_geometry(
+def photo_scale_observations_match_geometry(
     geometry: PhotoSequenceSolution,
     holder_boundary: HolderBoundaryEvidence,
-    observations: tuple[PhysicalScaleObservation, ...],
+    observations: tuple[PhotoScaleObservation, ...],
 ) -> bool:
-    expected = physical_scale_observations(geometry, holder_boundary)
+    expected = photo_scale_observations(geometry, holder_boundary)
 
-    def identity(observation: PhysicalScaleObservation) -> tuple[object, ...]:
+    def identity(observation: PhotoScaleObservation) -> tuple[object, ...]:
         provenance = observation.provenance
         return (
             observation.axis,
             observation.minimum_px_per_mm,
             observation.maximum_px_per_mm,
             observation.source,
-            observation.scope,
             provenance.root_measurement,
             provenance.observation_id,
             provenance.dependencies,
