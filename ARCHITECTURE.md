@@ -122,7 +122,8 @@ Candidate-specific `SeparatorBandAssignment` 必须同时满足：
 observation，但不能成为 hard separator。Dimension-only edge 只是一条 provisional hypothesis，
 不能增加 hard separator 数量或单独证明 count。
 
-相邻照片的 signed `InterPhotoSpacing`：正值表示 separator，零表示 contact，负值表示 overlap。
+相邻照片的 signed `InterPhotoSpacing`：正值表示 separator，零表示 contact，负值表示 overlap；
+`InterPhotoSpacingKind` 是该状态的唯一 typed identity，runtime/evidence/output 不比较裸字符串。
 只有独立 observation 或独立约束共同佐证的 overlap 才能触发输出保护；geometry equation
 推导的负值不能证明自身，也不能自动增加 bleed。
 

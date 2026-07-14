@@ -10,6 +10,7 @@ from x5crop.domain import (
     InterPhotoSpacing,
     InterPhotoBoundaryReference,
     InterPhotoSpacingBasis,
+    InterPhotoSpacingKind,
     MeasurementIdentity,
     MeasurementProvenance,
     ObservationId,
@@ -72,6 +73,17 @@ class InterFrameOverlapBleedTest(unittest.TestCase):
         self.assertNotIn("provenance", fields)
         self.assertNotIn("required_px", fields)
         self.assertIs(hints["spacing"], InterPhotoSpacing)
+
+    def test_inter_photo_spacing_kind_is_typed(self) -> None:
+        requirement = _overlap_requirement(
+            InterPhotoBoundaryReference(None, 1),
+            0,
+            1,
+            12,
+            supported=True,
+        )
+
+        self.assertIs(requirement.spacing.kind, InterPhotoSpacingKind.OVERLAP)
 
     def test_runtime_overlap_protection_consumes_assessed_boundary_evidence(self) -> None:
         source = getsource(_overlap_requirements)

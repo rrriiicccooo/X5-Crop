@@ -4,7 +4,7 @@ from dataclasses import replace
 
 from ..detection.candidate.model import CandidateEvidence, DualLaneEvidence
 from ..detection.candidate.selection.model import SelectionResult
-from ..domain import Box, InterPhotoBoundaryReference
+from ..domain import Box, InterPhotoBoundaryReference, InterPhotoSpacingKind
 from ..output.frame_bleed import frame_bleed_plan
 from ..output.model import AxisBleedParameters, FrameBleedPlan, FrameOverlapRequirement
 from ..detection.physical.model import DualLanePhotoSolution
@@ -79,7 +79,7 @@ def _overlap_requirements(
     lane_indexes = _lane_frame_indexes(selection)
     requirements: list[FrameOverlapRequirement] = []
     for relation in relations:
-        if relation.kind != "overlap":
+        if relation.kind != InterPhotoSpacingKind.OVERLAP:
             continue
         boundary = relation.boundary
         lane_index = 0 if boundary.lane_index is None else boundary.lane_index - 1

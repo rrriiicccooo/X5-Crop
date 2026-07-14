@@ -8,6 +8,7 @@ from ..domain import (
     FrameCropEnvelope,
     InterPhotoBoundaryReference,
     InterPhotoSpacing,
+    InterPhotoSpacingKind,
     MeasurementProvenance,
 )
 
@@ -62,7 +63,7 @@ class FrameOverlapRequirement:
             raise ValueError("overlap frame indexes must be non-negative")
         if self.right_frame_index != self.left_frame_index + 1:
             raise ValueError("overlap protection applies to adjacent frames")
-        if self.spacing.kind != "overlap":
+        if self.spacing.kind != InterPhotoSpacingKind.OVERLAP:
             raise ValueError("overlap protection requires negative spacing")
 
     @property

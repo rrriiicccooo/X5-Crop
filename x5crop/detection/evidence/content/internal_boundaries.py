@@ -8,6 +8,7 @@ from ....domain import (
     InterPhotoBoundaryReference,
     InterPhotoSpacing,
     InterPhotoSpacingBasis,
+    InterPhotoSpacingKind,
     MeasurementIdentity,
     MeasurementProvenance,
     ObservationId,
@@ -30,7 +31,12 @@ class InternalBoundaryObservation:
             raise ValueError("internal boundary spacing must preserve boundary identity")
         explained = bool(
             self.spacing_evidence.state == EvidenceState.SUPPORTED
-            and self.spacing_evidence.kind in {"separator", "contact", "overlap"}
+            and self.spacing_evidence.kind
+            in {
+                InterPhotoSpacingKind.SEPARATOR,
+                InterPhotoSpacingKind.CONTACT,
+                InterPhotoSpacingKind.OVERLAP,
+            }
         )
         if explained:
             state = EvidenceState.SUPPORTED
@@ -54,7 +60,7 @@ def _content_corroborated_spacing(
     if spacing.supports_output_protection:
         return spacing
     measured_overlap_edges = bool(
-        spacing.kind == "overlap"
+        spacing.kind == InterPhotoSpacingKind.OVERLAP
         and spacing.basis == InterPhotoSpacingBasis.GEOMETRY_HYPOTHESIS
         and continuous_content_crossing
         and left.trailing.source == PhotoApertureEdgeSource.MEASURED_BOUNDARY_PATH

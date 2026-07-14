@@ -47,6 +47,8 @@ repository rules in `AGENTS.md`.
 - Overlap output planning 不再复制 `physically_supported` 或把 provenance 压成字符串；
   `FrameOverlapRequirement` 直接持有 canonical `InterPhotoSpacing`，required bleed、support、boundary
   与 typed provenance 均从该物理事实派生。
+- Separator/contact/overlap/unresolved spacing 状态收敛为 `InterPhotoSpacingKind`；删除 runtime、
+  content evidence 与 output 中的裸字符串物理身份比较。
 - Sequence conservation 收敛为 `PhotoSequenceSolution` 的构造不变量。相邻 spacing 已由 aperture
   edge 差值唯一决定，不再把同一几何恒等式重复包装成 evidence、CandidateGate check、final reason
   或 report 字段，避免 geometry 自证。

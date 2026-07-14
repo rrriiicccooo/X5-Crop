@@ -709,6 +709,13 @@ class InterPhotoSpacingBasis(str, Enum):
     GEOMETRY_HYPOTHESIS = "geometry_hypothesis"
 
 
+class InterPhotoSpacingKind(str, Enum):
+    SEPARATOR = "separator"
+    CONTACT = "contact"
+    OVERLAP = "overlap"
+    UNRESOLVED = "unresolved"
+
+
 @dataclass(frozen=True)
 class InterPhotoSpacing:
     boundary: InterPhotoBoundaryReference
@@ -728,15 +735,15 @@ class InterPhotoSpacing:
             raise ValueError("corroborated inter-photo spacing must be an overlap")
 
     @property
-    def kind(self) -> str:
+    def kind(self) -> InterPhotoSpacingKind:
         interval = self.signed_width_px
         if interval.minimum > 0.0:
-            return "separator"
+            return InterPhotoSpacingKind.SEPARATOR
         if interval.maximum < 0.0:
-            return "overlap"
+            return InterPhotoSpacingKind.OVERLAP
         if interval.minimum == 0.0 and interval.maximum == 0.0:
-            return "contact"
-        return "unresolved"
+            return InterPhotoSpacingKind.CONTACT
+        return InterPhotoSpacingKind.UNRESOLVED
 
     @property
     def state(self) -> EvidenceState:
@@ -744,7 +751,7 @@ class InterPhotoSpacing:
             return EvidenceState.UNAVAILABLE
         return (
             EvidenceState.UNAVAILABLE
-            if self.kind == "unresolved"
+            if self.kind == InterPhotoSpacingKind.UNRESOLVED
             else EvidenceState.SUPPORTED
         )
 
@@ -758,7 +765,7 @@ class InterPhotoSpacing:
     @property
     def supports_output_protection(self) -> bool:
         return bool(
-            self.kind == "overlap"
+            self.kind == InterPhotoSpacingKind.OVERLAP
             and self.basis
             in {
                 InterPhotoSpacingBasis.OBSERVED,
@@ -769,10 +776,10 @@ class InterPhotoSpacing:
     @property
     def reason(self) -> str:
         if self.basis == InterPhotoSpacingBasis.GEOMETRY_HYPOTHESIS:
-            return f"{self.kind}_spacing_hypothesis"
+            return f"{self.kind.value}_spacing_hypothesis"
         if self.basis == InterPhotoSpacingBasis.CORROBORATED_OVERLAP:
             return "independent_constraints_require_overlap"
-        return f"observed_{self.kind}_spacing"
+        return f"observed_{self.kind.value}_spacing"
 
 
 @dataclass(frozen=True)

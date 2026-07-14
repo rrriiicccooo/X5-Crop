@@ -53,6 +53,7 @@ from x5crop.domain import (
     InterPhotoBoundaryReference,
     InterPhotoSpacing,
     InterPhotoSpacingBasis,
+    InterPhotoSpacingKind,
     MeasurementIdentity,
     MeasurementProvenance,
     ObservationId,
@@ -326,7 +327,7 @@ class FrameContentSupportTest(unittest.TestCase):
                     crossing,
                 )
                 self.assertEqual(evidence.state, expected)
-                if spacing.kind == "overlap":
+                if spacing.kind == InterPhotoSpacingKind.OVERLAP:
                     self.assertEqual(
                         evidence.observations[0].spacing_evidence.basis,
                         InterPhotoSpacingBasis.CORROBORATED_OVERLAP,
