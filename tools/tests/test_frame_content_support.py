@@ -8,6 +8,13 @@ import numpy as np
 from tools.tests.physical_gate_support import candidate_evidence_fixture, candidate_fixture
 from x5crop.cache import MeasurementCache
 from x5crop.configuration.registry import get_detection_configuration
+from x5crop.detection.candidate.assessment.candidate_gate import (
+    candidate_gate_assessment,
+)
+from x5crop.detection.candidate.assessment.model import (
+    BoundaryProofPath,
+    CandidateGateInput,
+)
 from x5crop.detection.candidate.model import content_preservation_state
 from x5crop.detection.evidence.content.external_boundaries import (
     external_aperture_preservation_evidence,
@@ -375,7 +382,7 @@ class FrameContentSupportTest(unittest.TestCase):
         self.assertFalse(evidence.observations[0].content_present)
         self.assertTrue(evidence.observations[1].content_present)
 
-    def test_external_content_measurement_does_not_rewrite_aperture_geometry(self) -> None:
+    def test_measured_aperture_content_conflict_blocks_candidate_gate(self) -> None:
         gray = np.full((120, 900), 255, dtype=np.uint8)
         gray[20:100, 50:850] = 0
         geometry = _single_aperture_geometry(Box(250, 0, 650, 120))
@@ -386,21 +393,46 @@ class FrameContentSupportTest(unittest.TestCase):
             get_detection_configuration("120-645", "full").content.evidence,
         )
 
-        self.assertEqual(preservation.state, EvidenceState.UNAVAILABLE)
+        self.assertEqual(preservation.state, EvidenceState.CONTRADICTED)
         self.assertEqual(
             preservation.reason,
-            "external_aperture_measurement_conflict",
+            "visible_content_crosses_external_aperture",
         )
         evidence = candidate_evidence_fixture()
-        self.assertEqual(
-            content_preservation_state(
-                evidence.photo_aperture_coverage,
-                evidence.inter_photo_boundary_preservation,
-                preservation,
-                evidence.partial_edge_safety,
-            ),
-            EvidenceState.UNAVAILABLE,
+        preservation_state = content_preservation_state(
+            evidence.photo_aperture_coverage,
+            evidence.inter_photo_boundary_preservation,
+            preservation,
+            evidence.partial_edge_safety,
         )
+        self.assertEqual(preservation_state, EvidenceState.CONTRADICTED)
+        gate = candidate_gate_assessment(
+            CandidateGateInput(
+                content_preservation=preservation_state,
+                photo_geometry=EvidenceState.SUPPORTED,
+                sequence_conservation=EvidenceState.SUPPORTED,
+                evidence_independence=EvidenceState.SUPPORTED,
+                proof_paths=(
+                    BoundaryProofPath(
+                        "separator_sequence_led",
+                        EvidenceState.SUPPORTED,
+                        ("synthetic_separator_sequence",),
+                    ),
+                    BoundaryProofPath(
+                        "geometry_led",
+                        EvidenceState.UNAVAILABLE,
+                        ("synthetic_photo_dimensions",),
+                    ),
+                    BoundaryProofPath(
+                        "partial_occupancy_led",
+                        EvidenceState.NOT_APPLICABLE,
+                        ("synthetic_full_strip",),
+                    ),
+                ),
+            )
+        )
+        self.assertFalse(gate.passed)
+        self.assertEqual(gate.failed_checks, ("content_preservation",))
         self.assertEqual(geometry.photo_apertures[0].frame_crop_envelope.box, Box(250, 0, 650, 120))
 
     def test_single_noise_pixel_cannot_contradict_external_aperture(self) -> None:

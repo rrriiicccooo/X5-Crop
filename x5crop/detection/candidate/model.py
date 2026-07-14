@@ -140,8 +140,6 @@ def content_preservation_state(
         return EvidenceState.CONTRADICTED
     if external_boundaries.state == EvidenceState.CONTRADICTED:
         return EvidenceState.CONTRADICTED
-    if external_boundaries.measured_boundary_conflict:
-        return EvidenceState.UNAVAILABLE
     if partial_edge.state == EvidenceState.CONTRADICTED:
         return EvidenceState.CONTRADICTED
     internal_boundaries_preserved = internal_boundaries.state in {

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import fields
+from pathlib import Path
 import re
 import unittest
 
@@ -10,6 +11,9 @@ from x5crop.detection.candidate import model as candidate_model
 from x5crop.detection.evidence.content import external_boundaries
 from x5crop.detection.physical import model
 from x5crop.output import model as output_model
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 class PhotoApertureArchitectureContractTest(unittest.TestCase):
@@ -68,6 +72,20 @@ class PhotoApertureArchitectureContractTest(unittest.TestCase):
         self.assertIsInstance(
             domain.SeparatorBandObservation.midpoint,
             property,
+        )
+
+    def test_architecture_keeps_cross_axis_support_candidate_specific(self) -> None:
+        architecture = (PROJECT_ROOT / "ARCHITECTURE.md").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn(
+            "跨短轴测量只存在于 candidate-specific `SeparatorBandCrossAxisSupport`",
+            architecture,
+        )
+        self.assertNotIn(
+            "tonal measurement、cross-axis measurements 与 provenance",
+            architecture,
         )
 
     def test_output_geometry_uses_per_photo_crop_envelopes(self) -> None:

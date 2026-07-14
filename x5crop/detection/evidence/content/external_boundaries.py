@@ -67,8 +67,8 @@ class ExternalApertureBoundaryObservation:
                 state = EvidenceState.CONTRADICTED
                 reason = "continuous_content_crosses_provisional_aperture"
             else:
-                state = EvidenceState.UNAVAILABLE
-                reason = "content_activity_conflicts_with_measured_aperture"
+                state = EvidenceState.CONTRADICTED
+                reason = "continuous_content_crosses_measured_aperture"
         else:
             state = EvidenceState.UNAVAILABLE
             reason = "external_content_crossing_not_corroborated"
@@ -84,7 +84,6 @@ class ExternalAperturePreservationEvidence:
     photo_count: int
     observations: tuple[ExternalApertureBoundaryObservation, ...]
     threshold: float | None
-    measured_boundary_conflict: bool = field(init=False)
     state: EvidenceState = field(init=False)
     reason: str = field(init=False)
 
@@ -126,11 +125,6 @@ class ExternalAperturePreservationEvidence:
                 "external aperture evidence requires every photo cross-axis edge "
                 "and only the sequence endpoint long-axis edges"
             )
-        measured_boundary_conflict = any(
-            item.content_crossing_detected
-            and item.boundary_source != PhotoApertureEdgeSource.DIMENSION_HYPOTHESIS
-            for item in self.observations
-        )
         if any(
             item.state == EvidenceState.CONTRADICTED
             for item in self.observations
@@ -148,19 +142,8 @@ class ExternalAperturePreservationEvidence:
             reason = (
                 "content_evidence_has_no_dynamic_range"
                 if self.threshold is None
-                else "external_aperture_measurement_conflict"
-                if any(
-                    item.reason
-                    == "content_activity_conflicts_with_measured_aperture"
-                    for item in self.observations
-                )
                 else "external_content_crossing_not_observed"
             )
-        object.__setattr__(
-            self,
-            "measured_boundary_conflict",
-            measured_boundary_conflict,
-        )
         object.__setattr__(self, "state", state)
         object.__setattr__(self, "reason", reason)
 

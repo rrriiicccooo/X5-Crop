@@ -92,7 +92,9 @@ Raw path 的物理解释只发生在 candidate-specific assignment：
 ### 2.3 Separator 双边模型
 
 `SeparatorBandObservation` 是 count-independent 像素 band，只保存 `start/end`、灰度外观、
-tonal measurement、cross-axis measurements 与 provenance；中点由两端派生，不是第三事实源。
+tonal measurement 与 provenance；中点由两端派生，不是第三事实源。
+跨短轴测量只存在于 candidate-specific `SeparatorBandCrossAxisSupport`，因为它必须对应当前照片
+开口的短轴范围。
 
 一个正间距 separator 有两条照片边界：
 
