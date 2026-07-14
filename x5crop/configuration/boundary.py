@@ -16,7 +16,7 @@ class BoundaryPathParameters:
     path_cluster_tolerance_ratio: float = 0.005
     path_cluster_tolerance_min_px: int = 2
     maximum_path_section_gap: int = 1
-    strongest_change_points_per_section: int = 24
+    strongest_change_points_per_section: int = 64
     maximum_paths_per_axis: int = 32
 
     def __post_init__(self) -> None:

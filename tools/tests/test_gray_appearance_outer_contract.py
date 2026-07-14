@@ -246,6 +246,25 @@ class GrayAppearanceOuterContractTests(unittest.TestCase):
 
         self.assertEqual(len(points), 1)
 
+    def test_moderate_aperture_edge_survives_stronger_content_changes(self) -> None:
+        signal = np.zeros(110, dtype=np.float32)
+        for index in range(24):
+            signal[2 + 3 * index] = 100.0
+        for index in range(10):
+            signal[74 + 3 * index] = 50.0
+
+        points = _adaptive_change_points(
+            signal,
+            replace(
+                BoundaryPathParameters(),
+                change_point_percentile=45.0,
+            ),
+        )
+
+        self.assertTrue(
+            any(point.minimum <= 74.0 < point.maximum for point in points)
+        )
+
     def test_short_axis_paths_sample_the_full_long_axis_at_local_density(self) -> None:
         gray = np.zeros((100, 1_000), dtype=np.uint8)
         profiles = _cross_section_profiles(

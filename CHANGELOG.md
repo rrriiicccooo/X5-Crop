@@ -14,6 +14,15 @@ repository rules in `AGENTS.md`.
 
 ### V4.9 当前开发线
 
+#### Boundary observation 代表性校准（2026-07-14）
+
+- 每个局部 cross-section 保留的 adaptive change-point 候选由 24 增至 64。较弱但跨照片一致的
+  aperture edge 不再因照片内部存在更多强纹理 transition 而在 count-independent observation 阶段
+  消失；该参数仍只控制原始测量代表性，不授予 geometry、Gate 或 PASS/REVIEW 权限。
+- 新增永久 synthetic contract，覆盖“真实 aperture edge 强度低于多组内容边缘”场景。
+  `120-67/full 1.tif` 现在保留与人工顶部边界区间相交的 raw path；互斥 placements 仍保持
+  GeometryResolution unavailable，provisional geometry 不可导出。
+
 #### Scan metadata 与照片比例权限收敛（2026-07-14）
 
 - 删除运行时不可达的 exact scan-calibration 权限。TIFF resolution metadata 现在只停留在
