@@ -1790,31 +1790,34 @@ def _conflicting_photo_indexes(
     builds: tuple[_SequenceBuild, ...],
 ) -> tuple[int, ...]:
     reference = builds[0]
-    return tuple(
-        photo_index
-        for photo_index in range(1, len(reference.apertures) + 1)
-        if any(
-            any(
-                not left.position.intersects(right.position)
-                for left, right in zip(
-                    (
-                        reference.apertures[photo_index - 1].leading,
-                        reference.apertures[photo_index - 1].trailing,
-                        reference.apertures[photo_index - 1].top,
-                        reference.apertures[photo_index - 1].bottom,
-                    ),
-                    (
-                        other.apertures[photo_index - 1].leading,
-                        other.apertures[photo_index - 1].trailing,
-                        other.apertures[photo_index - 1].top,
-                        other.apertures[photo_index - 1].bottom,
-                    ),
-                    strict=True,
-                )
+    conflicts: list[int] = []
+    for photo_index in range(1, len(reference.apertures) + 1):
+        apertures = tuple(build.apertures[photo_index - 1] for build in builds)
+        edges = tuple(
+            (
+                aperture.leading.position,
+                aperture.trailing.position,
+                aperture.top.position,
+                aperture.bottom.position,
             )
-            for other in builds[1:]
+            for aperture in apertures
         )
-    )
+        if any(
+            not _intervals_share_position(tuple(intervals))
+            for intervals in zip(*edges, strict=True)
+        ):
+            conflicts.append(photo_index)
+    return tuple(conflicts)
+
+
+def _intervals_share_position(intervals: tuple[PixelInterval, ...]) -> bool:
+    shared = intervals[0]
+    for interval in intervals[1:]:
+        intersection = shared.intersection(interval)
+        if intersection is None:
+            return False
+        shared = intersection
+    return True
 
 
 def _build_dominates(left: _SequenceBuild, right: _SequenceBuild) -> bool:

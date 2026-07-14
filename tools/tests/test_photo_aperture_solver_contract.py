@@ -889,6 +889,73 @@ class PhotoApertureSolverContractTest(unittest.TestCase):
             (1, 3),
         )
 
+    def test_assignment_consensus_requires_one_shared_aperture_interval(self) -> None:
+        scope = _scope(
+            width=120,
+            height=120,
+            leading=10.0,
+            trailing=110.0,
+            top=10.0,
+            bottom=110.0,
+        )
+        cross_axis = _plan(scope).hypotheses[0]
+        solved = solve_photo_sequence(
+            (),
+            scope,
+            _plan(scope),
+            1,
+            _dimensions(100.0, 100.0),
+            ContentRegionObservation(scope.holder_span.box, (), 0),
+            maximum_assignment_evaluations=100,
+            maximum_solution_alternatives=8,
+        )
+        self.assertIsInstance(solved, PhotoSequenceSolveResult)
+        assert isinstance(solved, PhotoSequenceSolveResult)
+        aperture = solved.photo_apertures[0]
+        objectives = sequence_solver._SequenceBuildObjectives(
+            uncorroborated_overlap_extent_px=0.0,
+            supported_separator_count=0,
+            internal_boundary_measurement_quality=0.0,
+            dimension_residual=0.0,
+            external_boundary_measurement_quality=0.0,
+            boundary_uncertainty_ratio=0.0,
+        )
+        template = sequence_solver._SequenceBuild(
+            apertures=(aperture,),
+            edge_assignments=solved.aperture_edge_assignments,
+            separator_assignments=solved.separator_assignments,
+            spacings=solved.inter_photo_spacings,
+            photo_width_px=solved.photo_width_constraint_px,
+            cross_axis=cross_axis,
+            residuals=solved.residuals,
+            objectives=objectives,
+        )
+
+        def with_leading_interval(
+            interval: PixelInterval,
+        ) -> sequence_solver._SequenceBuild:
+            return replace(
+                template,
+                apertures=(
+                    replace(
+                        aperture,
+                        leading=replace(aperture.leading, position=interval),
+                    ),
+                ),
+            )
+
+        consensus = sequence_solver._assignment_consensus(
+            (
+                with_leading_interval(PixelInterval(0.0, 10.0)),
+                with_leading_interval(PixelInterval(0.0, 4.0)),
+                with_leading_interval(PixelInterval(6.0, 10.0)),
+            ),
+            budget_exhausted=False,
+        )
+
+        self.assertEqual(consensus.outcome, AssignmentConsensusOutcome.DISAGREED)
+        self.assertEqual(consensus.conflicting_photo_indexes, (1,))
+
     def test_short_edge_photos_without_holder_contact_are_not_physical(self) -> None:
         scope = _scope(
             width=310,
