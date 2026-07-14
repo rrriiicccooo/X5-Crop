@@ -22,6 +22,7 @@ from x5crop.detection.candidate.assessment.model import (
 )
 from x5crop.detection.candidate.model import content_preservation_state
 from x5crop.detection.evidence.content.external_boundaries import (
+    _crossing_track_count,
     external_aperture_preservation_evidence,
 )
 from x5crop.detection.evidence.photo_aperture_coverage import (
@@ -400,6 +401,21 @@ class FrameContentSupportTest(unittest.TestCase):
                 threshold=0.5,
                 minimum_active_pixels=16,
             )
+        )
+
+    def test_separated_activity_is_not_a_continuous_boundary_crossing(self) -> None:
+        active = np.zeros((10, 5), dtype=bool)
+        active[0, :] = True
+        active[9, :] = True
+
+        self.assertEqual(
+            _crossing_track_count(
+                active,
+                Box(0, 5, 5, 10),
+                Box(0, 0, 5, 5),
+                BoundarySide.TOP,
+            ),
+            0,
         )
 
     def test_external_content_crossing_is_not_silently_accepted(self) -> None:

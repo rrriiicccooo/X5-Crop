@@ -239,12 +239,20 @@ def _crossing_track_count(
 ) -> int:
     inside_active = _active_region(active, inside)
     outside_active = _active_region(active, outside)
-    if side in {BoundarySide.LEADING, BoundarySide.TRAILING}:
-        inside_tracks = inside_active.any(axis=1)
-        outside_tracks = outside_active.any(axis=1)
+    if side == BoundarySide.LEADING:
+        inside_tracks = inside_active[:, 0]
+        outside_tracks = outside_active[:, -1]
+    elif side == BoundarySide.TRAILING:
+        inside_tracks = inside_active[:, -1]
+        outside_tracks = outside_active[:, 0]
+    elif side == BoundarySide.TOP:
+        inside_tracks = inside_active[0, :]
+        outside_tracks = outside_active[-1, :]
+    elif side == BoundarySide.BOTTOM:
+        inside_tracks = inside_active[-1, :]
+        outside_tracks = outside_active[0, :]
     else:
-        inside_tracks = inside_active.any(axis=0)
-        outside_tracks = outside_active.any(axis=0)
+        raise ValueError(f"unsupported external aperture side: {side}")
     track_count = min(inside_tracks.size, outside_tracks.size)
     return int(
         np.count_nonzero(

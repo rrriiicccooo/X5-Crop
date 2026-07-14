@@ -49,6 +49,8 @@ repository rules in `AGENTS.md`.
   与 typed provenance 均从该物理事实派生。
 - Separator/contact/overlap/unresolved spacing 状态收敛为 `InterPhotoSpacingKind`；删除 runtime、
   content evidence 与 output 中的裸字符串物理身份比较。
+- External aperture content preservation 只把边界两侧相邻像素上的连续活动视为 crossing；同一轨迹
+  在两侧带状区域内彼此分离的活动不再伪装成可见内容被裁断。
 - Sequence conservation 收敛为 `PhotoSequenceSolution` 的构造不变量。相邻 spacing 已由 aperture
   edge 差值唯一决定，不再把同一几何恒等式重复包装成 evidence、CandidateGate check、final reason
   或 report 字段，避免 geometry 自证。
