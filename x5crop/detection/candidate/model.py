@@ -34,7 +34,6 @@ from ..evidence.photo_aperture_coverage import (
     PhotoApertureCoverageEvidence,
     photo_aperture_coverage_matches_geometry,
 )
-from ..evidence.aperture_sequence import sequence_conservation_for_geometry
 from ..evidence.physical_scale import candidate_scale_observations_match_geometry
 from ..evidence.holder_occupancy import HolderOccupancyEvidence
 from ..evidence.content.external_boundaries import (
@@ -51,7 +50,6 @@ from ..physical.photo_size import (
 from .assessment.model import BoundaryProofPath, CandidateGateAssessment
 from .plan.model import CountHypothesis
 from ..physical.model import SequenceResiduals
-from ..evidence.aperture_sequence import PhotoSequenceConservationEvidence
 from ..geometry_resolution import GeometryResolution
 from ...units import PhysicalScaleObservation
 
@@ -77,7 +75,6 @@ class BuiltCandidate:
 @dataclass(frozen=True)
 class CandidateEvidence:
     photo_aperture_coverage: PhotoApertureCoverageEvidence
-    sequence_conservation: PhotoSequenceConservationEvidence
     separator_sequence: SeparatorSequenceEvidence
     frame_dimensions: FrameDimensionEvidence
     photo_content: PhotoContentEvidence
@@ -162,13 +159,12 @@ def boundary_proof_paths_for_geometry(
         aperture.all_boundaries_supported
         for aperture in geometry.photo_apertures
     )
-    conservation_and_independence = bool(
-        evidence.sequence_conservation.state != EvidenceState.CONTRADICTED
-        and evidence.independence.state
+    evidence_independent = bool(
+        evidence.independence.state
         in {EvidenceState.SUPPORTED, EvidenceState.NOT_APPLICABLE}
     )
     separator_sequence_context = bool(
-        conservation_and_independence and aperture_boundaries_supported
+        evidence_independent and aperture_boundaries_supported
     )
     separator_sequence_led = bool(
         geometry.count > 1
@@ -208,7 +204,7 @@ def boundary_proof_paths_for_geometry(
         and evidence.partial_edge_safety.state == EvidenceState.SUPPORTED
         and evidence.holder_occupancy.underfilled
         and aperture_boundaries_supported
-        and conservation_and_independence
+        and evidence_independent
     )
     return (
         BoundaryProofPath(
@@ -321,7 +317,6 @@ def _candidate_gate_evidence_states(
     return {
         "content_preservation": content_preservation,
         "photo_geometry_consistency": combined("frame_dimensions"),
-        "frame_sequence_conservation": combined("sequence_conservation"),
         "evidence_independence": combined("independence"),
     }
 
@@ -409,8 +404,6 @@ def _candidate_evidence_matches_geometry(
             geometry,
             evidence.photo_aperture_coverage,
         )
-        and evidence.sequence_conservation
-        == sequence_conservation_for_geometry(geometry)
         and (
             not content_indexes
             or content_indexes == tuple(range(1, geometry.count + 1))
@@ -600,10 +593,6 @@ class AssessedCandidate:
                     (
                         "photo_aperture_coverage",
                         evidence.photo_aperture_coverage.state,
-                    ),
-                    (
-                        "frame_sequence_conservation",
-                        evidence.sequence_conservation.state,
                     ),
                     ("separator_sequence", evidence.separator_sequence.state),
                     ("frame_dimensions", evidence.frame_dimensions.state),

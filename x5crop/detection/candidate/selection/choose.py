@@ -198,10 +198,6 @@ def geometry_resolution_for_selection(
         hypothesis.source
         in {CountHypothesisSource.FORMAT_DEFAULT, CountHypothesisSource.REQUESTED}
     )
-    conservation_not_contradicted = all(
-        item.sequence_conservation.state != EvidenceState.CONTRADICTED
-        for item in evidence
-    )
     assignment_geometry_resolved = (
         selected.geometry.assignment_consensus.state == EvidenceState.SUPPORTED
     )
@@ -214,7 +210,6 @@ def geometry_resolution_for_selection(
             item.frame_dimensions.state == EvidenceState.SUPPORTED
             for item in evidence
         )
-        and conservation_not_contradicted
         and all(
             item.content_preservation_state == EvidenceState.SUPPORTED
             for item in evidence
@@ -242,7 +237,6 @@ def geometry_resolution_for_selection(
         )
         and aperture_boundaries_resolved
         and proof_path_supported
-        and conservation_not_contradicted
         and assignment_geometry_resolved
         and not candidate_search_budget_exhausted
     )

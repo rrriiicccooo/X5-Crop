@@ -306,10 +306,9 @@ class PhysicalGateModelContractTest(unittest.TestCase):
     def test_final_reason_vocabulary_is_finite_and_physical(self) -> None:
         from x5crop.detection.decision.vocabulary import FINAL_REVIEW_REASONS
 
-        self.assertEqual(len(FINAL_REVIEW_REASONS), 11)
+        self.assertEqual(len(FINAL_REVIEW_REASONS), 10)
         self.assertIn("content_preservation_unresolved", FINAL_REVIEW_REASONS)
         self.assertIn("boundary_evidence_insufficient", FINAL_REVIEW_REASONS)
-        self.assertIn("frame_sequence_not_conserved", FINAL_REVIEW_REASONS)
         self.assertIn("count_resolution_unavailable", FINAL_REVIEW_REASONS)
         self.assertIn("geometry_resolution_unavailable", FINAL_REVIEW_REASONS)
 

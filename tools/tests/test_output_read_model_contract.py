@@ -163,10 +163,10 @@ class OutputReadModelContractTest(unittest.TestCase):
         self.assertNotIn("decision_geometry", output)
         self.assertNotIn("frame_bleed_plan", output["finalization_plan"])
 
-    def test_candidate_report_owns_sequence_conservation_directly(self) -> None:
+    def test_candidate_report_does_not_duplicate_geometry_invariants(self) -> None:
         candidate = _record()["selection"]["candidates"][0]
         self.assertIn("inter_photo_spacings", candidate["provisional_geometry"])
-        self.assertIn("sequence_conservation", candidate["evidence"])
+        self.assertNotIn("sequence_conservation", candidate["evidence"])
         self.assertNotIn("frame_sequence", candidate["evidence"])
 
     def test_cache_restoration_rejects_geometry_not_produced_by_finalization(

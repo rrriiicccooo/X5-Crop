@@ -8,7 +8,6 @@ from ...evidence.content.internal_boundaries import (
 from ...evidence.separator_sequence import separator_sequence_evidence
 from ...evidence.holder_boundary import holder_boundary_evidence
 from ...evidence.photo_aperture_coverage import photo_aperture_coverage_evidence
-from ...evidence.aperture_sequence import sequence_conservation_for_geometry
 from ...evidence.holder_occupancy import holder_occupancy_evidence
 from ...evidence.content.external_boundaries import (
     external_aperture_preservation_evidence,
@@ -44,7 +43,6 @@ def candidate_gate_for_evidence(
         CandidateGateInput(
             content_preservation=evidence.content_preservation_state,
             photo_geometry=evidence.frame_dimensions.state,
-            sequence_conservation=evidence.sequence_conservation.state,
             evidence_independence=evidence.independence.state,
             proof_paths=boundary_proof_paths_for_geometry(
                 candidate.geometry,
@@ -65,7 +63,6 @@ def assess_candidate(
     geometry = candidate.geometry
     if not isinstance(geometry, PhotoSequenceSolution):
         raise ValueError("standard candidate assessment requires sequence geometry")
-    sequence_conservation = sequence_conservation_for_geometry(geometry)
     frame_dimensions = frame_dimension_evidence(
         geometry,
         context.scan_calibration,
@@ -119,7 +116,6 @@ def assess_candidate(
     independence = evidence_independence_evidence(geometry)
     evidence = CandidateEvidence(
         photo_aperture_coverage=coverage,
-        sequence_conservation=sequence_conservation,
         separator_sequence=separator_sequence,
         frame_dimensions=frame_dimensions,
         photo_content=content,

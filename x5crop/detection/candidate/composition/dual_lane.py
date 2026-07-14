@@ -60,9 +60,6 @@ def compose_dual_lane_candidate(
             photo_geometry=_combined_evidence_state(
                 tuple(item.frame_dimensions.state for item in physical_evidence)
             ),
-            sequence_conservation=_combined_evidence_state(
-                tuple(item.sequence_conservation.state for item in physical_evidence)
-            ),
             evidence_independence=_combined_evidence_state(
                 tuple(item.independence.state for item in physical_evidence)
             ),

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import fields
-from typing import get_type_hints
 import unittest
 
 from tools.tests.architecture_contracts import (
@@ -62,18 +61,20 @@ class ArchitectureOwnershipContractTest(unittest.TestCase):
         )
         self.assertNotIn("content_preservation", CandidateEvidence.__dataclass_fields__)
 
-    def test_candidate_evidence_owns_sequence_conservation_directly(self) -> None:
+    def test_sequence_conservation_is_a_geometry_invariant_not_duplicate_evidence(self) -> None:
+        from x5crop.detection.candidate.assessment.model import (
+            CANDIDATE_GATE_CHECK_CODES,
+        )
         from x5crop.detection.candidate.model import CandidateEvidence
-        from x5crop.detection.evidence.aperture_sequence import (
-            PhotoSequenceConservationEvidence,
-        )
-        import x5crop.detection.evidence.aperture_sequence as aperture_sequence
 
-        self.assertIs(
-            get_type_hints(CandidateEvidence)["sequence_conservation"],
-            PhotoSequenceConservationEvidence,
+        self.assertFalse(
+            (
+                PROJECT_ROOT
+                / "x5crop/detection/evidence/aperture_sequence.py"
+            ).exists()
         )
-        self.assertFalse(hasattr(aperture_sequence, "FrameSequenceEvidence"))
+        self.assertNotIn("sequence_conservation", CandidateEvidence.__dataclass_fields__)
+        self.assertNotIn("frame_sequence_conservation", CANDIDATE_GATE_CHECK_CODES)
 
     def test_removed_architecture_surfaces_do_not_exist(self) -> None:
         removed = (

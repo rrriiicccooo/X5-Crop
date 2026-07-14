@@ -22,11 +22,6 @@ def candidate_gate_assessment(gate_input: CandidateGateInput) -> CandidateGateAs
             state=gate_input.photo_geometry,
         ),
         GateCheck(
-            code="frame_sequence_conservation",
-            stage=GateStage.CANDIDATE,
-            state=gate_input.sequence_conservation,
-        ),
-        GateCheck(
             code="evidence_independence",
             stage=GateStage.CANDIDATE,
             state=gate_input.evidence_independence,

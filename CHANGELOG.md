@@ -28,6 +28,9 @@ repository rules in `AGENTS.md`.
   `GeometryResolution.larger_count_hypotheses_resolved` 只有在更大 count ambiguity 确实消失时成立，
   防止空片夹 aperture 替代仍未覆盖的真实照片并获得自动输出权限。
 - `SeparatorBandObservation` 只保存 start/end，中点改为派生属性；删除可能与两端漂移的第三状态。
+- Sequence conservation 收敛为 `PhotoSequenceSolution` 的构造不变量。相邻 spacing 已由 aperture
+  edge 差值唯一决定，不再把同一几何恒等式重复包装成 evidence、CandidateGate check、final reason
+  或 report 字段，避免 geometry 自证。
 - Report identity 破坏性更新为
   `detection_report / photo_aperture_sequence_resolution`，旧 schema 只会 cache miss。
 - Debug Analysis 仍为三联图，图例由 diagnostics configuration 唯一生成。绿色表示理想

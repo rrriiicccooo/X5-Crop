@@ -410,7 +410,6 @@ class FrameContentSupportTest(unittest.TestCase):
             CandidateGateInput(
                 content_preservation=preservation_state,
                 photo_geometry=EvidenceState.SUPPORTED,
-                sequence_conservation=EvidenceState.SUPPORTED,
                 evidence_independence=EvidenceState.SUPPORTED,
                 proof_paths=(
                     BoundaryProofPath(

@@ -34,9 +34,6 @@ from x5crop.detection.evidence.content.external_boundaries import (
 from x5crop.detection.evidence.photo_aperture_coverage import (
     PhotoApertureCoverageEvidence,
 )
-from x5crop.detection.evidence.aperture_sequence import (
-    sequence_conservation_for_geometry,
-)
 from x5crop.detection.evidence.content.internal_boundaries import (
     inter_photo_boundary_preservation_evidence,
 )
@@ -451,7 +448,6 @@ def candidate_gate_fixture(
         for code in (
             "content_preservation",
             "photo_geometry_consistency",
-            "frame_sequence_conservation",
             "evidence_independence",
             "boundary_proof",
         )
@@ -605,7 +601,6 @@ def candidate_evidence_fixture(
             )
     return CandidateEvidence(
         photo_aperture_coverage=coverage,
-        sequence_conservation=sequence_conservation_for_geometry(geometry),
         separator_sequence=separator_sequence_evidence(geometry),
         frame_dimensions=dimensions,
         photo_content=content,

@@ -199,13 +199,6 @@ class FrameDimensionPrior:
         return self.source == FrameDimensionPriorSource.SCAN_CALIBRATION
 
 
-def sum_pixel_intervals(intervals: tuple[PixelInterval, ...]) -> PixelInterval:
-    return PixelInterval(
-        sum(interval.minimum for interval in intervals),
-        sum(interval.maximum for interval in intervals),
-    )
-
-
 @dataclass(frozen=True)
 class HolderSpan:
     box: Box

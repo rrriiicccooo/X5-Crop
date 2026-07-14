@@ -131,7 +131,8 @@ observation，但不能成为 hard separator。Dimension-only edge 只是一条 
 - interior photo dimensions 服从同一物理尺寸 option；
 - holder occlusion 只允许作用于首张 leading 与末张 trailing；
 - separator start/end 分别绑定相邻 aperture edge；
-- content coverage、spacing 与 sequence conservation 必须一致；
+- content coverage 必须与逐张 aperture 一致；spacing 与相邻 aperture edge 的
+  守恒关系由 `PhotoSequenceSolution` 构造不变量保证，不再包装成独立 evidence 或 Gate；
 - 同一 root measurement 不能同时充当两个独立证明；
 - search budget exhaustion 只产生 unresolved。
 
@@ -154,7 +155,7 @@ Standard candidate 的 canonical evidence 包括：
   只形成位置不确定度，不能让未分配给任何照片的内容藏在 sequence 外包络内。
 - external aperture preservation：首张 leading、末张 trailing，以及逐照片 top/bottom 的外边界安全。
 - inter-photo boundary preservation：每条内部边界是否由 separator、contact 或 overlap 解释。
-- separator sequence、photo dimensions 与 sequence conservation。
+- separator sequence 与 photo dimensions；spacing conservation 是 geometry invariant，不是独立证明。
 - holder boundary、holder occupancy、partial edge safety 与 physical scale。
 - measurement independence。
 
@@ -168,7 +169,6 @@ CandidateGate 消费 canonical evidence，并检查：
 
 - content preservation；
 - measured photo geometry；
-- sequence conservation；
 - evidence independence；
 - 至少一条完整 boundary proof path。
 

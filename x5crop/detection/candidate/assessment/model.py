@@ -24,7 +24,6 @@ DUAL_LANE_BOUNDARY_PROOF_PATH_CODES = ("mode_composition",)
 CANDIDATE_GATE_CHECK_CODES = (
     "content_preservation",
     "photo_geometry_consistency",
-    "frame_sequence_conservation",
     "evidence_independence",
     "boundary_proof",
 )
@@ -61,7 +60,6 @@ def boundary_proof_state(
 class CandidateGateInput:
     content_preservation: EvidenceState
     photo_geometry: EvidenceState
-    sequence_conservation: EvidenceState
     evidence_independence: EvidenceState
     proof_paths: tuple[BoundaryProofPath, ...]
     diagnostics: tuple[str, ...] = ()
