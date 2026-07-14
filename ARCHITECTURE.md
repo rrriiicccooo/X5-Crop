@@ -131,6 +131,8 @@ Candidate-specific `SeparatorBandAssignment` 必须同时满足：
 宽度可变化，照片开口尺寸一致性才是主要物理约束。过宽的欠曝 tonal run 可以保留为 raw
 observation，但不能成为 hard separator。Dimension-only edge 只是一条 provisional hypothesis，
 不能增加 hard separator 数量或单独证明 count。
+`count=1` 没有内部照片边界，因此不会进入 separator-sequence hypothesis builder；它只能由两侧
+独立 aperture boundary measurement 或可信 calibration 与独立边界共同求解。
 
 相邻照片的 signed `InterPhotoSpacing`：正值表示 separator，零表示 contact，负值表示 overlap；
 `InterPhotoSpacingKind` 是该状态的唯一 typed identity，runtime/evidence/output 不比较裸字符串。

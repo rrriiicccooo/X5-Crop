@@ -47,6 +47,29 @@ from x5crop.domain import (
 
 
 class PhotoApertureSolverContractTest(unittest.TestCase):
+    def test_separator_sequence_builder_requires_an_internal_boundary(self) -> None:
+        search_scope = _scope(
+            width=120,
+            height=120,
+            leading=10.0,
+            trailing=110.0,
+            top=10.0,
+            bottom=110.0,
+        )
+        cross_axis = _plan(search_scope).hypotheses[0]
+
+        with self.assertRaises(ValueError):
+            sequence_solver._band_sequence_hypotheses(
+                (),
+                search_scope,
+                sequence_solver._axis_paths(search_scope, BoundaryAxis.LONG),
+                1,
+                _dimensions(1.0, 1.0),
+                cross_axis,
+                evaluation_budget=8,
+                maximum_hypotheses=8,
+            )
+
     def test_each_holder_consensus_path_can_authorize_a_clipped_endpoint(self) -> None:
         first = _path(
             BoundaryAxis.LONG,

@@ -154,11 +154,30 @@ class _BandSequenceHypothesis:
     supports: tuple[SeparatorBandCrossAxisSupport, ...]
     band_edges: tuple[tuple[_EdgeConstraint, _EdgeConstraint], ...]
     cross_axis: PhotoApertureCrossAxisHypothesis
-    photo_width_px: PixelInterval | None
+    photo_width_px: PixelInterval
     supported_band_count: int
     measurement_quality: float
     width_residual: float
     uncertainty_px: float
+
+    def __post_init__(self) -> None:
+        if not self.supports or len(self.supports) != len(self.band_edges):
+            raise ValueError(
+                "separator sequence hypothesis requires one edge pair per band"
+            )
+        if self.photo_width_px.minimum < MINIMUM_POSITIVE_PIXEL_EXTENT:
+            raise ValueError("separator sequence photo width must be positive")
+        if not 0 <= self.supported_band_count <= len(self.supports):
+            raise ValueError("supported separator count exceeds sequence length")
+        measurements = (
+            self.measurement_quality,
+            self.width_residual,
+            self.uncertainty_px,
+        )
+        if any(not isfinite(value) or value < 0.0 for value in measurements):
+            raise ValueError(
+                "separator sequence measurements must be finite and non-negative"
+            )
 
 
 @dataclass(frozen=True)
@@ -735,25 +754,12 @@ def _band_sequence_hypotheses(
     evaluation_budget: int,
     maximum_hypotheses: int,
 ) -> tuple[tuple[_BandSequenceHypothesis, ...], int, bool]:
-    required = max(0, count - 1)
-    interior = _interior_separator_supports(supports, search_scope)
-    if required == 0:
-        return (
-            (
-                _BandSequenceHypothesis(
-                    (),
-                    (),
-                    cross_axis,
-                    None,
-                    0,
-                    0.0,
-                    0.0,
-                    0.0,
-                ),
-            ),
-            0,
-            False,
+    required = count - 1
+    if required <= 0:
+        raise ValueError(
+            "separator sequence hypotheses require an internal photo boundary"
         )
+    interior = _interior_separator_supports(supports, search_scope)
     if len(interior) < required:
         return (), 0, False
     if maximum_hypotheses <= 0:
@@ -978,13 +984,11 @@ def _cross_axis_width_constraint(
 
 
 def _width_for_cross_axis(
-    band_width: PixelInterval | None,
+    band_width: PixelInterval,
     cross_axis: PhotoApertureCrossAxisHypothesis,
     dimensions: FrameDimensionPrior,
 ) -> tuple[PixelInterval | None, float]:
     cross_width = _cross_axis_width_constraint(cross_axis, dimensions)
-    if band_width is None:
-        return cross_width, 0.0
     intersection = band_width.intersection(cross_width)
     return (
         None if intersection is None else _positive_interval(intersection),
@@ -1851,28 +1855,22 @@ def _builds_for_hypotheses(
         )
         if photo_width is None:
             continue
-        if band_hypothesis.supports:
-            first_edges = band_hypothesis.band_edges[0]
-            last_edges = band_hypothesis.band_edges[-1]
-            leading_options = _admissible_aperture_endpoints(
-                long_paths,
-                first_edges[0],
-                photo_width,
-                holder_boundaries.get(BoundarySide.LEADING),
-                leading=True,
-            )
-            trailing_options = _admissible_aperture_endpoints(
-                long_paths,
-                last_edges[1],
-                photo_width,
-                holder_boundaries.get(BoundarySide.TRAILING),
-                leading=False,
-            )
-        else:
-            leading_options = tuple(
-                _external_constraint(path) for path in long_paths
-            )
-            trailing_options = leading_options
+        first_edges = band_hypothesis.band_edges[0]
+        last_edges = band_hypothesis.band_edges[-1]
+        leading_options = _admissible_aperture_endpoints(
+            long_paths,
+            first_edges[0],
+            photo_width,
+            holder_boundaries.get(BoundarySide.LEADING),
+            leading=True,
+        )
+        trailing_options = _admissible_aperture_endpoints(
+            long_paths,
+            last_edges[1],
+            photo_width,
+            holder_boundaries.get(BoundarySide.TRAILING),
+            leading=False,
+        )
         for leading_endpoint in leading_options:
             for trailing_endpoint in trailing_options:
                 if evaluations >= evaluation_budget:
@@ -1881,10 +1879,6 @@ def _builds_for_hypotheses(
                 evaluations += 1
                 if trailing_endpoint.position.minimum <= leading_endpoint.position.maximum:
                     continue
-                if not band_hypothesis.supports:
-                    visible = _visible_width(leading_endpoint, trailing_endpoint)
-                    if visible is None or not visible.intersects(photo_width):
-                        continue
                 build = _build_sequence(
                     band_hypothesis,
                     cross_axis,

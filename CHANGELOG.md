@@ -42,6 +42,9 @@ repository rules in `AGENTS.md`.
   退化成任意一条代表路径。只有实际贡献该共识的原始 path 可以佐证首尾 clipped endpoint；派生的
   holder-boundary provenance 只负责组合身份，不能冒充独立像素 measurement。Solver 同时把这些
   endpoint 收窄到共同 interval，不能继续使用单条 path 落在共识之外的 uncertainty。
+- Separator-led search 删除 `count=1` 的空 hypothesis、optional photo width 与 empty-support build
+  分支。该路径现在只表达至少一个真实内部边界的多照片 sequence；单张照片由独立 aperture
+  boundary 路径求解，不再借用一个没有 separator 的 separator 模型。
 
 #### Photo Aperture 联合求解与 Debug 可见性（2026-07-13）
 
