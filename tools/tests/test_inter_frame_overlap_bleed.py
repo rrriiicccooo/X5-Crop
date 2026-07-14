@@ -2,8 +2,19 @@ from __future__ import annotations
 
 import unittest
 from inspect import getsource, signature
+from typing import get_type_hints
 
-from x5crop.domain import Box, FrameCropEnvelope, InterPhotoBoundaryReference
+from x5crop.domain import (
+    Box,
+    FrameCropEnvelope,
+    InterPhotoSpacing,
+    InterPhotoBoundaryReference,
+    InterPhotoSpacingBasis,
+    MeasurementIdentity,
+    MeasurementProvenance,
+    ObservationId,
+    PixelInterval,
+)
 from x5crop.output.frame_bleed import apply_frame_bleed, frame_bleed_plan
 from x5crop.runtime.frame_bleed import _overlap_requirements
 from x5crop.output.model import (
@@ -13,7 +24,55 @@ from x5crop.output.model import (
 )
 
 
+def _overlap_requirement(
+    boundary: InterPhotoBoundaryReference,
+    left_frame_index: int,
+    right_frame_index: int,
+    required_px: int,
+    *,
+    supported: bool,
+) -> FrameOverlapRequirement:
+    basis = (
+        InterPhotoSpacingBasis.CORROBORATED_OVERLAP
+        if supported
+        else InterPhotoSpacingBasis.GEOMETRY_HYPOTHESIS
+    )
+    provenance = MeasurementProvenance(
+        (
+            MeasurementIdentity.PHOTO_EDGES
+            if supported
+            else MeasurementIdentity.FRAME_GEOMETRY
+        ),
+        ObservationId(
+            f"synthetic_overlap:{boundary.lane_index}:{boundary.boundary_index}:"
+            f"{basis.value}"
+        ),
+        (MeasurementIdentity.GRAY_WORK,),
+        "synthetic inter-photo overlap",
+    )
+    return FrameOverlapRequirement(
+        InterPhotoSpacing(
+            boundary,
+            PixelInterval.exact(float(-required_px)),
+            provenance,
+            basis,
+        ),
+        left_frame_index,
+        right_frame_index,
+    )
+
+
 class InterFrameOverlapBleedTest(unittest.TestCase):
+    def test_overlap_requirement_preserves_typed_spacing_fact(self) -> None:
+        fields = FrameOverlapRequirement.__dataclass_fields__
+        hints = get_type_hints(FrameOverlapRequirement)
+
+        self.assertIn("spacing", fields)
+        self.assertNotIn("physically_supported", fields)
+        self.assertNotIn("provenance", fields)
+        self.assertNotIn("required_px", fields)
+        self.assertIs(hints["spacing"], InterPhotoSpacing)
+
     def test_runtime_overlap_protection_consumes_assessed_boundary_evidence(self) -> None:
         source = getsource(_overlap_requirements)
         self.assertIn("inter_photo_boundary_preservation", source)
@@ -44,13 +103,12 @@ class InterFrameOverlapBleedTest(unittest.TestCase):
             frames=frames,
             frame_output_bounds=output_bounds,
             overlap_requirements=(
-                FrameOverlapRequirement(
-                    boundary=InterPhotoBoundaryReference(None, 1),
-                    left_frame_index=0,
-                    right_frame_index=1,
-                    required_px=30,
-                    physically_supported=True,
-                    provenance="content_overlap_measurement",
+                _overlap_requirement(
+                    InterPhotoBoundaryReference(None, 1),
+                    0,
+                    1,
+                    30,
+                    supported=True,
                 ),
             ),
             user_bleed=AxisBleedParameters(5, 2),
@@ -78,13 +136,12 @@ class InterFrameOverlapBleedTest(unittest.TestCase):
                 Box(0, 0, 200, 60),
             ),
             overlap_requirements=(
-                FrameOverlapRequirement(
-                    boundary=InterPhotoBoundaryReference(None, 1),
-                    left_frame_index=0,
-                    right_frame_index=1,
-                    required_px=40,
-                    physically_supported=False,
-                    provenance="geometry_spacing_hypothesis",
+                _overlap_requirement(
+                    InterPhotoBoundaryReference(None, 1),
+                    0,
+                    1,
+                    40,
+                    supported=False,
                 ),
             ),
             user_bleed=AxisBleedParameters(5, 2),
@@ -125,13 +182,12 @@ class InterFrameOverlapBleedTest(unittest.TestCase):
             frames=frames,
             frame_output_bounds=output_bounds,
             overlap_requirements=tuple(
-                FrameOverlapRequirement(
-                    boundary=boundary,
-                    left_frame_index=lane_index * 2,
-                    right_frame_index=lane_index * 2 + 1,
-                    required_px=20,
-                    physically_supported=False,
-                    provenance="geometry_spacing_hypothesis",
+                _overlap_requirement(
+                    boundary,
+                    lane_index * 2,
+                    lane_index * 2 + 1,
+                    20,
+                    supported=False,
                 )
                 for lane_index, boundary in enumerate(boundaries)
             ),
@@ -158,13 +214,12 @@ class InterFrameOverlapBleedTest(unittest.TestCase):
             frames=geometry.final_boxes,
             frame_output_bounds=(Box(0, 0, 300, 60),) * 3,
             overlap_requirements=(
-                FrameOverlapRequirement(
+                _overlap_requirement(
                     InterPhotoBoundaryReference(None, 1),
                     0,
                     1,
                     30,
-                    True,
-                    "observed_overlap",
+                    supported=True,
                 ),
             ),
             user_bleed=AxisBleedParameters(5, 2),
@@ -217,12 +272,6 @@ class InterFrameOverlapBleedTest(unittest.TestCase):
         self.assertEqual(expanded.final_boxes[0], Box(5, 3, 105, 57))
         self.assertEqual(expanded.final_boxes[2], Box(195, 3, 295, 57))
         self.assertEqual(expanded.frame_crop_envelopes, geometry.frame_crop_envelopes)
-
-    def test_overlap_requirement_uses_physical_support_not_observation_alias(self) -> None:
-        fields = FrameOverlapRequirement.__dataclass_fields__
-        self.assertIn("physically_supported", fields)
-        self.assertNotIn("independently_observed", fields)
-
 
 if __name__ == "__main__":
     unittest.main()

@@ -82,13 +82,9 @@ def frame_bleed_plan(
             horizontal=horizontal,
         )
         protection = BoundaryOverlapProtection(
-            boundary=requirement.boundary,
-            left_frame_index=left_index,
-            right_frame_index=right_index,
-            required_px=requirement.required_px,
+            requirement=requirement,
             left_trailing_available_px=left_capacity,
             right_leading_available_px=right_capacity,
-            provenance=requirement.provenance,
         )
         protections.append(protection)
         trailing[left_index] = max(trailing[left_index], requirement.required_px)

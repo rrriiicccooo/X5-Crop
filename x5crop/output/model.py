@@ -1,8 +1,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from math import ceil
 
-from ..domain import Box, FrameCropEnvelope, InterPhotoBoundaryReference
+from ..domain import (
+    Box,
+    FrameCropEnvelope,
+    InterPhotoBoundaryReference,
+    InterPhotoSpacing,
+    MeasurementProvenance,
+)
 
 
 @dataclass(frozen=True)
@@ -46,22 +53,33 @@ class OutputGeometry:
 
 @dataclass(frozen=True)
 class FrameOverlapRequirement:
-    boundary: InterPhotoBoundaryReference
+    spacing: InterPhotoSpacing
     left_frame_index: int
     right_frame_index: int
-    required_px: int
-    physically_supported: bool
-    provenance: str
 
     def __post_init__(self) -> None:
         if self.left_frame_index < 0 or self.right_frame_index < 0:
             raise ValueError("overlap frame indexes must be non-negative")
         if self.right_frame_index != self.left_frame_index + 1:
             raise ValueError("overlap protection applies to adjacent frames")
-        if self.required_px <= 0:
-            raise ValueError("overlap protection must be positive")
-        if not self.provenance:
-            raise ValueError("overlap requirement requires provenance")
+        if self.spacing.kind != "overlap":
+            raise ValueError("overlap protection requires negative spacing")
+
+    @property
+    def boundary(self) -> InterPhotoBoundaryReference:
+        return self.spacing.boundary
+
+    @property
+    def required_px(self) -> int:
+        return max(1, int(ceil(-self.spacing.signed_width_px.minimum)))
+
+    @property
+    def physically_supported(self) -> bool:
+        return self.spacing.supports_output_protection
+
+    @property
+    def provenance(self) -> MeasurementProvenance:
+        return self.spacing.provenance
 
 
 @dataclass(frozen=True)
@@ -80,29 +98,36 @@ class FrameSideBleed:
 
 @dataclass(frozen=True)
 class BoundaryOverlapProtection:
-    boundary: InterPhotoBoundaryReference
-    left_frame_index: int
-    right_frame_index: int
-    required_px: int
+    requirement: FrameOverlapRequirement
     left_trailing_available_px: int
     right_leading_available_px: int
-    provenance: str
 
     def __post_init__(self) -> None:
-        if (
-            self.left_frame_index < 0
-            or self.right_frame_index != self.left_frame_index + 1
-        ):
-            raise ValueError("overlap protection applies to adjacent frames")
-        if self.required_px <= 0:
-            raise ValueError("overlap protection requirement must be positive")
         if min(
             self.left_trailing_available_px,
             self.right_leading_available_px,
         ) < 0:
             raise ValueError("overlap protection availability must be non-negative")
-        if not self.provenance:
-            raise ValueError("overlap protection requires provenance")
+
+    @property
+    def boundary(self) -> InterPhotoBoundaryReference:
+        return self.requirement.boundary
+
+    @property
+    def left_frame_index(self) -> int:
+        return self.requirement.left_frame_index
+
+    @property
+    def right_frame_index(self) -> int:
+        return self.requirement.right_frame_index
+
+    @property
+    def required_px(self) -> int:
+        return self.requirement.required_px
+
+    @property
+    def provenance(self) -> MeasurementProvenance:
+        return self.requirement.provenance
 
     @property
     def complete(self) -> bool:

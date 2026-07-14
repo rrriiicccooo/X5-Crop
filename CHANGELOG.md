@@ -44,6 +44,9 @@ repository rules in `AGENTS.md`.
   派生，root 固定为 `FRAME_GEOMETRY`；measured edge 必须与 raw observation assignment 一一对应。
   Evidence independence 只拒绝 measurement 反向依赖 geometry，不再把正确的
   `measurement -> geometry` 数据流误判为循环。
+- Overlap output planning 不再复制 `physically_supported` 或把 provenance 压成字符串；
+  `FrameOverlapRequirement` 直接持有 canonical `InterPhotoSpacing`，required bleed、support、boundary
+  与 typed provenance 均从该物理事实派生。
 - Sequence conservation 收敛为 `PhotoSequenceSolution` 的构造不变量。相邻 spacing 已由 aperture
   edge 差值唯一决定，不再把同一几何恒等式重复包装成 evidence、CandidateGate check、final reason
   或 report 字段，避免 geometry 自证。

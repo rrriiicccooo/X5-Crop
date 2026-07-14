@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from math import ceil
 
 from ..detection.candidate.model import CandidateEvidence, DualLaneEvidence
 from ..detection.candidate.selection.model import SelectionResult
@@ -93,15 +92,9 @@ def _overlap_requirements(
             raise ValueError("inter-frame relation references a missing boundary")
         requirements.append(
             FrameOverlapRequirement(
-                boundary=boundary,
+                spacing=relation,
                 left_frame_index=frames[left_position],
                 right_frame_index=frames[right_position],
-                required_px=max(1, int(ceil(-relation.signed_width_px.minimum))),
-                physically_supported=relation.supports_output_protection,
-                provenance=(
-                    f"{relation.provenance.root_measurement.value}:"
-                    f"{relation.provenance.observation_id}"
-                ),
             )
         )
     return tuple(requirements)

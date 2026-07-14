@@ -215,7 +215,9 @@ PhotoAperture -> FrameCropEnvelope -> FrameBleedPlan -> final box
 
 用户 bleed 是唯一主动增加普通 margin 的设置。Measured/corroborated overlap 只扩张相关
 boundary 两侧；无关 frame 不受全局最大值影响。可用范围由 holder canvas 或所属 lane 的
-`frame_output_bounds` 决定。Bleed 不修改 aperture、CandidateGate、GeometryResolution 或 status。
+`frame_output_bounds` 决定。Output planning 直接携带 canonical `InterPhotoSpacing` 与 typed
+measurement provenance，不复制支持布尔值或压扁身份字符串。Bleed 不修改 aperture、
+CandidateGate、GeometryResolution 或 status。
 
 ### 4.2 Current Report Schema
 
