@@ -20,6 +20,8 @@ from x5crop.domain import (
     BoundaryAxis,
     BoundaryKind,
     BoundarySide,
+    FrameDimensionPrior,
+    FrameDimensionPriorSource,
     GrayBoundaryPathObservation,
     MeasurementIdentity,
     PixelInterval,
@@ -108,7 +110,7 @@ class PhotoApertureCrossAxisContractTest(unittest.TestCase):
         self.assertEqual(plan.assignment_evaluations, 0)
         self.assertFalse(plan.search_budget_exhausted)
 
-    def test_cross_axis_budget_prioritizes_visible_aperture_extent(self) -> None:
+    def test_cross_axis_budget_does_not_reward_taller_aperture_extent(self) -> None:
         search_scope = _scope(
             width=320,
             height=120,
@@ -123,7 +125,7 @@ class PhotoApertureCrossAxisContractTest(unittest.TestCase):
             if item.axis == BoundaryAxis.SHORT
             and item.position == PixelInterval.exact(110.0)
         )
-        lower_quality_bottom = replace(
+        low_quality_tall_bottom = replace(
             bottom,
             lower_appearance=replace(
                 bottom.lower_appearance,
@@ -134,18 +136,18 @@ class PhotoApertureCrossAxisContractTest(unittest.TestCase):
                 spatial_continuity=0.6,
             ),
         )
-        internal = _path(
+        measured_shorter_bottom = _path(
             BoundaryAxis.SHORT,
-            20.0,
-            "high_quality_internal_transition",
+            100.0,
+            "measured_shorter_bottom",
         )
         search_scope = replace(
             search_scope,
             raw_boundary_paths=tuple(
-                lower_quality_bottom if item is bottom else item
+                low_quality_tall_bottom if item is bottom else item
                 for item in search_scope.raw_boundary_paths
             )
-            + (internal,),
+            + (measured_shorter_bottom,),
         )
 
         plan = photo_aperture_cross_axis_plan(
@@ -155,7 +157,60 @@ class PhotoApertureCrossAxisContractTest(unittest.TestCase):
             maximum_hypotheses=1,
         )
 
-        self.assertEqual(plan.hypotheses[0].height_px, PixelInterval.exact(100.0))
+        self.assertEqual(plan.hypotheses[0].height_px, PixelInterval.exact(90.0))
+        self.assertTrue(plan.search_budget_exhausted)
+
+    def test_cross_axis_budget_uses_calibrated_photo_height(self) -> None:
+        search_scope = _scope(
+            width=320,
+            height=120,
+            leading=0.0,
+            trailing=320.0,
+            top=10.0,
+            bottom=110.0,
+        )
+        calibrated_bottom = _path(
+            BoundaryAxis.SHORT,
+            100.0,
+            "calibrated_photo_bottom",
+        )
+        calibrated_bottom = replace(
+            calibrated_bottom,
+            lower_appearance=replace(
+                calibrated_bottom.lower_appearance,
+                spatial_continuity=0.8,
+            ),
+            upper_appearance=replace(
+                calibrated_bottom.upper_appearance,
+                spatial_continuity=0.8,
+            ),
+        )
+        search_scope = replace(
+            search_scope,
+            raw_boundary_paths=(
+                *search_scope.raw_boundary_paths,
+                calibrated_bottom,
+            ),
+        )
+        dimensions = FrameDimensionPrior(
+            frame_size_mm=(1.0, 1.0),
+            source=FrameDimensionPriorSource.SCAN_CALIBRATION,
+            provenance=_provenance(
+                MeasurementIdentity.SCAN_CALIBRATION,
+                "calibrated_photo_dimensions",
+            ),
+            calibrated_width_px=PixelInterval.exact(90.0),
+            calibrated_height_px=PixelInterval.exact(90.0),
+        )
+
+        plan = photo_aperture_cross_axis_plan(
+            search_scope,
+            dimensions,
+            1,
+            maximum_hypotheses=1,
+        )
+
+        self.assertEqual(plan.hypotheses[0].height_px, PixelInterval.exact(90.0))
         self.assertTrue(plan.search_budget_exhausted)
 
     def test_cross_axis_budget_prioritizes_nonoverlap_feasible_dimensions(self) -> None:

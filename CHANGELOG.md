@@ -21,6 +21,9 @@ repository rules in `AGENTS.md`.
   dimension residual 现在只决定搜索顺序，片夹压住画面的实测 outer 不会被提前丢弃。
 - Assignment consensus 改为逐照片、逐边求全部非支配解的共同 interval。宽 uncertainty 分别与两组
   互斥边界相交时不再误写为 `AGREED`，没有全体共享 outer 的候选会保持 geometry disagreement。
+- Cross-axis planning 删除“更高 aperture 优先”的旧测试与排序。可信 scan calibration 现在以短轴
+  尺寸残差约束探索顺序；normalized 路径只按 count/aspect 可行性、measurement quality、uncertainty
+  与稳定坐标排序，片基或片夹余量不再因扩大照片高度而获得物理优势。
 - Internal-boundary content evidence 现在保留逐照片 leading/trailing edge 的短轴空间轨迹。只有同一
   短轴轨迹在相邻照片两侧重合，且 count-independent content run 同时贯穿长轴 boundary interval，
   才能反证未解释切线或佐证 measured-edge overlap；上下错位的独立纹理不再触发自动 overlap bleed。

@@ -303,6 +303,9 @@ Current state:
 - Assignment consensus requires one shared interval for every aperture edge
   across all non-dominated solutions. A broad uncertainty interval cannot bridge
   two mutually exclusive outer placements and call them agreed.
+- Cross-axis planning never rewards a taller aperture. Trusted calibration uses
+  physical photo-height residual; normalized search uses feasibility,
+  measurement quality, uncertainty, and deterministic coordinates.
 - Gray boundary paths preserve typed local samples across the orthogonal axis.
   Short-axis aperture edges are resolved within each photo's own long-axis span.
   Raw channels remain visible, while geometry-equivalent paths form one solver
@@ -338,7 +341,7 @@ Current verification state:
   are implemented. Debug distinguishes ideal apertures, output envelopes, raw
   observations, measured edges, provisional edges, holder boundaries, and
   corroborated overlap through one diagnostics-owned legend.
-- The current suite contains 480 tests and 14 valid format/mode configurations.
+- The current suite contains 481 tests and 14 valid format/mode configurations.
   On `135/full 005.tif`, global-consensus verification completed in about
   2.47 seconds with 4,740 assignment evaluations and no search-budget exhaustion.
   Geometry remains unresolved because physically admissible aperture placements
@@ -349,9 +352,10 @@ Current verification state:
 - `half/full` remains the measured performance hotspot. Performance work must
   profile one fixed sample and preserve GeometryResolution ownership.
 - Audit A restarted after removing aperture extent from physical ranking,
-  pre-solver endpoint selection, and reference-only assignment consensus. Any
-  further finding must still receive a failing permanent contract before repair;
-  an independent fresh-context Audit B follows only after Audit A reaches zero.
+  pre-solver endpoint selection, reference-only assignment consensus, and
+  taller-aperture cross-axis preference. Any further finding must still receive
+  a failing permanent contract before repair; an independent fresh-context Audit
+  B follows only after Audit A reaches zero.
 - Current PASS/REVIEW outcomes and adaptive measurement values remain calibration
   material for the separate real-sample project; do not loosen Gate rules to
   manufacture PASS from the current unresolved results.

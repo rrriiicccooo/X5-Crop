@@ -361,18 +361,29 @@ def photo_aperture_cross_axis_plan(
 
     def rank(
         hypothesis: PhotoApertureCrossAxisHypothesis,
-    ) -> tuple[float, float, float, float, float]:
+    ) -> tuple[float, float, float, float, float, float]:
         photo_width = _cross_axis_width_constraint(hypothesis, dimensions)
         nonoverlap_overrun = max(
             0.0,
             float(count) * photo_width.minimum - holder_long_extent,
         ) / max(MINIMUM_POSITIVE_PIXEL_EXTENT, holder_long_extent)
+        calibrated_height = dimensions.calibrated_height_px
+        calibrated_height_residual = (
+            0.0
+            if calibrated_height is None
+            else _interval_distance(
+                hypothesis.height_px,
+                calibrated_height,
+            )
+            / max(MINIMUM_POSITIVE_PIXEL_EXTENT, calibrated_height.midpoint)
+        )
         return (
             -nonoverlap_overrun,
-            hypothesis.height_px.minimum,
+            -calibrated_height_residual,
             hypothesis.measurement_quality,
             -hypothesis.uncertainty_px,
-            hypothesis.height_px.maximum,
+            -hypothesis.top_path.position.midpoint,
+            -hypothesis.bottom_path.position.midpoint,
         )
 
     ranked = tuple(
