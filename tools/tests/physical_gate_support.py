@@ -469,7 +469,7 @@ def _candidate_geometry(
         ),
         raw_boundary_paths=paths,
         holder_boundaries=tuple(
-            HolderBoundaryObservation(side, path.position, path)
+            HolderBoundaryObservation(side, path.position, (path,))
             for side, path in zip(
                 (
                     BoundarySide.LEADING,

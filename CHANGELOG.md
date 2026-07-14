@@ -38,6 +38,9 @@ repository rules in `AGENTS.md`.
   metrics 与 solver/build result，不再污染物理结论或 report identity。
 - `BoundaryAssignmentConsensus` 删除 execution-budget outcome，只描述已评估 aperture alternatives 的
   几何共识。搜索是否完整由 `PhysicalSearchOutcome` 单独表达并阻止 unresolved geometry early-stop。
+- Holder boundary 现在保存全部最高支持 edge-adjacent paths 的精确共同区间与 typed anchors，不再
+  退化成任意一条代表路径。只有实际贡献该共识的原始 path 可以佐证首尾 clipped endpoint；派生的
+  holder-boundary provenance 只负责组合身份，不能冒充独立像素 measurement。
 
 #### Photo Aperture 联合求解与 Debug 可见性（2026-07-13）
 

@@ -294,11 +294,12 @@ class PhotoApertureCrossAxisContractTest(unittest.TestCase):
             holder_sides=(BoundarySide.TOP,),
         )
         holder_boundary = search_scope.holder_boundaries[0]
+        holder_path = holder_boundary.supporting_paths[0]
         broad_holder_path = replace(
-            holder_boundary.path,
+            holder_path,
             samples=(
                 domain.BoundaryPathSample(
-                    holder_boundary.path.orthogonal_extent,
+                    holder_path.orthogonal_extent,
                     PixelInterval(10.0, 20.0),
                 ),
             ),
@@ -306,7 +307,7 @@ class PhotoApertureCrossAxisContractTest(unittest.TestCase):
         search_scope = replace(
             search_scope,
             raw_boundary_paths=tuple(
-                broad_holder_path if item is holder_boundary.path else item
+                broad_holder_path if item is holder_path else item
                 for item in search_scope.raw_boundary_paths
             )
             + (
@@ -317,7 +318,7 @@ class PhotoApertureCrossAxisContractTest(unittest.TestCase):
                 domain.HolderBoundaryObservation(
                     BoundarySide.TOP,
                     broad_holder_path.position,
-                    broad_holder_path,
+                    (broad_holder_path,),
                 ),
             ),
         )

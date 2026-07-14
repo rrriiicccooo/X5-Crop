@@ -169,7 +169,11 @@ def scope(
         holder_span=HolderSpan(Box(0, 0, width, height)),
         raw_boundary_paths=paths,
         holder_boundaries=tuple(
-            HolderBoundaryObservation(side, endpoints[side].position, endpoints[side])
+            HolderBoundaryObservation(
+                side,
+                endpoints[side].position,
+                (endpoints[side],),
+            )
             for side in holder_sides
         ),
         containment_fallback=ContainmentFallback(

@@ -588,32 +588,79 @@ class GrayBoundaryPathObservation:
 class HolderBoundaryObservation:
     side: BoundarySide
     position: PixelInterval
-    path: GrayBoundaryPathObservation
+    supporting_paths: tuple[GrayBoundaryPathObservation, ...]
 
     def __post_init__(self) -> None:
-        if (
-            self.path.axis != boundary_axis_for_side(self.side)
-            or self.path.position != self.position
+        if not self.supporting_paths:
+            raise ValueError("holder boundary requires supporting paths")
+        ordered = tuple(
+            sorted(
+                self.supporting_paths,
+                key=lambda path: str(path.provenance.observation_id),
+            )
+        )
+        observation_ids = tuple(
+            path.provenance.observation_id for path in ordered
+        )
+        if len(set(observation_ids)) != len(observation_ids):
+            raise ValueError(
+                "holder boundary supporting path identities must be unique"
+            )
+        if any(
+            path.axis != boundary_axis_for_side(self.side)
+            or path.kind != BoundaryKind.EDGE_ADJACENT_TRANSITION
+            for path in ordered
         ):
-            raise ValueError("holder boundary must preserve its raw path identity")
-        if self.path.kind != BoundaryKind.EDGE_ADJACENT_TRANSITION:
-            raise ValueError("holder boundary requires an edge-adjacent measurement")
+            raise ValueError(
+                "holder boundary requires edge-adjacent paths on one axis"
+            )
+        shared = PixelInterval.common_intersection(
+            tuple(path.position for path in ordered)
+        )
+        if shared != self.position:
+            raise ValueError("holder boundary position must be the shared path interval")
+        object.__setattr__(self, "supporting_paths", ordered)
 
     @property
     def provenance(self) -> MeasurementProvenance:
-        return self.path.provenance
+        anchors = tuple(
+            path.provenance.observation_id for path in self.supporting_paths
+        )
+        dependencies = tuple(
+            sorted(
+                {
+                    dependency
+                    for path in self.supporting_paths
+                    for dependency in (
+                        path.provenance.root_measurement,
+                        *path.provenance.dependencies,
+                    )
+                    if dependency != MeasurementIdentity.BOUNDARY_PATHS
+                },
+                key=lambda item: item.value,
+            )
+        )
+        return MeasurementProvenance(
+            root_measurement=MeasurementIdentity.BOUNDARY_PATHS,
+            observation_id=ObservationId(
+                f"holder_boundary:{self.side.value}:" + ":".join(map(str, anchors))
+            ),
+            dependencies=dependencies,
+            description="consensus edge-adjacent holder boundary",
+            boundary_anchors=anchors,
+        )
 
     @property
-    def outer_appearance(self) -> GrayAppearanceObservation:
+    def outer_appearances(self) -> tuple[GrayAppearanceObservation, ...]:
         if self.side in {BoundarySide.LEADING, BoundarySide.TOP}:
-            return self.path.lower_appearance
-        return self.path.upper_appearance
+            return tuple(path.lower_appearance for path in self.supporting_paths)
+        return tuple(path.upper_appearance for path in self.supporting_paths)
 
     @property
-    def inner_appearance(self) -> GrayAppearanceObservation:
+    def inner_appearances(self) -> tuple[GrayAppearanceObservation, ...]:
         if self.side in {BoundarySide.LEADING, BoundarySide.TOP}:
-            return self.path.upper_appearance
-        return self.path.lower_appearance
+            return tuple(path.upper_appearance for path in self.supporting_paths)
+        return tuple(path.lower_appearance for path in self.supporting_paths)
 
 
 class PhotoApertureEdgeSource(str, Enum):
@@ -747,7 +794,11 @@ class PhotoSequenceSearchScope:
         sides = tuple(item.side for item in self.holder_boundaries)
         if len(sides) != len(set(sides)):
             raise ValueError("photo sequence search scope holder sides must be unique")
-        if any(item.path not in self.raw_boundary_paths for item in self.holder_boundaries):
+        if any(
+            path not in self.raw_boundary_paths
+            for item in self.holder_boundaries
+            for path in item.supporting_paths
+        ):
             raise ValueError("holder boundaries must reference raw boundary paths")
         holder = self.holder_span.box
         fallback = self.containment_fallback.box
@@ -768,7 +819,11 @@ class BoundaryMeasurementSet:
     measurement_budget_exhausted: bool
 
     def __post_init__(self) -> None:
-        if any(item.path not in self.raw_paths for item in self.holder_boundaries):
+        if any(
+            path not in self.raw_paths
+            for item in self.holder_boundaries
+            for path in item.supporting_paths
+        ):
             raise ValueError("holder boundaries must reference raw boundary paths")
 
 

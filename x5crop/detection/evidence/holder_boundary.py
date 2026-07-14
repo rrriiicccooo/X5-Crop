@@ -13,7 +13,10 @@ def boundary_supports_holder_region(
 ) -> bool:
     if not math.isfinite(edge_texture_limit) or edge_texture_limit < 0.0:
         raise ValueError("holder boundary texture limit must be finite and non-negative")
-    return boundary.outer_appearance.texture_median <= float(edge_texture_limit)
+    return all(
+        appearance.texture_median <= float(edge_texture_limit)
+        for appearance in boundary.outer_appearances
+    )
 
 
 @dataclass(frozen=True)

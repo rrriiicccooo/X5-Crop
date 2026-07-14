@@ -7,6 +7,7 @@ import unittest
 from tools.tests.photo_aperture_solver_support import (
     dimensions as _dimensions,
     geometry as _geometry,
+    path as _path,
     plan as _plan,
     provenance as _provenance,
     scope as _scope,
@@ -28,6 +29,7 @@ from x5crop.report.read_models import typed_read_model
 from x5crop.report.validation import _typed_value_from_read_model
 from x5crop.domain import (
     BoundaryAxis,
+    BoundaryPathSample,
     BoundarySide,
     EvidenceState,
     FrameDimensionPrior,
@@ -43,6 +45,49 @@ from x5crop.domain import (
 
 
 class PhotoApertureSolverContractTest(unittest.TestCase):
+    def test_each_holder_consensus_path_can_authorize_a_clipped_endpoint(self) -> None:
+        first = _path(BoundaryAxis.LONG, 10.0, "first_holder_consensus_path")
+        first = replace(
+            first,
+            samples=(
+                BoundaryPathSample(
+                    first.orthogonal_extent,
+                    PixelInterval(10.0, 20.0),
+                ),
+            ),
+        )
+        second = _path(BoundaryAxis.LONG, 15.0, "second_holder_consensus_path")
+        second = replace(
+            second,
+            samples=(
+                BoundaryPathSample(
+                    second.orthogonal_extent,
+                    PixelInterval(15.0, 25.0),
+                ),
+            ),
+        )
+        inner = sequence_solver._external_constraint(
+            _path(BoundaryAxis.LONG, 100.0, "measured_inner_photo_edge")
+        )
+
+        options = sequence_solver._admissible_aperture_endpoints(
+            (first, second),
+            inner,
+            PixelInterval.exact(100.0),
+            frozenset(
+                {
+                    first.provenance.observation_id,
+                    second.provenance.observation_id,
+                }
+            ),
+            leading=True,
+        )
+
+        self.assertEqual(
+            {option.path for option in options},
+            {first, second},
+        )
+
     def test_aperture_extent_is_not_a_physical_ranking_objective(self) -> None:
         objective_type = getattr(sequence_solver, "_SequenceBuildObjectives", None)
         self.assertIsNotNone(objective_type)

@@ -62,8 +62,9 @@ class BoundaryDetectionTests(unittest.TestCase):
         )
         self.assertTrue(
             all(
-                item.path.kind == BoundaryKind.EDGE_ADJACENT_TRANSITION
+                path.kind == BoundaryKind.EDGE_ADJACENT_TRANSITION
                 for item in measured.holder_boundaries
+                for path in item.supporting_paths
             )
         )
 
@@ -163,6 +164,52 @@ class BoundaryDetectionTests(unittest.TestCase):
                 BoundarySide.TOP,
                 (broad, leading_alternative, trailing_alternative),
             )
+        )
+
+    def test_holder_boundary_preserves_the_shared_interval_and_all_paths(self) -> None:
+        first = _path(
+            BoundaryAxis.SHORT,
+            10.0,
+            "first_overlapping_holder_path",
+            kind=BoundaryKind.EDGE_ADJACENT_TRANSITION,
+        )
+        first = replace(
+            first,
+            samples=(
+                BoundaryPathSample(
+                    first.orthogonal_extent,
+                    PixelInterval(10.0, 20.0),
+                ),
+            ),
+        )
+        second = _path(
+            BoundaryAxis.SHORT,
+            15.0,
+            "second_overlapping_holder_path",
+            kind=BoundaryKind.EDGE_ADJACENT_TRANSITION,
+        )
+        second = replace(
+            second,
+            samples=(
+                BoundaryPathSample(
+                    second.orthogonal_extent,
+                    PixelInterval(15.0, 25.0),
+                ),
+            ),
+        )
+
+        boundary = _holder_boundary(BoundarySide.TOP, (first, second))
+
+        self.assertIsNotNone(boundary)
+        assert boundary is not None
+        self.assertEqual(boundary.position, PixelInterval(15.0, 20.0))
+        self.assertEqual(boundary.supporting_paths, (first, second))
+        self.assertEqual(
+            boundary.provenance.boundary_anchors,
+            (
+                first.provenance.observation_id,
+                second.provenance.observation_id,
+            ),
         )
 
 

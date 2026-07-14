@@ -300,11 +300,12 @@ class PhotoSequenceSolution:
                 "inter-photo spacing must derive from adjacent aperture edges"
             )
         if any(
-            item.path not in self.raw_boundary_paths
+            path not in self.raw_boundary_paths
             for item in self.holder_boundaries
+            for path in item.supporting_paths
         ):
             raise GeometryIdentityError(
-                "holder boundaries must preserve raw path identity"
+                "holder boundaries must preserve every raw path identity"
             )
         if any(
             item.observation not in self.raw_boundary_paths

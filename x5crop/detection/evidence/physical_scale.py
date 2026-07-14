@@ -28,8 +28,14 @@ def _path_has_clear_inner_content(
 ) -> bool:
     return bool(
         boundary is not None
-        and boundary.outer_appearance.texture_median <= edge_texture_limit
-        and boundary.inner_appearance.texture_median > edge_texture_limit
+        and all(
+            appearance.texture_median <= edge_texture_limit
+            for appearance in boundary.outer_appearances
+        )
+        and all(
+            appearance.texture_median > edge_texture_limit
+            for appearance in boundary.inner_appearances
+        )
     )
 
 

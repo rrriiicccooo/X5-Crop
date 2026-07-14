@@ -241,6 +241,18 @@ def _boundary_path_fits(
     return fits
 
 
+def _holder_boundary_path_ids(
+    search_scope: PhotoSequenceSearchScope,
+) -> dict[BoundarySide, frozenset[ObservationId]]:
+    return {
+        boundary.side: frozenset(
+            path.provenance.observation_id
+            for path in boundary.supporting_paths
+        )
+        for boundary in search_scope.holder_boundaries
+    }
+
+
 def _axis_paths(
     search_scope: PhotoSequenceSearchScope,
     axis: BoundaryAxis,
@@ -252,11 +264,15 @@ def _axis_paths(
             if path.axis == axis
         )
     )
-    holder_paths = {item.path for item in search_scope.holder_boundaries}
+    holder_path_ids = {
+        observation_id
+        for side_path_ids in _holder_boundary_path_ids(search_scope).values()
+        for observation_id in side_path_ids
+    }
     ranked = sorted(
         paths,
         key=lambda path: (
-            -(path in holder_paths),
+            -(path.provenance.observation_id in holder_path_ids),
             -(
                 path.orthogonal_extent.maximum
                 - path.orthogonal_extent.minimum
@@ -879,7 +895,7 @@ def _admissible_aperture_endpoints(
     paths: tuple[GrayBoundaryPathObservation, ...],
     inner: _EdgeConstraint,
     photo_width: PixelInterval,
-    holder_boundary_provenance: MeasurementProvenance | None,
+    holder_boundary_path_ids: frozenset[ObservationId],
     *,
     leading: bool,
 ) -> tuple[_EdgeConstraint, ...]:
@@ -899,7 +915,11 @@ def _admissible_aperture_endpoints(
         residual = _endpoint_residual(visible, photo_width)
         if residual is None:
             continue
-        if residual > 0.0 and constraint.provenance != holder_boundary_provenance:
+        if (
+            residual > 0.0
+            and constraint.provenance.observation_id
+            not in holder_boundary_path_ids
+        ):
             continue
         rank = (
             -float(residual),
@@ -1076,9 +1096,7 @@ def _measured_aperture_constraints(
             for observation in excluded_separator_bands
         )
     )
-    holder_provenance = {
-        item.side: item.provenance for item in search_scope.holder_boundaries
-    }
+    holder_boundary_path_ids = _holder_boundary_path_ids(search_scope)
     constraints: list[_MeasuredApertureConstraint] = []
     evaluations = 0
     if maximum_options <= 0:
@@ -1097,11 +1115,13 @@ def _measured_aperture_constraints(
                 break
             full_dimension_supported = width.intersects(photo_width)
             leading_clip_supported = bool(
-                holder_provenance.get(BoundarySide.LEADING) == leading.provenance
+                leading.provenance.observation_id
+                in holder_boundary_path_ids.get(BoundarySide.LEADING, frozenset())
                 and width.maximum < photo_width.minimum
             )
             trailing_clip_supported = bool(
-                holder_provenance.get(BoundarySide.TRAILING) == trailing.provenance
+                trailing.provenance.observation_id
+                in holder_boundary_path_ids.get(BoundarySide.TRAILING, frozenset())
                 and width.maximum < photo_width.minimum
             )
             if not (
@@ -1598,7 +1618,7 @@ def _build_sequence(
     count: int,
     holder_extent: int,
     cross_axis_residual: float,
-    holder_boundary_provenance: dict[BoundarySide, MeasurementProvenance],
+    holder_boundary_path_ids: dict[BoundarySide, frozenset[ObservationId]],
 ) -> _SequenceBuild | None:
     band_edges = band_hypothesis.band_edges
     leading_constraints = (
@@ -1621,14 +1641,14 @@ def _build_sequence(
         leading_clip_supported = bool(
             photo_index == 1
             and leading_constraint.path is not None
-            and holder_boundary_provenance.get(BoundarySide.LEADING)
-            == leading_constraint.provenance
+            and leading_constraint.provenance.observation_id
+            in holder_boundary_path_ids.get(BoundarySide.LEADING, frozenset())
         )
         trailing_clip_supported = bool(
             photo_index == count
             and trailing_constraint.path is not None
-            and holder_boundary_provenance.get(BoundarySide.TRAILING)
-            == trailing_constraint.provenance
+            and trailing_constraint.provenance.observation_id
+            in holder_boundary_path_ids.get(BoundarySide.TRAILING, frozenset())
         )
         refined = _refine_aperture_edges(
             leading_constraint,
@@ -1774,9 +1794,7 @@ def _builds_for_hypotheses(
     evaluation_budget: int,
 ) -> tuple[tuple[_SequenceBuild, ...], int, bool]:
     holder = search_scope.holder_span.box
-    holder_boundary_provenance = {
-        item.side: item.provenance for item in search_scope.holder_boundaries
-    }
+    holder_boundary_path_ids = _holder_boundary_path_ids(search_scope)
     builds: list[_SequenceBuild] = []
     evaluations = 0
     exhausted = False
@@ -1800,14 +1818,14 @@ def _builds_for_hypotheses(
                 long_paths,
                 first_edges[0],
                 photo_width,
-                holder_boundary_provenance.get(BoundarySide.LEADING),
+                holder_boundary_path_ids.get(BoundarySide.LEADING, frozenset()),
                 leading=True,
             )
             trailing_options = _admissible_aperture_endpoints(
                 long_paths,
                 last_edges[1],
                 photo_width,
-                holder_boundary_provenance.get(BoundarySide.TRAILING),
+                holder_boundary_path_ids.get(BoundarySide.TRAILING, frozenset()),
                 leading=False,
             )
         else:
@@ -1837,7 +1855,7 @@ def _builds_for_hypotheses(
                     count,
                     holder.width + holder.height,
                     cross_axis_residual,
-                    holder_boundary_provenance,
+                    holder_boundary_path_ids,
                 )
                 if build is not None:
                     builds.append(build)

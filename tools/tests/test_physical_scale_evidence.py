@@ -40,25 +40,27 @@ def _holder_boundary(
     boundaries = []
     for boundary in base.boundaries:
         textured = boundary.side in textured_inner_sides
-        path = boundary.path
-        path = (
-            replace(
-                path,
-                upper_appearance=replace(
-                    path.upper_appearance,
-                    texture_median=2.0 if textured else 0.0,
-                ),
+        supporting_paths = tuple(
+            (
+                replace(
+                    path,
+                    upper_appearance=replace(
+                        path.upper_appearance,
+                        texture_median=2.0 if textured else 0.0,
+                    ),
+                )
+                if boundary.side in {BoundarySide.LEADING, BoundarySide.TOP}
+                else replace(
+                    path,
+                    lower_appearance=replace(
+                        path.lower_appearance,
+                        texture_median=2.0 if textured else 0.0,
+                    ),
+                )
             )
-            if boundary.side in {BoundarySide.LEADING, BoundarySide.TOP}
-            else replace(
-                path,
-                lower_appearance=replace(
-                    path.lower_appearance,
-                    texture_median=2.0 if textured else 0.0,
-                ),
-            )
+            for path in boundary.supporting_paths
         )
-        boundaries.append(replace(boundary, path=path))
+        boundaries.append(replace(boundary, supporting_paths=supporting_paths))
     return HolderBoundaryEvidence(tuple(boundaries), 1.0)
 
 
@@ -166,7 +168,11 @@ class PhysicalScaleEvidenceTests(unittest.TestCase):
             frozenset({BoundarySide.TOP, BoundarySide.BOTTOM})
         )
         measurements = BoundaryMeasurementSet(
-            raw_paths=tuple(item.path for item in holder.boundaries),
+            raw_paths=tuple(
+                path
+                for item in holder.boundaries
+                for path in item.supporting_paths
+            ),
             holder_boundaries=holder.boundaries,
             containment_fallback=ContainmentFallback(
                 geometry.holder_span.box,

@@ -578,23 +578,23 @@ def _holder_boundary(
 ) -> HolderBoundaryObservation | None:
     if not candidates:
         return None
-    wrapped = tuple(
-        HolderBoundaryObservation(side, path.position, path) for path in candidates
+    outer_appearance = (
+        (lambda path: path.lower_appearance)
+        if side in {BoundarySide.LEADING, BoundarySide.TOP}
+        else (lambda path: path.upper_appearance)
     )
-    best_support = max(item.outer_appearance.spatial_continuity for item in wrapped)
+    best_support = max(
+        outer_appearance(path).spatial_continuity for path in candidates
+    )
     best = tuple(
-        item
-        for item in wrapped
-        if item.outer_appearance.spatial_continuity == best_support
+        path
+        for path in candidates
+        if outer_appearance(path).spatial_continuity == best_support
     )
-    if PixelInterval.common_intersection(
-        tuple(item.position for item in best)
-    ) is None:
+    shared = PixelInterval.common_intersection(tuple(path.position for path in best))
+    if shared is None:
         return None
-    return min(
-        best,
-        key=lambda item: item.position.maximum - item.position.minimum,
-    )
+    return HolderBoundaryObservation(side, shared, best)
 
 
 def boundary_measurements(

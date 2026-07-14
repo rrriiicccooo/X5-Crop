@@ -148,7 +148,7 @@ class PhysicalSearchOutcomeContractTest(unittest.TestCase):
             holder_boundaries=tuple(
                 boundary
                 for boundary in search_scope.holder_boundaries
-                if boundary.path in long_paths
+                if all(path in long_paths for path in boundary.supporting_paths)
             ),
         )
         frame_dimensions = dimensions(100.0, 100.0)
