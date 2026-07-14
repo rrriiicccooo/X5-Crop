@@ -155,6 +155,10 @@ def _typed_value_from_read_model(value: Any, annotation: Any) -> Any:
         return b""
     if isinstance(annotation, type) and issubclass(annotation, Enum):
         return annotation(value)
+    if isinstance(annotation, type) and issubclass(annotation, str):
+        if not isinstance(value, str):
+            raise TypeError("expected typed string")
+        return annotation(value)
 
     origin = get_origin(annotation)
     arguments = get_args(annotation)

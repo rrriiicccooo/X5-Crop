@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import json
 from pathlib import Path
 import os
 from tempfile import TemporaryDirectory
@@ -395,6 +396,11 @@ class OutputReadModelContractTest(unittest.TestCase):
 
     def test_fresh_record_is_current_schema_valid(self) -> None:
         self.assertEqual(current_report_record_errors(_record()), [])
+
+    def test_json_round_trip_preserves_current_schema_identity(self) -> None:
+        persisted = json.loads(json.dumps(_record()))
+
+        self.assertEqual(current_report_record_errors(persisted), [])
 
     def test_current_schema_has_no_write_only_validation_section(self) -> None:
         from x5crop.report.validation import CURRENT_REPORT_SECTIONS
