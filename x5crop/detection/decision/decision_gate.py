@@ -101,7 +101,7 @@ def apply_decision_gate(
     resolution = selection.geometry_resolution
     automatic_processing_state = (
         EvidenceState.SUPPORTED
-        if selected.geometry.automatic_processing_supported
+        if candidate_gate is not None
         else EvidenceState.CONTRADICTED
     )
     final_stage_applicable = bool(

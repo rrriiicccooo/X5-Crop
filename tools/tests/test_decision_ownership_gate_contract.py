@@ -9,6 +9,7 @@ from tools.tests.physical_gate_support import (
     decide_candidate,
     final_detection_fixture,
     frame_bleed_fixture,
+    review_only_candidate_fixture,
     selection_fixture,
     transform_geometry_fixture,
 )
@@ -166,7 +167,7 @@ class DecisionOwnershipGateContractTest(unittest.TestCase):
 
     def test_review_only_mode_blocks_automatic_processing(self) -> None:
         decided = decide_candidate(
-            candidate_fixture(automatic_processing_supported=False)
+            review_only_candidate_fixture()
         )
         self.assertIn(
             FINAL_REASON_AUTOMATIC_PROCESSING_NOT_SUPPORTED,

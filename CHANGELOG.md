@@ -31,6 +31,9 @@ repository rules in `AGENTS.md`.
 - Sequence conservation 收敛为 `PhotoSequenceSolution` 的构造不变量。相邻 spacing 已由 aperture
   edge 差值唯一决定，不再把同一几何恒等式重复包装成 evidence、CandidateGate check、final reason
   或 report 字段，避免 geometry 自证。
+- 删除 physical geometry 与 evidence 中重复的 `automatic_processing_supported`。Standard/dual-lane
+  candidate 由 CandidateGate 表达自动处理资格，review-only assessment 明确没有 CandidateGate；
+  DecisionGate 不再读取低层权限开关。
 - Report identity 破坏性更新为
   `detection_report / photo_aperture_sequence_resolution`，旧 schema 只会 cache miss。
 - Debug Analysis 仍为三联图，图例由 diagnostics configuration 唯一生成。绿色表示理想

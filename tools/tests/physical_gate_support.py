@@ -10,6 +10,9 @@ from x5crop.detection.candidate.assessment.model import (
 from x5crop.detection.candidate.assessment.evidence_independence import (
     evidence_independence_evidence,
 )
+from x5crop.detection.candidate.assessment.review_only import (
+    assess_review_only_candidate,
+)
 from x5crop.detection.candidate.model import (
     AssessedCandidate,
     BuiltCandidate,
@@ -64,6 +67,7 @@ from x5crop.detection.physical.model import (
     AssignmentConsensusOutcome,
     BoundaryAssignmentConsensus,
     PhotoSequenceSolution,
+    ReviewOnlyContainment,
     SequenceResiduals,
 )
 from x5crop.detection.physical.photo_size import frame_dimension_evidence
@@ -72,6 +76,7 @@ from x5crop.domain import (
     BoundaryKind,
     BoundarySide,
     Box,
+    ContainmentFallback,
     EvidenceState,
     FrameDimensionPrior,
     FrameDimensionPriorSource,
@@ -292,7 +297,6 @@ def _separator_resolution(
 
 def _candidate_geometry(
     *,
-    automatic_processing_supported: bool = True,
     boundary_proof_supported: bool = True,
 ) -> PhotoSequenceSolution:
     paths = candidate_boundary_paths()
@@ -405,7 +409,6 @@ def _candidate_geometry(
             (),
         ),
         search_budget_exhausted=False,
-        automatic_processing_supported=automatic_processing_supported,
         sequence_provenance=MeasurementProvenance(
             MeasurementIdentity.BOUNDARY_PATHS,
             ObservationId("synthetic_photo_aperture_sequence"),
@@ -643,7 +646,6 @@ def candidate_evidence_fixture(
 def candidate_fixture(
     *,
     failed_candidate_check: str | None = None,
-    automatic_processing_supported: bool = True,
     content_preservation: EvidenceState = EvidenceState.SUPPORTED,
 ) -> AssessedCandidate:
     if failed_candidate_check not in {
@@ -653,7 +655,6 @@ def candidate_fixture(
     }:
         raise ValueError("candidate fixture requires a physical failed check")
     geometry = _candidate_geometry(
-        automatic_processing_supported=automatic_processing_supported,
         boundary_proof_supported=failed_candidate_check != "boundary_proof",
     )
     evidence = candidate_evidence_fixture(
@@ -680,12 +681,49 @@ def candidate_fixture(
     )
 
 
+def review_only_candidate_fixture() -> AssessedCandidate:
+    source = _candidate_geometry()
+    geometry = ReviewOnlyContainment(
+        format_id=source.format_id,
+        layout=source.layout,
+        strip_mode=source.strip_mode,
+        count=source.count,
+        holder_span=source.holder_span,
+        containment_fallback=ContainmentFallback(
+            source.holder_span.box,
+            source.sequence_provenance,
+        ),
+        frame_dimension_prior=source.frame_dimension_prior,
+        residuals=source.residuals,
+        assignment_consensus=BoundaryAssignmentConsensus(
+            AssignmentConsensusOutcome.NOT_APPLICABLE,
+            0,
+            (),
+        ),
+        sequence_provenance=source.sequence_provenance,
+        raw_boundary_paths=source.raw_boundary_paths,
+        search_budget_exhausted=False,
+    )
+    return assess_review_only_candidate(
+        BuiltCandidate(
+            geometry,
+            CountHypothesis(
+                geometry.count,
+                geometry.strip_mode,
+                CountHypothesisSource.HARD_SAFETY,
+            ),
+            ("photo_aperture_geometry_unresolved",),
+        )
+    )
+
+
 def selection_fixture(
     candidate: AssessedCandidate | None = None,
     *,
     geometry_disagreement: bool = False,
 ) -> SelectionResult:
     selected = candidate or candidate_fixture()
+    geometry_resolved = selected.assessment.gate is not None
     cluster = GeometryCluster((selected,), selected)
     return SelectionResult(
         selected=selected,
@@ -697,13 +735,13 @@ def selection_fixture(
             else SelectionConsensus.UNCONTESTED
         ),
         geometry_resolution=GeometryResolution(
-            count_resolved=True,
-            placement_resolved=True,
-            boundaries_resolved=True,
-            content_preservation_compatible=True,
+            count_resolved=geometry_resolved,
+            placement_resolved=geometry_resolved,
+            boundaries_resolved=geometry_resolved,
+            content_preservation_compatible=geometry_resolved,
             larger_count_hypotheses_resolved=True,
             alternative_geometries_resolved=not geometry_disagreement,
-            assignment_geometry_resolved=True,
+            assignment_geometry_resolved=geometry_resolved,
             search_budget_exhausted=False,
         ),
     )
@@ -747,9 +785,24 @@ def decide_candidate(
     output_protection_feasible: bool = True,
     transform_state: EvidenceState = EvidenceState.SUPPORTED,
 ) -> DecisionGateAssessment:
+    selection = selection_fixture(
+        candidate,
+        geometry_disagreement=geometry_disagreement,
+    )
+    frame_bleed = (
+        frame_bleed_fixture(feasible=output_protection_feasible)
+        if selection.selected.assessment.gate is not None
+        else FrameBleedPlan(
+            user_bleed=AxisBleedParameters(20, 10),
+            frame_output_bounds=(),
+            frame_sides=(),
+            overlap_protection=(),
+            unresolved_overlap_boundaries=(),
+        )
+    )
     return apply_decision_gate(
-        selection_fixture(candidate, geometry_disagreement=geometry_disagreement),
-        frame_bleed_fixture(feasible=output_protection_feasible),
+        selection,
+        frame_bleed,
         transform_geometry_fixture(transform_state),
     )
 

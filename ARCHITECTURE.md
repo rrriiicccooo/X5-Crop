@@ -173,7 +173,9 @@ CandidateGate 消费 canonical evidence，并检查：
 - 至少一条完整 boundary proof path。
 
 它不读取 scalar confidence，也不拥有 final reason。Candidate blockers 只能从 failed Gate checks
-派生。
+派生。Standard 与 dual-lane physical candidate 拥有 CandidateGate；review-only candidate 使用独立
+assessment 且没有 CandidateGate。DecisionGate 从这一 lifecycle fact 派生 automatic-processing
+eligibility，physical geometry 不保存或推导 decision 权限布尔值。
 
 `GeometryResolution` 单独回答 count、placement、每张照片边界、content compatibility、assignment
 consensus、替代几何和 execution budget 是否已解决。Unresolved geometry 可以进入 provisional

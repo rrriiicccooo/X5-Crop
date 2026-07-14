@@ -167,7 +167,6 @@ class PhotoSequenceSolution:
     residuals: SequenceResiduals
     assignment_consensus: BoundaryAssignmentConsensus
     search_budget_exhausted: bool
-    automatic_processing_supported: bool
     sequence_provenance: MeasurementProvenance
     raw_boundary_paths: tuple[GrayBoundaryPathObservation, ...]
     holder_boundaries: tuple[HolderBoundaryObservation, ...]
@@ -350,10 +349,6 @@ class DualLanePhotoSolution:
     lane_boxes: tuple[Box, ...]
 
     @property
-    def automatic_processing_supported(self) -> bool:
-        return self.lane_divider.state == EvidenceState.SUPPORTED
-
-    @property
     def sequence_provenance(self) -> MeasurementProvenance:
         return self.lane_divider.provenance
 
@@ -439,14 +434,11 @@ class ReviewOnlyContainment:
     sequence_provenance: MeasurementProvenance
     raw_boundary_paths: tuple[GrayBoundaryPathObservation, ...]
     search_budget_exhausted: bool
-    automatic_processing_supported: bool = False
 
     def __post_init__(self) -> None:
         _validate_geometry_identity(self.format_id, self.layout, self.strip_mode)
         if self.count <= 0:
             raise ValueError("review-only count must be positive")
-        if self.automatic_processing_supported:
-            raise ValueError("review-only containment cannot support automatic output")
 
 
 CandidateGeometry = (

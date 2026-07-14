@@ -161,7 +161,6 @@ def _underfilled_geometry() -> PhotoSequenceSolution:
             (),
         ),
         search_budget_exhausted=False,
-        automatic_processing_supported=True,
         sequence_provenance=provenance,
         raw_boundary_paths=(),
         holder_boundaries=(),

@@ -76,6 +76,31 @@ class ArchitectureOwnershipContractTest(unittest.TestCase):
         self.assertNotIn("sequence_conservation", CandidateEvidence.__dataclass_fields__)
         self.assertNotIn("frame_sequence_conservation", CANDIDATE_GATE_CHECK_CODES)
 
+    def test_automatic_processing_authority_is_not_physical_geometry(self) -> None:
+        from x5crop.detection.candidate.assessment.evidence_independence import (
+            EvidenceIndependenceEvidence,
+        )
+        from x5crop.detection.physical.model import (
+            DualLanePhotoSolution,
+            PhotoSequenceSolution,
+            ReviewOnlyContainment,
+        )
+
+        for model in (
+            PhotoSequenceSolution,
+            DualLanePhotoSolution,
+            ReviewOnlyContainment,
+            EvidenceIndependenceEvidence,
+        ):
+            with self.subTest(model=model.__name__):
+                self.assertNotIn(
+                    "automatic_processing_supported",
+                    model.__dataclass_fields__,
+                )
+        self.assertFalse(
+            hasattr(DualLanePhotoSolution, "automatic_processing_supported")
+        )
+
     def test_removed_architecture_surfaces_do_not_exist(self) -> None:
         removed = (
             "x5crop/gap_methods.py",

@@ -44,7 +44,6 @@ class AutoCountContractTest(unittest.TestCase):
             contradicted: tuple[str, ...] = (),
             internal_boundary_contradiction_count: int = 0,
             supported_proof_paths: tuple[str, ...] = (),
-            automatic_processing_supported: bool = False,
         ) -> SimpleNamespace:
             return SimpleNamespace(
                 evidence_quality=EvidenceQuality(
@@ -66,8 +65,8 @@ class AutoCountContractTest(unittest.TestCase):
                 geometry=SimpleNamespace(
                     count=count,
                     strip_mode="partial",
-                    automatic_processing_supported=automatic_processing_supported,
                 ),
+                assessment=SimpleNamespace(gate=object()),
                 count_hypothesis=CountHypothesis(
                     count,
                     "partial",
@@ -101,7 +100,6 @@ class AutoCountContractTest(unittest.TestCase):
             count: int,
             *,
             proof: tuple[str, ...],
-            automatic_processing_supported: bool,
         ) -> SimpleNamespace:
             return SimpleNamespace(
                 evidence_quality=EvidenceQuality(
@@ -118,8 +116,8 @@ class AutoCountContractTest(unittest.TestCase):
                 geometry=SimpleNamespace(
                     count=count,
                     strip_mode="partial",
-                    automatic_processing_supported=automatic_processing_supported,
                 ),
+                assessment=SimpleNamespace(gate=object()),
                 count_hypothesis=CountHypothesis(
                     count,
                     "partial",
@@ -130,12 +128,10 @@ class AutoCountContractTest(unittest.TestCase):
         independently_proven = candidate(
             2,
             proof=("separator_sequence_led",),
-            automatic_processing_supported=True,
         )
         larger_unproven = candidate(
             5,
             proof=(),
-            automatic_processing_supported=False,
         )
 
         self.assertGreater(

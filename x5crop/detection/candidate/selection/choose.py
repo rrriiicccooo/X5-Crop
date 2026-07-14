@@ -44,7 +44,7 @@ def candidate_rank(
         -int(quality.internal_boundary_contradiction_count),
         -int(quality.other_contradiction_count),
         len(quality.supported_proof_paths),
-        1 if candidate.geometry.automatic_processing_supported else 0,
+        1 if candidate.assessment.gate is not None else 0,
         int(partial_auto_count),
         -float(dimension_residual),
         -float(boundary_residual),

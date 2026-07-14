@@ -19,7 +19,6 @@ class EvidenceIndependenceEvidence:
     sequence_root_measurement: MeasurementIdentity
     supporting_root_measurements: tuple[MeasurementIdentity, ...]
     cyclic_measurements: tuple[MeasurementIdentity, ...]
-    automatic_processing_supported: bool
     state: EvidenceState = field(init=False)
     reason: str = field(init=False)
 
@@ -37,14 +36,7 @@ class EvidenceIndependenceEvidence:
                     "evidence measurement identities must be non-empty and unique"
                 )
         root_reused = self.sequence_root_measurement in self.supporting_root_measurements
-        if not self.automatic_processing_supported:
-            if self.supporting_root_measurements or self.cyclic_measurements:
-                raise ValueError(
-                    "unsupported automatic processing cannot claim independence measurements"
-                )
-            state = EvidenceState.NOT_APPLICABLE
-            reason = "automatic_processing_not_supported"
-        elif root_reused:
+        if root_reused:
             state = EvidenceState.CONTRADICTED
             reason = "sequence_and_boundary_share_root_measurement"
         elif self.cyclic_measurements:
@@ -108,13 +100,6 @@ def _supporting_boundary_provenances(
 def evidence_independence_evidence(
     geometry: PhotoSequenceSolution,
 ) -> EvidenceIndependenceEvidence:
-    if not geometry.automatic_processing_supported:
-        return EvidenceIndependenceEvidence(
-            geometry.sequence_provenance.root_measurement,
-            (),
-            (),
-            False,
-        )
     supporting_provenances = _supporting_boundary_provenances(geometry)
     supporting_roots = tuple(
         sorted(
@@ -147,5 +132,4 @@ def evidence_independence_evidence(
         sequence_root_measurement=sequence_root,
         supporting_root_measurements=measurement_roots,
         cyclic_measurements=cyclic_measurements,
-        automatic_processing_supported=True,
     )
