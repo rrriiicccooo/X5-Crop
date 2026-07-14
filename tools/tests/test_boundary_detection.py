@@ -6,7 +6,12 @@ import numpy as np
 
 from x5crop.configuration.boundary import BoundaryPathParameters
 from x5crop.detection.physical.boundary_detection import boundary_measurements
-from x5crop.domain import BoundaryKind, BoundarySide, Box
+from x5crop.domain import (
+    BoundaryKind,
+    BoundarySide,
+    Box,
+    MeasurementIdentity,
+)
 from x5crop.image.statistics import (
     ImageMeasurementStatisticsParameters,
     image_measurement_statistics,
@@ -96,6 +101,25 @@ class BoundaryDetectionTests(unittest.TestCase):
         for path in measured.raw_paths:
             self.assertEqual(path.lower_appearance.provenance, path.provenance)
             self.assertEqual(path.upper_appearance.provenance, path.provenance)
+
+    def test_raw_paths_do_not_claim_holder_identity_before_assignment(self) -> None:
+        gray = np.full((120, 240), 240, dtype=np.uint8)
+        gray[20:100, 40:200] = 80
+
+        measured = _measure(gray)
+
+        self.assertTrue(measured.raw_paths)
+        self.assertTrue(
+            all(
+                path.provenance.root_measurement
+                == MeasurementIdentity.BOUNDARY_PATHS
+                for path in measured.raw_paths
+            )
+        )
+        self.assertNotIn("HOLDER_BOUNDARY_PROFILE", MeasurementIdentity.__members__)
+        parameters = BoundaryPathParameters()
+        self.assertTrue(hasattr(parameters, "edge_reference_percentile"))
+        self.assertFalse(hasattr(parameters, "holder_reference_percentile"))
 
 
 if __name__ == "__main__":

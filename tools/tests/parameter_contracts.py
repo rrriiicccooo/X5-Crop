@@ -150,7 +150,7 @@ PARAMETER_GROUPS = (
     _group(DualLaneDividerParameters, ("band_width_min_px", "band_width_max_px"), ParameterRole.ADAPTIVE_MEASUREMENT, "px", "dual_lane_measurement", "Gutter measurement support bounds."),
     _group(DualLaneDividerParameters, ("proposal_count",), ParameterRole.EXECUTION_BUDGET, "count", "dual_lane_measurement", "Bounds lane-divider candidate expansion."),
     _group(SequenceSolverParameters, ("maximum_assignment_evaluations", "maximum_dimension_hypotheses", "maximum_solution_alternatives"), ParameterRole.EXECUTION_BUDGET, "count", "sequence_solver", "Bounds global aperture assignment and alternative search."),
-    _group(BoundaryPathParameters, ("holder_reference_percentile", "change_point_percentile"), ParameterRole.ADAPTIVE_MEASUREMENT, "percentile", "boundary_path", "Robust per-image holder and change-point measurement."),
+    _group(BoundaryPathParameters, ("edge_reference_percentile", "change_point_percentile"), ParameterRole.ADAPTIVE_MEASUREMENT, "percentile", "boundary_path", "Robust per-image canvas-edge and change-point measurement."),
     _group(BoundaryPathParameters, ("cross_section_margin_ratio", "minimum_path_support_ratio", "inner_sample_ratio"), ParameterRole.ADAPTIVE_MEASUREMENT, "ratio", "boundary_path", "Scale-independent local boundary-path sampling and aggregation."),
     _group(BoundaryPathParameters, ("cross_sections",), ParameterRole.ADAPTIVE_MEASUREMENT, "section_count", "boundary_path", "Number of local cross-sections used to measure one spatial boundary path."),
     _group(BoundaryPathParameters, ("path_cluster_tolerance_ratio",), ParameterRole.ADAPTIVE_MEASUREMENT, "ratio", "boundary_path", "Scale-relative clustering tolerance for local change points."),

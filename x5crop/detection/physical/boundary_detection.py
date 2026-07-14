@@ -89,7 +89,7 @@ def _edge_reference_mask(
 ) -> np.ndarray:
     deviation = np.abs(intensity - float(intensity[0]))
     tolerance = float(
-        np.percentile(deviation, parameters.holder_reference_percentile)
+        np.percentile(deviation, parameters.edge_reference_percentile)
     )
     return (deviation <= tolerance) & (texture <= float(texture_limit))
 
@@ -325,7 +325,7 @@ def _provenance(
     if scan_origin is not None:
         source = f"{source}:scan_from_{scan_origin.value}"
     return MeasurementProvenance(
-        root_measurement=MeasurementIdentity.HOLDER_BOUNDARY_PROFILE,
+        root_measurement=MeasurementIdentity.BOUNDARY_PATHS,
         observation_id=ObservationId(source),
         dependencies=(
             MeasurementIdentity.GRAY_WORK,

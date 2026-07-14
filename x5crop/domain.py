@@ -53,7 +53,6 @@ class MeasurementIdentity(str, Enum):
     FRAME_DIMENSIONS = "frame_dimensions"
     FRAME_GEOMETRY = "frame_geometry"
     GRAY_WORK = "gray_work"
-    HOLDER_BOUNDARY_PROFILE = "holder_boundary_profile"
     HOLDER_CANVAS = "holder_canvas"
     IMAGE_MEASUREMENT_STATISTICS = "image_measurement_statistics"
     LANE_DIVIDER_PROFILE = "lane_divider_profile"

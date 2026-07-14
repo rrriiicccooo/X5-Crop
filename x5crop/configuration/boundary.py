@@ -10,7 +10,7 @@ MAX_CROSS_SECTION_MARGIN_RATIO = 0.5
 
 @dataclass(frozen=True)
 class BoundaryPathParameters:
-    holder_reference_percentile: float = 10.0
+    edge_reference_percentile: float = 10.0
     change_point_percentile: float = 90.0
     cross_sections: int = 5
     cross_section_margin_ratio: float = 0.10
@@ -23,8 +23,8 @@ class BoundaryPathParameters:
 
     def __post_init__(self) -> None:
         require_percentile(
-            "holder reference percentile",
-            self.holder_reference_percentile,
+            "canvas-edge reference percentile",
+            self.edge_reference_percentile,
         )
         require_percentile(
             "boundary change-point percentile",
