@@ -30,6 +30,7 @@ from x5crop.detection.candidate.selection.choose import (
 )
 from x5crop.detection.geometry_resolution import GeometryResolution
 from x5crop.detection.evidence.partial_edge import partial_edge_safety_evidence
+from x5crop.domain import EvidenceState
 from x5crop.formats import format_spec
 
 
@@ -200,6 +201,8 @@ class AutoCountContractTest(unittest.TestCase):
         )
         self.assertFalse(unresolved.geometry_resolved)
         self.assertTrue(resolved.geometry_resolved)
+        self.assertEqual(unresolved.hypothesis_state, EvidenceState.UNAVAILABLE)
+        self.assertEqual(resolved.hypothesis_state, EvidenceState.SUPPORTED)
 
         hypotheses = tuple(
             CountHypothesis(count, "partial", CountHypothesisSource.AUTOMATIC)
@@ -243,6 +246,7 @@ class AutoCountContractTest(unittest.TestCase):
             return SimpleNamespace(
                 hypothesis=hypothesis,
                 geometry_resolved=hypothesis.count == 2,
+                hypothesis_state=EvidenceState.UNAVAILABLE,
             )
 
         evaluate = getattr(detection_pipeline, "_evaluate_count_hypotheses")
@@ -257,11 +261,51 @@ class AutoCountContractTest(unittest.TestCase):
             SimpleNamespace(
                 hypothesis=hypothesis,
                 geometry_resolved=hypothesis.count == 2,
+                hypothesis_state=EvidenceState.UNAVAILABLE,
             )
             for hypothesis in hypotheses
         ))
         self.assertEqual(larger_count_states, [True, False, False])
         self.assertIsNone(stopped_after_count)
+
+    def test_contradicted_larger_count_allows_smaller_count_resolution(self) -> None:
+        hypotheses = tuple(
+            CountHypothesis(count, "partial", CountHypothesisSource.AUTOMATIC)
+            for count in (3, 2, 1)
+        )
+        plan = CountHypothesisPlan(hypotheses, True, None)
+        larger_count_states: list[bool] = []
+
+        def evaluate_one(
+            _context,
+            hypothesis,
+            *,
+            larger_count_hypotheses_resolved,
+        ):
+            larger_count_states.append(larger_count_hypotheses_resolved)
+            supported = hypothesis.count == 2
+            return SimpleNamespace(
+                hypothesis=hypothesis,
+                geometry_resolved=supported,
+                hypothesis_state=(
+                    EvidenceState.SUPPORTED
+                    if supported
+                    else EvidenceState.CONTRADICTED
+                ),
+            )
+
+        evaluate = getattr(detection_pipeline, "_evaluate_count_hypotheses")
+        with patch.object(
+            detection_pipeline,
+            "evaluate_count_hypothesis",
+            side_effect=evaluate_one,
+        ) as evaluate_one_mock:
+            completed, stopped_after_count = evaluate(object(), plan)
+
+        self.assertEqual(tuple(item.hypothesis.count for item in completed), (3, 2))
+        self.assertEqual(larger_count_states, [True, True])
+        self.assertEqual(stopped_after_count, 2)
+        self.assertEqual(evaluate_one_mock.call_count, 2)
 
     def test_geometry_resolution_names_larger_count_resolution(self) -> None:
         fields = GeometryResolution.__dataclass_fields__
@@ -292,6 +336,21 @@ class AutoCountContractTest(unittest.TestCase):
 
         self.assertEqual(candidates, ())
         self.assertTrue(budget_exhausted)
+        self.assertEqual(evaluation.hypothesis_state, EvidenceState.UNAVAILABLE)
+
+    def test_exhaustive_empty_count_hypothesis_is_physically_contradicted(self) -> None:
+        evaluation = CountHypothesisEvaluation(
+            CountHypothesis(
+                5,
+                "partial",
+                CountHypothesisSource.AUTOMATIC,
+            ),
+            (),
+            None,
+            search_budget_exhausted=False,
+        )
+
+        self.assertEqual(evaluation.hypothesis_state, EvidenceState.CONTRADICTED)
 
     def test_count_search_exhaustion_does_not_rewrite_candidate_geometry(self) -> None:
         candidate = candidate_fixture()

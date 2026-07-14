@@ -25,6 +25,7 @@ from .modes.dual_lane import choose_dual_lane_detection
 from .modes.review_only import unresolved_dual_lane_candidate
 from .evidence.physical_scale import boundary_scale_observations
 from .physical.model import ReviewOnlyContainment
+from ..domain import EvidenceState
 from ..units import ScanCalibrationResolution
 
 
@@ -99,7 +100,8 @@ def _evaluate_count_hypotheses(
         ):
             stopped_after_count = hypothesis.count
             break
-        larger_count_hypotheses_resolved = False
+        if evaluation.hypothesis_state != EvidenceState.CONTRADICTED:
+            larger_count_hypotheses_resolved = False
     return tuple(evaluations), stopped_after_count
 
 

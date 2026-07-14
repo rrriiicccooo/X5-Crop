@@ -36,6 +36,8 @@ repository rules in `AGENTS.md`.
   adaptive reference 不再偷带片夹身份。
 - `PhotoContentObservation` 统一使用 `photo_index` 与 typed `BoundarySide`；删除泛化 `index` 和
   `left/right` 字符串侧名，content crossing、assessment 与 current report 共享同一照片/边界身份。
+- Partial auto count 明确区分“较大 count 已被穷尽否定”和“较大 count 仍缺证据”：前者允许继续
+  证明较小 count，后者继续阻止自动解决；budget exhaustion 永远保持 unavailable。
 - Sequence conservation 收敛为 `PhotoSequenceSolution` 的构造不变量。相邻 spacing 已由 aperture
   edge 差值唯一决定，不再把同一几何恒等式重复包装成 evidence、CandidateGate check、final reason
   或 report 字段，避免 geometry 自证。
