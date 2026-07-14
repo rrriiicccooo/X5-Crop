@@ -296,6 +296,27 @@ def _separator_resolution(
     )
 
 
+def _dimension_resolution(
+    photo_index: int,
+    side: BoundarySide,
+    position: float,
+) -> PhotoApertureBoundaryResolution:
+    provenance = MeasurementProvenance(
+        MeasurementIdentity.FRAME_GEOMETRY,
+        ObservationId(f"synthetic_dimension_edge:{photo_index}:{side.value}"),
+        (MeasurementIdentity.FRAME_DIMENSIONS,),
+        "synthetic dimension-only aperture edge",
+    )
+    return PhotoApertureBoundaryResolution(
+        photo_index,
+        side,
+        PixelInterval.exact(position),
+        EvidenceState.UNAVAILABLE,
+        PhotoApertureEdgeSource.DIMENSION_HYPOTHESIS,
+        provenance,
+    )
+
+
 def _candidate_geometry(
     *,
     boundary_proof_supported: bool = True,
@@ -313,18 +334,30 @@ def _candidate_geometry(
         cross_axis,
     )
     first_leading = _measured_resolution(1, BoundarySide.LEADING, leading_path)
-    first_trailing = _separator_resolution(
-        1,
-        BoundarySide.TRAILING,
-        _SEPARATOR[0],
-        observation,
-    )
-    second_leading = _separator_resolution(
-        2,
-        BoundarySide.LEADING,
-        _SEPARATOR[1],
-        observation,
-    )
+    if boundary_proof_supported:
+        first_trailing = _separator_resolution(
+            1,
+            BoundarySide.TRAILING,
+            _SEPARATOR[0],
+            observation,
+        )
+        second_leading = _separator_resolution(
+            2,
+            BoundarySide.LEADING,
+            _SEPARATOR[1],
+            observation,
+        )
+    else:
+        first_trailing = _dimension_resolution(
+            1,
+            BoundarySide.TRAILING,
+            _SEPARATOR[0],
+        )
+        second_leading = _dimension_resolution(
+            2,
+            BoundarySide.LEADING,
+            _SEPARATOR[1],
+        )
     second_trailing = _measured_resolution(2, BoundarySide.TRAILING, trailing_path)
     first_top = _measured_resolution(1, BoundarySide.TOP, top_path)
     first_bottom = _measured_resolution(1, BoundarySide.BOTTOM, bottom_path)
@@ -371,10 +404,20 @@ def _candidate_geometry(
         if boundary_proof_supported
         else ()
     )
+    spacing_provenance = (
+        observation.provenance
+        if boundary_proof_supported
+        else MeasurementProvenance(
+            MeasurementIdentity.FRAME_GEOMETRY,
+            ObservationId("synthetic_dimension_spacing:1"),
+            (MeasurementIdentity.FRAME_DIMENSIONS,),
+            "synthetic dimension-only spacing",
+        )
+    )
     spacing = InterPhotoSpacing(
         InterPhotoBoundaryReference(None, 1),
         PixelInterval.exact(_SEPARATOR[1] - _SEPARATOR[0]),
-        observation.provenance,
+        spacing_provenance,
         (
             InterPhotoSpacingBasis.OBSERVED
             if boundary_proof_supported
@@ -411,13 +454,6 @@ def _candidate_geometry(
             (),
         ),
         search_budget_exhausted=False,
-        sequence_provenance=MeasurementProvenance(
-            MeasurementIdentity.BOUNDARY_PATHS,
-            ObservationId("synthetic_photo_aperture_sequence"),
-            (MeasurementIdentity.GRAY_WORK,),
-            "synthetic photo aperture sequence",
-            tuple(path.provenance.observation_id for path in paths),
-        ),
         raw_boundary_paths=paths,
         holder_boundaries=tuple(
             HolderBoundaryObservation(side, path.position, path)

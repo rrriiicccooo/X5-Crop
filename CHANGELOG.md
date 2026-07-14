@@ -40,6 +40,10 @@ repository rules in `AGENTS.md`.
   证明较小 count，后者继续阻止自动解决；budget exhaustion 永远保持 unavailable。
 - Architecture contract 现在检查 active Enum 成员是否有 runtime 使用者；删除 8 个只属于旧 sequence、
   safety、review-only 与 TIFF identity 模型的孤儿 `MeasurementIdentity`，测试不再保护失效身份。
+- `PhotoSequenceSolution` provenance 改为从实际 aperture、separator、dimension 与 holder 输入自动
+  派生，root 固定为 `FRAME_GEOMETRY`；measured edge 必须与 raw observation assignment 一一对应。
+  Evidence independence 只拒绝 measurement 反向依赖 geometry，不再把正确的
+  `measurement -> geometry` 数据流误判为循环。
 - Sequence conservation 收敛为 `PhotoSequenceSolution` 的构造不变量。相邻 spacing 已由 aperture
   edge 差值唯一决定，不再把同一几何恒等式重复包装成 evidence、CandidateGate check、final reason
   或 report 字段，避免 geometry 自证。

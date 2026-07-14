@@ -5,6 +5,7 @@ from inspect import signature
 import unittest
 
 from tools.tests.physical_gate_support import (
+    boundary_path_fixture,
     candidate_boundary_paths,
     separator_cross_axis_measurement,
     separator_observation,
@@ -31,6 +32,7 @@ from x5crop.detection.physical.model import (
 from x5crop.detection.physical.photo_size import frame_dimension_evidence
 from x5crop.domain import (
     BoundarySide,
+    BoundaryKind,
     Box,
     EvidenceState,
     FrameDimensionPrior,
@@ -45,6 +47,7 @@ from x5crop.domain import (
     PhotoAperture,
     PhotoApertureBoundaryResolution,
     PhotoApertureCrossAxisHypothesis,
+    PhotoApertureEdgeAssignment,
     PhotoApertureEdgeSource,
     PixelInterval,
     SeparatorBandAssignment,
@@ -54,12 +57,6 @@ from x5crop.formats import format_spec
 
 
 def _underfilled_geometry() -> PhotoSequenceSolution:
-    provenance = MeasurementProvenance(
-        MeasurementIdentity.PHOTO_EDGES,
-        ObservationId("synthetic_underfilled_apertures"),
-        (MeasurementIdentity.GRAY_WORK,),
-        "synthetic underfilled apertures",
-    )
     observations = (
         separator_observation(140.0, start=135.0, end=145.0),
         separator_observation(250.0, start=245.0, end=255.0),
@@ -77,6 +74,18 @@ def _underfilled_geometry() -> PhotoSequenceSolution:
         observation = (
             None if separator_index is None else observations[separator_index]
         )
+        provenance = (
+            MeasurementProvenance(
+                MeasurementIdentity.PHOTO_EDGES,
+                ObservationId(
+                    f"synthetic_underfilled_aperture:{photo_index}:{side.value}"
+                ),
+                (MeasurementIdentity.GRAY_WORK,),
+                "synthetic underfilled aperture edge",
+            )
+            if observation is None
+            else observation.provenance
+        )
         return PhotoApertureBoundaryResolution(
             photo_index,
             side,
@@ -87,7 +96,7 @@ def _underfilled_geometry() -> PhotoSequenceSolution:
                 if observation is None
                 else PhotoApertureEdgeSource.SEPARATOR_BAND_EDGE
             ),
-            provenance if observation is None else observation.provenance,
+            provenance,
         )
 
     apertures = (
@@ -133,6 +142,35 @@ def _underfilled_geometry() -> PhotoSequenceSolution:
         )
         for index, observation in enumerate(observations, start=1)
     )
+    measured_edges = tuple(
+        boundary
+        for aperture in apertures
+        for boundary in (
+            aperture.leading,
+            aperture.trailing,
+            aperture.top,
+            aperture.bottom,
+        )
+        if boundary.source == PhotoApertureEdgeSource.MEASURED_BOUNDARY_PATH
+    )
+    raw_paths = tuple(
+        boundary_path_fixture(
+            boundary.side,
+            boundary.position,
+            BoundaryKind.TONAL_TRANSITION,
+            boundary.provenance,
+        )
+        for boundary in measured_edges
+    )
+    edge_assignments = tuple(
+        PhotoApertureEdgeAssignment(
+            boundary.photo_index,
+            boundary.side,
+            path,
+            boundary,
+        )
+        for boundary, path in zip(measured_edges, raw_paths, strict=True)
+    )
     return PhotoSequenceSolution(
         format_id="120-66",
         layout="horizontal",
@@ -140,7 +178,7 @@ def _underfilled_geometry() -> PhotoSequenceSolution:
         count=3,
         holder_span=HolderSpan(Box(0, 0, 400, 100)),
         photo_apertures=apertures,
-        aperture_edge_assignments=(),
+        aperture_edge_assignments=edge_assignments,
         separator_observations=observations,
         separator_assignments=assignments,
         inter_photo_spacings=spacings,
@@ -163,8 +201,7 @@ def _underfilled_geometry() -> PhotoSequenceSolution:
             (),
         ),
         search_budget_exhausted=False,
-        sequence_provenance=provenance,
-        raw_boundary_paths=(),
+        raw_boundary_paths=raw_paths,
         holder_boundaries=(),
     )
 

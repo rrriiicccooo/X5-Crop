@@ -148,7 +148,6 @@ def build_sequence_candidate(
             support_set.budget_exhausted
             or solved.search_budget_exhausted
         ),
-        sequence_provenance=search_scope.provenance,
         raw_boundary_paths=search_scope.raw_boundary_paths,
         holder_boundaries=search_scope.holder_boundaries,
     )

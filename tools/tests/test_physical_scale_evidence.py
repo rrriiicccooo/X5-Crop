@@ -18,7 +18,6 @@ from x5crop.domain import (
     BoundarySide,
     ContainmentFallback,
     EvidenceState,
-    InterPhotoSpacingBasis,
     MeasurementIdentity,
     MeasurementProvenance,
     ObservationId,
@@ -242,8 +241,8 @@ class PhysicalScaleEvidenceTests(unittest.TestCase):
         )
         second = replace(
             geometry.photo_apertures[1],
-            leading=replace(
-                geometry.photo_apertures[1].leading,
+            trailing=replace(
+                geometry.photo_apertures[1].trailing,
                 state=EvidenceState.UNAVAILABLE,
                 source=PhotoApertureEdgeSource.DIMENSION_HYPOTHESIS,
                 provenance=provenance,
@@ -252,13 +251,10 @@ class PhysicalScaleEvidenceTests(unittest.TestCase):
         provisional = replace(
             geometry,
             photo_apertures=(geometry.photo_apertures[0], second),
-            separator_assignments=(),
-            inter_photo_spacings=(
-                replace(
-                    geometry.inter_photo_spacings[0],
-                    basis=InterPhotoSpacingBasis.GEOMETRY_HYPOTHESIS,
-                    provenance=provenance,
-                ),
+            aperture_edge_assignments=tuple(
+                assignment
+                for assignment in geometry.aperture_edge_assignments
+                if assignment.resolution != geometry.photo_apertures[1].trailing
             ),
         )
         observations = physical_scale_observations(

@@ -71,6 +71,11 @@ runtime 与 export 数据流。
 measurement provenance。`PhotoSequenceSolution.photo_sequence_envelope` 派生全部开口的外包络
 `Box`，不拥有检测权限。
 
+`PhotoSequenceSolution` 的 provenance 由其实际 aperture assignments、separator assignments、
+dimension prior 与 holder boundaries 自动派生，root 固定为 `FRAME_GEOMETRY`；调用者不能声明或
+改写几何身份。每条 measured aperture edge 和 separator edge 都必须精确对应一个原始 observation
+assignment，不能只靠 source 标签伪造实测几何。
+
 `HolderBoundaryObservation` 只描述 canvas 邻接片夹范围，用于约束搜索。它不能直接定义照片
 边界。`ContainmentFallback` 只给 REVIEW 与 Debug 提供安全范围，永远不是 resolved geometry。
 
@@ -135,7 +140,8 @@ observation，但不能成为 hard separator。Dimension-only edge 只是一条 
 - separator start/end 分别绑定相邻 aperture edge；
 - content coverage 必须与逐张 aperture 一致；spacing 与相邻 aperture edge 的
   守恒关系由 `PhotoSequenceSolution` 构造不变量保证，不再包装成独立 evidence 或 Gate；
-- 同一 root measurement 不能同时充当两个独立证明；
+- supporting measurement 可以被 geometry 消费；只有 measurement 反向依赖 `FRAME_GEOMETRY`
+  才构成循环证明；
 - search budget exhaustion 只产生 unresolved。
 
 `FrameDimensionPrior` 由 mm/aspect/calibration 约束搜索，不是 measurement evidence。只有独立

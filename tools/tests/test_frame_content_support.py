@@ -6,7 +6,11 @@ import unittest
 
 import numpy as np
 
-from tools.tests.physical_gate_support import candidate_evidence_fixture, candidate_fixture
+from tools.tests.physical_gate_support import (
+    boundary_path_fixture,
+    candidate_evidence_fixture,
+    candidate_fixture,
+)
 from x5crop.cache import MeasurementCache
 from x5crop.configuration.registry import get_detection_configuration
 from x5crop.detection.candidate.assessment.candidate_gate import (
@@ -40,6 +44,7 @@ from x5crop.detection.physical.model import (
 )
 from x5crop.domain import (
     BoundarySide,
+    BoundaryKind,
     Box,
     EvidenceState,
     FrameDimensionPrior,
@@ -53,6 +58,7 @@ from x5crop.domain import (
     ObservationId,
     PhotoAperture,
     PhotoApertureBoundaryResolution,
+    PhotoApertureEdgeAssignment,
     PhotoApertureEdgeSource,
     PixelInterval,
 )
@@ -81,14 +87,25 @@ def _single_aperture_geometry(
     *,
     measured_boundaries: bool = True,
 ) -> PhotoSequenceSolution:
-    provenance = MeasurementProvenance(
-        MeasurementIdentity.PHOTO_EDGES,
-        ObservationId("synthetic_single_aperture"),
-        (MeasurementIdentity.GRAY_WORK,),
-        "synthetic single-aperture measurement",
-    )
-
     def edge(side: BoundarySide, position: float):
+        provenance = MeasurementProvenance(
+            (
+                MeasurementIdentity.PHOTO_EDGES
+                if measured_boundaries
+                else MeasurementIdentity.FRAME_GEOMETRY
+            ),
+            ObservationId(f"synthetic_single_aperture:{side.value}"),
+            (
+                (MeasurementIdentity.GRAY_WORK,)
+                if measured_boundaries
+                else (MeasurementIdentity.FRAME_DIMENSIONS,)
+            ),
+            (
+                "synthetic single-aperture measurement"
+                if measured_boundaries
+                else "synthetic single-aperture dimension hypothesis"
+            ),
+        )
         return PhotoApertureBoundaryResolution(
             1,
             side,
@@ -113,6 +130,38 @@ def _single_aperture_geometry(
         edge(BoundarySide.TOP, float(box.top)),
         edge(BoundarySide.BOTTOM, float(box.bottom)),
     )
+    boundaries = (
+        aperture.leading,
+        aperture.trailing,
+        aperture.top,
+        aperture.bottom,
+    )
+    raw_paths = (
+        tuple(
+            boundary_path_fixture(
+                boundary.side,
+                boundary.position,
+                BoundaryKind.TONAL_TRANSITION,
+                boundary.provenance,
+            )
+            for boundary in boundaries
+        )
+        if measured_boundaries
+        else ()
+    )
+    edge_assignments = (
+        tuple(
+            PhotoApertureEdgeAssignment(
+                1,
+                boundary.side,
+                path,
+                boundary,
+            )
+            for boundary, path in zip(boundaries, raw_paths, strict=True)
+        )
+        if measured_boundaries
+        else ()
+    )
     return PhotoSequenceSolution(
         format_id="120-645",
         layout="horizontal",
@@ -120,7 +169,7 @@ def _single_aperture_geometry(
         count=1,
         holder_span=HolderSpan(box),
         photo_apertures=(aperture,),
-        aperture_edge_assignments=(),
+        aperture_edge_assignments=edge_assignments,
         separator_observations=(),
         separator_assignments=(),
         inter_photo_spacings=(),
@@ -143,8 +192,7 @@ def _single_aperture_geometry(
             (),
         ),
         search_budget_exhausted=False,
-        sequence_provenance=provenance,
-        raw_boundary_paths=(),
+        raw_boundary_paths=raw_paths,
         holder_boundaries=(),
     )
 

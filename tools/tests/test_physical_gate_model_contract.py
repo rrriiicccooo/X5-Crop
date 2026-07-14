@@ -20,6 +20,7 @@ from x5crop.detection.decision.decision_gate import apply_decision_gate
 from x5crop.detection.evidence.separator_sequence import separator_sequence_evidence
 from x5crop.detection.candidate.selection.choose import select_candidates
 from x5crop.detection.candidate.selection.choose import geometry_clusters
+from x5crop.detection.candidate.plan.model import CountHypothesisSource
 from x5crop.detection.candidate.assessment.candidate import (
     candidate_gate_for_evidence,
 )
@@ -47,12 +48,12 @@ from x5crop.runtime.options import RuntimeOptions
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
-def _independent_photo_edge(source: str) -> MeasurementProvenance:
+def _geometry_hypothesis(source: str) -> MeasurementProvenance:
     return MeasurementProvenance(
-        MeasurementIdentity.PHOTO_EDGES,
+        MeasurementIdentity.FRAME_GEOMETRY,
         ObservationId(source),
-        (MeasurementIdentity.GRAY_WORK,),
-        "synthetic independent photo edge",
+        (MeasurementIdentity.FRAME_DIMENSIONS,),
+        "synthetic aperture geometry hypothesis",
     )
 
 
@@ -74,8 +75,9 @@ def _with_leading_interval(candidate, interval: PixelInterval, source: str):
     leading = replace(
         geometry.photo_apertures[0].leading,
         position=interval,
-        source=PhotoApertureEdgeSource.MEASURED_BOUNDARY_PATH,
-        provenance=_independent_photo_edge(source),
+        state=EvidenceState.UNAVAILABLE,
+        source=PhotoApertureEdgeSource.DIMENSION_HYPOTHESIS,
+        provenance=_geometry_hypothesis(source),
     )
     first = replace(geometry.photo_apertures[0], leading=leading)
     updated = replace(
@@ -100,10 +102,20 @@ def _with_shifted_short_axis(candidate, offset: float):
             top=replace(
                 aperture.top,
                 position=aperture.top.position.plus(PixelInterval.exact(offset)),
+                state=EvidenceState.UNAVAILABLE,
+                source=PhotoApertureEdgeSource.DIMENSION_HYPOTHESIS,
+                provenance=_geometry_hypothesis(
+                    f"shifted_top:{aperture.index}"
+                ),
             ),
             bottom=replace(
                 aperture.bottom,
                 position=aperture.bottom.position.plus(PixelInterval.exact(offset)),
+                state=EvidenceState.UNAVAILABLE,
+                source=PhotoApertureEdgeSource.DIMENSION_HYPOTHESIS,
+                provenance=_geometry_hypothesis(
+                    f"shifted_bottom:{aperture.index}"
+                ),
             ),
         )
         for aperture in geometry.photo_apertures
@@ -197,15 +209,9 @@ class PhysicalGateModelContractTest(unittest.TestCase):
         candidate = candidate_fixture()
         corroborating_candidate = replace(
             candidate,
-            geometry=replace(
-                candidate.geometry,
-                sequence_provenance=replace(
-                    candidate.geometry.sequence_provenance,
-                    observation_id=ObservationId(
-                        "equivalent_independent_candidate"
-                    ),
-                    description="equivalent independent candidate",
-                ),
+            count_hypothesis=replace(
+                candidate.count_hypothesis,
+                source=CountHypothesisSource.REQUESTED,
             ),
         )
         result = select_candidates(

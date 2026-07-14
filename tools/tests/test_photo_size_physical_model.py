@@ -15,6 +15,7 @@ from x5crop.detection.physical.photo_size import (
     frame_dimension_priors,
 )
 from x5crop.domain import (
+    BoundarySide,
     EvidenceState,
     FrameDimensionPriorSource,
     HolderSpan,
@@ -146,6 +147,11 @@ class PhotoSizePhysicalModelTest(unittest.TestCase):
         provisional = replace(
             geometry,
             photo_apertures=apertures,
+            aperture_edge_assignments=tuple(
+                assignment
+                for assignment in geometry.aperture_edge_assignments
+                if assignment.side in {BoundarySide.TOP, BoundarySide.BOTTOM}
+            ),
             separator_assignments=(),
         )
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
 from enum import Enum
+import hashlib
 import math
 
 from ...domain import (
@@ -16,9 +17,12 @@ from ...domain import (
     HolderSpan,
     InterPhotoBoundaryReference,
     InterPhotoSpacing,
+    MeasurementIdentity,
     MeasurementProvenance,
+    ObservationId,
     PhotoAperture,
     PhotoApertureEdgeAssignment,
+    PhotoApertureEdgeSource,
     SeparatorWidthConstraint,
     PhotoApertureBoundaryResolution,
     PixelInterval,
@@ -150,6 +154,87 @@ def _spacing_matches_apertures(
     )
 
 
+def _derived_geometry_provenance(
+    signature_parts: tuple[str, ...],
+    inputs: tuple[MeasurementProvenance, ...],
+    description: str,
+) -> MeasurementProvenance:
+    unique_inputs = tuple(dict.fromkeys(inputs))
+    dependencies: set[MeasurementIdentity] = set()
+    anchors: set[ObservationId] = set()
+    for provenance in unique_inputs:
+        if provenance.root_measurement == MeasurementIdentity.FRAME_GEOMETRY:
+            dependencies.update(provenance.dependencies)
+        else:
+            dependencies.add(provenance.root_measurement)
+        anchors.add(provenance.observation_id)
+        anchors.update(provenance.boundary_anchors)
+    dependencies.discard(MeasurementIdentity.FRAME_GEOMETRY)
+    digest = hashlib.sha256("\x1f".join(signature_parts).encode("utf-8")).hexdigest()
+    return MeasurementProvenance(
+        root_measurement=MeasurementIdentity.FRAME_GEOMETRY,
+        observation_id=ObservationId(f"photo_sequence_geometry:{digest}"),
+        dependencies=tuple(sorted(dependencies, key=lambda item: item.value)),
+        description=description,
+        boundary_anchors=tuple(sorted(anchors, key=str)),
+    )
+
+
+def _photo_sequence_provenance(
+    format_id: str,
+    layout: str,
+    strip_mode: str,
+    count: int,
+    holder_span: HolderSpan,
+    photo_apertures: tuple[PhotoAperture, ...],
+    aperture_edge_assignments: tuple[PhotoApertureEdgeAssignment, ...],
+    separator_assignments: tuple[SeparatorBandAssignment, ...],
+    frame_dimension_prior: FrameDimensionPrior,
+    holder_boundaries: tuple[HolderBoundaryObservation, ...],
+) -> MeasurementProvenance:
+    boundaries = tuple(
+        boundary
+        for aperture in photo_apertures
+        for boundary in (
+            aperture.leading,
+            aperture.trailing,
+            aperture.top,
+            aperture.bottom,
+        )
+    )
+    inputs = tuple(
+        dict.fromkeys(
+            (
+                *(boundary.provenance for boundary in boundaries),
+                *(item.observation.provenance for item in aperture_edge_assignments),
+                *(item.observation.provenance for item in separator_assignments),
+                frame_dimension_prior.provenance,
+                *(item.provenance for item in holder_boundaries),
+            )
+        )
+    )
+    box = holder_span.box
+    signature_parts = (
+        format_id,
+        layout,
+        strip_mode,
+        str(count),
+        f"{box.left},{box.top},{box.right},{box.bottom}",
+        *(
+            f"{item.photo_index}:{item.side.value}:{item.source.value}:"
+            f"{item.state.value}:{item.position.minimum:.12g}:"
+            f"{item.position.maximum:.12g}:{item.provenance.observation_id}"
+            for item in boundaries
+        ),
+        *(str(item.observation_id) for item in inputs),
+    )
+    return _derived_geometry_provenance(
+        signature_parts,
+        inputs,
+        "photo aperture sequence geometry derived from accepted physical inputs",
+    )
+
+
 @dataclass(frozen=True)
 class PhotoSequenceSolution:
     format_id: str
@@ -168,9 +253,9 @@ class PhotoSequenceSolution:
     residuals: SequenceResiduals
     assignment_consensus: BoundaryAssignmentConsensus
     search_budget_exhausted: bool
-    sequence_provenance: MeasurementProvenance
     raw_boundary_paths: tuple[GrayBoundaryPathObservation, ...]
     holder_boundaries: tuple[HolderBoundaryObservation, ...]
+    sequence_provenance: MeasurementProvenance = field(init=False)
 
     def __post_init__(self) -> None:
         _validate_geometry_identity(self.format_id, self.layout, self.strip_mode)
@@ -234,6 +319,58 @@ class PhotoSequenceSolution:
             raise GeometryIdentityError(
                 "aperture edge assignments must preserve raw path identity"
             )
+        aperture_boundaries = tuple(
+            boundary
+            for aperture in self.photo_apertures
+            for boundary in (
+                aperture.leading,
+                aperture.trailing,
+                aperture.top,
+                aperture.bottom,
+            )
+        )
+        measured_path_edges = {
+            item
+            for item in aperture_boundaries
+            if item.source == PhotoApertureEdgeSource.MEASURED_BOUNDARY_PATH
+        }
+        assigned_path_edges = {
+            item.resolution for item in self.aperture_edge_assignments
+        }
+        if measured_path_edges != assigned_path_edges:
+            raise GeometryIdentityError(
+                "every measured aperture edge requires exactly one path assignment"
+            )
+        if len(assigned_path_edges) != len(self.aperture_edge_assignments):
+            raise GeometryIdentityError("aperture edge assignments must be unique")
+        if len({item.boundary_index for item in self.separator_assignments}) != len(
+            self.separator_assignments
+        ):
+            raise GeometryIdentityError("separator boundary assignments must be unique")
+        if any(
+            item.observation not in self.separator_observations
+            for item in self.separator_assignments
+        ):
+            raise GeometryIdentityError(
+                "separator assignments must preserve raw observation identity"
+            )
+        separator_edges = {
+            item
+            for item in aperture_boundaries
+            if item.source == PhotoApertureEdgeSource.SEPARATOR_BAND_EDGE
+        }
+        assigned_separator_edges = {
+            edge
+            for assignment in self.separator_assignments
+            for edge in (
+                assignment.preceding_trailing_edge,
+                assignment.following_leading_edge,
+            )
+        }
+        if separator_edges != assigned_separator_edges:
+            raise GeometryIdentityError(
+                "every separator aperture edge requires exactly one band assignment"
+            )
         selected = {item.boundary_index: item for item in self.separator_assignments}
         expected_separator_width = SeparatorWidthConstraint(
             self.photo_width_constraint_px
@@ -258,6 +395,22 @@ class PhotoSequenceSolution:
                 raise GeometryIdentityError(
                     "separator band edges must bind adjacent photo apertures"
                 )
+        object.__setattr__(
+            self,
+            "sequence_provenance",
+            _photo_sequence_provenance(
+                self.format_id,
+                self.layout,
+                self.strip_mode,
+                self.count,
+                self.holder_span,
+                self.photo_apertures,
+                self.aperture_edge_assignments,
+                self.separator_assignments,
+                self.frame_dimension_prior,
+                self.holder_boundaries,
+            ),
+        )
 
     @property
     def frame_crop_envelopes(self) -> tuple[FrameCropEnvelope, ...]:
@@ -361,7 +514,21 @@ class DualLanePhotoSolution:
 
     @property
     def sequence_provenance(self) -> MeasurementProvenance:
-        return self.lane_divider.provenance
+        return _derived_geometry_provenance(
+            (
+                self.format_id,
+                self.layout,
+                self.strip_mode,
+                str(self.count),
+                str(self.lane_divider.provenance.observation_id),
+                *(str(item.sequence_provenance.observation_id) for item in self.lane_solutions),
+            ),
+            (
+                self.lane_divider.provenance,
+                *(item.sequence_provenance for item in self.lane_solutions),
+            ),
+            "dual-lane photo geometry derived from divider and lane solutions",
+        )
 
     @property
     def photo_apertures(self) -> tuple[PhotoAperture, ...]:

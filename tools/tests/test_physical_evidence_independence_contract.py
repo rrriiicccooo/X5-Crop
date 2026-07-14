@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import ast
-from dataclasses import replace
+from dataclasses import fields, replace
 from pathlib import Path
 import unittest
 
@@ -10,11 +10,13 @@ from x5crop.detection.candidate.model import boundary_proof_paths_for_geometry
 from x5crop.detection.candidate.assessment.evidence_independence import (
     evidence_independence_evidence,
 )
+from x5crop.detection.physical.model import GeometryIdentityError, PhotoSequenceSolution
 from x5crop.domain import (
     EvidenceState,
     MeasurementIdentity,
     MeasurementProvenance,
     ObservationId,
+    PhotoApertureEdgeAssignment,
     PhotoApertureEdgeSource,
 )
 
@@ -52,14 +54,118 @@ def _geometry_with_measured_internal_edges():
             provenance=right_provenance,
         ),
     )
+    template = geometry.aperture_edge_assignments[0].observation
+
+    def path_for(resolution, provenance):
+        return replace(
+            template,
+            position=resolution.position,
+            local_positions=(resolution.position,),
+            lower_appearance=replace(
+                template.lower_appearance,
+                provenance=provenance,
+            ),
+            upper_appearance=replace(
+                template.upper_appearance,
+                provenance=provenance,
+            ),
+            provenance=provenance,
+        )
+
+    left_path = path_for(left.trailing, left_provenance)
+    right_path = path_for(right.leading, right_provenance)
     return replace(
         geometry,
         photo_apertures=(left, right),
+        aperture_edge_assignments=(
+            *geometry.aperture_edge_assignments,
+            PhotoApertureEdgeAssignment(
+                left.index,
+                left.trailing.side,
+                left_path,
+                left.trailing,
+            ),
+            PhotoApertureEdgeAssignment(
+                right.index,
+                right.leading.side,
+                right_path,
+                right.leading,
+            ),
+        ),
+        separator_assignments=(),
+        raw_boundary_paths=(
+            *geometry.raw_boundary_paths,
+            left_path,
+            right_path,
+        ),
+    )
+
+
+def _geometry_without_independent_measurements():
+    geometry = candidate_fixture().geometry
+
+    def hypothesis(boundary):
+        provenance = MeasurementProvenance(
+            MeasurementIdentity.FRAME_GEOMETRY,
+            ObservationId(
+                f"dimension_hypothesis:{boundary.photo_index}:{boundary.side.value}"
+            ),
+            (MeasurementIdentity.FRAME_DIMENSIONS,),
+            "synthetic dimension-only aperture edge",
+        )
+        return replace(
+            boundary,
+            state=EvidenceState.UNAVAILABLE,
+            source=PhotoApertureEdgeSource.DIMENSION_HYPOTHESIS,
+            provenance=provenance,
+        )
+
+    apertures = tuple(
+        replace(
+            aperture,
+            leading=hypothesis(aperture.leading),
+            trailing=hypothesis(aperture.trailing),
+            top=hypothesis(aperture.top),
+            bottom=hypothesis(aperture.bottom),
+        )
+        for aperture in geometry.photo_apertures
+    )
+    return replace(
+        geometry,
+        photo_apertures=apertures,
+        aperture_edge_assignments=(),
         separator_assignments=(),
     )
 
 
 class PhysicalEvidenceIndependenceContractTest(unittest.TestCase):
+    def test_sequence_provenance_is_derived_from_geometry(self) -> None:
+        provenance_field = next(
+            item
+            for item in fields(PhotoSequenceSolution)
+            if item.name == "sequence_provenance"
+        )
+        geometry = candidate_fixture().geometry
+
+        self.assertFalse(provenance_field.init)
+        self.assertEqual(
+            geometry.sequence_provenance.root_measurement,
+            MeasurementIdentity.FRAME_GEOMETRY,
+        )
+        self.assertIn(
+            MeasurementIdentity.SEPARATOR_PROFILE,
+            geometry.sequence_provenance.dependencies,
+        )
+
+    def test_measured_aperture_edge_requires_its_assignment(self) -> None:
+        geometry = candidate_fixture().geometry
+
+        with self.assertRaises(GeometryIdentityError):
+            replace(
+                geometry,
+                aperture_edge_assignments=geometry.aperture_edge_assignments[:-1],
+            )
+
     def test_measurement_authority_comparisons_use_typed_identities(self) -> None:
         offenders: list[str] = []
         for path in (PROJECT_ROOT / "x5crop/detection").rglob("*.py"):
@@ -81,19 +187,7 @@ class PhysicalEvidenceIndependenceContractTest(unittest.TestCase):
                     )
         self.assertEqual(offenders, [])
 
-    def test_shared_root_measurement_is_contradicted(self) -> None:
-        candidate = candidate_fixture()
-        geometry = replace(
-            candidate.geometry,
-            sequence_provenance=replace(
-                candidate.geometry.sequence_provenance,
-                root_measurement=MeasurementIdentity.SEPARATOR_PROFILE,
-            ),
-        )
-        evidence = evidence_independence_evidence(geometry)
-        self.assertEqual(evidence.state, EvidenceState.CONTRADICTED)
-
-    def test_sequence_root_reused_by_separator_dependency_is_contradicted(self) -> None:
+    def test_geometry_dependent_separator_measurement_is_contradicted(self) -> None:
         candidate = candidate_fixture()
         original_assignment = candidate.geometry.separator_assignments[0]
         provenance = replace(
@@ -141,19 +235,21 @@ class PhysicalEvidenceIndependenceContractTest(unittest.TestCase):
 
         self.assertEqual(evidence.state, EvidenceState.CONTRADICTED)
 
-    def test_distinct_sequence_and_separator_roots_are_supported(self) -> None:
-        evidence = evidence_independence_evidence(candidate_fixture().geometry)
+    def test_geometry_may_depend_on_independent_separator_measurement(self) -> None:
+        geometry = candidate_fixture().geometry
+        evidence = evidence_independence_evidence(geometry)
+
+        self.assertIn(
+            MeasurementIdentity.SEPARATOR_PROFILE,
+            geometry.sequence_provenance.dependencies,
+        )
         self.assertEqual(evidence.state, EvidenceState.SUPPORTED)
 
     def test_dimension_prior_is_not_independent_measurement_evidence(self) -> None:
-        candidate = candidate_fixture()
-        geometry = replace(
-            candidate.geometry,
-            separator_assignments=(),
-        )
+        geometry = _geometry_without_independent_measurements()
         evidence = evidence_independence_evidence(geometry)
         self.assertEqual(evidence.state, EvidenceState.UNAVAILABLE)
-        self.assertEqual(evidence.supporting_root_measurements, ())
+        self.assertEqual(evidence.supporting_measurement_roots, ())
 
     def test_measured_internal_photo_edges_are_independent_boundary_evidence(self) -> None:
         measured_geometry = _geometry_with_measured_internal_edges()
@@ -161,9 +257,9 @@ class PhysicalEvidenceIndependenceContractTest(unittest.TestCase):
         evidence = evidence_independence_evidence(measured_geometry)
 
         self.assertEqual(evidence.state, EvidenceState.SUPPORTED)
-        self.assertEqual(
-            evidence.supporting_root_measurements,
-            (MeasurementIdentity.PHOTO_EDGES,),
+        self.assertIn(
+            MeasurementIdentity.PHOTO_EDGES,
+            evidence.supporting_measurement_roots,
         )
 
     def test_geometry_proof_accepts_an_independent_internal_photo_edge_anchor(self) -> None:
