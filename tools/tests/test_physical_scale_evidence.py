@@ -172,7 +172,7 @@ class PhysicalScaleEvidenceTests(unittest.TestCase):
             containment_fallback=ContainmentFallback(
                 geometry.holder_span.box,
                 MeasurementProvenance(
-                    MeasurementIdentity.HOLDER_CANVAS,
+                    MeasurementIdentity.CANVAS,
                     ObservationId("test_containment"),
                     (MeasurementIdentity.CANVAS,),
                     "test containment",

@@ -169,7 +169,7 @@ def scope(
         containment_fallback=ContainmentFallback(
             Box(0, 0, width, height),
             MeasurementProvenance(
-                MeasurementIdentity.HOLDER_CANVAS,
+                MeasurementIdentity.CANVAS,
                 ObservationId("synthetic_containment"),
                 (MeasurementIdentity.CANVAS,),
                 "synthetic containment fallback",

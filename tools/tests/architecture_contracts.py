@@ -161,6 +161,35 @@ def modules_importing_external(package_name: str) -> list[str]:
     return sorted(importers)
 
 
+def unreferenced_enum_members(
+    module_name: str,
+    enum_name: str,
+) -> list[str]:
+    modules = source_modules()
+    module = modules[module_name]
+    enum_node = next(
+        node
+        for node in parsed_source(module).body
+        if isinstance(node, ast.ClassDef) and node.name == enum_name
+    )
+    members = {
+        target.id
+        for statement in enum_node.body
+        if isinstance(statement, ast.Assign)
+        for target in statement.targets
+        if isinstance(target, ast.Name)
+    }
+    referenced = {
+        node.attr
+        for source_module in modules.values()
+        for node in ast.walk(parsed_source(source_module))
+        if isinstance(node, ast.Attribute)
+        and isinstance(node.value, ast.Name)
+        and node.value.id == enum_name
+    }
+    return sorted(members - referenced)
+
+
 def source_layer_import_graph() -> dict[str, frozenset[str]]:
     graph: dict[str, set[str]] = {
         layer: set() for layer in SOURCE_LAYER_PREFIXES

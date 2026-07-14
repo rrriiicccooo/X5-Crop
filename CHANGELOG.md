@@ -38,6 +38,8 @@ repository rules in `AGENTS.md`.
   `left/right` 字符串侧名，content crossing、assessment 与 current report 共享同一照片/边界身份。
 - Partial auto count 明确区分“较大 count 已被穷尽否定”和“较大 count 仍缺证据”：前者允许继续
   证明较小 count，后者继续阻止自动解决；budget exhaustion 永远保持 unavailable。
+- Architecture contract 现在检查 active Enum 成员是否有 runtime 使用者；删除 8 个只属于旧 sequence、
+  safety、review-only 与 TIFF identity 模型的孤儿 `MeasurementIdentity`，测试不再保护失效身份。
 - Sequence conservation 收敛为 `PhotoSequenceSolution` 的构造不变量。相邻 spacing 已由 aperture
   edge 差值唯一决定，不再把同一几何恒等式重复包装成 evidence、CandidateGate check、final reason
   或 report 字段，避免 geometry 自证。

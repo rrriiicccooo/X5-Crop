@@ -45,27 +45,19 @@ class WorkspaceExtent:
 class MeasurementIdentity(str, Enum):
     BOUNDARY_PATHS = "boundary_paths"
     BOUNDARY_CORRIDOR = "boundary_corridor"
-    CALIBRATED_SEQUENCE_CONSTRAINTS = "calibrated_sequence_constraints"
     CANVAS = "canvas"
     CONTENT_EVIDENCE_IMAGE = "content_evidence_image"
-    COUNT = "count"
     FORMAT_PHYSICAL_SPEC = "format_physical_spec"
     FRAME_DIMENSIONS = "frame_dimensions"
     FRAME_GEOMETRY = "frame_geometry"
     GRAY_WORK = "gray_work"
-    HOLDER_CANVAS = "holder_canvas"
     IMAGE_MEASUREMENT_STATISTICS = "image_measurement_statistics"
     LANE_DIVIDER_PROFILE = "lane_divider_profile"
     PHYSICAL_FRAME_ASPECT = "physical_frame_aspect"
     PHOTO_EDGES = "photo_edges"
-    REVIEW_ONLY_MODE = "review_only_mode"
-    SAFETY_GEOMETRY_MODEL = "safety_geometry_model"
     SCAN_CALIBRATION = "scan_calibration"
     SEPARATOR_PROFILE = "separator_profile"
-    SEQUENCE_BOUNDARIES = "sequence_boundaries"
-    SEQUENCE_CUTS = "sequence_cuts"
     SHORT_AXIS_BOUNDARIES = "short_axis_boundaries"
-    TIFF_RESOLUTION = "tiff_resolution"
 
 
 class ObservationId(str):
