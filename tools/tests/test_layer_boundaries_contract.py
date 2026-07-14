@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 from tools.tests.architecture_contracts import (
     PROJECT_ROOT,
     RUNTIME_ROOTS,
     SOURCE_LAYER_PREFIXES,
+    SourceModule,
     STANDALONE_ROOTS,
     STANDALONE_TOOL_ROOTS,
     forbidden_import_edges,
@@ -177,6 +181,19 @@ class LayerBoundariesContractTest(unittest.TestCase):
         ]
         self.assertEqual(offenders, [])
 
+    def test_report_restoration_depends_on_models_not_computation_stages(self) -> None:
+        self.assertEqual(
+            forbidden_import_edges(
+                ("x5crop.report",),
+                (
+                    "x5crop.detection.candidate.assessment.candidate_gate",
+                    "x5crop.detection.candidate.plan.counts",
+                    "x5crop.detection.final.finalize",
+                ),
+            ),
+            [],
+        )
+
     def test_output_and_runtime_do_not_reverse_dependency_direction(self) -> None:
         self.assertEqual(
             forbidden_import_edges(("x5crop.output",), ("x5crop.detection", "x5crop.runtime")),
@@ -205,6 +222,24 @@ class LayerBoundariesContractTest(unittest.TestCase):
         self.assertEqual(unreferenced_tool_assignments(), [])
         self.assertEqual(pass_through_tool_functions(), [])
         self.assertEqual(unused_tool_imports(), [])
+
+    def test_pass_through_detection_follows_parameter_attribute_chains(self) -> None:
+        with TemporaryDirectory() as temporary_directory:
+            path = Path(temporary_directory) / "fixture.py"
+            path.write_text(
+                "def forwarded(candidate):\n"
+                "    return typed_read_model(candidate.assessment.evidence)\n",
+                encoding="utf-8",
+            )
+            module = SourceModule("x5crop.fixture", path)
+            with patch(
+                "tools.tests.architecture_contracts.source_modules",
+                return_value={module.name: module},
+            ):
+                self.assertEqual(
+                    pass_through_source_functions(),
+                    ["x5crop.fixture:1:forwarded"],
+                )
 
     def test_active_interfaces_are_typed_and_configuration_defaults_are_explicit(self) -> None:
         self.assertEqual(functions_with_untyped_parameters(), [])

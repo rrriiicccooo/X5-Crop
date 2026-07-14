@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 from x5crop.domain import EvidenceState
 
-from ..candidate.assessment.candidate_gate import CANDIDATE_GATE_CHECK_CODES
+from ..candidate.assessment.model import CANDIDATE_GATE_CHECK_CODES
 from ..gate_checks import GateCheck, GateStage
 from .vocabulary import (
     FINAL_REASON_AUTOMATIC_PROCESSING_NOT_SUPPORTED,

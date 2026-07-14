@@ -25,7 +25,7 @@ from ...physical.sequence_solver import (
     solve_photo_sequence,
 )
 from ..model import BuiltCandidate
-from ..plan.count_hypotheses import CountHypothesis
+from ..plan.model import CountHypothesis
 
 
 @dataclass(frozen=True)

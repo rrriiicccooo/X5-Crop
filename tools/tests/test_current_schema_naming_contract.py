@@ -36,6 +36,21 @@ def _active_source() -> str:
 
 
 class CurrentSchemaNamingContractTest(unittest.TestCase):
+    def test_report_read_models_have_no_constructor_or_projection_wrappers(self) -> None:
+        finalize = (
+            PROJECT_ROOT / "x5crop/detection/final/finalize.py"
+        ).read_text(encoding="utf-8")
+        restoration = (
+            PROJECT_ROOT / "x5crop/report/restoration.py"
+        ).read_text(encoding="utf-8")
+        read_models = (
+            PROJECT_ROOT / "x5crop/report/read_models.py"
+        ).read_text(encoding="utf-8")
+
+        self.assertNotIn("final_detection_from_facts", finalize)
+        self.assertNotIn("final_detection_from_facts", restoration)
+        self.assertNotIn("candidate_evidence_read_model", read_models)
+
     def test_known_report_and_debug_interfaces_use_canonical_types(self) -> None:
         self.assertIs(
             get_type_hints(make_separator_evidence_debug_rgb)["separator_overlay"],

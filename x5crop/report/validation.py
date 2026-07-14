@@ -14,7 +14,7 @@ from ..configuration.diagnostics import DiagnosticsConfiguration
 from ..configuration.preprocess import PreprocessConfiguration
 from ..configuration.separator import SeparatorConfiguration
 from ..detection.decision.vocabulary import FINAL_REVIEW_REASONS
-from ..detection.candidate.assessment.candidate_gate import (
+from ..detection.candidate.assessment.model import (
     BoundaryProofPath,
     CandidateGateAssessment,
 )
@@ -24,7 +24,7 @@ from ..detection.candidate.model import (
     CandidateAssessment,
     CandidateEvidenceModel,
 )
-from ..detection.candidate.plan.count_hypotheses import CountHypothesis
+from ..detection.candidate.plan.model import CountHypothesis
 from ..detection.candidate.selection.model import (
     CountResolution,
     GeometryCluster,

@@ -18,11 +18,11 @@ from x5crop.detection.candidate.model import (
     CandidateAssessment,
     EvidenceQuality,
 )
-from x5crop.detection.candidate.plan.count_hypotheses import (
+from x5crop.detection.candidate.plan.counts import count_hypothesis_plan
+from x5crop.detection.candidate.plan.model import (
     CountHypothesis,
     CountHypothesisPlan,
     CountHypothesisSource,
-    count_hypothesis_plan,
 )
 from x5crop.detection.candidate.selection.choose import (
     candidate_rank,

@@ -5,10 +5,10 @@ from enum import Enum
 from typing import get_type_hints
 import unittest
 
-from x5crop.detection.candidate.assessment.candidate_gate import (
+from x5crop.detection.candidate.assessment.candidate_gate import candidate_gate_assessment
+from x5crop.detection.candidate.assessment.model import (
     BoundaryProofPath,
     CandidateGateInput,
-    candidate_gate_assessment,
 )
 from x5crop.domain import EvidenceState
 from x5crop.detection.gate_checks import GateCheck, GateStage

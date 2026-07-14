@@ -40,7 +40,7 @@ class ArchitectureOwnershipContractTest(unittest.TestCase):
         self.assertNotIn("edge_texture_percentiles", parameter_fields)
 
     def test_frame_topology_is_a_geometry_invariant_not_duplicate_evidence(self) -> None:
-        from x5crop.detection.candidate.assessment.candidate_gate import (
+        from x5crop.detection.candidate.assessment.model import (
             CANDIDATE_GATE_CHECK_CODES,
         )
         from x5crop.detection.candidate.model import CandidateEvidence

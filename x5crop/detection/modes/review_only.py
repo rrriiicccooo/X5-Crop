@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from ..candidate.model import BuiltCandidate
-from ..candidate.plan.count_hypotheses import CountHypothesis, CountHypothesisSource
+from ..candidate.plan.model import CountHypothesis, CountHypothesisSource
 from ..candidate.proposal.sequence import photo_sequence_search_scope
 from ..context import DetectionContext
 from ..physical.model import (

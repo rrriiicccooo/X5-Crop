@@ -48,8 +48,8 @@ from ..physical.photo_size import (
     FrameDimensionEvidence,
     frame_dimension_measurements_match_geometry,
 )
-from .assessment.candidate_gate import BoundaryProofPath, CandidateGateAssessment
-from .plan.count_hypotheses import CountHypothesis
+from .assessment.model import BoundaryProofPath, CandidateGateAssessment
+from .plan.model import CountHypothesis
 from ..physical.model import SequenceResiduals
 from ..evidence.aperture_sequence import PhotoSequenceConservationEvidence
 from ..geometry_resolution import GeometryResolution

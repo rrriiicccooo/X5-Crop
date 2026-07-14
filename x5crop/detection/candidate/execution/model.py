@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from ..model import AssessedCandidate
-from ..plan.count_hypotheses import CountHypothesis
+from ..plan.model import CountHypothesis
 from ..selection.model import SelectionResult
 
 

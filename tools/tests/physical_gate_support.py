@@ -3,7 +3,7 @@ from __future__ import annotations
 from x5crop.detection.candidate.assessment.candidate import (
     candidate_gate_for_evidence,
 )
-from x5crop.detection.candidate.assessment.candidate_gate import (
+from x5crop.detection.candidate.assessment.model import (
     BoundaryProofPath,
     CandidateGateAssessment,
 )
@@ -16,7 +16,7 @@ from x5crop.detection.candidate.model import (
     CandidateAssessment,
     CandidateEvidence,
 )
-from x5crop.detection.candidate.plan.count_hypotheses import (
+from x5crop.detection.candidate.plan.model import (
     CountHypothesis,
     CountHypothesisSource,
 )

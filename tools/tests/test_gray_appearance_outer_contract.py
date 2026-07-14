@@ -8,7 +8,7 @@ import unittest
 import numpy as np
 
 from x5crop.configuration.boundary import BoundaryPathParameters
-from x5crop.detection.candidate.assessment.candidate_gate import (
+from x5crop.detection.candidate.assessment.model import (
     BOUNDARY_PROOF_PATH_CODES,
 )
 from x5crop.detection.candidate.assessment.candidate import (

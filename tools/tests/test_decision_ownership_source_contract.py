@@ -49,7 +49,7 @@ class DecisionOwnershipSourceContractTest(unittest.TestCase):
             )
         self.assertEqual(offenders, [])
 
-    def test_decision_and_finalization_have_single_factories(self) -> None:
+    def test_final_detection_has_runtime_and_validated_restoration_factories(self) -> None:
         final_factories: list[str] = []
         for path in (PROJECT_ROOT / "x5crop").rglob("*.py"):
             tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
@@ -61,7 +61,10 @@ class DecisionOwnershipSourceContractTest(unittest.TestCase):
                         final_factories.append(str(path.relative_to(PROJECT_ROOT)))
         self.assertEqual(
             sorted(set(final_factories)),
-            ["x5crop/detection/final/finalize.py"],
+            [
+                "x5crop/detection/final/finalize.py",
+                "x5crop/report/restoration.py",
+            ],
         )
 
     def test_decision_gate_owns_status_and_final_reason_creation(self) -> None:

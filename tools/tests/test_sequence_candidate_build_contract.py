@@ -16,7 +16,7 @@ from x5crop.configuration.registry import get_detection_configuration
 from x5crop.detection.candidate.build.sequence_candidate import (
     build_sequence_candidate,
 )
-from x5crop.detection.candidate.plan.count_hypotheses import (
+from x5crop.detection.candidate.plan.model import (
     CountHypothesis,
     CountHypothesisSource,
 )

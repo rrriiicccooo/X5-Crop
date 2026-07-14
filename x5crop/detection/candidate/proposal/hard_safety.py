@@ -3,7 +3,7 @@ from __future__ import annotations
 from ...context import DetectionContext
 from ...physical.photo_size import frame_dimension_priors
 from ..model import BuiltCandidate
-from ..plan.count_hypotheses import CountHypothesis, CountHypothesisSource
+from ..plan.model import CountHypothesis, CountHypothesisSource
 from .sequence import photo_sequence_search_scope
 from ...physical.model import (
     AssignmentConsensusOutcome,

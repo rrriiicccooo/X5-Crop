@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..detection.final.finalize import final_detection_from_facts
 from ..detection.final.model import FinalDetection
 from .validation import (
     current_report_record_errors,
@@ -30,7 +29,7 @@ def final_detection_from_record(record: dict[str, Any]) -> FinalDetection:
         if output["final_geometry"] is None
         else output_geometry_from_read_model(output["final_geometry"])
     )
-    return final_detection_from_facts(
+    return FinalDetection(
         decision=decision_gate_from_read_model(decision["gate"]),
         frame_bleed_plan=frame_bleed_plan,
         finalization_plan=finalization_plan,

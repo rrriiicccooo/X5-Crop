@@ -25,7 +25,7 @@ from x5crop.detection.context import (
     DetectionExecutionStatistics,
     DetectionRequest,
 )
-from x5crop.detection.candidate.assessment.candidate_gate import (
+from x5crop.detection.candidate.assessment.model import (
     CandidateGateAssessment,
 )
 from x5crop.detection.final import finalize
@@ -108,7 +108,7 @@ class DetectionStageTypeContractTests(unittest.TestCase):
         self.assertNotIn("image_profile", DetectionContext.__dataclass_fields__)
 
     def test_physical_authority_discriminators_are_typed(self) -> None:
-        from x5crop.detection.candidate.plan.count_hypotheses import (
+        from x5crop.detection.candidate.plan.model import (
             CountHypothesis,
             CountHypothesisSource,
         )

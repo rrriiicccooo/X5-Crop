@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from ...output.model import FrameBleedPlan
-from ..candidate.assessment.candidate_gate import CandidateGateAssessment
+from ..candidate.assessment.model import CandidateGateAssessment
 from ..candidate.selection.model import SelectionConsensus, SelectionResult
 from x5crop.domain import EvidenceState
 from ..gate_checks import GateCheck, GateStage

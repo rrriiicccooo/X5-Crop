@@ -230,9 +230,15 @@ def pass_through_classes() -> list[str]:
     return sorted(offenders)
 
 
-def pass_through_source_functions() -> list[str]:
+def _argument_root_name(argument: ast.expr) -> str | None:
+    while isinstance(argument, ast.Attribute):
+        argument = argument.value
+    return argument.id if isinstance(argument, ast.Name) else None
+
+
+def _pass_through_functions(modules: Iterable[SourceModule]) -> list[str]:
     offenders: list[str] = []
-    for module in source_modules().values():
+    for module in modules:
         for node in parsed_source(module).body:
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 continue
@@ -270,13 +276,17 @@ def pass_through_source_functions() -> list[str]:
                 )
             )
             forwarded = tuple(
-                argument.id
+                root_name
                 for argument in call.args
-                if isinstance(argument, ast.Name)
+                if (root_name := _argument_root_name(argument)) is not None
             )
             if len(forwarded) == len(call.args) and forwarded == parameters:
                 offenders.append(f"{module.name}:{node.lineno}:{node.name}")
     return sorted(offenders)
+
+
+def pass_through_source_functions() -> list[str]:
+    return _pass_through_functions(source_modules().values())
 
 
 def duplicate_dataclass_models(
@@ -765,49 +775,4 @@ def unreferenced_tool_assignments() -> list[str]:
 
 
 def pass_through_tool_functions() -> list[str]:
-    offenders: list[str] = []
-    for module in _tool_modules().values():
-        for node in parsed_source(module).body:
-            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                continue
-            if node.name.startswith("_") or node.name == "main":
-                continue
-            statements = [
-                statement
-                for statement in node.body
-                if not (
-                    isinstance(statement, ast.Expr)
-                    and isinstance(statement.value, ast.Constant)
-                    and isinstance(statement.value.value, str)
-                )
-            ]
-            if len(statements) != 1:
-                continue
-            statement = statements[0]
-            call = (
-                statement.value
-                if isinstance(statement, ast.Expr)
-                and isinstance(statement.value, ast.Call)
-                else statement.value
-                if isinstance(statement, ast.Return)
-                and isinstance(statement.value, ast.Call)
-                else None
-            )
-            if call is None or call.keywords:
-                continue
-            parameters = tuple(
-                argument.arg
-                for argument in (
-                    *node.args.posonlyargs,
-                    *node.args.args,
-                    *node.args.kwonlyargs,
-                )
-            )
-            forwarded = tuple(
-                argument.id
-                for argument in call.args
-                if isinstance(argument, ast.Name)
-            )
-            if len(forwarded) == len(call.args) and forwarded == parameters:
-                offenders.append(f"{module.name}:{node.lineno}:{node.name}")
-    return sorted(offenders)
+    return _pass_through_functions(_tool_modules().values())

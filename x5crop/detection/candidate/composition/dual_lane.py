@@ -1,10 +1,8 @@
 from __future__ import annotations
 
 from ...physical.model import DualLanePhotoSolution
-from ..assessment.candidate_gate import (
-    CandidateGateInput,
-    candidate_gate_assessment,
-)
+from ..assessment.candidate_gate import candidate_gate_assessment
+from ..assessment.model import CandidateGateInput
 from ..model import (
     AssessedCandidate,
     BuiltCandidate,

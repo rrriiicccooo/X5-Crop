@@ -6,7 +6,7 @@ from ....cache import MeasurementCache
 from ....configuration.boundary import BoundaryPathParameters
 from ....domain import PhotoSequenceSearchScope
 from ...context import DetectionRequest
-from ..plan.count_hypotheses import CountHypothesis
+from ..plan.model import CountHypothesis
 from ..proposal.sequence import photo_sequence_search_scope
 
 

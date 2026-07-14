@@ -25,10 +25,10 @@ from ..model import (
     CandidateEvidence,
     boundary_proof_paths_for_geometry,
 )
-from .candidate_gate import (
+from .candidate_gate import candidate_gate_assessment
+from .model import (
     CandidateGateAssessment,
     CandidateGateInput,
-    candidate_gate_assessment,
 )
 from .evidence_independence import evidence_independence_evidence
 

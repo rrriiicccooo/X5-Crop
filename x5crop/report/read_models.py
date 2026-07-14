@@ -73,10 +73,6 @@ def candidate_gate_read_model(
     }
 
 
-def candidate_evidence_read_model(candidate: AssessedCandidate) -> dict[str, Any]:
-    return typed_read_model(candidate.assessment.evidence)
-
-
 def candidate_read_model(candidate: AssessedCandidate) -> dict[str, Any]:
     geometry = candidate.geometry
     if isinstance(geometry, PhotoSequenceSolution):
@@ -93,7 +89,7 @@ def candidate_read_model(candidate: AssessedCandidate) -> dict[str, Any]:
         "evidence_quality": typed_read_model(candidate.evidence_quality),
         "candidate_gate": candidate_gate_read_model(candidate),
         "count_hypothesis": typed_read_model(candidate.count_hypothesis),
-        "evidence": candidate_evidence_read_model(candidate),
+        "evidence": typed_read_model(candidate.assessment.evidence),
     }
 
 

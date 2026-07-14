@@ -58,10 +58,6 @@ class FormatPhysicalSpec:
         return self.frame_size_mm_options[0]
 
     @property
-    def horizontal_content_aspect(self) -> float:
-        return self.nominal_frame_size_mm.aspect
-
-    @property
     def expected_separator_count(self) -> int:
         return expected_separator_count(
             self.default_count,

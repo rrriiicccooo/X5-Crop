@@ -8,10 +8,10 @@ from .candidate.execution.count_hypothesis import evaluate_count_hypothesis
 from .candidate.execution.model import CountHypothesisEvaluation
 from .candidate.model import AssessedCandidate
 from .candidate.proposal.sequence import cached_boundary_measurements
-from .candidate.plan.count_hypotheses import (
+from .candidate.plan.counts import count_hypothesis_plan
+from .candidate.plan.model import (
     CountHypothesisPlan,
     CountHypothesisSource,
-    count_hypothesis_plan,
 )
 from .candidate.proposal.hard_safety import hard_safety_candidate
 from .candidate.selection.choose import select_candidates

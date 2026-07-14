@@ -14,7 +14,7 @@ from ...image.statistics import image_measurement_statistics
 from ...units import ScanCalibrationResolution, transposed_scan_calibration
 from ..candidate.composition.dual_lane import compose_dual_lane_candidate
 from ..candidate.model import BuiltCandidate
-from ..candidate.plan.count_hypotheses import CountHypothesis, CountHypothesisSource
+from ..candidate.plan.model import CountHypothesis, CountHypothesisSource
 from ..candidate.assessment.review_only import assess_review_only_candidate
 from ..candidate.selection.choose import select_candidates
 from ..candidate.selection.model import SelectionResult

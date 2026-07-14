@@ -21,7 +21,7 @@ def detection_configuration_read_model(
             "allowed_counts": list(spec.allowed_counts),
             "nominal_frame_size_mm": typed_read_model(spec.nominal_frame_size_mm),
             "frame_size_mm_options": typed_read_model(spec.frame_size_mm_options),
-            "frame_aspect": spec.horizontal_content_aspect,
+            "frame_aspect": spec.nominal_frame_size_mm.aspect,
             "aspect_source": "frame_size_mm",
             "complete_strip_can_be_underfilled": bool(
                 spec.complete_strip_can_be_underfilled

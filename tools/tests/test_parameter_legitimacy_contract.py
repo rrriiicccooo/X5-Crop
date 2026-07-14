@@ -23,7 +23,7 @@ from x5crop.configuration.candidate import (
     SequenceSolverParameters,
 )
 from x5crop.configuration.separator import SeparatorObservationParameters
-from x5crop.detection.candidate.plan.count_hypotheses import (
+from x5crop.detection.candidate.plan.model import (
     CountHypothesis,
     CountHypothesisSource,
 )

@@ -59,20 +59,6 @@ def finalize_detection(
             image_height=finalization_plan.image_height,
         )
     )
-    return final_detection_from_facts(
-        decision=decision,
-        frame_bleed_plan=frame_bleed_plan,
-        finalization_plan=finalization_plan,
-        output_geometry=output_geometry,
-    )
-
-
-def final_detection_from_facts(
-    decision: DecisionGateAssessment,
-    frame_bleed_plan: FrameBleedPlan,
-    finalization_plan: FinalizationPlan | None,
-    output_geometry: OutputGeometry | None,
-) -> FinalDetection:
     return FinalDetection(
         decision=decision,
         frame_bleed_plan=frame_bleed_plan,

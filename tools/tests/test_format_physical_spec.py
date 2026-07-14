@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 
 from x5crop.formats import FORMATS
-from x5crop.detection.candidate.plan.count_hypotheses import count_hypothesis_plan
+from x5crop.detection.candidate.plan.counts import count_hypothesis_plan
 from x5crop.configuration.registry import get_detection_configuration
 from x5crop.report.configuration import detection_configuration_read_model
 from x5crop.configuration.bundle import DetectionConfigurationBundle
@@ -62,7 +62,7 @@ class FormatPhysicalSpecTests(unittest.TestCase):
         for format_id, expected in expected_aspects.items():
             with self.subTest(format_id=format_id):
                 spec = FORMATS[format_id]
-                self.assertAlmostEqual(spec.horizontal_content_aspect, expected)
+                self.assertFalse(hasattr(spec, "horizontal_content_aspect"))
                 self.assertAlmostEqual(
                     spec.nominal_frame_size_mm.width_mm / spec.nominal_frame_size_mm.height_mm,
                     expected,
@@ -100,7 +100,7 @@ class FormatPhysicalSpecTests(unittest.TestCase):
         )
         self.assertTrue(
             all(
-                item.aspect == spec.horizontal_content_aspect
+                item.aspect == spec.nominal_frame_size_mm.aspect
                 for item in spec.frame_size_mm_options
             )
         )

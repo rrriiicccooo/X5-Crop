@@ -9,7 +9,7 @@ from ..model import (
     DualLaneEvidence,
     ReviewOnlyEvidence,
 )
-from ..plan.count_hypotheses import CountHypothesisSource
+from ..plan.model import CountHypothesisSource
 from .model import (
     GeometryCluster,
     SelectionConsensus,

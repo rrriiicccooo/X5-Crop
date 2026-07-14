@@ -4,7 +4,7 @@ from ...context import DetectionContext
 from ..assessment.candidate import assess_candidate
 from ..build.sequence_candidate import build_sequence_candidate
 from ..model import AssessedCandidate
-from ..plan.count_hypotheses import CountHypothesis
+from ..plan.model import CountHypothesis
 from ..selection.choose import select_candidates
 from ...physical.photo_size import frame_dimension_priors
 from .source_candidates import (
