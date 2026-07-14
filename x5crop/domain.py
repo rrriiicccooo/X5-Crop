@@ -577,6 +577,7 @@ class PhotoApertureCrossAxisHypothesis:
 
 @dataclass(frozen=True)
 class SeparatorCrossAxisMeasurement:
+    observation_id: ObservationId
     aperture_cross_axis: PhotoApertureCrossAxisHypothesis
     outcome: SeparatorCrossAxisOutcome
     coverage_ratio: float | None
@@ -587,6 +588,8 @@ class SeparatorCrossAxisMeasurement:
     reason: str = field(init=False)
 
     def __post_init__(self) -> None:
+        if not isinstance(self.observation_id, ObservationId):
+            raise TypeError("separator measurement requires an observation identity")
         if not isinstance(
             self.aperture_cross_axis,
             PhotoApertureCrossAxisHypothesis,
@@ -650,21 +653,12 @@ class SeparatorBandObservation:
     tonal_evidence: float
     appearance: GrayAppearanceObservation
     provenance: MeasurementProvenance
-    cross_axis_measurements: tuple[SeparatorCrossAxisMeasurement, ...]
-    lane_box: Box | None = None
 
     def __post_init__(self) -> None:
         if self.end <= self.start:
             raise ValueError("separator observation must have positive width")
         if self.appearance.provenance != self.provenance:
             raise ValueError("separator appearance must share band provenance")
-        hypotheses = tuple(
-            item.aperture_cross_axis for item in self.cross_axis_measurements
-        )
-        if len(set(hypotheses)) != len(hypotheses):
-            raise ValueError(
-                "separator observation requires unique cross-axis measurements"
-            )
 
     @property
     def width(self) -> float:
@@ -678,13 +672,32 @@ class SeparatorBandObservation:
     def midpoint(self) -> float:
         return 0.5 * (float(self.start) + float(self.end))
 
-    def cross_axis_measurement_for(
+
+@dataclass(frozen=True)
+class SeparatorBandCrossAxisSupport:
+    observation: SeparatorBandObservation
+    measurements: tuple[SeparatorCrossAxisMeasurement, ...]
+
+    def __post_init__(self) -> None:
+        observation_id = self.observation.provenance.observation_id
+        if any(
+            item.observation_id != observation_id
+            for item in self.measurements
+        ):
+            raise ValueError("separator support must preserve observation identity")
+        hypotheses = tuple(item.aperture_cross_axis for item in self.measurements)
+        if not hypotheses or len(set(hypotheses)) != len(hypotheses):
+            raise ValueError(
+                "separator support requires unique cross-axis measurements"
+            )
+
+    def measurement_for(
         self,
         hypothesis: PhotoApertureCrossAxisHypothesis,
     ) -> SeparatorCrossAxisMeasurement:
         matches = tuple(
             item
-            for item in self.cross_axis_measurements
+            for item in self.measurements
             if item.aperture_cross_axis == hypothesis
         )
         if len(matches) != 1:
@@ -789,7 +802,10 @@ class SeparatorBandAssignment:
     def __post_init__(self) -> None:
         if self.boundary_index <= 0:
             raise ValueError("separator assignment boundary index must be positive")
-        if self.cross_axis_measurement not in self.observation.cross_axis_measurements:
+        if (
+            self.cross_axis_measurement.observation_id
+            != self.observation.provenance.observation_id
+        ):
             raise ValueError("separator assignment measurement must belong to its band")
         if self.cross_axis_measurement.state != EvidenceState.SUPPORTED:
             raise ValueError("assigned separator requires cross-axis support")

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from math import ceil, floor
 
 import numpy as np
@@ -13,6 +13,7 @@ from ....domain import (
     MeasurementProvenance,
     ObservationId,
     PhotoApertureCrossAxisHypothesis,
+    SeparatorBandCrossAxisSupport,
     SeparatorBandObservation,
     SeparatorCrossAxisMeasurement,
     SeparatorCrossAxisOutcome,
@@ -25,6 +26,12 @@ from ....utils import runs_from_mask
 @dataclass(frozen=True)
 class SeparatorObservationSet:
     observations: tuple[SeparatorBandObservation, ...]
+    budget_exhausted: bool
+
+
+@dataclass(frozen=True)
+class SeparatorSupportSet:
+    supports: tuple[SeparatorBandCrossAxisSupport, ...]
     budget_exhausted: bool
 
 
@@ -116,6 +123,7 @@ def _cross_axis_support_is_continuous(
 
 
 def _cross_axis_measurement(
+    observation_id: ObservationId,
     row_measurements: _SeparatorBandRowMeasurements | None,
     aperture_cross_axis: PhotoApertureCrossAxisHypothesis,
     statistics: ImageMeasurementStatistics,
@@ -123,6 +131,7 @@ def _cross_axis_measurement(
 ) -> SeparatorCrossAxisMeasurement:
     if row_measurements is None:
         return SeparatorCrossAxisMeasurement(
+            observation_id,
             aperture_cross_axis,
             SeparatorCrossAxisOutcome.BAND_OUTSIDE_CORRIDOR,
             None,
@@ -141,6 +150,7 @@ def _cross_axis_measurement(
     )
     if row_end <= row_start:
         return SeparatorCrossAxisMeasurement(
+            observation_id,
             aperture_cross_axis,
             SeparatorCrossAxisOutcome.BAND_OUTSIDE_CORRIDOR,
             None,
@@ -154,6 +164,7 @@ def _cross_axis_measurement(
         and float(statistics.texture_signal) <= measurement_floor
     ):
         return SeparatorCrossAxisMeasurement(
+            observation_id,
             aperture_cross_axis,
             SeparatorCrossAxisOutcome.APPEARANCE_REFERENCE_UNAVAILABLE,
             None,
@@ -202,6 +213,7 @@ def _cross_axis_measurement(
         maximum_break_rows,
     )
     return SeparatorCrossAxisMeasurement(
+        observation_id,
         aperture_cross_axis,
         (
             SeparatorCrossAxisOutcome.PATH_SUPPORTED
@@ -218,7 +230,7 @@ def _cross_axis_measurement(
 def _band_appearance_observation(
     row_measurements: _SeparatorBandRowMeasurements | None,
     statistics: ImageMeasurementStatistics,
-    cross_axis_measurements: tuple[SeparatorCrossAxisMeasurement, ...],
+    parameters: SeparatorObservationParameters,
     provenance: MeasurementProvenance,
 ) -> GrayAppearanceObservation:
     if row_measurements is None or not row_measurements.band.size:
@@ -227,17 +239,22 @@ def _band_appearance_observation(
     center = float(np.median(band))
     gx = np.abs(np.diff(band, axis=1, prepend=band[:, :1]))
     gy = np.abs(np.diff(band, axis=0, prepend=band[:1, :]))
+    row_appearance = row_measurements.row_appearance
+    appearance_scale = max(
+        float(parameters.minimum_profile_range),
+        float(statistics.gradient_baseline),
+        float(statistics.gradient_mad),
+        float(statistics.texture_mad),
+    )
+    coherent_rows = np.abs(row_appearance - center) <= appearance_scale
     return GrayAppearanceObservation(
         intensity_median=center,
         intensity_mad=float(np.median(np.abs(band - center))),
         texture_median=float(np.median(gx + gy)),
         gradient_median=float(np.median(np.maximum(gx, gy))),
-        spatial_continuity=max(
-            (
-                float(item.longest_supported_ratio or 0.0)
-                for item in cross_axis_measurements
-            ),
-            default=0.0,
+        spatial_continuity=(
+            float(_longest_true_run(coherent_rows))
+            / float(max(1, coherent_rows.size))
         ),
         intensity_tail=gray_intensity_tail(
             center,
@@ -316,11 +333,10 @@ def propose_separator_bands(
                 appearance=_band_appearance_observation(
                     row_measurements,
                     statistics,
-                    (),
+                    parameters,
                     provenance,
                 ),
                 provenance=provenance,
-                cross_axis_measurements=(),
             )
         )
     budget = int(parameters.maximum_observations)
@@ -348,10 +364,10 @@ def measure_separator_cross_axis_support(
     statistics: ImageMeasurementStatistics,
     parameters: SeparatorObservationParameters,
     cross_axis_hypotheses: tuple[PhotoApertureCrossAxisHypothesis, ...],
-) -> SeparatorObservationSet:
+) -> SeparatorSupportSet:
     if not cross_axis_hypotheses:
         raise ValueError("separator cross-axis measurement requires hypotheses")
-    measured: list[SeparatorBandObservation] = []
+    measured: list[SeparatorBandCrossAxisSupport] = []
     for observation in proposed.observations:
         row_measurements = _band_row_measurements(
             gray_work,
@@ -361,6 +377,7 @@ def measure_separator_cross_axis_support(
         )
         cross_axis_measurements = tuple(
             _cross_axis_measurement(
+                observation.provenance.observation_id,
                 row_measurements,
                 hypothesis,
                 statistics,
@@ -369,15 +386,9 @@ def measure_separator_cross_axis_support(
             for hypothesis in cross_axis_hypotheses
         )
         measured.append(
-            replace(
-                observation,
-                appearance=_band_appearance_observation(
-                    row_measurements,
-                    statistics,
-                    cross_axis_measurements,
-                    observation.provenance,
-                ),
-                cross_axis_measurements=cross_axis_measurements,
+            SeparatorBandCrossAxisSupport(
+                observation=observation,
+                measurements=cross_axis_measurements,
             )
         )
-    return SeparatorObservationSet(tuple(measured), proposed.budget_exhausted)
+    return SeparatorSupportSet(tuple(measured), proposed.budget_exhausted)

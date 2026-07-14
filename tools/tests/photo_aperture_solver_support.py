@@ -24,6 +24,7 @@ from x5crop.domain import (
     PhotoApertureCrossAxisHypothesis,
     PhotoSequenceSearchScope,
     PixelInterval,
+    SeparatorBandCrossAxisSupport,
     SeparatorBandObservation,
     SeparatorCrossAxisMeasurement,
     SeparatorCrossAxisOutcome,
@@ -81,7 +82,7 @@ def separator(
     *,
     supported: bool = False,
     cross_axis: PhotoApertureCrossAxisHypothesis | None = None,
-) -> SeparatorBandObservation:
+) -> SeparatorBandCrossAxisSupport:
     measurement_provenance = provenance(
         MeasurementIdentity.SEPARATOR_PROFILE,
         f"separator_band:{start:.3f}:{end:.3f}",
@@ -91,14 +92,18 @@ def separator(
             path(BoundaryAxis.SHORT, 10.0, "top_aperture_path"),
             path(BoundaryAxis.SHORT, 110.0, "bottom_aperture_path"),
         )
-    return SeparatorBandObservation(
+    observation = SeparatorBandObservation(
         start=start,
         end=end,
         tonal_evidence=1.0,
         appearance=appearance(measurement_provenance),
         provenance=measurement_provenance,
-        cross_axis_measurements=(
+    )
+    return SeparatorBandCrossAxisSupport(
+        observation=observation,
+        measurements=(
             SeparatorCrossAxisMeasurement(
+                observation_id=measurement_provenance.observation_id,
                 aperture_cross_axis=cross_axis,
                 outcome=(
                     SeparatorCrossAxisOutcome.PATH_SUPPORTED
@@ -204,7 +209,7 @@ def plan(search_scope: PhotoSequenceSearchScope):
 
 def geometry(
     search_scope: PhotoSequenceSearchScope,
-    observations: tuple[SeparatorBandObservation, ...],
+    supports: tuple[SeparatorBandCrossAxisSupport, ...],
     frame_dimensions: FrameDimensionPrior,
     solved: PhotoSequenceSolveResult,
 ) -> PhotoSequenceSolution:
@@ -216,7 +221,9 @@ def geometry(
         holder_span=search_scope.holder_span,
         photo_apertures=solved.photo_apertures,
         aperture_edge_assignments=solved.aperture_edge_assignments,
-        separator_observations=observations,
+        separator_observations=tuple(
+            support.observation for support in supports
+        ),
         separator_assignments=solved.separator_assignments,
         inter_photo_spacings=solved.inter_photo_spacings,
         frame_dimension_prior=frame_dimensions,

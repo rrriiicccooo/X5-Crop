@@ -219,9 +219,6 @@ def separator_observation(
     tonal_evidence: float = 1.0,
     start: float | None = None,
     end: float | None = None,
-    cross_axis_state: EvidenceState = EvidenceState.SUPPORTED,
-    *,
-    aperture_cross_axis: PhotoApertureCrossAxisHypothesis | None = None,
 ) -> SeparatorBandObservation:
     start = float(center - 1.0 if start is None else start)
     end = float(center + 1.0 if end is None else end)
@@ -231,33 +228,37 @@ def separator_observation(
         (MeasurementIdentity.GRAY_WORK,),
         "synthetic separator band",
     )
-    if aperture_cross_axis is None:
-        paths = candidate_boundary_paths()
-        aperture_cross_axis = PhotoApertureCrossAxisHypothesis(paths[2], paths[3])
-    outcome = (
-        SeparatorCrossAxisOutcome.PATH_SUPPORTED
-        if cross_axis_state == EvidenceState.SUPPORTED
-        else SeparatorCrossAxisOutcome.CONTINUITY_WEAK
-    )
-    measurement = SeparatorCrossAxisMeasurement(
-        aperture_cross_axis=aperture_cross_axis,
-        outcome=outcome,
-        coverage_ratio=1.0 if cross_axis_state == EvidenceState.SUPPORTED else 0.0,
-        longest_supported_ratio=(
-            1.0 if cross_axis_state == EvidenceState.SUPPORTED else 0.0
-        ),
-        break_count=0,
-        appearance_coherence_ratio=(
-            1.0 if cross_axis_state == EvidenceState.SUPPORTED else 0.0
-        ),
-    )
     return SeparatorBandObservation(
         start=start,
         end=end,
         tonal_evidence=float(tonal_evidence),
         appearance=_appearance(provenance, texture=0.0),
         provenance=provenance,
-        cross_axis_measurements=(measurement,),
+    )
+
+
+def separator_cross_axis_measurement(
+    observation: SeparatorBandObservation,
+    aperture_cross_axis: PhotoApertureCrossAxisHypothesis,
+    state: EvidenceState = EvidenceState.SUPPORTED,
+) -> SeparatorCrossAxisMeasurement:
+    outcome = (
+        SeparatorCrossAxisOutcome.PATH_SUPPORTED
+        if state == EvidenceState.SUPPORTED
+        else SeparatorCrossAxisOutcome.CONTINUITY_WEAK
+    )
+    return SeparatorCrossAxisMeasurement(
+        observation_id=observation.provenance.observation_id,
+        aperture_cross_axis=aperture_cross_axis,
+        outcome=outcome,
+        coverage_ratio=1.0 if state == EvidenceState.SUPPORTED else 0.0,
+        longest_supported_ratio=(
+            1.0 if state == EvidenceState.SUPPORTED else 0.0
+        ),
+        break_count=0,
+        appearance_coherence_ratio=(
+            1.0 if state == EvidenceState.SUPPORTED else 0.0
+        ),
     )
 
 
@@ -304,7 +305,10 @@ def _candidate_geometry(
         sum(_SEPARATOR) / 2.0,
         start=_SEPARATOR[0],
         end=_SEPARATOR[1],
-        aperture_cross_axis=cross_axis,
+    )
+    separator_measurement = separator_cross_axis_measurement(
+        observation,
+        cross_axis,
     )
     first_leading = _measured_resolution(1, BoundarySide.LEADING, leading_path)
     first_trailing = _separator_resolution(
@@ -356,7 +360,7 @@ def _candidate_geometry(
             SeparatorBandAssignment(
                 1,
                 observation,
-                observation.cross_axis_measurements[0],
+                separator_measurement,
                 first_trailing,
                 second_leading,
             ),

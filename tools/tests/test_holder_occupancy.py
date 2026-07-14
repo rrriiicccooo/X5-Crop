@@ -5,6 +5,8 @@ from inspect import signature
 import unittest
 
 from tools.tests.physical_gate_support import (
+    candidate_boundary_paths,
+    separator_cross_axis_measurement,
     separator_observation,
     unavailable_calibration_fixture,
 )
@@ -42,6 +44,7 @@ from x5crop.domain import (
     ObservationId,
     PhotoAperture,
     PhotoApertureBoundaryResolution,
+    PhotoApertureCrossAxisHypothesis,
     PhotoApertureEdgeSource,
     PixelInterval,
     SeparatorBandAssignment,
@@ -60,6 +63,8 @@ def _underfilled_geometry() -> PhotoSequenceSolution:
         separator_observation(140.0, start=135.0, end=145.0),
         separator_observation(250.0, start=245.0, end=255.0),
     )
+    paths = candidate_boundary_paths()
+    cross_axis = PhotoApertureCrossAxisHypothesis(paths[2], paths[3])
 
     def edge(
         photo_index: int,
@@ -111,7 +116,7 @@ def _underfilled_geometry() -> PhotoSequenceSolution:
         SeparatorBandAssignment(
             index,
             observation,
-            observation.cross_axis_measurements[0],
+            separator_cross_axis_measurement(observation, cross_axis),
             apertures[index - 1].trailing,
             apertures[index].leading,
         )

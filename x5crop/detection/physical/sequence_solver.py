@@ -22,6 +22,7 @@ from ...domain import (
     PhotoSequenceSearchScope,
     PixelInterval,
     SeparatorBandAssignment,
+    SeparatorBandCrossAxisSupport,
     SeparatorBandObservation,
     SeparatorCrossAxisMeasurement,
 )
@@ -139,7 +140,7 @@ class _EdgeConstraint:
 
 @dataclass(frozen=True)
 class _BandSequenceHypothesis:
-    bands: tuple[SeparatorBandObservation, ...]
+    supports: tuple[SeparatorBandCrossAxisSupport, ...]
     band_edges: tuple[tuple[_EdgeConstraint, _EdgeConstraint], ...]
     cross_axis: PhotoApertureCrossAxisHypothesis
     photo_width_px: PixelInterval | None
@@ -239,23 +240,23 @@ def _all_photo_aperture_cross_axis_hypotheses(
     )
 
 
-def _interior_separator_observations(
-    observations: tuple[SeparatorBandObservation, ...],
+def _interior_separator_supports(
+    supports: tuple[SeparatorBandCrossAxisSupport, ...],
     search_scope: PhotoSequenceSearchScope,
-) -> tuple[SeparatorBandObservation, ...]:
+) -> tuple[SeparatorBandCrossAxisSupport, ...]:
     holder = search_scope.holder_span.box
     return tuple(
         sorted(
             dict.fromkeys(
-                observation
-                for observation in observations
-                if observation.start > float(holder.left)
-                and observation.end < float(holder.right)
+                support
+                for support in supports
+                if support.observation.start > float(holder.left)
+                and support.observation.end < float(holder.right)
             ),
-            key=lambda observation: (
-                observation.start,
-                observation.end,
-                observation.provenance.observation_id,
+            key=lambda support: (
+                support.observation.start,
+                support.observation.end,
+                support.observation.provenance.observation_id,
             ),
         )
     )
@@ -306,10 +307,11 @@ def photo_aperture_cross_axis_plan(
 
 
 def _dimension_band_constraint(
-    observation: SeparatorBandObservation,
+    support: SeparatorBandCrossAxisSupport,
     cross_axis: PhotoApertureCrossAxisHypothesis,
 ) -> _EdgeConstraint:
-    measurement = observation.cross_axis_measurement_for(cross_axis)
+    observation = support.observation
+    measurement = support.measurement_for(cross_axis)
     return _EdgeConstraint(
         position=observation.interval,
         source=PhotoApertureEdgeSource.DIMENSION_HYPOTHESIS,
@@ -321,32 +323,34 @@ def _dimension_band_constraint(
 
 
 def _separator_band_edge_constraint(
-    observation: SeparatorBandObservation,
+    support: SeparatorBandCrossAxisSupport,
     cross_axis: PhotoApertureCrossAxisHypothesis,
     position: float,
 ) -> _EdgeConstraint:
+    observation = support.observation
     return _EdgeConstraint(
         position=PixelInterval.exact(position),
         source=PhotoApertureEdgeSource.SEPARATOR_BAND_EDGE,
         state=EvidenceState.SUPPORTED,
         provenance=observation.provenance,
         separator=observation,
-        separator_cross_axis=observation.cross_axis_measurement_for(cross_axis),
+        separator_cross_axis=support.measurement_for(cross_axis),
     )
 
 
 def _observed_band_edges(
-    observation: SeparatorBandObservation,
+    support: SeparatorBandCrossAxisSupport,
     cross_axis: PhotoApertureCrossAxisHypothesis,
 ) -> tuple[_EdgeConstraint, _EdgeConstraint]:
+    observation = support.observation
     return (
         _separator_band_edge_constraint(
-            observation,
+            support,
             cross_axis,
             observation.start,
         ),
         _separator_band_edge_constraint(
-            observation,
+            support,
             cross_axis,
             observation.end,
         ),
@@ -397,17 +401,18 @@ def _measured_path_pairs_within_band(
 
 
 def _band_edge_options(
-    observation: SeparatorBandObservation,
+    support: SeparatorBandCrossAxisSupport,
     cross_axis: PhotoApertureCrossAxisHypothesis,
     paths: tuple[GrayBoundaryPathObservation, ...],
 ) -> tuple[tuple[_EdgeConstraint, _EdgeConstraint], ...]:
-    fallback = _dimension_band_constraint(observation, cross_axis)
-    measurement = observation.cross_axis_measurement_for(cross_axis)
+    observation = support.observation
+    fallback = _dimension_band_constraint(support, cross_axis)
+    measurement = support.measurement_for(cross_axis)
     measured_paths = _measured_path_pairs_within_band(observation, paths)
     if measurement.state != EvidenceState.SUPPORTED:
         return (*measured_paths, (fallback, fallback))
     return (
-        _observed_band_edges(observation, cross_axis),
+        _observed_band_edges(support, cross_axis),
         *measured_paths,
         (fallback, fallback),
     )
@@ -436,35 +441,36 @@ def _interval_distance(left: PixelInterval, right: PixelInterval) -> float:
 
 def _supported_band_demotion_is_justified(
     band_index: int,
-    bands: tuple[SeparatorBandObservation, ...],
+    supports: tuple[SeparatorBandCrossAxisSupport, ...],
     selected_edges: tuple[tuple[_EdgeConstraint, _EdgeConstraint], ...],
     cross_axis: PhotoApertureCrossAxisHypothesis,
     physical_width: PixelInterval,
 ) -> bool:
-    band = bands[band_index]
+    support = supports[band_index]
+    band = support.observation
     chosen = selected_edges[band_index]
-    measurement = band.cross_axis_measurement_for(cross_axis)
+    measurement = support.measurement_for(cross_axis)
     if (
         measurement.state != EvidenceState.SUPPORTED
         or _separator_band_edges(chosen)
     ):
         return True
-    observed = _observed_band_edges(band, cross_axis)
+    observed = _observed_band_edges(support, cross_axis)
     neighbor_widths: list[PixelInterval | None] = []
     if band_index > 0:
         neighbor_widths.append(
             _width_between_bands(
-                bands[band_index - 1],
+                supports[band_index - 1].observation,
                 band,
                 selected_edges[band_index - 1],
                 observed,
             )
         )
-    if band_index + 1 < len(bands):
+    if band_index + 1 < len(supports):
         neighbor_widths.append(
             _width_between_bands(
                 band,
-                bands[band_index + 1],
+                supports[band_index + 1].observation,
                 observed,
                 selected_edges[band_index + 1],
             )
@@ -476,12 +482,12 @@ def _supported_band_demotion_is_justified(
 
 
 def _band_search_order(
-    observations: tuple[SeparatorBandObservation, ...],
+    supports: tuple[SeparatorBandCrossAxisSupport, ...],
     edge_options: tuple[tuple[tuple[_EdgeConstraint, _EdgeConstraint], ...], ...],
     start_index: int,
     remaining_count: int,
 ) -> tuple[int, ...]:
-    maximum_index = len(observations) - remaining_count
+    maximum_index = len(supports) - remaining_count
     return tuple(
         sorted(
             range(start_index, maximum_index + 1),
@@ -501,7 +507,7 @@ def _band_search_order(
                     )
                     for pair in edge_options[index]
                 ),
-                -observations[index].start,
+                -supports[index].observation.start,
             ),
             reverse=True,
         )
@@ -509,14 +515,14 @@ def _band_search_order(
 
 
 def _band_sequence_hypothesis(
-    bands: tuple[SeparatorBandObservation, ...],
+    supports: tuple[SeparatorBandCrossAxisSupport, ...],
     band_edges: tuple[tuple[_EdgeConstraint, _EdgeConstraint], ...],
     cross_axis: PhotoApertureCrossAxisHypothesis,
     photo_width_px: PixelInterval,
     physical_width_px: PixelInterval,
 ) -> _BandSequenceHypothesis:
     return _BandSequenceHypothesis(
-        bands=bands,
+        supports=supports,
         band_edges=band_edges,
         cross_axis=cross_axis,
         photo_width_px=photo_width_px,
@@ -543,7 +549,7 @@ def _band_sequence_hypothesis(
 
 
 def _band_sequence_hypotheses(
-    observations: tuple[SeparatorBandObservation, ...],
+    supports: tuple[SeparatorBandCrossAxisSupport, ...],
     search_scope: PhotoSequenceSearchScope,
     count: int,
     dimensions: FrameDimensionPrior,
@@ -552,7 +558,7 @@ def _band_sequence_hypotheses(
     maximum_hypotheses: int,
 ) -> tuple[tuple[_BandSequenceHypothesis, ...], int, bool]:
     required = max(0, count - 1)
-    interior = _interior_separator_observations(observations, search_scope)
+    interior = _interior_separator_supports(supports, search_scope)
     if required == 0:
         return (
             (
@@ -586,26 +592,26 @@ def _band_sequence_hypotheses(
 
     def search(
         start_index: int,
-        selected_bands: tuple[SeparatorBandObservation, ...],
+        selected_supports: tuple[SeparatorBandCrossAxisSupport, ...],
         selected_edges: tuple[tuple[_EdgeConstraint, _EdgeConstraint], ...],
     ) -> None:
         nonlocal evaluations, search_truncated
         if search_truncated:
             return
-        if len(selected_bands) == required:
+        if len(selected_supports) == required:
             if not all(
                 _supported_band_demotion_is_justified(
                     band_index,
-                    selected_bands,
+                    selected_supports,
                     selected_edges,
                     cross_axis,
                     physical_width,
                 )
-                for band_index in range(len(selected_bands))
+                for band_index in range(len(selected_supports))
             ):
                 return
             hypothesis = _band_sequence_hypothesis(
-                selected_bands,
+                selected_supports,
                 selected_edges,
                 cross_axis,
                 physical_width,
@@ -617,22 +623,23 @@ def _band_sequence_hypotheses(
                 search_truncated = True
             return
 
-        remaining_count = required - len(selected_bands)
+        remaining_count = required - len(selected_supports)
         for observation_index in _band_search_order(
             interior,
             edge_options,
             start_index,
             remaining_count,
         ):
-            observation = interior[observation_index]
+            support = interior[observation_index]
+            observation = support.observation
             for edges in edge_options[observation_index]:
                 if evaluations >= evaluation_budget:
                     search_truncated = True
                     return
                 evaluations += 1
-                if selected_bands:
+                if selected_supports:
                     measured_width = _width_between_bands(
-                        selected_bands[-1],
+                        selected_supports[-1].observation,
                         observation,
                         selected_edges[-1],
                         edges,
@@ -642,14 +649,14 @@ def _band_sequence_hypotheses(
                         or not measured_width.intersects(physical_width)
                     ):
                         continue
-                next_bands = (*selected_bands, observation)
+                next_supports = (*selected_supports, support)
                 next_edges = (*selected_edges, edges)
-                resolved_neighbor_index = len(selected_bands) - 1
+                resolved_neighbor_index = len(selected_supports) - 1
                 if (
-                    selected_bands
+                    selected_supports
                     and not _supported_band_demotion_is_justified(
                         resolved_neighbor_index,
-                        next_bands,
+                        next_supports,
                         next_edges,
                         cross_axis,
                         physical_width,
@@ -658,7 +665,7 @@ def _band_sequence_hypotheses(
                     continue
                 search(
                     observation_index + 1,
-                    next_bands,
+                    next_supports,
                     next_edges,
                 )
                 if search_truncated:
@@ -1280,12 +1287,13 @@ def _measured_path_builds(
 
 def _spacing_for_band(
     boundary_index: int,
-    band: SeparatorBandObservation,
+    support: SeparatorBandCrossAxisSupport,
     cross_axis: PhotoApertureCrossAxisHypothesis,
     trailing: PhotoApertureBoundaryResolution,
     leading: PhotoApertureBoundaryResolution,
 ) -> tuple[InterPhotoSpacing, SeparatorBandAssignment | None]:
-    measurement = band.cross_axis_measurement_for(cross_axis)
+    band = support.observation
+    measurement = support.measurement_for(cross_axis)
     supported = bool(
         measurement.state == EvidenceState.SUPPORTED
         and trailing.state == EvidenceState.SUPPORTED
@@ -1441,7 +1449,7 @@ def _build_sequence(
 
     spacings: list[InterPhotoSpacing] = []
     separator_assignments: list[SeparatorBandAssignment] = []
-    for boundary_index, band in enumerate(band_hypothesis.bands, start=1):
+    for boundary_index, support in enumerate(band_hypothesis.supports, start=1):
         signed_width = apertures[boundary_index].leading.position.minus(
             apertures[boundary_index - 1].trailing.position
         )
@@ -1449,7 +1457,7 @@ def _build_sequence(
             return None
         spacing, assignment = _spacing_for_band(
             boundary_index,
-            band,
+            support,
             cross_axis,
             apertures[boundary_index - 1].trailing,
             apertures[boundary_index].leading,
@@ -1542,7 +1550,7 @@ def _builds_for_hypotheses(
         )
         if photo_width is None:
             continue
-        if band_hypothesis.bands:
+        if band_hypothesis.supports:
             first_edges = band_hypothesis.band_edges[0]
             last_edges = band_hypothesis.band_edges[-1]
             leading_options = _best_external_constraints(
@@ -1570,7 +1578,7 @@ def _builds_for_hypotheses(
                 evaluations += 1
                 if trailing_endpoint.position.minimum <= leading_endpoint.position.maximum:
                     continue
-                if not band_hypothesis.bands:
+                if not band_hypothesis.supports:
                     visible = _visible_width(leading_endpoint, trailing_endpoint)
                     if visible is None or not visible.intersects(photo_width):
                         continue
@@ -1670,7 +1678,7 @@ def _assignment_consensus(
 
 
 def solve_photo_sequence(
-    observations: tuple[SeparatorBandObservation, ...],
+    supports: tuple[SeparatorBandCrossAxisSupport, ...],
     search_scope: PhotoSequenceSearchScope,
     cross_axis_plan: PhotoApertureCrossAxisPlan,
     count: int,
@@ -1693,11 +1701,11 @@ def solve_photo_sequence(
         )
     expected_measurements = tuple(
         measurement.aperture_cross_axis
-        for observation in observations
-        for measurement in observation.cross_axis_measurements
+        for support in supports
+        for measurement in support.measurements
     )
-    if observations and (
-        any(not observation.cross_axis_measurements for observation in observations)
+    if supports and (
+        any(not support.measurements for support in supports)
         or set(expected_measurements) != set(cross_axis_hypotheses)
     ):
         raise ValueError(
@@ -1706,13 +1714,13 @@ def solve_photo_sequence(
     band_hypotheses: list[_BandSequenceHypothesis] = []
     band_evaluations = cross_axis_plan.assignment_evaluations
     band_budget_exhausted = cross_axis_plan.search_budget_exhausted
-    for cross_axis in cross_axis_hypotheses if observations and count > 1 else ():
+    for cross_axis in cross_axis_hypotheses if supports and count > 1 else ():
         remaining_band_budget = maximum_assignment_evaluations - band_evaluations
         if remaining_band_budget <= 0:
             band_budget_exhausted = True
             break
         hypotheses, evaluations, exhausted = _band_sequence_hypotheses(
-            observations,
+            supports,
             search_scope,
             count,
             dimensions,

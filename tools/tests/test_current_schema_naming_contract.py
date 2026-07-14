@@ -72,8 +72,6 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
                 "tonal_evidence",
                 "appearance",
                 "provenance",
-                "cross_axis_measurements",
-                "lane_box",
             ),
         )
         self.assertTrue(SeparatorBandObservation.__dataclass_params__.frozen)

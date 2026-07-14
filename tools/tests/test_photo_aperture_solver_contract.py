@@ -98,7 +98,7 @@ class PhotoApertureSolverContractTest(unittest.TestCase):
                 assignment.observation
                 for assignment in solved.separator_assignments
             ),
-            supported,
+            tuple(support.observation for support in supported),
         )
         self.assertLess(solved.assignment_evaluations, 200)
 
@@ -281,7 +281,9 @@ class PhotoApertureSolverContractTest(unittest.TestCase):
                 assignment.cross_axis_measurement,
                 replace(
                     assignment.preceding_trailing_edge,
-                    position=PixelInterval.exact(observation.start - 1.0),
+                    position=PixelInterval.exact(
+                        observation.observation.start - 1.0
+                    ),
                 ),
                 assignment.following_leading_edge,
             )
@@ -368,9 +370,9 @@ class PhotoApertureSolverContractTest(unittest.TestCase):
         selected_bands = {
             assignment.observation for assignment in solved.separator_assignments
         }
-        self.assertIn(first, selected_bands)
-        self.assertIn(second, selected_bands)
-        self.assertNotIn(unrelated, selected_bands)
+        self.assertIn(first.observation, selected_bands)
+        self.assertIn(second.observation, selected_bands)
+        self.assertNotIn(unrelated.observation, selected_bands)
 
     def test_photo_width_measurements_share_a_physical_interval_not_one_exact_pixel_width(self) -> None:
         scope = _scope(
@@ -474,7 +476,7 @@ class PhotoApertureSolverContractTest(unittest.TestCase):
         assert isinstance(solved, PhotoSequenceSolveResult)
         self.assertEqual(
             tuple(item.observation for item in solved.separator_assignments),
-            (first, third),
+            (first.observation, third.observation),
         )
         self.assertEqual(
             solved.photo_apertures[1].trailing.source,
@@ -542,7 +544,7 @@ class PhotoApertureSolverContractTest(unittest.TestCase):
         )
         self.assertEqual(
             tuple(item.observation for item in solved.separator_assignments),
-            (first, third),
+            (first.observation, third.observation),
         )
 
     def test_canvas_adjacent_bands_cannot_bind_internal_photo_boundaries(self) -> None:
@@ -575,7 +577,7 @@ class PhotoApertureSolverContractTest(unittest.TestCase):
         assert isinstance(solved, PhotoSequenceSolveResult)
         self.assertEqual(
             tuple(item.observation for item in solved.separator_assignments),
-            (internal,),
+            (internal.observation,),
         )
 
     def test_positive_separator_band_cannot_produce_overlap_spacing(self) -> None:

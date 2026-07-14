@@ -103,7 +103,7 @@ def build_sequence_candidate(
             unavailable.assignment_evaluations,
             unavailable.search_budget_exhausted,
         )
-    observation_set = measure_separator_cross_axis_support(
+    support_set = measure_separator_cross_axis_support(
         proposed,
         gray_work=cache.gray_work,
         corridor=corridor,
@@ -112,7 +112,7 @@ def build_sequence_candidate(
         cross_axis_hypotheses=cross_axis_plan.hypotheses,
     )
     solved = solve_photo_sequence(
-        observation_set.observations,
+        support_set.supports,
         search_scope,
         cross_axis_plan,
         int(count_hypothesis.count),
@@ -134,7 +134,9 @@ def build_sequence_candidate(
         holder_span=search_scope.holder_span,
         photo_apertures=solved.photo_apertures,
         aperture_edge_assignments=solved.aperture_edge_assignments,
-        separator_observations=observation_set.observations,
+        separator_observations=tuple(
+            support.observation for support in support_set.supports
+        ),
         separator_assignments=solved.separator_assignments,
         inter_photo_spacings=solved.inter_photo_spacings,
         frame_dimension_prior=dimensions,
@@ -143,7 +145,7 @@ def build_sequence_candidate(
         residuals=solved.residuals,
         assignment_consensus=solved.assignment_consensus,
         search_budget_exhausted=bool(
-            observation_set.budget_exhausted
+            support_set.budget_exhausted
             or solved.search_budget_exhausted
         ),
         automatic_processing_supported=True,

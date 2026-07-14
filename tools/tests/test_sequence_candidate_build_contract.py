@@ -22,7 +22,7 @@ from x5crop.detection.candidate.plan.count_hypotheses import (
 )
 from x5crop.detection.context import DetectionRequest
 from x5crop.detection.physical.separator.observations import (
-    SeparatorObservationSet,
+    SeparatorSupportSet,
 )
 from x5crop.detection.physical.sequence_solver import (
     PhotoSequenceSolveResult,
@@ -92,7 +92,7 @@ class SequenceCandidateBuildContractTest(unittest.TestCase):
             ),
             patch(
                 "x5crop.detection.candidate.build.sequence_candidate.measure_separator_cross_axis_support",
-                return_value=SeparatorObservationSet((observation,), True),
+                return_value=SeparatorSupportSet((observation,), True),
             ),
             patch(
                 "x5crop.detection.candidate.build.sequence_candidate.solve_photo_sequence",

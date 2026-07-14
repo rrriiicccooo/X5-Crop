@@ -94,7 +94,7 @@ def _measure(gray: np.ndarray, start: int, end: int):
         parameters=parameters,
         cross_axis_hypotheses=(_cross_axis(gray.shape[0]),),
     )
-    return measured.observations[0] if measured.observations else None
+    return measured.supports[0] if measured.supports else None
 
 
 class SeparatorCrossAxisContractTest(unittest.TestCase):
@@ -137,7 +137,7 @@ class SeparatorCrossAxisContractTest(unittest.TestCase):
             observation = _measure(gray, 112, 120)
             self.assertIsNotNone(observation)
             assert observation is not None
-            states.append(observation.cross_axis_measurements[0].state)
+            states.append(observation.measurements[0].state)
 
         self.assertEqual(states, [EvidenceState.SUPPORTED] * 3)
 
@@ -150,9 +150,45 @@ class SeparatorCrossAxisContractTest(unittest.TestCase):
         self.assertIsNotNone(observation)
         assert observation is not None
         self.assertEqual(
-            observation.cross_axis_measurements[0].state,
+            observation.measurements[0].state,
             EvidenceState.CONTRADICTED,
         )
+
+    def test_candidate_cross_axis_support_does_not_replace_raw_observation(self) -> None:
+        gray = _textured_workspace()
+        gray[:, 112:120] = 128
+        profile = np.zeros(gray.shape[1], dtype=np.float32)
+        profile[112:120] = 1.0
+        parameters = SeparatorObservationParameters(
+            activation_percentile=99.0,
+            minimum_run_px=1,
+            maximum_observations=8,
+        )
+        statistics = image_measurement_statistics(
+            gray,
+            ImageMeasurementStatisticsParameters(),
+        )
+        corridor = Box(0, 0, gray.shape[1], gray.shape[0])
+        proposed = propose_separator_bands(
+            profile,
+            gray_work=gray,
+            corridor=corridor,
+            statistics=statistics,
+            parameters=parameters,
+        )
+        raw = proposed.observations[0]
+
+        measured = measure_separator_cross_axis_support(
+            proposed,
+            gray_work=gray,
+            corridor=corridor,
+            statistics=statistics,
+            parameters=parameters,
+            cross_axis_hypotheses=(_cross_axis(gray.shape[0]),),
+        )
+
+        self.assertIs(measured.supports[0].observation, raw)
+        self.assertEqual(proposed.observations[0], raw)
 
 
 if __name__ == "__main__":
