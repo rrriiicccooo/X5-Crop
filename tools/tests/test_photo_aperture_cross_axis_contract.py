@@ -21,6 +21,7 @@ from x5crop.domain import (
     BoundaryKind,
     BoundaryPathFit,
     BoundarySide,
+    Box,
     GrayBoundaryPathObservation,
     MeasurementIdentity,
     PixelInterval,
@@ -52,12 +53,14 @@ class PhotoApertureCrossAxisContractTest(unittest.TestCase):
             BoundarySide.TOP,
             BoundaryPathFit(path),
             PixelInterval(0.0, 50.0),
+            Box(0, 0, 100, 100),
         )
         right, _ = _short_axis_resolution(
             2,
             BoundarySide.TOP,
             BoundaryPathFit(path),
             PixelInterval(50.0, 100.0),
+            Box(0, 0, 100, 100),
         )
 
         self.assertLess(left.position.minimum, right.position.minimum)

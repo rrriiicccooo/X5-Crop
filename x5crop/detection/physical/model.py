@@ -261,6 +261,17 @@ class PhotoSequenceSolution:
             range(1, self.count + 1)
         ):
             raise ValueError("photo aperture indexes must be complete and ordered")
+        holder = self.holder_span.box
+        if any(
+            aperture.leading.position.minimum < float(holder.left)
+            or aperture.trailing.position.maximum > float(holder.right)
+            or aperture.top.position.minimum < float(holder.top)
+            or aperture.bottom.position.maximum > float(holder.bottom)
+            for aperture in self.photo_apertures
+        ):
+            raise GeometryIdentityError(
+                "photo aperture uncertainty must stay inside the holder span"
+            )
         if (
             self.photo_width_constraint_px.minimum <= 0.0
             or self.photo_height_constraint_px.minimum <= 0.0

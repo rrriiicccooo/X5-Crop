@@ -31,6 +31,7 @@ from x5crop.domain import (
     BoundaryKind,
     BoundaryPathSample,
     BoundarySide,
+    Box,
     EvidenceState,
     HolderBoundaryObservation,
     InterPhotoSpacingBasis,
@@ -111,6 +112,7 @@ class PhotoApertureSolverContractTest(unittest.TestCase):
             inner,
             PixelInterval.exact(100.0),
             holder_boundary,
+            Box(0, 0, 200, 120),
             leading=True,
         )
 
@@ -444,6 +446,56 @@ class PhotoApertureSolverContractTest(unittest.TestCase):
         )
 
         self.assertNotIsInstance(solved, PhotoSequenceSolveResult)
+
+    def test_aperture_uncertainty_is_intersected_with_holder_span(self) -> None:
+        scope = _scope(
+            width=100,
+            height=120,
+            leading=0.0,
+            trailing=100.0,
+            top=10.0,
+            bottom=110.0,
+        )
+        leading_path = next(
+            path
+            for path in scope.raw_boundary_paths
+            if path.provenance.observation_id
+            == ObservationId("leading_aperture_path")
+        )
+        uncertain_leading = replace(
+            leading_path,
+            samples=tuple(
+                replace(sample, position=PixelInterval(-0.4, 0.2))
+                for sample in leading_path.samples
+            ),
+        )
+        constrained_scope = replace(
+            scope,
+            raw_boundary_paths=tuple(
+                uncertain_leading if path is leading_path else path
+                for path in scope.raw_boundary_paths
+            ),
+        )
+
+        solved = solve_photo_sequence(
+            (),
+            constrained_scope,
+            _plan(constrained_scope),
+            1,
+            _dimensions(100.0, 100.0),
+            ContentRegionObservation(constrained_scope.holder_span.box, (), 0),
+            maximum_assignment_evaluations=100,
+            maximum_solution_alternatives=8,
+        )
+
+        self.assertIsInstance(solved, PhotoSequenceSolveResult)
+        assert isinstance(solved, PhotoSequenceSolveResult)
+        envelope = solved.photo_apertures[0].frame_crop_envelope.box
+        holder = constrained_scope.holder_span.box
+        self.assertGreaterEqual(envelope.left, holder.left)
+        self.assertLessEqual(envelope.right, holder.right)
+        self.assertGreaterEqual(envelope.top, holder.top)
+        self.assertLessEqual(envelope.bottom, holder.bottom)
 
     def test_separator_assignment_edges_must_match_observed_band_edges(self) -> None:
         scope = _scope(

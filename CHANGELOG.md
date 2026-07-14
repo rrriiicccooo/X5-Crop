@@ -14,6 +14,15 @@ repository rules in `AGENTS.md`.
 
 ### V4.9 当前开发线
 
+#### PhotoAperture holder-domain 不变量（2026-07-14）
+
+- Raw boundary path 可以保留超出 canvas 的拟合不确定度；一旦被 solver 分配为照片边界，其位置区间
+  必须先与对应 HolderSpan 轴向范围求交。无交集的 assignment branch 直接淘汰，部分相交的
+  canvas-contact 边界继续保留有效 uncertainty。
+- 新增永久 synthetic contract 覆盖 `[-0.4, 0.2]px` 的 leading-edge uncertainty，并迁移所有 solver
+  caller 到显式 HolderSpan 约束。`135/partial X5_00033.tif` 不再在 holder occupancy evidence 阶段因
+  越界 envelope 抛出异常，而是正常生成 unresolved REVIEW、current report 与三联 Debug。
+
 #### Cross-axis 无效分支归约（2026-07-14）
 
 - Cross-axis planning 现在会在 separator sequence 搜索前排除不能保证至少一个有效像素高度或

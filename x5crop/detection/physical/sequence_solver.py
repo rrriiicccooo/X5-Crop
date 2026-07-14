@@ -7,6 +7,7 @@ from ...domain import (
     BoundaryAxis,
     BoundaryPathFit,
     BoundarySide,
+    Box,
     EvidenceState,
     FrameDimensionPrior,
     GrayBoundaryPathObservation,
@@ -869,6 +870,12 @@ def _external_constraint(
     )
 
 
+def _holder_axis_interval(holder: Box, axis: BoundaryAxis) -> PixelInterval:
+    if axis == BoundaryAxis.LONG:
+        return PixelInterval(float(holder.left), float(holder.right))
+    return PixelInterval(float(holder.top), float(holder.bottom))
+
+
 def _holder_boundary_supports_path(
     path: GrayBoundaryPathObservation,
     boundary: HolderBoundaryObservation | None,
@@ -886,17 +893,16 @@ def _holder_boundary_supports_path(
 def _external_constraint_with_holder_consensus(
     path: GrayBoundaryPathObservation,
     boundary: HolderBoundaryObservation | None,
-) -> tuple[_EdgeConstraint, bool]:
+    holder: Box,
+) -> tuple[_EdgeConstraint | None, bool]:
     supports_holder_boundary = _holder_boundary_supports_path(path, boundary)
+    position = (
+        boundary.position
+        if supports_holder_boundary and boundary is not None
+        else path.position
+    ).intersection(_holder_axis_interval(holder, path.axis))
     return (
-        _external_constraint(
-            path,
-            position=(
-                boundary.position
-                if supports_holder_boundary and boundary is not None
-                else None
-            ),
-        ),
+        None if position is None else _external_constraint(path, position=position),
         supports_holder_boundary,
     )
 
@@ -927,14 +933,21 @@ def _admissible_aperture_endpoints(
     inner: _EdgeConstraint,
     photo_width: PixelInterval,
     holder_boundary: HolderBoundaryObservation | None,
+    holder: Box,
     *,
     leading: bool,
 ) -> tuple[_EdgeConstraint, ...]:
     ranked: list[tuple[tuple[float, float, float, float], _EdgeConstraint]] = []
     for path in paths:
         constraint, holder_clip_supported = (
-            _external_constraint_with_holder_consensus(path, holder_boundary)
+            _external_constraint_with_holder_consensus(
+                path,
+                holder_boundary,
+                holder,
+            )
         )
+        if constraint is None:
+            continue
         if leading:
             if constraint.position.minimum >= inner.position.maximum:
                 continue
@@ -1074,12 +1087,16 @@ def _short_axis_resolution(
     side: BoundarySide,
     path_fit: BoundaryPathFit,
     long_axis_interval: PixelInterval,
+    holder: Box,
 ) -> tuple[
     PhotoApertureBoundaryResolution,
     PhotoApertureEdgeAssignment,
 ] | None:
     path = path_fit.observation
     position = path_fit.position_within(long_axis_interval)
+    if position is None:
+        return None
+    position = position.intersection(_holder_axis_interval(holder, BoundaryAxis.SHORT))
     if position is None:
         return None
     resolution = PhotoApertureBoundaryResolution(
@@ -1129,8 +1146,11 @@ def _measured_aperture_constraints(
             _external_constraint_with_holder_consensus(
                 leading_path,
                 holder_boundaries.get(BoundarySide.LEADING),
+                search_scope.holder_span.box,
             )
         )
+        if leading is None:
+            continue
         for trailing_path in paths[leading_index + 1 :]:
             if evaluations >= evaluation_budget:
                 return tuple(constraints), evaluations, True
@@ -1139,8 +1159,11 @@ def _measured_aperture_constraints(
                 _external_constraint_with_holder_consensus(
                     trailing_path,
                     holder_boundaries.get(BoundarySide.TRAILING),
+                    search_scope.holder_span.box,
                 )
             )
+            if trailing is None:
+                continue
             width = _visible_width(leading, trailing)
             if width is None:
                 continue
@@ -1267,7 +1290,7 @@ def _measured_sequence_build(
     cross_axis: PhotoApertureCrossAxisHypothesis,
     path_fits: dict[ObservationId, BoundaryPathFit],
     photo_width: PixelInterval,
-    holder_extent: int,
+    holder: Box,
 ) -> _SequenceBuild | None:
     apertures: list[PhotoAperture] = []
     assignments: list[PhotoApertureEdgeAssignment] = []
@@ -1291,12 +1314,14 @@ def _measured_sequence_build(
             BoundarySide.TOP,
             path_fits[cross_axis.top_path.provenance.observation_id],
             long_axis_interval,
+            holder,
         )
         bottom_result = _short_axis_resolution(
             photo_index,
             BoundarySide.BOTTOM,
             path_fits[cross_axis.bottom_path.provenance.observation_id],
             long_axis_interval,
+            holder,
         )
         if top_result is None or bottom_result is None:
             return None
@@ -1335,7 +1360,10 @@ def _measured_sequence_build(
     residuals = SequenceResiduals(
         dimension=dimension_residual,
         boundary_uncertainty=uncertainty_px
-        / max(MINIMUM_POSITIVE_PIXEL_EXTENT, float(holder_extent)),
+        / max(
+            MINIMUM_POSITIVE_PIXEL_EXTENT,
+            float(holder.width + holder.height),
+        ),
     )
     internal_boundary_quality = sum(
         left.trailing.measurement_quality + right.leading.measurement_quality
@@ -1542,7 +1570,7 @@ def _measured_path_builds(
                     cross_axis,
                     path_fits,
                     photo_width,
-                    holder.width + holder.height,
+                    holder,
                 )
             )
             is not None
@@ -1647,7 +1675,7 @@ def _build_sequence(
     trailing_endpoint: _EdgeConstraint,
     photo_width: PixelInterval,
     count: int,
-    holder_extent: int,
+    holder: Box,
     cross_axis_residual: float,
     holder_boundaries: dict[BoundarySide, HolderBoundaryObservation],
 ) -> _SequenceBuild | None:
@@ -1713,12 +1741,14 @@ def _build_sequence(
             BoundarySide.TOP,
             path_fits[cross_axis.top_path.provenance.observation_id],
             long_axis_interval,
+            holder,
         )
         bottom_result = _short_axis_resolution(
             photo_index,
             BoundarySide.BOTTOM,
             path_fits[cross_axis.bottom_path.provenance.observation_id],
             long_axis_interval,
+            holder,
         )
         if top_result is None or bottom_result is None:
             return None
@@ -1787,7 +1817,10 @@ def _build_sequence(
     residuals = SequenceResiduals(
         dimension=float(max(dimension_residual, cross_axis_residual)),
         boundary_uncertainty=float(uncertainty_px)
-        / max(MINIMUM_POSITIVE_PIXEL_EXTENT, float(holder_extent)),
+        / max(
+            MINIMUM_POSITIVE_PIXEL_EXTENT,
+            float(holder.width + holder.height),
+        ),
     )
     endpoint_quality = (
         leading_endpoint.measurement_quality + trailing_endpoint.measurement_quality
@@ -1853,6 +1886,7 @@ def _builds_for_hypotheses(
             first_edges[0],
             photo_width,
             holder_boundaries.get(BoundarySide.LEADING),
+            holder,
             leading=True,
         )
         trailing_options = _admissible_aperture_endpoints(
@@ -1860,6 +1894,7 @@ def _builds_for_hypotheses(
             last_edges[1],
             photo_width,
             holder_boundaries.get(BoundarySide.TRAILING),
+            holder,
             leading=False,
         )
         for leading_endpoint in leading_options:
@@ -1878,7 +1913,7 @@ def _builds_for_hypotheses(
                     trailing_endpoint,
                     photo_width,
                     count,
-                    holder.width + holder.height,
+                    holder,
                     cross_axis_residual,
                     holder_boundaries,
                 )
