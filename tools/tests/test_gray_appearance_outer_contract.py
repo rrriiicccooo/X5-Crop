@@ -230,6 +230,48 @@ class GrayAppearanceOuterContractTests(unittest.TestCase):
         self.assertIn("boundary_supports_holder_region", evidence_source)
         self.assertNotIn("film_base", evidence_source)
 
+    def test_change_point_budget_exhaustion_is_explicit(self) -> None:
+        gray = np.tile(
+            np.asarray(([0] * 5 + [255] * 5) * 20, dtype=np.uint8),
+            (120, 1),
+        )
+        statistics = image_measurement_statistics(
+            gray,
+            ImageMeasurementStatisticsParameters(),
+        )
+        measurements = boundary_measurements(
+            gray,
+            statistics,
+            replace(
+                BoundaryPathParameters(),
+                maximum_change_points_per_section=1,
+                maximum_paths_per_axis=64,
+            ),
+        )
+
+        self.assertTrue(measurements.measurement_budget_exhausted)
+
+    def test_path_budget_exhaustion_is_explicit(self) -> None:
+        gray = np.tile(
+            np.asarray(([0] * 5 + [255] * 5) * 20, dtype=np.uint8),
+            (120, 1),
+        )
+        statistics = image_measurement_statistics(
+            gray,
+            ImageMeasurementStatisticsParameters(),
+        )
+        measurements = boundary_measurements(
+            gray,
+            statistics,
+            replace(
+                BoundaryPathParameters(),
+                maximum_change_points_per_section=64,
+                maximum_paths_per_axis=1,
+            ),
+        )
+
+        self.assertTrue(measurements.measurement_budget_exhausted)
+
 
 if __name__ == "__main__":
     unittest.main()

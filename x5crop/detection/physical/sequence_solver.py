@@ -295,7 +295,14 @@ def photo_aperture_cross_axis_plan(
             reverse=True,
         )[:maximum_hypotheses]
     )
-    return PhotoApertureCrossAxisPlan(ranked, 0, False)
+    return PhotoApertureCrossAxisPlan(
+        ranked,
+        0,
+        bool(
+            search_scope.measurement_budget_exhausted
+            or len(all_hypotheses) > maximum_hypotheses
+        ),
+    )
 
 
 def _dimension_band_constraint(
@@ -1224,7 +1231,7 @@ def _measured_path_builds(
     builds: list[_SequenceBuild] = []
     evaluations = 0
     search_truncated = False
-    for cross_axis in cross_axis_hypotheses:
+    for cross_axis_index, cross_axis in enumerate(cross_axis_hypotheses):
         remaining = evaluation_budget - evaluations
         if remaining <= 0:
             return tuple(builds), evaluations, True
@@ -1263,6 +1270,10 @@ def _measured_path_builds(
             for state in states
         )
         if evaluations >= evaluation_budget:
+            search_truncated = bool(
+                search_truncated
+                or cross_axis_index + 1 < len(cross_axis_hypotheses)
+            )
             break
     return tuple(builds), evaluations, search_truncated
 

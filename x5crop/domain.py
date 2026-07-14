@@ -498,6 +498,7 @@ class PhotoSequenceSearchScope:
     raw_boundary_paths: tuple[GrayBoundaryPathObservation, ...]
     holder_boundaries: tuple[HolderBoundaryObservation, ...]
     containment_fallback: ContainmentFallback
+    measurement_budget_exhausted: bool
     provenance: MeasurementProvenance
 
     def __post_init__(self) -> None:
@@ -522,6 +523,7 @@ class BoundaryMeasurementSet:
     raw_paths: tuple[GrayBoundaryPathObservation, ...]
     holder_boundaries: tuple[HolderBoundaryObservation, ...]
     containment_fallback: ContainmentFallback
+    measurement_budget_exhausted: bool
 
     def __post_init__(self) -> None:
         if any(item.path not in self.raw_paths for item in self.holder_boundaries):

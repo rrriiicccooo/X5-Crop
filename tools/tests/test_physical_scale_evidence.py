@@ -167,9 +167,9 @@ class PhysicalScaleEvidenceTests(unittest.TestCase):
             frozenset({BoundarySide.TOP, BoundarySide.BOTTOM})
         )
         measurements = BoundaryMeasurementSet(
-            tuple(item.path for item in holder.boundaries),
-            holder.boundaries,
-            ContainmentFallback(
+            raw_paths=tuple(item.path for item in holder.boundaries),
+            holder_boundaries=holder.boundaries,
+            containment_fallback=ContainmentFallback(
                 geometry.holder_span.box,
                 MeasurementProvenance(
                     MeasurementIdentity.HOLDER_CANVAS,
@@ -178,6 +178,7 @@ class PhysicalScaleEvidenceTests(unittest.TestCase):
                     "test containment",
                 ),
             ),
+            measurement_budget_exhausted=False,
         )
         observations = boundary_scale_observations(
             measurements,

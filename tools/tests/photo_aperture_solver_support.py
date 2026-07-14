@@ -170,6 +170,7 @@ def scope(
                 "synthetic containment fallback",
             ),
         ),
+        measurement_budget_exhausted=False,
         provenance=MeasurementProvenance(
             MeasurementIdentity.BOUNDARY_CORRIDOR,
             ObservationId("synthetic_search_scope"),

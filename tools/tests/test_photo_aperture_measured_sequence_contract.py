@@ -5,6 +5,7 @@ import unittest
 
 from tools.tests.photo_aperture_solver_support import (
     dimensions as _dimensions,
+    path as _path,
     plan as _plan,
     scope as _scope,
 )
@@ -174,6 +175,38 @@ class PhotoApertureMeasuredSequenceContractTest(unittest.TestCase):
         self.assertIsInstance(solved, PhotoSequenceSolveResult)
         assert isinstance(solved, PhotoSequenceSolveResult)
         self.assertEqual(len(solved.photo_apertures), 3)
+        self.assertTrue(solved.search_budget_exhausted)
+
+    def test_exact_budget_consumption_does_not_hide_unexamined_cross_axis_hypotheses(self) -> None:
+        scope = _scope(
+            width=220,
+            height=140,
+            leading=10.0,
+            trailing=210.0,
+            top=10.0,
+            bottom=110.0,
+            internal_paths=(110.0,),
+        )
+        scope = replace(
+            scope,
+            raw_boundary_paths=(
+                *scope.raw_boundary_paths,
+                _path(BoundaryAxis.SHORT, 120.0, "unexamined_cross_axis"),
+            ),
+        )
+        plan = _plan(scope)
+        self.assertGreater(len(plan.hypotheses), 1)
+
+        solved = solve_photo_sequence(
+            (),
+            scope,
+            plan,
+            2,
+            _dimensions(100.0, 100.0),
+            maximum_assignment_evaluations=16,
+            maximum_solution_alternatives=8,
+        )
+
         self.assertTrue(solved.search_budget_exhausted)
 
 

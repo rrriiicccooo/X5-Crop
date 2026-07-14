@@ -39,6 +39,7 @@ def photo_sequence_search_scope(
         raw_boundary_paths=measured.raw_paths,
         holder_boundaries=measured.holder_boundaries,
         containment_fallback=measured.containment_fallback,
+        measurement_budget_exhausted=measured.measurement_budget_exhausted,
         provenance=MeasurementProvenance(
             root_measurement=MeasurementIdentity.BOUNDARY_PATHS,
             observation_id=ObservationId("photo_aperture_search_scope"),

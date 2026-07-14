@@ -16,6 +16,28 @@ from x5crop.domain import BoundaryAxis, PixelInterval
 
 
 class PhotoApertureCrossAxisContractTest(unittest.TestCase):
+    def test_boundary_measurement_exhaustion_reaches_cross_axis_plan(self) -> None:
+        search_scope = replace(
+            _scope(
+                width=320,
+                height=120,
+                leading=0.0,
+                trailing=320.0,
+                top=10.0,
+                bottom=110.0,
+            ),
+            measurement_budget_exhausted=True,
+        )
+
+        plan = photo_aperture_cross_axis_plan(
+            search_scope,
+            _dimensions(1.0, 1.0),
+            1,
+            maximum_hypotheses=8,
+        )
+
+        self.assertTrue(plan.search_budget_exhausted)
+
     def test_cross_axis_planning_does_not_enumerate_separator_sequences(self) -> None:
         scope = _scope(
             width=320,
@@ -88,6 +110,7 @@ class PhotoApertureCrossAxisContractTest(unittest.TestCase):
         )
 
         self.assertEqual(plan.hypotheses[0].height_px, PixelInterval.exact(100.0))
+        self.assertTrue(plan.search_budget_exhausted)
 
     def test_cross_axis_budget_prioritizes_nonoverlap_feasible_dimensions(self) -> None:
         search_scope = _scope(
@@ -119,6 +142,7 @@ class PhotoApertureCrossAxisContractTest(unittest.TestCase):
         )
 
         self.assertEqual(plan.hypotheses[0].height_px, PixelInterval.exact(150.0))
+        self.assertTrue(plan.search_budget_exhausted)
 
 
 if __name__ == "__main__":

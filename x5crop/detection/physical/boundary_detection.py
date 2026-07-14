@@ -119,13 +119,13 @@ def _edge_adjacent_transition(
 def _adaptive_change_points(
     signal: np.ndarray,
     parameters: BoundaryPathParameters,
-) -> tuple[PixelInterval, ...]:
+) -> tuple[tuple[PixelInterval, ...], bool]:
     if signal.size <= 1:
-        return ()
+        return (), False
     change = np.abs(np.diff(signal, prepend=signal[:1]))
     threshold = float(np.percentile(change, parameters.change_point_percentile))
     if threshold <= 0.0:
-        return ()
+        return (), False
     runs = tuple(
         (start, end)
         for start, end in runs_from_mask(change >= threshold)
@@ -135,11 +135,12 @@ def _adaptive_change_points(
         runs,
         key=lambda run: float(np.max(change[run[0] : run[1]])),
         reverse=True,
-    )[: parameters.maximum_change_points_per_section]
+    )
+    selected = ranked[: parameters.maximum_change_points_per_section]
     return tuple(
         PixelInterval(float(start), float(max(start + 1, end)))
-        for start, end in sorted(ranked)
-    )
+        for start, end in sorted(selected)
+    ), len(ranked) > parameters.maximum_change_points_per_section
 
 
 def _source_interval(
@@ -225,9 +226,10 @@ def _local_samples_for_kind(
     kind: BoundaryKind,
     statistics: ImageMeasurementStatistics,
     parameters: BoundaryPathParameters,
-) -> tuple[_LocalPathSample, ...]:
+) -> tuple[tuple[_LocalPathSample, ...], bool]:
     reverse = side in {BoundarySide.TRAILING, BoundarySide.BOTTOM}
     samples: list[_LocalPathSample] = []
+    budget_exhausted = False
     for section_index, (source_intensity, source_texture) in enumerate(profiles):
         intensity = source_intensity[::-1] if reverse else source_intensity
         texture = source_texture[::-1] if reverse else source_texture
@@ -239,9 +241,11 @@ def _local_samples_for_kind(
                 parameters,
             )
         elif kind == BoundaryKind.TONAL_TRANSITION:
-            positions = _adaptive_change_points(intensity, parameters)
+            positions, truncated = _adaptive_change_points(intensity, parameters)
+            budget_exhausted = budget_exhausted or truncated
         elif kind == BoundaryKind.TEXTURE_TRANSITION:
-            positions = _adaptive_change_points(texture, parameters)
+            positions, truncated = _adaptive_change_points(texture, parameters)
+            budget_exhausted = budget_exhausted or truncated
         else:
             raise ValueError(f"unsupported boundary path kind: {kind}")
         for position in positions:
@@ -255,14 +259,14 @@ def _local_samples_for_kind(
             )
             if sample is not None:
                 samples.append(sample)
-    return tuple(samples)
+    return tuple(samples), budget_exhausted
 
 
 def _cluster_samples(
     samples: tuple[_LocalPathSample, ...],
     extent: int,
     parameters: BoundaryPathParameters,
-) -> tuple[tuple[_LocalPathSample, ...], ...]:
+) -> tuple[tuple[tuple[_LocalPathSample, ...], ...], bool]:
     tolerance = max(
         float(parameters.path_cluster_tolerance_min_px),
         float(extent) * float(parameters.path_cluster_tolerance_ratio),
@@ -294,7 +298,7 @@ def _cluster_samples(
         for cluster in clusters
         if len({item.section_index for item in cluster}) >= minimum_support
     )
-    return tuple(
+    ranked = tuple(
         sorted(
             supported,
             key=lambda cluster: (
@@ -303,7 +307,11 @@ def _cluster_samples(
                 - min(item.position.minimum for item in cluster),
                 median(item.position.midpoint for item in cluster),
             ),
-        )[: parameters.maximum_paths_per_axis]
+        )
+    )
+    return (
+        ranked[: parameters.maximum_paths_per_axis],
+        len(ranked) > parameters.maximum_paths_per_axis,
     )
 
 
@@ -358,21 +366,22 @@ def _paths_for_axis(
     parameters: BoundaryPathParameters,
     *,
     scan_origin: BoundarySide | None = None,
-) -> tuple[GrayBoundaryPathObservation, ...]:
+) -> tuple[tuple[GrayBoundaryPathObservation, ...], bool]:
     if scan_origin is not None and boundary_axis_for_side(scan_origin) != axis:
         raise ValueError("boundary scan origin must lie on the measured axis")
     oriented_side = scan_origin or (
         BoundarySide.LEADING if axis == BoundaryAxis.LONG else BoundarySide.TOP
     )
     extent = len(profiles[0][0]) if profiles else 0
-    clusters = _cluster_samples(
-        _local_samples_for_kind(
-            profiles,
-            oriented_side,
-            kind,
-            statistics,
-            parameters,
-        ),
+    local_samples, change_point_budget_exhausted = _local_samples_for_kind(
+        profiles,
+        oriented_side,
+        kind,
+        statistics,
+        parameters,
+    )
+    clusters, path_budget_exhausted = _cluster_samples(
+        local_samples,
         extent,
         parameters,
     )
@@ -408,7 +417,9 @@ def _paths_for_axis(
                 provenance=provenance,
             )
         )
-    return tuple(paths)
+    return tuple(paths), bool(
+        change_point_budget_exhausted or path_budget_exhausted
+    )
 
 
 def _holder_boundary(
@@ -460,19 +471,22 @@ def boundary_measurements(
         BoundaryAxis.LONG: long_axis_profiles,
         BoundaryAxis.SHORT: short_axis_profiles,
     }
-    generic_paths = tuple(
-        path
-        for axis, profiles in profiles_by_axis.items()
-        for kind in (BoundaryKind.TONAL_TRANSITION, BoundaryKind.TEXTURE_TRANSITION)
-        for path in _paths_for_axis(
-            axis,
-            profiles,
-            statistics,
-            kind,
-            parameters,
-        )
-    )
-    edge_paths_by_side = {
+    generic_paths: list[GrayBoundaryPathObservation] = []
+    measurement_budget_exhausted = False
+    for axis, profiles in profiles_by_axis.items():
+        for kind in (BoundaryKind.TONAL_TRANSITION, BoundaryKind.TEXTURE_TRANSITION):
+            paths, budget_exhausted = _paths_for_axis(
+                axis,
+                profiles,
+                statistics,
+                kind,
+                parameters,
+            )
+            generic_paths.extend(paths)
+            measurement_budget_exhausted = bool(
+                measurement_budget_exhausted or budget_exhausted
+            )
+    edge_measurements_by_side = {
         side: _paths_for_axis(
             boundary_axis_for_side(side),
             profiles_by_axis[boundary_axis_for_side(side)],
@@ -483,6 +497,14 @@ def boundary_measurements(
         )
         for side in BoundarySide
     }
+    edge_paths_by_side = {
+        side: paths
+        for side, (paths, _) in edge_measurements_by_side.items()
+    }
+    measurement_budget_exhausted = bool(
+        measurement_budget_exhausted
+        or any(exhausted for _, exhausted in edge_measurements_by_side.values())
+    )
     edge_paths = tuple(
         path for paths in edge_paths_by_side.values() for path in paths
     )
@@ -505,4 +527,5 @@ def boundary_measurements(
                 description="workspace containment fallback",
             ),
         ),
+        measurement_budget_exhausted=measurement_budget_exhausted,
     )
