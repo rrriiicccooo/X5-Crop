@@ -16,6 +16,9 @@ repository rules in `AGENTS.md`.
 
 #### Photo Aperture 联合求解与 Debug 可见性（2026-07-13）
 
+- 首尾 endpoint 搜索不再在全局 solver 前按 nominal frame width 选出唯一边界。符合完整照片宽度的
+  endpoint 与由同侧 holder boundary 佐证的 clipped endpoint 会共同进入 assignment consensus；
+  dimension residual 现在只决定搜索顺序，片夹压住画面的实测 outer 不会被提前丢弃。
 - Internal-boundary content evidence 现在保留逐照片 leading/trailing edge 的短轴空间轨迹。只有同一
   短轴轨迹在相邻照片两侧重合，且 count-independent content run 同时贯穿长轴 boundary interval，
   才能反证未解释切线或佐证 measured-edge overlap；上下错位的独立纹理不再触发自动 overlap bleed。

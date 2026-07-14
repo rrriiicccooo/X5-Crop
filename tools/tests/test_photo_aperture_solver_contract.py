@@ -841,6 +841,54 @@ class PhotoApertureSolverContractTest(unittest.TestCase):
             ).intersects(geometry.photo_width_constraint_px)
         )
 
+    def test_holder_clipped_endpoints_reach_global_geometry_consensus(self) -> None:
+        scope = _scope(
+            width=310,
+            height=120,
+            leading=15.0,
+            trailing=295.0,
+            top=10.0,
+            bottom=110.0,
+            internal_paths=(10.0, 100.0, 110.0, 200.0, 210.0, 300.0),
+            holder_sides=(BoundarySide.LEADING, BoundarySide.TRAILING),
+        )
+        observations = (
+            _separator(100.0, 110.0, supported=True),
+            _separator(200.0, 210.0, supported=True),
+        )
+        dimensions = FrameDimensionPrior(
+            frame_size_mm=(1.0, 1.0),
+            source=FrameDimensionPriorSource.SCAN_CALIBRATION,
+            provenance=_provenance(
+                MeasurementIdentity.SCAN_CALIBRATION,
+                "synthetic_calibrated_dimensions",
+            ),
+            calibrated_width_px=PixelInterval.exact(90.0),
+            calibrated_height_px=PixelInterval.exact(100.0),
+        )
+
+        solved = solve_photo_sequence(
+            observations,
+            scope,
+            _plan(scope),
+            3,
+            dimensions,
+            ContentRegionObservation(scope.holder_span.box, (), 0),
+            maximum_assignment_evaluations=10_000,
+            maximum_solution_alternatives=8,
+        )
+
+        self.assertIsInstance(solved, PhotoSequenceSolveResult)
+        assert isinstance(solved, PhotoSequenceSolveResult)
+        self.assertEqual(
+            solved.assignment_consensus.outcome,
+            AssignmentConsensusOutcome.DISAGREED,
+        )
+        self.assertEqual(
+            solved.assignment_consensus.conflicting_photo_indexes,
+            (1, 3),
+        )
+
     def test_short_edge_photos_without_holder_contact_are_not_physical(self) -> None:
         scope = _scope(
             width=310,

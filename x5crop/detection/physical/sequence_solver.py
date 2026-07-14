@@ -823,10 +823,11 @@ def _endpoint_residual(
     )
 
 
-def _best_external_constraints(
+def _admissible_aperture_endpoints(
     paths: tuple[GrayBoundaryPathObservation, ...],
     inner: _EdgeConstraint,
     photo_width: PixelInterval,
+    holder_boundary_provenance: MeasurementProvenance | None,
     *,
     leading: bool,
 ) -> tuple[_EdgeConstraint, ...]:
@@ -846,6 +847,8 @@ def _best_external_constraints(
         residual = _endpoint_residual(visible, photo_width)
         if residual is None:
             continue
+        if residual > 0.0 and constraint.provenance != holder_boundary_provenance:
+            continue
         rank = (
             -float(residual),
             min(visible.midpoint, photo_width.midpoint),
@@ -853,10 +856,14 @@ def _best_external_constraints(
             -(constraint.position.maximum - constraint.position.minimum),
         )
         ranked.append((rank, constraint))
-    if not ranked:
-        return ()
-    best_rank = max(item[0] for item in ranked)
-    return tuple(item[1] for item in ranked if item[0] == best_rank)
+    return tuple(
+        constraint
+        for _, constraint in sorted(
+            ranked,
+            key=lambda item: item[0],
+            reverse=True,
+        )
+    )
 
 
 def _cross_axis_width_constraint(
@@ -1728,16 +1735,18 @@ def _builds_for_hypotheses(
         if band_hypothesis.supports:
             first_edges = band_hypothesis.band_edges[0]
             last_edges = band_hypothesis.band_edges[-1]
-            leading_options = _best_external_constraints(
+            leading_options = _admissible_aperture_endpoints(
                 long_paths,
                 first_edges[0],
                 photo_width,
+                holder_boundary_provenance.get(BoundarySide.LEADING),
                 leading=True,
             )
-            trailing_options = _best_external_constraints(
+            trailing_options = _admissible_aperture_endpoints(
                 long_paths,
                 last_edges[1],
                 photo_width,
+                holder_boundary_provenance.get(BoundarySide.TRAILING),
                 leading=False,
             )
         else:

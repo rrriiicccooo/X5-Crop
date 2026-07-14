@@ -152,6 +152,9 @@ observation，但不能成为 hard separator。Dimension-only edge 只是一条 
   保留这些几何并由后续 evidence 明确报告 contradiction，而不是用 content 伪造新边界；
 - aperture 总宽不是物理质量指标；在可见内容已经覆盖后，更宽的几何不能仅凭多包含片基或片夹
   余量支配另一组边界，实质不同的 alternatives 必须继续进入 geometry consensus；
+- 首尾 aperture endpoint 的物理可行性与搜索顺序分离。符合完整照片宽度的 endpoint 与由同侧
+  holder boundary 佐证的 clipped endpoint 都必须进入全局求解；dimension residual 只能决定探索
+  次序，不能在 geometry consensus 前选出唯一 outer；
 - content coverage 必须与逐张 aperture 一致；spacing 与相邻 aperture edge 的
   守恒关系由 `PhotoSequenceSolution` 构造不变量保证，不再包装成独立 evidence 或 Gate；
 - supporting measurement 可以被 geometry 消费；只有 measurement 反向依赖 `FRAME_GEOMETRY`
