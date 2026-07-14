@@ -347,7 +347,7 @@ Current verification state:
   are implemented. Debug distinguishes ideal apertures, output envelopes, raw
   observations, measured edges, provisional edges, holder boundaries, and
   corroborated overlap through one diagnostics-owned legend.
-- The current suite contains 493 tests and 14 valid format/mode configurations.
+- The current suite contains 494 tests and 14 valid format/mode configurations.
   On `135/full 005.tif`, current verification completed in about 4.97 seconds,
   retained 54 non-dominated assignment alternatives, and honestly reported
   search-budget exhaustion. Geometry remains unresolved because admissible
@@ -363,9 +363,10 @@ Current verification state:
   reports search-budget exhaustion and unresolved geometry.
 - Audit A restarted after making build dominance transitive, preventing broad
   uncertainty from erasing disjoint geometry, and removing repeated exact path
-  fitting. Any further finding must still receive a failing permanent contract
-  before repair; an independent fresh-context Audit B follows only after Audit A
-  reaches zero.
+  fitting. It has since removed duplicate CandidateGate/proof projections from
+  physical evidence ranking. Any further finding must still receive a failing
+  permanent contract before repair; an independent fresh-context Audit B follows
+  only after Audit A reaches zero.
 - Current PASS/REVIEW outcomes and adaptive measurement values remain calibration
   material for the separate real-sample project; do not loosen Gate rules to
   manufacture PASS from the current unresolved results.

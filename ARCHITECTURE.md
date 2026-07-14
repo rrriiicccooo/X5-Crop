@@ -231,8 +231,9 @@ selection 与 Debug，但不能形成 finalization plan，也不能在 `--export
 
 Selection 只按 typed facts 确定性排序：优先保护可见内容，减少明确物理矛盾，优先 resolved
 independent proof；partial auto 在其它事实相同后优先较大 count；最后比较物理 residual 与稳定
-source order。Geometry consensus 由对应 aperture/cut uncertainty intervals 是否相交决定，不使用
-固定百分比 clustering tolerance。
+source order。`EvidenceQuality` 只统计叶子 physical evidence；`content_preservation` 与
+`partial_edge_safety` 等 Gate/proof projection 不会再次计数。Geometry consensus 由对应 aperture/cut
+uncertainty intervals 是否相交决定，不使用固定百分比 clustering tolerance。
 
 DecisionGate 只消费 selected CandidateGate、GeometryResolution、selection consensus、
 FrameBleedPlan 和 transform geometry。它不重新测量 evidence，不生成候选，也不以低 confidence

@@ -604,12 +604,10 @@ class AssessedCandidate:
                         evidence.inter_photo_boundary_preservation.state,
                     ),
                     ("holder_boundary", evidence.holder_boundary.state),
-                    ("content_preservation", evidence.content_preservation_state),
                     (
                         "external_aperture_preservation",
                         evidence.external_aperture_preservation.state,
                     ),
-                    ("partial_edge_safety", evidence.partial_edge_safety.state),
                     ("evidence_independence", evidence.independence.state),
                 )
             )

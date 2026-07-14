@@ -28,6 +28,8 @@ repository rules in `AGENTS.md`.
 - Current report JSON restoration 现在恢复 `ObservationId` 等 typed string identity；内存 read model
   与实际 JSONL round-trip 使用同一 current-schema validation，不再把合法 persisted report 误判为
   `separator_observation_invalid`。
+- Candidate `EvidenceQuality` 只统计叶子物理证据；`content_preservation` 和 `partial_edge_safety` 作为
+  CandidateGate/proof projection 不再与 coverage、boundary、dimension 组成项重复计数和重复影响排序。
 
 #### Photo Aperture 联合求解与 Debug 可见性（2026-07-13）
 
