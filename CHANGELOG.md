@@ -14,6 +14,21 @@ repository rules in `AGENTS.md`.
 
 ### V4.9 当前开发线
 
+#### Solver 物理归约与性能封口（2026-07-14）
+
+- Sequence build 的 Pareto 支配改为可传递的 geometry refinement：更优解必须逐边收窄另一解的
+  uncertainty，不能只因区间相交就删除候选。宽 uncertainty 不再充当桥梁，间接吞掉两组互斥
+  aperture placements；未经佐证的 overlap 只在兼容 geometry 内参与排序，不能抹掉另一组 placement。
+- 非支配解归约只与当前 frontier 比较，不再让已淘汰的数千个 builds 继续参与 O(n²) 全量比较。
+  Boundary paths 在 solver 入口只 canonicalize 一次，并以 solve-local `BoundaryPathFit` 复用同一
+  raw observation 的精确线性拟合；不缓存 candidate、Gate 或 approximate geometry。
+- 固定热点 `half/full X5_00050` 从约 90.38 秒降到 11.27 秒，仍如实报告 search-budget exhaustion、
+  geometry unresolved 和相同 final reasons；current-schema regression 字段无差异。`135/full 005.tif`
+  当前约 4.97 秒，保留 54 组非支配 alternatives 并诚实报告 assignment budget exhausted。
+- Current report JSON restoration 现在恢复 `ObservationId` 等 typed string identity；内存 read model
+  与实际 JSONL round-trip 使用同一 current-schema validation，不再把合法 persisted report 误判为
+  `separator_observation_invalid`。
+
 #### Photo Aperture 联合求解与 Debug 可见性（2026-07-13）
 
 - 首尾 endpoint 搜索不再在全局 solver 前按 nominal frame width 选出唯一边界。符合完整照片宽度的

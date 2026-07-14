@@ -90,6 +90,8 @@ Detection 只消费二维灰度 workspace。原 TIFF 通道、ICC 和色彩 meta
 压成一个固定短轴坐标。灰度中位数、MAD、纹理、梯度、连续性和 intensity tail 只描述像素
 外观，不能证明区域是片夹、片基、照片或 separator。局部 strongest-change 选择属于 adaptive
 measurement；只有 path 数量或 solver search 的显式上限耗尽才产生 execution-budget unavailable。
+Raw samples 的精确线性拟合由 `BoundaryPathFit` 表达；同一次 solve 对每条 observation 只构造一次，
+随后按候选的长轴区间查询。它不是候选几何、物理证明或跨运行 cache。
 
 Raw path 的物理解释只发生在 candidate-specific assignment：
 
@@ -157,6 +159,8 @@ observation，但不能成为 hard separator。Dimension-only edge 只是一条 
   次序，不能在 geometry consensus 前选出唯一 outer；
 - assignment consensus 要求每张照片的每条 aperture edge 在全部非支配解之间存在同一个共同
   interval。仅由一条宽 uncertainty 分别接触两组互斥边界，不构成 geometry agreement；
+- Pareto 支配只允许更优目标且逐边 interval 是另一解的细化。未经佐证的 overlap 可以在兼容
+  geometry 内参与目标排序，但不能淘汰另一组 geometry；归约只比较仍存活的 frontier alternatives；
 - cross-axis hypothesis 的搜索顺序不奖励更高的 aperture。可信 calibration 存在时使用照片短轴
   尺寸残差；否则只使用 count/aspect 可行性、测量质量、uncertainty 与稳定坐标顺序。被预算截断
   的 alternatives 仍使 geometry unavailable；
@@ -331,7 +335,8 @@ detection computation。
 
 `MeasurementCache` 只缓存 exact、count/offset-independent measurements，typed key 包含所有影响
 结果的参数与 region。Candidate、Gate、GeometryResolution、decision、final reason 和 approximate
-geometry 永不缓存。
+geometry 永不缓存。Solver-local `BoundaryPathFit` 只是对同一 raw observation 的精确数值展开，
+不进入 MeasurementCache，也不跨 count、图片或运行复用。
 
 `tools/tests` 使用 AST 与 synthetic physical contracts 检查模块可达、唯一归层、单向依赖、
 current schema、显式参数、零兼容与零孤儿。发现残余时先增加失败契约，再删除整类根因。冻结的

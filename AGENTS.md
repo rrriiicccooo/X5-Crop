@@ -347,25 +347,25 @@ Current verification state:
   are implemented. Debug distinguishes ideal apertures, output envelopes, raw
   observations, measured edges, provisional edges, holder boundaries, and
   corroborated overlap through one diagnostics-owned legend.
-- The current suite contains 483 tests and 14 valid format/mode configurations.
-  On `135/full 005.tif`, global-consensus verification completed in about
-  2.47 seconds with 4,740 assignment evaluations and no search-budget exhaustion.
-  Geometry remains unresolved because physically admissible aperture placements
-  disagree; this is audit/calibration material, not a Gate failure.
+- The current suite contains 493 tests and 14 valid format/mode configurations.
+  On `135/full 005.tif`, current verification completed in about 4.97 seconds,
+  retained 54 non-dominated assignment alternatives, and honestly reported
+  search-budget exhaustion. Geometry remains unresolved because admissible
+  aperture placements and content preservation disagree; this is
+  audit/calibration material, not permission to loosen a Gate.
 - The previous 113-TIFF run in `Test/test 2` remains an immutable visual baseline.
   A new full run must be written to `Test/test 3` after performance profiling and
   representative-sample calibration.
-- `half/full` remains the measured performance hotspot. With distinct overlapping
-  paths preserved, `X5_00050` took about 90.38 seconds, evaluated 36,254
-  assignments, and honestly reported search-budget exhaustion. Performance work
-  must profile this fixed sample and prune infeasible branches without deleting
-  observations or moving GeometryResolution ownership.
-- Audit A restarted after removing aperture extent from physical ranking,
-  pre-solver endpoint selection, reference-only assignment consensus, and
-  taller-aperture cross-axis preference, then restricting path deduplication to
-  truly identical geometry and requiring global holder-boundary consensus. Any
-  further finding must still receive a failing permanent contract before repair;
-  an independent fresh-context Audit B follows only after Audit A reaches zero.
+- `half/full X5_00050` remains the fixed performance sample. A profiled Pareto
+  frontier, canonical long-axis paths, and solve-local exact boundary-path fits
+  reduced runtime from about 90.38 seconds to 11.27 seconds without deleting
+  observations. It retains 340 non-dominated alternatives and still honestly
+  reports search-budget exhaustion and unresolved geometry.
+- Audit A restarted after making build dominance transitive, preventing broad
+  uncertainty from erasing disjoint geometry, and removing repeated exact path
+  fitting. Any further finding must still receive a failing permanent contract
+  before repair; an independent fresh-context Audit B follows only after Audit A
+  reaches zero.
 - Current PASS/REVIEW outcomes and adaptive measurement values remain calibration
   material for the separate real-sample project; do not loosen Gate rules to
   manufacture PASS from the current unresolved results.

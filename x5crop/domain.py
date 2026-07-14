@@ -322,24 +322,59 @@ class BoundaryPathSample:
             raise ValueError("boundary path sample requires positive orthogonal extent")
 
 
-def _fitted_path_interval(
+@dataclass(frozen=True)
+class BoundaryLineFit:
+    slope: float
+    intercept: float
+    residual: float
+
+    def bounds_within(self, interval: PixelInterval) -> tuple[float, float]:
+        predictions = (
+            self.intercept + self.slope * interval.minimum,
+            self.intercept + self.slope * interval.maximum,
+        )
+        return (
+            min(predictions) - self.residual,
+            max(predictions) + self.residual,
+        )
+
+
+def _boundary_path_fit_components(
     samples: tuple[BoundaryPathSample, ...],
-    orthogonal_interval: PixelInterval,
-) -> PixelInterval:
-    if len(samples) == 1:
-        return samples[0].position
-    coordinates = tuple(
-        sample.orthogonal_interval.midpoint for sample in samples
+) -> tuple[PixelInterval, BoundaryLineFit, BoundaryLineFit]:
+    if not samples:
+        raise ValueError("boundary path fit requires local samples")
+    extent = PixelInterval(
+        min(sample.orthogonal_interval.minimum for sample in samples),
+        max(sample.orthogonal_interval.maximum for sample in samples),
     )
+    if len(samples) == 1:
+        position = samples[0].position
+        return (
+            extent,
+            BoundaryLineFit(0.0, position.minimum, 0.0),
+            BoundaryLineFit(0.0, position.maximum, 0.0),
+        )
+
+    coordinates = tuple(sample.orthogonal_interval.midpoint for sample in samples)
     center = sum(coordinates) / float(len(coordinates))
     denominator = sum((coordinate - center) ** 2 for coordinate in coordinates)
     if denominator <= 0.0:
-        return PixelInterval(
-            min(sample.position.minimum for sample in samples),
-            max(sample.position.maximum for sample in samples),
+        return (
+            extent,
+            BoundaryLineFit(
+                0.0,
+                min(sample.position.minimum for sample in samples),
+                0.0,
+            ),
+            BoundaryLineFit(
+                0.0,
+                max(sample.position.maximum for sample in samples),
+                0.0,
+            ),
         )
 
-    def fitted_bounds(attribute: str) -> tuple[float, float]:
+    def line_fit(attribute: str) -> BoundaryLineFit:
         values = tuple(
             float(getattr(sample.position, attribute)) for sample in samples
         )
@@ -353,14 +388,61 @@ def _fitted_path_interval(
             abs(value - (intercept + slope * coordinate))
             for coordinate, value in zip(coordinates, values, strict=True)
         )
-        predictions = (
-            intercept + slope * orthogonal_interval.minimum,
-            intercept + slope * orthogonal_interval.maximum,
-        )
-        return min(predictions) - residual, max(predictions) + residual
+        return BoundaryLineFit(slope, intercept, residual)
 
-    minimum_lower, minimum_upper = fitted_bounds("minimum")
-    maximum_lower, maximum_upper = fitted_bounds("maximum")
+    return extent, line_fit("minimum"), line_fit("maximum")
+
+
+@dataclass(frozen=True)
+class BoundaryPathFit:
+    observation: "GrayBoundaryPathObservation"
+    orthogonal_extent: PixelInterval = field(init=False)
+    minimum_line: BoundaryLineFit = field(init=False)
+    maximum_line: BoundaryLineFit = field(init=False)
+
+    def __post_init__(self) -> None:
+        extent, minimum_line, maximum_line = _boundary_path_fit_components(
+            self.observation.samples
+        )
+        object.__setattr__(self, "orthogonal_extent", extent)
+        object.__setattr__(self, "minimum_line", minimum_line)
+        object.__setattr__(self, "maximum_line", maximum_line)
+
+    @property
+    def observation_id(self) -> ObservationId:
+        return self.observation.provenance.observation_id
+
+    def position_within(
+        self,
+        orthogonal_interval: PixelInterval,
+    ) -> PixelInterval | None:
+        measured_interval = self.orthogonal_extent.intersection(
+            orthogonal_interval
+        )
+        if measured_interval is None:
+            return None
+        minimum_lower, minimum_upper = self.minimum_line.bounds_within(
+            measured_interval
+        )
+        maximum_lower, maximum_upper = self.maximum_line.bounds_within(
+            measured_interval
+        )
+        return PixelInterval(
+            min(minimum_lower, maximum_lower),
+            max(minimum_upper, maximum_upper),
+        )
+
+
+def _fitted_path_interval(
+    samples: tuple[BoundaryPathSample, ...],
+    orthogonal_interval: PixelInterval,
+) -> PixelInterval:
+    extent, minimum_line, maximum_line = _boundary_path_fit_components(samples)
+    measured_interval = extent.intersection(orthogonal_interval)
+    if measured_interval is None:
+        raise ValueError("boundary path fit interval must overlap its samples")
+    minimum_lower, minimum_upper = minimum_line.bounds_within(measured_interval)
+    maximum_lower, maximum_upper = maximum_line.bounds_within(measured_interval)
     return PixelInterval(
         min(minimum_lower, maximum_lower),
         max(minimum_upper, maximum_upper),

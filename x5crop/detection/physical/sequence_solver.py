@@ -5,6 +5,7 @@ from math import ceil, floor, isfinite
 
 from ...domain import (
     BoundaryAxis,
+    BoundaryPathFit,
     BoundarySide,
     EvidenceState,
     FrameDimensionPrior,
@@ -216,6 +217,24 @@ class _MeasuredApertureConstraint:
         )
 
 
+def _boundary_path_fits(
+    paths: tuple[GrayBoundaryPathObservation, ...],
+) -> dict[ObservationId, BoundaryPathFit]:
+    observations: dict[ObservationId, GrayBoundaryPathObservation] = {}
+    fits: dict[ObservationId, BoundaryPathFit] = {}
+    for path in paths:
+        observation_id = path.provenance.observation_id
+        existing = observations.get(observation_id)
+        if existing is not None and existing != path:
+            raise ValueError(
+                "distinct boundary paths cannot share one observation identity"
+            )
+        if existing is None:
+            observations[observation_id] = path
+            fits[observation_id] = BoundaryPathFit(path)
+    return fits
+
+
 def _axis_paths(
     search_scope: PhotoSequenceSearchScope,
     axis: BoundaryAxis,
@@ -245,9 +264,16 @@ def _axis_paths(
             path.provenance.observation_id,
         ),
     )
+    path_fits = _boundary_path_fits(paths)
     canonical: list[GrayBoundaryPathObservation] = []
     for path in ranked:
-        if any(_paths_geometrically_equivalent(path, item) for item in canonical):
+        if any(
+            _paths_geometrically_equivalent(
+                path_fits[path.provenance.observation_id],
+                path_fits[item.provenance.observation_id],
+            )
+            for item in canonical
+        ):
             continue
         canonical.append(path)
     return tuple(
@@ -264,9 +290,11 @@ def _axis_paths(
 
 
 def _paths_geometrically_equivalent(
-    left: GrayBoundaryPathObservation,
-    right: GrayBoundaryPathObservation,
+    left_fit: BoundaryPathFit,
+    right_fit: BoundaryPathFit,
 ) -> bool:
+    left = left_fit.observation
+    right = right_fit.observation
     if left.axis != right.axis:
         return False
     shared = left.orthogonal_extent.intersection(right.orthogonal_extent)
@@ -280,8 +308,8 @@ def _paths_geometrically_equivalent(
         for coordinate in coordinates
         for left_position, right_position in (
             (
-                left.position_within(PixelInterval.exact(coordinate)),
-                right.position_within(PixelInterval.exact(coordinate)),
+                left_fit.position_within(PixelInterval.exact(coordinate)),
+                right_fit.position_within(PixelInterval.exact(coordinate)),
             ),
         )
     )
@@ -673,6 +701,7 @@ def _band_sequence_hypothesis(
 def _band_sequence_hypotheses(
     supports: tuple[SeparatorBandCrossAxisSupport, ...],
     search_scope: PhotoSequenceSearchScope,
+    long_paths: tuple[GrayBoundaryPathObservation, ...],
     count: int,
     dimensions: FrameDimensionPrior,
     cross_axis: PhotoApertureCrossAxisHypothesis,
@@ -708,7 +737,6 @@ def _band_sequence_hypotheses(
     search_truncated = False
     physical_width = _cross_axis_width_constraint(cross_axis, dimensions)
     width_constraint = SeparatorWidthConstraint(physical_width)
-    long_paths = _axis_paths(search_scope, BoundaryAxis.LONG)
     edge_options = tuple(
         _band_edge_options(item, cross_axis, long_paths, width_constraint)
         for item in interior
@@ -988,13 +1016,14 @@ def _resolution(
 def _short_axis_resolution(
     photo_index: int,
     side: BoundarySide,
-    path: GrayBoundaryPathObservation,
+    path_fit: BoundaryPathFit,
     long_axis_interval: PixelInterval,
 ) -> tuple[
     PhotoApertureBoundaryResolution,
     PhotoApertureEdgeAssignment,
 ] | None:
-    position = path.position_within(long_axis_interval)
+    path = path_fit.observation
+    position = path_fit.position_within(long_axis_interval)
     if position is None:
         return None
     resolution = PhotoApertureBoundaryResolution(
@@ -1018,6 +1047,7 @@ def _short_axis_resolution(
 
 def _measured_aperture_constraints(
     search_scope: PhotoSequenceSearchScope,
+    long_paths: tuple[GrayBoundaryPathObservation, ...],
     cross_axis: PhotoApertureCrossAxisHypothesis,
     dimensions: FrameDimensionPrior,
     excluded_separator_bands: tuple[SeparatorBandObservation, ...],
@@ -1027,7 +1057,7 @@ def _measured_aperture_constraints(
     photo_width = _cross_axis_width_constraint(cross_axis, dimensions)
     paths = tuple(
         path
-        for path in _axis_paths(search_scope, BoundaryAxis.LONG)
+        for path in long_paths
         if not any(
             _path_associated_with_band(path, observation)
             for observation in excluded_separator_bands
@@ -1171,6 +1201,7 @@ def _uncorroborated_overlap_extent(
 def _measured_sequence_build(
     constraints: tuple[_MeasuredApertureConstraint, ...],
     cross_axis: PhotoApertureCrossAxisHypothesis,
+    path_fits: dict[ObservationId, BoundaryPathFit],
     photo_width: PixelInterval,
     holder_extent: int,
 ) -> _SequenceBuild | None:
@@ -1194,13 +1225,13 @@ def _measured_sequence_build(
         top_result = _short_axis_resolution(
             photo_index,
             BoundarySide.TOP,
-            cross_axis.top_path,
+            path_fits[cross_axis.top_path.provenance.observation_id],
             long_axis_interval,
         )
         bottom_result = _short_axis_resolution(
             photo_index,
             BoundarySide.BOTTOM,
-            cross_axis.bottom_path,
+            path_fits[cross_axis.bottom_path.provenance.observation_id],
             long_axis_interval,
         )
         if top_result is None or bottom_result is None:
@@ -1387,6 +1418,8 @@ def _measured_aperture_sequences(
 
 def _measured_path_builds(
     search_scope: PhotoSequenceSearchScope,
+    long_paths: tuple[GrayBoundaryPathObservation, ...],
+    path_fits: dict[ObservationId, BoundaryPathFit],
     separator_supports: tuple[SeparatorBandCrossAxisSupport, ...],
     cross_axis_hypotheses: tuple[PhotoApertureCrossAxisHypothesis, ...],
     dimensions: FrameDimensionPrior,
@@ -1411,6 +1444,7 @@ def _measured_path_builds(
             return tuple(builds), evaluations, True
         options, option_evaluations, exhausted = _measured_aperture_constraints(
             search_scope,
+            long_paths,
             cross_axis,
             dimensions,
             excluded_separator_bands,
@@ -1442,6 +1476,7 @@ def _measured_path_builds(
                 build := _measured_sequence_build(
                     state,
                     cross_axis,
+                    path_fits,
                     photo_width,
                     holder.width + holder.height,
                 )
@@ -1543,6 +1578,7 @@ def _spacing_for_band(
 def _build_sequence(
     band_hypothesis: _BandSequenceHypothesis,
     cross_axis: PhotoApertureCrossAxisHypothesis,
+    path_fits: dict[ObservationId, BoundaryPathFit],
     leading_endpoint: _EdgeConstraint,
     trailing_endpoint: _EdgeConstraint,
     photo_width: PixelInterval,
@@ -1607,13 +1643,13 @@ def _build_sequence(
         top_result = _short_axis_resolution(
             photo_index,
             BoundarySide.TOP,
-            cross_axis.top_path,
+            path_fits[cross_axis.top_path.provenance.observation_id],
             long_axis_interval,
         )
         bottom_result = _short_axis_resolution(
             photo_index,
             BoundarySide.BOTTOM,
-            cross_axis.bottom_path,
+            path_fits[cross_axis.bottom_path.provenance.observation_id],
             long_axis_interval,
         )
         if top_result is None or bottom_result is None:
@@ -1718,11 +1754,12 @@ def _build_sequence(
 def _builds_for_hypotheses(
     band_hypotheses: tuple[_BandSequenceHypothesis, ...],
     search_scope: PhotoSequenceSearchScope,
+    long_paths: tuple[GrayBoundaryPathObservation, ...],
+    path_fits: dict[ObservationId, BoundaryPathFit],
     dimensions: FrameDimensionPrior,
     count: int,
     evaluation_budget: int,
 ) -> tuple[tuple[_SequenceBuild, ...], int, bool]:
-    long_paths = _axis_paths(search_scope, BoundaryAxis.LONG)
     holder = search_scope.holder_span.box
     holder_boundary_provenance = {
         item.side: item.provenance for item in search_scope.holder_boundaries
@@ -1780,6 +1817,7 @@ def _builds_for_hypotheses(
                 build = _build_sequence(
                     band_hypothesis,
                     cross_axis,
+                    path_fits,
                     leading_endpoint,
                     trailing_endpoint,
                     photo_width,
@@ -1821,6 +1859,33 @@ def _conflicting_photo_indexes(
     return tuple(conflicts)
 
 
+def _build_apertures_refine(
+    left: _SequenceBuild,
+    right: _SequenceBuild,
+) -> bool:
+    if len(left.apertures) != len(right.apertures):
+        return False
+    for left_aperture, right_aperture in zip(
+        left.apertures,
+        right.apertures,
+        strict=True,
+    ):
+        for side in (
+            BoundarySide.LEADING,
+            BoundarySide.TRAILING,
+            BoundarySide.TOP,
+            BoundarySide.BOTTOM,
+        ):
+            left_position = getattr(left_aperture, side.value).position
+            right_position = getattr(right_aperture, side.value).position
+            if not (
+                left_position.minimum >= right_position.minimum
+                and left_position.maximum <= right_position.maximum
+            ):
+                return False
+    return True
+
+
 def _build_dominates(left: _SequenceBuild, right: _SequenceBuild) -> bool:
     comparisons = tuple(
         left_value - right_value
@@ -1835,25 +1900,23 @@ def _build_dominates(left: _SequenceBuild, right: _SequenceBuild) -> bool:
         and any(value > 0.0 for value in comparisons)
     ):
         return False
-    geometry_conflicts = bool(_conflicting_photo_indexes((left, right)))
-    return bool(
-        not geometry_conflicts
-        or left.objectives.uncorroborated_overlap_extent_px
-        < right.objectives.uncorroborated_overlap_extent_px
-    )
+    return _build_apertures_refine(left, right)
 
 
 def _non_dominated_builds(
     builds: tuple[_SequenceBuild, ...],
 ) -> tuple[_SequenceBuild, ...]:
-    return tuple(
-        build
-        for build in builds
-        if not any(
-            other is not build and _build_dominates(other, build)
-            for other in builds
-        )
-    )
+    frontier: list[_SequenceBuild] = []
+    for build in builds:
+        if any(_build_dominates(other, build) for other in frontier):
+            continue
+        frontier = [
+            other
+            for other in frontier
+            if not _build_dominates(build, other)
+        ]
+        frontier.append(build)
+    return tuple(frontier)
 
 
 def _assignment_consensus(
@@ -1930,6 +1993,14 @@ def solve_photo_sequence(
         raise ValueError(
             "photo sequence solver requires measurements for its cross-axis plan"
         )
+    path_fits = _boundary_path_fits(
+        tuple(
+            path
+            for cross_axis in cross_axis_hypotheses
+            for path in (cross_axis.top_path, cross_axis.bottom_path)
+        )
+    )
+    long_paths = _axis_paths(search_scope, BoundaryAxis.LONG)
     band_hypotheses: list[_BandSequenceHypothesis] = []
     band_evaluations = cross_axis_plan.assignment_evaluations
     band_budget_exhausted = cross_axis_plan.search_budget_exhausted
@@ -1941,6 +2012,7 @@ def solve_photo_sequence(
         hypotheses, evaluations, exhausted = _band_sequence_hypotheses(
             supports,
             search_scope,
+            long_paths,
             count,
             dimensions,
             cross_axis,
@@ -1964,6 +2036,8 @@ def solve_photo_sequence(
         ) = _builds_for_hypotheses(
             tuple(band_hypotheses),
             search_scope,
+            long_paths,
+            path_fits,
             dimensions,
             count,
             remaining,
@@ -1983,6 +2057,8 @@ def solve_photo_sequence(
             measured_budget_exhausted,
         ) = _measured_path_builds(
             search_scope,
+            long_paths,
+            path_fits,
             supports,
             cross_axis_hypotheses,
             dimensions,

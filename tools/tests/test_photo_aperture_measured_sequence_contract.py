@@ -163,7 +163,7 @@ class PhotoApertureMeasuredSequenceContractTest(unittest.TestCase):
         assert isinstance(solved, PhotoSequenceSolveResult)
         self.assertNotEqual(solved.inter_photo_spacings[0].kind, "overlap")
 
-    def test_dominated_geometry_does_not_create_assignment_disagreement(self) -> None:
+    def test_distinct_geometry_remains_assignment_disagreement(self) -> None:
         scope = _scope(
             width=230,
             height=120,
@@ -189,9 +189,13 @@ class PhotoApertureMeasuredSequenceContractTest(unittest.TestCase):
         assert isinstance(solved, PhotoSequenceSolveResult)
         self.assertEqual(
             solved.assignment_consensus.outcome,
-            AssignmentConsensusOutcome.UNCONTESTED,
+            AssignmentConsensusOutcome.DISAGREED,
         )
-        self.assertEqual(solved.assignment_consensus.solution_count, 1)
+        self.assertEqual(solved.assignment_consensus.solution_count, 3)
+        self.assertEqual(
+            solved.assignment_consensus.conflicting_photo_indexes,
+            (1, 2),
+        )
 
     def test_measured_path_search_keeps_a_provisional_solution_before_truncation(self) -> None:
         scope = _scope(

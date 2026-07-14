@@ -91,6 +91,7 @@ class PhotoApertureSolverContractTest(unittest.TestCase):
 
         options, _evaluations, exhausted = _measured_aperture_constraints(
             scope,
+            sequence_solver._axis_paths(scope, BoundaryAxis.LONG),
             cross_axis,
             _dimensions(100.0, 100.0),
             excluded_separator_bands=(),
@@ -116,6 +117,7 @@ class PhotoApertureSolverContractTest(unittest.TestCase):
 
         options, _evaluations, exhausted = _measured_aperture_constraints(
             scope,
+            sequence_solver._axis_paths(scope, BoundaryAxis.LONG),
             cross_axis,
             _dimensions(100.0, 100.0),
             excluded_separator_bands=(support.observation,),

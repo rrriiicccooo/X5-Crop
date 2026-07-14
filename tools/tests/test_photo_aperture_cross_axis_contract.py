@@ -19,6 +19,7 @@ from x5crop.detection.physical.sequence_solver import (
 from x5crop.domain import (
     BoundaryAxis,
     BoundaryKind,
+    BoundaryPathFit,
     BoundarySide,
     FrameDimensionPrior,
     FrameDimensionPriorSource,
@@ -51,13 +52,13 @@ class PhotoApertureCrossAxisContractTest(unittest.TestCase):
         left, _ = _short_axis_resolution(
             1,
             BoundarySide.TOP,
-            path,
+            BoundaryPathFit(path),
             PixelInterval(0.0, 50.0),
         )
         right, _ = _short_axis_resolution(
             2,
             BoundarySide.TOP,
-            path,
+            BoundaryPathFit(path),
             PixelInterval(50.0, 100.0),
         )
 
