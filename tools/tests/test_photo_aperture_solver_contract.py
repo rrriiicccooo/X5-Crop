@@ -29,11 +29,13 @@ from x5crop.report.read_models import typed_read_model
 from x5crop.report.validation import _typed_value_from_read_model
 from x5crop.domain import (
     BoundaryAxis,
+    BoundaryKind,
     BoundaryPathSample,
     BoundarySide,
     EvidenceState,
     FrameDimensionPrior,
     FrameDimensionPriorSource,
+    HolderBoundaryObservation,
     InterPhotoSpacingBasis,
     MeasurementIdentity,
     ObservationId,
@@ -46,7 +48,12 @@ from x5crop.domain import (
 
 class PhotoApertureSolverContractTest(unittest.TestCase):
     def test_each_holder_consensus_path_can_authorize_a_clipped_endpoint(self) -> None:
-        first = _path(BoundaryAxis.LONG, 10.0, "first_holder_consensus_path")
+        first = _path(
+            BoundaryAxis.LONG,
+            10.0,
+            "first_holder_consensus_path",
+            kind=BoundaryKind.EDGE_ADJACENT_TRANSITION,
+        )
         first = replace(
             first,
             samples=(
@@ -56,7 +63,12 @@ class PhotoApertureSolverContractTest(unittest.TestCase):
                 ),
             ),
         )
-        second = _path(BoundaryAxis.LONG, 15.0, "second_holder_consensus_path")
+        second = _path(
+            BoundaryAxis.LONG,
+            15.0,
+            "second_holder_consensus_path",
+            kind=BoundaryKind.EDGE_ADJACENT_TRANSITION,
+        )
         second = replace(
             second,
             samples=(
@@ -69,23 +81,27 @@ class PhotoApertureSolverContractTest(unittest.TestCase):
         inner = sequence_solver._external_constraint(
             _path(BoundaryAxis.LONG, 100.0, "measured_inner_photo_edge")
         )
+        holder_boundary = HolderBoundaryObservation(
+            BoundarySide.LEADING,
+            PixelInterval(15.0, 20.0),
+            (first, second),
+        )
 
         options = sequence_solver._admissible_aperture_endpoints(
             (first, second),
             inner,
             PixelInterval.exact(100.0),
-            frozenset(
-                {
-                    first.provenance.observation_id,
-                    second.provenance.observation_id,
-                }
-            ),
+            holder_boundary,
             leading=True,
         )
 
         self.assertEqual(
             {option.path for option in options},
             {first, second},
+        )
+        self.assertEqual(
+            {option.position for option in options},
+            {holder_boundary.position},
         )
 
     def test_aperture_extent_is_not_a_physical_ranking_objective(self) -> None:

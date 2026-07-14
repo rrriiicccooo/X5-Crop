@@ -171,7 +171,8 @@ observation，但不能成为 hard separator。Dimension-only edge 只是一条 
   的窄 aperture observations；
 - holder boundary 只有在全部最高支持 edge-adjacent paths 存在共同 position interval 时才成立，并
   保存该精确交集与全部贡献路径。宽 uncertainty 分别接触两条互斥 transition 时保持 unavailable；
-  clipped endpoint 权限只属于这些原始路径，不能任选一条或让派生 provenance 冒充像素观测；
+  clipped endpoint 权限只属于这些原始路径，且 solver 必须把其 endpoint uncertainty 收窄到共同
+  interval，不能任选一条、使用交集外坐标或让派生 provenance 冒充像素观测；
 - content coverage 必须与逐张 aperture 一致；spacing 与相邻 aperture edge 的
   守恒关系由 `PhotoSequenceSolution` 构造不变量保证，不再包装成独立 evidence 或 Gate；
 - supporting measurement 可以被 geometry 消费；只有 measurement 反向依赖 `FRAME_GEOMETRY`

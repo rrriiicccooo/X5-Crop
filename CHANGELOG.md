@@ -40,7 +40,8 @@ repository rules in `AGENTS.md`.
   几何共识。搜索是否完整由 `PhysicalSearchOutcome` 单独表达并阻止 unresolved geometry early-stop。
 - Holder boundary 现在保存全部最高支持 edge-adjacent paths 的精确共同区间与 typed anchors，不再
   退化成任意一条代表路径。只有实际贡献该共识的原始 path 可以佐证首尾 clipped endpoint；派生的
-  holder-boundary provenance 只负责组合身份，不能冒充独立像素 measurement。
+  holder-boundary provenance 只负责组合身份，不能冒充独立像素 measurement。Solver 同时把这些
+  endpoint 收窄到共同 interval，不能继续使用单条 path 落在共识之外的 uncertainty。
 
 #### Photo Aperture 联合求解与 Debug 可见性（2026-07-13）
 

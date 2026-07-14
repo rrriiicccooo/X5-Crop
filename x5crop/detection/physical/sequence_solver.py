@@ -10,6 +10,7 @@ from ...domain import (
     EvidenceState,
     FrameDimensionPrior,
     GrayBoundaryPathObservation,
+    HolderBoundaryObservation,
     InterPhotoBoundaryReference,
     InterPhotoSpacing,
     InterPhotoSpacingBasis,
@@ -241,14 +242,11 @@ def _boundary_path_fits(
     return fits
 
 
-def _holder_boundary_path_ids(
+def _holder_boundaries(
     search_scope: PhotoSequenceSearchScope,
-) -> dict[BoundarySide, frozenset[ObservationId]]:
+) -> dict[BoundarySide, HolderBoundaryObservation]:
     return {
-        boundary.side: frozenset(
-            path.provenance.observation_id
-            for path in boundary.supporting_paths
-        )
+        boundary.side: boundary
         for boundary in search_scope.holder_boundaries
     }
 
@@ -265,9 +263,9 @@ def _axis_paths(
         )
     )
     holder_path_ids = {
-        observation_id
-        for side_path_ids in _holder_boundary_path_ids(search_scope).values()
-        for observation_id in side_path_ids
+        path.provenance.observation_id
+        for boundary in _holder_boundaries(search_scope).values()
+        for path in boundary.supporting_paths
     }
     ranked = sorted(
         paths,
@@ -870,6 +868,38 @@ def _external_constraint(
     )
 
 
+def _holder_boundary_supports_path(
+    path: GrayBoundaryPathObservation,
+    boundary: HolderBoundaryObservation | None,
+) -> bool:
+    return bool(
+        boundary is not None
+        and any(
+            supporting.provenance.observation_id
+            == path.provenance.observation_id
+            for supporting in boundary.supporting_paths
+        )
+    )
+
+
+def _external_constraint_with_holder_consensus(
+    path: GrayBoundaryPathObservation,
+    boundary: HolderBoundaryObservation | None,
+) -> tuple[_EdgeConstraint, bool]:
+    supports_holder_boundary = _holder_boundary_supports_path(path, boundary)
+    return (
+        _external_constraint(
+            path,
+            position=(
+                boundary.position
+                if supports_holder_boundary and boundary is not None
+                else None
+            ),
+        ),
+        supports_holder_boundary,
+    )
+
+
 def _visible_width(
     leading: _EdgeConstraint,
     trailing: _EdgeConstraint,
@@ -895,13 +925,15 @@ def _admissible_aperture_endpoints(
     paths: tuple[GrayBoundaryPathObservation, ...],
     inner: _EdgeConstraint,
     photo_width: PixelInterval,
-    holder_boundary_path_ids: frozenset[ObservationId],
+    holder_boundary: HolderBoundaryObservation | None,
     *,
     leading: bool,
 ) -> tuple[_EdgeConstraint, ...]:
     ranked: list[tuple[tuple[float, float, float, float], _EdgeConstraint]] = []
     for path in paths:
-        constraint = _external_constraint(path)
+        constraint, holder_clip_supported = (
+            _external_constraint_with_holder_consensus(path, holder_boundary)
+        )
         if leading:
             if constraint.position.minimum >= inner.position.maximum:
                 continue
@@ -915,11 +947,7 @@ def _admissible_aperture_endpoints(
         residual = _endpoint_residual(visible, photo_width)
         if residual is None:
             continue
-        if (
-            residual > 0.0
-            and constraint.provenance.observation_id
-            not in holder_boundary_path_ids
-        ):
+        if residual > 0.0 and not holder_clip_supported:
             continue
         rank = (
             -float(residual),
@@ -1096,18 +1124,28 @@ def _measured_aperture_constraints(
             for observation in excluded_separator_bands
         )
     )
-    holder_boundary_path_ids = _holder_boundary_path_ids(search_scope)
+    holder_boundaries = _holder_boundaries(search_scope)
     constraints: list[_MeasuredApertureConstraint] = []
     evaluations = 0
     if maximum_options <= 0:
         raise ValueError("measured aperture option budget must be positive")
     for leading_index, leading_path in enumerate(paths):
-        leading = _external_constraint(leading_path)
+        leading, leading_holder_supported = (
+            _external_constraint_with_holder_consensus(
+                leading_path,
+                holder_boundaries.get(BoundarySide.LEADING),
+            )
+        )
         for trailing_path in paths[leading_index + 1 :]:
             if evaluations >= evaluation_budget:
                 return tuple(constraints), evaluations, True
             evaluations += 1
-            trailing = _external_constraint(trailing_path)
+            trailing, trailing_holder_supported = (
+                _external_constraint_with_holder_consensus(
+                    trailing_path,
+                    holder_boundaries.get(BoundarySide.TRAILING),
+                )
+            )
             width = _visible_width(leading, trailing)
             if width is None:
                 continue
@@ -1115,13 +1153,11 @@ def _measured_aperture_constraints(
                 break
             full_dimension_supported = width.intersects(photo_width)
             leading_clip_supported = bool(
-                leading.provenance.observation_id
-                in holder_boundary_path_ids.get(BoundarySide.LEADING, frozenset())
+                leading_holder_supported
                 and width.maximum < photo_width.minimum
             )
             trailing_clip_supported = bool(
-                trailing.provenance.observation_id
-                in holder_boundary_path_ids.get(BoundarySide.TRAILING, frozenset())
+                trailing_holder_supported
                 and width.maximum < photo_width.minimum
             )
             if not (
@@ -1618,7 +1654,7 @@ def _build_sequence(
     count: int,
     holder_extent: int,
     cross_axis_residual: float,
-    holder_boundary_path_ids: dict[BoundarySide, frozenset[ObservationId]],
+    holder_boundaries: dict[BoundarySide, HolderBoundaryObservation],
 ) -> _SequenceBuild | None:
     band_edges = band_hypothesis.band_edges
     leading_constraints = (
@@ -1641,14 +1677,18 @@ def _build_sequence(
         leading_clip_supported = bool(
             photo_index == 1
             and leading_constraint.path is not None
-            and leading_constraint.provenance.observation_id
-            in holder_boundary_path_ids.get(BoundarySide.LEADING, frozenset())
+            and _holder_boundary_supports_path(
+                leading_constraint.path,
+                holder_boundaries.get(BoundarySide.LEADING),
+            )
         )
         trailing_clip_supported = bool(
             photo_index == count
             and trailing_constraint.path is not None
-            and trailing_constraint.provenance.observation_id
-            in holder_boundary_path_ids.get(BoundarySide.TRAILING, frozenset())
+            and _holder_boundary_supports_path(
+                trailing_constraint.path,
+                holder_boundaries.get(BoundarySide.TRAILING),
+            )
         )
         refined = _refine_aperture_edges(
             leading_constraint,
@@ -1794,7 +1834,7 @@ def _builds_for_hypotheses(
     evaluation_budget: int,
 ) -> tuple[tuple[_SequenceBuild, ...], int, bool]:
     holder = search_scope.holder_span.box
-    holder_boundary_path_ids = _holder_boundary_path_ids(search_scope)
+    holder_boundaries = _holder_boundaries(search_scope)
     builds: list[_SequenceBuild] = []
     evaluations = 0
     exhausted = False
@@ -1818,14 +1858,14 @@ def _builds_for_hypotheses(
                 long_paths,
                 first_edges[0],
                 photo_width,
-                holder_boundary_path_ids.get(BoundarySide.LEADING, frozenset()),
+                holder_boundaries.get(BoundarySide.LEADING),
                 leading=True,
             )
             trailing_options = _admissible_aperture_endpoints(
                 long_paths,
                 last_edges[1],
                 photo_width,
-                holder_boundary_path_ids.get(BoundarySide.TRAILING, frozenset()),
+                holder_boundaries.get(BoundarySide.TRAILING),
                 leading=False,
             )
         else:
@@ -1855,7 +1895,7 @@ def _builds_for_hypotheses(
                     count,
                     holder.width + holder.height,
                     cross_axis_residual,
-                    holder_boundary_path_ids,
+                    holder_boundaries,
                 )
                 if build is not None:
                     builds.append(build)
