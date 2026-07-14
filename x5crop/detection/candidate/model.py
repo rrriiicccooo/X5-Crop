@@ -333,10 +333,29 @@ class EvidenceQuality:
     supported: tuple[str, ...]
     contradicted: tuple[str, ...]
     unavailable: tuple[str, ...]
+    internal_boundary_contradiction_count: int
+    other_contradiction_count: int
     covered_content_px: int
     uncovered_content_px: int
     supported_proof_paths: tuple[str, ...]
     physical_residuals: SequenceResiduals | None
+
+    def __post_init__(self) -> None:
+        if min(
+            self.internal_boundary_contradiction_count,
+            self.other_contradiction_count,
+            self.covered_content_px,
+            self.uncovered_content_px,
+        ) < 0:
+            raise ValueError("evidence quality counts cannot be negative")
+        if (
+            self.internal_boundary_contradiction_count
+            + self.other_contradiction_count
+            != len(self.contradicted)
+        ):
+            raise ValueError(
+                "typed contradiction counts must match diagnostic contradictions"
+            )
 
 
 @dataclass(frozen=True)
@@ -555,6 +574,8 @@ class AssessedCandidate:
                 supported=(),
                 contradicted=(),
                 unavailable=(evidence_model.quality_unavailable_code,),
+                internal_boundary_contradiction_count=0,
+                other_contradiction_count=0,
                 covered_content_px=0,
                 uncovered_content_px=0,
                 supported_proof_paths=(),
@@ -568,6 +589,7 @@ class AssessedCandidate:
         named_states: list[tuple[str, EvidenceState]] = []
         content_total = 0
         uncovered = 0
+        internal_boundary_contradictions = 0
         for lane_index, evidence in enumerate(evidence_sets, start=1):
             prefix = (
                 f"lane_{lane_index}:"
@@ -610,24 +632,35 @@ class AssessedCandidate:
                 max(0, int(end) - int(start))
                 for start, end in evidence.photo_aperture_coverage.uncovered_content
             )
+            internal_boundary_contradictions += int(
+                evidence.inter_photo_boundary_preservation.state
+                == EvidenceState.CONTRADICTED
+            )
         gate = self.assessment.gate
         if gate is None:
             raise ValueError("physical evidence quality requires CandidateGate")
+        contradicted = tuple(
+            code
+            for code, state in named_states
+            if state == EvidenceState.CONTRADICTED
+        )
         return EvidenceQuality(
             supported=tuple(
                 code
                 for code, state in named_states
                 if state == EvidenceState.SUPPORTED
             ),
-            contradicted=tuple(
-                code
-                for code, state in named_states
-                if state == EvidenceState.CONTRADICTED
-            ),
+            contradicted=contradicted,
             unavailable=tuple(
                 code
                 for code, state in named_states
                 if state == EvidenceState.UNAVAILABLE
+            ),
+            internal_boundary_contradiction_count=(
+                internal_boundary_contradictions
+            ),
+            other_contradiction_count=(
+                len(contradicted) - internal_boundary_contradictions
             ),
             covered_content_px=max(0, content_total - uncovered),
             uncovered_content_px=uncovered,

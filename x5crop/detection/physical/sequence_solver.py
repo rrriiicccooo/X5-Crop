@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from math import isfinite
 
 from ...domain import (
     BoundaryAxis,
@@ -151,6 +152,42 @@ class _BandSequenceHypothesis:
 
 
 @dataclass(frozen=True)
+class _SequenceBuildObjectives:
+    uncorroborated_overlap_extent_px: float
+    supported_separator_count: int
+    internal_boundary_measurement_quality: float
+    dimension_residual: float
+    external_boundary_measurement_quality: float
+    boundary_uncertainty_ratio: float
+    visible_aperture_coverage_px: float
+
+    def __post_init__(self) -> None:
+        measurements = (
+            self.uncorroborated_overlap_extent_px,
+            self.internal_boundary_measurement_quality,
+            self.dimension_residual,
+            self.external_boundary_measurement_quality,
+            self.boundary_uncertainty_ratio,
+            self.visible_aperture_coverage_px,
+        )
+        if any(not isfinite(value) or value < 0.0 for value in measurements):
+            raise ValueError("sequence build objectives must be finite and non-negative")
+        if self.supported_separator_count < 0:
+            raise ValueError("supported separator count cannot be negative")
+
+    def ranking_key(self) -> tuple[float, int, float, float, float, float, float]:
+        return (
+            -self.uncorroborated_overlap_extent_px,
+            self.supported_separator_count,
+            self.internal_boundary_measurement_quality,
+            -self.dimension_residual,
+            self.external_boundary_measurement_quality,
+            -self.boundary_uncertainty_ratio,
+            self.visible_aperture_coverage_px,
+        )
+
+
+@dataclass(frozen=True)
 class _SequenceBuild:
     apertures: tuple[PhotoAperture, ...]
     edge_assignments: tuple[PhotoApertureEdgeAssignment, ...]
@@ -159,7 +196,7 @@ class _SequenceBuild:
     photo_width_px: PixelInterval
     cross_axis: PhotoApertureCrossAxisHypothesis
     residuals: SequenceResiduals
-    physical_objectives: tuple[float, int, float, float, float, float, float]
+    objectives: _SequenceBuildObjectives
 
 
 @dataclass(frozen=True)
@@ -1086,9 +1123,14 @@ def _measured_sequence_build(
         boundary_uncertainty=uncertainty_px
         / max(MINIMUM_POSITIVE_PIXEL_EXTENT, float(holder_extent)),
     )
-    measurement_quality = sum(
-        item.leading.measurement_quality + item.trailing.measurement_quality
-        for item in constraints
+    internal_boundary_quality = sum(
+        left.trailing.measurement_quality + right.leading.measurement_quality
+        for left, right in zip(constraints, constraints[1:])
+    )
+    external_boundary_quality = (
+        constraints[0].leading.measurement_quality
+        + constraints[-1].trailing.measurement_quality
+        + cross_axis.measurement_quality
     )
     visible_coverage = sum(item.width_px.midpoint for item in constraints)
     return _SequenceBuild(
@@ -1099,14 +1141,14 @@ def _measured_sequence_build(
         photo_width_px=photo_width,
         cross_axis=cross_axis,
         residuals=residuals,
-        physical_objectives=(
-            -_uncorroborated_overlap_extent(spacings),
-            0,
-            measurement_quality,
-            -dimension_residual,
-            measurement_quality + cross_axis.measurement_quality,
-            -residuals.boundary_uncertainty,
-            visible_coverage,
+        objectives=_SequenceBuildObjectives(
+            uncorroborated_overlap_extent_px=_uncorroborated_overlap_extent(spacings),
+            supported_separator_count=0,
+            internal_boundary_measurement_quality=internal_boundary_quality,
+            dimension_residual=dimension_residual,
+            external_boundary_measurement_quality=external_boundary_quality,
+            boundary_uncertainty_ratio=residuals.boundary_uncertainty,
+            visible_aperture_coverage_px=visible_coverage,
         ),
     )
 
@@ -1510,14 +1552,22 @@ def _build_sequence(
         photo_width_px=photo_width,
         cross_axis=cross_axis,
         residuals=residuals,
-        physical_objectives=(
-            -_uncorroborated_overlap_extent(tuple(spacings)),
-            band_hypothesis.supported_band_count,
-            band_hypothesis.measurement_quality,
-            -float(max(band_hypothesis.width_residual, cross_axis_residual)),
-            endpoint_quality + cross_axis.measurement_quality,
-            -float(residuals.boundary_uncertainty),
-            float(visible_coverage),
+        objectives=_SequenceBuildObjectives(
+            uncorroborated_overlap_extent_px=_uncorroborated_overlap_extent(
+                tuple(spacings)
+            ),
+            supported_separator_count=band_hypothesis.supported_band_count,
+            internal_boundary_measurement_quality=(
+                band_hypothesis.measurement_quality
+            ),
+            dimension_residual=float(
+                max(band_hypothesis.width_residual, cross_axis_residual)
+            ),
+            external_boundary_measurement_quality=(
+                endpoint_quality + cross_axis.measurement_quality
+            ),
+            boundary_uncertainty_ratio=float(residuals.boundary_uncertainty),
+            visible_aperture_coverage_px=float(visible_coverage),
         ),
     )
 
@@ -1637,13 +1687,21 @@ def _build_dominates(left: _SequenceBuild, right: _SequenceBuild) -> bool:
     comparisons = tuple(
         left_value - right_value
         for left_value, right_value in zip(
-            left.physical_objectives,
-            right.physical_objectives,
+            left.objectives.ranking_key(),
+            right.objectives.ranking_key(),
             strict=True,
         )
     )
-    return all(value >= 0.0 for value in comparisons) and any(
-        value > 0.0 for value in comparisons
+    if not (
+        all(value >= 0.0 for value in comparisons)
+        and any(value > 0.0 for value in comparisons)
+    ):
+        return False
+    geometry_conflicts = bool(_conflicting_photo_indexes((left, right)))
+    return bool(
+        not geometry_conflicts
+        or left.objectives.uncorroborated_overlap_extent_px
+        < right.objectives.uncorroborated_overlap_extent_px
     )
 
 
@@ -1788,11 +1846,13 @@ def solve_photo_sequence(
         )
 
     non_dominated = _non_dominated_builds(builds)
-    best_objectives = max(build.physical_objectives for build in non_dominated)
+    best_objectives = max(
+        build.objectives.ranking_key() for build in non_dominated
+    )
     best = tuple(
         build
         for build in non_dominated
-        if build.physical_objectives == best_objectives
+        if build.objectives.ranking_key() == best_objectives
     )
     if len(best) > maximum_solution_alternatives:
         best = best[:maximum_solution_alternatives]

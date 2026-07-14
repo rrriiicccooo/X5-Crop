@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import replace
-from inspect import signature
+from dataclasses import fields, replace
+from inspect import getsource, signature
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
@@ -42,21 +42,31 @@ class AutoCountContractTest(unittest.TestCase):
             *,
             covered: int = 100,
             contradicted: tuple[str, ...] = (),
+            internal_boundary_contradiction_count: int = 0,
+            supported_proof_paths: tuple[str, ...] = (),
+            automatic_processing_supported: bool = False,
         ) -> SimpleNamespace:
             return SimpleNamespace(
                 evidence_quality=EvidenceQuality(
                     supported=(),
                     contradicted=contradicted,
                     unavailable=(),
+                    internal_boundary_contradiction_count=(
+                        internal_boundary_contradiction_count
+                    ),
+                    other_contradiction_count=(
+                        len(contradicted)
+                        - internal_boundary_contradiction_count
+                    ),
                     covered_content_px=covered,
                     uncovered_content_px=0,
-                    supported_proof_paths=(),
+                    supported_proof_paths=supported_proof_paths,
                     physical_residuals=None,
                 ),
                 geometry=SimpleNamespace(
                     count=count,
                     strip_mode="partial",
-                    automatic_processing_supported=False,
+                    automatic_processing_supported=automatic_processing_supported,
                 ),
                 count_hypothesis=CountHypothesis(
                     count,
@@ -69,6 +79,7 @@ class AutoCountContractTest(unittest.TestCase):
         larger_with_internal_cut = candidate(
             5,
             contradicted=("inter_photo_boundary_preservation",),
+            internal_boundary_contradiction_count=1,
         )
         larger_with_less_coverage = candidate(5, covered=99)
 
@@ -84,6 +95,59 @@ class AutoCountContractTest(unittest.TestCase):
             candidate_rank(candidate(5)),
             candidate_rank(smaller_safe),
         )
+
+    def test_independent_physical_proof_precedes_partial_auto_count(self) -> None:
+        def candidate(
+            count: int,
+            *,
+            proof: tuple[str, ...],
+            automatic_processing_supported: bool,
+        ) -> SimpleNamespace:
+            return SimpleNamespace(
+                evidence_quality=EvidenceQuality(
+                    supported=(),
+                    contradicted=(),
+                    unavailable=(),
+                    internal_boundary_contradiction_count=0,
+                    other_contradiction_count=0,
+                    covered_content_px=100,
+                    uncovered_content_px=0,
+                    supported_proof_paths=proof,
+                    physical_residuals=None,
+                ),
+                geometry=SimpleNamespace(
+                    count=count,
+                    strip_mode="partial",
+                    automatic_processing_supported=automatic_processing_supported,
+                ),
+                count_hypothesis=CountHypothesis(
+                    count,
+                    "partial",
+                    CountHypothesisSource.AUTOMATIC,
+                ),
+            )
+
+        independently_proven = candidate(
+            2,
+            proof=("separator_sequence_led",),
+            automatic_processing_supported=True,
+        )
+        larger_unproven = candidate(
+            5,
+            proof=(),
+            automatic_processing_supported=False,
+        )
+
+        self.assertGreater(
+            candidate_rank(independently_proven),
+            candidate_rank(larger_unproven),
+        )
+
+    def test_selection_uses_typed_contradiction_counts(self) -> None:
+        quality_fields = {field.name for field in fields(EvidenceQuality)}
+        self.assertIn("internal_boundary_contradiction_count", quality_fields)
+        self.assertIn("other_contradiction_count", quality_fields)
+        self.assertNotIn("rsplit", getsource(candidate_rank))
 
     def _plan(self, format_id: str, requested_count: int | None = None):
         return count_hypothesis_plan(

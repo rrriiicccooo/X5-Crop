@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import fields, replace
 import unittest
 
 from tools.tests.photo_aperture_solver_support import (
@@ -17,6 +17,7 @@ from x5crop.detection.physical.sequence_solver import (
     photo_aperture_cross_axis_plan,
     solve_photo_sequence,
 )
+from x5crop.detection.physical import sequence_solver
 from x5crop.detection.physical.model import (
     AssignmentConsensusOutcome,
     PhotoSequenceSolution,
@@ -40,6 +41,27 @@ from x5crop.domain import (
 
 
 class PhotoApertureSolverContractTest(unittest.TestCase):
+    def test_solver_build_objectives_have_one_named_physical_semantics(self) -> None:
+        objective_type = getattr(sequence_solver, "_SequenceBuildObjectives", None)
+        self.assertIsNotNone(objective_type)
+        assert objective_type is not None
+        self.assertEqual(
+            tuple(field.name for field in fields(objective_type)),
+            (
+                "uncorroborated_overlap_extent_px",
+                "supported_separator_count",
+                "internal_boundary_measurement_quality",
+                "dimension_residual",
+                "external_boundary_measurement_quality",
+                "boundary_uncertainty_ratio",
+                "visible_aperture_coverage_px",
+            ),
+        )
+        self.assertNotIn(
+            "physical_objectives",
+            sequence_solver._SequenceBuild.__dataclass_fields__,
+        )
+
     def test_exact_measured_option_capacity_is_not_search_exhaustion(self) -> None:
         scope = _scope(
             width=100,

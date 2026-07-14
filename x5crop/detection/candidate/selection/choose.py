@@ -21,13 +21,6 @@ def candidate_rank(
     candidate: AssessedCandidate,
 ) -> tuple[int, int, int, int, int, int, int, float, float]:
     quality = candidate.evidence_quality
-    internal_boundary_contradictions = sum(
-        code.rsplit(":", 1)[-1] == "inter_photo_boundary_preservation"
-        for code in quality.contradicted
-    )
-    other_contradictions = (
-        len(quality.contradicted) - internal_boundary_contradictions
-    )
     residuals = quality.physical_residuals
     partial_auto_count = (
         candidate.geometry.count
@@ -48,11 +41,11 @@ def candidate_rank(
     return (
         int(quality.covered_content_px),
         -int(quality.uncovered_content_px),
-        -int(internal_boundary_contradictions),
-        -int(other_contradictions),
-        int(partial_auto_count),
+        -int(quality.internal_boundary_contradiction_count),
+        -int(quality.other_contradiction_count),
         len(quality.supported_proof_paths),
         1 if candidate.geometry.automatic_processing_supported else 0,
+        int(partial_auto_count),
         -float(dimension_residual),
         -float(boundary_residual),
     )
