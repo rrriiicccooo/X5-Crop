@@ -283,6 +283,56 @@ class PhotoApertureCrossAxisContractTest(unittest.TestCase):
         self.assertEqual(len(plan.hypotheses), 1)
         self.assertFalse(plan.search_budget_exhausted)
 
+    def test_broad_holder_uncertainty_cannot_hide_distinct_aperture_paths(self) -> None:
+        search_scope = _scope(
+            width=320,
+            height=120,
+            leading=0.0,
+            trailing=320.0,
+            top=10.0,
+            bottom=110.0,
+            holder_sides=(BoundarySide.TOP,),
+        )
+        holder_boundary = search_scope.holder_boundaries[0]
+        broad_holder_path = replace(
+            holder_boundary.path,
+            samples=(
+                domain.BoundaryPathSample(
+                    holder_boundary.path.orthogonal_extent,
+                    PixelInterval(10.0, 20.0),
+                ),
+            ),
+        )
+        search_scope = replace(
+            search_scope,
+            raw_boundary_paths=tuple(
+                broad_holder_path if item is holder_boundary.path else item
+                for item in search_scope.raw_boundary_paths
+            )
+            + (
+                _path(BoundaryAxis.SHORT, 10.0, "narrow_top_path"),
+                _path(BoundaryAxis.SHORT, 20.0, "distinct_top_path"),
+            ),
+            holder_boundaries=(
+                domain.HolderBoundaryObservation(
+                    BoundarySide.TOP,
+                    broad_holder_path.position,
+                    broad_holder_path,
+                ),
+            ),
+        )
+
+        plan = photo_aperture_cross_axis_plan(
+            search_scope,
+            _dimensions(1.0, 1.0),
+            1,
+            maximum_hypotheses=8,
+        )
+        heights = {item.height_px for item in plan.hypotheses}
+
+        self.assertIn(PixelInterval.exact(90.0), heights)
+        self.assertIn(PixelInterval.exact(100.0), heights)
+
 
 if __name__ == "__main__":
     unittest.main()

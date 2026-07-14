@@ -160,6 +160,9 @@ observation，但不能成为 hard separator。Dimension-only edge 只是一条 
 - cross-axis hypothesis 的搜索顺序不奖励更高的 aperture。可信 calibration 存在时使用照片短轴
   尺寸残差；否则只使用 count/aspect 可行性、测量质量、uncertainty 与稳定坐标顺序。被预算截断
   的 alternatives 仍使 geometry unavailable；
+- raw boundary paths 只有在共享轨迹上的位置 uncertainty 完全相同时才是 geometry-equivalent。
+  区间相交只表示 alternatives 可能一致，必须留给全局 consensus；一条宽 path 不能删除两条互斥
+  的窄 aperture observations；
 - content coverage 必须与逐张 aperture 一致；spacing 与相邻 aperture edge 的
   守恒关系由 `PhotoSequenceSolution` 构造不变量保证，不再包装成独立 evidence 或 Gate；
 - supporting measurement 可以被 geometry 消费；只有 measurement 反向依赖 `FRAME_GEOMETRY`

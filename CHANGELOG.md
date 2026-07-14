@@ -24,6 +24,10 @@ repository rules in `AGENTS.md`.
 - Cross-axis planning 删除“更高 aperture 优先”的旧测试与排序。可信 scan calibration 现在以短轴
   尺寸残差约束探索顺序；normalized 路径只按 count/aspect 可行性、measurement quality、uncertainty
   与稳定坐标排序，片基或片夹余量不再因扩大照片高度而获得物理优势。
+- Solver-side boundary path 去重由“位置区间相交”收紧为共享轨迹上的 interval 完全相同。宽 holder
+  uncertainty 不再吞掉两条互斥的窄 outer observations；相交但不同的 measurements 保留到 global
+  consensus。该修复使 `half/full X5_00050` 暴露原有搜索热点并诚实耗尽预算，后续只可通过可行性
+  剪枝优化，不能恢复删除物理 alternatives 的旧捷径。
 - Internal-boundary content evidence 现在保留逐照片 leading/trailing edge 的短轴空间轨迹。只有同一
   短轴轨迹在相邻照片两侧重合，且 count-independent content run 同时贯穿长轴 boundary interval，
   才能反证未解释切线或佐证 measured-edge overlap；上下错位的独立纹理不再触发自动 overlap bleed。

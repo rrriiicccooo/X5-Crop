@@ -276,7 +276,7 @@ def _paths_geometrically_equivalent(
     return all(
         left_position is not None
         and right_position is not None
-        and left_position.intersects(right_position)
+        and left_position == right_position
         for coordinate in coordinates
         for left_position, right_position in (
             (
