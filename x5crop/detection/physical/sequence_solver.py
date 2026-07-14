@@ -158,7 +158,7 @@ class _SequenceBuild:
     photo_width_px: PixelInterval
     cross_axis: PhotoApertureCrossAxisHypothesis
     residuals: SequenceResiduals
-    rank: tuple[float, int, float, float, float, float, float]
+    physical_objectives: tuple[float, int, float, float, float, float, float]
 
 
 @dataclass(frozen=True)
@@ -1092,7 +1092,7 @@ def _measured_sequence_build(
         photo_width_px=photo_width,
         cross_axis=cross_axis,
         residuals=residuals,
-        rank=(
+        physical_objectives=(
             -_uncorroborated_overlap_extent(spacings),
             0,
             measurement_quality,
@@ -1502,7 +1502,7 @@ def _build_sequence(
         photo_width_px=photo_width,
         cross_axis=cross_axis,
         residuals=residuals,
-        rank=(
+        physical_objectives=(
             -_uncorroborated_overlap_extent(tuple(spacings)),
             band_hypothesis.supported_band_count,
             band_hypothesis.measurement_quality,
@@ -1621,6 +1621,33 @@ def _conflicting_photo_indexes(
                 )
             )
             for other in builds[1:]
+        )
+    )
+
+
+def _build_dominates(left: _SequenceBuild, right: _SequenceBuild) -> bool:
+    comparisons = tuple(
+        left_value - right_value
+        for left_value, right_value in zip(
+            left.physical_objectives,
+            right.physical_objectives,
+            strict=True,
+        )
+    )
+    return all(value >= 0.0 for value in comparisons) and any(
+        value > 0.0 for value in comparisons
+    )
+
+
+def _non_dominated_builds(
+    builds: tuple[_SequenceBuild, ...],
+) -> tuple[_SequenceBuild, ...]:
+    return tuple(
+        build
+        for build in builds
+        if not any(
+            other is not build and _build_dominates(other, build)
+            for other in builds
         )
     )
 
@@ -1752,8 +1779,13 @@ def solve_photo_sequence(
             budget_exhausted,
         )
 
-    best_rank = max(build.rank for build in builds)
-    best = tuple(build for build in builds if build.rank == best_rank)
+    non_dominated = _non_dominated_builds(builds)
+    best_objectives = max(build.physical_objectives for build in non_dominated)
+    best = tuple(
+        build
+        for build in non_dominated
+        if build.physical_objectives == best_objectives
+    )
     if len(best) > maximum_solution_alternatives:
         best = best[:maximum_solution_alternatives]
         budget_exhausted = True
@@ -1779,7 +1811,7 @@ def solve_photo_sequence(
         photo_height_constraint_px=representative.cross_axis.height_px,
         residuals=representative.residuals,
         assignment_consensus=_assignment_consensus(
-            builds,
+            non_dominated,
             budget_exhausted=budget_exhausted,
         ),
         assignment_evaluations=total_evaluations,

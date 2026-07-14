@@ -13,6 +13,7 @@ from x5crop.detection.physical.sequence_solver import (
     PhotoSequenceSolveResult,
     solve_photo_sequence,
 )
+from x5crop.detection.physical.model import AssignmentConsensusOutcome
 from x5crop.domain import (
     BoundaryAxis,
     InterPhotoSpacingBasis,
@@ -151,6 +152,35 @@ class PhotoApertureMeasuredSequenceContractTest(unittest.TestCase):
         self.assertIsInstance(solved, PhotoSequenceSolveResult)
         assert isinstance(solved, PhotoSequenceSolveResult)
         self.assertNotEqual(solved.inter_photo_spacings[0].kind, "overlap")
+
+    def test_dominated_geometry_does_not_create_assignment_disagreement(self) -> None:
+        scope = _scope(
+            width=230,
+            height=120,
+            leading=10.0,
+            trailing=220.0,
+            top=10.0,
+            bottom=110.0,
+            internal_paths=(20.0, 30.0, 120.0, 130.0),
+        )
+
+        solved = solve_photo_sequence(
+            (),
+            scope,
+            _plan(scope),
+            2,
+            _dimensions(100.0, 100.0),
+            maximum_assignment_evaluations=10_000,
+            maximum_solution_alternatives=8,
+        )
+
+        self.assertIsInstance(solved, PhotoSequenceSolveResult)
+        assert isinstance(solved, PhotoSequenceSolveResult)
+        self.assertEqual(
+            solved.assignment_consensus.outcome,
+            AssignmentConsensusOutcome.UNCONTESTED,
+        )
+        self.assertEqual(solved.assignment_consensus.solution_count, 1)
 
     def test_measured_path_search_keeps_a_provisional_solution_before_truncation(self) -> None:
         scope = _scope(
