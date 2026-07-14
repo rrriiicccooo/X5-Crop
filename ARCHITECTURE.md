@@ -214,6 +214,8 @@ Content evidence 只由局部 gradient、texture 与 contrast 共识生成，不
 它只提供遗漏内容反证与 preservation measurement，不能定义精确 aperture edge、制造 frame
 count，或无条件扩张物理几何。同一份 count-independent content observation 由 measurement cache
 保存一次，并同时供 solver 反证与最终 aperture coverage evidence 使用，避免两套覆盖事实漂移。
+Content activation threshold 绑定完整 `HolderSpan`；候选只能在该固定测量面上查询逐照片边缘，
+不能用自己的 aperture union 重新定义证据尺度。
 External crossing 测量排除相邻 aperture boundary 的 uncertainty
 区域和 evidence kernel footprint，避免垂直边角或卷积邻域伪造跨界内容。单个 content/noise pixel
 不得改写 aperture；独立 measured edge 与 content measurement 冲突时保留 conflict，不静默删除

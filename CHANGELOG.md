@@ -45,6 +45,9 @@ repository rules in `AGENTS.md`.
 - Separator-led search 删除 `count=1` 的空 hypothesis、optional photo width 与 empty-support build
   分支。该路径现在只表达至少一个真实内部边界的多照片 sequence；单张照片由独立 aperture
   boundary 路径求解，不再借用一个没有 separator 的 separator 模型。
+- Internal-boundary content activation 现在以完整 `HolderSpan` 作为唯一 count-independent measurement
+  region。候选 aperture 只查询同一固定 activation surface，不再用自己的 aperture union 重新计算
+  threshold 后反向验证自身。
 
 #### Photo Aperture 联合求解与 Debug 可见性（2026-07-13）
 

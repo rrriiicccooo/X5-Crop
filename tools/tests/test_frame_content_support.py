@@ -325,6 +325,25 @@ class FrameContentSupportTest(unittest.TestCase):
             ),
         )
 
+    def test_photo_content_threshold_uses_count_independent_holder_region(self) -> None:
+        holder = Box(0, 0, 400, 100)
+        geometry = replace(
+            candidate_fixture().geometry,
+            holder_span=HolderSpan(holder),
+        )
+        cache = _cache(np.full((holder.height, holder.width), 255, dtype=np.uint8))
+
+        photo_content_evidence(
+            geometry,
+            cache,
+            get_detection_configuration("135", "full").content,
+        )
+
+        self.assertEqual(
+            {key.region for key in cache.content_evidence_thresholds},
+            {holder},
+        )
+
     def test_internal_crossing_requires_one_spatial_track_across_the_boundary(self) -> None:
         content = _content_at_internal_boundary(
             ((0, 20),),

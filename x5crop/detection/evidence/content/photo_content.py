@@ -173,30 +173,30 @@ def photo_content_evidence(
 ) -> PhotoContentEvidence:
     if cache.layout != geometry.layout:
         raise ValueError("content evidence requires matching analysis cache")
-    aperture_union_box = geometry.photo_sequence_envelope.clamp(
+    measurement_region = geometry.holder_span.box.clamp(
         cache.gray_work.shape[1],
         cache.gray_work.shape[0],
     )
-    if not aperture_union_box.valid():
+    if not measurement_region.valid():
         return PhotoContentEvidence(
             None,
             (),
-            "invalid_photo_aperture_union",
+            "invalid_holder_measurement_region",
         )
     evidence = cache.content_evidence_float_work[
-        aperture_union_box.top : aperture_union_box.bottom,
-        aperture_union_box.left : aperture_union_box.right,
+        measurement_region.top : measurement_region.bottom,
+        measurement_region.left : measurement_region.right,
     ]
     if not evidence.size:
         return PhotoContentEvidence(
             None,
             (),
-            "empty_photo_aperture_union",
+            "empty_holder_measurement_region",
         )
     parameters = configuration.evidence
     threshold = cached_content_evidence_threshold(
         cache,
-        aperture_union_box,
+        measurement_region,
         parameters,
     )
     if threshold is None:
@@ -207,7 +207,7 @@ def photo_content_evidence(
         )
     statistics_key = ThresholdedMeasurementRegionKey(
         parameters,
-        aperture_union_box,
+        measurement_region,
         float(threshold),
     )
     found = statistics_key in cache.content_column_statistics
@@ -226,10 +226,16 @@ def photo_content_evidence(
             cache.gray_work.shape[0],
         )
         relative = Box(
-            max(0, absolute.left - aperture_union_box.left),
-            max(0, absolute.top - aperture_union_box.top),
-            min(aperture_union_box.width, absolute.right - aperture_union_box.left),
-            min(aperture_union_box.height, absolute.bottom - aperture_union_box.top),
+            max(0, absolute.left - measurement_region.left),
+            max(0, absolute.top - measurement_region.top),
+            min(
+                measurement_region.width,
+                absolute.right - measurement_region.left,
+            ),
+            min(
+                measurement_region.height,
+                absolute.bottom - measurement_region.top,
+            ),
         )
         if not relative.valid():
             continue
@@ -239,7 +245,7 @@ def photo_content_evidence(
         ]
         if not crop.size:
             continue
-        if relative.top == 0 and relative.bottom == aperture_union_box.height:
+        if relative.top == 0 and relative.bottom == measurement_region.height:
             mean, coverage = statistics.interval(relative.left, relative.right)
         else:
             mean = float(crop.mean())

@@ -347,7 +347,7 @@ Current verification state:
   are implemented. Debug distinguishes ideal apertures, output envelopes, raw
   observations, measured edges, provisional edges, holder boundaries, and
   corroborated overlap through one diagnostics-owned legend.
-- The current suite contains 504 tests and 14 valid format/mode configurations.
+- The current suite contains 508 tests and 14 valid format/mode configurations.
   Physical search now distinguishes a complete contradiction from unavailable
   measurements and execution-budget exhaustion; search state no longer lives in
   candidate geometry. On `135/full 005.tif`, current verification completed in
@@ -364,13 +364,11 @@ Current verification state:
   observations. It evaluates 36,254 assignments, retains 340 non-dominated
   alternatives, and still honestly reports search-budget exhaustion and
   unresolved geometry.
-- Audit A restarted after making build dominance transitive, preventing broad
-  uncertainty from erasing disjoint geometry, and removing repeated exact path
-  fitting. It has since removed duplicate CandidateGate/proof projections from
-  physical evidence ranking. Any further finding must still receive a failing
-  permanent contract before repair; an independent fresh-context Audit B follows
-  only after Audit A reaches zero. The typed physical-search repair resets the
-  Audit A zero-violation count again.
+- Audit A restarted after binding all content activation thresholds to the
+  count-independent `HolderSpan` measurement region. Candidate apertures now only
+  query that fixed surface and cannot define their own evidence scale. Any further
+  finding must still receive a failing permanent contract before repair; an
+  independent fresh-context Audit B follows only after Audit A reaches zero.
 - Current PASS/REVIEW outcomes and adaptive measurement values remain calibration
   material for the separate real-sample project; do not loosen Gate rules to
   manufacture PASS from the current unresolved results.
