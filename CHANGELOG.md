@@ -14,6 +14,21 @@ repository rules in `AGENTS.md`.
 
 ### V4.9 当前开发线
 
+#### PhotoAperture 架构封口候选（2026-07-14）
+
+- 在 source commit `5500c1ff` 上按冻结的六轴清单完成 Audit A 与独立逆序 Audit B；两轮均为零违规。
+  当前状态只标记为 `architecture closure candidate`，仍需新的 Codex 任务完整重跑同一双轮审核后才能
+  正式封口。
+- 当前机器契约覆盖 148 个 active modules、509 项测试和 14 组 format/mode configuration；完整
+  unittest、compile、configuration consistency、launcher syntax、diff hygiene 与版本检查通过。
+- `Test/test 3` 已从当前源码重建：113/113 输入均完成并生成 terminal manifest、current-schema report
+  与三联 Debug Analysis；运行异常、schema validation failure、错误 provisional TIFF export 均为 0。
+  10 个手工 PhotoAperture reference 全部保持 unresolved，错误 resolved aperture 为 0。
+- 已实测 current-schema cache reuse、unresolved `--export-review` 抑制和真实双 worker ProcessPool。
+  全量 Test 3 在受限环境中使用 thread fallback；这只影响 wall time，不改变 runtime ownership。
+- 当前 113 张均保持 geometry unresolved。该结果明确进入独立真实样片 calibration 与性能项目，不能
+  通过放宽 CandidateGate、DecisionGate 或伪造 GeometryResolution 来提高 PASS 数量。
+
 #### PhotoAperture holder-domain 不变量（2026-07-14）
 
 - Raw boundary path 可以保留超出 canvas 的拟合不确定度；一旦被 solver 分配为照片边界，其位置区间

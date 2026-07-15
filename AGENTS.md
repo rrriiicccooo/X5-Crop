@@ -347,28 +347,26 @@ Current verification state:
   are implemented. Debug distinguishes ideal apertures, output envelopes, raw
   observations, measured edges, provisional edges, holder boundaries, and
   corroborated overlap through one diagnostics-owned legend.
-- The current suite contains 505 tests and 14 valid format/mode configurations.
-  Physical search now distinguishes a complete contradiction from unavailable
-  measurements and execution-budget exhaustion; search state no longer lives in
-  candidate geometry. On `135/full 005.tif`, current verification completed in
-  about 4.74 seconds with 2,300 assignment evaluations and honestly reported
-  search-budget exhaustion. Geometry remains unresolved because admissible
-  aperture placements and content preservation disagree; this is audit/calibration
-  material, not permission to loosen a Gate.
+- The current suite contains 509 tests, 148 active modules, and 14 valid
+  format/mode configurations. Audit A and an independent reverse-order Audit B
+  both found zero violations under the frozen six-axis contract at source
+  commit `5500c1ff`. This state is an `architecture closure candidate`, not
+  `architecture closed`.
 - The previous 113-TIFF run in `Test/test 2` remains an immutable visual baseline.
-  A new full run must be written to `Test/test 3` after performance profiling and
-  representative-sample calibration.
-- `half/full X5_00050` remains the fixed performance sample. A profiled Pareto
-  frontier, canonical long-axis paths, and solve-local exact boundary-path fits
-  reduced runtime from about 90.38 seconds to 11.06 seconds without deleting
-  observations. It evaluates 36,254 assignments, retains 340 non-dominated
-  alternatives, and still honestly reports search-budget exhaustion and
-  unresolved geometry.
-- Audit A restarted after removing the unreachable exact scan-calibration path.
-  TIFF resolution metadata now remains outside detection; frame mm/aspect priors
-  and candidate-local photo-scale diagnostics have no calibration authority. Any
-  further finding must still receive a failing permanent contract before repair;
-  an independent fresh-context Audit B follows only after Audit A reaches zero.
+  `Test/test 3` is the current `5500c1ff` baseline: 113/113 inputs completed with
+  terminal manifests, valid current-schema reports, and three-panel Debug
+  Analysis; there were zero runtime exceptions, schema failures, or exported
+  provisional TIFFs. Ten manual aperture references remained unresolved with
+  zero incorrectly resolved geometries.
+- Fresh single-sample verification measured `135/full 005.tif` at about 5.84
+  seconds total and 3.91 seconds detection with 39,708 assignment evaluations.
+  `half/full X5_00050` took about 16.05 seconds total and 14.10 seconds detection
+  while exhausting its 100,000-evaluation budget honestly. Real two-worker
+  ProcessPool execution, current-schema cache reuse, unresolved review-export
+  suppression, and Debug read-only behavior were also verified.
 - Current PASS/REVIEW outcomes and adaptive measurement values remain calibration
   material for the separate real-sample project; do not loosen Gate rules to
   manufacture PASS from the current unresolved results.
+- A new Codex task must rerun the same Audit A/B plan from the closure-candidate
+  commit. Only a second consecutive zero-violation double audit may change the
+  handoff to `architecture closed`.
