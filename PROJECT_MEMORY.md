@@ -99,7 +99,9 @@ reports, Debug Analysis, and command output remain authoritative.
   and fixture residue, and produces zero cyclic provenances. The six frozen
   samples retain zero canonical report diffs, byte-identical Debug Analysis, and
   their prior `REVIEW` / non-exportable decisions. The full verifier now passes
-  758 tests and 14 configuration pairs.
+  759 tests and 14 configuration pairs. Current-report validation also rejects
+  one `ObservationId` carrying conflicting provenance; all six fresh reports pass
+  that identity check with no collisions.
 
 以上样片仍需当前报告和 Debug Analysis 逐张复核；肉眼正确的代表解不能覆盖仍存在的非支配、
 dimension-heavy 替代解释。

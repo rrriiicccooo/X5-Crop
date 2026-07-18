@@ -109,10 +109,14 @@ Every `MeasurementProvenance` is acyclic: its `root_measurement` cannot also
 appear in `dependencies`. A derived fact that consumes same-root inputs keeps
 their upstream dependencies instead of creating a self-authorizing provenance
 loop; runtime construction and current-report validation enforce the same rule.
+Within one current report, one `ObservationId` must also map to exactly one full
+provenance; conflicting reuse is an identity error, not an alternate description.
 
 每个 `MeasurementProvenance` 都必须无环：`root_measurement` 不得再出现在
 `dependencies` 中。派生事实消费同 root 输入时只保留其上游依赖，不得形成
 自我授权环；runtime 构造与 current-report 校验共用同一规则。
+同一份 current report 内，一个 `ObservationId` 也只能对应一套完整 provenance；
+冲突复用是 identity error，不是可接受的替代描述。
 
 ### 2.4 空白 Frame Slot
 

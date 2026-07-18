@@ -919,6 +919,40 @@ def _record_identities_valid(
     )
 
 
+_PROVENANCE_READ_MODEL_FIELDS = (
+    "root_measurement",
+    "observation_id",
+    "dependencies",
+    "description",
+    "boundary_anchors",
+)
+_PROVENANCE_READ_MODEL_FIELD_SET = frozenset(_PROVENANCE_READ_MODEL_FIELDS)
+
+
+def _observation_identity_collision(value: Any) -> bool:
+    identities: dict[str, tuple[Any, ...]] = {}
+
+    def visit(item: Any) -> bool:
+        if isinstance(item, dict):
+            if item.keys() >= _PROVENANCE_READ_MODEL_FIELD_SET:
+                observation_id = item.get("observation_id")
+                if isinstance(observation_id, str):
+                    signature = tuple(
+                        item[field]
+                        for field in _PROVENANCE_READ_MODEL_FIELDS
+                    )
+                    existing = identities.get(observation_id)
+                    if existing is not None and existing != signature:
+                        return True
+                    identities[observation_id] = signature
+            return any(visit(child) for child in item.values())
+        if isinstance(item, list):
+            return any(visit(child) for child in item)
+        return False
+
+    return visit(value)
+
+
 def current_report_record_errors(record: dict[str, Any]) -> list[str]:
     errors = [
         f"missing_section:{key}"
@@ -938,6 +972,8 @@ def current_report_record_errors(record: dict[str, Any]) -> list[str]:
         errors.append("script_version_invalid")
     if not isinstance(record["source"], str):
         errors.append("source_invalid")
+    if _observation_identity_collision(record):
+        errors.append("observation_identity_collision")
     input_detail = record["input"]
     input_valid = _input_valid(input_detail)
     if not input_valid:

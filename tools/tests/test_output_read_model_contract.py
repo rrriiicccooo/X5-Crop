@@ -630,6 +630,49 @@ class OutputReadModelContractTest(unittest.TestCase):
         )
         self.assertTrue(current_report_record_errors(record))
 
+    def test_current_schema_rejects_conflicting_observation_identity(self) -> None:
+        record = _record()
+        provenances: list[dict] = []
+
+        def collect(value) -> None:
+            if isinstance(value, dict):
+                if {
+                    "root_measurement",
+                    "observation_id",
+                    "dependencies",
+                    "description",
+                    "boundary_anchors",
+                } <= value.keys():
+                    provenances.append(value)
+                for child in value.values():
+                    collect(child)
+            elif isinstance(value, list):
+                for child in value:
+                    collect(child)
+
+        collect(record)
+        first = provenances[0]
+        conflicting = next(
+            item
+            for item in provenances[1:]
+            if item["observation_id"] != first["observation_id"]
+            and any(
+                item[field] != first[field]
+                for field in (
+                    "root_measurement",
+                    "dependencies",
+                    "description",
+                    "boundary_anchors",
+                )
+            )
+        )
+        conflicting["observation_id"] = first["observation_id"]
+
+        self.assertIn(
+            "observation_identity_collision",
+            current_report_record_errors(record),
+        )
+
     def test_candidate_gate_cannot_carry_decision_stage_authority(self) -> None:
         record = _record()
         check = record["selection"]["candidates"][0]["candidate_gate"][
