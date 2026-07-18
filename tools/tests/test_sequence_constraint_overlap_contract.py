@@ -3,10 +3,8 @@ from __future__ import annotations
 import unittest
 
 from tools.tests.frame_slot_solver_support import path
+from x5crop.detection.physical import frame_sequence_candidates as candidate_builds
 from x5crop.detection.physical import frame_sequence_solver as solver_module
-from x5crop.detection.physical.frame_sequence_solver import (
-    _SequenceBuildObjectives,
-)
 from x5crop.detection.physical.model import (
     BoundaryAnchor,
     BoundaryGeometryState,
@@ -304,7 +302,7 @@ class SequenceConstraintOverlapContractTest(unittest.TestCase):
                 third_trailing,
             ),
         )
-        objectives = _SequenceBuildObjectives(
+        objectives = candidate_builds.SequenceBuildObjectives(
             uncorroborated_overlap_extent_px=0.0,
             unexplained_spacing_extent_px=10.0,
             supported_separator_count=1,
@@ -321,7 +319,7 @@ class SequenceConstraintOverlapContractTest(unittest.TestCase):
         pattern.slots = pattern_slots
         pattern.objectives = objectives
 
-        preferred = solver_module._physically_preferred_builds(
+        preferred = candidate_builds.physically_preferred_builds(
             (subset, pattern)
         )
 

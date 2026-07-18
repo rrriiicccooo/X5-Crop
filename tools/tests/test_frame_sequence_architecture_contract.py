@@ -33,6 +33,16 @@ _CANONICAL_OWNERS = {
         "measured_frame_option_rank",
         "measured_frame_sequences",
     },
+    "frame_sequence_candidates.py": {
+        "SequenceBuildObjectives",
+        "SeparatorBandBinding",
+        "SequenceBuild",
+        "conflicting_internal_frame_indexes",
+        "external_endpoint_alternatives",
+        "physically_preferred_builds",
+        "representative_build",
+        "build_preserves_visible_content",
+    },
 }
 
 
@@ -87,6 +97,7 @@ class FrameSequenceArchitectureContractTest(unittest.TestCase):
                 {
                     "frame_sequence_common_width",
                     "frame_sequence_search",
+                    "frame_sequence_candidates",
                     "frame_sequence_solver",
                 }
             )
@@ -97,6 +108,10 @@ class FrameSequenceArchitectureContractTest(unittest.TestCase):
         )
         self.assertNotIn(
             "frame_sequence_search",
+            _relative_import_modules(common_width),
+        )
+        self.assertNotIn(
+            "frame_sequence_candidates",
             _relative_import_modules(common_width),
         )
         self.assertNotIn(
@@ -115,6 +130,14 @@ class FrameSequenceArchitectureContractTest(unittest.TestCase):
             }.issubset(imports)
         )
         self.assertNotIn("frame_sequence_solver", imports)
+
+    def test_candidate_owner_does_not_depend_on_solver(self) -> None:
+        candidates = _PHYSICAL_ROOT / "frame_sequence_candidates.py"
+
+        self.assertNotIn(
+            "frame_sequence_solver",
+            _relative_import_modules(candidates),
+        )
 
     def test_search_result_owns_budget_state_not_final_decision(self) -> None:
         from x5crop.detection.physical.frame_sequence_search import (
@@ -144,6 +167,7 @@ class FrameSequenceArchitectureContractTest(unittest.TestCase):
                 "frame_sequence_measurements",
                 "frame_sequence_common_width",
                 "frame_sequence_search",
+                "frame_sequence_candidates",
             }
             for alias in node.names
         }

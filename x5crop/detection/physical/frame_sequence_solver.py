@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 import hashlib
-from math import ceil, floor, isfinite
+from math import isfinite
 
 from ...domain import (
     BoundaryAxis,
@@ -26,10 +26,10 @@ from ...domain import (
     PixelInterval,
     SeparatorBandCrossAxisSupport,
     SeparatorBandObservation,
-    SeparatorCrossAxisMeasurement,
 )
 from ...image.content import ContentRegionObservation
 from ...strip_modes import FULL, PARTIAL
+from . import frame_sequence_candidates as sequence_candidates
 from . import frame_sequence_common_width as width_resolution
 from . import frame_sequence_measurements as measurement_facts
 from . import frame_sequence_search as sequence_search
@@ -195,92 +195,6 @@ class _BandSequenceHypothesis:
             raise ValueError(
                 "separator sequence measurements must be finite and non-negative"
             )
-
-@dataclass(frozen=True)
-class _SequenceBuildObjectives:
-    uncorroborated_overlap_extent_px: float
-    unexplained_spacing_extent_px: float
-    supported_separator_count: int
-    internal_boundary_measurement_quality: float
-    dimension_residual: float
-    external_boundary_measurement_quality: float
-    boundary_uncertainty_ratio: float
-    frame_width_hint_residual: float = 0.0
-    uncorroborated_contact_count: int = 0
-    inferred_boundary_count: int = 0
-
-    def __post_init__(self) -> None:
-        measurements = (
-            self.uncorroborated_overlap_extent_px,
-            self.unexplained_spacing_extent_px,
-            self.internal_boundary_measurement_quality,
-            self.dimension_residual,
-            self.external_boundary_measurement_quality,
-            self.boundary_uncertainty_ratio,
-            self.frame_width_hint_residual,
-        )
-        if any(not isfinite(value) or value < 0.0 for value in measurements):
-            raise ValueError("sequence build objectives must be finite and non-negative")
-        if self.supported_separator_count < 0:
-            raise ValueError("supported separator count cannot be negative")
-        if self.uncorroborated_contact_count < 0:
-            raise ValueError("uncorroborated contact count cannot be negative")
-        if self.inferred_boundary_count < 0:
-            raise ValueError("inferred boundary count cannot be negative")
-
-    def dominance_axes(
-        self,
-    ) -> tuple[float, ...]:
-        return (
-            -self.uncorroborated_overlap_extent_px,
-            -self.unexplained_spacing_extent_px,
-            self.supported_separator_count,
-            -self.dimension_residual,
-            -self.boundary_uncertainty_ratio,
-            -float(self.uncorroborated_contact_count),
-        )
-
-    def dominates(self, other: "_SequenceBuildObjectives") -> bool:
-        left = self.dominance_axes()
-        right = other.dominance_axes()
-        return all(a >= b for a, b in zip(left, right, strict=True)) and any(
-            a > b for a, b in zip(left, right, strict=True)
-        )
-
-@dataclass(frozen=True)
-class _SeparatorBandBinding:
-    boundary_index: int
-    observation: SeparatorBandObservation
-    cross_axis_measurement: SeparatorCrossAxisMeasurement
-    preceding_trailing_edge: ResolvedFrameBoundary
-    following_leading_edge: ResolvedFrameBoundary
-
-    def __post_init__(self) -> None:
-        if self.boundary_index <= 0:
-            raise ValueError("separator binding boundary index must be positive")
-        if (
-            self.cross_axis_measurement.observation_id
-            != self.observation.provenance.observation_id
-            or not self.cross_axis_measurement.complete_separator_supported
-        ):
-            raise ValueError("separator binding requires its cross-axis measurement")
-        if (
-            self.preceding_trailing_edge.position != self.observation.leading_edge
-            or self.following_leading_edge.position
-            != self.observation.trailing_edge
-        ):
-            raise ValueError("separator binding must preserve both observed band edges")
-
-@dataclass(frozen=True)
-class _SequenceBuild:
-    slots: tuple[FrameSlot, ...]
-    long_axis_assignments: tuple[FrameEdgeAssignment, ...]
-    separator_bindings: tuple[_SeparatorBandBinding, ...]
-    spacings: tuple[InterFrameSpacing, ...]
-    frame_width_px: PixelInterval
-    short_axis: SharedShortAxisSafetySpan
-    residuals: SequenceResiduals
-    objectives: _SequenceBuildObjectives
 
 @dataclass(frozen=True)
 class _MeasuredFrameSearchSpace:
@@ -1906,7 +1820,7 @@ def _measured_sequence_build(
     holder: Box,
     *,
     allow_nominal_slot_sized_gap: bool,
-) -> _SequenceBuild | None:
+) -> sequence_candidates.SequenceBuild | None:
     frame_width = (
         constraints[0].width_px
         if len(constraints) == 1
@@ -1961,7 +1875,7 @@ def _measured_sequence_build(
     slots = tuple(slots)
     assignments = tuple(assignments)
     spacings: list[InterFrameSpacing] = []
-    separator_bindings: list[_SeparatorBandBinding] = []
+    separator_bindings: list[sequence_candidates.SeparatorBandBinding] = []
     for boundary_index, (left, right) in enumerate(
         zip(slots, slots[1:]),
         start=1,
@@ -2040,7 +1954,7 @@ def _measured_sequence_build(
         slots[0].leading.independently_observed
         + slots[-1].trailing.independently_observed
     )
-    return _SequenceBuild(
+    return sequence_candidates.SequenceBuild(
         slots=slots,
         long_axis_assignments=assignments,
         separator_bindings=tuple(separator_bindings),
@@ -2048,7 +1962,7 @@ def _measured_sequence_build(
         frame_width_px=frame_width,
         short_axis=short_axis,
         residuals=residuals,
-        objectives=_SequenceBuildObjectives(
+        objectives=sequence_candidates.SequenceBuildObjectives(
             uncorroborated_overlap_extent_px=_uncorroborated_overlap_extent(
                 tuple(spacings)
             ),
@@ -2093,13 +2007,13 @@ def _canonical_measured_frame_constraints(
     return tuple(by_geometry.values())
 
 def _content_preserving_complete_separator_builds(
-    builds: tuple[_SequenceBuild, ...],
+    builds: tuple[sequence_candidates.SequenceBuild, ...],
     visible_content: ContentRegionObservation,
-) -> tuple[_SequenceBuild, ...]:
+) -> tuple[sequence_candidates.SequenceBuild, ...]:
     return tuple(
         build
         for build in builds
-        if _build_preserves_visible_content(build, visible_content)
+        if sequence_candidates.build_preserves_visible_content(build, visible_content)
         and len(build.separator_bindings) == max(0, len(build.slots) - 1)
         and len(build.spacings) == max(0, len(build.slots) - 1)
         and all(
@@ -2117,7 +2031,7 @@ def _content_preserving_complete_separator_builds(
     )
 
 def _complete_separator_sequence_builds_dominate_dimension_inference(
-    builds: tuple[_SequenceBuild, ...],
+    builds: tuple[sequence_candidates.SequenceBuild, ...],
     visible_content: ContentRegionObservation,
 ) -> bool:
     return bool(
@@ -2135,7 +2049,7 @@ def _measured_builds_for_options(
     *,
     allow_nominal_slot_sized_gap: bool,
     minimum_supported_separator_count: int = 0,
-) -> tuple[tuple[_SequenceBuild, ...], int, bool]:
+) -> tuple[tuple[sequence_candidates.SequenceBuild, ...], int, bool]:
     search_result = sequence_search.measured_frame_sequences(
         options,
         count,
@@ -2166,7 +2080,7 @@ def _measured_builds_for_options(
     )
 
 def _supported_separator_incumbent(
-    builds: tuple[_SequenceBuild, ...],
+    builds: tuple[sequence_candidates.SequenceBuild, ...],
     visible_content: ContentRegionObservation,
 ) -> int:
     return max(
@@ -2174,7 +2088,7 @@ def _supported_separator_incumbent(
             build.objectives.supported_separator_count
             for build in builds
             if build.objectives.uncorroborated_overlap_extent_px == 0.0
-            and _build_preserves_visible_content(build, visible_content)
+            and sequence_candidates.build_preserves_visible_content(build, visible_content)
         ),
         default=0,
     )
@@ -2192,9 +2106,9 @@ def _measured_path_builds(
     *,
     physical_scale_constraint: FrameWidthPhysicalScaleConstraint | None,
     allow_nominal_slot_sized_gap: bool,
-) -> tuple[tuple[_SequenceBuild, ...], int, bool]:
+) -> tuple[tuple[sequence_candidates.SequenceBuild, ...], int, bool]:
     holder = search_scope.holder_safety.box
-    builds: list[_SequenceBuild] = []
+    builds: list[sequence_candidates.SequenceBuild] = []
     evaluations = 0
     search_truncated = False
     for short_axis_index, short_axis in enumerate(short_axis_spans):
@@ -2241,7 +2155,7 @@ def _measured_path_builds(
             for hypothesis in search_space.width_hypotheses
         )
 
-        observed_builds: list[_SequenceBuild] = []
+        observed_builds: list[sequence_candidates.SequenceBuild] = []
         observed_evaluations = 0
         separator_incumbent = 0
         observed_truncated = False
@@ -2317,7 +2231,7 @@ def _measured_path_builds(
                     else ()
                 ),
             )
-            hypothesis_builds: list[_SequenceBuild] = []
+            hypothesis_builds: list[sequence_candidates.SequenceBuild] = []
             states_truncated = False
             for leading_seeds, trailing_seeds in seed_passes:
                 remaining = evaluation_budget - evaluations
@@ -2404,7 +2318,7 @@ def _spacing_for_band(
     support: SeparatorBandCrossAxisSupport,
     trailing: ResolvedFrameBoundary,
     leading: ResolvedFrameBoundary,
-) -> tuple[InterFrameSpacing, _SeparatorBandBinding | None]:
+) -> tuple[InterFrameSpacing, sequence_candidates.SeparatorBandBinding | None]:
     band = support.observation
     measurement = support.measurement
     supported = bool(
@@ -2415,7 +2329,7 @@ def _spacing_for_band(
         and leading.source == FrameBoundarySource.SEPARATOR_EDGE_OBSERVATION
     )
     assignment = (
-        _SeparatorBandBinding(
+        sequence_candidates.SeparatorBandBinding(
             boundary_index,
             band,
             measurement,
@@ -2487,7 +2401,7 @@ def _build_sequence(
     holder: Box,
     holder_boundaries: dict[BoundarySide, HolderBoundaryObservation],
     physical_scale_constraint: FrameWidthPhysicalScaleConstraint | None,
-) -> _SequenceBuild | None:
+) -> sequence_candidates.SequenceBuild | None:
     band_edges = band_hypothesis.band_edges
     leading_constraints = (
         leading_endpoint,
@@ -2599,7 +2513,7 @@ def _build_sequence(
         )
 
     spacings: list[InterFrameSpacing] = []
-    separator_bindings: list[_SeparatorBandBinding] = []
+    separator_bindings: list[sequence_candidates.SeparatorBandBinding] = []
     for boundary_index, support in enumerate(band_hypothesis.supports, start=1):
         signed_width = slots[boundary_index].leading.position.minus(
             slots[boundary_index - 1].trailing.position
@@ -2651,7 +2565,7 @@ def _build_sequence(
     endpoint_quality = (
         leading_endpoint.measurement_quality + trailing_endpoint.measurement_quality
     )
-    return _SequenceBuild(
+    return sequence_candidates.SequenceBuild(
         slots=tuple(slots),
         long_axis_assignments=tuple(assignments),
         separator_bindings=tuple(separator_bindings),
@@ -2659,7 +2573,7 @@ def _build_sequence(
         frame_width_px=frame_width,
         short_axis=short_axis,
         residuals=residuals,
-        objectives=_SequenceBuildObjectives(
+        objectives=sequence_candidates.SequenceBuildObjectives(
             uncorroborated_overlap_extent_px=_uncorroborated_overlap_extent(
                 tuple(spacings)
             ),
@@ -2691,7 +2605,7 @@ def _builds_for_hypotheses(
     count: int,
     evaluation_budget: int,
     physical_scale_constraint: FrameWidthPhysicalScaleConstraint | None,
-) -> tuple[tuple[_SequenceBuild, ...], int, bool]:
+) -> tuple[tuple[sequence_candidates.SequenceBuild, ...], int, bool]:
     holder = search_scope.holder_safety.box
     holder_boundaries = _holder_boundaries(search_scope)
     separator_leading, separator_trailing = _separator_edge_candidates(
@@ -2708,7 +2622,7 @@ def _builds_for_hypotheses(
         for constraint, _ in separator_trailing
         if constraint.external_side == BoundarySide.TRAILING
     )
-    builds: list[_SequenceBuild] = []
+    builds: list[sequence_candidates.SequenceBuild] = []
     evaluations = 0
     exhausted = False
     ordered_hypotheses = tuple(
@@ -2802,223 +2716,23 @@ def _builds_for_hypotheses(
             break
     return tuple(builds), evaluations, exhausted
 
-def _boundaries_share_one_placement(
-    boundaries: tuple[ResolvedFrameBoundary, ...],
-) -> bool:
-    if PixelInterval.common_intersection(
-        tuple(boundary.position for boundary in boundaries)
-    ) is not None:
-        return True
-    return all(
-        boundary.source == FrameBoundarySource.DIMENSION_CONSTRAINED
-        and not boundary.independently_observed
-        for boundary in boundaries
-    )
-
-def _conflicting_internal_frame_indexes(
-    builds: tuple[_SequenceBuild, ...],
-) -> tuple[int, ...]:
-    reference = builds[0]
-    has_internal_geometry = len(reference.slots) > 1
-    conflicts: list[int] = []
-    for frame_index in range(1, len(reference.slots) + 1):
-        slots = tuple(build.slots[frame_index - 1] for build in builds)
-        if all(slot.sequence_inferred for slot in slots):
-            continue
-        sides = tuple(
-            side
-            for side in (BoundarySide.LEADING, BoundarySide.TRAILING)
-            if not (
-                (
-                    has_internal_geometry
-                    and
-                    frame_index == 1
-                    and side == BoundarySide.LEADING
-                    and all(not slot.sequence_inferred for slot in slots)
-                )
-                or (
-                    has_internal_geometry
-                    and
-                    frame_index == len(reference.slots)
-                    and side == BoundarySide.TRAILING
-                    and all(not slot.sequence_inferred for slot in slots)
-                )
-            )
-        )
-        if any(
-            not _boundaries_share_one_placement(
-                tuple(
-                    slot.leading
-                    if side == BoundarySide.LEADING
-                    else slot.trailing
-                    for slot in slots
-                )
-            )
-            for side in sides
-        ):
-            conflicts.append(frame_index)
-    return tuple(conflicts)
-
-def _external_endpoint_alternatives(
-    builds: tuple[_SequenceBuild, ...],
-) -> bool:
-    if (
-        len(builds) <= 1
-        or any(build.slots[0].sequence_inferred or build.slots[-1].sequence_inferred for build in builds)
-    ):
-        return False
-    return any(
-        PixelInterval.common_intersection(
-            tuple(
-                (
-                    build.slots[0].leading.position
-                    if side == BoundarySide.LEADING
-                    else build.slots[-1].trailing.position
-                )
-                for build in builds
-            )
-        )
-        is None
-        for side in (BoundarySide.LEADING, BoundarySide.TRAILING)
-    )
-
-def _sequence_inference_signature(
-    build: _SequenceBuild,
-) -> tuple[int, ...]:
-    return (
-        tuple(slot.index for slot in build.slots if slot.sequence_inferred)
-        if len(build.slots) > 1
-        else ()
-    )
-
-def _internal_boundary_role_map(
-    build: _SequenceBuild,
-) -> dict[tuple[int, BoundarySide], ResolvedFrameBoundary]:
-    roles: dict[tuple[int, BoundarySide], ResolvedFrameBoundary] = {}
-    for left, right in zip(build.slots, build.slots[1:]):
-        if boundary_role_is_independent_physical_measurement(left.trailing):
-            roles[(left.index, BoundarySide.TRAILING)] = left.trailing
-        if boundary_role_is_independent_physical_measurement(right.leading):
-            roles[(right.index, BoundarySide.LEADING)] = right.leading
-    return roles
-
-def _boundary_role_map_strictly_dominates(
-    left: _SequenceBuild,
-    right: _SequenceBuild,
-) -> bool:
-    if _sequence_inference_signature(left) != _sequence_inference_signature(right):
-        return False
-    left_roles = _internal_boundary_role_map(left)
-    right_roles = _internal_boundary_role_map(right)
-    return bool(
-        left_roles.keys() > right_roles.keys()
-        and all(
-            left_roles[key].position.intersects(boundary.position)
-            for key, boundary in right_roles.items()
-        )
-    )
-
-def _build_has_independent_boundary_support(build: _SequenceBuild) -> bool:
-    return bool(
-        build.objectives.supported_separator_count
-        or _internal_boundary_role_map(build)
-    )
-
-def _physically_preferred_builds(
-    builds: tuple[_SequenceBuild, ...],
-) -> tuple[_SequenceBuild, ...]:
-    if not builds:
-        raise ValueError("physical sequence ranking requires builds")
-    independently_supported = tuple(
-        build
-        for build in builds
-        if _build_has_independent_boundary_support(build)
-    )
-    if not independently_supported:
-        return builds
-    builds = independently_supported
-    builds = tuple(
-        build
-        for build in builds
-        if not any(
-            other is not build
-            and _boundary_role_map_strictly_dominates(other, build)
-            for other in builds
-        )
-    )
-    minimum_uncorroborated_overlap = min(
-        build.objectives.uncorroborated_overlap_extent_px
-        for build in builds
-    )
-    non_overlapping = tuple(
-        build
-        for build in builds
-        if build.objectives.uncorroborated_overlap_extent_px
-        == minimum_uncorroborated_overlap
-    )
-    strongest_separator_support = max(
-        build.objectives.supported_separator_count
-        for build in non_overlapping
-    )
-    physically_anchored = tuple(
-        build
-        for build in non_overlapping
-        if build.objectives.supported_separator_count
-        == strongest_separator_support
-    )
-    return tuple(
-        build
-        for build in physically_anchored
-        if not any(
-            other is not build
-            and other.objectives.dominates(build.objectives)
-            for other in physically_anchored
-        )
-    )
-
-def _representative_build(
-    builds: tuple[_SequenceBuild, ...],
-) -> _SequenceBuild:
-    if not builds:
-        raise ValueError("representative sequence requires physical builds")
-    return max(
-        builds,
-        key=lambda build: (
-            _build_has_independent_boundary_support(build),
-            -build.objectives.uncorroborated_overlap_extent_px,
-            -build.objectives.uncorroborated_contact_count,
-            build.objectives.supported_separator_count,
-            build.objectives.internal_boundary_measurement_quality,
-            build.objectives.external_boundary_measurement_quality,
-            -build.objectives.inferred_boundary_count,
-            -build.objectives.unexplained_spacing_extent_px,
-            -build.objectives.dimension_residual,
-            -build.objectives.frame_width_hint_residual,
-            -build.objectives.boundary_uncertainty_ratio,
-            tuple(
-                -edge.position.midpoint
-                for slot in build.slots
-                for edge in (slot.leading, slot.trailing)
-            ),
-        ),
-    )
 
 def _assignment_consensus(
-    builds: tuple[_SequenceBuild, ...],
+    builds: tuple[sequence_candidates.SequenceBuild, ...],
 ) -> BoundaryAssignmentConsensus:
-    conflicting = _conflicting_internal_frame_indexes(builds)
+    conflicting = sequence_candidates.conflicting_internal_frame_indexes(builds)
     if conflicting:
         outcome = AssignmentConsensusOutcome.DISAGREED
     elif len(builds) == 1:
         outcome = AssignmentConsensusOutcome.UNCONTESTED
-    elif _external_endpoint_alternatives(builds):
+    elif sequence_candidates.external_endpoint_alternatives(builds):
         outcome = AssignmentConsensusOutcome.EXTERNAL_SAFETY_ENVELOPE
     else:
         outcome = AssignmentConsensusOutcome.AGREED
     return BoundaryAssignmentConsensus(outcome, len(builds), conflicting)
 
 def _sequence_assignment_consensus(
-    preferred_builds: tuple[_SequenceBuild, ...],
+    preferred_builds: tuple[sequence_candidates.SequenceBuild, ...],
 ) -> BoundaryAssignmentConsensus:
     inferred_positions = {
         slot.index
@@ -3165,7 +2879,7 @@ def _internal_geometry_uncertainty_boundary(
 def _apply_internal_geometry_uncertainty(
     slots: tuple[FrameSlot, ...],
     assignments: tuple[FrameEdgeAssignment, ...],
-    preferred_builds: tuple[_SequenceBuild, ...],
+    preferred_builds: tuple[sequence_candidates.SequenceBuild, ...],
 ) -> tuple[tuple[FrameSlot, ...], tuple[FrameEdgeAssignment, ...]] | None:
     if len(preferred_builds) <= 1:
         return slots, assignments
@@ -3256,7 +2970,7 @@ def _external_safety_boundary(
 def _apply_external_safety_envelope(
     slots: tuple[FrameSlot, ...],
     assignments: tuple[FrameEdgeAssignment, ...],
-    preferred_builds: tuple[_SequenceBuild, ...],
+    preferred_builds: tuple[sequence_candidates.SequenceBuild, ...],
     consensus: BoundaryAssignmentConsensus,
     holder_safety: PixelInterval,
 ) -> tuple[tuple[FrameSlot, ...], tuple[FrameEdgeAssignment, ...]] | None:
@@ -3320,25 +3034,6 @@ def _apply_external_safety_envelope(
         ),
     )
 
-def _build_preserves_visible_content(
-    build: _SequenceBuild,
-    visible_content: ContentRegionObservation,
-) -> bool:
-    if not build.slots:
-        return False
-    sequence_interval = (
-        max(
-            visible_content.region.left,
-            int(floor(build.slots[0].leading.position.minimum)),
-        ),
-        min(
-            visible_content.region.right,
-            int(ceil(build.slots[-1].trailing.position.maximum)),
-        ),
-    )
-    if sequence_interval[1] <= sequence_interval[0]:
-        return False
-    return not visible_content.uncovered_by((sequence_interval,))
 
 def _slot_can_contribute_repeated_width_measurement(
     slot: FrameSlot,
@@ -3434,9 +3129,9 @@ def _repeated_width_role_provenance(
     )
 
 def _corroborate_build_roles_from_repeated_frame_width(
-    build: _SequenceBuild,
+    build: sequence_candidates.SequenceBuild,
     holder_boundaries: dict[BoundarySide, HolderBoundaryObservation],
-) -> _SequenceBuild:
+) -> sequence_candidates.SequenceBuild:
     candidates = tuple(
         slot
         for slot in build.slots
@@ -3587,9 +3282,9 @@ def _corroborate_boundary_role_from_physical_scale(
     )
 
 def _corroborate_build_roles_from_physical_scale(
-    build: _SequenceBuild,
+    build: sequence_candidates.SequenceBuild,
     scale_constraint: FrameWidthPhysicalScaleConstraint | None,
-) -> _SequenceBuild:
+) -> sequence_candidates.SequenceBuild:
     original = build.slots
     count = len(original)
     slots = tuple(
@@ -3803,10 +3498,10 @@ def _corroborate_adjacent_boundary_pair(
     )
 
 def _separator_bindings_for_resolved_slots(
-    bindings: tuple[_SeparatorBandBinding, ...],
+    bindings: tuple[sequence_candidates.SeparatorBandBinding, ...],
     slots: tuple[FrameSlot, ...],
-) -> tuple[_SeparatorBandBinding, ...]:
-    resolved: list[_SeparatorBandBinding] = []
+) -> tuple[sequence_candidates.SeparatorBandBinding, ...]:
+    resolved: list[sequence_candidates.SeparatorBandBinding] = []
     for binding in bindings:
         trailing = slots[binding.boundary_index - 1].trailing
         leading = slots[binding.boundary_index].leading
@@ -3827,9 +3522,9 @@ def _separator_bindings_for_resolved_slots(
     return tuple(resolved)
 
 def _rebuild_sequence_build(
-    build: _SequenceBuild,
+    build: sequence_candidates.SequenceBuild,
     slots: tuple[FrameSlot, ...],
-) -> _SequenceBuild:
+) -> sequence_candidates.SequenceBuild:
     long_axis_assignments = _long_axis_assignments_for_slots(
         build.long_axis_assignments,
         slots,
@@ -3869,11 +3564,11 @@ def _rebuild_sequence_build(
     )
 
 def _separator_observation_assignment(
-    build: _SequenceBuild,
+    build: sequence_candidates.SequenceBuild,
     boundary_index: int,
     support: SeparatorBandCrossAxisSupport,
     common_width: CommonFrameWidthResolution,
-) -> tuple[tuple[FrameSlot, ...], _SeparatorBandBinding] | None:
+) -> tuple[tuple[FrameSlot, ...], sequence_candidates.SeparatorBandBinding] | None:
     if (
         common_width.state != EvidenceState.SUPPORTED
         or common_width.width_px is None
@@ -3954,7 +3649,7 @@ def _separator_observation_assignment(
         return None
     return (
         resolved_slots,
-        _SeparatorBandBinding(
+        sequence_candidates.SeparatorBandBinding(
             boundary_index=boundary_index,
             observation=support.observation,
             cross_axis_measurement=support.measurement,
@@ -3964,10 +3659,10 @@ def _separator_observation_assignment(
     )
 
 def _assign_unique_separator_observations(
-    build: _SequenceBuild,
+    build: sequence_candidates.SequenceBuild,
     common_width: CommonFrameWidthResolution,
     supports: tuple[SeparatorBandCrossAxisSupport, ...],
-) -> _SequenceBuild:
+) -> sequence_candidates.SequenceBuild:
     resolved = build
     remaining = tuple(
         support
@@ -3985,7 +3680,7 @@ def _assign_unique_separator_observations(
                 tuple[
                     SeparatorBandCrossAxisSupport,
                     tuple[FrameSlot, ...],
-                    _SeparatorBandBinding,
+                    sequence_candidates.SeparatorBandBinding,
                 ]
             ],
         ] = {}
@@ -4046,7 +3741,7 @@ def _assign_unique_separator_observations(
     return resolved
 
 def _boundary_path_assignment(
-    build: _SequenceBuild,
+    build: sequence_candidates.SequenceBuild,
     slot_offset: int,
     side: BoundarySide,
     path: GrayBoundaryPathObservation,
@@ -4114,10 +3809,10 @@ def _boundary_path_assignment(
     return resolved_slots, assignment
 
 def _assign_unique_boundary_path_observations(
-    build: _SequenceBuild,
+    build: sequence_candidates.SequenceBuild,
     common_width: CommonFrameWidthResolution,
     paths: tuple[GrayBoundaryPathObservation, ...],
-) -> _SequenceBuild:
+) -> sequence_candidates.SequenceBuild:
     resolved = build
     remaining = tuple(
         path
@@ -4198,8 +3893,8 @@ def _assign_unique_boundary_path_observations(
     return resolved
 
 def _corroborate_build_adjacent_boundary_roles(
-    build: _SequenceBuild,
-) -> _SequenceBuild:
+    build: sequence_candidates.SequenceBuild,
+) -> sequence_candidates.SequenceBuild:
     slots = list(build.slots)
     for index in range(len(slots) - 1):
         trailing, leading = _corroborate_adjacent_boundary_pair(
@@ -4216,9 +3911,9 @@ def _corroborate_build_adjacent_boundary_roles(
     )
 
 def _corroborate_build_boundary_roles(
-    build: _SequenceBuild,
+    build: sequence_candidates.SequenceBuild,
     common_width: CommonFrameWidthResolution,
-) -> _SequenceBuild:
+) -> sequence_candidates.SequenceBuild:
     original_slots = build.slots
     slots = tuple(
         replace(
@@ -4426,10 +4121,10 @@ def _long_axis_assignments_for_slots(
     return tuple(retained)
 
 def _resolve_build_dimension_boundaries(
-    build: _SequenceBuild,
+    build: sequence_candidates.SequenceBuild,
     common_width: CommonFrameWidthResolution,
     holder_boundaries: dict[BoundarySide, HolderBoundaryObservation],
-) -> _SequenceBuild:
+) -> sequence_candidates.SequenceBuild:
     slots = _resolve_dimension_boundaries_from_common_width(
         build.slots,
         common_width,
@@ -4440,11 +4135,11 @@ def _resolve_build_dimension_boundaries(
     return _rebuild_sequence_build(build, slots)
 
 def _resolve_build_physical_boundaries(
-    build: _SequenceBuild,
+    build: sequence_candidates.SequenceBuild,
     holder_boundaries: dict[BoundarySide, HolderBoundaryObservation],
     photo_height_evidence: PhotoHeightEvidence,
     dimensions: FrameDimensionPrior,
-) -> tuple[_SequenceBuild, CommonFrameWidthResolution]:
+) -> tuple[sequence_candidates.SequenceBuild, CommonFrameWidthResolution]:
     resolved = _corroborate_build_roles_from_repeated_frame_width(
         build,
         holder_boundaries,
@@ -4478,7 +4173,7 @@ def _resolve_build_physical_boundaries(
     return resolved, common_width
 
 def _separator_assignments_from_bindings(
-    bindings: tuple[_SeparatorBandBinding, ...],
+    bindings: tuple[sequence_candidates.SeparatorBandBinding, ...],
     slots: tuple[FrameSlot, ...],
     common_width: CommonFrameWidthResolution,
 ) -> tuple[SeparatorBandAssignment, ...]:
@@ -4786,10 +4481,10 @@ def _shifted_separator_boundary_index(
     return boundary_index + 1 if boundary_index >= insertion_index else boundary_index
 
 def _build_with_inserted_slot(
-    build: _SequenceBuild,
+    build: sequence_candidates.SequenceBuild,
     inserted_slot: FrameSlot,
     holder: Box,
-) -> _SequenceBuild:
+) -> sequence_candidates.SequenceBuild:
     insertion_index = inserted_slot.index
     inserted_slot_count = 1
     slots = tuple(
@@ -4861,7 +4556,7 @@ def _build_with_inserted_slot(
             build.residuals.boundary_uncertainty + added_uncertainty
         ),
     )
-    return _SequenceBuild(
+    return sequence_candidates.SequenceBuild(
         slots=slots,
         long_axis_assignments=long_axis_assignments,
         separator_bindings=separator_bindings,
@@ -4883,12 +4578,12 @@ def _build_with_inserted_slot(
     )
 
 def _sequence_completed_builds(
-    real_frame_builds: tuple[_SequenceBuild, ...],
+    real_frame_builds: tuple[sequence_candidates.SequenceBuild, ...],
     search_scope: FrameSequenceSearchScope,
     photo_height_evidence: PhotoHeightEvidence,
     dimensions: FrameDimensionPrior,
-) -> tuple[_SequenceBuild, ...]:
-    inferred: list[_SequenceBuild] = []
+) -> tuple[sequence_candidates.SequenceBuild, ...]:
+    inferred: list[sequence_candidates.SequenceBuild] = []
     holder_boundaries = _holder_boundaries(search_scope)
     for build in real_frame_builds:
         build, common_width = _resolve_build_physical_boundaries(
@@ -4927,7 +4622,7 @@ def _sequence_completed_builds(
     return tuple(inferred)
 
 def _build_supports_resolved_nominal_slots(
-    build: _SequenceBuild,
+    build: sequence_candidates.SequenceBuild,
     holder_boundaries: dict[BoundarySide, HolderBoundaryObservation],
     photo_height_evidence: PhotoHeightEvidence,
     dimensions: FrameDimensionPrior,
@@ -4990,7 +4685,7 @@ def _endpoint_slack_is_sub_frame(
     return True
 
 def _build_satisfies_full_endpoint_extent(
-    build: _SequenceBuild,
+    build: sequence_candidates.SequenceBuild,
     holder_boundaries: dict[BoundarySide, HolderBoundaryObservation],
     photo_height_evidence: PhotoHeightEvidence,
     dimensions: FrameDimensionPrior,
@@ -5016,7 +4711,7 @@ def _build_satisfies_full_endpoint_extent(
     )
 
 def _build_does_not_contradict_common_width(
-    build: _SequenceBuild,
+    build: sequence_candidates.SequenceBuild,
     holder_boundaries: dict[BoundarySide, HolderBoundaryObservation],
     photo_height_evidence: PhotoHeightEvidence,
     dimensions: FrameDimensionPrior,
@@ -5069,7 +4764,7 @@ def _slot_has_non_holder_boundary_observation(
     return observed_boundary_count == measurement_facts.INTERVAL_ENDPOINT_COUNT
 
 def _unexcluded_sequence_inference_indexes(
-    build: _SequenceBuild,
+    build: sequence_candidates.SequenceBuild,
     visible_content: ContentRegionObservation,
     holder_boundaries: dict[BoundarySide, HolderBoundaryObservation],
 ) -> tuple[int, ...]:
@@ -5092,12 +4787,12 @@ def _unexcluded_sequence_inference_indexes(
     return tuple(unresolved)
 
 def _infer_unique_slot_in_direct_nominal_build(
-    build: _SequenceBuild,
+    build: sequence_candidates.SequenceBuild,
     visible_content: ContentRegionObservation,
     search_scope: FrameSequenceSearchScope,
     photo_height_evidence: PhotoHeightEvidence,
     dimensions: FrameDimensionPrior,
-) -> _SequenceBuild:
+) -> sequence_candidates.SequenceBuild:
     holder_boundaries = _holder_boundaries(search_scope)
     resolved_build, common_width = _resolve_build_physical_boundaries(
         build,
@@ -5139,7 +4834,7 @@ def _infer_unique_slot_in_direct_nominal_build(
     return _rebuild_sequence_build(resolved_build, slots)
 
 def _direct_nominal_geometry_is_complete(
-    builds: tuple[_SequenceBuild, ...],
+    builds: tuple[sequence_candidates.SequenceBuild, ...],
     visible_content: ContentRegionObservation,
     holder_boundaries: dict[BoundarySide, HolderBoundaryObservation],
     photo_height_evidence: PhotoHeightEvidence,
@@ -5150,7 +4845,7 @@ def _direct_nominal_geometry_is_complete(
     preserving = tuple(
         build
         for build in builds
-        if _build_preserves_visible_content(build, visible_content)
+        if sequence_candidates.build_preserves_visible_content(build, visible_content)
     )
     return any(
         _build_supports_resolved_nominal_slots(
@@ -5168,7 +4863,7 @@ def _direct_nominal_geometry_is_complete(
     )
 
 def _preferred_direct_common_width_is_supported(
-    builds: tuple[_SequenceBuild, ...],
+    builds: tuple[sequence_candidates.SequenceBuild, ...],
     visible_content: ContentRegionObservation,
     holder_boundaries: dict[BoundarySide, HolderBoundaryObservation],
     photo_height_evidence: PhotoHeightEvidence,
@@ -5179,9 +4874,9 @@ def _preferred_direct_common_width_is_supported(
     preserving = tuple(
         build
         for build in builds
-        if _build_preserves_visible_content(build, visible_content)
+        if sequence_candidates.build_preserves_visible_content(build, visible_content)
     )
-    preferred = _physically_preferred_builds(preserving or builds)
+    preferred = sequence_candidates.physically_preferred_builds(preserving or builds)
     return any(
         width_resolution.common_width_has_independent_measurement_basis(
             _resolve_build_physical_boundaries(
@@ -5194,7 +4889,7 @@ def _preferred_direct_common_width_is_supported(
         for build in preferred
     )
 
-def _build_has_geometry_only_slot(build: _SequenceBuild) -> bool:
+def _build_has_geometry_only_slot(build: sequence_candidates.SequenceBuild) -> bool:
     return any(
         not any(
             boundary.independently_observed
@@ -5214,7 +4909,7 @@ def _sequence_builds_for_count(
     maximum_assignment_evaluations: int,
     *,
     allow_nominal_slot_sized_gap: bool,
-) -> tuple[tuple[_SequenceBuild, ...], int, bool]:
+) -> tuple[tuple[sequence_candidates.SequenceBuild, ...], int, bool]:
     supports = search_index.separator_supports.canonical_supports
     frame_width_hint = frame_width_search_hint(
         shared_short_axis,
@@ -5269,7 +4964,7 @@ def _sequence_builds_for_count(
             band_budget_exhausted = True
             break
     remaining = maximum_assignment_evaluations - band_evaluations
-    separator_builds: tuple[_SequenceBuild, ...] = ()
+    separator_builds: tuple[sequence_candidates.SequenceBuild, ...] = ()
     separator_build_evaluations = 0
     separator_build_budget_exhausted = False
     if band_hypotheses and remaining > 0:
@@ -5303,7 +4998,7 @@ def _sequence_builds_for_count(
         - band_evaluations
         - separator_build_evaluations
     )
-    measured_builds: tuple[_SequenceBuild, ...] = ()
+    measured_builds: tuple[sequence_candidates.SequenceBuild, ...] = ()
     measured_evaluations = 0
     measured_budget_exhausted = False
     if measured_budget > 0:
@@ -5441,7 +5136,7 @@ def solve_frame_sequence(
             dimensions,
         )
     )
-    completion_builds: tuple[_SequenceBuild, ...] = ()
+    completion_builds: tuple[sequence_candidates.SequenceBuild, ...] = ()
     completion_evaluations = 0
     completion_exhausted = False
     if (
@@ -5596,12 +5291,12 @@ def solve_frame_sequence(
     content_preserving_builds = tuple(
         build
         for build in builds
-        if _build_preserves_visible_content(build, visible_content)
+        if sequence_candidates.build_preserves_visible_content(build, visible_content)
     )
     if content_preserving_builds:
         builds = content_preserving_builds
 
-    best = _physically_preferred_builds(builds)
+    best = sequence_candidates.physically_preferred_builds(builds)
     assignment_consensus = (
         BoundaryAssignmentConsensus(
             AssignmentConsensusOutcome.COMPONENT_UNRESOLVED,
@@ -5611,7 +5306,7 @@ def solve_frame_sequence(
         if budget_exhausted
         else _sequence_assignment_consensus(best)
     )
-    representative = _representative_build(best)
+    representative = sequence_candidates.representative_build(best)
     holder_boundaries = _holder_boundaries(search_scope)
     representative, common_width = _resolve_build_physical_boundaries(
         representative,
