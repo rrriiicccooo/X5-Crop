@@ -2451,6 +2451,15 @@ def _largest_measurement_compatible_interval_indexes(
         )
         if len(indexes) < minimum_count:
             continue
+        if any(
+            not _measurement_intervals_are_compatible(
+                intervals[left_index],
+                intervals[right_index],
+            )
+            for offset, left_index in enumerate(indexes)
+            for right_index in indexes[offset + 1 :]
+        ):
+            continue
         envelope = _interval_envelope(
             tuple(intervals[index] for index in indexes)
         )
@@ -2503,7 +2512,13 @@ def _measured_constraint_common_width(
     )
     contributor_set = set(contributor_indexes)
     for index, constraint in enumerate(constraints):
-        if index in contributor_set or constraint.width_px.intersects(shared):
+        if index in contributor_set or all(
+            _measurement_intervals_are_compatible(
+                constraint.width_px,
+                constraints[contributor_index].width_px,
+            )
+            for contributor_index in contributor_indexes
+        ):
             continue
         leading_clip = bool(
             index == 0

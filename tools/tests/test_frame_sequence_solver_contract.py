@@ -1489,6 +1489,30 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
 
         self.assertIn((1, 2), index.group_masks)
 
+    def test_broad_width_uncertainty_cannot_bridge_disjoint_narrow_groups(
+        self,
+    ) -> None:
+        intervals = (
+            PixelInterval(95.0, 100.0),
+            PixelInterval(90.0, 120.0),
+            PixelInterval(110.0, 115.0),
+        )
+        constraints = tuple(
+            SimpleNamespace(
+                width_px=interval,
+                leading_holder_clip_supported=False,
+                trailing_holder_clip_supported=False,
+            )
+            for interval in intervals
+        )
+
+        common_width = solver_module._measured_constraint_common_width(
+            constraints,
+            3,
+        )
+
+        self.assertIsNone(common_width)
+
     def test_common_width_groups_remove_strictly_contained_search_surfaces(
         self,
     ) -> None:
