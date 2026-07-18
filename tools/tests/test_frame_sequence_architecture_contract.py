@@ -82,6 +82,7 @@ _CANONICAL_OWNERS = {
         "resolve_dimension_boundaries_from_common_width",
         "resolve_build_dimension_boundaries",
         "resolve_build_physical_boundaries",
+        "assign_unique_boundary_path_observations",
     },
     "sequence_completion.py": {
         "measured_sequence_supports_slot_inference",

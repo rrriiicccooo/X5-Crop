@@ -160,7 +160,7 @@ boundaries are:
 | `frame_sequence_consensus.py` | Assignment consensus, dimension-only internal uncertainty envelopes, external safety envelopes, and their provenance. |
 | `frame_sequence_separator_assignment.py` | Candidate-specific separator edge roles, double-edge binding, holder-band roles, unique observation assignment, spacing bindings, and final typed separator assignments. |
 | `frame_sequence_boundary_roles.py` | Repeated-width, physical-scale, common-width, and adjacent-measurement corroboration of typed boundary roles and provenance. |
-| `frame_sequence_candidate_resolution.py` | Holder-boundary lookup, common-width dimension-boundary resolution, and the ordered boundary-role/common-width physical-resolution pass for one candidate build. |
+| `frame_sequence_candidate_resolution.py` | Holder-boundary lookup, common-width dimension-boundary resolution, unique gray-path assignment, and the ordered boundary-role/common-width physical-resolution pass for one candidate build. |
 | `sequence_completion.py` | Measured-sequence slot inference, blank-slot completion, content occupancy, holder-edge occlusion, endpoint/full-sequence eligibility, and completion selection. |
 | `frame_sequence_solver.py` | Remaining candidate construction and top-level orchestration responsibilities pending their own canonical owners. |
 
@@ -187,8 +187,8 @@ owner。当前 measurement interval 只由 `frame_sequence_measurements.py` 拥�
 角色、双边绑定、唯一观测分配、spacing binding 与最终 typed assignment 只由
 `frame_sequence_separator_assignment.py` 拥有；repeated-width、physical-scale、common-width
 与相邻实测的 typed boundary-role corroboration 只由 `frame_sequence_boundary_roles.py` 拥有。
-holder boundary 映射、common-width dimension-boundary resolution，以及 boundary role 与
-common-width 的有序 candidate physical-resolution pass 只由
+holder boundary 映射、common-width dimension-boundary resolution、唯一 gray-path assignment，
+以及 boundary role 与 common-width 的有序 candidate physical-resolution pass 只由
 `frame_sequence_candidate_resolution.py` 拥有。measured-sequence slot inference、blank-slot
 completion、content occupancy、holder-edge occlusion、endpoint/full-sequence eligibility 与
 completion selection 只由 `sequence_completion.py` 拥有。candidate construction 仍由 solver

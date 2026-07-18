@@ -15,6 +15,7 @@ from tools.tests.physical_gate_support import candidate_fixture
 from x5crop.detection.physical import (
     frame_sequence_candidate_resolution as candidate_resolution,
 )
+from x5crop.detection.physical import frame_sequence_candidates as candidate_builds
 from x5crop.detection.physical.frame_sequence_solver import FrameSequenceSolveResult
 from x5crop.detection.physical.model import (
     BoundaryAnchor,
@@ -438,3 +439,74 @@ class FrameSequenceCandidateResolutionContractTest(unittest.TestCase):
         )
 
         self.assertEqual(resolved[1].leading, incompatible)
+
+    def test_unique_gray_path_locates_geometry_without_proving_edge_role(
+        self,
+    ) -> None:
+        geometry = candidate_fixture().geometry
+        first, second = geometry.frame_slots
+        position = second.leading.position
+        inferred_leading = ResolvedFrameBoundary(
+            position=position,
+            source=FrameBoundarySource.DIMENSION_CONSTRAINED,
+            geometry_state=BoundaryGeometryState.RESOLVED,
+            boundary_anchor=None,
+            inference_provenance=MeasurementProvenance(
+                MeasurementIdentity.FRAME_GEOMETRY,
+                ObservationId("dimension_only_second_leading"),
+                (MeasurementIdentity.FRAME_DIMENSIONS,),
+                "synthetic dimension-only leading edge",
+            ),
+        )
+        slots = (
+            first,
+            replace(
+                second,
+                leading=inferred_leading,
+                visible_long_axis=PixelInterval(
+                    inferred_leading.position.minimum,
+                    second.trailing.position.maximum,
+                ),
+            ),
+        )
+        build = candidate_builds.SequenceBuild(
+            slots=slots,
+            long_axis_assignments=geometry.long_axis_assignments,
+            separator_bindings=(),
+            spacings=geometry.inter_frame_spacings,
+            frame_width_px=geometry.common_frame_width.width_px,
+            short_axis=geometry.shared_short_axis,
+            residuals=geometry.residuals,
+            objectives=candidate_builds.SequenceBuildObjectives(
+                uncorroborated_overlap_extent_px=0.0,
+                unexplained_spacing_extent_px=10.0,
+                supported_separator_count=0,
+                internal_boundary_measurement_quality=1.0,
+                dimension_residual=0.0,
+                external_boundary_measurement_quality=2.0,
+                boundary_uncertainty_ratio=0.0,
+                inferred_boundary_count=1,
+            ),
+        )
+        observation = path(
+            BoundaryAxis.LONG,
+            position.midpoint,
+            "unique_dimension_focused_path",
+        )
+
+        resolved = candidate_resolution.assign_unique_boundary_path_observations(
+            build,
+            geometry.common_frame_width,
+            (observation,),
+        )
+
+        boundary = resolved.slots[1].leading
+        self.assertEqual(boundary.source, FrameBoundarySource.GRAY_PATH_OBSERVATION)
+        self.assertEqual(boundary.role_state, EvidenceState.UNAVAILABLE)
+        self.assertFalse(boundary.independently_observed)
+        self.assertTrue(
+            any(
+                assignment.observation == observation
+                for assignment in resolved.long_axis_assignments
+            )
+        )
