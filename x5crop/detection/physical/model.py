@@ -421,8 +421,8 @@ class FrameEdgeOcclusionInference:
     def __post_init__(self) -> None:
         if self.side not in {BoundarySide.LEADING, BoundarySide.TRAILING}:
             raise ValueError("frame edge occlusion applies only to long-axis endpoints")
-        if self.hidden_width_px.minimum < 0.0:
-            raise ValueError("frame edge occlusion width cannot be negative")
+        if self.hidden_width_px.minimum <= 0.0:
+            raise ValueError("holder occlusion width must be positive")
 
 
 @dataclass(frozen=True)
@@ -1041,6 +1041,19 @@ class FrameSequenceSolution:
                 "visible frame-slot geometry must stay inside the holder"
             )
         for slot in self.frame_slots:
+            expected_occlusion_side = (
+                BoundarySide.LEADING
+                if slot.index == 1
+                else BoundarySide.TRAILING
+                if slot.index == self.count
+                else None
+            )
+            if slot.edge_occlusion is not None and (
+                slot.edge_occlusion.side != expected_occlusion_side
+            ):
+                raise GeometryIdentityError(
+                    "holder occlusion must match the sequence endpoint"
+                )
             leading_outside = slot.leading.position.minimum < float(holder.left)
             trailing_outside = slot.trailing.position.maximum > float(holder.right)
             leading_occluded = bool(

@@ -87,6 +87,15 @@ Measured boundary 与 geometry-derived boundary 是不同事实。Dimension cons
 occlusion 或 blank inference 可以解决几何，但其 measurement state 保持 unavailable，不能增加
 独立测量、hard separator 数量或 proof path。
 
+Holder occlusion is endpoint-only geometry: it must hide a positive extent and
+may occur only on the first slot's leading side or the final slot's trailing
+side. Final sequence identity rejects zero-width, wrong-side, and interior
+occlusion states rather than treating them as harmless annotations.
+
+Holder occlusion 只能表达端点几何：必须隐藏正宽度，并且只允许首 slot 的 leading side 或尾
+slot 的 trailing side。最终序列 identity 会拒绝零宽、错误 side 与 interior occlusion，而不是
+把它们当作无害标注。
+
 ### 2.3 Separator 与 Signed Spacing
 
 `SeparatorBandObservation` 是 count-independent 原始像素 band。一个正 separator 的两条边分别

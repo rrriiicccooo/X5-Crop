@@ -49,6 +49,7 @@ from x5crop.detection.physical.model import (
     BoundaryGeometryState,
     BoundaryRoleAuthority,
     FrameBoundarySource,
+    FrameEdgeOcclusionInference,
     GeometryIdentityError,
     SeparatorBandAssignment,
 )
@@ -937,6 +938,65 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             solved,
         )
         self.assertEqual(final_geometry.frame_crop_envelopes[0].box.left, 10)
+
+    def test_holder_occlusion_is_restricted_to_matching_sequence_endpoint(
+        self,
+    ) -> None:
+        geometry_with_endpoints = candidate_fixture().geometry
+        cases = (
+            (0, BoundarySide.TRAILING),
+            (len(geometry_with_endpoints.frame_slots) - 1, BoundarySide.LEADING),
+        )
+
+        for slot_offset, side in cases:
+            with self.subTest(slot=slot_offset + 1, side=side.value):
+                slot = geometry_with_endpoints.frame_slots[slot_offset]
+                holder_boundary = geometry_with_endpoints.holder_safety.boundary(side)
+                assert holder_boundary is not None
+                visible = (
+                    PixelInterval(
+                        slot.visible_long_axis.minimum,
+                        slot.visible_long_axis.maximum - 10.0,
+                    )
+                    if side == BoundarySide.TRAILING
+                    else PixelInterval(
+                        slot.visible_long_axis.minimum + 10.0,
+                        slot.visible_long_axis.maximum,
+                    )
+                )
+                wrong_endpoint = replace(
+                    slot,
+                    visible_long_axis=visible,
+                    edge_occlusion=FrameEdgeOcclusionInference(
+                        side=side,
+                        hidden_width_px=PixelInterval.exact(10.0),
+                        holder_boundary_provenance=holder_boundary.provenance,
+                    ),
+                )
+                slots = list(geometry_with_endpoints.frame_slots)
+                slots[slot_offset] = wrong_endpoint
+
+                with self.assertRaisesRegex(
+                    GeometryIdentityError,
+                    "holder occlusion must match the sequence endpoint",
+                ):
+                    replace(
+                        geometry_with_endpoints,
+                        frame_slots=tuple(slots),
+                    )
+
+    def test_holder_occlusion_requires_positive_hidden_extent(self) -> None:
+        provenance = candidate_fixture().geometry.holder_safety.provenance
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "holder occlusion width must be positive",
+        ):
+            FrameEdgeOcclusionInference(
+                side=BoundarySide.LEADING,
+                hidden_width_px=PixelInterval.exact(0.0),
+                holder_boundary_provenance=provenance,
+            )
 
     def test_blank_search_does_not_receive_a_preallocated_budget(self) -> None:
         source = inspect.getsource(solve_frame_sequence)
