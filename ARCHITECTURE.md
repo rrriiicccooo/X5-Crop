@@ -163,7 +163,8 @@ boundaries are:
 | `frame_sequence_candidate_resolution.py` | Holder-boundary lookup, common-width dimension-boundary resolution, unique gray-path assignment, and the ordered boundary-role/common-width physical-resolution pass for one candidate build. |
 | `sequence_completion.py` | Measured-sequence slot inference, blank-slot completion, content occupancy, holder-edge occlusion, endpoint/full-sequence eligibility, and completion selection. |
 | `frame_sequence_result.py` | Typed solve success/failure outcomes, content-extent and indexed-anchor constraints, and final spacing/overlap physical facts. |
-| `frame_sequence_solver.py` | Remaining candidate construction and top-level orchestration responsibilities pending their own canonical owners. |
+| `frame_sequence_construction.py` | Search-index preparation, canonical path/band/dimension hypotheses, bounded candidate-build enumeration, and count-specific construction. |
+| `frame_sequence_solver.py` | Thin top-level validation and lifecycle orchestration across construction, completion, consensus, selection, budget state, and typed result assembly. |
 
 Dependency direction is one way: common-width resolution consumes measurement
 facts; search consumes both lower owners; candidate state consumes measurement facts;
@@ -173,9 +174,12 @@ candidate state. Candidate physical resolution consumes measurement facts,
 common-width resolution, candidate state, and boundary-role corroboration. Sequence
 completion consumes measurement facts, common-width resolution, candidate state,
 and candidate physical resolution. Result facts consume measurement facts,
-common-width resolution, and candidate state. The solver consumes all ten modules.
-No lower owner imports the solver. The solver does not re-export migrated symbols.
-Architecture contracts check the definition owners and import direction, while
+common-width resolution, and candidate state. Construction consumes measurement,
+common-width, search, candidate-state, separator-assignment, and candidate-resolution
+owners. The solver facade consumes construction together with candidate resolution,
+candidate state, consensus, separator assignment, completion, and result facts. No
+lower owner imports construction or the solver, and neither facade re-exports migrated
+symbols. Architecture contracts check definition owners and import direction, while
 physical contracts target the canonical module directly.
 
 Frame-sequence 证明代码按显式 owner 划分，不再把单个 solver 文件视为全部生命周期概念的共同
@@ -195,14 +199,20 @@ holder boundary 映射、common-width dimension-boundary resolution、唯一 gra
 completion、content occupancy、holder-edge occlusion、endpoint/full-sequence eligibility 与
 completion selection 只由 `sequence_completion.py` 拥有。typed solve outcome、content-extent /
 indexed-anchor constraints 与最终 spacing/overlap physical facts 只由
-`frame_sequence_result.py` 拥有。candidate construction 仍由 solver 承载，等待后续独立 owner。
+`frame_sequence_result.py` 拥有。search-index 准备、规范 path/band/dimension hypotheses、
+有界 candidate-build 枚举与 count-specific construction 只由
+`frame_sequence_construction.py` 拥有；`frame_sequence_solver.py` 只保留入参校验、
+生命周期编排、budget state、selection 与 typed result 组装。
 依赖保持单向：measurement facts 供 common-width、search、candidate state、separator assignment
 与 boundary-role owner 消费；consensus、separator assignment 与 boundary-role owner 再消费
 candidate state；candidate physical resolution 只消费 measurement facts、common-width、candidate
 state 与 boundary-role owner；sequence completion 只消费 measurement facts、common-width、
 candidate state 与 candidate physical resolution；result facts 只消费 measurement facts、
-common-width 与 candidate state；solver 统一消费十个低层 owner。低层模块不得反向导入
-solver，solver 也不兼容导出已经迁移的符号。
+common-width 与 candidate state；construction 只消费 measurement、common-width、search、
+candidate state、separator assignment 与 candidate resolution owners；solver facade 再消费
+construction、candidate resolution/state、consensus、separator assignment、completion 与
+result facts。低层模块不得反向导入 construction 或 solver，两个 facade 也不兼容
+导出已经迁移的符号。
 
 ## 3. Evidence、Assessment 与 Decision
 

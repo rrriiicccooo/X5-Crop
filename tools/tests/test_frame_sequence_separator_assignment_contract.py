@@ -10,7 +10,7 @@ from x5crop.detection.physical import frame_sequence_measurements as measurement
 from x5crop.detection.physical import (
     frame_sequence_separator_assignment as separator_assignment,
 )
-from x5crop.detection.physical import frame_sequence_solver as solver
+from x5crop.detection.physical import frame_sequence_construction as construction
 from x5crop.detection.physical.model import (
     BoundaryAnchor,
     BoundaryGeometryState,
@@ -64,7 +64,7 @@ class FrameSequenceSeparatorAssignmentContractTest(unittest.TestCase):
             band_supported=True,
         )
 
-        leading, trailing = solver._separator_edge_candidates(
+        leading, trailing = construction._separator_edge_candidates(
             (support,),
             self.search_scope,
         )
@@ -135,7 +135,7 @@ class FrameSequenceSeparatorAssignmentContractTest(unittest.TestCase):
         )
         self.assertTrue(resolved.independently_observed)
         self.assertEqual(
-            solver._interior_separator_supports(
+            construction.interior_separator_supports(
                 (support,),
                 self.search_scope,
             ),
@@ -150,7 +150,7 @@ class FrameSequenceSeparatorAssignmentContractTest(unittest.TestCase):
             supported=True,
         )
 
-        leading, trailing = solver._separator_edge_candidates(
+        leading, trailing = construction._separator_edge_candidates(
             (support,),
             self.search_scope,
         )
@@ -164,7 +164,7 @@ class FrameSequenceSeparatorAssignmentContractTest(unittest.TestCase):
             1,
         )
         self.assertEqual(
-            solver._interior_separator_supports(
+            construction.interior_separator_supports(
                 (support,),
                 self.search_scope,
             ),
@@ -181,12 +181,12 @@ class FrameSequenceSeparatorAssignmentContractTest(unittest.TestCase):
             band_supported=True,
         )
 
-        leading, trailing = solver._separator_edge_candidates(
+        leading, trailing = construction._separator_edge_candidates(
             (support,),
             self.search_scope,
         )
         geometry_leading, geometry_trailing = (
-            solver._separator_geometry_edge_candidates(
+            construction._separator_geometry_edge_candidates(
                 (support,),
                 self.search_scope,
             )
@@ -203,7 +203,7 @@ class FrameSequenceSeparatorAssignmentContractTest(unittest.TestCase):
         self.assertTrue(geometry_leading)
         self.assertTrue(geometry_trailing)
         self.assertEqual(
-            solver._interior_separator_supports(
+            construction.interior_separator_supports(
                 (support,),
                 self.search_scope,
             ),

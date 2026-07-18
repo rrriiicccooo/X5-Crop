@@ -18,13 +18,15 @@ reports, Debug Analysis, and command output remain authoritative.
   `git status --short` 确认，不依赖这里保存的旧提交号。
 - State / 状态：Shared Short Axis / Frame Slot 破坏性迁移已经进入受跟踪源码、测试、报告、
   Debug 和文档；broad-uncertainty common-width contributor 分组合同已经补齐。Auditability /
-  Ownership Gate 前十波已建立独立的 measurement-interval、common-width、search graph /
+  Ownership Gate 十一个 behavior-neutral waves 已建立独立的 measurement-interval、common-width、search graph /
   reachability / budget、candidate state / physical Pareto，以及 assignment-consensus canonical
   owners；candidate-specific separator assignment、boundary-role corroboration 与 candidate
   physical resolution（含唯一 gray-path assignment）也已有唯一 owner；blank/occlusion /
   completion 现在统一由既有 `sequence_completion.py` 拥有，typed outcome 与最终物理结果事实
-  则由 `frame_sequence_result.py` 拥有。但其余 candidate construction / solver orchestration、
-  剩余物理校准、完整样片复核、性能对比和双轮架构审计尚未完成。
+  则由 `frame_sequence_result.py` 拥有。candidate construction 现在由
+  `frame_sequence_construction.py` 单独拥有，`solve_frame_sequence` 已收敛为薄编排 facade；
+  Phase 2 ownership gate 的结构迁移已完成，但剩余物理收口、完整样片复核、性能对比和
+  双轮架构审计尚未完成，不得称为架构或物理闭环。
 - Safety / 安全：不得 reset、restore 或恢复旧 `PhotoAperture`、旧 sequence solver、旧 schema
   或任何兼容层；不要把当前检查点误称为物理或架构闭环。
 
@@ -83,43 +85,45 @@ reports, Debug Analysis, and command output remain authoritative.
 - Representative geometry that looks visually correct is not enough when another
   non-dominated, weaker dimension-heavy explanation remains.
 
-- Phase 1 and the first ten Phase 2 ownership waves were behavior-neutral on the
+- Phase 1 and all eleven Phase 2 ownership waves were behavior-neutral on the
   same six frozen samples (`00007/13/18/19/31/32`): every adjacent current-schema
   comparison had zero report diffs and all six Debug Analysis JPEGs were
   byte-identical. The latest fresh visual inspection kept all six `REVIEW` /
   non-exportable; `00018` and `00031` still show incomplete provisional geometry
   and must not be upgraded.
+- The latest full verifier passed 757 tests and 14 configuration pairs at V4.9;
+  this is structural evidence only, not named-sample physical closure.
 
 以上样片仍需当前报告和 Debug Analysis 逐张复核；肉眼正确的代表解不能覆盖仍存在的非支配、
 dimension-heavy 替代解释。
 
 ## Next Actions / 下一步
 
-1. Continue the Auditability / Ownership Gate before further broad sample
-   calibration. Measurement intervals and common-width resolution now have
-   canonical owners; search graph/reachability/budget and candidate state/Pareto
-   are separate too, as are assignment consensus and separator assignment. Next
-   separate the remaining candidate construction without wrappers, re-exports, or
-   duplicate models, then leave `solve_frame_sequence` as a thin orchestration facade.
-   Boundary roles, candidate physical resolution, sequence completion, and result
-   facts now each have one owner.
-2. Keep reducing `solve_frame_sequence` to a thin orchestration facade and extend
-   the machine-checked authority/import boundaries for each coherent ownership wave.
-3. After each green ownership wave, recheck current-schema reports and relevant
+1. Begin Phase 3 with a read-only audit of the current implementation: observation
+   identity/provenance; measurement uncertainty; holder safety/shared short axis;
+   separated-width and global-separator feasibility; common-width; count/slot,
+   blank, occlusion, and overlap; physical Pareto, consensus, and search
+   completeness; CandidateGate, GeometryResolution, selection, and DecisionGate;
+   FrameCropEnvelope, user bleed, local overlap protection; and current
+   report/debug/cache/output truth.
+2. For each demonstrated violation, first add and confirm a minimal failing
+   contract, then repair the canonical owner and remove the whole residue class.
+   Keep unresolved geometry typed unavailable/REVIEW.
+3. After each green physical wave, recheck current-schema reports and relevant
    Debug Analysis before committing and pushing.
-4. Then finish the remaining physical contracts, all format-mode samples,
-   fixed-sample performance comparison, and Test/test 2.
+4. Then finish all format-mode sample contracts, fixed-sample performance
+   comparison, and Test/test 2.
 5. Audit active runtime, tests, fixtures, helpers, reports, and Debug twice with
    the same frozen checklist: forward Audit A, then a fresh-context reverse-order
    Audit B.
 6. Only after physical validation and both audits, update the rolling checkpoint,
    docs, commit, and push. Never manufacture PASS from unresolved geometry.
 
-1. 下一步继续 Auditability / Ownership Gate；measurement intervals、common-width、search
-   graph/reachability/budget、candidate state/Pareto 与 assignment consensus 已有唯一 owner，
-   separator assignment、boundary roles、candidate physical resolution、sequence completion
-   与 result facts 也已独立；接着只拆剩余 candidate construction，并把
-   `solve_frame_sequence` 收敛为薄编排 facade，不增加 wrapper、re-export、重复模型或行为阈值。
-2. 每个 ownership wave 都要复核 current-schema report 与相关 Debug，完整验证后独立提交并推送。
-3. 之后再完成剩余物理合同、全格式样片、性能、Test/test 2 与双轮审计。
-4. 未解决几何继续保持 REVIEW / 不导出；只有物理验证与双轮审计完成后才能宣称闭环。
+1. Phase 3 先只读逐项审计当前实现：identity/provenance、measurement uncertainty、
+   holder safety/shared short axis、separated width / separator global feasibility、
+   common-width、count/slot/blank/occlusion/overlap、Pareto/consensus/search completeness、
+   gates/selection/decision、crop/bleed/protection 以及 report/debug/cache/output truth。
+2. 每发现一类违规，先增加并确认最小失败合同，再修复 canonical owner 并清理整类残留；
+   未解决几何保持 typed unavailable/REVIEW。
+3. 每个绿色物理 wave 都要复核 current-schema report 与相关 Debug，完整验证后独立提交并推送。
+4. 之后完成全格式样片合同、性能、Test/test 2 与双轮审计；只有全部完成后才能宣称闭环。

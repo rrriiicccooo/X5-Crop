@@ -1,8 +1,10 @@
 from __future__ import annotations
 
-from x5crop.detection.physical.frame_sequence_solver import (
+from x5crop.detection.physical.frame_sequence_construction import (
     FrameSequenceSearchIndex,
     prepare_frame_sequence_search_index,
+)
+from x5crop.detection.physical.frame_sequence_solver import (
     solve_frame_sequence,
 )
 from x5crop.detection.physical.frame_sequence_result import (

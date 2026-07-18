@@ -19,7 +19,7 @@ from x5crop.detection.physical.model import (
 )
 from x5crop.detection.physical.sequence_completion import infer_sequence_frame_slot
 from x5crop.detection.physical import frame_sequence_common_width as common_width
-from x5crop.detection.physical import frame_sequence_solver as solver_module
+from x5crop.detection.physical import frame_sequence_construction as construction
 from x5crop.detection.physical.frame_sequence_solver import (
     solve_frame_sequence,
 )
@@ -950,7 +950,7 @@ class FrameSlotSequenceContractTest(unittest.TestCase):
         self.assertIsNotNone(scale_constraint)
         assert scale_constraint is not None
 
-        search_space = solver_module._measured_frame_search_space(
+        search_space = construction._measured_frame_search_space(
             search_index,
             (scale_constraint.width_px,),
             scale_constraint.width_px,

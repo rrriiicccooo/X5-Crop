@@ -18,8 +18,10 @@ from x5crop.detection.physical.frame_sequence_measurements import (
     EdgeConstraint,
     MeasuredFrameConstraint,
 )
-from x5crop.detection.physical.frame_sequence_solver import (
+from x5crop.detection.physical.frame_sequence_construction import (
     _measured_sequence_build,
+)
+from x5crop.detection.physical.frame_sequence_solver import (
     solve_frame_sequence,
 )
 from x5crop.detection.physical.frame_sequence_result import FrameSequenceSolveResult

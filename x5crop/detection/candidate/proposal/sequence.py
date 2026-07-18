@@ -17,7 +17,7 @@ from ....domain import (
     FrameSequenceSearchScope,
 )
 from ...physical.boundary_detection import boundary_measurements
-from ...physical.frame_sequence_solver import (
+from ...physical.frame_sequence_construction import (
     FrameSequenceSearchIndex,
     prepare_frame_sequence_search_index,
 )

@@ -235,7 +235,7 @@ CONSTANT_PARAMETER_CONTRACTS = (
         "fixed_by_contract",
     ),
     ParameterContract(
-        "x5crop.detection.physical.frame_sequence_solver.MINIMUM_COUNT_WITH_INTERIOR_FRAME",
+        "x5crop.detection.physical.frame_sequence_construction.MINIMUM_COUNT_WITH_INTERIOR_FRAME",
         ParameterRole.PHYSICAL_FACT,
         "photo_count",
         "sequence_solver",
@@ -243,7 +243,7 @@ CONSTANT_PARAMETER_CONTRACTS = (
         "fixed_by_contract",
     ),
     ParameterContract(
-        "x5crop.detection.physical.frame_sequence_solver.BIDIRECTIONAL_REFINEMENT_PASSES",
+        "x5crop.detection.physical.frame_sequence_construction.BIDIRECTIONAL_REFINEMENT_PASSES",
         ParameterRole.NUMERICAL_SAFETY,
         "pass_count",
         "sequence_solver",
