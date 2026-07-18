@@ -165,7 +165,11 @@ def debug_geometry(
             frame_slot_boxes=frame_slot_boxes,
             sequence_inferred_slot_boxes=sequence_inferred_slot_boxes,
             frame_crop_envelopes=final_geometry.frame_crop_envelopes,
-            final_boxes=final_geometry.final_boxes,
+            final_boxes=(
+                final_geometry.final_boxes
+                if detection.frame_export_eligible
+                else ()
+            ),
             containment_fallback=None,
         )
     mapped_envelopes = _map_envelopes(

@@ -186,7 +186,7 @@ class DiagnosticsConfiguration:
                 True,
             ),
             DebugLegendEntry(
-                "FrameCropEnvelope / protected output",
+                "FrameCropEnvelope / export-eligible final box",
                 style.frame_crop_envelope_color,
                 True,
             ),

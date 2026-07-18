@@ -128,9 +128,10 @@ debug analysis? [y/n, return=no]:
 TIFF DPI/PPI 只由 I/O 与报告保存，不会直接决定裁切几何。
 
 auto count 会从当前格式允许的较大张数开始检查。程序先确定整条片条的安全短轴范围，再联合判断
-每张照片的顺序、边界和片间关系。只有张数与裁切几何都已解决、且不存在未解决的替代方案时，
-才会自动输出；否则保持 REVIEW。Full 模式最多允许一个由完整序列唯一推导的空白位置，缺少内容
-本身不算证据；两个空白位置或位置不唯一时保持 REVIEW。Partial auto 不会利用空白区域增加张数。
+每张照片的顺序、边界和片间关系。只有张数与裁切几何都已解决、不存在未解决的替代方案、且
+输出保护可行时，才会自动输出；否则保持 REVIEW。Full 模式最多允许一个由完整序列唯一推导的
+空白位置，缺少内容本身不算证据；两个空白位置或位置不唯一时保持 REVIEW。Partial auto 不会
+利用空白区域增加张数。
 
 内部物理证据、数据流和权限边界详见 `ARCHITECTURE.md`。
 
@@ -189,7 +190,7 @@ x5_crop_output/_debug_analysis/
 - 青色 `Corroborated overlap`。
 - 绿色 `FrameSlot`。
 - 黄色虚线 `Sequence-inferred FrameSlot`。
-- 蓝色虚线 `FrameCropEnvelope / protected output`。
+- 蓝色虚线 `FrameCropEnvelope / export-eligible final box`。
 
 详细 evidence、CandidateGate 与 DecisionGate 说明写入 report；Debug Analysis
 保持固定三联图，优先服务人工快速审阅。
@@ -493,7 +494,7 @@ The third panel carries a legend derived from the current diagnostics configurat
 - cyan: `Corroborated overlap`;
 - green: `FrameSlot`;
 - yellow dashed: `Sequence-inferred FrameSlot`;
-- blue dashed: `FrameCropEnvelope / protected output`.
+- blue dashed: `FrameCropEnvelope / export-eligible final box`.
 
 Detailed evidence, CandidateGate, and DecisionGate explanations are written to
 the report. Debug Analysis remains a fixed three-panel image for fast human review.

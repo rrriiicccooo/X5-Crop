@@ -85,12 +85,15 @@ the validation evidence.
   `evidence_independence_failed`, with only its Debug header changing and all
   geometry boxes preserved. All six samples remain `REVIEW` / non-exportable.
 - 六张冻结 `135/full` 样片的 selection、DecisionGate、FrameBleedPlan、crop envelopes 与
-  final boxes 保持逐字段一致；00007 仅修正 export eligibility 和 Debug 权限标题，真实
-  `--export-review` 运行没有写出 frame TIFF，其余五张 Debug 字节一致。 / Across the six
+  final boxes 保持逐字段一致；00007 仅修正 export eligibility 和 Debug 输出权限表达：保留
+  FrameCropEnvelope，但不再绘制未受保护的 final boxes，真实 `--export-review` 运行没有写出
+  frame TIFF；其余五张 Debug 只改变公共图例文字，几何像素一致。 / Across the six
   frozen `135/full` samples, selection, DecisionGate, FrameBleedPlan, crop
   envelopes, and final boxes remained field-identical; 00007 changed only export
-  eligibility and the Debug authority label, an actual `--export-review` run wrote
-  no frame TIFF, and the other five Debug images remained byte-identical.
+  eligibility and Debug output-authority rendering, retaining FrameCropEnvelope
+  while omitting unprotected final boxes, and an actual `--export-review` run wrote
+  no frame TIFF. The other five Debug images changed only the shared legend text;
+  their geometry pixels remained identical.
 - 完整验证通过 774 项测试和 14 组配置。 / Full verification passed 774 tests
   and 14 configuration pairs.
 

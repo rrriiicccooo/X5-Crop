@@ -119,6 +119,16 @@ class UnresolvedOutputContractTest(unittest.TestCase):
                 RunTerminalOutcome.COMPLETED,
             )[1],
         )
+        geometry = debug_geometry(
+            np.zeros((100, 310), dtype=np.uint8),
+            detection,
+            selection.selected,
+        )
+        self.assertEqual(
+            geometry.frame_crop_envelopes,
+            detection.output_geometry.frame_crop_envelopes,
+        )
+        self.assertEqual(geometry.final_boxes, ())
 
         record = report_record_for_final_detection(
             detection,

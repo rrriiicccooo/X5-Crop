@@ -117,7 +117,7 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
                 "Corroborated overlap",
                 "FrameSlot",
                 "Sequence-inferred FrameSlot",
-                "FrameCropEnvelope / protected output",
+                "FrameCropEnvelope / export-eligible final box",
             ),
         )
         self.assertEqual(
@@ -385,7 +385,7 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
             "Corroborated overlap",
             "FrameSlot",
             "Sequence-inferred FrameSlot",
-            "FrameCropEnvelope / protected output",
+            "FrameCropEnvelope / export-eligible final box",
         ):
             self.assertIn(legend_label, readme)
         for stale in (
