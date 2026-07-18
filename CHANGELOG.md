@@ -40,13 +40,18 @@ the validation evidence.
 - Holder occlusion now requires a positive hidden extent and is restricted to
   the first slot's leading side or final slot's trailing side. / Holder occlusion
   现在必须隐藏正宽度，并且只能作用于首 slot 的 leading side 或尾 slot 的 trailing side。
+- Content continuity can corroborate overlap only across independently measured
+  physical boundary roles; repeated-width geometry can no longer gain overlap
+  output-protection authority through content. / Content continuity 只能佐证两侧
+  physical role 已独立测得的 overlap；repeated-width geometry 不能再借 content 获得
+  overlap 输出保护权限。
 - 六张冻结 `135/full` 样片的 current report 中循环 provenance 由 55 降为 0；
   canonical report 比较零差异，六张 Debug Analysis 字节完全一致，且全部继续
   `REVIEW` / 不导出。 / Across the six frozen `135/full` samples, cyclic report
   provenances fell from 55 to zero; canonical report comparison had zero diffs,
   all six Debug Analysis files were byte-identical, and every sample remained
   `REVIEW` / non-exportable.
-- 完整验证通过 763 项测试和 14 组配置。 / Full verification passed 763 tests
+- 完整验证通过 764 项测试和 14 组配置。 / Full verification passed 764 tests
   and 14 configuration pairs.
 
 ### 2026-07-15 — 共享短轴与 Frame Slot / Shared Short Axis And Frame Slots

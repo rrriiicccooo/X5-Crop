@@ -18,7 +18,10 @@ from ....domain import (
     ObservationId,
     PixelInterval,
 )
-from ...physical.model import FrameSlot
+from ...physical.model import (
+    FrameSlot,
+    boundary_role_is_independent_physical_measurement,
+)
 from ....image.evidence import activation_mask
 from ....image.statistics import ImageMeasurementStatistics
 from ..frame_coverage import FrameCoverageEvidence
@@ -420,8 +423,8 @@ def _content_corroborated_spacing(
         spacing.kind == InterFrameSpacingKind.OVERLAP
         and spacing.basis == InterFrameSpacingBasis.GEOMETRY_HYPOTHESIS
         and continuous_content_crossing
-        and left.trailing.independently_observed
-        and right.leading.independently_observed
+        and boundary_role_is_independent_physical_measurement(left.trailing)
+        and boundary_role_is_independent_physical_measurement(right.leading)
         and left.trailing.measurement_provenance.observation_id
         != right.leading.measurement_provenance.observation_id
     )

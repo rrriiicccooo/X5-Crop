@@ -136,6 +136,84 @@ def _content_continuity(
     )
 
 
+def _measured_overlap_slots(*, width_pattern_roles: bool):
+    left, right = candidate_fixture().geometry.frame_slots
+
+    def boundary(
+        template,
+        *,
+        side: BoundarySide,
+        position: float,
+        name: str,
+    ):
+        measurement = MeasurementProvenance(
+            MeasurementIdentity.BOUNDARY_PATHS,
+            ObservationId(name),
+            (MeasurementIdentity.GRAY_WORK,),
+            "measured overlap edge",
+        )
+        path = boundary_path_fixture(
+            side,
+            PixelInterval.exact(position),
+            BoundaryKind.TONAL_TRANSITION,
+            measurement,
+        )
+        role = (
+            MeasurementProvenance(
+                MeasurementIdentity.PHOTO_EDGES,
+                ObservationId(f"{name}:width-pattern-role"),
+                (
+                    MeasurementIdentity.BOUNDARY_PATHS,
+                    MeasurementIdentity.FRAME_WIDTH_PATTERN,
+                ),
+                "overlap-edge role assigned only by repeated width geometry",
+                (measurement.observation_id,),
+            )
+            if width_pattern_roles
+            else measurement
+        )
+        return replace(
+            template,
+            position=path.position,
+            source=FrameBoundarySource.GRAY_PATH_OBSERVATION,
+            boundary_anchor=BoundaryAnchor(
+                path,
+                side,
+                EvidenceState.SUPPORTED,
+                (
+                    BoundaryRoleAuthority.MEASUREMENT_CORROBORATED
+                    if width_pattern_roles
+                    else BoundaryRoleAuthority.DIRECT_MEASUREMENT
+                ),
+                role,
+            ),
+            inference_provenance=None,
+        )
+
+    return (
+        replace(
+            left,
+            trailing=boundary(
+                left.trailing,
+                side=BoundarySide.TRAILING,
+                position=165.0,
+                name="left_overlap_edge",
+            ),
+            visible_long_axis=PixelInterval(0.0, 165.0),
+        ),
+        replace(
+            right,
+            leading=boundary(
+                right.leading,
+                side=BoundarySide.LEADING,
+                position=155.0,
+                name="right_overlap_edge",
+            ),
+            visible_long_axis=PixelInterval(155.0, 310.0),
+        ),
+    )
+
+
 class FrameContentSupportTest(unittest.TestCase):
     def test_smooth_content_across_an_inferred_cut_is_continuous(self) -> None:
         geometry = candidate_fixture().geometry
@@ -719,77 +797,14 @@ class FrameContentSupportTest(unittest.TestCase):
         )
 
     def test_independent_content_tracks_can_corroborate_measured_overlap(self) -> None:
-        geometry = candidate_fixture().geometry
-        left, right = geometry.frame_slots
-        left_provenance = MeasurementProvenance(
-            MeasurementIdentity.BOUNDARY_PATHS,
-            ObservationId("left_overlap_edge"),
-            (MeasurementIdentity.GRAY_WORK,),
-            "left measured overlap edge",
-        )
-        right_provenance = MeasurementProvenance(
-            MeasurementIdentity.BOUNDARY_PATHS,
-            ObservationId("right_overlap_edge"),
-            (MeasurementIdentity.GRAY_WORK,),
-            "right measured overlap edge",
-        )
-        left_path = boundary_path_fixture(
-            BoundarySide.TRAILING,
-            PixelInterval.exact(165.0),
-            BoundaryKind.TONAL_TRANSITION,
-            left_provenance,
-        )
-        right_path = boundary_path_fixture(
-            BoundarySide.LEADING,
-            PixelInterval.exact(155.0),
-            BoundaryKind.TONAL_TRANSITION,
-            right_provenance,
-        )
-        overlapped_left = replace(
-            left,
-            trailing=replace(
-                left.trailing,
-                position=PixelInterval.exact(165.0),
-                source=FrameBoundarySource.GRAY_PATH_OBSERVATION,
-                boundary_anchor=BoundaryAnchor(
-                    left_path,
-                    BoundarySide.TRAILING,
-                    EvidenceState.SUPPORTED,
-                    BoundaryRoleAuthority.DIRECT_MEASUREMENT,
-                    left_provenance,
-                ),
-                inference_provenance=None,
-            ),
-            visible_long_axis=PixelInterval(0.0, 165.0),
-        )
-        overlapped_right = replace(
-            right,
-            leading=replace(
-                right.leading,
-                position=PixelInterval.exact(155.0),
-                source=FrameBoundarySource.GRAY_PATH_OBSERVATION,
-                boundary_anchor=BoundaryAnchor(
-                    right_path,
-                    BoundarySide.LEADING,
-                    EvidenceState.SUPPORTED,
-                    BoundaryRoleAuthority.DIRECT_MEASUREMENT,
-                    right_provenance,
-                ),
-                inference_provenance=None,
-            ),
-            visible_long_axis=PixelInterval(155.0, 310.0),
+        overlapped_left, overlapped_right = _measured_overlap_slots(
+            width_pattern_roles=False,
         )
         spacing = InterFrameSpacing(
             InterFrameBoundaryReference(None, 1),
             PixelInterval.exact(-10.0),
             _provenance("overlap_hypothesis"),
             InterFrameSpacingBasis.GEOMETRY_HYPOTHESIS,
-        )
-        coverage = FrameCoverageEvidence(
-            (0, 310),
-            ((0, 165), (155, 310)),
-            ((0, 310),),
-            0,
         )
 
         evidence = internal_frame_boundary_preservation_evidence(
@@ -801,6 +816,30 @@ class FrameContentSupportTest(unittest.TestCase):
         measured = evidence.observations[0].spacing_evidence
         self.assertEqual(measured.basis, InterFrameSpacingBasis.CORROBORATED_OVERLAP)
         self.assertTrue(measured.supports_output_protection)
+
+    def test_content_cannot_corroborate_width_pattern_overlap(self) -> None:
+        overlapped_left, overlapped_right = _measured_overlap_slots(
+            width_pattern_roles=True,
+        )
+        spacing = InterFrameSpacing(
+            InterFrameBoundaryReference(None, 1),
+            PixelInterval.exact(-10.0),
+            _provenance("width_pattern_overlap_hypothesis"),
+            InterFrameSpacingBasis.GEOMETRY_HYPOTHESIS,
+        )
+
+        evidence = internal_frame_boundary_preservation_evidence(
+            (overlapped_left, overlapped_right),
+            (spacing,),
+            _content_continuity(crossing=True),
+        )
+
+        measured = evidence.observations[0].spacing_evidence
+        self.assertEqual(
+            measured.basis,
+            InterFrameSpacingBasis.GEOMETRY_HYPOTHESIS,
+        )
+        self.assertFalse(measured.supports_output_protection)
 
     def test_blank_boundary_crossing_is_identified_as_inferred_geometry(self) -> None:
         observation = ExternalFrameBoundaryObservation(

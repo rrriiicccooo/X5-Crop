@@ -113,7 +113,14 @@ Candidate-specific assignment 必须同时满足位置、物理宽度、当前 s
 
 `InterFrameSpacing` 使用 signed interval：正值是 separator，零是 contact，负值是 overlap。
 只有独立像素观测或独立约束共同佐证的 overlap 才能触发输出保护。Geometry 方程推导的负值
-不能证明自身，也不能自动增加 bleed。
+不能证明自身，也不能自动增加 bleed。Content crossing 只能佐证两侧 physical roles 已经独立测得的
+overlap；由 dimension 或 `FRAME_WIDTH_PATTERN` 分配的 role 不能借 content 升级为
+`CORROBORATED_OVERLAP`。
+
+Content crossing may corroborate overlap only when both physical boundary roles
+were independently measured. A role assigned by dimensions or
+`FRAME_WIDTH_PATTERN` cannot use content to upgrade geometry into
+`CORROBORATED_OVERLAP` or output-protection authority.
 
 Final sequence identity also conserves separator measurement and spacing
 authority: every typed separator assignment must use cross-axis continuity
