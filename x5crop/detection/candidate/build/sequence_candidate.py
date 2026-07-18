@@ -16,9 +16,9 @@ from ....image.content import ContentRegionObservation
 from ...context import DetectionRequest
 from ...physical.model import FrameSequenceSolution
 from ...physical.frame_sequence_solver import (
-    FrameSequenceSolveFailure,
     solve_frame_sequence,
 )
+from ...physical.frame_sequence_result import FrameSequenceSolveFailure
 from ...physical.short_axis import SharedShortAxisPlan
 from ..model import BuiltCandidate
 from ..plan.model import CountHypothesis

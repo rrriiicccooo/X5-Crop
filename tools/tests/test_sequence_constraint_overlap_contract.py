@@ -7,7 +7,7 @@ from x5crop.detection.physical import frame_sequence_candidates as candidate_bui
 from x5crop.detection.physical import (
     frame_sequence_candidate_resolution as candidate_resolution,
 )
-from x5crop.detection.physical import frame_sequence_solver as solver_module
+from x5crop.detection.physical import frame_sequence_result as sequence_result
 from x5crop.detection.physical.model import (
     BoundaryAnchor,
     BoundaryGeometryState,
@@ -226,7 +226,7 @@ class SequenceConstraintOverlapContractTest(unittest.TestCase):
             width_contributor_indexes=(3, 4),
         )
 
-        spacings = solver_module._final_inter_frame_spacings(
+        spacings = sequence_result.final_inter_frame_spacings(
             slots,
             (),
             common_width,
@@ -243,7 +243,7 @@ class SequenceConstraintOverlapContractTest(unittest.TestCase):
             width_contributor_indexes=(2, 3),
         )
 
-        spacings = solver_module._final_inter_frame_spacings(
+        spacings = sequence_result.final_inter_frame_spacings(
             slots,
             (),
             common_width,

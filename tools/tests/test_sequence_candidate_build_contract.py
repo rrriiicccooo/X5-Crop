@@ -27,9 +27,9 @@ from x5crop.detection.physical.separator.observations import (
     SeparatorObservationSet,
 )
 from x5crop.detection.physical.frame_sequence_solver import (
-    FrameSequenceSolveResult,
     solve_frame_sequence,
 )
+from x5crop.detection.physical.frame_sequence_result import FrameSequenceSolveResult
 from x5crop.detection.physical.short_axis import shared_short_axis_plan
 from x5crop.domain import EvidenceState
 from x5crop.domain import BoundarySide

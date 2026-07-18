@@ -2,10 +2,12 @@ from __future__ import annotations
 
 from x5crop.detection.physical.frame_sequence_solver import (
     FrameSequenceSearchIndex,
-    FrameSequenceSolveFailure,
-    FrameSequenceSolveResult,
     prepare_frame_sequence_search_index,
     solve_frame_sequence,
+)
+from x5crop.detection.physical.frame_sequence_result import (
+    FrameSequenceSolveFailure,
+    FrameSequenceSolveResult,
 )
 from x5crop.detection.physical.short_axis import (
     SharedShortAxisPlan,

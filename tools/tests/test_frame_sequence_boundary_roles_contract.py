@@ -19,10 +19,10 @@ from x5crop.detection.physical.frame_sequence_measurements import (
     MeasuredFrameConstraint,
 )
 from x5crop.detection.physical.frame_sequence_solver import (
-    FrameSequenceSolveResult,
     _measured_sequence_build,
     solve_frame_sequence,
 )
+from x5crop.detection.physical.frame_sequence_result import FrameSequenceSolveResult
 from x5crop.detection.physical.model import (
     BoundaryAnchor,
     BoundaryGeometryState,

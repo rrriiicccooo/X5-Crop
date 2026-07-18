@@ -22,9 +22,9 @@ from x5crop.detection.physical.frame_dimensions import (
     frame_dimension_priors,
 )
 from x5crop.detection.physical.frame_sequence_solver import (
-    FrameSequenceSolveResult,
     solve_frame_sequence,
 )
+from x5crop.detection.physical.frame_sequence_result import FrameSequenceSolveResult
 from x5crop.detection.physical.model import (
     PhotoHeightEvidence,
     SharedShortAxisBasis,

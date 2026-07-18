@@ -22,9 +22,9 @@ from x5crop.detection.physical.model import (
     ReviewOnlyContainment,
 )
 from x5crop.detection.physical.frame_sequence_solver import (
-    FrameSequenceSolveFailure,
     solve_frame_sequence,
 )
+from x5crop.detection.physical.frame_sequence_result import FrameSequenceSolveFailure
 from x5crop.detection.physical.short_axis import shared_short_axis_plan
 from x5crop.domain import (
     BoundaryAxis,

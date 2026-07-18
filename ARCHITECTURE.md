@@ -162,6 +162,7 @@ boundaries are:
 | `frame_sequence_boundary_roles.py` | Repeated-width, physical-scale, common-width, and adjacent-measurement corroboration of typed boundary roles and provenance. |
 | `frame_sequence_candidate_resolution.py` | Holder-boundary lookup, common-width dimension-boundary resolution, unique gray-path assignment, and the ordered boundary-role/common-width physical-resolution pass for one candidate build. |
 | `sequence_completion.py` | Measured-sequence slot inference, blank-slot completion, content occupancy, holder-edge occlusion, endpoint/full-sequence eligibility, and completion selection. |
+| `frame_sequence_result.py` | Typed solve success/failure outcomes, content-extent and indexed-anchor constraints, and final spacing/overlap physical facts. |
 | `frame_sequence_solver.py` | Remaining candidate construction and top-level orchestration responsibilities pending their own canonical owners. |
 
 Dependency direction is one way: common-width resolution consumes measurement
@@ -171,8 +172,9 @@ and candidate state; boundary-role corroboration also consumes measurement facts
 candidate state. Candidate physical resolution consumes measurement facts,
 common-width resolution, candidate state, and boundary-role corroboration. Sequence
 completion consumes measurement facts, common-width resolution, candidate state,
-and candidate physical resolution. The solver consumes all nine modules. No lower
-owner imports the solver. The solver does not re-export migrated symbols.
+and candidate physical resolution. Result facts consume measurement facts,
+common-width resolution, and candidate state. The solver consumes all ten modules.
+No lower owner imports the solver. The solver does not re-export migrated symbols.
 Architecture contracts check the definition owners and import direction, while
 physical contracts target the canonical module directly.
 
@@ -191,14 +193,16 @@ holder boundary 映射、common-width dimension-boundary resolution、唯一 gra
 以及 boundary role 与 common-width 的有序 candidate physical-resolution pass 只由
 `frame_sequence_candidate_resolution.py` 拥有。measured-sequence slot inference、blank-slot
 completion、content occupancy、holder-edge occlusion、endpoint/full-sequence eligibility 与
-completion selection 只由 `sequence_completion.py` 拥有。candidate construction 仍由 solver
-承载，等待后续独立 owner。
+completion selection 只由 `sequence_completion.py` 拥有。typed solve outcome、content-extent /
+indexed-anchor constraints 与最终 spacing/overlap physical facts 只由
+`frame_sequence_result.py` 拥有。candidate construction 仍由 solver 承载，等待后续独立 owner。
 依赖保持单向：measurement facts 供 common-width、search、candidate state、separator assignment
 与 boundary-role owner 消费；consensus、separator assignment 与 boundary-role owner 再消费
 candidate state；candidate physical resolution 只消费 measurement facts、common-width、candidate
 state 与 boundary-role owner；sequence completion 只消费 measurement facts、common-width、
-candidate state 与 candidate physical resolution；solver 统一消费九个低层 owner。低层模块不得
-反向导入 solver，solver 也不兼容导出已经迁移的符号。
+candidate state 与 candidate physical resolution；result facts 只消费 measurement facts、
+common-width 与 candidate state；solver 统一消费十个低层 owner。低层模块不得反向导入
+solver，solver 也不兼容导出已经迁移的符号。
 
 ## 3. Evidence、Assessment 与 Decision
 

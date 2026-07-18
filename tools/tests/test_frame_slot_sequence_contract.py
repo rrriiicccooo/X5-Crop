@@ -21,9 +21,9 @@ from x5crop.detection.physical.sequence_completion import infer_sequence_frame_s
 from x5crop.detection.physical import frame_sequence_common_width as common_width
 from x5crop.detection.physical import frame_sequence_solver as solver_module
 from x5crop.detection.physical.frame_sequence_solver import (
-    FrameSequenceSolveResult,
     solve_frame_sequence,
 )
+from x5crop.detection.physical.frame_sequence_result import FrameSequenceSolveResult
 from x5crop.detection.physical.short_axis import (
     resolve_photo_height_evidence,
     resolve_shared_short_axis,

@@ -16,7 +16,7 @@ from x5crop.detection.physical import (
     frame_sequence_candidate_resolution as candidate_resolution,
 )
 from x5crop.detection.physical import frame_sequence_candidates as candidate_builds
-from x5crop.detection.physical.frame_sequence_solver import FrameSequenceSolveResult
+from x5crop.detection.physical.frame_sequence_result import FrameSequenceSolveResult
 from x5crop.detection.physical.model import (
     BoundaryAnchor,
     BoundaryGeometryState,
