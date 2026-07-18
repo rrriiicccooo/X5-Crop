@@ -32,7 +32,7 @@ from ..detection.candidate.selection.model import (
     SelectionResult,
 )
 from ..detection.geometry_resolution import GeometryResolution
-from ..detection.final.model import FinalizationPlan
+from ..detection.final.model import FinalizationPlan, frame_export_eligibility
 from ..detection.gate_checks import GateCheck, GateRequirement, GateStage
 from ..detection.evidence.transform_geometry import TransformGeometryEvidence
 from ..detection.physical.model import (
@@ -560,17 +560,7 @@ def _output_valid(value: Any, *, geometry_resolved: bool) -> bool:
         )
     except (KeyError, TypeError, ValueError):
         return False
-    eligibility = value["export_eligibility"]
-    expected_eligibility = {
-        "frame_export_eligible": geometry_resolved,
-        "reason": (
-            "geometry_resolved"
-            if geometry_resolved
-            else "geometry_resolution_unavailable"
-        ),
-    }
-    if eligibility != expected_eligibility:
-        return False
+    plan: FinalizationPlan | None = None
     if geometry_resolved:
         try:
             plan = finalization_plan_from_read_model(value["finalization_plan"])
@@ -592,10 +582,20 @@ def _output_valid(value: Any, *, geometry_resolved: bool) -> bool:
             and value["final_geometry"] is None
             and value["output_files"] == []
         )
+    export_eligible, export_reason = frame_export_eligibility(
+        plan,
+        frame_bleed_plan,
+    )
+    if value["export_eligibility"] != {
+        "frame_export_eligible": export_eligible,
+        "reason": export_reason,
+    }:
+        return False
     return bool(
         geometry_valid
         and isinstance(value["output_files"], list)
         and all(isinstance(path, str) for path in value["output_files"])
+        and (export_eligible or value["output_files"] == [])
         and (value["review_copy"] is None or isinstance(value["review_copy"], str))
         and isinstance(value["warnings"], list)
         and all(isinstance(warning, str) for warning in value["warnings"])
@@ -851,6 +851,10 @@ def _record_identities_valid(
     frame_bleed_plan = frame_bleed_plan_from_read_model(
         record["output"]["frame_bleed_plan"]
     )
+    export_eligible, export_reason = frame_export_eligibility(
+        plan,
+        frame_bleed_plan,
+    )
     final_geometry = (
         None
         if record["output"]["final_geometry"] is None
@@ -909,12 +913,8 @@ def _record_identities_valid(
         and output_identity_valid
         and record["output"]["export_eligibility"]
         == {
-            "frame_export_eligible": selection.geometry_resolution.supported,
-            "reason": (
-                "geometry_resolved"
-                if selection.geometry_resolution.supported
-                else "geometry_resolution_unavailable"
-            ),
+            "frame_export_eligible": export_eligible,
+            "reason": export_reason,
         }
     )
 

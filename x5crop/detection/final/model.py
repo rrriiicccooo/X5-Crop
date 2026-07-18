@@ -5,6 +5,13 @@ from dataclasses import dataclass
 from ...geometry.layout import require_work_layout
 from ...output.model import FrameBleedPlan, OutputGeometry
 from ..decision.model import DecisionGateAssessment
+from ..decision.vocabulary import (
+    FINAL_REASON_GEOMETRY_RESOLUTION_UNAVAILABLE,
+    FINAL_REASON_OUTPUT_PROTECTION_UNRESOLVED,
+)
+
+
+FRAME_EXPORT_REASON_READY = "geometry_resolved_output_protected"
 
 
 @dataclass(frozen=True)
@@ -20,6 +27,17 @@ class FinalizationPlan:
             raise ValueError("finalization image dimensions must be positive")
 
 
+def frame_export_eligibility(
+    finalization_plan: FinalizationPlan | None,
+    frame_bleed_plan: FrameBleedPlan,
+) -> tuple[bool, str]:
+    if finalization_plan is None:
+        return False, FINAL_REASON_GEOMETRY_RESOLUTION_UNAVAILABLE
+    if not frame_bleed_plan.feasible:
+        return False, FINAL_REASON_OUTPUT_PROTECTION_UNRESOLVED
+    return True, FRAME_EXPORT_REASON_READY
+
+
 @dataclass(frozen=True)
 class FinalDetection:
     decision: DecisionGateAssessment
@@ -29,8 +47,11 @@ class FinalDetection:
 
     def __post_init__(self) -> None:
         plan = self.finalization_plan
-        if plan is None and self.decision.status == "approved_auto":
-            raise ValueError("approved detection requires resolved final geometry")
+        if (
+            self.decision.status == "approved_auto"
+            and not frame_export_eligibility(plan, self.frame_bleed_plan)[0]
+        ):
+            raise ValueError("approved detection requires export-eligible output")
         if (plan is None) != (self.output_geometry is None):
             raise ValueError("finalization plan and output geometry must resolve together")
         if plan is None and self.frame_bleed_plan.frame_sides:
@@ -47,12 +68,14 @@ class FinalDetection:
 
     @property
     def frame_export_eligible(self) -> bool:
-        return self.finalization_plan is not None
+        return frame_export_eligibility(
+            self.finalization_plan,
+            self.frame_bleed_plan,
+        )[0]
 
     @property
     def frame_export_reason(self) -> str:
-        return (
-            "geometry_resolved"
-            if self.frame_export_eligible
-            else "geometry_resolution_unavailable"
-        )
+        return frame_export_eligibility(
+            self.finalization_plan,
+            self.frame_bleed_plan,
+        )[1]

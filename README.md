@@ -302,7 +302,8 @@ python3 X5_Crop.py . --format 135 --strip full --deskew-fallback off
 python3 X5_Crop.py . --format 135 --strip full --jobs 1
 ```
 
-强制导出已经解决几何的 `REVIEW` 结果；未解决的 provisional geometry 永远不会导出：
+强制导出几何已解决且输出保护可行的 `REVIEW` 结果；未解决的 provisional geometry 或
+未解决的 overlap 输出保护永远不会导出：
 
 ```bash
 python3 X5_Crop.py . --format 135 --strip full --export-review
@@ -434,15 +435,17 @@ DPI/PPI remain I/O and report data rather than direct crop geometry.
 Auto count checks the larger allowed counts first. The program resolves one safe
 short-axis span for the strip, then evaluates the frame order, boundaries, and
 spacing together. It exports automatically only when the count and crop geometry
-are resolved with no outstanding alternative. Full mode may uniquely infer one
+are resolved with no outstanding alternative and output protection is feasible.
+Full mode may uniquely infer one
 blank position from a complete sequence, but missing content is not evidence by
 itself. Two blank positions or ambiguous placement remain in review, and partial
 auto count never grows from a blank-looking region.
 
 See `ARCHITECTURE.md` for internal evidence, data flow, and authority boundaries.
 
-`--export-review` exports resolved REVIEW crops only. Unresolved provisional
-geometry is never exportable.
+`--export-review` exports REVIEW crops only when geometry is resolved and output
+protection is feasible. Unresolved provisional geometry or overlap protection is
+never exportable.
 
 ### Formats
 

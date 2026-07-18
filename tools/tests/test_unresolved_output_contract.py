@@ -11,6 +11,7 @@ import numpy as np
 
 from tools.tests.physical_gate_support import (
     candidate_fixture,
+    frame_bleed_fixture,
     selection_fixture,
     transform_geometry_fixture,
     unavailable_resolution_metadata_fixture,
@@ -42,6 +43,121 @@ from x5crop.run_status import RunTerminalOutcome
 
 
 class UnresolvedOutputContractTest(unittest.TestCase):
+    def test_approved_detection_requires_export_eligible_output(self) -> None:
+        selection = selection_fixture()
+        safe_bleed = frame_bleed_fixture()
+        unsafe_bleed = frame_bleed_fixture(feasible=False)
+        approved = apply_decision_gate(
+            selection,
+            safe_bleed,
+            transform_geometry_fixture(),
+            automatic_processing_eligibility=EvidenceState.SUPPORTED,
+        )
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "approved detection requires export-eligible output",
+        ):
+            finalize_detection(
+                approved,
+                unsafe_bleed,
+                finalization_plan_for_selection(
+                    selection,
+                    workspace_extent=WorkspaceExtent(310, 100),
+                ),
+            )
+
+    def test_export_review_cannot_bypass_unresolved_output_protection(self) -> None:
+        selection = selection_fixture(
+            candidate_fixture(failed_candidate_check="sequence_proof")
+        )
+        bleed = frame_bleed_fixture(feasible=False)
+        transform = transform_geometry_fixture()
+        detection = finalize_detection(
+            apply_decision_gate(
+                selection,
+                bleed,
+                transform,
+                automatic_processing_eligibility=EvidenceState.SUPPORTED,
+            ),
+            bleed,
+            finalization_plan_for_selection(
+                selection,
+                workspace_extent=WorkspaceExtent(310, 100),
+            ),
+        )
+
+        self.assertFalse(detection.frame_export_eligible)
+        self.assertEqual(
+            detection.frame_export_reason,
+            "output_protection_unresolved",
+        )
+        with TemporaryDirectory() as temporary_directory, patch(
+            "x5crop.export.actions.write_crops",
+            return_value=["output/frame.tif"],
+        ) as writer:
+            output_root = Path(temporary_directory) / "output"
+            outputs = write_crops_if_allowed(
+                Path("input.tif"),
+                np.zeros((100, 310), dtype=np.uint8),
+                np.zeros((100, 310), dtype=np.uint8),
+                _profile(),
+                detection,
+                SimpleNamespace(export_review=True, dry_run=False),
+                False,
+                OutputSurface(output_root),
+            )
+            self.assertFalse(output_root.exists())
+
+        self.assertEqual(outputs, [])
+        writer.assert_not_called()
+        self.assertIn(
+            "NOT EXPORTABLE",
+            debug_status_parts(
+                detection,
+                get_detection_configuration("135", "full").diagnostics.style,
+                RunTerminalOutcome.COMPLETED,
+            )[1],
+        )
+
+        record = report_record_for_final_detection(
+            detection,
+            selection,
+            source="input.tif",
+            profile=typed_read_model(_profile()),
+            workspace_identity=WorkspaceIdentity(
+                WorkspaceExtent(310, 100),
+                "0" * 64,
+            ),
+            output_files=outputs,
+            review_copy=None,
+            warnings=[],
+            configuration=detection_configuration_read_model(
+                get_detection_configuration("135", "partial")
+            ),
+            resolution_metadata=unavailable_resolution_metadata_fixture(),
+            transform_geometry=transform,
+            analysis_reuse_signature=_analysis_reuse_signature(),
+        )
+        self.assertIsNotNone(record["output"]["finalization_plan"])
+        self.assertIsNotNone(record["output"]["final_geometry"])
+        self.assertEqual(
+            record["output"]["export_eligibility"],
+            {
+                "frame_export_eligible": False,
+                "reason": "output_protection_unresolved",
+            },
+        )
+        self.assertEqual(current_report_record_errors(record), [])
+        self.assertFalse(
+            final_detection_from_record(record).frame_export_eligible
+        )
+        record["output"]["output_files"] = ["unsafe-review-frame.tif"]
+        self.assertIn(
+            "output_incomplete",
+            current_report_record_errors(record),
+        )
+
     def test_resolved_review_remains_explicitly_exportable(self) -> None:
         selection = selection_fixture(
             candidate_fixture(failed_candidate_check="sequence_proof")
@@ -59,6 +175,11 @@ class UnresolvedOutputContractTest(unittest.TestCase):
                 selection,
                 workspace_extent=WorkspaceExtent(310, 100),
             ),
+        )
+        self.assertTrue(detection.frame_export_eligible)
+        self.assertEqual(
+            detection.frame_export_reason,
+            "geometry_resolved_output_protected",
         )
         with TemporaryDirectory() as temporary_directory, patch(
             "x5crop.export.actions.write_crops",

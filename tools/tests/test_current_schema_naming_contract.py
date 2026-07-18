@@ -427,8 +427,9 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
             PROJECT_ROOT / "tools/tests/test_architecture_ownership_contract.py"
         ).read_text(encoding="utf-8")
 
-        self.assertIn("resolved REVIEW crops", cli)
-        self.assertIn("resolved REVIEW crops", readme)
+        for source in (cli, readme):
+            self.assertIn("geometry is resolved", source)
+            self.assertIn("output protection is feasible", source)
         self.assertNotIn("PhotoSequenceSolver", architecture)
         self.assertNotIn("PhotoSequenceEnvelope", architecture)
         self.assertIn("solve_frame_sequence", architecture)

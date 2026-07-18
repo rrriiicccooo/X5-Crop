@@ -64,6 +64,14 @@ the validation evidence.
   frame-scale observations. / Repeated-width boundary role 现在不能进入单帧 proof、
   单帧 geometry resolution、evidence-independence support 或 measured frame-scale
   observation。
+- REVIEW 导出现在同时要求 resolved geometry 与 feasible `FrameBleedPlan`；
+  `--export-review` 不能绕过 unresolved overlap protection。Report、cache restoration、Debug
+  和实际 writer 共用同一 export eligibility，且 current report 拒绝不可导出状态下声称存在
+  frame outputs。 / REVIEW export now requires both resolved geometry and a feasible
+  `FrameBleedPlan`; `--export-review` cannot bypass unresolved overlap protection.
+  Report, cache restoration, Debug, and the writer share one export eligibility,
+  whose positive reason is `geometry_resolved_output_protected`; current reports
+  reject claimed frame outputs while export is ineligible.
 - 初始 provenance/sequence-conservation 波次使六张冻结 `135/full` 样片的循环
   provenance 由 55 降为 0，同时保持 canonical report 零差异和 Debug Analysis 字节一致。 /
   The initial provenance and sequence-conservation waves reduced cyclic
@@ -76,7 +84,14 @@ the validation evidence.
   frame-scale and independence records from 00007/13/18/19/31; 00031 gained
   `evidence_independence_failed`, with only its Debug header changing and all
   geometry boxes preserved. All six samples remain `REVIEW` / non-exportable.
-- 完整验证通过 772 项测试和 14 组配置。 / Full verification passed 772 tests
+- 六张冻结 `135/full` 样片的 selection、DecisionGate、FrameBleedPlan、crop envelopes 与
+  final boxes 保持逐字段一致；00007 仅修正 export eligibility 和 Debug 权限标题，真实
+  `--export-review` 运行没有写出 frame TIFF，其余五张 Debug 字节一致。 / Across the six
+  frozen `135/full` samples, selection, DecisionGate, FrameBleedPlan, crop
+  envelopes, and final boxes remained field-identical; 00007 changed only export
+  eligibility and the Debug authority label, an actual `--export-review` run wrote
+  no frame TIFF, and the other five Debug images remained byte-identical.
+- 完整验证通过 774 项测试和 14 组配置。 / Full verification passed 774 tests
   and 14 configuration pairs.
 
 ### 2026-07-15 — 共享短轴与 Frame Slot / Shared Short Axis And Frame Slots

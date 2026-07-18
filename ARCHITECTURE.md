@@ -327,8 +327,9 @@ Blank frame 使用自己的 `safe_output_interval`，可以保守包含连续片
 但不能改写任何真实照片的 crop envelope。用户 bleed 与 blank safe output 是不同概念。
 
 Measured/corroborated overlap 只扩张相关内部 boundary 两侧；无关 frame 不受全局最大值影响。
-Bleed 不修改 frame slots、CandidateGate、GeometryResolution 或 status。Unresolved geometry 永不
-导出 frame TIFF，即使用户启用 `--export-review`。
+Bleed 不修改 frame slots、CandidateGate、GeometryResolution 或 status。Unresolved geometry 或
+FrameBleedPlan 中 unresolved overlap protection 永不导出 frame TIFF，即使用户启用
+`--export-review`；resolved geometry 可继续供诊断显示，但不获得导出权限。
 
 ### 4.2 Current Report Schema
 

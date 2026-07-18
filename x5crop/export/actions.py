@@ -50,7 +50,7 @@ def write_crops_if_allowed(
 ) -> list[str]:
     should_export = (
         detection.decision.status == "approved_auto" or config.export_review
-    ) and not config.dry_run
+    ) and detection.frame_export_eligible and not config.dry_run
     if not should_export:
         return []
     output_geometry = detection.output_geometry
