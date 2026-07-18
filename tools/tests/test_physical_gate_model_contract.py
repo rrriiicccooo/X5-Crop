@@ -3,7 +3,9 @@ from __future__ import annotations
 from dataclasses import replace
 from inspect import signature
 from pathlib import Path
+from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
 from tools.tests.physical_gate_support import (
     candidate_evidence_fixture,
@@ -20,6 +22,7 @@ from x5crop.detection.decision.decision_gate import apply_decision_gate
 from x5crop.detection.evidence.separator_sequence import separator_sequence_evidence
 from x5crop.detection.candidate.selection.choose import select_candidates
 from x5crop.detection.candidate.selection.choose import geometry_clusters
+from x5crop.detection.candidate.selection.choose import geometry_equivalent
 from x5crop.detection.candidate.plan.model import CountHypothesisSource
 from x5crop.detection.candidate.assessment.candidate import (
     candidate_gate_for_evidence,
@@ -271,6 +274,66 @@ class PhysicalGateModelContractTest(unittest.TestCase):
             "bridge_geometry_leading_edge",
         )
         self.assertEqual(len(geometry_clusters((bridge, left, right))), 2)
+
+    def test_geometry_cluster_preserves_slot_topology_and_visible_extent(self) -> None:
+        class SyntheticSequenceGeometry:
+            def __init__(
+                self,
+                second_slot_inferred: bool,
+                second_visible: PixelInterval | None = None,
+            ) -> None:
+                def boundary(position: float):
+                    return SimpleNamespace(position=PixelInterval.exact(position))
+
+                self.count = 2
+                self.strip_mode = "full"
+                self.shared_short_axis = SimpleNamespace(
+                    top=PixelInterval.exact(0.0),
+                    bottom=PixelInterval.exact(100.0),
+                )
+                self.frame_slots = (
+                    SimpleNamespace(
+                        sequence_inferred=False,
+                        visible_long_axis=PixelInterval(0.0, 100.0),
+                        leading=boundary(0.0),
+                        trailing=boundary(100.0),
+                    ),
+                    SimpleNamespace(
+                        sequence_inferred=second_slot_inferred,
+                        visible_long_axis=(
+                            second_visible
+                            if second_visible is not None
+                            else PixelInterval(110.0, 210.0)
+                        ),
+                        leading=boundary(110.0),
+                        trailing=boundary(210.0),
+                    ),
+                )
+
+        measured = SimpleNamespace(geometry=SyntheticSequenceGeometry(False))
+        inferred = SimpleNamespace(geometry=SyntheticSequenceGeometry(True))
+
+        with patch(
+            "x5crop.detection.candidate.selection.choose.FrameSequenceSolution",
+            SyntheticSequenceGeometry,
+        ):
+            self.assertFalse(geometry_equivalent(measured, inferred))
+            self.assertFalse(
+                geometry_equivalent(
+                    SimpleNamespace(
+                        geometry=SyntheticSequenceGeometry(
+                            False,
+                            PixelInterval(110.0, 150.0),
+                        )
+                    ),
+                    SimpleNamespace(
+                        geometry=SyntheticSequenceGeometry(
+                            False,
+                            PixelInterval(170.0, 210.0),
+                        )
+                    ),
+                )
+            )
 
     def test_candidate_residual_tradeoffs_preserve_geometry_disagreement(self) -> None:
         selected = candidate_fixture()

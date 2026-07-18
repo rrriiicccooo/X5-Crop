@@ -55,13 +55,17 @@ the validation evidence.
   real topology disagreement even when both alternatives occupy the same
   coordinates. / 即使两个替代解坐标完全相同，assignment consensus 也会把 measured
   slot 与 sequence-inferred slot 的身份差异保留为真实 topology disagreement。
+- Candidate geometry clustering now preserves sequence-inferred slot identity
+  and mutually exclusive visible extents instead of merging them by nominal
+  boundary coordinates alone. / Candidate geometry clustering 现在同时保留
+  sequence-inferred slot 身份与互斥 visible extent，不再只按 nominal boundary 坐标合并。
 - 六张冻结 `135/full` 样片的 current report 中循环 provenance 由 55 降为 0；
   canonical report 比较零差异，六张 Debug Analysis 字节完全一致，且全部继续
   `REVIEW` / 不导出。 / Across the six frozen `135/full` samples, cyclic report
   provenances fell from 55 to zero; canonical report comparison had zero diffs,
   all six Debug Analysis files were byte-identical, and every sample remained
   `REVIEW` / non-exportable.
-- 完整验证通过 767 项测试和 14 组配置。 / Full verification passed 767 tests
+- 完整验证通过 768 项测试和 14 组配置。 / Full verification passed 768 tests
   and 14 configuration pairs.
 
 ### 2026-07-15 — 共享短轴与 Frame Slot / Shared Short Axis And Frame Slots

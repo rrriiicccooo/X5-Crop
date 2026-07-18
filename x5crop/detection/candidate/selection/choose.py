@@ -171,15 +171,20 @@ def geometry_equivalent(
                 right_geometry.shared_short_axis.bottom
             )
             and all(
-                left_boundary.position.intersects(right_boundary.position)
+                left_slot.sequence_inferred == right_slot.sequence_inferred
+                and left_slot.visible_long_axis.intersects(
+                    right_slot.visible_long_axis
+                )
+                and left_slot.leading.position.intersects(
+                    right_slot.leading.position
+                )
+                and left_slot.trailing.position.intersects(
+                    right_slot.trailing.position
+                )
                 for left_slot, right_slot in zip(
                     left_geometry.frame_slots,
                     right_geometry.frame_slots,
                     strict=True,
-                )
-                for left_boundary, right_boundary in (
-                    (left_slot.leading, right_slot.leading),
-                    (left_slot.trailing, right_slot.trailing),
                 )
             )
         )
