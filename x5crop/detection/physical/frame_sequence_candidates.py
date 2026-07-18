@@ -1,17 +1,27 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from math import ceil, floor, isfinite
 
 from ...domain import (
     BoundarySide,
+    EvidenceState,
+    InterFrameBoundaryReference,
     InterFrameSpacing,
+    InterFrameSpacingBasis,
+    InterFrameSpacingKind,
+    MeasurementIdentity,
+    MeasurementProvenance,
+    ObservationId,
     PixelInterval,
     SeparatorBandObservation,
     SeparatorCrossAxisMeasurement,
 )
 from ...image.content import ContentRegionObservation
+from . import frame_sequence_measurements as measurement_facts
 from .model import (
+    BoundaryAnchor,
+    BoundaryRoleAuthority,
     FrameBoundarySource,
     FrameEdgeAssignment,
     FrameSlot,
@@ -345,3 +355,278 @@ def build_preserves_visible_content(
     if sequence_interval[1] <= sequence_interval[0]:
         return False
     return not visible_content.uncovered_by((sequence_interval,))
+
+
+def resolve_edge_constraint(
+    frame_index: int,
+    side: BoundarySide,
+    constraint: measurement_facts.EdgeConstraint,
+) -> tuple[ResolvedFrameBoundary, FrameEdgeAssignment | None]:
+    observation = constraint.path or constraint.separator
+    observed = constraint.basis in {
+        FrameBoundarySource.GRAY_PATH_OBSERVATION,
+        FrameBoundarySource.SEPARATOR_EDGE_OBSERVATION,
+    }
+    anchor = (
+        BoundaryAnchor(
+            observation=observation,
+            physical_role=side,
+            role_state=constraint.state,
+            role_authority=(
+                BoundaryRoleAuthority.DIRECT_MEASUREMENT
+                if constraint.state == EvidenceState.SUPPORTED
+                else BoundaryRoleAuthority.UNAVAILABLE
+            ),
+            role_provenance=constraint.provenance,
+        )
+        if observed and observation is not None
+        else None
+    )
+    resolution = ResolvedFrameBoundary(
+        position=constraint.position,
+        source=constraint.basis,
+        geometry_state=constraint.geometry_state,
+        boundary_anchor=anchor,
+        inference_provenance=(None if anchor is not None else constraint.provenance),
+    )
+    if constraint.path is None:
+        return resolution, None
+    return (
+        resolution,
+        FrameEdgeAssignment(
+            frame_index=frame_index,
+            side=side,
+            observation=constraint.path,
+            resolution=resolution,
+        ),
+    )
+
+def spacing_from_frame_edges(
+    boundary_index: int,
+    trailing: ResolvedFrameBoundary,
+    leading: ResolvedFrameBoundary,
+    *,
+    separator_observation_supported: bool = True,
+) -> InterFrameSpacing:
+    trailing_provenance = trailing.measurement_provenance
+    leading_provenance = leading.measurement_provenance
+    same_observation = bool(
+        trailing.boundary_anchor is not None
+        and leading.boundary_anchor is not None
+        and trailing_provenance.observation_id
+        == leading_provenance.observation_id
+    )
+    shared_photo_edge = bool(
+        same_observation
+        and trailing.source == FrameBoundarySource.GRAY_PATH_OBSERVATION
+        and leading.source == FrameBoundarySource.GRAY_PATH_OBSERVATION
+        and boundary_role_is_independent_physical_measurement(trailing)
+        and boundary_role_is_independent_physical_measurement(leading)
+    )
+    signed_width = (
+        PixelInterval.exact(0.0)
+        if shared_photo_edge
+        else leading.position.minus(trailing.position)
+    )
+    measured_separator = bool(
+        separator_observation_supported
+        and
+        signed_width.minimum > 0.0
+        and same_observation
+        and trailing.source == FrameBoundarySource.SEPARATOR_EDGE_OBSERVATION
+        and leading.source == FrameBoundarySource.SEPARATOR_EDGE_OBSERVATION
+    )
+    measured_contact = bool(
+        shared_photo_edge
+        or (
+            signed_width.minimum == 0.0
+            and signed_width.maximum == 0.0
+            and same_observation
+        )
+    )
+    distinct_observed_edges = bool(
+        boundary_role_is_independent_physical_measurement(trailing)
+        and boundary_role_is_independent_physical_measurement(leading)
+        and trailing_provenance.observation_id
+        != leading_provenance.observation_id
+    )
+    observed = bool(
+        boundary_role_is_independent_physical_measurement(trailing)
+        and boundary_role_is_independent_physical_measurement(leading)
+        and (
+            measured_separator
+            or measured_contact
+            or distinct_observed_edges
+        )
+    )
+    provenance = MeasurementProvenance(
+        root_measurement=(
+            MeasurementIdentity.PHOTO_EDGES
+            if observed
+            else MeasurementIdentity.FRAME_GEOMETRY
+        ),
+        observation_id=ObservationId(
+            f"inter_frame_spacing:{boundary_index}:"
+            f"{trailing_provenance.observation_id}:"
+            f"{leading_provenance.observation_id}"
+        ),
+        dependencies=tuple(
+            dict.fromkeys(
+                (
+                    trailing_provenance.root_measurement,
+                    leading_provenance.root_measurement,
+                )
+            )
+        ),
+        description=(
+            "measured inter-frame spacing"
+            if observed
+            else "inter-frame spacing hypothesis"
+        ),
+        boundary_anchors=tuple(
+            dict.fromkeys(
+                (
+                    trailing_provenance.observation_id,
+                    leading_provenance.observation_id,
+                )
+            )
+        ),
+    )
+    return InterFrameSpacing(
+        boundary=InterFrameBoundaryReference(None, boundary_index),
+        signed_width_px=signed_width,
+        provenance=provenance,
+        basis=(
+            InterFrameSpacingBasis.OBSERVED
+            if observed
+            else InterFrameSpacingBasis.GEOMETRY_HYPOTHESIS
+        ),
+    )
+
+def uncorroborated_overlap_extent(
+    spacings: tuple[InterFrameSpacing, ...],
+) -> float:
+    return sum(
+        max(0.0, -spacing.signed_width_px.maximum)
+        for spacing in spacings
+        if spacing.basis == InterFrameSpacingBasis.GEOMETRY_HYPOTHESIS
+    )
+
+def unexplained_spacing_extent(
+    spacings: tuple[InterFrameSpacing, ...],
+) -> float:
+    return sum(
+        max(0.0, spacing.signed_width_px.minimum)
+        for spacing in spacings
+        if spacing.basis == InterFrameSpacingBasis.GEOMETRY_HYPOTHESIS
+    )
+
+def uncorroborated_contact_count(
+    spacings: tuple[InterFrameSpacing, ...],
+) -> int:
+    return sum(
+        spacing.kind == InterFrameSpacingKind.CONTACT
+        and spacing.basis == InterFrameSpacingBasis.GEOMETRY_HYPOTHESIS
+        for spacing in spacings
+    )
+
+def inferred_boundary_count(slots: tuple[FrameSlot, ...]) -> int:
+    observed_sources = {
+        FrameBoundarySource.GRAY_PATH_OBSERVATION,
+        FrameBoundarySource.SEPARATOR_EDGE_OBSERVATION,
+    }
+    return sum(
+        boundary.source not in observed_sources
+        for slot in slots
+        for boundary in (slot.leading, slot.trailing)
+    )
+
+def long_axis_assignments_for_slots(
+    assignments: tuple[FrameEdgeAssignment, ...],
+    slots: tuple[FrameSlot, ...],
+) -> tuple[FrameEdgeAssignment, ...]:
+    boundaries = {
+        (slot.index, side): boundary
+        for slot in slots
+        for side, boundary in (
+            (BoundarySide.LEADING, slot.leading),
+            (BoundarySide.TRAILING, slot.trailing),
+        )
+    }
+    retained: list[FrameEdgeAssignment] = []
+    for assignment in assignments:
+        boundary = boundaries[(assignment.frame_index, assignment.side)]
+        if (
+            boundary.source != FrameBoundarySource.GRAY_PATH_OBSERVATION
+            or boundary.boundary_anchor is None
+            or boundary.boundary_anchor.observation != assignment.observation
+        ):
+            continue
+        retained.append(replace(assignment, resolution=boundary))
+    return tuple(retained)
+
+def bindings_for_resolved_slots(
+    bindings: tuple[SeparatorBandBinding, ...],
+    slots: tuple[FrameSlot, ...],
+) -> tuple[SeparatorBandBinding, ...]:
+    resolved: list[SeparatorBandBinding] = []
+    for binding in bindings:
+        trailing = slots[binding.boundary_index - 1].trailing
+        leading = slots[binding.boundary_index].leading
+        if (
+            trailing.source != FrameBoundarySource.SEPARATOR_EDGE_OBSERVATION
+            or leading.source != FrameBoundarySource.SEPARATOR_EDGE_OBSERVATION
+            or trailing.measurement_provenance != binding.observation.provenance
+            or leading.measurement_provenance != binding.observation.provenance
+        ):
+            continue
+        resolved.append(
+            replace(
+                binding,
+                preceding_trailing_edge=trailing,
+                following_leading_edge=leading,
+            )
+        )
+    return tuple(resolved)
+
+def rebuild_sequence_build(
+    build: SequenceBuild,
+    slots: tuple[FrameSlot, ...],
+) -> SequenceBuild:
+    long_axis_assignments = long_axis_assignments_for_slots(
+        build.long_axis_assignments,
+        slots,
+    )
+    separator_bindings = bindings_for_resolved_slots(
+        build.separator_bindings,
+        slots,
+    )
+    spacings = tuple(
+        spacing_from_frame_edges(index, left.trailing, right.leading)
+        for index, (left, right) in enumerate(zip(slots, slots[1:]), start=1)
+    )
+    return replace(
+        build,
+        slots=slots,
+        long_axis_assignments=long_axis_assignments,
+        separator_bindings=separator_bindings,
+        spacings=spacings,
+        objectives=replace(
+            build.objectives,
+            uncorroborated_overlap_extent_px=uncorroborated_overlap_extent(spacings),
+            unexplained_spacing_extent_px=unexplained_spacing_extent(spacings),
+            supported_separator_count=len(separator_bindings),
+            internal_boundary_measurement_quality=float(
+                sum(
+                    boundary.independently_observed
+                    for left, right in zip(slots, slots[1:])
+                    for boundary in (left.trailing, right.leading)
+                )
+            ),
+            external_boundary_measurement_quality=float(
+                slots[0].leading.independently_observed
+                + slots[-1].trailing.independently_observed
+            ),
+            inferred_boundary_count=inferred_boundary_count(slots),
+        ),
+    )

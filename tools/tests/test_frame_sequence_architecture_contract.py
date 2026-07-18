@@ -43,6 +43,15 @@ _CANONICAL_OWNERS = {
         "representative_build",
         "build_preserves_visible_content",
         "frame_slots_are_strictly_monotonic",
+        "resolve_edge_constraint",
+        "spacing_from_frame_edges",
+        "uncorroborated_overlap_extent",
+        "unexplained_spacing_extent",
+        "uncorroborated_contact_count",
+        "inferred_boundary_count",
+        "long_axis_assignments_for_slots",
+        "bindings_for_resolved_slots",
+        "rebuild_sequence_build",
     },
     "frame_sequence_consensus.py": {
         "sequence_assignment_consensus",
@@ -50,6 +59,16 @@ _CANONICAL_OWNERS = {
         "apply_internal_geometry_uncertainty",
         "external_safety_boundary",
         "apply_external_safety_envelope",
+    },
+    "frame_sequence_separator_assignment.py": {
+        "separator_band_edge_constraint",
+        "observed_band_edges",
+        "candidate_specific_separator_edge_roles",
+        "candidate_specific_holder_band_roles",
+        "spacing_for_band",
+        "separator_observation_assignment",
+        "assign_unique_separator_observations",
+        "separator_assignments_from_bindings",
     },
 }
 
@@ -107,6 +126,7 @@ class FrameSequenceArchitectureContractTest(unittest.TestCase):
                     "frame_sequence_search",
                     "frame_sequence_candidates",
                     "frame_sequence_consensus",
+                    "frame_sequence_separator_assignment",
                     "frame_sequence_solver",
                 }
             )
@@ -125,6 +145,10 @@ class FrameSequenceArchitectureContractTest(unittest.TestCase):
         )
         self.assertNotIn(
             "frame_sequence_consensus",
+            _relative_import_modules(common_width),
+        )
+        self.assertNotIn(
+            "frame_sequence_separator_assignment",
             _relative_import_modules(common_width),
         )
         self.assertNotIn(
@@ -148,6 +172,7 @@ class FrameSequenceArchitectureContractTest(unittest.TestCase):
                 {
                     "frame_sequence_candidates",
                     "frame_sequence_consensus",
+                    "frame_sequence_separator_assignment",
                 }
             )
         )
@@ -156,9 +181,16 @@ class FrameSequenceArchitectureContractTest(unittest.TestCase):
         candidates = _PHYSICAL_ROOT / "frame_sequence_candidates.py"
 
         self.assertTrue(
+            {
+                "frame_sequence_measurements",
+            }.issubset(_relative_import_modules(candidates))
+        )
+        self.assertTrue(
             _relative_import_modules(candidates).isdisjoint(
                 {
+                    "frame_sequence_search",
                     "frame_sequence_consensus",
+                    "frame_sequence_separator_assignment",
                     "frame_sequence_solver",
                 }
             )
@@ -170,6 +202,29 @@ class FrameSequenceArchitectureContractTest(unittest.TestCase):
 
         self.assertIn("frame_sequence_candidates", imports)
         self.assertNotIn("frame_sequence_solver", imports)
+        self.assertNotIn("frame_sequence_separator_assignment", imports)
+
+    def test_separator_assignment_depends_on_lower_facts_not_solver(self) -> None:
+        assignment = (
+            _PHYSICAL_ROOT / "frame_sequence_separator_assignment.py"
+        )
+        imports = _relative_import_modules(assignment)
+
+        self.assertTrue(
+            {
+                "frame_sequence_measurements",
+                "frame_sequence_candidates",
+            }.issubset(imports)
+        )
+        self.assertTrue(
+            imports.isdisjoint(
+                {
+                    "frame_sequence_search",
+                    "frame_sequence_consensus",
+                    "frame_sequence_solver",
+                }
+            )
+        )
 
     def test_search_result_owns_budget_state_not_final_decision(self) -> None:
         from x5crop.detection.physical.frame_sequence_search import (
@@ -201,6 +256,7 @@ class FrameSequenceArchitectureContractTest(unittest.TestCase):
                 "frame_sequence_search",
                 "frame_sequence_candidates",
                 "frame_sequence_consensus",
+                "frame_sequence_separator_assignment",
             }
             for alias in node.names
         }

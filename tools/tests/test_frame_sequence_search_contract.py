@@ -14,7 +14,9 @@ from tools.tests.frame_slot_solver_support import (
     sequence_search_index,
 )
 from x5crop.detection.physical import frame_sequence_search as sequence_search
-from x5crop.detection.physical import frame_sequence_solver as solver_module
+from x5crop.detection.physical import (
+    frame_sequence_separator_assignment as separator_assignment,
+)
 from x5crop.detection.physical.frame_sequence_measurements import (
     EdgeConstraint,
     MeasuredFrameConstraint,
@@ -215,7 +217,7 @@ class FrameSequenceSearchContractTest(unittest.TestCase):
         plan = shared_short_axis_plan(search_scope)
         separator_support = separator(1_100.0, 1_110.0, plan, supported=True)
         bad_first_trailing, bad_second_leading = (
-            solver_module._observed_band_edges(separator_support)
+            separator_assignment.observed_band_edges(separator_support)
         )
 
         def dimension(position: float, label: str) -> EdgeConstraint:
@@ -621,7 +623,7 @@ class FrameSequenceSearchContractTest(unittest.TestCase):
         plan = shared_short_axis_plan(search_scope)
         support = separator(100.0, 110.0, plan, supported=True)
         preceding_trailing, following_leading = (
-            solver_module._observed_band_edges(support)
+            separator_assignment.observed_band_edges(support)
         )
         paths = {
             path.position.midpoint: path
@@ -734,10 +736,10 @@ class FrameSequenceSearchContractTest(unittest.TestCase):
         plan = shared_short_axis_plan(search_scope)
         internal_separator = separator(100.0, 110.0, plan, supported=True)
         trailing_holder_band = separator(320.0, 330.0, plan, supported=True)
-        first_trailing, second_leading = solver_module._observed_band_edges(
+        first_trailing, second_leading = separator_assignment.observed_band_edges(
             internal_separator
         )
-        holder_trailing, _ = solver_module._observed_band_edges(
+        holder_trailing, _ = separator_assignment.observed_band_edges(
             trailing_holder_band
         )
         holder_trailing = replace(
@@ -896,7 +898,7 @@ class FrameSequenceSearchContractTest(unittest.TestCase):
         )
         plan = shared_short_axis_plan(search_scope)
         holder_band = separator(0.0, 10.0, plan, supported=True)
-        _, external_leading = solver_module._observed_band_edges(holder_band)
+        _, external_leading = separator_assignment.observed_band_edges(holder_band)
         external_leading = replace(
             external_leading,
             external_side=BoundarySide.LEADING,
@@ -1070,7 +1072,7 @@ class FrameSequenceSearchContractTest(unittest.TestCase):
             holder_sides=_ALL_HOLDER_SIDES,
         )
         plan = shared_short_axis_plan(search_scope)
-        band_leading, band_trailing = solver_module._observed_band_edges(
+        band_leading, band_trailing = separator_assignment.observed_band_edges(
             separator(100.0, 110.0, plan, supported=True)
         )
 

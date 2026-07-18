@@ -22,6 +22,9 @@ from x5crop.detection.candidate.model import sequence_proof_paths_for_geometry
 from x5crop.detection.physical import frame_sequence_candidates as candidate_builds
 from x5crop.detection.physical import frame_sequence_common_width as width_resolution
 from x5crop.detection.physical import frame_sequence_measurements as measurements
+from x5crop.detection.physical import (
+    frame_sequence_separator_assignment as separator_assignment,
+)
 from x5crop.detection.physical import frame_sequence_solver as solver_module
 from x5crop.detection.physical import model as physical_model
 from x5crop.detection.physical.frame_dimensions import frame_dimension_evidence
@@ -31,8 +34,6 @@ from x5crop.detection.physical.frame_sequence_solver import (
     _dimension_frame_constraints,
     _measured_frame_search_space,
     _measured_sequence_build,
-    _uncorroborated_overlap_extent,
-    _unexplained_spacing_extent,
     solve_frame_sequence,
 )
 from x5crop.detection.physical.frame_sequence_common_width import (
@@ -67,7 +68,6 @@ from x5crop.domain import (
     ObservationId,
     PhysicalSearchFact,
     PixelInterval,
-    SeparatorBandCrossAxisSupport,
 )
 
 _ALL_HOLDER_SIDES = (
@@ -173,214 +173,6 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             )
         )
 
-    def test_unique_separator_observation_replaces_unmeasured_boundary_pair(
-        self,
-    ) -> None:
-        geometry = candidate_fixture().geometry
-        first, second = geometry.frame_slots
-        assignment = geometry.separator_assignments[0]
-
-        def inferred_boundary(
-            position: PixelInterval,
-            label: str,
-        ) -> ResolvedFrameBoundary:
-            return ResolvedFrameBoundary(
-                position=position,
-                source=FrameBoundarySource.DIMENSION_CONSTRAINED,
-                geometry_state=BoundaryGeometryState.RESOLVED,
-                boundary_anchor=None,
-                inference_provenance=MeasurementProvenance(
-                    MeasurementIdentity.FRAME_GEOMETRY,
-                    ObservationId(label),
-                    (MeasurementIdentity.FRAME_DIMENSIONS,),
-                    "synthetic unmeasured boundary pair",
-                ),
-            )
-
-        trailing = inferred_boundary(
-            assignment.observation.leading_edge,
-            "unmeasured_separator_leading_edge",
-        )
-        leading = inferred_boundary(
-            assignment.observation.trailing_edge,
-            "unmeasured_separator_trailing_edge",
-        )
-        slots = (
-            replace(
-                first,
-                trailing=trailing,
-                visible_long_axis=PixelInterval(
-                    first.leading.position.minimum,
-                    trailing.position.maximum,
-                ),
-            ),
-            replace(
-                second,
-                leading=leading,
-                visible_long_axis=PixelInterval(
-                    leading.position.minimum,
-                    second.trailing.position.maximum,
-                ),
-            ),
-        )
-        build = candidate_builds.SequenceBuild(
-            slots=slots,
-            long_axis_assignments=geometry.long_axis_assignments,
-            separator_bindings=(),
-            spacings=geometry.inter_frame_spacings,
-            frame_width_px=geometry.common_frame_width.width_px,
-            short_axis=geometry.shared_short_axis,
-            residuals=geometry.residuals,
-            objectives=candidate_builds.SequenceBuildObjectives(
-                uncorroborated_overlap_extent_px=0.0,
-                unexplained_spacing_extent_px=10.0,
-                supported_separator_count=0,
-                internal_boundary_measurement_quality=0.0,
-                dimension_residual=0.0,
-                external_boundary_measurement_quality=2.0,
-                boundary_uncertainty_ratio=0.0,
-                inferred_boundary_count=2,
-            ),
-        )
-
-        resolved = solver_module._assign_unique_separator_observations(
-            build,
-            geometry.common_frame_width,
-            (
-                SeparatorBandCrossAxisSupport(
-                    assignment.observation,
-                    assignment.cross_axis_measurement,
-                ),
-            ),
-        )
-
-        self.assertEqual(len(resolved.separator_bindings), 1)
-        self.assertEqual(
-            resolved.slots[0].trailing.source,
-            FrameBoundarySource.SEPARATOR_EDGE_OBSERVATION,
-        )
-        self.assertEqual(
-            resolved.slots[1].leading.source,
-            FrameBoundarySource.SEPARATOR_EDGE_OBSERVATION,
-        )
-        self.assertTrue(resolved.slots[0].trailing.independently_observed)
-        self.assertTrue(resolved.slots[1].leading.independently_observed)
-
-    def test_separator_observation_supersedes_incompatible_unproven_paths(
-        self,
-    ) -> None:
-        geometry = candidate_fixture().geometry
-        first, second = geometry.frame_slots
-        assignment = geometry.separator_assignments[0]
-
-        def unproven_path_boundary(
-            position: PixelInterval,
-            side: BoundarySide,
-        ) -> ResolvedFrameBoundary:
-            observation = path(
-                BoundaryAxis.LONG,
-                position.midpoint,
-                f"unproven_{side.value}_path",
-            )
-            anchor = BoundaryAnchor(
-                observation=observation,
-                physical_role=side,
-                role_state=EvidenceState.SUPPORTED,
-                role_authority=BoundaryRoleAuthority.GEOMETRY_CORROBORATED,
-                role_provenance=MeasurementProvenance(
-                    MeasurementIdentity.PHOTO_EDGES,
-                    ObservationId(f"dimension_corroborated_{side.value}_role"),
-                    (
-                        MeasurementIdentity.GRAY_WORK,
-                        MeasurementIdentity.BOUNDARY_PATHS,
-                        MeasurementIdentity.FRAME_DIMENSIONS,
-                    ),
-                    "synthetic geometry-corroborated photo-edge role",
-                    boundary_anchors=(observation.provenance.observation_id,),
-                ),
-            )
-            return ResolvedFrameBoundary(
-                position=position,
-                source=FrameBoundarySource.GRAY_PATH_OBSERVATION,
-                geometry_state=BoundaryGeometryState.RESOLVED,
-                boundary_anchor=anchor,
-                inference_provenance=None,
-            )
-
-        observed_trailing = assignment.observation.leading_edge
-        observed_leading = assignment.observation.trailing_edge
-        displaced_trailing = unproven_path_boundary(
-            PixelInterval(
-                observed_trailing.minimum + 60.0,
-                observed_trailing.maximum + 60.0,
-            ),
-            BoundarySide.TRAILING,
-        )
-        displaced_leading = unproven_path_boundary(
-            PixelInterval(
-                observed_leading.minimum + 60.0,
-                observed_leading.maximum + 60.0,
-            ),
-            BoundarySide.LEADING,
-        )
-        slots = (
-            replace(
-                first,
-                trailing=displaced_trailing,
-                visible_long_axis=PixelInterval(
-                    first.leading.position.minimum,
-                    displaced_trailing.position.maximum,
-                ),
-            ),
-            replace(
-                second,
-                leading=displaced_leading,
-                visible_long_axis=PixelInterval(
-                    displaced_leading.position.minimum,
-                    second.trailing.position.maximum,
-                ),
-            ),
-        )
-        build = candidate_builds.SequenceBuild(
-            slots=slots,
-            long_axis_assignments=geometry.long_axis_assignments,
-            separator_bindings=(),
-            spacings=geometry.inter_frame_spacings,
-            frame_width_px=geometry.common_frame_width.width_px,
-            short_axis=geometry.shared_short_axis,
-            residuals=geometry.residuals,
-            objectives=candidate_builds.SequenceBuildObjectives(
-                uncorroborated_overlap_extent_px=0.0,
-                unexplained_spacing_extent_px=10.0,
-                supported_separator_count=0,
-                internal_boundary_measurement_quality=0.0,
-                dimension_residual=0.0,
-                external_boundary_measurement_quality=2.0,
-                boundary_uncertainty_ratio=0.0,
-                inferred_boundary_count=2,
-            ),
-        )
-
-        resolved = solver_module._assign_unique_separator_observations(
-            build,
-            geometry.common_frame_width,
-            (
-                SeparatorBandCrossAxisSupport(
-                    assignment.observation,
-                    assignment.cross_axis_measurement,
-                ),
-            ),
-        )
-
-        self.assertEqual(len(resolved.separator_bindings), 1)
-        self.assertEqual(
-            resolved.slots[0].trailing.position,
-            assignment.observation.leading_edge,
-        )
-        self.assertEqual(
-            resolved.slots[1].leading.position,
-            assignment.observation.trailing_edge,
-        )
 
     def test_frame_sequence_rejects_non_monotonic_separator_assignments(
         self,
@@ -1632,31 +1424,6 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
         self.assertEqual(alternatives, (overcontained, aligned))
 
 
-    def test_spacing_interval_crossing_zero_is_uncertainty_not_physical_residual(
-        self,
-    ) -> None:
-        spacing = SimpleNamespace(
-            basis=InterFrameSpacingBasis.GEOMETRY_HYPOTHESIS,
-            signed_width_px=PixelInterval(-100.0, 5.0),
-        )
-
-        self.assertEqual(_uncorroborated_overlap_extent((spacing,)), 0.0)
-        self.assertEqual(_unexplained_spacing_extent((spacing,)), 0.0)
-
-    def test_spacing_residuals_only_count_unavoidable_overlap_or_gap(self) -> None:
-        overlap = SimpleNamespace(
-            basis=InterFrameSpacingBasis.GEOMETRY_HYPOTHESIS,
-            signed_width_px=PixelInterval(-100.0, -20.0),
-        )
-        gap = SimpleNamespace(
-            basis=InterFrameSpacingBasis.GEOMETRY_HYPOTHESIS,
-            signed_width_px=PixelInterval(5.0, 40.0),
-        )
-
-        self.assertEqual(_uncorroborated_overlap_extent((overlap, gap)), 20.0)
-        self.assertEqual(_unexplained_spacing_extent((overlap, gap)), 5.0)
-
-
     def test_unsupported_separator_bands_do_not_gain_separator_authority(
         self,
     ) -> None:
@@ -1993,7 +1760,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
         )
         plan = shared_short_axis_plan(search_scope)
         holder_band = separator(320.0, 330.0, plan, supported=True)
-        trailing_endpoint, _ = solver_module._observed_band_edges(holder_band)
+        trailing_endpoint, _ = separator_assignment.observed_band_edges(holder_band)
         trailing_endpoint = replace(
             trailing_endpoint,
             external_side=BoundarySide.TRAILING,
@@ -2942,39 +2709,6 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
 
         self.assertEqual(resolved[1].leading, incompatible)
 
-    def test_dimension_replacement_removes_superseded_path_assignment(
-        self,
-    ) -> None:
-        geometry_model = candidate_fixture().geometry
-        replaced_boundary = ResolvedFrameBoundary(
-            position=geometry_model.frame_slots[0].leading.position,
-            source=FrameBoundarySource.DIMENSION_CONSTRAINED,
-            geometry_state=BoundaryGeometryState.RESOLVED,
-            boundary_anchor=None,
-            inference_provenance=MeasurementProvenance(
-                MeasurementIdentity.FRAME_GEOMETRY,
-                ObservationId("dimension-replaced-leading-edge"),
-                (MeasurementIdentity.FRAME_DIMENSIONS,),
-                "dimension replacement",
-            ),
-        )
-        slots = (
-            replace(
-                geometry_model.frame_slots[0],
-                leading=replaced_boundary,
-            ),
-            *geometry_model.frame_slots[1:],
-        )
-
-        assignments = solver_module._long_axis_assignments_for_slots(
-            geometry_model.long_axis_assignments,
-            slots,
-        )
-
-        self.assertNotIn(
-            (1, BoundarySide.LEADING),
-            {(item.frame_index, item.side) for item in assignments},
-        )
 
     def test_holder_occlusion_keeps_hidden_nominal_geometry_out_of_crop(self) -> None:
         search_scope = scope(
@@ -4103,237 +3837,6 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             InterFrameSpacingBasis.GEOMETRY_HYPOTHESIS,
         )
 
-    def test_distinct_supported_photo_edges_measure_their_distance(
-        self,
-    ) -> None:
-        def boundary(
-            position: float,
-            side: BoundarySide,
-            label: str,
-        ) -> ResolvedFrameBoundary:
-            observation = path(BoundaryAxis.LONG, position, label)
-            role_provenance = MeasurementProvenance(
-                MeasurementIdentity.PHOTO_EDGES,
-                ObservationId(f"{label}:role"),
-                (observation.provenance.root_measurement,),
-                "synthetic independently supported photo-edge role",
-                (observation.provenance.observation_id,),
-            )
-            return ResolvedFrameBoundary(
-                position=observation.position,
-                source=FrameBoundarySource.GRAY_PATH_OBSERVATION,
-                geometry_state=BoundaryGeometryState.RESOLVED,
-                boundary_anchor=BoundaryAnchor(
-                    observation=observation,
-                    physical_role=side,
-                    role_state=EvidenceState.SUPPORTED,
-                    role_authority=BoundaryRoleAuthority.DIRECT_MEASUREMENT,
-                    role_provenance=role_provenance,
-                ),
-                inference_provenance=None,
-            )
-
-        spacing = solver_module._spacing_from_frame_edges(
-            1,
-            boundary(100.0, BoundarySide.TRAILING, "unrelated-trailing"),
-            boundary(5_000.0, BoundarySide.LEADING, "unrelated-leading"),
-        )
-
-        self.assertEqual(
-            spacing.basis,
-            InterFrameSpacingBasis.OBSERVED,
-        )
-        self.assertEqual(spacing.state, EvidenceState.SUPPORTED)
-        self.assertEqual(
-            spacing.provenance.root_measurement,
-            MeasurementIdentity.PHOTO_EDGES,
-        )
-
-    def test_distinct_supported_photo_edges_measure_uncertain_spacing(self) -> None:
-        def boundary(
-            interval: PixelInterval,
-            side: BoundarySide,
-            label: str,
-        ) -> ResolvedFrameBoundary:
-            observation = path(BoundaryAxis.LONG, interval.midpoint, label)
-            observation = replace(
-                observation,
-                samples=tuple(
-                    replace(sample, position=interval)
-                    for sample in observation.samples
-                ),
-            )
-            role_provenance = MeasurementProvenance(
-                MeasurementIdentity.PHOTO_EDGES,
-                ObservationId(f"{label}:role"),
-                (observation.provenance.root_measurement,),
-                "synthetic independently supported photo-edge role",
-                (observation.provenance.observation_id,),
-            )
-            return ResolvedFrameBoundary(
-                position=observation.position,
-                source=FrameBoundarySource.GRAY_PATH_OBSERVATION,
-                geometry_state=BoundaryGeometryState.RESOLVED,
-                boundary_anchor=BoundaryAnchor(
-                    observation=observation,
-                    physical_role=side,
-                    role_state=EvidenceState.SUPPORTED,
-                    role_authority=BoundaryRoleAuthority.DIRECT_MEASUREMENT,
-                    role_provenance=role_provenance,
-                ),
-                inference_provenance=None,
-            )
-
-        spacing = solver_module._spacing_from_frame_edges(
-            1,
-            boundary(
-                PixelInterval(100.0, 105.0),
-                BoundarySide.TRAILING,
-                "measured-trailing",
-            ),
-            boundary(
-                PixelInterval(99.0, 110.0),
-                BoundarySide.LEADING,
-                "measured-leading",
-            ),
-        )
-
-        self.assertEqual(spacing.basis, InterFrameSpacingBasis.OBSERVED)
-        self.assertEqual(spacing.kind, InterFrameSpacingKind.UNRESOLVED)
-        self.assertEqual(spacing.state, EvidenceState.UNAVAILABLE)
-        self.assertFalse(spacing.supports_output_protection)
-
-    def test_repeated_width_role_does_not_measure_inter_frame_overlap(
-        self,
-    ) -> None:
-        def boundary(
-            position: float,
-            side: BoundarySide,
-            label: str,
-        ) -> ResolvedFrameBoundary:
-            observation = path(BoundaryAxis.LONG, position, label)
-            role_provenance = MeasurementProvenance(
-                MeasurementIdentity.PHOTO_EDGES,
-                ObservationId(f"{label}:repeated-width-role"),
-                (
-                    observation.provenance.root_measurement,
-                    MeasurementIdentity.FRAME_WIDTH_PATTERN,
-                ),
-                "synthetic role corroborated by repeated frame width",
-                (observation.provenance.observation_id,),
-            )
-            return ResolvedFrameBoundary(
-                position=observation.position,
-                source=FrameBoundarySource.GRAY_PATH_OBSERVATION,
-                geometry_state=BoundaryGeometryState.RESOLVED,
-                boundary_anchor=BoundaryAnchor(
-                    observation=observation,
-                    physical_role=side,
-                    role_state=EvidenceState.SUPPORTED,
-                    role_authority=(
-                        BoundaryRoleAuthority.MEASUREMENT_CORROBORATED
-                    ),
-                    role_provenance=role_provenance,
-                ),
-                inference_provenance=None,
-            )
-
-        spacing = solver_module._spacing_from_frame_edges(
-            1,
-            boundary(200.0, BoundarySide.TRAILING, "pattern-trailing"),
-            boundary(100.0, BoundarySide.LEADING, "pattern-leading"),
-        )
-
-        self.assertEqual(
-            spacing.basis,
-            InterFrameSpacingBasis.GEOMETRY_HYPOTHESIS,
-        )
-        self.assertEqual(spacing.state, EvidenceState.UNAVAILABLE)
-        self.assertFalse(spacing.supports_output_protection)
-
-    def test_shared_supported_photo_edge_is_exact_measured_contact(self) -> None:
-        observation = path(BoundaryAxis.LONG, 100.0, "shared-contact")
-        uncertain_position = PixelInterval(90.0, 110.0)
-        observation = replace(
-            observation,
-            samples=tuple(
-                replace(sample, position=uncertain_position)
-                for sample in observation.samples
-            ),
-        )
-        role_provenance = MeasurementProvenance(
-            MeasurementIdentity.PHOTO_EDGES,
-            ObservationId("shared-contact:role"),
-            (observation.provenance.root_measurement,),
-            "synthetic independently supported shared photo edge",
-            (observation.provenance.observation_id,),
-        )
-
-        def boundary(side: BoundarySide) -> ResolvedFrameBoundary:
-            boundary_observation = (
-                observation
-                if side == BoundarySide.TRAILING
-                else replace(observation)
-            )
-            return ResolvedFrameBoundary(
-                position=boundary_observation.position,
-                source=FrameBoundarySource.GRAY_PATH_OBSERVATION,
-                geometry_state=BoundaryGeometryState.RESOLVED,
-                boundary_anchor=BoundaryAnchor(
-                    observation=boundary_observation,
-                    physical_role=side,
-                    role_state=EvidenceState.SUPPORTED,
-                    role_authority=BoundaryRoleAuthority.DIRECT_MEASUREMENT,
-                    role_provenance=role_provenance,
-                ),
-                inference_provenance=None,
-            )
-
-        spacing = solver_module._spacing_from_frame_edges(
-            1,
-            boundary(BoundarySide.TRAILING),
-            boundary(BoundarySide.LEADING),
-        )
-
-        self.assertEqual(spacing.basis, InterFrameSpacingBasis.OBSERVED)
-        self.assertEqual(spacing.signed_width_px, PixelInterval.exact(0.0))
-        self.assertEqual(spacing.kind, InterFrameSpacingKind.CONTACT)
-        self.assertEqual(spacing.state, EvidenceState.SUPPORTED)
-        self.assertFalse(spacing.supports_output_protection)
-
-        def inferred_boundary(position: float) -> ResolvedFrameBoundary:
-            return ResolvedFrameBoundary(
-                position=PixelInterval.exact(position),
-                source=FrameBoundarySource.DIMENSION_CONSTRAINED,
-                geometry_state=BoundaryGeometryState.RESOLVED,
-                boundary_anchor=None,
-                inference_provenance=MeasurementProvenance(
-                    MeasurementIdentity.FRAME_GEOMETRY,
-                    ObservationId(f"contact-endpoint:{position}"),
-                    (),
-                    "synthetic contact endpoint",
-                ),
-            )
-
-        left = FrameSlot(
-            1,
-            PixelInterval(0.0, 110.0),
-            inferred_boundary(0.0),
-            boundary(BoundarySide.TRAILING),
-            FrameContentOccupancy.UNAVAILABLE,
-            None,
-        )
-        right = FrameSlot(
-            2,
-            PixelInterval(90.0, 200.0),
-            boundary(BoundarySide.LEADING),
-            inferred_boundary(200.0),
-            FrameContentOccupancy.UNAVAILABLE,
-            None,
-        )
-        self.assertTrue(
-            physical_model._spacing_matches_frame_slots(spacing, left, right)
-        )
 
     def test_raw_separator_edges_require_candidate_specific_role_assignment(
         self,
@@ -4350,7 +3853,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
         plan = shared_short_axis_plan(search_scope)
         support = separator(100.0, 110.0, plan, supported=True)
 
-        preceding, following = solver_module._observed_band_edges(support)
+        preceding, following = separator_assignment.observed_band_edges(support)
 
         self.assertEqual(preceding.state, EvidenceState.UNAVAILABLE)
         self.assertEqual(following.state, EvidenceState.UNAVAILABLE)

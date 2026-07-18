@@ -13,7 +13,6 @@ from ...domain import (
     FrameDimensionPrior,
     GrayBoundaryPathObservation,
     HolderBoundaryObservation,
-    InterFrameBoundaryReference,
     InterFrameSpacing,
     InterFrameSpacingBasis,
     InterFrameSpacingKind,
@@ -34,9 +33,9 @@ from . import frame_sequence_common_width as width_resolution
 from . import frame_sequence_consensus as sequence_consensus
 from . import frame_sequence_measurements as measurement_facts
 from . import frame_sequence_search as sequence_search
+from . import frame_sequence_separator_assignment as separator_assignment
 from .model import (
     AssignmentConsensusOutcome,
-    BoundaryAnchor,
     BoundaryAssignmentConsensus,
     BoundaryGeometryState,
     BoundaryRoleAuthority,
@@ -395,37 +394,6 @@ def _raw_separator_frame_width_search_hints(
         ),
     )
 
-def _separator_band_edge_constraint(
-    support: SeparatorBandCrossAxisSupport,
-    position: PixelInterval,
-) -> measurement_facts.EdgeConstraint:
-    observation = support.observation
-    if position not in {observation.leading_edge, observation.trailing_edge}:
-        raise ValueError("separator edge constraint must preserve one observed edge")
-    return measurement_facts.EdgeConstraint(
-        position=position,
-        basis=FrameBoundarySource.SEPARATOR_EDGE_OBSERVATION,
-        state=EvidenceState.UNAVAILABLE,
-        geometry_state=BoundaryGeometryState.RESOLVED,
-        provenance=observation.provenance,
-        separator=observation,
-        separator_cross_axis=support.measurement,
-    )
-
-def _observed_band_edges(
-    support: SeparatorBandCrossAxisSupport,
-) -> tuple[measurement_facts.EdgeConstraint, measurement_facts.EdgeConstraint]:
-    observation = support.observation
-    return (
-        _separator_band_edge_constraint(
-            support,
-            observation.leading_edge,
-        ),
-        _separator_band_edge_constraint(
-            support,
-            observation.trailing_edge,
-        ),
-    )
 
 def _separator_band_edges(
     edges: tuple[measurement_facts.EdgeConstraint, measurement_facts.EdgeConstraint],
@@ -438,7 +406,7 @@ def _separator_band_edges(
 def _band_edge_options(
     support: SeparatorBandCrossAxisSupport,
 ) -> tuple[tuple[measurement_facts.EdgeConstraint, measurement_facts.EdgeConstraint], ...]:
-    return (_observed_band_edges(support),)
+    return (separator_assignment.observed_band_edges(support),)
 
 def _width_between_bands(
     left: SeparatorBandObservation,
@@ -955,152 +923,6 @@ def _sequence_constraints_fit_physical_scale(
         for constraint in constraints
     )
 
-def _resolution(
-    frame_index: int,
-    side: BoundarySide,
-    constraint: measurement_facts.EdgeConstraint,
-) -> tuple[ResolvedFrameBoundary, FrameEdgeAssignment | None]:
-    observation = constraint.path or constraint.separator
-    observed = constraint.basis in {
-        FrameBoundarySource.GRAY_PATH_OBSERVATION,
-        FrameBoundarySource.SEPARATOR_EDGE_OBSERVATION,
-    }
-    anchor = (
-        BoundaryAnchor(
-            observation=observation,
-            physical_role=side,
-            role_state=constraint.state,
-            role_authority=(
-                BoundaryRoleAuthority.DIRECT_MEASUREMENT
-                if constraint.state == EvidenceState.SUPPORTED
-                else BoundaryRoleAuthority.UNAVAILABLE
-            ),
-            role_provenance=constraint.provenance,
-        )
-        if observed and observation is not None
-        else None
-    )
-    resolution = ResolvedFrameBoundary(
-        position=constraint.position,
-        source=constraint.basis,
-        geometry_state=constraint.geometry_state,
-        boundary_anchor=anchor,
-        inference_provenance=(None if anchor is not None else constraint.provenance),
-    )
-    if constraint.path is None:
-        return resolution, None
-    return (
-        resolution,
-        FrameEdgeAssignment(
-            frame_index=frame_index,
-            side=side,
-            observation=constraint.path,
-            resolution=resolution,
-        ),
-    )
-
-def _separator_edge_with_supported_role(
-    constraint: measurement_facts.EdgeConstraint,
-) -> measurement_facts.EdgeConstraint:
-    if (
-        constraint.basis != FrameBoundarySource.SEPARATOR_EDGE_OBSERVATION
-        or constraint.separator is None
-        or constraint.separator_cross_axis is None
-        or not measurement_facts.separator_edge_path_is_supported(constraint)
-    ):
-        raise ValueError("separator role requires a supported raw band observation")
-    return replace(constraint, state=EvidenceState.SUPPORTED)
-
-def _separator_pair_fits_sequence(
-    trailing: measurement_facts.EdgeConstraint,
-    leading: measurement_facts.EdgeConstraint,
-    frame_width: PixelInterval,
-) -> bool:
-    band = trailing.separator
-    return bool(
-        band is not None
-        and band is leading.separator
-        and trailing.separator_cross_axis is leading.separator_cross_axis
-        and trailing.external_side is None
-        and leading.external_side is None
-        and trailing.separator_cross_axis is not None
-        and trailing.separator_cross_axis.complete_separator_supported
-        and trailing.position == band.leading_edge
-        and leading.position == band.trailing_edge
-        and band.width_px.minimum > 0.0
-        and band.width_px.maximum < frame_width.minimum
-    )
-
-def _candidate_specific_separator_edge_roles(
-    constraints: tuple[measurement_facts.MeasuredFrameConstraint, ...],
-) -> tuple[measurement_facts.MeasuredFrameConstraint, ...]:
-    updated = list(constraints)
-    for boundary_index in range(1, len(updated)):
-        left = updated[boundary_index - 1]
-        right = updated[boundary_index]
-        if measurement_facts.separator_edge_path_is_supported(left.trailing):
-            updated[boundary_index - 1] = replace(
-                left,
-                trailing=_separator_edge_with_supported_role(left.trailing),
-            )
-        if measurement_facts.separator_edge_path_is_supported(right.leading):
-            updated[boundary_index] = replace(
-                right,
-                leading=_separator_edge_with_supported_role(right.leading),
-            )
-    return tuple(updated)
-
-def _candidate_specific_holder_band_roles(
-    constraints: tuple[measurement_facts.MeasuredFrameConstraint, ...],
-    frame_width: PixelInterval,
-    holder_boundaries: dict[BoundarySide, HolderBoundaryObservation],
-) -> tuple[measurement_facts.MeasuredFrameConstraint, ...]:
-    updated = list(constraints)
-    internal_sequence_complete = len(updated) > 1 and all(
-        _separator_pair_fits_sequence(
-            updated[boundary_index - 1].trailing,
-            updated[boundary_index].leading,
-            frame_width,
-        )
-        for boundary_index in range(1, len(updated))
-    )
-    if internal_sequence_complete:
-        for slot_index, side in (
-            (0, BoundarySide.LEADING),
-            (len(updated) - 1, BoundarySide.TRAILING),
-        ):
-            boundary = (
-                updated[slot_index].leading
-                if side == BoundarySide.LEADING
-                else updated[slot_index].trailing
-            )
-            band = boundary.separator
-            holder_boundary = holder_boundaries.get(side)
-            if (
-                band is None
-                or boundary.external_side != side
-                or boundary.separator_cross_axis is None
-                or not measurement_facts.separator_edge_path_is_supported(boundary)
-                or holder_boundary is None
-                or band.width_px.maximum >= frame_width.minimum
-                or not PixelInterval(
-                    band.leading_edge.minimum,
-                    band.trailing_edge.maximum,
-                ).intersects(holder_boundary.position)
-            ):
-                continue
-            supported = _separator_edge_with_supported_role(boundary)
-            if side == BoundarySide.LEADING:
-                updated[slot_index] = replace(
-                    updated[slot_index],
-                    leading=supported,
-                )
-            else:
-                updated[slot_index] = replace(
-                    updated[slot_index],
-                    trailing=supported,
-                )
-    return tuple(updated)
 
 def _dimension_constraint(
     anchor: measurement_facts.EdgeConstraint,
@@ -1337,7 +1159,7 @@ def _separator_edge_candidates(
     leading_candidates: list[tuple[measurement_facts.EdgeConstraint, bool]] = []
     trailing_candidates: list[tuple[measurement_facts.EdgeConstraint, bool]] = []
     for support in separator_supports:
-        preceding_trailing, following_leading = _observed_band_edges(support)
+        preceding_trailing, following_leading = separator_assignment.observed_band_edges(support)
         band_span = PixelInterval(
             support.observation.leading_edge.minimum,
             support.observation.trailing_edge.maximum,
@@ -1401,7 +1223,7 @@ def _separator_geometry_edge_candidates(
             or observation.trailing_edge.maximum >= float(holder.right)
         ):
             continue
-        preceding_trailing, following_leading = _observed_band_edges(support)
+        preceding_trailing, following_leading = separator_assignment.observed_band_edges(support)
         trailing_candidates.append((preceding_trailing, False))
         leading_candidates.append((following_leading, False))
     return tuple(dict.fromkeys(leading_candidates)), tuple(
@@ -1585,156 +1407,18 @@ def _measured_frame_search_space(
         recurring_width_hypotheses=recurring_width_hypotheses,
     )
 
-def _spacing_from_frame_edges(
-    boundary_index: int,
-    trailing: ResolvedFrameBoundary,
-    leading: ResolvedFrameBoundary,
-    *,
-    separator_observation_supported: bool = True,
-) -> InterFrameSpacing:
-    trailing_provenance = trailing.measurement_provenance
-    leading_provenance = leading.measurement_provenance
-    same_observation = bool(
-        trailing.boundary_anchor is not None
-        and leading.boundary_anchor is not None
-        and trailing_provenance.observation_id
-        == leading_provenance.observation_id
-    )
-    shared_photo_edge = bool(
-        same_observation
-        and trailing.source == FrameBoundarySource.GRAY_PATH_OBSERVATION
-        and leading.source == FrameBoundarySource.GRAY_PATH_OBSERVATION
-        and boundary_role_is_independent_physical_measurement(trailing)
-        and boundary_role_is_independent_physical_measurement(leading)
-    )
-    signed_width = (
-        PixelInterval.exact(0.0)
-        if shared_photo_edge
-        else leading.position.minus(trailing.position)
-    )
-    measured_separator = bool(
-        separator_observation_supported
-        and
-        signed_width.minimum > 0.0
-        and same_observation
-        and trailing.source == FrameBoundarySource.SEPARATOR_EDGE_OBSERVATION
-        and leading.source == FrameBoundarySource.SEPARATOR_EDGE_OBSERVATION
-    )
-    measured_contact = bool(
-        shared_photo_edge
-        or (
-            signed_width.minimum == 0.0
-            and signed_width.maximum == 0.0
-            and same_observation
-        )
-    )
-    distinct_observed_edges = bool(
-        boundary_role_is_independent_physical_measurement(trailing)
-        and boundary_role_is_independent_physical_measurement(leading)
-        and trailing_provenance.observation_id
-        != leading_provenance.observation_id
-    )
-    observed = bool(
-        boundary_role_is_independent_physical_measurement(trailing)
-        and boundary_role_is_independent_physical_measurement(leading)
-        and (
-            measured_separator
-            or measured_contact
-            or distinct_observed_edges
-        )
-    )
-    provenance = MeasurementProvenance(
-        root_measurement=(
-            MeasurementIdentity.PHOTO_EDGES
-            if observed
-            else MeasurementIdentity.FRAME_GEOMETRY
-        ),
-        observation_id=ObservationId(
-            f"inter_frame_spacing:{boundary_index}:"
-            f"{trailing_provenance.observation_id}:"
-            f"{leading_provenance.observation_id}"
-        ),
-        dependencies=tuple(
-            dict.fromkeys(
-                (
-                    trailing_provenance.root_measurement,
-                    leading_provenance.root_measurement,
-                )
-            )
-        ),
-        description=(
-            "measured inter-frame spacing"
-            if observed
-            else "inter-frame spacing hypothesis"
-        ),
-        boundary_anchors=tuple(
-            dict.fromkeys(
-                (
-                    trailing_provenance.observation_id,
-                    leading_provenance.observation_id,
-                )
-            )
-        ),
-    )
-    return InterFrameSpacing(
-        boundary=InterFrameBoundaryReference(None, boundary_index),
-        signed_width_px=signed_width,
-        provenance=provenance,
-        basis=(
-            InterFrameSpacingBasis.OBSERVED
-            if observed
-            else InterFrameSpacingBasis.GEOMETRY_HYPOTHESIS
-        ),
-    )
 
 def _measured_spacing(
     boundary_index: int,
     left: FrameSlot,
     right: FrameSlot,
 ) -> InterFrameSpacing:
-    return _spacing_from_frame_edges(
+    return sequence_candidates.spacing_from_frame_edges(
         boundary_index,
         left.trailing,
         right.leading,
     )
 
-def _uncorroborated_overlap_extent(
-    spacings: tuple[InterFrameSpacing, ...],
-) -> float:
-    return sum(
-        max(0.0, -spacing.signed_width_px.maximum)
-        for spacing in spacings
-        if spacing.basis == InterFrameSpacingBasis.GEOMETRY_HYPOTHESIS
-    )
-
-def _unexplained_spacing_extent(
-    spacings: tuple[InterFrameSpacing, ...],
-) -> float:
-    return sum(
-        max(0.0, spacing.signed_width_px.minimum)
-        for spacing in spacings
-        if spacing.basis == InterFrameSpacingBasis.GEOMETRY_HYPOTHESIS
-    )
-
-def _uncorroborated_contact_count(
-    spacings: tuple[InterFrameSpacing, ...],
-) -> int:
-    return sum(
-        spacing.kind == InterFrameSpacingKind.CONTACT
-        and spacing.basis == InterFrameSpacingBasis.GEOMETRY_HYPOTHESIS
-        for spacing in spacings
-    )
-
-def _inferred_boundary_count(slots: tuple[FrameSlot, ...]) -> int:
-    observed_sources = {
-        FrameBoundarySource.GRAY_PATH_OBSERVATION,
-        FrameBoundarySource.SEPARATOR_EDGE_OBSERVATION,
-    }
-    return sum(
-        boundary.source not in observed_sources
-        for slot in slots
-        for boundary in (slot.leading, slot.trailing)
-    )
 
 def _indexed_anchor_distance_constraints(
     assignments: tuple[SeparatorBandAssignment, ...],
@@ -1838,16 +1522,16 @@ def _measured_sequence_build(
         for left, right in zip(constraints, constraints[1:])
     ):
         return None
-    constraints = _candidate_specific_separator_edge_roles(constraints)
+    constraints = separator_assignment.candidate_specific_separator_edge_roles(constraints)
     slots: list[FrameSlot] = []
     assignments: list[FrameEdgeAssignment] = []
     for frame_index, constraint in enumerate(constraints, start=1):
-        leading, leading_assignment = _resolution(
+        leading, leading_assignment = sequence_candidates.resolve_edge_constraint(
             frame_index,
             BoundarySide.LEADING,
             constraint.leading,
         )
-        trailing, trailing_assignment = _resolution(
+        trailing, trailing_assignment = sequence_candidates.resolve_edge_constraint(
             frame_index,
             BoundarySide.TRAILING,
             constraint.trailing,
@@ -1892,7 +1576,7 @@ def _measured_sequence_build(
         if same_separator:
             assert trailing_constraint.separator is not None
             assert trailing_constraint.separator_cross_axis is not None
-            spacing, assignment = _spacing_for_band(
+            spacing, assignment = separator_assignment.spacing_for_band(
                 boundary_index,
                 SeparatorBandCrossAxisSupport(
                     trailing_constraint.separator,
@@ -1964,10 +1648,10 @@ def _measured_sequence_build(
         short_axis=short_axis,
         residuals=residuals,
         objectives=sequence_candidates.SequenceBuildObjectives(
-            uncorroborated_overlap_extent_px=_uncorroborated_overlap_extent(
+            uncorroborated_overlap_extent_px=sequence_candidates.uncorroborated_overlap_extent(
                 tuple(spacings)
             ),
-            unexplained_spacing_extent_px=_unexplained_spacing_extent(
+            unexplained_spacing_extent_px=sequence_candidates.unexplained_spacing_extent(
                 tuple(spacings)
             ),
             supported_separator_count=len(separator_bindings),
@@ -1976,10 +1660,10 @@ def _measured_sequence_build(
             external_boundary_measurement_quality=external_boundary_quality,
             boundary_uncertainty_ratio=residuals.boundary_uncertainty,
             frame_width_hint_residual=frame_width_hint_residual,
-            uncorroborated_contact_count=_uncorroborated_contact_count(
+            uncorroborated_contact_count=sequence_candidates.uncorroborated_contact_count(
                 tuple(spacings)
             ),
-            inferred_boundary_count=_inferred_boundary_count(slots),
+            inferred_boundary_count=sequence_candidates.inferred_boundary_count(slots),
         ),
     )
 
@@ -2314,83 +1998,6 @@ def _measured_path_builds(
             break
     return tuple(dict.fromkeys(builds)), evaluations, search_truncated
 
-def _spacing_for_band(
-    boundary_index: int,
-    support: SeparatorBandCrossAxisSupport,
-    trailing: ResolvedFrameBoundary,
-    leading: ResolvedFrameBoundary,
-) -> tuple[InterFrameSpacing, sequence_candidates.SeparatorBandBinding | None]:
-    band = support.observation
-    measurement = support.measurement
-    supported = bool(
-        measurement.complete_separator_supported
-        and trailing.role_state == EvidenceState.SUPPORTED
-        and leading.role_state == EvidenceState.SUPPORTED
-        and trailing.source == FrameBoundarySource.SEPARATOR_EDGE_OBSERVATION
-        and leading.source == FrameBoundarySource.SEPARATOR_EDGE_OBSERVATION
-    )
-    assignment = (
-        sequence_candidates.SeparatorBandBinding(
-            boundary_index,
-            band,
-            measurement,
-            trailing,
-            leading,
-        )
-        if supported
-        else None
-    )
-    if assignment is not None:
-        provenance = band.provenance
-        basis = InterFrameSpacingBasis.OBSERVED
-    elif (
-        trailing.source == FrameBoundarySource.GRAY_PATH_OBSERVATION
-        and leading.source == FrameBoundarySource.GRAY_PATH_OBSERVATION
-    ):
-        return (
-            _spacing_from_frame_edges(
-                boundary_index,
-                trailing,
-                leading,
-            ),
-            None,
-        )
-    else:
-        provenance = MeasurementProvenance(
-            root_measurement=MeasurementIdentity.FRAME_GEOMETRY,
-            observation_id=ObservationId(
-                f"dimension_spacing:{boundary_index}:"
-                f"{trailing.measurement_provenance.observation_id}:"
-                f"{leading.measurement_provenance.observation_id}"
-            ),
-            dependencies=tuple(
-                dict.fromkeys(
-                    (
-                        MeasurementIdentity.FRAME_DIMENSIONS,
-                        band.provenance.root_measurement,
-                    )
-                )
-            ),
-            description="dimension-constrained inter-frame spacing",
-            boundary_anchors=tuple(
-                dict.fromkeys(
-                    (
-                        trailing.measurement_provenance.observation_id,
-                        leading.measurement_provenance.observation_id,
-                    )
-                )
-            ),
-        )
-        basis = InterFrameSpacingBasis.GEOMETRY_HYPOTHESIS
-    return (
-        InterFrameSpacing(
-            boundary=InterFrameBoundaryReference(None, boundary_index),
-            signed_width_px=leading.position.minus(trailing.position),
-            provenance=provenance,
-            basis=basis,
-        ),
-        assignment,
-    )
 
 def _build_sequence(
     band_hypothesis: _BandSequenceHypothesis,
@@ -2469,10 +2076,10 @@ def _build_sequence(
     )
     if separator_roles_are_physically_feasible:
         refined_constraints = list(
-            _candidate_specific_separator_edge_roles(tuple(refined_constraints))
+            separator_assignment.candidate_specific_separator_edge_roles(tuple(refined_constraints))
         )
         refined_constraints = list(
-            _candidate_specific_holder_band_roles(
+            separator_assignment.candidate_specific_holder_band_roles(
                 tuple(refined_constraints),
                 frame_width,
                 holder_boundaries,
@@ -2481,12 +2088,12 @@ def _build_sequence(
     slots: list[FrameSlot] = []
     assignments: list[FrameEdgeAssignment] = []
     for frame_index, constraint in enumerate(refined_constraints, start=1):
-        leading, leading_assignment = _resolution(
+        leading, leading_assignment = sequence_candidates.resolve_edge_constraint(
             frame_index,
             BoundarySide.LEADING,
             constraint.leading,
         )
-        trailing, trailing_assignment = _resolution(
+        trailing, trailing_assignment = sequence_candidates.resolve_edge_constraint(
             frame_index,
             BoundarySide.TRAILING,
             constraint.trailing,
@@ -2521,7 +2128,7 @@ def _build_sequence(
         )
         if signed_width.maximum < 0.0:
             return None
-        spacing, assignment = _spacing_for_band(
+        spacing, assignment = separator_assignment.spacing_for_band(
             boundary_index,
             support,
             slots[boundary_index - 1].trailing,
@@ -2575,10 +2182,10 @@ def _build_sequence(
         short_axis=short_axis,
         residuals=residuals,
         objectives=sequence_candidates.SequenceBuildObjectives(
-            uncorroborated_overlap_extent_px=_uncorroborated_overlap_extent(
+            uncorroborated_overlap_extent_px=sequence_candidates.uncorroborated_overlap_extent(
                 tuple(spacings)
             ),
-            unexplained_spacing_extent_px=_unexplained_spacing_extent(
+            unexplained_spacing_extent_px=sequence_candidates.unexplained_spacing_extent(
                 tuple(spacings)
             ),
             supported_separator_count=len(separator_bindings),
@@ -2591,10 +2198,10 @@ def _build_sequence(
             ),
             boundary_uncertainty_ratio=float(residuals.boundary_uncertainty),
             frame_width_hint_residual=band_hypothesis.search_order_residual,
-            uncorroborated_contact_count=_uncorroborated_contact_count(
+            uncorroborated_contact_count=sequence_candidates.uncorroborated_contact_count(
                 tuple(spacings)
             ),
-            inferred_boundary_count=_inferred_boundary_count(tuple(slots)),
+            inferred_boundary_count=sequence_candidates.inferred_boundary_count(tuple(slots)),
         ),
     )
 
@@ -2867,7 +2474,7 @@ def _corroborate_build_roles_from_repeated_frame_width(
                 trailing=boundaries[BoundarySide.TRAILING],
             )
         )
-    return _rebuild_sequence_build(build, tuple(slots))
+    return sequence_candidates.rebuild_sequence_build(build, tuple(slots))
 
 def _physical_scale_corroborated_role_provenance(
     boundary: ResolvedFrameBoundary,
@@ -2990,7 +2597,7 @@ def _corroborate_build_roles_from_physical_scale(
         )
         for slot in original
     )
-    return build if slots == original else _rebuild_sequence_build(build, slots)
+    return build if slots == original else sequence_candidates.rebuild_sequence_build(build, slots)
 
 def _dimension_corroborated_role_provenance(
     boundary: ResolvedFrameBoundary,
@@ -3180,248 +2787,6 @@ def _corroborate_adjacent_boundary_pair(
         _corroborate_adjacent_boundary(leading, trailing),
     )
 
-def _separator_bindings_for_resolved_slots(
-    bindings: tuple[sequence_candidates.SeparatorBandBinding, ...],
-    slots: tuple[FrameSlot, ...],
-) -> tuple[sequence_candidates.SeparatorBandBinding, ...]:
-    resolved: list[sequence_candidates.SeparatorBandBinding] = []
-    for binding in bindings:
-        trailing = slots[binding.boundary_index - 1].trailing
-        leading = slots[binding.boundary_index].leading
-        if (
-            trailing.source != FrameBoundarySource.SEPARATOR_EDGE_OBSERVATION
-            or leading.source != FrameBoundarySource.SEPARATOR_EDGE_OBSERVATION
-            or trailing.measurement_provenance != binding.observation.provenance
-            or leading.measurement_provenance != binding.observation.provenance
-        ):
-            continue
-        resolved.append(
-            replace(
-                binding,
-                preceding_trailing_edge=trailing,
-                following_leading_edge=leading,
-            )
-        )
-    return tuple(resolved)
-
-def _rebuild_sequence_build(
-    build: sequence_candidates.SequenceBuild,
-    slots: tuple[FrameSlot, ...],
-) -> sequence_candidates.SequenceBuild:
-    long_axis_assignments = _long_axis_assignments_for_slots(
-        build.long_axis_assignments,
-        slots,
-    )
-    separator_bindings = _separator_bindings_for_resolved_slots(
-        build.separator_bindings,
-        slots,
-    )
-    spacings = tuple(
-        _spacing_from_frame_edges(index, left.trailing, right.leading)
-        for index, (left, right) in enumerate(zip(slots, slots[1:]), start=1)
-    )
-    return replace(
-        build,
-        slots=slots,
-        long_axis_assignments=long_axis_assignments,
-        separator_bindings=separator_bindings,
-        spacings=spacings,
-        objectives=replace(
-            build.objectives,
-            uncorroborated_overlap_extent_px=_uncorroborated_overlap_extent(spacings),
-            unexplained_spacing_extent_px=_unexplained_spacing_extent(spacings),
-            supported_separator_count=len(separator_bindings),
-            internal_boundary_measurement_quality=float(
-                sum(
-                    boundary.independently_observed
-                    for left, right in zip(slots, slots[1:])
-                    for boundary in (left.trailing, right.leading)
-                )
-            ),
-            external_boundary_measurement_quality=float(
-                slots[0].leading.independently_observed
-                + slots[-1].trailing.independently_observed
-            ),
-            inferred_boundary_count=_inferred_boundary_count(slots),
-        ),
-    )
-
-def _separator_observation_assignment(
-    build: sequence_candidates.SequenceBuild,
-    boundary_index: int,
-    support: SeparatorBandCrossAxisSupport,
-    common_width: CommonFrameWidthResolution,
-) -> tuple[tuple[FrameSlot, ...], sequence_candidates.SeparatorBandBinding] | None:
-    if (
-        common_width.state != EvidenceState.SUPPORTED
-        or common_width.width_px is None
-        or not support.measurement.complete_separator_supported
-        or support.observation.width_px.maximum >= common_width.width_px.minimum
-        or not 1 <= boundary_index < len(build.slots)
-    ):
-        return None
-    left = build.slots[boundary_index - 1]
-    right = build.slots[boundary_index]
-    if left.sequence_inferred or right.sequence_inferred:
-        return None
-    replaceable_sources = {
-        FrameBoundarySource.DIMENSION_CONSTRAINED,
-        FrameBoundarySource.GRAY_PATH_OBSERVATION,
-    }
-    if (
-        left.trailing.source not in replaceable_sources
-        or right.leading.source not in replaceable_sources
-        or (
-            left.trailing.role_state == EvidenceState.SUPPORTED
-            and boundary_role_is_independent_physical_measurement(left.trailing)
-        )
-        or (
-            right.leading.role_state == EvidenceState.SUPPORTED
-            and boundary_role_is_independent_physical_measurement(right.leading)
-        )
-    ):
-        return None
-    observed_trailing, observed_leading = tuple(
-        _separator_edge_with_supported_role(edge)
-        for edge in _observed_band_edges(support)
-    )
-    trailing, _ = _resolution(
-        left.index,
-        BoundarySide.TRAILING,
-        observed_trailing,
-    )
-    leading, _ = _resolution(
-        right.index,
-        BoundarySide.LEADING,
-        observed_leading,
-    )
-    left_width = trailing.position.minus(left.leading.position)
-    right_width = right.trailing.position.minus(leading.position)
-    if (
-        measurement_facts.positive_interval(left_width) is None
-        or measurement_facts.positive_interval(right_width) is None
-        or not measurement_facts.measurement_intervals_are_compatible(
-            left_width,
-            common_width.width_px,
-        )
-        or not measurement_facts.measurement_intervals_are_compatible(
-            right_width,
-            common_width.width_px,
-        )
-    ):
-        return None
-    slots = list(build.slots)
-    slots[boundary_index - 1] = replace(
-        left,
-        trailing=trailing,
-        visible_long_axis=PixelInterval(
-            left.leading.position.minimum,
-            trailing.position.maximum,
-        ),
-    )
-    slots[boundary_index] = replace(
-        right,
-        leading=leading,
-        visible_long_axis=PixelInterval(
-            leading.position.minimum,
-            right.trailing.position.maximum,
-        ),
-    )
-    resolved_slots = tuple(slots)
-    if not sequence_candidates.frame_slots_are_strictly_monotonic(resolved_slots):
-        return None
-    return (
-        resolved_slots,
-        sequence_candidates.SeparatorBandBinding(
-            boundary_index=boundary_index,
-            observation=support.observation,
-            cross_axis_measurement=support.measurement,
-            preceding_trailing_edge=trailing,
-            following_leading_edge=leading,
-        ),
-    )
-
-def _assign_unique_separator_observations(
-    build: sequence_candidates.SequenceBuild,
-    common_width: CommonFrameWidthResolution,
-    supports: tuple[SeparatorBandCrossAxisSupport, ...],
-) -> sequence_candidates.SequenceBuild:
-    resolved = build
-    remaining = tuple(
-        support
-        for support in supports
-        if support.observation.provenance.observation_id
-        not in {
-            binding.observation.provenance.observation_id
-            for binding in build.separator_bindings
-        }
-    )
-    while remaining:
-        candidates: dict[
-            int,
-            list[
-                tuple[
-                    SeparatorBandCrossAxisSupport,
-                    tuple[FrameSlot, ...],
-                    sequence_candidates.SeparatorBandBinding,
-                ]
-            ],
-        ] = {}
-        support_boundaries: dict[ObservationId, list[int]] = {}
-        for boundary_index in range(1, len(resolved.slots)):
-            if any(
-                binding.boundary_index == boundary_index
-                for binding in resolved.separator_bindings
-            ):
-                continue
-            for support in remaining:
-                assignment = _separator_observation_assignment(
-                    resolved,
-                    boundary_index,
-                    support,
-                    common_width,
-                )
-                if assignment is None:
-                    continue
-                slots, binding = assignment
-                candidates.setdefault(boundary_index, []).append(
-                    (support, slots, binding)
-                )
-                support_boundaries.setdefault(
-                    support.observation.provenance.observation_id,
-                    [],
-                ).append(boundary_index)
-        unique = tuple(
-            items[0]
-            for boundary_index, items in sorted(candidates.items())
-            if len(items) == 1
-            and len(
-                support_boundaries[
-                    items[0][0].observation.provenance.observation_id
-                ]
-            )
-            == 1
-        )
-        if not unique:
-            break
-        support, slots, binding = unique[0]
-        resolved = _rebuild_sequence_build(
-            replace(
-                resolved,
-                separator_bindings=(
-                    *resolved.separator_bindings,
-                    binding,
-                ),
-            ),
-            slots,
-        )
-        assigned_id = support.observation.provenance.observation_id
-        remaining = tuple(
-            item
-            for item in remaining
-            if item.observation.provenance.observation_id != assigned_id
-        )
-    return resolved
 
 def _boundary_path_assignment(
     build: sequence_candidates.SequenceBuild,
@@ -3456,7 +2821,7 @@ def _boundary_path_assignment(
         provenance=path.provenance,
         path=path,
     )
-    resolution, assignment = _resolution(slot.index, side, constraint)
+    resolution, assignment = sequence_candidates.resolve_edge_constraint(slot.index, side, constraint)
     assert assignment is not None
     updated_slot = replace(
         slot,
@@ -3557,7 +2922,7 @@ def _assign_unique_boundary_path_observations(
         if not unique:
             break
         path, slots, assignment = unique[0]
-        resolved = _rebuild_sequence_build(
+        resolved = sequence_candidates.rebuild_sequence_build(
             replace(
                 resolved,
                 long_axis_assignments=(
@@ -3590,7 +2955,7 @@ def _corroborate_build_adjacent_boundary_roles(
     return (
         build
         if resolved_slots == build.slots
-        else _rebuild_sequence_build(build, resolved_slots)
+        else sequence_candidates.rebuild_sequence_build(build, resolved_slots)
     )
 
 def _corroborate_build_boundary_roles(
@@ -3619,7 +2984,7 @@ def _corroborate_build_boundary_roles(
     return (
         build
         if slots == build.slots
-        else _rebuild_sequence_build(build, slots)
+        else sequence_candidates.rebuild_sequence_build(build, slots)
     )
 
 def _common_width_dimension_provenance(
@@ -3768,30 +3133,6 @@ def _resolve_dimension_boundaries_from_common_width(
     return candidate if sequence_candidates.frame_slots_are_strictly_monotonic(candidate) else slots
 
 
-def _long_axis_assignments_for_slots(
-    assignments: tuple[FrameEdgeAssignment, ...],
-    slots: tuple[FrameSlot, ...],
-) -> tuple[FrameEdgeAssignment, ...]:
-    boundaries = {
-        (slot.index, side): boundary
-        for slot in slots
-        for side, boundary in (
-            (BoundarySide.LEADING, slot.leading),
-            (BoundarySide.TRAILING, slot.trailing),
-        )
-    }
-    retained: list[FrameEdgeAssignment] = []
-    for assignment in assignments:
-        boundary = boundaries[(assignment.frame_index, assignment.side)]
-        if (
-            boundary.source != FrameBoundarySource.GRAY_PATH_OBSERVATION
-            or boundary.boundary_anchor is None
-            or boundary.boundary_anchor.observation != assignment.observation
-        ):
-            continue
-        retained.append(replace(assignment, resolution=boundary))
-    return tuple(retained)
-
 def _resolve_build_dimension_boundaries(
     build: sequence_candidates.SequenceBuild,
     common_width: CommonFrameWidthResolution,
@@ -3804,7 +3145,7 @@ def _resolve_build_dimension_boundaries(
     )
     if slots == build.slots:
         return build
-    return _rebuild_sequence_build(build, slots)
+    return sequence_candidates.rebuild_sequence_build(build, slots)
 
 def _resolve_build_physical_boundaries(
     build: sequence_candidates.SequenceBuild,
@@ -3844,38 +3185,6 @@ def _resolve_build_physical_boundaries(
     )
     return resolved, common_width
 
-def _separator_assignments_from_bindings(
-    bindings: tuple[sequence_candidates.SeparatorBandBinding, ...],
-    slots: tuple[FrameSlot, ...],
-    common_width: CommonFrameWidthResolution,
-) -> tuple[SeparatorBandAssignment, ...]:
-    if common_width.state != EvidenceState.SUPPORTED:
-        return ()
-    assert common_width.width_px is not None
-    assignments: list[SeparatorBandAssignment] = []
-    for binding in bindings:
-        if binding.observation.width_px.maximum >= common_width.width_px.minimum:
-            continue
-        trailing = slots[binding.boundary_index - 1].trailing
-        leading = slots[binding.boundary_index].leading
-        if (
-            trailing.position != binding.observation.leading_edge
-            or leading.position != binding.observation.trailing_edge
-        ):
-            continue
-        assignments.append(
-            SeparatorBandAssignment(
-                boundary_index=binding.boundary_index,
-                observation=binding.observation,
-                cross_axis_measurement=binding.cross_axis_measurement,
-                frame_width_px=common_width.width_px,
-                preceding_trailing_edge=trailing,
-                following_leading_edge=leading,
-            )
-        )
-    return tuple(
-        sorted(assignments, key=lambda assignment: assignment.boundary_index)
-    )
 
 def _final_inter_frame_spacings(
     slots: tuple[FrameSlot, ...],
@@ -3885,7 +3194,7 @@ def _final_inter_frame_spacings(
     assigned_boundaries = {item.boundary_index for item in assignments}
     return tuple(
         _corroborate_overlap_from_independent_sequence_constraints(
-            _spacing_from_frame_edges(
+            sequence_candidates.spacing_from_frame_edges(
                 boundary_index,
                 left.trailing,
                 right.leading,
@@ -4203,7 +3512,7 @@ def _build_with_inserted_slot(
         is not None
     )
     spacings = tuple(
-        _spacing_from_frame_edges(
+        sequence_candidates.spacing_from_frame_edges(
             boundary_index,
             left.trailing,
             right.leading,
@@ -4238,10 +3547,10 @@ def _build_with_inserted_slot(
         residuals=residuals,
         objectives=replace(
             build.objectives,
-            uncorroborated_overlap_extent_px=_uncorroborated_overlap_extent(
+            uncorroborated_overlap_extent_px=sequence_candidates.uncorroborated_overlap_extent(
                 spacings
             ),
-            unexplained_spacing_extent_px=_unexplained_spacing_extent(spacings),
+            unexplained_spacing_extent_px=sequence_candidates.unexplained_spacing_extent(spacings),
             supported_separator_count=len(separator_bindings),
             boundary_uncertainty_ratio=(
                 build.objectives.boundary_uncertainty_ratio + added_uncertainty
@@ -4503,7 +3812,7 @@ def _infer_unique_slot_in_direct_nominal_build(
         inferred_slot if index == slot_index else slot
         for index, slot in enumerate(resolved_build.slots)
     )
-    return _rebuild_sequence_build(resolved_build, slots)
+    return sequence_candidates.rebuild_sequence_build(resolved_build, slots)
 
 def _direct_nominal_geometry_is_complete(
     builds: tuple[sequence_candidates.SequenceBuild, ...],
@@ -4924,7 +4233,7 @@ def solve_frame_sequence(
             short_axis_plan.photo_height_evidence,
             dimensions,
         )
-        assigned = _assign_unique_separator_observations(
+        assigned = separator_assignment.assign_unique_separator_observations(
             resolved,
             common_width,
             interior_supports,
@@ -5035,7 +4344,7 @@ def solve_frame_sequence(
         slots,
         visible_content,
     )
-    separator_assignments = _separator_assignments_from_bindings(
+    separator_assignments = separator_assignment.separator_assignments_from_bindings(
         representative.separator_bindings,
         slots,
         common_width,

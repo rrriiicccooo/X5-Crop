@@ -1,10 +1,33 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from types import SimpleNamespace
 import unittest
 
+from tools.tests.frame_slot_solver_support import path
+from tools.tests.physical_gate_support import candidate_fixture
 from x5crop.detection.physical import frame_sequence_candidates as candidate_builds
-from x5crop.domain import MeasurementIdentity, ObservationId, PixelInterval
+from x5crop.detection.physical import model as physical_model
+from x5crop.detection.physical.model import (
+    BoundaryAnchor,
+    BoundaryGeometryState,
+    BoundaryRoleAuthority,
+    FrameBoundarySource,
+    FrameContentOccupancy,
+    FrameSlot,
+    ResolvedFrameBoundary,
+)
+from x5crop.domain import (
+    BoundaryAxis,
+    BoundarySide,
+    EvidenceState,
+    InterFrameSpacingBasis,
+    InterFrameSpacingKind,
+    MeasurementIdentity,
+    MeasurementProvenance,
+    ObservationId,
+    PixelInterval,
+)
 
 
 class FrameSequenceCandidateContractTest(unittest.TestCase):
@@ -433,6 +456,297 @@ class FrameSequenceCandidateContractTest(unittest.TestCase):
                 (extra_separator_with_broken_conservation, conserved)
             ),
             (conserved,),
+        )
+
+
+    def test_spacing_interval_crossing_zero_is_uncertainty_not_physical_residual(
+        self,
+    ) -> None:
+        spacing = SimpleNamespace(
+            basis=InterFrameSpacingBasis.GEOMETRY_HYPOTHESIS,
+            signed_width_px=PixelInterval(-100.0, 5.0),
+        )
+
+        self.assertEqual(candidate_builds.uncorroborated_overlap_extent((spacing,)), 0.0)
+        self.assertEqual(candidate_builds.unexplained_spacing_extent((spacing,)), 0.0)
+
+    def test_spacing_residuals_only_count_unavoidable_overlap_or_gap(self) -> None:
+        overlap = SimpleNamespace(
+            basis=InterFrameSpacingBasis.GEOMETRY_HYPOTHESIS,
+            signed_width_px=PixelInterval(-100.0, -20.0),
+        )
+        gap = SimpleNamespace(
+            basis=InterFrameSpacingBasis.GEOMETRY_HYPOTHESIS,
+            signed_width_px=PixelInterval(5.0, 40.0),
+        )
+
+        self.assertEqual(candidate_builds.uncorroborated_overlap_extent((overlap, gap)), 20.0)
+        self.assertEqual(candidate_builds.unexplained_spacing_extent((overlap, gap)), 5.0)
+
+    def test_dimension_replacement_removes_superseded_path_assignment(
+        self,
+    ) -> None:
+        geometry_model = candidate_fixture().geometry
+        replaced_boundary = ResolvedFrameBoundary(
+            position=geometry_model.frame_slots[0].leading.position,
+            source=FrameBoundarySource.DIMENSION_CONSTRAINED,
+            geometry_state=BoundaryGeometryState.RESOLVED,
+            boundary_anchor=None,
+            inference_provenance=MeasurementProvenance(
+                MeasurementIdentity.FRAME_GEOMETRY,
+                ObservationId("dimension-replaced-leading-edge"),
+                (MeasurementIdentity.FRAME_DIMENSIONS,),
+                "dimension replacement",
+            ),
+        )
+        slots = (
+            replace(
+                geometry_model.frame_slots[0],
+                leading=replaced_boundary,
+            ),
+            *geometry_model.frame_slots[1:],
+        )
+
+        assignments = candidate_builds.long_axis_assignments_for_slots(
+            geometry_model.long_axis_assignments,
+            slots,
+        )
+
+        self.assertNotIn(
+            (1, BoundarySide.LEADING),
+            {(item.frame_index, item.side) for item in assignments},
+        )
+
+    def test_distinct_supported_photo_edges_measure_their_distance(
+        self,
+    ) -> None:
+        def boundary(
+            position: float,
+            side: BoundarySide,
+            label: str,
+        ) -> ResolvedFrameBoundary:
+            observation = path(BoundaryAxis.LONG, position, label)
+            role_provenance = MeasurementProvenance(
+                MeasurementIdentity.PHOTO_EDGES,
+                ObservationId(f"{label}:role"),
+                (observation.provenance.root_measurement,),
+                "synthetic independently supported photo-edge role",
+                (observation.provenance.observation_id,),
+            )
+            return ResolvedFrameBoundary(
+                position=observation.position,
+                source=FrameBoundarySource.GRAY_PATH_OBSERVATION,
+                geometry_state=BoundaryGeometryState.RESOLVED,
+                boundary_anchor=BoundaryAnchor(
+                    observation=observation,
+                    physical_role=side,
+                    role_state=EvidenceState.SUPPORTED,
+                    role_authority=BoundaryRoleAuthority.DIRECT_MEASUREMENT,
+                    role_provenance=role_provenance,
+                ),
+                inference_provenance=None,
+            )
+
+        spacing = candidate_builds.spacing_from_frame_edges(
+            1,
+            boundary(100.0, BoundarySide.TRAILING, "unrelated-trailing"),
+            boundary(5_000.0, BoundarySide.LEADING, "unrelated-leading"),
+        )
+
+        self.assertEqual(
+            spacing.basis,
+            InterFrameSpacingBasis.OBSERVED,
+        )
+        self.assertEqual(spacing.state, EvidenceState.SUPPORTED)
+        self.assertEqual(
+            spacing.provenance.root_measurement,
+            MeasurementIdentity.PHOTO_EDGES,
+        )
+
+    def test_distinct_supported_photo_edges_measure_uncertain_spacing(self) -> None:
+        def boundary(
+            interval: PixelInterval,
+            side: BoundarySide,
+            label: str,
+        ) -> ResolvedFrameBoundary:
+            observation = path(BoundaryAxis.LONG, interval.midpoint, label)
+            observation = replace(
+                observation,
+                samples=tuple(
+                    replace(sample, position=interval)
+                    for sample in observation.samples
+                ),
+            )
+            role_provenance = MeasurementProvenance(
+                MeasurementIdentity.PHOTO_EDGES,
+                ObservationId(f"{label}:role"),
+                (observation.provenance.root_measurement,),
+                "synthetic independently supported photo-edge role",
+                (observation.provenance.observation_id,),
+            )
+            return ResolvedFrameBoundary(
+                position=observation.position,
+                source=FrameBoundarySource.GRAY_PATH_OBSERVATION,
+                geometry_state=BoundaryGeometryState.RESOLVED,
+                boundary_anchor=BoundaryAnchor(
+                    observation=observation,
+                    physical_role=side,
+                    role_state=EvidenceState.SUPPORTED,
+                    role_authority=BoundaryRoleAuthority.DIRECT_MEASUREMENT,
+                    role_provenance=role_provenance,
+                ),
+                inference_provenance=None,
+            )
+
+        spacing = candidate_builds.spacing_from_frame_edges(
+            1,
+            boundary(
+                PixelInterval(100.0, 105.0),
+                BoundarySide.TRAILING,
+                "measured-trailing",
+            ),
+            boundary(
+                PixelInterval(99.0, 110.0),
+                BoundarySide.LEADING,
+                "measured-leading",
+            ),
+        )
+
+        self.assertEqual(spacing.basis, InterFrameSpacingBasis.OBSERVED)
+        self.assertEqual(spacing.kind, InterFrameSpacingKind.UNRESOLVED)
+        self.assertEqual(spacing.state, EvidenceState.UNAVAILABLE)
+        self.assertFalse(spacing.supports_output_protection)
+
+    def test_repeated_width_role_does_not_measure_inter_frame_overlap(
+        self,
+    ) -> None:
+        def boundary(
+            position: float,
+            side: BoundarySide,
+            label: str,
+        ) -> ResolvedFrameBoundary:
+            observation = path(BoundaryAxis.LONG, position, label)
+            role_provenance = MeasurementProvenance(
+                MeasurementIdentity.PHOTO_EDGES,
+                ObservationId(f"{label}:repeated-width-role"),
+                (
+                    observation.provenance.root_measurement,
+                    MeasurementIdentity.FRAME_WIDTH_PATTERN,
+                ),
+                "synthetic role corroborated by repeated frame width",
+                (observation.provenance.observation_id,),
+            )
+            return ResolvedFrameBoundary(
+                position=observation.position,
+                source=FrameBoundarySource.GRAY_PATH_OBSERVATION,
+                geometry_state=BoundaryGeometryState.RESOLVED,
+                boundary_anchor=BoundaryAnchor(
+                    observation=observation,
+                    physical_role=side,
+                    role_state=EvidenceState.SUPPORTED,
+                    role_authority=(
+                        BoundaryRoleAuthority.MEASUREMENT_CORROBORATED
+                    ),
+                    role_provenance=role_provenance,
+                ),
+                inference_provenance=None,
+            )
+
+        spacing = candidate_builds.spacing_from_frame_edges(
+            1,
+            boundary(200.0, BoundarySide.TRAILING, "pattern-trailing"),
+            boundary(100.0, BoundarySide.LEADING, "pattern-leading"),
+        )
+
+        self.assertEqual(
+            spacing.basis,
+            InterFrameSpacingBasis.GEOMETRY_HYPOTHESIS,
+        )
+        self.assertEqual(spacing.state, EvidenceState.UNAVAILABLE)
+        self.assertFalse(spacing.supports_output_protection)
+
+    def test_shared_supported_photo_edge_is_exact_measured_contact(self) -> None:
+        observation = path(BoundaryAxis.LONG, 100.0, "shared-contact")
+        uncertain_position = PixelInterval(90.0, 110.0)
+        observation = replace(
+            observation,
+            samples=tuple(
+                replace(sample, position=uncertain_position)
+                for sample in observation.samples
+            ),
+        )
+        role_provenance = MeasurementProvenance(
+            MeasurementIdentity.PHOTO_EDGES,
+            ObservationId("shared-contact:role"),
+            (observation.provenance.root_measurement,),
+            "synthetic independently supported shared photo edge",
+            (observation.provenance.observation_id,),
+        )
+
+        def boundary(side: BoundarySide) -> ResolvedFrameBoundary:
+            boundary_observation = (
+                observation
+                if side == BoundarySide.TRAILING
+                else replace(observation)
+            )
+            return ResolvedFrameBoundary(
+                position=boundary_observation.position,
+                source=FrameBoundarySource.GRAY_PATH_OBSERVATION,
+                geometry_state=BoundaryGeometryState.RESOLVED,
+                boundary_anchor=BoundaryAnchor(
+                    observation=boundary_observation,
+                    physical_role=side,
+                    role_state=EvidenceState.SUPPORTED,
+                    role_authority=BoundaryRoleAuthority.DIRECT_MEASUREMENT,
+                    role_provenance=role_provenance,
+                ),
+                inference_provenance=None,
+            )
+
+        spacing = candidate_builds.spacing_from_frame_edges(
+            1,
+            boundary(BoundarySide.TRAILING),
+            boundary(BoundarySide.LEADING),
+        )
+
+        self.assertEqual(spacing.basis, InterFrameSpacingBasis.OBSERVED)
+        self.assertEqual(spacing.signed_width_px, PixelInterval.exact(0.0))
+        self.assertEqual(spacing.kind, InterFrameSpacingKind.CONTACT)
+        self.assertEqual(spacing.state, EvidenceState.SUPPORTED)
+        self.assertFalse(spacing.supports_output_protection)
+
+        def inferred_boundary(position: float) -> ResolvedFrameBoundary:
+            return ResolvedFrameBoundary(
+                position=PixelInterval.exact(position),
+                source=FrameBoundarySource.DIMENSION_CONSTRAINED,
+                geometry_state=BoundaryGeometryState.RESOLVED,
+                boundary_anchor=None,
+                inference_provenance=MeasurementProvenance(
+                    MeasurementIdentity.FRAME_GEOMETRY,
+                    ObservationId(f"contact-endpoint:{position}"),
+                    (),
+                    "synthetic contact endpoint",
+                ),
+            )
+
+        left = FrameSlot(
+            1,
+            PixelInterval(0.0, 110.0),
+            inferred_boundary(0.0),
+            boundary(BoundarySide.TRAILING),
+            FrameContentOccupancy.UNAVAILABLE,
+            None,
+        )
+        right = FrameSlot(
+            2,
+            PixelInterval(90.0, 200.0),
+            boundary(BoundarySide.LEADING),
+            inferred_boundary(200.0),
+            FrameContentOccupancy.UNAVAILABLE,
+            None,
+        )
+        self.assertTrue(
+            physical_model._spacing_matches_frame_slots(spacing, left, right)
         )
 
 
