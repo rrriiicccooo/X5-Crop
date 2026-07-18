@@ -12,7 +12,10 @@ from ...domain import (
 )
 from ...geometry.layout import is_horizontal_layout
 from ..physical.frame_dimensions import MINIMUM_COMMON_FRAME_WIDTH_OBSERVATIONS
-from ..physical.model import FrameSequenceSolution
+from ..physical.model import (
+    FrameSequenceSolution,
+    boundary_role_is_independent_physical_measurement,
+)
 
 
 class FrameScaleSource(str, Enum):
@@ -52,14 +55,8 @@ def _frame_width_observations(
     slots = tuple(
         slot
         for slot in geometry.frame_slots
-        if slot.leading.independently_observed
-        and slot.trailing.independently_observed
-        and all(
-            boundary.role_provenance is not None
-            and boundary.role_provenance.root_measurement
-            != MeasurementIdentity.FRAME_DIMENSIONS
-            and MeasurementIdentity.FRAME_DIMENSIONS
-            not in boundary.role_provenance.dependencies
+        if all(
+            boundary_role_is_independent_physical_measurement(boundary)
             for boundary in (slot.leading, slot.trailing)
         )
         and not slot.sequence_inferred

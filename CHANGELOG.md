@@ -59,13 +59,24 @@ the validation evidence.
   and mutually exclusive visible extents instead of merging them by nominal
   boundary coordinates alone. / Candidate geometry clustering 现在同时保留
   sequence-inferred slot 身份与互斥 visible extent，不再只按 nominal boundary 坐标合并。
-- 六张冻结 `135/full` 样片的 current report 中循环 provenance 由 55 降为 0；
-  canonical report 比较零差异，六张 Debug Analysis 字节完全一致，且全部继续
-  `REVIEW` / 不导出。 / Across the six frozen `135/full` samples, cyclic report
-  provenances fell from 55 to zero; canonical report comparison had zero diffs,
-  all six Debug Analysis files were byte-identical, and every sample remained
-  `REVIEW` / non-exportable.
-- 完整验证通过 768 项测试和 14 组配置。 / Full verification passed 768 tests
+- Repeated-width boundary roles are now excluded from single-frame proof,
+  single-frame geometry resolution, evidence-independence support, and measured
+  frame-scale observations. / Repeated-width boundary role 现在不能进入单帧 proof、
+  单帧 geometry resolution、evidence-independence support 或 measured frame-scale
+  observation。
+- 初始 provenance/sequence-conservation 波次使六张冻结 `135/full` 样片的循环
+  provenance 由 55 降为 0，同时保持 canonical report 零差异和 Debug Analysis 字节一致。 /
+  The initial provenance and sequence-conservation waves reduced cyclic
+  provenances from 55 to zero across the six frozen `135/full` samples while
+  preserving canonical reports and Debug Analysis bytes.
+- 随后的 repeated-width 权限清理按物理事实移除了 00007/13/18/19/31 中依赖 pattern 的
+  measured frame-scale/independence 记录；00031 新增 `evidence_independence_failed`，只有其
+  Debug 标题改变，几何框未变。六张样片仍全部 `REVIEW` / 不导出。 / The later
+  repeated-width authority cleanup removed pattern-dependent measured
+  frame-scale and independence records from 00007/13/18/19/31; 00031 gained
+  `evidence_independence_failed`, with only its Debug header changing and all
+  geometry boxes preserved. All six samples remain `REVIEW` / non-exportable.
+- 完整验证通过 772 项测试和 14 组配置。 / Full verification passed 772 tests
   and 14 configuration pairs.
 
 ### 2026-07-15 — 共享短轴与 Frame Slot / Shared Short Axis And Frame Slots

@@ -8,6 +8,7 @@ from x5crop.domain import (
     MeasurementIdentity,
     MeasurementProvenance,
 )
+from ...physical.model import boundary_role_is_independent_physical_measurement
 
 if TYPE_CHECKING:
     from ...physical.model import FrameSequenceSolution
@@ -53,7 +54,9 @@ def _supporting_measurement_provenances(
     frame_boundary_provenances = tuple(
         assignment.observation.provenance
         for assignment in geometry.long_axis_assignments
-        if assignment.resolution.independently_observed
+        if boundary_role_is_independent_physical_measurement(
+            assignment.resolution
+        )
     )
     separator_provenances = tuple(
         assignment.observation.provenance

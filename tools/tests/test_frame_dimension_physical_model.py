@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from types import SimpleNamespace
 import unittest
 
 from tools.tests.frame_slot_solver_support import (
@@ -14,6 +15,7 @@ from tools.tests.frame_slot_solver_support import (
 from tools.tests.physical_gate_support import candidate_fixture
 from x5crop.detection.evidence.frame_scale import (
     FrameScaleSource,
+    _frame_width_observations,
     frame_scale_observations,
 )
 from x5crop.detection.physical.frame_dimensions import (
@@ -31,7 +33,14 @@ from x5crop.detection.physical.model import (
     SharedShortAxisSafetySpan,
 )
 from x5crop.detection.physical.short_axis import shared_short_axis_plan
-from x5crop.domain import BoundarySide, EvidenceState, PixelInterval
+from x5crop.domain import (
+    BoundarySide,
+    EvidenceState,
+    MeasurementIdentity,
+    MeasurementProvenance,
+    ObservationId,
+    PixelInterval,
+)
 from x5crop.formats import FORMATS
 
 
@@ -92,7 +101,7 @@ class FrameDimensionPhysicalModelTest(unittest.TestCase):
 
         self.assertIsNone(evidence.observed_aspect)
 
-    def test_blank_slot_is_excluded_from_scale_measurements(self) -> None:
+    def test_blank_and_geometry_derived_slots_are_excluded_from_scale(self) -> None:
         search_scope = scope(
             width=660,
             height=120,
@@ -168,7 +177,14 @@ class FrameDimensionPhysicalModelTest(unittest.TestCase):
                 str(item.provenance.observation_id)
                 for item in width_observations
             ),
-            tuple(f"frame_width_scale:{index}" for index in range(2, 6)),
+            tuple(f"frame_width_scale:{index}" for index in range(2, 5)),
+        )
+        self.assertNotIn(
+            "frame_width_scale:5",
+            tuple(
+                str(item.provenance.observation_id)
+                for item in width_observations
+            ),
         )
         self.assertNotIn(
             "frame_width_scale:6",
@@ -182,6 +198,46 @@ class FrameDimensionPhysicalModelTest(unittest.TestCase):
         source = frame_scale_observations.__module__
 
         self.assertEqual(source, "x5crop.detection.evidence.frame_scale")
+
+    def test_repeated_width_roles_do_not_emit_measured_frame_scale(self) -> None:
+        def boundary(label: str) -> SimpleNamespace:
+            measurement = MeasurementProvenance(
+                MeasurementIdentity.BOUNDARY_PATHS,
+                ObservationId(f"frame_scale_repeated_width_path:{label}"),
+                (MeasurementIdentity.GRAY_WORK,),
+                "raw gray boundary path",
+            )
+            repeated_width_role = MeasurementProvenance(
+                MeasurementIdentity.PHOTO_EDGES,
+                ObservationId(f"frame_scale_repeated_width_role:{label}"),
+                (
+                    MeasurementIdentity.BOUNDARY_PATHS,
+                    MeasurementIdentity.FRAME_WIDTH_PATTERN,
+                ),
+                "photo-edge role assigned by repeated-width geometry",
+            )
+            return SimpleNamespace(
+                independently_observed=True,
+                role_provenance=repeated_width_role,
+                measurement_provenance=measurement,
+            )
+
+        geometry = SimpleNamespace(
+            frame_dimension_prior=SimpleNamespace(frame_size_mm=(36.0, 24.0)),
+            layout="horizontal",
+            frame_slots=tuple(
+                SimpleNamespace(
+                    index=index,
+                    leading=boundary(f"{index}:leading"),
+                    trailing=boundary(f"{index}:trailing"),
+                    width_px=PixelInterval.exact(100.0),
+                    sequence_inferred=False,
+                )
+                for index in (1, 2)
+            ),
+        )
+
+        self.assertEqual(_frame_width_observations(geometry), ())
 
 
 if __name__ == "__main__":

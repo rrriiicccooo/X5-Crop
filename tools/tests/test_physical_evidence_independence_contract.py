@@ -279,6 +279,43 @@ class PhysicalEvidenceIndependenceContractTest(unittest.TestCase):
             evidence.supporting_measurement_roots,
         )
 
+    def test_repeated_width_roles_are_not_independent_geometry_support(self) -> None:
+        raw_measurement = MeasurementProvenance(
+            MeasurementIdentity.BOUNDARY_PATHS,
+            ObservationId("repeated_width_independence_raw_path"),
+            (MeasurementIdentity.GRAY_WORK,),
+            "raw gray boundary path",
+        )
+        repeated_width_role = MeasurementProvenance(
+            MeasurementIdentity.PHOTO_EDGES,
+            ObservationId("repeated_width_independence_role"),
+            (
+                MeasurementIdentity.BOUNDARY_PATHS,
+                MeasurementIdentity.FRAME_WIDTH_PATTERN,
+            ),
+            "photo-edge role assigned by repeated-width geometry",
+        )
+        geometry = SimpleNamespace(
+            long_axis_assignments=(
+                SimpleNamespace(
+                    observation=SimpleNamespace(provenance=raw_measurement),
+                    resolution=SimpleNamespace(
+                        independently_observed=True,
+                        role_provenance=repeated_width_role,
+                    ),
+                ),
+            ),
+            separator_assignments=(),
+            sequence_provenance=SimpleNamespace(
+                root_measurement=MeasurementIdentity.FRAME_GEOMETRY,
+            ),
+        )
+
+        evidence = evidence_independence_evidence(geometry)
+
+        self.assertEqual(evidence.state, EvidenceState.UNAVAILABLE)
+        self.assertEqual(evidence.supporting_measurement_roots, ())
+
     def test_measured_internal_frame_edges_support_dimension_sequence(self) -> None:
         geometry = _measured_internal_edge_geometry()
         independence = evidence_independence_evidence(geometry)
@@ -358,6 +395,55 @@ class PhysicalEvidenceIndependenceContractTest(unittest.TestCase):
             content_preservation_state=EvidenceState.SUPPORTED,
             internal_frame_boundary_preservation=SimpleNamespace(observations=()),
             partial_edge_safety=SimpleNamespace(state=EvidenceState.UNAVAILABLE),
+            holder_occupancy=SimpleNamespace(occupancy_state="unavailable"),
+        )
+
+        dimension_path = next(
+            path
+            for path in sequence_proof_paths_for_geometry(geometry, evidence)
+            if path.code == "dimension_sequence_led"
+        )
+
+        self.assertEqual(dimension_path.state, EvidenceState.UNAVAILABLE)
+
+    def test_repeated_width_roles_cannot_prove_single_frame_boundaries(self) -> None:
+        repeated_width_role = MeasurementProvenance(
+            MeasurementIdentity.PHOTO_EDGES,
+            ObservationId("single_frame_repeated_width_role"),
+            (
+                MeasurementIdentity.GRAY_WORK,
+                MeasurementIdentity.FRAME_WIDTH_PATTERN,
+            ),
+            "photo-edge role assigned by repeated-width geometry",
+        )
+        boundary = SimpleNamespace(
+            independently_observed=True,
+            role_provenance=repeated_width_role,
+        )
+        geometry = SimpleNamespace(
+            count=1,
+            strip_mode="full",
+            shared_short_axis=SimpleNamespace(supports_safe_crop=True),
+            frame_slots=(
+                SimpleNamespace(leading=boundary, trailing=boundary),
+            ),
+            inter_frame_spacings=(),
+            common_frame_width=SimpleNamespace(
+                state=EvidenceState.UNAVAILABLE,
+                physical_scale_constraint=None,
+            ),
+        )
+        evidence = SimpleNamespace(
+            frame_slot_topology=SimpleNamespace(state=EvidenceState.SUPPORTED),
+            independence=SimpleNamespace(state=EvidenceState.SUPPORTED),
+            separator_sequence=SimpleNamespace(
+                state=EvidenceState.NOT_APPLICABLE,
+                hard_count=0,
+            ),
+            frame_dimensions=SimpleNamespace(state=EvidenceState.UNAVAILABLE),
+            content_preservation_state=EvidenceState.SUPPORTED,
+            internal_frame_boundary_preservation=SimpleNamespace(observations=()),
+            partial_edge_safety=SimpleNamespace(state=EvidenceState.NOT_APPLICABLE),
             holder_occupancy=SimpleNamespace(occupancy_state="unavailable"),
         )
 

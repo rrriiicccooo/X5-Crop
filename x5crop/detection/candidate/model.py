@@ -235,8 +235,12 @@ def sequence_proof_paths_for_geometry(
     )
     single_frame_physical_boundaries = bool(
         geometry.count == 1
-        and geometry.frame_slots[0].leading.independently_observed
-        and geometry.frame_slots[0].trailing.independently_observed
+        and _boundary_role_is_dimension_independent(
+            geometry.frame_slots[0].leading
+        )
+        and _boundary_role_is_dimension_independent(
+            geometry.frame_slots[0].trailing
+        )
     )
     content_preservation_compatible = bool(
         evidence.content_preservation_state != EvidenceState.CONTRADICTED

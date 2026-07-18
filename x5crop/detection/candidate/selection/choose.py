@@ -6,6 +6,7 @@ from ...physical.model import (
     DualLaneFrameSolution,
     FrameSequenceSolution,
     ReviewOnlyContainment,
+    boundary_role_is_independent_physical_measurement,
 )
 from ..model import (
     AssessedCandidate,
@@ -38,8 +39,8 @@ def _sequence_frame_slots_resolved(
     if geometry.count == 1:
         slot = slots[0]
         return bool(
-            slot.leading.independently_observed
-            and slot.trailing.independently_observed
+            boundary_role_is_independent_physical_measurement(slot.leading)
+            and boundary_role_is_independent_physical_measurement(slot.trailing)
         )
     return geometry.common_frame_width.state == EvidenceState.SUPPORTED
 

@@ -23,6 +23,7 @@ from x5crop.detection.evidence.separator_sequence import separator_sequence_evid
 from x5crop.detection.candidate.selection.choose import select_candidates
 from x5crop.detection.candidate.selection.choose import geometry_clusters
 from x5crop.detection.candidate.selection.choose import geometry_equivalent
+from x5crop.detection.candidate.selection.choose import _sequence_frame_slots_resolved
 from x5crop.detection.candidate.plan.model import CountHypothesisSource
 from x5crop.detection.candidate.assessment.candidate import (
     candidate_gate_for_evidence,
@@ -334,6 +335,33 @@ class PhysicalGateModelContractTest(unittest.TestCase):
                     ),
                 )
             )
+
+    def test_repeated_width_roles_do_not_resolve_single_frame_geometry(self) -> None:
+        repeated_width_role = MeasurementProvenance(
+            MeasurementIdentity.PHOTO_EDGES,
+            ObservationId("single_frame_resolution_repeated_width_role"),
+            (
+                MeasurementIdentity.GRAY_WORK,
+                MeasurementIdentity.FRAME_WIDTH_PATTERN,
+            ),
+            "photo-edge role assigned by repeated-width geometry",
+        )
+        boundary = SimpleNamespace(
+            geometry_resolved=True,
+            independently_observed=True,
+            role_provenance=repeated_width_role,
+        )
+        geometry = SimpleNamespace(
+            count=1,
+            frame_slots=(
+                SimpleNamespace(leading=boundary, trailing=boundary),
+            ),
+            frame_crop_envelopes=(
+                SimpleNamespace(box=Box(0, 0, 100, 100)),
+            ),
+        )
+
+        self.assertFalse(_sequence_frame_slots_resolved(geometry))
 
     def test_candidate_residual_tradeoffs_preserve_geometry_disagreement(self) -> None:
         selected = candidate_fixture()
