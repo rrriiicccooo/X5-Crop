@@ -59,6 +59,45 @@ _ALL_HOLDER_SIDES = (
 
 
 class FrameSequenceConstructionContractTest(unittest.TestCase):
+    def test_search_hint_cannot_select_canonical_observation_provenance(
+        self,
+    ) -> None:
+        def edge(quality: float) -> SimpleNamespace:
+            return SimpleNamespace(
+                position=PixelInterval.exact(0.0),
+                external_side=None,
+                state=EvidenceState.UNAVAILABLE,
+                basis=FrameBoundarySource.GRAY_PATH_OBSERVATION,
+                separator=None,
+                path=object(),
+                observation_quality=quality,
+            )
+
+        def option(*, quality: float, hint_residual: float) -> SimpleNamespace:
+            leading = edge(quality)
+            trailing = SimpleNamespace(
+                **{
+                    **vars(leading),
+                    "position": PixelInterval.exact(100.0),
+                }
+            )
+            return SimpleNamespace(
+                leading=leading,
+                trailing=trailing,
+                full_width_hypothesis_admissible=True,
+                search_order_residual=hint_residual,
+                frame_width_hint_residual=hint_residual,
+            )
+
+        measured = option(quality=1.0, hint_residual=10.0)
+        merely_hinted = option(quality=0.1, hint_residual=0.0)
+
+        canonical = construction._canonical_measured_frame_constraints(
+            (measured, merely_hinted)
+        )
+
+        self.assertEqual(canonical, (measured,))
+
     def test_weak_separator_edges_are_geometry_hypotheses_not_hard_support(
         self,
     ) -> None:

@@ -45,13 +45,18 @@ the validation evidence.
   output-protection authority through content. / Content continuity 只能佐证两侧
   physical role 已独立测得的 overlap；repeated-width geometry 不能再借 content 获得
   overlap 输出保护权限。
+- Canonical measured-frame selection now ranks physical support, observation
+  quality, and measurement uncertainty before search hints; hints can order work
+  but cannot choose the retained observation identity. / Measured-frame 的规范化
+  选择现在先比较物理支持、观测质量和测量不确定度，再比较 search hint；hint 只能安排
+  搜索顺序，不能决定保留哪条观测 identity。
 - 六张冻结 `135/full` 样片的 current report 中循环 provenance 由 55 降为 0；
   canonical report 比较零差异，六张 Debug Analysis 字节完全一致，且全部继续
   `REVIEW` / 不导出。 / Across the six frozen `135/full` samples, cyclic report
   provenances fell from 55 to zero; canonical report comparison had zero diffs,
   all six Debug Analysis files were byte-identical, and every sample remained
   `REVIEW` / non-exportable.
-- 完整验证通过 764 项测试和 14 组配置。 / Full verification passed 764 tests
+- 完整验证通过 765 项测试和 14 组配置。 / Full verification passed 765 tests
   and 14 configuration pairs.
 
 ### 2026-07-15 — 共享短轴与 Frame Slot / Shared Short Axis And Frame Slots

@@ -45,8 +45,6 @@ def measured_frame_option_rank(
             edge.basis == FrameBoundarySource.GRAY_PATH_OBSERVATION
             for edge in (option.leading, option.trailing)
         ),
-        -option.search_order_residual,
-        -option.frame_width_hint_residual,
         option.leading.observation_quality + option.trailing.observation_quality,
         -(
             option.leading.position.maximum
@@ -54,6 +52,8 @@ def measured_frame_option_rank(
             + option.trailing.position.maximum
             - option.trailing.position.minimum
         ),
+        -option.search_order_residual,
+        -option.frame_width_hint_residual,
         -option.leading.position.midpoint,
     )
 
