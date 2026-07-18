@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+from dataclasses import fields
 from pathlib import Path
 import unittest
 
@@ -23,6 +24,14 @@ _CANONICAL_OWNERS = {
         "DimensionPlacementHypothesis",
         "measured_constraint_common_width",
         "resolve_common_frame_width",
+    },
+    "frame_sequence_search.py": {
+        "SequenceGraphContext",
+        "SequenceGraphEvaluations",
+        "SequenceGraphFeasibility",
+        "MeasuredFrameSequenceSearchResult",
+        "measured_frame_option_rank",
+        "measured_frame_sequences",
     },
 }
 
@@ -50,7 +59,7 @@ def _relative_import_modules(path: Path) -> set[str]:
 
 
 class FrameSequenceArchitectureContractTest(unittest.TestCase):
-    def test_measurement_and_common_width_authority_have_one_owner(self) -> None:
+    def test_frame_sequence_authorities_have_one_owner(self) -> None:
         all_definitions = {
             path.name: _definitions(path)
             for path in _PHYSICAL_ROOT.glob("*.py")
@@ -77,6 +86,7 @@ class FrameSequenceArchitectureContractTest(unittest.TestCase):
             _relative_import_modules(measurements).isdisjoint(
                 {
                     "frame_sequence_common_width",
+                    "frame_sequence_search",
                     "frame_sequence_solver",
                 }
             )
@@ -86,8 +96,38 @@ class FrameSequenceArchitectureContractTest(unittest.TestCase):
             _relative_import_modules(common_width),
         )
         self.assertNotIn(
+            "frame_sequence_search",
+            _relative_import_modules(common_width),
+        )
+        self.assertNotIn(
             "frame_sequence_solver",
             _relative_import_modules(common_width),
+        )
+
+    def test_search_depends_on_lower_physical_owners_not_solver(self) -> None:
+        search = _PHYSICAL_ROOT / "frame_sequence_search.py"
+        imports = _relative_import_modules(search)
+
+        self.assertTrue(
+            {
+                "frame_sequence_measurements",
+                "frame_sequence_common_width",
+            }.issubset(imports)
+        )
+        self.assertNotIn("frame_sequence_solver", imports)
+
+    def test_search_result_owns_budget_state_not_final_decision(self) -> None:
+        from x5crop.detection.physical.frame_sequence_search import (
+            MeasuredFrameSequenceSearchResult,
+        )
+
+        self.assertEqual(
+            tuple(field.name for field in fields(MeasuredFrameSequenceSearchResult)),
+            (
+                "sequences",
+                "assignment_evaluations",
+                "budget_exhausted",
+            ),
         )
 
     def test_solver_does_not_compatibility_export_owned_symbols(self) -> None:
@@ -103,6 +143,7 @@ class FrameSequenceArchitectureContractTest(unittest.TestCase):
             in {
                 "frame_sequence_measurements",
                 "frame_sequence_common_width",
+                "frame_sequence_search",
             }
             for alias in node.names
         }

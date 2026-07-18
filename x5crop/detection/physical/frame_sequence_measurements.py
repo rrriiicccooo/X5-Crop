@@ -21,6 +21,7 @@ from .model import (
 
 
 MINIMUM_POSITIVE_PIXEL_EXTENT = 1.0
+INTERVAL_ENDPOINT_COUNT = 2
 
 
 @dataclass(frozen=True)

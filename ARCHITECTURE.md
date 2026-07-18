@@ -155,10 +155,12 @@ boundaries are:
 |---|---|
 | `frame_sequence_measurements.py` | `EdgeConstraint`, `MeasuredFrameConstraint`, positive interval facts, measurement compatibility, and strict contributor grouping primitives. |
 | `frame_sequence_common_width.py` | Measured/recurring width hypotheses, contributor selection, independent physical-scale corroboration, and final `CommonFrameWidthResolution`. |
-| `frame_sequence_solver.py` | Remaining search, build, consensus, boundary-role, completion, and top-level orchestration responsibilities pending their own canonical owners. |
+| `frame_sequence_search.py` | Common-width option graph, reachability, graph witnesses, assignment-evaluation accounting, and typed budget exhaustion. |
+| `frame_sequence_solver.py` | Remaining candidate build, consensus, boundary-role, completion, and top-level orchestration responsibilities pending their own canonical owners. |
 
 Dependency direction is one way: common-width resolution consumes measurement
-facts; the solver consumes both modules; neither lower owner imports the solver.
+facts; search consumes both lower owners; the solver consumes all three modules;
+no lower owner imports the solver.
 The solver does not re-export migrated symbols. Architecture contracts check the
 definition owners and import direction, while physical contracts target the
 canonical module directly.
@@ -166,8 +168,9 @@ canonical module directly.
 Frame-sequence 证明代码按显式 owner 划分，不再把单个 solver 文件视为全部生命周期概念的共同
 owner。当前 measurement interval 只由 `frame_sequence_measurements.py` 拥有，common-width
 假设、contributor 选择、独立 scale 佐证与最终 resolution 只由
-`frame_sequence_common_width.py` 拥有；其余搜索、候选、共识、边界角色与补全职责仍由 solver
-承载，等待后续独立 owner。依赖只能从 common-width 指向 measurement facts，再由 solver 消费；
+`frame_sequence_common_width.py` 拥有；graph options、reachability、witness 与 typed budget state
+只由 `frame_sequence_search.py` 拥有。其余候选、共识、边界角色与补全职责仍由 solver 承载，
+等待后续独立 owner。依赖只能按 measurement facts → common-width → search → solver 单向流动；
 低层模块不得反向导入 solver，solver 也不兼容导出已经迁移的符号。
 
 ## 3. Evidence、Assessment 与 Decision

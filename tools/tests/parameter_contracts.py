@@ -259,7 +259,7 @@ CONSTANT_PARAMETER_CONTRACTS = (
         "fixed_by_algorithm",
     ),
     ParameterContract(
-        "x5crop.detection.physical.frame_sequence_solver.INTERVAL_ENDPOINT_COUNT",
+        "x5crop.detection.physical.frame_sequence_measurements.INTERVAL_ENDPOINT_COUNT",
         ParameterRole.STANDARD_TRANSFORM,
         "endpoint_count",
         "sequence_solver",

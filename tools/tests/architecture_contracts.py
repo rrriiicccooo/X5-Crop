@@ -446,9 +446,23 @@ def unreferenced_public_assignments() -> list[str]:
     references: set[tuple[str, str]] = set()
     for module in modules.values():
         tree = parsed_source(module)
+        module_aliases: dict[str, str] = {}
         for node in ast.walk(tree):
             if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load):
                 references.add((module.name, node.id))
+            elif (
+                isinstance(node, ast.Attribute)
+                and isinstance(node.ctx, ast.Load)
+                and isinstance(node.value, ast.Name)
+                and node.value.id in module_aliases
+            ):
+                references.add((module_aliases[node.value.id], node.attr))
+            elif isinstance(node, ast.Import):
+                for alias in node.names:
+                    if alias.name in modules:
+                        module_aliases[alias.asname or alias.name.split(".")[0]] = (
+                            alias.name
+                        )
             elif isinstance(node, ast.ImportFrom):
                 if node.level:
                     relative = "." * node.level + (node.module or "")
@@ -457,6 +471,9 @@ def unreferenced_public_assignments() -> list[str]:
                     base = node.module or ""
                 for alias in node.names:
                     references.add((base, alias.name))
+                    imported_module = f"{base}.{alias.name}" if base else alias.name
+                    if imported_module in modules:
+                        module_aliases[alias.asname or alias.name] = imported_module
 
     for path in (PROJECT_ROOT / "tools").rglob("*.py"):
         module_name = ".".join(path.relative_to(PROJECT_ROOT).with_suffix("").parts)

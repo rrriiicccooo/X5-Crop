@@ -22,6 +22,7 @@ from x5crop.image.separator_profile import (
     SeparatorProfileMeasurement,
     SeparatorProfileParameters,
 )
+from x5crop.image.content import ContentRegionObservation
 from x5crop.geometry.layout import work_gray
 from x5crop.image.statistics import ImageMeasurementStatisticsParameters, image_measurement_statistics
 from x5crop.configuration.bundle import DetectionConfigurationBundle
@@ -31,8 +32,8 @@ from tools.tests.physical_gate_support import candidate_fixture
 from x5crop.runtime.analysis_reuse import analysis_configuration_fingerprint
 from x5crop.configuration.boundary import BoundaryPathParameters
 from x5crop.detection.candidate.proposal.sequence import cached_boundary_measurements
-from x5crop.detection.physical import frame_sequence_solver as solver_module
 from x5crop.detection.physical import frame_sequence_measurements as measurements
+from x5crop.detection.physical import frame_sequence_search as sequence_search
 from x5crop.detection.physical.model import (
     BoundaryGeometryState,
     FrameBoundarySource,
@@ -90,9 +91,9 @@ class DetectionCachePerformanceContractTest(unittest.TestCase):
         )
         current = frame(1_000.0, 512)
         ordered = (*previous_options, current)
-        context = solver_module._sequence_graph_context(
+        context = sequence_search.sequence_graph_context(
             ordered,
-            solver_module.ContentRegionObservation(
+            ContentRegionObservation(
                 region=Box(0, 0, 1_100, 100),
                 reliable_runs=(),
                 position_uncertainty_px=0,
@@ -100,7 +101,7 @@ class DetectionCachePerformanceContractTest(unittest.TestCase):
             allow_nominal_slot_sized_gap=True,
         )
         states = {
-            index: solver_module._GraphPathState(
+            index: sequence_search.GraphPathState(
                 observation_candidate_count=0,
                 supported_separator_count=0,
                 internal_measurement_quality=0.0,
@@ -116,7 +117,7 @@ class DetectionCachePerformanceContractTest(unittest.TestCase):
             )
             for index in range(len(previous_options))
         }
-        previous = solver_module._graph_layer_state_index(
+        previous = sequence_search.graph_layer_state_index(
             states,
             ordered,
             context,
@@ -134,7 +135,7 @@ class DetectionCachePerformanceContractTest(unittest.TestCase):
             return original_intersection(left, right)
 
         with patch.object(PixelInterval, "intersection", counted_intersection):
-            selected = solver_module._best_graph_predecessor(
+            selected = sequence_search.best_graph_predecessor(
                 len(previous_options),
                 previous,
                 ordered,
@@ -173,9 +174,9 @@ class DetectionCachePerformanceContractTest(unittest.TestCase):
             )
 
         ordered = (frame(0.0, 0), frame(110.0, 1))
-        context = solver_module._sequence_graph_context(
+        context = sequence_search.sequence_graph_context(
             ordered,
-            solver_module.ContentRegionObservation(
+            ContentRegionObservation(
                 region=Box(0, 0, 210, 100),
                 reliable_runs=(),
                 position_uncertainty_px=0,
@@ -184,11 +185,11 @@ class DetectionCachePerformanceContractTest(unittest.TestCase):
         )
 
         with patch.object(
-            solver_module,
-            "_sequence_graph_edge_is_interval_feasible",
-            wraps=solver_module._sequence_graph_edge_is_interval_feasible,
+            sequence_search,
+            "sequence_graph_edge_is_interval_feasible",
+            wraps=sequence_search.sequence_graph_edge_is_interval_feasible,
         ) as feasibility:
-            reachable = solver_module._reachable_predecessors_for_boundary(
+            reachable = sequence_search.reachable_predecessors_for_boundary(
                 (0,),
                 (1,),
                 ordered,
@@ -236,9 +237,9 @@ class DetectionCachePerformanceContractTest(unittest.TestCase):
             ((1, contact), (2, separated)),
             ((3, last),),
         )
-        context = solver_module._sequence_graph_context(
+        context = sequence_search.sequence_graph_context(
             ordered,
-            solver_module.ContentRegionObservation(
+            ContentRegionObservation(
                 region=Box(0, 0, 320, 100),
                 reliable_runs=(),
                 position_uncertainty_px=0,
@@ -247,11 +248,11 @@ class DetectionCachePerformanceContractTest(unittest.TestCase):
         )
 
         with patch.object(
-            solver_module,
-            "_sequence_graph_best_path",
-            wraps=solver_module._sequence_graph_best_path,
+            sequence_search,
+            "sequence_graph_best_path",
+            wraps=sequence_search.sequence_graph_best_path,
         ) as best_path:
-            witnesses = solver_module._sequence_graph_witnesses(
+            witnesses = sequence_search.sequence_graph_witnesses(
                 grouped,
                 ordered,
                 context,
