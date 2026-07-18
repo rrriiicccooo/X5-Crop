@@ -1129,6 +1129,13 @@ class FrameSequenceSolution:
         selected = {item.boundary_index: item for item in self.separator_assignments}
         for boundary_index, assignment in selected.items():
             if (
+                assignment.cross_axis_measurement.short_axis_span
+                != self.shared_short_axis.measurement_span
+            ):
+                raise GeometryIdentityError(
+                    "assigned separator continuity must use the shared short axis"
+                )
+            if (
                 self.frame_slots[boundary_index - 1].trailing
                 != assignment.preceding_trailing_edge
                 or self.frame_slots[boundary_index].leading

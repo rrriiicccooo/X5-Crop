@@ -63,6 +63,7 @@ from x5crop.domain import (
     ObservationId,
     PhysicalSearchFact,
     PixelInterval,
+    ShortAxisMeasurementSpan,
 )
 
 _ALL_HOLDER_SIDES = (
@@ -153,6 +154,34 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             replace(
                 geometry_with_separator,
                 inter_frame_spacings=(contradictory_spacing,),
+            )
+
+    def test_separator_assignment_requires_shared_short_axis_measurement(
+        self,
+    ) -> None:
+        geometry_with_separator = candidate_fixture().geometry
+        assignment = geometry_with_separator.separator_assignments[0]
+        span = assignment.cross_axis_measurement.short_axis_span
+        foreign_span = ShortAxisMeasurementSpan(
+            top=span.top.plus(PixelInterval.exact(1.0)),
+            bottom=span.bottom.plus(PixelInterval.exact(1.0)),
+            provenance=span.provenance,
+        )
+        foreign_assignment = replace(
+            assignment,
+            cross_axis_measurement=replace(
+                assignment.cross_axis_measurement,
+                short_axis_span=foreign_span,
+            ),
+        )
+
+        with self.assertRaisesRegex(
+            GeometryIdentityError,
+            "assigned separator continuity must use the shared short axis",
+        ):
+            replace(
+                geometry_with_separator,
+                separator_assignments=(foreign_assignment,),
             )
 
     def test_sequence_geometry_rejects_separator_without_supported_common_width(

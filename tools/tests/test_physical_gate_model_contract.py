@@ -111,6 +111,12 @@ def _with_leading_interval(candidate, interval: PixelInterval, source: str):
 def _with_shifted_short_axis(candidate, offset: float):
     geometry = candidate.geometry
     short_axis = geometry.shared_short_axis
+    shifted_short_axis = replace(
+        short_axis,
+        top=short_axis.top.plus(PixelInterval.exact(offset)),
+        bottom=short_axis.bottom.plus(PixelInterval.exact(offset)),
+        provenance=_geometry_hypothesis("shifted_shared_short_axis"),
+    )
     updated = replace(
         geometry,
         holder_safety=HolderSafetyEnvelope(
@@ -120,11 +126,16 @@ def _with_shifted_short_axis(candidate, offset: float):
                 _geometry_hypothesis("shifted_holder_containment"),
             ),
         ),
-        shared_short_axis=replace(
-            short_axis,
-            top=short_axis.top.plus(PixelInterval.exact(offset)),
-            bottom=short_axis.bottom.plus(PixelInterval.exact(offset)),
-            provenance=_geometry_hypothesis("shifted_shared_short_axis"),
+        shared_short_axis=shifted_short_axis,
+        separator_assignments=tuple(
+            replace(
+                assignment,
+                cross_axis_measurement=replace(
+                    assignment.cross_axis_measurement,
+                    short_axis_span=shifted_short_axis.measurement_span,
+                ),
+            )
+            for assignment in geometry.separator_assignments
         ),
     )
     return _candidate_with_geometry(candidate, updated)

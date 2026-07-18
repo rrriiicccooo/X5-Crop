@@ -33,15 +33,17 @@ the validation evidence.
   provenance，不允许重复 identity 静默合并不同物理观测。
 - Final frame-sequence identity now rejects a separator assignment whose matching
   signed spacing is not `OBSERVED`, positive, non-geometric, and traceable to the
-  assigned band. / 最终 frame-sequence identity 现在拒绝与 assigned band 不可追溯、
-  不是正值 `OBSERVED` 或仍由 geometry hypothesis 授权的 separator spacing。
+  assigned band, or whose cross-axis continuity was measured on a different
+  short-axis span. / 最终 frame-sequence identity 现在拒绝与 assigned band 不可追溯、
+  不是正值 `OBSERVED`、仍由 geometry hypothesis 授权，或跨轴连续性来自其他短轴 span 的
+  separator assignment。
 - 六张冻结 `135/full` 样片的 current report 中循环 provenance 由 55 降为 0；
   canonical report 比较零差异，六张 Debug Analysis 字节完全一致，且全部继续
   `REVIEW` / 不导出。 / Across the six frozen `135/full` samples, cyclic report
   provenances fell from 55 to zero; canonical report comparison had zero diffs,
   all six Debug Analysis files were byte-identical, and every sample remained
   `REVIEW` / non-exportable.
-- 完整验证通过 760 项测试和 14 组配置。 / Full verification passed 760 tests
+- 完整验证通过 761 项测试和 14 组配置。 / Full verification passed 761 tests
   and 14 configuration pairs.
 
 ### 2026-07-15 — 共享短轴与 Frame Slot / Shared Short Axis And Frame Slots

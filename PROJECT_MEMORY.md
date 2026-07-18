@@ -55,7 +55,7 @@ reports, Debug Analysis, and command output remain authoritative.
 ## Verification State / 验证状态
 
 - Fresh checkpoint verification / 当前检查点新验证：`tools/verify full` passed on 2026-07-19
-  with 760 unit/contract tests, 14 format/mode configuration pairs, compile,
+  with 761 unit/contract tests, 14 format/mode configuration pairs, compile,
   macOS shell syntax, diff hygiene, release-package construction, and version
   checks. Confirm the current commit and clean status at resume time.
 - The verifier proves source and contract consistency only. It does not prove
@@ -67,7 +67,7 @@ reports, Debug Analysis, and command output remain authoritative.
   geometry reference and must be repaired from real evidence before that dataset
   can be called validated.
 
-- 当前 `tools/verify full` 已通过 760 项 unit/contracts、14 组配置、compile、macOS shell syntax、
+- 当前 `tools/verify full` 已通过 761 项 unit/contracts、14 组配置、compile、macOS shell syntax、
   diff hygiene、发布包构建和版本检查；它仍不能证明具名样片几何、性能闭环、Debug 视觉正确性或
   两轮架构审计。
 - sample-expectation 单元测试只验证加载器和契约代码；当前本地 `pass_X5_00038.tif` 记录仍缺少
@@ -104,9 +104,10 @@ reports, Debug Analysis, and command output remain authoritative.
   that identity check with no collisions. The separator-feasibility audit also
   closed a representable contradiction where an assigned hard separator could
   coexist with geometry-hypothesis spacing: final sequence identity now requires
-  matching positive observed spacing with the same band provenance. The six
-  frozen reports still have zero canonical diffs and their Debug Analysis files
-  remain byte-identical.
+  matching positive observed spacing with the same band provenance. It also
+  rejects cross-axis separator support measured on any span other than the
+  strip's exact shared short axis. The six frozen reports still have zero
+  canonical diffs and their Debug Analysis files remain byte-identical.
 
 以上样片仍需当前报告和 Debug Analysis 逐张复核；肉眼正确的代表解不能覆盖仍存在的非支配、
 dimension-heavy 替代解释。

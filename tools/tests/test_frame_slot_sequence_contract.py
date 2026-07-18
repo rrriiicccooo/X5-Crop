@@ -437,6 +437,16 @@ class FrameSlotSequenceContractTest(unittest.TestCase):
             geometry,
             holder_safety=holder_safety,
             shared_short_axis=safe_short_axis,
+            separator_assignments=tuple(
+                replace(
+                    assignment,
+                    cross_axis_measurement=replace(
+                        assignment.cross_axis_measurement,
+                        short_axis_span=safe_short_axis.measurement_span,
+                    ),
+                )
+                for assignment in geometry.separator_assignments
+            ),
             raw_boundary_paths=(
                 *geometry.raw_boundary_paths,
                 top_path,
