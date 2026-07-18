@@ -133,7 +133,7 @@ def _search_scope(*, holder_bounded: bool) -> FrameSequenceSearchScope:
     fallback_provenance = MeasurementProvenance(
         root_measurement=MeasurementIdentity.CANVAS,
         observation_id=ObservationId("containment"),
-        dependencies=(MeasurementIdentity.CANVAS,),
+        dependencies=(),
         description="synthetic containment",
     )
     holder_boundaries = (

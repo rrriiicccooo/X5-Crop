@@ -460,7 +460,7 @@ def _candidate_geometry(
         MeasurementProvenance(
             MeasurementIdentity.CANVAS,
             ObservationId("synthetic_holder_containment"),
-            (MeasurementIdentity.CANVAS,),
+            (),
             "synthetic holder containment",
         ),
     )

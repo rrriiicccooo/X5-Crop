@@ -237,12 +237,14 @@ def frame_width_search_hint(
         ),
         dependencies=tuple(
             dict.fromkeys(
-                (
+                dependency
+                for dependency in (
                     safety_span.provenance.root_measurement,
                     *safety_span.provenance.dependencies,
                     dimensions.provenance.root_measurement,
                     *dimensions.provenance.dependencies,
                 )
+                if dependency != MeasurementIdentity.FRAME_GEOMETRY
             )
         ),
         description="short-axis safety span frame-width search hint",

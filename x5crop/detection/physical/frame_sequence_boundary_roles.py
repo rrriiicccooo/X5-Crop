@@ -96,6 +96,7 @@ def _repeated_width_role_provenance(
                     not in {
                         MeasurementIdentity.FRAME_DIMENSIONS,
                         MeasurementIdentity.FRAME_GEOMETRY,
+                        MeasurementIdentity.PHOTO_EDGES,
                     }
                 ),
             },
@@ -197,7 +198,10 @@ def _physical_scale_corroborated_role_provenance(
                 scale_constraint.provenance.root_measurement,
                 *scale_constraint.provenance.dependencies,
             }
-            - {MeasurementIdentity.FRAME_GEOMETRY},
+            - {
+                MeasurementIdentity.FRAME_GEOMETRY,
+                MeasurementIdentity.PHOTO_EDGES,
+            },
             key=lambda item: item.value,
         )
     )
@@ -317,7 +321,10 @@ def _dimension_corroborated_role_provenance(
                 opposite_role.root_measurement,
                 *opposite_role.dependencies,
             }
-            - {MeasurementIdentity.FRAME_GEOMETRY},
+            - {
+                MeasurementIdentity.FRAME_GEOMETRY,
+                MeasurementIdentity.PHOTO_EDGES,
+            },
             key=lambda item: item.value,
         )
     )
@@ -406,6 +413,7 @@ def _adjacent_boundary_role_provenance(
             - {
                 MeasurementIdentity.FRAME_DIMENSIONS,
                 MeasurementIdentity.FRAME_GEOMETRY,
+                MeasurementIdentity.PHOTO_EDGES,
             },
             key=lambda item: item.value,
         )

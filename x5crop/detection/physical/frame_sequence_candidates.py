@@ -459,23 +459,43 @@ def spacing_from_frame_edges(
             or distinct_observed_edges
         )
     )
-    provenance = MeasurementProvenance(
-        root_measurement=(
-            MeasurementIdentity.PHOTO_EDGES
+    root_measurement = (
+        MeasurementIdentity.PHOTO_EDGES
+        if observed
+        else MeasurementIdentity.FRAME_GEOMETRY
+    )
+    provenance_inputs = (
+        trailing_provenance,
+        leading_provenance,
+        *(
+            (
+                trailing.role_provenance,
+                leading.role_provenance,
+            )
             if observed
-            else MeasurementIdentity.FRAME_GEOMETRY
+            else ()
         ),
+    )
+    provenance = MeasurementProvenance(
+        root_measurement=root_measurement,
         observation_id=ObservationId(
             f"inter_frame_spacing:{boundary_index}:"
             f"{trailing_provenance.observation_id}:"
             f"{leading_provenance.observation_id}"
         ),
         dependencies=tuple(
-            dict.fromkeys(
-                (
-                    trailing_provenance.root_measurement,
-                    leading_provenance.root_measurement,
-                )
+            sorted(
+                {
+                    dependency
+                    for input_provenance in provenance_inputs
+                    if input_provenance is not None
+                    for dependency in (
+                        input_provenance.root_measurement,
+                        *input_provenance.dependencies,
+                    )
+                    if dependency != root_measurement
+                },
+                key=lambda item: item.value,
             )
         ),
         description=(

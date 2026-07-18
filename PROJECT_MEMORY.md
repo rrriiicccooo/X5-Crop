@@ -91,16 +91,23 @@ reports, Debug Analysis, and command output remain authoritative.
   byte-identical. The latest fresh visual inspection kept all six `REVIEW` /
   non-exportable; `00018` and `00031` still show incomplete provisional geometry
   and must not be upgraded.
-- The latest full verifier passed 757 tests and 14 configuration pairs at V4.9;
-  this is structural evidence only, not named-sample physical closure.
+- The Phase 2 closing verifier passed 757 tests and 14 configuration pairs at
+  V4.9; this was structural evidence only, not named-sample physical closure.
+- Phase 3 found a real provenance-authority violation in current reports: 55
+  derived facts repeated their own root measurement in dependencies. The first
+  physical wave now rejects that state at the canonical type, removes all runtime
+  and fixture residue, and produces zero cyclic provenances. The six frozen
+  samples retain zero canonical report diffs, byte-identical Debug Analysis, and
+  their prior `REVIEW` / non-exportable decisions. The full verifier now passes
+  758 tests and 14 configuration pairs.
 
 以上样片仍需当前报告和 Debug Analysis 逐张复核；肉眼正确的代表解不能覆盖仍存在的非支配、
 dimension-heavy 替代解释。
 
 ## Next Actions / 下一步
 
-1. Begin Phase 3 with a read-only audit of the current implementation: observation
-   identity/provenance; measurement uncertainty; holder safety/shared short axis;
+1. Continue Phase 3 by finishing observation-identity uniqueness, then audit
+   measurement uncertainty and holder safety/shared short axis; next cover
    separated-width and global-separator feasibility; common-width; count/slot,
    blank, occlusion, and overlap; physical Pareto, consensus, and search
    completeness; CandidateGate, GeometryResolution, selection, and DecisionGate;
@@ -119,7 +126,7 @@ dimension-heavy 替代解释。
 6. Only after physical validation and both audits, update the rolling checkpoint,
    docs, commit, and push. Never manufacture PASS from unresolved geometry.
 
-1. Phase 3 先只读逐项审计当前实现：identity/provenance、measurement uncertainty、
+1. Phase 3 继续先完成 observation identity 唯一性核对，再审计 measurement uncertainty、
    holder safety/shared short axis、separated width / separator global feasibility、
    common-width、count/slot/blank/occlusion/overlap、Pareto/consensus/search completeness、
    gates/selection/decision、crop/bleed/protection 以及 report/debug/cache/output truth。

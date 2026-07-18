@@ -396,7 +396,6 @@ def measure_internal_boundary_content_continuity(
                         f"{right.leading.position.maximum:.6f}"
                     ),
                     dependencies=(
-                        MeasurementIdentity.CONTENT_EVIDENCE_IMAGE,
                         MeasurementIdentity.GRAY_WORK,
                         MeasurementIdentity.IMAGE_MEASUREMENT_STATISTICS,
                         MeasurementIdentity.FRAME_GEOMETRY,
@@ -429,12 +428,21 @@ def _content_corroborated_spacing(
     if not measured_overlap_edges:
         return spacing
     dependencies = tuple(
-        dict.fromkeys(
-            (
-                spacing.provenance.root_measurement,
-                left.trailing.role_provenance.root_measurement,
-                right.leading.role_provenance.root_measurement,
-            )
+        sorted(
+            {
+                dependency
+                for provenance in (
+                    spacing.provenance,
+                    left.trailing.role_provenance,
+                    right.leading.role_provenance,
+                )
+                for dependency in (
+                    provenance.root_measurement,
+                    *provenance.dependencies,
+                )
+                if dependency != MeasurementIdentity.CONTENT_EVIDENCE_IMAGE
+            },
+            key=lambda item: item.value,
         )
     )
     return replace(

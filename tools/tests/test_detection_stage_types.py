@@ -148,6 +148,21 @@ class DetectionStageTypeContractTests(unittest.TestCase):
             tuple[ObservationId, ...],
         )
 
+    def test_measurement_provenance_rejects_cyclic_root_dependency(self) -> None:
+        from x5crop.domain import (
+            MeasurementIdentity,
+            MeasurementProvenance,
+            ObservationId,
+        )
+
+        with self.assertRaises(ValueError):
+            MeasurementProvenance(
+                root_measurement=MeasurementIdentity.FRAME_GEOMETRY,
+                observation_id=ObservationId("cyclic_geometry_provenance"),
+                dependencies=(MeasurementIdentity.FRAME_GEOMETRY,),
+                description="invalid cyclic geometry provenance",
+            )
+
     def test_candidate_stages_are_immutable_and_separate(self) -> None:
         geometry_fields = {field.name for field in fields(FrameSequenceSolution)}
         built_fields = {field.name for field in fields(BuiltCandidate)}

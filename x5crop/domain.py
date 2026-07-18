@@ -89,6 +89,8 @@ class MeasurementProvenance:
             raise ValueError("measurement dependencies require typed identities")
         if len(set(self.dependencies)) != len(self.dependencies):
             raise ValueError("measurement dependencies must be unique")
+        if self.root_measurement in self.dependencies:
+            raise ValueError("measurement provenance cannot depend on its own root")
         if any(
             not isinstance(anchor, ObservationId)
             for anchor in self.boundary_anchors

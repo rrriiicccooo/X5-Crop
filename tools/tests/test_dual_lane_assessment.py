@@ -79,7 +79,7 @@ def _parent(lane):
                 MeasurementProvenance(
                     MeasurementIdentity.CANVAS,
                     ObservationId("dual_lane_containment"),
-                    (MeasurementIdentity.CANVAS,),
+                    (),
                     "dual-lane test containment",
                 ),
             ),

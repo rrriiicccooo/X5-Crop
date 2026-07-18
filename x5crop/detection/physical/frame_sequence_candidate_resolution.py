@@ -52,7 +52,8 @@ def _common_width_dimension_provenance(
                 *anchor.measurement_provenance.dependencies,
                 common_width.provenance.root_measurement,
                 *common_width.provenance.dependencies,
-            },
+            }
+            - {MeasurementIdentity.FRAME_GEOMETRY},
             key=lambda item: item.value,
         )
     )

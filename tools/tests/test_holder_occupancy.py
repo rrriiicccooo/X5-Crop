@@ -114,7 +114,7 @@ class HolderOccupancyTest(unittest.TestCase):
                     MeasurementProvenance(
                         MeasurementIdentity.CANVAS,
                         ObservationId("holder_occupancy_containment"),
-                        (MeasurementIdentity.CANVAS,),
+                        (),
                         "holder occupancy test containment",
                     ),
                 ),

@@ -154,7 +154,7 @@ def scope(
         MeasurementProvenance(
             MeasurementIdentity.CANVAS,
             ObservationId("synthetic_containment"),
-            (MeasurementIdentity.CANVAS,),
+            (),
             "synthetic containment fallback",
         ),
     )

@@ -281,7 +281,7 @@ def _corroborate_overlap_from_independent_sequence_constraints(
     dependencies = tuple(
         sorted(
             {
-                provenance.root_measurement
+                dependency
                 for boundary in (
                     positional_anchor,
                     measured_overlap_edge,
@@ -292,8 +292,13 @@ def _corroborate_overlap_from_independent_sequence_constraints(
                     boundary.role_provenance,
                 )
                 if provenance is not None
-                and provenance.root_measurement
+                for dependency in (
+                    provenance.root_measurement,
+                    *provenance.dependencies,
+                )
+                if dependency
                 not in {
+                    MeasurementIdentity.FRAME_DIMENSIONS,
                     MeasurementIdentity.FRAME_GEOMETRY,
                     MeasurementIdentity.FRAME_WIDTH_PATTERN,
                 }

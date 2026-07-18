@@ -103,7 +103,7 @@ def _parent_candidate(
                     MeasurementProvenance(
                         MeasurementIdentity.CANVAS,
                         ObservationId("dual_lane_containment"),
-                        (MeasurementIdentity.CANVAS,),
+                        (MeasurementIdentity.GRAY_WORK,),
                         "dual-lane workspace containment",
                     ),
                 ),

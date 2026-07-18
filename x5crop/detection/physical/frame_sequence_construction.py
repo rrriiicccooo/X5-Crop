@@ -68,10 +68,12 @@ def holder_span_scale_hint(
             observation_id=ObservationId(f"holder_span_scale_hint:{count}"),
             dependencies=tuple(
                 dict.fromkeys(
-                    (
+                    dependency
+                    for dependency in (
                         search_scope.holder_safety.provenance.root_measurement,
                         *search_scope.holder_safety.provenance.dependencies,
                     )
+                    if dependency != MeasurementIdentity.FRAME_GEOMETRY
                 )
             ),
             description="count-dependent holder-span search hint",
@@ -847,7 +849,8 @@ def _dimension_constraint(
                 MeasurementIdentity.FRAME_DIMENSIONS,
                 anchor.provenance.root_measurement,
                 *anchor.provenance.dependencies,
-            },
+            }
+            - {MeasurementIdentity.FRAME_GEOMETRY},
             key=lambda item: item.value,
         )
     )
