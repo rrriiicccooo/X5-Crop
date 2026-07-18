@@ -41,7 +41,6 @@ from .model import (
     boundary_role_is_independent_physical_measurement,
     CommonFrameWidthResolution,
     ContentExtentConstraint,
-    FrameEdgeOcclusionInference,
     FrameContentOccupancy,
     FrameWidthPhysicalScaleConstraint,
     FrameWidthSearchHint,
@@ -56,10 +55,7 @@ from .model import (
     SequenceResiduals,
     SharedShortAxisSafetySpan,
 )
-from .sequence_completion import (
-    infer_sequence_frame_slot,
-    measured_sequence_supports_slot_inference,
-)
+from . import sequence_completion
 from .frame_dimensions import MINIMUM_COMMON_FRAME_WIDTH_OBSERVATIONS
 from .separator.observations import SeparatorSupportSet
 from .short_axis import (
@@ -2619,550 +2615,6 @@ def _corroborate_overlap_from_independent_sequence_constraints(
         basis=InterFrameSpacingBasis.CORROBORATED_OVERLAP,
     )
 
-def _occlusion_provenance(
-    side: BoundarySide,
-    holder_boundary: HolderBoundaryObservation,
-    common_width: CommonFrameWidthResolution,
-) -> MeasurementProvenance:
-    return MeasurementProvenance(
-        root_measurement=MeasurementIdentity.FRAME_GEOMETRY,
-        observation_id=ObservationId(f"holder_occlusion_inference:{side.value}"),
-        dependencies=(
-            MeasurementIdentity.BOUNDARY_PATHS,
-            MeasurementIdentity.FRAME_DIMENSIONS,
-        ),
-        description="frame endpoint inferred from holder contact and common frame width",
-        boundary_anchors=tuple(
-            dict.fromkeys(
-                (
-                    holder_boundary.provenance.observation_id,
-                    *common_width.provenance.boundary_anchors,
-                )
-            )
-        ),
-    )
-
-def _apply_edge_occlusion_inference(
-    slots: tuple[FrameSlot, ...],
-    assignments: tuple[FrameEdgeAssignment, ...],
-    holder_boundaries: dict[BoundarySide, HolderBoundaryObservation],
-    common_width: CommonFrameWidthResolution,
-    strip_mode: str,
-) -> tuple[tuple[FrameSlot, ...], tuple[FrameEdgeAssignment, ...]]:
-    if strip_mode != FULL or common_width.state != EvidenceState.SUPPORTED:
-        return slots, assignments
-    assert common_width.width_px is not None
-    updated = list(slots)
-    removed: set[tuple[int, BoundarySide]] = set()
-    for index, side in ((0, BoundarySide.LEADING), (len(slots) - 1, BoundarySide.TRAILING)):
-        slot = updated[index]
-        if slot.sequence_inferred:
-            continue
-        visible_boundary = slot.leading if side == BoundarySide.LEADING else slot.trailing
-        opposite_boundary = (
-            slot.trailing if side == BoundarySide.LEADING else slot.leading
-        )
-        holder_boundary = holder_boundaries.get(side)
-        if not measurement_facts.boundary_matches_holder(visible_boundary, holder_boundary):
-            continue
-        if not opposite_boundary.independently_observed:
-            continue
-        if slot.width_px.maximum >= common_width.width_px.minimum:
-            continue
-        assert holder_boundary is not None
-        inferred = (
-            slot.trailing.position.minus(common_width.width_px)
-            if side == BoundarySide.LEADING
-            else slot.leading.position.plus(common_width.width_px)
-        )
-        if side == BoundarySide.LEADING:
-            if inferred.maximum >= visible_boundary.position.minimum:
-                continue
-            hidden_width = visible_boundary.position.minus(inferred)
-        else:
-            if inferred.minimum <= visible_boundary.position.maximum:
-                continue
-            hidden_width = inferred.minus(visible_boundary.position)
-        provenance = _occlusion_provenance(side, holder_boundary, common_width)
-        inferred_boundary = ResolvedFrameBoundary(
-            position=inferred,
-            source=FrameBoundarySource.HOLDER_OCCLUSION_INFERENCE,
-            geometry_state=BoundaryGeometryState.RESOLVED,
-            boundary_anchor=None,
-            inference_provenance=provenance,
-        )
-        updated[index] = replace(
-            slot,
-            leading=(inferred_boundary if side == BoundarySide.LEADING else slot.leading),
-            trailing=(inferred_boundary if side == BoundarySide.TRAILING else slot.trailing),
-            edge_occlusion=FrameEdgeOcclusionInference(
-                side=side,
-                hidden_width_px=hidden_width,
-                holder_boundary_provenance=holder_boundary.provenance,
-            ),
-        )
-        removed.add((slot.index, side))
-    return (
-        tuple(updated),
-        tuple(
-            assignment
-            for assignment in assignments
-            if (assignment.frame_index, assignment.side) not in removed
-        ),
-    )
-
-def _slot_has_observed_content(
-    slot: FrameSlot,
-    visible_content: ContentRegionObservation,
-) -> bool:
-    return visible_content.reliable_content_intersects(slot.visible_long_axis)
-
-def _annotate_frame_content_occupancy(
-    slots: tuple[FrameSlot, ...],
-    visible_content: ContentRegionObservation,
-) -> tuple[FrameSlot, ...]:
-    return tuple(
-        replace(
-            slot,
-            content_occupancy=(
-                FrameContentOccupancy.CONTENT_OBSERVED
-                if _slot_has_observed_content(slot, visible_content)
-                else FrameContentOccupancy.UNAVAILABLE
-            ),
-        )
-        for slot in slots
-    )
-
-def _shifted_frame_index(frame_index: int, insertion_index: int) -> int:
-    return frame_index + 1 if frame_index >= insertion_index else frame_index
-
-def _shifted_separator_boundary_index(
-    boundary_index: int,
-    insertion_index: int,
-) -> int | None:
-    broken_boundary = insertion_index - 1
-    if 1 < insertion_index and boundary_index == broken_boundary:
-        return None
-    return boundary_index + 1 if boundary_index >= insertion_index else boundary_index
-
-def _build_with_inserted_slot(
-    build: sequence_candidates.SequenceBuild,
-    inserted_slot: FrameSlot,
-    holder: Box,
-) -> sequence_candidates.SequenceBuild:
-    insertion_index = inserted_slot.index
-    inserted_slot_count = 1
-    slots = tuple(
-        (
-            inserted_slot
-            if frame_index == insertion_index
-            else replace(
-                build.slots[
-                    frame_index
-                    - 1
-                    - (
-                        inserted_slot_count
-                        if frame_index > insertion_index
-                        else 0
-                    )
-                ],
-                index=frame_index,
-            )
-        )
-        for frame_index in range(
-            1,
-            len(build.slots) + inserted_slot_count + 1,
-        )
-    )
-    long_axis_assignments = tuple(
-        replace(
-            assignment,
-            frame_index=_shifted_frame_index(
-                assignment.frame_index,
-                insertion_index,
-            ),
-        )
-        for assignment in build.long_axis_assignments
-    )
-    separator_bindings = tuple(
-        replace(assignment, boundary_index=shifted)
-        for assignment in build.separator_bindings
-        if (
-            shifted := _shifted_separator_boundary_index(
-                assignment.boundary_index,
-                insertion_index,
-            )
-        )
-        is not None
-    )
-    spacings = tuple(
-        sequence_candidates.spacing_from_frame_edges(
-            boundary_index,
-            left.trailing,
-            right.leading,
-        )
-        for boundary_index, (left, right) in enumerate(
-            zip(slots, slots[1:]),
-            start=1,
-        )
-    )
-    added_uncertainty = (
-        inserted_slot.leading.position.maximum
-        - inserted_slot.leading.position.minimum
-        + inserted_slot.trailing.position.maximum
-        - inserted_slot.trailing.position.minimum
-    ) / max(
-        measurement_facts.MINIMUM_POSITIVE_PIXEL_EXTENT,
-        float(holder.width + holder.height),
-    )
-    residuals = replace(
-        build.residuals,
-        boundary_uncertainty=(
-            build.residuals.boundary_uncertainty + added_uncertainty
-        ),
-    )
-    return sequence_candidates.SequenceBuild(
-        slots=slots,
-        long_axis_assignments=long_axis_assignments,
-        separator_bindings=separator_bindings,
-        spacings=spacings,
-        frame_width_px=build.frame_width_px,
-        short_axis=build.short_axis,
-        residuals=residuals,
-        objectives=replace(
-            build.objectives,
-            uncorroborated_overlap_extent_px=sequence_candidates.uncorroborated_overlap_extent(
-                spacings
-            ),
-            unexplained_spacing_extent_px=sequence_candidates.unexplained_spacing_extent(spacings),
-            supported_separator_count=len(separator_bindings),
-            boundary_uncertainty_ratio=(
-                build.objectives.boundary_uncertainty_ratio + added_uncertainty
-            ),
-        ),
-    )
-
-def _sequence_completed_builds(
-    real_frame_builds: tuple[sequence_candidates.SequenceBuild, ...],
-    search_scope: FrameSequenceSearchScope,
-    photo_height_evidence: PhotoHeightEvidence,
-    dimensions: FrameDimensionPrior,
-) -> tuple[sequence_candidates.SequenceBuild, ...]:
-    inferred: list[sequence_candidates.SequenceBuild] = []
-    holder_boundaries = candidate_resolution.holder_boundaries(search_scope)
-    for build in real_frame_builds:
-        build, common_width = candidate_resolution.resolve_build_physical_boundaries(
-            build,
-            holder_boundaries,
-            photo_height_evidence,
-            dimensions,
-        )
-        if common_width.state != EvidenceState.SUPPORTED:
-            continue
-        if not measured_sequence_supports_slot_inference(
-            build.slots,
-            build.spacings,
-            common_width,
-        ):
-            continue
-        sequence_inferred_slot_count = 1
-        for insertion_index in range(
-            1,
-            len(build.slots) + sequence_inferred_slot_count + 1,
-        ):
-            inferred_slot = infer_sequence_frame_slot(
-                build.slots,
-                insertion_index=insertion_index,
-                common_width=common_width,
-                holder_safety=search_scope.holder_safety,
-            )
-            if inferred_slot is not None:
-                inferred.append(
-                    _build_with_inserted_slot(
-                        build,
-                        inferred_slot,
-                        search_scope.holder_safety.box,
-                    )
-                )
-    return tuple(inferred)
-
-def _build_supports_resolved_nominal_slots(
-    build: sequence_candidates.SequenceBuild,
-    holder_boundaries: dict[BoundarySide, HolderBoundaryObservation],
-    photo_height_evidence: PhotoHeightEvidence,
-    dimensions: FrameDimensionPrior,
-) -> bool:
-    resolved_build, common_width = candidate_resolution.resolve_build_physical_boundaries(
-        build,
-        holder_boundaries,
-        photo_height_evidence,
-        dimensions,
-    )
-    resolved_slots = resolved_build.slots
-    return bool(
-        sequence_candidates.frame_slots_are_strictly_monotonic(resolved_slots)
-        and resolved_build.objectives.uncorroborated_overlap_extent_px == 0.0
-        and all(
-            slot.leading.geometry_state == BoundaryGeometryState.RESOLVED
-            and slot.trailing.geometry_state == BoundaryGeometryState.RESOLVED
-            for slot in resolved_slots
-        )
-        and width_resolution.slots_do_not_contradict_supported_common_width(
-            resolved_slots,
-            holder_boundaries,
-            common_width,
-        )
-        and _full_sequence_endpoint_slack_is_sub_frame(
-            resolved_slots,
-            holder_boundaries,
-            common_width,
-        )
-    )
-
-def _full_sequence_endpoint_slack_is_sub_frame(
-    slots: tuple[FrameSlot, ...],
-    holder_boundaries: dict[BoundarySide, HolderBoundaryObservation],
-    common_width: CommonFrameWidthResolution,
-) -> bool:
-    if common_width.state != EvidenceState.SUPPORTED or common_width.width_px is None:
-        return False
-    return _endpoint_slack_is_sub_frame(
-        slots,
-        holder_boundaries,
-        common_width.width_px,
-    )
-
-def _endpoint_slack_is_sub_frame(
-    slots: tuple[FrameSlot, ...],
-    holder_boundaries: dict[BoundarySide, HolderBoundaryObservation],
-    frame_width: PixelInterval,
-) -> bool:
-    leading_holder = holder_boundaries.get(BoundarySide.LEADING)
-    if leading_holder is not None:
-        leading_slack = slots[0].leading.position.minus(leading_holder.position)
-        if leading_slack.minimum >= frame_width.minimum:
-            return False
-    trailing_holder = holder_boundaries.get(BoundarySide.TRAILING)
-    if trailing_holder is not None:
-        trailing_slack = trailing_holder.position.minus(slots[-1].trailing.position)
-        if trailing_slack.minimum >= frame_width.minimum:
-            return False
-    return True
-
-def _build_satisfies_full_endpoint_extent(
-    build: sequence_candidates.SequenceBuild,
-    holder_boundaries: dict[BoundarySide, HolderBoundaryObservation],
-    photo_height_evidence: PhotoHeightEvidence,
-    dimensions: FrameDimensionPrior,
-) -> bool:
-    resolved_build, common_width = candidate_resolution.resolve_build_physical_boundaries(
-        build,
-        holder_boundaries,
-        photo_height_evidence,
-        dimensions,
-    )
-    frame_width = (
-        common_width.width_px
-        if common_width.state == EvidenceState.SUPPORTED
-        and common_width.width_px is not None
-        else PixelInterval.exact(
-            max(slot.width_px.maximum for slot in build.slots)
-        )
-    )
-    return _endpoint_slack_is_sub_frame(
-        resolved_build.slots,
-        holder_boundaries,
-        frame_width,
-    )
-
-def _build_does_not_contradict_common_width(
-    build: sequence_candidates.SequenceBuild,
-    holder_boundaries: dict[BoundarySide, HolderBoundaryObservation],
-    photo_height_evidence: PhotoHeightEvidence,
-    dimensions: FrameDimensionPrior,
-) -> bool:
-    resolved_build, common_width = candidate_resolution.resolve_build_physical_boundaries(
-        build,
-        holder_boundaries,
-        photo_height_evidence,
-        dimensions,
-    )
-    resolved_slots = resolved_build.slots
-    return bool(
-        sequence_candidates.frame_slots_are_strictly_monotonic(resolved_slots)
-        and (
-            common_width.state != EvidenceState.SUPPORTED
-            or width_resolution.slots_do_not_contradict_supported_common_width(
-                resolved_slots,
-                holder_boundaries,
-                common_width,
-            )
-        )
-    )
-
-def _slot_has_non_holder_boundary_observation(
-    slot: FrameSlot,
-    slot_index: int,
-    last_index: int,
-    holder_boundaries: dict[BoundarySide, HolderBoundaryObservation],
-) -> bool:
-    observed_boundary_count = 0
-    for side, boundary in (
-        (BoundarySide.LEADING, slot.leading),
-        (BoundarySide.TRAILING, slot.trailing),
-    ):
-        if boundary.boundary_anchor is None:
-            continue
-        external_holder_boundary = (
-            slot_index == 0 and side == BoundarySide.LEADING
-        ) or (
-            slot_index == last_index and side == BoundarySide.TRAILING
-        )
-        if external_holder_boundary and measurement_facts.boundary_matches_holder(
-            boundary,
-            holder_boundaries.get(side),
-        ):
-            continue
-        if boundary.independently_observed:
-            return True
-        observed_boundary_count += 1
-    return observed_boundary_count == measurement_facts.INTERVAL_ENDPOINT_COUNT
-
-def _unexcluded_sequence_inference_indexes(
-    build: sequence_candidates.SequenceBuild,
-    visible_content: ContentRegionObservation,
-    holder_boundaries: dict[BoundarySide, HolderBoundaryObservation],
-) -> tuple[int, ...]:
-    last_index = len(build.slots) - 1
-    unresolved: list[int] = []
-    for slot_index, slot in enumerate(build.slots):
-        if (
-            not slot.sequence_inferred
-            and not _slot_has_non_holder_boundary_observation(
-                slot,
-                slot_index,
-                last_index,
-                holder_boundaries,
-            )
-            and not visible_content.reliable_content_intersects(
-                slot.visible_long_axis
-            )
-        ):
-            unresolved.append(slot_index)
-    return tuple(unresolved)
-
-def _infer_unique_slot_in_direct_nominal_build(
-    build: sequence_candidates.SequenceBuild,
-    visible_content: ContentRegionObservation,
-    search_scope: FrameSequenceSearchScope,
-    photo_height_evidence: PhotoHeightEvidence,
-    dimensions: FrameDimensionPrior,
-) -> sequence_candidates.SequenceBuild:
-    holder_boundaries = candidate_resolution.holder_boundaries(search_scope)
-    resolved_build, common_width = candidate_resolution.resolve_build_physical_boundaries(
-        build,
-        holder_boundaries,
-        photo_height_evidence,
-        dimensions,
-    )
-    inference_indexes = _unexcluded_sequence_inference_indexes(
-        resolved_build,
-        visible_content,
-        holder_boundaries,
-    )
-    if len(inference_indexes) != 1:
-        return build
-    slot_index = inference_indexes[0]
-    existing_slot = resolved_build.slots[slot_index]
-    real_slots = tuple(
-        slot
-        for index, slot in enumerate(resolved_build.slots)
-        if index != slot_index
-    )
-    inferred_slot = infer_sequence_frame_slot(
-        real_slots,
-        insertion_index=existing_slot.index,
-        common_width=common_width,
-        holder_safety=search_scope.holder_safety,
-    )
-    if (
-        inferred_slot is None
-        or not inferred_slot.nominal_long_axis.intersects(
-            existing_slot.nominal_long_axis
-        )
-    ):
-        return build
-    slots = tuple(
-        inferred_slot if index == slot_index else slot
-        for index, slot in enumerate(resolved_build.slots)
-    )
-    return sequence_candidates.rebuild_sequence_build(resolved_build, slots)
-
-def _direct_nominal_geometry_is_complete(
-    builds: tuple[sequence_candidates.SequenceBuild, ...],
-    visible_content: ContentRegionObservation,
-    holder_boundaries: dict[BoundarySide, HolderBoundaryObservation],
-    photo_height_evidence: PhotoHeightEvidence,
-    dimensions: FrameDimensionPrior,
-) -> bool:
-    if not builds:
-        return False
-    preserving = tuple(
-        build
-        for build in builds
-        if sequence_candidates.build_preserves_visible_content(build, visible_content)
-    )
-    return any(
-        _build_supports_resolved_nominal_slots(
-            build,
-            holder_boundaries,
-            photo_height_evidence,
-            dimensions,
-        )
-        and not _unexcluded_sequence_inference_indexes(
-            build,
-            visible_content,
-            holder_boundaries,
-        )
-        for build in preserving or builds
-    )
-
-def _preferred_direct_common_width_is_supported(
-    builds: tuple[sequence_candidates.SequenceBuild, ...],
-    visible_content: ContentRegionObservation,
-    holder_boundaries: dict[BoundarySide, HolderBoundaryObservation],
-    photo_height_evidence: PhotoHeightEvidence,
-    dimensions: FrameDimensionPrior,
-) -> bool:
-    if not builds:
-        return False
-    preserving = tuple(
-        build
-        for build in builds
-        if sequence_candidates.build_preserves_visible_content(build, visible_content)
-    )
-    preferred = sequence_candidates.physically_preferred_builds(preserving or builds)
-    return any(
-        width_resolution.common_width_has_independent_measurement_basis(
-            candidate_resolution.resolve_build_physical_boundaries(
-                build,
-                holder_boundaries,
-                photo_height_evidence,
-                dimensions,
-            )[1]
-        )
-        for build in preferred
-    )
-
-def _build_has_geometry_only_slot(build: sequence_candidates.SequenceBuild) -> bool:
-    return any(
-        not any(
-            boundary.independently_observed
-            for boundary in (slot.leading, slot.trailing)
-        )
-        for slot in build.slots
-    )
-
 def _sequence_builds_for_count(
     search_index: FrameSequenceSearchIndex,
     search_scope: FrameSequenceSearchScope,
@@ -3356,7 +2808,7 @@ def solve_frame_sequence(
     )
     holder_boundaries = candidate_resolution.holder_boundaries(search_scope)
     direct_geometry_complete_before_inference = (
-        _direct_nominal_geometry_is_complete(
+        sequence_completion.direct_nominal_geometry_is_complete(
             direct_builds,
             visible_content,
             holder_boundaries,
@@ -3370,7 +2822,7 @@ def solve_frame_sequence(
         and not direct_geometry_complete_before_inference
     ):
         direct_builds = tuple(
-            _infer_unique_slot_in_direct_nominal_build(
+            sequence_completion.infer_unique_slot_in_direct_nominal_build(
                 build,
                 visible_content,
                 search_scope,
@@ -3384,7 +2836,7 @@ def solve_frame_sequence(
         for build in direct_builds
     )
     direct_nominal_geometry_resolved = (
-        _direct_nominal_geometry_is_complete(
+        sequence_completion.direct_nominal_geometry_is_complete(
             direct_builds,
             visible_content,
             holder_boundaries,
@@ -3393,7 +2845,7 @@ def solve_frame_sequence(
         )
     )
     direct_common_width_supported = (
-        _preferred_direct_common_width_is_supported(
+        sequence_completion.preferred_direct_common_width_is_supported(
             direct_builds,
             visible_content,
             holder_boundaries,
@@ -3431,7 +2883,7 @@ def solve_frame_sequence(
                     allow_nominal_slot_sized_gap=True,
                 )
             )
-            completion_builds = _sequence_completed_builds(
+            completion_builds = sequence_completion.sequence_completed_builds(
                 real_frame_builds,
                 search_scope,
                 short_axis_plan.photo_height_evidence,
@@ -3447,11 +2899,11 @@ def solve_frame_sequence(
             build
             for build in direct_builds
             if (
-                not _build_has_geometry_only_slot(build)
+                not sequence_completion.build_has_geometry_only_slot(build)
                 and (
                     build.objectives.supported_separator_count
                     > strongest_completion_separator_count
-                    or _build_supports_resolved_nominal_slots(
+                    or sequence_completion.build_supports_resolved_nominal_slots(
                         build,
                         holder_boundaries,
                         short_axis_plan.photo_height_evidence,
@@ -3463,7 +2915,7 @@ def solve_frame_sequence(
     builds = tuple(
         build
         for build in (*direct_selection_builds, *completion_builds)
-        if _build_does_not_contradict_common_width(
+        if sequence_completion.build_does_not_contradict_common_width(
             build,
             holder_boundaries,
             short_axis_plan.photo_height_evidence,
@@ -3472,7 +2924,7 @@ def solve_frame_sequence(
         and (
             strip_mode != FULL
             or any(slot.sequence_inferred for slot in build.slots)
-            or _build_satisfies_full_endpoint_extent(
+            or sequence_completion.build_satisfies_full_endpoint_extent(
                 build,
                 holder_boundaries,
                 short_axis_plan.photo_height_evidence,
@@ -3584,7 +3036,7 @@ def solve_frame_sequence(
             PhysicalSearchOutcome((PhysicalSearchFact.CONSTRAINTS_CONTRADICTED,)),
             total_evaluations,
         )
-    slots, long_axis_assignments = _apply_edge_occlusion_inference(
+    slots, long_axis_assignments = sequence_completion.apply_edge_occlusion_inference(
         representative.slots,
         representative.long_axis_assignments,
         holder_boundaries,
@@ -3624,7 +3076,7 @@ def solve_frame_sequence(
             PhysicalSearchOutcome((PhysicalSearchFact.CONSTRAINTS_CONTRADICTED,)),
             total_evaluations,
         )
-    slots = _annotate_frame_content_occupancy(
+    slots = sequence_completion.annotate_frame_content_occupancy(
         slots,
         visible_content,
     )

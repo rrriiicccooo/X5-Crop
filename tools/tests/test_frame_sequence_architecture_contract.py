@@ -83,6 +83,20 @@ _CANONICAL_OWNERS = {
         "resolve_build_dimension_boundaries",
         "resolve_build_physical_boundaries",
     },
+    "sequence_completion.py": {
+        "measured_sequence_supports_slot_inference",
+        "infer_sequence_frame_slot",
+        "apply_edge_occlusion_inference",
+        "annotate_frame_content_occupancy",
+        "sequence_completed_builds",
+        "build_supports_resolved_nominal_slots",
+        "build_satisfies_full_endpoint_extent",
+        "build_does_not_contradict_common_width",
+        "infer_unique_slot_in_direct_nominal_build",
+        "direct_nominal_geometry_is_complete",
+        "preferred_direct_common_width_is_supported",
+        "build_has_geometry_only_slot",
+    },
 }
 
 
@@ -304,6 +318,43 @@ class FrameSequenceArchitectureContractTest(unittest.TestCase):
             )
         )
 
+    def test_sequence_completion_consumes_lower_owners_not_solver(self) -> None:
+        completion = _PHYSICAL_ROOT / "sequence_completion.py"
+        imports = _relative_import_modules(completion)
+
+        self.assertTrue(
+            {
+                "frame_sequence_measurements",
+                "frame_sequence_common_width",
+                "frame_sequence_candidates",
+                "frame_sequence_candidate_resolution",
+            }.issubset(imports)
+        )
+        self.assertTrue(
+            imports.isdisjoint(
+                {
+                    "frame_sequence_search",
+                    "frame_sequence_consensus",
+                    "frame_sequence_separator_assignment",
+                    "frame_sequence_boundary_roles",
+                    "frame_sequence_solver",
+                }
+            )
+        )
+
+    def test_lower_frame_sequence_owners_do_not_depend_on_completion(self) -> None:
+        lower_owners = {
+            name
+            for name in _CANONICAL_OWNERS
+            if name not in {"sequence_completion.py", "frame_sequence_solver.py"}
+        }
+        for owner in sorted(lower_owners):
+            with self.subTest(owner=owner):
+                self.assertNotIn(
+                    "sequence_completion",
+                    _relative_import_modules(_PHYSICAL_ROOT / owner),
+                )
+
     def test_search_result_owns_budget_state_not_final_decision(self) -> None:
         from x5crop.detection.physical.frame_sequence_search import (
             MeasuredFrameSequenceSearchResult,
@@ -337,6 +388,7 @@ class FrameSequenceArchitectureContractTest(unittest.TestCase):
                 "frame_sequence_separator_assignment",
                 "frame_sequence_boundary_roles",
                 "frame_sequence_candidate_resolution",
+                "sequence_completion",
             }
             for alias in node.names
         }
