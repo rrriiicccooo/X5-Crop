@@ -70,6 +70,13 @@ _CANONICAL_OWNERS = {
         "assign_unique_separator_observations",
         "separator_assignments_from_bindings",
     },
+    "frame_sequence_boundary_roles.py": {
+        "corroborate_build_roles_from_repeated_frame_width",
+        "corroborate_build_roles_from_physical_scale",
+        "corroborate_adjacent_boundary_pair",
+        "corroborate_build_adjacent_boundary_roles",
+        "corroborate_build_boundary_roles",
+    },
 }
 
 
@@ -127,6 +134,7 @@ class FrameSequenceArchitectureContractTest(unittest.TestCase):
                     "frame_sequence_candidates",
                     "frame_sequence_consensus",
                     "frame_sequence_separator_assignment",
+                    "frame_sequence_boundary_roles",
                     "frame_sequence_solver",
                 }
             )
@@ -152,6 +160,10 @@ class FrameSequenceArchitectureContractTest(unittest.TestCase):
             _relative_import_modules(common_width),
         )
         self.assertNotIn(
+            "frame_sequence_boundary_roles",
+            _relative_import_modules(common_width),
+        )
+        self.assertNotIn(
             "frame_sequence_solver",
             _relative_import_modules(common_width),
         )
@@ -173,6 +185,7 @@ class FrameSequenceArchitectureContractTest(unittest.TestCase):
                     "frame_sequence_candidates",
                     "frame_sequence_consensus",
                     "frame_sequence_separator_assignment",
+                    "frame_sequence_boundary_roles",
                 }
             )
         )
@@ -191,6 +204,7 @@ class FrameSequenceArchitectureContractTest(unittest.TestCase):
                     "frame_sequence_search",
                     "frame_sequence_consensus",
                     "frame_sequence_separator_assignment",
+                    "frame_sequence_boundary_roles",
                     "frame_sequence_solver",
                 }
             )
@@ -203,6 +217,7 @@ class FrameSequenceArchitectureContractTest(unittest.TestCase):
         self.assertIn("frame_sequence_candidates", imports)
         self.assertNotIn("frame_sequence_solver", imports)
         self.assertNotIn("frame_sequence_separator_assignment", imports)
+        self.assertNotIn("frame_sequence_boundary_roles", imports)
 
     def test_separator_assignment_depends_on_lower_facts_not_solver(self) -> None:
         assignment = (
@@ -221,6 +236,30 @@ class FrameSequenceArchitectureContractTest(unittest.TestCase):
                 {
                     "frame_sequence_search",
                     "frame_sequence_consensus",
+                    "frame_sequence_boundary_roles",
+                    "frame_sequence_solver",
+                }
+            )
+        )
+
+    def test_boundary_roles_depend_on_measurements_and_candidates_not_solver(
+        self,
+    ) -> None:
+        roles = _PHYSICAL_ROOT / "frame_sequence_boundary_roles.py"
+        imports = _relative_import_modules(roles)
+
+        self.assertTrue(
+            {
+                "frame_sequence_measurements",
+                "frame_sequence_candidates",
+            }.issubset(imports)
+        )
+        self.assertTrue(
+            imports.isdisjoint(
+                {
+                    "frame_sequence_search",
+                    "frame_sequence_consensus",
+                    "frame_sequence_separator_assignment",
                     "frame_sequence_solver",
                 }
             )
@@ -257,6 +296,7 @@ class FrameSequenceArchitectureContractTest(unittest.TestCase):
                 "frame_sequence_candidates",
                 "frame_sequence_consensus",
                 "frame_sequence_separator_assignment",
+                "frame_sequence_boundary_roles",
             }
             for alias in node.names
         }

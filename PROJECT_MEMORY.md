@@ -18,10 +18,10 @@ reports, Debug Analysis, and command output remain authoritative.
   `git status --short` 确认，不依赖这里保存的旧提交号。
 - State / 状态：Shared Short Axis / Frame Slot 破坏性迁移已经进入受跟踪源码、测试、报告、
   Debug 和文档；broad-uncertainty common-width contributor 分组合同已经补齐。Auditability /
-  Ownership Gate 前五波已建立独立的 measurement-interval、common-width、search graph /
+  Ownership Gate 前六波已建立独立的 measurement-interval、common-width、search graph /
   reachability / budget、candidate state / physical Pareto，以及 assignment-consensus canonical
-  owners；candidate-specific separator assignment 也已有唯一 owner。但其余 solver 职责、剩余
-  物理校准、完整样片复核、性能对比和双轮架构审计尚未完成。
+  owners；candidate-specific separator assignment 与 boundary-role corroboration 也已有唯一
+  owner。但其余 solver 职责、剩余物理校准、完整样片复核、性能对比和双轮架构审计尚未完成。
 - Safety / 安全：不得 reset、restore 或恢复旧 `PhotoAperture`、旧 sequence solver、旧 schema
   或任何兼容层；不要把当前检查点误称为物理或架构闭环。
 
@@ -50,7 +50,7 @@ reports, Debug Analysis, and command output remain authoritative.
 ## Verification State / 验证状态
 
 - Fresh checkpoint verification / 当前检查点新验证：`tools/verify full` passed on 2026-07-19
-  with 748 unit/contract tests, 14 format/mode configuration pairs, compile,
+  with 749 unit/contract tests, 14 format/mode configuration pairs, compile,
   macOS shell syntax, diff hygiene, release-package construction, and version
   checks. Confirm the current commit and clean status at resume time.
 - The verifier proves source and contract consistency only. It does not prove
@@ -62,7 +62,7 @@ reports, Debug Analysis, and command output remain authoritative.
   geometry reference and must be repaired from real evidence before that dataset
   can be called validated.
 
-- 当前 `tools/verify full` 已通过 748 项 unit/contracts、14 组配置、compile、macOS shell syntax、
+- 当前 `tools/verify full` 已通过 749 项 unit/contracts、14 组配置、compile、macOS shell syntax、
   diff hygiene、发布包构建和版本检查；它仍不能证明具名样片几何、性能闭环、Debug 视觉正确性或
   两轮架构审计。
 - sample-expectation 单元测试只验证加载器和契约代码；当前本地 `pass_X5_00038.tif` 记录仍缺少
@@ -80,7 +80,7 @@ reports, Debug Analysis, and command output remain authoritative.
 - Representative geometry that looks visually correct is not enough when another
   non-dominated, weaker dimension-heavy explanation remains.
 
-- Phase 1 and the first five Phase 2 ownership waves were behavior-neutral on the
+- Phase 1 and the first six Phase 2 ownership waves were behavior-neutral on the
   same six frozen samples (`00007/13/18/19/31/32`): every adjacent current-schema
   comparison had zero report diffs and all six Debug Analysis JPEGs were
   byte-identical. The latest fresh visual inspection kept all six `REVIEW` /
@@ -96,8 +96,8 @@ dimension-heavy 替代解释。
    calibration. Measurement intervals and common-width resolution now have
    canonical owners; search graph/reachability/budget and candidate state/Pareto
    are separate too, as are assignment consensus and separator assignment. Next
-   separate boundary roles, blank/occlusion/completion, and then candidate
-   construction without wrappers, re-exports, or duplicate models.
+   separate blank/occlusion/completion and then candidate construction without
+   wrappers, re-exports, or duplicate models; boundary roles now have one owner.
 2. Keep reducing `solve_frame_sequence` to a thin orchestration facade and extend
    the machine-checked authority/import boundaries for each coherent ownership wave.
 3. After each green ownership wave, recheck current-schema reports and relevant
@@ -112,7 +112,7 @@ dimension-heavy 替代解释。
 
 1. 下一步继续 Auditability / Ownership Gate；measurement intervals、common-width、search
    graph/reachability/budget、candidate state/Pareto 与 assignment consensus 已有唯一 owner，
-   separator assignment 也已独立；接着拆 boundary roles、blank/occlusion/completion 与
+   separator assignment 与 boundary roles 也已独立；接着拆 blank/occlusion/completion 与
    candidate construction，不增加 wrapper、re-export、重复模型或行为阈值。
 2. 每个 ownership wave 都要复核 current-schema report 与相关 Debug，完整验证后独立提交并推送。
 3. 之后再完成剩余物理合同、全格式样片、性能、Test/test 2 与双轮审计。

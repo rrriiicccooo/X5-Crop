@@ -2,10 +2,15 @@ from __future__ import annotations
 
 from x5crop.detection.physical.frame_sequence_solver import (
     FrameSequenceSearchIndex,
+    FrameSequenceSolveFailure,
     FrameSequenceSolveResult,
     prepare_frame_sequence_search_index,
+    solve_frame_sequence,
 )
-from x5crop.detection.physical.short_axis import SharedShortAxisPlan
+from x5crop.detection.physical.short_axis import (
+    SharedShortAxisPlan,
+    shared_short_axis_plan,
+)
 from x5crop.detection.physical.model import FrameSequenceSolution
 from x5crop.detection.physical.separator.observations import SeparatorSupportSet
 from x5crop.domain import (
@@ -259,6 +264,31 @@ def sequence_search_index(
     return prepare_frame_sequence_search_index(
         search_scope,
         SeparatorSupportSet(supports, support_budget_exhausted),
+    )
+
+
+def solve_sequence(
+    *,
+    search_scope: FrameSequenceSearchScope,
+    visible_content: ContentRegionObservation,
+    count: int,
+    frame_dimensions: FrameDimensionPrior,
+    supports: tuple[SeparatorBandCrossAxisSupport, ...] = (),
+    strip_mode: str = "full",
+    nominal_count: int | None = None,
+    maximum_assignment_evaluations: int = 100_000,
+) -> FrameSequenceSolveResult | FrameSequenceSolveFailure:
+    plan = shared_short_axis_plan(search_scope)
+    return solve_frame_sequence(
+        sequence_search_index(search_scope, supports),
+        search_scope,
+        plan,
+        count,
+        frame_dimensions,
+        visible_content,
+        maximum_assignment_evaluations,
+        strip_mode=strip_mode,
+        nominal_count=count if nominal_count is None else nominal_count,
     )
 
 
