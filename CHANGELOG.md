@@ -22,6 +22,11 @@ the validation evidence.
 
 ### 2026-07-19 — 无环观测权限 / Acyclic Observation Authority
 
+- 真实样片期望现在分别记录人工 geometry reference、允许灰度观测的独立 proof 预期与自动
+  decision 预期；文件名前缀只拥有 dataset intent，不能再作为 decision oracle。 /
+  Real-sample expectations now record manual geometry reference, independent-proof
+  expectation for allowed grayscale observations, and automatic-decision expectation
+  separately; filename prefixes own dataset intent only and are no longer decision oracles.
 - `MeasurementProvenance` 现在拒绝 root 同时出现在 dependencies 中；content、
   frame geometry、photo-edge role、spacing 和 dual-lane containment 的派生路径已清理同类
   自循环。 / `MeasurementProvenance` now rejects its root appearing again in

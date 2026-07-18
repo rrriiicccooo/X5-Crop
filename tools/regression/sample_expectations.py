@@ -18,13 +18,24 @@ from x5crop.strip_modes import FULL, PARTIAL
 
 
 EXPECTATION_SCHEMA_ID = "sample_expectation"
-EXPECTATION_SCHEMA_REVISION = "frame_slot_sequence_resolution"
+EXPECTATION_SCHEMA_REVISION = "independent_geometry_proof_decision"
+
+
+class DatasetIntent(str, Enum):
+    PASS = "pass"
+    REVIEW = "review"
+    UNKNOWN = "unknown"
 
 
 class DecisionExpectation(str, Enum):
     PASS_REQUIRED = "pass_required"
     REVIEW_REQUIRED = "review_required"
     PASS_PREFERRED = "pass_preferred"
+
+
+class ObservationProofExpectation(str, Enum):
+    INDEPENDENT_PROOF_EXPECTED = "independent_proof_expected"
+    INDEPENDENT_PROOF_UNAVAILABLE = "independent_proof_unavailable"
 
 
 class SampleScenario(str, Enum):
@@ -47,22 +58,18 @@ class DatasetRole(str, Enum):
     VALIDATION = "validation"
 
 
-_EXPECTATION_BY_PREFIX = {
-    "pass": DecisionExpectation.PASS_REQUIRED,
-    "review": DecisionExpectation.REVIEW_REQUIRED,
-    "unknown": DecisionExpectation.PASS_PREFERRED,
-}
-
 _EnumType = TypeVar("_EnumType", bound=Enum)
 
 
 @dataclass(frozen=True)
 class SampleExpectation:
     source: str
+    dataset_intent: DatasetIntent
     format_id: str
     strip_mode: str
     requested_count: int | str | None
-    decision_expectation: DecisionExpectation
+    automatic_decision_expectation: DecisionExpectation
+    observation_proof_expectation: ObservationProofExpectation
     scenario: SampleScenario
     dataset_role: DatasetRole
     expected_count: int | None
@@ -73,11 +80,14 @@ class SampleExpectation:
         if not self.source:
             raise ValueError("sample expectation requires a source")
         prefix = Path(self.source).name.partition("_")[0]
-        expected_decision = _EXPECTATION_BY_PREFIX.get(prefix)
-        if expected_decision is None:
-            raise ValueError("sample filename requires pass, review, or unknown prefix")
-        if self.decision_expectation != expected_decision:
-            raise ValueError("sample filename prefix and decision expectation differ")
+        try:
+            filename_intent = DatasetIntent(prefix)
+        except ValueError as error:
+            raise ValueError(
+                "sample filename requires pass, review, or unknown prefix"
+            ) from error
+        if self.dataset_intent != filename_intent:
+            raise ValueError("sample filename prefix and dataset intent differ")
         if self.format_id not in FORMATS:
             raise ValueError("sample expectation format is unknown")
         if self.strip_mode not in {FULL, PARTIAL}:
@@ -96,15 +106,15 @@ class SampleExpectation:
             raise ValueError("expected count must be null or positive")
         if any(not item for item in self.review_basis):
             raise ValueError("review basis entries must not be empty")
-        if self.decision_expectation == DecisionExpectation.REVIEW_REQUIRED:
+        if self.automatic_decision_expectation == DecisionExpectation.REVIEW_REQUIRED:
             if not self.review_basis:
                 raise ValueError("review-required sample needs a physical review basis")
             if self.dataset_role != DatasetRole.VALIDATION:
                 raise ValueError("review-required sample must be validation-only")
         elif self.geometry_reference != self.source:
-            raise ValueError("pass and unknown samples require their own geometry reference")
+            raise ValueError("automatic pass targets require their own geometry reference")
         if (
-            self.decision_expectation == DecisionExpectation.PASS_PREFERRED
+            self.automatic_decision_expectation == DecisionExpectation.PASS_PREFERRED
             and self.dataset_role != DatasetRole.VALIDATION
         ):
             raise ValueError("pass-preferred sample must be validation-only")
@@ -128,10 +138,12 @@ def sample_expectation_from_record(record: dict[str, Any]) -> SampleExpectation:
         "schema_id",
         "schema_revision",
         "source",
+        "dataset_intent",
         "format_id",
         "strip_mode",
         "requested_count",
-        "decision_expectation",
+        "automatic_decision_expectation",
+        "observation_proof_expectation",
         "scenario",
         "dataset_role",
         "expected_count",
@@ -161,13 +173,23 @@ def sample_expectation_from_record(record: dict[str, Any]) -> SampleExpectation:
         raise ValueError("review basis must be a list of strings")
     return SampleExpectation(
         source=record["source"],
+        dataset_intent=_typed_enum(
+            DatasetIntent,
+            record["dataset_intent"],
+            "dataset intent",
+        ),
         format_id=record["format_id"],
         strip_mode=record["strip_mode"],
         requested_count=record["requested_count"],
-        decision_expectation=_typed_enum(
+        automatic_decision_expectation=_typed_enum(
             DecisionExpectation,
-            record["decision_expectation"],
-            "decision expectation",
+            record["automatic_decision_expectation"],
+            "automatic decision expectation",
+        ),
+        observation_proof_expectation=_typed_enum(
+            ObservationProofExpectation,
+            record["observation_proof_expectation"],
+            "observation proof expectation",
         ),
         scenario=_typed_enum(SampleScenario, record["scenario"], "scenario"),
         dataset_role=_typed_enum(

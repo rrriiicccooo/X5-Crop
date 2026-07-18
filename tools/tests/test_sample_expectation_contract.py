@@ -11,8 +11,10 @@ from tools.regression.frame_slot_reference import (
     SharedShortAxisReference,
 )
 from tools.regression.sample_expectations import (
+    DatasetIntent,
     DatasetRole,
     DecisionExpectation,
+    ObservationProofExpectation,
     SampleScenario,
     load_sample_expectations,
     sample_expectation_from_record,
@@ -24,7 +26,9 @@ from x5crop.domain import PixelInterval
 def _record(
     *,
     source: str = "Test/135/full/pass_X5_00001.tif",
-    decision_expectation: str = "pass_required",
+    dataset_intent: str = "pass",
+    automatic_decision_expectation: str = "pass_required",
+    observation_proof_expectation: str = "independent_proof_expected",
     geometry_reference: str | None = "Test/135/full/pass_X5_00001.tif",
     review_basis: list[str] | None = None,
     dataset_role: str = "calibration",
@@ -32,12 +36,14 @@ def _record(
 ) -> dict:
     return {
         "schema_id": "sample_expectation",
-        "schema_revision": "frame_slot_sequence_resolution",
+        "schema_revision": "independent_geometry_proof_decision",
         "source": source,
+        "dataset_intent": dataset_intent,
         "format_id": "135",
         "strip_mode": "full",
         "requested_count": None,
-        "decision_expectation": decision_expectation,
+        "automatic_decision_expectation": automatic_decision_expectation,
+        "observation_proof_expectation": observation_proof_expectation,
         "scenario": "standard",
         "dataset_role": dataset_role,
         "expected_count": expected_count,
@@ -68,24 +74,35 @@ def _reference(source: str) -> FrameSlotReference:
 
 
 class SampleExpectationContractTest(unittest.TestCase):
-    def test_current_record_has_typed_expectation_scenario_and_role(self) -> None:
+    def test_current_record_has_three_independent_authorities(self) -> None:
         expectation = sample_expectation_from_record(_record())
 
         self.assertEqual(
-            expectation.decision_expectation,
+            expectation.automatic_decision_expectation,
             DecisionExpectation.PASS_REQUIRED,
+        )
+        self.assertEqual(expectation.dataset_intent, DatasetIntent.PASS)
+        self.assertEqual(
+            expectation.observation_proof_expectation,
+            ObservationProofExpectation.INDEPENDENT_PROOF_EXPECTED,
+        )
+        self.assertEqual(
+            expectation.geometry_reference,
+            "Test/135/full/pass_X5_00001.tif",
         )
         self.assertEqual(expectation.scenario, SampleScenario.STANDARD)
         self.assertEqual(expectation.dataset_role, DatasetRole.CALIBRATION)
         self.assertEqual(expectation.expected_count, 6)
 
-    def test_filename_prefix_is_the_decision_oracle(self) -> None:
+    def test_filename_prefix_only_owns_dataset_intent(self) -> None:
         cases = (
             (_record(), True),
             (
                 _record(
                     source="Test/135/full/review_X5_00001.tif",
-                    decision_expectation="review_required",
+                    dataset_intent="review",
+                    automatic_decision_expectation="review_required",
+                    observation_proof_expectation="independent_proof_unavailable",
                     geometry_reference=None,
                     review_basis=["human_boundary_ambiguous"],
                     dataset_role="validation",
@@ -95,7 +112,8 @@ class SampleExpectationContractTest(unittest.TestCase):
             (
                 _record(
                     source="Test/135/full/unknown_X5_00001.tif",
-                    decision_expectation="pass_preferred",
+                    dataset_intent="unknown",
+                    automatic_decision_expectation="pass_preferred",
                     geometry_reference="Test/135/full/unknown_X5_00001.tif",
                     dataset_role="validation",
                 ),
@@ -104,15 +122,26 @@ class SampleExpectationContractTest(unittest.TestCase):
             (
                 _record(
                     source="Test/135/full/unkown_X5_00001.tif",
-                    decision_expectation="pass_preferred",
+                    dataset_intent="unknown",
+                    automatic_decision_expectation="pass_preferred",
                     geometry_reference="Test/135/full/unkown_X5_00001.tif",
                     dataset_role="validation",
                 ),
                 False,
             ),
             (
-                _record(decision_expectation="review_required"),
+                _record(dataset_intent="review"),
                 False,
+            ),
+            (
+                _record(
+                    automatic_decision_expectation="review_required",
+                    observation_proof_expectation="independent_proof_unavailable",
+                    geometry_reference=None,
+                    review_basis=["allowed_gray_observations_insufficient"],
+                    dataset_role="validation",
+                ),
+                True,
             ),
         )
         for record, accepted in cases:
@@ -123,7 +152,7 @@ class SampleExpectationContractTest(unittest.TestCase):
                     with self.assertRaises(ValueError):
                         sample_expectation_from_record(record)
 
-    def test_pass_and_unknown_require_manual_geometry_reference(self) -> None:
+    def test_pass_targets_require_manual_geometry_reference(self) -> None:
         for source, expectation in (
             ("Test/135/full/pass_X5_00001.tif", "pass_required"),
             ("Test/135/full/unknown_X5_00001.tif", "pass_preferred"),
@@ -133,7 +162,8 @@ class SampleExpectationContractTest(unittest.TestCase):
                     sample_expectation_from_record(
                         _record(
                             source=source,
-                            decision_expectation=expectation,
+                            dataset_intent=source.rsplit("/", 1)[-1].partition("_")[0],
+                            automatic_decision_expectation=expectation,
                             geometry_reference=None,
                             dataset_role=(
                                 "validation"
@@ -148,11 +178,30 @@ class SampleExpectationContractTest(unittest.TestCase):
             sample_expectation_from_record(
                 _record(
                     source="Test/135/full/review_X5_00001.tif",
-                    decision_expectation="review_required",
+                    dataset_intent="review",
+                    automatic_decision_expectation="review_required",
+                    observation_proof_expectation="independent_proof_unavailable",
                     geometry_reference=None,
                     dataset_role="validation",
                 )
             )
+
+    def test_proof_unavailable_can_remain_a_pass_capability_target(self) -> None:
+        expectation = sample_expectation_from_record(
+            _record(
+                automatic_decision_expectation="pass_required",
+                observation_proof_expectation="independent_proof_unavailable",
+            )
+        )
+
+        self.assertEqual(
+            expectation.automatic_decision_expectation,
+            DecisionExpectation.PASS_REQUIRED,
+        )
+        self.assertEqual(
+            expectation.observation_proof_expectation,
+            ObservationProofExpectation.INDEPENDENT_PROOF_UNAVAILABLE,
+        )
 
     def test_loader_rejects_duplicate_sources(self) -> None:
         with TemporaryDirectory() as temporary:
