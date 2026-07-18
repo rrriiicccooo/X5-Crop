@@ -1,0 +1,137 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from enum import Enum
+import math
+
+from ...domain import (
+    EvidenceState,
+    MeasurementIdentity,
+    MeasurementProvenance,
+    ObservationId,
+)
+from ...geometry.layout import is_horizontal_layout
+from ..physical.frame_dimensions import MINIMUM_COMMON_FRAME_WIDTH_OBSERVATIONS
+from ..physical.model import FrameSequenceSolution
+
+
+class FrameScaleSource(str, Enum):
+    FRAME_WIDTH_INTERVAL = "frame_width_interval"
+    FRAME_HEIGHT_INTERVAL = "frame_height_interval"
+
+
+@dataclass(frozen=True)
+class FrameScaleObservation:
+    axis: str
+    minimum_px_per_mm: float
+    maximum_px_per_mm: float
+    source: FrameScaleSource
+    provenance: MeasurementProvenance
+
+    def __post_init__(self) -> None:
+        if self.axis not in {"x", "y"}:
+            raise ValueError("frame scale observation axis must be x or y")
+        if not isinstance(self.source, FrameScaleSource):
+            raise TypeError("frame scale observation requires a typed source")
+        if any(
+            not math.isfinite(value) or value <= 0.0
+            for value in (self.minimum_px_per_mm, self.maximum_px_per_mm)
+        ):
+            raise ValueError("frame scale must be finite and positive")
+        if self.maximum_px_per_mm < self.minimum_px_per_mm:
+            raise ValueError("frame scale maximum must not be below minimum")
+        if self.provenance.root_measurement != MeasurementIdentity.FRAME_DIMENSIONS:
+            raise ValueError("frame scale source must match measurement provenance")
+
+
+def _frame_width_observations(
+    geometry: FrameSequenceSolution,
+) -> tuple[FrameScaleObservation, ...]:
+    width_mm = float(geometry.frame_dimension_prior.frame_size_mm[0])
+    axis = "x" if is_horizontal_layout(geometry.layout) else "y"
+    slots = tuple(
+        slot
+        for slot in geometry.frame_slots
+        if slot.leading.independently_observed
+        and slot.trailing.independently_observed
+        and all(
+            boundary.role_provenance is not None
+            and boundary.role_provenance.root_measurement
+            != MeasurementIdentity.FRAME_DIMENSIONS
+            and MeasurementIdentity.FRAME_DIMENSIONS
+            not in boundary.role_provenance.dependencies
+            for boundary in (slot.leading, slot.trailing)
+        )
+        and not slot.sequence_inferred
+    )
+    if len(slots) < MINIMUM_COMMON_FRAME_WIDTH_OBSERVATIONS:
+        return ()
+    return tuple(
+        FrameScaleObservation(
+            axis=axis,
+            minimum_px_per_mm=slot.width_px.minimum / width_mm,
+            maximum_px_per_mm=slot.width_px.maximum / width_mm,
+            source=FrameScaleSource.FRAME_WIDTH_INTERVAL,
+            provenance=MeasurementProvenance(
+                root_measurement=MeasurementIdentity.FRAME_DIMENSIONS,
+                observation_id=ObservationId(f"frame_width_scale:{slot.index}"),
+                dependencies=tuple(
+                    dict.fromkeys(
+                        (
+                            MeasurementIdentity.FORMAT_PHYSICAL_SPEC,
+                            slot.leading.role_provenance.root_measurement,
+                            slot.trailing.role_provenance.root_measurement,
+                        )
+                    )
+                ),
+                description="independently measured frame-width scale interval",
+                boundary_anchors=(
+                    slot.leading.measurement_provenance.observation_id,
+                    slot.trailing.measurement_provenance.observation_id,
+                ),
+            ),
+        )
+        for slot in slots
+    )
+
+
+def _frame_height_observation(
+    geometry: FrameSequenceSolution,
+) -> FrameScaleObservation | None:
+    evidence = geometry.photo_height_evidence
+    if evidence.state != EvidenceState.SUPPORTED or evidence.height_px is None:
+        return None
+    height_mm = float(geometry.frame_dimension_prior.frame_size_mm[1])
+    axis = "y" if is_horizontal_layout(geometry.layout) else "x"
+    height_px = evidence.height_px
+    return FrameScaleObservation(
+        axis=axis,
+        minimum_px_per_mm=height_px.minimum / height_mm,
+        maximum_px_per_mm=height_px.maximum / height_mm,
+        source=FrameScaleSource.FRAME_HEIGHT_INTERVAL,
+        provenance=MeasurementProvenance(
+            root_measurement=MeasurementIdentity.FRAME_DIMENSIONS,
+            observation_id=ObservationId("shared_frame_height_scale"),
+            dependencies=(
+                MeasurementIdentity.BOUNDARY_PATHS,
+                MeasurementIdentity.FORMAT_PHYSICAL_SPEC,
+            ),
+            description="shared photo-bounded frame-height scale interval",
+            boundary_anchors=evidence.provenance.boundary_anchors,
+        ),
+    )
+
+
+def frame_scale_observations(
+    geometry: FrameSequenceSolution,
+) -> tuple[FrameScaleObservation, ...]:
+    widths = _frame_width_observations(geometry)
+    height = _frame_height_observation(geometry)
+    return widths if height is None else (*widths, height)
+
+
+def frame_scale_observations_match_geometry(
+    geometry: FrameSequenceSolution,
+    observations: tuple[FrameScaleObservation, ...],
+) -> bool:
+    return observations == frame_scale_observations(geometry)

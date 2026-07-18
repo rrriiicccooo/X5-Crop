@@ -13,9 +13,9 @@ from tools.tests.parameter_contracts import (
 )
 from x5crop.configuration.preprocess import PreprocessConfiguration
 from x5crop.image.evidence import (
-    ContentEvidenceImageParameters,
     DeskewFallbackEvidenceParameters,
     SeparatorEvidenceImageParameters,
+    make_content_evidence_gray,
 )
 from x5crop.image.deskew_parameters import DeskewParameters
 from x5crop.configuration.content import ContentEvidenceParameters
@@ -28,7 +28,14 @@ from x5crop.detection.candidate.plan.model import (
     CountHypothesisSource,
 )
 from x5crop.output.model import AxisBleedParameters
-from x5crop.formats import FormatPhysicalSpec, FrameSizeMm, expected_separator_count
+from x5crop.formats import (
+    FormatSpec,
+    FramePhysicalSpec,
+    FrameSizeMm,
+    ScanLayoutSpec,
+    StripHandlingSpec,
+    expected_separator_count,
+)
 from x5crop.image.separator_profile import SeparatorProfileParameters
 from x5crop.geometry.sampling import sampling_step_for_limit
 from x5crop.run_config import RunConfig
@@ -41,12 +48,11 @@ class ParameterLegitimacyContractTest(unittest.TestCase):
     def test_invalid_physical_facts_and_execution_budgets_are_rejected(self) -> None:
         invalid_factories = (
             lambda: FrameSizeMm(0.0, 24.0),
-            lambda: FormatPhysicalSpec(
+            lambda: FormatSpec(
                 "invalid",
-                3,
-                (1, 2),
-                "test",
-                (FrameSizeMm(36.0, 24.0),),
+                FramePhysicalSpec((FrameSizeMm(36.0, 24.0),)),
+                StripHandlingSpec(3, (1, 2, 4)),
+                ScanLayoutSpec(),
             ),
             lambda: CountHypothesis(
                 0,
@@ -58,16 +64,16 @@ class ParameterLegitimacyContractTest(unittest.TestCase):
             lambda: SeparatorObservationParameters(minimum_run_px=0),
             lambda: SeparatorObservationParameters(maximum_observations=0),
             lambda: SequenceSolverParameters(maximum_assignment_evaluations=0),
-            lambda: ContentEvidenceImageParameters(
-                minimum_consensus_channels=5,
-            ),
         )
         for factory in invalid_factories:
             with self.subTest(factory=factory), self.assertRaises(ValueError):
                 factory()
 
         with self.assertRaises(ValueError):
-            expected_separator_count(0, "single_strip", 1)
+            expected_separator_count(
+                StripHandlingSpec(3, (1, 2)),
+                ScanLayoutSpec("dual_lane", 2, "135"),
+            )
         with self.assertRaises(ValueError):
             sampling_step_for_limit(100, 0)
 
@@ -135,9 +141,9 @@ class ParameterLegitimacyContractTest(unittest.TestCase):
         )
 
     def test_foundation_measurement_budgets_and_floors_are_explicit(self) -> None:
-        self.assertNotIn(
-            "minimum_active_pixels",
-            ContentEvidenceImageParameters.__dataclass_fields__,
+        self.assertEqual(
+            tuple(signature(make_content_evidence_gray).parameters),
+            ("gray",),
         )
         self.assertIs(
             signature(sampled_percentile).parameters["max_samples"].default,
@@ -150,10 +156,6 @@ class ParameterLegitimacyContractTest(unittest.TestCase):
         self.assertIs(
             signature(bbox_from_mask).parameters["min_col_fraction"].default,
             signature(bbox_from_mask).empty,
-        )
-        self.assertIn(
-            "numerical_floor",
-            ContentEvidenceImageParameters.__dataclass_fields__,
         )
         self.assertIn(
             "maximum_percentile_samples",
@@ -203,6 +205,10 @@ class ParameterLegitimacyContractTest(unittest.TestCase):
     def test_debug_separator_image_parameters_belong_to_diagnostics(self) -> None:
         self.assertNotIn(
             "separator_evidence_image",
+            PreprocessConfiguration.__dataclass_fields__,
+        )
+        self.assertNotIn(
+            "content_evidence_image",
             PreprocessConfiguration.__dataclass_fields__,
         )
 

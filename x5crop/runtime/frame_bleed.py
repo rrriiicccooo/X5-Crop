@@ -4,17 +4,18 @@ from dataclasses import replace
 
 from ..detection.candidate.model import CandidateEvidence, DualLaneEvidence
 from ..detection.candidate.selection.model import SelectionResult
-from ..domain import Box, InterPhotoBoundaryReference, InterPhotoSpacingKind
+from ..domain import Box, InterFrameBoundaryReference, InterFrameSpacingKind
 from ..output.frame_bleed import frame_bleed_plan
 from ..output.model import AxisBleedParameters, FrameBleedPlan, FrameOverlapRequirement
-from ..detection.physical.model import DualLanePhotoSolution
+from ..detection.physical.model import DualLaneFrameSolution
 
 
 def _frame_output_bounds(selection: SelectionResult) -> tuple[Box, ...]:
     geometry = selection.selected.geometry
     envelopes = geometry.frame_crop_envelopes
-    if not isinstance(geometry, DualLanePhotoSolution):
-        return (geometry.holder_span.box,) * len(envelopes)
+    if not isinstance(geometry, DualLaneFrameSolution):
+        canvas = geometry.holder_safety.containment_fallback.box
+        return (canvas,) * len(envelopes)
     bounds: list[Box] = []
     for envelope in envelopes:
         center_y = 0.5 * float(envelope.box.top + envelope.box.bottom)
@@ -32,7 +33,7 @@ def _frame_output_bounds(selection: SelectionResult) -> tuple[Box, ...]:
 def _lane_frame_indexes(selection: SelectionResult) -> tuple[tuple[int, ...], ...]:
     geometry = selection.selected.geometry
     envelopes = geometry.frame_crop_envelopes
-    if not isinstance(geometry, DualLanePhotoSolution):
+    if not isinstance(geometry, DualLaneFrameSolution):
         return (tuple(range(len(envelopes))),)
     lane_indexes: list[list[int]] = [[] for _lane in geometry.lane_boxes]
     for frame_index, envelope in enumerate(envelopes):
@@ -55,13 +56,13 @@ def _overlap_requirements(
     if isinstance(evidence, CandidateEvidence):
         relations = tuple(
             observation.spacing_evidence
-            for observation in evidence.inter_photo_boundary_preservation.observations
+            for observation in evidence.internal_frame_boundary_preservation.observations
         )
     elif isinstance(evidence, DualLaneEvidence):
         relations = tuple(
             replace(
                 observation.spacing_evidence,
-                boundary=InterPhotoBoundaryReference(
+                boundary=InterFrameBoundaryReference(
                     lane_index,
                     observation.boundary.boundary_index,
                 ),
@@ -71,7 +72,7 @@ def _overlap_requirements(
                 start=1,
             )
             for observation in (
-                lane_evidence.inter_photo_boundary_preservation.observations
+                lane_evidence.internal_frame_boundary_preservation.observations
             )
         )
     else:
@@ -79,7 +80,7 @@ def _overlap_requirements(
     lane_indexes = _lane_frame_indexes(selection)
     requirements: list[FrameOverlapRequirement] = []
     for relation in relations:
-        if relation.kind != InterPhotoSpacingKind.OVERLAP:
+        if relation.kind != InterFrameSpacingKind.OVERLAP:
             continue
         boundary = relation.boundary
         lane_index = 0 if boundary.lane_index is None else boundary.lane_index - 1

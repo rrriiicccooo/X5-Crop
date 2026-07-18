@@ -23,7 +23,7 @@ from x5crop.detection.candidate.assessment.review_only import (
 )
 from x5crop.detection.candidate.model import BuiltCandidate, DualLaneEvidence
 from x5crop.detection.candidate.proposal.hard_safety import hard_safety_candidate
-from x5crop.detection.candidate.proposal.sequence import photo_sequence_search_scope
+from x5crop.detection.candidate.proposal.sequence import frame_sequence_search_scope
 from x5crop.detection.candidate.selection.choose import select_candidates
 from x5crop.detection.context import (
     DetectionContext,
@@ -39,7 +39,7 @@ from x5crop.detection.physical.lane_divider import (
 from x5crop.detection.physical.model import (
     AssignmentConsensusOutcome,
     BoundaryAssignmentConsensus,
-    DualLanePhotoSolution,
+    DualLaneFrameSolution,
     ReviewOnlyContainment,
     SequenceResiduals,
     combined_assignment_consensus,
@@ -47,8 +47,9 @@ from x5crop.detection.physical.model import (
 )
 from x5crop.domain import (
     Box,
+    ContainmentFallback,
     EvidenceState,
-    HolderSpan,
+    HolderSafetyEnvelope,
     MeasurementIdentity,
     MeasurementProvenance,
     ObservationId,
@@ -59,19 +60,30 @@ from x5crop.image.statistics import image_measurement_statistics
 
 
 def _parent(lane):
-    lane_width = lane.geometry.holder_span.box.width
-    lane_height = lane.geometry.holder_span.box.height
+    lane_width = lane.geometry.holder_safety.box.width
+    lane_height = lane.geometry.holder_safety.box.height
     lane_boxes = (
         Box(0, 0, lane_width, lane_height),
         Box(0, lane_height, lane_width, 2 * lane_height),
     )
     lane_solutions = (lane.geometry, lane.geometry)
-    geometry = DualLanePhotoSolution(
+    geometry = DualLaneFrameSolution(
         format_id="135-dual",
         layout=lane.geometry.layout,
         strip_mode=lane.geometry.strip_mode,
         count=sum(item.count for item in lane_solutions),
-        holder_span=HolderSpan(Box(0, 0, lane_width, 2 * lane_height)),
+        holder_safety=HolderSafetyEnvelope(
+            (),
+            ContainmentFallback(
+                Box(0, 0, lane_width, 2 * lane_height),
+                MeasurementProvenance(
+                    MeasurementIdentity.CANVAS,
+                    ObservationId("dual_lane_containment"),
+                    (MeasurementIdentity.CANVAS,),
+                    "dual-lane test containment",
+                ),
+            ),
+        ),
         residuals=combined_sequence_residuals(lane_solutions),
         assignment_consensus=combined_assignment_consensus(lane_solutions),
         lane_divider=LaneDividerEvidence(
@@ -104,7 +116,7 @@ def _lane_selection(candidate, *, resolved: bool = True):
         selection,
         geometry_resolution=replace(
             selection.geometry_resolution,
-            boundaries_resolved=False,
+            frame_slots_resolved=False,
         ),
     )
 
@@ -125,8 +137,8 @@ class DualLaneAssessmentTest(unittest.TestCase):
             make_measurement_cache(
                 gray,
                 "horizontal",
-                configuration.preprocess.content_evidence_image,
                 statistics,
+                0.0,
                 MeasurementCacheStatistics(),
             ),
             DetectionExecutionStatistics(),
@@ -159,24 +171,21 @@ class DualLaneAssessmentTest(unittest.TestCase):
             make_measurement_cache(
                 gray,
                 "horizontal",
-                configuration.preprocess.content_evidence_image,
                 statistics,
+                0.0,
                 MeasurementCacheStatistics(),
             ),
             DetectionExecutionStatistics(),
         )
-        search_scope = replace(
-            photo_sequence_search_scope(
-                context.measurement_cache,
-                context.configuration.boundary_path,
-            ),
-            measurement_budget_exhausted=True,
+        search_scope = frame_sequence_search_scope(
+            context.measurement_cache,
+            context.configuration.boundary_path,
         )
         with patch(
             "x5crop.detection.modes.dual_lane.measure_lane_dividers",
             return_value=LaneDividerEvidenceSet((), False),
         ), patch(
-            "x5crop.detection.modes.review_only.photo_sequence_search_scope",
+            "x5crop.detection.modes.review_only.frame_sequence_search_scope",
             return_value=search_scope,
         ):
             selection = choose_dual_lane_detection(
@@ -209,8 +218,8 @@ class DualLaneAssessmentTest(unittest.TestCase):
             make_measurement_cache(
                 gray,
                 "horizontal",
-                configuration.preprocess.content_evidence_image,
                 statistics,
+                0.0,
                 MeasurementCacheStatistics(),
             ),
             DetectionExecutionStatistics(),
@@ -222,12 +231,12 @@ class DualLaneAssessmentTest(unittest.TestCase):
         self.assertTrue(divider_evidence.candidates)
 
         def unresolved_lane(lane_context: DetectionContext):
-            count = lane_context.configuration.physical_spec.default_count
+            count = lane_context.configuration.physical_spec.strip.default_count
             assessed = assess_review_only_candidate(
                 hard_safety_candidate(
                     lane_context,
                     count,
-                    photo_sequence_search_scope(
+                    frame_sequence_search_scope(
                         lane_context.measurement_cache,
                         lane_context.configuration.boundary_path,
                     ),
@@ -238,7 +247,7 @@ class DualLaneAssessmentTest(unittest.TestCase):
             )
             return select_candidates(
                 (assessed,),
-                larger_count_hypotheses_resolved=True,
+                larger_count_search_complete=True,
                 physical_search=PhysicalSearchOutcome(
                     (PhysicalSearchFact.MEASUREMENTS_UNAVAILABLE,),
                 ),
@@ -296,7 +305,7 @@ class DualLaneAssessmentTest(unittest.TestCase):
         )
 
     def test_dual_lane_solution_derives_all_aggregate_geometry(self) -> None:
-        field_names = {field.name for field in fields(DualLanePhotoSolution)}
+        field_names = {field.name for field in fields(DualLaneFrameSolution)}
         self.assertEqual(
             field_names,
             {
@@ -304,7 +313,7 @@ class DualLaneAssessmentTest(unittest.TestCase):
                 "layout",
                 "strip_mode",
                 "count",
-                "holder_span",
+                "holder_safety",
                 "residuals",
                 "assignment_consensus",
                 "lane_divider",
@@ -351,7 +360,7 @@ class DualLaneAssessmentTest(unittest.TestCase):
 
     def test_component_geometry_must_match_parent_exactly(self) -> None:
         first = candidate_fixture()
-        second = candidate_fixture(failed_candidate_check="boundary_proof")
+        second = candidate_fixture(failed_candidate_check="sequence_proof")
         with self.assertRaises(ValueError):
             compose_dual_lane_candidate(
                 _parent(first),
@@ -381,7 +390,7 @@ class DualLaneAssessmentTest(unittest.TestCase):
     def test_lane_scoped_spacing_identity_is_derived(self) -> None:
         geometry = _parent(candidate_fixture()).geometry
         self.assertEqual(
-            tuple(item.boundary.lane_index for item in geometry.inter_photo_spacings),
+            tuple(item.boundary.lane_index for item in geometry.inter_frame_spacings),
             (1, 2),
         )
 

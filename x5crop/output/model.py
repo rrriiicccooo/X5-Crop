@@ -6,9 +6,9 @@ from math import ceil
 from ..domain import (
     Box,
     FrameCropEnvelope,
-    InterPhotoBoundaryReference,
-    InterPhotoSpacing,
-    InterPhotoSpacingKind,
+    InterFrameBoundaryReference,
+    InterFrameSpacing,
+    InterFrameSpacingKind,
     MeasurementProvenance,
 )
 
@@ -30,11 +30,11 @@ class OutputGeometry:
 
     def __post_init__(self) -> None:
         if len(self.frame_crop_envelopes) != len(self.final_boxes):
-            raise ValueError("output geometry requires one final box per photo envelope")
-        if tuple(item.photo_index for item in self.frame_crop_envelopes) != tuple(
+            raise ValueError("output geometry requires one final box per frame envelope")
+        if tuple(item.frame_index for item in self.frame_crop_envelopes) != tuple(
             range(1, len(self.frame_crop_envelopes) + 1)
         ):
-            raise ValueError("output photo envelopes must be complete and ordered")
+            raise ValueError("output frame envelopes must be complete and ordered")
         for envelope, final_box in zip(
             self.frame_crop_envelopes,
             self.final_boxes,
@@ -42,19 +42,19 @@ class OutputGeometry:
         ):
             if not final_box.valid():
                 raise ValueError("final output boxes must have positive extent")
-            aperture_box = envelope.box
+            envelope_box = envelope.box
             if not (
-                final_box.left <= aperture_box.left
-                and final_box.top <= aperture_box.top
-                and final_box.right >= aperture_box.right
-                and final_box.bottom >= aperture_box.bottom
+                final_box.left <= envelope_box.left
+                and final_box.top <= envelope_box.top
+                and final_box.right >= envelope_box.right
+                and final_box.bottom >= envelope_box.bottom
             ):
-                raise ValueError("final output boxes must contain photo envelopes")
+                raise ValueError("final output boxes must contain frame envelopes")
 
 
 @dataclass(frozen=True)
 class FrameOverlapRequirement:
-    spacing: InterPhotoSpacing
+    spacing: InterFrameSpacing
     left_frame_index: int
     right_frame_index: int
 
@@ -63,11 +63,11 @@ class FrameOverlapRequirement:
             raise ValueError("overlap frame indexes must be non-negative")
         if self.right_frame_index != self.left_frame_index + 1:
             raise ValueError("overlap protection applies to adjacent frames")
-        if self.spacing.kind != InterPhotoSpacingKind.OVERLAP:
+        if self.spacing.kind != InterFrameSpacingKind.OVERLAP:
             raise ValueError("overlap protection requires negative spacing")
 
     @property
-    def boundary(self) -> InterPhotoBoundaryReference:
+    def boundary(self) -> InterFrameBoundaryReference:
         return self.spacing.boundary
 
     @property
@@ -111,7 +111,7 @@ class BoundaryOverlapProtection:
             raise ValueError("overlap protection availability must be non-negative")
 
     @property
-    def boundary(self) -> InterPhotoBoundaryReference:
+    def boundary(self) -> InterFrameBoundaryReference:
         return self.requirement.boundary
 
     @property
@@ -144,7 +144,7 @@ class FrameBleedPlan:
     frame_output_bounds: tuple[Box, ...]
     frame_sides: tuple[FrameSideBleed, ...]
     overlap_protection: tuple[BoundaryOverlapProtection, ...]
-    unresolved_overlap_boundaries: tuple[InterPhotoBoundaryReference, ...]
+    unresolved_overlap_boundaries: tuple[InterFrameBoundaryReference, ...]
     feasible: bool = field(init=False)
     reason: str = field(init=False)
 

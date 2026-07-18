@@ -61,7 +61,7 @@ class DetectionConfigurationBundleTests(unittest.TestCase):
                 "135",
             )
             self.assertEqual(
-                bundle.initial_configuration.physical_spec.lane_count,
+                bundle.initial_configuration.physical_spec.layout.lane_count,
                 2,
             )
 

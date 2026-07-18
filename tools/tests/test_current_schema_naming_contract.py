@@ -82,14 +82,16 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
         self.assertEqual(
             tuple(SeparatorBandObservation.__dataclass_fields__),
             (
-                "start",
-                "end",
+                "leading_edge",
+                "trailing_edge",
                 "tonal_evidence",
                 "appearance",
                 "provenance",
             ),
         )
         self.assertTrue(SeparatorBandObservation.__dataclass_params__.frozen)
+        self.assertNotIn("start", SeparatorBandObservation.__dict__)
+        self.assertNotIn("end", SeparatorBandObservation.__dict__)
         self.assertEqual(
             tuple(MeasurementProvenance.__dataclass_fields__),
             (
@@ -108,17 +110,19 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
             tuple(entry.label for entry in diagnostics.legend_entries),
             (
                 "Holder boundary",
-                "Raw observation",
-                "Measured aperture / separator edge",
+                "Selected raw observation",
+                "Measured frame / separator edge",
                 "Dimension-only provisional edge",
+                "External safety envelope",
                 "Corroborated overlap",
-                "PhotoAperture",
+                "FrameSlot",
+                "Sequence-inferred FrameSlot",
                 "FrameCropEnvelope / protected output",
             ),
         )
         self.assertEqual(
             tuple(entry.dashed for entry in diagnostics.legend_entries),
-            (True, False, False, True, False, False, True),
+            (True, False, False, True, True, False, False, True, True),
         )
         self.assertEqual(
             tuple(entry.color for entry in diagnostics.legend_entries),
@@ -127,8 +131,10 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
                 diagnostics.style.raw_observation_color,
                 diagnostics.style.measured_boundary_color,
                 diagnostics.style.dimension_hypothesis_color,
+                diagnostics.style.frame_crop_envelope_color,
                 diagnostics.style.corroborated_overlap_color,
-                diagnostics.style.photo_aperture_color,
+                diagnostics.style.frame_slot_color,
+                diagnostics.style.sequence_inferred_slot_color,
                 diagnostics.style.frame_crop_envelope_color,
             ),
         )
@@ -144,7 +150,8 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
         self.assertNotIn("dimension_boundary_color", fields)
         self.assertTrue(
             {
-                "photo_aperture_color",
+                "frame_slot_color",
+                "sequence_inferred_slot_color",
                 "frame_crop_envelope_color",
                 "measured_boundary_color",
                 "raw_observation_color",
@@ -285,7 +292,7 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
         self.assertEqual(REPORT_SCHEMA_ID, "detection_report")
         self.assertEqual(
             REPORT_SCHEMA_REVISION,
-            "photo_aperture_sequence_resolution",
+            "frame_slot_sequence_resolution",
         )
         self.assertNotIn("v4", REPORT_SCHEMA_REVISION)
 
@@ -322,7 +329,7 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
         self.assertNotIn("OuterProposal", source)
         self.assertNotIn("FilmSpan", source)
 
-    def test_current_coordination_and_test_fixtures_use_aperture_vocabulary(self) -> None:
+    def test_current_architecture_and_test_fixtures_use_frame_slot_vocabulary(self) -> None:
         removed_terms = (
             "film" + "_span_overcontains_holder_area",
             "independent_" + "outer_and_separator_measurements",
@@ -339,18 +346,6 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
         ]
         self.assertEqual(test_offenders, [])
 
-        coordination = (PROJECT_ROOT / "AGENTS.md").read_text(encoding="utf-8")
-        for removed in (
-            "outer" + "_box",
-            "Film" + "Span",
-            "physical" + "_resolution",
-        ):
-            self.assertNotIn(removed, coordination)
-        self.assertNotIn("`SequenceSolution`", coordination)
-        self.assertNotIn("gray_sequence_integrity", coordination)
-        self.assertIn("`PhotoSequenceSolution`", coordination)
-        self.assertIn("photo_aperture_sequence_resolution", coordination)
-
         architecture = (PROJECT_ROOT / "ARCHITECTURE.md").read_text(
             encoding="utf-8"
         )
@@ -359,9 +354,9 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
         self.assertNotIn("`VisibleSequenceSpan`", architecture)
         self.assertNotIn("`SequenceSolution`", architecture)
         self.assertNotIn("`CropEnvelope`", architecture)
-        self.assertIn("`PhotoAperture`", architecture)
-        self.assertIn("`PhotoSequenceSolution`", architecture)
-        self.assertIn("photo_aperture_sequence_resolution", architecture)
+        self.assertIn("`FrameSlot`", architecture)
+        self.assertIn("`FrameSequenceSolution`", architecture)
+        self.assertIn("frame_slot_sequence_resolution", architecture)
 
     def test_user_docs_describe_current_sequence_and_bleed_model(self) -> None:
         quick_start = (PROJECT_ROOT / "快速启动_Quick_Start.md").read_text(
@@ -371,7 +366,6 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
         self.assertNotIn("inspect the outer box", quick_start)
         self.assertNotIn("可见序列边界", quick_start)
         self.assertNotIn("visible-sequence boundaries", quick_start)
-        self.assertIn("PhotoAperture", quick_start)
 
         readme = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
         self.assertNotIn("可用容量由可信 scan calibration", readme)
@@ -380,15 +374,17 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
             readme,
         )
         self.assertNotRegex(readme, r"(?<!Frame)\bCropEnvelope\b")
-        self.assertIn("PhotoAperture", readme)
+        self.assertIn("FrameSlot", readme)
         self.assertIn("FrameCropEnvelope", readme)
         for legend_label in (
             "Holder boundary",
             "Raw observation",
-            "Measured aperture / separator edge",
+            "Measured frame / separator edge",
             "Dimension-only provisional edge",
+            "External safety envelope",
             "Corroborated overlap",
-            "PhotoAperture",
+            "FrameSlot",
+            "Sequence-inferred FrameSlot",
             "FrameCropEnvelope / protected output",
         ):
             self.assertIn(legend_label, readme)
@@ -427,19 +423,15 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
         readme = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
         cli = (PROJECT_ROOT / "x5crop/entry/cli.py").read_text(encoding="utf-8")
         architecture = (PROJECT_ROOT / "ARCHITECTURE.md").read_text(encoding="utf-8")
-        coordination = (PROJECT_ROOT / "AGENTS.md").read_text(encoding="utf-8")
         ownership_test = (
             PROJECT_ROOT / "tools/tests/test_architecture_ownership_contract.py"
         ).read_text(encoding="utf-8")
 
-        self.assertIn("All candidates pass CandidateGate", readme)
-        self.assertIn("selected candidate then passes DecisionGate", readme)
         self.assertIn("resolved REVIEW crops", cli)
         self.assertIn("resolved REVIEW crops", readme)
         self.assertNotIn("PhotoSequenceSolver", architecture)
-        self.assertNotIn("PhotoSequenceSolver", coordination)
         self.assertNotIn("PhotoSequenceEnvelope", architecture)
-        self.assertIn("solve_photo_sequence", architecture)
+        self.assertIn("solve_frame_sequence", architecture)
         self.assertNotIn("splitlines()) > 800", ownership_test)
 
         for launcher in (
@@ -472,24 +464,26 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
         self.assertNotIn("CANDIDATE_SOURCE_", source)
 
     def test_review_only_marker_is_described_without_payload(self) -> None:
-        for name in ("AGENTS.md", "ARCHITECTURE.md"):
-            document = (PROJECT_ROOT / name).read_text(encoding="utf-8")
-            with self.subTest(document=name):
-                self.assertNotIn(
-                    "review-only assessment stores only its unsupported reason",
-                    document,
-                )
-                self.assertNotIn(
-                    "review-only assessment 只保存明确的不可自动处理原因",
-                    document,
-                )
+        architecture = (PROJECT_ROOT / "ARCHITECTURE.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotIn(
+            "review-only assessment stores only its unsupported reason",
+            architecture,
+        )
+        self.assertNotIn(
+            "review-only assessment 只保存明确的不可自动处理原因",
+            architecture,
+        )
 
-    def test_agents_grants_early_stop_only_to_geometry_resolution(self) -> None:
-        agents = (PROJECT_ROOT / "AGENTS.md").read_text(encoding="utf-8")
-        self.assertNotIn("or typed execution-budget", agents)
+    def test_architecture_grants_early_stop_only_to_geometry_resolution(self) -> None:
+        architecture = (PROJECT_ROOT / "ARCHITECTURE.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotIn("or typed execution-budget", architecture)
         self.assertIn(
-            "`GeometryResolution` is the only early-stop input",
-            agents,
+            "| GeometryResolution | 唯一 early-stop 输入",
+            architecture,
         )
 
 

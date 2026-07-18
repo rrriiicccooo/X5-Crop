@@ -9,6 +9,7 @@ from .content_statistics import ContentColumnStatistics
 from ..domain import BoundaryMeasurementSet, Box
 from ..image.content import ContentRegionObservation
 from ..image.statistics import ImageMeasurementStatistics
+from ..image.separator_profile import SeparatorProfileMeasurement
 from ..geometry.layout import require_work_layout
 
 
@@ -73,10 +74,14 @@ class MeasurementCache:
     content_evidence_work: np.ndarray
     content_evidence_float_work: np.ndarray
     image_statistics: ImageMeasurementStatistics
+    transform_position_uncertainty_px: float
     lookup_statistics: MeasurementCacheStatistics = field(
         default_factory=MeasurementCacheStatistics
     )
-    separator_profiles: dict[MeasurementRegionKey, np.ndarray] = field(default_factory=dict)
+    separator_profile_measurements: dict[
+        MeasurementRegionKey,
+        SeparatorProfileMeasurement,
+    ] = field(default_factory=dict)
     boundary_measurements: dict[MeasurementParametersKey, BoundaryMeasurementSet] = field(
         default_factory=dict
     )
@@ -100,3 +105,8 @@ class MeasurementCache:
             raise ValueError("measurement cache images must be two-dimensional")
         if any(item.shape != self.gray_work.shape for item in measurements[1:]):
             raise ValueError("measurement cache images must share one workspace shape")
+        if (
+            not math.isfinite(self.transform_position_uncertainty_px)
+            or self.transform_position_uncertainty_px < 0.0
+        ):
+            raise ValueError("transform position uncertainty must be finite")

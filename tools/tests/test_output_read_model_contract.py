@@ -31,7 +31,7 @@ from x5crop.report.record import report_record_for_final_detection
 from x5crop.report.read_models import typed_read_model
 from x5crop.report.restoration import final_detection_from_record
 from x5crop.report.validation import current_report_record_errors
-from x5crop.domain import WorkspaceExtent
+from x5crop.domain import EvidenceState, WorkspaceExtent
 from x5crop.image.workspace import WorkspaceIdentity
 from x5crop.runtime.prepared_workspace import PreparedWorkspace
 from tools.regression.compare import DEFAULT_FIELDS
@@ -60,7 +60,7 @@ def _profile() -> ImageProfile:
 
 def _analysis_reuse_signature(
     format_id: str = "135",
-    strip_mode: str = "full",
+    strip_mode: str = "partial",
     source_name: str = "input.tif",
     shape: tuple[int, int] = (100, 310),
     workspace_shape: tuple[int, int] | None = None,
@@ -114,7 +114,7 @@ def _record() -> dict:
         review_copy=None,
         warnings=[],
         configuration=detection_configuration_read_model(
-            get_detection_configuration("135", "full")
+            get_detection_configuration("135", "partial")
         ),
         resolution_metadata=unavailable_resolution_metadata_fixture(),
         transform_geometry=transform_geometry_fixture(),
@@ -137,7 +137,7 @@ class OutputReadModelContractTest(unittest.TestCase):
         self.assertIn("resolution_metadata", input_detail)
         self.assertNotIn("scan_calibration", input_detail)
         candidate = _record()["selection"]["candidates"][0]
-        self.assertIn("photo_scale_observations", candidate["evidence"])
+        self.assertIn("frame_scale_observations", candidate["evidence"])
 
     def test_configuration_report_includes_boundary_path_measurements(self) -> None:
         configuration = get_detection_configuration("135", "full")
@@ -166,7 +166,7 @@ class OutputReadModelContractTest(unittest.TestCase):
 
     def test_candidate_report_does_not_duplicate_geometry_invariants(self) -> None:
         candidate = _record()["selection"]["candidates"][0]
-        self.assertIn("inter_photo_spacings", candidate["provisional_geometry"])
+        self.assertIn("inter_frame_spacings", candidate["provisional_geometry"])
         self.assertNotIn("sequence_conservation", candidate["evidence"])
         self.assertNotIn("frame_sequence", candidate["evidence"])
 
@@ -271,8 +271,8 @@ class OutputReadModelContractTest(unittest.TestCase):
         cache = make_measurement_cache(
             gray,
             "horizontal",
-            configuration.preprocess.content_evidence_image,
             statistics,
+            0.0,
             MeasurementCacheStatistics(),
         )
         profile = ImageProfile(
@@ -318,6 +318,7 @@ class OutputReadModelContractTest(unittest.TestCase):
             selection,
             bleed,
             transform_geometry_fixture(),
+            automatic_processing_eligibility=EvidenceState.CONTRADICTED,
         )
         detection = finalize_detection(
             detection,
@@ -465,7 +466,7 @@ class OutputReadModelContractTest(unittest.TestCase):
         self.assertTrue(current_report_record_errors(record))
 
         invalid_counts = _record()
-        invalid_counts["configuration"]["physical"]["allowed_counts"] = [[]]
+        invalid_counts["configuration"]["physical"]["allowed_partial_counts"] = [[]]
         self.assertTrue(current_report_record_errors(invalid_counts))
 
         invalid_candidate = _record()
@@ -562,6 +563,7 @@ class OutputReadModelContractTest(unittest.TestCase):
             0.0,
             None,
             None,
+            0.0,
         )
         record = report_record_for_final_detection(
             final_detection_fixture(),
@@ -573,7 +575,7 @@ class OutputReadModelContractTest(unittest.TestCase):
             review_copy=None,
             warnings=[],
             configuration=detection_configuration_read_model(
-                get_detection_configuration("135", "full")
+                get_detection_configuration("135", "partial")
             ),
             resolution_metadata=unavailable_resolution_metadata_fixture(),
             transform_geometry=transform,
@@ -691,7 +693,7 @@ class OutputReadModelContractTest(unittest.TestCase):
         self.assertEqual(record["schema_id"], "detection_report")
         self.assertEqual(
             record["schema_revision"],
-            "photo_aperture_sequence_resolution",
+            "frame_slot_sequence_resolution",
         )
         self.assertNotIn("v4", record["schema_revision"])
 

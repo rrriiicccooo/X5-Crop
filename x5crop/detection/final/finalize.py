@@ -21,7 +21,7 @@ def finalization_plan_for_selection(
     image_height = workspace_extent.height
     mapped_envelopes = tuple(
         FrameCropEnvelope(
-            envelope.photo_index,
+            envelope.frame_index,
             map_work_box(
                 envelope.box,
                 geometry.layout,

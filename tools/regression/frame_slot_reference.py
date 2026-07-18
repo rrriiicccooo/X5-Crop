@@ -1,4 +1,4 @@
-"""Validate resolved photo apertures against manual boundary intervals."""
+"""Validate resolved frame slots against manual boundary intervals."""
 
 from __future__ import annotations
 
@@ -13,44 +13,49 @@ from x5crop.domain import PixelInterval
 from x5crop.report.validation import validate_current_report_record
 
 
-REFERENCE_SCHEMA_ID = "photo_aperture_reference"
-REFERENCE_SCHEMA_REVISION = "acceptable_boundary_intervals"
-BOUNDARY_SIDES = ("leading", "trailing", "top", "bottom")
+REFERENCE_SCHEMA_ID = "frame_slot_reference"
+REFERENCE_SCHEMA_REVISION = "acceptable_sequence_intervals"
 
 
 @dataclass(frozen=True)
-class PhotoApertureIntervalReference:
+class FrameSlotIntervalReference:
     index: int
     leading: PixelInterval
     trailing: PixelInterval
+
+    def __post_init__(self) -> None:
+        if self.index <= 0:
+            raise ValueError("frame-slot reference index must be positive")
+        if self.trailing.minimum <= self.leading.maximum:
+            raise ValueError("frame-slot reference must admit positive width")
+
+
+@dataclass(frozen=True)
+class SharedShortAxisReference:
     top: PixelInterval
     bottom: PixelInterval
 
     def __post_init__(self) -> None:
-        if self.index <= 0:
-            raise ValueError("photo aperture reference index must be positive")
-
-    def interval_for(self, side: str) -> PixelInterval:
-        if side not in BOUNDARY_SIDES:
-            raise ValueError(f"unsupported photo aperture side: {side}")
-        return getattr(self, side)
+        if self.bottom.minimum <= self.top.maximum:
+            raise ValueError("shared short-axis reference must admit positive height")
 
 
 @dataclass(frozen=True)
-class PhotoApertureReference:
+class FrameSlotReference:
     source: str
     format_id: str
     strip_mode: str
     layout: str
-    apertures: tuple[PhotoApertureIntervalReference, ...]
+    shared_short_axis: SharedShortAxisReference
+    frame_slots: tuple[FrameSlotIntervalReference, ...]
     notes: tuple[str, ...]
 
     def __post_init__(self) -> None:
         if not self.source:
-            raise ValueError("photo aperture reference requires a source")
-        indexes = tuple(item.index for item in self.apertures)
+            raise ValueError("frame-slot reference requires a source")
+        indexes = tuple(item.index for item in self.frame_slots)
         if not indexes or indexes != tuple(range(1, len(indexes) + 1)):
-            raise ValueError("photo aperture references must use consecutive indexes")
+            raise ValueError("frame-slot references require consecutive indexes")
 
 
 class ReferenceValidationOutcome(str, Enum):
@@ -68,21 +73,17 @@ class ReferenceValidationResult:
 
 def _interval_from_record(value: Any) -> PixelInterval:
     if not isinstance(value, dict) or set(value) != {"minimum", "maximum"}:
-        raise ValueError("reference boundary requires minimum and maximum")
+        raise ValueError("reference interval requires minimum and maximum")
     bounds = (value["minimum"], value["maximum"])
     if any(
         isinstance(item, bool) or not isinstance(item, (int, float))
         for item in bounds
     ):
-        raise ValueError("reference boundary values must be numbers")
+        raise ValueError("reference interval values must be numbers")
     return PixelInterval(float(bounds[0]), float(bounds[1]))
 
 
-def photo_aperture_reference_from_record(record: dict[str, Any]) -> PhotoApertureReference:
-    if record.get("schema_id") != REFERENCE_SCHEMA_ID:
-        raise ValueError("photo aperture reference schema id mismatch")
-    if record.get("schema_revision") != REFERENCE_SCHEMA_REVISION:
-        raise ValueError("photo aperture reference schema revision mismatch")
+def frame_slot_reference_from_record(record: dict[str, Any]) -> FrameSlotReference:
     required = {
         "schema_id",
         "schema_revision",
@@ -90,59 +91,66 @@ def photo_aperture_reference_from_record(record: dict[str, Any]) -> PhotoApertur
         "format_id",
         "strip_mode",
         "layout",
-        "apertures",
+        "shared_short_axis",
+        "frame_slots",
         "notes",
     }
+    if record.get("schema_id") != REFERENCE_SCHEMA_ID:
+        raise ValueError("frame-slot reference schema id mismatch")
+    if record.get("schema_revision") != REFERENCE_SCHEMA_REVISION:
+        raise ValueError("frame-slot reference schema revision mismatch")
     if set(record) != required:
-        raise ValueError("photo aperture reference fields are incomplete")
-    apertures = record["apertures"]
-    notes = record["notes"]
-    if not isinstance(apertures, list) or not isinstance(notes, list):
-        raise ValueError("photo aperture reference collections must be lists")
+        raise ValueError("frame-slot reference fields are incomplete")
     identity_values = tuple(
         record[field] for field in ("source", "format_id", "strip_mode", "layout")
     )
     if any(not isinstance(value, str) or not value for value in identity_values):
-        raise ValueError("photo aperture reference identities must be strings")
+        raise ValueError("frame-slot reference identities must be strings")
+    short_axis = record["shared_short_axis"]
+    frame_slots = record["frame_slots"]
+    notes = record["notes"]
+    if not isinstance(short_axis, dict) or set(short_axis) != {"top", "bottom"}:
+        raise ValueError("shared short-axis reference fields are invalid")
+    if not isinstance(frame_slots, list) or not isinstance(notes, list):
+        raise ValueError("frame-slot reference collections must be lists")
     if any(not isinstance(note, str) for note in notes):
-        raise ValueError("photo aperture reference notes must be strings")
-    aperture_fields = {"index", *BOUNDARY_SIDES}
-    for aperture in apertures:
-        if not isinstance(aperture, dict) or set(aperture) != aperture_fields:
-            raise ValueError("photo aperture reference aperture fields are invalid")
-        if isinstance(aperture["index"], bool) or not isinstance(aperture["index"], int):
-            raise ValueError("photo aperture reference index must be an integer")
-    return PhotoApertureReference(
+        raise ValueError("frame-slot reference notes must be strings")
+    slot_fields = {"index", "leading", "trailing"}
+    for slot in frame_slots:
+        if not isinstance(slot, dict) or set(slot) != slot_fields:
+            raise ValueError("frame-slot reference slot fields are invalid")
+        if isinstance(slot["index"], bool) or not isinstance(slot["index"], int):
+            raise ValueError("frame-slot reference index must be an integer")
+    return FrameSlotReference(
         source=record["source"],
         format_id=record["format_id"],
         strip_mode=record["strip_mode"],
         layout=record["layout"],
-        apertures=tuple(
-            PhotoApertureIntervalReference(
-                index=aperture["index"],
-                **{
-                    side: _interval_from_record(aperture[side])
-                    for side in BOUNDARY_SIDES
-                },
+        shared_short_axis=SharedShortAxisReference(
+            top=_interval_from_record(short_axis["top"]),
+            bottom=_interval_from_record(short_axis["bottom"]),
+        ),
+        frame_slots=tuple(
+            FrameSlotIntervalReference(
+                index=slot["index"],
+                leading=_interval_from_record(slot["leading"]),
+                trailing=_interval_from_record(slot["trailing"]),
             )
-            for aperture in apertures
+            for slot in frame_slots
         ),
         notes=tuple(notes),
     )
 
 
-def load_photo_aperture_references(path: Path) -> tuple[PhotoApertureReference, ...]:
-    references: list[PhotoApertureReference] = []
+def load_frame_slot_references(path: Path) -> tuple[FrameSlotReference, ...]:
+    references: list[FrameSlotReference] = []
     with path.open("r", encoding="utf-8") as handle:
         for line in handle:
-            line = line.strip()
-            if line:
-                references.append(
-                    photo_aperture_reference_from_record(json.loads(line))
-                )
+            if stripped := line.strip():
+                references.append(frame_slot_reference_from_record(json.loads(stripped)))
     sources = tuple(reference.source for reference in references)
     if len(sources) != len(set(sources)):
-        raise ValueError("photo aperture reference sources must be unique")
+        raise ValueError("frame-slot reference sources must be unique")
     return tuple(references)
 
 
@@ -154,7 +162,7 @@ def _selected_geometry(report: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("selected candidate rank is outside the candidate table")
     candidate = candidates[selected_index]
     if candidate["geometry_kind"] != "sequence":
-        raise ValueError("photo aperture reference requires sequence geometry")
+        raise ValueError("frame-slot reference requires sequence geometry")
     return candidate["provisional_geometry"]
 
 
@@ -167,11 +175,11 @@ def _interval_inside(actual: PixelInterval, accepted: PixelInterval) -> bool:
 
 def compare_report_to_reference(
     report: dict[str, Any],
-    reference: PhotoApertureReference,
+    reference: FrameSlotReference,
 ) -> ReferenceValidationResult:
     validate_current_report_record(report)
     if report["source"] != reference.source:
-        raise ValueError("report and photo aperture reference sources differ")
+        raise ValueError("report and frame-slot reference sources differ")
     if report["selection"]["geometry_resolution"]["state"] != "supported":
         return ReferenceValidationResult(
             reference.source,
@@ -184,30 +192,26 @@ def compare_report_to_reference(
         geometry["strip_mode"],
         geometry["layout"],
     )
-    if identity != (
-        reference.format_id,
-        reference.strip_mode,
-        reference.layout,
-    ):
-        raise ValueError("report and photo aperture reference identities differ")
-    actual_apertures = geometry["photo_apertures"]
+    if identity != (reference.format_id, reference.strip_mode, reference.layout):
+        raise ValueError("report and frame-slot reference identities differ")
     violations: list[str] = []
-    if len(actual_apertures) != len(reference.apertures):
-        violations.append("photo_count_outside_reference")
-    for actual, accepted in zip(
-        actual_apertures,
-        reference.apertures,
-        strict=False,
-    ):
+    actual_short_axis = geometry["shared_short_axis"]
+    for side in ("top", "bottom"):
+        actual = _interval_from_record(actual_short_axis[side])
+        accepted = getattr(reference.shared_short_axis, side)
+        if not _interval_inside(actual, accepted):
+            violations.append(f"shared_short_axis:{side}:outside_reference")
+    actual_slots = geometry["frame_slots"]
+    if len(actual_slots) != len(reference.frame_slots):
+        violations.append("frame_count_outside_reference")
+    for actual, accepted in zip(actual_slots, reference.frame_slots, strict=False):
         if int(actual["index"]) != accepted.index:
-            violations.append(f"photo:{accepted.index}:index_mismatch")
+            violations.append(f"frame:{accepted.index}:index_mismatch")
             continue
-        for side in BOUNDARY_SIDES:
+        for side in ("leading", "trailing"):
             actual_interval = _interval_from_record(actual[side]["position"])
-            if not _interval_inside(actual_interval, accepted.interval_for(side)):
-                violations.append(
-                    f"photo:{accepted.index}:{side}:outside_reference"
-                )
+            if not _interval_inside(actual_interval, getattr(accepted, side)):
+                violations.append(f"frame:{accepted.index}:{side}:outside_reference")
     return ReferenceValidationResult(
         reference.source,
         (
@@ -224,10 +228,9 @@ def _load_report_rows(paths: Iterable[Path]) -> dict[str, dict[str, Any]]:
     for path in paths:
         with path.open("r", encoding="utf-8") as handle:
             for line in handle:
-                line = line.strip()
-                if not line:
+                if not (stripped := line.strip()):
                     continue
-                report = json.loads(line)
+                report = json.loads(stripped)
                 validate_current_report_record(report)
                 source = str(report["source"])
                 if source in reports:
@@ -238,12 +241,12 @@ def _load_report_rows(paths: Iterable[Path]) -> dict[str, dict[str, Any]]:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Validate resolved photo apertures against manual intervals."
+        description="Validate resolved frame slots against manual intervals."
     )
     parser.add_argument("reference", type=Path)
     parser.add_argument("reports", nargs="+", type=Path)
     args = parser.parse_args(argv)
-    references = load_photo_aperture_references(args.reference)
+    references = load_frame_slot_references(args.reference)
     reports = _load_report_rows(args.reports)
     results: list[ReferenceValidationResult] = []
     for reference in references:

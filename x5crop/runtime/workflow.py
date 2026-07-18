@@ -27,6 +27,7 @@ from ..detection.final.finalize import (
     finalize_detection,
 )
 from ..detection.pipeline import choose_detection
+from ..domain import EvidenceState
 from ..output.model import AxisBleedParameters
 from ..export.actions import copy_for_review_if_needed, write_crops_if_allowed
 from ..geometry.layout import infer_layout, work_gray
@@ -147,8 +148,8 @@ def process_one(
         measurement_cache = make_measurement_cache(
             gray,
             config.layout,
-            initial_configuration.preprocess.content_evidence_image,
             measurement_statistics,
+            workspace.transform_geometry.position_uncertainty_px,
             measurement_cache_statistics,
         )
         detection_context = DetectionContext(
@@ -160,8 +161,11 @@ def process_one(
             configuration=initial_configuration,
             lane_configuration=(
                 None
-                if fmt.lane_format_id is None
-                else configuration_bundle.configuration_for(fmt.lane_format_id, "full")
+                if fmt.layout.lane_format_id is None
+                else configuration_bundle.configuration_for(
+                    fmt.layout.lane_format_id,
+                    "full",
+                )
             ),
             measurement_cache=measurement_cache,
             execution_statistics=execution_statistics,
@@ -187,6 +191,11 @@ def process_one(
             selection,
             prepared_frame_bleed,
             transform_geometry,
+            automatic_processing_eligibility=(
+                EvidenceState.SUPPORTED
+                if initial_configuration.detector_kind != "review_only"
+                else EvidenceState.CONTRADICTED
+            ),
         )
 
         failure_stage = FailureStage.FINALIZATION

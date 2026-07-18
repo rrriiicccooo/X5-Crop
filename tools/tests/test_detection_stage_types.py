@@ -16,7 +16,12 @@ from x5crop.detection.candidate.model import (
     CandidateAssessment,
     CandidateEvidence,
 )
-from x5crop.detection.physical.model import PhotoSequenceSolution, SequenceResiduals
+from x5crop.detection.physical.model import (
+    FrameSequenceSolution,
+    FrameBoundarySource,
+    ResolvedFrameBoundary,
+    SequenceResiduals,
+)
 import x5crop.detection.physical.model as physical_model
 from x5crop.detection.decision.model import DecisionGateAssessment
 from x5crop.detection.final.model import FinalDetection
@@ -38,9 +43,9 @@ from x5crop.output.model import OutputGeometry
 from tools.tests.physical_gate_support import (
     selection_fixture,
 )
-from x5crop.detection.evidence.photo_scale import (
-    PhotoScaleObservation,
-    PhotoScaleSource,
+from x5crop.detection.evidence.frame_scale import (
+    FrameScaleObservation,
+    FrameScaleSource,
 )
 
 
@@ -118,20 +123,18 @@ class DetectionStageTypeContractTests(unittest.TestCase):
             MeasurementIdentity,
             MeasurementProvenance,
             ObservationId,
-            PhotoApertureBoundaryResolution,
-            PhotoApertureEdgeSource,
         )
         self.assertIs(
             get_type_hints(CountHypothesis)["source"],
             CountHypothesisSource,
         )
         self.assertIs(
-            get_type_hints(PhotoApertureBoundaryResolution)["source"],
-            PhotoApertureEdgeSource,
+            get_type_hints(ResolvedFrameBoundary)["source"],
+            FrameBoundarySource,
         )
         self.assertIs(
-            get_type_hints(PhotoScaleObservation)["source"],
-            PhotoScaleSource,
+            get_type_hints(FrameScaleObservation)["source"],
+            FrameScaleSource,
         )
         provenance_hints = get_type_hints(MeasurementProvenance)
         self.assertIs(provenance_hints["root_measurement"], MeasurementIdentity)
@@ -146,7 +149,7 @@ class DetectionStageTypeContractTests(unittest.TestCase):
         )
 
     def test_candidate_stages_are_immutable_and_separate(self) -> None:
-        geometry_fields = {field.name for field in fields(PhotoSequenceSolution)}
+        geometry_fields = {field.name for field in fields(FrameSequenceSolution)}
         built_fields = {field.name for field in fields(BuiltCandidate)}
         assessed_fields = {field.name for field in fields(AssessedCandidate)}
         final_fields = {field.name for field in fields(FinalDetection)}
@@ -162,11 +165,11 @@ class DetectionStageTypeContractTests(unittest.TestCase):
         )
         self.assertIn("evidence", CandidateAssessment.__dataclass_fields__)
         self.assertIn(
-            "photo_aperture_coverage",
+            "frame_coverage",
             CandidateEvidence.__dataclass_fields__,
         )
         self.assertNotIn("frame_topology", CandidateEvidence.__dataclass_fields__)
-        self.assertTrue(PhotoSequenceSolution.__dataclass_params__.frozen)
+        self.assertTrue(FrameSequenceSolution.__dataclass_params__.frozen)
         self.assertTrue(BuiltCandidate.__dataclass_params__.frozen)
         self.assertTrue(AssessedCandidate.__dataclass_params__.frozen)
         self.assertNotIn("status", final_fields)
@@ -191,16 +194,16 @@ class DetectionStageTypeContractTests(unittest.TestCase):
         )
 
     def test_typed_results_do_not_store_report_only_identity_copies(self) -> None:
-        from x5crop.detection.evidence.content.photo_content import (
-            PhotoContentEvidence,
+        from x5crop.detection.evidence.content.frame_content import (
+            FrameContentEvidence,
         )
         from x5crop.detection.physical.model import (
-            DualLanePhotoSolution,
+            DualLaneFrameSolution,
             ReviewOnlyContainment,
         )
         for model in (
-            PhotoSequenceSolution,
-            DualLanePhotoSolution,
+            FrameSequenceSolution,
+            DualLaneFrameSolution,
             ReviewOnlyContainment,
         ):
             model_fields = set(model.__dataclass_fields__)
@@ -208,7 +211,7 @@ class DetectionStageTypeContractTests(unittest.TestCase):
             self.assertNotIn("strategy", model_fields)
             self.assertNotIn("sequence_hypothesis_name", model_fields)
             self.assertNotIn("sequence_hypothesis_strategy", model_fields)
-        self.assertNotIn("composite", PhotoContentEvidence.__dataclass_fields__)
+        self.assertNotIn("composite", FrameContentEvidence.__dataclass_fields__)
 
     def test_decision_and_finalization_have_distinct_lifecycle_types(self) -> None:
         import x5crop.detection.decision.model as decision_model
@@ -245,10 +248,10 @@ class DetectionStageTypeContractTests(unittest.TestCase):
         self.assertNotEqual(decision_model.DecisionGateAssessment, FinalDetection)
 
     def test_standard_dual_lane_and_review_only_geometry_have_distinct_types(self) -> None:
-        sequence_fields = {field.name for field in fields(PhotoSequenceSolution)}
+        sequence_fields = {field.name for field in fields(FrameSequenceSolution)}
         self.assertNotIn("lane_boxes", sequence_fields)
         self.assertNotIn("lane_crop_envelopes", sequence_fields)
-        self.assertTrue(hasattr(physical_model, "DualLanePhotoSolution"))
+        self.assertTrue(hasattr(physical_model, "DualLaneFrameSolution"))
         self.assertTrue(hasattr(physical_model, "ReviewOnlyContainment"))
         self.assertFalse(hasattr(physical_model, "UnavailableGeometry"))
 
@@ -257,7 +260,7 @@ class DetectionStageTypeContractTests(unittest.TestCase):
         from tools.tests.physical_gate_support import candidate_fixture
 
         with self.assertRaises(ValueError):
-            replace(candidate_fixture().geometry, photo_apertures=())
+            replace(candidate_fixture().geometry, frame_slots=())
 
     def test_review_only_geometry_uses_a_dedicated_assessment_path(self) -> None:
         from x5crop.detection.candidate.assessment.review_only import (
@@ -274,17 +277,17 @@ class DetectionStageTypeContractTests(unittest.TestCase):
         )
 
     def test_external_content_preservation_has_only_measured_fields(self) -> None:
-        from x5crop.detection.evidence.content.external_boundaries import (
-            ExternalAperturePreservationEvidence,
+        from x5crop.detection.evidence.content.external_frame_boundaries import (
+            ExternalFramePreservationEvidence,
         )
 
         preservation_fields = set(
-            ExternalAperturePreservationEvidence.__dataclass_fields__
+            ExternalFramePreservationEvidence.__dataclass_fields__
         )
-        self.assertIn("photo_count", preservation_fields)
+        self.assertIn("frame_count", preservation_fields)
         self.assertIn("observations", preservation_fields)
         self.assertIn("workspace_extent", preservation_fields)
-        self.assertIn("photo_sequence_envelope", preservation_fields)
+        self.assertIn("frame_sequence_envelope", preservation_fields)
         for removed in (
             "content_span",
             "content_outside_sides",
@@ -337,7 +340,7 @@ class DetectionStageTypeContractTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
         self.assertNotIn("_count_hypothesis_identity", source)
 
-    def test_candidate_build_consumes_canonical_aperture_search_inputs(self) -> None:
+    def test_candidate_build_consumes_canonical_frame_sequence_search_inputs(self) -> None:
         from x5crop.detection.candidate.build.sequence_candidate import (
             build_sequence_candidate,
         )

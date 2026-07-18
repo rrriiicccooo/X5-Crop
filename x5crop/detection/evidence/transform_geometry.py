@@ -21,6 +21,7 @@ class TransformGeometryEvidence:
     estimated_angle_degrees: float
     span_px: float | None
     span_threshold_px: float | None
+    position_uncertainty_px: float
     measurement_outcome: DeskewMeasurementOutcome | None = None
     state: EvidenceState = field(init=False)
     applied: bool = field(init=False)
@@ -34,6 +35,11 @@ class TransformGeometryEvidence:
             raise ValueError("transform geometry angle must be finite")
         if (self.span_px is None) != (self.span_threshold_px is None):
             raise ValueError("transform span and threshold must be present together")
+        if (
+            not math.isfinite(self.position_uncertainty_px)
+            or self.position_uncertainty_px < 0.0
+        ):
+            raise ValueError("transform position uncertainty must be finite")
         if self.span_px is not None:
             if (
                 not math.isfinite(self.span_px)
@@ -46,6 +52,7 @@ class TransformGeometryEvidence:
             if (
                 self.estimated_angle_degrees != 0.0
                 or self.span_px is not None
+                or self.position_uncertainty_px != 0.0
                 or self.measurement_outcome is not None
             ):
                 raise ValueError("disabled deskew cannot carry transform measurements")
@@ -59,6 +66,12 @@ class TransformGeometryEvidence:
         } and self.measurement_outcome != DeskewMeasurementOutcome.MEASURED:
             raise ValueError(
                 "applied or out-of-range transform requires a measured deskew angle"
+            )
+        if (
+            self.outcome == TransformOutcome.APPLIED
+        ) != (self.position_uncertainty_px > 0.0):
+            raise ValueError(
+                "only an applied transform carries coordinate uncertainty"
             )
         applied = self.outcome == TransformOutcome.APPLIED
         object.__setattr__(

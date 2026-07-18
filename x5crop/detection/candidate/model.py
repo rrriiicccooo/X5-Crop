@@ -4,14 +4,18 @@ from dataclasses import dataclass
 
 from x5crop.domain import (
     EvidenceState,
+    InterFrameSpacingBasis,
+    InterFrameSpacingKind,
 )
 
 from ..physical.model import (
     CandidateGeometry,
-    DualLanePhotoSolution,
+    DualLaneFrameSolution,
     GeometryIdentityError,
     ReviewOnlyContainment,
-    PhotoSequenceSolution,
+    FrameSequenceSolution,
+    ResolvedFrameBoundary,
+    boundary_role_is_independent_physical_measurement,
 )
 from .assessment.evidence_independence import (
     EvidenceIndependenceEvidence,
@@ -21,36 +25,43 @@ from ..evidence.separator_sequence import (
     SeparatorSequenceEvidence,
     separator_sequence_evidence,
 )
-from ..evidence.content.photo_content import PhotoContentEvidence
-from ..evidence.content.internal_boundaries import (
-    InterPhotoBoundaryPreservationEvidence,
-    inter_photo_boundary_preservation_evidence,
+from ..evidence.content.frame_content import FrameContentEvidence
+from ..evidence.content.internal_frame_boundaries import (
+    InternalFrameBoundaryPreservationEvidence,
+    internal_frame_boundary_evidence_matches_geometry,
 )
 from ..evidence.holder_boundary import (
     HolderBoundaryEvidence,
     holder_boundary_evidence,
 )
-from ..evidence.photo_aperture_coverage import (
-    PhotoApertureCoverageEvidence,
-    photo_aperture_coverage_matches_geometry,
+from ..evidence.frame_coverage import (
+    FrameCoverageEvidence,
+    frame_coverage_matches_geometry,
 )
-from ..evidence.photo_scale import (
-    PhotoScaleObservation,
-    photo_scale_observations_match_geometry,
+from ..evidence.frame_scale import (
+    FrameScaleObservation,
+    frame_scale_observations_match_geometry,
 )
-from ..evidence.holder_occupancy import HolderOccupancyEvidence
-from ..evidence.content.external_boundaries import (
-    ExternalAperturePreservationEvidence,
+from ..evidence.frame_slot_topology import (
+    FrameSlotTopologyEvidence,
+    frame_slot_topology_evidence,
+)
+from ..evidence.holder_occupancy import (
+    HolderOccupancyEvidence,
+    HolderOccupancyState,
+)
+from ..evidence.content.external_frame_boundaries import (
+    ExternalFramePreservationEvidence,
 )
 from ..evidence.partial_edge import (
     PartialEdgeSafetyEvidence,
     partial_edge_safety_evidence,
 )
-from ..physical.photo_size import (
+from ..physical.frame_dimensions import (
     FrameDimensionEvidence,
     frame_dimension_measurements_match_geometry,
 )
-from .assessment.model import BoundaryProofPath, CandidateGateAssessment
+from .assessment.model import CandidateGateAssessment, SequenceProofPath
 from .plan.model import CountHypothesis
 from ..physical.model import SequenceResiduals
 from ..geometry_resolution import GeometryResolution
@@ -76,14 +87,15 @@ class BuiltCandidate:
 
 @dataclass(frozen=True)
 class CandidateEvidence:
-    photo_aperture_coverage: PhotoApertureCoverageEvidence
+    frame_slot_topology: FrameSlotTopologyEvidence
+    frame_coverage: FrameCoverageEvidence
     separator_sequence: SeparatorSequenceEvidence
     frame_dimensions: FrameDimensionEvidence
-    photo_content: PhotoContentEvidence
-    inter_photo_boundary_preservation: InterPhotoBoundaryPreservationEvidence
+    frame_content: FrameContentEvidence
+    internal_frame_boundary_preservation: InternalFrameBoundaryPreservationEvidence
     holder_boundary: HolderBoundaryEvidence
-    photo_scale_observations: tuple[PhotoScaleObservation, ...]
-    external_aperture_preservation: ExternalAperturePreservationEvidence
+    frame_scale_observations: tuple[FrameScaleObservation, ...]
+    external_frame_preservation: ExternalFramePreservationEvidence
     holder_occupancy: HolderOccupancyEvidence
     partial_edge_safety: PartialEdgeSafetyEvidence
     independence: EvidenceIndependenceEvidence
@@ -91,9 +103,9 @@ class CandidateEvidence:
     @property
     def content_preservation_state(self) -> EvidenceState:
         return content_preservation_state(
-            self.photo_aperture_coverage,
-            self.inter_photo_boundary_preservation,
-            self.external_aperture_preservation,
+            self.frame_coverage,
+            self.internal_frame_boundary_preservation,
+            self.external_frame_preservation,
             self.partial_edge_safety,
         )
 
@@ -128,12 +140,12 @@ CandidateEvidenceModel = CandidateEvidence | DualLaneEvidence | ReviewOnlyEviden
 
 
 def content_preservation_state(
-    photo_aperture_coverage: PhotoApertureCoverageEvidence,
-    internal_boundaries: InterPhotoBoundaryPreservationEvidence,
-    external_boundaries: ExternalAperturePreservationEvidence,
+    frame_coverage: FrameCoverageEvidence,
+    internal_boundaries: InternalFrameBoundaryPreservationEvidence,
+    external_boundaries: ExternalFramePreservationEvidence,
     partial_edge: PartialEdgeSafetyEvidence,
 ) -> EvidenceState:
-    if photo_aperture_coverage.state == EvidenceState.CONTRADICTED:
+    if frame_coverage.state == EvidenceState.CONTRADICTED:
         return EvidenceState.CONTRADICTED
     if internal_boundaries.state == EvidenceState.CONTRADICTED:
         return EvidenceState.CONTRADICTED
@@ -147,69 +159,132 @@ def content_preservation_state(
     }
     if (
         internal_boundaries_preserved
-        and photo_aperture_coverage.state == EvidenceState.SUPPORTED
+        and frame_coverage.state == EvidenceState.SUPPORTED
     ):
         return EvidenceState.SUPPORTED
     return EvidenceState.UNAVAILABLE
 
 
-def boundary_proof_paths_for_geometry(
-    geometry: PhotoSequenceSolution,
+def _dimension_spacing_is_compatible(
+    geometry: FrameSequenceSolution,
     evidence: CandidateEvidence,
-) -> tuple[BoundaryProofPath, ...]:
-    aperture_boundaries_supported = all(
-        aperture.all_boundaries_supported
-        for aperture in geometry.photo_apertures
+) -> bool:
+    observations = {
+        item.boundary.boundary_index: item
+        for item in evidence.internal_frame_boundary_preservation.observations
+    }
+    for spacing in geometry.inter_frame_spacings:
+        if not (
+            spacing.kind == InterFrameSpacingKind.OVERLAP
+            and spacing.basis == InterFrameSpacingBasis.GEOMETRY_HYPOTHESIS
+        ):
+            continue
+        observation = observations.get(spacing.boundary.boundary_index)
+        if observation is None or not (
+            observation.spacing_evidence.basis
+            == InterFrameSpacingBasis.CORROBORATED_OVERLAP
+            and observation.spacing_evidence.state == EvidenceState.SUPPORTED
+        ):
+            return False
+    return True
+
+
+def _boundary_role_is_dimension_independent(
+    boundary: ResolvedFrameBoundary,
+) -> bool:
+    return boundary_role_is_independent_physical_measurement(boundary)
+
+
+def _dimension_anchor_coverage_is_supported(
+    geometry: FrameSequenceSolution,
+) -> bool:
+    anchor_indexes = tuple(
+        index
+        for index, (left, right) in enumerate(
+            zip(geometry.frame_slots, geometry.frame_slots[1:]),
+            start=1,
+        )
+        if _boundary_role_is_dimension_independent(left.trailing)
+        and _boundary_role_is_dimension_independent(right.leading)
+    )
+    return bool(anchor_indexes)
+
+
+def sequence_proof_paths_for_geometry(
+    geometry: FrameSequenceSolution,
+    evidence: CandidateEvidence,
+) -> tuple[SequenceProofPath, ...]:
+    slot_geometry_resolved = bool(
+        evidence.frame_slot_topology.state == EvidenceState.SUPPORTED
+        and geometry.shared_short_axis.supports_safe_crop
     )
     evidence_independent = bool(
         evidence.independence.state
         in {EvidenceState.SUPPORTED, EvidenceState.NOT_APPLICABLE}
     )
     separator_sequence_context = bool(
-        evidence_independent and aperture_boundaries_supported
+        evidence_independent and slot_geometry_resolved
     )
     separator_sequence_led = bool(
         geometry.count > 1
         and separator_sequence_context
         and evidence.separator_sequence.state == EvidenceState.SUPPORTED
     )
-    hard_anchor_count = evidence.separator_sequence.hard_count
-    internal_photo_edge_anchor_count = sum(
-        left.trailing.independently_observed
-        and right.leading.independently_observed
-        for left, right in zip(
-            geometry.photo_apertures,
-            geometry.photo_apertures[1:],
-        )
-    )
-    independent_internal_anchor = bool(
-        hard_anchor_count or internal_photo_edge_anchor_count
+    dimension_anchor_coverage_supported = _dimension_anchor_coverage_is_supported(
+        geometry
     )
     single_frame_physical_boundaries = bool(
         geometry.count == 1
-        and aperture_boundaries_supported
-        and evidence.frame_dimensions.state == EvidenceState.SUPPORTED
+        and geometry.frame_slots[0].leading.independently_observed
+        and geometry.frame_slots[0].trailing.independently_observed
     )
-    geometry_led = bool(
-        evidence.frame_dimensions.state == EvidenceState.SUPPORTED
+    content_preservation_compatible = bool(
+        evidence.content_preservation_state != EvidenceState.CONTRADICTED
+    )
+    dimension_spacing_compatible = _dimension_spacing_is_compatible(
+        geometry,
+        evidence,
+    )
+    dimension_sequence_led = bool(
+        slot_geometry_resolved
+        and evidence_independent
+        and content_preservation_compatible
+        and dimension_spacing_compatible
         and (
             single_frame_physical_boundaries
             or (
-                separator_sequence_context
-                and geometry.count > 1
-                and independent_internal_anchor
+                geometry.count > 1
+                and geometry.common_frame_width.state
+                == EvidenceState.SUPPORTED
+                and evidence.frame_dimensions.state == EvidenceState.SUPPORTED
+                and dimension_anchor_coverage_supported
             )
+        )
+    )
+    dimension_supporting_evidence = (
+        (
+            "independent_two_side_frame_boundaries",
+            "content_preservation_compatible",
+        )
+        if single_frame_physical_boundaries
+        else (
+            "physical_frame_dimensions",
+            "common_frame_width_resolution",
+            "content_preservation_compatible",
+            "inter_frame_spacing_physically_compatible",
+            "independent_internal_boundary_anchor_coverage",
         )
     )
     partial_occupancy_led = bool(
         geometry.strip_mode == "partial"
         and evidence.partial_edge_safety.state == EvidenceState.SUPPORTED
-        and evidence.holder_occupancy.underfilled
-        and aperture_boundaries_supported
+        and evidence.holder_occupancy.occupancy_state
+        == HolderOccupancyState.UNDERFILLED
+        and slot_geometry_resolved
         and evidence_independent
     )
     return (
-        BoundaryProofPath(
+        SequenceProofPath(
             "separator_sequence_led",
             (
                 EvidenceState.SUPPORTED
@@ -222,25 +297,16 @@ def boundary_proof_paths_for_geometry(
                 "cross_axis_separator_pixel_paths",
             ),
         ),
-        BoundaryProofPath(
-            "geometry_led",
+        SequenceProofPath(
+            "dimension_sequence_led",
             (
                 EvidenceState.SUPPORTED
-                if geometry_led
+                if dimension_sequence_led
                 else EvidenceState.UNAVAILABLE
             ),
-            (
-                "physical_frame_dimensions",
-                (
-                    "independent_two_side_photo_boundaries"
-                    if single_frame_physical_boundaries
-                    else "independent_separator_anchor"
-                    if hard_anchor_count
-                    else "independent_internal_photo_edge_anchor"
-                ),
-            ),
+            dimension_supporting_evidence,
         ),
-        BoundaryProofPath(
+        SequenceProofPath(
             "partial_occupancy_led",
             (
                 EvidenceState.SUPPORTED
@@ -252,16 +318,16 @@ def boundary_proof_paths_for_geometry(
             (
                 "partial_edge_content_preservation",
                 "holder_occupancy",
-                "resolved_photo_aperture_sequence",
+                "resolved_frame_slot_sequence",
             ),
         ),
     )
 
 
-def boundary_proof_paths_for_dual_lane(
-    geometry: DualLanePhotoSolution,
+def sequence_proof_paths_for_dual_lane(
+    geometry: DualLaneFrameSolution,
     evidence: DualLaneEvidence,
-) -> tuple[BoundaryProofPath, ...]:
+) -> tuple[SequenceProofPath, ...]:
     composition_supported = bool(
         geometry.lane_divider.state == EvidenceState.SUPPORTED
         and all(gate.passed for gate in evidence.lane_gates)
@@ -271,7 +337,7 @@ def boundary_proof_paths_for_dual_lane(
         )
     )
     return (
-        BoundaryProofPath(
+        SequenceProofPath(
             "mode_composition",
             (
                 EvidenceState.SUPPORTED
@@ -315,8 +381,9 @@ def _candidate_gate_evidence_states(
         tuple(item.content_preservation_state for item in evidence_sets)
     )
     return {
+        "frame_slot_topology": combined("frame_slot_topology"),
         "content_preservation": content_preservation,
-        "photo_geometry_consistency": combined("frame_dimensions"),
+        "frame_dimension_consistency": combined("frame_dimensions"),
         "evidence_independence": combined("independence"),
     }
 
@@ -328,7 +395,6 @@ class EvidenceQuality:
     unavailable: tuple[str, ...]
     internal_boundary_contradiction_count: int
     other_contradiction_count: int
-    covered_content_px: int
     uncovered_content_px: int
     supported_proof_paths: tuple[str, ...]
     physical_residuals: SequenceResiduals | None
@@ -337,7 +403,6 @@ class EvidenceQuality:
         if min(
             self.internal_boundary_contradiction_count,
             self.other_contradiction_count,
-            self.covered_content_px,
             self.uncovered_content_px,
         ) < 0:
             raise ValueError("evidence quality counts cannot be negative")
@@ -374,7 +439,7 @@ class CandidateAssessment:
 
 
 def _separator_and_holder_evidence_matches_geometry(
-    geometry: PhotoSequenceSolution,
+    geometry: FrameSequenceSolution,
     evidence: CandidateEvidence,
 ) -> bool:
     expected_holder = holder_boundary_evidence(
@@ -388,48 +453,48 @@ def _separator_and_holder_evidence_matches_geometry(
 
 
 def _candidate_evidence_matches_geometry(
-    geometry: PhotoSequenceSolution,
+    geometry: FrameSequenceSolution,
     evidence: CandidateEvidence,
 ) -> bool:
     content_indexes = tuple(
-        observation.photo_index
-        for observation in evidence.photo_content.observations
+        observation.frame_index
+        for observation in evidence.frame_content.observations
     )
     completeness = evidence.holder_occupancy.strip_completeness
-    independent_separator_count = sum(
-        assignment.independent
-        for assignment in geometry.separator_assignments
-    )
+    independent_separator_count = len(geometry.separator_assignments)
     return bool(
-        photo_aperture_coverage_matches_geometry(
+        evidence.frame_slot_topology == frame_slot_topology_evidence(geometry)
+        and frame_coverage_matches_geometry(
             geometry,
-            evidence.photo_aperture_coverage,
+            evidence.frame_coverage,
         )
         and (
             not content_indexes
             or content_indexes == tuple(range(1, geometry.count + 1))
         )
-        and evidence.external_aperture_preservation.photo_sequence_envelope
-        == geometry.photo_sequence_envelope
-        and evidence.external_aperture_preservation.photo_count == geometry.count
-        and evidence.holder_occupancy.holder_span == geometry.holder_span
-        and evidence.holder_occupancy.photo_sequence_envelope
-        == geometry.photo_sequence_envelope
+        and evidence.external_frame_preservation.frame_sequence_envelope
+        == geometry.frame_sequence_envelope
+        and evidence.external_frame_preservation.frame_count == geometry.count
+        and evidence.holder_occupancy.holder_safety == geometry.holder_safety
+        and evidence.holder_occupancy.sequence_leading_boundary
+        == geometry.frame_slots[0].leading.position
+        and evidence.holder_occupancy.sequence_trailing_boundary
+        == geometry.frame_slots[-1].trailing.position
         and evidence.holder_occupancy.content_support_available
-        == evidence.photo_content.support_available
-        and evidence.holder_occupancy.photo_aperture_coverage_state
-        == evidence.photo_aperture_coverage.state
+        == evidence.frame_content.support_available
+        and evidence.holder_occupancy.frame_coverage_state
+        == evidence.frame_coverage.state
         and evidence.holder_occupancy.frame_dimension_state
         == evidence.frame_dimensions.state
         and completeness.count == geometry.count
-        and completeness.valid_aperture_count == len(geometry.photo_apertures)
-        and completeness.resolved_inter_photo_boundary_count
+        and completeness.valid_frame_slot_count == len(geometry.frame_slots)
+        and completeness.resolved_internal_boundary_count
         == sum(
-            left.trailing.independently_observed
-            and right.leading.independently_observed
+            left.trailing.geometry_resolved
+            and right.leading.geometry_resolved
             for left, right in zip(
-                geometry.photo_apertures,
-                geometry.photo_apertures[1:],
+                geometry.frame_slots,
+                geometry.frame_slots[1:],
             )
         )
         and completeness.independent_separator_count
@@ -437,23 +502,20 @@ def _candidate_evidence_matches_geometry(
         and evidence.partial_edge_safety
         == partial_edge_safety_evidence(
             geometry,
-            evidence.photo_aperture_coverage,
+            evidence.frame_coverage,
             evidence.frame_dimensions,
-            evidence.photo_content,
+            evidence.frame_content,
         )
-        and evidence.inter_photo_boundary_preservation
-        == inter_photo_boundary_preservation_evidence(
-            geometry.count,
-            geometry.photo_apertures,
-            geometry.inter_photo_spacings,
-            evidence.photo_content,
-            evidence.photo_aperture_coverage,
+        and evidence.internal_frame_boundary_preservation
+        and internal_frame_boundary_evidence_matches_geometry(
+            geometry.frame_slots,
+            geometry.inter_frame_spacings,
+            evidence.internal_frame_boundary_preservation,
         )
         and evidence.independence == evidence_independence_evidence(geometry)
-        and photo_scale_observations_match_geometry(
+        and frame_scale_observations_match_geometry(
             geometry,
-            evidence.holder_boundary,
-            evidence.photo_scale_observations,
+            evidence.frame_scale_observations,
         )
     )
 
@@ -474,12 +536,12 @@ class AssessedCandidate:
             ReviewOnlyEvidence
             if isinstance(self.geometry, ReviewOnlyContainment)
             else DualLaneEvidence
-            if isinstance(self.geometry, DualLanePhotoSolution)
+            if isinstance(self.geometry, DualLaneFrameSolution)
             else CandidateEvidence
         )
         if not isinstance(self.assessment.evidence, expected_evidence):
             raise ValueError("candidate geometry and evidence model must match")
-        if isinstance(self.geometry, PhotoSequenceSolution):
+        if isinstance(self.geometry, FrameSequenceSolution):
             if not _candidate_evidence_matches_geometry(
                 self.geometry,
                 self.assessment.evidence,
@@ -502,14 +564,14 @@ class AssessedCandidate:
                     "candidate separator and holder evidence must match geometry"
                 )
             gate = self.assessment.gate
-            if gate is None or gate.proof_paths != boundary_proof_paths_for_geometry(
+            if gate is None or gate.proof_paths != sequence_proof_paths_for_geometry(
                 self.geometry,
                 self.assessment.evidence,
             ):
                 raise ValueError(
                     "candidate boundary proof paths must match geometry and evidence"
                 )
-        elif isinstance(self.geometry, DualLanePhotoSolution):
+        elif isinstance(self.geometry, DualLaneFrameSolution):
             evidence = self.assessment.evidence
             gate = self.assessment.gate
             if not isinstance(evidence, DualLaneEvidence) or gate is None:
@@ -544,14 +606,14 @@ class AssessedCandidate:
                         "dual-lane separator and holder evidence must match lane geometry"
                     )
                 CandidateAssessment(lane_evidence, lane_gate)
-                if lane_gate.proof_paths != boundary_proof_paths_for_geometry(
+                if lane_gate.proof_paths != sequence_proof_paths_for_geometry(
                     lane_geometry,
                     lane_evidence,
                 ):
                     raise ValueError(
                         "dual-lane component proof paths must match lane facts"
                     )
-            if gate.proof_paths != boundary_proof_paths_for_dual_lane(
+            if gate.proof_paths != sequence_proof_paths_for_dual_lane(
                 self.geometry,
                 evidence,
             ):
@@ -569,7 +631,6 @@ class AssessedCandidate:
                 unavailable=(evidence_model.quality_unavailable_code,),
                 internal_boundary_contradiction_count=0,
                 other_contradiction_count=0,
-                covered_content_px=0,
                 uncovered_content_px=0,
                 supported_proof_paths=(),
                 physical_residuals=self.geometry.residuals,
@@ -580,7 +641,6 @@ class AssessedCandidate:
             else (evidence_model,)
         )
         named_states: list[tuple[str, EvidenceState]] = []
-        content_total = 0
         uncovered = 0
         internal_boundary_contradictions = 0
         for lane_index, evidence in enumerate(evidence_sets, start=1):
@@ -592,35 +652,32 @@ class AssessedCandidate:
             named_states.extend(
                 (f"{prefix}{code}", state)
                 for code, state in (
+                    ("frame_slot_topology", evidence.frame_slot_topology.state),
                     (
-                        "photo_aperture_coverage",
-                        evidence.photo_aperture_coverage.state,
+                        "frame_coverage",
+                        evidence.frame_coverage.state,
                     ),
                     ("separator_sequence", evidence.separator_sequence.state),
                     ("frame_dimensions", evidence.frame_dimensions.state),
-                    ("photo_content", evidence.photo_content.state),
+                    ("frame_content", evidence.frame_content.state),
                     (
-                        "inter_photo_boundary_preservation",
-                        evidence.inter_photo_boundary_preservation.state,
+                        "internal_frame_boundary_preservation",
+                        evidence.internal_frame_boundary_preservation.state,
                     ),
                     ("holder_boundary", evidence.holder_boundary.state),
                     (
-                        "external_aperture_preservation",
-                        evidence.external_aperture_preservation.state,
+                        "external_frame_preservation",
+                        evidence.external_frame_preservation.state,
                     ),
                     ("evidence_independence", evidence.independence.state),
                 )
             )
-            content_total += sum(
-                max(0, int(end) - int(start))
-                for start, end in evidence.photo_aperture_coverage.content_runs
-            )
             uncovered += sum(
                 max(0, int(end) - int(start))
-                for start, end in evidence.photo_aperture_coverage.uncovered_content
+                for start, end in evidence.frame_coverage.uncovered_content
             )
             internal_boundary_contradictions += int(
-                evidence.inter_photo_boundary_preservation.state
+                evidence.internal_frame_boundary_preservation.state
                 == EvidenceState.CONTRADICTED
             )
         gate = self.assessment.gate
@@ -649,7 +706,6 @@ class AssessedCandidate:
             other_contradiction_count=(
                 len(contradicted) - internal_boundary_contradictions
             ),
-            covered_content_px=max(0, content_total - uncovered),
             uncovered_content_px=uncovered,
             supported_proof_paths=tuple(
                 path.code

@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 import math
 
 from ...domain import EvidenceState, HolderBoundaryObservation
-from ..physical.model import PhotoSequenceSolution
+from ..physical.model import FrameSequenceSolution
 
 
 def boundary_supports_holder_region(
@@ -48,13 +48,13 @@ class HolderBoundaryEvidence:
 
 
 def holder_boundary_evidence(
-    geometry: PhotoSequenceSolution,
+    geometry: FrameSequenceSolution,
     edge_texture_limit: float,
 ) -> HolderBoundaryEvidence:
     return HolderBoundaryEvidence(
         tuple(
             boundary
-            for boundary in geometry.holder_boundaries
+            for boundary in geometry.holder_safety.boundaries
             if boundary_supports_holder_region(boundary, edge_texture_limit)
         ),
         edge_texture_limit,

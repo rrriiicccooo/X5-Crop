@@ -15,9 +15,9 @@ def configuration_consistency_issues() -> tuple[str, ...]:
                 issues.append(f"{format_id}/{strip_mode}: physical spec mismatch")
             expected_detector = (
                 "dual_lane"
-                if spec.physical_layout == "dual_lane" and strip_mode == FULL
+                if spec.layout.kind == "dual_lane" and strip_mode == FULL
                 else "review_only"
-                if spec.physical_layout == "dual_lane" and strip_mode == PARTIAL
+                if spec.layout.kind == "dual_lane" and strip_mode == PARTIAL
                 else "standard_strip"
             )
             if configuration.detector_kind != expected_detector:

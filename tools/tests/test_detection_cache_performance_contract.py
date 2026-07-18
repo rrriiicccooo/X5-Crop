@@ -9,18 +9,33 @@ from dataclasses import replace
 import numpy as np
 
 from x5crop.cache import MeasurementCache, MeasurementRegionKey
-from x5crop.cache.separator import cached_separator_profile
-from x5crop.domain import Box
-from x5crop.image.separator_profile import SeparatorProfileParameters
+from x5crop.cache.separator import cached_separator_profile_measurement
+from x5crop.domain import (
+    Box,
+    EvidenceState,
+    MeasurementIdentity,
+    MeasurementProvenance,
+    ObservationId,
+    PixelInterval,
+)
+from x5crop.image.separator_profile import (
+    SeparatorProfileMeasurement,
+    SeparatorProfileParameters,
+)
 from x5crop.geometry.layout import work_gray
 from x5crop.image.statistics import ImageMeasurementStatisticsParameters, image_measurement_statistics
 from x5crop.configuration.bundle import DetectionConfigurationBundle
 from x5crop.configuration.registry import get_detection_configuration
-from x5crop.detection.evidence.content.photo_content import photo_content_evidence
+from x5crop.detection.evidence.content.frame_content import frame_content_evidence
 from tools.tests.physical_gate_support import candidate_fixture
 from x5crop.runtime.analysis_reuse import analysis_configuration_fingerprint
 from x5crop.configuration.boundary import BoundaryPathParameters
 from x5crop.detection.candidate.proposal.sequence import cached_boundary_measurements
+from x5crop.detection.physical import frame_sequence_solver as solver_module
+from x5crop.detection.physical.model import (
+    BoundaryGeometryState,
+    FrameBoundarySource,
+)
 
 
 def _cache() -> MeasurementCache:
@@ -31,10 +46,220 @@ def _cache() -> MeasurementCache:
         gray,
         gray.astype(np.float32),
         image_measurement_statistics(gray, ImageMeasurementStatisticsParameters()),
+        0.0,
     )
 
 
+def _profile_measurement(width: int) -> SeparatorProfileMeasurement:
+    score = np.arange(width, dtype=np.float32)
+    return SeparatorProfileMeasurement(score, score.copy(), 1, 1)
+
+
 class DetectionCachePerformanceContractTest(unittest.TestCase):
+    def test_graph_predecessor_ranking_does_not_materialize_interval_per_option(
+        self,
+    ) -> None:
+        def edge(position: float, label: str):
+            return solver_module._EdgeConstraint(
+                position=PixelInterval.exact(position),
+                basis=FrameBoundarySource.DIMENSION_CONSTRAINED,
+                state=EvidenceState.UNAVAILABLE,
+                geometry_state=BoundaryGeometryState.RESOLVED,
+                provenance=MeasurementProvenance(
+                    MeasurementIdentity.FRAME_GEOMETRY,
+                    ObservationId(label),
+                    (),
+                    "synthetic graph performance edge",
+                ),
+            )
+
+        def frame(start: float, index: int):
+            return solver_module._MeasuredFrameConstraint(
+                leading=edge(start, f"performance-leading-{index}"),
+                trailing=edge(start + 100.0, f"performance-trailing-{index}"),
+                width_px=PixelInterval(99.0, 101.0),
+                full_width_hypothesis_admissible=True,
+                leading_holder_clip_supported=False,
+                trailing_holder_clip_supported=False,
+                search_order_residual=0.0,
+            )
+
+        previous_options = tuple(
+            frame(float(index), index) for index in range(512)
+        )
+        current = frame(1_000.0, 512)
+        ordered = (*previous_options, current)
+        context = solver_module._sequence_graph_context(
+            ordered,
+            solver_module.ContentRegionObservation(
+                region=Box(0, 0, 1_100, 100),
+                reliable_runs=(),
+                position_uncertainty_px=0,
+            ),
+            allow_nominal_slot_sized_gap=True,
+        )
+        states = {
+            index: solver_module._GraphPathState(
+                observation_candidate_count=0,
+                supported_separator_count=0,
+                internal_measurement_quality=0.0,
+                uncorroborated_overlap_extent_px=0.0,
+                frame_sized_unexplained_gap_count=0,
+                unexplained_spacing_extent_px=0.0,
+                uncorroborated_contact_count=0,
+                frame_width_hint_residual=0.0,
+                boundary_uncertainty_px=0.0,
+                external_leading_quality=0.0,
+                coordinate_key=(-float(index),),
+                predecessor=None,
+            )
+            for index in range(len(previous_options))
+        }
+        previous = solver_module._graph_layer_state_index(
+            states,
+            ordered,
+            context,
+        )
+
+        intersection_calls = 0
+        original_intersection = PixelInterval.intersection
+
+        def counted_intersection(
+            left: PixelInterval,
+            right: PixelInterval,
+        ) -> PixelInterval | None:
+            nonlocal intersection_calls
+            intersection_calls += 1
+            return original_intersection(left, right)
+
+        with patch.object(PixelInterval, "intersection", counted_intersection):
+            selected = solver_module._best_graph_predecessor(
+                len(previous_options),
+                previous,
+                ordered,
+                context,
+            )
+
+        self.assertIsNotNone(selected)
+        self.assertLessEqual(intersection_calls, 2)
+
+    def test_graph_reachability_uses_one_cached_feasibility_check_per_edge(
+        self,
+    ) -> None:
+        def edge(position: float, label: str):
+            return solver_module._EdgeConstraint(
+                position=PixelInterval.exact(position),
+                basis=FrameBoundarySource.DIMENSION_CONSTRAINED,
+                state=EvidenceState.UNAVAILABLE,
+                geometry_state=BoundaryGeometryState.RESOLVED,
+                provenance=MeasurementProvenance(
+                    MeasurementIdentity.FRAME_GEOMETRY,
+                    ObservationId(label),
+                    (),
+                    "synthetic graph reachability edge",
+                ),
+            )
+
+        def frame(start: float, index: int):
+            return solver_module._MeasuredFrameConstraint(
+                leading=edge(start, f"reachability-leading-{index}"),
+                trailing=edge(start + 100.0, f"reachability-trailing-{index}"),
+                width_px=PixelInterval.exact(100.0),
+                full_width_hypothesis_admissible=True,
+                leading_holder_clip_supported=False,
+                trailing_holder_clip_supported=False,
+                search_order_residual=0.0,
+            )
+
+        ordered = (frame(0.0, 0), frame(110.0, 1))
+        context = solver_module._sequence_graph_context(
+            ordered,
+            solver_module.ContentRegionObservation(
+                region=Box(0, 0, 210, 100),
+                reliable_runs=(),
+                position_uncertainty_px=0,
+            ),
+            allow_nominal_slot_sized_gap=True,
+        )
+
+        with patch.object(
+            solver_module,
+            "_sequence_graph_edge_is_interval_feasible",
+            wraps=solver_module._sequence_graph_edge_is_interval_feasible,
+        ) as feasibility:
+            reachable = solver_module._reachable_predecessors_for_boundary(
+                (0,),
+                (1,),
+                ordered,
+                context,
+            )
+
+        self.assertEqual(reachable, {1: 0})
+        self.assertEqual(feasibility.call_count, 1)
+
+    def test_contact_alternative_does_not_require_a_second_graph_optimization(
+        self,
+    ) -> None:
+        def edge(position: float, label: str):
+            return solver_module._EdgeConstraint(
+                position=PixelInterval.exact(position),
+                basis=FrameBoundarySource.DIMENSION_CONSTRAINED,
+                state=EvidenceState.UNAVAILABLE,
+                geometry_state=BoundaryGeometryState.RESOLVED,
+                provenance=MeasurementProvenance(
+                    MeasurementIdentity.FRAME_GEOMETRY,
+                    ObservationId(label),
+                    (),
+                    "synthetic graph contact edge",
+                ),
+            )
+
+        def frame(start: float, label: str):
+            return solver_module._MeasuredFrameConstraint(
+                leading=edge(start, f"{label}-leading"),
+                trailing=edge(start + 100.0, f"{label}-trailing"),
+                width_px=PixelInterval.exact(100.0),
+                full_width_hypothesis_admissible=True,
+                leading_holder_clip_supported=False,
+                trailing_holder_clip_supported=False,
+                search_order_residual=0.0,
+            )
+
+        first = frame(0.0, "first")
+        contact = frame(100.0, "contact")
+        separated = frame(110.0, "separated")
+        last = frame(220.0, "last")
+        ordered = (first, contact, separated, last)
+        grouped = (
+            ((0, first),),
+            ((1, contact), (2, separated)),
+            ((3, last),),
+        )
+        context = solver_module._sequence_graph_context(
+            ordered,
+            solver_module.ContentRegionObservation(
+                region=Box(0, 0, 320, 100),
+                reliable_runs=(),
+                position_uncertainty_px=0,
+            ),
+            allow_nominal_slot_sized_gap=True,
+        )
+
+        with patch.object(
+            solver_module,
+            "_sequence_graph_best_path",
+            wraps=solver_module._sequence_graph_best_path,
+        ) as best_path:
+            witnesses = solver_module._sequence_graph_witnesses(
+                grouped,
+                ordered,
+                context,
+            )
+
+        self.assertIn((first, contact, last), witnesses)
+        self.assertIn((first, separated, last), witnesses)
+        self.assertEqual(best_path.call_count, 1)
+
     def test_workspace_and_measurement_cache_reject_coordinate_drift(self) -> None:
         gray = np.zeros((80, 240), dtype=np.uint8)
         statistics = image_measurement_statistics(
@@ -50,6 +275,7 @@ class DetectionCachePerformanceContractTest(unittest.TestCase):
                 gray,
                 gray.astype(np.float32),
                 statistics,
+                0.0,
             )
         with self.assertRaises(ValueError):
             MeasurementCache(
@@ -58,6 +284,7 @@ class DetectionCachePerformanceContractTest(unittest.TestCase):
                 gray[:, :-1],
                 gray.astype(np.float32),
                 statistics,
+                0.0,
             )
 
     def test_cached_output_does_not_rebuild_detection_gray(self) -> None:
@@ -84,8 +311,8 @@ class DetectionCachePerformanceContractTest(unittest.TestCase):
             "x5crop.detection.evidence.content.activation.content_evidence_threshold",
             return_value=None,
         ) as measurement:
-            photo_content_evidence(geometry, cache, configuration)
-            photo_content_evidence(geometry, cache, configuration)
+            frame_content_evidence(geometry, cache, configuration)
+            frame_content_evidence(geometry, cache, configuration)
         measurement.assert_called_once()
 
     def test_diagnostics_do_not_invalidate_detection_analysis(self) -> None:
@@ -142,13 +369,13 @@ class DetectionCachePerformanceContractTest(unittest.TestCase):
         cache = _cache()
         corridor = Box(0, 10, 240, 70)
         parameters = SeparatorProfileParameters()
-        measured = np.arange(240, dtype=np.float32)
+        measured = _profile_measurement(240)
         with patch(
-            "x5crop.cache.separator.separator_profile",
+            "x5crop.cache.separator.measure_separator_profile",
             return_value=measured,
         ) as measurement:
-            first = cached_separator_profile(cache, corridor, parameters)
-            second = cached_separator_profile(cache, corridor, parameters)
+            first = cached_separator_profile_measurement(cache, corridor, parameters)
+            second = cached_separator_profile_measurement(cache, corridor, parameters)
         self.assertIs(first, second)
         measurement.assert_called_once()
 
@@ -157,8 +384,8 @@ class DetectionCachePerformanceContractTest(unittest.TestCase):
         corridor = Box(0, 10, 240, 70)
         parameters = SeparatorProfileParameters()
 
-        cached_separator_profile(cache, corridor, parameters)
-        cached_separator_profile(cache, corridor, parameters)
+        cached_separator_profile_measurement(cache, corridor, parameters)
+        cached_separator_profile_measurement(cache, corridor, parameters)
 
         self.assertEqual(cache.lookup_statistics.hits, 1)
         self.assertEqual(cache.lookup_statistics.misses, 1)
@@ -178,41 +405,39 @@ class DetectionCachePerformanceContractTest(unittest.TestCase):
         cache = _cache()
         parameters = SeparatorProfileParameters()
         with patch(
-            "x5crop.cache.separator.separator_profile",
-            side_effect=lambda crop, _statistics, _params: np.zeros(
-                crop.shape[1],
-                dtype=np.float32,
+            "x5crop.cache.separator.measure_separator_profile",
+            side_effect=lambda crop, _statistics, _params: _profile_measurement(
+                crop.shape[1]
             ),
         ) as measurement:
-            cached_separator_profile(cache, Box(0, 0, 240, 60), parameters)
-            cached_separator_profile(cache, Box(0, 20, 240, 80), parameters)
+            cached_separator_profile_measurement(cache, Box(0, 0, 240, 60), parameters)
+            cached_separator_profile_measurement(cache, Box(0, 20, 240, 80), parameters)
         self.assertEqual(measurement.call_count, 2)
 
     def test_profile_cache_uses_the_canonical_measured_corridor(self) -> None:
         cache = _cache()
         parameters = SeparatorProfileParameters()
         with patch(
-            "x5crop.cache.separator.separator_profile",
-            side_effect=lambda crop, _statistics, _params: np.zeros(
-                crop.shape[1],
-                dtype=np.float32,
+            "x5crop.cache.separator.measure_separator_profile",
+            side_effect=lambda crop, _statistics, _params: _profile_measurement(
+                crop.shape[1]
             ),
         ) as measurement:
-            cached_separator_profile(cache, Box(-20, 0, 120, 80), parameters)
+            cached_separator_profile_measurement(cache, Box(-20, 0, 120, 80), parameters)
 
-        key = next(iter(cache.separator_profiles))
+        key = next(iter(cache.separator_profile_measurements))
         self.assertEqual(key.region, Box(0, 0, 120, 80))
         self.assertEqual(measurement.call_args.args[0].shape, (80, 120))
 
     def test_profile_cache_rejects_corridor_outside_the_workspace(self) -> None:
         cache = _cache()
         with self.assertRaises(ValueError):
-            cached_separator_profile(
+            cached_separator_profile_measurement(
                 cache,
                 Box(300, 0, 400, 80),
                 SeparatorProfileParameters(),
             )
-        self.assertEqual(cache.separator_profiles, {})
+        self.assertEqual(cache.separator_profile_measurements, {})
 
     def test_cache_contains_measurements_not_candidates_or_decisions(self) -> None:
         names = {field.name for field in fields(MeasurementCache)}
@@ -233,9 +458,8 @@ class DetectionCachePerformanceContractTest(unittest.TestCase):
     def test_profile_cache_key_is_count_and_offset_independent(self) -> None:
         cache = _cache()
         parameters = SeparatorProfileParameters()
-        cached_separator_profile(cache, Box(0, 0, 240, 80), parameters)
-        self.assertFalse(hasattr(cache, "separator_profiles_full"))
-        key = next(iter(cache.separator_profiles))
+        cached_separator_profile_measurement(cache, Box(0, 0, 240, 80), parameters)
+        key = next(iter(cache.separator_profile_measurements))
         self.assertEqual(
             key,
             MeasurementRegionKey(parameters, Box(0, 0, 240, 80)),

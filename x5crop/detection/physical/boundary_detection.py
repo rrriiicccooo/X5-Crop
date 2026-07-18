@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from statistics import median
+from statistics import fmean, median
 
 import numpy as np
 
@@ -115,10 +115,27 @@ def _edge_reference_mask(
     texture_limit: float,
     parameters: BoundaryPathParameters,
 ) -> np.ndarray:
-    deviation = np.abs(intensity - float(intensity[0]))
-    tolerance = float(
-        np.percentile(deviation, parameters.edge_reference_percentile)
+    window = max(
+        parameters.minimum_local_measurement_window_px,
+        int(round(len(intensity) * parameters.local_measurement_window_ratio)),
     )
+    window = min(len(intensity), window)
+    seed_intensity = intensity[:window]
+    seed_texture = texture[:window]
+    quiet_seed = seed_intensity[seed_texture <= float(texture_limit)]
+    reference_intensity = float(
+        np.median(quiet_seed if quiet_seed.size else seed_intensity)
+    )
+    seed_deviation = np.abs(seed_intensity - reference_intensity)
+    deviation_center = float(np.median(seed_deviation))
+    deviation_mad = float(
+        np.median(np.abs(seed_deviation - deviation_center))
+    )
+    tolerance = float(
+        deviation_center
+        + parameters.edge_reference_mad_multiplier * deviation_mad
+    )
+    deviation = np.abs(intensity - reference_intensity)
     return (deviation <= tolerance) & (texture <= float(texture_limit))
 
 
@@ -128,7 +145,7 @@ def _edge_adjacent_transition(
     texture_limit: float,
     parameters: BoundaryPathParameters,
 ) -> tuple[PixelInterval, ...]:
-    if not intensity.size or float(texture[0]) > float(texture_limit):
+    if not intensity.size:
         return ()
     reference = _edge_reference_mask(
         intensity,
@@ -136,12 +153,24 @@ def _edge_adjacent_transition(
         texture_limit,
         parameters,
     )
-    if not bool(reference[0]):
-        return ()
-    exits = np.flatnonzero(~reference)
+    window = max(
+        parameters.minimum_local_measurement_window_px,
+        int(round(len(reference) * parameters.local_measurement_window_ratio)),
+    )
+    window = min(len(reference), window)
+    required_nonreference = int(
+        np.ceil(window * parameters.edge_transition_persistence_ratio)
+    )
+    nonreference_counts = np.convolve(
+        (~reference).astype(np.int32),
+        np.ones(window, dtype=np.int32),
+        mode="valid",
+    )
+    exits = np.flatnonzero(nonreference_counts >= required_nonreference)
     if not exits.size or int(exits[0]) <= 0:
         return ()
-    return (PixelInterval.exact(float(exits[0])),)
+    first_exit = int(exits[0])
+    return (PixelInterval(float(first_exit), float(first_exit + 1)),)
 
 
 def _adaptive_change_points(
@@ -151,20 +180,55 @@ def _adaptive_change_points(
     if signal.size <= 1:
         return ()
     change = np.abs(np.diff(signal, prepend=signal[:1]))
-    threshold = float(np.percentile(change, parameters.change_point_percentile))
-    if threshold <= 0.0:
+    if not np.any(change > 0.0):
         return ()
     runs = tuple(
         (start, end)
-        for start, end in runs_from_mask(change >= threshold)
+        for start, end in runs_from_mask(change > 0.0)
         if start > 0 and end > start and start < signal.size
     )
+    if not runs:
+        return ()
+    strengths = {
+        run: float(np.max(change[run[0] : run[1]]))
+        for run in runs
+    }
     ranked = sorted(
         runs,
-        key=lambda run: float(np.max(change[run[0] : run[1]])),
-        reverse=True,
+        key=lambda run: (-strengths[run], run[0], run[1]),
     )
-    selected = ranked[: parameters.strongest_change_points_per_section]
+    priority_threshold = float(
+        np.percentile(
+            tuple(strengths.values()),
+            parameters.change_point_percentile,
+        )
+    )
+    priority_ranked = tuple(
+        run for run in ranked if strengths[run] >= priority_threshold
+    )
+    limit = min(parameters.maximum_change_points_per_section, len(runs))
+    bin_count = limit
+    spatial_edges = np.linspace(0.0, float(signal.size), bin_count + 1)
+    selected: list[tuple[int, int]] = []
+    selected_set: set[tuple[int, int]] = set()
+    for left, right in zip(spatial_edges[:-1], spatial_edges[1:], strict=True):
+        local = tuple(
+            run
+            for run in runs
+            if left <= fmean(run) < right
+        )
+        if not local:
+            continue
+        choice = min(local, key=lambda run: (-strengths[run], run[0], run[1]))
+        selected.append(choice)
+        selected_set.add(choice)
+    for candidates in (priority_ranked, ranked):
+        for run in candidates:
+            if len(selected) >= limit:
+                break
+            if run not in selected_set:
+                selected.append(run)
+                selected_set.add(run)
     return tuple(
         PixelInterval(float(start), float(max(start + 1, end)))
         for start, end in sorted(selected)
@@ -212,12 +276,17 @@ def _local_sample(
     texture: np.ndarray,
     reverse: bool,
     parameters: BoundaryPathParameters,
+    transform_position_uncertainty_px: float,
 ) -> _LocalPathSample | None:
     coordinate = int(round(position.midpoint))
     extent = len(intensity)
     if coordinate <= 0 or coordinate >= extent:
         return None
-    sample_width = max(1, int(round(extent * parameters.inner_sample_ratio)))
+    sample_width = max(
+        parameters.minimum_local_measurement_window_px,
+        int(round(extent * parameters.local_measurement_window_ratio)),
+    )
+    sample_width = min(extent, sample_width)
     outer_start = max(0, coordinate - sample_width)
     inner_end = min(extent, coordinate + sample_width)
     if outer_start >= coordinate or inner_end <= coordinate:
@@ -235,10 +304,16 @@ def _local_sample(
         inner_end,
     )
     lower, upper = (outward, inward) if not reverse else (inward, outward)
+    source_position = _source_interval(position, extent, reverse)
+    measured_position = source_position.expanded(
+        transform_position_uncertainty_px
+    ).intersection(PixelInterval(0.0, float(extent)))
+    if measured_position is None:
+        return None
     return _LocalPathSample(
         section_index=section_index,
         orthogonal_interval=orthogonal_interval,
-        position=_source_interval(position, extent, reverse),
+        position=measured_position,
         lower_intensity=lower[0],
         lower_mad=lower[1],
         lower_texture=lower[2],
@@ -256,6 +331,7 @@ def _local_samples_for_kind(
     kind: BoundaryKind,
     statistics: ImageMeasurementStatistics,
     parameters: BoundaryPathParameters,
+    transform_position_uncertainty_px: float,
 ) -> tuple[_LocalPathSample, ...]:
     reverse = side in {BoundarySide.TRAILING, BoundarySide.BOTTOM}
     samples: list[_LocalPathSample] = []
@@ -286,6 +362,7 @@ def _local_samples_for_kind(
                 texture,
                 reverse,
                 parameters,
+                transform_position_uncertainty_px,
             )
             if sample is not None:
                 samples.append(sample)
@@ -297,7 +374,7 @@ def _cluster_samples(
     extent: int,
     section_count: int,
     parameters: BoundaryPathParameters,
-) -> tuple[tuple[tuple[_LocalPathSample, ...], ...], bool]:
+) -> tuple[tuple[_LocalPathSample, ...], ...]:
     tolerance = max(
         float(parameters.path_cluster_tolerance_min_px),
         float(extent) * float(parameters.path_cluster_tolerance_ratio),
@@ -312,23 +389,6 @@ def _cluster_samples(
         )
         for section_index in sorted({sample.section_index for sample in samples})
     }
-    tracks: dict[
-        tuple[tuple[int, float, float], ...],
-        tuple[_LocalPathSample, ...],
-    ] = {}
-
-    def track_key(
-        track: tuple[_LocalPathSample, ...],
-    ) -> tuple[tuple[int, float, float], ...]:
-        return tuple(
-            (
-                sample.section_index,
-                sample.position.minimum,
-                sample.position.maximum,
-            )
-            for sample in track
-        )
-
     def prediction(
         track: tuple[_LocalPathSample, ...],
         coordinate: float,
@@ -352,79 +412,64 @@ def _cluster_samples(
         ) / denominator
         return position_center + slope * (coordinate - coordinate_center)
 
-    active_tracks: tuple[tuple[_LocalPathSample, ...], ...] = ()
+    active_tracks: list[tuple[_LocalPathSample, ...]] = []
+    completed_tracks: list[tuple[_LocalPathSample, ...]] = []
     for section_index in range(section_count):
         section_samples = by_section.get(section_index, ())
-        next_tracks: dict[
-            tuple[tuple[int, float, float], ...],
-            tuple[_LocalPathSample, ...],
-        ] = {}
+        eligible_tracks: list[tuple[_LocalPathSample, ...]] = []
         for track in active_tracks:
             gap = section_index - track[-1].section_index
-            if gap <= 0 or gap > parameters.maximum_path_section_gap + 1:
-                continue
-            if section_samples:
-                closest = min(
-                    section_samples,
-                    key=lambda sample: abs(
-                        sample.position.midpoint
-                        - prediction(
-                            track,
-                            sample.orthogonal_interval.midpoint,
-                        )
-                    ),
-                )
+            if 0 < gap <= parameters.maximum_path_section_gap + 1:
+                eligible_tracks.append(track)
+            else:
+                completed_tracks.append(track)
+
+        associations: list[tuple[float, int, int]] = []
+        for track_index, track in enumerate(eligible_tracks):
+            gap = section_index - track[-1].section_index
+            for sample_index, sample in enumerate(section_samples):
                 residual = abs(
-                    closest.position.midpoint
-                    - prediction(
-                        track,
-                        closest.orthogonal_interval.midpoint,
-                    )
+                    sample.position.midpoint
+                    - prediction(track, sample.orthogonal_interval.midpoint)
                 )
                 if residual <= tolerance * float(gap):
-                    extended = (*track, closest)
-                    next_tracks[track_key(extended)] = extended
-                    tracks[track_key(extended)] = extended
-                    continue
-            if gap <= parameters.maximum_path_section_gap:
-                next_tracks[track_key(track)] = track
-        for sample in section_samples:
-            track = (sample,)
-            next_tracks[track_key(track)] = track
-            tracks[track_key(track)] = track
-        active_tracks = tuple(next_tracks.values())
+                    associations.append((residual, track_index, sample_index))
+        assigned_tracks: dict[int, int] = {}
+        assigned_samples: set[int] = set()
+        for _, track_index, sample_index in sorted(associations):
+            if track_index in assigned_tracks or sample_index in assigned_samples:
+                continue
+            assigned_tracks[track_index] = sample_index
+            assigned_samples.add(sample_index)
 
-    def fit_residual(cluster: tuple[_LocalPathSample, ...]) -> float:
-        coordinates = tuple(
-            item.orthogonal_interval.midpoint for item in cluster
+        next_tracks: list[tuple[_LocalPathSample, ...]] = []
+        for track_index, track in enumerate(eligible_tracks):
+            sample_index = assigned_tracks.get(track_index)
+            if sample_index is not None:
+                next_tracks.append((*track, section_samples[sample_index]))
+                continue
+            gap = section_index - track[-1].section_index
+            if gap <= parameters.maximum_path_section_gap:
+                next_tracks.append(track)
+            else:
+                completed_tracks.append(track)
+        next_tracks.extend(
+            (sample,)
+            for sample_index, sample in enumerate(section_samples)
+            if sample_index not in assigned_samples
         )
-        positions = tuple(item.position.midpoint for item in cluster)
-        coordinate_center = sum(coordinates) / float(len(coordinates))
-        position_center = sum(positions) / float(len(positions))
-        denominator = sum(
-            (coordinate - coordinate_center) ** 2 for coordinate in coordinates
-        )
-        if denominator <= 0.0:
-            return max(positions) - min(positions)
-        slope = sum(
-            (coordinate - coordinate_center) * (position - position_center)
-            for coordinate, position in zip(coordinates, positions, strict=True)
-        ) / denominator
-        intercept = position_center - slope * coordinate_center
-        return max(
-            abs(position - (intercept + slope * coordinate))
-            for coordinate, position in zip(coordinates, positions, strict=True)
-        )
+        active_tracks = next_tracks
+    completed_tracks.extend(active_tracks)
 
     supported = tuple(
-        track for track in tracks.values() if len(track) >= minimum_support
+        track for track in completed_tracks if len(track) >= minimum_support
     )
     ranked = tuple(
         sorted(
             supported,
             key=lambda cluster: (
                 -len(cluster),
-                fit_residual(cluster),
+                _path_fit_residual(cluster),
                 max(item.position.maximum for item in cluster)
                 - min(item.position.minimum for item in cluster),
                 median(item.position.midpoint for item in cluster),
@@ -454,10 +499,67 @@ def _cluster_samples(
         if any(same_path(cluster, accepted) for accepted in canonical):
             continue
         canonical.append(cluster)
-    return (
-        tuple(canonical[: parameters.maximum_paths_per_axis]),
-        len(canonical) > parameters.maximum_paths_per_axis,
+    return tuple(canonical)
+
+
+def _path_fit_residual(cluster: tuple[_LocalPathSample, ...]) -> float:
+    coordinates = tuple(item.orthogonal_interval.midpoint for item in cluster)
+    positions = tuple(item.position.midpoint for item in cluster)
+    coordinate_center = sum(coordinates) / float(len(coordinates))
+    position_center = sum(positions) / float(len(positions))
+    denominator = sum(
+        (coordinate - coordinate_center) ** 2 for coordinate in coordinates
     )
+    if denominator <= 0.0:
+        return max(positions) - min(positions)
+    slope = sum(
+        (coordinate - coordinate_center) * (position - position_center)
+        for coordinate, position in zip(coordinates, positions, strict=True)
+    ) / denominator
+    intercept = position_center - slope * coordinate_center
+    return max(
+        abs(position - (intercept + slope * coordinate))
+        for coordinate, position in zip(coordinates, positions, strict=True)
+    )
+
+
+def _edge_adjacent_cluster(
+    samples: tuple[_LocalPathSample, ...],
+    extent: int,
+    section_count: int,
+    parameters: BoundaryPathParameters,
+) -> tuple[tuple[_LocalPathSample, ...], ...]:
+    minimum_support = max(
+        1,
+        int(np.ceil(section_count * parameters.minimum_path_support_ratio)),
+    )
+    if len(samples) < minimum_support:
+        return ()
+    positions = np.asarray(
+        [sample.position.midpoint for sample in samples],
+        dtype=np.float64,
+    )
+    center = float(np.median(positions))
+    mad = float(np.median(np.abs(positions - center)))
+    tolerance = max(
+        float(parameters.path_cluster_tolerance_min_px),
+        float(extent) * float(parameters.path_cluster_tolerance_ratio),
+        mad * float(parameters.path_inlier_mad_multiplier),
+    )
+    inliers = tuple(
+        sample
+        for sample in samples
+        if abs(sample.position.midpoint - center) <= tolerance
+    )
+    if len(inliers) < minimum_support:
+        return ()
+    maximum_residual = max(
+        float(parameters.path_cluster_tolerance_min_px),
+        float(extent) * float(parameters.maximum_path_fit_residual_ratio),
+    )
+    if _path_fit_residual(inliers) > maximum_residual:
+        return ()
+    return (inliers,)
 
 
 def _provenance(
@@ -465,6 +567,7 @@ def _provenance(
     axis: BoundaryAxis,
     path_index: int,
     scan_origin: BoundarySide | None,
+    transform_position_uncertainty_px: float,
 ) -> MeasurementProvenance:
     source = f"{kind.value}:{axis.value}:{path_index}"
     if scan_origin is not None:
@@ -475,6 +578,11 @@ def _provenance(
         dependencies=(
             MeasurementIdentity.GRAY_WORK,
             MeasurementIdentity.IMAGE_MEASUREMENT_STATISTICS,
+            *(
+                (MeasurementIdentity.WORKSPACE_TRANSFORM,)
+                if transform_position_uncertainty_px > 0.0
+                else ()
+            ),
         ),
         description="measured gray boundary path",
     )
@@ -511,7 +619,8 @@ def _paths_for_axis(
     parameters: BoundaryPathParameters,
     *,
     scan_origin: BoundarySide | None = None,
-) -> tuple[tuple[GrayBoundaryPathObservation, ...], bool]:
+    transform_position_uncertainty_px: float,
+) -> tuple[GrayBoundaryPathObservation, ...]:
     if scan_origin is not None and boundary_axis_for_side(scan_origin) != axis:
         raise ValueError("boundary scan origin must lie on the measured axis")
     oriented_side = scan_origin or (
@@ -524,8 +633,14 @@ def _paths_for_axis(
         kind,
         statistics,
         parameters,
+        transform_position_uncertainty_px,
     )
-    clusters, path_budget_exhausted = _cluster_samples(
+    clusterer = (
+        _edge_adjacent_cluster
+        if kind == BoundaryKind.EDGE_ADJACENT_TRANSITION
+        else _cluster_samples
+    )
+    clusters = clusterer(
         local_samples,
         extent,
         len(profiles),
@@ -537,7 +652,13 @@ def _paths_for_axis(
             BoundaryPathSample(item.orthogonal_interval, item.position)
             for item in cluster
         )
-        provenance = _provenance(kind, axis, path_index, scan_origin)
+        provenance = _provenance(
+            kind,
+            axis,
+            path_index,
+            scan_origin,
+            transform_position_uncertainty_px,
+        )
         support_ratio = len(cluster) / float(len(profiles))
         paths.append(
             GrayBoundaryPathObservation(
@@ -561,12 +682,28 @@ def _paths_for_axis(
                 provenance=provenance,
             )
         )
-    return tuple(paths), path_budget_exhausted
+    return tuple(paths)
+
+
+def _generic_path_rank(
+    path: GrayBoundaryPathObservation,
+) -> tuple[float, float, float, str, ObservationId]:
+    return (
+        min(
+            path.lower_appearance.spatial_continuity,
+            path.upper_appearance.spatial_continuity,
+        ),
+        path.orthogonal_extent.maximum - path.orthogonal_extent.minimum,
+        -(path.position.maximum - path.position.minimum),
+        path.kind.value,
+        path.provenance.observation_id,
+    )
 
 
 def _holder_boundary(
     side: BoundarySide,
     candidates: tuple[GrayBoundaryPathObservation, ...],
+    measurement_extent: PixelInterval,
 ) -> HolderBoundaryObservation | None:
     if not candidates:
         return None
@@ -583,7 +720,11 @@ def _holder_boundary(
         for path in candidates
         if outer_appearance(path).spatial_continuity == best_support
     )
-    shared = PixelInterval.common_intersection(tuple(path.position for path in best))
+    shared = PixelInterval.common_intersection(
+        tuple(path.position for path in best)
+    )
+    if shared is not None:
+        shared = shared.intersection(measurement_extent)
     if shared is None:
         return None
     return HolderBoundaryObservation(side, shared, best)
@@ -593,9 +734,16 @@ def boundary_measurements(
     gray: np.ndarray,
     statistics: ImageMeasurementStatistics,
     parameters: BoundaryPathParameters,
+    *,
+    transform_position_uncertainty_px: float,
 ) -> BoundaryMeasurementSet:
     if gray.ndim != 2 or not gray.size:
         raise ValueError("boundary measurement requires non-empty grayscale")
+    if (
+        not np.isfinite(transform_position_uncertainty_px)
+        or transform_position_uncertainty_px < 0.0
+    ):
+        raise ValueError("transform position uncertainty must be finite")
     texture = _texture_image(gray)
     long_axis_profiles = _cross_section_profiles(
         gray,
@@ -614,20 +762,29 @@ def boundary_measurements(
         BoundaryAxis.SHORT: short_axis_profiles,
     }
     generic_paths: list[GrayBoundaryPathObservation] = []
-    measurement_budget_exhausted = False
     for axis, profiles in profiles_by_axis.items():
+        measured_axis_paths: list[GrayBoundaryPathObservation] = []
         for kind in (BoundaryKind.TONAL_TRANSITION, BoundaryKind.TEXTURE_TRANSITION):
-            paths, budget_exhausted = _paths_for_axis(
-                axis,
-                profiles,
-                statistics,
-                kind,
-                parameters,
+            measured_axis_paths.extend(
+                _paths_for_axis(
+                    axis,
+                    profiles,
+                    statistics,
+                    kind,
+                    parameters,
+                    transform_position_uncertainty_px=(
+                        transform_position_uncertainty_px
+                    ),
+                )
             )
-            generic_paths.extend(paths)
-            measurement_budget_exhausted = bool(
-                measurement_budget_exhausted or budget_exhausted
+        ranked_axis_paths = tuple(
+            sorted(
+                dict.fromkeys(measured_axis_paths),
+                key=_generic_path_rank,
+                reverse=True,
             )
+        )
+        generic_paths.extend(ranked_axis_paths)
     edge_measurements_by_side = {
         side: _paths_for_axis(
             boundary_axis_for_side(side),
@@ -636,27 +793,39 @@ def boundary_measurements(
             BoundaryKind.EDGE_ADJACENT_TRANSITION,
             parameters,
             scan_origin=side,
+            transform_position_uncertainty_px=(
+                transform_position_uncertainty_px
+            ),
         )
         for side in BoundarySide
     }
     edge_paths_by_side = {
-        side: paths
-        for side, (paths, _) in edge_measurements_by_side.items()
+        side: paths for side, paths in edge_measurements_by_side.items()
     }
-    measurement_budget_exhausted = bool(
-        measurement_budget_exhausted
-        or any(exhausted for _, exhausted in edge_measurements_by_side.values())
-    )
     edge_paths = tuple(
         path for paths in edge_paths_by_side.values() for path in paths
     )
     raw_paths = (*generic_paths, *edge_paths)
+    height, width = gray.shape
     holder_boundaries = tuple(
         boundary
         for side, paths in edge_paths_by_side.items()
-        if (boundary := _holder_boundary(side, paths)) is not None
+        if (
+            boundary := _holder_boundary(
+                side,
+                paths,
+                PixelInterval(
+                    0.0,
+                    float(
+                        width
+                        if boundary_axis_for_side(side) == BoundaryAxis.LONG
+                        else height
+                    ),
+                ),
+            )
+        )
+        is not None
     )
-    height, width = gray.shape
     return BoundaryMeasurementSet(
         raw_paths=raw_paths,
         holder_boundaries=holder_boundaries,
@@ -669,5 +838,4 @@ def boundary_measurements(
                 description="workspace containment fallback",
             ),
         ),
-        measurement_budget_exhausted=measurement_budget_exhausted,
     )

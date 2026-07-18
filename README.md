@@ -11,13 +11,13 @@
 > those are development source trees, not user-ready release packages.
 
 X5 Crop 是用于 Hasselblad / Imacon X5 胶片片夹长图的 TIFF 自动裁切工具。
-它会将同一文件夹里的长条 TIFF 扫描图拆成单张 TIFF。只有同时通过物理
-`CandidateGate` 和最终 `DecisionGate` 的结果会自动导出；其余图片进入复核。
+它会将同一文件夹里的长条 TIFF 扫描图拆成单张 TIFF。只有裁切几何和安全条件都已
+明确解决的结果才会自动导出；其余图片进入复核。
 
 X5 Crop is a TIFF cropper for long film-strip scans from Hasselblad / Imacon X5
 holders. It splits long-strip TIFF scans into individual TIFF frames. Only
-detections that pass both the physical `CandidateGate` and final `DecisionGate`
-are exported automatically; all other cases are sent to review.
+detections with resolved geometry and final safety approval are exported
+automatically; all other cases are sent to review.
 
 当前 active 脚本版本：V4.9
 
@@ -36,8 +36,8 @@ Current stable release: v4.2.8
 - `needs_review/` 里的文件是原始 TIFF 的复制，用于人工处理。
 - 自动裁切输出会保留原 TIFF 的位深、通道结构、ICC / 色彩空间、resolution、
   metadata 和已知无损压缩行为。
-- 检测阶段依据物理证据决定自动导出或复核。独立像素观测，或由可信校准、两端实测边界
-  和其余独立片距唯一共同佐证的叠片，只扩大相邻 frame 的最终输出范围，不天然阻断自动裁切。
+- 检测阶段依据物理证据决定自动导出或复核；任何未解决的张数、边界或替代裁切方案都会
+  保持复核，而不会由置信度或历史输出强行转为自动裁切。
 
 ### 推荐下载
 
@@ -124,17 +124,15 @@ debug analysis? [y/n, return=no]:
 ```
 
 只有开启 partial mode 后才会询问 `count`。按 Return 或输入 `auto` 表示自动判断张数。
-Detection 始终在唯一灰度 workspace 中工作；片夹可亮、可暗或处于中间灰度。原始通道和色彩
-metadata 仅由 TIFF I/O 保存，Debug 只使用彩色标记解释灰度检测。TIFF DPI/PPI 只作为输入声明
-保存到 report，不参与候选几何或 Gate。照片的 mm 规格提供 aspect 和尺寸关系先验；候选中独立
-测得的照片边界可生成只读比例诊断，但不会反向证明同一候选。灰度和纹理只描述像素外观，不会
-被当成“片基”或其它材料身份；边界与 separator 必须由空间拓扑和物理几何共同成立。
-auto count 始终按 format 允许的张数从大到小求解。每个 count 都从相同的逐边 boundary 与
-count-independent separator observations 构造 hypotheses，再由全局 solver 联合求解每张照片的
-`PhotoAperture`。只有 `GeometryResolution` 确认 count、placement、coverage 和替代几何都已解决，
-才停止搜索更小 count；即使最终结果仍需 REVIEW，也不会让 CandidateGate 或 confidence 代替这项
-物理解析。所有候选都完成相同的 evidence 和 CandidateGate；选中结果随后只进入一次
-DecisionGate。
+检测始终在灰度 workspace 中工作；片夹可以是亮、暗或中间灰度。原始通道、色彩 metadata 和
+TIFF DPI/PPI 只由 I/O 与报告保存，不会直接决定裁切几何。
+
+auto count 会从当前格式允许的较大张数开始检查。程序先确定整条片条的安全短轴范围，再联合判断
+每张照片的顺序、边界和片间关系。只有张数与裁切几何都已解决、且不存在未解决的替代方案时，
+才会自动输出；否则保持 REVIEW。Full 模式最多允许一个由完整序列唯一推导的空白位置，缺少内容
+本身不算证据；两个空白位置或位置不唯一时保持 REVIEW。Partial auto 不会利用空白区域增加张数。
+
+内部物理证据、数据流和权限边界详见 `ARCHITECTURE.md`。
 
 ### Format 和张数
 
@@ -177,18 +175,20 @@ x5_crop_output/_debug_analysis/
 每张 Debug Analysis JPG 固定包含：
 
 - `Original gray context`: 原始灰度上下文。
-- `Photo aperture geometry`: 理想照片开口、保守输出包络和最终裁切框；未解决时显示
-  `Provisional photo apertures - NOT EXPORTABLE`。
+- `Frame slot geometry`: 共享短轴、有序 frame slots、保守输出包络和最终裁切框；未解决时显示
+  `Provisional frame slots - NOT EXPORTABLE`。
 - `Boundary and separator evidence`: raw paths/bands、实测边界、尺寸假设和叠片标记。
 
 第三联图的内置图例由当前 diagnostics configuration 生成：
 
 - 白色虚线 `Holder boundary`。
 - 黄色 `Raw observation`。
-- 红色 `Measured aperture / separator edge`。
+- 红色 `Measured frame / separator edge`。
 - 紫色虚线 `Dimension-only provisional edge`。
+- 蓝色虚线 `External safety envelope`。
 - 青色 `Corroborated overlap`。
-- 绿色 `PhotoAperture`。
+- 绿色 `FrameSlot`。
+- 黄色虚线 `Sequence-inferred FrameSlot`。
 - 蓝色虚线 `FrameCropEnvelope / protected output`。
 
 详细 evidence、CandidateGate 与 DecisionGate 说明写入 report；Debug Analysis
@@ -203,8 +203,9 @@ x5_crop_output/_debug_analysis/
 
 检查 Debug Analysis 时优先确认：
 
-- 绿色 `PhotoAperture` 是否只包住可见真实照片，不把可辨认片基或 separator 算进去。
-- 蓝色 `FrameCropEnvelope` 是否覆盖绿色开口及其 boundary uncertainty。
+- 全部绿色 `FrameSlot` 是否共用一组安全短轴，长轴顺序、宽度和数量是否合理。
+- 黄色虚线 blank slot 是否只出现在唯一可解释的完整序列中，且没有移动相邻真实照片边界。
+- 蓝色 `FrameCropEnvelope` 是否覆盖对应 slot 与 boundary uncertainty。
 - 半透明裁切色块是否覆盖照片并留出合理 bleed。
 - 红色 separator observation 是否落在真实片间间距。
 - 紫色 dimension-constrained tick 与青色 overlap tick 是否符合照片物理尺寸。
@@ -248,7 +249,7 @@ x5_crop_output/
 默认输出 bleed 为长轴 20px、短轴 10px。只有独立观测的 signed spacing 确认叠片时，
 相邻两张 frame 的对应侧才会增加到所需宽度。可用保护范围是基础 frame 到其
 holder canvas 或所属 lane `frame_output_bounds` 的实际几何余量；任一侧余量不足时进入复核。
-`FrameCropEnvelope` 是单张 `PhotoAperture` uncertainty 的保守外侧，不包含用户 bleed。
+`FrameCropEnvelope` 是单个 `FrameSlot` 与共享短轴 uncertainty 的保守输出范围，不包含用户 bleed。
 Bleed 只影响最终输出，不能改变 candidate geometry 或 Gate 结果。
 
 ### 常用命令行
@@ -334,15 +335,13 @@ Windows: install/X5_Crop_win_uninstall.bat
 - Auto-cropped TIFF output preserves source quality attributes, including bit
   depth, channel layout, ICC / color space, resolution, metadata, and known
   lossless compression behavior.
-- Detection uses physical proof paths. Separator widths and spacing may vary;
-  confirmed content loss, unresolved geometry, or physically inconsistent frame
-  dimensions go to review. Feasible overlap bleed does not independently require
-  review.
+- Detection uses physical evidence. Confirmed content loss, unresolved geometry,
+  or physically inconsistent frame dimensions go to review.
 - Detection uses one grayscale workspace. Holder polarity is not assumed, and
   TIFF resolution metadata is used only after independent physical-scale
   corroboration. Original channels and color metadata remain an I/O concern.
-- Automatic output requires resolved physical geometry plus CandidateGate and
-  DecisionGate approval. Historical confidence or output parity is not used.
+- Automatic output requires resolved geometry and a final safety decision.
+  Historical confidence or output parity is not used.
 
 ### Download
 
@@ -429,13 +428,18 @@ debug analysis? [y/n, return=no]:
 
 It asks for `count` only when partial mode is enabled. Press Return or type
 `auto` to let the script estimate the partial count.
-Auto count solves the format's allowed counts from largest to smallest. Every
-count uses the same per-side boundary measurements and count-independent separator
-observations. The global solver then resolves every photo's `PhotoAperture` jointly. Smaller
-counts are skipped only after `GeometryResolution` confirms count, placement,
-coverage, and alternative geometry resolution. CandidateGate and confidence never
-substitute for that physical resolution. All candidates pass CandidateGate; the
-selected candidate then passes DecisionGate exactly once.
+Detection uses a grayscale workspace; source channels, color metadata, and TIFF
+DPI/PPI remain I/O and report data rather than direct crop geometry.
+
+Auto count checks the larger allowed counts first. The program resolves one safe
+short-axis span for the strip, then evaluates the frame order, boundaries, and
+spacing together. It exports automatically only when the count and crop geometry
+are resolved with no outstanding alternative. Full mode may uniquely infer one
+blank position from a complete sequence, but missing content is not evidence by
+itself. Two blank positions or ambiguous placement remain in review, and partial
+auto count never grows from a blank-looking region.
+
+See `ARCHITECTURE.md` for internal evidence, data flow, and authority boundaries.
 
 `--export-review` exports resolved REVIEW crops only. Unresolved provisional
 geometry is never exportable.
@@ -470,9 +474,9 @@ x5_crop_output/_debug_analysis/
 Each JPG contains the fixed panels:
 
 - `Original gray context`: source gray context.
-- `Photo aperture geometry`: ideal photo apertures, conservative output envelopes,
-  and final crop boxes; unresolved results are labeled
-  `Provisional photo apertures - NOT EXPORTABLE`.
+- `Frame slot geometry`: shared short-axis span, ordered frame slots,
+  conservative output envelopes, and final crop boxes; unresolved results are
+  labeled `Provisional frame slots - NOT EXPORTABLE`.
 - `Boundary and separator evidence`: raw paths/bands, measured boundaries,
   dimension hypotheses, and overlap markers.
 
@@ -480,10 +484,12 @@ The third panel carries a legend derived from the current diagnostics configurat
 
 - white dashed: `Holder boundary`;
 - yellow: `Raw observation`;
-- red: `Measured aperture / separator edge`;
+- red: `Measured frame / separator edge`;
 - purple dashed: `Dimension-only provisional edge`;
+- blue dashed: `External safety envelope`;
 - cyan: `Corroborated overlap`;
-- green: `PhotoAperture`;
+- green: `FrameSlot`;
+- yellow dashed: `Sequence-inferred FrameSlot`;
 - blue dashed: `FrameCropEnvelope / protected output`.
 
 Detailed evidence, CandidateGate, and DecisionGate explanations are written to
@@ -526,7 +532,8 @@ sequence edges and the remaining observed spacings, can expand the corresponding
 sides of the two adjacent frames. Corroborated overlap
 cannot prove its own conservation equation. Available protection is the actual geometric slack between
 each base frame and its holder or lane `frame_output_bounds`. `FrameCropEnvelope`
-is the conservative uncertainty envelope around one `PhotoAperture`, before user
+is the conservative output envelope around one `FrameSlot` and the shared
+short-axis span, before user
 bleed. If either side lacks enough output space,
 the result goes to review. Bleed affects final output only and cannot change
 candidate geometry or Gate results.

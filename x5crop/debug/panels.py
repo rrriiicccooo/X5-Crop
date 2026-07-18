@@ -63,13 +63,23 @@ def make_debug_preview_rgb(
             dash_length=style.line_dash_length,
             dash_gap=style.line_dash_gap,
         )
-    for box in geometry.photo_aperture_boxes:
+    for box in geometry.frame_slot_boxes:
         draw_preview_rect(
             rgb,
             box,
             scale,
-            style.photo_aperture_color,
-            style.photo_aperture_line_width,
+            style.frame_slot_color,
+            style.frame_slot_line_width,
+        )
+    for box in geometry.sequence_inferred_slot_boxes:
+        draw_preview_dashed_rect(
+            rgb,
+            box,
+            scale,
+            style.sequence_inferred_slot_color,
+            style.sequence_inferred_slot_line_width,
+            dash_length=style.line_dash_length,
+            dash_gap=style.line_dash_gap,
         )
     if geometry.containment_fallback is not None:
         draw_preview_rect(
@@ -84,7 +94,8 @@ def make_debug_preview_rgb(
 
 @dataclass(frozen=True)
 class DebugGeometry:
-    photo_aperture_boxes: tuple[Box, ...]
+    frame_slot_boxes: tuple[Box, ...]
+    sequence_inferred_slot_boxes: tuple[Box, ...]
     frame_crop_envelopes: tuple[FrameCropEnvelope, ...]
     final_boxes: tuple[Box, ...]
     containment_fallback: Box | None
@@ -98,7 +109,7 @@ def _map_envelopes(
 ) -> tuple[FrameCropEnvelope, ...]:
     return tuple(
         FrameCropEnvelope(
-            item.photo_index,
+            item.frame_index,
             map_work_box(item.box, layout, image_width, image_height),
         )
         for item in envelopes
@@ -114,34 +125,45 @@ def debug_geometry(
     image_height, image_width = gray.shape
     if isinstance(candidate_geometry, ReviewOnlyContainment):
         return DebugGeometry(
-            photo_aperture_boxes=(),
+            frame_slot_boxes=(),
+            sequence_inferred_slot_boxes=(),
             frame_crop_envelopes=(),
             final_boxes=(),
             containment_fallback=map_work_box(
-                candidate_geometry.containment_fallback.box,
+                candidate_geometry.holder_safety.containment_fallback.box,
                 candidate_geometry.layout,
                 image_width,
                 image_height,
             ),
         )
-    aperture_boxes = tuple(
-        map_work_box(
-            Box(
-                int(round(aperture.leading.position.midpoint)),
-                int(round(aperture.top.position.midpoint)),
-                int(round(aperture.trailing.position.midpoint)),
-                int(round(aperture.bottom.position.midpoint)),
+    slot_boxes = tuple(
+        (
+            slot,
+            map_work_box(
+                Box(
+                    int(round(slot.leading.position.midpoint)),
+                    int(round(candidate_geometry.shared_short_axis.top.midpoint)),
+                    int(round(slot.trailing.position.midpoint)),
+                    int(round(candidate_geometry.shared_short_axis.bottom.midpoint)),
+                ),
+                candidate_geometry.layout,
+                image_width,
+                image_height,
             ),
-            candidate_geometry.layout,
-            image_width,
-            image_height,
         )
-        for aperture in candidate_geometry.photo_apertures
+        for slot in candidate_geometry.frame_slots
+    )
+    frame_slot_boxes = tuple(
+        box for slot, box in slot_boxes if not slot.sequence_inferred
+    )
+    sequence_inferred_slot_boxes = tuple(
+        box for slot, box in slot_boxes if slot.sequence_inferred
     )
     final_geometry = detection.output_geometry
     if final_geometry is not None:
         return DebugGeometry(
-            photo_aperture_boxes=aperture_boxes,
+            frame_slot_boxes=frame_slot_boxes,
+            sequence_inferred_slot_boxes=sequence_inferred_slot_boxes,
             frame_crop_envelopes=final_geometry.frame_crop_envelopes,
             final_boxes=final_geometry.final_boxes,
             containment_fallback=None,
@@ -153,7 +175,8 @@ def debug_geometry(
         image_height,
     )
     return DebugGeometry(
-        photo_aperture_boxes=aperture_boxes,
+        frame_slot_boxes=frame_slot_boxes,
+        sequence_inferred_slot_boxes=sequence_inferred_slot_boxes,
         frame_crop_envelopes=mapped_envelopes,
         final_boxes=(),
         containment_fallback=None,
@@ -249,9 +272,9 @@ def make_debug_analysis_panel(
             render_cache,
         ),
         (
-            "Photo aperture geometry"
+            "Frame slot geometry"
             if detection.frame_export_eligible
-            else "Provisional photo apertures - NOT EXPORTABLE"
+            else "Provisional frame slots - NOT EXPORTABLE"
         ),
         height=style.label_height,
         origin=style.label_origin,

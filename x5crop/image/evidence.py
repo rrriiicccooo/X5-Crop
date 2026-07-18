@@ -7,7 +7,6 @@ import numpy as np
 
 from .constants import (
     FIVE_POINT_MEAN_WEIGHT,
-    FOUR_NEIGHBOR_MEAN_WEIGHT,
     UINT8_MAX_VALUE,
     UINT8_ROUNDING_OFFSET,
 )
@@ -22,7 +21,6 @@ from ..utils import (
 )
 
 
-CONTENT_EVIDENCE_COMPONENT_COUNT = 3
 CONTENT_EVIDENCE_NEIGHBORHOOD_RADIUS_PX = 1
 
 
@@ -124,35 +122,6 @@ class SeparatorEvidenceImageParameters:
             "separator image percentile sample budget",
             self.maximum_percentile_samples,
         )
-
-
-@dataclass(frozen=True)
-class ContentEvidenceImageParameters:
-    gradient_percentile: float = 99.2
-    texture_percentile: float = 99.2
-    local_contrast_percentile: float = 99.0
-    numerical_floor: float = 1e-6
-    maximum_percentile_samples: int = 1_000_000
-    minimum_consensus_channels: int = 2
-
-    def __post_init__(self) -> None:
-        for name, value in (
-            ("content gradient percentile", self.gradient_percentile),
-            ("content texture percentile", self.texture_percentile),
-            ("content local-contrast percentile", self.local_contrast_percentile),
-        ):
-            require_percentile(name, value)
-        require_positive("content evidence numerical floor", self.numerical_floor)
-        require_positive(
-            "content evidence percentile sample budget",
-            self.maximum_percentile_samples,
-        )
-        require_positive(
-            "content evidence consensus channel count",
-            self.minimum_consensus_channels,
-        )
-        if self.minimum_consensus_channels > CONTENT_EVIDENCE_COMPONENT_COUNT:
-            raise ValueError("content evidence consensus exceeds component count")
 
 
 def adaptive_activation_threshold(
@@ -303,57 +272,10 @@ def make_separator_evidence_gray(
     ).astype(np.uint8)
 
 
-def normalize_score_image(
-    score: np.ndarray,
-    percentile: float,
-    numerical_floor: float,
-    maximum_percentile_samples: int,
-) -> np.ndarray:
-    data = score.astype(np.float32, copy=False)
-    hi = float(
-        sampled_percentile(
-            data,
-            [percentile],
-            maximum_percentile_samples,
-        )[0]
-    )
-    if hi <= numerical_floor:
-        return np.zeros(data.shape, dtype=np.float32)
-    return np.clip(data / hi, 0.0, 1.0)
-
-
-def _three_component_consensus(
-    components: tuple[np.ndarray, np.ndarray, np.ndarray],
-    minimum_channels: int,
-) -> np.ndarray:
-    if minimum_channels < 1 or minimum_channels > len(components):
-        raise ValueError("content consensus channel count must be between one and three")
-    first_low = np.minimum(components[0], components[1])
-    first_high = np.maximum(components[0], components[1])
-    ordered = (
-        np.maximum(first_high, components[2]),
-        np.maximum(first_low, np.minimum(first_high, components[2])),
-        np.minimum(first_low, components[2]),
-    )
-    return ordered[minimum_channels - 1]
-
-
-def make_content_evidence_gray(
-    gray: np.ndarray,
-    params: ContentEvidenceImageParameters,
-) -> np.ndarray:
+def make_content_evidence_gray(gray: np.ndarray) -> np.ndarray:
     data = gray.astype(np.float32, copy=False) / UINT8_MAX_VALUE
     if data.size == 0:
         return gray.copy()
-
-    gx = np.abs(np.diff(data, axis=1, prepend=data[:, :1]))
-    gy = np.abs(np.diff(data, axis=0, prepend=data[:1, :]))
-    gradient = normalize_score_image(
-        gx + gy,
-        params.gradient_percentile,
-        params.numerical_floor,
-        params.maximum_percentile_samples,
-    )
 
     north = np.empty_like(data)
     south = np.empty_like(data)
@@ -367,32 +289,17 @@ def make_content_evidence_gray(
     west[:, 1:] = data[:, :-1]
     east[:, -1] = data[:, -1]
     east[:, :-1] = data[:, 1:]
-    neighbor_texture = (
-        np.abs(data - north)
-        + np.abs(data - south)
-        + np.abs(data - west)
-        + np.abs(data - east)
-    ) * FOUR_NEIGHBOR_MEAN_WEIGHT
-    texture = normalize_score_image(
-        neighbor_texture,
-        params.texture_percentile,
-        params.numerical_floor,
-        params.maximum_percentile_samples,
-    )
+    horizontal_activity = np.abs(data - west) + np.abs(data - east)
+    vertical_activity = np.abs(data - north) + np.abs(data - south)
 
     local_mean = (
         data + north + south + west + east
     ) * FIVE_POINT_MEAN_WEIGHT
-    local_contrast = normalize_score_image(
-        np.abs(data - local_mean),
-        params.local_contrast_percentile,
-        params.numerical_floor,
-        params.maximum_percentile_samples,
-    )
+    local_contrast = np.abs(data - local_mean)
 
-    evidence = _three_component_consensus(
-        (gradient, texture, local_contrast),
-        int(params.minimum_consensus_channels),
+    evidence = np.minimum(
+        np.minimum(horizontal_activity, vertical_activity),
+        local_contrast,
     )
     evidence = np.clip(evidence, 0.0, 1.0)
     return (

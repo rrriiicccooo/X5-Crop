@@ -27,7 +27,7 @@ from x5crop.detection.final.finalize import (
 )
 from x5crop.debug.panels import debug_geometry
 from x5crop.debug.status import debug_status_parts
-from x5crop.domain import WorkspaceExtent
+from x5crop.domain import EvidenceState, WorkspaceExtent
 from x5crop.image.workspace import WorkspaceIdentity
 from x5crop.output.model import AxisBleedParameters
 from x5crop.output.surface import OutputSurface
@@ -44,7 +44,7 @@ from x5crop.run_status import RunTerminalOutcome
 class UnresolvedOutputContractTest(unittest.TestCase):
     def test_resolved_review_remains_explicitly_exportable(self) -> None:
         selection = selection_fixture(
-            candidate_fixture(failed_candidate_check="boundary_proof")
+            candidate_fixture(failed_candidate_check="sequence_proof")
         )
         bleed = prepare_frame_bleed(selection, AxisBleedParameters(20, 10))
         detection = finalize_detection(
@@ -52,6 +52,7 @@ class UnresolvedOutputContractTest(unittest.TestCase):
                 selection,
                 bleed,
                 transform_geometry_fixture(),
+                automatic_processing_eligibility=EvidenceState.SUPPORTED,
             ),
             bleed,
             finalization_plan_for_selection(
@@ -91,7 +92,12 @@ class UnresolvedOutputContractTest(unittest.TestCase):
         bleed = prepare_frame_bleed(selection, AxisBleedParameters(20, 10))
         transform = transform_geometry_fixture()
         detection = finalize_detection(
-            apply_decision_gate(selection, bleed, transform),
+            apply_decision_gate(
+                selection,
+                bleed,
+                transform,
+                automatic_processing_eligibility=EvidenceState.SUPPORTED,
+            ),
             bleed,
             finalization_plan_for_selection(
                 selection,
@@ -143,7 +149,7 @@ class UnresolvedOutputContractTest(unittest.TestCase):
             review_copy=None,
             warnings=[],
             configuration=detection_configuration_read_model(
-                get_detection_configuration("135", "full")
+                get_detection_configuration("135", "partial")
             ),
             resolution_metadata=unavailable_resolution_metadata_fixture(),
             transform_geometry=transform,

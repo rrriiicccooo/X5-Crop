@@ -4,9 +4,9 @@ from dataclasses import dataclass, field
 
 from ...domain import (
     EvidenceState,
-    InterPhotoBoundaryReference,
+    InterFrameBoundaryReference,
 )
-from ..physical.model import PhotoSequenceSolution
+from ..physical.model import FrameSequenceSolution
 
 
 @dataclass(frozen=True)
@@ -14,8 +14,8 @@ class SeparatorSequenceEvidence:
     expected_count: int
     hard_count: int
     provisional_boundary_count: int
-    hard_boundaries: tuple[InterPhotoBoundaryReference, ...]
-    missing_boundaries: tuple[InterPhotoBoundaryReference, ...]
+    hard_boundaries: tuple[InterFrameBoundaryReference, ...]
+    missing_boundaries: tuple[InterFrameBoundaryReference, ...]
     hard_tonal_evidence: tuple[float, ...]
     state: EvidenceState = field(init=False)
     reason: str = field(init=False)
@@ -57,7 +57,7 @@ class SeparatorSequenceEvidence:
 
 
 def separator_sequence_evidence(
-    geometry: PhotoSequenceSolution,
+    geometry: FrameSequenceSolution,
 ) -> SeparatorSequenceEvidence:
     expected = max(0, geometry.count - 1)
     accepted = geometry.separator_assignments
@@ -70,10 +70,10 @@ def separator_sequence_evidence(
         hard_count=len(accepted),
         provisional_boundary_count=expected - len(accepted),
         hard_boundaries=tuple(
-            InterPhotoBoundaryReference(None, index) for index in indexes
+            InterFrameBoundaryReference(None, index) for index in indexes
         ),
         missing_boundaries=tuple(
-            InterPhotoBoundaryReference(None, index) for index in missing
+            InterFrameBoundaryReference(None, index) for index in missing
         ),
         hard_tonal_evidence=tuple(
             float(assignment.observation.tonal_evidence)

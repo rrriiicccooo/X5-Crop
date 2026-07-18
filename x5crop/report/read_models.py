@@ -9,11 +9,11 @@ from ..detection.decision.model import DecisionGateAssessment
 from ..detection.gate_checks import GateCheck
 from ..detection.candidate.selection.model import SelectionResult
 from ..detection.physical.model import (
-    DualLanePhotoSolution,
+    DualLaneFrameSolution,
     ReviewOnlyContainment,
-    PhotoSequenceSolution,
+    FrameSequenceSolution,
 )
-from ..domain import InterPhotoSpacing
+from ..domain import InterFrameSpacing
 from ..output.model import FrameBleedPlan
 
 
@@ -22,7 +22,7 @@ def typed_read_model(value: Any) -> Any:
         return f"<bytes:{len(value)}>"
     if isinstance(value, Enum):
         return value.value
-    if isinstance(value, InterPhotoSpacing):
+    if isinstance(value, InterFrameSpacing):
         return {
             "measurement_basis": value.basis.value,
             "boundary": typed_read_model(value.boundary),
@@ -53,6 +53,7 @@ def gate_check_read_model(check: GateCheck) -> dict[str, Any]:
         "code": check.code,
         "stage": typed_read_model(check.stage),
         "state": check.state.value,
+        "requirement": check.requirement.value,
         "final_review_reason": check.final_review_reason,
         "blocks": bool(check.blocks),
     }
@@ -75,9 +76,9 @@ def candidate_gate_read_model(
 
 def candidate_read_model(candidate: AssessedCandidate) -> dict[str, Any]:
     geometry = candidate.geometry
-    if isinstance(geometry, PhotoSequenceSolution):
+    if isinstance(geometry, FrameSequenceSolution):
         geometry_kind = "sequence"
-    elif isinstance(geometry, DualLanePhotoSolution):
+    elif isinstance(geometry, DualLaneFrameSolution):
         geometry_kind = "dual_lane"
     elif isinstance(geometry, ReviewOnlyContainment):
         geometry_kind = "review_only"

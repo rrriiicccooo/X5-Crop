@@ -7,22 +7,25 @@ from ..utils import require_percentile, require_positive, require_unit_interval
 
 @dataclass(frozen=True)
 class BoundaryPathParameters:
-    edge_reference_percentile: float = 10.0
+    edge_reference_mad_multiplier: float = 3.0
     change_point_percentile: float = 90.0
     minimum_cross_sections: int = 5
     maximum_section_width_ratio_to_scan_extent: float = 0.5
     minimum_path_support_ratio: float = 0.60
-    inner_sample_ratio: float = 0.01
+    local_measurement_window_ratio: float = 0.01
+    minimum_local_measurement_window_px: int = 3
+    edge_transition_persistence_ratio: float = 0.80
     path_cluster_tolerance_ratio: float = 0.005
     path_cluster_tolerance_min_px: int = 2
+    path_inlier_mad_multiplier: float = 3.0
+    maximum_path_fit_residual_ratio: float = 0.06
     maximum_path_section_gap: int = 1
-    strongest_change_points_per_section: int = 64
-    maximum_paths_per_axis: int = 32
+    maximum_change_points_per_section: int = 64
 
     def __post_init__(self) -> None:
-        require_percentile(
-            "canvas-edge reference percentile",
-            self.edge_reference_percentile,
+        require_positive(
+            "canvas-edge reference MAD multiplier",
+            self.edge_reference_mad_multiplier,
         )
         require_percentile(
             "boundary change-point percentile",
@@ -44,9 +47,22 @@ class BoundaryPathParameters:
         )
         if self.minimum_path_support_ratio <= 0.0:
             raise ValueError("boundary path support must be positive")
-        require_unit_interval("boundary inner sample ratio", self.inner_sample_ratio)
-        if self.inner_sample_ratio <= 0.0:
-            raise ValueError("boundary inner sample ratio must be positive")
+        require_unit_interval(
+            "boundary local measurement window ratio",
+            self.local_measurement_window_ratio,
+        )
+        if self.local_measurement_window_ratio <= 0.0:
+            raise ValueError("boundary local measurement window ratio must be positive")
+        require_positive(
+            "boundary minimum local measurement window",
+            self.minimum_local_measurement_window_px,
+        )
+        require_unit_interval(
+            "boundary edge transition persistence",
+            self.edge_transition_persistence_ratio,
+        )
+        if self.edge_transition_persistence_ratio <= 0.0:
+            raise ValueError("boundary edge transition persistence must be positive")
         require_unit_interval(
             "boundary path cluster tolerance",
             self.path_cluster_tolerance_ratio,
@@ -55,13 +71,19 @@ class BoundaryPathParameters:
             "boundary path cluster minimum",
             self.path_cluster_tolerance_min_px,
         )
+        require_positive(
+            "boundary path inlier MAD multiplier",
+            self.path_inlier_mad_multiplier,
+        )
+        require_unit_interval(
+            "boundary maximum path-fit residual ratio",
+            self.maximum_path_fit_residual_ratio,
+        )
+        if self.maximum_path_fit_residual_ratio <= 0.0:
+            raise ValueError("boundary path-fit residual ratio must be positive")
         if self.maximum_path_section_gap < 0:
             raise ValueError("boundary path section gap cannot be negative")
         require_positive(
-            "boundary strongest change-point count",
-            self.strongest_change_points_per_section,
-        )
-        require_positive(
-            "boundary path budget",
-            self.maximum_paths_per_axis,
+            "boundary maximum change-point count",
+            self.maximum_change_points_per_section,
         )

@@ -51,13 +51,23 @@ class DetectionContext:
             raise ValueError("measurement cache and detection request layout must match")
         if (
             self.request.requested_count is not None
-            and self.request.requested_count
-            not in self.configuration.physical_spec.allowed_counts
+            and (
+                (
+                    self.request.strip_mode == FULL
+                    and self.request.requested_count
+                    != self.configuration.physical_spec.strip.default_count
+                )
+                or (
+                    self.request.strip_mode == PARTIAL
+                    and self.request.requested_count
+                    not in self.configuration.physical_spec.strip.allowed_partial_counts
+                )
+            )
         ):
-            raise ValueError("requested count must be allowed by the physical spec")
+            raise ValueError("requested count must be allowed by strip handling")
 
         if self.configuration.detector_kind == "dual_lane":
-            expected_lane_format = self.configuration.physical_spec.lane_format_id
+            expected_lane_format = self.configuration.physical_spec.layout.lane_format_id
             if (
                 self.lane_configuration is None
                 or self.lane_configuration.strip_mode != FULL

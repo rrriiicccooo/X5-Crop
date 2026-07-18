@@ -72,5 +72,5 @@ esac
 echo
 echo "Uninstall helper finished."
 echo "To remove X5 Crop itself, delete this X5 Crop folder."
-echo "To keep your cropped TIFF output, move split_output/ somewhere safe before deleting the folder."
+echo "To keep your cropped TIFF output, move x5_crop_output/ somewhere safe before deleting the folder."
 finish 0

@@ -24,6 +24,10 @@ class DecisionOwnershipOutputContractTest(unittest.TestCase):
             parameters["transform_geometry"].annotation,
             "TransformGeometryEvidence",
         )
+        self.assertEqual(
+            parameters["automatic_processing_eligibility"].annotation,
+            "EvidenceState",
+        )
 
     def test_final_fields_exist_only_on_final_detection(self) -> None:
         candidate = candidate_fixture()

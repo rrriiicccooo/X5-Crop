@@ -32,16 +32,20 @@ from x5crop.detection.candidate.model import (
 from x5crop.domain import (
     BoundarySide,
     Box,
+    ContainmentFallback,
     EvidenceState,
+    HolderSafetyEnvelope,
     MeasurementIdentity,
     MeasurementProvenance,
     ObservationId,
     PixelInterval,
-    PhotoApertureEdgeSource,
     PhysicalSearchFact,
     PhysicalSearchOutcome,
 )
-from x5crop.detection.physical.model import SequenceResiduals
+from x5crop.detection.physical.model import (
+    FrameBoundarySource,
+    SequenceResiduals,
+)
 from x5crop.entry.cli import build_parser
 from x5crop.run_config import RunConfig
 from x5crop.runtime.options import RuntimeOptions
@@ -55,7 +59,7 @@ def _geometry_hypothesis(source: str) -> MeasurementProvenance:
         MeasurementIdentity.FRAME_GEOMETRY,
         ObservationId(source),
         (MeasurementIdentity.FRAME_DIMENSIONS,),
-        "synthetic aperture geometry hypothesis",
+        "synthetic frame-slot geometry hypothesis",
     )
 
 
@@ -74,22 +78,30 @@ def _candidate_with_geometry(candidate, geometry):
 
 def _with_leading_interval(candidate, interval: PixelInterval, source: str):
     geometry = candidate.geometry
+    first_slot = geometry.frame_slots[0]
     leading = replace(
-        geometry.photo_apertures[0].leading,
+        first_slot.leading,
         position=interval,
-        state=EvidenceState.UNAVAILABLE,
-        source=PhotoApertureEdgeSource.DIMENSION_HYPOTHESIS,
-        provenance=_geometry_hypothesis(source),
+        source=FrameBoundarySource.DIMENSION_CONSTRAINED,
+        boundary_anchor=None,
+        inference_provenance=_geometry_hypothesis(source),
     )
-    first = replace(geometry.photo_apertures[0], leading=leading)
+    first = replace(
+        first_slot,
+        leading=leading,
+        visible_long_axis=PixelInterval(
+            interval.minimum,
+            first_slot.visible_long_axis.maximum,
+        ),
+    )
     updated = replace(
         geometry,
-        photo_apertures=(first, *geometry.photo_apertures[1:]),
-        aperture_edge_assignments=tuple(
+        frame_slots=(first, *geometry.frame_slots[1:]),
+        long_axis_assignments=tuple(
             item
-            for item in geometry.aperture_edge_assignments
+            for item in geometry.long_axis_assignments
             if not (
-                item.photo_index == 1 and item.side == BoundarySide.LEADING
+                item.frame_index == 1 and item.side == BoundarySide.LEADING
             )
         ),
     )
@@ -98,41 +110,21 @@ def _with_leading_interval(candidate, interval: PixelInterval, source: str):
 
 def _with_shifted_short_axis(candidate, offset: float):
     geometry = candidate.geometry
-    apertures = tuple(
-        replace(
-            aperture,
-            top=replace(
-                aperture.top,
-                position=aperture.top.position.plus(PixelInterval.exact(offset)),
-                state=EvidenceState.UNAVAILABLE,
-                source=PhotoApertureEdgeSource.DIMENSION_HYPOTHESIS,
-                provenance=_geometry_hypothesis(
-                    f"shifted_top:{aperture.index}"
-                ),
-            ),
-            bottom=replace(
-                aperture.bottom,
-                position=aperture.bottom.position.plus(PixelInterval.exact(offset)),
-                state=EvidenceState.UNAVAILABLE,
-                source=PhotoApertureEdgeSource.DIMENSION_HYPOTHESIS,
-                provenance=_geometry_hypothesis(
-                    f"shifted_bottom:{aperture.index}"
-                ),
-            ),
-        )
-        for aperture in geometry.photo_apertures
-    )
+    short_axis = geometry.shared_short_axis
     updated = replace(
         geometry,
-        holder_span=replace(
-            geometry.holder_span,
-            box=Box(0, 0, 310, 120),
+        holder_safety=HolderSafetyEnvelope(
+            (),
+            ContainmentFallback(
+                Box(0, 0, 310, 120),
+                _geometry_hypothesis("shifted_holder_containment"),
+            ),
         ),
-        photo_apertures=apertures,
-        aperture_edge_assignments=tuple(
-            item
-            for item in geometry.aperture_edge_assignments
-            if item.side not in {BoundarySide.TOP, BoundarySide.BOTTOM}
+        shared_short_axis=replace(
+            short_axis,
+            top=short_axis.top.plus(PixelInterval.exact(offset)),
+            bottom=short_axis.bottom.plus(PixelInterval.exact(offset)),
+            provenance=_geometry_hypothesis("shifted_shared_short_axis"),
         ),
     )
     return _candidate_with_geometry(candidate, updated)
@@ -154,6 +146,7 @@ class PhysicalGateModelContractTest(unittest.TestCase):
             selection,
             frame_bleed_fixture(),
             transform_geometry_fixture(),
+            automatic_processing_eligibility=EvidenceState.SUPPORTED,
         )
 
     def test_unresolved_count_does_not_duplicate_generic_geometry_reason(
@@ -222,7 +215,7 @@ class PhysicalGateModelContractTest(unittest.TestCase):
         )
         result = select_candidates(
             (candidate, corroborating_candidate),
-            larger_count_hypotheses_resolved=True,
+            larger_count_search_complete=True,
             physical_search=PhysicalSearchOutcome(
                 (PhysicalSearchFact.SOLUTION_FOUND,),
             ),
@@ -233,7 +226,7 @@ class PhysicalGateModelContractTest(unittest.TestCase):
     def test_failed_candidate_does_not_create_equal_rank_disagreement(self) -> None:
         good = candidate_fixture()
         bad = candidate_fixture(
-            failed_candidate_check="boundary_proof",
+            failed_candidate_check="sequence_proof",
         )
         bad = _with_leading_interval(
             bad,
@@ -242,7 +235,7 @@ class PhysicalGateModelContractTest(unittest.TestCase):
         )
         result = select_candidates(
             (good, bad),
-            larger_count_hypotheses_resolved=True,
+            larger_count_search_complete=True,
             physical_search=PhysicalSearchOutcome(
                 (PhysicalSearchFact.SOLUTION_FOUND,),
             ),
@@ -268,9 +261,9 @@ class PhysicalGateModelContractTest(unittest.TestCase):
         )
         self.assertEqual(len(geometry_clusters((bridge, left, right))), 2)
 
-    def test_non_dominated_geometry_tradeoff_remains_disagreed(self) -> None:
+    def test_candidate_residual_tradeoffs_preserve_geometry_disagreement(self) -> None:
         selected = candidate_fixture()
-        alternative = _with_shifted_short_axis(selected, 10.0)
+        alternative = _with_shifted_short_axis(selected, 1.0)
         alternative = replace(
             alternative,
             geometry=replace(
@@ -295,11 +288,12 @@ class PhysicalGateModelContractTest(unittest.TestCase):
         )
         result = select_candidates(
             (selected, alternative),
-            larger_count_hypotheses_resolved=True,
+            larger_count_search_complete=True,
             physical_search=PhysicalSearchOutcome(
                 (PhysicalSearchFact.SOLUTION_FOUND,),
             ),
         )
+        self.assertIs(result.selected, selected)
         self.assertEqual(result.consensus, SelectionConsensus.DISAGREED)
         self.assertFalse(result.geometry_resolution.alternative_geometries_resolved)
 
@@ -324,9 +318,9 @@ class PhysicalGateModelContractTest(unittest.TestCase):
     def test_final_reason_vocabulary_is_finite_and_physical(self) -> None:
         from x5crop.detection.decision.vocabulary import FINAL_REVIEW_REASONS
 
-        self.assertEqual(len(FINAL_REVIEW_REASONS), 10)
+        self.assertEqual(len(FINAL_REVIEW_REASONS), 11)
         self.assertIn("content_preservation_unresolved", FINAL_REVIEW_REASONS)
-        self.assertIn("boundary_evidence_insufficient", FINAL_REVIEW_REASONS)
+        self.assertIn("sequence_evidence_insufficient", FINAL_REVIEW_REASONS)
         self.assertIn("count_resolution_unavailable", FINAL_REVIEW_REASONS)
         self.assertIn("geometry_resolution_unavailable", FINAL_REVIEW_REASONS)
 

@@ -1,17 +1,16 @@
 from __future__ import annotations
 
+from inspect import signature
+from pathlib import Path
 import unittest
 from unittest.mock import patch
 
-import numpy as np
-
-from tools.tests.photo_aperture_solver_support import (
+from tools.tests.frame_slot_solver_support import (
     dimensions,
-    plan,
     scope,
     separator,
+    sequence_search_index,
 )
-from x5crop.cache import MeasurementCache
 from x5crop.configuration.registry import get_detection_configuration
 from x5crop.detection.candidate.build.sequence_candidate import (
     build_sequence_candidate,
@@ -20,23 +19,38 @@ from x5crop.detection.candidate.plan.model import (
     CountHypothesis,
     CountHypothesisSource,
 )
+from x5crop.detection.candidate.proposal.sequence import (
+    FrameSequenceObservations,
+)
 from x5crop.detection.context import DetectionRequest
 from x5crop.detection.physical.separator.observations import (
-    SeparatorSupportSet,
+    SeparatorObservationSet,
 )
-from x5crop.detection.physical.sequence_solver import (
-    PhotoSequenceSolveResult,
-    solve_photo_sequence,
+from x5crop.detection.physical.frame_sequence_solver import (
+    FrameSequenceSolveResult,
+    solve_frame_sequence,
 )
+from x5crop.detection.physical.short_axis import shared_short_axis_plan
 from x5crop.domain import EvidenceState
-from x5crop.image.statistics import (
-    ImageMeasurementStatisticsParameters,
-    image_measurement_statistics,
-)
+from x5crop.domain import BoundarySide
 from x5crop.image.content import ContentRegionObservation
 
 
 class SequenceCandidateBuildContractTest(unittest.TestCase):
+    def test_candidate_build_consumes_resolved_shared_short_axis(self) -> None:
+        parameters = signature(build_sequence_candidate).parameters
+        source = (
+            Path(__file__).resolve().parents[2]
+            / "x5crop/detection/candidate/build/sequence_candidate.py"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("short_axis_plan", parameters)
+        self.assertIn("sequence_observations", parameters)
+        self.assertNotIn("shared_short_axis_plan(", source)
+        self.assertNotIn("cached_separator_profile", source)
+        self.assertNotIn("propose_separator_bands", source)
+        self.assertNotIn("measure_separator_cross_axis_support", source)
+
     def test_separator_observation_exhaustion_reaches_candidate_geometry(self) -> None:
         search_scope = scope(
             width=210,
@@ -45,62 +59,46 @@ class SequenceCandidateBuildContractTest(unittest.TestCase):
             trailing=210.0,
             top=10.0,
             bottom=110.0,
+            holder_sides=(BoundarySide.TOP, BoundarySide.BOTTOM),
         )
-        cross_axis_plan = plan(search_scope)
+        cross_axis_plan = shared_short_axis_plan(search_scope)
         frame_dimensions = dimensions(100.0, 100.0)
         observation = separator(
             100.0,
             110.0,
             supported=True,
-            cross_axis=cross_axis_plan.hypotheses[0],
+            short_axis=cross_axis_plan,
         )
-        solved = solve_photo_sequence(
+        search_index = sequence_search_index(
+            search_scope,
             (observation,),
+            support_budget_exhausted=True,
+        )
+        solved = solve_frame_sequence(
+            search_index,
             search_scope,
             cross_axis_plan,
             2,
             frame_dimensions,
-            ContentRegionObservation(search_scope.holder_span.box, (), 0),
+            ContentRegionObservation(search_scope.holder_safety.box, (), 0),
             maximum_assignment_evaluations=1_000,
-            maximum_solution_alternatives=16,
+            strip_mode="full",
+            nominal_count=2,
         )
-        self.assertIsInstance(solved, PhotoSequenceSolveResult)
-        assert isinstance(solved, PhotoSequenceSolveResult)
+        self.assertIsInstance(solved, FrameSequenceSolveResult)
+        assert isinstance(solved, FrameSequenceSolveResult)
         self.assertEqual(solved.search_outcome.state, EvidenceState.SUPPORTED)
 
-        gray = np.zeros((120, 210), dtype=np.uint8)
-        cache = MeasurementCache(
-            "horizontal",
-            gray,
-            gray,
-            gray.astype(np.float32),
-            image_measurement_statistics(
-                gray,
-                ImageMeasurementStatisticsParameters(),
+        sequence_observations = FrameSequenceObservations(
+            SeparatorObservationSet(
+                (observation.observation,),
             ),
+            search_index,
         )
         configuration = get_detection_configuration("135", "full")
-        with (
-            patch(
-                "x5crop.detection.candidate.build.sequence_candidate.cached_separator_profile",
-                return_value=np.zeros(210, dtype=np.float32),
-            ),
-            patch(
-                "x5crop.detection.candidate.build.sequence_candidate.propose_separator_bands",
-                return_value=(),
-            ),
-            patch(
-                "x5crop.detection.candidate.build.sequence_candidate.photo_aperture_cross_axis_plan",
-                return_value=cross_axis_plan,
-            ),
-            patch(
-                "x5crop.detection.candidate.build.sequence_candidate.measure_separator_cross_axis_support",
-                return_value=SeparatorSupportSet((observation,), True),
-            ),
-            patch(
-                "x5crop.detection.candidate.build.sequence_candidate.solve_photo_sequence",
+        with patch(
+                "x5crop.detection.candidate.build.sequence_candidate.solve_frame_sequence",
                 return_value=solved,
-            ),
         ):
             outcome = build_sequence_candidate(
                 DetectionRequest("horizontal", "full", 2),
@@ -111,10 +109,10 @@ class SequenceCandidateBuildContractTest(unittest.TestCase):
                     CountHypothesisSource.REQUESTED,
                 ),
                 search_scope,
+                cross_axis_plan,
+                sequence_observations,
                 frame_dimensions,
-                ContentRegionObservation(search_scope.holder_span.box, (), 0),
-                cache=cache,
-                separator_configuration=configuration.separator,
+                ContentRegionObservation(search_scope.holder_safety.box, (), 0),
                 solver_parameters=configuration.candidate_plan.sequence_solver,
             )
 

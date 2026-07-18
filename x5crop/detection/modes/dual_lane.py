@@ -6,8 +6,12 @@ from typing import Callable
 from ...cache.analysis import make_measurement_cache
 from ...domain import (
     Box,
+    ContainmentFallback,
     EvidenceState,
-    HolderSpan,
+    HolderSafetyEnvelope,
+    MeasurementIdentity,
+    MeasurementProvenance,
+    ObservationId,
     PhysicalSearchFact,
     PhysicalSearchOutcome,
     combined_physical_search_outcome,
@@ -25,8 +29,8 @@ from .review_only import unresolved_dual_lane_candidate
 from ..physical.model import (
     combined_assignment_consensus,
     combined_sequence_residuals,
-    DualLanePhotoSolution,
-    PhotoSequenceSolution,
+    DualLaneFrameSolution,
+    FrameSequenceSolution,
 )
 from ..physical.lane_divider import (
     DUAL_LANE_COUNT,
@@ -50,16 +54,16 @@ def _lane_context(
         context.request,
         layout=HORIZONTAL,
         strip_mode="full",
-        requested_count=lane_configuration.physical_spec.default_count,
+        requested_count=lane_configuration.physical_spec.strip.default_count,
     )
     cache = make_measurement_cache(
         lane_gray,
         HORIZONTAL,
-        lane_configuration.preprocess.content_evidence_image,
         image_measurement_statistics(
             lane_gray,
             lane_configuration.preprocess.image_statistics,
         ),
+        context.measurement_cache.transform_position_uncertainty_px,
         context.measurement_cache.lookup_statistics,
     )
     return DetectionContext(
@@ -80,20 +84,29 @@ def _parent_candidate(
     physical_spec = context.configuration.physical_spec
     lane_candidates = tuple(selection.selected for selection in lanes)
     lane_solutions = tuple(candidate.geometry for candidate in lane_candidates)
-    if not all(isinstance(solution, PhotoSequenceSolution) for solution in lane_solutions):
+    if not all(isinstance(solution, FrameSequenceSolution) for solution in lane_solutions):
         raise ValueError("dual-lane components require solved lane sequences")
     count = sum(candidate.geometry.count for candidate in lane_candidates)
-    if count not in physical_spec.allowed_counts:
-        raise ValueError("dual-lane total count must be physically allowed")
+    if count != physical_spec.strip.default_count:
+        raise ValueError("dual-lane total count must match the nominal full strip")
     work_height, work_width = context.measurement_cache.gray_work.shape
     return BuiltCandidate(
-        geometry=DualLanePhotoSolution(
+        geometry=DualLaneFrameSolution(
             format_id=physical_spec.format_id,
             layout=context.request.layout,
             strip_mode="full",
             count=count,
-            holder_span=HolderSpan(
-                Box(0, 0, work_width, work_height)
+            holder_safety=HolderSafetyEnvelope(
+                (),
+                ContainmentFallback(
+                    Box(0, 0, work_width, work_height),
+                    MeasurementProvenance(
+                        MeasurementIdentity.CANVAS,
+                        ObservationId("dual_lane_containment"),
+                        (MeasurementIdentity.CANVAS,),
+                        "dual-lane workspace containment",
+                    ),
+                ),
             ),
             residuals=combined_sequence_residuals(lane_solutions),
             assignment_consensus=combined_assignment_consensus(lane_solutions),
@@ -121,7 +134,7 @@ def choose_dual_lane_detection(
     physical_spec = context.configuration.physical_spec
     if context.request.strip_mode != "full":
         raise ValueError("dual-lane detector is only valid for full mode")
-    if physical_spec.lane_count != DUAL_LANE_COUNT:
+    if physical_spec.layout.lane_count != DUAL_LANE_COUNT:
         raise ValueError("dual-lane detector supports exactly two lanes")
     divider_evidence = measure_lane_dividers(
         context.measurement_cache.content_evidence_float_work,
@@ -149,7 +162,7 @@ def choose_dual_lane_detection(
             )
         )
         if any(
-            not isinstance(selection.selected.geometry, PhotoSequenceSolution)
+            not isinstance(selection.selected.geometry, FrameSequenceSolution)
             for selection in lane_selections
         ):
             lane_geometry_unresolved = True
@@ -200,6 +213,6 @@ def choose_dual_lane_detection(
         )
     return select_candidates(
         tuple(parent_candidates),
-        larger_count_hypotheses_resolved=True,
+        larger_count_search_complete=True,
         physical_search=physical_search,
     )

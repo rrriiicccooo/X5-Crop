@@ -10,7 +10,7 @@ from x5crop.domain import (
 )
 
 if TYPE_CHECKING:
-    from ...physical.model import PhotoSequenceSolution
+    from ...physical.model import FrameSequenceSolution
 
 
 @dataclass(frozen=True)
@@ -48,25 +48,24 @@ class EvidenceIndependenceEvidence:
 
 
 def _supporting_measurement_provenances(
-    geometry: PhotoSequenceSolution,
+    geometry: FrameSequenceSolution,
 ) -> tuple[MeasurementProvenance, ...]:
-    aperture_provenances = tuple(
+    frame_boundary_provenances = tuple(
         assignment.observation.provenance
-        for assignment in geometry.aperture_edge_assignments
+        for assignment in geometry.long_axis_assignments
         if assignment.resolution.independently_observed
     )
     separator_provenances = tuple(
         assignment.observation.provenance
         for assignment in geometry.separator_assignments
-        if assignment.independent
     )
     return tuple(
-        dict.fromkeys((*aperture_provenances, *separator_provenances))
+        dict.fromkeys((*frame_boundary_provenances, *separator_provenances))
     )
 
 
 def evidence_independence_evidence(
-    geometry: PhotoSequenceSolution,
+    geometry: FrameSequenceSolution,
 ) -> EvidenceIndependenceEvidence:
     supporting_provenances = _supporting_measurement_provenances(geometry)
     supporting_roots = tuple(

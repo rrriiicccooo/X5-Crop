@@ -3,12 +3,16 @@ from __future__ import annotations
 from x5crop.detection.candidate.assessment.candidate import (
     candidate_gate_for_evidence,
 )
-from x5crop.detection.candidate.assessment.model import (
-    BoundaryProofPath,
-    CandidateGateAssessment,
+from x5crop.detection.candidate.assessment.candidate_gate import (
+    candidate_gate_assessment,
 )
 from x5crop.detection.candidate.assessment.evidence_independence import (
     evidence_independence_evidence,
+)
+from x5crop.detection.candidate.assessment.model import (
+    CandidateGateAssessment,
+    CandidateGateInput,
+    SequenceProofPath,
 )
 from x5crop.detection.candidate.assessment.review_only import (
     assess_review_only_candidate,
@@ -30,19 +34,22 @@ from x5crop.detection.candidate.selection.model import (
 )
 from x5crop.detection.decision.decision_gate import apply_decision_gate
 from x5crop.detection.decision.model import DecisionGateAssessment
-from x5crop.detection.evidence.content.external_boundaries import (
-    ExternalApertureBoundaryObservation,
-    ExternalAperturePreservationEvidence,
+from x5crop.detection.evidence.content.external_frame_boundaries import (
+    ExternalFrameBoundaryObservation,
+    ExternalFramePreservationEvidence,
 )
-from x5crop.detection.evidence.photo_aperture_coverage import (
-    PhotoApertureCoverageEvidence,
+from x5crop.detection.evidence.content.frame_content import (
+    FrameContentEvidence,
+    FrameContentObservation,
 )
-from x5crop.detection.evidence.content.internal_boundaries import (
-    inter_photo_boundary_preservation_evidence,
+from x5crop.detection.evidence.content.internal_frame_boundaries import (
+    InternalBoundaryContentContinuityObservation,
+    internal_frame_boundary_preservation_evidence,
 )
-from x5crop.detection.evidence.content.photo_content import (
-    PhotoContentEvidence,
-    PhotoContentObservation,
+from x5crop.detection.evidence.frame_coverage import FrameCoverageEvidence
+from x5crop.detection.evidence.frame_scale import frame_scale_observations
+from x5crop.detection.evidence.frame_slot_topology import (
+    frame_slot_topology_evidence,
 )
 from x5crop.detection.evidence.holder_boundary import holder_boundary_evidence
 from x5crop.detection.evidence.holder_occupancy import (
@@ -50,7 +57,6 @@ from x5crop.detection.evidence.holder_occupancy import (
     StripCompletenessEvidence,
 )
 from x5crop.detection.evidence.partial_edge import partial_edge_safety_evidence
-from x5crop.detection.evidence.photo_scale import photo_scale_observations
 from x5crop.detection.evidence.separator_sequence import separator_sequence_evidence
 from x5crop.detection.evidence.transform_geometry import (
     TransformGeometryEvidence,
@@ -61,16 +67,32 @@ from x5crop.detection.final.finalize import (
     finalize_detection,
 )
 from x5crop.detection.final.model import FinalDetection
-from x5crop.detection.gate_checks import GateCheck, GateStage
 from x5crop.detection.geometry_resolution import GeometryResolution
+from x5crop.detection.physical.frame_dimensions import frame_dimension_evidence
 from x5crop.detection.physical.model import (
     AssignmentConsensusOutcome,
+    BoundaryAnchor,
     BoundaryAssignmentConsensus,
-    PhotoSequenceSolution,
+    BoundaryGeometryState,
+    BoundaryRoleAuthority,
+    CommonFrameWidthResolution,
+    ContentExtentConstraint,
+    FrameContentOccupancy,
+    HolderSpanScaleHint,
+    FrameWidthSearchHint,
+    FrameWidthMeasurementConstraint,
+    FrameSequenceSolution,
+    FrameSlot,
+    FrameEdgeAssignment,
+    FrameBoundarySource,
+    ResolvedFrameBoundary,
+    PhotoHeightEvidence,
     ReviewOnlyContainment,
+    SeparatorBandAssignment,
     SequenceResiduals,
+    SharedShortAxisBasis,
+    SharedShortAxisSafetySpan,
 )
-from x5crop.detection.physical.photo_size import frame_dimension_evidence
 from x5crop.domain import (
     BoundaryAxis,
     BoundaryKind,
@@ -78,32 +100,26 @@ from x5crop.domain import (
     BoundarySide,
     Box,
     ContainmentFallback,
+    CrossAxisPathMeasurement,
+    CrossAxisPathOutcome,
     EvidenceState,
     FrameDimensionPrior,
     GrayAppearanceObservation,
     GrayBoundaryPathObservation,
     GrayIntensityTail,
     HolderBoundaryObservation,
-    HolderSpan,
-    InterPhotoBoundaryReference,
-    InterPhotoSpacing,
-    InterPhotoSpacingBasis,
+    HolderSafetyEnvelope,
+    InterFrameBoundaryReference,
+    InterFrameSpacing,
+    InterFrameSpacingBasis,
     MeasurementIdentity,
     MeasurementProvenance,
     ObservationId,
-    PhotoAperture,
-    PhotoApertureBoundaryResolution,
-    PhotoApertureCrossAxisHypothesis,
-    PhotoApertureEdgeAssignment,
-    PhotoApertureEdgeSource,
-    PixelInterval,
     PhysicalSearchFact,
     PhysicalSearchOutcome,
-    SeparatorBandAssignment,
-    SeparatorWidthConstraint,
+    PixelInterval,
     SeparatorBandObservation,
     SeparatorCrossAxisMeasurement,
-    SeparatorCrossAxisOutcome,
     WorkspaceExtent,
 )
 from x5crop.image.deskew import DeskewMeasurementOutcome
@@ -194,11 +210,7 @@ def candidate_boundary_paths() -> tuple[GrayBoundaryPathObservation, ...]:
 
 
 def unavailable_resolution_metadata_fixture() -> ResolutionMetadataObservation:
-    return ResolutionMetadataObservation(
-        None,
-        None,
-        ("test_metadata_unavailable",),
-    )
+    return ResolutionMetadataObservation(None, None, ("test_metadata_unavailable",))
 
 
 def separator_observation(
@@ -216,8 +228,8 @@ def separator_observation(
         "synthetic separator band",
     )
     return SeparatorBandObservation(
-        start=start,
-        end=end,
+        leading_edge=PixelInterval.exact(start),
+        trailing_edge=PixelInterval.exact(end),
         tonal_evidence=float(tonal_evidence),
         appearance=_appearance(provenance, texture=0.0),
         provenance=provenance,
@@ -226,88 +238,114 @@ def separator_observation(
 
 def separator_cross_axis_measurement(
     observation: SeparatorBandObservation,
-    aperture_cross_axis: PhotoApertureCrossAxisHypothesis,
+    shared_short_axis: SharedShortAxisSafetySpan,
     state: EvidenceState = EvidenceState.SUPPORTED,
 ) -> SeparatorCrossAxisMeasurement:
-    outcome = (
-        SeparatorCrossAxisOutcome.PATH_SUPPORTED
-        if state == EvidenceState.SUPPORTED
-        else SeparatorCrossAxisOutcome.CONTINUITY_WEAK
+    path = CrossAxisPathMeasurement(
+        (
+            CrossAxisPathOutcome.PATH_SUPPORTED
+            if state == EvidenceState.SUPPORTED
+            else CrossAxisPathOutcome.CONTINUITY_WEAK
+        ),
+        1.0 if state == EvidenceState.SUPPORTED else 0.0,
+        1.0 if state == EvidenceState.SUPPORTED else 0.0,
+        0,
     )
     return SeparatorCrossAxisMeasurement(
         observation_id=observation.provenance.observation_id,
-        aperture_cross_axis=aperture_cross_axis,
-        outcome=outcome,
-        coverage_ratio=1.0 if state == EvidenceState.SUPPORTED else 0.0,
-        longest_supported_ratio=(
-            1.0 if state == EvidenceState.SUPPORTED else 0.0
-        ),
-        break_count=0,
+        short_axis_span=shared_short_axis.measurement_span,
+        leading_edge_path=path,
+        trailing_edge_path=path,
+        band_path=path,
         appearance_coherence_ratio=(
             1.0 if state == EvidenceState.SUPPORTED else 0.0
         ),
     )
 
 
-def _measured_resolution(
-    photo_index: int,
-    side: BoundarySide,
+def _measured_boundary(
+    position: float,
     path: GrayBoundaryPathObservation,
-) -> PhotoApertureBoundaryResolution:
-    return PhotoApertureBoundaryResolution(
-        photo_index,
-        side,
-        path.position,
-        EvidenceState.SUPPORTED,
-        PhotoApertureEdgeSource.MEASURED_BOUNDARY_PATH,
-        path.provenance,
+    side: BoundarySide,
+) -> ResolvedFrameBoundary:
+    return ResolvedFrameBoundary(
+        position=PixelInterval.exact(position),
+        source=FrameBoundarySource.GRAY_PATH_OBSERVATION,
+        geometry_state=BoundaryGeometryState.RESOLVED,
+        boundary_anchor=BoundaryAnchor(
+            path,
+            side,
+            EvidenceState.SUPPORTED,
+            BoundaryRoleAuthority.DIRECT_MEASUREMENT,
+            path.provenance,
+        ),
+        inference_provenance=None,
     )
 
 
-def _separator_resolution(
-    photo_index: int,
-    side: BoundarySide,
+def _separator_boundary(
     position: float,
     observation: SeparatorBandObservation,
-) -> PhotoApertureBoundaryResolution:
-    return PhotoApertureBoundaryResolution(
-        photo_index,
-        side,
-        PixelInterval.exact(position),
-        EvidenceState.SUPPORTED,
-        PhotoApertureEdgeSource.SEPARATOR_BAND_EDGE,
-        observation.provenance,
+    side: BoundarySide,
+) -> ResolvedFrameBoundary:
+    return ResolvedFrameBoundary(
+        position=PixelInterval.exact(position),
+        source=FrameBoundarySource.SEPARATOR_EDGE_OBSERVATION,
+        geometry_state=BoundaryGeometryState.RESOLVED,
+        boundary_anchor=BoundaryAnchor(
+            observation,
+            side,
+            EvidenceState.SUPPORTED,
+            BoundaryRoleAuthority.DIRECT_MEASUREMENT,
+            observation.provenance,
+        ),
+        inference_provenance=None,
     )
 
 
-def _dimension_resolution(
-    photo_index: int,
+def _dimension_boundary(
+    frame_index: int,
     side: BoundarySide,
     position: float,
-) -> PhotoApertureBoundaryResolution:
+) -> ResolvedFrameBoundary:
     provenance = MeasurementProvenance(
         MeasurementIdentity.FRAME_GEOMETRY,
-        ObservationId(f"synthetic_dimension_edge:{photo_index}:{side.value}"),
+        ObservationId(f"synthetic_dimension_edge:{frame_index}:{side.value}"),
         (MeasurementIdentity.FRAME_DIMENSIONS,),
-        "synthetic dimension-only aperture edge",
+        "synthetic dimension-only frame edge",
     )
-    return PhotoApertureBoundaryResolution(
-        photo_index,
-        side,
-        PixelInterval.exact(position),
-        EvidenceState.UNAVAILABLE,
-        PhotoApertureEdgeSource.DIMENSION_HYPOTHESIS,
-        provenance,
+    return ResolvedFrameBoundary(
+        position=PixelInterval.exact(position),
+        source=FrameBoundarySource.DIMENSION_CONSTRAINED,
+        geometry_state=BoundaryGeometryState.RESOLVED,
+        boundary_anchor=None,
+        inference_provenance=provenance,
     )
 
 
 def _candidate_geometry(
     *,
     boundary_proof_supported: bool = True,
-) -> PhotoSequenceSolution:
+) -> FrameSequenceSolution:
     paths = candidate_boundary_paths()
     leading_path, trailing_path, top_path, bottom_path = paths
-    cross_axis = PhotoApertureCrossAxisHypothesis(top_path, bottom_path)
+    short_axis_provenance = MeasurementProvenance(
+        MeasurementIdentity.FRAME_GEOMETRY,
+        ObservationId("synthetic_shared_short_axis"),
+        (MeasurementIdentity.BOUNDARY_PATHS,),
+        "synthetic shared short-axis span",
+        boundary_anchors=(
+            top_path.provenance.observation_id,
+            bottom_path.provenance.observation_id,
+        ),
+    )
+    shared_short_axis = SharedShortAxisSafetySpan(
+        PixelInterval.exact(0.0),
+        PixelInterval.exact(100.0),
+        SharedShortAxisBasis.PHOTO_EDGE_BOUNDED,
+        EvidenceState.SUPPORTED,
+        short_axis_provenance,
+    )
     observation = separator_observation(
         sum(_SEPARATOR) / 2.0,
         start=_SEPARATOR[0],
@@ -315,64 +353,45 @@ def _candidate_geometry(
     )
     separator_measurement = separator_cross_axis_measurement(
         observation,
-        cross_axis,
+        shared_short_axis,
     )
-    first_leading = _measured_resolution(1, BoundarySide.LEADING, leading_path)
+    first_leading = _measured_boundary(0.0, leading_path, BoundarySide.LEADING)
+    second_trailing = _measured_boundary(
+        310.0,
+        trailing_path,
+        BoundarySide.TRAILING,
+    )
     if boundary_proof_supported:
-        first_trailing = _separator_resolution(
-            1,
-            BoundarySide.TRAILING,
+        first_trailing = _separator_boundary(
             _SEPARATOR[0],
             observation,
+            BoundarySide.TRAILING,
         )
-        second_leading = _separator_resolution(
-            2,
-            BoundarySide.LEADING,
+        second_leading = _separator_boundary(
             _SEPARATOR[1],
             observation,
+            BoundarySide.LEADING,
         )
     else:
-        first_trailing = _dimension_resolution(
+        first_trailing = _dimension_boundary(1, BoundarySide.TRAILING, _SEPARATOR[0])
+        second_leading = _dimension_boundary(2, BoundarySide.LEADING, _SEPARATOR[1])
+    slots = (
+        FrameSlot(
             1,
-            BoundarySide.TRAILING,
-            _SEPARATOR[0],
-        )
-        second_leading = _dimension_resolution(
-            2,
-            BoundarySide.LEADING,
-            _SEPARATOR[1],
-        )
-    second_trailing = _measured_resolution(2, BoundarySide.TRAILING, trailing_path)
-    first_top = _measured_resolution(1, BoundarySide.TOP, top_path)
-    first_bottom = _measured_resolution(1, BoundarySide.BOTTOM, bottom_path)
-    second_top = _measured_resolution(2, BoundarySide.TOP, top_path)
-    second_bottom = _measured_resolution(2, BoundarySide.BOTTOM, bottom_path)
-    apertures = (
-        PhotoAperture(
-            1,
+            PixelInterval(0.0, 150.0),
             first_leading,
             first_trailing,
-            first_top,
-            first_bottom,
+            FrameContentOccupancy.CONTENT_OBSERVED,
+            None,
         ),
-        PhotoAperture(
+        FrameSlot(
             2,
+            PixelInterval(160.0, 310.0),
             second_leading,
             second_trailing,
-            second_top,
-            second_bottom,
+            FrameContentOccupancy.CONTENT_OBSERVED,
+            None,
         ),
-    )
-    edge_assignments = tuple(
-        PhotoApertureEdgeAssignment(index, side, path, resolution)
-        for index, side, path, resolution in (
-            (1, BoundarySide.LEADING, leading_path, first_leading),
-            (1, BoundarySide.TOP, top_path, first_top),
-            (1, BoundarySide.BOTTOM, bottom_path, first_bottom),
-            (2, BoundarySide.TRAILING, trailing_path, second_trailing),
-            (2, BoundarySide.TOP, top_path, second_top),
-            (2, BoundarySide.BOTTOM, bottom_path, second_bottom),
-        )
     )
     separator_assignments = (
         (
@@ -380,56 +399,155 @@ def _candidate_geometry(
                 1,
                 observation,
                 separator_measurement,
+                PixelInterval.exact(150.0),
                 first_trailing,
                 second_leading,
-                SeparatorWidthConstraint(PixelInterval.exact(150.0)),
             ),
         )
         if boundary_proof_supported
         else ()
     )
-    spacing_provenance = (
-        observation.provenance
-        if boundary_proof_supported
-        else MeasurementProvenance(
-            MeasurementIdentity.FRAME_GEOMETRY,
-            ObservationId("synthetic_dimension_spacing:1"),
-            (MeasurementIdentity.FRAME_DIMENSIONS,),
-            "synthetic dimension-only spacing",
-        )
-    )
-    spacing = InterPhotoSpacing(
-        InterPhotoBoundaryReference(None, 1),
+    spacing = InterFrameSpacing(
+        InterFrameBoundaryReference(None, 1),
         PixelInterval.exact(_SEPARATOR[1] - _SEPARATOR[0]),
-        spacing_provenance,
         (
-            InterPhotoSpacingBasis.OBSERVED
+            observation.provenance
             if boundary_proof_supported
-            else InterPhotoSpacingBasis.GEOMETRY_HYPOTHESIS
+            else MeasurementProvenance(
+                MeasurementIdentity.FRAME_GEOMETRY,
+                ObservationId("synthetic_dimension_spacing:1"),
+                (MeasurementIdentity.FRAME_DIMENSIONS,),
+                "synthetic dimension-only spacing",
+            )
+        ),
+        (
+            InterFrameSpacingBasis.OBSERVED
+            if boundary_proof_supported
+            else InterFrameSpacingBasis.GEOMETRY_HYPOTHESIS
         ),
     )
-    return PhotoSequenceSolution(
+    width_provenance = MeasurementProvenance(
+        MeasurementIdentity.FRAME_DIMENSIONS,
+        ObservationId("synthetic_common_frame_width"),
+        (MeasurementIdentity.PHOTO_EDGES,),
+        "synthetic common frame width",
+        boundary_anchors=tuple(
+            dict.fromkeys(
+                (
+                    first_leading.measurement_provenance.observation_id,
+                    first_trailing.measurement_provenance.observation_id,
+                    second_leading.measurement_provenance.observation_id,
+                    second_trailing.measurement_provenance.observation_id,
+                )
+            )
+        ),
+    )
+    holder_boundaries = tuple(
+        HolderBoundaryObservation(side, path.position, (path,))
+        for side, path in zip(
+            (
+                BoundarySide.LEADING,
+                BoundarySide.TRAILING,
+                BoundarySide.TOP,
+                BoundarySide.BOTTOM,
+            ),
+            paths,
+            strict=True,
+        )
+    )
+    containment = ContainmentFallback(
+        _HOLDER_BOX,
+        MeasurementProvenance(
+            MeasurementIdentity.CANVAS,
+            ObservationId("synthetic_holder_containment"),
+            (MeasurementIdentity.CANVAS,),
+            "synthetic holder containment",
+        ),
+    )
+    holder_safety = HolderSafetyEnvelope(holder_boundaries, containment)
+    width_constraints = tuple(
+        FrameWidthMeasurementConstraint(
+            slot.index,
+            slot.leading,
+            slot.trailing,
+        )
+        for slot in slots
+        if slot.leading.independently_observed
+        and slot.trailing.independently_observed
+    )
+    common_width_supported = len(width_constraints) >= 2
+    return FrameSequenceSolution(
         format_id="135",
         layout="horizontal",
-        strip_mode="full",
+        strip_mode="partial",
         count=2,
-        holder_span=HolderSpan(_HOLDER_BOX),
-        photo_apertures=apertures,
-        aperture_edge_assignments=edge_assignments,
+        nominal_count=6,
+        holder_safety=holder_safety,
+        shared_short_axis=shared_short_axis,
+        photo_height_evidence=PhotoHeightEvidence(
+            shared_short_axis.height_px,
+            EvidenceState.SUPPORTED,
+            shared_short_axis.provenance,
+        ),
+        frame_width_search_hint=FrameWidthSearchHint(
+            shared_short_axis.height_px.scaled(1.5),
+            shared_short_axis.provenance,
+        ),
+        holder_span_scale_hint=HolderSpanScaleHint(
+            PixelInterval.exact(float(holder_safety.box.width)),
+            2,
+            containment.provenance,
+        ),
+        content_extent_constraint=ContentExtentConstraint(
+            PixelInterval(float(_HOLDER_BOX.left), float(_HOLDER_BOX.right)),
+            (),
+            0,
+            MeasurementProvenance(
+                MeasurementIdentity.CONTENT_EVIDENCE_IMAGE,
+                ObservationId("synthetic_content_extent_constraint"),
+                (MeasurementIdentity.GRAY_WORK,),
+                "synthetic visible-content extent constraint",
+            ),
+        ),
+        indexed_anchor_distance_constraints=(),
+        frame_slots=slots,
+        long_axis_assignments=(
+            FrameEdgeAssignment(
+                1,
+                BoundarySide.LEADING,
+                leading_path,
+                first_leading,
+            ),
+            FrameEdgeAssignment(
+                2,
+                BoundarySide.TRAILING,
+                trailing_path,
+                second_trailing,
+            ),
+        ),
         separator_observations=(observation,),
         separator_assignments=separator_assignments,
-        inter_photo_spacings=(spacing,),
+        inter_frame_spacings=(spacing,),
         frame_dimension_prior=FrameDimensionPrior(
-            frame_size_mm=(36.0, 24.0),
-            provenance=MeasurementProvenance(
+            (36.0, 24.0),
+            MeasurementProvenance(
                 MeasurementIdentity.PHYSICAL_FRAME_ASPECT,
                 ObservationId("synthetic_frame_dimension_prior"),
                 (MeasurementIdentity.FORMAT_PHYSICAL_SPEC,),
                 "synthetic frame dimension prior",
             ),
         ),
-        photo_width_constraint_px=PixelInterval.exact(150.0),
-        photo_height_constraint_px=PixelInterval.exact(100.0),
+        common_frame_width=CommonFrameWidthResolution(
+            PixelInterval.exact(150.0) if common_width_supported else None,
+            width_constraints if common_width_supported else (),
+            None,
+            (
+                EvidenceState.SUPPORTED
+                if common_width_supported
+                else EvidenceState.UNAVAILABLE
+            ),
+            width_provenance,
+        ),
         residuals=SequenceResiduals(0.0, 0.0),
         assignment_consensus=BoundaryAssignmentConsensus(
             AssignmentConsensusOutcome.UNCONTESTED,
@@ -437,75 +555,58 @@ def _candidate_geometry(
             (),
         ),
         raw_boundary_paths=paths,
-        holder_boundaries=tuple(
-            HolderBoundaryObservation(side, path.position, (path,))
-            for side, path in zip(
-                (
-                    BoundarySide.LEADING,
-                    BoundarySide.TRAILING,
-                    BoundarySide.TOP,
-                    BoundarySide.BOTTOM,
-                ),
-                paths,
-                strict=True,
-            )
-        ),
     )
 
 
 def candidate_gate_fixture(
     *,
     passed: bool = True,
-    failed_check: str = "boundary_proof",
+    failed_check: str = "sequence_proof",
 ) -> CandidateGateAssessment:
-    checks = tuple(
-        GateCheck(
-            code=code,
-            stage=GateStage.CANDIDATE,
-            state=(
-                EvidenceState.CONTRADICTED
-                if not passed and code == failed_check
-                else EvidenceState.SUPPORTED
-            ),
-        )
-        for code in (
-            "content_preservation",
-            "photo_geometry_consistency",
-            "evidence_independence",
-            "boundary_proof",
-        )
+    states = {
+        "frame_slot_topology": EvidenceState.SUPPORTED,
+        "content_preservation": EvidenceState.SUPPORTED,
+        "frame_dimension_consistency": EvidenceState.SUPPORTED,
+        "evidence_independence": EvidenceState.SUPPORTED,
+    }
+    if not passed and failed_check in states:
+        states[failed_check] = EvidenceState.CONTRADICTED
+    proof_state = (
+        EvidenceState.CONTRADICTED
+        if not passed and failed_check == "sequence_proof"
+        else EvidenceState.SUPPORTED
     )
-    return CandidateGateAssessment(
-        checks=checks,
-        proof_paths=(
-            BoundaryProofPath(
-                "separator_sequence_led",
-                (
-                    EvidenceState.CONTRADICTED
-                    if not passed and failed_check == "boundary_proof"
-                    else EvidenceState.SUPPORTED
+    return candidate_gate_assessment(
+        CandidateGateInput(
+            frame_slot_topology=states["frame_slot_topology"],
+            content_preservation=states["content_preservation"],
+            frame_dimensions=states["frame_dimension_consistency"],
+            evidence_independence=states["evidence_independence"],
+            proof_paths=(
+                SequenceProofPath(
+                    "separator_sequence_led",
+                    proof_state,
+                    ("synthetic_separator_sequence",),
                 ),
-                ("synthetic_separator_sequence",),
+                SequenceProofPath(
+                    "dimension_sequence_led",
+                    EvidenceState.UNAVAILABLE,
+                    ("synthetic_frame_dimensions",),
+                ),
+                SequenceProofPath(
+                    "partial_occupancy_led",
+                    EvidenceState.NOT_APPLICABLE,
+                    ("synthetic_full_strip",),
+                ),
             ),
-            BoundaryProofPath(
-                "geometry_led",
-                EvidenceState.UNAVAILABLE,
-                ("synthetic_photo_dimensions",),
-            ),
-            BoundaryProofPath(
-                "partial_occupancy_led",
-                EvidenceState.NOT_APPLICABLE,
-                ("synthetic_full_strip",),
-            ),
-        ),
-        diagnostics=(),
+        )
     )
 
 
 def candidate_evidence_fixture(
     *,
     content_preservation: EvidenceState = EvidenceState.SUPPORTED,
-    geometry: PhotoSequenceSolution | None = None,
+    geometry: FrameSequenceSolution | None = None,
 ) -> CandidateEvidence:
     if content_preservation not in {
         EvidenceState.SUPPORTED,
@@ -513,150 +614,122 @@ def candidate_evidence_fixture(
     }:
         raise ValueError("candidate evidence fixture requires resolved content state")
     geometry = geometry or _candidate_geometry()
-    aperture_intervals = tuple(
+    intervals = tuple(
         (item.box.left, item.box.right) for item in geometry.frame_crop_envelopes
     )
-    supported_content_runs = tuple(
-        (start + min(10, max(1, (end - start) // 4)), end - min(10, max(1, (end - start) // 4)))
-        for start, end in aperture_intervals
+    content_runs = ((10, 140), (170, 300))
+    coverage = FrameCoverageEvidence(
+        (_HOLDER_BOX.left, _HOLDER_BOX.right),
+        intervals,
+        content_runs,
+        0,
     )
-    content_runs = supported_content_runs
-    if content_preservation == EvidenceState.CONTRADICTED:
-        first_start, first_end = supported_content_runs[0]
-        next_start = aperture_intervals[1][0]
-        content_runs = (
-            (first_start, min(next_start, aperture_intervals[0][1] + 5)),
-            *supported_content_runs[1:],
-        )
-    coverage = PhotoApertureCoverageEvidence(
-        holder_long_axis_interval=(
-            geometry.holder_span.box.left,
-            geometry.holder_span.box.right,
-        ),
-        photo_aperture_intervals=aperture_intervals,
-        content_runs=content_runs,
-        content_position_uncertainty_px=0,
-    )
-    content = PhotoContentEvidence(
+    content = FrameContentEvidence(
         0.5,
         tuple(
-            PhotoContentObservation(index, 0.8, 0.8, True, ())
+            FrameContentObservation(index, 0.8, 0.8, True, ())
             for index in range(1, geometry.count + 1)
         ),
     )
     dimensions = frame_dimension_evidence(geometry)
     holder = holder_boundary_evidence(geometry, 1.0)
-    candidate_scale = photo_scale_observations(
-        geometry,
-        holder,
+    continuity = tuple(
+        InternalBoundaryContentContinuityObservation(
+            boundary=InterFrameBoundaryReference(None, boundary_index),
+            shared_content_track_count=0,
+            minimum_shared_content_tracks=1,
+            long_axis_content_spans_boundary=False,
+            content_bridge_track_count=1,
+            minimum_content_bridge_tracks=1,
+            gray_discontinuity_track_count=0,
+            minimum_gray_discontinuity_tracks=1,
+            provenance=MeasurementProvenance(
+                MeasurementIdentity.CONTENT_EVIDENCE_IMAGE,
+                ObservationId(
+                    f"synthetic_internal_content_continuity:{boundary_index}"
+                ),
+                (
+                    MeasurementIdentity.GRAY_WORK,
+                    MeasurementIdentity.FRAME_GEOMETRY,
+                ),
+                "synthetic internal-boundary content continuity",
+            ),
+        )
+        for boundary_index in range(1, geometry.count)
+    )
+    internal = internal_frame_boundary_preservation_evidence(
+        geometry.frame_slots,
+        geometry.inter_frame_spacings,
+        continuity,
+    )
+    external = ExternalFramePreservationEvidence(
+        Box(0, 0, 311, 101),
+        geometry.frame_sequence_envelope,
+        geometry.count,
+        (
+            ExternalFrameBoundaryObservation(
+                1,
+                BoundarySide.LEADING,
+                geometry.frame_slots[0].leading.source,
+                Box(0, 0, 1, 100),
+                None,
+                0,
+                0,
+                0,
+                1,
+                1,
+                False,
+            ),
+            ExternalFrameBoundaryObservation(
+                geometry.count,
+                BoundarySide.TRAILING,
+                geometry.frame_slots[-1].trailing.source,
+                Box(309, 0, 310, 100),
+                Box(310, 0, 311, 100),
+                int(content_preservation == EvidenceState.CONTRADICTED),
+                int(content_preservation == EvidenceState.CONTRADICTED),
+                int(content_preservation == EvidenceState.CONTRADICTED),
+                1,
+                1,
+                content_preservation == EvidenceState.CONTRADICTED,
+            ),
+        ),
+        0.5,
     )
     completeness = StripCompletenessEvidence(
         geometry.count,
-        geometry.count,
-        len(geometry.photo_apertures),
-        sum(
-            left.trailing.independently_observed
-            and right.leading.independently_observed
-            for left, right in zip(
-                geometry.photo_apertures,
-                geometry.photo_apertures[1:],
-            )
-        ),
-        sum(item.independent for item in geometry.separator_assignments),
+        geometry.nominal_count,
+        len(geometry.frame_slots),
+        geometry.count - 1,
+        len(geometry.separator_assignments),
     )
-    sequence = geometry.photo_sequence_envelope
-    workspace = Box(
-        sequence.left,
-        sequence.top,
-        sequence.right + 1,
-        sequence.bottom + 1,
+    partial = partial_edge_safety_evidence(
+        geometry,
+        coverage,
+        dimensions,
+        content,
     )
-    external_observations: list[ExternalApertureBoundaryObservation] = []
-    for aperture in geometry.photo_apertures:
-        box = aperture.frame_crop_envelope.box
-        sides = (
-            *((BoundarySide.LEADING,) if aperture.index == 1 else ()),
-            BoundarySide.TOP,
-            BoundarySide.BOTTOM,
-            *(
-                (BoundarySide.TRAILING,)
-                if aperture.index == geometry.count
-                else ()
-            ),
-        )
-        for side in sides:
-            if side == BoundarySide.LEADING:
-                inside = Box(box.left, box.top, box.left + 1, box.bottom)
-                outside = None
-            elif side == BoundarySide.TRAILING:
-                inside = Box(box.right - 1, box.top, box.right, box.bottom)
-                outside = Box(box.right, box.top, box.right + 1, box.bottom)
-            elif side == BoundarySide.TOP:
-                inside = Box(box.left, box.top, box.right, box.top + 1)
-                outside = None
-            else:
-                inside = Box(box.left, box.bottom - 1, box.right, box.bottom)
-                outside = Box(box.left, box.bottom, box.right, box.bottom + 1)
-            contradicted = bool(
-                content_preservation == EvidenceState.CONTRADICTED
-                and side == BoundarySide.TRAILING
-            )
-            external_observations.append(
-                ExternalApertureBoundaryObservation(
-                    aperture.index,
-                    side,
-                    (
-                        PhotoApertureEdgeSource.DIMENSION_HYPOTHESIS
-                        if contradicted
-                        else PhotoApertureEdgeSource.MEASURED_BOUNDARY_PATH
-                    ),
-                    inside,
-                    outside,
-                    16 if contradicted else 0,
-                    16 if contradicted else 0,
-                    4 if contradicted else 0,
-                    16,
-                    4,
-                )
-            )
     return CandidateEvidence(
-        photo_aperture_coverage=coverage,
+        frame_slot_topology=frame_slot_topology_evidence(geometry),
+        frame_coverage=coverage,
         separator_sequence=separator_sequence_evidence(geometry),
         frame_dimensions=dimensions,
-        photo_content=content,
-        inter_photo_boundary_preservation=(
-            inter_photo_boundary_preservation_evidence(
-                geometry.count,
-                geometry.photo_apertures,
-                geometry.inter_photo_spacings,
-                content,
-                coverage,
-            )
-        ),
+        frame_content=content,
+        internal_frame_boundary_preservation=internal,
         holder_boundary=holder,
-        photo_scale_observations=candidate_scale,
-        external_aperture_preservation=ExternalAperturePreservationEvidence(
-            workspace,
-            sequence,
-            geometry.count,
-            tuple(external_observations),
-            0.5,
-        ),
+        frame_scale_observations=frame_scale_observations(geometry),
+        external_frame_preservation=external,
         holder_occupancy=HolderOccupancyEvidence(
-            strip_completeness=completeness,
-            content_support_available=content.support_available,
-            photo_aperture_coverage_state=coverage.state,
-            frame_dimension_state=dimensions.state,
-            complete_strip_can_be_underfilled=False,
-            holder_span=geometry.holder_span,
-            photo_sequence_envelope=geometry.photo_sequence_envelope,
+            completeness,
+            content.support_available,
+            coverage.state,
+            dimensions.state,
+            False,
+            geometry.holder_safety,
+            geometry.frame_slots[0].leading.position,
+            geometry.frame_slots[-1].trailing.position,
         ),
-        partial_edge_safety=partial_edge_safety_evidence(
-            geometry,
-            coverage,
-            dimensions,
-            content,
-        ),
+        partial_edge_safety=partial,
         independence=evidence_independence_evidence(geometry),
     )
 
@@ -668,12 +741,12 @@ def candidate_fixture(
 ) -> AssessedCandidate:
     if failed_candidate_check not in {
         None,
-        "boundary_proof",
+        "sequence_proof",
         "content_preservation",
     }:
         raise ValueError("candidate fixture requires a physical failed check")
     geometry = _candidate_geometry(
-        boundary_proof_supported=failed_candidate_check != "boundary_proof",
+        boundary_proof_supported=failed_candidate_check != "sequence_proof",
     )
     evidence = candidate_evidence_fixture(
         content_preservation=(
@@ -683,18 +756,14 @@ def candidate_fixture(
         ),
         geometry=geometry,
     )
-    hypothesis = CountHypothesis(
-        2,
-        "full",
-        CountHypothesisSource.FORMAT_DEFAULT,
-    )
+    hypothesis = CountHypothesis(2, "partial", CountHypothesisSource.REQUESTED)
     built = BuiltCandidate(geometry, hypothesis, ())
     return AssessedCandidate(
-        geometry=geometry,
-        count_hypothesis=hypothesis,
-        assessment=CandidateAssessment(
-            evidence=evidence,
-            gate=candidate_gate_for_evidence(built, evidence),
+        geometry,
+        hypothesis,
+        CandidateAssessment(
+            evidence,
+            candidate_gate_for_evidence(built, evidence),
         ),
     )
 
@@ -702,24 +771,20 @@ def candidate_fixture(
 def review_only_candidate_fixture() -> AssessedCandidate:
     source = _candidate_geometry()
     geometry = ReviewOnlyContainment(
-        format_id=source.format_id,
-        layout=source.layout,
-        strip_mode=source.strip_mode,
-        count=source.count,
-        holder_span=source.holder_span,
-        containment_fallback=ContainmentFallback(
-            source.holder_span.box,
-            source.sequence_provenance,
-        ),
-        frame_dimension_prior=source.frame_dimension_prior,
-        residuals=source.residuals,
-        assignment_consensus=BoundaryAssignmentConsensus(
+        source.format_id,
+        source.layout,
+        source.strip_mode,
+        source.count,
+        source.holder_safety,
+        source.frame_dimension_prior,
+        source.residuals,
+        BoundaryAssignmentConsensus(
             AssignmentConsensusOutcome.NOT_APPLICABLE,
             0,
             (),
         ),
-        sequence_provenance=source.sequence_provenance,
-        raw_boundary_paths=source.raw_boundary_paths,
+        source.sequence_provenance,
+        source.raw_boundary_paths,
     )
     return assess_review_only_candidate(
         BuiltCandidate(
@@ -729,7 +794,7 @@ def review_only_candidate_fixture() -> AssessedCandidate:
                 geometry.strip_mode,
                 CountHypothesisSource.HARD_SAFETY,
             ),
-            ("photo_aperture_geometry_unresolved",),
+            ("frame_slot_geometry_unresolved",),
         )
     )
 
@@ -740,25 +805,25 @@ def selection_fixture(
     geometry_disagreement: bool = False,
 ) -> SelectionResult:
     selected = candidate or candidate_fixture()
-    geometry_resolved = selected.assessment.gate is not None
+    geometry_resolved = not isinstance(selected.geometry, ReviewOnlyContainment)
     cluster = GeometryCluster((selected,), selected)
     return SelectionResult(
-        selected=selected,
-        ranked_candidates=(selected,),
-        clusters=(cluster,),
-        consensus=(
+        selected,
+        (selected,),
+        (cluster,),
+        (
             SelectionConsensus.DISAGREED
             if geometry_disagreement
             else SelectionConsensus.UNCONTESTED
         ),
-        geometry_resolution=GeometryResolution(
+        GeometryResolution(
             count_resolved=geometry_resolved,
-            placement_resolved=geometry_resolved,
-            boundaries_resolved=geometry_resolved,
+            frame_slots_resolved=geometry_resolved,
+            shared_short_axis_safe=geometry_resolved,
             content_preservation_compatible=geometry_resolved,
-            larger_count_hypotheses_resolved=True,
+            larger_count_search_complete=True,
             alternative_geometries_resolved=not geometry_disagreement,
-            assignment_geometry_resolved=geometry_resolved,
+            assignment_consensus_resolved=geometry_resolved,
             physical_search=PhysicalSearchOutcome(
                 (PhysicalSearchFact.SOLUTION_FOUND,),
             ),
@@ -768,16 +833,14 @@ def selection_fixture(
 
 def frame_bleed_fixture(*, feasible: bool = True) -> FrameBleedPlan:
     return FrameBleedPlan(
-        user_bleed=AxisBleedParameters(20, 10),
-        frame_output_bounds=(_HOLDER_BOX, _HOLDER_BOX),
-        frame_sides=(
+        AxisBleedParameters(20, 10),
+        (_HOLDER_BOX, _HOLDER_BOX),
+        (
             FrameSideBleed(0, 20, 20, 10),
             FrameSideBleed(1, 20, 20, 10),
         ),
-        overlap_protection=(),
-        unresolved_overlap_boundaries=(
-            () if feasible else (InterPhotoBoundaryReference(None, 1),)
-        ),
+        (),
+        (() if feasible else (InterFrameBoundaryReference(None, 1),)),
     )
 
 
@@ -793,6 +856,7 @@ def transform_geometry_fixture(
         0.0,
         0.0,
         1.0,
+        0.0,
         DeskewMeasurementOutcome.MEASURED,
     )
 
@@ -803,6 +867,7 @@ def decide_candidate(
     geometry_disagreement: bool = False,
     output_protection_feasible: bool = True,
     transform_state: EvidenceState = EvidenceState.SUPPORTED,
+    automatic_processing_eligible: bool = True,
 ) -> DecisionGateAssessment:
     selection = selection_fixture(
         candidate,
@@ -811,18 +876,17 @@ def decide_candidate(
     frame_bleed = (
         frame_bleed_fixture(feasible=output_protection_feasible)
         if selection.selected.assessment.gate is not None
-        else FrameBleedPlan(
-            user_bleed=AxisBleedParameters(20, 10),
-            frame_output_bounds=(),
-            frame_sides=(),
-            overlap_protection=(),
-            unresolved_overlap_boundaries=(),
-        )
+        else FrameBleedPlan(AxisBleedParameters(20, 10), (), (), (), ())
     )
     return apply_decision_gate(
         selection,
         frame_bleed,
         transform_geometry_fixture(transform_state),
+        automatic_processing_eligibility=(
+            EvidenceState.SUPPORTED
+            if automatic_processing_eligible
+            else EvidenceState.CONTRADICTED
+        ),
     )
 
 
@@ -835,10 +899,18 @@ def final_detection_fixture(
     )
     bleed = frame_bleed_fixture()
     return finalize_detection(
-        apply_decision_gate(selection, bleed, transform_geometry_fixture()),
+        apply_decision_gate(
+            selection,
+            bleed,
+            transform_geometry_fixture(),
+            automatic_processing_eligibility=EvidenceState.SUPPORTED,
+        ),
         bleed,
         finalization_plan_for_selection(
             selection,
-            workspace_extent=WorkspaceExtent(_HOLDER_BOX.right, _HOLDER_BOX.bottom),
+            workspace_extent=WorkspaceExtent(
+                _HOLDER_BOX.right,
+                _HOLDER_BOX.bottom,
+            ),
         ),
     )

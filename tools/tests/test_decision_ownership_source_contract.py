@@ -29,7 +29,12 @@ class DecisionOwnershipSourceContractTest(unittest.TestCase):
             self.assertIs(parameters[name].default, Parameter.empty)
         self.assertEqual(
             tuple(parameters),
-            ("selection", "frame_bleed_plan", "transform_geometry"),
+            (
+                "selection",
+                "frame_bleed_plan",
+                "transform_geometry",
+                "automatic_processing_eligibility",
+            ),
         )
 
     def test_decision_consumes_evidence_without_generating_candidates(self) -> None:

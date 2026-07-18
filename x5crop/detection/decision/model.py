@@ -2,19 +2,18 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from x5crop.domain import EvidenceState
-
 from ..candidate.assessment.model import CANDIDATE_GATE_CHECK_CODES
 from ..gate_checks import GateCheck, GateStage
 from .vocabulary import (
     FINAL_REASON_AUTOMATIC_PROCESSING_NOT_SUPPORTED,
-    FINAL_REASON_BOUNDARY_EVIDENCE_INSUFFICIENT,
+    FINAL_REASON_FRAME_DIMENSION_CONTRADICTED,
+    FINAL_REASON_FRAME_SLOT_TOPOLOGY_INVALID,
     FINAL_REASON_CONTENT_PRESERVATION_UNRESOLVED,
     FINAL_REASON_COUNT_RESOLUTION_UNAVAILABLE,
     FINAL_REASON_EVIDENCE_INDEPENDENCE_FAILED,
     FINAL_REASON_GEOMETRY_RESOLUTION_UNAVAILABLE,
     FINAL_REASON_OUTPUT_PROTECTION_UNRESOLVED,
-    FINAL_REASON_PHOTO_GEOMETRY_CONTRADICTED,
+    FINAL_REASON_SEQUENCE_EVIDENCE_INSUFFICIENT,
     FINAL_REASON_SELECTION_GEOMETRY_DISAGREEMENT,
     FINAL_REASON_TRANSFORM_GEOMETRY_UNCERTAIN,
 )
@@ -32,10 +31,11 @@ DECISION_FINAL_CHECK_CODES = (
     "transform_geometry_integrity",
 )
 DECISION_GATE_REASON_BY_CODE = {
+    "candidate_frame_slot_topology": FINAL_REASON_FRAME_SLOT_TOPOLOGY_INVALID,
     "candidate_content_preservation": FINAL_REASON_CONTENT_PRESERVATION_UNRESOLVED,
-    "candidate_photo_geometry_consistency": FINAL_REASON_PHOTO_GEOMETRY_CONTRADICTED,
+    "candidate_frame_dimension_consistency": FINAL_REASON_FRAME_DIMENSION_CONTRADICTED,
     "candidate_evidence_independence": FINAL_REASON_EVIDENCE_INDEPENDENCE_FAILED,
-    "candidate_boundary_proof": FINAL_REASON_BOUNDARY_EVIDENCE_INSUFFICIENT,
+    "candidate_sequence_proof": FINAL_REASON_SEQUENCE_EVIDENCE_INSUFFICIENT,
     "count_resolution": FINAL_REASON_COUNT_RESOLUTION_UNAVAILABLE,
     "geometry_resolution": FINAL_REASON_GEOMETRY_RESOLUTION_UNAVAILABLE,
     "automatic_processing_eligibility": FINAL_REASON_AUTOMATIC_PROCESSING_NOT_SUPPORTED,
@@ -65,11 +65,6 @@ class DecisionGateAssessment:
             code for code in DECISION_CANDIDATE_CHECK_CODES if code in candidate_codes
         ):
             raise ValueError("decision candidate checks must be canonical and ordered")
-        if any(
-            check.state != EvidenceState.CONTRADICTED
-            for check in self.checks[: len(candidate_codes)]
-        ):
-            raise ValueError("projected candidate checks must be physical failures")
         if any(
             check.final_review_reason != DECISION_GATE_REASON_BY_CODE.get(check.code)
             for check in self.checks

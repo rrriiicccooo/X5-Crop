@@ -3,7 +3,11 @@ from __future__ import annotations
 from dataclasses import replace
 import unittest
 
-from tools.tests.photo_aperture_solver_support import dimensions, scope
+from tools.tests.frame_slot_solver_support import (
+    dimensions,
+    scope,
+    sequence_search_index,
+)
 from tools.tests.physical_gate_support import candidate_fixture
 from x5crop.detection.candidate.execution.model import CountHypothesisEvaluation
 from x5crop.detection.candidate.plan.model import (
@@ -13,18 +17,19 @@ from x5crop.detection.candidate.plan.model import (
 from x5crop.detection.candidate.selection.choose import select_candidates
 from x5crop.detection.physical.model import (
     AssignmentConsensusOutcome,
-    DualLanePhotoSolution,
-    PhotoSequenceSolution,
+    DualLaneFrameSolution,
+    FrameSequenceSolution,
     ReviewOnlyContainment,
 )
-from x5crop.detection.physical.sequence_solver import (
-    PhotoSequenceSolveFailure,
-    photo_aperture_cross_axis_plan,
-    solve_photo_sequence,
+from x5crop.detection.physical.frame_sequence_solver import (
+    FrameSequenceSolveFailure,
+    solve_frame_sequence,
 )
+from x5crop.detection.physical.short_axis import shared_short_axis_plan
 from x5crop.domain import (
     BoundaryAxis,
     EvidenceState,
+    HolderSafetyEnvelope,
     PhysicalSearchFact,
     PhysicalSearchOutcome,
     combined_physical_search_outcome,
@@ -145,64 +150,40 @@ class PhysicalSearchOutcomeContractTest(unittest.TestCase):
         search_scope = replace(
             search_scope,
             raw_boundary_paths=long_paths,
-            holder_boundaries=tuple(
-                boundary
-                for boundary in search_scope.holder_boundaries
-                if all(path in long_paths for path in boundary.supporting_paths)
+            holder_safety=HolderSafetyEnvelope(
+                tuple(
+                    boundary
+                    for boundary in search_scope.holder_safety.boundaries
+                    if all(path in long_paths for path in boundary.supporting_paths)
+                ),
+                search_scope.holder_safety.containment_fallback,
             ),
         )
         frame_dimensions = dimensions(100.0, 100.0)
-        cross_axis_plan = photo_aperture_cross_axis_plan(
-            search_scope,
-            frame_dimensions,
-            2,
-            maximum_hypotheses=8,
-        )
-        solved = solve_photo_sequence(
+        visible_content = ContentRegionObservation(
+            search_scope.holder_safety.box,
             (),
+            0,
+        )
+        cross_axis_plan = shared_short_axis_plan(search_scope)
+        solved = solve_frame_sequence(
+            sequence_search_index(search_scope),
             search_scope,
             cross_axis_plan,
             2,
             frame_dimensions,
-            ContentRegionObservation(search_scope.holder_span.box, (), 0),
+            visible_content,
             maximum_assignment_evaluations=1_000,
-            maximum_solution_alternatives=16,
+            strip_mode="full",
+            nominal_count=2,
         )
 
-        self.assertIsInstance(solved, PhotoSequenceSolveFailure)
-        assert isinstance(solved, PhotoSequenceSolveFailure)
+        self.assertIsInstance(solved, FrameSequenceSolveFailure)
+        assert isinstance(solved, FrameSequenceSolveFailure)
         self.assertEqual(solved.search_outcome.state, EvidenceState.UNAVAILABLE)
         self.assertIn(
             PhysicalSearchFact.MEASUREMENTS_UNAVAILABLE,
             solved.search_outcome.facts,
-        )
-
-    def test_measurement_budget_exhaustion_reaches_search_outcome(self) -> None:
-        search_scope = replace(
-            scope(
-                width=210,
-                height=120,
-                leading=0.0,
-                trailing=210.0,
-                top=10.0,
-                bottom=110.0,
-            ),
-            measurement_budget_exhausted=True,
-        )
-        cross_axis_plan = photo_aperture_cross_axis_plan(
-            search_scope,
-            dimensions(100.0, 100.0),
-            2,
-            maximum_hypotheses=8,
-        )
-
-        self.assertEqual(
-            cross_axis_plan.search_outcome.state,
-            EvidenceState.UNAVAILABLE,
-        )
-        self.assertIn(
-            PhysicalSearchFact.EXECUTION_BUDGET_EXHAUSTED,
-            cross_axis_plan.search_outcome.facts,
         )
 
     def test_count_resolution_consumes_physical_search_outcome(self) -> None:
@@ -213,7 +194,7 @@ class PhysicalSearchOutcomeContractTest(unittest.TestCase):
         )
         selection = select_candidates(
             (candidate,),
-            larger_count_hypotheses_resolved=True,
+            larger_count_search_complete=True,
             physical_search=physical_search,
         )
         evaluation = CountHypothesisEvaluation(
@@ -225,7 +206,7 @@ class PhysicalSearchOutcomeContractTest(unittest.TestCase):
 
         self.assertFalse(selection.geometry_resolution.supported)
         self.assertFalse(evaluation.geometry_resolved)
-        self.assertEqual(evaluation.hypothesis_state, EvidenceState.UNAVAILABLE)
+        self.assertEqual(evaluation.physical_search.state, EvidenceState.UNAVAILABLE)
 
     def test_exhaustive_empty_count_hypothesis_is_contradicted(self) -> None:
         physical_search = search_outcome(
@@ -242,12 +223,15 @@ class PhysicalSearchOutcomeContractTest(unittest.TestCase):
             physical_search=physical_search,
         )
 
-        self.assertEqual(evaluation.hypothesis_state, EvidenceState.CONTRADICTED)
+        self.assertEqual(
+            evaluation.physical_search.state,
+            EvidenceState.CONTRADICTED,
+        )
 
     def test_physical_geometry_does_not_own_execution_search_state(self) -> None:
         for geometry_type in (
-            PhotoSequenceSolution,
-            DualLanePhotoSolution,
+            FrameSequenceSolution,
+            DualLaneFrameSolution,
             ReviewOnlyContainment,
         ):
             with self.subTest(geometry_type=geometry_type.__name__):

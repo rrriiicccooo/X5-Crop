@@ -1,372 +1,212 @@
-# Codex Agent Rules
+# Codex Agent Rules / Codex 协作规则
 
-This is the coordination file for this repository. Keep it short and binding:
-standing rules, document roles, release rules, verification priorities, and the
-latest handoff. Do not use this file for changelog entries or architecture
-detail.
+This file contains short, binding repository rules. It owns standing policy,
+document roles, release policy, and verification priorities—not architecture,
+history, or task status.
 
-## First Moves
+本文件只保存简短且强制的仓库规则：长期政策、文档职责、发布政策和验证优先级。
+架构、历史和当前任务状态不属于这里。
 
-1. Read `README.md` and this handoff before editing.
-2. Check branch and dirty state:
+## First Moves / 开始工作
 
-```bash
-git branch --show-current
-git status --short
-```
+1. Read `README.md` before editing. Read `PROJECT_MEMORY.md` only when the user
+   explicitly resumes, updates, or requests the cross-session handoff.
+2. Check the current branch and working tree:
 
-3. Treat GitHub as authoritative for source and docs. NAS or local copied folders
-   are only transport/testing surfaces.
+   ```bash
+   git branch --show-current
+   git status --short
+   ```
 
-Repository:
+3. Treat GitHub as authoritative for tracked source and docs. NAS and copied
+   folders are transport or testing surfaces only.
+
+开始编辑前阅读 `README.md`。只有在用户明确恢复、更新或请求跨会话交接时才读取
+`PROJECT_MEMORY.md`。始终先核对分支和工作树；GitHub 是受跟踪源码与文档的权威来源。
+
+Repository / 仓库：
 
 ```text
 git@github.com:rrriiicccooo/X5-Crop.git
 https://github.com/rrriiicccooo/X5-Crop
 ```
 
-## Document Roles
+## Document Ownership / 文档职责
 
-- `快速启动_Quick_Start.md`: Release quick-start guide.
-- `README.md`: complete user manual for setup, launchers, Debug Analysis,
-  outputs, review folders, and common command-line use.
-- `ARCHITECTURE.md`: runtime-flow architecture and source-layer architecture.
-- `CHANGELOG.md`: version summaries, behavior changes, validation notes, and
-  rollback context.
-- `AGENTS.md`: Codex coordination rules and current handoff only.
+| File / 文件 | Canonical responsibility / 唯一职责 |
+|---|---|
+| `快速启动_Quick_Start.md` | Release quick-start / 发布版快速启动 |
+| `README.md` | Complete user manual / 完整用户手册 |
+| `ARCHITECTURE.md` | Current runtime flow and source layering / 当前运行流与源码分层 |
+| `CHANGELOG.md` | Version-level behavior, validation, and rollback context / 版本级行为、验证与回滚信息 |
+| `PROJECT_MEMORY.md` | On-demand rolling checkpoint for cross-session continuation / 按需读取的跨会话滚动检查点 |
+| `AGENTS.md` | Standing coordination policy only / 仅长期协作政策 |
 
-Do not duplicate long content across these documents. Link to the right document
-instead.
+Do not duplicate long explanations. Link to the canonical owner. User-readable
+durable docs must remain concise, professional, current, non-overlapping, and
+Chinese-English paired where practical.
 
-Documentation quality bar is extreme cleanliness and elegance. Every document
-change must leave the docs professional, concise, structurally clear, current,
-and non-overlapping. Treat this as a standing acceptance criterion; do not wait
-for the user to restate it.
+不要复制长篇解释；应链接到唯一所有者。面向用户的长期文档必须简洁、专业、当前、
+互不重叠，并在适合时保持中英文对应。
 
-## Current Scope
+## Current Scope / 当前范围
 
-- Active entry point: `X5_Crop.py`.
-- Active script version: V4.9.
-- Current stable GitHub Release: `v4.2.8`.
-- V4+ development source lives under `x5crop/`; Release builds may package a
+- Active entry point / 当前入口：`X5_Crop.py` V4.9.
+- Stable GitHub Release / 当前稳定发布：`v4.2.8`.
+- Development source lives under `x5crop/`; releases may embed it into one
   standalone `X5_Crop.py`.
-- Keep active work focused on the standalone X5 Crop workflow unless the user
-  explicitly resumes app/native packaging.
-- There is no `docs/` mirror. Root `ARCHITECTURE.md` is the single architecture
-  document.
+- Keep work on the standalone X5 Crop workflow unless the user explicitly
+  resumes app or native packaging.
+- Root `ARCHITECTURE.md` is the only architecture document; there is no `docs/`
+  mirror.
 
-## Coding Rules
+## Standing Implementation Rules / 长期实现规则
 
-- Preserve TIFF quality and metadata behavior unless the user explicitly asks
-  otherwise. Cropped TIFF output must keep bit depth, channel structure,
-  ICC/color space, resolution, metadata, and known lossless compression behavior.
-- Structural cleanup does not preserve historical output parity. PASS/REVIEW,
-  crop geometry, confidence, reasons, report/debug schema, and cache reuse may
-  all change when the new structure is cleaner and more truthful.
-- After structural closure, detection thresholds and behavior are calibrated
-  from real samples. Do not broadly loosen PASS/REVIEW rules to fix one file.
-- For detection changes, verify known-good formats before calling the change
-  safe, especially `135`.
-- Use `--deskew off` for fast detector regressions unless the task is about
-  export or deskew behavior.
-- Directional requests use horizontal-strip wording as baseline. Add rotated
-  vertical-strip behavior when implementing.
-- Update user docs when usage, setup, output folders, launcher behavior, or
-  release packaging changes.
-- Update `ARCHITECTURE.md` when runtime flow or source layering changes.
-- Update `CHANGELOG.md` when behavior, release packaging, validation scope, or
-  rollback context changes.
+- Preserve TIFF bit depth, channel structure, ICC/color space, resolution,
+  metadata, and known lossless compression behavior unless explicitly changed.
+- Structural cleanup need not preserve historical PASS/REVIEW, geometry,
+  confidence, reason, schema, debug, or cache parity. Prefer the cleaner and
+  more physically truthful current model.
+- Calibrate detection behavior from real samples after structural closure. Do
+  not broadly loosen rules to make one file pass; recheck known-good formats,
+  especially `135`.
+- Use `--deskew off` for fast detector regressions unless deskew or export is the
+  subject.
+- Horizontal-strip wording is the baseline for directional requests; implement
+  the rotated vertical behavior too.
+- Update user docs for changes to setup, usage, launchers, outputs, or release
+  packaging; update `ARCHITECTURE.md` for runtime flow or source-layer changes;
+  update `CHANGELOG.md` for version-level behavior, packaging, validation, or
+  rollback changes.
 
-## Extreme Cleanliness Contract
+除非用户明确改变要求，否则必须保持 TIFF 位深、通道、ICC/色彩空间、分辨率、元数据和
+已知无损压缩行为。结构重构以当前物理真实性为准，不以历史输出一致性为目标；检测校准必须
+回到真实样片，不能为单个文件普遍放宽规则。
 
-Extreme cleanliness is a closed, testable architecture contract. It means there
-are no known violations of the rules below; it does not mean that no alternative
-implementation could ever be imagined.
-
-Definition of extreme cleanliness and elegance:
+## Extreme Cleanliness Contract / 极致干净合同
 
 - Every active concept has one canonical name, type, owner, and source of truth.
-- Data and dependencies flow one way. Proposal, guidance, build, evidence,
-  assessment, selection, decision, finalization, output, report, and debug do not
-  borrow authority from one another.
+- Data and authority flow one way through proposal, build, evidence, assessment,
+  selection, decision, finalization, output, report, and debug.
 - `CandidateGate` and `DecisionGate` are the only gates. Only `DecisionGate`
-  creates final PASS/REVIEW status and `final_review_reasons`.
-- Format names identify physical specs; they do not own algorithm branches.
-  Physical facts, adaptive measurement parameters, runtime configuration, and
-  report descriptions remain separate concepts.
-- Configuration and format resolution happen at the runtime boundary. Lower layers
-  receive explicit specs, configuration groups, or plain parameter objects and never query
-  registries or invent defaults.
-- Foundation modules know only geometry, pixels, TIFF I/O, cache mechanics, and
-  units. They do not know format/mode identity, decision state, or report schema.
-- Report, debug, cache reuse, tests, and tools consume the current schema only and
-  never reconstruct missing decisions or preserve superseded field shapes.
-- Keep no compatibility of any kind with superseded source, APIs, schemas,
-  fields, names, aliases, import paths, reducers, shims, branches, or test
-  expectations. Migrate every active caller and delete the old surface in the
-  same change.
-- Keep no dead files, unreachable helpers, pass-through wrappers, duplicate data
-  models, hidden constants that affect crop/decision/output, or abstractions that
-  merely relocate complexity.
-- Prefer the smallest coherent model: delete rather than alias, pass an existing
-  typed object rather than translate it twice, and add an abstraction only when
-  it removes real duplication or responsibility ambiguity.
-- Names must state the physical fact or lifecycle responsibility they represent;
-  comments and documents must not compensate for misleading code names.
-- Code, contract tests, `ARCHITECTURE.md`, and current report/debug output must
-  describe the same system without duplicated or stale explanations.
+  creates final status and final reasons.
+- Format specs, adaptive measurements, runtime configuration, and report
+  descriptions remain separate. Resolve configuration at the runtime boundary;
+  lower layers receive explicit typed inputs and never query registries or invent
+  defaults.
+- Foundation code knows geometry, pixels, TIFF I/O, cache mechanics, and units—not
+  format identity, decision state, or report schema.
+- Runtime, tests, tools, report, debug, and cache reuse consume the current schema
+  only. Delete superseded APIs, fields, aliases, imports, reducers, shims, tests,
+  and compatibility branches in the same change.
+- Keep no dead files, unreachable helpers, pass-through wrappers, duplicate
+  models, hidden decision constants, or abstractions that merely move complexity.
+- Add an abstraction only when it removes real duplication or ownership
+  ambiguity. Names must state physical facts or lifecycle responsibility.
+- Code, contract tests, `ARCHITECTURE.md`, current reports, and Debug Analysis must
+  describe the same system.
+- For each newly discovered residue, add a contract that fails on that class,
+  remove the whole class, and retain the contract. Tests and fixtures obey the
+  same current-only and physical-truth rules as runtime code.
+- Architecture cleanup closes only after the full verifier passes and two
+  consecutive read-only audits using the same frozen checklist find no known
+  violations. Reopen it only for a demonstrated contract violation, an
+  unrepresentable physical fact, or a genuinely incompatible capability.
 
-Enforcement and closure:
+每个概念只能有一个名称、类型、所有者和真相来源；权限单向流动。删除而不是兼容，复用现有
+typed object 而不是重复翻译，只有消除真实重复或职责歧义时才增加抽象。代码、测试、架构、
+当前报告和 Debug 必须描述同一个系统。
 
-- When any new residue is found, first add a contract test that fails on that
-  exact class of violation, then fix the code. Keep the test permanently so the
-  same residue cannot return.
-- Architecture audits use this frozen contract. Do not invent a new aesthetic
-  standard midway through the same closure audit.
-- Architecture cleanup is complete only after the full verification suite passes
-  and two consecutive read-only audits using the same checklist find zero known
-  violations.
-- After closure, reopen architecture only for a demonstrated contract violation,
-  a new capability that cannot fit the current ownership model, or a physical fact
-  the current model cannot express. A sample-specific crop or threshold issue goes
-  to calibration, not another project-wide architecture rewrite.
+## Detection And Performance / 检测与性能
 
-## Performance And Detection Work
-
-- Profile one fixed real sample before optimizing. Record total and detection time,
+- Search hints, blank appearance, repeated-width patterns, and execution budgets
+  are not physical proof. Unresolved geometry remains typed unresolved.
+- Early-stop comes only from resolved geometry. Budget exhaustion is unavailable
+  geometry, never reliability evidence; candidate and final decisions remain
+  separate authorities.
+- Profile one fixed real sample before optimizing. Record wall/detection time,
   candidate builds, repeated measurements, and the actual call-stack hotspot.
-- Separate necessary one-time measurement, repeated pure measurement, and avoidable
-  candidate expansion. Optimize the latter two without moving decision authority.
-- Add a failing contract test for every newly found residue before fixing its root
-  cause; search and remove the whole class of residue in the same change.
-- Early-stop only from explicit `GeometryResolution`. Execution-budget exhaustion
-  makes geometry unavailable; it is never a reliability signal. Keep physical
-  resolution separate from CandidateGate and DecisionGate.
-- Cache only exact, count/offset-independent measurements with typed keys. Never
-  cache candidates, gates, decisions, final reasons, or approximate geometry.
-- Re-profile the same sample after each optimization wave, then run full contracts,
-  representative format/mode smokes, current-schema validation, and visual Debug
-  Analysis inspection. Treat output diffs as later calibration material.
+- Cache only exact count/offset-independent measurements with typed keys—never
+  candidates, gates, decisions, final reasons, or approximate geometry.
+- Re-profile the same sample after each optimization wave, then run contracts,
+  representative format/mode samples, current-schema validation, and visual Debug
+  Analysis inspection. Output diffs are calibration evidence, not parity gates.
 
-## Completion And Sync
+## Verification / 验证
 
-- Repository-owned Git hooks are the source of truth for mechanical commit and
-  push checks. Enable them once per clone with `tools/install_git_hooks.sh` and
-  never bypass them with `--no-verify`.
-- When the user asks Codex to change repository source, docs, config, launchers,
-  or release metadata, finish by verifying, committing, and pushing to GitHub
-  unless the user explicitly says not to.
-- Do not require the user to restate "push" or "sync" in later sessions.
-- Treat this as standing authorization for verified pushes to the current branch;
-  do not ask for a separate chat confirmation before `git push`. Use the platform
-  approval flow directly if it is required.
-- Before committing, confirm `git status --short` contains only intentional
-  changes. The hooks enforce staged-file hygiene and the full pre-push suite.
-- Push the current branch to `origin` after a successful commit.
-- If commit or push cannot complete, report the blocker clearly and leave the
-  working tree in the safest possible state.
+`tools/verify` is the canonical executable verifier. Hooks and CI are thin
+adapters and must call it rather than duplicate its commands.
 
-## Git And Local Files
+`tools/verify` 是唯一可执行验证入口；Hook 和 CI 只能作为薄适配器调用它，不能复制命令。
 
-- Commit only intentional source/docs/config changes.
-- Check `git status --short` before and after edits.
-- Other Codex sessions may have changed files. Do not revert user or
-  other-session changes unless explicitly asked.
-- Keep `.gitignore` visible. If `.github/` appears, keep it visible too.
-- Intended sparse checkout:
-
-```text
-/*
-!/archive/
-!/install/
-!/release/
-!/LICENSE
+```bash
+tools/verify full
 ```
 
-- Keep `tools/` available locally; it contains regression and build utilities
-  used by active verification. Keep `LICENSE`, `archive/`, `install/`, and
-  `release/` cloud/GitHub only locally unless the user asks to expand them.
-- Do not commit generated/local files:
-  - `.venv/`, `.venv-build/`, `build/`, `dist/`, `release/`
-  - `__pycache__/`, `.DS_Store`, `downloaded_apps/`
-  - `Test/`
-  - generated `x5_crop_output/`
-  - large TIFF samples unless explicitly made official fixtures with Git LFS
+For detection changes, compare current-schema reports with:
 
-## Release Package Rules
-
-User Release zip should contain only:
-
-```text
-X5_Crop.py
-X5_Crop_Mac.command
-X5_Crop_win.bat
-README.txt
-快速启动_Quick_Start.txt
-install/X5_Crop_Mac_install.command
-install/X5_Crop_win_install.bat
-install/X5_Crop_Mac_uninstall.command
-install/X5_Crop_win_uninstall.bat
+```bash
+python3 -m tools.regression.compare <baseline> <candidate>
 ```
 
-Do not package `x5crop/`, `archive/`, `CHANGELOG.md`, `AGENTS.md`, `LICENSE`,
-`.github/`, diagnostics launchers, Test files, or generated outputs unless the
-user changes this policy.
+Inspect at least status/reasons, selected rank, geometry resolution, crop
+envelopes, and final boxes. Report diffs are audit evidence, not historical-parity
+requirements.
 
-Use Python `zipfile` for release zips so Chinese filenames are stored with
-UTF-8 metadata.
-
-macOS installer behavior:
-
-- `chmod +x` the main macOS launcher and installer.
-- Remove `com.apple.quarantine` from the current Release folder when `xattr` is
-  available.
-- This is per-folder preparation, not permanent global trust registration.
-
-## Regression Priorities
-
-When detection changes are made, use
-`python3 -m tools.regression.compare <baseline> <candidate>` to locate changes
-between current-schema reports. Diffs are audit material, not parity blockers.
-
-Common fields to inspect:
-
-```text
-decision.status
-decision.final_review_reasons
-selection.selected_rank
-selection.geometry_resolution
-output.final_geometry.frame_crop_envelopes
-output.final_geometry.final_boxes
-```
-
-Local `Test/` fixtures are untracked and their directory layout is not a source
-contract. Discover available TIFFs at verification time:
+Local `Test/` fixtures are untracked and their layout is not a source contract.
+Discover available TIFFs at verification time:
 
 ```bash
 find Test -type f \( -iname '*.tif' -o -iname '*.tiff' \) | sort
 ```
 
-When present, cover representative `135/full`, `120-66/partial`, `half/full`,
-and `120-67/full` inputs. Treat additional sets as audit material.
+When available, cover representative `135/full`, `120-66/partial`, `half/full`,
+and `120-67/full` inputs. Unit-test success alone never proves named TIFF geometry;
+inspect current reports and Debug Analysis before a physical-completion claim.
 
-For source or configuration changes, also run:
+## Completion And Sync / 完成与同步
 
-```bash
-python3 -m unittest discover -s tools/tests
-python3 -m compileall -q X5_Crop.py x5crop
-python3 -m x5crop.configuration.consistency
-bash -n X5_Crop_Mac.command
-bash -n X5_Crop_Mac_diagnostics.command
-git diff --check
-python3 X5_Crop.py --version
-```
+- Enable the versioned hooks once per clone with `tools/install_git_hooks.sh` and
+  never use `--no-verify`.
+- After Codex changes tracked source, docs, configuration, launchers, or release
+  metadata, verify, commit, and push the current branch unless the user explicitly
+  says not to. This is standing authorization for a verified push.
+- Before committing, confirm staged and unstaged changes are intentional. If a
+  commit or push fails, report the blocker and leave the safest possible state.
 
-Also compile `tools/regression/*.py`.
+每次修改受跟踪内容后，除非用户明确禁止，都应完成验证、提交并推送当前分支；不得绕过 Hook。
 
-For docs-only changes, `git diff --check` and a final status review are enough
-unless the edit changes commands or release behavior.
+## Git And Local Files / Git 与本地文件
 
-## Current Handoff
+- Preserve user and other-session changes; never reset or restore them without
+  explicit permission.
+- Keep `.gitignore`, `.github/`, and `tools/` visible. `install/` is also kept
+  visible so release inputs participate in routine validation.
+- Intended sparse checkout / 预期稀疏检出：
 
-Date: 2026-07-14
-Computer: primary macOS machine
-Branch: main
-Latest documentation state: root documents have distinct responsibilities.
-`ARCHITECTURE.md` now keeps only runtime-flow architecture and source-layer
-architecture; no `docs/` mirror is kept.
+  ```text
+  /*
+  !/archive/
+  !/release/
+  !/LICENSE
+  ```
 
-Current state:
+- Never commit `.venv/`, `.venv-build/`, `build/`, `dist/`, `release/`, caches,
+  `.DS_Store`, `downloaded_apps/`, `Test/`, generated `x5_crop_output/`, or large
+  TIFF samples unless explicitly approved as Git LFS fixtures.
 
-- Active script is `X5_Crop.py` V4.9.
-- Runtime resolves one `DetectionConfiguration`; the superseded `x5crop.policies`
-  topology and all compatibility surfaces are deleted.
-- Detection uses `solve_photo_sequence` to produce `PhotoSequenceSolution`.
-  Each `PhotoAperture` represents one visible real-photo opening; visible film
-  base and internal separator bands are excluded from ideal aperture geometry.
-- Gray paths and separator bands are count-independent observations. Candidate
-  assignment binds separator start/end to the trailing/leading edges of adjacent
-  apertures; dimension-only boundaries remain provisional.
-- Count-independent content observations are cached once and may only reject
-  geometry alternatives that omit measured visible content. They never create,
-  move, or shrink aperture edges; the same observation and coverage calculation
-  feed final evidence.
-- Internal content crossing requires overlapping short-axis content tracks on
-  both adjacent photo edges plus a count-independent long-axis run spanning the
-  boundary. Aggregate edge-contact booleans cannot corroborate overlap bleed.
-- Aperture extent is not a solver quality objective. Once measured visible
-  content is covered, a wider aperture cannot dominate another geometry merely
-  by including more film base or holder slack.
-- Physically admissible leading/trailing endpoints all reach the global solver.
-  Nominal-width fit only orders exploration; holder-boundary provenance keeps a
-  clipped visible photo edge eligible for geometry consensus.
-- Assignment consensus requires one shared interval for every aperture edge
-  across all non-dominated solutions. A broad uncertainty interval cannot bridge
-  two mutually exclusive outer placements and call them agreed.
-- Cross-axis planning never rewards a taller aperture. It uses physical aspect
-  feasibility, measurement quality, uncertainty, and deterministic coordinates;
-  TIFF resolution metadata never enters candidate geometry.
-- Boundary paths are solver-equivalent only when their position intervals match
-  across the shared track. Mere overlap remains a geometry alternative for
-  global consensus; broad uncertainty cannot erase disjoint narrow paths.
-- Holder-boundary identity requires one common interval across every highest
-  support edge-adjacent path. Mutually exclusive transitions keep holder contact
-  unavailable rather than granting clipping authority to an arbitrary path.
-- Gray boundary paths preserve typed local samples across the orthogonal axis.
-  Short-axis aperture edges are resolved within each photo's own long-axis span.
-  Raw channels remain visible, while geometry-equivalent paths form one solver
-  hypothesis and separator-bound paths do not reenter generic aperture search.
-- Count, boundary, dimension, and measurement-dependency authority use typed
-  identities; descriptive provenance text cannot change physical proof.
-- Detection consumes one canonical grayscale workspace. Boundary and separator
-  observations carry typed gray appearance measurements, never material identity.
-  Physical proof comes from spatial topology, geometry, and separator sequence;
-  color and perforation are not detection concepts.
-- TIFF resolution is runtime/report metadata only. Candidate-local
-  `PhotoScaleObservation` requires independent aperture boundaries and never
-  feeds back into the same candidate's geometry or Gate.
-- Standard, dual-lane, and review-only candidates use distinct geometry types;
-  review-only modes never masquerade as solved frame sequences.
-- Physical candidate assessment stores canonical evidence and `CandidateGate`;
-  review-only assessment uses a fieldless marker. `EvidenceQuality` is derived
-  for ordering and reporting. `GeometryResolution` is the only early-stop input.
-- Overlap protection uses a per-boundary `FrameBleedPlan`; unrelated frames are
-  never expanded by a global maximum.
-- Current reports use `detection_report / photo_aperture_sequence_resolution` with
-  canonical `input`, `configuration`, `selection`, `decision`, and `output`
-  sections. Cache reuse accepts only this schema.
-- TIFF export preserves typed transferable metadata and verifies it after write;
-  TIFF tag semantics remain owned by the I/O layer.
-- Runtime flow and source-layer structure live in `ARCHITECTURE.md`.
-- Version history and validation summaries live in `CHANGELOG.md`.
-- User setup and usage live in `README.md` and `快速启动_Quick_Start.md`.
+## Release Packages / 发布包
 
-Current verification state:
+- `tools/release_manifest.py` is the exact package-content owner.
+- Build a user zip with `python3 -m tools.build_release --version <version>`.
+- The builder must generate the standalone script, package only manifest entries,
+  preserve executable launchers, and use Python `zipfile` so Chinese names carry
+  UTF-8 metadata.
+- User packages exclude modular source, tests, internal docs, diagnostics
+  launchers, local samples, and generated outputs.
+- On macOS, prepare only the current release folder: mark the main launcher and
+  installer executable and remove quarantine attributes when available. Never
+  establish permanent system-wide trust.
 
-- The photo-aperture joint solver and local external-content preservation model
-  are implemented. Debug distinguishes ideal apertures, output envelopes, raw
-  observations, measured edges, provisional edges, holder boundaries, and
-  corroborated overlap through one diagnostics-owned legend.
-- The current suite contains 509 tests, 148 active modules, and 14 valid
-  format/mode configurations. Audit A and an independent reverse-order Audit B
-  both found zero violations under the frozen six-axis contract at source
-  commit `5500c1ff`. This state is an `architecture closure candidate`, not
-  `architecture closed`.
-- The previous 113-TIFF run in `Test/test 2` remains an immutable visual baseline.
-  `Test/test 3` is the current `5500c1ff` baseline: 113/113 inputs completed with
-  terminal manifests, valid current-schema reports, and three-panel Debug
-  Analysis; there were zero runtime exceptions, schema failures, or exported
-  provisional TIFFs. Ten manual aperture references remained unresolved with
-  zero incorrectly resolved geometries.
-- Fresh single-sample verification measured `135/full 005.tif` at about 5.84
-  seconds total and 3.91 seconds detection with 39,708 assignment evaluations.
-  `half/full X5_00050` took about 16.05 seconds total and 14.10 seconds detection
-  while exhausting its 100,000-evaluation budget honestly. Real two-worker
-  ProcessPool execution, current-schema cache reuse, unresolved review-export
-  suppression, and Debug read-only behavior were also verified.
-- Current PASS/REVIEW outcomes and adaptive measurement values remain calibration
-  material for the separate real-sample project; do not loosen Gate rules to
-  manufacture PASS from the current unresolved results.
-- A new Codex task must rerun the same Audit A/B plan from the closure-candidate
-  commit. Only a second consecutive zero-violation double audit may change the
-  handoff to `architecture closed`.
+`tools/release_manifest.py` 是发布内容的唯一清单；发布构建器只能打包清单条目，并正确保存中文
+文件名和启动器权限。发布包不得包含模块化源码、测试、内部文档、诊断启动器、样片或生成输出。

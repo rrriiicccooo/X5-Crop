@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from x5crop.domain import EvidenceState, PhysicalSearchOutcome
 from ...geometry_resolution import GeometryResolution
-from ...physical.model import PhotoSequenceSolution, ReviewOnlyContainment
+from ...physical.model import (
+    DualLaneFrameSolution,
+    FrameSequenceSolution,
+    ReviewOnlyContainment,
+)
 from ..model import (
     AssessedCandidate,
     CandidateEvidence,
@@ -17,9 +21,46 @@ from .model import (
 )
 
 
+def _sequence_frame_slots_resolved(
+    geometry: FrameSequenceSolution,
+) -> bool:
+    slots = geometry.frame_slots
+    if not (
+        slots
+        and len(slots) == geometry.count
+        and all(
+            slot.leading.geometry_resolved and slot.trailing.geometry_resolved
+            for slot in slots
+        )
+        and all(envelope.box.valid() for envelope in geometry.frame_crop_envelopes)
+    ):
+        return False
+    if geometry.count == 1:
+        slot = slots[0]
+        return bool(
+            slot.leading.independently_observed
+            and slot.trailing.independently_observed
+        )
+    return geometry.common_frame_width.state == EvidenceState.SUPPORTED
+
+
+def _candidate_frame_slots_resolved(
+    geometry: FrameSequenceSolution | DualLaneFrameSolution,
+) -> bool:
+    if isinstance(geometry, FrameSequenceSolution):
+        return _sequence_frame_slots_resolved(geometry)
+    return bool(
+        geometry.lane_solutions
+        and all(
+            _sequence_frame_slots_resolved(lane)
+            for lane in geometry.lane_solutions
+        )
+    )
+
+
 def candidate_rank(
     candidate: AssessedCandidate,
-) -> tuple[int, int, int, int, int, int, int, float, float]:
+) -> tuple[int, int, int, int, int, int, float, float]:
     quality = candidate.evidence_quality
     residuals = quality.physical_residuals
     partial_auto_count = (
@@ -39,12 +80,11 @@ def candidate_rank(
         else float("inf")
     )
     return (
-        int(quality.covered_content_px),
+        1 if quality.uncovered_content_px == 0 else 0,
         -int(quality.uncovered_content_px),
         -int(quality.internal_boundary_contradiction_count),
         -int(quality.other_contradiction_count),
         len(quality.supported_proof_paths),
-        1 if candidate.assessment.gate is not None else 0,
         int(partial_auto_count),
         -float(dimension_residual),
         -float(boundary_residual),
@@ -55,17 +95,44 @@ def candidate_dominates(
     left: AssessedCandidate,
     right: AssessedCandidate,
 ) -> bool:
-    left_rank = candidate_rank(left)
-    right_rank = candidate_rank(right)
-    return bool(
-        all(
-            left_value >= right_value
-            for left_value, right_value in zip(left_rank, right_rank)
+    def axes(candidate: AssessedCandidate) -> tuple[int, int, int, int, int, float, float]:
+        quality = candidate.evidence_quality
+        residuals = quality.physical_residuals
+        dimension_residual = (
+            residuals.dimension
+            if residuals is not None and residuals.dimension is not None
+            else float("inf")
         )
-        and any(
-            left_value > right_value
-            for left_value, right_value in zip(left_rank, right_rank)
+        boundary_residual = (
+            residuals.boundary_uncertainty
+            if residuals is not None
+            else float("inf")
         )
+        partial_auto_count = (
+            candidate.geometry.count
+            if candidate.geometry.strip_mode == "partial"
+            and candidate.count_hypothesis.source
+            == CountHypothesisSource.AUTOMATIC
+            else 0
+        )
+        return (
+            -int(quality.uncovered_content_px),
+            -int(quality.internal_boundary_contradiction_count),
+            -int(quality.other_contradiction_count),
+            len(quality.supported_proof_paths),
+            int(partial_auto_count),
+            -float(dimension_residual),
+            -float(boundary_residual),
+        )
+
+    left_axes = axes(left)
+    right_axes = axes(right)
+    return all(
+        left_value >= right_value
+        for left_value, right_value in zip(left_axes, right_axes, strict=True)
+    ) and any(
+        left_value > right_value
+        for left_value, right_value in zip(left_axes, right_axes, strict=True)
     )
 
 
@@ -84,45 +151,39 @@ def geometry_equivalent(
             and isinstance(right_geometry, ReviewOnlyContainment)
             and left_geometry.count == right_geometry.count
             and left_geometry.strip_mode == right_geometry.strip_mode
-            and left_geometry.containment_fallback
-            == right_geometry.containment_fallback
+            and left_geometry.holder_safety == right_geometry.holder_safety
         )
     if (
         left_geometry.count != right_geometry.count
         or left_geometry.strip_mode != right_geometry.strip_mode
-        or len(left_geometry.photo_apertures) != len(right_geometry.photo_apertures)
+        or len(left_geometry.frame_slots) != len(right_geometry.frame_slots)
     ):
         return False
-    if isinstance(left_geometry, PhotoSequenceSolution) and isinstance(
+    if isinstance(left_geometry, FrameSequenceSolution) and isinstance(
         right_geometry,
-        PhotoSequenceSolution,
+        FrameSequenceSolution,
     ):
-        return all(
-            all(
-                left_edge.position.intersects(right_edge.position)
-                for left_edge, right_edge in zip(
-                    (
-                        left_photo.leading,
-                        left_photo.trailing,
-                        left_photo.top,
-                        left_photo.bottom,
-                    ),
-                    (
-                        right_photo.leading,
-                        right_photo.trailing,
-                        right_photo.top,
-                        right_photo.bottom,
-                    ),
+        return bool(
+            left_geometry.shared_short_axis.top.intersects(
+                right_geometry.shared_short_axis.top
+            )
+            and left_geometry.shared_short_axis.bottom.intersects(
+                right_geometry.shared_short_axis.bottom
+            )
+            and all(
+                left_boundary.position.intersects(right_boundary.position)
+                for left_slot, right_slot in zip(
+                    left_geometry.frame_slots,
+                    right_geometry.frame_slots,
                     strict=True,
                 )
-            )
-            for left_photo, right_photo in zip(
-                left_geometry.photo_apertures,
-                right_geometry.photo_apertures,
-                strict=True,
+                for left_boundary, right_boundary in (
+                    (left_slot.leading, right_slot.leading),
+                    (left_slot.trailing, right_slot.trailing),
+                )
             )
         )
-    return left_geometry.photo_apertures == right_geometry.photo_apertures
+    return left_geometry.frame_slots == right_geometry.frame_slots
 
 
 def geometry_clusters(
@@ -152,23 +213,23 @@ def geometry_resolution_for_selection(
     selected: AssessedCandidate,
     *,
     consensus: SelectionConsensus,
-    larger_count_hypotheses_resolved: bool,
+    larger_count_search_complete: bool,
     physical_search: PhysicalSearchOutcome,
 ) -> GeometryResolution:
     evidence_model = selected.assessment.evidence
     if isinstance(evidence_model, ReviewOnlyEvidence):
         return GeometryResolution(
             count_resolved=False,
-            placement_resolved=False,
-            boundaries_resolved=False,
+            frame_slots_resolved=False,
+            shared_short_axis_safe=False,
             content_preservation_compatible=False,
-            larger_count_hypotheses_resolved=(
-                larger_count_hypotheses_resolved
+            larger_count_search_complete=(
+                larger_count_search_complete
             ),
             alternative_geometries_resolved=(
                 consensus != SelectionConsensus.DISAGREED
             ),
-            assignment_geometry_resolved=False,
+            assignment_consensus_resolved=False,
             physical_search=physical_search,
         )
     evidence_sets = (
@@ -182,63 +243,34 @@ def geometry_resolution_for_selection(
         item for item in evidence_sets if isinstance(item, CandidateEvidence)
     )
     hypothesis = selected.count_hypothesis
-    gate = selected.assessment.gate
-    if gate is None:
-        raise ValueError("physical selection requires CandidateGate")
-    proof_path_supported = any(
-        path.state == EvidenceState.SUPPORTED
-        for path in gate.proof_paths
-    )
     fixed_count = bool(
         hypothesis.source
         in {CountHypothesisSource.FORMAT_DEFAULT, CountHypothesisSource.REQUESTED}
     )
-    assignment_geometry_resolved = (
+    assignment_consensus_resolved = (
         selected.geometry.assignment_consensus.state == EvidenceState.SUPPORTED
     )
-    automatic_count_supported = bool(
-        all(
-            item.photo_aperture_coverage.state == EvidenceState.SUPPORTED
-            for item in evidence
+    frame_slots_resolved = _candidate_frame_slots_resolved(selected.geometry)
+    if isinstance(selected.geometry, FrameSequenceSolution):
+        shared_short_axis_safe = selected.geometry.shared_short_axis.supports_safe_crop
+    elif isinstance(selected.geometry, DualLaneFrameSolution):
+        shared_short_axis_safe = all(
+            lane.shared_short_axis.supports_safe_crop
+            for lane in selected.geometry.lane_solutions
         )
-        and all(
-            item.frame_dimensions.state == EvidenceState.SUPPORTED
-            for item in evidence
-        )
-        and all(
-            item.content_preservation_state == EvidenceState.SUPPORTED
-            for item in evidence
-        )
-        and proof_path_supported
-        and assignment_geometry_resolved
-        and physical_search.state == EvidenceState.SUPPORTED
-    )
+    else:
+        shared_short_axis_safe = False
     count_resolved = bool(
-        fixed_count or automatic_count_supported
-    )
-    aperture_boundaries_resolved = bool(
-        selected.geometry.photo_apertures
-        and all(
-            aperture.all_boundaries_supported
-            for aperture in selected.geometry.photo_apertures
+        fixed_count
+        or (
+            frame_slots_resolved
+            and assignment_consensus_resolved
+            and physical_search.state == EvidenceState.SUPPORTED
         )
     )
-    placement_resolved = bool(
-        count_resolved
-        and len(selected.geometry.photo_apertures) == selected.geometry.count
-        and all(
-            envelope.box.valid()
-            for envelope in selected.geometry.frame_crop_envelopes
-        )
-        and aperture_boundaries_resolved
-        and proof_path_supported
-        and assignment_geometry_resolved
-        and physical_search.state == EvidenceState.SUPPORTED
-    )
-    boundaries_resolved = aperture_boundaries_resolved
     content_preservation_compatible = bool(
         all(
-            item.photo_aperture_coverage.state != EvidenceState.CONTRADICTED
+            item.frame_coverage.state != EvidenceState.CONTRADICTED
             for item in evidence
         )
         and all(
@@ -251,12 +283,12 @@ def geometry_resolution_for_selection(
     )
     return GeometryResolution(
         count_resolved=count_resolved,
-        placement_resolved=placement_resolved,
-        boundaries_resolved=boundaries_resolved,
+        frame_slots_resolved=frame_slots_resolved,
+        shared_short_axis_safe=shared_short_axis_safe,
         content_preservation_compatible=content_preservation_compatible,
-        larger_count_hypotheses_resolved=larger_count_hypotheses_resolved,
+        larger_count_search_complete=larger_count_search_complete,
         alternative_geometries_resolved=alternative_geometries_resolved,
-        assignment_geometry_resolved=assignment_geometry_resolved,
+        assignment_consensus_resolved=assignment_consensus_resolved,
         physical_search=physical_search,
     )
 
@@ -264,7 +296,7 @@ def geometry_resolution_for_selection(
 def select_candidates(
     candidates: tuple[AssessedCandidate, ...],
     *,
-    larger_count_hypotheses_resolved: bool,
+    larger_count_search_complete: bool,
     physical_search: PhysicalSearchOutcome,
 ) -> SelectionResult:
     if not candidates:
@@ -295,7 +327,7 @@ def select_candidates(
     resolution = geometry_resolution_for_selection(
         selected,
         consensus=consensus,
-        larger_count_hypotheses_resolved=larger_count_hypotheses_resolved,
+        larger_count_search_complete=larger_count_search_complete,
         physical_search=physical_search,
     )
     return SelectionResult(

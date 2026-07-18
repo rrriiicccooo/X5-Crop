@@ -26,8 +26,8 @@ native/build*/
 
 # Local app/test artifacts
 downloaded_apps/
-split_output/
-**/split_output/
+x5_crop_output/
+**/x5_crop_output/
 *_debug.jpg
 *_analysis.jpg
 

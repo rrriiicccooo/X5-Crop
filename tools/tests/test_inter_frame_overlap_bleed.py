@@ -2,22 +2,23 @@ from __future__ import annotations
 
 import unittest
 from inspect import getsource, signature
+from types import SimpleNamespace
 from typing import get_type_hints
 
 from x5crop.domain import (
     Box,
     FrameCropEnvelope,
-    InterPhotoSpacing,
-    InterPhotoBoundaryReference,
-    InterPhotoSpacingBasis,
-    InterPhotoSpacingKind,
+    InterFrameSpacing,
+    InterFrameBoundaryReference,
+    InterFrameSpacingBasis,
+    InterFrameSpacingKind,
     MeasurementIdentity,
     MeasurementProvenance,
     ObservationId,
     PixelInterval,
 )
 from x5crop.output.frame_bleed import apply_frame_bleed, frame_bleed_plan
-from x5crop.runtime.frame_bleed import _overlap_requirements
+from x5crop.runtime.frame_bleed import _frame_output_bounds, _overlap_requirements
 from x5crop.output.model import (
     AxisBleedParameters,
     FrameOverlapRequirement,
@@ -26,7 +27,7 @@ from x5crop.output.model import (
 
 
 def _overlap_requirement(
-    boundary: InterPhotoBoundaryReference,
+    boundary: InterFrameBoundaryReference,
     left_frame_index: int,
     right_frame_index: int,
     required_px: int,
@@ -34,9 +35,9 @@ def _overlap_requirement(
     supported: bool,
 ) -> FrameOverlapRequirement:
     basis = (
-        InterPhotoSpacingBasis.CORROBORATED_OVERLAP
+        InterFrameSpacingBasis.CORROBORATED_OVERLAP
         if supported
-        else InterPhotoSpacingBasis.GEOMETRY_HYPOTHESIS
+        else InterFrameSpacingBasis.GEOMETRY_HYPOTHESIS
     )
     provenance = MeasurementProvenance(
         (
@@ -52,7 +53,7 @@ def _overlap_requirement(
         "synthetic inter-photo overlap",
     )
     return FrameOverlapRequirement(
-        InterPhotoSpacing(
+        InterFrameSpacing(
             boundary,
             PixelInterval.exact(float(-required_px)),
             provenance,
@@ -64,6 +65,24 @@ def _overlap_requirement(
 
 
 class InterFrameOverlapBleedTest(unittest.TestCase):
+    def test_standard_output_bounds_use_canvas_not_holder_interpretation(
+        self,
+    ) -> None:
+        canvas = Box(0, 0, 300, 60)
+        frame = FrameCropEnvelope(1, Box(10, 0, 100, 60))
+        geometry = SimpleNamespace(
+            frame_crop_envelopes=(frame,),
+            holder_safety=SimpleNamespace(
+                box=Box(0, 10, 300, 50),
+                containment_fallback=SimpleNamespace(box=canvas),
+            ),
+        )
+        selection = SimpleNamespace(
+            selected=SimpleNamespace(geometry=geometry),
+        )
+
+        self.assertEqual(_frame_output_bounds(selection), (canvas,))
+
     def test_overlap_requirement_preserves_typed_spacing_fact(self) -> None:
         fields = FrameOverlapRequirement.__dataclass_fields__
         hints = get_type_hints(FrameOverlapRequirement)
@@ -72,22 +91,22 @@ class InterFrameOverlapBleedTest(unittest.TestCase):
         self.assertNotIn("physically_supported", fields)
         self.assertNotIn("provenance", fields)
         self.assertNotIn("required_px", fields)
-        self.assertIs(hints["spacing"], InterPhotoSpacing)
+        self.assertIs(hints["spacing"], InterFrameSpacing)
 
     def test_inter_photo_spacing_kind_is_typed(self) -> None:
         requirement = _overlap_requirement(
-            InterPhotoBoundaryReference(None, 1),
+            InterFrameBoundaryReference(None, 1),
             0,
             1,
             12,
             supported=True,
         )
 
-        self.assertIs(requirement.spacing.kind, InterPhotoSpacingKind.OVERLAP)
+        self.assertIs(requirement.spacing.kind, InterFrameSpacingKind.OVERLAP)
 
     def test_runtime_overlap_protection_consumes_assessed_boundary_evidence(self) -> None:
         source = getsource(_overlap_requirements)
-        self.assertIn("inter_photo_boundary_preservation", source)
+        self.assertIn("internal_frame_boundary_preservation", source)
         self.assertNotIn("geometry.inter_photo_spacings", source)
 
     def test_frame_bleed_layout_is_explicit(self) -> None:
@@ -116,7 +135,7 @@ class InterFrameOverlapBleedTest(unittest.TestCase):
             frame_output_bounds=output_bounds,
             overlap_requirements=(
                 _overlap_requirement(
-                    InterPhotoBoundaryReference(None, 1),
+                    InterFrameBoundaryReference(None, 1),
                     0,
                     1,
                     30,
@@ -137,7 +156,7 @@ class InterFrameOverlapBleedTest(unittest.TestCase):
         )
         self.assertEqual(
             tuple(item.boundary for item in plan.overlap_protection),
-            (InterPhotoBoundaryReference(None, 1),),
+            (InterFrameBoundaryReference(None, 1),),
         )
 
     def test_geometry_overlap_hypothesis_cannot_create_output_protection(self) -> None:
@@ -149,7 +168,7 @@ class InterFrameOverlapBleedTest(unittest.TestCase):
             ),
             overlap_requirements=(
                 _overlap_requirement(
-                    InterPhotoBoundaryReference(None, 1),
+                    InterFrameBoundaryReference(None, 1),
                     0,
                     1,
                     40,
@@ -163,7 +182,7 @@ class InterFrameOverlapBleedTest(unittest.TestCase):
         self.assertFalse(plan.feasible)
         self.assertEqual(
             plan.unresolved_overlap_boundaries,
-            (InterPhotoBoundaryReference(None, 1),),
+            (InterFrameBoundaryReference(None, 1),),
         )
         self.assertEqual(
             tuple(
@@ -187,8 +206,8 @@ class InterFrameOverlapBleedTest(unittest.TestCase):
             Box(0, 60, 200, 120),
         )
         boundaries = (
-            InterPhotoBoundaryReference(1, 1),
-            InterPhotoBoundaryReference(2, 1),
+            InterFrameBoundaryReference(1, 1),
+            InterFrameBoundaryReference(2, 1),
         )
         plan = frame_bleed_plan(
             frames=frames,
@@ -227,7 +246,7 @@ class InterFrameOverlapBleedTest(unittest.TestCase):
             frame_output_bounds=(Box(0, 0, 300, 60),) * 3,
             overlap_requirements=(
                 _overlap_requirement(
-                    InterPhotoBoundaryReference(None, 1),
+                    InterFrameBoundaryReference(None, 1),
                     0,
                     1,
                     30,

@@ -1,28 +1,30 @@
 from __future__ import annotations
 
 from ...context import DetectionContext
-from ...evidence.content.photo_content import photo_content_evidence
-from ...evidence.content.internal_boundaries import (
-    inter_photo_boundary_preservation_evidence,
+from ...evidence.content.frame_content import frame_content_evidence
+from ...evidence.content.internal_frame_boundaries import (
+    internal_frame_boundary_preservation_evidence,
+    measure_internal_boundary_content_continuity,
 )
 from ...evidence.separator_sequence import separator_sequence_evidence
 from ...evidence.holder_boundary import holder_boundary_evidence
-from ...evidence.photo_aperture_coverage import photo_aperture_coverage_evidence
+from ...evidence.frame_coverage import frame_coverage_evidence
 from ...evidence.holder_occupancy import holder_occupancy_evidence
-from ...evidence.content.external_boundaries import (
-    external_aperture_preservation_evidence,
+from ...evidence.content.external_frame_boundaries import (
+    external_frame_preservation_evidence,
 )
 from ...evidence.partial_edge import partial_edge_safety_evidence
-from ...evidence.photo_scale import photo_scale_observations
-from ...physical.model import PhotoSequenceSolution
-from ...physical.photo_size import frame_dimension_evidence
+from ...evidence.frame_scale import frame_scale_observations
+from ...evidence.frame_slot_topology import frame_slot_topology_evidence
+from ...physical.model import FrameSequenceSolution
+from ...physical.frame_dimensions import frame_dimension_evidence
 from ....domain import EvidenceState
 from ..model import (
     AssessedCandidate,
     BuiltCandidate,
     CandidateAssessment,
     CandidateEvidence,
-    boundary_proof_paths_for_geometry,
+    sequence_proof_paths_for_geometry,
 )
 from .candidate_gate import candidate_gate_assessment
 from .model import (
@@ -37,14 +39,15 @@ def candidate_gate_for_evidence(
     evidence: CandidateEvidence,
     diagnostics: tuple[str, ...] = (),
 ) -> CandidateGateAssessment:
-    if not isinstance(candidate.geometry, PhotoSequenceSolution):
+    if not isinstance(candidate.geometry, FrameSequenceSolution):
         raise ValueError("standard CandidateGate requires sequence geometry")
     return candidate_gate_assessment(
         CandidateGateInput(
+            frame_slot_topology=evidence.frame_slot_topology.state,
             content_preservation=evidence.content_preservation_state,
-            photo_geometry=evidence.frame_dimensions.state,
+            frame_dimensions=evidence.frame_dimensions.state,
             evidence_independence=evidence.independence.state,
-            proof_paths=boundary_proof_paths_for_geometry(
+            proof_paths=sequence_proof_paths_for_geometry(
                 candidate.geometry,
                 evidence,
             ),
@@ -61,48 +64,53 @@ def assess_candidate(
     if candidate.geometry.format_id != physical_spec.format_id:
         raise ValueError("candidate and detection context format do not match")
     geometry = candidate.geometry
-    if not isinstance(geometry, PhotoSequenceSolution):
+    if not isinstance(geometry, FrameSequenceSolution):
         raise ValueError("standard candidate assessment requires sequence geometry")
     frame_dimensions = frame_dimension_evidence(geometry)
-    coverage = photo_aperture_coverage_evidence(
+    coverage = frame_coverage_evidence(
         geometry,
         context.measurement_cache,
         context.configuration.content,
     )
-    content = photo_content_evidence(
+    content = frame_content_evidence(
         geometry,
         context.measurement_cache,
         context.configuration.content,
     )
-    internal_boundaries = inter_photo_boundary_preservation_evidence(
-        geometry.count,
-        geometry.photo_apertures,
-        geometry.inter_photo_spacings,
+    content_continuity = measure_internal_boundary_content_continuity(
+        geometry.frame_slots,
         content,
         coverage,
+        context.measurement_cache.content_evidence_float_work,
+        context.measurement_cache.gray_work,
+        context.measurement_cache.image_statistics,
+        context.configuration.content.evidence,
+    )
+    internal_boundaries = internal_frame_boundary_preservation_evidence(
+        geometry.frame_slots,
+        geometry.inter_frame_spacings,
+        content_continuity,
     )
     holder_boundary = holder_boundary_evidence(
         geometry,
         context.measurement_cache.image_statistics.edge_texture_limit,
     )
-    candidate_scale = photo_scale_observations(
-        geometry,
-        holder_boundary,
-    )
-    external_preservation = external_aperture_preservation_evidence(
+    candidate_scale = frame_scale_observations(geometry)
+    external_preservation = external_frame_preservation_evidence(
         geometry,
         context.measurement_cache,
         context.configuration.content.evidence,
+        coverage,
     )
     separator_sequence = separator_sequence_evidence(geometry)
     occupancy = holder_occupancy_evidence(
         count=geometry.count,
-        holder_span=geometry.holder_span,
-        photo_apertures=geometry.photo_apertures,
+        holder_safety=geometry.holder_safety,
+        frame_slots=geometry.frame_slots,
         separator_assignments=geometry.separator_assignments,
         physical_spec=physical_spec,
         content_support_available=content.support_available,
-        photo_aperture_coverage=coverage,
+        frame_coverage=coverage,
         frame_dimensions=frame_dimensions,
     )
     partial_edge = partial_edge_safety_evidence(
@@ -113,14 +121,15 @@ def assess_candidate(
     )
     independence = evidence_independence_evidence(geometry)
     evidence = CandidateEvidence(
-        photo_aperture_coverage=coverage,
+        frame_slot_topology=frame_slot_topology_evidence(geometry),
+        frame_coverage=coverage,
         separator_sequence=separator_sequence,
         frame_dimensions=frame_dimensions,
-        photo_content=content,
-        inter_photo_boundary_preservation=internal_boundaries,
+        frame_content=content,
+        internal_frame_boundary_preservation=internal_boundaries,
         holder_boundary=holder_boundary,
-        photo_scale_observations=candidate_scale,
-        external_aperture_preservation=external_preservation,
+        frame_scale_observations=candidate_scale,
+        external_frame_preservation=external_preservation,
         holder_occupancy=occupancy,
         partial_edge_safety=partial_edge,
         independence=independence,
@@ -128,7 +137,7 @@ def assess_candidate(
     diagnostics = list(candidate.build_diagnostics)
     diagnostics.extend(partial_edge.diagnostics)
     if content.state == EvidenceState.UNAVAILABLE:
-        diagnostics.append("photo_content_unavailable")
+        diagnostics.append("frame_content_unavailable")
     gate = candidate_gate_for_evidence(
         candidate,
         evidence,

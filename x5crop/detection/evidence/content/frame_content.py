@@ -18,11 +18,11 @@ from ....utils import runs_from_mask
 from .activation import cached_content_evidence_threshold, sample_supports_content
 
 if TYPE_CHECKING:
-    from ...physical.model import PhotoSequenceSolution
+    from ...physical.model import FrameSequenceSolution
 
 
 @dataclass(frozen=True)
-class PhotoBoundaryContentTrace:
+class FrameBoundaryContentTrace:
     side: BoundarySide
     boundary_parallel_runs: tuple[tuple[int, int], ...]
     minimum_crossing_tracks: int
@@ -46,25 +46,25 @@ class PhotoBoundaryContentTrace:
 
 
 @dataclass(frozen=True)
-class PhotoContentObservation:
-    photo_index: int
+class FrameContentObservation:
+    frame_index: int
     mean: float
     coverage: float
     content_present: bool
-    boundary_traces: tuple[PhotoBoundaryContentTrace, ...]
+    boundary_traces: tuple[FrameBoundaryContentTrace, ...]
 
     def __post_init__(self) -> None:
-        if self.photo_index <= 0:
-            raise ValueError("photo content observation requires a photo index")
+        if self.frame_index <= 0:
+            raise ValueError("frame content observation requires a frame index")
         sides = tuple(trace.side for trace in self.boundary_traces)
         if len(sides) != len(set(sides)):
             raise ValueError("photo content observation requires unique boundary traces")
 
 
 @dataclass(frozen=True)
-class PhotoContentEvidence:
+class FrameContentEvidence:
     threshold: float | None
-    observations: tuple[PhotoContentObservation, ...]
+    observations: tuple[FrameContentObservation, ...]
     unavailable_reason: str | None = None
     state: EvidenceState = field(init=False)
     reason: str = field(init=False)
@@ -119,7 +119,7 @@ def _boundary_content_traces(
     cross_axis_offset: int,
     threshold: float,
     parameters: ContentEvidenceParameters,
-) -> tuple[PhotoBoundaryContentTrace, ...]:
+) -> tuple[FrameBoundaryContentTrace, ...]:
     band = max(
         int(parameters.boundary_band_min_px),
         int(round(min(crop.shape) * float(parameters.boundary_band_ratio))),
@@ -136,7 +136,7 @@ def _boundary_content_traces(
         1,
         int(math.ceil(math.sqrt(parameters.minimum_active_pixels))),
     )
-    traces: list[PhotoBoundaryContentTrace] = []
+    traces: list[FrameBoundaryContentTrace] = []
     for side, (sample, coordinate_offset) in samples.items():
         if not sample_supports_content(
             sample,
@@ -157,7 +157,7 @@ def _boundary_content_traces(
         )
         if runs:
             traces.append(
-                PhotoBoundaryContentTrace(
+                FrameBoundaryContentTrace(
                     side,
                     runs,
                     minimum_tracks,
@@ -166,19 +166,19 @@ def _boundary_content_traces(
     return tuple(traces)
 
 
-def photo_content_evidence(
-    geometry: PhotoSequenceSolution,
+def frame_content_evidence(
+    geometry: FrameSequenceSolution,
     cache: MeasurementCache,
     configuration: ContentConfiguration,
-) -> PhotoContentEvidence:
+) -> FrameContentEvidence:
     if cache.layout != geometry.layout:
         raise ValueError("content evidence requires matching analysis cache")
-    measurement_region = geometry.holder_span.box.clamp(
+    measurement_region = geometry.holder_safety.box.clamp(
         cache.gray_work.shape[1],
         cache.gray_work.shape[0],
     )
     if not measurement_region.valid():
-        return PhotoContentEvidence(
+        return FrameContentEvidence(
             None,
             (),
             "invalid_holder_measurement_region",
@@ -188,7 +188,7 @@ def photo_content_evidence(
         measurement_region.left : measurement_region.right,
     ]
     if not evidence.size:
-        return PhotoContentEvidence(
+        return FrameContentEvidence(
             None,
             (),
             "empty_holder_measurement_region",
@@ -200,7 +200,7 @@ def photo_content_evidence(
         parameters,
     )
     if threshold is None:
-        return PhotoContentEvidence(
+        return FrameContentEvidence(
             None,
             (),
             "content_evidence_has_no_dynamic_range",
@@ -218,9 +218,9 @@ def photo_content_evidence(
         )
     statistics = cache.content_column_statistics[statistics_key]
 
-    observations: list[PhotoContentObservation] = []
+    observations: list[FrameContentObservation] = []
     for envelope in geometry.frame_crop_envelopes:
-        index = envelope.photo_index
+        index = envelope.frame_index
         absolute = envelope.box.clamp(
             cache.gray_work.shape[1],
             cache.gray_work.shape[0],
@@ -256,8 +256,8 @@ def photo_content_evidence(
             parameters.minimum_active_pixels,
         )
         observations.append(
-            PhotoContentObservation(
-                photo_index=index,
+            FrameContentObservation(
+                frame_index=index,
                 mean=float(mean),
                 coverage=float(coverage),
                 content_present=content_present,
@@ -270,8 +270,8 @@ def photo_content_evidence(
             )
         )
 
-    return PhotoContentEvidence(
+    return FrameContentEvidence(
         threshold=float(threshold),
         observations=tuple(observations),
-        unavailable_reason=None if observations else "no_valid_photo_apertures",
+        unavailable_reason=None if observations else "no_valid_frame_slots",
     )

@@ -7,34 +7,37 @@ import unittest
 
 from x5crop.detection.candidate.assessment.candidate_gate import candidate_gate_assessment
 from x5crop.detection.candidate.assessment.model import (
-    BoundaryProofPath,
+    SequenceProofPath,
     CandidateGateInput,
+    sequence_proof_state,
 )
 from x5crop.domain import EvidenceState
-from x5crop.detection.gate_checks import GateCheck, GateStage
+from x5crop.detection.gate_checks import GateCheck, GateRequirement, GateStage
 
 
-def _path(code: str, state: EvidenceState) -> BoundaryProofPath:
-    return BoundaryProofPath(code, state, ("synthetic",))
+def _path(code: str, state: EvidenceState) -> SequenceProofPath:
+    return SequenceProofPath(code, state, ("synthetic",))
 
 
 def _gate(
     *,
+    frame_slot_topology: EvidenceState = EvidenceState.SUPPORTED,
     content_preservation: EvidenceState = EvidenceState.SUPPORTED,
-    photo_geometry: EvidenceState = EvidenceState.SUPPORTED,
+    frame_dimensions: EvidenceState = EvidenceState.SUPPORTED,
     evidence_independence: EvidenceState = EvidenceState.SUPPORTED,
-    proof_paths: tuple[BoundaryProofPath, ...] | None = None,
+    proof_paths: tuple[SequenceProofPath, ...] | None = None,
     diagnostics: tuple[str, ...] = (),
 ):
     return candidate_gate_assessment(
         CandidateGateInput(
+            frame_slot_topology=frame_slot_topology,
             content_preservation=content_preservation,
-            photo_geometry=photo_geometry,
+            frame_dimensions=frame_dimensions,
             evidence_independence=evidence_independence,
             proof_paths=proof_paths
             or (
                 _path("separator_sequence_led", EvidenceState.SUPPORTED),
-                _path("geometry_led", EvidenceState.UNAVAILABLE),
+                _path("dimension_sequence_led", EvidenceState.UNAVAILABLE),
                 _path("partial_occupancy_led", EvidenceState.NOT_APPLICABLE),
             ),
             diagnostics=diagnostics,
@@ -52,8 +55,31 @@ class CandidateLifecycleGateContractTest(unittest.TestCase):
     def test_gate_check_has_no_unused_consequence_dimension(self) -> None:
         self.assertEqual(
             {field.name for field in fields(GateCheck)},
-            {"code", "stage", "state", "final_review_reason"},
+            {
+                "code",
+                "stage",
+                "state",
+                "requirement",
+                "final_review_reason",
+            },
         )
+
+    def test_gate_requirement_distinguishes_required_support_from_safety(self) -> None:
+        required = GateCheck(
+            "sequence_proof",
+            GateStage.CANDIDATE,
+            EvidenceState.UNAVAILABLE,
+            GateRequirement.SUPPORTED_REQUIRED,
+        )
+        safety = GateCheck(
+            "content_preservation",
+            GateStage.CANDIDATE,
+            EvidenceState.UNAVAILABLE,
+            GateRequirement.NOT_CONTRADICTED,
+        )
+
+        self.assertTrue(required.blocks)
+        self.assertFalse(safety.blocks)
 
     def test_gate_check_rejects_cross_stage_reason_ownership(self) -> None:
         invalid_factories = (
@@ -86,11 +112,11 @@ class CandidateLifecycleGateContractTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             replace(gate, checks=gate.checks[:-1])
 
-    def test_boundary_check_must_match_proof_paths(self) -> None:
+    def test_sequence_check_must_match_proof_paths(self) -> None:
         gate = _gate()
         checks = tuple(
             replace(check, state=EvidenceState.CONTRADICTED)
-            if check.code == "boundary_proof"
+            if check.code == "sequence_proof"
             else check
             for check in gate.checks
         )
@@ -101,17 +127,19 @@ class CandidateLifecycleGateContractTest(unittest.TestCase):
         self.assertEqual(
             tuple(check.code for check in _gate().checks),
             (
+                "frame_slot_topology",
                 "content_preservation",
-                "photo_geometry_consistency",
+                "frame_dimension_consistency",
                 "evidence_independence",
-                "boundary_proof",
+                "sequence_proof",
             ),
         )
 
     def test_each_physical_contradiction_blocks_its_own_check(self) -> None:
         cases = (
+            ("frame_slot_topology", "frame_slot_topology"),
             ("content_preservation", "content_preservation"),
-            ("photo_geometry", "photo_geometry_consistency"),
+            ("frame_dimensions", "frame_dimension_consistency"),
             ("evidence_independence", "evidence_independence"),
         )
         for argument, expected in cases:
@@ -122,36 +150,37 @@ class CandidateLifecycleGateContractTest(unittest.TestCase):
 
     def test_unavailable_measurement_is_not_a_contradiction(self) -> None:
         gate = _gate(
-            photo_geometry=EvidenceState.UNAVAILABLE,
+            frame_dimensions=EvidenceState.UNAVAILABLE,
             content_preservation=EvidenceState.UNAVAILABLE,
         )
         self.assertTrue(gate.passed)
 
-    def test_one_supported_boundary_path_is_sufficient(self) -> None:
+    def test_one_supported_sequence_path_is_sufficient(self) -> None:
         gate = _gate(
             proof_paths=(
                 _path("separator_sequence_led", EvidenceState.UNAVAILABLE),
-                _path("geometry_led", EvidenceState.SUPPORTED),
+                _path("dimension_sequence_led", EvidenceState.SUPPORTED),
                 _path("partial_occupancy_led", EvidenceState.NOT_APPLICABLE),
             )
         )
         self.assertTrue(gate.passed)
 
-    def test_no_supported_boundary_path_blocks_once(self) -> None:
-        gate = _gate(
-            proof_paths=(
-                _path("separator_sequence_led", EvidenceState.UNAVAILABLE),
-                _path("geometry_led", EvidenceState.UNAVAILABLE),
-                _path("partial_occupancy_led", EvidenceState.NOT_APPLICABLE),
-            )
+    def test_no_supported_sequence_path_blocks_once(self) -> None:
+        proof_paths = (
+            _path("separator_sequence_led", EvidenceState.UNAVAILABLE),
+            _path("dimension_sequence_led", EvidenceState.UNAVAILABLE),
+            _path("partial_occupancy_led", EvidenceState.NOT_APPLICABLE),
         )
-        self.assertEqual(gate.failed_checks, ("boundary_proof",))
+        gate = _gate(proof_paths=proof_paths)
 
-    def test_unknown_boundary_path_is_rejected(self) -> None:
-        with self.assertRaisesRegex(ValueError, "boundary proof path"):
+        self.assertEqual(sequence_proof_state(proof_paths), EvidenceState.UNAVAILABLE)
+        self.assertEqual(gate.failed_checks, ("sequence_proof",))
+
+    def test_unknown_sequence_path_is_rejected(self) -> None:
+        with self.assertRaisesRegex(ValueError, "sequence proof path"):
             _gate(proof_paths=(_path("unknown", EvidenceState.SUPPORTED),))
 
-    def test_standard_boundary_proof_set_must_be_complete(self) -> None:
+    def test_standard_sequence_proof_set_must_be_complete(self) -> None:
         with self.assertRaises(ValueError):
             _gate(
                 proof_paths=(

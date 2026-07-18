@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from ..geometry.layout import infer_layout
+from ..strip_modes import FULL, PARTIAL
 from .options import DEFAULT_OUTPUT_BLEED
 from ..configuration.bundle import DetectionConfigurationBundle
 from ..run_config import RunConfig
@@ -24,11 +25,22 @@ def runtime_invocation_from_options(options: RuntimeOptions) -> RuntimeInvocatio
         options.strip_mode,
     )
     fmt = configuration_bundle.initial_configuration.physical_spec
-    if options.requested_count is not None and options.requested_count not in fmt.allowed_counts:
-        allowed = ", ".join(str(count) for count in fmt.allowed_counts)
-        raise ValueError(
-            f"--format {fmt.format_id} allows --count values: {allowed}"
-        )
+    if options.requested_count is not None:
+        if options.strip_mode == FULL:
+            if options.requested_count != fmt.strip.default_count:
+                raise ValueError(
+                    f"--format {fmt.format_id} full mode requires --count "
+                    f"{fmt.strip.default_count}"
+                )
+        elif options.strip_mode == PARTIAL:
+            if options.requested_count not in fmt.strip.allowed_partial_counts:
+                allowed = ", ".join(
+                    str(count) for count in fmt.strip.allowed_partial_counts
+                )
+                raise ValueError(
+                    f"--format {fmt.format_id} partial mode allows --count "
+                    f"values: {allowed}"
+                )
 
     layout_auto = options.layout == "auto"
     layout = infer_layout(width, height) if layout_auto else options.layout

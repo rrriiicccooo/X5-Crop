@@ -16,8 +16,10 @@ RUNTIME_ROOTS = frozenset({"x5crop.entry.cli"})
 STANDALONE_ROOTS = frozenset({"x5crop.configuration.consistency"})
 STANDALONE_TOOL_ROOTS = frozenset(
     {
+        "tools.build_release",
         "tools.build_standalone",
-        "tools.regression.aperture_reference",
+        "tools.regression.frame_slot_reference",
+        "tools.regression.sample_expectations",
         "tools.regression.compare",
     }
 )
@@ -84,6 +86,26 @@ def source_modules() -> dict[str, SourceModule]:
 
 def parsed_source(module: SourceModule) -> ast.Module:
     return ast.parse(module.path.read_text(encoding="utf-8"), filename=str(module.path))
+
+
+def duplicate_top_level_symbols() -> list[str]:
+    offenders: list[str] = []
+    modules = tuple(source_modules().values()) + tuple(_tool_modules().values())
+    for module in modules:
+        definitions: dict[str, list[int]] = {}
+        for node in parsed_source(module).body:
+            if not isinstance(
+                node,
+                (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef),
+            ):
+                continue
+            definitions.setdefault(node.name, []).append(node.lineno)
+        offenders.extend(
+            f"{module.name}:{name}:{','.join(str(line) for line in lines)}"
+            for name, lines in definitions.items()
+            if len(lines) > 1
+        )
+    return sorted(offenders)
 
 
 def _known_module(name: str, modules: dict[str, SourceModule]) -> str | None:

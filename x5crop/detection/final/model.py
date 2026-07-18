@@ -43,7 +43,7 @@ class FinalDetection:
             self.output_geometry.frame_crop_envelopes
             != plan.base_geometry.frame_crop_envelopes
         ):
-            raise ValueError("final output must preserve photo aperture identity")
+            raise ValueError("final output must preserve frame-slot identity")
 
     @property
     def frame_export_eligible(self) -> bool:

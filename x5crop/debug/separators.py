@@ -4,13 +4,18 @@ import numpy as np
 
 from ..configuration.diagnostics import DebugStyleParameters, SeparatorOverlayParameters
 from ..detection.candidate.model import AssessedCandidate
-from ..detection.physical.model import DualLanePhotoSolution, PhotoSequenceSolution
+from ..detection.physical.model import (
+    DualLaneFrameSolution,
+    FrameSequenceSolution,
+    FrameBoundarySource,
+    ResolvedFrameBoundary,
+    SharedShortAxisBasis,
+)
 from ..domain import (
     BoundaryAxis,
     BoundarySide,
     Box,
-    PhotoApertureBoundaryResolution,
-    PhotoApertureEdgeSource,
+    GrayBoundaryPathObservation,
     SeparatorBandObservation,
 )
 from ..geometry.boxes import map_work_box
@@ -48,8 +53,8 @@ def separator_mark_box(
     image_height: int,
     layout: str,
 ) -> Box:
-    start = int(round(observation.start))
-    end = max(start + 1, int(round(observation.end)))
+    start = int(round(observation.leading_edge.midpoint))
+    end = max(start + 1, int(round(observation.trailing_edge.midpoint)))
     return _mapped_work_mark(
         Box(start, corridor.top, end, corridor.bottom),
         x_offset=x_offset,
@@ -103,7 +108,8 @@ def _axis_mark_box(
 
 def _draw_boundary(
     rgb: np.ndarray,
-    boundary: PhotoApertureBoundaryResolution,
+    side: BoundarySide,
+    boundary: ResolvedFrameBoundary,
     corridor: Box,
     *,
     x_offset: int,
@@ -118,7 +124,7 @@ def _draw_boundary(
     draw_preview_line(
         rgb,
         _boundary_mark_box(
-            boundary.side,
+            side,
             boundary.position.midpoint,
             corridor,
             x_offset=x_offset,
@@ -133,9 +139,38 @@ def _draw_boundary(
     )
 
 
+def _selected_boundary_paths(
+    solution: FrameSequenceSolution,
+) -> tuple[GrayBoundaryPathObservation, ...]:
+    selected_ids = {
+        *(
+            path.provenance.observation_id
+            for boundary in solution.holder_safety.boundaries
+            for path in boundary.supporting_paths
+        ),
+        *(
+            assignment.observation.provenance.observation_id
+            for assignment in solution.long_axis_assignments
+        ),
+    }
+    return tuple(
+        path
+        for path in solution.raw_boundary_paths
+        if path.provenance.observation_id in selected_ids
+    )
+
+
+def _selected_separator_observations(
+    solution: FrameSequenceSolution,
+) -> tuple[SeparatorBandObservation, ...]:
+    return tuple(
+        assignment.observation for assignment in solution.separator_assignments
+    )
+
+
 def _draw_sequence_overlay(
     rgb: np.ndarray,
-    solution: PhotoSequenceSolution,
+    solution: FrameSequenceSolution,
     corridor: Box,
     *,
     x_offset: int,
@@ -147,7 +182,7 @@ def _draw_sequence_overlay(
     image_height: int,
     layout: str,
 ) -> None:
-    for path in solution.raw_boundary_paths:
+    for path in _selected_boundary_paths(solution):
         draw_preview_line(
             rgb,
             _axis_mark_box(
@@ -164,7 +199,7 @@ def _draw_sequence_overlay(
             style.raw_observation_color,
             overlay.observed_line_width,
         )
-    for holder_boundary in solution.holder_boundaries:
+    for holder_boundary in solution.holder_safety.boundaries:
         draw_preview_dashed_line(
             rgb,
             _boundary_mark_box(
@@ -183,7 +218,7 @@ def _draw_sequence_overlay(
             dash_length=style.line_dash_length,
             dash_gap=style.line_dash_gap,
         )
-    for observation in solution.separator_observations:
+    for observation in _selected_separator_observations(solution):
         draw_preview_mark(
             rgb,
             separator_mark_box(
@@ -199,18 +234,53 @@ def _draw_sequence_overlay(
             style.raw_observation_color,
             overlay.observed_line_width,
         )
-    for aperture in solution.photo_apertures:
-        for boundary in (
-            aperture.leading,
-            aperture.trailing,
-            aperture.top,
-            aperture.bottom,
+    for side, position in (
+        (BoundarySide.TOP, solution.shared_short_axis.top),
+        (BoundarySide.BOTTOM, solution.shared_short_axis.bottom),
+    ):
+        mark = _boundary_mark_box(
+            side,
+            position.midpoint,
+            corridor,
+            x_offset=x_offset,
+            y_offset=y_offset,
+            image_width=image_width,
+            image_height=image_height,
+            layout=layout,
+        )
+        if solution.shared_short_axis.basis == SharedShortAxisBasis.PHOTO_EDGE_BOUNDED:
+            draw_preview_line(
+                rgb,
+                mark,
+                scale,
+                style.measured_boundary_color,
+                overlay.observed_line_width,
+            )
+        else:
+            draw_preview_dashed_line(
+                rgb,
+                mark,
+                scale,
+                style.holder_boundary_color,
+                overlay.observed_line_width,
+                dash_length=style.line_dash_length,
+                dash_gap=style.line_dash_gap,
+            )
+    for slot in solution.frame_slots:
+        for side, boundary in (
+            (BoundarySide.LEADING, slot.leading),
+            (BoundarySide.TRAILING, slot.trailing),
         ):
-            if boundary.source == PhotoApertureEdgeSource.DIMENSION_HYPOTHESIS:
+            if boundary.source in {
+                FrameBoundarySource.DIMENSION_CONSTRAINED,
+                FrameBoundarySource.HOLDER_OCCLUSION_INFERENCE,
+                FrameBoundarySource.EXTERNAL_SAFETY_ENVELOPE,
+                FrameBoundarySource.SEQUENCE_INFERENCE,
+            }:
                 draw_preview_dashed_line(
                     rgb,
                     _boundary_mark_box(
-                        boundary.side,
+                        side,
                         boundary.position.midpoint,
                         corridor,
                         x_offset=x_offset,
@@ -220,14 +290,30 @@ def _draw_sequence_overlay(
                         layout=layout,
                     ),
                     scale,
-                    style.dimension_hypothesis_color,
-                    overlay.dimension_line_width,
+                    (
+                        style.sequence_inferred_slot_color
+                        if boundary.source
+                        == FrameBoundarySource.SEQUENCE_INFERENCE
+                        else (
+                            style.frame_crop_envelope_color
+                            if boundary.source
+                            == FrameBoundarySource.EXTERNAL_SAFETY_ENVELOPE
+                            else style.dimension_hypothesis_color
+                        )
+                    ),
+                    (
+                        style.sequence_inferred_slot_line_width
+                        if boundary.source
+                        == FrameBoundarySource.SEQUENCE_INFERENCE
+                        else overlay.dimension_line_width
+                    ),
                     dash_length=style.line_dash_length,
                     dash_gap=style.line_dash_gap,
                 )
             elif boundary.independently_observed:
                 _draw_boundary(
                     rgb,
+                    side,
                     boundary,
                     corridor,
                     x_offset=x_offset,
@@ -239,11 +325,11 @@ def _draw_sequence_overlay(
                     image_height=image_height,
                     layout=layout,
                 )
-    for index, spacing in enumerate(solution.inter_photo_spacings):
+    for index, spacing in enumerate(solution.inter_frame_spacings):
         if not spacing.supports_output_protection:
             continue
-        left = solution.photo_apertures[index]
-        right = solution.photo_apertures[index + 1]
+        left = solution.frame_slots[index]
+        right = solution.frame_slots[index + 1]
         overlap_position = 0.5 * (
             left.trailing.position.midpoint + right.leading.position.midpoint
         )
@@ -275,11 +361,11 @@ def draw_separator_overlay(
     image_height: int,
 ) -> None:
     geometry = selected_candidate.geometry
-    if isinstance(geometry, PhotoSequenceSolution):
+    if isinstance(geometry, FrameSequenceSolution):
         _draw_sequence_overlay(
             rgb,
             geometry,
-            geometry.holder_span.box,
+            geometry.holder_safety.box,
             x_offset=0,
             y_offset=0,
             scale=scale,
@@ -289,7 +375,7 @@ def draw_separator_overlay(
             image_height=image_height,
             layout=geometry.layout,
         )
-    elif isinstance(geometry, DualLanePhotoSolution):
+    elif isinstance(geometry, DualLaneFrameSolution):
         for lane, lane_solution in zip(
             geometry.lane_boxes,
             geometry.lane_solutions,
@@ -298,7 +384,7 @@ def draw_separator_overlay(
             _draw_sequence_overlay(
                 rgb,
                 lane_solution,
-                lane_solution.holder_span.box,
+                lane_solution.holder_safety.box,
                 x_offset=lane.left,
                 y_offset=lane.top,
                 scale=scale,

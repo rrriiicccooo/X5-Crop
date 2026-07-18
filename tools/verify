@@ -1,0 +1,68 @@
+#!/bin/sh
+set -eu
+
+check_staged() {
+    git diff --cached --check
+    git diff --cached --name-only --diff-filter=ACMR | while IFS= read -r path; do
+        case "/$path" in
+            */.DS_Store|/.venv/*|/.venv-build/*|/build/*|/dist/*|/release/*|/downloaded_apps/*|/Test/*|/x5_crop_output/*)
+                printf >&2 'Refusing generated or local file: %s\n' "$path"
+                exit 1
+                ;;
+        esac
+        case "$path" in
+            *.[Tt][Ii][Ff]|*.[Tt][Ii][Ff][Ff])
+                [ "$(git check-attr filter -- "$path")" = "$path: filter: lfs" ] || {
+                    printf >&2 'TIFF fixtures must be explicitly tracked by Git LFS: %s\n' "$path"
+                    exit 1
+                }
+                ;;
+        esac
+    done
+}
+
+check_diff_hygiene() {
+    git diff --check
+    git diff --cached --check
+    if git diff --quiet && git diff --cached --quiet && \
+        git rev-parse --verify HEAD^ >/dev/null 2>&1
+    then
+        git diff --check HEAD^ HEAD
+    fi
+}
+
+run_full() {
+    python3 -m unittest discover -s tools/tests
+    python3 -m compileall -q X5_Crop.py x5crop tools/regression tools/build_release.py tools/release_manifest.py
+    python3 -m x5crop.configuration.consistency
+    for script in \
+        X5_Crop_Mac.command \
+        X5_Crop_Mac_diagnostics.command \
+        install/X5_Crop_Mac_install.command \
+        install/X5_Crop_Mac_uninstall.command
+    do
+        [ ! -f "$script" ] || bash -n "$script"
+    done
+    check_diff_hygiene
+    python3 X5_Crop.py --version
+}
+
+case "${1:-}" in
+    staged)
+        check_staged
+        ;;
+    full)
+        run_full
+        ;;
+    pre-push)
+        [ -z "$(git status --porcelain)" ] || {
+            printf >&2 'Refusing push from a dirty worktree. Commit intentional changes first.\n'
+            exit 1
+        }
+        run_full
+        ;;
+    *)
+        printf >&2 'usage: %s staged|full|pre-push\n' "$0"
+        exit 2
+        ;;
+esac

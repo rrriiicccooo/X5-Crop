@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from ..domain import (
     Box,
-    InterPhotoBoundaryReference,
+    InterFrameBoundaryReference,
 )
 from ..geometry.boxes import map_work_box, original_box_to_work
 from ..geometry.layout import is_horizontal_layout
@@ -59,7 +59,7 @@ def frame_bleed_plan(
     leading = [int(user_bleed.long_axis) for _frame in frames]
     trailing = [int(user_bleed.long_axis) for _frame in frames]
     protections: list[BoundaryOverlapProtection] = []
-    unresolved: list[InterPhotoBoundaryReference] = []
+    unresolved: list[InterFrameBoundaryReference] = []
 
     for requirement in overlap_requirements:
         if requirement.right_frame_index >= len(frames):

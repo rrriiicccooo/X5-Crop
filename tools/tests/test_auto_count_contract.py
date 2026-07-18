@@ -6,7 +6,11 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-from tools.tests.physical_gate_support import candidate_fixture, selection_fixture
+from tools.tests.physical_gate_support import (
+    candidate_evidence_fixture,
+    candidate_fixture,
+    selection_fixture,
+)
 import x5crop.detection.pipeline as detection_pipeline
 from x5crop.detection.candidate.assessment.candidate import (
     candidate_gate_for_evidence,
@@ -25,7 +29,9 @@ from x5crop.detection.candidate.plan.model import (
     CountHypothesisSource,
 )
 from x5crop.detection.candidate.selection.choose import (
+    candidate_dominates,
     candidate_rank,
+    geometry_resolution_for_selection,
     select_candidates,
 )
 from x5crop.detection.geometry_resolution import GeometryResolution
@@ -45,13 +51,13 @@ class AutoCountContractTest(unittest.TestCase):
     ) -> PhysicalSearchOutcome:
         return PhysicalSearchOutcome(facts)
 
-    def test_unresolved_rank_protects_content_before_preferring_larger_count(
+    def test_unresolved_rank_uses_content_omission_not_raw_coverage_volume(
         self,
     ) -> None:
         def candidate(
             count: int,
             *,
-            covered: int = 100,
+            uncovered: int = 0,
             contradicted: tuple[str, ...] = (),
             internal_boundary_contradiction_count: int = 0,
             supported_proof_paths: tuple[str, ...] = (),
@@ -68,8 +74,7 @@ class AutoCountContractTest(unittest.TestCase):
                         len(contradicted)
                         - internal_boundary_contradiction_count
                     ),
-                    covered_content_px=covered,
-                    uncovered_content_px=0,
+                    uncovered_content_px=uncovered,
                     supported_proof_paths=supported_proof_paths,
                     physical_residuals=None,
                 ),
@@ -91,7 +96,7 @@ class AutoCountContractTest(unittest.TestCase):
             contradicted=("inter_photo_boundary_preservation",),
             internal_boundary_contradiction_count=1,
         )
-        larger_with_less_coverage = candidate(5, covered=99)
+        larger_with_omission = candidate(5, uncovered=1)
 
         self.assertGreater(
             candidate_rank(smaller_safe),
@@ -99,7 +104,7 @@ class AutoCountContractTest(unittest.TestCase):
         )
         self.assertGreater(
             candidate_rank(smaller_safe),
-            candidate_rank(larger_with_less_coverage),
+            candidate_rank(larger_with_omission),
         )
         self.assertGreater(
             candidate_rank(candidate(5)),
@@ -119,7 +124,6 @@ class AutoCountContractTest(unittest.TestCase):
                     unavailable=(),
                     internal_boundary_contradiction_count=0,
                     other_contradiction_count=0,
-                    covered_content_px=100,
                     uncovered_content_px=0,
                     supported_proof_paths=proof,
                     physical_residuals=None,
@@ -150,11 +154,45 @@ class AutoCountContractTest(unittest.TestCase):
             candidate_rank(larger_unproven),
         )
 
+    def test_candidate_order_does_not_erase_non_dominated_geometry(self) -> None:
+        def candidate(*, proof_count: int, boundary_uncertainty: float):
+            return SimpleNamespace(
+                evidence_quality=EvidenceQuality(
+                    supported=(),
+                    contradicted=(),
+                    unavailable=(),
+                    internal_boundary_contradiction_count=0,
+                    other_contradiction_count=0,
+                    uncovered_content_px=0,
+                    supported_proof_paths=tuple(
+                        f"proof_{index}" for index in range(proof_count)
+                    ),
+                    physical_residuals=SimpleNamespace(
+                        dimension=0.0,
+                        boundary_uncertainty=boundary_uncertainty,
+                    ),
+                ),
+                geometry=SimpleNamespace(count=3, strip_mode="partial"),
+                count_hypothesis=CountHypothesis(
+                    3,
+                    "partial",
+                    CountHypothesisSource.AUTOMATIC,
+                ),
+            )
+
+        stronger_proof = candidate(proof_count=1, boundary_uncertainty=0.2)
+        tighter_boundary = candidate(proof_count=0, boundary_uncertainty=0.1)
+
+        self.assertFalse(candidate_dominates(stronger_proof, tighter_boundary))
+        self.assertFalse(candidate_dominates(tighter_boundary, stronger_proof))
+
     def test_selection_uses_typed_contradiction_counts(self) -> None:
         quality_fields = {field.name for field in fields(EvidenceQuality)}
         self.assertIn("internal_boundary_contradiction_count", quality_fields)
         self.assertIn("other_contradiction_count", quality_fields)
+        self.assertNotIn("covered_content_px", quality_fields)
         self.assertNotIn("rsplit", getsource(candidate_rank))
+        self.assertNotIn("assessment.gate", getsource(candidate_rank))
 
     def _plan(self, format_id: str, requested_count: int | None = None):
         return count_hypothesis_plan(
@@ -172,10 +210,13 @@ class AutoCountContractTest(unittest.TestCase):
     def test_only_complete_underfilled_formats_include_nominal_count(self) -> None:
         for format_id in ("xpan", "120-66"):
             plan = self._plan(format_id)
-            self.assertEqual(plan.hypotheses[0].count, format_spec(format_id).default_count)
+            self.assertEqual(
+                plan.hypotheses[0].count,
+                format_spec(format_id).strip.default_count,
+            )
         for format_id in ("135", "half", "120-645", "120-67"):
             counts = tuple(item.count for item in self._plan(format_id).hypotheses)
-            self.assertNotIn(format_spec(format_id).default_count, counts)
+            self.assertNotIn(format_spec(format_id).strip.default_count, counts)
 
     def test_requested_count_is_one_nonautomatic_hypothesis(self) -> None:
         plan = self._plan("135", 3)
@@ -211,14 +252,14 @@ class AutoCountContractTest(unittest.TestCase):
         )
         self.assertFalse(unresolved.geometry_resolved)
         self.assertTrue(resolved.geometry_resolved)
-        self.assertEqual(unresolved.hypothesis_state, EvidenceState.UNAVAILABLE)
-        self.assertEqual(resolved.hypothesis_state, EvidenceState.SUPPORTED)
 
         hypotheses = tuple(
             CountHypothesis(count, "partial", CountHypothesisSource.AUTOMATIC)
             for count in (3, 2, 1)
         )
         plan = CountHypothesisPlan(hypotheses, True, None)
+        expected_short_axis = object()
+        expected_sequence_observations = object()
         evaluations = tuple(
             SimpleNamespace(
                 hypothesis=hypothesis,
@@ -236,6 +277,8 @@ class AutoCountContractTest(unittest.TestCase):
                 object(),
                 plan,
                 object(),
+                expected_short_axis,
+                expected_sequence_observations,
                 object(),
             )
 
@@ -243,14 +286,16 @@ class AutoCountContractTest(unittest.TestCase):
         self.assertEqual(stopped_after_count, 3)
         self.assertEqual(evaluate_one.call_count, 1)
 
-    def test_unresolved_larger_count_prevents_smaller_count_resolution(self) -> None:
+    def test_complete_unresolved_larger_count_allows_first_resolved_count(self) -> None:
         hypotheses = tuple(
             CountHypothesis(count, "partial", CountHypothesisSource.AUTOMATIC)
             for count in (3, 2, 1)
         )
         plan = CountHypothesisPlan(hypotheses, True, None)
-        larger_count_states: list[bool] = []
+        larger_count_search_states: list[bool] = []
         expected_scope = object()
+        expected_short_axis = object()
+        expected_sequence_observations = object()
         expected_content = object()
 
         def evaluate_one(
@@ -258,16 +303,25 @@ class AutoCountContractTest(unittest.TestCase):
             hypothesis,
             *,
             search_scope,
+            short_axis_plan,
+            sequence_observations,
             visible_content,
-            larger_count_hypotheses_resolved,
+            larger_count_search_complete,
         ):
             self.assertIs(search_scope, expected_scope)
+            self.assertIs(short_axis_plan, expected_short_axis)
+            self.assertIs(
+                sequence_observations,
+                expected_sequence_observations,
+            )
             self.assertIs(visible_content, expected_content)
-            larger_count_states.append(larger_count_hypotheses_resolved)
+            larger_count_search_states.append(larger_count_search_complete)
             return SimpleNamespace(
                 hypothesis=hypothesis,
                 geometry_resolved=hypothesis.count == 2,
-                hypothesis_state=EvidenceState.UNAVAILABLE,
+                physical_search=self._physical_search(
+                    PhysicalSearchFact.SOLUTION_FOUND,
+                ),
             )
 
         evaluate = getattr(detection_pipeline, "_evaluate_count_hypotheses")
@@ -280,19 +334,17 @@ class AutoCountContractTest(unittest.TestCase):
                 object(),
                 plan,
                 expected_scope,
+                expected_short_axis,
+                expected_sequence_observations,
                 expected_content,
             )
 
-        self.assertEqual(completed, tuple(
-            SimpleNamespace(
-                hypothesis=hypothesis,
-                geometry_resolved=hypothesis.count == 2,
-                hypothesis_state=EvidenceState.UNAVAILABLE,
-            )
-            for hypothesis in hypotheses
-        ))
-        self.assertEqual(larger_count_states, [True, False, False])
-        self.assertIsNone(stopped_after_count)
+        self.assertEqual(
+            tuple(item.hypothesis.count for item in completed),
+            (3, 2),
+        )
+        self.assertEqual(larger_count_search_states, [True, True])
+        self.assertEqual(stopped_after_count, 2)
 
     def test_contradicted_larger_count_allows_smaller_count_resolution(self) -> None:
         hypotheses = tuple(
@@ -302,6 +354,8 @@ class AutoCountContractTest(unittest.TestCase):
         plan = CountHypothesisPlan(hypotheses, True, None)
         larger_count_states: list[bool] = []
         expected_scope = object()
+        expected_short_axis = object()
+        expected_sequence_observations = object()
         expected_content = object()
 
         def evaluate_one(
@@ -309,20 +363,25 @@ class AutoCountContractTest(unittest.TestCase):
             hypothesis,
             *,
             search_scope,
+            short_axis_plan,
+            sequence_observations,
             visible_content,
-            larger_count_hypotheses_resolved,
+            larger_count_search_complete,
         ):
             self.assertIs(search_scope, expected_scope)
+            self.assertIs(short_axis_plan, expected_short_axis)
+            self.assertIs(
+                sequence_observations,
+                expected_sequence_observations,
+            )
             self.assertIs(visible_content, expected_content)
-            larger_count_states.append(larger_count_hypotheses_resolved)
+            larger_count_states.append(larger_count_search_complete)
             supported = hypothesis.count == 2
             return SimpleNamespace(
                 hypothesis=hypothesis,
                 geometry_resolved=supported,
-                hypothesis_state=(
-                    EvidenceState.SUPPORTED
-                    if supported
-                    else EvidenceState.CONTRADICTED
+                physical_search=self._physical_search(
+                    PhysicalSearchFact.SOLUTION_FOUND,
                 ),
             )
 
@@ -336,6 +395,8 @@ class AutoCountContractTest(unittest.TestCase):
                 object(),
                 plan,
                 expected_scope,
+                expected_short_axis,
+                expected_sequence_observations,
                 expected_content,
             )
 
@@ -344,10 +405,61 @@ class AutoCountContractTest(unittest.TestCase):
         self.assertEqual(stopped_after_count, 2)
         self.assertEqual(evaluate_one_mock.call_count, 2)
 
-    def test_geometry_resolution_names_larger_count_resolution(self) -> None:
+    def test_exhausted_larger_count_search_blocks_smaller_count_resolution(
+        self,
+    ) -> None:
+        hypotheses = tuple(
+            CountHypothesis(count, "partial", CountHypothesisSource.AUTOMATIC)
+            for count in (3, 2, 1)
+        )
+        plan = CountHypothesisPlan(hypotheses, True, None)
+        search_states: list[bool] = []
+
+        def evaluate_one(
+            _context,
+            hypothesis,
+            *,
+            larger_count_search_complete,
+            **_kwargs,
+        ):
+            search_states.append(larger_count_search_complete)
+            return SimpleNamespace(
+                hypothesis=hypothesis,
+                geometry_resolved=hypothesis.count == 2,
+                physical_search=self._physical_search(
+                    PhysicalSearchFact.EXECUTION_BUDGET_EXHAUSTED
+                    if hypothesis.count == 3
+                    else PhysicalSearchFact.SOLUTION_FOUND,
+                ),
+            )
+
+        with patch.object(
+            detection_pipeline,
+            "evaluate_count_hypothesis",
+            side_effect=evaluate_one,
+        ):
+            completed, stopped_after_count = (
+                detection_pipeline._evaluate_count_hypotheses(
+                    object(),
+                    plan,
+                    object(),
+                    object(),
+                    object(),
+                    object(),
+                )
+            )
+
+        self.assertEqual(
+            tuple(item.hypothesis.count for item in completed),
+            (3, 2, 1),
+        )
+        self.assertEqual(search_states, [True, False, False])
+        self.assertIsNone(stopped_after_count)
+
+    def test_geometry_resolution_names_larger_count_search_completion(self) -> None:
         fields = GeometryResolution.__dataclass_fields__
-        self.assertIn("larger_count_hypotheses_resolved", fields)
-        self.assertNotIn("larger_counts_evaluated", fields)
+        self.assertIn("larger_count_search_complete", fields)
+        self.assertNotIn("larger_count_hypotheses_resolved", fields)
 
     def test_geometry_resolution_names_resolved_alternatives(self) -> None:
         fields = GeometryResolution.__dataclass_fields__
@@ -375,7 +487,7 @@ class AutoCountContractTest(unittest.TestCase):
 
         self.assertEqual(candidates, ())
         self.assertTrue(physical_search.budget_exhausted)
-        self.assertEqual(evaluation.hypothesis_state, EvidenceState.UNAVAILABLE)
+        self.assertEqual(evaluation.physical_search.state, EvidenceState.UNAVAILABLE)
 
     def test_exhaustive_empty_count_hypothesis_is_physically_contradicted(self) -> None:
         evaluation = CountHypothesisEvaluation(
@@ -391,7 +503,10 @@ class AutoCountContractTest(unittest.TestCase):
             ),
         )
 
-        self.assertEqual(evaluation.hypothesis_state, EvidenceState.CONTRADICTED)
+        self.assertEqual(
+            evaluation.physical_search.state,
+            EvidenceState.CONTRADICTED,
+        )
 
     def test_count_search_exhaustion_does_not_rewrite_candidate_geometry(self) -> None:
         candidate = candidate_fixture()
@@ -402,7 +517,7 @@ class AutoCountContractTest(unittest.TestCase):
 
         selection = select_candidates(
             (candidate,),
-            larger_count_hypotheses_resolved=True,
+            larger_count_search_complete=True,
             physical_search=self._physical_search(
                 PhysicalSearchFact.SOLUTION_FOUND,
                 PhysicalSearchFact.EXECUTION_BUDGET_EXHAUSTED,
@@ -415,27 +530,40 @@ class AutoCountContractTest(unittest.TestCase):
         self.assertFalse(selection.geometry_resolution.supported)
 
     def test_full_format_count_is_resolved_independently_of_placement(self) -> None:
-        candidate = candidate_fixture(failed_candidate_check="boundary_proof")
-        candidate = replace(
-            candidate,
-            count_hypothesis=CountHypothesis(
-                2,
-                "full",
-                CountHypothesisSource.FORMAT_DEFAULT,
+        candidate = candidate_fixture(failed_candidate_check="sequence_proof")
+        full_geometry = replace(
+            candidate.geometry,
+            format_id="synthetic-two-frame",
+            strip_mode="full",
+            nominal_count=2,
+        )
+        hypothesis = CountHypothesis(
+            2,
+            "full",
+            CountHypothesisSource.FORMAT_DEFAULT,
+        )
+        built = BuiltCandidate(full_geometry, hypothesis, ())
+        evidence = candidate_evidence_fixture(geometry=full_geometry)
+        candidate = AssessedCandidate(
+            full_geometry,
+            hypothesis,
+            CandidateAssessment(
+                evidence,
+                candidate_gate_for_evidence(built, evidence),
             ),
         )
         resolution = select_candidates(
             (candidate,),
-            larger_count_hypotheses_resolved=True,
+            larger_count_search_complete=True,
             physical_search=self._physical_search(
                 PhysicalSearchFact.SOLUTION_FOUND,
             ),
         ).geometry_resolution
         self.assertTrue(resolution.count_resolved)
-        self.assertFalse(resolution.placement_resolved)
+        self.assertFalse(resolution.frame_slots_resolved)
 
     def test_requested_partial_count_is_resolved_independently_of_placement(self) -> None:
-        candidate = candidate_fixture(failed_candidate_check="boundary_proof")
+        candidate = candidate_fixture(failed_candidate_check="sequence_proof")
         geometry = replace(candidate.geometry, strip_mode="partial")
         hypothesis = CountHypothesis(
             2,
@@ -447,9 +575,9 @@ class AutoCountContractTest(unittest.TestCase):
             candidate.assessment.evidence,
             partial_edge_safety=partial_edge_safety_evidence(
                 geometry,
-                candidate.assessment.evidence.photo_aperture_coverage,
+                candidate.assessment.evidence.frame_coverage,
                 candidate.assessment.evidence.frame_dimensions,
-                candidate.assessment.evidence.photo_content,
+                candidate.assessment.evidence.frame_content,
             ),
         )
         candidate = AssessedCandidate(
@@ -465,13 +593,94 @@ class AutoCountContractTest(unittest.TestCase):
         )
         resolution = select_candidates(
             (candidate,),
-            larger_count_hypotheses_resolved=True,
+            larger_count_search_complete=True,
             physical_search=self._physical_search(
                 PhysicalSearchFact.SOLUTION_FOUND,
             ),
         ).geometry_resolution
         self.assertTrue(resolution.count_resolved)
-        self.assertFalse(resolution.placement_resolved)
+        self.assertFalse(resolution.frame_slots_resolved)
+
+    def test_automatic_geometry_resolution_does_not_read_candidate_gate(
+        self,
+    ) -> None:
+        candidate = candidate_fixture()
+        hypothesis = CountHypothesis(
+            candidate.geometry.count,
+            "partial",
+            CountHypothesisSource.AUTOMATIC,
+        )
+        built = BuiltCandidate(candidate.geometry, hypothesis, ())
+        evidence = candidate_evidence_fixture(geometry=candidate.geometry)
+        gate = candidate_gate_for_evidence(built, evidence)
+        self.assertTrue(gate.passed)
+        candidate = AssessedCandidate(
+            candidate.geometry,
+            hypothesis,
+            CandidateAssessment(evidence, gate),
+        )
+
+        resolution = select_candidates(
+            (candidate,),
+            larger_count_search_complete=True,
+            physical_search=self._physical_search(
+                PhysicalSearchFact.SOLUTION_FOUND,
+            ),
+        ).geometry_resolution
+
+        self.assertTrue(resolution.count_resolved)
+        self.assertTrue(resolution.frame_slots_resolved)
+        self.assertTrue(resolution.supported)
+        self.assertNotIn(
+            ".gate",
+            getsource(geometry_resolution_for_selection),
+        )
+
+    def test_automatic_multi_frame_geometry_requires_common_width_resolution(
+        self,
+    ) -> None:
+        candidate = candidate_fixture()
+        unresolved_width = replace(
+            candidate.geometry.common_frame_width,
+            width_px=None,
+            constraints=(),
+            physical_scale_constraint=None,
+            state=EvidenceState.UNAVAILABLE,
+        )
+        geometry = replace(
+            candidate.geometry,
+            strip_mode="partial",
+            separator_assignments=(),
+            indexed_anchor_distance_constraints=(),
+            common_frame_width=unresolved_width,
+        )
+        hypothesis = CountHypothesis(
+            geometry.count,
+            "partial",
+            CountHypothesisSource.AUTOMATIC,
+        )
+        built = BuiltCandidate(geometry, hypothesis, ())
+        evidence = candidate_evidence_fixture(geometry=geometry)
+        assessed = AssessedCandidate(
+            geometry,
+            hypothesis,
+            CandidateAssessment(
+                evidence,
+                candidate_gate_for_evidence(built, evidence),
+            ),
+        )
+
+        resolution = select_candidates(
+            (assessed,),
+            larger_count_search_complete=True,
+            physical_search=self._physical_search(
+                PhysicalSearchFact.SOLUTION_FOUND,
+            ),
+        ).geometry_resolution
+
+        self.assertFalse(resolution.count_resolved)
+        self.assertFalse(resolution.frame_slots_resolved)
+        self.assertFalse(resolution.supported)
 
 
 if __name__ == "__main__":

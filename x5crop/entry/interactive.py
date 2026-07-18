@@ -70,8 +70,8 @@ def ask_format() -> str:
 
 
 def ask_partial_count(format_id: str) -> int | None:
-    allowed_counts = FORMATS[format_id].allowed_counts
-    allowed_text = " ".join(str(count) for count in allowed_counts)
+    allowed_partial_counts = FORMATS[format_id].strip.allowed_partial_counts
+    allowed_text = " ".join(str(count) for count in allowed_partial_counts)
     while True:
         print("partial count:")
         print("  return or auto = auto")
@@ -83,7 +83,7 @@ def ask_partial_count(format_id: str) -> int | None:
             count = int(answer)
         except ValueError:
             count = -1
-        if count in allowed_counts:
+        if count in allowed_partial_counts:
             return count
         print(f"unknown count: {answer}")
         print(f"use auto or one of: {allowed_text}")

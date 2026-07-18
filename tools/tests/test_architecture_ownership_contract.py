@@ -6,10 +6,14 @@ import unittest
 from tools.tests.architecture_contracts import (
     PROJECT_ROOT,
     duplicate_dataclass_models,
+    duplicate_top_level_symbols,
 )
 
 
 class ArchitectureOwnershipContractTest(unittest.TestCase):
+    def test_top_level_symbol_identity_is_unique_per_module(self) -> None:
+        self.assertEqual(duplicate_top_level_symbols(), [])
+
     def test_image_statistics_expose_only_consumed_named_measurements(self) -> None:
         from x5crop.image.statistics import (
             ImageMeasurementStatistics,
@@ -81,14 +85,14 @@ class ArchitectureOwnershipContractTest(unittest.TestCase):
             EvidenceIndependenceEvidence,
         )
         from x5crop.detection.physical.model import (
-            DualLanePhotoSolution,
-            PhotoSequenceSolution,
+            DualLaneFrameSolution,
+            FrameSequenceSolution,
             ReviewOnlyContainment,
         )
 
         for model in (
-            PhotoSequenceSolution,
-            DualLanePhotoSolution,
+            FrameSequenceSolution,
+            DualLaneFrameSolution,
             ReviewOnlyContainment,
             EvidenceIndependenceEvidence,
         ):
@@ -98,7 +102,7 @@ class ArchitectureOwnershipContractTest(unittest.TestCase):
                     model.__dataclass_fields__,
                 )
         self.assertFalse(
-            hasattr(DualLanePhotoSolution, "automatic_processing_supported")
+            hasattr(DualLaneFrameSolution, "automatic_processing_supported")
         )
 
     def test_removed_architecture_surfaces_do_not_exist(self) -> None:

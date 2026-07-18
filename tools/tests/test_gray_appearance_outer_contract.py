@@ -9,7 +9,7 @@ import numpy as np
 
 from x5crop.configuration.boundary import BoundaryPathParameters
 from x5crop.detection.candidate.assessment.model import (
-    BOUNDARY_PROOF_PATH_CODES,
+    SEQUENCE_PROOF_PATH_CODES,
 )
 from x5crop.detection.candidate.assessment.candidate import (
     candidate_gate_for_evidence,
@@ -22,7 +22,13 @@ from x5crop.detection.physical.boundary_detection import (
     _texture_image,
     boundary_measurements,
 )
-from x5crop.domain import BoundaryKind, EvidenceState, InterPhotoBoundaryReference
+from x5crop.domain import (
+    BoundaryAxis,
+    BoundaryKind,
+    BoundaryMeasurementSet,
+    EvidenceState,
+    InterFrameBoundaryReference,
+)
 from x5crop.image.statistics import (
     ImageMeasurementStatisticsParameters,
     image_measurement_statistics,
@@ -32,6 +38,13 @@ from tools.tests.physical_gate_support import candidate_fixture
 
 
 class GrayAppearanceOuterContractTests(unittest.TestCase):
+    def test_boundary_measurement_has_no_downstream_path_budget(self) -> None:
+        parameter_fields = {item.name for item in fields(BoundaryPathParameters)}
+        measurement_fields = {item.name for item in fields(BoundaryMeasurementSet)}
+
+        self.assertNotIn("maximum_paths_per_axis", parameter_fields)
+        self.assertNotIn("completeness", measurement_fields)
+
     def _measurements(self, gray: np.ndarray):
         statistics = image_measurement_statistics(
             gray,
@@ -41,6 +54,7 @@ class GrayAppearanceOuterContractTests(unittest.TestCase):
             gray,
             statistics,
             BoundaryPathParameters(),
+            transform_position_uncertainty_px=0.0,
         )
 
     def test_gray_appearance_is_the_only_canonical_pixel_observation(self) -> None:
@@ -66,9 +80,9 @@ class GrayAppearanceOuterContractTests(unittest.TestCase):
         self.assertNotIn("film_structure", names)
         self.assertNotIn("aperture_contact", names)
 
-    def test_separator_sequence_is_the_physical_boundary_proof(self) -> None:
-        self.assertIn("separator_sequence_led", BOUNDARY_PROOF_PATH_CODES)
-        self.assertNotIn("film_structure_led", BOUNDARY_PROOF_PATH_CODES)
+    def test_separator_sequence_is_the_physical_sequence_proof(self) -> None:
+        self.assertIn("separator_sequence_led", SEQUENCE_PROOF_PATH_CODES)
+        self.assertNotIn("film_structure_led", SEQUENCE_PROOF_PATH_CODES)
 
     def test_separator_sequence_carries_no_gray_identity(self) -> None:
         names = {field.name for field in fields(SeparatorSequenceEvidence)}
@@ -89,7 +103,7 @@ class GrayAppearanceOuterContractTests(unittest.TestCase):
             1,
             1,
             0,
-            (InterPhotoBoundaryReference(None, 1),),
+            (InterFrameBoundaryReference(None, 1),),
             (),
             (0.0,),
         )
@@ -207,10 +221,10 @@ class GrayAppearanceOuterContractTests(unittest.TestCase):
                 offenders.append(relative)
         self.assertEqual(offenders, [])
 
-    def test_current_schema_names_photo_aperture_resolution(self) -> None:
+    def test_current_schema_names_frame_slot_resolution(self) -> None:
         self.assertEqual(
             REPORT_SCHEMA_REVISION,
-            "photo_aperture_sequence_resolution",
+            "frame_slot_sequence_resolution",
         )
 
     def test_boundary_measurements_have_one_typed_canonical_model(self) -> None:
@@ -240,13 +254,13 @@ class GrayAppearanceOuterContractTests(unittest.TestCase):
             np.asarray(([0.0] * 5 + [1.0] * 5) * 20, dtype=np.float32),
             replace(
                 BoundaryPathParameters(),
-                strongest_change_points_per_section=1,
+                maximum_change_points_per_section=1,
             ),
         )
 
         self.assertEqual(len(points), 1)
 
-    def test_moderate_aperture_edge_survives_stronger_content_changes(self) -> None:
+    def test_moderate_frame_edge_survives_stronger_content_changes(self) -> None:
         signal = np.zeros(110, dtype=np.float32)
         for index in range(24):
             signal[2 + 3 * index] = 100.0
@@ -263,6 +277,42 @@ class GrayAppearanceOuterContractTests(unittest.TestCase):
 
         self.assertTrue(
             any(point.minimum <= 74.0 < point.maximum for point in points)
+        )
+
+    def test_change_point_selection_preserves_spatial_coverage(self) -> None:
+        signal = np.zeros(1000, dtype=np.float32)
+        for position in range(20, 960, 20):
+            signal[position] = 100.0
+        for position in (20, 40, 60, 80):
+            signal[position] = 200.0
+        signal[900] = 190.0
+
+        points = _adaptive_change_points(
+            signal,
+            replace(
+                BoundaryPathParameters(),
+                change_point_percentile=99.0,
+                maximum_change_points_per_section=4,
+            ),
+        )
+
+        self.assertTrue(
+            any(point.minimum <= 900.0 < point.maximum for point in points),
+            points,
+        )
+
+    def test_sparse_transition_is_not_discarded_by_zero_change_mass(self) -> None:
+        signal = np.zeros(1_000, dtype=np.float32)
+        signal[800:] = 100.0
+
+        points = _adaptive_change_points(
+            signal,
+            BoundaryPathParameters(),
+        )
+
+        self.assertTrue(
+            any(point.minimum <= 800.0 < point.maximum for point in points),
+            points,
         )
 
     def test_short_axis_paths_sample_the_full_long_axis_at_local_density(self) -> None:
@@ -295,7 +345,7 @@ class GrayAppearanceOuterContractTests(unittest.TestCase):
 
         self.assertEqual(len(edge_paths), 4)
 
-    def test_path_budget_exhaustion_is_explicit(self) -> None:
+    def test_count_independent_measurement_keeps_supported_paths(self) -> None:
         gray = np.tile(
             np.asarray(([0] * 5 + [255] * 5) * 20, dtype=np.uint8),
             (120, 1),
@@ -309,12 +359,18 @@ class GrayAppearanceOuterContractTests(unittest.TestCase):
             statistics,
             replace(
                 BoundaryPathParameters(),
-                strongest_change_points_per_section=64,
-                maximum_paths_per_axis=1,
+                maximum_change_points_per_section=64,
             ),
+            transform_position_uncertainty_px=0.0,
         )
 
-        self.assertTrue(measurements.measurement_budget_exhausted)
+        long_axis_generic = tuple(
+            path
+            for path in measurements.raw_paths
+            if path.axis == BoundaryAxis.LONG
+            and path.kind != BoundaryKind.EDGE_ADJACENT_TRANSITION
+        )
+        self.assertGreater(len(long_axis_generic), 1)
 
 
 if __name__ == "__main__":

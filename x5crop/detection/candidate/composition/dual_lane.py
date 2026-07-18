@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ...physical.model import DualLanePhotoSolution
+from ...physical.model import DualLaneFrameSolution
 from ..assessment.candidate_gate import candidate_gate_assessment
 from ..assessment.model import CandidateGateInput
 from ..model import (
@@ -10,7 +10,7 @@ from ..model import (
     CandidateEvidence,
     DualLaneEvidence,
     _combined_evidence_state,
-    boundary_proof_paths_for_dual_lane,
+    sequence_proof_paths_for_dual_lane,
 )
 from ..selection.model import SelectionResult
 
@@ -20,7 +20,7 @@ def compose_dual_lane_candidate(
     lane_selections: tuple[SelectionResult, ...],
 ) -> AssessedCandidate:
     geometry = candidate.geometry
-    if not isinstance(geometry, DualLanePhotoSolution):
+    if not isinstance(geometry, DualLaneFrameSolution):
         raise ValueError("dual-lane composition requires dual-lane geometry")
     if len(lane_selections) <= 1:
         raise ValueError("dual-lane composition requires multiple lane selections")
@@ -54,16 +54,19 @@ def compose_dual_lane_candidate(
     )
     gate = candidate_gate_assessment(
         CandidateGateInput(
+            frame_slot_topology=_combined_evidence_state(
+                tuple(item.frame_slot_topology.state for item in physical_evidence)
+            ),
             content_preservation=_combined_evidence_state(
                 tuple(item.content_preservation_state for item in physical_evidence)
             ),
-            photo_geometry=_combined_evidence_state(
+            frame_dimensions=_combined_evidence_state(
                 tuple(item.frame_dimensions.state for item in physical_evidence)
             ),
             evidence_independence=_combined_evidence_state(
                 tuple(item.independence.state for item in physical_evidence)
             ),
-            proof_paths=boundary_proof_paths_for_dual_lane(
+            proof_paths=sequence_proof_paths_for_dual_lane(
                 geometry,
                 dual_lane_evidence,
             ),

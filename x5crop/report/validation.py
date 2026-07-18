@@ -15,8 +15,8 @@ from ..configuration.preprocess import PreprocessConfiguration
 from ..configuration.separator import SeparatorConfiguration
 from ..detection.decision.vocabulary import FINAL_REVIEW_REASONS
 from ..detection.candidate.assessment.model import (
-    BoundaryProofPath,
     CandidateGateAssessment,
+    SequenceProofPath,
 )
 from ..detection.decision.model import DecisionGateAssessment
 from ..detection.candidate.model import (
@@ -33,20 +33,20 @@ from ..detection.candidate.selection.model import (
 )
 from ..detection.geometry_resolution import GeometryResolution
 from ..detection.final.model import FinalizationPlan
-from ..detection.gate_checks import GateCheck, GateStage
+from ..detection.gate_checks import GateCheck, GateRequirement, GateStage
 from ..detection.evidence.transform_geometry import TransformGeometryEvidence
 from ..detection.physical.model import (
-    DualLanePhotoSolution,
+    DualLaneFrameSolution,
     ReviewOnlyContainment,
-    PhotoSequenceSolution,
+    FrameSequenceSolution,
     GeometryIdentityError,
 )
 from ..domain import (
     Box,
     FrameCropEnvelope,
     EvidenceState,
-    InterPhotoSpacing,
-    InterPhotoSpacingBasis,
+    InterFrameSpacing,
+    InterFrameSpacingBasis,
     SeparatorBandObservation,
 )
 from ..image.workspace import WorkspaceIdentity
@@ -86,7 +86,7 @@ def _model_hints(model: type) -> dict[str, Any]:
 def _spacing_from_read_model(value: Any) -> Any:
     if not isinstance(value, dict):
         raise TypeError("spacing read model must be a mapping")
-    model_fields = {field.name for field in fields(InterPhotoSpacing)}
+    model_fields = {field.name for field in fields(InterFrameSpacing)}
     expected = (model_fields - {"basis"}) | {
         "measurement_basis",
         "state",
@@ -95,16 +95,16 @@ def _spacing_from_read_model(value: Any) -> Any:
         "independently_observed",
         "supports_output_protection",
     }
-    hints = _model_hints(InterPhotoSpacing)
+    hints = _model_hints(InterFrameSpacing)
     if set(value) != expected:
         raise ValueError("spacing read model fields are incomplete")
-    spacing = InterPhotoSpacing(
+    spacing = InterFrameSpacing(
         **{
             name: _typed_value_from_read_model(value[name], hints[name])
             for name in model_fields
             if name != "basis"
         },
-        basis=InterPhotoSpacingBasis(value["measurement_basis"]),
+        basis=InterFrameSpacingBasis(value["measurement_basis"]),
     )
     if (
         value["state"] != spacing.state.value
@@ -121,7 +121,7 @@ def _spacing_from_read_model(value: Any) -> Any:
 def _typed_value_from_read_model(value: Any, annotation: Any) -> Any:
     if annotation is Any:
         return value
-    if annotation is InterPhotoSpacing:
+    if annotation is InterFrameSpacing:
         return _spacing_from_read_model(value)
     if annotation is type(None):
         if value is not None:
@@ -246,8 +246,8 @@ def _separator_observation_valid(value: Any) -> bool:
 
 def _provisional_geometry_from_read_model(kind: str, value: Any) -> Any:
     model = {
-        "sequence": PhotoSequenceSolution,
-        "dual_lane": DualLanePhotoSolution,
+        "sequence": FrameSequenceSolution,
+        "dual_lane": DualLaneFrameSolution,
         "review_only": ReviewOnlyContainment,
     }.get(kind)
     if model is None:
@@ -271,6 +271,7 @@ def _gate_check_from_read_model(value: Any) -> GateCheck:
         code=str(value["code"]),
         stage=GateStage(value["stage"]),
         state=EvidenceState(str(value["state"])),
+        requirement=GateRequirement(value["requirement"]),
         final_review_reason=(
             None
             if value["final_review_reason"] is None
@@ -282,10 +283,10 @@ def _gate_check_from_read_model(value: Any) -> GateCheck:
     return check
 
 
-def _boundary_proof_path_from_read_model(value: Any) -> BoundaryProofPath:
-    if not _typed_value_valid(value, BoundaryProofPath):
-        raise ValueError("boundary proof path read model is incomplete")
-    return BoundaryProofPath(
+def _sequence_proof_path_from_read_model(value: Any) -> SequenceProofPath:
+    if not _typed_value_valid(value, SequenceProofPath):
+        raise ValueError("sequence proof path read model is incomplete")
+    return SequenceProofPath(
         code=str(value["code"]),
         state=EvidenceState(str(value["state"])),
         supporting_evidence=tuple(
@@ -319,7 +320,7 @@ def candidate_gate_from_read_model(value: Any) -> CandidateGateAssessment:
             _gate_check_from_read_model(check) for check in value["checks"]
         ),
         proof_paths=tuple(
-            _boundary_proof_path_from_read_model(path)
+            _sequence_proof_path_from_read_model(path)
             for path in value["proof_paths"]
         ),
         diagnostics=tuple(str(item) for item in value["diagnostics"]),
@@ -636,7 +637,7 @@ def _configuration_valid(value: Any) -> bool:
         "physical_layout",
         "default_count",
         "expected_separator_count",
-        "allowed_counts",
+        "allowed_partial_counts",
         "nominal_frame_size_mm",
         "frame_size_mm_options",
         "frame_aspect",
@@ -655,10 +656,10 @@ def _configuration_valid(value: Any) -> bool:
     physical = value["physical"]
     measurement = value["measurement"]
     execution = value["execution"]
-    allowed_counts = (
-        tuple(physical.get("allowed_counts", ()))
+    allowed_partial_counts = (
+        tuple(physical.get("allowed_partial_counts", ()))
         if isinstance(physical, dict)
-        and isinstance(physical.get("allowed_counts"), list)
+        and isinstance(physical.get("allowed_partial_counts"), list)
         else ()
     )
     nominal_size = (
@@ -688,11 +689,17 @@ def _configuration_valid(value: Any) -> bool:
         and default_count is not None
         and default_count > 0
         and _integer(physical["expected_separator_count"]) is not None
-        and bool(allowed_counts)
-        and all(_integer(count) is not None and count > 0 for count in allowed_counts)
-        and allowed_counts == tuple(sorted(allowed_counts))
-        and len(set(allowed_counts)) == len(allowed_counts)
-        and default_count in allowed_counts
+        and all(
+            _integer(count) is not None and count > 0
+            for count in allowed_partial_counts
+        )
+        and allowed_partial_counts == tuple(sorted(allowed_partial_counts))
+        and len(set(allowed_partial_counts)) == len(allowed_partial_counts)
+        and all(count <= default_count for count in allowed_partial_counts)
+        and (
+            (default_count in allowed_partial_counts)
+            == physical["complete_strip_can_be_underfilled"]
+        )
         and _typed_value_valid(physical["nominal_frame_size_mm"], FrameSizeMm)
         and _typed_value_valid(
             physical["frame_size_mm_options"],
@@ -825,7 +832,10 @@ def _record_identities_valid(
     format_id = configuration["format_id"]
     strip_mode = configuration["strip_mode"]
     layout = signature_config["layout"]
-    allowed_counts = set(physical["allowed_counts"])
+    if strip_mode == "full" or configuration["execution"]["detector_kind"] == "review_only":
+        candidate_counts = {physical["default_count"]}
+    else:
+        candidate_counts = set(physical["allowed_partial_counts"])
     requested_count = signature_config["requested_count"]
     plan = (
         finalization_plan_from_read_model(
@@ -892,7 +902,7 @@ def _record_identities_valid(
             candidate.geometry.format_id == format_id
             and candidate.geometry.strip_mode == strip_mode
             and candidate.geometry.layout == layout
-            and candidate.geometry.count in allowed_counts
+            and candidate.geometry.count in candidate_counts
             for candidate in selection.ranked_candidates
         )
         and (requested_count is None or selected.count == requested_count)

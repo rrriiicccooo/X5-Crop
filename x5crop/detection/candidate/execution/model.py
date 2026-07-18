@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ....domain import EvidenceState, PhysicalSearchOutcome
+from ....domain import PhysicalSearchOutcome
 from ..model import AssessedCandidate
 from ..plan.model import CountHypothesis
 from ..selection.model import SelectionResult
@@ -42,14 +42,3 @@ class CountHypothesisEvaluation:
             self.selection is not None
             and self.selection.geometry_resolution.supported
         )
-
-    @property
-    def hypothesis_state(self) -> EvidenceState:
-        if self.geometry_resolved:
-            return EvidenceState.SUPPORTED
-        if (
-            not self.candidates
-            and self.physical_search.state == EvidenceState.CONTRADICTED
-        ):
-            return EvidenceState.CONTRADICTED
-        return EvidenceState.UNAVAILABLE

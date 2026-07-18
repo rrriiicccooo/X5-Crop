@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from ..candidate.model import BuiltCandidate
 from ..candidate.plan.model import CountHypothesis, CountHypothesisSource
-from ..candidate.proposal.sequence import photo_sequence_search_scope
+from ..candidate.proposal.sequence import frame_sequence_search_scope
 from ..context import DetectionContext
 from ..physical.model import (
     AssignmentConsensusOutcome,
@@ -10,7 +10,7 @@ from ..physical.model import (
     ReviewOnlyContainment,
     SequenceResiduals,
 )
-from ..physical.photo_size import frame_dimension_priors
+from ..physical.frame_dimensions import frame_dimension_priors
 
 
 def unresolved_dual_lane_candidate(
@@ -18,15 +18,15 @@ def unresolved_dual_lane_candidate(
     diagnostic: str,
 ) -> BuiltCandidate:
     physical_spec = context.configuration.physical_spec
-    if physical_spec.physical_layout != "dual_lane":
+    if physical_spec.layout.kind != "dual_lane":
         raise ValueError("unresolved dual-lane geometry requires dual-lane input")
     if not diagnostic:
         raise ValueError("unresolved dual-lane geometry requires a diagnostic")
-    scope = photo_sequence_search_scope(
+    scope = frame_sequence_search_scope(
         context.measurement_cache,
         context.configuration.boundary_path,
     )
-    count = physical_spec.default_count
+    count = physical_spec.strip.default_count
     dimensions = frame_dimension_priors(
         physical_spec,
     )[0]
@@ -36,8 +36,7 @@ def unresolved_dual_lane_candidate(
             layout=context.request.layout,
             strip_mode=context.request.strip_mode,
             count=count,
-            holder_span=scope.holder_span,
-            containment_fallback=scope.containment_fallback,
+            holder_safety=scope.holder_safety,
             frame_dimension_prior=dimensions,
             residuals=SequenceResiduals(None, 0.0),
             assignment_consensus=BoundaryAssignmentConsensus(

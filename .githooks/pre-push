@@ -9,4 +9,4 @@ if command -v git-lfs >/dev/null 2>&1; then
   git lfs pre-push "$@" <"$refs"
 fi
 
-tools/git_checks.sh pre-push
+tools/verify pre-push

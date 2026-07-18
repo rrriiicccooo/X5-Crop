@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 from ....domain import (
-    PhotoSequenceSearchScope,
+    FrameSequenceSearchScope,
     PhysicalSearchFact,
     PhysicalSearchOutcome,
 )
+from ....strip_modes import FULL, PARTIAL
 from ...context import DetectionContext
-from ...physical.photo_size import frame_dimension_priors
+from ...physical.frame_dimensions import frame_dimension_priors
 from ..model import BuiltCandidate
 from ..plan.model import CountHypothesis, CountHypothesisSource
 from ...physical.model import (
@@ -20,7 +21,7 @@ from ...physical.model import (
 def hard_safety_candidate(
     context: DetectionContext,
     count: int,
-    search_scope: PhotoSequenceSearchScope,
+    search_scope: FrameSequenceSearchScope,
     *,
     physical_search: PhysicalSearchOutcome,
 ) -> BuiltCandidate:
@@ -28,8 +29,14 @@ def hard_safety_candidate(
     if count <= 0:
         raise ValueError("hard-safety candidate count must be positive")
     count = int(count)
-    if count not in physical_spec.allowed_counts:
-        raise ValueError("hard-safety candidate count must be physically allowed")
+    if context.request.strip_mode == FULL:
+        count_allowed = count == physical_spec.strip.default_count
+    elif context.request.strip_mode == PARTIAL:
+        count_allowed = count in physical_spec.strip.allowed_partial_counts
+    else:
+        count_allowed = False
+    if not count_allowed:
+        raise ValueError("hard-safety candidate count must be allowed by strip handling")
     dimensions = frame_dimension_priors(
         physical_spec,
     )[0]
@@ -39,8 +46,7 @@ def hard_safety_candidate(
             layout=context.request.layout,
             strip_mode=context.request.strip_mode,
             count=count,
-            holder_span=search_scope.holder_span,
-            containment_fallback=search_scope.containment_fallback,
+            holder_safety=search_scope.holder_safety,
             frame_dimension_prior=dimensions,
             residuals=SequenceResiduals(None, 0.0),
             assignment_consensus=BoundaryAssignmentConsensus(
@@ -57,7 +63,7 @@ def hard_safety_candidate(
             source=CountHypothesisSource.HARD_SAFETY,
         ),
         build_diagnostics=(
-            "photo_aperture_geometry_unresolved",
+            "frame_slot_geometry_unresolved",
             *(
                 ("search_budget_exhausted",)
                 if PhysicalSearchFact.EXECUTION_BUDGET_EXHAUSTED

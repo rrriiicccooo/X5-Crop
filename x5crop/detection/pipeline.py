@@ -1,13 +1,18 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from math import ceil, floor
 
 from .candidate.assessment.candidate import assess_candidate
 from .candidate.assessment.review_only import assess_review_only_candidate
 from .candidate.execution.count_hypothesis import evaluate_count_hypothesis
 from .candidate.execution.model import CountHypothesisEvaluation
 from .candidate.model import AssessedCandidate
-from .candidate.proposal.sequence import photo_sequence_search_scope
+from .candidate.proposal.sequence import (
+    FrameSequenceObservations,
+    frame_sequence_observations,
+    frame_sequence_search_scope,
+)
 from .candidate.plan.counts import count_hypothesis_plan
 from .candidate.plan.model import (
     CountHypothesisPlan,
@@ -25,9 +30,14 @@ from .modes.dual_lane import choose_dual_lane_detection
 from .modes.review_only import unresolved_dual_lane_candidate
 from .evidence.content.regions import cached_content_region_observation
 from .physical.model import ReviewOnlyContainment
+from .physical.short_axis import (
+    SharedShortAxisPlan,
+    shared_short_axis_plan,
+)
 from ..domain import (
-    EvidenceState,
-    PhotoSequenceSearchScope,
+    BoundaryAxis,
+    Box,
+    FrameSequenceSearchScope,
     PhysicalSearchFact,
     PhysicalSearchOutcome,
     combined_physical_search_outcome,
@@ -59,32 +69,36 @@ def _candidate_pool_for_count_resolution(
 def _evaluate_count_hypotheses(
     context: DetectionContext,
     plan: CountHypothesisPlan,
-    search_scope: PhotoSequenceSearchScope,
+    search_scope: FrameSequenceSearchScope,
+    short_axis_plan: SharedShortAxisPlan,
+    sequence_observations: FrameSequenceObservations,
     visible_content: ContentRegionObservation,
 ) -> tuple[tuple[CountHypothesisEvaluation, ...], int | None]:
     evaluations: list[CountHypothesisEvaluation] = []
     stopped_after_count: int | None = None
-    larger_count_hypotheses_resolved = True
+    larger_count_search_complete = True
     for hypothesis in plan.hypotheses:
         evaluation = evaluate_count_hypothesis(
             context,
             hypothesis,
             search_scope=search_scope,
+            short_axis_plan=short_axis_plan,
+            sequence_observations=sequence_observations,
             visible_content=visible_content,
-            larger_count_hypotheses_resolved=(
-                larger_count_hypotheses_resolved
+            larger_count_search_complete=(
+                larger_count_search_complete
             ),
         )
         evaluations.append(evaluation)
         if (
             plan.automatic
-            and larger_count_hypotheses_resolved
+            and larger_count_search_complete
             and evaluation.geometry_resolved
         ):
             stopped_after_count = hypothesis.count
             break
-        if evaluation.hypothesis_state != EvidenceState.CONTRADICTED:
-            larger_count_hypotheses_resolved = False
+        if evaluation.physical_search.budget_exhausted:
+            larger_count_search_complete = False
     return tuple(evaluations), stopped_after_count
 
 
@@ -122,13 +136,35 @@ def _count_resolution(
 def _choose_standard_detection(context: DetectionContext) -> SelectionResult:
     configuration = context.configuration
     physical_spec = configuration.physical_spec
-    search_scope = photo_sequence_search_scope(
+    search_scope = frame_sequence_search_scope(
         context.measurement_cache,
         configuration.boundary_path,
     )
+    short_axis_plan = shared_short_axis_plan(search_scope)
+    sequence_observations = frame_sequence_observations(
+        context.measurement_cache,
+        search_scope,
+        short_axis_plan,
+        configuration.separator,
+    )
+    context.execution_statistics.record_assignment_evaluations(
+        sequence_observations.search_index.preparation_evaluations
+    )
+    holder_long_axis = search_scope.holder_safety.safe_axis_interval(
+        BoundaryAxis.LONG
+    )
+    content_region = Box(
+        floor(holder_long_axis.minimum),
+        floor(short_axis_plan.span.top.minimum),
+        ceil(holder_long_axis.maximum),
+        ceil(short_axis_plan.span.bottom.maximum),
+    ).clamp(
+        context.measurement_cache.gray_work.shape[1],
+        context.measurement_cache.gray_work.shape[0],
+    )
     visible_content = cached_content_region_observation(
         context.measurement_cache,
-        search_scope.holder_span.box,
+        content_region,
         configuration.content,
     )
     plan = count_hypothesis_plan(
@@ -140,6 +176,8 @@ def _choose_standard_detection(context: DetectionContext) -> SelectionResult:
         context,
         plan,
         search_scope,
+        short_axis_plan,
+        sequence_observations,
         visible_content,
     )
 
@@ -162,7 +200,7 @@ def _choose_standard_detection(context: DetectionContext) -> SelectionResult:
         candidates = (assessed,)
     selection = select_candidates(
         candidates,
-        larger_count_hypotheses_resolved=bool(
+        larger_count_search_complete=bool(
             not plan.automatic or stopped_after_count is not None
         ),
         physical_search=physical_search,
@@ -195,7 +233,7 @@ def choose_detection(context: DetectionContext) -> SelectionResult:
         )
         selection = select_candidates(
             (assessed,),
-            larger_count_hypotheses_resolved=True,
+            larger_count_search_complete=True,
             physical_search=PhysicalSearchOutcome(
                 (PhysicalSearchFact.MEASUREMENTS_UNAVAILABLE,),
             ),

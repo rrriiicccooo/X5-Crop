@@ -47,21 +47,11 @@ class DualLaneDividerParameters:
 @dataclass(frozen=True)
 class SequenceSolverParameters:
     maximum_assignment_evaluations: int = 100_000
-    maximum_dimension_hypotheses: int = 64
-    maximum_solution_alternatives: int = 128
 
     def __post_init__(self) -> None:
         require_positive(
             "sequence assignment evaluation budget",
             self.maximum_assignment_evaluations,
-        )
-        require_positive(
-            "sequence dimension hypothesis budget",
-            self.maximum_dimension_hypotheses,
-        )
-        require_positive(
-            "sequence solution alternative budget",
-            self.maximum_solution_alternatives,
         )
 
 

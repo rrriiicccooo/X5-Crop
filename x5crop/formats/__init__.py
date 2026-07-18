@@ -19,124 +19,141 @@ class FrameSizeMm:
 
 
 @dataclass(frozen=True)
-class FormatPhysicalSpec:
-    format_id: str
-    default_count: int
-    allowed_counts: tuple[int, ...]
+class FramePhysicalSpec:
     frame_size_mm_options: tuple[FrameSizeMm, ...]
-    physical_layout: str = "single_strip"
+
+    def __post_init__(self) -> None:
+        if not self.frame_size_mm_options:
+            raise ValueError("frame physical spec requires at least one size option")
+
+    @property
+    def nominal_size_mm(self) -> FrameSizeMm:
+        return self.frame_size_mm_options[0]
+
+
+@dataclass(frozen=True)
+class StripHandlingSpec:
+    default_count: int
+    allowed_partial_counts: tuple[int, ...]
     complete_strip_can_be_underfilled: bool = False
+
+    def __post_init__(self) -> None:
+        require_positive("default frame count", self.default_count)
+        if (
+            tuple(sorted(set(self.allowed_partial_counts)))
+            != self.allowed_partial_counts
+            or any(count <= 0 for count in self.allowed_partial_counts)
+        ):
+            raise ValueError(
+                "allowed partial counts must be positive, unique, and ordered"
+            )
+        if any(count > self.default_count for count in self.allowed_partial_counts):
+            raise ValueError("partial counts cannot exceed the nominal full count")
+        if (
+            self.default_count in self.allowed_partial_counts
+        ) != self.complete_strip_can_be_underfilled:
+            raise ValueError(
+                "only complete-underfilled strips may expose the nominal count "
+                "in partial mode"
+            )
+
+
+@dataclass(frozen=True)
+class ScanLayoutSpec:
+    kind: str = "single_strip"
     lane_count: int = 1
     lane_format_id: str | None = None
 
     def __post_init__(self) -> None:
+        if self.kind not in {"single_strip", "dual_lane"}:
+            raise ValueError(f"unsupported scan layout: {self.kind}")
+        if self.kind == "dual_lane":
+            if self.lane_count <= 1:
+                raise ValueError("dual-lane layout requires multiple lanes")
+            if not self.lane_format_id:
+                raise ValueError("dual-lane layout requires a lane format identity")
+        elif self.lane_count != 1 or self.lane_format_id is not None:
+            raise ValueError("single-strip layout cannot declare lane geometry")
+
+
+@dataclass(frozen=True)
+class FormatSpec:
+    format_id: str
+    frame: FramePhysicalSpec
+    strip: StripHandlingSpec
+    layout: ScanLayoutSpec
+
+    def __post_init__(self) -> None:
         if not self.format_id:
             raise ValueError("format identity must not be empty")
-        require_positive("default frame count", self.default_count)
         if (
-            not self.allowed_counts
-            or tuple(sorted(set(self.allowed_counts))) != self.allowed_counts
-            or any(count <= 0 for count in self.allowed_counts)
+            self.layout.kind == "dual_lane"
+            and self.strip.default_count % self.layout.lane_count
         ):
-            raise ValueError("allowed frame counts must be positive, unique, and ordered")
-        if self.default_count not in self.allowed_counts:
-            raise ValueError("default frame count must be allowed")
-        if not self.frame_size_mm_options:
-            raise ValueError("format requires at least one physical frame size")
-        if self.physical_layout not in {"single_strip", "dual_lane"}:
-            raise ValueError(f"unsupported physical layout: {self.physical_layout}")
-        if self.physical_layout == "dual_lane":
-            if self.lane_count <= 1 or self.default_count % self.lane_count:
-                raise ValueError("dual-lane count must divide into multiple equal lanes")
-            if not self.lane_format_id:
-                raise ValueError("dual-lane format requires a lane format identity")
-        elif self.lane_count != 1 or self.lane_format_id is not None:
-            raise ValueError("single-strip format cannot declare lane geometry")
-
-    @property
-    def nominal_frame_size_mm(self) -> FrameSizeMm:
-        return self.frame_size_mm_options[0]
-
-    @property
-    def expected_separator_count(self) -> int:
-        return expected_separator_count(
-            self.default_count,
-            self.physical_layout,
-            self.lane_count,
-        )
+            raise ValueError("dual-lane frame count must divide evenly across lanes")
 
 def expected_separator_count(
-    default_count: int,
-    physical_layout: str,
-    lane_count: int,
+    strip: StripHandlingSpec,
+    layout: ScanLayoutSpec,
 ) -> int:
-    if default_count <= 0:
-        raise ValueError("default frame count must be positive")
-    if physical_layout == "dual_lane":
-        if lane_count <= 1 or default_count % lane_count:
+    if layout.kind == "dual_lane":
+        if strip.default_count % layout.lane_count:
             raise ValueError("dual-lane frame count must divide evenly")
-        lane_frame_count = int(default_count) // int(lane_count)
-        return int(lane_count) * (lane_frame_count - 1)
-    if physical_layout != "single_strip" or lane_count != 1:
-        raise ValueError("single-strip separator count requires one lane")
-    return int(default_count) - 1
+        lane_frame_count = int(strip.default_count) // int(layout.lane_count)
+        return int(layout.lane_count) * (lane_frame_count - 1)
+    return int(strip.default_count) - 1
 
 
-FORMATS: dict[str, FormatPhysicalSpec] = {
-    "135": FormatPhysicalSpec(
+FORMATS: dict[str, FormatSpec] = {
+    "135": FormatSpec(
         format_id="135",
-        default_count=6,
-        allowed_counts=tuple(range(1, 7)),
-        frame_size_mm_options=(FrameSizeMm(36.0, 24.0),),
+        frame=FramePhysicalSpec((FrameSizeMm(36.0, 24.0),)),
+        strip=StripHandlingSpec(6, tuple(range(1, 6))),
+        layout=ScanLayoutSpec(),
     ),
-    "135-dual": FormatPhysicalSpec(
+    "135-dual": FormatSpec(
         format_id="135-dual",
-        default_count=12,
-        allowed_counts=(12,),
-        frame_size_mm_options=(FrameSizeMm(36.0, 24.0),),
-        physical_layout="dual_lane",
-        lane_count=2,
-        lane_format_id="135",
+        frame=FramePhysicalSpec((FrameSizeMm(36.0, 24.0),)),
+        strip=StripHandlingSpec(12, ()),
+        layout=ScanLayoutSpec("dual_lane", 2, "135"),
     ),
-    "half": FormatPhysicalSpec(
+    "half": FormatSpec(
         format_id="half",
-        default_count=12,
-        allowed_counts=tuple(range(1, 13)),
-        frame_size_mm_options=(FrameSizeMm(18.0, 24.0),),
+        frame=FramePhysicalSpec((FrameSizeMm(18.0, 24.0),)),
+        strip=StripHandlingSpec(12, tuple(range(1, 12))),
+        layout=ScanLayoutSpec(),
     ),
-    "xpan": FormatPhysicalSpec(
+    "xpan": FormatSpec(
         format_id="xpan",
-        default_count=3,
-        allowed_counts=(1, 2, 3),
-        frame_size_mm_options=(FrameSizeMm(65.0, 24.0),),
-        complete_strip_can_be_underfilled=True,
+        frame=FramePhysicalSpec((FrameSizeMm(65.0, 24.0),)),
+        strip=StripHandlingSpec(3, (1, 2, 3), True),
+        layout=ScanLayoutSpec(),
     ),
-    "120-645": FormatPhysicalSpec(
+    "120-645": FormatSpec(
         format_id="120-645",
-        default_count=4,
-        allowed_counts=(1, 2, 3, 4),
-        frame_size_mm_options=(FrameSizeMm(42.0, 56.0),),
+        frame=FramePhysicalSpec((FrameSizeMm(42.0, 56.0),)),
+        strip=StripHandlingSpec(4, (1, 2, 3)),
+        layout=ScanLayoutSpec(),
     ),
-    "120-66": FormatPhysicalSpec(
+    "120-66": FormatSpec(
         format_id="120-66",
-        default_count=3,
-        allowed_counts=(1, 2, 3),
-        frame_size_mm_options=(
+        frame=FramePhysicalSpec((
             FrameSizeMm(56.0, 56.0),
             FrameSizeMm(54.0, 54.0),
-        ),
-        complete_strip_can_be_underfilled=True,
+        )),
+        strip=StripHandlingSpec(3, (1, 2, 3), True),
+        layout=ScanLayoutSpec(),
     ),
-    "120-67": FormatPhysicalSpec(
+    "120-67": FormatSpec(
         format_id="120-67",
-        default_count=3,
-        allowed_counts=(1, 2, 3),
-        frame_size_mm_options=(FrameSizeMm(70.0, 56.0),),
+        frame=FramePhysicalSpec((FrameSizeMm(70.0, 56.0),)),
+        strip=StripHandlingSpec(3, (1, 2)),
+        layout=ScanLayoutSpec(),
     ),
 }
 
 FORMAT_CHOICES = tuple(FORMATS.keys())
 
 
-def format_spec(format_id: str) -> FormatPhysicalSpec:
+def format_spec(format_id: str) -> FormatSpec:
     return FORMATS[format_id]

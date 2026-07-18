@@ -50,13 +50,14 @@ class MeasurementIdentity(str, Enum):
     FORMAT_PHYSICAL_SPEC = "format_physical_spec"
     FRAME_DIMENSIONS = "frame_dimensions"
     FRAME_GEOMETRY = "frame_geometry"
+    FRAME_WIDTH_PATTERN = "frame_width_pattern"
     GRAY_WORK = "gray_work"
     IMAGE_MEASUREMENT_STATISTICS = "image_measurement_statistics"
     LANE_DIVIDER_PROFILE = "lane_divider_profile"
     PHYSICAL_FRAME_ASPECT = "physical_frame_aspect"
     PHOTO_EDGES = "photo_edges"
     SEPARATOR_PROFILE = "separator_profile"
-    SHORT_AXIS_BOUNDARIES = "short_axis_boundaries"
+    WORKSPACE_TRANSFORM = "workspace_transform"
 
 
 class ObservationId(str):
@@ -236,6 +237,12 @@ class PixelInterval:
         high = self.maximum * float(factor)
         return PixelInterval(min(low, high), max(low, high))
 
+    def expanded(self, radius: float) -> "PixelInterval":
+        radius = float(radius)
+        if not math.isfinite(radius) or radius < 0.0:
+            raise ValueError("pixel interval expansion must be finite and non-negative")
+        return PixelInterval(self.minimum - radius, self.maximum + radius)
+
 
 @dataclass(frozen=True)
 class FrameDimensionPrior:
@@ -268,21 +275,12 @@ class FrameDimensionPrior:
 
 
 @dataclass(frozen=True)
-class HolderSpan:
-    box: Box
-
-    def __post_init__(self) -> None:
-        if not self.box.valid():
-            raise ValueError("holder span must have positive extent")
-
-
-@dataclass(frozen=True)
 class FrameCropEnvelope:
-    photo_index: int
+    frame_index: int
     box: Box
 
     def __post_init__(self) -> None:
-        if self.photo_index <= 0:
+        if self.frame_index <= 0:
             raise ValueError("frame crop envelope index must be positive")
         if not self.box.valid():
             raise ValueError("frame crop envelope must have positive extent")
@@ -606,8 +604,13 @@ class HolderBoundaryObservation:
         shared = PixelInterval.common_intersection(
             tuple(path.position for path in ordered)
         )
-        if shared != self.position:
-            raise ValueError("holder boundary position must be the shared path interval")
+        if (
+            shared is None
+            or self.position.intersection(shared) != self.position
+        ):
+            raise ValueError(
+                "holder boundary position must lie within the shared path interval"
+            )
         object.__setattr__(self, "supporting_paths", ordered)
 
     @property
@@ -645,159 +648,176 @@ class HolderBoundaryObservation:
             return tuple(path.lower_appearance for path in self.supporting_paths)
         return tuple(path.upper_appearance for path in self.supporting_paths)
 
-    @property
-    def inner_appearances(self) -> tuple[GrayAppearanceObservation, ...]:
-        if self.side in {BoundarySide.LEADING, BoundarySide.TOP}:
-            return tuple(path.upper_appearance for path in self.supporting_paths)
-        return tuple(path.lower_appearance for path in self.supporting_paths)
-
-
-class PhotoApertureEdgeSource(str, Enum):
-    MEASURED_BOUNDARY_PATH = "measured_boundary_path"
-    SEPARATOR_BAND_EDGE = "separator_band_edge"
-    DIMENSION_HYPOTHESIS = "dimension_hypothesis"
-    CANVAS_LIMIT = "canvas_limit"
-
 
 @dataclass(frozen=True)
-class PhotoApertureBoundaryResolution:
-    photo_index: int
-    side: BoundarySide
-    position: PixelInterval
-    state: EvidenceState
-    source: PhotoApertureEdgeSource
-    provenance: MeasurementProvenance
+class HolderSafetyEnvelope:
+    boundaries: tuple[HolderBoundaryObservation, ...]
+    containment_fallback: ContainmentFallback
+    state: EvidenceState = field(init=False)
+    provenance: MeasurementProvenance = field(init=False)
 
     def __post_init__(self) -> None:
-        if self.photo_index <= 0:
-            raise ValueError("photo aperture boundary index must be positive")
-        if not isinstance(self.side, BoundarySide):
-            raise TypeError("photo aperture boundary requires a typed side")
-        if not isinstance(self.state, EvidenceState):
-            raise TypeError("photo aperture boundary requires a typed state")
-        if not isinstance(self.source, PhotoApertureEdgeSource):
-            raise TypeError("photo aperture boundary requires a typed source")
-        measured_source = self.source in {
-            PhotoApertureEdgeSource.MEASURED_BOUNDARY_PATH,
-            PhotoApertureEdgeSource.SEPARATOR_BAND_EDGE,
+        by_side = {boundary.side: boundary for boundary in self.boundaries}
+        if len(by_side) != len(self.boundaries):
+            raise ValueError("holder safety boundaries must have unique sides")
+        fallback = self.containment_fallback.box
+        limits = {
+            BoundarySide.LEADING: (float(fallback.left), float(fallback.right)),
+            BoundarySide.TRAILING: (float(fallback.left), float(fallback.right)),
+            BoundarySide.TOP: (float(fallback.top), float(fallback.bottom)),
+            BoundarySide.BOTTOM: (float(fallback.top), float(fallback.bottom)),
         }
-        if self.state == EvidenceState.SUPPORTED and not measured_source:
-            raise ValueError(
-                "only independently measured aperture boundaries can be supported"
-            )
-        if self.source == PhotoApertureEdgeSource.CANVAS_LIMIT and self.state not in {
-            EvidenceState.UNAVAILABLE,
-            EvidenceState.NOT_APPLICABLE,
-        }:
-            raise ValueError("canvas limits cannot resolve a photo aperture boundary")
-
-    @property
-    def independently_observed(self) -> bool:
-        return bool(
-            self.state == EvidenceState.SUPPORTED
-            and self.source
-            in {
-                PhotoApertureEdgeSource.MEASURED_BOUNDARY_PATH,
-                PhotoApertureEdgeSource.SEPARATOR_BAND_EDGE,
-            }
+        if any(
+            boundary.position.minimum < limits[boundary.side][0]
+            or boundary.position.maximum > limits[boundary.side][1]
+            for boundary in self.boundaries
+        ):
+            raise ValueError("holder safety boundary must lie inside containment")
+        state = (
+            EvidenceState.SUPPORTED
+            if set(by_side) == set(BoundarySide)
+            else EvidenceState.UNAVAILABLE
         )
-
-
-@dataclass(frozen=True)
-class PhotoApertureEdgeAssignment:
-    photo_index: int
-    side: BoundarySide
-    observation: GrayBoundaryPathObservation
-    resolution: PhotoApertureBoundaryResolution
-
-    def __post_init__(self) -> None:
-        if (
-            self.photo_index != self.resolution.photo_index
-            or self.side != self.resolution.side
-            or self.observation.axis != boundary_axis_for_side(self.side)
-            or self.observation.provenance != self.resolution.provenance
-        ):
-            raise ValueError("aperture edge assignment must preserve measurement identity")
-        if self.resolution.source != PhotoApertureEdgeSource.MEASURED_BOUNDARY_PATH:
-            raise ValueError("aperture path assignment requires a measured boundary source")
-        if not self.observation.position.intersects(self.resolution.position):
-            raise ValueError("aperture path assignment must intersect its resolution")
-
-
-@dataclass(frozen=True)
-class PhotoAperture:
-    index: int
-    leading: PhotoApertureBoundaryResolution
-    trailing: PhotoApertureBoundaryResolution
-    top: PhotoApertureBoundaryResolution
-    bottom: PhotoApertureBoundaryResolution
-
-    def __post_init__(self) -> None:
-        if self.index <= 0:
-            raise ValueError("photo aperture index must be positive")
-        resolutions = (self.leading, self.trailing, self.top, self.bottom)
-        if any(item.photo_index != self.index for item in resolutions):
-            raise ValueError("photo aperture edges must share one photo identity")
-        if tuple(item.side for item in resolutions) != (
-            BoundarySide.LEADING,
-            BoundarySide.TRAILING,
-            BoundarySide.TOP,
-            BoundarySide.BOTTOM,
-        ):
-            raise ValueError("photo aperture requires all four physical sides")
-        if self.trailing.position.minimum <= self.leading.position.maximum:
-            raise ValueError("photo aperture must have guaranteed positive long-axis extent")
-        if self.bottom.position.minimum <= self.top.position.maximum:
-            raise ValueError("photo aperture must have guaranteed positive short-axis extent")
-
-    @property
-    def frame_crop_envelope(self) -> FrameCropEnvelope:
-        return FrameCropEnvelope(
-            self.index,
-            Box(
-                int(math.floor(self.leading.position.minimum)),
-                int(math.floor(self.top.position.minimum)),
-                int(math.ceil(self.trailing.position.maximum)),
-                int(math.ceil(self.bottom.position.maximum)),
+        object.__setattr__(self, "state", state)
+        if not self.boundaries:
+            object.__setattr__(
+                self,
+                "provenance",
+                self.containment_fallback.provenance,
+            )
+            return
+        inputs = tuple(boundary.provenance for boundary in self.boundaries)
+        object.__setattr__(
+            self,
+            "provenance",
+            MeasurementProvenance(
+                root_measurement=MeasurementIdentity.BOUNDARY_PATHS,
+                observation_id=ObservationId(
+                    "holder_safety_envelope:"
+                    + ":".join(
+                        f"{boundary.side.value}={boundary.provenance.observation_id}"
+                        for boundary in sorted(
+                            self.boundaries,
+                            key=lambda item: item.side.value,
+                        )
+                    )
+                ),
+                dependencies=tuple(
+                    dict.fromkeys(
+                        dependency
+                        for item in inputs
+                        for dependency in (
+                            item.root_measurement,
+                            *item.dependencies,
+                        )
+                        if dependency != MeasurementIdentity.BOUNDARY_PATHS
+                    )
+                ),
+                description="holder safety envelope from edge-adjacent boundaries",
+                boundary_anchors=tuple(
+                    item.observation_id for item in inputs
+                ),
             ),
         )
 
-    @property
-    def all_boundaries_supported(self) -> bool:
-        return all(
-            item.state == EvidenceState.SUPPORTED
-            for item in (self.leading, self.trailing, self.top, self.bottom)
+    def boundary(
+        self,
+        side: BoundarySide,
+    ) -> HolderBoundaryObservation | None:
+        return next(
+            (boundary for boundary in self.boundaries if boundary.side == side),
+            None,
         )
 
+    def safe_axis_interval(self, axis: BoundaryAxis) -> PixelInterval:
+        fallback = self.containment_fallback.box
+        if axis == BoundaryAxis.LONG:
+            lower_side = BoundarySide.LEADING
+            upper_side = BoundarySide.TRAILING
+            fallback_interval = PixelInterval(
+                float(fallback.left),
+                float(fallback.right),
+            )
+        elif axis == BoundaryAxis.SHORT:
+            lower_side = BoundarySide.TOP
+            upper_side = BoundarySide.BOTTOM
+            fallback_interval = PixelInterval(
+                float(fallback.top),
+                float(fallback.bottom),
+            )
+        else:
+            raise ValueError("holder safety requires a spatial axis")
+
+        lower = self.boundary(lower_side)
+        upper = self.boundary(upper_side)
+        if (
+            lower is not None
+            and upper is not None
+            and upper.position.minimum > lower.position.maximum
+        ):
+            return PixelInterval(
+                lower.position.minimum,
+                upper.position.maximum,
+            )
+
+        candidates: list[PixelInterval] = []
+        if (
+            lower is not None
+            and fallback_interval.maximum > lower.position.maximum
+        ):
+            candidates.append(
+                PixelInterval(
+                    lower.position.minimum,
+                    fallback_interval.maximum,
+                )
+            )
+        if (
+            upper is not None
+            and upper.position.minimum > fallback_interval.minimum
+        ):
+            candidates.append(
+                PixelInterval(
+                    fallback_interval.minimum,
+                    upper.position.maximum,
+                )
+            )
+        return max(
+            candidates,
+            key=lambda interval: (
+                interval.maximum - interval.minimum,
+                -interval.minimum,
+                interval.maximum,
+            ),
+            default=fallback_interval,
+        )
+
+    @property
+    def box(self) -> Box:
+        long_axis = self.safe_axis_interval(BoundaryAxis.LONG)
+        short_axis = self.safe_axis_interval(BoundaryAxis.SHORT)
+        box = Box(
+            math.floor(long_axis.minimum),
+            math.floor(short_axis.minimum),
+            math.ceil(long_axis.maximum),
+            math.ceil(short_axis.maximum),
+        )
+        if not box.valid():
+            raise ValueError("holder safety envelope must have positive extent")
+        return box
 
 @dataclass(frozen=True)
-class PhotoSequenceSearchScope:
-    holder_span: HolderSpan
+class FrameSequenceSearchScope:
+    holder_safety: HolderSafetyEnvelope
     raw_boundary_paths: tuple[GrayBoundaryPathObservation, ...]
-    holder_boundaries: tuple[HolderBoundaryObservation, ...]
-    containment_fallback: ContainmentFallback
-    measurement_budget_exhausted: bool
     provenance: MeasurementProvenance
 
     def __post_init__(self) -> None:
-        sides = tuple(item.side for item in self.holder_boundaries)
-        if len(sides) != len(set(sides)):
-            raise ValueError("photo sequence search scope holder sides must be unique")
         if any(
             path not in self.raw_boundary_paths
-            for item in self.holder_boundaries
+            for item in self.holder_safety.boundaries
             for path in item.supporting_paths
         ):
             raise ValueError("holder boundaries must reference raw boundary paths")
-        holder = self.holder_span.box
-        fallback = self.containment_fallback.box
-        if not (
-            holder.left <= fallback.left
-            and holder.top <= fallback.top
-            and holder.right >= fallback.right
-            and holder.bottom >= fallback.bottom
-        ):
-            raise ValueError("containment fallback must lie inside the holder span")
 
 
 @dataclass(frozen=True)
@@ -805,7 +825,6 @@ class BoundaryMeasurementSet:
     raw_paths: tuple[GrayBoundaryPathObservation, ...]
     holder_boundaries: tuple[HolderBoundaryObservation, ...]
     containment_fallback: ContainmentFallback
-    measurement_budget_exhausted: bool
 
     def __post_init__(self) -> None:
         if any(
@@ -816,7 +835,7 @@ class BoundaryMeasurementSet:
             raise ValueError("holder boundaries must reference raw boundary paths")
 
 
-class SeparatorCrossAxisOutcome(str, Enum):
+class CrossAxisPathOutcome(str, Enum):
     BAND_OUTSIDE_CORRIDOR = "band_outside_corridor"
     APPEARANCE_REFERENCE_UNAVAILABLE = "appearance_reference_unavailable"
     PATH_SUPPORTED = "path_supported"
@@ -824,71 +843,37 @@ class SeparatorCrossAxisOutcome(str, Enum):
 
 
 @dataclass(frozen=True)
-class PhotoApertureCrossAxisHypothesis:
-    top_path: GrayBoundaryPathObservation
-    bottom_path: GrayBoundaryPathObservation
+class ShortAxisMeasurementSpan:
+    top: PixelInterval
+    bottom: PixelInterval
+    provenance: MeasurementProvenance
 
     def __post_init__(self) -> None:
-        if (
-            self.top_path.axis != BoundaryAxis.SHORT
-            or self.bottom_path.axis != BoundaryAxis.SHORT
-        ):
-            raise ValueError("photo aperture cross axis requires short-axis paths")
-        if self.bottom_path.position.minimum <= self.top_path.position.maximum:
-            raise ValueError("photo aperture cross axis must have positive extent")
+        if self.bottom.minimum <= self.top.maximum:
+            raise ValueError("short-axis measurement span must have positive extent")
 
     @property
     def height_px(self) -> PixelInterval:
-        return self.bottom_path.position.minus(self.top_path.position)
-
-    @property
-    def measurement_quality(self) -> float:
-        return min(
-            self.top_path.lower_appearance.spatial_continuity,
-            self.top_path.upper_appearance.spatial_continuity,
-        ) + min(
-            self.bottom_path.lower_appearance.spatial_continuity,
-            self.bottom_path.upper_appearance.spatial_continuity,
-        )
-
-    @property
-    def uncertainty_px(self) -> float:
-        return (
-            self.top_path.position.maximum
-            - self.top_path.position.minimum
-            + self.bottom_path.position.maximum
-            - self.bottom_path.position.minimum
-        )
+        return self.bottom.minus(self.top)
 
 
 @dataclass(frozen=True)
-class SeparatorCrossAxisMeasurement:
-    observation_id: ObservationId
-    aperture_cross_axis: PhotoApertureCrossAxisHypothesis
-    outcome: SeparatorCrossAxisOutcome
+class CrossAxisPathMeasurement:
+    outcome: CrossAxisPathOutcome
     coverage_ratio: float | None
     longest_supported_ratio: float | None
     break_count: int | None
-    appearance_coherence_ratio: float | None
     state: EvidenceState = field(init=False)
     reason: str = field(init=False)
 
     def __post_init__(self) -> None:
-        if not isinstance(self.observation_id, ObservationId):
-            raise TypeError("separator measurement requires an observation identity")
-        if not isinstance(
-            self.aperture_cross_axis,
-            PhotoApertureCrossAxisHypothesis,
-        ):
-            raise TypeError("separator measurement requires a typed aperture cross axis")
-        if not isinstance(self.outcome, SeparatorCrossAxisOutcome):
-            raise TypeError("separator cross-axis measurement requires a typed outcome")
+        if not isinstance(self.outcome, CrossAxisPathOutcome):
+            raise TypeError("cross-axis path measurement requires a typed outcome")
         ratios = tuple(
             value
             for value in (
                 self.coverage_ratio,
                 self.longest_supported_ratio,
-                self.appearance_coherence_ratio,
             )
             if value is not None
         )
@@ -897,33 +882,32 @@ class SeparatorCrossAxisMeasurement:
         if self.break_count is not None and self.break_count < 0:
             raise ValueError("separator cross-axis break count cannot be negative")
         unavailable = self.outcome in {
-            SeparatorCrossAxisOutcome.BAND_OUTSIDE_CORRIDOR,
-            SeparatorCrossAxisOutcome.APPEARANCE_REFERENCE_UNAVAILABLE,
+            CrossAxisPathOutcome.BAND_OUTSIDE_CORRIDOR,
+            CrossAxisPathOutcome.APPEARANCE_REFERENCE_UNAVAILABLE,
         }
         measurements = (
             self.coverage_ratio,
             self.longest_supported_ratio,
             self.break_count,
-            self.appearance_coherence_ratio,
         )
         if unavailable != all(value is None for value in measurements):
             raise ValueError(
                 "cross-axis outcome must match measurement availability"
             )
         state, reason = {
-            SeparatorCrossAxisOutcome.BAND_OUTSIDE_CORRIDOR: (
+            CrossAxisPathOutcome.BAND_OUTSIDE_CORRIDOR: (
                 EvidenceState.UNAVAILABLE,
-                "separator_band_outside_measurement_corridor",
+                "cross_axis_path_outside_measurement_corridor",
             ),
-            SeparatorCrossAxisOutcome.APPEARANCE_REFERENCE_UNAVAILABLE: (
+            CrossAxisPathOutcome.APPEARANCE_REFERENCE_UNAVAILABLE: (
                 EvidenceState.UNAVAILABLE,
-                "separator_appearance_reference_unavailable",
+                "cross_axis_appearance_reference_unavailable",
             ),
-            SeparatorCrossAxisOutcome.PATH_SUPPORTED: (
+            CrossAxisPathOutcome.PATH_SUPPORTED: (
                 EvidenceState.SUPPORTED,
                 "cross_axis_path_supported",
             ),
-            SeparatorCrossAxisOutcome.CONTINUITY_WEAK: (
+            CrossAxisPathOutcome.CONTINUITY_WEAK: (
                 EvidenceState.CONTRADICTED,
                 "cross_axis_continuity_weak",
             ),
@@ -933,68 +917,121 @@ class SeparatorCrossAxisMeasurement:
 
 
 @dataclass(frozen=True)
+class SeparatorCrossAxisMeasurement:
+    observation_id: ObservationId
+    short_axis_span: ShortAxisMeasurementSpan
+    leading_edge_path: CrossAxisPathMeasurement
+    trailing_edge_path: CrossAxisPathMeasurement
+    band_path: CrossAxisPathMeasurement
+    appearance_coherence_ratio: float | None
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.observation_id, ObservationId):
+            raise TypeError("separator measurement requires an observation identity")
+        if not isinstance(self.short_axis_span, ShortAxisMeasurementSpan):
+            raise TypeError("separator measurement requires a typed short-axis span")
+        paths = (
+            self.leading_edge_path,
+            self.trailing_edge_path,
+            self.band_path,
+        )
+        if any(not isinstance(path, CrossAxisPathMeasurement) for path in paths):
+            raise TypeError("separator measurement requires typed cross-axis paths")
+        if self.appearance_coherence_ratio is not None and (
+            not math.isfinite(self.appearance_coherence_ratio)
+            or not 0.0 <= self.appearance_coherence_ratio <= 1.0
+        ):
+            raise ValueError("separator appearance coherence must lie in [0, 1]")
+        all_unavailable = all(
+            path.state == EvidenceState.UNAVAILABLE for path in paths
+        )
+        if all_unavailable != (self.appearance_coherence_ratio is None):
+            raise ValueError(
+                "separator appearance coherence must match path availability"
+            )
+
+    def edge_path(self, side: BoundarySide) -> CrossAxisPathMeasurement:
+        if side == BoundarySide.LEADING:
+            return self.leading_edge_path
+        if side == BoundarySide.TRAILING:
+            return self.trailing_edge_path
+        raise ValueError("separator edge path requires a long-axis side")
+
+    @property
+    def supported_edge_count(self) -> int:
+        return sum(
+            path.state == EvidenceState.SUPPORTED
+            for path in (self.leading_edge_path, self.trailing_edge_path)
+        )
+
+    @property
+    def complete_separator_supported(self) -> bool:
+        return all(
+            path.state == EvidenceState.SUPPORTED
+            for path in (self.leading_edge_path, self.trailing_edge_path)
+        )
+
+    @property
+    def has_supported_path(self) -> bool:
+        return any(
+            path.state == EvidenceState.SUPPORTED
+            for path in (
+                self.leading_edge_path,
+                self.trailing_edge_path,
+                self.band_path,
+            )
+        )
+
+    @property
+    def all_paths_contradicted(self) -> bool:
+        return not self.has_supported_path and all(
+            path.state == EvidenceState.CONTRADICTED
+            for path in (
+                self.leading_edge_path,
+                self.trailing_edge_path,
+                self.band_path,
+            )
+        )
+
+
+@dataclass(frozen=True)
 class SeparatorBandObservation:
-    start: float
-    end: float
+    leading_edge: PixelInterval
+    trailing_edge: PixelInterval
     tonal_evidence: float
     appearance: GrayAppearanceObservation
     provenance: MeasurementProvenance
 
     def __post_init__(self) -> None:
-        if self.end <= self.start:
-            raise ValueError("separator observation must have positive width")
+        if self.trailing_edge.midpoint <= self.leading_edge.midpoint:
+            raise ValueError("separator observation edges must be ordered")
         if self.appearance.provenance != self.provenance:
             raise ValueError("separator appearance must share band provenance")
 
     @property
-    def width(self) -> float:
-        return float(self.end) - float(self.start)
+    def width_px(self) -> PixelInterval:
+        return self.trailing_edge.minus(self.leading_edge)
 
     @property
-    def interval(self) -> PixelInterval:
-        return PixelInterval(float(self.start), float(self.end))
-
-    @property
-    def midpoint(self) -> float:
-        return 0.5 * (float(self.start) + float(self.end))
-
+    def span(self) -> PixelInterval:
+        return PixelInterval(
+            self.leading_edge.minimum,
+            self.trailing_edge.maximum,
+        )
 
 @dataclass(frozen=True)
 class SeparatorBandCrossAxisSupport:
     observation: SeparatorBandObservation
-    measurements: tuple[SeparatorCrossAxisMeasurement, ...]
+    measurement: SeparatorCrossAxisMeasurement
 
     def __post_init__(self) -> None:
         observation_id = self.observation.provenance.observation_id
-        if any(
-            item.observation_id != observation_id
-            for item in self.measurements
-        ):
+        if self.measurement.observation_id != observation_id:
             raise ValueError("separator support must preserve observation identity")
-        hypotheses = tuple(item.aperture_cross_axis for item in self.measurements)
-        if not hypotheses or len(set(hypotheses)) != len(hypotheses):
-            raise ValueError(
-                "separator support requires unique cross-axis measurements"
-            )
-
-    def measurement_for(
-        self,
-        hypothesis: PhotoApertureCrossAxisHypothesis,
-    ) -> SeparatorCrossAxisMeasurement:
-        matches = tuple(
-            item
-            for item in self.measurements
-            if item.aperture_cross_axis == hypothesis
-        )
-        if len(matches) != 1:
-            raise ValueError(
-                "separator observation does not contain the requested cross-axis measurement"
-            )
-        return matches[0]
 
 
 @dataclass(frozen=True)
-class InterPhotoBoundaryReference:
+class InterFrameBoundaryReference:
     lane_index: int | None
     boundary_index: int
 
@@ -1005,13 +1042,13 @@ class InterPhotoBoundaryReference:
             raise ValueError("frame boundary index must be positive")
 
 
-class InterPhotoSpacingBasis(str, Enum):
+class InterFrameSpacingBasis(str, Enum):
     OBSERVED = "observed"
     CORROBORATED_OVERLAP = "corroborated_overlap"
     GEOMETRY_HYPOTHESIS = "geometry_hypothesis"
 
 
-class InterPhotoSpacingKind(str, Enum):
+class InterFrameSpacingKind(str, Enum):
     SEPARATOR = "separator"
     CONTACT = "contact"
     OVERLAP = "overlap"
@@ -1019,141 +1056,66 @@ class InterPhotoSpacingKind(str, Enum):
 
 
 @dataclass(frozen=True)
-class InterPhotoSpacing:
-    boundary: InterPhotoBoundaryReference
+class InterFrameSpacing:
+    boundary: InterFrameBoundaryReference
     signed_width_px: PixelInterval
     provenance: MeasurementProvenance
-    basis: InterPhotoSpacingBasis
+    basis: InterFrameSpacingBasis
 
     def __post_init__(self) -> None:
-        if not isinstance(self.boundary, InterPhotoBoundaryReference):
-            raise TypeError("inter-photo spacing requires a boundary reference")
-        if not isinstance(self.basis, InterPhotoSpacingBasis):
-            raise TypeError("inter-photo spacing requires a typed basis")
+        if not isinstance(self.boundary, InterFrameBoundaryReference):
+            raise TypeError("inter-frame spacing requires a boundary reference")
+        if not isinstance(self.basis, InterFrameSpacingBasis):
+            raise TypeError("inter-frame spacing requires a typed basis")
         if (
-            self.basis == InterPhotoSpacingBasis.CORROBORATED_OVERLAP
+            self.basis == InterFrameSpacingBasis.CORROBORATED_OVERLAP
             and self.signed_width_px.maximum >= 0.0
         ):
             raise ValueError("corroborated inter-photo spacing must be an overlap")
 
     @property
-    def kind(self) -> InterPhotoSpacingKind:
+    def kind(self) -> InterFrameSpacingKind:
         interval = self.signed_width_px
         if interval.minimum > 0.0:
-            return InterPhotoSpacingKind.SEPARATOR
+            return InterFrameSpacingKind.SEPARATOR
         if interval.maximum < 0.0:
-            return InterPhotoSpacingKind.OVERLAP
+            return InterFrameSpacingKind.OVERLAP
         if interval.minimum == 0.0 and interval.maximum == 0.0:
-            return InterPhotoSpacingKind.CONTACT
-        return InterPhotoSpacingKind.UNRESOLVED
+            return InterFrameSpacingKind.CONTACT
+        return InterFrameSpacingKind.UNRESOLVED
 
     @property
     def state(self) -> EvidenceState:
-        if self.basis == InterPhotoSpacingBasis.GEOMETRY_HYPOTHESIS:
+        if self.basis == InterFrameSpacingBasis.GEOMETRY_HYPOTHESIS:
             return EvidenceState.UNAVAILABLE
         return (
             EvidenceState.UNAVAILABLE
-            if self.kind == InterPhotoSpacingKind.UNRESOLVED
+            if self.kind == InterFrameSpacingKind.UNRESOLVED
             else EvidenceState.SUPPORTED
         )
 
     @property
     def independently_observed(self) -> bool:
         return bool(
-            self.basis == InterPhotoSpacingBasis.OBSERVED
+            self.basis == InterFrameSpacingBasis.OBSERVED
             and self.state == EvidenceState.SUPPORTED
         )
 
     @property
     def supports_output_protection(self) -> bool:
         return bool(
-            self.kind == InterPhotoSpacingKind.OVERLAP
+            self.kind == InterFrameSpacingKind.OVERLAP
             and self.basis
             in {
-                InterPhotoSpacingBasis.OBSERVED,
-                InterPhotoSpacingBasis.CORROBORATED_OVERLAP,
+                InterFrameSpacingBasis.OBSERVED,
+                InterFrameSpacingBasis.CORROBORATED_OVERLAP,
             }
         )
 
     @property
     def reason(self) -> str:
-        if self.basis == InterPhotoSpacingBasis.GEOMETRY_HYPOTHESIS:
+        if self.basis == InterFrameSpacingBasis.GEOMETRY_HYPOTHESIS:
             return f"{self.kind.value}_spacing_hypothesis"
-        if self.basis == InterPhotoSpacingBasis.CORROBORATED_OVERLAP:
+        if self.basis == InterFrameSpacingBasis.CORROBORATED_OVERLAP:
             return "independent_constraints_require_overlap"
         return f"observed_{self.kind.value}_spacing"
-
-
-@dataclass(frozen=True)
-class SeparatorWidthConstraint:
-    adjacent_photo_width_px: PixelInterval
-
-    def __post_init__(self) -> None:
-        if self.adjacent_photo_width_px.minimum <= 0.0:
-            raise ValueError("separator width constraint requires positive photo width")
-
-    def permits(self, observation: SeparatorBandObservation) -> bool:
-        return observation.width < self.adjacent_photo_width_px.minimum
-
-
-@dataclass(frozen=True)
-class SeparatorBandAssignment:
-    boundary_index: int
-    observation: SeparatorBandObservation
-    cross_axis_measurement: SeparatorCrossAxisMeasurement
-    preceding_trailing_edge: PhotoApertureBoundaryResolution
-    following_leading_edge: PhotoApertureBoundaryResolution
-    width_constraint: SeparatorWidthConstraint
-
-    def __post_init__(self) -> None:
-        if self.boundary_index <= 0:
-            raise ValueError("separator assignment boundary index must be positive")
-        if (
-            self.cross_axis_measurement.observation_id
-            != self.observation.provenance.observation_id
-        ):
-            raise ValueError("separator assignment measurement must belong to its band")
-        if self.cross_axis_measurement.state != EvidenceState.SUPPORTED:
-            raise ValueError("assigned separator requires cross-axis support")
-        if not self.width_constraint.permits(self.observation):
-            raise ValueError(
-                "assigned separator must be narrower than one adjacent photo"
-            )
-        if (
-            self.preceding_trailing_edge.photo_index != self.boundary_index
-            or self.preceding_trailing_edge.side != BoundarySide.TRAILING
-            or self.following_leading_edge.photo_index != self.boundary_index + 1
-            or self.following_leading_edge.side != BoundarySide.LEADING
-            or self.preceding_trailing_edge.state != EvidenceState.SUPPORTED
-            or self.following_leading_edge.state != EvidenceState.SUPPORTED
-        ):
-            raise ValueError(
-                "separator assignment requires two supported adjacent aperture edges"
-            )
-        expected_preceding = PixelInterval.exact(self.observation.start)
-        expected_following = PixelInterval.exact(self.observation.end)
-        if (
-            self.preceding_trailing_edge.source
-            != PhotoApertureEdgeSource.SEPARATOR_BAND_EDGE
-            or self.following_leading_edge.source
-            != PhotoApertureEdgeSource.SEPARATOR_BAND_EDGE
-            or self.preceding_trailing_edge.position != expected_preceding
-            or self.following_leading_edge.position != expected_following
-            or self.preceding_trailing_edge.provenance != self.observation.provenance
-            or self.following_leading_edge.provenance != self.observation.provenance
-        ):
-            raise ValueError(
-                "separator assignment aperture edges must match observed band edges"
-            )
-
-    @property
-    def independent(self) -> bool:
-        return True
-
-    @property
-    def state(self) -> EvidenceState:
-        return EvidenceState.SUPPORTED
-
-    @property
-    def reason(self) -> str:
-        return "separator_band_edges_bind_adjacent_photo_apertures"

@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from ..configuration.model import DetectionConfiguration
+from ..formats import expected_separator_count
 from .read_models import typed_read_model
 
 
@@ -15,16 +16,22 @@ def detection_configuration_read_model(
         "format_id": spec.format_id,
         "strip_mode": configuration.strip_mode,
         "physical": {
-            "physical_layout": spec.physical_layout,
-            "default_count": int(spec.default_count),
-            "expected_separator_count": int(spec.expected_separator_count),
-            "allowed_counts": list(spec.allowed_counts),
-            "nominal_frame_size_mm": typed_read_model(spec.nominal_frame_size_mm),
-            "frame_size_mm_options": typed_read_model(spec.frame_size_mm_options),
-            "frame_aspect": spec.nominal_frame_size_mm.aspect,
+            "physical_layout": spec.layout.kind,
+            "default_count": int(spec.strip.default_count),
+            "expected_separator_count": int(
+                expected_separator_count(spec.strip, spec.layout)
+            ),
+            "allowed_partial_counts": list(
+                spec.strip.allowed_partial_counts
+            ),
+            "nominal_frame_size_mm": typed_read_model(spec.frame.nominal_size_mm),
+            "frame_size_mm_options": typed_read_model(
+                spec.frame.frame_size_mm_options
+            ),
+            "frame_aspect": spec.frame.nominal_size_mm.aspect,
             "aspect_source": "frame_size_mm",
             "complete_strip_can_be_underfilled": bool(
-                spec.complete_strip_can_be_underfilled
+                spec.strip.complete_strip_can_be_underfilled
             ),
         },
         "measurement": {

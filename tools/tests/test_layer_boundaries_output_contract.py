@@ -83,7 +83,7 @@ class LayerBoundariesOutputContractTest(unittest.TestCase):
         )
         self.assertNotIn("FinalDetection", source)
         self.assertIn("separator_observations", source)
-        self.assertIn("solution.inter_photo_spacings", source)
+        self.assertIn("solution.inter_frame_spacings", source)
         self.assertNotIn(".detail", source)
 
     def test_separator_overlay_uses_explicit_workspace_extent(self) -> None:
@@ -134,7 +134,7 @@ class LayerBoundariesOutputContractTest(unittest.TestCase):
         source = (PROJECT_ROOT / "x5crop/runtime/frame_bleed.py").read_text(
             encoding="utf-8"
         )
-        self.assertIn("inter_photo_boundary_preservation", source)
+        self.assertIn("internal_frame_boundary_preservation", source)
         self.assertNotIn("geometry.inter_photo_spacings", source)
 
     def test_debug_analysis_has_one_fixed_three_panel_contract(self) -> None:

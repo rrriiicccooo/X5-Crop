@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ..formats import FormatPhysicalSpec
+from ..formats import FormatSpec
 from ..strip_modes import FULL, PARTIAL
 from .boundary import BoundaryPathParameters
 from .candidate import CandidatePlanParameters
@@ -14,7 +14,7 @@ from .separator import SeparatorConfiguration
 
 @dataclass(frozen=True)
 class DetectionConfiguration:
-    physical_spec: FormatPhysicalSpec
+    physical_spec: FormatSpec
     strip_mode: str
     preprocess: PreprocessConfiguration
     boundary_path: BoundaryPathParameters
@@ -29,7 +29,7 @@ class DetectionConfiguration:
 
     @property
     def detector_kind(self) -> str:
-        if self.physical_spec.physical_layout != "dual_lane":
+        if self.physical_spec.layout.kind != "dual_lane":
             return "standard_strip"
         return "dual_lane" if self.strip_mode == FULL else "review_only"
 

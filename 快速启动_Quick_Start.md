@@ -88,7 +88,7 @@ Windows: 双击 X5_Crop_win.bat
 - 生成 Debug Analysis JPG。
 - 生成 `x5_crop_report.jsonl` 和 `x5_crop_summary.csv`。
 
-适合正式裁切前检查逐张 `PhotoAperture`、separator 观测和最终裁切范围。
+适合正式裁切前检查片条范围、逐张照片边界、片间观测和最终裁切范围。
 
 ### 8. 输出和复核
 
@@ -98,7 +98,7 @@ Windows: 双击 X5_Crop_win.bat
 x5_crop_output/
 ```
 
-同时通过物理 `CandidateGate` 和最终 `DecisionGate` 的结果会导出为新的单张 TIFF。
+只有张数、边界和最终裁切范围都已安全解决的结果才会导出为新的单张 TIFF。
 其他图片会进入：
 
 ```text
@@ -205,8 +205,8 @@ Type `y` for a dry run:
 - It writes Debug Analysis JPGs.
 - It writes `x5_crop_report.jsonl` and `x5_crop_summary.csv`.
 
-Use it before final cropping to inspect each `PhotoAperture`, separator
-observations, and the final crop range.
+Use it before final cropping to inspect the strip span, each frame boundary,
+inter-frame observations, and the final crop range.
 
 ### 8. Output And Review
 
@@ -216,7 +216,7 @@ Output folder:
 x5_crop_output/
 ```
 
-Results that pass both the physical `CandidateGate` and final `DecisionGate` are
+Only results with a resolved count, boundaries, and safe final crop range are
 exported as new TIFF files. All other files go to:
 
 ```text

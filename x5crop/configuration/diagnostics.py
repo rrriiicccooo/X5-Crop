@@ -27,9 +27,11 @@ class DebugStyleParameters:
     preview_max_side: int = 1800
     frame_fill_alpha: float = 0.26
     frame_crop_envelope_line_width: int = 1
-    photo_aperture_line_width: int = 3
+    frame_slot_line_width: int = 3
+    sequence_inferred_slot_line_width: int = 3
     containment_fallback_line_width: int = 2
-    photo_aperture_color: tuple[int, int, int] = (0, 255, 0)
+    frame_slot_color: tuple[int, int, int] = (0, 255, 0)
+    sequence_inferred_slot_color: tuple[int, int, int] = (255, 210, 0)
     frame_crop_envelope_color: tuple[int, int, int] = (40, 120, 255)
     holder_boundary_color: tuple[int, int, int] = (255, 255, 255)
     panel_spacing: int = 12
@@ -66,7 +68,11 @@ class DebugStyleParameters:
                 "debug frame crop envelope line width",
                 self.frame_crop_envelope_line_width,
             ),
-            ("debug photo aperture line width", self.photo_aperture_line_width),
+            ("debug frame-slot line width", self.frame_slot_line_width),
+            (
+                "debug sequence-inferred slot line width",
+                self.sequence_inferred_slot_line_width,
+            ),
             (
                 "debug containment fallback line width",
                 self.containment_fallback_line_width,
@@ -89,7 +95,8 @@ class DebugStyleParameters:
         if self.jpeg_quality > JPEG_QUALITY_MAX:
             raise ValueError("debug JPEG quality exceeds the standard maximum")
         colors = (
-            self.photo_aperture_color,
+            self.frame_slot_color,
+            self.sequence_inferred_slot_color,
             self.frame_crop_envelope_color,
             self.holder_boundary_color,
             self.text_color,
@@ -147,9 +154,13 @@ class DiagnosticsConfiguration:
         style = self.style
         return (
             DebugLegendEntry("Holder boundary", style.holder_boundary_color, True),
-            DebugLegendEntry("Raw observation", style.raw_observation_color, False),
             DebugLegendEntry(
-                "Measured aperture / separator edge",
+                "Selected raw observation",
+                style.raw_observation_color,
+                False,
+            ),
+            DebugLegendEntry(
+                "Measured frame / separator edge",
                 style.measured_boundary_color,
                 False,
             ),
@@ -159,11 +170,21 @@ class DiagnosticsConfiguration:
                 True,
             ),
             DebugLegendEntry(
+                "External safety envelope",
+                style.frame_crop_envelope_color,
+                True,
+            ),
+            DebugLegendEntry(
                 "Corroborated overlap",
                 style.corroborated_overlap_color,
                 False,
             ),
-            DebugLegendEntry("PhotoAperture", style.photo_aperture_color, False),
+            DebugLegendEntry("FrameSlot", style.frame_slot_color, False),
+            DebugLegendEntry(
+                "Sequence-inferred FrameSlot",
+                style.sequence_inferred_slot_color,
+                True,
+            ),
             DebugLegendEntry(
                 "FrameCropEnvelope / protected output",
                 style.frame_crop_envelope_color,

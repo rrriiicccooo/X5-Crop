@@ -21,14 +21,7 @@ from x5crop.detection.candidate.plan.model import (
     CountHypothesisSource,
 )
 from x5crop.detection.evidence.separator_sequence import separator_sequence_evidence
-from x5crop.domain import (
-    EvidenceState,
-    InterPhotoSpacingBasis,
-    MeasurementIdentity,
-    MeasurementProvenance,
-    ObservationId,
-    PhotoApertureEdgeSource,
-)
+from x5crop.domain import EvidenceState
 
 
 class CandidateEvidenceQualityContractTest(unittest.TestCase):
@@ -68,48 +61,12 @@ class CandidateEvidenceQualityContractTest(unittest.TestCase):
         self.assertNotIn("partial_edge_safety", partial_quality.contradicted)
         self.assertNotIn("partial_edge_safety", partial_quality.unavailable)
 
-    def test_dimension_only_aperture_edges_do_not_become_separator_proof(
+    def test_dimension_only_frame_boundaries_do_not_become_separator_proof(
         self,
     ) -> None:
-        geometry = candidate_fixture().geometry
-        provenance = MeasurementProvenance(
-            MeasurementIdentity.FRAME_GEOMETRY,
-            ObservationId("dimension_only_internal_boundary"),
-            (MeasurementIdentity.FRAME_DIMENSIONS,),
-            "dimension-only internal boundary",
+        evidence = separator_sequence_evidence(
+            _candidate_geometry(boundary_proof_supported=False)
         )
-        first = replace(
-            geometry.photo_apertures[0],
-            trailing=replace(
-                geometry.photo_apertures[0].trailing,
-                state=EvidenceState.UNAVAILABLE,
-                source=PhotoApertureEdgeSource.DIMENSION_HYPOTHESIS,
-                provenance=provenance,
-            ),
-        )
-        second = replace(
-            geometry.photo_apertures[1],
-            leading=replace(
-                geometry.photo_apertures[1].leading,
-                state=EvidenceState.UNAVAILABLE,
-                source=PhotoApertureEdgeSource.DIMENSION_HYPOTHESIS,
-                provenance=provenance,
-            ),
-        )
-        provisional = replace(
-            geometry,
-            photo_apertures=(first, second),
-            separator_assignments=(),
-            inter_photo_spacings=(
-                replace(
-                    geometry.inter_photo_spacings[0],
-                    basis=InterPhotoSpacingBasis.GEOMETRY_HYPOTHESIS,
-                    provenance=provenance,
-                ),
-            ),
-        )
-
-        evidence = separator_sequence_evidence(provisional)
 
         self.assertEqual(evidence.state, EvidenceState.UNAVAILABLE)
         self.assertEqual(evidence.hard_count, 0)

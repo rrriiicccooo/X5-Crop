@@ -1,751 +1,847 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from typing import get_type_hints
 import unittest
 
 import numpy as np
 
 from tools.tests.physical_gate_support import (
     boundary_path_fixture,
-    candidate_evidence_fixture,
     candidate_fixture,
 )
-from x5crop.cache import MeasurementCache
-from x5crop.configuration.registry import get_detection_configuration
-from x5crop.detection.candidate.assessment.candidate_gate import (
-    candidate_gate_assessment,
+from x5crop.configuration.content import ContentConfiguration
+from x5crop.detection.evidence.content.external_frame_boundaries import (
+    ExternalFrameBoundaryObservation,
 )
-from x5crop.detection.candidate.assessment.model import (
-    BoundaryProofPath,
-    CandidateGateInput,
+from x5crop.detection.evidence.content.frame_content import (
+    FrameBoundaryContentTrace,
+    FrameContentEvidence,
+    FrameContentObservation,
 )
-from x5crop.detection.candidate.model import content_preservation_state
-from x5crop.detection.evidence.content.external_boundaries import (
-    _boundary_regions,
-    _crossing_track_count,
-    external_aperture_preservation_evidence,
+from x5crop.detection.evidence.content.activation import content_evidence_threshold
+from x5crop.detection.evidence.content.internal_frame_boundaries import (
+    InternalBoundaryContentContinuityObservation,
+    measure_internal_boundary_content_continuity,
+    internal_frame_boundary_preservation_evidence,
 )
-from x5crop.detection.evidence.photo_aperture_coverage import (
-    PhotoApertureCoverageEvidence,
-)
-from x5crop.detection.evidence.content.internal_boundaries import (
-    inter_photo_boundary_preservation_evidence,
-)
-from x5crop.detection.evidence.content.photo_content import (
-    PhotoBoundaryContentTrace,
-    PhotoContentEvidence,
-    PhotoContentObservation,
-    photo_content_evidence,
-)
-from x5crop.detection.evidence.content.activation import sample_supports_content
+from x5crop.detection.evidence.content.regions import content_region_observation
+from x5crop.detection.evidence.frame_coverage import FrameCoverageEvidence
 from x5crop.detection.physical.model import (
-    AssignmentConsensusOutcome,
-    BoundaryAssignmentConsensus,
-    PhotoSequenceSolution,
-    SequenceResiduals,
+    BoundaryAnchor,
+    BoundaryRoleAuthority,
+    FrameBoundarySource,
 )
 from x5crop.domain import (
-    BoundarySide,
     BoundaryKind,
+    BoundarySide,
     Box,
     EvidenceState,
-    FrameDimensionPrior,
-    HolderSpan,
-    InterPhotoBoundaryReference,
-    InterPhotoSpacing,
-    InterPhotoSpacingBasis,
-    InterPhotoSpacingKind,
+    InterFrameBoundaryReference,
+    InterFrameSpacing,
+    InterFrameSpacingBasis,
     MeasurementIdentity,
     MeasurementProvenance,
     ObservationId,
-    PhotoAperture,
-    PhotoApertureBoundaryResolution,
-    PhotoApertureEdgeAssignment,
-    PhotoApertureEdgeSource,
     PixelInterval,
 )
+from x5crop.image.evidence import make_content_evidence_gray
+from x5crop.image.constants import UINT8_MAX_VALUE
+from x5crop.image.content import ContentRegionObservation
 from x5crop.image.statistics import (
     ImageMeasurementStatisticsParameters,
     image_measurement_statistics,
 )
 
 
-def _cache(gray: np.ndarray) -> MeasurementCache:
-    evidence = (gray < 225).astype(np.uint8) * 255
-    return MeasurementCache(
-        "horizontal",
-        gray,
-        evidence,
-        evidence.astype(np.float32) / 255.0,
-        image_measurement_statistics(
-            gray,
-            ImageMeasurementStatisticsParameters(),
-        ),
+def _provenance(name: str) -> MeasurementProvenance:
+    return MeasurementProvenance(
+        root_measurement=MeasurementIdentity.FRAME_GEOMETRY,
+        observation_id=ObservationId(name),
+        dependencies=(MeasurementIdentity.FRAME_DIMENSIONS,),
+        description=name,
     )
 
 
-def _single_aperture_geometry(
-    box: Box,
-    *,
-    measured_boundaries: bool = True,
-) -> PhotoSequenceSolution:
-    def edge(side: BoundarySide, position: float):
-        provenance = MeasurementProvenance(
-            (
-                MeasurementIdentity.PHOTO_EDGES
-                if measured_boundaries
-                else MeasurementIdentity.FRAME_GEOMETRY
-            ),
-            ObservationId(f"synthetic_single_aperture:{side.value}"),
-            (
-                (MeasurementIdentity.GRAY_WORK,)
-                if measured_boundaries
-                else (MeasurementIdentity.FRAME_DIMENSIONS,)
-            ),
-            (
-                "synthetic single-aperture measurement"
-                if measured_boundaries
-                else "synthetic single-aperture dimension hypothesis"
-            ),
-        )
-        return PhotoApertureBoundaryResolution(
-            1,
-            side,
-            PixelInterval.exact(position),
-            (
-                EvidenceState.SUPPORTED
-                if measured_boundaries
-                else EvidenceState.UNAVAILABLE
-            ),
-            (
-                PhotoApertureEdgeSource.MEASURED_BOUNDARY_PATH
-                if measured_boundaries
-                else PhotoApertureEdgeSource.DIMENSION_HYPOTHESIS
-            ),
-            provenance,
-        )
-
-    aperture = PhotoAperture(
-        1,
-        edge(BoundarySide.LEADING, float(box.left)),
-        edge(BoundarySide.TRAILING, float(box.right)),
-        edge(BoundarySide.TOP, float(box.top)),
-        edge(BoundarySide.BOTTOM, float(box.bottom)),
-    )
-    boundaries = (
-        aperture.leading,
-        aperture.trailing,
-        aperture.top,
-        aperture.bottom,
-    )
-    raw_paths = (
-        tuple(
-            boundary_path_fixture(
-                boundary.side,
-                boundary.position,
-                BoundaryKind.TONAL_TRANSITION,
-                boundary.provenance,
-            )
-            for boundary in boundaries
-        )
-        if measured_boundaries
-        else ()
-    )
-    edge_assignments = (
-        tuple(
-            PhotoApertureEdgeAssignment(
-                1,
-                boundary.side,
-                path,
-                boundary,
-            )
-            for boundary, path in zip(boundaries, raw_paths, strict=True)
-        )
-        if measured_boundaries
-        else ()
-    )
-    return PhotoSequenceSolution(
-        format_id="120-645",
-        layout="horizontal",
-        strip_mode="full",
-        count=1,
-        holder_span=HolderSpan(box),
-        photo_apertures=(aperture,),
-        aperture_edge_assignments=edge_assignments,
-        separator_observations=(),
-        separator_assignments=(),
-        inter_photo_spacings=(),
-        frame_dimension_prior=FrameDimensionPrior(
-            (42.0, 56.0),
-            MeasurementProvenance(
-                MeasurementIdentity.PHYSICAL_FRAME_ASPECT,
-                ObservationId("synthetic_frame_prior"),
-                (MeasurementIdentity.FORMAT_PHYSICAL_SPEC,),
-                "synthetic physical frame prior",
-            ),
-        ),
-        photo_width_constraint_px=PixelInterval.exact(float(box.width)),
-        photo_height_constraint_px=PixelInterval.exact(float(box.height)),
-        residuals=SequenceResiduals(0.0, 0.0),
-        assignment_consensus=BoundaryAssignmentConsensus(
-            AssignmentConsensusOutcome.UNCONTESTED,
-            1,
-            (),
-        ),
-        raw_boundary_paths=raw_paths,
-        holder_boundaries=(),
-    )
-
-
-def _measured_apertures_for_spacing(spacing_px: float) -> tuple[PhotoAperture, ...]:
-    def edge(
-        photo_index: int,
-        side: BoundarySide,
-        position: float,
-    ) -> PhotoApertureBoundaryResolution:
-        return PhotoApertureBoundaryResolution(
-            photo_index,
-            side,
-            PixelInterval.exact(position),
-            EvidenceState.SUPPORTED,
-            PhotoApertureEdgeSource.MEASURED_BOUNDARY_PATH,
-            MeasurementProvenance(
-                MeasurementIdentity.BOUNDARY_PATHS,
-                ObservationId(f"synthetic_photo_{photo_index}_{side.value}"),
-                (MeasurementIdentity.GRAY_WORK,),
-                "synthetic measured aperture edge",
-            ),
-        )
-
-    first_trailing = 100.0
-    second_leading = first_trailing + spacing_px
-    return (
-        PhotoAperture(
-            1,
-            edge(1, BoundarySide.LEADING, 0.0),
-            edge(1, BoundarySide.TRAILING, first_trailing),
-            edge(1, BoundarySide.TOP, 0.0),
-            edge(1, BoundarySide.BOTTOM, 100.0),
-        ),
-        PhotoAperture(
-            2,
-            edge(2, BoundarySide.LEADING, second_leading),
-            edge(2, BoundarySide.TRAILING, second_leading + 100.0),
-            edge(2, BoundarySide.TOP, 0.0),
-            edge(2, BoundarySide.BOTTOM, 100.0),
-        ),
-    )
-
-
-def _coverage_for_apertures(
-    apertures: tuple[PhotoAperture, ...],
-    content_runs: tuple[tuple[int, int], ...],
-) -> PhotoApertureCoverageEvidence:
-    intervals = tuple(
+def _frame_content(*, crossing: bool) -> FrameContentEvidence:
+    traces = (
         (
-            item.frame_crop_envelope.box.left,
-            item.frame_crop_envelope.box.right,
-        )
-        for item in apertures
-    )
-    return PhotoApertureCoverageEvidence(
-        (min(start for start, _ in intervals), max(end for _, end in intervals)),
-        intervals,
-        content_runs,
-        0,
-    )
-
-
-def _content_at_internal_boundary(
-    left_runs: tuple[tuple[int, int], ...],
-    right_runs: tuple[tuple[int, int], ...],
-) -> PhotoContentEvidence:
-    return PhotoContentEvidence(
-        0.5,
-        (
-            PhotoContentObservation(
-                1,
-                0.8,
-                0.8,
-                True,
-                (
-                    PhotoBoundaryContentTrace(
-                        BoundarySide.TRAILING,
-                        left_runs,
-                        4,
-                    ),
-                ),
-            ),
-            PhotoContentObservation(
+            FrameBoundaryContentTrace(
+                BoundarySide.TRAILING,
+                ((10, 30),),
                 2,
-                0.8,
-                0.8,
-                True,
+            ),
+        ),
+        (
+            FrameBoundaryContentTrace(
+                BoundarySide.LEADING,
+                ((15, 35),),
+                2,
+            ),
+        ),
+    )
+    return FrameContentEvidence(
+        0.5,
+        tuple(
+            FrameContentObservation(
+                frame_index=index,
+                mean=0.8,
+                coverage=0.7,
+                content_present=True,
+                boundary_traces=(traces[index - 1] if crossing else ()),
+            )
+            for index in (1, 2)
+        ),
+    )
+
+
+def _content_measurement(
+    gray: np.ndarray,
+) -> tuple[np.ndarray, float]:
+    parameters = ContentConfiguration().evidence
+    evidence = (
+        make_content_evidence_gray(gray).astype(np.float32)
+        / UINT8_MAX_VALUE
+    )
+    threshold = content_evidence_threshold(evidence, parameters)
+    if threshold is None:
+        raise AssertionError("synthetic content measurement requires dynamic range")
+    return evidence, float(threshold)
+
+
+def _content_continuity(
+    *,
+    crossing: bool,
+    boundary_index: int = 1,
+) -> tuple[InternalBoundaryContentContinuityObservation, ...]:
+    return (
+        InternalBoundaryContentContinuityObservation(
+            boundary=InterFrameBoundaryReference(None, boundary_index),
+            shared_content_track_count=20 if crossing else 0,
+            minimum_shared_content_tracks=2,
+            long_axis_content_spans_boundary=crossing,
+            content_bridge_track_count=20 if crossing else 0,
+            minimum_content_bridge_tracks=5,
+            gray_discontinuity_track_count=0,
+            minimum_gray_discontinuity_tracks=5,
+            provenance=MeasurementProvenance(
+                MeasurementIdentity.CONTENT_EVIDENCE_IMAGE,
+                ObservationId(f"synthetic_content_continuity:{boundary_index}"),
                 (
-                    PhotoBoundaryContentTrace(
-                        BoundarySide.LEADING,
-                        right_runs,
-                        4,
-                    ),
+                    MeasurementIdentity.GRAY_WORK,
+                    MeasurementIdentity.FRAME_GEOMETRY,
                 ),
+                "synthetic internal-boundary content continuity",
             ),
         ),
     )
 
 
 class FrameContentSupportTest(unittest.TestCase):
-    def test_photo_content_measurement_preserves_boundary_parallel_tracks(self) -> None:
+    def test_smooth_content_across_an_inferred_cut_is_continuous(self) -> None:
         geometry = candidate_fixture().geometry
-        gray = np.full((100, 310), 255, dtype=np.uint8)
-        gray[20:80, 145:165] = 0
-
-        evidence = photo_content_evidence(
-            geometry,
-            _cache(gray),
-            get_detection_configuration("135", "full").content,
-        )
-
-        self.assertEqual(
-            evidence.observations[0].boundary_traces[-1],
-            PhotoBoundaryContentTrace(
-                BoundarySide.TRAILING,
-                ((20, 80),),
-                4,
-            ),
-        )
-        self.assertEqual(
-            evidence.observations[1].boundary_traces[0],
-            PhotoBoundaryContentTrace(
-                BoundarySide.LEADING,
-                ((20, 80),),
-                4,
-            ),
-        )
-
-    def test_photo_content_threshold_uses_count_independent_holder_region(self) -> None:
-        holder = Box(0, 0, 400, 100)
-        geometry = replace(
-            candidate_fixture().geometry,
-            holder_span=HolderSpan(holder),
-        )
-        cache = _cache(np.full((holder.height, holder.width), 255, dtype=np.uint8))
-
-        photo_content_evidence(
-            geometry,
-            cache,
-            get_detection_configuration("135", "full").content,
-        )
-
-        self.assertEqual(
-            {key.region for key in cache.content_evidence_thresholds},
-            {holder},
-        )
-
-    def test_internal_crossing_requires_one_spatial_track_across_the_boundary(self) -> None:
-        content = _content_at_internal_boundary(
-            ((0, 20),),
-            ((80, 100),),
-        )
-        coverage = PhotoApertureCoverageEvidence(
-            (0, 210),
-            ((0, 100), (110, 210)),
-            ((90, 120),),
+        rows, columns = 60, 310
+        y, x = np.mgrid[:rows, :columns]
+        gray = np.clip(
+            110.0
+            + 30.0 * np.sin(x / 3.0)
+            + 20.0 * np.sin(y / 4.0)
+            + 10.0 * np.sin((x + y) / 2.0),
+            0.0,
+            255.0,
+        ).astype(np.uint8)
+        coverage = FrameCoverageEvidence(
+            (0, columns),
+            ((0, 150), (160, columns)),
+            ((0, columns),),
             0,
         )
-        spacing = InterPhotoSpacing(
-            InterPhotoBoundaryReference(None, 1),
-            PixelInterval.exact(10.0),
-            MeasurementProvenance(
-                MeasurementIdentity.FRAME_GEOMETRY,
-                ObservationId("synthetic_unobserved_spacing"),
-                (MeasurementIdentity.FRAME_DIMENSIONS,),
-                "synthetic spacing hypothesis",
-            ),
-            InterPhotoSpacingBasis.GEOMETRY_HYPOTHESIS,
-        )
+        content_evidence, threshold = _content_measurement(gray)
 
-        evidence = inter_photo_boundary_preservation_evidence(
-            2,
-            _measured_apertures_for_spacing(10.0),
-            (spacing,),
-            content,
+        observations = measure_internal_boundary_content_continuity(
+            geometry.frame_slots,
+            replace(_frame_content(crossing=True), threshold=threshold),
             coverage,
+            content_evidence,
+            gray,
+            image_measurement_statistics(
+                gray,
+                ImageMeasurementStatisticsParameters(),
+            ),
+            ContentConfiguration().evidence,
         )
 
-        self.assertFalse(evidence.observations[0].continuous_content_crossing)
-        self.assertEqual(evidence.state, EvidenceState.UNAVAILABLE)
+        self.assertEqual(observations[0].state, EvidenceState.SUPPORTED)
+        self.assertTrue(observations[0].continuous_content_crossing)
 
-    def test_photo_content_uses_canonical_photo_and_boundary_identities(self) -> None:
-        annotations = get_type_hints(PhotoContentObservation)
-
-        self.assertIn("photo_index", annotations)
-        self.assertNotIn("index", annotations)
-        self.assertNotIn("boundary_contact_sides", annotations)
-        self.assertEqual(
-            annotations["boundary_traces"],
-            tuple[PhotoBoundaryContentTrace, ...],
-        )
-
-    def test_internal_content_crossing_requires_physical_spacing_evidence(self) -> None:
+    def test_low_activity_corridor_is_not_continuous_content(self) -> None:
         geometry = candidate_fixture().geometry
-        crossing = _content_at_internal_boundary(
-            ((20, 80),),
-            ((20, 80),),
+        rows, columns = 60, 310
+        y, x = np.mgrid[:rows, :columns]
+        gray = np.clip(
+            110.0
+            + 30.0 * np.sin(x / 3.0)
+            + 20.0 * np.sin(y / 4.0)
+            + 10.0 * np.sin((x + y) / 2.0),
+            0.0,
+            255.0,
         )
-        boundary = InterPhotoBoundaryReference(None, 1)
-        provenance = MeasurementProvenance(
-            MeasurementIdentity.PHOTO_EDGES,
-            ObservationId("synthetic_spacing"),
-            (MeasurementIdentity.GRAY_WORK,),
-            "synthetic inter-photo spacing",
+        gray[:, 140:170] = 100.0
+        gray = gray.astype(np.uint8)
+        coverage = FrameCoverageEvidence(
+            (0, columns),
+            ((0, 150), (160, columns)),
+            ((0, columns),),
+            0,
         )
-        cases = (
-            (
-                InterPhotoSpacing(
-                    boundary,
-                    PixelInterval.exact(10.0),
-                    provenance,
-                    InterPhotoSpacingBasis.GEOMETRY_HYPOTHESIS,
-                ),
-                EvidenceState.CONTRADICTED,
-            ),
-            (geometry.inter_photo_spacings[0], EvidenceState.SUPPORTED),
-            (
-                InterPhotoSpacing(
-                    boundary,
-                    PixelInterval.exact(0.0),
-                    provenance,
-                    InterPhotoSpacingBasis.OBSERVED,
-                ),
-                EvidenceState.SUPPORTED,
-            ),
-            (
-                InterPhotoSpacing(
-                    boundary,
-                    PixelInterval.exact(-5.0),
-                    provenance,
-                    InterPhotoSpacingBasis.GEOMETRY_HYPOTHESIS,
-                ),
-                EvidenceState.SUPPORTED,
-            ),
-            (
-                InterPhotoSpacing(
-                    boundary,
-                    PixelInterval.exact(-5.0),
-                    provenance,
-                    InterPhotoSpacingBasis.CORROBORATED_OVERLAP,
-                ),
-                EvidenceState.SUPPORTED,
-            ),
-        )
-        for spacing, expected in cases:
-            with self.subTest(basis=spacing.basis):
-                apertures = _measured_apertures_for_spacing(
-                    spacing.signed_width_px.midpoint,
-                )
-                evidence = inter_photo_boundary_preservation_evidence(
-                    2,
-                    apertures,
-                    (spacing,),
-                    crossing,
-                    _coverage_for_apertures(
-                        apertures,
-                        ((90, 120),),
-                    ),
-                )
-                self.assertEqual(evidence.state, expected)
-                if spacing.kind == InterPhotoSpacingKind.OVERLAP:
-                    self.assertEqual(
-                        evidence.observations[0].spacing_evidence.basis,
-                        InterPhotoSpacingBasis.CORROBORATED_OVERLAP,
-                    )
+        content_evidence, threshold = _content_measurement(gray)
 
-    def test_description_text_cannot_create_independent_overlap_evidence(self) -> None:
+        observations = measure_internal_boundary_content_continuity(
+            geometry.frame_slots,
+            replace(_frame_content(crossing=True), threshold=threshold),
+            coverage,
+            content_evidence,
+            gray,
+            image_measurement_statistics(
+                gray,
+                ImageMeasurementStatisticsParameters(),
+            ),
+            ContentConfiguration().evidence,
+        )
+
+        self.assertEqual(observations[0].state, EvidenceState.UNAVAILABLE)
+        self.assertFalse(observations[0].continuous_content_crossing)
+
+    def test_sparse_corridor_noise_does_not_form_a_content_bridge(self) -> None:
         geometry = candidate_fixture().geometry
-        crossing = _content_at_internal_boundary(
-            ((20, 80),),
-            ((20, 80),),
-        )
-        apertures = _measured_apertures_for_spacing(-5.0)
-        shared = ObservationId("shared_boundary_observation")
-        first = replace(
-            apertures[0],
-            trailing=replace(
-                apertures[0].trailing,
-                provenance=replace(
-                    apertures[0].trailing.provenance,
-                    observation_id=shared,
-                    description="left description",
-                ),
-            ),
-        )
-        second = replace(
-            apertures[1],
-            leading=replace(
-                apertures[1].leading,
-                provenance=replace(
-                    apertures[1].leading.provenance,
-                    observation_id=shared,
-                    description="right description",
-                ),
-            ),
-        )
-        spacing = replace(
-            geometry.inter_photo_spacings[0],
-            signed_width_px=PixelInterval.exact(-5.0),
-            basis=InterPhotoSpacingBasis.GEOMETRY_HYPOTHESIS,
+        rows, columns = 60, 310
+        content_evidence = np.zeros((rows, columns), dtype=np.float32)
+        content_evidence[:, 145:150] = 1.0
+        content_evidence[:, 160:165] = 1.0
+        for row in range(rows):
+            content_evidence[row, 150 + row % 10] = 1.0
+        gray = np.full((rows, columns), 100, dtype=np.uint8)
+        coverage = FrameCoverageEvidence(
+            (0, columns),
+            ((0, 150), (160, columns)),
+            ((0, columns),),
+            0,
         )
 
-        evidence = inter_photo_boundary_preservation_evidence(
-            2,
-            (first, second),
-            (spacing,),
-            crossing,
-            _coverage_for_apertures(
-                (first, second),
-                ((90, 110),),
+        observations = measure_internal_boundary_content_continuity(
+            geometry.frame_slots,
+            _frame_content(crossing=True),
+            coverage,
+            content_evidence,
+            gray,
+            image_measurement_statistics(
+                gray,
+                ImageMeasurementStatisticsParameters(),
             ),
+            ContentConfiguration().evidence,
         )
 
-        self.assertEqual(evidence.state, EvidenceState.CONTRADICTED)
+        self.assertEqual(observations[0].state, EvidenceState.UNAVAILABLE)
+        self.assertFalse(observations[0].continuous_content_crossing)
 
-    def test_undersized_sample_cannot_satisfy_content_support(self) -> None:
+    def test_disjoint_track_activity_does_not_form_a_content_bridge(self) -> None:
+        geometry = candidate_fixture().geometry
+        rows, columns = 60, 310
+        content_evidence = np.zeros((rows, columns), dtype=np.float32)
+        for offset, column in enumerate(range(145, 165)):
+            for track_offset in range(4):
+                row = 15 + (offset * 4 + track_offset) % 15
+                content_evidence[row, column] = 1.0
+        gray = np.full((rows, columns), 100, dtype=np.uint8)
+        coverage = FrameCoverageEvidence(
+            (0, columns),
+            ((0, 150), (160, columns)),
+            ((0, columns),),
+            0,
+        )
+
+        observations = measure_internal_boundary_content_continuity(
+            geometry.frame_slots,
+            _frame_content(crossing=True),
+            coverage,
+            content_evidence,
+            gray,
+            image_measurement_statistics(
+                gray,
+                ImageMeasurementStatisticsParameters(),
+            ),
+            ContentConfiguration().evidence,
+        )
+
+        self.assertEqual(observations[0].state, EvidenceState.UNAVAILABLE)
+        self.assertFalse(observations[0].continuous_content_crossing)
+
+    def test_tonal_step_without_content_bridge_is_not_continuous(self) -> None:
+        geometry = candidate_fixture().geometry
+        rows, columns = 60, 310
+        y, x = np.mgrid[:rows, :columns]
+        texture = 20.0 * np.sin(x / 3.0) + 15.0 * np.sin(y / 4.0)
+        gray = np.clip(70.0 + texture, 0.0, 255.0)
+        gray[:, 155:] = np.clip(
+            180.0 + texture[:, 155:],
+            0.0,
+            255.0,
+        )
+        gray = gray.astype(np.uint8)
+        coverage = FrameCoverageEvidence(
+            (0, 310),
+            ((0, 150), (160, 310)),
+            ((0, 310),),
+            0,
+        )
+        content_evidence, threshold = _content_measurement(gray)
+
+        observations = measure_internal_boundary_content_continuity(
+            geometry.frame_slots,
+            replace(_frame_content(crossing=True), threshold=threshold),
+            coverage,
+            content_evidence,
+            gray,
+            image_measurement_statistics(
+                gray,
+                ImageMeasurementStatisticsParameters(),
+            ),
+            ContentConfiguration().evidence,
+        )
+
+        self.assertEqual(observations[0].state, EvidenceState.UNAVAILABLE)
+        self.assertFalse(observations[0].continuous_content_crossing)
+
+    def test_content_inside_endpoint_uncertainty_does_not_cross_interval(
+        self,
+    ) -> None:
+        observation = ContentRegionObservation(
+            Box(0, 0, 1000, 200),
+            ((495, 650),),
+            10,
+        )
+
         self.assertFalse(
-            sample_supports_content(
-                np.ones((1, 1), dtype=np.float32),
-                threshold=0.5,
-                minimum_active_pixels=16,
+            observation.reliable_content_intersects(
+                PixelInterval(0.0, 500.0)
+            )
+        )
+        self.assertTrue(
+            observation.reliable_content_intersects(
+                PixelInterval(0.0, 520.0)
             )
         )
 
-    def test_separated_activity_is_not_a_continuous_boundary_crossing(self) -> None:
-        active = np.zeros((10, 5), dtype=bool)
-        active[0, :] = True
-        active[9, :] = True
+    def test_uniform_film_noise_does_not_create_reliable_content_runs(self) -> None:
+        rng = np.random.default_rng(7)
+        gray = np.clip(
+            24.0 + rng.normal(0.0, 1.0, (200, 1000)),
+            0.0,
+            255.0,
+        ).astype(np.uint8)
+        evidence = make_content_evidence_gray(gray)
 
-        self.assertEqual(
-            _crossing_track_count(
-                active,
-                Box(0, 5, 5, 10),
-                Box(0, 0, 5, 5),
-                BoundarySide.TOP,
-                boundary_halo_px=0,
-            ),
-            0,
+        observation = content_region_observation(
+            evidence,
+            Box(0, 0, 1000, 200),
+            content_configuration=ContentConfiguration(),
         )
 
-    def test_perpendicular_corner_edge_is_not_a_side_crossing(self) -> None:
-        active = np.zeros((20, 20), dtype=bool)
-        active[:, 5] = True
-        aperture = _single_aperture_geometry(
-            Box(5, 5, 15, 15)
-        ).photo_apertures[0]
-        aperture = replace(
-            aperture,
-            leading=replace(
-                aperture.leading,
-                position=PixelInterval(5.0, 8.0),
-            ),
-        )
-        inside, outside = _boundary_regions(
-            aperture,
-            BoundarySide.BOTTOM,
-            2,
-            Box(0, 0, 20, 20),
-        )
-        assert outside is not None
+        self.assertEqual(observation.reliable_runs, ())
 
-        self.assertEqual(inside.left, 10)
+    def test_coherent_photo_texture_remains_visible_content(self) -> None:
+        rng = np.random.default_rng(11)
+        gray = np.full((200, 1000), 24, dtype=np.uint8)
+        gray[:, 700:900] = rng.integers(
+            40,
+            220,
+            size=(200, 200),
+            dtype=np.uint8,
+        )
+        evidence = make_content_evidence_gray(gray)
 
-        self.assertEqual(
-            _crossing_track_count(
-                active,
-                inside,
-                outside,
-                BoundarySide.BOTTOM,
-                boundary_halo_px=0,
-            ),
-            0,
+        observation = content_region_observation(
+            evidence,
+            Box(0, 0, 1000, 200),
+            content_configuration=ContentConfiguration(),
         )
 
-    def test_content_evidence_boundary_halo_is_not_a_crossing(self) -> None:
-        active = np.zeros((10, 5), dtype=bool)
-        active[4:6, :] = True
-
-        self.assertEqual(
-            _crossing_track_count(
-                active,
-                Box(0, 5, 5, 10),
-                Box(0, 0, 5, 5),
-                BoundarySide.TOP,
-                boundary_halo_px=1,
-            ),
-            0,
+        self.assertTrue(
+            any(start < 800 < end for start, end in observation.reliable_runs),
+            observation.reliable_runs,
         )
 
-    def test_external_content_crossing_is_not_silently_accepted(self) -> None:
-        evidence = candidate_evidence_fixture()
-        crossing = external_aperture_preservation_evidence(
-            _single_aperture_geometry(
-                Box(250, 20, 650, 100),
-                measured_boundaries=False,
-            ),
-            _cache(
-                np.pad(
-                    np.zeros((80, 420), dtype=np.uint8),
-                    ((20, 20), (240, 240)),
-                    constant_values=255,
-                )
-            ),
-            get_detection_configuration("120-645", "full").content.evidence,
+    def test_strip_wide_two_dimensional_texture_is_reliable_content(self) -> None:
+        rng = np.random.default_rng(17)
+        gray = np.full((200, 1000), 24, dtype=np.uint8)
+        frame_intervals = (
+            (20, 170),
+            (180, 330),
+            (340, 490),
+            (500, 650),
+            (660, 810),
+            (820, 970),
         )
-        self.assertEqual(crossing.state, EvidenceState.CONTRADICTED)
-        self.assertEqual(
-            content_preservation_state(
-                evidence.photo_aperture_coverage,
-                evidence.inter_photo_boundary_preservation,
-                crossing,
-                evidence.partial_edge_safety,
-            ),
-            EvidenceState.CONTRADICTED,
+        for start, end in frame_intervals:
+            gray[:, start:end] = rng.integers(
+                40,
+                220,
+                size=(200, end - start),
+                dtype=np.uint8,
+            )
+        evidence = make_content_evidence_gray(gray)
+
+        observation = content_region_observation(
+            evidence,
+            Box(0, 0, 1000, 200),
+            content_configuration=ContentConfiguration(),
         )
 
-    def test_external_preservation_keeps_each_photo_cross_axis_edges(self) -> None:
-        geometry = candidate_fixture().geometry
-        preservation = external_aperture_preservation_evidence(
-            geometry,
-            _cache(np.full((100, 310), 255, dtype=np.uint8)),
-            get_detection_configuration("135", "full").content.evidence,
-        )
-
-        self.assertEqual(
-            tuple(
-                (item.photo_index, item.side)
-                for item in preservation.observations
-            ),
-            (
-                (1, BoundarySide.LEADING),
-                (1, BoundarySide.TOP),
-                (1, BoundarySide.BOTTOM),
-                (2, BoundarySide.TOP),
-                (2, BoundarySide.BOTTOM),
-                (2, BoundarySide.TRAILING),
-            ),
-        )
-
-    def test_empty_aperture_is_not_content_damage(self) -> None:
-        geometry = candidate_fixture().geometry
-        gray = np.full((100, 310), 255, dtype=np.uint8)
-        gray[10:90, 170:300] = 0
-        evidence = photo_content_evidence(
-            geometry,
-            _cache(gray),
-            get_detection_configuration("135", "full").content,
-        )
-        self.assertNotEqual(evidence.state, EvidenceState.CONTRADICTED)
-        self.assertFalse(evidence.observations[0].content_present)
-        self.assertTrue(evidence.observations[1].content_present)
-
-    def test_measured_aperture_content_conflict_blocks_candidate_gate(self) -> None:
-        gray = np.full((120, 900), 255, dtype=np.uint8)
-        gray[20:100, 50:850] = 0
-        geometry = _single_aperture_geometry(Box(250, 0, 650, 120))
-
-        preservation = external_aperture_preservation_evidence(
-            geometry,
-            _cache(gray),
-            get_detection_configuration("120-645", "full").content.evidence,
-        )
-
-        self.assertEqual(preservation.state, EvidenceState.CONTRADICTED)
-        self.assertEqual(
-            preservation.reason,
-            "visible_content_crosses_external_aperture",
-        )
-        evidence = candidate_evidence_fixture()
-        preservation_state = content_preservation_state(
-            evidence.photo_aperture_coverage,
-            evidence.inter_photo_boundary_preservation,
-            preservation,
-            evidence.partial_edge_safety,
-        )
-        self.assertEqual(preservation_state, EvidenceState.CONTRADICTED)
-        gate = candidate_gate_assessment(
-            CandidateGateInput(
-                content_preservation=preservation_state,
-                photo_geometry=EvidenceState.SUPPORTED,
-                evidence_independence=EvidenceState.SUPPORTED,
-                proof_paths=(
-                    BoundaryProofPath(
-                        "separator_sequence_led",
-                        EvidenceState.SUPPORTED,
-                        ("synthetic_separator_sequence",),
-                    ),
-                    BoundaryProofPath(
-                        "geometry_led",
-                        EvidenceState.UNAVAILABLE,
-                        ("synthetic_photo_dimensions",),
-                    ),
-                    BoundaryProofPath(
-                        "partial_occupancy_led",
-                        EvidenceState.NOT_APPLICABLE,
-                        ("synthetic_full_strip",),
-                    ),
+        for start, end in frame_intervals:
+            center = (start + end) // 2
+            self.assertTrue(
+                any(
+                    run_start < center < run_end
+                    for run_start, run_end in observation.reliable_runs
                 ),
+                (center, observation.reliable_runs),
             )
+
+    def test_flat_interval_between_textured_frames_is_not_reliable_content(
+        self,
+    ) -> None:
+        rng = np.random.default_rng(23)
+        gray = np.full((200, 1000), 24, dtype=np.uint8)
+        gray[:, 40:360] = rng.integers(
+            40,
+            220,
+            size=(200, 320),
+            dtype=np.uint8,
         )
-        self.assertFalse(gate.passed)
-        self.assertEqual(gate.failed_checks, ("content_preservation",))
-        self.assertEqual(geometry.photo_apertures[0].frame_crop_envelope.box, Box(250, 0, 650, 120))
+        gray[:, 640:960] = rng.integers(
+            40,
+            220,
+            size=(200, 320),
+            dtype=np.uint8,
+        )
+        evidence = make_content_evidence_gray(gray)
 
-    def test_single_noise_pixel_cannot_contradict_external_aperture(self) -> None:
-        gray = np.full((120, 900), 255, dtype=np.uint8)
-        gray[20:100, 250:650] = 0
-        gray[0, 0] = 0
-        geometry = _single_aperture_geometry(Box(250, 20, 650, 100))
-
-        preservation = external_aperture_preservation_evidence(
-            geometry,
-            _cache(gray),
-            get_detection_configuration("120-645", "full").content.evidence,
+        observation = content_region_observation(
+            evidence,
+            Box(0, 0, 1000, 200),
+            content_configuration=ContentConfiguration(),
         )
 
-        self.assertNotEqual(preservation.state, EvidenceState.CONTRADICTED)
+        self.assertTrue(
+            any(start < 200 < end for start, end in observation.reliable_runs),
+            observation.reliable_runs,
+        )
+        self.assertFalse(
+            any(start < 500 < end for start, end in observation.reliable_runs),
+            observation.reliable_runs,
+        )
+        self.assertTrue(
+            any(start < 800 < end for start, end in observation.reliable_runs),
+            observation.reliable_runs,
+        )
 
-    def test_content_run_smoothing_uncertainty_can_span_a_separator(self) -> None:
-        coverage = PhotoApertureCoverageEvidence(
+    def test_underexposed_trailing_photo_remains_content_guidance(self) -> None:
+        rng = np.random.default_rng(19)
+        gray = np.full((200, 1000), 24, dtype=np.uint8)
+        for start, end in (
+            (20, 170),
+            (180, 330),
+            (340, 490),
+            (500, 650),
+            (660, 810),
+        ):
+            gray[:, start:end] = rng.integers(
+                40,
+                220,
+                size=(200, end - start),
+                dtype=np.uint8,
+            )
+        gray[:, 820:970] = rng.integers(
+            24,
+            80,
+            size=(200, 150),
+            dtype=np.uint8,
+        )
+        evidence = make_content_evidence_gray(gray)
+
+        observation = content_region_observation(
+            evidence,
+            Box(0, 0, 1000, 200),
+            content_configuration=ContentConfiguration(),
+        )
+
+        self.assertFalse(
+            any(start < 895 < end for start, end in observation.reliable_runs),
+            observation.reliable_runs,
+        )
+        self.assertTrue(
+            any(start < 895 < end for start, end in observation.guidance_runs),
+            observation.guidance_runs,
+        )
+
+    def test_one_dimensional_material_transition_is_not_photo_content(self) -> None:
+        gray = np.full((200, 1000), 24, dtype=np.uint8)
+        gray[:, 500:] = 220
+        evidence = make_content_evidence_gray(gray)
+
+        observation = content_region_observation(
+            evidence,
+            Box(0, 0, 1000, 200),
+            content_configuration=ContentConfiguration(),
+        )
+
+        self.assertEqual(observation.reliable_runs, ())
+
+    def test_one_dimensional_film_streaks_are_not_reliable_photo_content(
+        self,
+    ) -> None:
+        gray = np.full((200, 1000), 24, dtype=np.uint8)
+        for position in range(450, 550, 4):
+            gray[:, position : position + 2] = 220
+        evidence = make_content_evidence_gray(gray)
+
+        observation = content_region_observation(
+            evidence,
+            Box(0, 0, 1000, 200),
+            content_configuration=ContentConfiguration(),
+        )
+
+        self.assertEqual(observation.reliable_runs, ())
+
+    def test_sparse_film_defects_remain_guidance_beside_strong_photo_texture(
+        self,
+    ) -> None:
+        rng = np.random.default_rng(19)
+        gray = np.full((200, 1000), 24, dtype=np.uint8)
+        film_transition = np.tile(
+            np.linspace(200, 24, 400, dtype=np.float32),
+            (200, 1),
+        )
+        defects = rng.random((200, 400)) < 0.08
+        film_transition[defects] = rng.integers(
+            0,
+            256,
+            int(np.count_nonzero(defects)),
+        )
+        gray[:, :400] = np.clip(film_transition, 0, 255).astype(np.uint8)
+        gray[:, 400:] = rng.integers(
+            40,
+            220,
+            size=(200, 600),
+            dtype=np.uint8,
+        )
+
+        observation = content_region_observation(
+            make_content_evidence_gray(gray),
+            Box(0, 0, 1000, 200),
+            content_configuration=ContentConfiguration(),
+        )
+
+        self.assertFalse(
+            any(start < 300 < end for start, end in observation.reliable_runs),
+            observation.reliable_runs,
+        )
+        self.assertTrue(
+            any(start < 300 < end for start, end in observation.guidance_runs),
+            observation.guidance_runs,
+        )
+
+    def test_content_run_must_exceed_smoothing_endpoint_uncertainty(self) -> None:
+        rng = np.random.default_rng(13)
+        gray = np.full((200, 1000), 24, dtype=np.uint8)
+        gray[:, 500:540] = rng.integers(
+            40,
+            220,
+            size=(200, 40),
+            dtype=np.uint8,
+        )
+        evidence = make_content_evidence_gray(gray)
+        configuration = replace(
+            ContentConfiguration(),
+            profile=replace(
+                ContentConfiguration().profile,
+                smooth_ratio=0.1,
+            ),
+        )
+
+        observation = content_region_observation(
+            evidence,
+            Box(0, 0, 1000, 200),
+            content_configuration=configuration,
+        )
+
+        self.assertEqual(observation.reliable_runs, ())
+
+    def test_missing_content_is_unavailable_not_blank_support(self) -> None:
+        evidence = FrameContentEvidence(None, (), "content_evidence_unavailable")
+
+        self.assertEqual(evidence.state, EvidenceState.UNAVAILABLE)
+        self.assertFalse(evidence.support_available)
+
+    def test_frame_coverage_rejects_reliable_content_outside_all_slots(self) -> None:
+        coverage = FrameCoverageEvidence(
+            holder_long_axis_interval=(0, 400),
+            frame_slot_intervals=((0, 100), (120, 220)),
+            content_runs=((10, 90), (260, 320)),
+            content_position_uncertainty_px=0,
+        )
+
+        self.assertEqual(coverage.state, EvidenceState.CONTRADICTED)
+        self.assertEqual(coverage.uncovered_content, ((260, 320),))
+
+    def test_overlapping_frame_slots_can_cover_visible_content(self) -> None:
+        coverage = FrameCoverageEvidence(
             holder_long_axis_interval=(0, 310),
-            photo_aperture_intervals=((0, 150), (160, 310)),
-            content_runs=((25, 285),),
-            content_position_uncertainty_px=5,
+            frame_slot_intervals=((0, 160), (150, 310)),
+            content_runs=((10, 300),),
+            content_position_uncertainty_px=0,
+        )
+
+        self.assertEqual(coverage.state, EvidenceState.SUPPORTED)
+
+    def test_one_dimensional_content_run_cannot_reject_internal_spacing(
+        self,
+    ) -> None:
+        coverage = FrameCoverageEvidence(
+            holder_long_axis_interval=(0, 310),
+            frame_slot_intervals=((0, 150), (160, 310)),
+            content_runs=((10, 300),),
+            content_position_uncertainty_px=0,
         )
 
         self.assertEqual(coverage.state, EvidenceState.SUPPORTED)
         self.assertEqual(coverage.uncovered_content, ())
 
-    def test_content_between_apertures_is_not_covered_by_their_outer_envelope(
+    def test_observed_separator_explains_internal_boundary(self) -> None:
+        geometry = candidate_fixture().geometry
+        coverage = FrameCoverageEvidence(
+            (0, 310),
+            ((0, 150), (160, 310)),
+            ((0, 310),),
+            0,
+        )
+
+        evidence = internal_frame_boundary_preservation_evidence(
+            geometry.frame_slots,
+            geometry.inter_frame_spacings,
+            _content_continuity(crossing=True),
+        )
+
+        self.assertEqual(evidence.state, EvidenceState.SUPPORTED)
+
+    def test_positive_spacing_hypothesis_cannot_justify_cutting_continuous_content(
         self,
     ) -> None:
-        coverage = PhotoApertureCoverageEvidence(
-            holder_long_axis_interval=(0, 1000),
-            photo_aperture_intervals=((0, 100), (900, 1000)),
-            content_runs=((200, 800),),
-            content_position_uncertainty_px=5,
+        geometry = candidate_fixture().geometry
+        spacing = InterFrameSpacing(
+            InterFrameBoundaryReference(None, 1),
+            PixelInterval.exact(10.0),
+            _provenance("spacing_hypothesis"),
+            InterFrameSpacingBasis.GEOMETRY_HYPOTHESIS,
+        )
+        coverage = FrameCoverageEvidence(
+            (0, 310),
+            ((0, 150), (160, 310)),
+            ((0, 310),),
+            0,
         )
 
-        self.assertEqual(coverage.state, EvidenceState.CONTRADICTED)
-        self.assertEqual(coverage.uncovered_content, ((200, 800),))
-
-    def test_overlapping_photo_apertures_are_valid_sequence_coverage(self) -> None:
-        coverage = PhotoApertureCoverageEvidence(
-            holder_long_axis_interval=(0, 310),
-            photo_aperture_intervals=((0, 160), (150, 310)),
-            content_runs=((25, 285),),
-            content_position_uncertainty_px=0,
+        evidence = internal_frame_boundary_preservation_evidence(
+            geometry.frame_slots,
+            (spacing,),
+            _content_continuity(crossing=True),
         )
 
-        self.assertEqual(coverage.state, EvidenceState.SUPPORTED)
+        self.assertEqual(evidence.state, EvidenceState.CONTRADICTED)
+        self.assertEqual(
+            evidence.observations[0].reason,
+            "internal_boundary_cuts_continuous_content",
+        )
+
+    def test_geometry_hypothesis_without_crossing_remains_unavailable(self) -> None:
+        geometry = candidate_fixture().geometry
+        spacing = InterFrameSpacing(
+            InterFrameBoundaryReference(None, 1),
+            PixelInterval.exact(10.0),
+            _provenance("spacing_hypothesis"),
+            InterFrameSpacingBasis.GEOMETRY_HYPOTHESIS,
+        )
+        coverage = FrameCoverageEvidence(
+            (0, 310),
+            ((0, 150), (160, 310)),
+            ((10, 140), (170, 300)),
+            0,
+        )
+
+        evidence = internal_frame_boundary_preservation_evidence(
+            geometry.frame_slots,
+            (spacing,),
+            _content_continuity(crossing=False),
+        )
+
+        self.assertEqual(evidence.state, EvidenceState.UNAVAILABLE)
+        self.assertEqual(
+            evidence.observations[0].reason,
+            "internal_frame_boundary_preservation_unresolved",
+        )
+
+    def test_unresolved_spacing_hypothesis_cannot_justify_cutting_content(
+        self,
+    ) -> None:
+        geometry = candidate_fixture().geometry
+        spacing = InterFrameSpacing(
+            InterFrameBoundaryReference(None, 1),
+            PixelInterval(-5.0, 10.0),
+            _provenance("unresolved_spacing_hypothesis"),
+            InterFrameSpacingBasis.GEOMETRY_HYPOTHESIS,
+        )
+        coverage = FrameCoverageEvidence(
+            (0, 310),
+            ((0, 150), (145, 310)),
+            ((0, 310),),
+            0,
+        )
+
+        evidence = internal_frame_boundary_preservation_evidence(
+            geometry.frame_slots,
+            (spacing,),
+            _content_continuity(crossing=True),
+        )
+
+        self.assertEqual(evidence.state, EvidenceState.CONTRADICTED)
+        self.assertEqual(
+            evidence.observations[0].reason,
+            "internal_boundary_cuts_continuous_content",
+        )
+
+    def test_independent_content_tracks_can_corroborate_measured_overlap(self) -> None:
+        geometry = candidate_fixture().geometry
+        left, right = geometry.frame_slots
+        left_provenance = MeasurementProvenance(
+            MeasurementIdentity.BOUNDARY_PATHS,
+            ObservationId("left_overlap_edge"),
+            (MeasurementIdentity.GRAY_WORK,),
+            "left measured overlap edge",
+        )
+        right_provenance = MeasurementProvenance(
+            MeasurementIdentity.BOUNDARY_PATHS,
+            ObservationId("right_overlap_edge"),
+            (MeasurementIdentity.GRAY_WORK,),
+            "right measured overlap edge",
+        )
+        left_path = boundary_path_fixture(
+            BoundarySide.TRAILING,
+            PixelInterval.exact(165.0),
+            BoundaryKind.TONAL_TRANSITION,
+            left_provenance,
+        )
+        right_path = boundary_path_fixture(
+            BoundarySide.LEADING,
+            PixelInterval.exact(155.0),
+            BoundaryKind.TONAL_TRANSITION,
+            right_provenance,
+        )
+        overlapped_left = replace(
+            left,
+            trailing=replace(
+                left.trailing,
+                position=PixelInterval.exact(165.0),
+                source=FrameBoundarySource.GRAY_PATH_OBSERVATION,
+                boundary_anchor=BoundaryAnchor(
+                    left_path,
+                    BoundarySide.TRAILING,
+                    EvidenceState.SUPPORTED,
+                    BoundaryRoleAuthority.DIRECT_MEASUREMENT,
+                    left_provenance,
+                ),
+                inference_provenance=None,
+            ),
+            visible_long_axis=PixelInterval(0.0, 165.0),
+        )
+        overlapped_right = replace(
+            right,
+            leading=replace(
+                right.leading,
+                position=PixelInterval.exact(155.0),
+                source=FrameBoundarySource.GRAY_PATH_OBSERVATION,
+                boundary_anchor=BoundaryAnchor(
+                    right_path,
+                    BoundarySide.LEADING,
+                    EvidenceState.SUPPORTED,
+                    BoundaryRoleAuthority.DIRECT_MEASUREMENT,
+                    right_provenance,
+                ),
+                inference_provenance=None,
+            ),
+            visible_long_axis=PixelInterval(155.0, 310.0),
+        )
+        spacing = InterFrameSpacing(
+            InterFrameBoundaryReference(None, 1),
+            PixelInterval.exact(-10.0),
+            _provenance("overlap_hypothesis"),
+            InterFrameSpacingBasis.GEOMETRY_HYPOTHESIS,
+        )
+        coverage = FrameCoverageEvidence(
+            (0, 310),
+            ((0, 165), (155, 310)),
+            ((0, 310),),
+            0,
+        )
+
+        evidence = internal_frame_boundary_preservation_evidence(
+            (overlapped_left, overlapped_right),
+            (spacing,),
+            _content_continuity(crossing=True),
+        )
+
+        measured = evidence.observations[0].spacing_evidence
+        self.assertEqual(measured.basis, InterFrameSpacingBasis.CORROBORATED_OVERLAP)
+        self.assertTrue(measured.supports_output_protection)
+
+    def test_blank_boundary_crossing_is_identified_as_inferred_geometry(self) -> None:
+        observation = ExternalFrameBoundaryObservation(
+            frame_index=1,
+            side=BoundarySide.LEADING,
+            boundary_basis=FrameBoundarySource.SEQUENCE_INFERENCE,
+            inside_region=Box(10, 0, 20, 20),
+            outside_region=Box(0, 0, 10, 20),
+            active_inside_pixels=20,
+            active_outside_pixels=20,
+            crossing_track_count=10,
+            minimum_active_pixels=1,
+            minimum_crossing_tracks=1,
+            long_axis_content_spans_boundary=True,
+        )
+
+        self.assertEqual(observation.state, EvidenceState.CONTRADICTED)
+        self.assertEqual(
+            observation.reason,
+            "continuous_content_crosses_inferred_frame_boundary",
+        )
+
+    def test_local_activation_without_content_run_does_not_prove_undercrop(
+        self,
+    ) -> None:
+        observation = ExternalFrameBoundaryObservation(
+            frame_index=1,
+            side=BoundarySide.LEADING,
+            boundary_basis=FrameBoundarySource.GRAY_PATH_OBSERVATION,
+            inside_region=Box(10, 0, 20, 20),
+            outside_region=Box(0, 0, 10, 20),
+            active_inside_pixels=20,
+            active_outside_pixels=20,
+            crossing_track_count=10,
+            minimum_active_pixels=1,
+            minimum_crossing_tracks=1,
+            long_axis_content_spans_boundary=False,
+        )
+
+        self.assertFalse(observation.content_crossing_detected)
+        self.assertEqual(observation.state, EvidenceState.UNAVAILABLE)
 
 
 if __name__ == "__main__":

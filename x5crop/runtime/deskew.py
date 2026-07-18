@@ -18,6 +18,7 @@ from ..image.deskew import (
 from ..image.evidence import make_deskew_fallback_gray
 from ..image.gray import make_base_gray_u8
 from ..image.transforms import (
+    BILINEAR_INTERPOLATION_POSITION_UNCERTAINTY_PX,
     photometric_background_value,
     rotate_array_expand,
 )
@@ -105,6 +106,7 @@ def apply_deskew(
                 estimated_angle_degrees=0.0,
                 span_px=None,
                 span_threshold_px=None,
+                position_uncertainty_px=0.0,
             ),
         )
 
@@ -139,6 +141,17 @@ def apply_deskew(
         warnings.append(f"deskew applied: {-angle:.4f} degrees")
     else:
         outcome = TransformOutcome.ANGLE_OUT_OF_RANGE
+    fit_residuals = tuple(
+        fit.median_residual
+        for fit in (measurement.top_fit, measurement.bottom_fit)
+        if fit is not None
+    )
+    transform_position_uncertainty_px = (
+        BILINEAR_INTERPOLATION_POSITION_UNCERTAINTY_PX
+        + max(fit_residuals, default=0.0)
+        if outcome == TransformOutcome.APPLIED
+        else 0.0
+    )
     return PreparedWorkspace(
         pixels=arr,
         gray=gray,
@@ -147,6 +160,7 @@ def apply_deskew(
             estimated_angle_degrees=float(angle),
             span_px=float(deskew_span),
             span_threshold_px=float(deskew_span_threshold),
+            position_uncertainty_px=float(transform_position_uncertainty_px),
             measurement_outcome=measurement.outcome,
         ),
     )

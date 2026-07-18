@@ -32,8 +32,8 @@ class DetectionConfigurationBundle:
     ) -> "DetectionConfigurationBundle":
         initial = get_detection_configuration(format_id, strip_mode)
         configurations = [initial]
-        if initial.physical_spec.physical_layout == "dual_lane":
-            lane_format_id = initial.physical_spec.lane_format_id
+        if initial.physical_spec.layout.kind == "dual_lane":
+            lane_format_id = initial.physical_spec.layout.lane_format_id
             if lane_format_id is None:
                 raise ValueError(
                     f"Dual-lane format {format_id} has no lane format"

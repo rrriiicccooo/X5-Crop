@@ -9,6 +9,7 @@ from ..utils import spatial_shape
 
 ROTATION_IDENTITY_EPSILON_DEGREES = 1e-9
 ROTATION_ROW_CHUNK_SIZE = 256
+BILINEAR_INTERPOLATION_POSITION_UNCERTAINTY_PX = 1.0
 
 
 def _dtype_limits(dtype: np.dtype) -> tuple[int, int] | None:

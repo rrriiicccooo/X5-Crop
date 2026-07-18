@@ -16,7 +16,8 @@ from tools.tests.physical_gate_support import (
 from x5crop.detection.decision.decision_gate import apply_decision_gate
 from x5crop.detection.decision.vocabulary import (
     FINAL_REASON_AUTOMATIC_PROCESSING_NOT_SUPPORTED,
-    FINAL_REASON_BOUNDARY_EVIDENCE_INSUFFICIENT,
+    FINAL_REASON_COUNT_RESOLUTION_UNAVAILABLE,
+    FINAL_REASON_SEQUENCE_EVIDENCE_INSUFFICIENT,
     FINAL_REASON_CONTENT_PRESERVATION_UNRESOLVED,
     FINAL_REASON_GEOMETRY_RESOLUTION_UNAVAILABLE,
     FINAL_REASON_OUTPUT_PROTECTION_UNRESOLVED,
@@ -75,16 +76,31 @@ class DecisionOwnershipGateContractTest(unittest.TestCase):
         self.assertEqual(decided.status, "approved_auto")
         self.assertEqual(decided.final_review_reasons, ())
 
-    def test_missing_boundary_proof_has_one_reason(self) -> None:
+    def test_missing_sequence_proof_has_one_reason(self) -> None:
         decided = decide_candidate(
             candidate_fixture(
-                failed_candidate_check="boundary_proof",
+                failed_candidate_check="sequence_proof",
             )
         )
         self.assertEqual(
             decided.final_review_reasons,
-            (FINAL_REASON_BOUNDARY_EVIDENCE_INSUFFICIENT,),
+            (FINAL_REASON_SEQUENCE_EVIDENCE_INSUFFICIENT,),
         )
+
+    def test_decision_preserves_unavailable_required_candidate_evidence(self) -> None:
+        decided = decide_candidate(
+            candidate_fixture(
+                failed_candidate_check="sequence_proof",
+            )
+        )
+        check = next(
+            item
+            for item in decided.checks
+            if item.code == "candidate_sequence_proof"
+        )
+        self.assertEqual(check.state, EvidenceState.UNAVAILABLE)
+        self.assertEqual(check.requirement.value, "supported_required")
+        self.assertTrue(check.blocks)
 
     def test_confirmed_undercrop_blocks(self) -> None:
         decided = decide_candidate(
@@ -129,7 +145,7 @@ class DecisionOwnershipGateContractTest(unittest.TestCase):
         unresolved = (
             replace(
                 base.geometry_resolution,
-                assignment_geometry_resolved=False,
+                assignment_consensus_resolved=False,
             ),
             replace(
                 base.geometry_resolution,
@@ -147,6 +163,7 @@ class DecisionOwnershipGateContractTest(unittest.TestCase):
                     replace(base, geometry_resolution=resolution),
                     frame_bleed_fixture(),
                     transform_geometry_fixture(),
+                    automatic_processing_eligibility=EvidenceState.SUPPORTED,
                 )
                 self.assertEqual(decided.status, "needs_review")
                 self.assertIn(
@@ -176,9 +193,27 @@ class DecisionOwnershipGateContractTest(unittest.TestCase):
 
     def test_review_only_mode_blocks_automatic_processing(self) -> None:
         decided = decide_candidate(
-            review_only_candidate_fixture()
+            review_only_candidate_fixture(),
+            automatic_processing_eligible=False,
         )
         self.assertIn(
+            FINAL_REASON_AUTOMATIC_PROCESSING_NOT_SUPPORTED,
+            decided.final_review_reasons,
+        )
+
+    def test_standard_mode_unresolved_geometry_is_not_review_only(self) -> None:
+        selection = selection_fixture(review_only_candidate_fixture())
+        decided = apply_decision_gate(
+            selection,
+            frame_bleed_fixture(),
+            transform_geometry_fixture(),
+            automatic_processing_eligibility=EvidenceState.SUPPORTED,
+        )
+        self.assertIn(
+            FINAL_REASON_COUNT_RESOLUTION_UNAVAILABLE,
+            decided.final_review_reasons,
+        )
+        self.assertNotIn(
             FINAL_REASON_AUTOMATIC_PROCESSING_NOT_SUPPORTED,
             decided.final_review_reasons,
         )

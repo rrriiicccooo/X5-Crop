@@ -2,35 +2,51 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ..domain import Box
+from ..domain import Box, PixelInterval
 
 
 @dataclass(frozen=True)
 class ContentRegionObservation:
     region: Box
-    runs: tuple[tuple[int, int], ...]
+    reliable_runs: tuple[tuple[int, int], ...]
     position_uncertainty_px: int
+    guidance_runs: tuple[tuple[int, int], ...] = ()
 
     def __post_init__(self) -> None:
         if not self.region.valid():
             raise ValueError("content observation region must have positive extent")
         if self.position_uncertainty_px < 0:
             raise ValueError("content position uncertainty must be non-negative")
-        if any(
-            not self.region.left <= start < end <= self.region.right
-            for start, end in self.runs
+        for name, runs in (
+            ("reliable", self.reliable_runs),
+            ("guidance", self.guidance_runs),
         ):
-            raise ValueError("content runs must fit their measurement region")
+            if any(
+                not self.region.left <= start < end <= self.region.right
+                for start, end in runs
+            ):
+                raise ValueError(
+                    f"{name} content runs must fit their measurement region"
+                )
 
     def uncovered_by(
         self,
         intervals: tuple[tuple[int, int], ...],
     ) -> tuple[tuple[int, int], ...]:
         return uncovered_content_runs(
-            self.runs,
+            self.reliable_runs,
             intervals,
             position_uncertainty_px=self.position_uncertainty_px,
             bounds=(self.region.left, self.region.right),
+        )
+
+    def reliable_content_intersects(self, interval: PixelInterval) -> bool:
+        uncertainty = self.position_uncertainty_px
+        return any(
+            float(start + uncertainty) < interval.maximum
+            and float(end - uncertainty) > interval.minimum
+            for start, end in self.reliable_runs
+            if start + uncertainty < end - uncertainty
         )
 
 

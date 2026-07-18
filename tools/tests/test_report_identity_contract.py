@@ -64,7 +64,12 @@ class ReportIdentityContractTest(unittest.TestCase):
         frame_bleed = frame_bleed_fixture()
         transform = transform_geometry_fixture(EvidenceState.SUPPORTED)
         final_detection = finalize_detection(
-            apply_decision_gate(selection, frame_bleed, transform),
+            apply_decision_gate(
+                selection,
+                frame_bleed,
+                transform,
+                automatic_processing_eligibility=EvidenceState.SUPPORTED,
+            ),
             frame_bleed,
             finalization_plan_for_selection(
                 selection,
@@ -81,7 +86,7 @@ class ReportIdentityContractTest(unittest.TestCase):
             review_copy=None,
             warnings=[],
             configuration=detection_configuration_read_model(
-                get_detection_configuration("135", "full")
+                get_detection_configuration("135", "partial")
             ),
             resolution_metadata=unavailable_resolution_metadata_fixture(),
             transform_geometry=transform,
@@ -119,7 +124,12 @@ class ReportIdentityContractTest(unittest.TestCase):
         frame_bleed = frame_bleed_fixture()
         transform = transform_geometry_fixture(EvidenceState.CONTRADICTED)
         final_detection = finalize_detection(
-            apply_decision_gate(selection, frame_bleed, transform),
+            apply_decision_gate(
+                selection,
+                frame_bleed,
+                transform,
+                automatic_processing_eligibility=EvidenceState.SUPPORTED,
+            ),
             frame_bleed,
             finalization_plan_for_selection(
                 selection,
@@ -136,7 +146,7 @@ class ReportIdentityContractTest(unittest.TestCase):
             review_copy=None,
             warnings=[],
             configuration=detection_configuration_read_model(
-                get_detection_configuration("135", "full")
+                get_detection_configuration("135", "partial")
             ),
             resolution_metadata=unavailable_resolution_metadata_fixture(),
             transform_geometry=transform,
@@ -193,31 +203,29 @@ class ReportIdentityContractTest(unittest.TestCase):
 
         self.assertTrue(current_report_record_errors(record))
 
-    def test_current_schema_rejects_photo_interval_geometry_drift(self) -> None:
+    def test_current_schema_rejects_frame_slot_geometry_drift(self) -> None:
         record = _record()
         interval = record["selection"]["candidates"][0]["provisional_geometry"][
-            "photo_apertures"
+            "frame_slots"
         ][0]["leading"]["position"]
         interval["minimum"] += 10.0
         interval["maximum"] += 10.0
 
-        self.assertIn(
-            "record_identity_mismatch",
-            current_report_record_errors(record),
-        )
+        errors = current_report_record_errors(record)
+        self.assertTrue(errors)
+        self.assertIn("runtime_facts_fingerprint_mismatch", errors)
 
-    def test_current_schema_binds_dimension_evidence_to_photo_intervals(self) -> None:
+    def test_current_schema_binds_dimension_evidence_to_frame_slots(self) -> None:
         record = _record()
         interval = record["selection"]["candidates"][0]["provisional_geometry"][
-            "photo_apertures"
+            "frame_slots"
         ][0]["trailing"]["position"]
         interval["minimum"] = 140.0
         interval["maximum"] = 140.0
 
-        self.assertIn(
-            "record_identity_mismatch",
-            current_report_record_errors(record),
-        )
+        errors = current_report_record_errors(record)
+        self.assertTrue(errors)
+        self.assertIn("runtime_facts_fingerprint_mismatch", errors)
 
 
 if __name__ == "__main__":

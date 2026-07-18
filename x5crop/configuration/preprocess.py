@@ -4,7 +4,6 @@ from dataclasses import dataclass, field
 
 from ..image.deskew_parameters import DeskewParameters
 from ..image.evidence import (
-    ContentEvidenceImageParameters,
     DeskewFallbackEvidenceParameters,
 )
 from ..image.gray import BaseGrayParameters
@@ -17,9 +16,6 @@ class PreprocessConfiguration:
     deskew: DeskewParameters = field(default_factory=DeskewParameters)
     deskew_fallback_evidence: DeskewFallbackEvidenceParameters = field(
         default_factory=DeskewFallbackEvidenceParameters
-    )
-    content_evidence_image: ContentEvidenceImageParameters = field(
-        default_factory=ContentEvidenceImageParameters
     )
     image_statistics: ImageMeasurementStatisticsParameters = field(
         default_factory=ImageMeasurementStatisticsParameters
