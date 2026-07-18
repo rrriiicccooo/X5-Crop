@@ -88,6 +88,37 @@ class FrameSequenceConsensusContractTest(unittest.TestCase):
         self.assertEqual(consensus.state, EvidenceState.SUPPORTED)
         self.assertEqual(consensus.conflicting_frame_indexes, ())
 
+    def test_measured_and_inferred_slot_identity_is_assignment_disagreement(
+        self,
+    ) -> None:
+        def boundary(position: float):
+            return SimpleNamespace(position=PixelInterval.exact(position))
+
+        def build(second_slot_inferred: bool):
+            return SimpleNamespace(
+                slots=(
+                    SimpleNamespace(
+                        index=1,
+                        sequence_inferred=False,
+                        leading=boundary(0.0),
+                        trailing=boundary(100.0),
+                    ),
+                    SimpleNamespace(
+                        index=2,
+                        sequence_inferred=second_slot_inferred,
+                        leading=boundary(110.0),
+                        trailing=boundary(210.0),
+                    ),
+                ),
+            )
+
+        consensus = sequence_consensus.sequence_assignment_consensus(
+            (build(False), build(True))
+        )
+
+        self.assertEqual(consensus.outcome, AssignmentConsensusOutcome.DISAGREED)
+        self.assertEqual(consensus.conflicting_frame_indexes, (2,))
+
     def test_external_safety_uncertainty_is_not_internal_assignment_disagreement(
         self,
     ) -> None:

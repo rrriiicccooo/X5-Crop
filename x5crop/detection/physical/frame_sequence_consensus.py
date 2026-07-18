@@ -39,17 +39,23 @@ def _assignment_consensus(
 def sequence_assignment_consensus(
     preferred_builds: tuple[sequence_candidates.SequenceBuild, ...],
 ) -> BoundaryAssignmentConsensus:
-    inferred_positions = {
-        slot.index
+    inferred_signatures = tuple(
+        frozenset(
+            slot.index
+            for slot in build.slots
+            if slot.sequence_inferred
+        )
         for build in preferred_builds
-        for slot in build.slots
-        if slot.sequence_inferred
-    }
-    if len(inferred_positions) > 1:
+    )
+    if len(set(inferred_signatures)) > 1:
+        inferred_positions = set().union(*inferred_signatures)
+        common_positions = set(inferred_signatures[0]).intersection(
+            *inferred_signatures[1:]
+        )
         return BoundaryAssignmentConsensus(
             AssignmentConsensusOutcome.DISAGREED,
             len(preferred_builds),
-            tuple(sorted(inferred_positions)),
+            tuple(sorted(inferred_positions - common_positions)),
         )
     return _assignment_consensus(preferred_builds)
 

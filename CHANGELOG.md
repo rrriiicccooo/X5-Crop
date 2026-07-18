@@ -51,13 +51,17 @@ the validation evidence.
   predecessor. / Measured-frame 规范化与 graph-path 选择现在先比较物理支持、
   观测质量和测量不确定度，再比较 search hint；hint 只能安排搜索顺序，不能决定保留哪条
   观测 identity 或 graph predecessor。
+- Assignment consensus now treats measured-versus-inferred slot identity as a
+  real topology disagreement even when both alternatives occupy the same
+  coordinates. / 即使两个替代解坐标完全相同，assignment consensus 也会把 measured
+  slot 与 sequence-inferred slot 的身份差异保留为真实 topology disagreement。
 - 六张冻结 `135/full` 样片的 current report 中循环 provenance 由 55 降为 0；
   canonical report 比较零差异，六张 Debug Analysis 字节完全一致，且全部继续
   `REVIEW` / 不导出。 / Across the six frozen `135/full` samples, cyclic report
   provenances fell from 55 to zero; canonical report comparison had zero diffs,
   all six Debug Analysis files were byte-identical, and every sample remained
   `REVIEW` / non-exportable.
-- 完整验证通过 766 项测试和 14 组配置。 / Full verification passed 766 tests
+- 完整验证通过 767 项测试和 14 组配置。 / Full verification passed 767 tests
   and 14 configuration pairs.
 
 ### 2026-07-15 — 共享短轴与 Frame Slot / Shared Short Axis And Frame Slots
