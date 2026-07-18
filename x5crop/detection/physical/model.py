@@ -866,6 +866,27 @@ def _spacing_matches_frame_slots(
     )
 
 
+def _spacing_preserves_separator_assignment(
+    spacing: InterFrameSpacing,
+    assignment: SeparatorBandAssignment,
+) -> bool:
+    observation_id = assignment.observation.provenance.observation_id
+    provenance = spacing.provenance
+    return bool(
+        spacing.boundary.lane_index is None
+        and spacing.boundary.boundary_index == assignment.boundary_index
+        and spacing.basis == InterFrameSpacingBasis.OBSERVED
+        and spacing.kind == InterFrameSpacingKind.SEPARATOR
+        and spacing.signed_width_px == assignment.observation.width_px
+        and provenance.root_measurement != MeasurementIdentity.FRAME_GEOMETRY
+        and MeasurementIdentity.FRAME_GEOMETRY not in provenance.dependencies
+        and (
+            provenance.observation_id == observation_id
+            or observation_id in provenance.boundary_anchors
+        )
+    )
+
+
 def _frame_sequence_provenance(
     format_id: str,
     layout: str,
@@ -1115,6 +1136,13 @@ class FrameSequenceSolution:
             ):
                 raise GeometryIdentityError(
                     "separator band edges must bind adjacent frame slots"
+                )
+            if not _spacing_preserves_separator_assignment(
+                self.inter_frame_spacings[boundary_index - 1],
+                assignment,
+            ):
+                raise GeometryIdentityError(
+                    "assigned separator spacing must preserve its observation"
                 )
         if any(
             constraint.second_boundary_index >= self.count

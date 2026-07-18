@@ -55,7 +55,7 @@ reports, Debug Analysis, and command output remain authoritative.
 ## Verification State / 验证状态
 
 - Fresh checkpoint verification / 当前检查点新验证：`tools/verify full` passed on 2026-07-19
-  with 754 unit/contract tests, 14 format/mode configuration pairs, compile,
+  with 760 unit/contract tests, 14 format/mode configuration pairs, compile,
   macOS shell syntax, diff hygiene, release-package construction, and version
   checks. Confirm the current commit and clean status at resume time.
 - The verifier proves source and contract consistency only. It does not prove
@@ -67,7 +67,7 @@ reports, Debug Analysis, and command output remain authoritative.
   geometry reference and must be repaired from real evidence before that dataset
   can be called validated.
 
-- 当前 `tools/verify full` 已通过 754 项 unit/contracts、14 组配置、compile、macOS shell syntax、
+- 当前 `tools/verify full` 已通过 760 项 unit/contracts、14 组配置、compile、macOS shell syntax、
   diff hygiene、发布包构建和版本检查；它仍不能证明具名样片几何、性能闭环、Debug 视觉正确性或
   两轮架构审计。
 - sample-expectation 单元测试只验证加载器和契约代码；当前本地 `pass_X5_00038.tif` 记录仍缺少
@@ -101,16 +101,20 @@ reports, Debug Analysis, and command output remain authoritative.
   their prior `REVIEW` / non-exportable decisions. The full verifier now passes
   759 tests and 14 configuration pairs. Current-report validation also rejects
   one `ObservationId` carrying conflicting provenance; all six fresh reports pass
-  that identity check with no collisions.
+  that identity check with no collisions. The separator-feasibility audit also
+  closed a representable contradiction where an assigned hard separator could
+  coexist with geometry-hypothesis spacing: final sequence identity now requires
+  matching positive observed spacing with the same band provenance. The six
+  frozen reports still have zero canonical diffs and their Debug Analysis files
+  remain byte-identical.
 
 以上样片仍需当前报告和 Debug Analysis 逐张复核；肉眼正确的代表解不能覆盖仍存在的非支配、
 dimension-heavy 替代解释。
 
 ## Next Actions / 下一步
 
-1. Continue Phase 3 by finishing observation-identity uniqueness, then audit
-   measurement uncertainty and holder safety/shared short axis; next cover
-   separated-width and global-separator feasibility; common-width; count/slot,
+1. Continue Phase 3 from the separated-width / separator-feasibility checklist,
+   then cover common-width; count/slot,
    blank, occlusion, and overlap; physical Pareto, consensus, and search
    completeness; CandidateGate, GeometryResolution, selection, and DecisionGate;
    FrameCropEnvelope, user bleed, local overlap protection; and current
@@ -128,9 +132,8 @@ dimension-heavy 替代解释。
 6. Only after physical validation and both audits, update the rolling checkpoint,
    docs, commit, and push. Never manufacture PASS from unresolved geometry.
 
-1. Phase 3 继续先完成 observation identity 唯一性核对，再审计 measurement uncertainty、
-   holder safety/shared short axis、separated width / separator global feasibility、
-   common-width、count/slot/blank/occlusion/overlap、Pareto/consensus/search completeness、
+1. Phase 3 从 separated width / separator global feasibility 清单继续，再核对 common-width、
+   count/slot/blank/occlusion/overlap、Pareto/consensus/search completeness、
    gates/selection/decision、crop/bleed/protection 以及 report/debug/cache/output truth。
 2. 每发现一类违规，先增加并确认最小失败合同，再修复 canonical owner 并清理整类残留；
    未解决几何保持 typed unavailable/REVIEW。

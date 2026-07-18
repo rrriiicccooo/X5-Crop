@@ -49,6 +49,7 @@ from x5crop.detection.physical.model import (
     BoundaryGeometryState,
     BoundaryRoleAuthority,
     FrameBoundarySource,
+    GeometryIdentityError,
     SeparatorBandAssignment,
 )
 from x5crop.detection.physical.short_axis import shared_short_axis_plan
@@ -128,6 +129,31 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             "frame_width_px",
             {field.name for field in fields(SeparatorBandAssignment)},
         )
+
+    def test_separator_assignment_requires_observed_spacing_conservation(
+        self,
+    ) -> None:
+        geometry_with_separator = candidate_fixture().geometry
+        spacing = geometry_with_separator.inter_frame_spacings[0]
+        contradictory_spacing = replace(
+            spacing,
+            basis=InterFrameSpacingBasis.GEOMETRY_HYPOTHESIS,
+            provenance=MeasurementProvenance(
+                MeasurementIdentity.FRAME_GEOMETRY,
+                ObservationId("contradictory_separator_spacing"),
+                (MeasurementIdentity.FRAME_DIMENSIONS,),
+                "geometry hypothesis contradicting an assigned separator",
+            ),
+        )
+
+        with self.assertRaisesRegex(
+            GeometryIdentityError,
+            "assigned separator spacing must preserve its observation",
+        ):
+            replace(
+                geometry_with_separator,
+                inter_frame_spacings=(contradictory_spacing,),
+            )
 
     def test_sequence_geometry_rejects_separator_without_supported_common_width(
         self,
