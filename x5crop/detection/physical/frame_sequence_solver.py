@@ -27,7 +27,7 @@ from ...domain import (
 )
 from ...image.content import ContentRegionObservation
 from ...strip_modes import FULL, PARTIAL
-from . import frame_sequence_boundary_roles as boundary_roles
+from . import frame_sequence_candidate_resolution as candidate_resolution
 from . import frame_sequence_candidates as sequence_candidates
 from . import frame_sequence_common_width as width_resolution
 from . import frame_sequence_consensus as sequence_consensus
@@ -238,13 +238,6 @@ def _boundary_path_fits(
             fits[observation_id] = BoundaryPathFit(path)
     return fits
 
-def _holder_boundaries(
-    search_scope: FrameSequenceSearchScope,
-) -> dict[BoundarySide, HolderBoundaryObservation]:
-    return {
-        boundary.side: boundary
-        for boundary in search_scope.holder_safety.boundaries
-    }
 
 def _axis_paths(
     search_scope: FrameSequenceSearchScope,
@@ -259,7 +252,7 @@ def _axis_paths(
     )
     holder_path_ids = {
         path.provenance.observation_id
-        for boundary in _holder_boundaries(search_scope).values()
+        for boundary in candidate_resolution.holder_boundaries(search_scope).values()
         for path in boundary.supporting_paths
     }
     ranked = sorted(
@@ -1149,7 +1142,7 @@ def _separator_edge_candidates(
     tuple[tuple[measurement_facts.EdgeConstraint, bool], ...],
     tuple[tuple[measurement_facts.EdgeConstraint, bool], ...],
 ]:
-    holder_boundaries = _holder_boundaries(search_scope)
+    holder_boundaries = candidate_resolution.holder_boundaries(search_scope)
     interior_observations = set(
         _interior_separator_observations(separator_supports, search_scope)
     )
@@ -1234,7 +1227,7 @@ def prepare_frame_sequence_search_index(
     separator_supports: SeparatorSupportSet,
 ) -> FrameSequenceSearchIndex:
     paths = _axis_paths(search_scope, BoundaryAxis.LONG)
-    holder_boundaries = _holder_boundaries(search_scope)
+    holder_boundaries = candidate_resolution.holder_boundaries(search_scope)
     leading_candidates: list[tuple[measurement_facts.EdgeConstraint, bool]] = []
     trailing_candidates: list[tuple[measurement_facts.EdgeConstraint, bool]] = []
     for path in paths:
@@ -2214,7 +2207,7 @@ def _builds_for_hypotheses(
     physical_scale_constraint: FrameWidthPhysicalScaleConstraint | None,
 ) -> tuple[tuple[sequence_candidates.SequenceBuild, ...], int, bool]:
     holder = search_scope.holder_safety.box
-    holder_boundaries = _holder_boundaries(search_scope)
+    holder_boundaries = candidate_resolution.holder_boundaries(search_scope)
     separator_leading, separator_trailing = _separator_edge_candidates(
         separator_supports,
         search_scope,
@@ -2475,205 +2468,6 @@ def _assign_unique_boundary_path_observations(
             if item.provenance.observation_id != assigned_id
         )
     return resolved
-
-
-def _common_width_dimension_provenance(
-    frame_index: int,
-    side: BoundarySide,
-    anchor: ResolvedFrameBoundary,
-    common_width: CommonFrameWidthResolution,
-) -> MeasurementProvenance:
-    dependencies = tuple(
-        sorted(
-            {
-                anchor.measurement_provenance.root_measurement,
-                *anchor.measurement_provenance.dependencies,
-                common_width.provenance.root_measurement,
-                *common_width.provenance.dependencies,
-            },
-            key=lambda item: item.value,
-        )
-    )
-    return MeasurementProvenance(
-        root_measurement=MeasurementIdentity.FRAME_GEOMETRY,
-        observation_id=ObservationId(
-            "common_width_dimension_boundary:"
-            f"{frame_index}:{side.value}:"
-            f"{anchor.measurement_provenance.observation_id}:"
-            f"{common_width.provenance.observation_id}"
-        ),
-        dependencies=dependencies,
-        description="frame boundary resolved from a positional anchor and common width",
-        boundary_anchors=tuple(
-            dict.fromkeys(
-                (
-                    anchor.measurement_provenance.observation_id,
-                    *common_width.provenance.boundary_anchors,
-                )
-            )
-        ),
-    )
-
-def _resolved_dimension_boundary(
-    frame_index: int,
-    side: BoundarySide,
-    boundary: ResolvedFrameBoundary,
-    anchor: ResolvedFrameBoundary,
-    common_width: CommonFrameWidthResolution,
-    holder_boundary: HolderBoundaryObservation | None,
-) -> ResolvedFrameBoundary:
-    unproven_observation_assignment = bool(
-        boundary.source
-        in {
-            FrameBoundarySource.GRAY_PATH_OBSERVATION,
-            FrameBoundarySource.SEPARATOR_EDGE_OBSERVATION,
-        }
-        and boundary.role_state == EvidenceState.UNAVAILABLE
-    )
-    dimension_candidate = bool(
-        boundary.source == FrameBoundarySource.DIMENSION_CONSTRAINED
-        or unproven_observation_assignment
-    )
-    if (
-        not dimension_candidate
-        or common_width.state != EvidenceState.SUPPORTED
-        or common_width.width_px is None
-        or not anchor.geometry_resolved
-    ):
-        return boundary
-    if unproven_observation_assignment and measurement_facts.boundary_matches_holder(
-        boundary,
-        holder_boundary,
-    ):
-        return boundary
-    expected = (
-        anchor.position.minus(common_width.width_px)
-        if side == BoundarySide.LEADING
-        else anchor.position.plus(common_width.width_px)
-    )
-    if (
-        unproven_observation_assignment
-        and boundary.position.intersects(expected)
-    ):
-        return boundary
-    resolved_position = boundary.position.intersection(expected)
-    if resolved_position is None and unproven_observation_assignment:
-        resolved_position = expected
-    if resolved_position is None:
-        return boundary
-    return ResolvedFrameBoundary(
-        position=resolved_position,
-        source=FrameBoundarySource.DIMENSION_CONSTRAINED,
-        geometry_state=BoundaryGeometryState.RESOLVED,
-        boundary_anchor=None,
-        inference_provenance=_common_width_dimension_provenance(
-            frame_index,
-            side,
-            anchor,
-            common_width,
-        ),
-    )
-
-def _resolve_dimension_boundaries_from_common_width(
-    slots: tuple[FrameSlot, ...],
-    common_width: CommonFrameWidthResolution,
-    holder_boundaries: dict[BoundarySide, HolderBoundaryObservation],
-) -> tuple[FrameSlot, ...]:
-    resolved: list[FrameSlot] = []
-    for slot in slots:
-        leading = _resolved_dimension_boundary(
-            slot.index,
-            BoundarySide.LEADING,
-            slot.leading,
-            slot.trailing,
-            common_width,
-            (
-                holder_boundaries.get(BoundarySide.LEADING)
-                if slot.index == 1
-                else None
-            ),
-        )
-        trailing = _resolved_dimension_boundary(
-            slot.index,
-            BoundarySide.TRAILING,
-            slot.trailing,
-            slot.leading,
-            common_width,
-            (
-                holder_boundaries.get(BoundarySide.TRAILING)
-                if slot.index == len(slots)
-                else None
-            ),
-        )
-        if trailing.position.minimum <= leading.position.maximum:
-            resolved.append(slot)
-            continue
-        resolved.append(
-            replace(
-                slot,
-                leading=leading,
-                trailing=trailing,
-                visible_long_axis=PixelInterval(
-                    leading.position.minimum,
-                    trailing.position.maximum,
-                ),
-            )
-        )
-    candidate = tuple(resolved)
-    return candidate if sequence_candidates.frame_slots_are_strictly_monotonic(candidate) else slots
-
-
-def _resolve_build_dimension_boundaries(
-    build: sequence_candidates.SequenceBuild,
-    common_width: CommonFrameWidthResolution,
-    holder_boundaries: dict[BoundarySide, HolderBoundaryObservation],
-) -> sequence_candidates.SequenceBuild:
-    slots = _resolve_dimension_boundaries_from_common_width(
-        build.slots,
-        common_width,
-        holder_boundaries,
-    )
-    if slots == build.slots:
-        return build
-    return sequence_candidates.rebuild_sequence_build(build, slots)
-
-def _resolve_build_physical_boundaries(
-    build: sequence_candidates.SequenceBuild,
-    holder_boundaries: dict[BoundarySide, HolderBoundaryObservation],
-    photo_height_evidence: PhotoHeightEvidence,
-    dimensions: FrameDimensionPrior,
-) -> tuple[sequence_candidates.SequenceBuild, CommonFrameWidthResolution]:
-    resolved = boundary_roles.corroborate_build_roles_from_repeated_frame_width(
-        build,
-        holder_boundaries,
-    )
-    resolved = boundary_roles.corroborate_build_adjacent_boundary_roles(resolved)
-    resolved = boundary_roles.corroborate_build_roles_from_physical_scale(
-        resolved,
-        width_resolution.frame_width_physical_scale_constraint(
-            photo_height_evidence,
-            dimensions,
-        ),
-    )
-    common_width = width_resolution.resolve_common_frame_width(
-        resolved.slots,
-        holder_boundaries,
-        photo_height_evidence,
-        dimensions,
-    )
-    resolved = boundary_roles.corroborate_build_boundary_roles(resolved, common_width)
-    common_width = width_resolution.resolve_common_frame_width(
-        resolved.slots,
-        holder_boundaries,
-        photo_height_evidence,
-        dimensions,
-    )
-    resolved = _resolve_build_dimension_boundaries(
-        resolved,
-        common_width,
-        holder_boundaries,
-    )
-    return resolved, common_width
 
 
 def _final_inter_frame_spacings(
@@ -3055,9 +2849,9 @@ def _sequence_completed_builds(
     dimensions: FrameDimensionPrior,
 ) -> tuple[sequence_candidates.SequenceBuild, ...]:
     inferred: list[sequence_candidates.SequenceBuild] = []
-    holder_boundaries = _holder_boundaries(search_scope)
+    holder_boundaries = candidate_resolution.holder_boundaries(search_scope)
     for build in real_frame_builds:
-        build, common_width = _resolve_build_physical_boundaries(
+        build, common_width = candidate_resolution.resolve_build_physical_boundaries(
             build,
             holder_boundaries,
             photo_height_evidence,
@@ -3098,7 +2892,7 @@ def _build_supports_resolved_nominal_slots(
     photo_height_evidence: PhotoHeightEvidence,
     dimensions: FrameDimensionPrior,
 ) -> bool:
-    resolved_build, common_width = _resolve_build_physical_boundaries(
+    resolved_build, common_width = candidate_resolution.resolve_build_physical_boundaries(
         build,
         holder_boundaries,
         photo_height_evidence,
@@ -3161,7 +2955,7 @@ def _build_satisfies_full_endpoint_extent(
     photo_height_evidence: PhotoHeightEvidence,
     dimensions: FrameDimensionPrior,
 ) -> bool:
-    resolved_build, common_width = _resolve_build_physical_boundaries(
+    resolved_build, common_width = candidate_resolution.resolve_build_physical_boundaries(
         build,
         holder_boundaries,
         photo_height_evidence,
@@ -3187,7 +2981,7 @@ def _build_does_not_contradict_common_width(
     photo_height_evidence: PhotoHeightEvidence,
     dimensions: FrameDimensionPrior,
 ) -> bool:
-    resolved_build, common_width = _resolve_build_physical_boundaries(
+    resolved_build, common_width = candidate_resolution.resolve_build_physical_boundaries(
         build,
         holder_boundaries,
         photo_height_evidence,
@@ -3264,8 +3058,8 @@ def _infer_unique_slot_in_direct_nominal_build(
     photo_height_evidence: PhotoHeightEvidence,
     dimensions: FrameDimensionPrior,
 ) -> sequence_candidates.SequenceBuild:
-    holder_boundaries = _holder_boundaries(search_scope)
-    resolved_build, common_width = _resolve_build_physical_boundaries(
+    holder_boundaries = candidate_resolution.holder_boundaries(search_scope)
+    resolved_build, common_width = candidate_resolution.resolve_build_physical_boundaries(
         build,
         holder_boundaries,
         photo_height_evidence,
@@ -3350,7 +3144,7 @@ def _preferred_direct_common_width_is_supported(
     preferred = sequence_candidates.physically_preferred_builds(preserving or builds)
     return any(
         width_resolution.common_width_has_independent_measurement_basis(
-            _resolve_build_physical_boundaries(
+            candidate_resolution.resolve_build_physical_boundaries(
                 build,
                 holder_boundaries,
                 photo_height_evidence,
@@ -3560,7 +3354,7 @@ def solve_frame_sequence(
             allow_nominal_slot_sized_gap=False,
         )
     )
-    holder_boundaries = _holder_boundaries(search_scope)
+    holder_boundaries = candidate_resolution.holder_boundaries(search_scope)
     direct_geometry_complete_before_inference = (
         _direct_nominal_geometry_is_complete(
             direct_builds,
@@ -3717,7 +3511,7 @@ def solve_frame_sequence(
     )
     resolved_builds = []
     for build in builds:
-        resolved, common_width = _resolve_build_physical_boundaries(
+        resolved, common_width = candidate_resolution.resolve_build_physical_boundaries(
             build,
             holder_boundaries,
             short_axis_plan.photo_height_evidence,
@@ -3734,7 +3528,7 @@ def solve_frame_sequence(
             interior_paths,
         )
         if assigned != resolved:
-            resolved, common_width = _resolve_build_physical_boundaries(
+            resolved, common_width = candidate_resolution.resolve_build_physical_boundaries(
                 assigned,
                 holder_boundaries,
                 short_axis_plan.photo_height_evidence,
@@ -3778,8 +3572,8 @@ def solve_frame_sequence(
         else sequence_consensus.sequence_assignment_consensus(best)
     )
     representative = sequence_candidates.representative_build(best)
-    holder_boundaries = _holder_boundaries(search_scope)
-    representative, common_width = _resolve_build_physical_boundaries(
+    holder_boundaries = candidate_resolution.holder_boundaries(search_scope)
+    representative, common_width = candidate_resolution.resolve_build_physical_boundaries(
         representative,
         holder_boundaries,
         short_axis_plan.photo_height_evidence,

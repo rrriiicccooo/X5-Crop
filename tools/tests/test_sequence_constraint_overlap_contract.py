@@ -4,6 +4,9 @@ import unittest
 
 from tools.tests.frame_slot_solver_support import path
 from x5crop.detection.physical import frame_sequence_candidates as candidate_builds
+from x5crop.detection.physical import (
+    frame_sequence_candidate_resolution as candidate_resolution,
+)
 from x5crop.detection.physical import frame_sequence_solver as solver_module
 from x5crop.detection.physical.model import (
     BoundaryAnchor,
@@ -123,7 +126,7 @@ def _dimension_trailing_boundary(
         source=FrameBoundarySource.DIMENSION_CONSTRAINED,
         geometry_state=BoundaryGeometryState.RESOLVED,
         boundary_anchor=None,
-        inference_provenance=solver_module._common_width_dimension_provenance(
+        inference_provenance=candidate_resolution._common_width_dimension_provenance(
             frame_index,
             BoundarySide.TRAILING,
             anchor,
