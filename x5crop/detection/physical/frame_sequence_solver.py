@@ -31,6 +31,7 @@ from ...image.content import ContentRegionObservation
 from ...strip_modes import FULL, PARTIAL
 from . import frame_sequence_candidates as sequence_candidates
 from . import frame_sequence_common_width as width_resolution
+from . import frame_sequence_consensus as sequence_consensus
 from . import frame_sequence_measurements as measurement_facts
 from . import frame_sequence_search as sequence_search
 from .model import (
@@ -96,7 +97,7 @@ class FrameSequenceSolveResult:
             raise ValueError("frame sequence result requires a found solution")
         if not self.frame_slots:
             raise ValueError("frame sequence result requires frame slots")
-        if not _frame_slots_are_strictly_monotonic(self.frame_slots):
+        if not sequence_candidates.frame_slots_are_strictly_monotonic(self.frame_slots):
             raise ValueError("frame sequence result requires monotonic slots")
 
 @dataclass(frozen=True)
@@ -2717,324 +2718,6 @@ def _builds_for_hypotheses(
     return tuple(builds), evaluations, exhausted
 
 
-def _assignment_consensus(
-    builds: tuple[sequence_candidates.SequenceBuild, ...],
-) -> BoundaryAssignmentConsensus:
-    conflicting = sequence_candidates.conflicting_internal_frame_indexes(builds)
-    if conflicting:
-        outcome = AssignmentConsensusOutcome.DISAGREED
-    elif len(builds) == 1:
-        outcome = AssignmentConsensusOutcome.UNCONTESTED
-    elif sequence_candidates.external_endpoint_alternatives(builds):
-        outcome = AssignmentConsensusOutcome.EXTERNAL_SAFETY_ENVELOPE
-    else:
-        outcome = AssignmentConsensusOutcome.AGREED
-    return BoundaryAssignmentConsensus(outcome, len(builds), conflicting)
-
-def _sequence_assignment_consensus(
-    preferred_builds: tuple[sequence_candidates.SequenceBuild, ...],
-) -> BoundaryAssignmentConsensus:
-    inferred_positions = {
-        slot.index
-        for build in preferred_builds
-        for slot in build.slots
-        if slot.sequence_inferred
-    }
-    if len(inferred_positions) > 1:
-        return BoundaryAssignmentConsensus(
-            AssignmentConsensusOutcome.DISAGREED,
-            len(preferred_builds),
-            tuple(sorted(inferred_positions)),
-        )
-    return _assignment_consensus(preferred_builds)
-
-def _external_safety_provenance(
-    side: BoundarySide,
-    boundaries: tuple[ResolvedFrameBoundary, ...],
-) -> MeasurementProvenance:
-    inputs = tuple(
-        dict.fromkeys(
-            (
-                *(boundary.measurement_provenance for boundary in boundaries),
-                *(
-                    boundary.role_provenance
-                    for boundary in boundaries
-                    if boundary.role_provenance is not None
-                ),
-            )
-        )
-    )
-    dependencies = tuple(
-        sorted(
-            {
-                dependency
-                for item in inputs
-                for dependency in (item.root_measurement, *item.dependencies)
-                if dependency != MeasurementIdentity.FRAME_GEOMETRY
-            },
-            key=lambda item: item.value,
-        )
-    )
-    anchors = tuple(
-        dict.fromkeys(
-            anchor
-            for item in inputs
-            for anchor in (item.observation_id, *item.boundary_anchors)
-        )
-    )
-    digest = hashlib.sha256(
-        "\x1f".join(
-            (
-                side.value,
-                *(
-                    f"{boundary.position.minimum:.12g}:"
-                    f"{boundary.position.maximum:.12g}:"
-                    f"{boundary.measurement_provenance.observation_id}"
-                    for boundary in boundaries
-                ),
-            )
-        ).encode("utf-8")
-    ).hexdigest()
-    return MeasurementProvenance(
-        root_measurement=MeasurementIdentity.FRAME_GEOMETRY,
-        observation_id=ObservationId(f"external_safety_envelope:{digest}"),
-        dependencies=dependencies,
-        description=(
-            "conservative external crop boundary spanning physically equivalent "
-            "endpoint observations"
-        ),
-        boundary_anchors=anchors,
-    )
-
-def _internal_geometry_uncertainty_boundary(
-    side: BoundarySide,
-    boundaries: tuple[ResolvedFrameBoundary, ...],
-) -> ResolvedFrameBoundary:
-    if side not in {BoundarySide.LEADING, BoundarySide.TRAILING}:
-        raise ValueError("internal geometry uncertainty requires a long-axis side")
-    if not boundaries or any(
-        boundary.source != FrameBoundarySource.DIMENSION_CONSTRAINED
-        or boundary.independently_observed
-        for boundary in boundaries
-    ):
-        raise ValueError(
-            "internal geometry uncertainty can combine only dimension constraints"
-        )
-    inputs = tuple(
-        dict.fromkeys(boundary.measurement_provenance for boundary in boundaries)
-    )
-    dependencies = tuple(
-        sorted(
-            {
-                dependency
-                for item in inputs
-                for dependency in (item.root_measurement, *item.dependencies)
-                if dependency != MeasurementIdentity.FRAME_GEOMETRY
-            },
-            key=lambda item: item.value,
-        )
-    )
-    anchors = tuple(
-        dict.fromkeys(
-            anchor
-            for item in inputs
-            for anchor in (item.observation_id, *item.boundary_anchors)
-        )
-    )
-    digest = hashlib.sha256(
-        "\x1f".join(
-            (
-                side.value,
-                *(
-                    f"{boundary.position.minimum:.12g}:"
-                    f"{boundary.position.maximum:.12g}:"
-                    f"{boundary.measurement_provenance.observation_id}"
-                    for boundary in boundaries
-                ),
-            )
-        ).encode("utf-8")
-    ).hexdigest()
-    return ResolvedFrameBoundary(
-        position=PixelInterval(
-            min(boundary.position.minimum for boundary in boundaries),
-            max(boundary.position.maximum for boundary in boundaries),
-        ),
-        source=FrameBoundarySource.DIMENSION_CONSTRAINED,
-        geometry_state=BoundaryGeometryState.RESOLVED,
-        boundary_anchor=None,
-        inference_provenance=MeasurementProvenance(
-            root_measurement=MeasurementIdentity.FRAME_GEOMETRY,
-            observation_id=ObservationId(
-                f"internal_geometry_uncertainty:{side.value}:{digest}"
-            ),
-            dependencies=dependencies,
-            description=(
-                "conservative internal boundary interval across equivalent "
-                "dimension-constrained sequence solutions"
-            ),
-            boundary_anchors=anchors,
-        ),
-    )
-
-def _apply_internal_geometry_uncertainty(
-    slots: tuple[FrameSlot, ...],
-    assignments: tuple[FrameEdgeAssignment, ...],
-    preferred_builds: tuple[sequence_candidates.SequenceBuild, ...],
-) -> tuple[tuple[FrameSlot, ...], tuple[FrameEdgeAssignment, ...]] | None:
-    if len(preferred_builds) <= 1:
-        return slots, assignments
-    updated = list(slots)
-    replaced: set[tuple[int, BoundarySide]] = set()
-    for offset, slot in enumerate(slots):
-        sides = tuple(
-            side
-            for side in (BoundarySide.LEADING, BoundarySide.TRAILING)
-            if not (
-                (offset == 0 and side == BoundarySide.LEADING)
-                or (
-                    offset == len(slots) - 1
-                    and side == BoundarySide.TRAILING
-                )
-            )
-        )
-        for side in sides:
-            boundaries = tuple(
-                (
-                    build.slots[offset].leading
-                    if side == BoundarySide.LEADING
-                    else build.slots[offset].trailing
-                )
-                for build in preferred_builds
-            )
-            if PixelInterval.common_intersection(
-                tuple(boundary.position for boundary in boundaries)
-            ) is not None:
-                continue
-            if any(
-                boundary.source != FrameBoundarySource.DIMENSION_CONSTRAINED
-                or boundary.independently_observed
-                for boundary in boundaries
-            ):
-                return None
-            envelope = _internal_geometry_uncertainty_boundary(side, boundaries)
-            current = updated[offset]
-            updated[offset] = replace(
-                current,
-                leading=(envelope if side == BoundarySide.LEADING else current.leading),
-                trailing=(envelope if side == BoundarySide.TRAILING else current.trailing),
-                visible_long_axis=PixelInterval(
-                    (
-                        envelope.position.minimum
-                        if side == BoundarySide.LEADING
-                        else current.visible_long_axis.minimum
-                    ),
-                    (
-                        envelope.position.maximum
-                        if side == BoundarySide.TRAILING
-                        else current.visible_long_axis.maximum
-                    ),
-                ),
-            )
-            replaced.add((slot.index, side))
-    result = tuple(updated)
-    if not _frame_slots_are_strictly_monotonic(result):
-        return None
-    return (
-        result,
-        tuple(
-            assignment
-            for assignment in assignments
-            if (assignment.frame_index, assignment.side) not in replaced
-        ),
-    )
-
-def _external_safety_boundary(
-    side: BoundarySide,
-    boundaries: tuple[ResolvedFrameBoundary, ...],
-    holder_safety: PixelInterval,
-) -> ResolvedFrameBoundary | None:
-    position = PixelInterval(
-        min(boundary.position.minimum for boundary in boundaries),
-        max(boundary.position.maximum for boundary in boundaries),
-    ).intersection(holder_safety)
-    if position is None:
-        return None
-    return ResolvedFrameBoundary(
-        position=position,
-        source=FrameBoundarySource.EXTERNAL_SAFETY_ENVELOPE,
-        geometry_state=BoundaryGeometryState.RESOLVED,
-        boundary_anchor=None,
-        inference_provenance=_external_safety_provenance(side, boundaries),
-    )
-
-def _apply_external_safety_envelope(
-    slots: tuple[FrameSlot, ...],
-    assignments: tuple[FrameEdgeAssignment, ...],
-    preferred_builds: tuple[sequence_candidates.SequenceBuild, ...],
-    consensus: BoundaryAssignmentConsensus,
-    holder_safety: PixelInterval,
-) -> tuple[tuple[FrameSlot, ...], tuple[FrameEdgeAssignment, ...]] | None:
-    if (
-        consensus.outcome != AssignmentConsensusOutcome.EXTERNAL_SAFETY_ENVELOPE
-        or not slots
-    ):
-        return slots, assignments
-    updated = list(slots)
-    replaced: set[tuple[int, BoundarySide]] = set()
-    for offset, side in (
-        (0, BoundarySide.LEADING),
-        (len(slots) - 1, BoundarySide.TRAILING),
-    ):
-        slot = updated[offset]
-        if slot.sequence_inferred or slot.edge_occlusion is not None:
-            continue
-        boundaries = tuple(
-            (
-                build.slots[offset].leading
-                if side == BoundarySide.LEADING
-                else build.slots[offset].trailing
-            )
-            for build in preferred_builds
-        )
-        if PixelInterval.common_intersection(
-            tuple(boundary.position for boundary in boundaries)
-        ) is not None:
-            continue
-        safe_boundary = _external_safety_boundary(
-            side,
-            boundaries,
-            holder_safety,
-        )
-        if safe_boundary is None:
-            return None
-        updated[offset] = replace(
-            slot,
-            leading=(safe_boundary if side == BoundarySide.LEADING else slot.leading),
-            trailing=(safe_boundary if side == BoundarySide.TRAILING else slot.trailing),
-            visible_long_axis=PixelInterval(
-                (
-                    safe_boundary.position.minimum
-                    if side == BoundarySide.LEADING
-                    else slot.visible_long_axis.minimum
-                ),
-                (
-                    safe_boundary.position.maximum
-                    if side == BoundarySide.TRAILING
-                    else slot.visible_long_axis.maximum
-                ),
-            ),
-        )
-        replaced.add((slot.index, side))
-    return (
-        tuple(updated),
-        tuple(
-            assignment
-            for assignment in assignments
-            if (assignment.frame_index, assignment.side) not in replaced
-        ),
-    )
-
-
 def _slot_can_contribute_repeated_width_measurement(
     slot: FrameSlot,
     slot_count: int,
@@ -3645,7 +3328,7 @@ def _separator_observation_assignment(
         ),
     )
     resolved_slots = tuple(slots)
-    if not _frame_slots_are_strictly_monotonic(resolved_slots):
+    if not sequence_candidates.frame_slots_are_strictly_monotonic(resolved_slots):
         return None
     return (
         resolved_slots,
@@ -3804,7 +3487,7 @@ def _boundary_path_assignment(
     slots = list(build.slots)
     slots[slot_offset] = updated_slot
     resolved_slots = tuple(slots)
-    if not _frame_slots_are_strictly_monotonic(resolved_slots):
+    if not sequence_candidates.frame_slots_are_strictly_monotonic(resolved_slots):
         return None
     return resolved_slots, assignment
 
@@ -4082,19 +3765,8 @@ def _resolve_dimension_boundaries_from_common_width(
             )
         )
     candidate = tuple(resolved)
-    return candidate if _frame_slots_are_strictly_monotonic(candidate) else slots
+    return candidate if sequence_candidates.frame_slots_are_strictly_monotonic(candidate) else slots
 
-def _frame_slots_are_strictly_monotonic(
-    slots: tuple[FrameSlot, ...],
-) -> bool:
-    return bool(
-        slots
-        and all(
-            right.leading.position.minimum > left.leading.position.maximum
-            and right.trailing.position.minimum > left.trailing.position.maximum
-            for left, right in zip(slots, slots[1:])
-        )
-    )
 
 def _long_axis_assignments_for_slots(
     assignments: tuple[FrameEdgeAssignment, ...],
@@ -4635,7 +4307,7 @@ def _build_supports_resolved_nominal_slots(
     )
     resolved_slots = resolved_build.slots
     return bool(
-        _frame_slots_are_strictly_monotonic(resolved_slots)
+        sequence_candidates.frame_slots_are_strictly_monotonic(resolved_slots)
         and resolved_build.objectives.uncorroborated_overlap_extent_px == 0.0
         and all(
             slot.leading.geometry_state == BoundaryGeometryState.RESOLVED
@@ -4724,7 +4396,7 @@ def _build_does_not_contradict_common_width(
     )
     resolved_slots = resolved_build.slots
     return bool(
-        _frame_slots_are_strictly_monotonic(resolved_slots)
+        sequence_candidates.frame_slots_are_strictly_monotonic(resolved_slots)
         and (
             common_width.state != EvidenceState.SUPPORTED
             or width_resolution.slots_do_not_contradict_supported_common_width(
@@ -5274,7 +4946,7 @@ def solve_frame_sequence(
     resolved_builds = tuple(
         item
         for item in resolved_builds
-        if _frame_slots_are_strictly_monotonic(item[0].slots)
+        if sequence_candidates.frame_slots_are_strictly_monotonic(item[0].slots)
     )
     if not resolved_builds:
         return FrameSequenceSolveFailure(
@@ -5304,7 +4976,7 @@ def solve_frame_sequence(
             (),
         )
         if budget_exhausted
-        else _sequence_assignment_consensus(best)
+        else sequence_consensus.sequence_assignment_consensus(best)
     )
     representative = sequence_candidates.representative_build(best)
     holder_boundaries = _holder_boundaries(search_scope)
@@ -5314,7 +4986,7 @@ def solve_frame_sequence(
         short_axis_plan.photo_height_evidence,
         dimensions,
     )
-    if not _frame_slots_are_strictly_monotonic(representative.slots):
+    if not sequence_candidates.frame_slots_are_strictly_monotonic(representative.slots):
         return FrameSequenceSolveFailure(
             PhysicalSearchOutcome((PhysicalSearchFact.CONSTRAINTS_CONTRADICTED,)),
             total_evaluations,
@@ -5327,7 +4999,7 @@ def solve_frame_sequence(
         strip_mode,
     )
     internal_geometry = (
-        _apply_internal_geometry_uncertainty(
+        sequence_consensus.apply_internal_geometry_uncertainty(
             slots,
             long_axis_assignments,
             best,
@@ -5341,7 +5013,7 @@ def solve_frame_sequence(
             total_evaluations,
         )
     slots, long_axis_assignments = internal_geometry
-    external_safety_geometry = _apply_external_safety_envelope(
+    external_safety_geometry = sequence_consensus.apply_external_safety_envelope(
         slots,
         long_axis_assignments,
         best,
@@ -5354,7 +5026,7 @@ def solve_frame_sequence(
             total_evaluations,
         )
     slots, long_axis_assignments = external_safety_geometry
-    if not _frame_slots_are_strictly_monotonic(slots):
+    if not sequence_candidates.frame_slots_are_strictly_monotonic(slots):
         return FrameSequenceSolveFailure(
             PhysicalSearchOutcome((PhysicalSearchFact.CONSTRAINTS_CONTRADICTED,)),
             total_evaluations,

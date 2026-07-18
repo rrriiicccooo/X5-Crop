@@ -8,7 +8,7 @@ from x5crop.domain import MeasurementIdentity, ObservationId, PixelInterval
 
 
 class FrameSequenceCandidateContractTest(unittest.TestCase):
-    def test_assignment_consensus_prefers_stronger_physical_measurement_support(
+    def test_physical_pareto_prefers_stronger_physical_measurement_support(
         self,
     ) -> None:
         stronger_separator = SimpleNamespace(

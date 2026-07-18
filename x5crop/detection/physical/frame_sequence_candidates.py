@@ -109,6 +109,19 @@ class SequenceBuild:
     objectives: SequenceBuildObjectives
 
 
+def frame_slots_are_strictly_monotonic(
+    slots: tuple[FrameSlot, ...],
+) -> bool:
+    return bool(
+        slots
+        and all(
+            right.leading.position.minimum > left.leading.position.maximum
+            and right.trailing.position.minimum > left.trailing.position.maximum
+            for left, right in zip(slots, slots[1:])
+        )
+    )
+
+
 def _boundaries_share_one_placement(
     boundaries: tuple[ResolvedFrameBoundary, ...],
 ) -> bool:

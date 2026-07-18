@@ -42,6 +42,14 @@ _CANONICAL_OWNERS = {
         "physically_preferred_builds",
         "representative_build",
         "build_preserves_visible_content",
+        "frame_slots_are_strictly_monotonic",
+    },
+    "frame_sequence_consensus.py": {
+        "sequence_assignment_consensus",
+        "internal_geometry_uncertainty_boundary",
+        "apply_internal_geometry_uncertainty",
+        "external_safety_boundary",
+        "apply_external_safety_envelope",
     },
 }
 
@@ -98,6 +106,7 @@ class FrameSequenceArchitectureContractTest(unittest.TestCase):
                     "frame_sequence_common_width",
                     "frame_sequence_search",
                     "frame_sequence_candidates",
+                    "frame_sequence_consensus",
                     "frame_sequence_solver",
                 }
             )
@@ -112,6 +121,10 @@ class FrameSequenceArchitectureContractTest(unittest.TestCase):
         )
         self.assertNotIn(
             "frame_sequence_candidates",
+            _relative_import_modules(common_width),
+        )
+        self.assertNotIn(
+            "frame_sequence_consensus",
             _relative_import_modules(common_width),
         )
         self.assertNotIn(
@@ -130,14 +143,33 @@ class FrameSequenceArchitectureContractTest(unittest.TestCase):
             }.issubset(imports)
         )
         self.assertNotIn("frame_sequence_solver", imports)
+        self.assertTrue(
+            imports.isdisjoint(
+                {
+                    "frame_sequence_candidates",
+                    "frame_sequence_consensus",
+                }
+            )
+        )
 
-    def test_candidate_owner_does_not_depend_on_solver(self) -> None:
+    def test_candidate_owner_does_not_depend_on_higher_owners(self) -> None:
         candidates = _PHYSICAL_ROOT / "frame_sequence_candidates.py"
 
-        self.assertNotIn(
-            "frame_sequence_solver",
-            _relative_import_modules(candidates),
+        self.assertTrue(
+            _relative_import_modules(candidates).isdisjoint(
+                {
+                    "frame_sequence_consensus",
+                    "frame_sequence_solver",
+                }
+            )
         )
+
+    def test_consensus_depends_on_candidate_state_not_solver(self) -> None:
+        consensus = _PHYSICAL_ROOT / "frame_sequence_consensus.py"
+        imports = _relative_import_modules(consensus)
+
+        self.assertIn("frame_sequence_candidates", imports)
+        self.assertNotIn("frame_sequence_solver", imports)
 
     def test_search_result_owns_budget_state_not_final_decision(self) -> None:
         from x5crop.detection.physical.frame_sequence_search import (
@@ -168,6 +200,7 @@ class FrameSequenceArchitectureContractTest(unittest.TestCase):
                 "frame_sequence_common_width",
                 "frame_sequence_search",
                 "frame_sequence_candidates",
+                "frame_sequence_consensus",
             }
             for alias in node.names
         }
