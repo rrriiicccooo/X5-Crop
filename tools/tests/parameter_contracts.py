@@ -227,7 +227,7 @@ CONSTANT_PARAMETER_CONTRACTS = (
         "fixed_by_contract",
     ),
     ParameterContract(
-        "x5crop.detection.physical.frame_sequence_solver.MINIMUM_POSITIVE_PIXEL_EXTENT",
+        "x5crop.detection.physical.frame_sequence_measurements.MINIMUM_POSITIVE_PIXEL_EXTENT",
         ParameterRole.NUMERICAL_SAFETY,
         "px",
         "sequence_solver",
@@ -251,7 +251,7 @@ CONSTANT_PARAMETER_CONTRACTS = (
         "fixed_by_contract",
     ),
     ParameterContract(
-        "x5crop.detection.physical.frame_sequence_solver.STRICT_MAJORITY_DIVISOR",
+        "x5crop.detection.physical.frame_sequence_common_width.STRICT_MAJORITY_DIVISOR",
         ParameterRole.STANDARD_TRANSFORM,
         "divisor",
         "sequence_solver",

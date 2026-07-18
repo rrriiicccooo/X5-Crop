@@ -3,6 +3,7 @@ from __future__ import annotations
 import unittest
 
 from tools.tests.frame_slot_solver_support import scope, separator
+from x5crop.detection.physical import frame_sequence_measurements as measurements
 from x5crop.detection.physical import frame_sequence_solver as solver
 from x5crop.detection.physical.model import (
     BoundaryGeometryState,
@@ -71,8 +72,8 @@ class SeparatorEdgePathSolverContractTest(unittest.TestCase):
         )
         self.assertEqual(internal_trailing[0].state, EvidenceState.UNAVAILABLE)
 
-        def inferred(position: float, name: str) -> solver._EdgeConstraint:
-            return solver._EdgeConstraint(
+        def inferred(position: float, name: str) -> measurements.EdgeConstraint:
+            return measurements.EdgeConstraint(
                 position=PixelInterval.exact(position),
                 basis=FrameBoundarySource.DIMENSION_CONSTRAINED,
                 state=EvidenceState.UNAVAILABLE,
@@ -88,7 +89,7 @@ class SeparatorEdgePathSolverContractTest(unittest.TestCase):
         following_leading = solver._observed_band_edges(support)[1]
         promoted = solver._candidate_specific_separator_edge_roles(
             (
-                solver._MeasuredFrameConstraint(
+                measurements.MeasuredFrameConstraint(
                     inferred(0.0, "first-leading"),
                     internal_trailing[0],
                     PixelInterval.exact(190.0),
@@ -97,7 +98,7 @@ class SeparatorEdgePathSolverContractTest(unittest.TestCase):
                     False,
                     0.0,
                 ),
-                solver._MeasuredFrameConstraint(
+                measurements.MeasuredFrameConstraint(
                     following_leading,
                     inferred(400.0, "second-trailing"),
                     PixelInterval.exact(190.0),

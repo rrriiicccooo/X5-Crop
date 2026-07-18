@@ -32,6 +32,7 @@ from x5crop.runtime.analysis_reuse import analysis_configuration_fingerprint
 from x5crop.configuration.boundary import BoundaryPathParameters
 from x5crop.detection.candidate.proposal.sequence import cached_boundary_measurements
 from x5crop.detection.physical import frame_sequence_solver as solver_module
+from x5crop.detection.physical import frame_sequence_measurements as measurements
 from x5crop.detection.physical.model import (
     BoundaryGeometryState,
     FrameBoundarySource,
@@ -60,7 +61,7 @@ class DetectionCachePerformanceContractTest(unittest.TestCase):
         self,
     ) -> None:
         def edge(position: float, label: str):
-            return solver_module._EdgeConstraint(
+            return measurements.EdgeConstraint(
                 position=PixelInterval.exact(position),
                 basis=FrameBoundarySource.DIMENSION_CONSTRAINED,
                 state=EvidenceState.UNAVAILABLE,
@@ -74,7 +75,7 @@ class DetectionCachePerformanceContractTest(unittest.TestCase):
             )
 
         def frame(start: float, index: int):
-            return solver_module._MeasuredFrameConstraint(
+            return measurements.MeasuredFrameConstraint(
                 leading=edge(start, f"performance-leading-{index}"),
                 trailing=edge(start + 100.0, f"performance-trailing-{index}"),
                 width_px=PixelInterval(99.0, 101.0),
@@ -147,7 +148,7 @@ class DetectionCachePerformanceContractTest(unittest.TestCase):
         self,
     ) -> None:
         def edge(position: float, label: str):
-            return solver_module._EdgeConstraint(
+            return measurements.EdgeConstraint(
                 position=PixelInterval.exact(position),
                 basis=FrameBoundarySource.DIMENSION_CONSTRAINED,
                 state=EvidenceState.UNAVAILABLE,
@@ -161,7 +162,7 @@ class DetectionCachePerformanceContractTest(unittest.TestCase):
             )
 
         def frame(start: float, index: int):
-            return solver_module._MeasuredFrameConstraint(
+            return measurements.MeasuredFrameConstraint(
                 leading=edge(start, f"reachability-leading-{index}"),
                 trailing=edge(start + 100.0, f"reachability-trailing-{index}"),
                 width_px=PixelInterval.exact(100.0),
@@ -201,7 +202,7 @@ class DetectionCachePerformanceContractTest(unittest.TestCase):
         self,
     ) -> None:
         def edge(position: float, label: str):
-            return solver_module._EdgeConstraint(
+            return measurements.EdgeConstraint(
                 position=PixelInterval.exact(position),
                 basis=FrameBoundarySource.DIMENSION_CONSTRAINED,
                 state=EvidenceState.UNAVAILABLE,
@@ -215,7 +216,7 @@ class DetectionCachePerformanceContractTest(unittest.TestCase):
             )
 
         def frame(start: float, label: str):
-            return solver_module._MeasuredFrameConstraint(
+            return measurements.MeasuredFrameConstraint(
                 leading=edge(start, f"{label}-leading"),
                 trailing=edge(start + 100.0, f"{label}-trailing"),
                 width_px=PixelInterval.exact(100.0),

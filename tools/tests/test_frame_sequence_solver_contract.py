@@ -19,28 +19,31 @@ from tools.tests.frame_slot_solver_support import (
 from tools.tests.physical_gate_support import candidate_fixture
 from x5crop.detection.evidence.separator_sequence import separator_sequence_evidence
 from x5crop.detection.candidate.model import sequence_proof_paths_for_geometry
+from x5crop.detection.physical import frame_sequence_common_width as width_resolution
+from x5crop.detection.physical import frame_sequence_measurements as measurements
 from x5crop.detection.physical import frame_sequence_solver as solver_module
 from x5crop.detection.physical import model as physical_model
 from x5crop.detection.physical.frame_dimensions import frame_dimension_evidence
 from x5crop.detection.physical.frame_sequence_solver import (
-    _CommonWidthHypothesis,
-    _DimensionPlacementHypothesis,
     FrameSequenceSolveFailure,
     FrameSequenceSolveResult,
-    _EdgeConstraint,
-    _MeasuredFrameConstraint,
     _SequenceBuildObjectives,
     _dimension_frame_constraints,
-    _common_measured_width_interval,
     _measured_frame_search_space,
     _measured_sequence_build,
-    _measured_width_hypotheses,
-    _non_dominated_width_hypotheses,
     _physically_preferred_builds,
-    _strict_majority_width_consensus,
     _uncorroborated_overlap_extent,
     _unexplained_spacing_extent,
     solve_frame_sequence,
+)
+from x5crop.detection.physical.frame_sequence_common_width import (
+    CommonWidthHypothesis,
+    DimensionPlacementHypothesis,
+    measured_width_hypotheses,
+)
+from x5crop.detection.physical.frame_sequence_measurements import (
+    EdgeConstraint,
+    MeasuredFrameConstraint,
 )
 from x5crop.detection.physical.model import (
     AssignmentConsensusOutcome,
@@ -609,100 +612,9 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
         self.assertEqual(geometry_leading[0][0].state, EvidenceState.UNAVAILABLE)
         self.assertEqual(geometry_trailing[0][0].state, EvidenceState.UNAVAILABLE)
 
-    def test_measured_common_width_precedes_short_axis_search_hint(self) -> None:
-        measured = _CommonWidthHypothesis(
-            width_px=PixelInterval(100.0, 102.0),
-            boundary_anchors=(ObservationId("measured_common_width"),),
-            contributor_count=2,
-        )
-        hint = PixelInterval(110.0, 125.0)
 
-        branches = solver_module._dimension_placement_hypotheses(
-            (measured,),
-            (),
-            (hint,),
-            None,
-        )
 
-        self.assertEqual(branches[0].width_px, measured.width_px)
-        self.assertEqual(branches[0].boundary_anchors, measured.boundary_anchors)
-        self.assertEqual(branches[-1].width_px, hint)
-        self.assertEqual(branches[-1].boundary_anchors, ())
 
-    def test_recurring_boundary_width_precedes_search_hint(self) -> None:
-        recurring = solver_module._RecurringBoundaryWidthHypothesis(
-            width_px=PixelInterval(100.0, 102.0),
-            contributor_count=4,
-        )
-        hint = PixelInterval(110.0, 125.0)
-
-        branches = solver_module._dimension_placement_hypotheses(
-            (),
-            (recurring,),
-            (hint,),
-            None,
-        )
-
-        self.assertEqual(branches[0].width_px, recurring.width_px)
-        self.assertEqual(branches[0].repeated_slot_count, 4)
-        self.assertEqual(branches[-1].width_px, hint)
-        self.assertEqual(branches[-1].repeated_slot_count, 0)
-
-    def test_dominated_recurring_widths_share_one_search_branch(self) -> None:
-        stronger = solver_module._RecurringBoundaryWidthHypothesis(
-            PixelInterval(100.0, 104.0),
-            4,
-        )
-        weaker_overlap = solver_module._RecurringBoundaryWidthHypothesis(
-            PixelInterval(99.0, 105.0),
-            3,
-        )
-        distinct = solver_module._RecurringBoundaryWidthHypothesis(
-            PixelInterval(120.0, 122.0),
-            2,
-        )
-
-        branches = solver_module._dimension_placement_hypotheses(
-            (),
-            (weaker_overlap, distinct, stronger),
-            (),
-            None,
-        )
-
-        self.assertEqual(
-            tuple(
-                (branch.width_px, branch.repeated_slot_count)
-                for branch in branches
-            ),
-            (
-                (stronger.width_px, stronger.contributor_count),
-                (distinct.width_px, distinct.contributor_count),
-            ),
-        )
-
-    def test_edge_overlapping_recurring_widths_remain_distinct_branches(
-        self,
-    ) -> None:
-        first = solver_module._RecurringBoundaryWidthHypothesis(
-            PixelInterval(3141.0, 3182.0),
-            5,
-        )
-        second = solver_module._RecurringBoundaryWidthHypothesis(
-            PixelInterval(3101.0, 3143.0),
-            5,
-        )
-
-        branches = solver_module._dimension_placement_hypotheses(
-            (),
-            (first, second),
-            (),
-            None,
-        )
-
-        self.assertEqual(
-            tuple(branch.width_px for branch in branches),
-            (first.width_px, second.width_px),
-        )
 
     def test_frame_width_hint_orders_but_does_not_delete_recurring_widths(
         self,
@@ -716,11 +628,11 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             bottom=100.0,
             holder_sides=_ALL_HOLDER_SIDES,
         )
-        plausible = solver_module._RecurringBoundaryWidthHypothesis(
+        plausible = width_resolution.RecurringBoundaryWidthHypothesis(
             PixelInterval(100.0, 102.0),
             4,
         )
-        frequent_texture = solver_module._RecurringBoundaryWidthHypothesis(
+        frequent_texture = width_resolution.RecurringBoundaryWidthHypothesis(
             PixelInterval(20.0, 21.0),
             9,
         )
@@ -762,11 +674,11 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
         search_index = replace(
             sequence_search_index(search_scope, supports),
             recurring_width_hypotheses=(
-                solver_module._RecurringBoundaryWidthHypothesis(
+                width_resolution.RecurringBoundaryWidthHypothesis(
                     PixelInterval.exact(100.0),
                     9,
                 ),
-                solver_module._RecurringBoundaryWidthHypothesis(
+                width_resolution.RecurringBoundaryWidthHypothesis(
                     PixelInterval.exact(90.0),
                     4,
                 ),
@@ -816,11 +728,11 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             bottom=100.0,
             holder_sides=_ALL_HOLDER_SIDES,
         )
-        separator_aligned = solver_module._RecurringBoundaryWidthHypothesis(
+        separator_aligned = width_resolution.RecurringBoundaryWidthHypothesis(
             PixelInterval(100.0, 104.0),
             4,
         )
-        short_axis_aligned = solver_module._RecurringBoundaryWidthHypothesis(
+        short_axis_aligned = width_resolution.RecurringBoundaryWidthHypothesis(
             PixelInterval(126.0, 132.0),
             5,
         )
@@ -931,8 +843,8 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
         )
 
     def test_graph_layer_state_index_is_built_once_per_transition(self) -> None:
-        def edge(position: float) -> _EdgeConstraint:
-            return _EdgeConstraint(
+        def edge(position: float) -> EdgeConstraint:
+            return EdgeConstraint(
                 position=PixelInterval.exact(position),
                 basis=FrameBoundarySource.DIMENSION_CONSTRAINED,
                 state=EvidenceState.UNAVAILABLE,
@@ -945,8 +857,8 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
                 ),
             )
 
-        def frame(start: float, end: float) -> _MeasuredFrameConstraint:
-            return _MeasuredFrameConstraint(
+        def frame(start: float, end: float) -> MeasuredFrameConstraint:
+            return MeasuredFrameConstraint(
                 leading=edge(start),
                 trailing=edge(end),
                 width_px=PixelInterval.exact(end - start),
@@ -984,8 +896,8 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
         self.assertEqual(indexed.call_count, len(grouped) - 1)
 
     def test_blank_search_retains_a_witness_for_every_feasible_anchor(self) -> None:
-        def edge(position: float) -> _EdgeConstraint:
-            return _EdgeConstraint(
+        def edge(position: float) -> EdgeConstraint:
+            return EdgeConstraint(
                 position=PixelInterval.exact(position),
                 basis=FrameBoundarySource.DIMENSION_CONSTRAINED,
                 state=EvidenceState.UNAVAILABLE,
@@ -998,8 +910,8 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
                 ),
             )
 
-        def frame(start: float) -> _MeasuredFrameConstraint:
-            return _MeasuredFrameConstraint(
+        def frame(start: float) -> MeasuredFrameConstraint:
+            return MeasuredFrameConstraint(
                 leading=edge(start),
                 trailing=edge(start + 100.0),
                 width_px=PixelInterval.exact(100.0),
@@ -1036,8 +948,8 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
         self.assertEqual(witnessed_middle_options, {1, 2, 3})
 
     def test_blank_search_retains_frame_sized_anchor_pair_alternative(self) -> None:
-        def edge(position: float) -> _EdgeConstraint:
-            return _EdgeConstraint(
+        def edge(position: float) -> EdgeConstraint:
+            return EdgeConstraint(
                 position=PixelInterval.exact(position),
                 basis=FrameBoundarySource.DIMENSION_CONSTRAINED,
                 state=EvidenceState.UNAVAILABLE,
@@ -1050,8 +962,8 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
                 ),
             )
 
-        def frame(start: float) -> _MeasuredFrameConstraint:
-            return _MeasuredFrameConstraint(
+        def frame(start: float) -> MeasuredFrameConstraint:
+            return MeasuredFrameConstraint(
                 leading=edge(start),
                 trailing=edge(start + 100.0),
                 width_px=PixelInterval.exact(100.0),
@@ -1105,8 +1017,8 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             solver_module._observed_band_edges(separator_support)
         )
 
-        def dimension(position: float, label: str) -> _EdgeConstraint:
-            return _EdgeConstraint(
+        def dimension(position: float, label: str) -> EdgeConstraint:
+            return EdgeConstraint(
                 position=PixelInterval.exact(position),
                 basis=FrameBoundarySource.DIMENSION_CONSTRAINED,
                 state=EvidenceState.UNAVAILABLE,
@@ -1120,10 +1032,10 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             )
 
         def frame(
-            leading: _EdgeConstraint,
-            trailing: _EdgeConstraint,
-        ) -> _MeasuredFrameConstraint:
-            return _MeasuredFrameConstraint(
+            leading: EdgeConstraint,
+            trailing: EdgeConstraint,
+        ) -> MeasuredFrameConstraint:
+            return MeasuredFrameConstraint(
                 leading=leading,
                 trailing=trailing,
                 width_px=PixelInterval.exact(100.0),
@@ -1167,8 +1079,8 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
     def test_small_width_alternative_does_not_cap_larger_sequence_spacing(
         self,
     ) -> None:
-        def edge(position: float) -> _EdgeConstraint:
-            return _EdgeConstraint(
+        def edge(position: float) -> EdgeConstraint:
+            return EdgeConstraint(
                 position=PixelInterval.exact(position),
                 basis=FrameBoundarySource.DIMENSION_CONSTRAINED,
                 state=EvidenceState.UNAVAILABLE,
@@ -1181,8 +1093,8 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
                 ),
             )
 
-        def frame(start: float) -> _MeasuredFrameConstraint:
-            return _MeasuredFrameConstraint(
+        def frame(start: float) -> MeasuredFrameConstraint:
+            return MeasuredFrameConstraint(
                 leading=edge(start),
                 trailing=edge(start + 100.0),
                 width_px=PixelInterval.exact(100.0),
@@ -1210,8 +1122,8 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
         self.assertIn(expected, sequences)
 
     def test_blank_pair_witness_uses_physical_prefix_and_suffix(self) -> None:
-        def edge(position: float) -> _EdgeConstraint:
-            return _EdgeConstraint(
+        def edge(position: float) -> EdgeConstraint:
+            return EdgeConstraint(
                 position=PixelInterval.exact(position),
                 basis=FrameBoundarySource.DIMENSION_CONSTRAINED,
                 state=EvidenceState.UNAVAILABLE,
@@ -1224,8 +1136,8 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
                 ),
             )
 
-        def frame(start: float) -> _MeasuredFrameConstraint:
-            return _MeasuredFrameConstraint(
+        def frame(start: float) -> MeasuredFrameConstraint:
+            return MeasuredFrameConstraint(
                 leading=edge(start),
                 trailing=edge(start + 100.0),
                 width_px=PixelInterval.exact(100.0),
@@ -1283,46 +1195,6 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
 
         self.assertIn(correct, witnesses)
 
-    def test_repeated_width_compatibility_is_materialized_once(self) -> None:
-        def edge(position: float, identity: str) -> SimpleNamespace:
-            return SimpleNamespace(
-                position=PixelInterval.exact(position),
-                provenance=SimpleNamespace(
-                    observation_id=ObservationId(identity),
-                ),
-            )
-
-        constraints = (
-            SimpleNamespace(
-                leading=edge(0.0, "leading_1"),
-                trailing=edge(100.0, "trailing_1"),
-                width_px=PixelInterval(98.0, 102.0),
-            ),
-            SimpleNamespace(
-                leading=edge(110.0, "leading_2"),
-                trailing=edge(211.0, "trailing_2"),
-                width_px=PixelInterval(99.0, 103.0),
-            ),
-            SimpleNamespace(
-                leading=edge(220.0, "leading_3"),
-                trailing=edge(320.0, "trailing_3"),
-                width_px=PixelInterval(97.0, 101.0),
-            ),
-        )
-        compatibility = solver_module._width_compatibility_matrix
-
-        with patch.object(
-            solver_module,
-            "_width_compatibility_matrix",
-            wraps=compatibility,
-        ) as materialize:
-            contributors = solver_module._repeated_width_contributor_sets(
-                constraints,
-                2,
-            )
-
-        self.assertTrue(contributors)
-        materialize.assert_called_once()
 
     def test_width_contributor_index_is_reused_across_count_hypotheses(
         self,
@@ -1337,11 +1209,11 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             internal_paths=(100.0, 110.0, 210.0, 220.0, 320.0, 330.0),
             holder_sides=_ALL_HOLDER_SIDES,
         )
-        repeated = solver_module._repeated_width_contributor_sets
+        repeated = width_resolution.repeated_width_contributor_sets
 
         with patch.object(
-            solver_module,
-            "_repeated_width_contributor_sets",
+            width_resolution,
+            "repeated_width_contributor_sets",
             wraps=repeated,
         ) as contributor_search:
             search_index = sequence_search_index(search_scope)
@@ -1489,29 +1361,6 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
 
         self.assertIn((1, 2), index.group_masks)
 
-    def test_broad_width_uncertainty_cannot_bridge_disjoint_narrow_groups(
-        self,
-    ) -> None:
-        intervals = (
-            PixelInterval(95.0, 100.0),
-            PixelInterval(90.0, 120.0),
-            PixelInterval(110.0, 115.0),
-        )
-        constraints = tuple(
-            SimpleNamespace(
-                width_px=interval,
-                leading_holder_clip_supported=False,
-                trailing_holder_clip_supported=False,
-            )
-            for interval in intervals
-        )
-
-        common_width = solver_module._measured_constraint_common_width(
-            constraints,
-            3,
-        )
-
-        self.assertIsNone(common_width)
 
     def test_common_width_groups_remove_strictly_contained_search_surfaces(
         self,
@@ -1546,9 +1395,9 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             if path.axis == BoundaryAxis.LONG
         }
 
-        def edge(position: float) -> _EdgeConstraint:
+        def edge(position: float) -> EdgeConstraint:
             observation = paths[position]
-            return _EdgeConstraint(
+            return EdgeConstraint(
                 position=observation.position,
                 basis=FrameBoundarySource.GRAY_PATH_OBSERVATION,
                 state=EvidenceState.UNAVAILABLE,
@@ -1558,7 +1407,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             )
 
         constraints = (
-            _MeasuredFrameConstraint(
+            MeasuredFrameConstraint(
                 leading=edge(0.0),
                 trailing=edge(100.0),
                 width_px=PixelInterval.exact(100.0),
@@ -1567,7 +1416,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
                 trailing_holder_clip_supported=False,
                 search_order_residual=0.0,
             ),
-            _MeasuredFrameConstraint(
+            MeasuredFrameConstraint(
                 leading=edge(110.0),
                 trailing=edge(210.0),
                 width_px=PixelInterval.exact(100.0),
@@ -1999,9 +1848,9 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             if path.axis == BoundaryAxis.LONG
         }
 
-        def edge(position: float) -> _EdgeConstraint:
+        def edge(position: float) -> EdgeConstraint:
             observation = paths[position]
-            return _EdgeConstraint(
+            return EdgeConstraint(
                 position=observation.position,
                 basis=FrameBoundarySource.GRAY_PATH_OBSERVATION,
                 state=EvidenceState.UNAVAILABLE,
@@ -2011,11 +1860,11 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             )
 
         def frame(
-            leading: _EdgeConstraint,
-            trailing: _EdgeConstraint,
+            leading: EdgeConstraint,
+            trailing: EdgeConstraint,
             width: float,
-        ) -> _MeasuredFrameConstraint:
-            return _MeasuredFrameConstraint(
+        ) -> MeasuredFrameConstraint:
+            return MeasuredFrameConstraint(
                 leading=leading,
                 trailing=trailing,
                 width_px=PixelInterval.exact(width),
@@ -2123,7 +1972,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             trailing_candidates=(),
             observed_constraints=(),
             width_hypotheses=(
-                _CommonWidthHypothesis(
+                CommonWidthHypothesis(
                     PixelInterval.exact(100.0),
                     (ObservationId("measured_width"),),
                     2,
@@ -2235,11 +2084,11 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             observed_constraints=(),
             width_hypotheses=(),
             recurring_width_hypotheses=(
-                solver_module._RecurringBoundaryWidthHypothesis(
+                width_resolution.RecurringBoundaryWidthHypothesis(
                     PixelInterval.exact(100.0),
                     2,
                 ),
-                solver_module._RecurringBoundaryWidthHypothesis(
+                width_resolution.RecurringBoundaryWidthHypothesis(
                     PixelInterval.exact(105.0),
                     2,
                 ),
@@ -2313,7 +2162,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             trailing_candidates=(),
             observed_constraints=(),
             width_hypotheses=(
-                _CommonWidthHypothesis(
+                CommonWidthHypothesis(
                     PixelInterval.exact(300.0),
                     (ObservationId("measured_width"),),
                     2,
@@ -2405,8 +2254,8 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             and path.position == PixelInterval.exact(230.0)
         )
 
-        def dimension(position: float, label: str) -> _EdgeConstraint:
-            return _EdgeConstraint(
+        def dimension(position: float, label: str) -> EdgeConstraint:
+            return EdgeConstraint(
                 position=PixelInterval.exact(position),
                 basis=FrameBoundarySource.DIMENSION_CONSTRAINED,
                 state=EvidenceState.UNAVAILABLE,
@@ -2420,10 +2269,10 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             )
 
         def frame(
-            leading: _EdgeConstraint,
-            trailing: _EdgeConstraint,
-        ) -> _MeasuredFrameConstraint:
-            return _MeasuredFrameConstraint(
+            leading: EdgeConstraint,
+            trailing: EdgeConstraint,
+        ) -> MeasuredFrameConstraint:
+            return MeasuredFrameConstraint(
                 leading=leading,
                 trailing=trailing,
                 width_px=PixelInterval.exact(100.0),
@@ -2436,7 +2285,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
         first = frame(dimension(0.0, "first-leading"), first_trailing)
         second = frame(second_leading, dimension(210.0, "second-trailing"))
         measured_last = frame(
-            _EdgeConstraint(
+            EdgeConstraint(
                 position=raw_path.position,
                 basis=FrameBoundarySource.GRAY_PATH_OBSERVATION,
                 state=EvidenceState.UNAVAILABLE,
@@ -2472,8 +2321,8 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
         )
 
     def test_sequence_graph_keeps_the_physical_best_non_extreme_path(self) -> None:
-        def edge(position: float) -> _EdgeConstraint:
-            return _EdgeConstraint(
+        def edge(position: float) -> EdgeConstraint:
+            return EdgeConstraint(
                 position=PixelInterval.exact(position),
                 basis=FrameBoundarySource.DIMENSION_CONSTRAINED,
                 state=EvidenceState.UNAVAILABLE,
@@ -2486,8 +2335,8 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
                 ),
             )
 
-        def frame(start: float, end: float) -> _MeasuredFrameConstraint:
-            return _MeasuredFrameConstraint(
+        def frame(start: float, end: float) -> MeasuredFrameConstraint:
+            return MeasuredFrameConstraint(
                 leading=edge(start),
                 trailing=edge(end),
                 width_px=PixelInterval.exact(100.0),
@@ -2561,7 +2410,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             0.0,
             "unsupported-leading-path",
         )
-        unsupported_leading = _EdgeConstraint(
+        unsupported_leading = EdgeConstraint(
             position=raw_path.position,
             basis=FrameBoundarySource.GRAY_PATH_OBSERVATION,
             state=EvidenceState.UNAVAILABLE,
@@ -2570,8 +2419,8 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             path=raw_path,
         )
 
-        def dimension(position: PixelInterval, label: str) -> _EdgeConstraint:
-            return _EdgeConstraint(
+        def dimension(position: PixelInterval, label: str) -> EdgeConstraint:
+            return EdgeConstraint(
                 position=position,
                 basis=FrameBoundarySource.DIMENSION_CONSTRAINED,
                 state=EvidenceState.UNAVAILABLE,
@@ -2585,7 +2434,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             )
 
         shared_trailing = dimension(PixelInterval.exact(110.0), "first-trailing")
-        supported_first = _MeasuredFrameConstraint(
+        supported_first = MeasuredFrameConstraint(
             leading=external_leading,
             trailing=shared_trailing,
             width_px=PixelInterval.exact(100.0),
@@ -2595,7 +2444,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             search_order_residual=0.0,
             frame_width_hint_residual=10.0,
         )
-        hinted_first = _MeasuredFrameConstraint(
+        hinted_first = MeasuredFrameConstraint(
             leading=unsupported_leading,
             trailing=shared_trailing,
             width_px=PixelInterval.exact(110.0),
@@ -2605,7 +2454,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             search_order_residual=0.0,
             frame_width_hint_residual=0.0,
         )
-        second = _MeasuredFrameConstraint(
+        second = MeasuredFrameConstraint(
             leading=dimension(PixelInterval.exact(120.0), "second-leading"),
             trailing=dimension(PixelInterval(220.0, 230.0), "second-trailing"),
             width_px=PixelInterval(100.0, 110.0),
@@ -2637,8 +2486,8 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
     def test_sequence_graph_skips_nodes_outside_complete_paths(
         self,
     ) -> None:
-        def edge(position: float) -> _EdgeConstraint:
-            return _EdgeConstraint(
+        def edge(position: float) -> EdgeConstraint:
+            return EdgeConstraint(
                 position=PixelInterval.exact(position),
                 basis=FrameBoundarySource.DIMENSION_CONSTRAINED,
                 state=EvidenceState.UNAVAILABLE,
@@ -2651,8 +2500,8 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
                 ),
             )
 
-        def frame(start: float, end: float) -> _MeasuredFrameConstraint:
-            return _MeasuredFrameConstraint(
+        def frame(start: float, end: float) -> MeasuredFrameConstraint:
+            return MeasuredFrameConstraint(
                 leading=edge(start),
                 trailing=edge(end),
                 width_px=PixelInterval.exact(100.0),
@@ -2767,9 +2616,9 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             if path.axis == BoundaryAxis.LONG
         }
 
-        def edge(position: float) -> _EdgeConstraint:
+        def edge(position: float) -> EdgeConstraint:
             observation = paths[position]
-            return _EdgeConstraint(
+            return EdgeConstraint(
                 position=observation.position,
                 basis=FrameBoundarySource.GRAY_PATH_OBSERVATION,
                 state=EvidenceState.UNAVAILABLE,
@@ -2779,7 +2628,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             )
 
         constraints = tuple(
-            _MeasuredFrameConstraint(
+            MeasuredFrameConstraint(
                 leading=edge(start),
                 trailing=edge(end),
                 width_px=PixelInterval.exact(100.0),
@@ -2819,9 +2668,9 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             if path.axis == BoundaryAxis.LONG
         }
 
-        def edge(position: float) -> _EdgeConstraint:
+        def edge(position: float) -> EdgeConstraint:
             observation = long_paths[position]
-            return _EdgeConstraint(
+            return EdgeConstraint(
                 position=observation.position,
                 basis=FrameBoundarySource.GRAY_PATH_OBSERVATION,
                 state=EvidenceState.UNAVAILABLE,
@@ -2833,7 +2682,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
         leading = edge(0.0)
         first_trailing = edge(100.0)
         focused_trailing = edge(200.0)
-        hypothesis = _DimensionPlacementHypothesis(
+        hypothesis = DimensionPlacementHypothesis(
             width_px=PixelInterval.exact(100.0),
             boundary_anchors=(
                 leading.provenance.observation_id,
@@ -2872,7 +2721,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
     def test_focused_raw_boundary_does_not_delete_dimension_hypothesis(
         self,
     ) -> None:
-        inferred = _EdgeConstraint(
+        inferred = EdgeConstraint(
             position=PixelInterval(95.0, 105.0),
             basis=FrameBoundarySource.DIMENSION_CONSTRAINED,
             state=EvidenceState.UNAVAILABLE,
@@ -2899,7 +2748,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             if path.axis == BoundaryAxis.LONG
             and path.position == PixelInterval.exact(100.0)
         )
-        observed = _EdgeConstraint(
+        observed = EdgeConstraint(
             position=raw_path.position,
             basis=FrameBoundarySource.GRAY_PATH_OBSERVATION,
             state=EvidenceState.UNAVAILABLE,
@@ -2926,7 +2775,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             internal_paths=(100.0,),
             holder_sides=_ALL_HOLDER_SIDES,
         ).raw_boundary_paths[-1]
-        constraint = _EdgeConstraint(
+        constraint = EdgeConstraint(
             position=gray_path.position,
             basis=FrameBoundarySource.GRAY_PATH_OBSERVATION,
             state=EvidenceState.UNAVAILABLE,
@@ -2956,9 +2805,9 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             if path.axis == BoundaryAxis.LONG
         }
 
-        def edge(position: float) -> _EdgeConstraint:
+        def edge(position: float) -> EdgeConstraint:
             path = paths[position]
-            return _EdgeConstraint(
+            return EdgeConstraint(
                 position=path.position,
                 basis=FrameBoundarySource.GRAY_PATH_OBSERVATION,
                 state=EvidenceState.UNAVAILABLE,
@@ -2968,7 +2817,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             )
 
         constraints = (
-            _MeasuredFrameConstraint(
+            MeasuredFrameConstraint(
                 leading=edge(100.0),
                 trailing=edge(200.0),
                 width_px=PixelInterval.exact(100.0),
@@ -2977,7 +2826,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
                 trailing_holder_clip_supported=False,
                 search_order_residual=0.0,
             ),
-            _MeasuredFrameConstraint(
+            MeasuredFrameConstraint(
                 leading=edge(300.0),
                 trailing=edge(400.0),
                 width_px=PixelInterval.exact(100.0),
@@ -2988,7 +2837,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             ),
         )
 
-        self.assertEqual(_measured_width_hypotheses(constraints), ())
+        self.assertEqual(measured_width_hypotheses(constraints), ())
         search_space = _measured_frame_search_space(
             sequence_search_index(search_scope),
             (PixelInterval.exact(100.0),),
@@ -3328,8 +3177,8 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             separator(100.0, 110.0, plan, supported=True)
         )
 
-        def inferred_edge(position: float, label: str) -> _EdgeConstraint:
-            return _EdgeConstraint(
+        def inferred_edge(position: float, label: str) -> EdgeConstraint:
+            return EdgeConstraint(
                 position=PixelInterval.exact(position),
                 basis=FrameBoundarySource.DIMENSION_CONSTRAINED,
                 state=EvidenceState.UNAVAILABLE,
@@ -3343,10 +3192,10 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             )
 
         def constraint(
-            leading: _EdgeConstraint,
-            trailing: _EdgeConstraint,
-        ) -> _MeasuredFrameConstraint:
-            return _MeasuredFrameConstraint(
+            leading: EdgeConstraint,
+            trailing: EdgeConstraint,
+        ) -> MeasuredFrameConstraint:
+            return MeasuredFrameConstraint(
                 leading=leading,
                 trailing=trailing,
                 width_px=trailing.position.minus(leading.position),
@@ -3382,13 +3231,13 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             minimum: float,
             maximum: float,
             label: str,
-        ) -> _EdgeConstraint:
+        ) -> EdgeConstraint:
             observation = path(
                 BoundaryAxis.LONG,
                 (minimum + maximum) / 2.0,
                 label,
             )
-            return _EdgeConstraint(
+            return EdgeConstraint(
                 position=PixelInterval(minimum, maximum),
                 basis=FrameBoundarySource.GRAY_PATH_OBSERVATION,
                 state=EvidenceState.UNAVAILABLE,
@@ -3408,7 +3257,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
         self.assertIsNotNone(refined)
         assert refined is not None
         leading, trailing = refined
-        constraint = _MeasuredFrameConstraint(
+        constraint = MeasuredFrameConstraint(
             leading=leading,
             trailing=trailing,
             width_px=trailing.position.minus(leading.position),
@@ -3450,8 +3299,8 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             holder_sides=_ALL_HOLDER_SIDES,
         )
 
-        def edge(minimum: float, maximum: float, label: str) -> _EdgeConstraint:
-            return _EdgeConstraint(
+        def edge(minimum: float, maximum: float, label: str) -> EdgeConstraint:
+            return EdgeConstraint(
                 position=PixelInterval(minimum, maximum),
                 basis=FrameBoundarySource.DIMENSION_CONSTRAINED,
                 state=EvidenceState.UNAVAILABLE,
@@ -3468,9 +3317,9 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             leading: tuple[float, float],
             trailing: tuple[float, float],
             label: str,
-        ) -> _MeasuredFrameConstraint:
+        ) -> MeasuredFrameConstraint:
             width = PixelInterval(*trailing).minus(PixelInterval(*leading))
-            return _MeasuredFrameConstraint(
+            return MeasuredFrameConstraint(
                 leading=edge(*leading, f"{label}:leading"),
                 trailing=edge(*trailing, f"{label}:trailing"),
                 width_px=width,
@@ -3726,9 +3575,9 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
         plan = shared_short_axis_plan(search_scope)
         separator_support = separator(210.0, 220.0, plan, supported=True)
 
-        def raw(position: float, interval: PixelInterval) -> _EdgeConstraint:
+        def raw(position: float, interval: PixelInterval) -> EdgeConstraint:
             observation = paths[position]
-            return _EdgeConstraint(
+            return EdgeConstraint(
                 position=interval,
                 basis=FrameBoundarySource.GRAY_PATH_OBSERVATION,
                 state=EvidenceState.UNAVAILABLE,
@@ -3737,9 +3586,9 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
                 path=observation,
             )
 
-        def separator_edge(side: BoundarySide) -> _EdgeConstraint:
+        def separator_edge(side: BoundarySide) -> EdgeConstraint:
             observation = separator_support.observation
-            return _EdgeConstraint(
+            return EdgeConstraint(
                 position=(
                     observation.leading_edge
                     if side == BoundarySide.TRAILING
@@ -3754,7 +3603,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             )
 
         constraints = (
-            _MeasuredFrameConstraint(
+            MeasuredFrameConstraint(
                 leading=raw(0.0, PixelInterval.exact(0.0)),
                 trailing=raw(100.0, PixelInterval(95.0, 105.0)),
                 width_px=PixelInterval(95.0, 105.0),
@@ -3763,7 +3612,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
                 trailing_holder_clip_supported=False,
                 search_order_residual=0.0,
             ),
-            _MeasuredFrameConstraint(
+            MeasuredFrameConstraint(
                 leading=raw(105.0, PixelInterval(100.0, 110.0)),
                 trailing=separator_edge(BoundarySide.TRAILING),
                 width_px=PixelInterval(100.0, 110.0),
@@ -3772,7 +3621,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
                 trailing_holder_clip_supported=False,
                 search_order_residual=0.0,
             ),
-            _MeasuredFrameConstraint(
+            MeasuredFrameConstraint(
                 leading=separator_edge(BoundarySide.LEADING),
                 trailing=raw(320.0, PixelInterval(315.0, 325.0)),
                 width_px=PixelInterval(95.0, 105.0),
@@ -3781,7 +3630,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
                 trailing_holder_clip_supported=False,
                 search_order_residual=0.0,
             ),
-            _MeasuredFrameConstraint(
+            MeasuredFrameConstraint(
                 leading=raw(330.0, PixelInterval(320.0, 330.0)),
                 trailing=raw(430.0, PixelInterval.exact(430.0)),
                 width_px=PixelInterval(100.0, 110.0),
@@ -4001,7 +3850,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             (),
             ((trailing_endpoint, True),),
             (
-                _DimensionPlacementHypothesis(
+                DimensionPlacementHypothesis(
                     PixelInterval.exact(100.0),
                     (),
                 ),
@@ -4243,33 +4092,6 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
 
         self.assertEqual(trailing_endpoint.state, EvidenceState.UNAVAILABLE)
 
-    def test_non_dominated_widths_preserve_disjoint_measurements(self) -> None:
-        measured_width = _CommonWidthHypothesis(
-            PixelInterval(100.0, 110.0),
-            (ObservationId("measured-a"), ObservationId("measured-b")),
-            4,
-        )
-        weaker_overlapping_width = _CommonWidthHypothesis(
-            PixelInterval(102.0, 108.0),
-            (ObservationId("measured-c"), ObservationId("measured-d")),
-            2,
-        )
-        disjoint_width = _CommonWidthHypothesis(
-            PixelInterval(200.0, 210.0),
-            (ObservationId("measured-e"), ObservationId("measured-f")),
-            3,
-        )
-
-        self.assertEqual(
-            _non_dominated_width_hypotheses(
-                (
-                    measured_width,
-                    weaker_overlapping_width,
-                    disjoint_width,
-                )
-            ),
-            (measured_width, disjoint_width),
-        )
 
     def test_frame_width_search_hint_cannot_reject_measured_sequence(self) -> None:
         search_scope = scope(
@@ -4617,28 +4439,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             )
         )
 
-    def test_disjoint_exact_widths_cannot_be_reconciled_by_pixel_quantization(
-        self,
-    ) -> None:
-        measurements = (
-            PixelInterval.exact(100.0),
-            PixelInterval.exact(102.0),
-        )
 
-        consensus = _common_measured_width_interval(measurements)
-
-        self.assertIsNone(consensus)
-
-    def test_search_width_majority_requires_a_real_shared_interval(self) -> None:
-        measurements = (
-            PixelInterval(90.0, 110.0),
-            PixelInterval(111.0, 131.0),
-            PixelInterval(132.0, 152.0),
-        )
-
-        consensus = _strict_majority_width_consensus(measurements)
-
-        self.assertIsNone(consensus)
 
     def test_supported_common_width_resolves_compatible_dimension_boundary(
         self,
@@ -5518,8 +5319,8 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
                 return_value=(build, common_width),
             ),
             patch.object(
-                solver_module,
-                "_slots_do_not_contradict_supported_common_width",
+                width_resolution,
+                "slots_do_not_contradict_supported_common_width",
                 return_value=True,
             ),
         ):
@@ -5570,8 +5371,8 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
                 return_value=(build, common_width),
             ),
             patch.object(
-                solver_module,
-                "_slots_do_not_contradict_supported_common_width",
+                width_resolution,
+                "slots_do_not_contradict_supported_common_width",
                 return_value=True,
             ),
             patch.object(
@@ -5623,8 +5424,8 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
                 return_value=(resolved_build, common_width),
             ),
             patch.object(
-                solver_module,
-                "_slots_do_not_contradict_supported_common_width",
+                width_resolution,
+                "slots_do_not_contradict_supported_common_width",
                 return_value=True,
             ),
             patch.object(
@@ -5691,46 +5492,6 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
                 )
             )
 
-    def test_holder_occlusion_may_extend_hidden_nominal_frame_outside_canvas(
-        self,
-    ) -> None:
-        leading = SimpleNamespace(
-            position=PixelInterval.exact(10.0),
-            independently_observed=False,
-        )
-        trailing = SimpleNamespace(
-            position=PixelInterval.exact(50.0),
-            independently_observed=True,
-        )
-        slot = SimpleNamespace(
-            width_px=PixelInterval.exact(40.0),
-            leading=leading,
-            trailing=trailing,
-        )
-        holder_boundaries = {
-            BoundarySide.LEADING: SimpleNamespace(
-                position=PixelInterval.exact(10.0),
-            ),
-        }
-        common_width = SimpleNamespace(
-            state=EvidenceState.SUPPORTED,
-            width_px=PixelInterval.exact(100.0),
-        )
-
-        with patch.object(
-            solver_module,
-            "_boundary_matches_holder",
-            return_value=True,
-        ):
-            compatible = (
-                solver_module._slots_do_not_contradict_supported_common_width(
-                    (slot,),
-                    holder_boundaries,
-                    common_width,
-                )
-            )
-
-        self.assertTrue(compatible)
 
     def test_common_width_resolution_cannot_create_non_monotonic_sequence(
         self,
@@ -5761,8 +5522,8 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
                 return_value=(SimpleNamespace(slots=resolved_slots), common_width),
             ),
             patch.object(
-                solver_module,
-                "_slots_do_not_contradict_supported_common_width",
+                width_resolution,
+                "slots_do_not_contradict_supported_common_width",
                 return_value=True,
             ),
         ):
@@ -5789,8 +5550,8 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
         )
         plan = shared_short_axis_plan(search_scope)
 
-        def edge(position: float, label: str) -> _EdgeConstraint:
-            return _EdgeConstraint(
+        def edge(position: float, label: str) -> EdgeConstraint:
+            return EdgeConstraint(
                 position=PixelInterval.exact(position),
                 basis=FrameBoundarySource.DIMENSION_CONSTRAINED,
                 state=EvidenceState.UNAVAILABLE,
@@ -5804,7 +5565,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             )
 
         constraints = (
-            _MeasuredFrameConstraint(
+            MeasuredFrameConstraint(
                 leading=edge(400.0, "isolated-1-leading"),
                 trailing=edge(500.0, "isolated-1-trailing"),
                 width_px=PixelInterval.exact(100.0),
@@ -5813,7 +5574,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
                 trailing_holder_clip_supported=False,
                 search_order_residual=0.0,
             ),
-            _MeasuredFrameConstraint(
+            MeasuredFrameConstraint(
                 leading=edge(510.0, "isolated-2-leading"),
                 trailing=edge(610.0, "isolated-2-trailing"),
                 width_px=PixelInterval.exact(100.0),
@@ -7747,7 +7508,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
                 edge.external_side is not None
                 or (
                     edge.separator_cross_axis is not None
-                    and solver_module._separator_edge_path_is_supported(edge)
+                    and measurements.separator_edge_path_is_supported(edge)
                 )
                 for edge, _ in seeds
             )
@@ -8527,7 +8288,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             sequence_search_index(search_scope, ()),
             width_hypotheses=(),
         )
-        captured: list[tuple[_MeasuredFrameConstraint, ...]] = []
+        captured: list[tuple[MeasuredFrameConstraint, ...]] = []
 
         def capture(options, *_args, **_kwargs):
             captured.append(options)

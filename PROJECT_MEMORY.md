@@ -17,8 +17,9 @@ reports, Debug Analysis, and command output remain authoritative.
 - Resume baseline / 恢复基线：使用包含本文件的当前提交；先运行 `git log -1 --oneline` 和
   `git status --short` 确认，不依赖这里保存的旧提交号。
 - State / 状态：Shared Short Axis / Frame Slot 破坏性迁移已经进入受跟踪源码、测试、报告、
-  Debug 和文档；broad-uncertainty common-width contributor 分组合同已经补齐，但 ownership
-  拆分、剩余物理校准、完整样片复核、性能对比和双轮架构审计尚未完成。
+  Debug 和文档；broad-uncertainty common-width contributor 分组合同已经补齐。Auditability /
+  Ownership Gate 第一波已建立独立的 measurement-interval 与 common-width canonical owners，
+  但其余 solver 职责、剩余物理校准、完整样片复核、性能对比和双轮架构审计尚未完成。
 - Safety / 安全：不得 reset、restore 或恢复旧 `PhotoAperture`、旧 sequence solver、旧 schema
   或任何兼容层；不要把当前检查点误称为物理或架构闭环。
 
@@ -47,7 +48,7 @@ reports, Debug Analysis, and command output remain authoritative.
 ## Verification State / 验证状态
 
 - Fresh checkpoint verification / 当前检查点新验证：`tools/verify full` passed on 2026-07-19
-  with 740 unit/contract tests, 14 format/mode configuration pairs, compile,
+  with 743 unit/contract tests, 14 format/mode configuration pairs, compile,
   macOS shell syntax, diff hygiene, release-package construction, and version
   checks. Confirm the current commit and clean status at resume time.
 - The verifier proves source and contract consistency only. It does not prove
@@ -59,7 +60,7 @@ reports, Debug Analysis, and command output remain authoritative.
   geometry reference and must be repaired from real evidence before that dataset
   can be called validated.
 
-- 当前 `tools/verify full` 已通过 740 项 unit/contracts、14 组配置、compile、macOS shell syntax、
+- 当前 `tools/verify full` 已通过 743 项 unit/contracts、14 组配置、compile、macOS shell syntax、
   diff hygiene、发布包构建和版本检查；它仍不能证明具名样片几何、性能闭环、Debug 视觉正确性或
   两轮架构审计。
 - sample-expectation 单元测试只验证加载器和契约代码；当前本地 `pass_X5_00038.tif` 记录仍缺少
@@ -81,17 +82,22 @@ reports, Debug Analysis, and command output remain authoritative.
   current-schema report diffs. Fresh Debug Analysis confirmed every unresolved
   result stayed `REVIEW` / non-exportable; `00031` still shows visibly incomplete
   provisional geometry and must not be upgraded.
+- The first Phase 2 ownership wave was behavior-neutral on the same six frozen
+  samples: current-schema report diff count was zero and all six Debug Analysis
+  JPEGs were byte-identical to the Phase 1 candidate baseline.
 
 以上样片仍需当前报告和 Debug Analysis 逐张复核；肉眼正确的代表解不能覆盖仍存在的非支配、
 dimension-heavy 替代解释。
 
 ## Next Actions / 下一步
 
-1. Begin the Auditability / Ownership Gate before further broad sample calibration:
-   split physical lifecycle owners and their contracts without adding wrappers,
-   re-exports, duplicate models, or behavior-changing thresholds.
-2. Keep `solve_frame_sequence` as the thin orchestration facade and add machine-
-   checked authority/import boundaries for each coherent ownership wave.
+1. Continue the Auditability / Ownership Gate before further broad sample
+   calibration. Measurement intervals and common-width resolution now have
+   canonical owners; next separate search graph/reachability/budget state, then
+   candidate build/Pareto, consensus, separator assignment, boundary roles, and
+   completion without wrappers, re-exports, or duplicate models.
+2. Keep reducing `solve_frame_sequence` to a thin orchestration facade and extend
+   the machine-checked authority/import boundaries for each coherent ownership wave.
 3. After each green ownership wave, recheck current-schema reports and relevant
    Debug Analysis before committing and pushing.
 4. Then finish the remaining physical contracts, all format-mode samples,
@@ -102,8 +108,9 @@ dimension-heavy 替代解释。
 6. Only after physical validation and both audits, update the rolling checkpoint,
    docs, commit, and push. Never manufacture PASS from unresolved geometry.
 
-1. 下一步先完成 Auditability / Ownership Gate，按真实物理生命周期拆 owner 与合同，不增加
-   wrapper、re-export、重复模型或行为阈值。
+1. 下一步继续 Auditability / Ownership Gate；measurement intervals 与 common-width 已有唯一
+   owner，接着拆 search graph/reachability/budget、candidate/Pareto、consensus、separator
+   assignment、boundary roles 与 completion，不增加 wrapper、re-export、重复模型或行为阈值。
 2. 每个 ownership wave 都要复核 current-schema report 与相关 Debug，完整验证后独立提交并推送。
 3. 之后再完成剩余物理合同、全格式样片、性能、Test/test 2 与双轮审计。
 4. 未解决几何继续保持 REVIEW / 不导出；只有物理验证与双轮审计完成后才能宣称闭环。

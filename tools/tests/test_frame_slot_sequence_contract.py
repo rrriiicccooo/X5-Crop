@@ -18,6 +18,7 @@ from x5crop.detection.physical.model import (
     SharedShortAxisSafetySpan,
 )
 from x5crop.detection.physical.sequence_completion import infer_sequence_frame_slot
+from x5crop.detection.physical import frame_sequence_common_width as common_width
 from x5crop.detection.physical import frame_sequence_solver as solver_module
 from x5crop.detection.physical.frame_sequence_solver import (
     FrameSequenceSolveResult,
@@ -942,7 +943,7 @@ class FrameSlotSequenceContractTest(unittest.TestCase):
         )
         support = solver_separator(100.0, 110.0, plan, supported=True)
         search_index = solver_search_index(search_scope, (support,))
-        scale_constraint = solver_module._frame_width_physical_scale_constraint(
+        scale_constraint = common_width.frame_width_physical_scale_constraint(
             plan.photo_height_evidence,
             solver_dimensions(1.0, 1.0),
         )

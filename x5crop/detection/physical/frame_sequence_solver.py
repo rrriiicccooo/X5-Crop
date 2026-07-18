@@ -34,6 +34,8 @@ from ...domain import (
 )
 from ...image.content import ContentRegionObservation
 from ...strip_modes import FULL, PARTIAL
+from . import frame_sequence_common_width as width_resolution
+from . import frame_sequence_measurements as measurement_facts
 from .model import (
     AssignmentConsensusOutcome,
     BoundaryAnchor,
@@ -45,7 +47,6 @@ from .model import (
     ContentExtentConstraint,
     FrameEdgeOcclusionInference,
     FrameContentOccupancy,
-    FrameWidthMeasurementConstraint,
     FrameWidthPhysicalScaleConstraint,
     FrameWidthSearchHint,
     HolderSpanScaleHint,
@@ -71,10 +72,8 @@ from .short_axis import (
 )
 
 
-MINIMUM_POSITIVE_PIXEL_EXTENT = 1.0
 MINIMUM_COUNT_WITH_INTERIOR_FRAME = 3
 BIDIRECTIONAL_REFINEMENT_PASSES = 2
-STRICT_MAJORITY_DIVISOR = 2
 INTERVAL_ENDPOINT_COUNT = 2
 
 
@@ -173,108 +172,11 @@ def _content_extent_constraint(
 
 
 @dataclass(frozen=True)
-class _EdgeConstraint:
-    position: PixelInterval
-    basis: FrameBoundarySource
-    state: EvidenceState
-    geometry_state: BoundaryGeometryState
-    provenance: MeasurementProvenance
-    path: GrayBoundaryPathObservation | None = None
-    separator: SeparatorBandObservation | None = None
-    separator_cross_axis: SeparatorCrossAxisMeasurement | None = None
-    external_side: BoundarySide | None = None
-
-    def __post_init__(self) -> None:
-        if self.basis == FrameBoundarySource.GRAY_PATH_OBSERVATION:
-            if (
-                self.path is None
-                or self.separator is not None
-                or self.separator_cross_axis is not None
-            ):
-                raise ValueError("measured frame-slot constraint requires one raw path")
-            if self.path.axis != BoundaryAxis.LONG:
-                raise ValueError("long-axis frame-slot constraint requires a long path")
-            if self.state != EvidenceState.UNAVAILABLE:
-                raise ValueError(
-                    "generic gray path cannot claim a supported photo-edge role"
-                )
-            if not self.path.position.intersects(self.position):
-                raise ValueError("measured frame-slot constraint must preserve its path")
-        elif self.basis == FrameBoundarySource.SEPARATOR_EDGE_OBSERVATION:
-            if (
-                self.separator is None
-                or self.separator_cross_axis is None
-                or self.path is not None
-            ):
-                raise ValueError("separator frame-slot constraint requires one band")
-            if self.state not in {
-                EvidenceState.UNAVAILABLE,
-                EvidenceState.SUPPORTED,
-            }:
-                raise ValueError(
-                    "separator edge role must be unavailable or supported"
-                )
-            if self.external_side is not None:
-                if self.external_side == BoundarySide.LEADING:
-                    expected = self.separator.trailing_edge
-                elif self.external_side == BoundarySide.TRAILING:
-                    expected = self.separator.leading_edge
-                else:
-                    raise ValueError(
-                        "holder-adjacent separator edge requires a long-axis side"
-                    )
-                if self.position != expected:
-                    raise ValueError(
-                        "holder-adjacent band must expose its photo-facing edge"
-                    )
-        elif self.basis == FrameBoundarySource.DIMENSION_CONSTRAINED:
-            if (
-                self.separator is not None
-                or self.separator_cross_axis is not None
-                or self.path is not None
-                or self.external_side is not None
-            ):
-                raise ValueError(
-                    "dimension-constrained frame-slot edge cannot claim an observation"
-                )
-            if self.state != EvidenceState.UNAVAILABLE:
-                raise ValueError("dimension-constrained frame-slot edge must be unavailable")
-        else:
-            raise ValueError("unsupported frame slot constraint basis")
-        if not isinstance(self.geometry_state, BoundaryGeometryState):
-            raise TypeError("frame-slot constraint requires typed geometry state")
-        if (
-            self.basis != FrameBoundarySource.DIMENSION_CONSTRAINED
-            and self.geometry_state != BoundaryGeometryState.RESOLVED
-        ):
-            raise ValueError("observed frame-slot constraints have resolved positions")
-
-    @property
-    def measurement_quality(self) -> float:
-        return (
-            self.observation_quality
-            if self.state == EvidenceState.SUPPORTED
-            else 0.0
-        )
-
-    @property
-    def observation_quality(self) -> float:
-        if self.path is not None:
-            return min(
-                self.path.lower_appearance.spatial_continuity,
-                self.path.upper_appearance.spatial_continuity,
-            )
-        if self.separator is None or self.separator_cross_axis is None:
-            return 0.0
-        return float(
-            _separator_edge_path_measurement(self).longest_supported_ratio or 0.0
-        )
-
-
-@dataclass(frozen=True)
 class _BandSequenceHypothesis:
     supports: tuple[SeparatorBandCrossAxisSupport, ...]
-    band_edges: tuple[tuple[_EdgeConstraint, _EdgeConstraint], ...]
+    band_edges: tuple[
+        tuple[measurement_facts.EdgeConstraint, measurement_facts.EdgeConstraint], ...
+    ]
     short_axis: SharedShortAxisSafetySpan
     frame_width_px: PixelInterval
     indexed_anchor_count: int
@@ -288,7 +190,7 @@ class _BandSequenceHypothesis:
             raise ValueError(
                 "separator sequence hypothesis requires one edge pair per band"
             )
-        if self.frame_width_px.minimum < MINIMUM_POSITIVE_PIXEL_EXTENT:
+        if self.frame_width_px.minimum < measurement_facts.MINIMUM_POSITIVE_PIXEL_EXTENT:
             raise ValueError("separator sequence frame width must be positive")
         if self.indexed_anchor_count < 0:
             raise ValueError("indexed anchor count cannot be negative")
@@ -395,166 +297,26 @@ class _SequenceBuild:
 
 
 @dataclass(frozen=True)
-class _MeasuredFrameConstraint:
-    leading: _EdgeConstraint
-    trailing: _EdgeConstraint
-    width_px: PixelInterval
-    full_width_hypothesis_admissible: bool
-    leading_holder_clip_supported: bool
-    trailing_holder_clip_supported: bool
-    search_order_residual: float
-    frame_width_hint_residual: float = 0.0
-
-    def allowed_at(self, frame_index: int, count: int) -> bool:
-        return bool(
-            self.full_width_hypothesis_admissible
-            or (frame_index == 1 and self.leading_holder_clip_supported)
-            or (frame_index == count and self.trailing_holder_clip_supported)
-        )
-
-
-@dataclass(frozen=True)
-class _CommonWidthHypothesis:
-    width_px: PixelInterval
-    boundary_anchors: tuple[ObservationId, ...]
-    contributor_count: int
-
-    def __post_init__(self) -> None:
-        if self.width_px.minimum < MINIMUM_POSITIVE_PIXEL_EXTENT:
-            raise ValueError("common-width hypothesis must be positive")
-        if self.contributor_count < MINIMUM_COMMON_FRAME_WIDTH_OBSERVATIONS:
-            raise ValueError("common-width hypothesis requires independent slots")
-        if not self.boundary_anchors:
-            raise ValueError("common-width hypothesis requires measured anchors")
-
-
-@dataclass(frozen=True)
-class _RecurringBoundaryWidthHypothesis:
-    width_px: PixelInterval
-    contributor_count: int
-
-    def __post_init__(self) -> None:
-        if self.width_px.minimum < MINIMUM_POSITIVE_PIXEL_EXTENT:
-            raise ValueError("recurring boundary width must be positive")
-        if self.contributor_count < MINIMUM_COMMON_FRAME_WIDTH_OBSERVATIONS:
-            raise ValueError("recurring boundary width requires repeated slots")
-
-
-@dataclass(frozen=True)
-class _DimensionPlacementHypothesis:
-    width_px: PixelInterval
-    boundary_anchors: tuple[ObservationId, ...]
-    repeated_slot_count: int = 0
-
-    def __post_init__(self) -> None:
-        if self.width_px.minimum < MINIMUM_POSITIVE_PIXEL_EXTENT:
-            raise ValueError("dimension placement hypothesis must be positive")
-        if self.repeated_slot_count < 0:
-            raise ValueError("repeated slot count cannot be negative")
-
-
-@dataclass(frozen=True)
 class _MeasuredFrameSearchSpace:
-    leading_candidates: tuple[tuple[_EdgeConstraint, bool], ...]
-    trailing_candidates: tuple[tuple[_EdgeConstraint, bool], ...]
-    observed_constraints: tuple[_MeasuredFrameConstraint, ...]
-    width_hypotheses: tuple[_CommonWidthHypothesis, ...]
-    recurring_width_hypotheses: tuple[_RecurringBoundaryWidthHypothesis, ...]
-
-
-def _width_satisfies_physical_scale(
-    width: PixelInterval,
-    constraint: FrameWidthPhysicalScaleConstraint | None,
-) -> bool:
-    return constraint is None or width.intersects(constraint.width_px)
-
-
-def _dimension_placement_hypotheses(
-    measured_widths: tuple[_CommonWidthHypothesis, ...],
-    recurring_widths: tuple[_RecurringBoundaryWidthHypothesis, ...],
-    search_hints: tuple[PixelInterval, ...],
-    physical_scale_constraint: FrameWidthPhysicalScaleConstraint | None,
-) -> tuple[_DimensionPlacementHypothesis, ...]:
-    measured = tuple(
-        _DimensionPlacementHypothesis(
-            hypothesis.width_px,
-            hypothesis.boundary_anchors,
-            hypothesis.contributor_count,
-        )
-        for hypothesis in measured_widths
-    )
-    recurring = tuple(
-        _DimensionPlacementHypothesis(
-            hypothesis.width_px,
-            (),
-            hypothesis.contributor_count,
-        )
-        for hypothesis in _non_dominated_recurring_width_hypotheses(
-            recurring_widths
-        )
-    )
-    hints = tuple(
-        _DimensionPlacementHypothesis(width, ())
-        for width in search_hints
-    )
-    by_width: dict[PixelInterval, _DimensionPlacementHypothesis] = {}
-    for hypothesis in (*measured, *recurring, *hints):
-        if not _width_satisfies_physical_scale(
-            hypothesis.width_px,
-            physical_scale_constraint,
-        ):
-            continue
-        existing = by_width.get(hypothesis.width_px)
-        if existing is None:
-            by_width[hypothesis.width_px] = hypothesis
-            continue
-        by_width[hypothesis.width_px] = _DimensionPlacementHypothesis(
-            hypothesis.width_px,
-            existing.boundary_anchors or hypothesis.boundary_anchors,
-            max(existing.repeated_slot_count, hypothesis.repeated_slot_count),
-        )
-    return tuple(by_width.values())
-
-
-def _non_dominated_recurring_width_hypotheses(
-    hypotheses: tuple[_RecurringBoundaryWidthHypothesis, ...],
-) -> tuple[_RecurringBoundaryWidthHypothesis, ...]:
-    ranked = tuple(
-        sorted(
-            hypotheses,
-            key=lambda item: (
-                -item.contributor_count,
-                item.width_px.maximum - item.width_px.minimum,
-                item.width_px.midpoint,
-            ),
-        )
-    )
-    selected: list[_RecurringBoundaryWidthHypothesis] = []
-    for hypothesis in ranked:
-        uncertainty = hypothesis.width_px.maximum - hypothesis.width_px.minimum
-        if any(
-            existing.contributor_count >= hypothesis.contributor_count
-            and hypothesis.width_px.minimum <= existing.width_px.minimum
-            and existing.width_px.maximum <= hypothesis.width_px.maximum
-            and (
-                existing.width_px.maximum - existing.width_px.minimum
-            )
-            <= uncertainty
-            for existing in selected
-        ):
-            continue
-        selected.append(hypothesis)
-    return tuple(selected)
+    leading_candidates: tuple[tuple[measurement_facts.EdgeConstraint, bool], ...]
+    trailing_candidates: tuple[tuple[measurement_facts.EdgeConstraint, bool], ...]
+    observed_constraints: tuple[measurement_facts.MeasuredFrameConstraint, ...]
+    width_hypotheses: tuple[width_resolution.CommonWidthHypothesis, ...]
+    recurring_width_hypotheses: tuple[
+        width_resolution.RecurringBoundaryWidthHypothesis, ...
+    ]
 
 
 @dataclass(frozen=True)
 class FrameSequenceSearchIndex:
     separator_supports: SeparatorSupportSet
-    leading_candidates: tuple[tuple[_EdgeConstraint, bool], ...]
-    trailing_candidates: tuple[tuple[_EdgeConstraint, bool], ...]
-    observed_constraints: tuple[_MeasuredFrameConstraint, ...]
-    width_hypotheses: tuple[_CommonWidthHypothesis, ...]
-    recurring_width_hypotheses: tuple[_RecurringBoundaryWidthHypothesis, ...]
+    leading_candidates: tuple[tuple[measurement_facts.EdgeConstraint, bool], ...]
+    trailing_candidates: tuple[tuple[measurement_facts.EdgeConstraint, bool], ...]
+    observed_constraints: tuple[measurement_facts.MeasuredFrameConstraint, ...]
+    width_hypotheses: tuple[width_resolution.CommonWidthHypothesis, ...]
+    recurring_width_hypotheses: tuple[
+        width_resolution.RecurringBoundaryWidthHypothesis, ...
+    ]
     preparation_evaluations: int
 
     def __post_init__(self) -> None:
@@ -673,87 +435,6 @@ def _paths_geometrically_equivalent(
     )
 
 
-def _positive_interval(interval: PixelInterval) -> PixelInterval | None:
-    if interval.minimum < MINIMUM_POSITIVE_PIXEL_EXTENT:
-        return None
-    return interval
-
-
-def _interval_envelope(
-    intervals: tuple[PixelInterval, ...],
-) -> PixelInterval:
-    if not intervals:
-        raise ValueError("interval envelope requires at least one measurement")
-    return PixelInterval(
-        min(interval.minimum for interval in intervals),
-        max(interval.maximum for interval in intervals),
-    )
-
-
-def _measurement_intervals_are_compatible(
-    first: PixelInterval,
-    second: PixelInterval,
-) -> bool:
-    if first.intersects(second):
-        return True
-    measurement_uncertainty = max(
-        first.maximum - first.minimum,
-        second.maximum - second.minimum,
-    )
-    return _interval_distance(first, second) <= measurement_uncertainty
-
-
-def _strict_majority_width_consensus(
-    intervals: tuple[PixelInterval, ...],
-) -> tuple[PixelInterval, int] | None:
-    if not intervals:
-        return None
-    contributor_indexes = _largest_strict_intersection_indexes(
-        intervals,
-        len(intervals) // STRICT_MAJORITY_DIVISOR + 1,
-    )
-    if not contributor_indexes:
-        return None
-    contributors = tuple(intervals[index] for index in contributor_indexes)
-    return _interval_envelope(contributors), len(contributors)
-
-
-def _non_dominated_width_hypotheses(
-    hypotheses: tuple[_CommonWidthHypothesis, ...],
-) -> tuple[_CommonWidthHypothesis, ...]:
-    ranked = tuple(
-        sorted(
-            hypotheses,
-            key=lambda item: (
-                -item.contributor_count,
-                item.width_px.maximum - item.width_px.minimum,
-                item.width_px.midpoint,
-                item.boundary_anchors,
-            ),
-        )
-    )
-    selected: list[_CommonWidthHypothesis] = []
-    for hypothesis in ranked:
-        uncertainty = hypothesis.width_px.maximum - hypothesis.width_px.minimum
-        if any(
-            existing.width_px.intersects(hypothesis.width_px)
-            and existing.contributor_count >= hypothesis.contributor_count
-            and (
-                (
-                    existing.width_px.minimum <= hypothesis.width_px.minimum
-                    and existing.width_px.maximum >= hypothesis.width_px.maximum
-                )
-                or (
-                    existing.width_px.maximum - existing.width_px.minimum
-                ) <= uncertainty
-            )
-            for existing in selected
-        ):
-            continue
-        selected.append(hypothesis)
-    return tuple(selected)
-
-
 def _interior_separator_observations(
     supports: tuple[SeparatorBandCrossAxisSupport, ...],
     search_scope: FrameSequenceSearchScope,
@@ -801,7 +482,7 @@ def _raw_separator_frame_width_search_hints(
         width
         for left, right in zip(interior, interior[1:])
         if (
-            width := _positive_interval(
+            width := measurement_facts.positive_interval(
                 right.observation.leading_edge.minus(
                     left.observation.trailing_edge
                 )
@@ -809,14 +490,14 @@ def _raw_separator_frame_width_search_hints(
         )
         is not None
     )
-    contributor_indexes = _largest_strict_intersection_indexes(
+    contributor_indexes = measurement_facts.largest_strict_intersection_indexes(
         candidate_widths,
         MINIMUM_COMMON_FRAME_WIDTH_OBSERVATIONS,
     )
     if not contributor_indexes:
         return ()
     return (
-        _interval_envelope(
+        measurement_facts.interval_envelope(
             tuple(candidate_widths[index] for index in contributor_indexes)
         ),
     )
@@ -825,11 +506,11 @@ def _raw_separator_frame_width_search_hints(
 def _separator_band_edge_constraint(
     support: SeparatorBandCrossAxisSupport,
     position: PixelInterval,
-) -> _EdgeConstraint:
+) -> measurement_facts.EdgeConstraint:
     observation = support.observation
     if position not in {observation.leading_edge, observation.trailing_edge}:
         raise ValueError("separator edge constraint must preserve one observed edge")
-    return _EdgeConstraint(
+    return measurement_facts.EdgeConstraint(
         position=position,
         basis=FrameBoundarySource.SEPARATOR_EDGE_OBSERVATION,
         state=EvidenceState.UNAVAILABLE,
@@ -840,37 +521,9 @@ def _separator_band_edge_constraint(
     )
 
 
-def _separator_edge_path_measurement(
-    constraint: _EdgeConstraint,
-):
-    observation = constraint.separator
-    measurement = constraint.separator_cross_axis
-    if (
-        constraint.basis != FrameBoundarySource.SEPARATOR_EDGE_OBSERVATION
-        or observation is None
-        or measurement is None
-    ):
-        raise ValueError("separator edge measurement requires a raw band constraint")
-    if constraint.position == observation.leading_edge:
-        return measurement.edge_path(BoundarySide.LEADING)
-    if constraint.position == observation.trailing_edge:
-        return measurement.edge_path(BoundarySide.TRAILING)
-    raise ValueError("separator edge constraint must preserve one observed band edge")
-
-
-def _separator_edge_path_is_supported(constraint: _EdgeConstraint) -> bool:
-    return bool(
-        constraint.basis == FrameBoundarySource.SEPARATOR_EDGE_OBSERVATION
-        and constraint.separator is not None
-        and constraint.separator_cross_axis is not None
-        and _separator_edge_path_measurement(constraint).state
-        == EvidenceState.SUPPORTED
-    )
-
-
 def _observed_band_edges(
     support: SeparatorBandCrossAxisSupport,
-) -> tuple[_EdgeConstraint, _EdgeConstraint]:
+) -> tuple[measurement_facts.EdgeConstraint, measurement_facts.EdgeConstraint]:
     observation = support.observation
     return (
         _separator_band_edge_constraint(
@@ -885,7 +538,7 @@ def _observed_band_edges(
 
 
 def _separator_band_edges(
-    edges: tuple[_EdgeConstraint, _EdgeConstraint],
+    edges: tuple[measurement_facts.EdgeConstraint, measurement_facts.EdgeConstraint],
 ) -> bool:
     return all(
         edge.basis == FrameBoundarySource.SEPARATOR_EDGE_OBSERVATION
@@ -895,78 +548,27 @@ def _separator_band_edges(
 
 def _band_edge_options(
     support: SeparatorBandCrossAxisSupport,
-) -> tuple[tuple[_EdgeConstraint, _EdgeConstraint], ...]:
+) -> tuple[tuple[measurement_facts.EdgeConstraint, measurement_facts.EdgeConstraint], ...]:
     return (_observed_band_edges(support),)
 
 
 def _width_between_bands(
     left: SeparatorBandObservation,
     right: SeparatorBandObservation,
-    left_edges: tuple[_EdgeConstraint, _EdgeConstraint],
-    right_edges: tuple[_EdgeConstraint, _EdgeConstraint],
+    left_edges: tuple[measurement_facts.EdgeConstraint, measurement_facts.EdgeConstraint],
+    right_edges: tuple[measurement_facts.EdgeConstraint, measurement_facts.EdgeConstraint],
 ) -> PixelInterval | None:
     if right.leading_edge.minimum <= left.trailing_edge.maximum:
         return None
-    return _positive_interval(
+    return measurement_facts.positive_interval(
         right_edges[0].position.minus(left_edges[1].position)
-    )
-
-
-def _interval_distance(left: PixelInterval, right: PixelInterval) -> float:
-    if left.intersects(right):
-        return 0.0
-    if left.maximum < right.minimum:
-        return right.minimum - left.maximum
-    return left.minimum - right.maximum
-
-
-def _interval_midpoint_residual(
-    measured: PixelInterval,
-    reference: PixelInterval,
-) -> float:
-    return abs(measured.midpoint - reference.midpoint) / max(
-        MINIMUM_POSITIVE_PIXEL_EXTENT,
-        reference.midpoint,
-    )
-
-
-def _normalized_interval_contradiction(
-    measured: PixelInterval,
-    reference: PixelInterval,
-) -> float:
-    return _interval_distance(measured, reference) / max(
-        MINIMUM_POSITIVE_PIXEL_EXTENT,
-        reference.midpoint,
-    )
-
-
-def _minimum_width_residual(
-    width: PixelInterval,
-    search_widths: tuple[PixelInterval, ...],
-) -> float:
-    if not search_widths:
-        raise ValueError("frame-width search requires at least one interval")
-    return min(
-        _normalized_interval_contradiction(width, candidate)
-        for candidate in search_widths
-    )
-
-
-def _width_search_order_key(
-    width: PixelInterval,
-    search_widths: tuple[PixelInterval, ...],
-) -> tuple[float, ...]:
-    return tuple(
-        _interval_distance(width, candidate)
-        / max(MINIMUM_POSITIVE_PIXEL_EXTENT, candidate.midpoint)
-        for candidate in search_widths
     )
 
 
 def _band_edge_interpretation_is_admissible(
     band_index: int,
     supports: tuple[SeparatorBandCrossAxisSupport, ...],
-    selected_edges: tuple[tuple[_EdgeConstraint, _EdgeConstraint], ...],
+    selected_edges: tuple[tuple[measurement_facts.EdgeConstraint, measurement_facts.EdgeConstraint], ...],
     physical_width: PixelInterval,
 ) -> bool:
     band = supports[band_index].observation
@@ -981,7 +583,7 @@ def _band_edge_interpretation_is_admissible(
 
 def _indexed_anchor_widths(
     supports: tuple[SeparatorBandCrossAxisSupport, ...],
-    selected_edges: tuple[tuple[_EdgeConstraint, _EdgeConstraint], ...],
+    selected_edges: tuple[tuple[measurement_facts.EdgeConstraint, measurement_facts.EdgeConstraint], ...],
 ) -> tuple[PixelInterval, ...] | None:
     widths: list[PixelInterval] = []
     for left_index in range(len(supports) - 1):
@@ -999,7 +601,7 @@ def _indexed_anchor_widths(
 
 def _band_search_order(
     supports: tuple[SeparatorBandCrossAxisSupport, ...],
-    edge_options: tuple[tuple[tuple[_EdgeConstraint, _EdgeConstraint], ...], ...],
+    edge_options: tuple[tuple[tuple[measurement_facts.EdgeConstraint, measurement_facts.EdgeConstraint], ...], ...],
     start_index: int,
     remaining_count: int,
 ) -> tuple[int, ...]:
@@ -1032,7 +634,7 @@ def _band_search_order(
 
 def _band_sequence_hypothesis(
     supports: tuple[SeparatorBandCrossAxisSupport, ...],
-    band_edges: tuple[tuple[_EdgeConstraint, _EdgeConstraint], ...],
+    band_edges: tuple[tuple[measurement_facts.EdgeConstraint, measurement_facts.EdgeConstraint], ...],
     short_axis: SharedShortAxisSafetySpan,
     frame_width_px: PixelInterval,
     frame_width_hint: PixelInterval,
@@ -1063,8 +665,8 @@ def _band_sequence_hypothesis(
             if support.measurement.complete_separator_supported
         ),
         search_order_residual=float(
-            _interval_distance(frame_width_px, frame_width_hint)
-            / max(MINIMUM_POSITIVE_PIXEL_EXTENT, frame_width_hint.midpoint)
+            measurement_facts.interval_distance(frame_width_px, frame_width_hint)
+            / max(measurement_facts.MINIMUM_POSITIVE_PIXEL_EXTENT, frame_width_hint.midpoint)
         ),
         uncertainty_px=sum(
             edge.position.maximum - edge.position.minimum
@@ -1094,7 +696,7 @@ def _band_sequence_hypotheses(
     evaluations = 0
     search_truncated = False
     search_width = PixelInterval(
-        MINIMUM_POSITIVE_PIXEL_EXTENT,
+        measurement_facts.MINIMUM_POSITIVE_PIXEL_EXTENT,
         float(search_scope.holder_safety.box.width),
     )
     edge_options = tuple(_band_edge_options(item) for item in interior)
@@ -1102,7 +704,7 @@ def _band_sequence_hypotheses(
     def search(
         start_index: int,
         selected_supports: tuple[SeparatorBandCrossAxisSupport, ...],
-        selected_edges: tuple[tuple[_EdgeConstraint, _EdgeConstraint], ...],
+        selected_edges: tuple[tuple[measurement_facts.EdgeConstraint, measurement_facts.EdgeConstraint], ...],
     ) -> None:
         nonlocal evaluations, search_truncated
         if search_truncated:
@@ -1115,7 +717,7 @@ def _band_sequence_hypotheses(
             if indexed_widths is None:
                 return
             width_consensus = (
-                _strict_majority_width_consensus(indexed_widths)
+                width_resolution.strict_majority_width_consensus(indexed_widths)
                 if indexed_widths
                 else (search_width, 0)
             )
@@ -1173,7 +775,7 @@ def _band_sequence_hypotheses(
                     width_consensus = (
                         None
                         if existing_widths is None
-                        else _strict_majority_width_consensus(existing_widths)
+                        else width_resolution.strict_majority_width_consensus(existing_widths)
                     )
                     if width_consensus is None:
                         continue
@@ -1208,8 +810,8 @@ def _external_constraint(
     path: GrayBoundaryPathObservation,
     *,
     position: PixelInterval | None = None,
-) -> _EdgeConstraint:
-    return _EdgeConstraint(
+) -> measurement_facts.EdgeConstraint:
+    return measurement_facts.EdgeConstraint(
         position=path.position if position is None else position,
         basis=FrameBoundarySource.GRAY_PATH_OBSERVATION,
         state=EvidenceState.UNAVAILABLE,
@@ -1243,7 +845,7 @@ def _external_constraint_with_holder_consensus(
     path: GrayBoundaryPathObservation,
     boundary: HolderBoundaryObservation | None,
     holder: Box,
-) -> tuple[_EdgeConstraint | None, bool]:
+) -> tuple[measurement_facts.EdgeConstraint | None, bool]:
     supports_holder_boundary = _holder_boundary_supports_path(path, boundary)
     position = (
         boundary.position
@@ -1258,37 +860,30 @@ def _external_constraint_with_holder_consensus(
     return constraint, supports_holder_boundary
 
 
-def _visible_width(
-    leading: _EdgeConstraint,
-    trailing: _EdgeConstraint,
-) -> PixelInterval | None:
-    return _positive_interval(trailing.position.minus(leading.position))
-
-
 def _endpoint_residual(
     visible_width: PixelInterval,
     frame_width: PixelInterval,
 ) -> float:
     if visible_width.intersects(frame_width):
         return 0.0
-    return _interval_distance(visible_width, frame_width) / max(
-        MINIMUM_POSITIVE_PIXEL_EXTENT,
+    return measurement_facts.interval_distance(visible_width, frame_width) / max(
+        measurement_facts.MINIMUM_POSITIVE_PIXEL_EXTENT,
         frame_width.midpoint,
     )
 
 
 def _admissible_frame_endpoints(
     paths: tuple[GrayBoundaryPathObservation, ...],
-    inner: _EdgeConstraint,
+    inner: measurement_facts.EdgeConstraint,
     frame_width: PixelInterval,
     holder_boundary: HolderBoundaryObservation | None,
     holder: Box,
     *,
     leading: bool,
-    additional_constraints: tuple[_EdgeConstraint, ...] = (),
-) -> tuple[_EdgeConstraint, ...]:
-    ranked: list[tuple[tuple[float, float, float, float], _EdgeConstraint]] = []
-    candidates: list[tuple[_EdgeConstraint, bool]] = []
+    additional_constraints: tuple[measurement_facts.EdgeConstraint, ...] = (),
+) -> tuple[measurement_facts.EdgeConstraint, ...]:
+    ranked: list[tuple[tuple[float, float, float, float], measurement_facts.EdgeConstraint]] = []
+    candidates: list[tuple[measurement_facts.EdgeConstraint, bool]] = []
     for path in paths:
         constraint, holder_clip_supported = (
             _external_constraint_with_holder_consensus(
@@ -1309,18 +904,18 @@ def _admissible_frame_endpoints(
         if leading:
             if constraint.position.minimum >= inner.position.maximum:
                 continue
-            visible = _visible_width(constraint, inner)
+            visible = measurement_facts.visible_width(constraint, inner)
         else:
             if constraint.position.maximum <= inner.position.minimum:
                 continue
-            visible = _visible_width(inner, constraint)
+            visible = measurement_facts.visible_width(inner, constraint)
         if visible is None:
             continue
         residual = _endpoint_residual(visible, frame_width)
         if (
             residual > 0.0
             and not holder_clip_supported
-            and not _measurement_intervals_are_compatible(
+            and not measurement_facts.measurement_intervals_are_compatible(
                 visible,
                 frame_width,
             )
@@ -1344,7 +939,7 @@ def _admissible_frame_endpoints(
 
 
 def _endpoint_supports_holder(
-    endpoint: _EdgeConstraint,
+    endpoint: measurement_facts.EdgeConstraint,
     boundary: HolderBoundaryObservation | None,
 ) -> bool:
     return bool(
@@ -1355,27 +950,27 @@ def _endpoint_supports_holder(
 
 def _frame_width_for_endpoints(
     hypothesis: _BandSequenceHypothesis,
-    leading_endpoint: _EdgeConstraint,
-    trailing_endpoint: _EdgeConstraint,
+    leading_endpoint: measurement_facts.EdgeConstraint,
+    trailing_endpoint: measurement_facts.EdgeConstraint,
     holder_boundaries: dict[BoundarySide, HolderBoundaryObservation],
 ) -> PixelInterval | None:
     first_edges = hypothesis.band_edges[0]
     last_edges = hypothesis.band_edges[-1]
-    leading_width = _visible_width(leading_endpoint, first_edges[0])
-    trailing_width = _visible_width(last_edges[1], trailing_endpoint)
+    leading_width = measurement_facts.visible_width(leading_endpoint, first_edges[0])
+    trailing_width = measurement_facts.visible_width(last_edges[1], trailing_endpoint)
     if leading_width is None or trailing_width is None:
         return None
 
     if hypothesis.indexed_anchor_count == 0:
         shared = leading_width.intersection(trailing_width)
         if shared is not None:
-            return _positive_interval(shared)
-        if _measurement_intervals_are_compatible(
+            return measurement_facts.positive_interval(shared)
+        if measurement_facts.measurement_intervals_are_compatible(
             leading_width,
             trailing_width,
         ):
-            return _positive_interval(
-                _interval_envelope((leading_width, trailing_width))
+            return measurement_facts.positive_interval(
+                measurement_facts.interval_envelope((leading_width, trailing_width))
             )
         leading_clipped = _endpoint_supports_holder(
             leading_endpoint,
@@ -1406,21 +1001,21 @@ def _frame_width_for_endpoints(
             ),
         ),
     ):
-        if _measurement_intervals_are_compatible(shared, visible_width):
+        if measurement_facts.measurement_intervals_are_compatible(shared, visible_width):
             continue
         if not clipped or visible_width.minimum > shared.maximum:
             return None
-    return _positive_interval(shared)
+    return measurement_facts.positive_interval(shared)
 
 
 def _refine_dimension_constraint(
-    constraint: _EdgeConstraint,
+    constraint: measurement_facts.EdgeConstraint,
     position: PixelInterval,
-) -> _EdgeConstraint | None:
+) -> measurement_facts.EdgeConstraint | None:
     if constraint.basis != FrameBoundarySource.DIMENSION_CONSTRAINED:
         return (
             constraint
-            if _measurement_intervals_are_compatible(
+            if measurement_facts.measurement_intervals_are_compatible(
                 constraint.position,
                 position,
             )
@@ -1429,7 +1024,7 @@ def _refine_dimension_constraint(
     refined = constraint.position.intersection(position)
     if refined is None:
         return None
-    return _EdgeConstraint(
+    return measurement_facts.EdgeConstraint(
         position=refined,
         basis=constraint.basis,
         state=constraint.state,
@@ -1439,12 +1034,12 @@ def _refine_dimension_constraint(
 
 
 def _refine_frame_edges(
-    leading: _EdgeConstraint,
-    trailing: _EdgeConstraint,
+    leading: measurement_facts.EdgeConstraint,
+    trailing: measurement_facts.EdgeConstraint,
     frame_width: PixelInterval,
     *,
     allow_underwidth: bool,
-) -> tuple[_EdgeConstraint, _EdgeConstraint] | None:
+) -> tuple[measurement_facts.EdgeConstraint, measurement_facts.EdgeConstraint] | None:
     current_leading = leading
     current_trailing = trailing
     for _ in range(BIDIRECTIONAL_REFINEMENT_PASSES):
@@ -1466,19 +1061,19 @@ def _refine_frame_edges(
                 return None
         else:
             current_leading = refined_leading
-    width = _visible_width(current_leading, current_trailing)
+    width = measurement_facts.visible_width(current_leading, current_trailing)
     if width is None:
         return None
     if (
         not allow_underwidth
-        and not _measurement_intervals_are_compatible(width, frame_width)
+        and not measurement_facts.measurement_intervals_are_compatible(width, frame_width)
     ):
         return None
     return current_leading, current_trailing
 
 
 def _sequence_constraints_fit_physical_scale(
-    constraints: tuple[_MeasuredFrameConstraint, ...],
+    constraints: tuple[measurement_facts.MeasuredFrameConstraint, ...],
     physical_scale: FrameWidthPhysicalScaleConstraint,
 ) -> bool:
     return all(
@@ -1492,7 +1087,7 @@ def _sequence_constraints_fit_physical_scale(
 def _resolution(
     frame_index: int,
     side: BoundarySide,
-    constraint: _EdgeConstraint,
+    constraint: measurement_facts.EdgeConstraint,
 ) -> tuple[ResolvedFrameBoundary, FrameEdgeAssignment | None]:
     observation = constraint.path or constraint.separator
     observed = constraint.basis in {
@@ -1535,21 +1130,21 @@ def _resolution(
 
 
 def _separator_edge_with_supported_role(
-    constraint: _EdgeConstraint,
-) -> _EdgeConstraint:
+    constraint: measurement_facts.EdgeConstraint,
+) -> measurement_facts.EdgeConstraint:
     if (
         constraint.basis != FrameBoundarySource.SEPARATOR_EDGE_OBSERVATION
         or constraint.separator is None
         or constraint.separator_cross_axis is None
-        or not _separator_edge_path_is_supported(constraint)
+        or not measurement_facts.separator_edge_path_is_supported(constraint)
     ):
         raise ValueError("separator role requires a supported raw band observation")
     return replace(constraint, state=EvidenceState.SUPPORTED)
 
 
 def _separator_pair_fits_sequence(
-    trailing: _EdgeConstraint,
-    leading: _EdgeConstraint,
+    trailing: measurement_facts.EdgeConstraint,
+    leading: measurement_facts.EdgeConstraint,
     frame_width: PixelInterval,
 ) -> bool:
     band = trailing.separator
@@ -1569,18 +1164,18 @@ def _separator_pair_fits_sequence(
 
 
 def _candidate_specific_separator_edge_roles(
-    constraints: tuple[_MeasuredFrameConstraint, ...],
-) -> tuple[_MeasuredFrameConstraint, ...]:
+    constraints: tuple[measurement_facts.MeasuredFrameConstraint, ...],
+) -> tuple[measurement_facts.MeasuredFrameConstraint, ...]:
     updated = list(constraints)
     for boundary_index in range(1, len(updated)):
         left = updated[boundary_index - 1]
         right = updated[boundary_index]
-        if _separator_edge_path_is_supported(left.trailing):
+        if measurement_facts.separator_edge_path_is_supported(left.trailing):
             updated[boundary_index - 1] = replace(
                 left,
                 trailing=_separator_edge_with_supported_role(left.trailing),
             )
-        if _separator_edge_path_is_supported(right.leading):
+        if measurement_facts.separator_edge_path_is_supported(right.leading):
             updated[boundary_index] = replace(
                 right,
                 leading=_separator_edge_with_supported_role(right.leading),
@@ -1589,10 +1184,10 @@ def _candidate_specific_separator_edge_roles(
 
 
 def _candidate_specific_holder_band_roles(
-    constraints: tuple[_MeasuredFrameConstraint, ...],
+    constraints: tuple[measurement_facts.MeasuredFrameConstraint, ...],
     frame_width: PixelInterval,
     holder_boundaries: dict[BoundarySide, HolderBoundaryObservation],
-) -> tuple[_MeasuredFrameConstraint, ...]:
+) -> tuple[measurement_facts.MeasuredFrameConstraint, ...]:
     updated = list(constraints)
     internal_sequence_complete = len(updated) > 1 and all(
         _separator_pair_fits_sequence(
@@ -1618,7 +1213,7 @@ def _candidate_specific_holder_band_roles(
                 band is None
                 or boundary.external_side != side
                 or boundary.separator_cross_axis is None
-                or not _separator_edge_path_is_supported(boundary)
+                or not measurement_facts.separator_edge_path_is_supported(boundary)
                 or holder_boundary is None
                 or band.width_px.maximum >= frame_width.minimum
                 or not PixelInterval(
@@ -1642,11 +1237,11 @@ def _candidate_specific_holder_band_roles(
 
 
 def _dimension_constraint(
-    anchor: _EdgeConstraint,
-    hypothesis: _DimensionPlacementHypothesis,
+    anchor: measurement_facts.EdgeConstraint,
+    hypothesis: width_resolution.DimensionPlacementHypothesis,
     position: PixelInterval,
     side: BoundarySide,
-) -> _EdgeConstraint:
+) -> measurement_facts.EdgeConstraint:
     dependencies = tuple(
         sorted(
             {
@@ -1657,7 +1252,7 @@ def _dimension_constraint(
             key=lambda item: item.value,
         )
     )
-    return _EdgeConstraint(
+    return measurement_facts.EdgeConstraint(
         position=position,
         basis=FrameBoundarySource.DIMENSION_CONSTRAINED,
         state=EvidenceState.UNAVAILABLE,
@@ -1690,9 +1285,9 @@ def _dimension_constraint(
 
 
 def _focused_edge_constraints(
-    inferred: _EdgeConstraint,
-    candidates: tuple[tuple[_EdgeConstraint, bool], ...],
-) -> tuple[_EdgeConstraint, ...]:
+    inferred: measurement_facts.EdgeConstraint,
+    candidates: tuple[tuple[measurement_facts.EdgeConstraint, bool], ...],
+) -> tuple[measurement_facts.EdgeConstraint, ...]:
     observed = tuple(
         candidate
         for candidate, _ in candidates
@@ -1702,41 +1297,41 @@ def _focused_edge_constraints(
 
 
 def _dimension_seed_candidates(
-    candidates: tuple[tuple[_EdgeConstraint, bool], ...],
-) -> tuple[tuple[_EdgeConstraint, bool], ...]:
+    candidates: tuple[tuple[measurement_facts.EdgeConstraint, bool], ...],
+) -> tuple[tuple[measurement_facts.EdgeConstraint, bool], ...]:
     return tuple(
         item
         for item in candidates
         if (
             item[0].external_side is not None
-            or _separator_edge_path_is_supported(item[0])
+            or measurement_facts.separator_edge_path_is_supported(item[0])
         )
     )
 
 
 def _has_supported_internal_separator_edge_seed(
-    candidates: tuple[tuple[_EdgeConstraint, bool], ...],
+    candidates: tuple[tuple[measurement_facts.EdgeConstraint, bool], ...],
 ) -> bool:
     return any(
         edge.external_side is None
-        and _separator_edge_path_is_supported(edge)
+        and measurement_facts.separator_edge_path_is_supported(edge)
         for edge, _ in candidates
     )
 
 
 def _dimension_frame_constraints(
-    leading_seeds: tuple[tuple[_EdgeConstraint, bool], ...],
-    trailing_seeds: tuple[tuple[_EdgeConstraint, bool], ...],
-    leading_candidates: tuple[tuple[_EdgeConstraint, bool], ...],
-    trailing_candidates: tuple[tuple[_EdgeConstraint, bool], ...],
-    width_hypotheses: tuple[_DimensionPlacementHypothesis, ...],
+    leading_seeds: tuple[tuple[measurement_facts.EdgeConstraint, bool], ...],
+    trailing_seeds: tuple[tuple[measurement_facts.EdgeConstraint, bool], ...],
+    leading_candidates: tuple[tuple[measurement_facts.EdgeConstraint, bool], ...],
+    trailing_candidates: tuple[tuple[measurement_facts.EdgeConstraint, bool], ...],
+    width_hypotheses: tuple[width_resolution.DimensionPlacementHypothesis, ...],
     holder_axis: PixelInterval,
     search_widths: tuple[PixelInterval, ...],
     frame_width_hint: PixelInterval,
-) -> tuple[_MeasuredFrameConstraint, ...]:
-    constraints: list[_MeasuredFrameConstraint] = []
+) -> tuple[measurement_facts.MeasuredFrameConstraint, ...]:
+    constraints: list[measurement_facts.MeasuredFrameConstraint] = []
     for hypothesis in width_hypotheses:
-        search_order_residual = _minimum_width_residual(
+        search_order_residual = measurement_facts.minimum_width_residual(
             hypothesis.width_px,
             search_widths,
         )
@@ -1780,14 +1375,14 @@ def _dimension_frame_constraints(
                 )
                 for focused_leading in leading_options:
                     for focused_trailing in trailing_options:
-                        width = _visible_width(focused_leading, focused_trailing)
+                        width = measurement_facts.visible_width(focused_leading, focused_trailing)
                         if width is None:
                             continue
                         shared = width.intersection(hypothesis.width_px)
                         if shared is None:
                             continue
                         constraints.append(
-                            _MeasuredFrameConstraint(
+                            measurement_facts.MeasuredFrameConstraint(
                                 leading=focused_leading,
                                 trailing=focused_trailing,
                                 width_px=shared,
@@ -1795,7 +1390,7 @@ def _dimension_frame_constraints(
                                 leading_holder_clip_supported=False,
                                 trailing_holder_clip_supported=False,
                                 search_order_residual=search_order_residual,
-                                frame_width_hint_residual=_minimum_width_residual(
+                                frame_width_hint_residual=measurement_facts.minimum_width_residual(
                                     shared,
                                     (frame_width_hint,),
                                 ),
@@ -1841,14 +1436,14 @@ def _dimension_frame_constraints(
                 )
                 for focused_leading in leading_options:
                     for focused_trailing in trailing_options:
-                        width = _visible_width(focused_leading, focused_trailing)
+                        width = measurement_facts.visible_width(focused_leading, focused_trailing)
                         if width is None:
                             continue
                         shared = width.intersection(hypothesis.width_px)
                         if shared is None:
                             continue
                         constraints.append(
-                            _MeasuredFrameConstraint(
+                            measurement_facts.MeasuredFrameConstraint(
                                 leading=focused_leading,
                                 trailing=focused_trailing,
                                 width_px=shared,
@@ -1856,7 +1451,7 @@ def _dimension_frame_constraints(
                                 leading_holder_clip_supported=False,
                                 trailing_holder_clip_supported=False,
                                 search_order_residual=search_order_residual,
-                                frame_width_hint_residual=_minimum_width_residual(
+                                frame_width_hint_residual=measurement_facts.minimum_width_residual(
                                     shared,
                                     (frame_width_hint,),
                                 ),
@@ -1869,8 +1464,8 @@ def _separator_edge_candidates(
     separator_supports: tuple[SeparatorBandCrossAxisSupport, ...],
     search_scope: FrameSequenceSearchScope,
 ) -> tuple[
-    tuple[tuple[_EdgeConstraint, bool], ...],
-    tuple[tuple[_EdgeConstraint, bool], ...],
+    tuple[tuple[measurement_facts.EdgeConstraint, bool], ...],
+    tuple[tuple[measurement_facts.EdgeConstraint, bool], ...],
 ]:
     holder_boundaries = _holder_boundaries(search_scope)
     interior_observations = set(
@@ -1878,8 +1473,8 @@ def _separator_edge_candidates(
     )
     leading_holder = holder_boundaries.get(BoundarySide.LEADING)
     trailing_holder = holder_boundaries.get(BoundarySide.TRAILING)
-    leading_candidates: list[tuple[_EdgeConstraint, bool]] = []
-    trailing_candidates: list[tuple[_EdgeConstraint, bool]] = []
+    leading_candidates: list[tuple[measurement_facts.EdgeConstraint, bool]] = []
+    trailing_candidates: list[tuple[measurement_facts.EdgeConstraint, bool]] = []
     for support in separator_supports:
         preceding_trailing, following_leading = _observed_band_edges(support)
         band_span = PixelInterval(
@@ -1894,15 +1489,15 @@ def _separator_edge_candidates(
             trailing_holder is not None
             and band_span.intersects(trailing_holder.position)
         )
-        if support in interior_observations and _separator_edge_path_is_supported(
+        if support in interior_observations and measurement_facts.separator_edge_path_is_supported(
             preceding_trailing
         ):
             trailing_candidates.append((preceding_trailing, False))
-        if support in interior_observations and _separator_edge_path_is_supported(
+        if support in interior_observations and measurement_facts.separator_edge_path_is_supported(
             following_leading
         ):
             leading_candidates.append((following_leading, False))
-        if _separator_edge_path_is_supported(following_leading):
+        if measurement_facts.separator_edge_path_is_supported(following_leading):
             leading_candidates.append(
                 (
                     replace(
@@ -1913,7 +1508,7 @@ def _separator_edge_candidates(
                     touches_leading_holder,
                 )
             )
-        if _separator_edge_path_is_supported(preceding_trailing):
+        if measurement_facts.separator_edge_path_is_supported(preceding_trailing):
             trailing_candidates.append(
                 (
                     replace(
@@ -1933,12 +1528,12 @@ def _separator_geometry_edge_candidates(
     separator_supports: tuple[SeparatorBandCrossAxisSupport, ...],
     search_scope: FrameSequenceSearchScope,
 ) -> tuple[
-    tuple[tuple[_EdgeConstraint, bool], ...],
-    tuple[tuple[_EdgeConstraint, bool], ...],
+    tuple[tuple[measurement_facts.EdgeConstraint, bool], ...],
+    tuple[tuple[measurement_facts.EdgeConstraint, bool], ...],
 ]:
     holder = search_scope.holder_safety.box
-    leading_candidates: list[tuple[_EdgeConstraint, bool]] = []
-    trailing_candidates: list[tuple[_EdgeConstraint, bool]] = []
+    leading_candidates: list[tuple[measurement_facts.EdgeConstraint, bool]] = []
+    trailing_candidates: list[tuple[measurement_facts.EdgeConstraint, bool]] = []
     for support in separator_supports:
         observation = support.observation
         if (
@@ -1960,8 +1555,8 @@ def prepare_frame_sequence_search_index(
 ) -> FrameSequenceSearchIndex:
     paths = _axis_paths(search_scope, BoundaryAxis.LONG)
     holder_boundaries = _holder_boundaries(search_scope)
-    leading_candidates: list[tuple[_EdgeConstraint, bool]] = []
-    trailing_candidates: list[tuple[_EdgeConstraint, bool]] = []
+    leading_candidates: list[tuple[measurement_facts.EdgeConstraint, bool]] = []
+    trailing_candidates: list[tuple[measurement_facts.EdgeConstraint, bool]] = []
     for path in paths:
         leading, leading_holder_supported = _external_constraint_with_holder_consensus(
             path,
@@ -1995,20 +1590,20 @@ def prepare_frame_sequence_search_index(
             item[0].provenance.observation_id,
         )
     )
-    observed_constraints: list[_MeasuredFrameConstraint] = []
+    observed_constraints: list[measurement_facts.MeasuredFrameConstraint] = []
     evaluations = 0
     for leading, leading_holder_supported in leading_candidates:
         for trailing, trailing_holder_supported in trailing_candidates:
             if trailing.position.minimum <= leading.position.maximum:
                 continue
-            width = _visible_width(leading, trailing)
+            width = measurement_facts.visible_width(leading, trailing)
             if width is None:
                 continue
             leading_clip_supported = leading_holder_supported
             trailing_clip_supported = trailing_holder_supported
             evaluations += 1
             observed_constraints.append(
-                _MeasuredFrameConstraint(
+                measurement_facts.MeasuredFrameConstraint(
                     leading=leading,
                     trailing=trailing,
                     width_px=width,
@@ -2022,10 +1617,10 @@ def prepare_frame_sequence_search_index(
     canonical_observed = _canonical_measured_frame_constraints(
         tuple(observed_constraints)
     )
-    width_hypotheses = _non_dominated_width_hypotheses(
-        _measured_width_hypotheses(canonical_observed)
+    width_hypotheses = width_resolution.non_dominated_width_hypotheses(
+        width_resolution.measured_width_hypotheses(canonical_observed)
     )
-    recurring_width_hypotheses = _recurring_boundary_width_hypotheses(
+    recurring_width_hypotheses = width_resolution.recurring_boundary_width_hypotheses(
         tuple(
             dict.fromkeys(
                 edge
@@ -2053,11 +1648,11 @@ def _measured_frame_search_space(
     canonical_observed = tuple(
         replace(
             constraint,
-            search_order_residual=_minimum_width_residual(
+            search_order_residual=measurement_facts.minimum_width_residual(
                 constraint.width_px,
                 search_widths,
             ),
-            frame_width_hint_residual=_minimum_width_residual(
+            frame_width_hint_residual=measurement_facts.minimum_width_residual(
                 constraint.width_px,
                 (frame_width_hint,),
             ),
@@ -2066,7 +1661,7 @@ def _measured_frame_search_space(
         if (
             constraint.leading_holder_clip_supported
             or constraint.trailing_holder_clip_supported
-            or _width_satisfies_physical_scale(
+            or width_resolution.width_satisfies_physical_scale(
                 constraint.width_px,
                 physical_scale_constraint,
             )
@@ -2077,13 +1672,13 @@ def _measured_frame_search_space(
             (
                 hypothesis
                 for hypothesis in search_index.width_hypotheses
-                if _width_satisfies_physical_scale(
+                if width_resolution.width_satisfies_physical_scale(
                     hypothesis.width_px,
                     physical_scale_constraint,
                 )
             ),
             key=lambda hypothesis: (
-                _width_search_order_key(hypothesis.width_px, search_widths),
+                measurement_facts.width_search_order_key(hypothesis.width_px, search_widths),
                 -hypothesis.contributor_count,
                 hypothesis.width_px.maximum - hypothesis.width_px.minimum,
                 hypothesis.width_px.midpoint,
@@ -2096,26 +1691,26 @@ def _measured_frame_search_space(
             (
                 hypothesis
                 for hypothesis in search_index.recurring_width_hypotheses
-                if _width_satisfies_physical_scale(
+                if width_resolution.width_satisfies_physical_scale(
                     hypothesis.width_px,
                     physical_scale_constraint,
                 )
             ),
             key=lambda hypothesis: (
-                _width_search_order_key(
+                measurement_facts.width_search_order_key(
                     hypothesis.width_px,
                     search_widths,
                 ),
-                _interval_distance(
+                measurement_facts.interval_distance(
                     hypothesis.width_px,
                     frame_width_hint,
                 )
                 / max(
-                    MINIMUM_POSITIVE_PIXEL_EXTENT,
+                    measurement_facts.MINIMUM_POSITIVE_PIXEL_EXTENT,
                     frame_width_hint.midpoint,
                 ),
                 -hypothesis.contributor_count,
-                _interval_midpoint_residual(
+                measurement_facts.interval_midpoint_residual(
                     hypothesis.width_px,
                     frame_width_hint,
                 ),
@@ -2329,7 +1924,7 @@ def _indexed_anchor_distance_constraints(
         ).scaled(1.0 / float(frame_index_distance))
         if (
             implied_frame_width.minimum <= 0.0
-            or not _measurement_intervals_are_compatible(
+            or not measurement_facts.measurement_intervals_are_compatible(
                 implied_frame_width,
                 frame_width,
             )
@@ -2370,174 +1965,8 @@ def _indexed_anchor_distance_constraints(
     return tuple(constraints)
 
 
-def _common_measured_width_interval(
-    intervals: tuple[PixelInterval, ...],
-) -> PixelInterval | None:
-    return PixelInterval.common_intersection(intervals)
-
-
-def _largest_strict_intersection_indexes(
-    intervals: tuple[PixelInterval, ...],
-    minimum_count: int,
-) -> tuple[int, ...]:
-    if minimum_count <= 0:
-        raise ValueError("strict interval group requires a positive minimum count")
-    if len(intervals) < minimum_count:
-        return ()
-    coordinates = tuple(
-        dict.fromkeys(
-            coordinate
-            for interval in intervals
-            for coordinate in (
-                interval.minimum,
-                interval.midpoint,
-                interval.maximum,
-            )
-        )
-    )
-    candidates: list[tuple[tuple[int, float, tuple[int, ...]], tuple[int, ...]]] = []
-    for coordinate in coordinates:
-        indexes = tuple(
-            index
-            for index, interval in enumerate(intervals)
-            if interval.minimum <= coordinate <= interval.maximum
-        )
-        if len(indexes) < minimum_count:
-            continue
-        shared = _common_measured_width_interval(
-            tuple(intervals[index] for index in indexes)
-        )
-        if shared is None:
-            continue
-        candidates.append(
-            (
-                (
-                    len(indexes),
-                    -(shared.maximum - shared.minimum),
-                    tuple(-index for index in indexes),
-                ),
-                indexes,
-            )
-        )
-    return () if not candidates else max(candidates, key=lambda item: item[0])[1]
-
-
-def _largest_measurement_compatible_interval_indexes(
-    intervals: tuple[PixelInterval, ...],
-    minimum_count: int,
-) -> tuple[int, ...]:
-    if minimum_count <= 0:
-        raise ValueError("common interval group requires a positive minimum count")
-    if len(intervals) < minimum_count:
-        return ()
-    coordinates = tuple(
-        dict.fromkeys(
-            coordinate
-            for interval in intervals
-            for coordinate in (
-                interval.minimum,
-                interval.midpoint,
-                interval.maximum,
-            )
-        )
-    )
-    candidates: list[tuple[tuple[int, float, tuple[int, ...]], tuple[int, ...]]] = []
-    for coordinate in coordinates:
-        center = PixelInterval.exact(coordinate)
-        indexes = tuple(
-            index
-            for index, interval in enumerate(intervals)
-            if _measurement_intervals_are_compatible(interval, center)
-        )
-        if len(indexes) < minimum_count:
-            continue
-        if any(
-            not _measurement_intervals_are_compatible(
-                intervals[left_index],
-                intervals[right_index],
-            )
-            for offset, left_index in enumerate(indexes)
-            for right_index in indexes[offset + 1 :]
-        ):
-            continue
-        envelope = _interval_envelope(
-            tuple(intervals[index] for index in indexes)
-        )
-        candidates.append(
-            (
-                (
-                    len(indexes),
-                    -(envelope.maximum - envelope.minimum),
-                    tuple(-index for index in indexes),
-                ),
-                indexes,
-            )
-        )
-    return () if not candidates else max(candidates, key=lambda item: item[0])[1]
-
-
-def _role_supported_frame_constraint(
-    constraint: _MeasuredFrameConstraint,
-) -> bool:
-    return bool(
-        all(
-            edge.basis
-            in {
-                FrameBoundarySource.GRAY_PATH_OBSERVATION,
-                FrameBoundarySource.SEPARATOR_EDGE_OBSERVATION,
-            }
-            for edge in (constraint.leading, constraint.trailing)
-        )
-        and all(
-            edge.state == EvidenceState.SUPPORTED
-            for edge in (constraint.leading, constraint.trailing)
-        )
-    )
-
-
-def _measured_constraint_common_width(
-    constraints: tuple[_MeasuredFrameConstraint, ...],
-    count: int,
-) -> PixelInterval | None:
-    if not constraints or count < len(constraints):
-        raise ValueError("measured constraint sequence must fit its frame count")
-    contributor_indexes = _largest_measurement_compatible_interval_indexes(
-        tuple(constraint.width_px for constraint in constraints),
-        MINIMUM_COMMON_FRAME_WIDTH_OBSERVATIONS,
-    )
-    if not contributor_indexes:
-        return None
-    shared = _interval_envelope(
-        tuple(constraints[index].width_px for index in contributor_indexes)
-    )
-    contributor_set = set(contributor_indexes)
-    for index, constraint in enumerate(constraints):
-        if index in contributor_set or all(
-            _measurement_intervals_are_compatible(
-                constraint.width_px,
-                constraints[contributor_index].width_px,
-            )
-            for contributor_index in contributor_indexes
-        ):
-            continue
-        leading_clip = bool(
-            index == 0
-            and constraint.leading_holder_clip_supported
-            and constraint.width_px.maximum < shared.minimum
-        )
-        trailing_clip = bool(
-            index == count - 1
-            and len(constraints) == count
-            and constraint.trailing_holder_clip_supported
-            and constraint.width_px.maximum < shared.minimum
-        )
-        if not leading_clip and not trailing_clip:
-            return None
-    return shared
-
-
 def _measured_sequence_build(
-    constraints: tuple[_MeasuredFrameConstraint, ...],
+    constraints: tuple[measurement_facts.MeasuredFrameConstraint, ...],
     short_axis: SharedShortAxisSafetySpan,
     holder: Box,
     *,
@@ -2546,7 +1975,7 @@ def _measured_sequence_build(
     frame_width = (
         constraints[0].width_px
         if len(constraints) == 1
-        else _measured_constraint_common_width(
+        else width_resolution.measured_constraint_common_width(
             constraints,
             len(constraints),
         )
@@ -2643,7 +2072,7 @@ def _measured_sequence_build(
     )
     dimension_residual = float(
         sum(
-            _normalized_interval_contradiction(
+            measurement_facts.normalized_interval_contradiction(
                 constraint.width_px,
                 frame_width,
             )
@@ -2661,7 +2090,7 @@ def _measured_sequence_build(
         dimension=dimension_residual,
         boundary_uncertainty=uncertainty_px
         / max(
-            MINIMUM_POSITIVE_PIXEL_EXTENT,
+            measurement_facts.MINIMUM_POSITIVE_PIXEL_EXTENT,
             float(holder.width + holder.height),
         ),
     )
@@ -2706,8 +2135,8 @@ def _measured_sequence_build(
 
 
 def _measured_frame_precedes(
-    left: _MeasuredFrameConstraint,
-    right: _MeasuredFrameConstraint,
+    left: measurement_facts.MeasuredFrameConstraint,
+    right: measurement_facts.MeasuredFrameConstraint,
 ) -> bool:
     return bool(
         right.leading.position.minimum > left.leading.position.maximum
@@ -2716,7 +2145,7 @@ def _measured_frame_precedes(
 
 
 def _measured_frame_option_rank(
-    option: _MeasuredFrameConstraint,
+    option: measurement_facts.MeasuredFrameConstraint,
 ) -> tuple[bool, int, int, int, float, float, float, float, float]:
     return (
         option.full_width_hypothesis_admissible,
@@ -2726,7 +2155,7 @@ def _measured_frame_option_rank(
         ),
         sum(
             edge.basis == FrameBoundarySource.SEPARATOR_EDGE_OBSERVATION
-            and _separator_edge_path_is_supported(edge)
+            and measurement_facts.separator_edge_path_is_supported(edge)
             for edge in (option.leading, option.trailing)
         ),
         sum(
@@ -2747,14 +2176,14 @@ def _measured_frame_option_rank(
 
 
 def _canonical_measured_frame_constraints(
-    options: tuple[_MeasuredFrameConstraint, ...],
-) -> tuple[_MeasuredFrameConstraint, ...]:
+    options: tuple[measurement_facts.MeasuredFrameConstraint, ...],
+) -> tuple[measurement_facts.MeasuredFrameConstraint, ...]:
     by_geometry: dict[
         tuple[
             tuple[PixelInterval, BoundarySide | None],
             tuple[PixelInterval, BoundarySide | None],
         ],
-        _MeasuredFrameConstraint,
+        measurement_facts.MeasuredFrameConstraint,
     ] = {}
     for option in options:
         key = (
@@ -2771,235 +2200,9 @@ def _canonical_measured_frame_constraints(
     return tuple(by_geometry.values())
 
 
-def _recurring_boundary_width_hypotheses(
-    edges: tuple[_EdgeConstraint, ...],
-) -> tuple[_RecurringBoundaryWidthHypothesis, ...]:
-    ordered_edges = tuple(
-        sorted(
-            edges,
-            key=lambda edge: (
-                edge.position.midpoint,
-                edge.position.minimum,
-                edge.position.maximum,
-                edge.provenance.observation_id,
-            ),
-        )
-    )
-    samples: list[tuple[PixelInterval, _EdgeConstraint, _EdgeConstraint]] = []
-    for left_index, left in enumerate(ordered_edges):
-        for right in ordered_edges[left_index + 1 :]:
-            if right.position.minimum <= left.position.maximum:
-                continue
-            width = right.position.minus(left.position)
-            if width.minimum < MINIMUM_POSITIVE_PIXEL_EXTENT:
-                continue
-            samples.append((width, left, right))
-    samples.sort(
-        key=lambda item: (
-            item[0].midpoint,
-            item[0].maximum - item[0].minimum,
-            item[1].position.midpoint,
-            item[2].position.midpoint,
-        )
-    )
-
-    grouped: list[
-        tuple[PixelInterval, list[tuple[PixelInterval, _EdgeConstraint, _EdgeConstraint]]]
-    ] = []
-    for sample in samples:
-        width = sample[0]
-        if grouped:
-            shared = grouped[-1][0].intersection(width)
-            if shared is not None:
-                grouped_samples = grouped[-1][1]
-                grouped_samples.append(sample)
-                grouped[-1] = (shared, grouped_samples)
-                continue
-        grouped.append((width, [sample]))
-
-    candidates: dict[
-        PixelInterval,
-        _RecurringBoundaryWidthHypothesis,
-    ] = {}
-    for _, group in grouped:
-        contributors: list[
-            tuple[PixelInterval, _EdgeConstraint, _EdgeConstraint]
-        ] = []
-        for sample in sorted(
-            group,
-            key=lambda item: (
-                item[2].position.maximum,
-                item[1].position.minimum,
-                item[1].provenance.observation_id,
-                item[2].provenance.observation_id,
-            ),
-        ):
-            if (
-                contributors
-                and sample[1].position.minimum
-                < contributors[-1][2].position.maximum
-            ):
-                continue
-            contributors.append(sample)
-        if len(contributors) < MINIMUM_COMMON_FRAME_WIDTH_OBSERVATIONS:
-            continue
-        shared = PixelInterval.common_intersection(
-            tuple(sample[0] for sample in contributors)
-        )
-        if shared is None:
-            continue
-        hypothesis = _RecurringBoundaryWidthHypothesis(
-            shared,
-            len(contributors),
-        )
-        existing = candidates.get(shared)
-        if existing is None or hypothesis.contributor_count > existing.contributor_count:
-            candidates[shared] = hypothesis
-    return tuple(
-        sorted(
-            candidates.values(),
-            key=lambda hypothesis: (
-                -hypothesis.contributor_count,
-                hypothesis.width_px.maximum - hypothesis.width_px.minimum,
-                hypothesis.width_px.midpoint,
-            ),
-        )
-    )
-
-
-def _width_compatibility_matrix(
-    constraints: tuple[_MeasuredFrameConstraint, ...],
-    coordinates: tuple[float, ...],
-) -> np.ndarray:
-    if not constraints or not coordinates:
-        return np.zeros((len(coordinates), len(constraints)), dtype=bool)
-    minima = np.fromiter(
-        (constraint.width_px.minimum for constraint in constraints),
-        dtype=np.float64,
-        count=len(constraints),
-    )
-    maxima = np.fromiter(
-        (constraint.width_px.maximum for constraint in constraints),
-        dtype=np.float64,
-        count=len(constraints),
-    )
-    candidate_coordinates = np.asarray(coordinates, dtype=np.float64)
-    return (
-        (candidate_coordinates[:, np.newaxis] >= minima[np.newaxis, :])
-        & (candidate_coordinates[:, np.newaxis] <= maxima[np.newaxis, :])
-    )
-
-
-def _repeated_width_contributor_sets(
-    constraints: tuple[_MeasuredFrameConstraint, ...],
-    minimum_contributors: int,
-) -> tuple[tuple[PixelInterval, tuple[_MeasuredFrameConstraint, ...]], ...]:
-    if minimum_contributors < MINIMUM_COMMON_FRAME_WIDTH_OBSERVATIONS:
-        raise ValueError("repeated width search requires multiple contributors")
-    coordinates = tuple(
-        dict.fromkeys(
-            coordinate
-            for constraint in constraints
-            for coordinate in (
-                constraint.width_px.minimum,
-                constraint.width_px.midpoint,
-                constraint.width_px.maximum,
-            )
-        )
-    )
-    ordered_constraints = tuple(
-        sorted(
-            constraints,
-            key=lambda item: (
-                item.trailing.position.maximum,
-                item.leading.position.minimum,
-                item.leading.provenance.observation_id,
-                item.trailing.provenance.observation_id,
-            ),
-        )
-    )
-    compatibility_matrix = _width_compatibility_matrix(
-        ordered_constraints,
-        coordinates,
-    )
-    candidates: dict[
-        tuple[float, float],
-        tuple[PixelInterval, tuple[_MeasuredFrameConstraint, ...]],
-    ] = {}
-    for coordinate, compatibility in zip(
-        coordinates,
-        compatibility_matrix,
-        strict=True,
-    ):
-        contributors: list[_MeasuredFrameConstraint] = []
-        for index in np.flatnonzero(compatibility):
-            constraint = ordered_constraints[int(index)]
-            if contributors and (
-                constraint.leading.position.minimum
-                < contributors[-1].trailing.position.maximum
-            ):
-                continue
-            contributors.append(constraint)
-        if len(contributors) < minimum_contributors:
-            continue
-        shared = PixelInterval.common_intersection(
-            tuple(constraint.width_px for constraint in contributors)
-        )
-        if shared is None:
-            continue
-        key = (shared.minimum, shared.maximum)
-        existing = candidates.get(key)
-        if (
-            existing is None
-            or len(contributors) > len(existing[1])
-        ):
-            candidates[key] = (shared, tuple(contributors))
-    return tuple(
-        sorted(
-            candidates.values(),
-            key=lambda item: (
-                -len(item[1]),
-                item[0].maximum - item[0].minimum,
-                item[0].midpoint,
-                tuple(
-                    boundary.provenance.observation_id
-                    for constraint in item[1]
-                    for boundary in (constraint.leading, constraint.trailing)
-                ),
-            ),
-        )
-    )
-
-
-def _measured_width_hypotheses(
-    constraints: tuple[_MeasuredFrameConstraint, ...],
-) -> tuple[_CommonWidthHypothesis, ...]:
-    measured = tuple(
-        constraint
-        for constraint in constraints
-        if _role_supported_frame_constraint(constraint)
-    )
-    return tuple(
-        _CommonWidthHypothesis(
-            width_px=width,
-            boundary_anchors=tuple(
-                dict.fromkeys(
-                    boundary.provenance.observation_id
-                    for constraint in contributors
-                    for boundary in (constraint.leading, constraint.trailing)
-                )
-            ),
-            contributor_count=len(contributors),
-        )
-        for width, contributors in _repeated_width_contributor_sets(
-            measured,
-            MINIMUM_COMMON_FRAME_WIDTH_OBSERVATIONS,
-        )
-    )
-
 
 def _option_is_valid_at_frame_index(
-    option: _MeasuredFrameConstraint,
+    option: measurement_facts.MeasuredFrameConstraint,
     frame_index: int,
     count: int,
 ) -> bool:
@@ -3032,7 +2235,7 @@ def _option_is_valid_at_frame_index(
     )
 
 
-def _separator_boundary_key(edge: _EdgeConstraint) -> ObservationId | None:
+def _separator_boundary_key(edge: measurement_facts.EdgeConstraint) -> ObservationId | None:
     return (
         None
         if edge.separator is None or edge.external_side is not None
@@ -3041,8 +2244,8 @@ def _separator_boundary_key(edge: _EdgeConstraint) -> ObservationId | None:
 
 
 def _separator_edges_pair_at_boundary(
-    left: _MeasuredFrameConstraint,
-    right: _MeasuredFrameConstraint,
+    left: measurement_facts.MeasuredFrameConstraint,
+    right: measurement_facts.MeasuredFrameConstraint,
 ) -> bool:
     left_key = _separator_boundary_key(left.trailing)
     right_key = _separator_boundary_key(right.leading)
@@ -3058,8 +2261,8 @@ def _separator_edges_pair_at_boundary(
 
 
 def _separator_boundary_keys_are_compatible(
-    left: _MeasuredFrameConstraint,
-    right: _MeasuredFrameConstraint,
+    left: measurement_facts.MeasuredFrameConstraint,
+    right: measurement_facts.MeasuredFrameConstraint,
 ) -> bool:
     left_key = _separator_boundary_key(left.trailing)
     right_key = _separator_boundary_key(right.leading)
@@ -3071,7 +2274,7 @@ def _separator_boundary_keys_are_compatible(
 
 
 def _common_width_coordinate_span(
-    option: _MeasuredFrameConstraint,
+    option: measurement_facts.MeasuredFrameConstraint,
     frame_index: int,
     count: int,
     coordinates: tuple[float, ...],
@@ -3104,9 +2307,9 @@ def _common_width_coordinate_span(
 
 def _options_from_mask(
     mask: int,
-    lookup: dict[int, _MeasuredFrameConstraint],
-) -> tuple[tuple[int, _MeasuredFrameConstraint], ...]:
-    selected: list[tuple[int, _MeasuredFrameConstraint]] = []
+    lookup: dict[int, measurement_facts.MeasuredFrameConstraint],
+) -> tuple[tuple[int, measurement_facts.MeasuredFrameConstraint], ...]:
+    selected: list[tuple[int, measurement_facts.MeasuredFrameConstraint]] = []
     remaining = mask
     while remaining:
         bit = remaining & -remaining
@@ -3118,7 +2321,7 @@ def _options_from_mask(
 
 @dataclass(frozen=True)
 class _CommonWidthOptionIndex:
-    option_lookups: tuple[dict[int, _MeasuredFrameConstraint], ...]
+    option_lookups: tuple[dict[int, measurement_facts.MeasuredFrameConstraint], ...]
     group_masks: tuple[tuple[int, ...], ...]
 
 
@@ -3138,7 +2341,7 @@ def _maximal_common_width_group_masks(
 
 
 def _separator_pair_option_masks(
-    option_lookups: tuple[dict[int, _MeasuredFrameConstraint], ...],
+    option_lookups: tuple[dict[int, measurement_facts.MeasuredFrameConstraint], ...],
 ) -> tuple[tuple[tuple[int, int], ...], ...]:
     pairs: list[tuple[tuple[int, int], ...]] = []
     for left_lookup, right_lookup in zip(
@@ -3184,7 +2387,7 @@ def _separator_assignment_upper_bound(
 
 def _common_width_option_index(
     options_by_frame: tuple[
-        tuple[tuple[int, _MeasuredFrameConstraint], ...],
+        tuple[tuple[int, measurement_facts.MeasuredFrameConstraint], ...],
         ...,
     ],
     count: int,
@@ -3264,7 +2467,7 @@ def _common_width_option_index(
 def _materialize_common_width_group(
     index: _CommonWidthOptionIndex,
     masks: tuple[int, ...],
-) -> tuple[tuple[tuple[int, _MeasuredFrameConstraint], ...], ...]:
+) -> tuple[tuple[tuple[int, measurement_facts.MeasuredFrameConstraint], ...], ...]:
     return tuple(
         _options_from_mask(mask, lookup)
         for mask, lookup in zip(masks, index.option_lookups, strict=True)
@@ -3272,7 +2475,7 @@ def _materialize_common_width_group(
 
 
 def _content_coverage_interval(
-    option: _MeasuredFrameConstraint,
+    option: measurement_facts.MeasuredFrameConstraint,
     visible_content: ContentRegionObservation,
 ) -> tuple[int, int] | None:
     start = max(
@@ -3287,7 +2490,7 @@ def _content_coverage_interval(
 
 
 def _expanded_content_coverage_interval(
-    option: _MeasuredFrameConstraint,
+    option: measurement_facts.MeasuredFrameConstraint,
     visible_content: ContentRegionObservation,
 ) -> tuple[int, int] | None:
     interval = _content_coverage_interval(option, visible_content)
@@ -3302,7 +2505,7 @@ def _expanded_content_coverage_interval(
 
 
 def _width_hypothesis_can_cover_reliable_content(
-    hypothesis: _DimensionPlacementHypothesis,
+    hypothesis: width_resolution.DimensionPlacementHypothesis,
     count: int,
     visible_content: ContentRegionObservation,
 ) -> bool:
@@ -3328,7 +2531,7 @@ class _SequenceGraphContext:
 
 
 def _sequence_graph_context(
-    ordered: tuple[_MeasuredFrameConstraint, ...],
+    ordered: tuple[measurement_facts.MeasuredFrameConstraint, ...],
     visible_content: ContentRegionObservation,
     *,
     allow_nominal_slot_sized_gap: bool,
@@ -3370,7 +2573,7 @@ def _sequence_graph_context(
 def _sequence_graph_edge_is_interval_feasible(
     left_index: int,
     right_index: int,
-    ordered: tuple[_MeasuredFrameConstraint, ...],
+    ordered: tuple[measurement_facts.MeasuredFrameConstraint, ...],
     context: _SequenceGraphContext,
 ) -> bool:
     left = ordered[left_index]
@@ -3405,7 +2608,7 @@ def _sequence_graph_edge_is_interval_feasible(
 def _cached_sequence_graph_edge_supported(
     left_index: int,
     right_index: int,
-    ordered: tuple[_MeasuredFrameConstraint, ...],
+    ordered: tuple[measurement_facts.MeasuredFrameConstraint, ...],
     context: _SequenceGraphContext,
 ) -> bool:
     key = (left_index, right_index)
@@ -3451,7 +2654,7 @@ def _fenwick_query(
 def _reachable_predecessors_for_boundary(
     previous_indexes: tuple[int, ...],
     current_indexes: tuple[int, ...],
-    ordered: tuple[_MeasuredFrameConstraint, ...],
+    ordered: tuple[measurement_facts.MeasuredFrameConstraint, ...],
     context: _SequenceGraphContext,
 ) -> dict[int, int]:
     eligible_previous = tuple(
@@ -3574,7 +2777,7 @@ def _reachable_predecessors_for_boundary(
 def _reachable_predecessors(
     previous_indexes: tuple[int, ...],
     current_indexes: tuple[int, ...],
-    ordered: tuple[_MeasuredFrameConstraint, ...],
+    ordered: tuple[measurement_facts.MeasuredFrameConstraint, ...],
     context: _SequenceGraphContext,
 ) -> dict[int, int]:
     previous_by_separator: dict[ObservationId | None, list[int]] = {}
@@ -3637,7 +2840,7 @@ def _reachable_predecessors(
 def _reachable_successors_for_boundary(
     current_indexes: tuple[int, ...],
     following_indexes: tuple[int, ...],
-    ordered: tuple[_MeasuredFrameConstraint, ...],
+    ordered: tuple[measurement_facts.MeasuredFrameConstraint, ...],
     context: _SequenceGraphContext,
 ) -> dict[int, int]:
     eligible_following = tuple(
@@ -3762,7 +2965,7 @@ def _reachable_successors_for_boundary(
 def _reachable_successors(
     current_indexes: tuple[int, ...],
     following_indexes: tuple[int, ...],
-    ordered: tuple[_MeasuredFrameConstraint, ...],
+    ordered: tuple[measurement_facts.MeasuredFrameConstraint, ...],
     context: _SequenceGraphContext,
 ) -> dict[int, int]:
     current_by_separator: dict[ObservationId | None, list[int]] = {}
@@ -3827,8 +3030,8 @@ def _graph_sequence_for_target(
     target_index: int,
     forward: list[dict[int, int | None]],
     backward: list[dict[int, int | None]],
-    ordered: tuple[_MeasuredFrameConstraint, ...],
-) -> tuple[_MeasuredFrameConstraint, ...]:
+    ordered: tuple[measurement_facts.MeasuredFrameConstraint, ...],
+) -> tuple[measurement_facts.MeasuredFrameConstraint, ...]:
     selected = [target_index]
     current = target_index
     for layer_index in range(target_layer, 0, -1):
@@ -3888,7 +3091,7 @@ class _GraphLayerStateIndex:
 
 def _graph_layer_state_index(
     states: dict[int, _GraphPathState],
-    ordered: tuple[_MeasuredFrameConstraint, ...],
+    ordered: tuple[measurement_facts.MeasuredFrameConstraint, ...],
     context: _SequenceGraphContext,
 ) -> _GraphLayerStateIndex:
     option_indexes = tuple(states)
@@ -4021,7 +3224,7 @@ class _SequenceGraphEvaluations:
 
 def _sequence_graph_evaluations(
     feasible: tuple[tuple[int, ...], ...],
-    ordered: tuple[_MeasuredFrameConstraint, ...],
+    ordered: tuple[measurement_facts.MeasuredFrameConstraint, ...],
     context: _SequenceGraphContext,
 ) -> _SequenceGraphEvaluations:
     if context.allow_nominal_slot_sized_gap:
@@ -4056,14 +3259,14 @@ def _sequence_graph_evaluations(
     )
 
 
-def _constraint_uncertainty(option: _MeasuredFrameConstraint) -> float:
+def _constraint_uncertainty(option: measurement_facts.MeasuredFrameConstraint) -> float:
     return sum(
         edge.position.maximum - edge.position.minimum
         for edge in (option.leading, option.trailing)
     )
 
 
-def _observation_candidate_count(option: _MeasuredFrameConstraint) -> int:
+def _observation_candidate_count(option: measurement_facts.MeasuredFrameConstraint) -> int:
     return len(
         {
             edge.provenance.observation_id
@@ -4080,7 +3283,7 @@ def _observation_candidate_count(option: _MeasuredFrameConstraint) -> int:
 def _best_graph_predecessor(
     current_index: int,
     previous: _GraphLayerStateIndex,
-    ordered: tuple[_MeasuredFrameConstraint, ...],
+    ordered: tuple[measurement_facts.MeasuredFrameConstraint, ...],
     context: _SequenceGraphContext,
 ) -> tuple[int, int, int, float, float, int, float, int] | None:
     current = ordered[current_index]
@@ -4246,12 +3449,12 @@ def _best_graph_predecessor(
 
 def _sequence_graph_best_path(
     grouped_options: tuple[
-        tuple[tuple[int, _MeasuredFrameConstraint], ...],
+        tuple[tuple[int, measurement_facts.MeasuredFrameConstraint], ...],
         ...,
     ],
-    ordered: tuple[_MeasuredFrameConstraint, ...],
+    ordered: tuple[measurement_facts.MeasuredFrameConstraint, ...],
     context: _SequenceGraphContext,
-) -> tuple[_MeasuredFrameConstraint, ...] | None:
+) -> tuple[measurement_facts.MeasuredFrameConstraint, ...] | None:
     states: list[dict[int, _GraphPathState]] = [
         {
             option_index: _GraphPathState(
@@ -4381,14 +3584,14 @@ def _sequence_graph_best_path(
     sequence = tuple(ordered[index] for index in selected)
     return (
         sequence
-        if _measured_constraint_common_width(sequence, len(sequence)) is not None
+        if width_resolution.measured_constraint_common_width(sequence, len(sequence)) is not None
         else None
     )
 
 
 def _sequence_boundary_has_supported_separator(
-    left: _MeasuredFrameConstraint,
-    right: _MeasuredFrameConstraint,
+    left: measurement_facts.MeasuredFrameConstraint,
+    right: measurement_facts.MeasuredFrameConstraint,
 ) -> bool:
     common_width = left.width_px.intersection(right.width_px)
     return bool(
@@ -4403,7 +3606,7 @@ def _sequence_boundary_has_supported_separator(
 
 
 def _sequence_supported_separator_count(
-    sequence: tuple[_MeasuredFrameConstraint, ...],
+    sequence: tuple[measurement_facts.MeasuredFrameConstraint, ...],
 ) -> int:
     return sum(
         _sequence_boundary_has_supported_separator(left, right)
@@ -4412,7 +3615,7 @@ def _sequence_supported_separator_count(
 
 
 def _graph_sequence_rank(
-    sequence: tuple[_MeasuredFrameConstraint, ...],
+    sequence: tuple[measurement_facts.MeasuredFrameConstraint, ...],
 ) -> tuple[object, ...]:
     supported_separator_count = 0
     internal_measurement_quality = 0.0
@@ -4474,7 +3677,7 @@ def _graph_sequence_rank(
 
 
 def _contact_neutral_sequence_rank(
-    sequence: tuple[_MeasuredFrameConstraint, ...],
+    sequence: tuple[measurement_facts.MeasuredFrameConstraint, ...],
 ) -> tuple[object, ...]:
     rank = _graph_sequence_rank(sequence)
     return (*rank[:4], *rank[5:])
@@ -4490,10 +3693,10 @@ class _SequenceGraphFeasibility:
 
 def _sequence_graph_feasibility(
     grouped_options: tuple[
-        tuple[tuple[int, _MeasuredFrameConstraint], ...],
+        tuple[tuple[int, measurement_facts.MeasuredFrameConstraint], ...],
         ...,
     ],
-    ordered: tuple[_MeasuredFrameConstraint, ...],
+    ordered: tuple[measurement_facts.MeasuredFrameConstraint, ...],
     context: _SequenceGraphContext,
 ) -> _SequenceGraphFeasibility | None:
     forward: list[dict[int, int | None]] = [
@@ -4558,8 +3761,8 @@ def _graph_sequence_for_transition(
     right_index: int,
     forward: list[dict[int, int | None]],
     backward: list[dict[int, int | None]],
-    ordered: tuple[_MeasuredFrameConstraint, ...],
-) -> tuple[_MeasuredFrameConstraint, ...]:
+    ordered: tuple[measurement_facts.MeasuredFrameConstraint, ...],
+) -> tuple[measurement_facts.MeasuredFrameConstraint, ...]:
     selected = [left_index]
     current = left_index
     for prefix_layer in range(layer_index, 0, -1):
@@ -4582,9 +3785,9 @@ def _graph_sequence_for_transition(
 def _contact_transition_witnesses(
     forward: list[dict[int, int | None]],
     backward: list[dict[int, int | None]],
-    ordered: tuple[_MeasuredFrameConstraint, ...],
-) -> tuple[tuple[_MeasuredFrameConstraint, ...], ...]:
-    best: tuple[_MeasuredFrameConstraint, ...] | None = None
+    ordered: tuple[measurement_facts.MeasuredFrameConstraint, ...],
+) -> tuple[tuple[measurement_facts.MeasuredFrameConstraint, ...], ...]:
+    best: tuple[measurement_facts.MeasuredFrameConstraint, ...] | None = None
     transitions = tuple(
         dict.fromkeys(
             (
@@ -4622,14 +3825,14 @@ def _contact_transition_witnesses(
 
 def _sequence_graph_witnesses(
     grouped_options: tuple[
-        tuple[tuple[int, _MeasuredFrameConstraint], ...],
+        tuple[tuple[int, measurement_facts.MeasuredFrameConstraint], ...],
         ...,
     ],
-    ordered: tuple[_MeasuredFrameConstraint, ...],
+    ordered: tuple[measurement_facts.MeasuredFrameConstraint, ...],
     context: _SequenceGraphContext,
     *,
     feasibility: _SequenceGraphFeasibility | None = None,
-) -> tuple[tuple[_MeasuredFrameConstraint, ...], ...]:
+) -> tuple[tuple[measurement_facts.MeasuredFrameConstraint, ...], ...]:
     resolved = feasibility or _sequence_graph_feasibility(
         grouped_options,
         ordered,
@@ -4676,7 +3879,7 @@ def _sequence_graph_witnesses(
                 lambda index: -ordered[index].trailing.position.maximum,
             ):
                 targets.append((layer_index, max(indexes, key=key)))
-    sequences: list[tuple[_MeasuredFrameConstraint, ...]] = []
+    sequences: list[tuple[measurement_facts.MeasuredFrameConstraint, ...]] = []
     if physical_witness is not None:
         sequences.append(physical_witness)
     sequences.extend(contact_witnesses)
@@ -4695,7 +3898,7 @@ def _sequence_graph_witnesses(
         def best_prefix(
             layer_index: int,
             option_index: int,
-        ) -> tuple[_MeasuredFrameConstraint, ...] | None:
+        ) -> tuple[measurement_facts.MeasuredFrameConstraint, ...] | None:
             option = ordered[option_index]
             if layer_index == 0:
                 return (option,)
@@ -4719,7 +3922,7 @@ def _sequence_graph_witnesses(
         def best_suffix(
             layer_index: int,
             option_index: int,
-        ) -> tuple[_MeasuredFrameConstraint, ...] | None:
+        ) -> tuple[measurement_facts.MeasuredFrameConstraint, ...] | None:
             option = ordered[option_index]
             if layer_index == len(feasible) - 1:
                 return (option,)
@@ -4766,13 +3969,13 @@ def _sequence_graph_witnesses(
         for sequence in dict.fromkeys(sequences)
         if (
             len(sequence) == 1
-            or _measured_constraint_common_width(sequence, len(sequence)) is not None
+            or width_resolution.measured_constraint_common_width(sequence, len(sequence)) is not None
         )
     )
 
 
 def _measured_frame_sequences(
-    options: tuple[_MeasuredFrameConstraint, ...],
+    options: tuple[measurement_facts.MeasuredFrameConstraint, ...],
     count: int,
     visible_content: ContentRegionObservation,
     evaluation_budget: int,
@@ -4780,7 +3983,7 @@ def _measured_frame_sequences(
     *,
     allow_nominal_slot_sized_gap: bool,
     minimum_supported_separator_count: int = 0,
-) -> tuple[tuple[tuple[_MeasuredFrameConstraint, ...], ...], int, bool]:
+) -> tuple[tuple[tuple[measurement_facts.MeasuredFrameConstraint, ...], ...], int, bool]:
     if minimum_supported_separator_count < 0:
         raise ValueError("separator support lower bound cannot be negative")
     ordered = tuple(
@@ -4796,7 +3999,7 @@ def _measured_frame_sequences(
         frozenset(),
         frozenset(),
     )
-    sequences: list[tuple[_MeasuredFrameConstraint, ...]] = []
+    sequences: list[tuple[measurement_facts.MeasuredFrameConstraint, ...]] = []
     truncated = False
     graph_context = _sequence_graph_context(
         ordered,
@@ -4899,7 +4102,7 @@ def _complete_separator_sequence_builds_dominate_dimension_inference(
 
 
 def _measured_builds_for_options(
-    options: tuple[_MeasuredFrameConstraint, ...],
+    options: tuple[measurement_facts.MeasuredFrameConstraint, ...],
     short_axis: SharedShortAxisSafetySpan,
     holder: Box,
     count: int,
@@ -5053,9 +4256,9 @@ def _measured_path_builds(
             )
         )
 
-        dimension_hypotheses: tuple[_DimensionPlacementHypothesis, ...] = ()
+        dimension_hypotheses: tuple[width_resolution.DimensionPlacementHypothesis, ...] = ()
         if count > 1 and not complete_separator_sequence_build:
-            dimension_hypotheses = _dimension_placement_hypotheses(
+            dimension_hypotheses = width_resolution.dimension_placement_hypotheses(
                 search_space.width_hypotheses,
                 search_space.recurring_width_hypotheses,
                 placement_widths,
@@ -5258,8 +4461,8 @@ def _spacing_for_band(
 def _build_sequence(
     band_hypothesis: _BandSequenceHypothesis,
     short_axis: SharedShortAxisSafetySpan,
-    leading_endpoint: _EdgeConstraint,
-    trailing_endpoint: _EdgeConstraint,
+    leading_endpoint: measurement_facts.EdgeConstraint,
+    trailing_endpoint: measurement_facts.EdgeConstraint,
     frame_width: PixelInterval,
     count: int,
     holder: Box,
@@ -5278,7 +4481,7 @@ def _build_sequence(
     if len(leading_constraints) != count or len(trailing_constraints) != count:
         raise ValueError("frame sequence constraints must match requested count")
 
-    refined_constraints: list[_MeasuredFrameConstraint] = []
+    refined_constraints: list[measurement_facts.MeasuredFrameConstraint] = []
     for frame_index, (leading_constraint, trailing_constraint) in enumerate(
         zip(leading_constraints, trailing_constraints, strict=True),
         start=1,
@@ -5308,11 +4511,11 @@ def _build_sequence(
         if refined is None:
             return None
         refined_leading, refined_trailing = refined
-        visible_width = _visible_width(refined_leading, refined_trailing)
+        visible_width = measurement_facts.visible_width(refined_leading, refined_trailing)
         if visible_width is None:
             return None
         refined_constraints.append(
-            _MeasuredFrameConstraint(
+            measurement_facts.MeasuredFrameConstraint(
                 leading=refined_leading,
                 trailing=refined_trailing,
                 width_px=visible_width,
@@ -5405,7 +4608,7 @@ def _build_sequence(
     )
     dimension_residual = max(
         (
-            _normalized_interval_contradiction(width, frame_width)
+            measurement_facts.normalized_interval_contradiction(width, frame_width)
             for width in interior_widths
         ),
         default=0.0,
@@ -5422,7 +4625,7 @@ def _build_sequence(
         dimension=float(dimension_residual),
         boundary_uncertainty=float(uncertainty_px)
         / max(
-            MINIMUM_POSITIVE_PIXEL_EXTENT,
+            measurement_facts.MINIMUM_POSITIVE_PIXEL_EXTENT,
             float(holder.width + holder.height),
         ),
     )
@@ -5512,7 +4715,7 @@ def _builds_for_hypotheses(
             band_hypothesis.frame_width_px
             if band_hypothesis.indexed_anchor_count > 0
             else PixelInterval(
-                MINIMUM_POSITIVE_PIXEL_EXTENT,
+                measurement_facts.MINIMUM_POSITIVE_PIXEL_EXTENT,
                 float(holder.width),
             )
         )
@@ -6137,341 +5340,6 @@ def _build_preserves_visible_content(
     return not visible_content.uncovered_by((sequence_interval,))
 
 
-def _boundary_matches_holder(
-    boundary: ResolvedFrameBoundary,
-    holder_boundary: HolderBoundaryObservation | None,
-) -> bool:
-    if holder_boundary is None or boundary.boundary_anchor is None:
-        return False
-    observation = boundary.boundary_anchor.observation
-    if isinstance(observation, SeparatorBandObservation):
-        band_span = PixelInterval(
-            observation.leading_edge.minimum,
-            observation.trailing_edge.maximum,
-        )
-        photo_facing_edge = (
-            observation.trailing_edge
-            if holder_boundary.side == BoundarySide.LEADING
-            else observation.leading_edge
-        )
-        return bool(
-            boundary.boundary_anchor.physical_role == holder_boundary.side
-            and boundary.position == photo_facing_edge
-            and band_span.intersects(holder_boundary.position)
-        )
-    return bool(
-        boundary.position.intersects(holder_boundary.position)
-        and boundary.measurement_provenance.observation_id
-        in {
-            path.provenance.observation_id
-            for path in holder_boundary.supporting_paths
-        }
-    )
-
-
-def _frame_width_physical_scale_constraint(
-    photo_height_evidence: PhotoHeightEvidence,
-    dimensions: FrameDimensionPrior,
-) -> FrameWidthPhysicalScaleConstraint | None:
-    if (
-        photo_height_evidence.state != EvidenceState.SUPPORTED
-        or photo_height_evidence.height_px is None
-    ):
-        return None
-    photo_inputs = {
-        photo_height_evidence.provenance.root_measurement,
-        *photo_height_evidence.provenance.dependencies,
-    }
-    if (
-        MeasurementIdentity.FRAME_GEOMETRY in photo_inputs
-        or not {
-            MeasurementIdentity.PHOTO_EDGES,
-            MeasurementIdentity.BOUNDARY_PATHS,
-        }.intersection(photo_inputs)
-    ):
-        return None
-    dependencies = tuple(
-        sorted(
-            {
-                *photo_inputs,
-                dimensions.provenance.root_measurement,
-                *dimensions.provenance.dependencies,
-            }
-            - {
-                MeasurementIdentity.FRAME_DIMENSIONS,
-                MeasurementIdentity.FRAME_GEOMETRY,
-            },
-            key=lambda item: item.value,
-        )
-    )
-    return FrameWidthPhysicalScaleConstraint(
-        width_px=photo_height_evidence.height_px.scaled(dimensions.aspect),
-        provenance=MeasurementProvenance(
-            root_measurement=MeasurementIdentity.FRAME_DIMENSIONS,
-            observation_id=ObservationId(
-                "frame_width_physical_scale:"
-                f"{photo_height_evidence.provenance.observation_id}:"
-                f"{dimensions.provenance.observation_id}"
-            ),
-            dependencies=dependencies,
-            description="independent photo-height and physical-aspect width constraint",
-            boundary_anchors=photo_height_evidence.provenance.boundary_anchors,
-        ),
-    )
-
-
-def _constraint_has_internal_anchor(
-    constraint: FrameWidthMeasurementConstraint,
-    slot_count: int,
-) -> bool:
-    return bool(
-        (
-            constraint.frame_index > 1
-            and boundary_role_is_independent_physical_measurement(
-                constraint.leading
-            )
-        )
-        or (
-            constraint.frame_index < slot_count
-            and boundary_role_is_independent_physical_measurement(
-                constraint.trailing
-            )
-        )
-    )
-
-
-def _boundary_role_can_contribute_to_width_geometry(
-    boundary: ResolvedFrameBoundary,
-) -> bool:
-    provenance = boundary.role_provenance
-    return bool(
-        boundary.independently_observed
-        and provenance is not None
-        and provenance.root_measurement != MeasurementIdentity.FRAME_DIMENSIONS
-        and MeasurementIdentity.FRAME_DIMENSIONS not in provenance.dependencies
-    )
-
-
-def _constraint_has_scale_independent_internal_anchor(
-    constraint: FrameWidthMeasurementConstraint,
-    slot_count: int,
-) -> bool:
-    return bool(
-        (
-            constraint.frame_index > 1
-            and boundary_role_is_independent_physical_measurement(
-                constraint.leading
-            )
-        )
-        or (
-            constraint.frame_index < slot_count
-            and boundary_role_is_independent_physical_measurement(
-                constraint.trailing
-            )
-        )
-    )
-
-
-def _common_frame_width(
-    slots: tuple[FrameSlot, ...],
-    holder_boundaries: dict[BoundarySide, HolderBoundaryObservation],
-    photo_height_evidence: PhotoHeightEvidence,
-    dimensions: FrameDimensionPrior,
-) -> CommonFrameWidthResolution:
-    all_measured_constraints = tuple(
-        FrameWidthMeasurementConstraint(slot.index, slot.leading, slot.trailing)
-        for slot in slots
-        if not slot.sequence_inferred
-        and slot.leading.position_independently_observed
-        and slot.trailing.position_independently_observed
-        and slot.leading.role_state == EvidenceState.SUPPORTED
-        and slot.trailing.role_state == EvidenceState.SUPPORTED
-        and not (
-            slot.index == 1
-            and slot.leading.source == FrameBoundarySource.GRAY_PATH_OBSERVATION
-            and _boundary_matches_holder(
-                slot.leading,
-                holder_boundaries.get(BoundarySide.LEADING),
-            )
-        )
-        and not (
-            slot.index == len(slots)
-            and slot.trailing.source == FrameBoundarySource.GRAY_PATH_OBSERVATION
-            and _boundary_matches_holder(
-                slot.trailing,
-                holder_boundaries.get(BoundarySide.TRAILING),
-            )
-        )
-        and all(
-            boundary.role_provenance is not None
-            for boundary in (slot.leading, slot.trailing)
-        )
-    )
-    geometry_constraints = tuple(
-        constraint
-        for constraint in all_measured_constraints
-        if all(
-            _boundary_role_can_contribute_to_width_geometry(boundary)
-            for boundary in (constraint.leading, constraint.trailing)
-        )
-    )
-    contributor_indexes = _largest_measurement_compatible_interval_indexes(
-        tuple(
-            constraint.width_px
-            for constraint in geometry_constraints
-        ),
-        MINIMUM_COMMON_FRAME_WIDTH_OBSERVATIONS,
-    )
-    measured_constraints = tuple(
-        geometry_constraints[index]
-        for index in contributor_indexes
-    )
-    if not measured_constraints and len(geometry_constraints) == 1:
-        measured_constraints = geometry_constraints
-    scale_constraint = _frame_width_physical_scale_constraint(
-        photo_height_evidence,
-        dimensions,
-    )
-    shared: PixelInterval | None = None
-    contributors: tuple[FrameWidthMeasurementConstraint, ...] = ()
-    used_scale: FrameWidthPhysicalScaleConstraint | None = None
-    if len(measured_constraints) >= MINIMUM_COMMON_FRAME_WIDTH_OBSERVATIONS:
-        shared = _interval_envelope(
-            tuple(constraint.width_px for constraint in measured_constraints)
-        )
-        contributors = measured_constraints
-    elif (
-        len(measured_constraints) == 1
-        and scale_constraint is not None
-        and _constraint_has_internal_anchor(
-            measured_constraints[0],
-            len(slots),
-        )
-    ):
-        shared = PixelInterval.common_intersection(
-            (
-                measured_constraints[0].width_px,
-                scale_constraint.width_px,
-            )
-        )
-        if shared is not None:
-            contributors = measured_constraints
-            used_scale = scale_constraint
-    elif scale_constraint is not None:
-        scale_corroborated_constraints = tuple(
-            constraint
-            for constraint in all_measured_constraints
-            if constraint.width_px.intersects(scale_constraint.width_px)
-            and _constraint_has_scale_independent_internal_anchor(
-                constraint,
-                len(slots),
-            )
-        )
-        scale_corroborated_width = PixelInterval.common_intersection(
-            (
-                *(
-                    constraint.width_px
-                    for constraint in scale_corroborated_constraints
-                ),
-                scale_constraint.width_px,
-            )
-        )
-        if (
-            scale_corroborated_width is not None
-            and scale_corroborated_constraints
-        ):
-            shared = scale_corroborated_width
-            contributors = scale_corroborated_constraints
-            used_scale = scale_constraint
-    anchors = tuple(
-        boundary.measurement_provenance.observation_id
-        for constraint in contributors
-        for boundary in (constraint.leading, constraint.trailing)
-    )
-    role_inputs = tuple(
-        boundary.role_provenance
-        for constraint in contributors
-        for boundary in (constraint.leading, constraint.trailing)
-        if boundary.role_provenance is not None
-    )
-    provenance_dependencies = {
-        dependency
-        for constraint in contributors
-        for boundary in (constraint.leading, constraint.trailing)
-        for input_provenance in (
-            boundary.measurement_provenance,
-            boundary.role_provenance,
-        )
-        if input_provenance is not None
-        for dependency in (
-            input_provenance.root_measurement,
-            *input_provenance.dependencies,
-        )
-        if dependency
-        not in {
-            MeasurementIdentity.FRAME_DIMENSIONS,
-            MeasurementIdentity.FRAME_GEOMETRY,
-        }
-    }
-    if used_scale is not None:
-        provenance_dependencies.update(
-            dependency
-            for dependency in (
-                used_scale.provenance.root_measurement,
-                *used_scale.provenance.dependencies,
-            )
-            if dependency
-            not in {
-                MeasurementIdentity.FRAME_DIMENSIONS,
-                MeasurementIdentity.FRAME_GEOMETRY,
-            }
-        )
-    provenance = MeasurementProvenance(
-        root_measurement=MeasurementIdentity.FRAME_DIMENSIONS,
-        observation_id=ObservationId(
-            "common_frame_width:"
-            + ":".join(
-                map(str, (item.frame_index for item in contributors) or (0,))
-            )
-        ),
-        dependencies=tuple(
-            sorted(provenance_dependencies, key=lambda item: item.value)
-        ),
-        description=(
-            "common frame width from independently observed complete slots"
-            if used_scale is None
-            else "common frame width from one observed slot and independent scale"
-        ),
-        boundary_anchors=tuple(
-            dict.fromkeys(
-                (
-                    *anchors,
-                    *(
-                        anchor
-                        for provenance in role_inputs
-                        for anchor in provenance.boundary_anchors
-                    ),
-                    *(
-                        ()
-                        if used_scale is None
-                        else used_scale.provenance.boundary_anchors
-                    ),
-                )
-            )
-        ),
-    )
-    return CommonFrameWidthResolution(
-        width_px=shared,
-        constraints=contributors,
-        physical_scale_constraint=used_scale,
-        state=(
-            EvidenceState.SUPPORTED
-            if shared is not None
-            else EvidenceState.UNAVAILABLE
-        ),
-        provenance=provenance,
-    )
-
 
 def _slot_can_contribute_repeated_width_measurement(
     slot: FrameSlot,
@@ -6499,19 +5367,19 @@ def _slot_can_contribute_repeated_width_measurement(
         return False
     if (
         slot.index == 1
-        and _boundary_matches_holder(
+        and measurement_facts.boundary_matches_holder(
             slot.leading,
             holder_boundaries.get(BoundarySide.LEADING),
         )
     ) or (
         slot.index == slot_count
-        and _boundary_matches_holder(
+        and measurement_facts.boundary_matches_holder(
             slot.trailing,
             holder_boundaries.get(BoundarySide.TRAILING),
         )
     ):
         return False
-    return slot.width_px.minimum >= MINIMUM_POSITIVE_PIXEL_EXTENT
+    return slot.width_px.minimum >= measurement_facts.MINIMUM_POSITIVE_PIXEL_EXTENT
 
 
 def _repeated_width_role_provenance(
@@ -6581,7 +5449,7 @@ def _corroborate_build_roles_from_repeated_frame_width(
             holder_boundaries,
         )
     )
-    contributor_indexes = _largest_measurement_compatible_interval_indexes(
+    contributor_indexes = measurement_facts.largest_measurement_compatible_interval_indexes(
         tuple(slot.width_px for slot in candidates),
         MINIMUM_COMMON_FRAME_WIDTH_OBSERVATIONS,
     )
@@ -7066,13 +5934,13 @@ def _separator_observation_assignment(
     left_width = trailing.position.minus(left.leading.position)
     right_width = right.trailing.position.minus(leading.position)
     if (
-        _positive_interval(left_width) is None
-        or _positive_interval(right_width) is None
-        or not _measurement_intervals_are_compatible(
+        measurement_facts.positive_interval(left_width) is None
+        or measurement_facts.positive_interval(right_width) is None
+        or not measurement_facts.measurement_intervals_are_compatible(
             left_width,
             common_width.width_px,
         )
-        or not _measurement_intervals_are_compatible(
+        or not measurement_facts.measurement_intervals_are_compatible(
             right_width,
             common_width.width_px,
         )
@@ -7213,12 +6081,12 @@ def _boundary_path_assignment(
     boundary = slot.leading if side == BoundarySide.LEADING else slot.trailing
     if boundary.source != FrameBoundarySource.DIMENSION_CONSTRAINED:
         return None
-    if not _measurement_intervals_are_compatible(
+    if not measurement_facts.measurement_intervals_are_compatible(
         boundary.position,
         path.position,
     ):
         return None
-    constraint = _EdgeConstraint(
+    constraint = measurement_facts.EdgeConstraint(
         position=path.position,
         basis=FrameBoundarySource.GRAY_PATH_OBSERVATION,
         state=EvidenceState.UNAVAILABLE,
@@ -7246,7 +6114,7 @@ def _boundary_path_assignment(
         ),
     )
     if (
-        not _measurement_intervals_are_compatible(
+        not measurement_facts.measurement_intervals_are_compatible(
             updated_slot.width_px,
             common_width.width_px,
         )
@@ -7461,7 +6329,7 @@ def _resolved_dimension_boundary(
         or not anchor.geometry_resolved
     ):
         return boundary
-    if unproven_observation_assignment and _boundary_matches_holder(
+    if unproven_observation_assignment and measurement_facts.boundary_matches_holder(
         boundary,
         holder_boundary,
     ):
@@ -7610,19 +6478,19 @@ def _resolve_build_physical_boundaries(
     resolved = _corroborate_build_adjacent_boundary_roles(resolved)
     resolved = _corroborate_build_roles_from_physical_scale(
         resolved,
-        _frame_width_physical_scale_constraint(
+        width_resolution.frame_width_physical_scale_constraint(
             photo_height_evidence,
             dimensions,
         ),
     )
-    common_width = _common_frame_width(
+    common_width = width_resolution.resolve_common_frame_width(
         resolved.slots,
         holder_boundaries,
         photo_height_evidence,
         dimensions,
     )
     resolved = _corroborate_build_boundary_roles(resolved, common_width)
-    common_width = _common_frame_width(
+    common_width = width_resolution.resolve_common_frame_width(
         resolved.slots,
         holder_boundaries,
         photo_height_evidence,
@@ -7697,36 +6565,6 @@ def _final_inter_frame_spacings(
     )
 
 
-def _target_independent_common_width(
-    common_width: CommonFrameWidthResolution,
-    left_frame_index: int,
-    right_frame_index: int,
-) -> tuple[PixelInterval, tuple[FrameWidthMeasurementConstraint, ...]] | None:
-    if common_width.state != EvidenceState.SUPPORTED:
-        return None
-    eligible = tuple(
-        constraint
-        for constraint in common_width.constraints
-        if constraint.frame_index not in {left_frame_index, right_frame_index}
-        and all(
-            boundary_role_is_independent_physical_measurement(boundary)
-            for boundary in (constraint.leading, constraint.trailing)
-        )
-    )
-    contributor_indexes = _largest_measurement_compatible_interval_indexes(
-        tuple(constraint.width_px for constraint in eligible),
-        MINIMUM_COMMON_FRAME_WIDTH_OBSERVATIONS,
-    )
-    if not contributor_indexes:
-        return None
-    contributors = tuple(eligible[index] for index in contributor_indexes)
-    return (
-        _interval_envelope(
-            tuple(constraint.width_px for constraint in contributors)
-        ),
-        contributors,
-    )
-
 
 def _inferred_overlap_geometry(
     left: FrameSlot,
@@ -7781,7 +6619,7 @@ def _corroborate_overlap_from_independent_sequence_constraints(
         or spacing.kind != InterFrameSpacingKind.OVERLAP
     ):
         return spacing
-    independent_width = _target_independent_common_width(
+    independent_width = width_resolution.target_independent_common_width(
         common_width,
         left.index,
         right.index,
@@ -7898,7 +6736,7 @@ def _apply_edge_occlusion_inference(
             slot.trailing if side == BoundarySide.LEADING else slot.leading
         )
         holder_boundary = holder_boundaries.get(side)
-        if not _boundary_matches_holder(visible_boundary, holder_boundary):
+        if not measurement_facts.boundary_matches_holder(visible_boundary, holder_boundary):
             continue
         if not opposite_boundary.independently_observed:
             continue
@@ -8052,7 +6890,7 @@ def _build_with_inserted_slot(
         + inserted_slot.trailing.position.maximum
         - inserted_slot.trailing.position.minimum
     ) / max(
-        MINIMUM_POSITIVE_PIXEL_EXTENT,
+        measurement_facts.MINIMUM_POSITIVE_PIXEL_EXTENT,
         float(holder.width + holder.height),
     )
     residuals = replace(
@@ -8128,49 +6966,6 @@ def _sequence_completed_builds(
     return tuple(inferred)
 
 
-def _slots_do_not_contradict_supported_common_width(
-    slots: tuple[FrameSlot, ...],
-    holder_boundaries: dict[BoundarySide, HolderBoundaryObservation],
-    common_width: CommonFrameWidthResolution,
-) -> bool:
-    if common_width.state != EvidenceState.SUPPORTED:
-        return False
-    assert common_width.width_px is not None
-    last_index = len(slots) - 1
-    for slot_index, slot in enumerate(slots):
-        if slot.width_px.intersects(common_width.width_px):
-            continue
-        clipped_side = (
-            BoundarySide.LEADING
-            if slot_index == 0
-            else BoundarySide.TRAILING
-            if slot_index == last_index
-            else None
-        )
-        if (
-            clipped_side is None
-            or slot.width_px.maximum >= common_width.width_px.minimum
-        ):
-            return False
-        visible_boundary = (
-            slot.leading
-            if clipped_side == BoundarySide.LEADING
-            else slot.trailing
-        )
-        if not _boundary_matches_holder(
-            visible_boundary,
-            holder_boundaries.get(clipped_side),
-        ):
-            return False
-        opposite_boundary = (
-            slot.trailing
-            if clipped_side == BoundarySide.LEADING
-            else slot.leading
-        )
-        if not opposite_boundary.independently_observed:
-            return False
-    return True
-
 
 def _build_supports_resolved_nominal_slots(
     build: _SequenceBuild,
@@ -8193,7 +6988,7 @@ def _build_supports_resolved_nominal_slots(
             and slot.trailing.geometry_state == BoundaryGeometryState.RESOLVED
             for slot in resolved_slots
         )
-        and _slots_do_not_contradict_supported_common_width(
+        and width_resolution.slots_do_not_contradict_supported_common_width(
             resolved_slots,
             holder_boundaries,
             common_width,
@@ -8282,7 +7077,7 @@ def _build_does_not_contradict_common_width(
         _frame_slots_are_strictly_monotonic(resolved_slots)
         and (
             common_width.state != EvidenceState.SUPPORTED
-            or _slots_do_not_contradict_supported_common_width(
+            or width_resolution.slots_do_not_contradict_supported_common_width(
                 resolved_slots,
                 holder_boundaries,
                 common_width,
@@ -8309,7 +7104,7 @@ def _slot_has_non_holder_boundary_observation(
         ) or (
             slot_index == last_index and side == BoundarySide.TRAILING
         )
-        if external_holder_boundary and _boundary_matches_holder(
+        if external_holder_boundary and measurement_facts.boundary_matches_holder(
             boundary,
             holder_boundaries.get(side),
         ):
@@ -8438,7 +7233,7 @@ def _preferred_direct_common_width_is_supported(
     )
     preferred = _physically_preferred_builds(preserving or builds)
     return any(
-        _common_width_has_independent_measurement_basis(
+        width_resolution.common_width_has_independent_measurement_basis(
             _resolve_build_physical_boundaries(
                 build,
                 holder_boundaries,
@@ -8449,28 +7244,6 @@ def _preferred_direct_common_width_is_supported(
         for build in preferred
     )
 
-
-def _common_width_has_independent_measurement_basis(
-    common_width: CommonFrameWidthResolution,
-) -> bool:
-    if common_width.state != EvidenceState.SUPPORTED:
-        return False
-    independent_constraints = tuple(
-        constraint
-        for constraint in common_width.constraints
-        if all(
-            boundary_role_is_independent_physical_measurement(boundary)
-            for boundary in (constraint.leading, constraint.trailing)
-        )
-    )
-    return bool(
-        len(independent_constraints)
-        >= MINIMUM_COMMON_FRAME_WIDTH_OBSERVATIONS
-        or (
-            common_width.physical_scale_constraint is not None
-            and independent_constraints
-        )
-    )
 
 
 def _build_has_geometry_only_slot(build: _SequenceBuild) -> bool:
@@ -8504,7 +7277,7 @@ def _sequence_builds_for_count(
         search_scope,
         count,
     ).width_px
-    physical_scale_constraint = _frame_width_physical_scale_constraint(
+    physical_scale_constraint = width_resolution.frame_width_physical_scale_constraint(
         photo_height_evidence,
         dimensions,
     )
