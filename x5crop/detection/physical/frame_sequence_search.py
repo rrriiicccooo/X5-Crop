@@ -1249,16 +1249,16 @@ def best_graph_predecessor(
     remaining = remaining[
         leading_qualities[remaining] == maximum_leading_quality
     ]
-    minimum_width_hint_residual = np.min(width_hint_residuals[remaining])
-    remaining = remaining[
-        width_hint_residuals[remaining] == minimum_width_hint_residual
-    ]
     maximum_observation_count = np.max(observation_counts[remaining])
     remaining = remaining[
         observation_counts[remaining] == maximum_observation_count
     ]
     minimum_uncertainty = np.min(uncertainties[remaining])
     remaining = remaining[uncertainties[remaining] == minimum_uncertainty]
+    minimum_width_hint_residual = np.min(width_hint_residuals[remaining])
+    remaining = remaining[
+        width_hint_residuals[remaining] == minimum_width_hint_residual
+    ]
     best_offset = max(
         (int(offset) for offset in remaining),
         key=lambda offset: previous.coordinate_keys[offset],
@@ -1395,9 +1395,9 @@ def sequence_graph_best_path(
             -states[-1][option_index].unexplained_spacing_extent_px,
             states[-1][option_index].external_leading_quality
             + ordered[option_index].trailing.measurement_quality,
-            -states[-1][option_index].frame_width_hint_residual,
             states[-1][option_index].observation_candidate_count,
             -states[-1][option_index].boundary_uncertainty_px,
+            -states[-1][option_index].frame_width_hint_residual,
             states[-1][option_index].coordinate_key,
         ),
     )
@@ -1486,9 +1486,9 @@ def _graph_sequence_rank(
         -unexplained_spacing_extent_px,
         sequence[0].leading.measurement_quality
         + sequence[-1].trailing.measurement_quality,
-        -sum(option.frame_width_hint_residual for option in sequence),
         sum(_observation_candidate_count(option) for option in sequence),
         -sum(_constraint_uncertainty(option) for option in sequence),
+        -sum(option.frame_width_hint_residual for option in sequence),
         tuple(
             coordinate
             for option in sequence

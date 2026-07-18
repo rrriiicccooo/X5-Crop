@@ -982,6 +982,77 @@ class FrameSequenceSearchContractTest(unittest.TestCase):
         assert selected is not None
         self.assertIs(selected[0], supported_first)
 
+    def test_frame_width_hint_cannot_outrank_narrower_measurement_interval(
+        self,
+    ) -> None:
+        def edge(position: PixelInterval, label: str) -> EdgeConstraint:
+            return EdgeConstraint(
+                position=position,
+                basis=FrameBoundarySource.DIMENSION_CONSTRAINED,
+                state=EvidenceState.UNAVAILABLE,
+                geometry_state=BoundaryGeometryState.RESOLVED,
+                provenance=MeasurementProvenance(
+                    MeasurementIdentity.FRAME_GEOMETRY,
+                    ObservationId(label),
+                    (),
+                    "synthetic dimension edge",
+                ),
+            )
+
+        def frame(
+            leading: PixelInterval,
+            trailing: PixelInterval,
+            label: str,
+            hint_residual: float,
+        ) -> MeasuredFrameConstraint:
+            return MeasuredFrameConstraint(
+                leading=edge(leading, f"{label}:leading"),
+                trailing=edge(trailing, f"{label}:trailing"),
+                width_px=trailing.minus(leading),
+                full_width_hypothesis_admissible=True,
+                leading_holder_clip_supported=False,
+                trailing_holder_clip_supported=False,
+                search_order_residual=0.0,
+                frame_width_hint_residual=hint_residual,
+            )
+
+        narrower = frame(
+            PixelInterval.exact(0.0),
+            PixelInterval.exact(100.0),
+            "narrower",
+            10.0,
+        )
+        merely_hinted = frame(
+            PixelInterval(-10.0, 0.0),
+            PixelInterval(90.0, 100.0),
+            "hinted",
+            0.0,
+        )
+        trailing = frame(
+            PixelInterval.exact(120.0),
+            PixelInterval.exact(220.0),
+            "trailing",
+            0.0,
+        )
+        ordered = (narrower, merely_hinted, trailing)
+
+        selected = sequence_search.sequence_graph_best_path(
+            (
+                ((0, narrower), (1, merely_hinted)),
+                ((2, trailing),),
+            ),
+            ordered,
+            sequence_search.sequence_graph_context(
+                ordered,
+                content(width=220, height=100, runs=()),
+                allow_nominal_slot_sized_gap=True,
+            ),
+        )
+
+        self.assertIsNotNone(selected)
+        assert selected is not None
+        self.assertIs(selected[0], narrower)
+
     def test_sequence_graph_skips_nodes_outside_complete_paths(
         self,
     ) -> None:
