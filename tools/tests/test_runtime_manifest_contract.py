@@ -66,7 +66,6 @@ def _config(*, output_dir: Path) -> RunConfig:
         overwrite=False,
         report=True,
         debug_errors=False,
-        reuse_analysis=False,
         jobs=1,
     )
 
@@ -295,12 +294,8 @@ class RuntimeManifestContractTest(unittest.TestCase):
                     return_value=(profile, []),
                 ),
                 patch(
-                    "x5crop.runtime.workflow.make_analysis_reuse_signature",
+                    "x5crop.runtime.workflow.make_analysis_identity",
                     return_value={},
-                ),
-                patch(
-                    "x5crop.runtime.workflow.result_from_reusable_analysis",
-                    return_value=None,
                 ),
                 patch(
                     "x5crop.runtime.workflow.read_tiff",

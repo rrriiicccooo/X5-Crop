@@ -16,11 +16,11 @@ class RegressionCompareContractTest(unittest.TestCase):
     def test_comparison_identity_includes_page_and_request_configuration(self) -> None:
         first = _record()
         second_page = deepcopy(first)
-        second_page["analysis_reuse_signature"]["source"]["page"] = 1
-        second_page["analysis_reuse_signature"]["config"]["page"] = 1
+        second_page["analysis_identity"]["source"]["page"] = 1
+        second_page["analysis_identity"]["runtime_configuration"]["page"] = 1
         bind_runtime_facts(second_page)
         second_deskew = deepcopy(first)
-        second_deskew["analysis_reuse_signature"]["config"]["deskew"] = "on"
+        second_deskew["analysis_identity"]["runtime_configuration"]["deskew"] = "on"
         bind_runtime_facts(second_deskew)
 
         identities = {

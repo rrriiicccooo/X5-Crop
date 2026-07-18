@@ -17,7 +17,7 @@ from tools.tests.physical_gate_support import (
     unavailable_resolution_metadata_fixture,
 )
 from tools.tests.test_output_read_model_contract import (
-    _analysis_reuse_signature,
+    _analysis_identity,
     _profile,
 )
 from x5crop.configuration.registry import get_detection_configuration
@@ -37,7 +37,6 @@ from x5crop.export.actions import write_crops_if_allowed
 from x5crop.report.configuration import detection_configuration_read_model
 from x5crop.report.read_models import typed_read_model
 from x5crop.report.record import report_record_for_final_detection
-from x5crop.report.restoration import final_detection_from_record
 from x5crop.report.validation import current_report_record_errors
 from x5crop.run_status import RunTerminalOutcome
 
@@ -147,7 +146,7 @@ class UnresolvedOutputContractTest(unittest.TestCase):
             ),
             resolution_metadata=unavailable_resolution_metadata_fixture(),
             transform_geometry=transform,
-            analysis_reuse_signature=_analysis_reuse_signature(),
+            analysis_identity=_analysis_identity(),
         )
         self.assertIsNotNone(record["output"]["finalization_plan"])
         self.assertIsNotNone(record["output"]["final_geometry"])
@@ -159,9 +158,6 @@ class UnresolvedOutputContractTest(unittest.TestCase):
             },
         )
         self.assertEqual(current_report_record_errors(record), [])
-        self.assertFalse(
-            final_detection_from_record(record).frame_export_eligible
-        )
         record["output"]["output_files"] = ["unsafe-review-frame.tif"]
         self.assertIn(
             "output_incomplete",
@@ -284,7 +280,7 @@ class UnresolvedOutputContractTest(unittest.TestCase):
             ),
             resolution_metadata=unavailable_resolution_metadata_fixture(),
             transform_geometry=transform,
-            analysis_reuse_signature=_analysis_reuse_signature(),
+            analysis_identity=_analysis_identity(),
         )
         self.assertIsNone(record["output"]["finalization_plan"])
         self.assertIsNone(record["output"]["final_geometry"])
@@ -296,7 +292,6 @@ class UnresolvedOutputContractTest(unittest.TestCase):
             },
         )
         self.assertEqual(current_report_record_errors(record), [])
-        self.assertIsNone(final_detection_from_record(record).output_geometry)
 
 
 if __name__ == "__main__":

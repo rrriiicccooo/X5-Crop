@@ -211,9 +211,9 @@ x5_crop_output/_debug_analysis/
 - 红色 separator observation 是否落在真实片间间距。
 - 紫色 dimension-constrained tick 与青色 overlap tick 是否符合照片物理尺寸。
 
-普通非 Debug Analysis 裁切不会生成报告。同一批 TIFF 已执行 Debug Analysis 后，
-普通裁切时可复用匹配的 `x5_crop_report.jsonl`；如果文件大小、修改时间、图像形状、
-脚本版本或关键参数不匹配，会自动重新检测。
+普通非 Debug Analysis 裁切不会生成报告。Report 只用于审计，不作为 detection cache；每次普通
+裁切都会重新检测当前 TIFF。运行内只复用带 typed key 的 exact、count/offset-independent
+measurement。
 
 ### 输出目录和复核
 
@@ -498,6 +498,9 @@ The third panel carries a legend derived from the current diagnostics configurat
 
 Detailed evidence, CandidateGate, and DecisionGate explanations are written to
 the report. Debug Analysis remains a fixed three-panel image for fast human review.
+Reports are audit artifacts, never a detection cache. Every normal crop run detects
+the current TIFF; only exact, count/offset-independent measurements are reused
+within that run through typed keys.
 
 `PASS` means the file will be cropped automatically. `REVIEW` means it needs
 manual review. `RUNTIME ERROR` means detection existed but a later runtime stage

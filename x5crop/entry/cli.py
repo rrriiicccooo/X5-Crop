@@ -61,8 +61,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Write lightweight JPG previews with sequence and frame geometry.",
     )
     parser.add_argument("--debug-analysis", action="store_true", help="Write one combined JPG with original gray, debug boxes, and separator evidence.")
-    parser.add_argument("--diagnostics", action="store_true", help="Read-only diagnostics mode; implies --report --debug-analysis --dry-run --no-copy-review-files --no-reuse-analysis.")
-    parser.add_argument("--no-reuse-analysis", dest="reuse_analysis", action="store_false", default=True, help="Do not reuse matching Debug Analysis report data for non-dry-run export.")
+    parser.add_argument("--diagnostics", action="store_true", help="Read-only diagnostics mode; implies --report --debug-analysis --dry-run --no-copy-review-files.")
     parser.add_argument("--jobs", type=int, default=STANDARD_JOB_LIMIT, help="Parallel TIFF workers. Default 2. Normal runs cap at 2; diagnostics runs cap at 4.")
     parser.add_argument("--debug-errors", action="store_true", help="Print tracebacks on errors.")
     parser.add_argument("--interactive", action="store_true", help="Prompt for format, mode, and Debug Analysis options.")
@@ -112,7 +111,6 @@ def options_from_args(args: argparse.Namespace) -> RuntimeOptions:
         overwrite=bool(args.overwrite),
         report=bool(args.report or diagnostics),
         debug_errors=bool(args.debug_errors),
-        reuse_analysis=False if diagnostics else bool(args.reuse_analysis),
         jobs=int(args.jobs),
     )
 

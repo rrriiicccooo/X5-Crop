@@ -41,32 +41,21 @@ class LayerBoundariesOutputContractTest(unittest.TestCase):
         self.assertFalse(hasattr(OutputSurface, "ensure_root"))
 
     def test_report_validation_is_the_only_schema_deserializer(self) -> None:
-        reuse = (PROJECT_ROOT / "x5crop/runtime/analysis_reuse.py").read_text(
-            encoding="utf-8"
-        )
-        restoration = (PROJECT_ROOT / "x5crop/report/restoration.py").read_text(
+        identity = (PROJECT_ROOT / "x5crop/runtime/analysis_identity.py").read_text(
             encoding="utf-8"
         )
         validation = (PROJECT_ROOT / "x5crop/report/validation.py").read_text(
             encoding="utf-8"
         )
-        self.assertIn(
-            "final_detection_from_record as _final_detection_from_record",
-            reuse,
-        )
+        self.assertFalse((PROJECT_ROOT / "x5crop/runtime/analysis_reuse.py").exists())
         for forbidden in (
             "DecisionGateAssessment(",
             "FinalDetection(",
+            "final_detection_from_record",
             "def _box_from_record",
         ):
-            self.assertNotIn(forbidden, reuse)
+            self.assertNotIn(forbidden, identity)
         self.assertIn("_typed_value_from_read_model", validation)
-        for duplicate_constructor in (
-            "OutputGeometry(",
-            "FrameBleedPlan(",
-            "TransformGeometryEvidence(",
-        ):
-            self.assertNotIn(duplicate_constructor, restoration)
 
     def test_report_output_has_one_runtime_owner(self) -> None:
         owners = [

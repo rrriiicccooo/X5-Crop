@@ -5,10 +5,7 @@ from pathlib import Path
 from time import perf_counter
 import traceback
 
-from .analysis_reuse import (
-    make_analysis_reuse_signature,
-    result_from_reusable_analysis,
-)
+from .analysis_identity import make_analysis_identity
 from ..cache import MeasurementCache, MeasurementCacheStatistics
 from ..cache.analysis import make_measurement_cache
 from ..detection.context import (
@@ -115,35 +112,13 @@ def process_one(
                 initial_configuration.preprocess.image_statistics,
             )
 
-        analysis_reuse_signature = make_analysis_reuse_signature(
+        analysis_identity = make_analysis_identity(
             input_file,
             profile,
             config,
             configuration_bundle,
             workspace.identity,
         )
-        failure_stage = FailureStage.ANALYSIS_REUSE
-        cached_result = result_from_reusable_analysis(
-            input_file,
-            config,
-            output_surface,
-            profile,
-            warnings,
-            analysis_reuse_signature,
-            workspace,
-            source_arr,
-        )
-        if cached_result is not None:
-            return CompletedInput(
-                result=cached_result.result,
-                artifacts=cached_result.artifacts,
-                metrics=_runtime_metrics(
-                    started_at,
-                    detection_seconds,
-                    execution_statistics,
-                    measurement_cache,
-                ),
-            )
 
         measurement_cache = make_measurement_cache(
             gray,
@@ -258,7 +233,7 @@ def process_one(
             configuration_detail=configuration_detail,
             resolution_metadata=resolution_metadata,
             transform_geometry=transform_geometry,
-            analysis_reuse_signature=analysis_reuse_signature,
+            analysis_identity=analysis_identity,
         )
         return CompletedInput(
             result=result,

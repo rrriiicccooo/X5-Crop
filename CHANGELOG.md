@@ -65,13 +65,29 @@ the validation evidence.
   单帧 geometry resolution、evidence-independence support 或 measured frame-scale
   observation。
 - REVIEW 导出现在同时要求 resolved geometry 与 feasible `FrameBleedPlan`；
-  `--export-review` 不能绕过 unresolved overlap protection。Report、cache restoration、Debug
+  `--export-review` 不能绕过 unresolved overlap protection。Report validation、Debug
   和实际 writer 共用同一 export eligibility，且 current report 拒绝不可导出状态下声称存在
   frame outputs。 / REVIEW export now requires both resolved geometry and a feasible
   `FrameBleedPlan`; `--export-review` cannot bypass unresolved overlap protection.
-  Report, cache restoration, Debug, and the writer share one export eligibility,
+  Report validation, Debug, and the writer share one export eligibility,
   whose positive reason is `geometry_resolved_output_protected`; current reports
   reject claimed frame outputs while export is ineligible.
+- Report-based analysis reuse 已删除：runtime 不再从旧 report 恢复 Candidate、Gate、Decision 或
+  final geometry，`--no-reuse-analysis`、相关 config、FailureStage 与 schema 状态也同步删除。
+  Current report 只保留 `analysis_identity` 供审计与 regression 定位；每次运行重新检测，只有运行内
+  exact、count/offset-independent measurement 可以缓存。 / Report-based analysis reuse was
+  removed: runtime no longer restores Candidate, Gate, Decision, or final geometry
+  from an earlier report, and `--no-reuse-analysis` plus its config, FailureStage,
+  and schema state were deleted in the same change. Current reports retain only
+  `analysis_identity` for audit and regression identity; every run detects afresh,
+  and only exact, count/offset-independent measurements may be cached in-run.
+- 在输出目录预置旧 report 后，00007 的普通运行仍执行 fresh detection（1 个 assessed candidate、
+  13,557 次 assignment evaluation），并写入新的 `analysis_identity` report。六张冻结样片的
+  selection、Decision、output 物理字段保持一致，Debug JPG 字节一致。 / With an earlier report
+  pre-seeded in the output directory, a normal 00007 run still performed fresh
+  detection (one assessed candidate and 13,557 assignment evaluations) and wrote a
+  new `analysis_identity` report. The six frozen samples preserved selection,
+  Decision, and physical output fields, with byte-identical Debug JPGs.
 - 初始 provenance/sequence-conservation 波次使六张冻结 `135/full` 样片的循环
   provenance 由 55 降为 0，同时保持 canonical report 零差异和 Debug Analysis 字节一致。 /
   The initial provenance and sequence-conservation waves reduced cyclic
@@ -94,8 +110,9 @@ the validation evidence.
   while omitting unprotected final boxes, and an actual `--export-review` run wrote
   no frame TIFF. The other five Debug images changed only the shared legend text;
   their geometry pixels remained identical.
-- 完整验证通过 774 项测试和 14 组配置。 / Full verification passed 774 tests
-  and 14 configuration pairs.
+- 完整验证通过 769 项 current-only 测试和 14 组配置；旧 reuse/restoration 专属测试与死模块已删除。 /
+  Full verification passed 769 current-only tests and 14 configuration pairs;
+  obsolete reuse/restoration-only tests and the unreachable module were deleted.
 
 ### 2026-07-15 — 共享短轴与 Frame Slot / Shared Short Axis And Frame Slots
 

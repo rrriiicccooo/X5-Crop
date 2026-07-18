@@ -96,9 +96,10 @@ Chinese-English paired where practical.
   defaults.
 - Foundation code knows geometry, pixels, TIFF I/O, cache mechanics, and units—not
   format identity, decision state, or report schema.
-- Runtime, tests, tools, report, debug, and cache reuse consume the current schema
-  only. Delete superseded APIs, fields, aliases, imports, reducers, shims, tests,
-  and compatibility branches in the same change.
+- Runtime, tests, tools, report, and debug consume the current schema only. Reports
+  are audit artifacts, never a detection cache; only exact count/offset-independent
+  measurements may be cached. Delete superseded APIs, fields, aliases, imports,
+  reducers, shims, tests, and compatibility branches in the same change.
 - Keep no dead files, unreachable helpers, pass-through wrappers, duplicate
   models, hidden decision constants, or abstractions that merely move complexity.
 - Add an abstraction only when it removes real duplication or ownership

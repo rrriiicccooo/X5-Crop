@@ -149,7 +149,6 @@ def interactive_options(diagnostics: bool = False) -> RuntimeOptions:
         overwrite=False,
         report=debug_analysis or diagnostics,
         debug_errors=False,
-        reuse_analysis=False if diagnostics else True,
         jobs=DIAGNOSTICS_JOB_LIMIT if diagnostics else STANDARD_JOB_LIMIT,
     )
 

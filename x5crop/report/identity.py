@@ -29,7 +29,7 @@ def runtime_facts_sha256(record: dict[str, Any]) -> str:
         "selection": record["selection"],
         "decision": record["decision"],
         "output": {field: output[field] for field in _IMMUTABLE_OUTPUT_FIELDS},
-        "analysis_reuse_signature": record["analysis_reuse_signature"],
+        "analysis_identity": record["analysis_identity"],
     }
     encoded = json.dumps(
         payload,

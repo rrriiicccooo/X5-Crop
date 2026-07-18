@@ -29,7 +29,7 @@ from x5crop.configuration.bundle import DetectionConfigurationBundle
 from x5crop.configuration.registry import get_detection_configuration
 from x5crop.detection.evidence.content.frame_content import frame_content_evidence
 from tools.tests.physical_gate_support import candidate_fixture
-from x5crop.runtime.analysis_reuse import analysis_configuration_fingerprint
+from x5crop.runtime.analysis_identity import detection_configuration_fingerprint
 from x5crop.configuration.boundary import BoundaryPathParameters
 from x5crop.detection.candidate.proposal.sequence import cached_boundary_measurements
 from x5crop.detection.physical import frame_sequence_measurements as measurements
@@ -58,6 +58,23 @@ def _profile_measurement(width: int) -> SeparatorProfileMeasurement:
 
 
 class DetectionCachePerformanceContractTest(unittest.TestCase):
+    def test_report_records_are_not_reused_as_detection_cache(self) -> None:
+        from tools.tests.architecture_contracts import PROJECT_ROOT
+        from x5crop.report.validation import CURRENT_REPORT_SECTIONS
+        from x5crop.run_config import RunConfig
+        from x5crop.runtime.options import RuntimeOptions
+
+        workflow = (PROJECT_ROOT / "x5crop/runtime/workflow.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotIn("result_from_reusable_analysis", workflow)
+        self.assertNotIn("reuse_analysis", {field.name for field in fields(RunConfig)})
+        self.assertNotIn(
+            "reuse_analysis",
+            {field.name for field in fields(RuntimeOptions)},
+        )
+        self.assertNotIn("analysis_reuse", CURRENT_REPORT_SECTIONS)
+
     def test_graph_predecessor_ranking_does_not_materialize_interval_per_option(
         self,
     ) -> None:
@@ -289,11 +306,11 @@ class DetectionCachePerformanceContractTest(unittest.TestCase):
                 0.0,
             )
 
-    def test_cached_output_does_not_rebuild_detection_gray(self) -> None:
+    def test_analysis_identity_does_not_rebuild_detection_gray(self) -> None:
         from tools.tests.architecture_contracts import PROJECT_ROOT
 
         source = (
-            PROJECT_ROOT / "x5crop/runtime/analysis_reuse.py"
+            PROJECT_ROOT / "x5crop/runtime/analysis_identity.py"
         ).read_text(encoding="utf-8")
         self.assertNotIn("make_base_gray_u8", source)
 
@@ -335,8 +352,8 @@ class DetectionCachePerformanceContractTest(unittest.TestCase):
             resolved_configurations=(changed_configuration,),
         )
         self.assertEqual(
-            analysis_configuration_fingerprint(bundle),
-            analysis_configuration_fingerprint(changed),
+            detection_configuration_fingerprint(bundle),
+            detection_configuration_fingerprint(changed),
         )
 
     def test_reuse_fingerprint_includes_every_resolved_configuration(self) -> None:
@@ -363,8 +380,8 @@ class DetectionCachePerformanceContractTest(unittest.TestCase):
             ),
         )
         self.assertNotEqual(
-            analysis_configuration_fingerprint(bundle),
-            analysis_configuration_fingerprint(changed),
+            detection_configuration_fingerprint(bundle),
+            detection_configuration_fingerprint(changed),
         )
 
     def test_separator_profile_is_cached_by_exact_corridor_and_parameters(self) -> None:

@@ -45,5 +45,4 @@ class RuntimeOptions:
     overwrite: bool
     report: bool
     debug_errors: bool
-    reuse_analysis: bool
     jobs: int

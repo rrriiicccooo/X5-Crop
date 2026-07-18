@@ -5,9 +5,7 @@ import json
 from pathlib import Path
 import os
 from tempfile import TemporaryDirectory
-from types import SimpleNamespace
 import unittest
-from unittest.mock import patch
 import numpy as np
 from dataclasses import fields
 
@@ -29,11 +27,9 @@ from x5crop.report.configuration import detection_configuration_read_model
 from x5crop.report.model import ReportResult
 from x5crop.report.record import report_record_for_final_detection
 from x5crop.report.read_models import typed_read_model
-from x5crop.report.restoration import final_detection_from_record
 from x5crop.report.validation import current_report_record_errors
 from x5crop.domain import EvidenceState, WorkspaceExtent
 from x5crop.image.workspace import WorkspaceIdentity
-from x5crop.runtime.prepared_workspace import PreparedWorkspace
 from tools.regression.compare import DEFAULT_FIELDS
 
 
@@ -58,7 +54,7 @@ def _profile() -> ImageProfile:
     )
 
 
-def _analysis_reuse_signature(
+def _analysis_identity(
     format_id: str = "135",
     strip_mode: str = "partial",
     source_name: str = "input.tif",
@@ -85,7 +81,7 @@ def _analysis_reuse_signature(
             "axes": "YX",
             "photometric": "MINISBLACK",
         },
-        "config": {
+        "runtime_configuration": {
             "format_id": format_id,
             "layout": "horizontal",
             "strip_mode": strip_mode,
@@ -98,7 +94,7 @@ def _analysis_reuse_signature(
             "bleed_x": 20,
             "bleed_y": 10,
         },
-        "configuration_fingerprint": "0" * 64,
+        "detection_configuration_fingerprint": "0" * 64,
         "workspace_identity": typed_read_model(workspace_identity),
     }
 
@@ -118,7 +114,7 @@ def _record() -> dict:
         ),
         resolution_metadata=unavailable_resolution_metadata_fixture(),
         transform_geometry=transform_geometry_fixture(),
-        analysis_reuse_signature=_analysis_reuse_signature(),
+        analysis_identity=_analysis_identity(),
     )
 
 
@@ -170,40 +166,8 @@ class OutputReadModelContractTest(unittest.TestCase):
         self.assertNotIn("sequence_conservation", candidate["evidence"])
         self.assertNotIn("frame_sequence", candidate["evidence"])
 
-    def test_cache_restoration_rejects_geometry_not_produced_by_finalization(
-        self,
-    ) -> None:
-        record = _record()
-        record["output"]["final_geometry"]["final_boxes"][0]["left"] -= 1
-        with self.assertRaises(ValueError):
-            final_detection_from_record(record)
-
-    def test_analysis_reuse_is_disabled_for_every_debug_surface(self) -> None:
-        from x5crop.runtime.analysis_reuse import result_from_reusable_analysis
-
-        for debug, debug_analysis in ((True, False), (False, True)):
-            config = SimpleNamespace(
-                reuse_analysis=True,
-                dry_run=False,
-                debug=debug,
-                debug_analysis=debug_analysis,
-            )
-            with self.subTest(debug=debug, debug_analysis=debug_analysis):
-                self.assertIsNone(
-                    result_from_reusable_analysis(
-                        Path("unused.tif"),
-                        config,
-                        None,
-                        None,
-                        [],
-                        {},
-                        None,
-                        None,
-                    )
-                )
-
-    def test_analysis_reuse_source_identity_includes_file_content(self) -> None:
-        from x5crop.runtime.analysis_reuse import source_cache_signature
+    def test_analysis_source_identity_includes_file_content(self) -> None:
+        from x5crop.runtime.analysis_identity import source_analysis_identity
 
         profile = ImageProfile(
             shape=(1, 4),
@@ -225,15 +189,15 @@ class OutputReadModelContractTest(unittest.TestCase):
             source = Path(directory) / "source.tif"
             source.write_bytes(b"aaaa")
             os.utime(source, ns=(fixed_time_ns, fixed_time_ns))
-            first = source_cache_signature(source, profile, 0)
+            first = source_analysis_identity(source, profile, 0)
             source.write_bytes(b"bbbb")
             os.utime(source, ns=(fixed_time_ns, fixed_time_ns))
-            second = source_cache_signature(source, profile, 0)
+            second = source_analysis_identity(source, profile, 0)
 
         self.assertNotEqual(first, second)
 
     def test_configuration_fingerprint_has_no_stringification_fallback(self) -> None:
-        source = (PROJECT_ROOT / "x5crop/runtime/analysis_reuse.py").read_text(
+        source = (PROJECT_ROOT / "x5crop/runtime/analysis_identity.py").read_text(
             encoding="utf-8"
         )
         self.assertNotIn("default=str", source)
@@ -344,7 +308,7 @@ class OutputReadModelContractTest(unittest.TestCase):
             configuration=detection_configuration_read_model(configuration),
             resolution_metadata=unavailable_resolution_metadata_fixture(),
             transform_geometry=transform_geometry_fixture(),
-            analysis_reuse_signature=_analysis_reuse_signature(
+            analysis_identity=_analysis_identity(
                 "135-dual",
                 "partial",
                 "synthetic.tif",
@@ -359,9 +323,9 @@ class OutputReadModelContractTest(unittest.TestCase):
         )
         self.assertIsNone(candidate_record["candidate_gate"])
 
-    def test_cache_reuse_does_not_resolve_configuration_from_report_data(self) -> None:
+    def test_analysis_identity_does_not_resolve_configuration_from_report_data(self) -> None:
         source = (
-            PROJECT_ROOT / "x5crop/runtime/analysis_reuse.py"
+            PROJECT_ROOT / "x5crop/runtime/analysis_identity.py"
         ).read_text(encoding="utf-8")
         self.assertNotIn("configuration_bundle.configuration_for(", source)
 
@@ -485,7 +449,7 @@ class OutputReadModelContractTest(unittest.TestCase):
             lambda record: record["selection"]["candidates"][0][
                 "provisional_geometry"
             ].__setitem__("format_id", "half"),
-            lambda record: record["analysis_reuse_signature"]["config"].__setitem__(
+            lambda record: record["analysis_identity"]["runtime_configuration"].__setitem__(
                 "format_id",
                 "half",
             ),
@@ -493,11 +457,11 @@ class OutputReadModelContractTest(unittest.TestCase):
                 "frame_aspect",
                 9.0,
             ),
-            lambda record: record["analysis_reuse_signature"]["source"].__setitem__(
+            lambda record: record["analysis_identity"]["source"].__setitem__(
                 "shape",
                 [1, 1],
             ),
-            lambda record: record["analysis_reuse_signature"]["source"].__setitem__(
+            lambda record: record["analysis_identity"]["source"].__setitem__(
                 "name",
                 "other.tif",
             ),
@@ -511,51 +475,6 @@ class OutputReadModelContractTest(unittest.TestCase):
             mutation(record)
             with self.subTest(mutation=mutation):
                 self.assertTrue(current_report_record_errors(record))
-
-    def test_invalid_current_record_is_a_cache_miss(self) -> None:
-        from x5crop.runtime.analysis_reuse import cached_record_matches
-
-        record = _record()
-        record["selection"]["geometry_resolution"]["count_resolved"] = False
-        self.assertFalse(
-            cached_record_matches(record, record["analysis_reuse_signature"])
-        )
-
-    def test_cache_restoration_failure_falls_back_to_fresh_detection(self) -> None:
-        from x5crop.runtime.analysis_reuse import result_from_reusable_analysis
-
-        config = SimpleNamespace(
-            reuse_analysis=True,
-            dry_run=False,
-            debug=False,
-            debug_analysis=False,
-        )
-        with (
-            patch(
-                "x5crop.runtime.analysis_reuse.find_reusable_analysis",
-                return_value=_record(),
-            ),
-            patch(
-                "x5crop.runtime.analysis_reuse._final_detection_from_record",
-                side_effect=ValueError("invalid typed restoration"),
-            ),
-        ):
-            self.assertIsNone(
-                result_from_reusable_analysis(
-                    Path("input.tif"),
-                    config,
-                    SimpleNamespace(root=Path("output")),
-                    _profile(),
-                    [],
-                    _analysis_reuse_signature(),
-                    PreparedWorkspace(
-                        pixels=np.zeros((100, 310), dtype=np.uint8),
-                        gray=np.zeros((100, 310), dtype=np.uint8),
-                        transform_geometry=transform_geometry_fixture(),
-                    ),
-                    np.zeros((100, 310), dtype=np.uint8),
-                )
-            )
 
     def test_unavailable_transform_span_remains_explicitly_unavailable(self) -> None:
         transform = TransformGeometryEvidence(
@@ -579,7 +498,7 @@ class OutputReadModelContractTest(unittest.TestCase):
             ),
             resolution_metadata=unavailable_resolution_metadata_fixture(),
             transform_geometry=transform,
-            analysis_reuse_signature=_analysis_reuse_signature(),
+            analysis_identity=_analysis_identity(),
         )
         self.assertIsNone(
             record["input"]["transform_geometry"]["span_px"]
@@ -597,7 +516,7 @@ class OutputReadModelContractTest(unittest.TestCase):
             "selection",
             "decision",
             "output",
-            "analysis_reuse_signature",
+            "analysis_identity",
         ):
             record = _record()
             record.pop(key)
@@ -697,7 +616,7 @@ class OutputReadModelContractTest(unittest.TestCase):
             current_report_record_errors(record),
         )
 
-    def test_cache_restoration_fields_are_required_by_current_schema(self) -> None:
+    def test_current_schema_fields_are_required(self) -> None:
         missing_provenance = _record()
         missing_provenance["selection"]["candidates"][0][
             "provisional_geometry"
@@ -766,42 +685,14 @@ class OutputReadModelContractTest(unittest.TestCase):
             ),
         )
 
-    def test_cache_reuse_validates_current_schema_before_use(self) -> None:
-        source = (PROJECT_ROOT / "x5crop/runtime/analysis_reuse.py").read_text()
-        self.assertIn("current_report_record_errors(record)", source)
-        self.assertNotIn('"review_reasons"', source)
+    def test_analysis_identity_binds_implementation_and_workspace(self) -> None:
+        identity = _record()["analysis_identity"]
 
-    def test_cache_reuse_signature_binds_implementation_and_workspace(self) -> None:
-        signature = _record()["analysis_reuse_signature"]
-
-        self.assertEqual(len(signature["implementation_fingerprint"]), 64)
+        self.assertEqual(len(identity["implementation_fingerprint"]), 64)
         self.assertEqual(
-            signature["workspace_identity"],
+            identity["workspace_identity"],
             _record()["input"]["workspace_identity"],
         )
-
-    def test_cache_reuse_restores_final_detection_for_shared_output_actions(self) -> None:
-        record = _record()
-        detection = final_detection_from_record(record)
-
-        self.assertEqual(
-            detection.decision.status,
-            record["decision"]["status"],
-        )
-        self.assertEqual(
-            detection.decision.final_review_reasons,
-            tuple(record["decision"]["final_review_reasons"]),
-        )
-        self.assertEqual(
-            detection.output_geometry,
-            final_detection_fixture().output_geometry,
-        )
-
-        source = (PROJECT_ROOT / "x5crop/runtime/analysis_reuse.py").read_text()
-        self.assertIn("copy_for_review_if_needed", source)
-        self.assertIn("write_crops_if_allowed", source)
-        self.assertNotIn("from ..export.crops import", source)
-        self.assertNotIn("from ..export.review import", source)
 
     def test_report_and_debug_do_not_recompute_decision(self) -> None:
         source = "\n".join(

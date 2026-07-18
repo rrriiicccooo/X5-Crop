@@ -77,9 +77,9 @@ def load_jsonl_report(path: Path) -> list[dict[str, Any]]:
 
 def report_key(row: dict[str, Any]) -> ReportComparisonIdentity:
     validate_current_report_record(row)
-    signature = row["analysis_reuse_signature"]
-    source = signature["source"]
-    config = signature["config"]
+    analysis_identity = row["analysis_identity"]
+    source = analysis_identity["source"]
+    config = analysis_identity["runtime_configuration"]
     if int(source["page"]) != int(config["page"]):
         raise ValueError("report source and configuration page disagree")
     return ReportComparisonIdentity(

@@ -82,7 +82,6 @@ def runtime_invocation_from_options(options: RuntimeOptions) -> RuntimeInvocatio
         overwrite=options.overwrite,
         report=options.report,
         debug_errors=options.debug_errors,
-        reuse_analysis=options.reuse_analysis,
         jobs=max(1, min(jobs_cap, int(options.jobs))),
     )
     return RuntimeInvocation(

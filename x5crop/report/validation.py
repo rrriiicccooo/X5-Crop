@@ -72,8 +72,7 @@ CURRENT_REPORT_SECTIONS = (
     "selection",
     "decision",
     "output",
-    "analysis_reuse_signature",
-    "analysis_reuse",
+    "analysis_identity",
     "runtime_facts_sha256",
 )
 
@@ -732,14 +731,14 @@ def _configuration_valid(value: Any) -> bool:
     )
 
 
-def _analysis_reuse_signature_valid(value: Any) -> bool:
+def _analysis_identity_valid(value: Any) -> bool:
     top_fields = {
         "script",
         "script_version",
         "implementation_fingerprint",
         "source",
-        "config",
-        "configuration_fingerprint",
+        "runtime_configuration",
+        "detection_configuration_fingerprint",
         "workspace_identity",
     }
     source_fields = {
@@ -769,14 +768,14 @@ def _analysis_reuse_signature_valid(value: Any) -> bool:
     if not isinstance(value, dict) or set(value) != top_fields:
         return False
     source = value["source"]
-    config = value["config"]
+    runtime_configuration = value["runtime_configuration"]
     return bool(
         isinstance(value["script"], str)
         and isinstance(value["script_version"], str)
         and isinstance(value["implementation_fingerprint"], str)
         and len(value["implementation_fingerprint"]) == 64
-        and isinstance(value["configuration_fingerprint"], str)
-        and len(value["configuration_fingerprint"]) == 64
+        and isinstance(value["detection_configuration_fingerprint"], str)
+        and len(value["detection_configuration_fingerprint"]) == 64
         and _typed_value_valid(value["workspace_identity"], WorkspaceIdentity)
         and isinstance(source, dict)
         and set(source) == source_fields
@@ -793,10 +792,10 @@ def _analysis_reuse_signature_valid(value: Any) -> bool:
             isinstance(source[field], str)
             for field in ("dtype", "axes", "photometric")
         )
-        and isinstance(config, dict)
-        and set(config) == config_fields
+        and isinstance(runtime_configuration, dict)
+        and set(runtime_configuration) == config_fields
         and all(
-            isinstance(config[field], str)
+            isinstance(runtime_configuration[field], str)
             for field in (
                 "format_id",
                 "layout",
@@ -806,15 +805,15 @@ def _analysis_reuse_signature_valid(value: Any) -> bool:
             )
         )
         and (
-            config["requested_count"] is None
-            or _integer(config["requested_count"]) is not None
+            runtime_configuration["requested_count"] is None
+            or _integer(runtime_configuration["requested_count"]) is not None
         )
         and all(
-            _integer(config[field]) is not None
+            _integer(runtime_configuration[field]) is not None
             for field in ("page", "bleed_x", "bleed_y")
         )
         and all(
-            _typed_value_valid(config[field], float)
+            _typed_value_valid(runtime_configuration[field], float)
             for field in ("deskew_min_angle", "deskew_max_angle")
         )
     )
@@ -826,17 +825,18 @@ def _record_identities_valid(
 ) -> bool:
     configuration = record["configuration"]
     physical = configuration["physical"]
-    signature_config = record["analysis_reuse_signature"]["config"]
-    signature_source = record["analysis_reuse_signature"]["source"]
+    analysis_identity = record["analysis_identity"]
+    runtime_configuration = analysis_identity["runtime_configuration"]
+    source_identity = analysis_identity["source"]
     input_profile = record["input"]["profile"]
     format_id = configuration["format_id"]
     strip_mode = configuration["strip_mode"]
-    layout = signature_config["layout"]
+    layout = runtime_configuration["layout"]
     if strip_mode == "full" or configuration["execution"]["detector_kind"] == "review_only":
         candidate_counts = {physical["default_count"]}
     else:
         candidate_counts = set(physical["allowed_partial_counts"])
-    requested_count = signature_config["requested_count"]
+    requested_count = runtime_configuration["requested_count"]
     plan = (
         finalization_plan_from_read_model(
             record["output"]["finalization_plan"]
@@ -878,9 +878,9 @@ def _record_identities_valid(
         and (final_geometry is None) == (not resolved)
         and frame_plan_matches_resolution
         and frame_bleed_plan.user_bleed.long_axis
-        == signature_config["bleed_x"]
+        == runtime_configuration["bleed_x"]
         and frame_bleed_plan.user_bleed.short_axis
-        == signature_config["bleed_y"]
+        == runtime_configuration["bleed_y"]
     )
     if plan is not None and final_geometry is not None:
         output_identity_valid = bool(
@@ -893,13 +893,13 @@ def _record_identities_valid(
             == plan.base_geometry.frame_crop_envelopes
         )
     return bool(
-        signature_config["format_id"] == format_id
-        and signature_config["strip_mode"] == strip_mode
-        and signature_source["name"] == Path(record["source"]).name
-        and record["analysis_reuse_signature"]["workspace_identity"]
+        runtime_configuration["format_id"] == format_id
+        and runtime_configuration["strip_mode"] == strip_mode
+        and source_identity["name"] == Path(record["source"]).name
+        and analysis_identity["workspace_identity"]
         == record["input"]["workspace_identity"]
         and all(
-            signature_source[name] == input_profile[name]
+            source_identity[name] == input_profile[name]
             for name in ("shape", "dtype", "axes", "photometric")
         )
         and all(
@@ -1018,8 +1018,8 @@ def current_report_record_errors(record: dict[str, Any]) -> list[str]:
     if not output_valid:
         errors.append("output_incomplete")
     _decision_consistent(record["decision"], errors)
-    if not _analysis_reuse_signature_valid(record["analysis_reuse_signature"]):
-        errors.append("analysis_reuse_signature_invalid")
+    if not _analysis_identity_valid(record["analysis_identity"]):
+        errors.append("analysis_identity_invalid")
     elif (
         selection_result is not None
         and configuration_valid
@@ -1034,12 +1034,6 @@ def current_report_record_errors(record: dict[str, Any]) -> list[str]:
             identities_valid = False
         if not identities_valid:
             errors.append("record_identity_mismatch")
-    if not (
-        isinstance(record["analysis_reuse"], dict)
-        and set(record["analysis_reuse"]) == {"used"}
-        and isinstance(record["analysis_reuse"]["used"], bool)
-    ):
-        errors.append("analysis_reuse_invalid")
     fingerprint = record["runtime_facts_sha256"]
     if not isinstance(fingerprint, str) or len(fingerprint) != 64:
         errors.append("runtime_facts_fingerprint_invalid")

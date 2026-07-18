@@ -11,7 +11,7 @@ from tools.tests.physical_gate_support import (
     unavailable_resolution_metadata_fixture,
 )
 from tools.tests.test_output_read_model_contract import (
-    _analysis_reuse_signature,
+    _analysis_identity,
     _profile,
     _record,
 )
@@ -90,7 +90,7 @@ class ReportIdentityContractTest(unittest.TestCase):
             ),
             resolution_metadata=unavailable_resolution_metadata_fixture(),
             transform_geometry=transform,
-            analysis_reuse_signature=_analysis_reuse_signature(
+            analysis_identity=_analysis_identity(
                 workspace_shape=(120, 330)
             ),
         )
@@ -150,7 +150,7 @@ class ReportIdentityContractTest(unittest.TestCase):
             ),
             resolution_metadata=unavailable_resolution_metadata_fixture(),
             transform_geometry=transform,
-            analysis_reuse_signature=_analysis_reuse_signature(),
+            analysis_identity=_analysis_identity(),
         )
         transform_check = next(
             check

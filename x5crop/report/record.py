@@ -51,7 +51,7 @@ def report_record_for_final_detection(
     configuration: dict,
     resolution_metadata: ResolutionMetadataObservation,
     transform_geometry: TransformGeometryEvidence,
-    analysis_reuse_signature: dict,
+    analysis_identity: dict,
 ) -> dict:
     output_geometry = detection.output_geometry
     record = {
@@ -94,7 +94,6 @@ def report_record_for_final_detection(
             "review_copy": review_copy,
             "warnings": list(warnings),
         },
-        "analysis_reuse_signature": dict(analysis_reuse_signature),
-        "analysis_reuse": {"used": False},
+        "analysis_identity": dict(analysis_identity),
     }
     return bind_runtime_facts(record)

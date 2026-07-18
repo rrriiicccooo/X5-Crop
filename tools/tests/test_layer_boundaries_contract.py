@@ -197,7 +197,7 @@ class LayerBoundariesContractTest(unittest.TestCase):
             ).exists()
         )
 
-    def test_report_restoration_depends_on_models_not_computation_stages(self) -> None:
+    def test_report_depends_on_models_not_computation_stages(self) -> None:
         self.assertEqual(
             forbidden_import_edges(
                 ("x5crop.report",),

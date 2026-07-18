@@ -40,7 +40,6 @@ def _config() -> RunConfig:
         overwrite=False,
         report=True,
         debug_errors=False,
-        reuse_analysis=False,
         jobs=1,
     )
 
