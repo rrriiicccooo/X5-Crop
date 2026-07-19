@@ -1120,9 +1120,9 @@ class FrameSequenceSearchContractTest(unittest.TestCase):
 
         with patch.object(
             sequence_search,
-            "best_graph_predecessor",
-            wraps=sequence_search.best_graph_predecessor,
-        ) as best_predecessor:
+            "best_graph_predecessors",
+            wraps=sequence_search.best_graph_predecessors,
+        ) as best_predecessors:
             witnesses = sequence_search.sequence_graph_witnesses(
                 grouped,
                 ordered,
@@ -1130,7 +1130,7 @@ class FrameSequenceSearchContractTest(unittest.TestCase):
             )
 
         self.assertIn(valid, witnesses)
-        self.assertLessEqual(best_predecessor.call_count, 4)
+        self.assertLessEqual(best_predecessors.call_count, 2)
 
     def test_graph_search_preserves_independent_separator_measurements(self) -> None:
         search_scope = scope(

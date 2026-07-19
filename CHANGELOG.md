@@ -22,6 +22,17 @@ the validation evidence.
 
 ### 2026-07-19 — 无环观测权限 / Acyclic Observation Authority
 
+- Graph path predecessor ranking now evaluates each layer in bounded vectorized batches while
+  retaining the exact physical-validity filters and lexicographic rank authority. The former
+  per-option ranking API was deleted; no candidate, state, evaluation, or execution budget was
+  changed. On the frozen `half/partial/pass_X5_00001` diagnostic, detection fell from 74.71 s to
+  50.27 s while preserving 971,842 assignment evaluations, 11 candidates, cache 41/6, a
+  zero-diff current report, and a byte-identical Debug Analysis JPG. / Graph path predecessor
+  ranking 现在以有界 vectorized batch 处理每一层，同时完整保留原有 physical-validity filter
+  与 lexicographic rank authority；旧的逐 option ranking API 已删除，candidate、state、
+  evaluation 与 execution budget 均未改变。冻结 `half/partial/pass_X5_00001` diagnostics
+  从 74.71 s 降至 50.27 s，同时保持 971,842 次 assignment evaluation、11 个 candidate、
+  cache 41/6、current report 0 diff 与 Debug Analysis JPG 字节一致。
 - Forward and backward graph reachability now materialize coordinate/fallback ordering once for
   each exact index subset within a single pass; no candidate, witness, edge result, or decision is
   cached. On the frozen `half/partial/pass_X5_00001` diagnostic, detection fell from 80.71 s to

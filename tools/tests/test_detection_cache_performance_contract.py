@@ -75,7 +75,7 @@ class DetectionCachePerformanceContractTest(unittest.TestCase):
         )
         self.assertNotIn("analysis_reuse", CURRENT_REPORT_SECTIONS)
 
-    def test_graph_predecessor_ranking_does_not_materialize_interval_per_option(
+    def test_graph_layer_predecessors_are_ranked_without_per_option_calls(
         self,
     ) -> None:
         def edge(position: float, label: str):
@@ -152,15 +152,16 @@ class DetectionCachePerformanceContractTest(unittest.TestCase):
             return original_intersection(left, right)
 
         with patch.object(PixelInterval, "intersection", counted_intersection):
-            selected = sequence_search.best_graph_predecessor(
-                len(previous_options),
+            selected = sequence_search.best_graph_predecessors(
+                (len(previous_options),),
                 previous,
                 ordered,
                 context,
             )
 
-        self.assertIsNotNone(selected)
+        self.assertIn(len(previous_options), selected)
         self.assertLessEqual(intersection_calls, 2)
+        self.assertFalse(hasattr(sequence_search, "best_graph_predecessor"))
 
     def test_reachability_reuses_identical_subset_order_within_one_pass(
         self,

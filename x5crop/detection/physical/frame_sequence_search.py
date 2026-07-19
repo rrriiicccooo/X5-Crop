@@ -1245,171 +1245,295 @@ def _observation_candidate_count(option: measurement_facts.MeasuredFrameConstrai
         }
     )
 
-def best_graph_predecessor(
-    current_index: int,
+_GRAPH_PREDECESSOR_BATCH_SIZE = 256
+
+
+def _retain_graph_rank(
+    remaining: np.ndarray,
+    values: np.ndarray,
+    *,
+    maximize: bool,
+) -> np.ndarray:
+    preferred = (
+        np.max(np.where(remaining, values, -np.inf), axis=1)
+        if maximize
+        else np.min(np.where(remaining, values, np.inf), axis=1)
+    )
+    return np.logical_and(remaining, values == preferred[:, None])
+
+
+def best_graph_predecessors(
+    current_indexes: tuple[int, ...],
     previous: GraphLayerStateIndex,
     ordered: tuple[measurement_facts.MeasuredFrameConstraint, ...],
     context: SequenceGraphContext,
-) -> tuple[int, int, int, float, float, int, float, int] | None:
-    current = ordered[current_index]
-    separator_key = _separator_boundary_key(current.leading)
+) -> dict[int, tuple[int, int, int, float, float, int, float, int]]:
     previous_indexes = previous.option_indexes
-    if not previous_indexes:
-        return None
-    valid = np.logical_and(
-        previous.leading_maxima < current.leading.position.minimum,
-        previous.trailing_maxima < current.trailing.position.minimum,
+    if not previous_indexes or not current_indexes:
+        return {}
+    previous_count = len(previous_indexes)
+    coordinate_component_count = len(previous.coordinate_keys[0])
+    coordinate_rank_values = tuple(
+        np.fromiter(
+            (
+                coordinates[component]
+                for coordinates in previous.coordinate_keys
+            ),
+            dtype=np.float64,
+            count=previous_count,
+        )[None, :]
+        for component in range(coordinate_component_count)
     )
-    common_width_minima = np.maximum(
-        previous.frame_width_minima,
-        current.width_px.minimum,
-    )
-    common_width_maxima = np.minimum(
-        previous.frame_width_maxima,
-        current.width_px.maximum,
-    )
-    common_width_available = common_width_maxima >= common_width_minima
-    if separator_key is not None:
-        separator_compatible = np.zeros(len(previous_indexes), dtype=bool)
-        for key in (None, separator_key):
-            offsets = previous.separator_offsets.get(key)
-            if offsets is not None:
-                separator_compatible[offsets] = True
-        valid &= separator_compatible
-    if not context.allow_nominal_slot_sized_gap:
-        valid &= common_width_available
-        valid &= (
-            current.leading.position.maximum - previous.trailing_minima
-            < common_width_minima
-        )
+    next_run_starts: np.ndarray | None = None
     if context.run_starts:
-        current_coverage = context.coverages[current_index]
-        if current_coverage is None:
-            return None
-        previous_coverage_end = previous.coverage_ends
-        valid &= np.isfinite(previous_coverage_end)
-        gap_end = float(current_coverage[0])
-        uncovered = gap_end > previous_coverage_end
-        if np.any(uncovered):
-            run_ends = np.asarray(context.run_ends, dtype=np.float64)
-            run_starts = np.asarray(context.run_starts, dtype=np.float64)
-            run_indexes = np.searchsorted(
-                run_ends,
-                previous_coverage_end,
-                side="right",
+        run_ends = np.asarray(context.run_ends, dtype=np.float64)
+        run_starts = np.asarray(context.run_starts, dtype=np.float64)
+        run_indexes = np.searchsorted(
+            run_ends,
+            previous.coverage_ends,
+            side="right",
+        )
+        next_run_starts = np.full(previous_count, np.inf, dtype=np.float64)
+        has_following_run = run_indexes < len(run_starts)
+        next_run_starts[has_following_run] = run_starts[
+            run_indexes[has_following_run]
+        ]
+
+    selected: dict[
+        int,
+        tuple[int, int, int, float, float, int, float, int],
+    ] = {}
+    for batch_start in range(
+        0,
+        len(current_indexes),
+        _GRAPH_PREDECESSOR_BATCH_SIZE,
+    ):
+        batch_indexes = current_indexes[
+            batch_start : batch_start + _GRAPH_PREDECESSOR_BATCH_SIZE
+        ]
+        current = tuple(ordered[index] for index in batch_indexes)
+        batch_count = len(current)
+        leading_minima = np.fromiter(
+            (option.leading.position.minimum for option in current),
+            dtype=np.float64,
+            count=batch_count,
+        )[:, None]
+        leading_maxima = np.fromiter(
+            (option.leading.position.maximum for option in current),
+            dtype=np.float64,
+            count=batch_count,
+        )[:, None]
+        trailing_minima = np.fromiter(
+            (option.trailing.position.minimum for option in current),
+            dtype=np.float64,
+            count=batch_count,
+        )[:, None]
+        width_minima = np.fromiter(
+            (option.width_px.minimum for option in current),
+            dtype=np.float64,
+            count=batch_count,
+        )[:, None]
+        width_maxima = np.fromiter(
+            (option.width_px.maximum for option in current),
+            dtype=np.float64,
+            count=batch_count,
+        )[:, None]
+        valid = np.logical_and(
+            previous.leading_maxima[None, :] < leading_minima,
+            previous.trailing_maxima[None, :] < trailing_minima,
+        )
+        common_width_minima = np.maximum(
+            previous.frame_width_minima[None, :],
+            width_minima,
+        )
+        common_width_maxima = np.minimum(
+            previous.frame_width_maxima[None, :],
+            width_maxima,
+        )
+        common_width_available = common_width_maxima >= common_width_minima
+        separator_keys = tuple(
+            _separator_boundary_key(option.leading) for option in current
+        )
+        for row, separator_key in enumerate(separator_keys):
+            if separator_key is None:
+                continue
+            separator_compatible = np.zeros(previous_count, dtype=bool)
+            for key in (None, separator_key):
+                offsets = previous.separator_offsets.get(key)
+                if offsets is not None:
+                    separator_compatible[offsets] = True
+            valid[row] &= separator_compatible
+        if not context.allow_nominal_slot_sized_gap:
+            valid &= common_width_available
+            valid &= (
+                leading_maxima - previous.trailing_minima[None, :]
+                < common_width_minima
             )
-            next_run_start = np.full(len(previous_indexes), np.inf, dtype=np.float64)
-            has_following_run = run_indexes < len(run_starts)
-            next_run_start[has_following_run] = run_starts[
-                run_indexes[has_following_run]
-            ]
-            valid &= np.logical_or(~uncovered, next_run_start >= gap_end)
-    candidate_offsets = np.flatnonzero(valid)
-    if not len(candidate_offsets):
-        return None
+        if context.run_starts:
+            coverage_starts = np.asarray(
+                [
+                    (
+                        np.nan
+                        if context.coverages[index] is None
+                        else float(context.coverages[index][0])
+                    )
+                    for index in batch_indexes
+                ],
+                dtype=np.float64,
+            )[:, None]
+            valid &= np.isfinite(coverage_starts)
+            valid &= np.isfinite(previous.coverage_ends)[None, :]
+            uncovered = coverage_starts > previous.coverage_ends[None, :]
+            assert next_run_starts is not None
+            valid &= np.logical_or(
+                ~uncovered,
+                next_run_starts[None, :] >= coverage_starts,
+            )
+        has_predecessor = np.any(valid, axis=1)
+        if not np.any(has_predecessor):
+            continue
 
-    separator_supported = np.zeros(len(previous_indexes), dtype=np.int64)
-    observation_increment = _observation_candidate_count(current)
-    internal_quality = np.zeros(len(previous_indexes), dtype=np.float64)
-    unexplained_spacing = np.maximum(
-        0.0,
-        current.leading.position.minimum - previous.trailing_maxima,
-    )
-    frame_sized_unexplained_gap = np.zeros(len(previous_indexes), dtype=np.int64)
-    uncorroborated_overlap = np.maximum(
-        0.0,
-        previous.trailing_minima - current.leading.position.maximum,
-    )
-    uncorroborated_contact = np.logical_and(
-        previous.trailing_minima == current.leading.position.minimum,
-        previous.trailing_maxima == current.leading.position.maximum,
-    ).astype(np.int64)
-    if separator_key is not None:
-        for offset in candidate_offsets:
-            previous_option = ordered[previous_indexes[int(offset)]]
-            if (
-                common_width_available[offset]
-                and _separator_edges_pair_at_boundary(previous_option, current)
-                and previous_option.trailing.separator is not None
-                and previous_option.trailing.separator_cross_axis is not None
-                and previous_option.trailing.separator_cross_axis
-                .complete_separator_supported
-                and previous_option.trailing.separator.width_px.minimum > 0.0
-                and previous_option.trailing.separator.width_px.maximum
-                < common_width_minima[offset]
-            ):
-                separator_supported[offset] = 1
-                internal_quality[offset] = (
-                    previous_option.trailing.observation_quality
-                    + current.leading.observation_quality
-                )
-                unexplained_spacing[offset] = 0.0
-                uncorroborated_overlap[offset] = 0.0
-                uncorroborated_contact[offset] = 0
-    frame_sized_unexplained_gap = np.logical_and(
-        common_width_available,
-        unexplained_spacing >= common_width_minima,
-    ).astype(np.int64)
-    frame_sized_unexplained_gap[separator_supported.astype(bool)] = 0
-    observation_counts = (
-        previous.observation_candidate_counts + observation_increment
-    )
-    supported_counts = previous.supported_separator_counts + separator_supported
-    qualities = previous.internal_measurement_qualities + internal_quality
-    overlaps = previous.uncorroborated_overlap_extents + uncorroborated_overlap
-    frame_sized_gaps = (
-        previous.frame_sized_unexplained_gap_counts
-        + frame_sized_unexplained_gap
-    )
-    unexplained = previous.unexplained_spacing_extents + unexplained_spacing
-    contacts = previous.uncorroborated_contact_counts + uncorroborated_contact
-    width_hint_residuals = previous.frame_width_hint_residuals
-    uncertainties = previous.boundary_uncertainties
-    leading_qualities = previous.external_leading_qualities
+        unexplained_spacing = np.maximum(
+            0.0,
+            leading_minima - previous.trailing_maxima[None, :],
+        )
+        uncorroborated_overlap = np.maximum(
+            0.0,
+            previous.trailing_minima[None, :] - leading_maxima,
+        )
+        uncorroborated_contact = np.logical_and(
+            previous.trailing_minima[None, :] == leading_minima,
+            previous.trailing_maxima[None, :] == leading_maxima,
+        ).astype(np.int64)
+        separator_supported = np.zeros(
+            (batch_count, previous_count),
+            dtype=np.int64,
+        )
+        internal_quality = np.zeros(
+            (batch_count, previous_count),
+            dtype=np.float64,
+        )
+        for row, separator_key in enumerate(separator_keys):
+            if separator_key is None:
+                continue
+            offsets = previous.separator_offsets.get(separator_key)
+            if offsets is None:
+                continue
+            current_option = current[row]
+            for offset_value in offsets:
+                offset = int(offset_value)
+                previous_option = ordered[previous_indexes[offset]]
+                if (
+                    valid[row, offset]
+                    and common_width_available[row, offset]
+                    and _separator_edges_pair_at_boundary(
+                        previous_option,
+                        current_option,
+                    )
+                    and previous_option.trailing.separator is not None
+                    and previous_option.trailing.separator_cross_axis is not None
+                    and previous_option.trailing.separator_cross_axis
+                    .complete_separator_supported
+                    and previous_option.trailing.separator.width_px.minimum > 0.0
+                    and previous_option.trailing.separator.width_px.maximum
+                    < common_width_minima[row, offset]
+                ):
+                    separator_supported[row, offset] = 1
+                    internal_quality[row, offset] = (
+                        previous_option.trailing.observation_quality
+                        + current_option.leading.observation_quality
+                    )
+                    unexplained_spacing[row, offset] = 0.0
+                    uncorroborated_overlap[row, offset] = 0.0
+                    uncorroborated_contact[row, offset] = 0
+        frame_sized_unexplained_gap = np.logical_and(
+            common_width_available,
+            unexplained_spacing >= common_width_minima,
+        ).astype(np.int64)
+        frame_sized_unexplained_gap[separator_supported.astype(bool)] = 0
+        supported_counts = (
+            previous.supported_separator_counts[None, :]
+            + separator_supported
+        )
+        qualities = (
+            previous.internal_measurement_qualities[None, :]
+            + internal_quality
+        )
+        overlaps = (
+            previous.uncorroborated_overlap_extents[None, :]
+            + uncorroborated_overlap
+        )
+        frame_sized_gaps = (
+            previous.frame_sized_unexplained_gap_counts[None, :]
+            + frame_sized_unexplained_gap
+        )
+        unexplained = (
+            previous.unexplained_spacing_extents[None, :]
+            + unexplained_spacing
+        )
+        contacts = (
+            previous.uncorroborated_contact_counts[None, :]
+            + uncorroborated_contact
+        )
 
-    remaining = candidate_offsets
-    minimum_overlap = np.min(overlaps[remaining])
-    remaining = remaining[overlaps[remaining] == minimum_overlap]
-    minimum_frame_sized_gaps = np.min(frame_sized_gaps[remaining])
-    remaining = remaining[
-        frame_sized_gaps[remaining] == minimum_frame_sized_gaps
-    ]
-    maximum_count = np.max(supported_counts[remaining])
-    remaining = remaining[supported_counts[remaining] == maximum_count]
-    maximum_quality = np.max(qualities[remaining])
-    remaining = remaining[qualities[remaining] == maximum_quality]
-    minimum_contacts = np.min(contacts[remaining])
-    remaining = remaining[contacts[remaining] == minimum_contacts]
-    minimum_unexplained = np.min(unexplained[remaining])
-    remaining = remaining[unexplained[remaining] == minimum_unexplained]
-    maximum_leading_quality = np.max(leading_qualities[remaining])
-    remaining = remaining[
-        leading_qualities[remaining] == maximum_leading_quality
-    ]
-    maximum_observation_count = np.max(observation_counts[remaining])
-    remaining = remaining[
-        observation_counts[remaining] == maximum_observation_count
-    ]
-    minimum_uncertainty = np.min(uncertainties[remaining])
-    remaining = remaining[uncertainties[remaining] == minimum_uncertainty]
-    minimum_width_hint_residual = np.min(width_hint_residuals[remaining])
-    remaining = remaining[
-        width_hint_residuals[remaining] == minimum_width_hint_residual
-    ]
-    best_offset = max(
-        (int(offset) for offset in remaining),
-        key=lambda offset: previous.coordinate_keys[offset],
-    )
-    return (
-        previous_indexes[best_offset],
-        observation_increment,
-        int(separator_supported[best_offset]),
-        float(internal_quality[best_offset]),
-        float(uncorroborated_overlap[best_offset]),
-        int(frame_sized_unexplained_gap[best_offset]),
-        float(unexplained_spacing[best_offset]),
-        int(uncorroborated_contact[best_offset]),
-    )
+        remaining = _retain_graph_rank(valid, overlaps, maximize=False)
+        remaining = _retain_graph_rank(
+            remaining, frame_sized_gaps, maximize=False
+        )
+        remaining = _retain_graph_rank(
+            remaining,
+            supported_counts,
+            maximize=True,
+        )
+        remaining = _retain_graph_rank(
+            remaining,
+            qualities,
+            maximize=True,
+        )
+        remaining = _retain_graph_rank(remaining, contacts, maximize=False)
+        remaining = _retain_graph_rank(
+            remaining, unexplained, maximize=False
+        )
+        remaining = _retain_graph_rank(
+            remaining,
+            previous.external_leading_qualities[None, :],
+            maximize=True,
+        )
+        remaining = _retain_graph_rank(
+            remaining,
+            previous.observation_candidate_counts[None, :],
+            maximize=True,
+        )
+        remaining = _retain_graph_rank(
+            remaining,
+            previous.boundary_uncertainties[None, :],
+            maximize=False,
+        )
+        remaining = _retain_graph_rank(
+            remaining,
+            previous.frame_width_hint_residuals[None, :],
+            maximize=False,
+        )
+        for coordinate_values in coordinate_rank_values:
+            remaining = _retain_graph_rank(
+                remaining, coordinate_values, maximize=True
+            )
+        best_offsets = np.argmax(remaining, axis=1)
+        for row, current_index in enumerate(batch_indexes):
+            if not has_predecessor[row]:
+                continue
+            best_offset = int(best_offsets[row])
+            selected[current_index] = (
+                previous_indexes[best_offset],
+                _observation_candidate_count(current[row]),
+                int(separator_supported[row, best_offset]),
+                float(internal_quality[row, best_offset]),
+                float(uncorroborated_overlap[row, best_offset]),
+                int(frame_sized_unexplained_gap[row, best_offset]),
+                float(unexplained_spacing[row, best_offset]),
+                int(uncorroborated_contact[row, best_offset]),
+            )
+    return selected
 
 def sequence_graph_best_path(
     grouped_options: tuple[
@@ -1448,14 +1572,15 @@ def sequence_graph_best_path(
             ordered,
             context,
         )
+        predecessors = best_graph_predecessors(
+            tuple(option_index for option_index, _ in frame_options),
+            previous_index,
+            ordered,
+            context,
+        )
         current_states: dict[int, GraphPathState] = {}
         for option_index, option in frame_options:
-            predecessor = best_graph_predecessor(
-                option_index,
-                previous_index,
-                ordered,
-                context,
-            )
+            predecessor = predecessors.get(option_index)
             if predecessor is None:
                 continue
             (
