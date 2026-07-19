@@ -13,12 +13,12 @@ authoritative.
 ## Frozen Checkpoint / 冻结检查点
 
 - Branch / 分支：`main`.
-- Candidate / 候选提交：`d1a4f6ad` (`test: preserve raw sequence alternatives`), pushed to
+- Candidate / 候选提交：`17a5a3e2` (`perf: reuse reachability subset ordering`), pushed to
   `origin/main`.
 - Worktree / 工作树：tracked files were clean immediately after that push; local `Test/`
   references and generated diagnostics are intentionally ignored and untracked.
 - Canonical verifier / 唯一验证入口：`tools/verify full` passed before commit and again in the
-  push hook at this candidate: 799 tests, 14 format/mode configuration pairs, V4.9.
+  push hook at this candidate: 800 tests, 14 format/mode configuration pairs, V4.9.
 - Resume by checking `git log -1 --oneline`, `git status --short`, and current reports; do not
   assume this snapshot is still current. / 恢复时先核对当前提交、工作树和报告，不把本快照当作
   现场事实。
@@ -61,7 +61,10 @@ authoritative.
   optimizations were rejected rather than committed: retroactive raw-build filtering made
   `unknown_X5_00038` resolved-wrong and automatically approved; a raw separator-chain upper
   bound changed the complete-search `half/full/pass_X5_00001` frame-slot resolution and Debug.
-- Current named diagnostics at the runtime-equivalent `d1a4f6ad` keep `pass_X5_00006` and
+- `17a5a3e2` reuses exact coordinate/fallback ordering for identical index subsets only within
+  one forward/backward reachability pass. It does not cache candidates, edge results, witnesses,
+  or decisions, and leaves assignment-evaluation and budget accounting unchanged.
+- Current named diagnostics at `17a5a3e2` keep `pass_X5_00006` and
   `unknown_X5_00038` unresolved and non-exportable. Representative
   `120-66/partial/pass_X5_00005` and `half/full/pass_X5_00001` also remain unresolved and
   non-exportable; both still expose typed `execution_budget_exhausted`, so the performance phase
@@ -85,6 +88,9 @@ authoritative.
   回溯过滤曾使 `unknown_X5_00038` 重新 resolved-wrong 且自动通过；raw separator-chain
   上界曾改变 `half/full/pass_X5_00001` 的完整搜索结果与 Debug。两者均已否决，
   没有保留 runtime 改动。
+- `17a5a3e2` 只在单次前向/反向 reachability pass 内复用完全相同 index subset 的
+  coordinate/fallback 顺序；不缓存 candidate、edge result、witness 或 decision，不改变
+  assignment-evaluation 与 budget 计账。
 
 ## Frozen Physical Rules / 冻结物理权限
 
@@ -119,15 +125,19 @@ authoritative.
   repeated reachability subset ordering as the next measured wall-time cost, but candidate or
   raw-build result caching remains forbidden; continue only with exact transient deduplication
   or a physically complete graph reduction.
+- `17a5a3e2`: 74.71 s detection with the same 971,842 assignment evaluations, 11 candidates,
+  cache 41/6, a zero-diff current report, and byte-identical Debug Analysis. This closes the
+  repeated subset-order materialization cost only; pass-required budget exhaustion remains.
 - Continue from measured call-stack costs. Only exact reuse/deduplication, physically complete
   interval or anchor pruning, branch-and-bound, delayed blank branching, and focused ordering
   are legal; performance, budget, Gate, or confidence cannot change physical authority.
 
 ## Next Actions / 下一步
 
-1. Continue profiling the fixed `half/partial/pass_X5_00001.tif` sample from `d1a4f6ad`; first
-   investigate exact within-call reachability-order deduplication or physically complete graph
-   reduction. Do not reintroduce provisional raw-build incumbent or separator-chain pruning.
+1. Continue profiling the fixed `half/partial/pass_X5_00001.tif` sample from `17a5a3e2`; the next
+   wave must reduce exact graph evaluations through a physically complete option/state reduction,
+   not merely wall-clock overhead. Do not reintroduce provisional raw-build incumbent or
+   separator-chain pruning.
 2. Re-profile after each legal optimization wave; run focused contracts, `tools/verify full`,
    named reports, reference comparison, and Debug Analysis before an independent commit/push.
 3. Rerun all 113 TIFFs from a clean frozen commit. Require zero runtime/schema failure, zero
