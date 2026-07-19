@@ -1196,6 +1196,161 @@ class FrameSequenceSearchContractTest(unittest.TestCase):
             sequence_search._graph_sequence_rank(compact_without_measurement),
         )
 
+    def test_graph_witnesses_preserve_one_sided_separator_edge_sequence(
+        self,
+    ) -> None:
+        search_scope = scope(
+            width=400,
+            height=100,
+            leading=0.0,
+            trailing=400.0,
+            top=0.0,
+            bottom=100.0,
+            holder_sides=_ALL_HOLDER_SIDES,
+        )
+        plan = shared_short_axis_plan(search_scope)
+        one_sided_support = separator(
+            110.0,
+            120.0,
+            plan,
+            leading_supported=True,
+            trailing_supported=False,
+            band_supported=True,
+        )
+        measured_trailing, _ = separator_assignment.observed_band_edges(
+            one_sided_support
+        )
+        two_sided_support = separator(
+            210.0,
+            220.0,
+            plan,
+            leading_supported=True,
+            trailing_supported=True,
+            band_supported=True,
+        )
+        two_sided_trailing, two_sided_leading = (
+            separator_assignment.observed_band_edges(two_sided_support)
+        )
+
+        self.assertTrue(
+            sequence_search._one_sided_supported_separator_edge_ids(
+                (measured_trailing,)
+            )
+        )
+        self.assertEqual(
+            sequence_search._one_sided_supported_separator_edge_ids(
+                (two_sided_trailing, two_sided_leading)
+            ),
+            (),
+        )
+
+        def inferred_edge(position: float, label: str) -> EdgeConstraint:
+            return EdgeConstraint(
+                position=PixelInterval.exact(position),
+                basis=FrameBoundarySource.DIMENSION_CONSTRAINED,
+                state=EvidenceState.UNAVAILABLE,
+                geometry_state=BoundaryGeometryState.RESOLVED,
+                provenance=MeasurementProvenance(
+                    MeasurementIdentity.FRAME_GEOMETRY,
+                    ObservationId(label),
+                    (),
+                    "synthetic graph boundary",
+                ),
+            )
+
+        def frame(
+            leading: EdgeConstraint,
+            trailing: EdgeConstraint,
+        ) -> MeasuredFrameConstraint:
+            return MeasuredFrameConstraint(
+                leading=leading,
+                trailing=trailing,
+                width_px=PixelInterval.exact(100.0),
+                full_width_hypothesis_admissible=True,
+                leading_holder_clip_supported=False,
+                trailing_holder_clip_supported=False,
+                search_order_residual=0.0,
+            )
+
+        left = tuple(
+            frame(
+                inferred_edge(start, f"left_{index}_leading"),
+                inferred_edge(start + 100.0, f"left_{index}_trailing"),
+            )
+            for index, start in enumerate((0.0, 105.0, 210.0), start=1)
+        )
+        measured = (
+            frame(inferred_edge(10.0, "measured_1_leading"), measured_trailing),
+            frame(
+                inferred_edge(125.0, "measured_2_leading"),
+                inferred_edge(225.0, "measured_2_trailing"),
+            ),
+            frame(
+                inferred_edge(240.0, "measured_3_leading"),
+                inferred_edge(340.0, "measured_3_trailing"),
+            ),
+        )
+        right = tuple(
+            frame(
+                inferred_edge(start, f"right_{index}_leading"),
+                inferred_edge(start + 100.0, f"right_{index}_trailing"),
+            )
+            for index, start in enumerate((20.0, 135.0, 250.0), start=1)
+        )
+        ordered = tuple(
+            option
+            for layer in zip(left, measured, right, strict=True)
+            for option in layer
+        )
+        grouped = tuple(
+            tuple(
+                (layer_index * 3 + route_index, option)
+                for route_index, option in enumerate(layer)
+            )
+            for layer_index, layer in enumerate(
+                zip(left, measured, right, strict=True)
+            )
+        )
+
+        graph_context = sequence_search.sequence_graph_context(
+            ordered,
+            content(width=400, height=100, runs=()),
+            allow_nominal_slot_sized_gap=False,
+        )
+        feasibility = sequence_search._sequence_graph_feasibility(
+            grouped,
+            ordered,
+            graph_context,
+        )
+        self.assertIsNotNone(feasibility)
+        assert feasibility is not None
+        witnesses = sequence_search.sequence_graph_witnesses(
+            grouped,
+            ordered,
+            graph_context,
+            feasibility=feasibility,
+        )
+
+        self.assertIn(measured, witnesses)
+        self.assertTrue(feasibility.evaluations.independent_edge_witnesses)
+        self.assertTrue(
+            all(
+                any(
+                    edge_id
+                    in sequence_search._one_sided_supported_separator_edge_ids(
+                        (
+                            ordered[option_index].leading,
+                            ordered[option_index].trailing,
+                        )
+                    )
+                    for option_index in feasibility.feasible[layer_index]
+                )
+                for layer_index, edge_id in (
+                    feasibility.evaluations.independent_edge_witnesses
+                )
+            )
+        )
+
     def test_common_width_grouping_does_not_scan_every_option_per_coordinate(
         self,
     ) -> None:

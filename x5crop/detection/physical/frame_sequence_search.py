@@ -1031,15 +1031,22 @@ def graph_layer_state_index(
 class SequenceGraphEvaluations:
     states: frozenset[tuple[int, int]]
     edge_queries: frozenset[tuple[int, int]]
-    completion_transitions: frozenset[tuple[int, int, int]]
+    witness_transitions: frozenset[tuple[int, int, int]]
+    independent_edge_witnesses: frozenset[
+        tuple[int, ObservationId]
+    ] = frozenset()
 
     def incremental_cost(self, previous: "SequenceGraphEvaluations") -> int:
         return (
             len(self.states - previous.states)
             + len(self.edge_queries - previous.edge_queries)
             + len(
-                self.completion_transitions
-                - previous.completion_transitions
+                self.witness_transitions
+                - previous.witness_transitions
+            )
+            + len(
+                self.independent_edge_witnesses
+                - previous.independent_edge_witnesses
             )
         )
 
@@ -1050,16 +1057,36 @@ class SequenceGraphEvaluations:
         return SequenceGraphEvaluations(
             self.states | other.states,
             self.edge_queries | other.edge_queries,
-            self.completion_transitions | other.completion_transitions,
+            self.witness_transitions | other.witness_transitions,
+            self.independent_edge_witnesses
+            | other.independent_edge_witnesses,
         )
+
+def _one_sided_supported_separator_edge_ids(
+    edges: tuple[measurement_facts.EdgeConstraint, ...],
+) -> tuple[ObservationId, ...]:
+    return tuple(
+        dict.fromkeys(
+            edge.provenance.observation_id
+            for edge in edges
+            if measurement_facts.separator_edge_path_is_supported(edge)
+            and edge.separator_cross_axis is not None
+            and sum(
+                edge.separator_cross_axis.edge_path(side).state
+                == EvidenceState.SUPPORTED
+                for side in (BoundarySide.LEADING, BoundarySide.TRAILING)
+            )
+            == 1
+        )
+    )
 
 def _sequence_graph_evaluations(
     feasible: tuple[tuple[int, ...], ...],
     ordered: tuple[measurement_facts.MeasuredFrameConstraint, ...],
     context: SequenceGraphContext,
 ) -> SequenceGraphEvaluations:
-    if context.allow_nominal_slot_sized_gap:
-        completion_transitions = frozenset(
+    witness_transitions = (
+        frozenset(
             (layer_index, left_index, right_index)
             for layer_index, (left_indexes, right_indexes) in enumerate(
                 zip(feasible, feasible[1:])
@@ -1073,8 +1100,37 @@ def _sequence_graph_evaluations(
                 context,
             )
         )
-    else:
-        completion_transitions = frozenset()
+        if context.allow_nominal_slot_sized_gap
+        else frozenset()
+    )
+    last_layer = len(feasible) - 1
+    independent_edge_witnesses = (
+        frozenset(
+            (layer_index, edge_id)
+            for layer_index, option_indexes in enumerate(feasible)
+            for option_index in option_indexes
+            for edge_id in _one_sided_supported_separator_edge_ids(
+                tuple(
+                    edge
+                    for edge in (
+                        (
+                            ordered[option_index].leading
+                            if layer_index > 0
+                            else None
+                        ),
+                        (
+                            ordered[option_index].trailing
+                            if layer_index < last_layer
+                            else None
+                        ),
+                    )
+                    if edge is not None
+                )
+            )
+        )
+        if ordered
+        else frozenset()
+    )
     return SequenceGraphEvaluations(
         states=frozenset(
             (layer_index, option_index)
@@ -1086,8 +1142,10 @@ def _sequence_graph_evaluations(
             for key, supported in context.edge_support_cache.items()
             if supported
         ),
-        completion_transitions=completion_transitions,
+        witness_transitions=witness_transitions,
+        independent_edge_witnesses=independent_edge_witnesses,
     )
+
 
 def _constraint_uncertainty(option: measurement_facts.MeasuredFrameConstraint) -> float:
     return sum(
@@ -1641,6 +1699,140 @@ def _contact_transition_witnesses(
             best = sequence
     return () if best is None else (best,)
 
+def _physical_sequences_through_transitions(
+    transitions: frozenset[tuple[int, int, int]],
+    feasible: tuple[tuple[int, ...], ...],
+    ordered: tuple[measurement_facts.MeasuredFrameConstraint, ...],
+    context: SequenceGraphContext,
+) -> dict[
+    tuple[int, int, int],
+    tuple[measurement_facts.MeasuredFrameConstraint, ...],
+]:
+    @lru_cache(maxsize=None)
+    def best_prefix(
+        layer_index: int,
+        option_index: int,
+    ) -> tuple[measurement_facts.MeasuredFrameConstraint, ...] | None:
+        option = ordered[option_index]
+        if layer_index == 0:
+            return (option,)
+        candidates = tuple(
+            (*prefix, option)
+            for previous_index in feasible[layer_index - 1]
+            if context.edge_support_cache.get(
+                (previous_index, option_index),
+                False,
+            )
+            and (
+                prefix := best_prefix(layer_index - 1, previous_index)
+            )
+            is not None
+        )
+        return max(candidates, key=_graph_sequence_rank, default=None)
+
+    @lru_cache(maxsize=None)
+    def best_suffix(
+        layer_index: int,
+        option_index: int,
+    ) -> tuple[measurement_facts.MeasuredFrameConstraint, ...] | None:
+        option = ordered[option_index]
+        if layer_index == len(feasible) - 1:
+            return (option,)
+        candidates = tuple(
+            (option, *suffix)
+            for next_index in feasible[layer_index + 1]
+            if context.edge_support_cache.get(
+                (option_index, next_index),
+                False,
+            )
+            and (
+                suffix := best_suffix(layer_index + 1, next_index)
+            )
+            is not None
+        )
+        return max(candidates, key=_graph_sequence_rank, default=None)
+
+    sequences: dict[
+        tuple[int, int, int],
+        tuple[measurement_facts.MeasuredFrameConstraint, ...],
+    ] = {}
+    for layer_index, left_index, right_index in sorted(transitions):
+        prefix = best_prefix(layer_index, left_index)
+        suffix = best_suffix(layer_index + 1, right_index)
+        if prefix is not None and suffix is not None:
+            sequences[(layer_index, left_index, right_index)] = (
+                *prefix,
+                *suffix,
+            )
+    return sequences
+
+def _independent_separator_edge_witnesses(
+    witnesses: frozenset[tuple[int, ObservationId]],
+    grouped_options: tuple[
+        tuple[tuple[int, measurement_facts.MeasuredFrameConstraint], ...],
+        ...,
+    ],
+    ordered: tuple[measurement_facts.MeasuredFrameConstraint, ...],
+    context: SequenceGraphContext,
+) -> tuple[tuple[measurement_facts.MeasuredFrameConstraint, ...], ...]:
+    best_by_edge: dict[
+        ObservationId,
+        tuple[measurement_facts.MeasuredFrameConstraint, ...],
+    ] = {}
+    last_layer = len(grouped_options) - 1
+    for layer_index, edge_id in sorted(
+        witnesses,
+        key=lambda item: (str(item[1]), item[0]),
+    ):
+        constrained = tuple(
+            (
+                tuple(
+                    (option_index, option)
+                    for option_index, option in frame_options
+                    if edge_id
+                    in _one_sided_supported_separator_edge_ids(
+                        tuple(
+                            edge
+                            for edge in (
+                                (
+                                    option.leading
+                                    if offset > 0
+                                    else None
+                                ),
+                                (
+                                    option.trailing
+                                    if offset < last_layer
+                                    else None
+                                ),
+                            )
+                            if edge is not None
+                        )
+                    )
+                )
+                if offset == layer_index
+                else frame_options
+            )
+            for offset, frame_options in enumerate(grouped_options)
+        )
+        sequence = sequence_graph_best_path(
+            constrained,
+            ordered,
+            context,
+        )
+        if sequence is None:
+            continue
+        existing = best_by_edge.get(edge_id)
+        if (
+            existing is None
+            or _graph_sequence_rank(sequence)
+            > _graph_sequence_rank(existing)
+        ):
+            best_by_edge[edge_id] = sequence
+    return tuple(
+        best_by_edge[edge_id]
+        for edge_id in sorted(best_by_edge, key=str)
+    )
+
 def sequence_graph_witnesses(
     grouped_options: tuple[
         tuple[tuple[int, measurement_facts.MeasuredFrameConstraint], ...],
@@ -1680,6 +1872,12 @@ def sequence_graph_witnesses(
         backward,
         ordered,
     )
+    transition_sequences = _physical_sequences_through_transitions(
+        resolved.evaluations.witness_transitions,
+        feasible,
+        ordered,
+        context,
+    )
     targets: list[tuple[int, int]] = []
     targets.append((0, feasible[0][0]))
     if context.allow_nominal_slot_sized_gap:
@@ -1712,76 +1910,27 @@ def sequence_graph_witnesses(
             )
         )
     if context.allow_nominal_slot_sized_gap:
-        @lru_cache(maxsize=None)
-        def best_prefix(
-            layer_index: int,
-            option_index: int,
-        ) -> tuple[measurement_facts.MeasuredFrameConstraint, ...] | None:
-            option = ordered[option_index]
-            if layer_index == 0:
-                return (option,)
-            candidates = tuple(
-                (*prefix, option)
-                for previous_index in feasible[layer_index - 1]
-                if _cached_sequence_graph_edge_supported(
-                    previous_index,
-                    option_index,
-                    ordered,
-                    context,
-                )
-                and (
-                    prefix := best_prefix(layer_index - 1, previous_index)
-                )
-                is not None
-            )
-            return max(candidates, key=_graph_sequence_rank, default=None)
-
-        @lru_cache(maxsize=None)
-        def best_suffix(
-            layer_index: int,
-            option_index: int,
-        ) -> tuple[measurement_facts.MeasuredFrameConstraint, ...] | None:
-            option = ordered[option_index]
-            if layer_index == len(feasible) - 1:
-                return (option,)
-            candidates = tuple(
-                (option, *suffix)
-                for next_index in feasible[layer_index + 1]
-                if _cached_sequence_graph_edge_supported(
-                    option_index,
-                    next_index,
-                    ordered,
-                    context,
-                )
-                and (
-                    suffix := best_suffix(layer_index + 1, next_index)
-                )
-                is not None
-            )
-            return max(candidates, key=_graph_sequence_rank, default=None)
-
-        for left_layer in range(len(feasible) - 1):
-            for left_index in feasible[left_layer]:
-                left = ordered[left_index]
-                for right_index in feasible[left_layer + 1]:
-                    right = ordered[right_index]
-                    if not _cached_sequence_graph_edge_supported(
-                        left_index,
-                        right_index,
-                        ordered,
-                        context,
-                    ):
-                        continue
-                    common_width = left.width_px.intersection(right.width_px)
-                    if common_width is None:
-                        continue
-                    spacing = right.leading.position.minus(left.trailing.position)
-                    if spacing.minimum < common_width.minimum:
-                        continue
-                    prefix = best_prefix(left_layer, left_index)
-                    suffix = best_suffix(left_layer + 1, right_index)
-                    if prefix is not None and suffix is not None:
-                        sequences.append((*prefix, *suffix))
+        for (
+            _layer_index,
+            left_index,
+            right_index,
+        ), sequence in transition_sequences.items():
+            left = ordered[left_index]
+            right = ordered[right_index]
+            common_width = left.width_px.intersection(right.width_px)
+            if common_width is None:
+                continue
+            spacing = right.leading.position.minus(left.trailing.position)
+            if spacing.minimum >= common_width.minimum:
+                sequences.append(sequence)
+    sequences.extend(
+        _independent_separator_edge_witnesses(
+            resolved.evaluations.independent_edge_witnesses,
+            feasible_grouped_options,
+            ordered,
+            context,
+        )
+    )
     return tuple(
         sequence
         for sequence in dict.fromkeys(sequences)

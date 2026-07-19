@@ -274,6 +274,15 @@ def physically_preferred_builds(
     if not independently_supported:
         return builds
     builds = independently_supported
+    minimum_uncorroborated_overlap = min(
+        build.objectives.uncorroborated_overlap_extent_px for build in builds
+    )
+    builds = tuple(
+        build
+        for build in builds
+        if build.objectives.uncorroborated_overlap_extent_px
+        == minimum_uncorroborated_overlap
+    )
     builds = tuple(
         build
         for build in builds
@@ -283,21 +292,12 @@ def physically_preferred_builds(
             for other in builds
         )
     )
-    minimum_uncorroborated_overlap = min(
-        build.objectives.uncorroborated_overlap_extent_px for build in builds
-    )
-    non_overlapping = tuple(
-        build
-        for build in builds
-        if build.objectives.uncorroborated_overlap_extent_px
-        == minimum_uncorroborated_overlap
-    )
     strongest_separator_support = max(
-        build.objectives.supported_separator_count for build in non_overlapping
+        build.objectives.supported_separator_count for build in builds
     )
     physically_anchored = tuple(
         build
-        for build in non_overlapping
+        for build in builds
         if build.objectives.supported_separator_count
         == strongest_separator_support
     )
@@ -309,6 +309,34 @@ def physically_preferred_builds(
             and other.objectives.dominates(build.objectives)
             for other in physically_anchored
         )
+    )
+
+
+def assignment_consensus_builds(
+    builds: tuple[SequenceBuild, ...],
+) -> tuple[SequenceBuild, ...]:
+    if not builds:
+        raise ValueError("assignment consensus requires sequence builds")
+    independently_supported = tuple(
+        build for build in builds if _build_has_independent_boundary_support(build)
+    )
+    groups: dict[
+        tuple[tuple[int, ObservationId], ...],
+        list[SequenceBuild],
+    ] = {}
+    for build in independently_supported or builds:
+        topology = tuple(
+            (
+                binding.boundary_index,
+                binding.observation.provenance.observation_id,
+            )
+            for binding in build.separator_bindings
+        )
+        groups.setdefault(topology, []).append(build)
+    return tuple(
+        preferred
+        for group in groups.values()
+        for preferred in physically_preferred_builds(tuple(group))
     )
 
 

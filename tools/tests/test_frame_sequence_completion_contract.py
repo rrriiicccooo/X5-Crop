@@ -233,6 +233,52 @@ class FrameSequenceCompletionContractTest(unittest.TestCase):
 
         self.assertTrue(resolved)
 
+    def test_nonpreferred_complete_geometry_cannot_suppress_completion_search(
+        self,
+    ) -> None:
+        anchored_slot = SimpleNamespace(
+            sequence_inferred=False,
+            leading=SimpleNamespace(
+                independently_observed=True,
+                source=FrameBoundarySource.GRAY_PATH_OBSERVATION,
+                boundary_anchor=object(),
+            ),
+            trailing=SimpleNamespace(
+                independently_observed=False,
+                source=FrameBoundarySource.DIMENSION_CONSTRAINED,
+                boundary_anchor=None,
+            ),
+        )
+        complete = SimpleNamespace(slots=(anchored_slot,))
+        preferred_unresolved = SimpleNamespace(slots=(anchored_slot,))
+
+        with (
+            patch.object(
+                candidate_builds,
+                "build_preserves_visible_content",
+                return_value=True,
+            ),
+            patch.object(
+                candidate_builds,
+                "physically_preferred_builds",
+                return_value=(preferred_unresolved,),
+            ),
+            patch.object(
+                sequence_completion,
+                "build_supports_resolved_nominal_slots",
+                side_effect=lambda build, *args: build is complete,
+            ),
+        ):
+            resolved = sequence_completion.direct_nominal_geometry_is_complete(
+                (complete, preferred_unresolved),
+                content(width=100, height=20),
+                {},
+                SimpleNamespace(),
+                SimpleNamespace(),
+            )
+
+        self.assertFalse(resolved)
+
     def test_common_width_resolved_dimension_slot_completes_direct_geometry(
         self,
     ) -> None:

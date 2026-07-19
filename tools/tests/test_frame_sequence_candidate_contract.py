@@ -309,6 +309,148 @@ class FrameSequenceCandidateContractTest(unittest.TestCase):
             (superset,),
         )
 
+    def test_boundary_role_superset_cannot_dominate_uncorroborated_overlap(
+        self,
+    ) -> None:
+        def boundary(
+            position: float,
+            observation_id: str | None,
+        ) -> SimpleNamespace:
+            return SimpleNamespace(
+                position=PixelInterval.exact(position),
+                independently_observed=observation_id is not None,
+                role_provenance=(
+                    None
+                    if observation_id is None
+                    else SimpleNamespace(
+                        root_measurement=MeasurementIdentity.PHOTO_EDGES,
+                        dependencies=(),
+                    )
+                ),
+            )
+
+        def build(*, second_anchor: bool, overlap: float) -> SimpleNamespace:
+            first_anchor = "first_internal_anchor"
+            second = "second_internal_anchor" if second_anchor else None
+            return SimpleNamespace(
+                slots=(
+                    SimpleNamespace(
+                        index=1,
+                        sequence_inferred=False,
+                        leading=boundary(0.0, None),
+                        trailing=boundary(100.0, first_anchor),
+                    ),
+                    SimpleNamespace(
+                        index=2,
+                        sequence_inferred=False,
+                        leading=boundary(110.0, first_anchor),
+                        trailing=boundary(210.0, second),
+                    ),
+                    SimpleNamespace(
+                        index=3,
+                        sequence_inferred=False,
+                        leading=boundary(220.0, second),
+                        trailing=boundary(320.0, None),
+                    ),
+                ),
+                objectives=candidate_builds.SequenceBuildObjectives(
+                    uncorroborated_overlap_extent_px=overlap,
+                    unexplained_spacing_extent_px=0.0,
+                    supported_separator_count=1,
+                    internal_boundary_measurement_quality=(
+                        4.0 if second_anchor else 2.0
+                    ),
+                    dimension_residual=0.0,
+                    external_boundary_measurement_quality=0.0,
+                    boundary_uncertainty_ratio=0.0,
+                ),
+            )
+
+        clean_subset = build(second_anchor=False, overlap=0.0)
+        overlapping_superset = build(second_anchor=True, overlap=10.0)
+
+        self.assertEqual(
+            candidate_builds.physically_preferred_builds(
+                (clean_subset, overlapping_superset)
+            ),
+            (clean_subset,),
+        )
+
+    def test_assignment_consensus_preserves_each_separator_binding_topology(
+        self,
+    ) -> None:
+        def boundary(position: float, independent: bool) -> SimpleNamespace:
+            return SimpleNamespace(
+                position=PixelInterval.exact(position),
+                independently_observed=independent,
+                role_provenance=(
+                    SimpleNamespace(
+                        root_measurement=MeasurementIdentity.PHOTO_EDGES,
+                        dependencies=(),
+                    )
+                    if independent
+                    else None
+                ),
+            )
+
+        slots = (
+            SimpleNamespace(
+                index=1,
+                sequence_inferred=False,
+                leading=boundary(0.0, False),
+                trailing=boundary(100.0, True),
+            ),
+            SimpleNamespace(
+                index=2,
+                sequence_inferred=False,
+                leading=boundary(110.0, True),
+                trailing=boundary(210.0, False),
+            ),
+        )
+
+        def build(*, binding: bool) -> SimpleNamespace:
+            bindings = (
+                (
+                    SimpleNamespace(
+                        boundary_index=1,
+                        observation=SimpleNamespace(
+                            provenance=SimpleNamespace(
+                                observation_id=ObservationId(
+                                    "independent_separator_binding"
+                                )
+                            )
+                        ),
+                    ),
+                )
+                if binding
+                else ()
+            )
+            return SimpleNamespace(
+                slots=slots,
+                separator_bindings=bindings,
+                objectives=candidate_builds.SequenceBuildObjectives(
+                    uncorroborated_overlap_extent_px=0.0,
+                    unexplained_spacing_extent_px=0.0,
+                    supported_separator_count=len(bindings),
+                    internal_boundary_measurement_quality=2.0,
+                    dimension_residual=0.0,
+                    external_boundary_measurement_quality=0.0,
+                    boundary_uncertainty_ratio=0.0,
+                ),
+            )
+
+        unbound = build(binding=False)
+        bound = build(binding=True)
+
+        self.assertEqual(
+            candidate_builds.physically_preferred_builds((unbound, bound)),
+            (bound,),
+        )
+        self.assertEqual(
+            candidate_builds.assignment_consensus_builds((unbound, bound)),
+            (unbound, bound),
+        )
+
     def test_independent_separator_sequence_precedes_small_unexplained_spacing(
         self,
     ) -> None:

@@ -842,6 +842,9 @@ def direct_nominal_geometry_is_complete(
         for build in builds
         if sequence_candidates.build_preserves_visible_content(build, visible_content)
     )
+    preferred = sequence_candidates.physically_preferred_builds(
+        preserving or builds
+    )
     return any(
         build_supports_resolved_nominal_slots(
             build,
@@ -854,7 +857,7 @@ def direct_nominal_geometry_is_complete(
             visible_content,
             holder_boundaries,
         )
-        for build in preserving or builds
+        for build in preferred
     )
 
 

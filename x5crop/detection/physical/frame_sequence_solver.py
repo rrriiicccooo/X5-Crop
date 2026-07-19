@@ -285,14 +285,15 @@ def solve_frame_sequence(
         builds = content_preserving_builds
 
     best = sequence_candidates.physically_preferred_builds(builds)
+    consensus_builds = sequence_candidates.assignment_consensus_builds(builds)
     assignment_consensus = (
         BoundaryAssignmentConsensus(
             AssignmentConsensusOutcome.COMPONENT_UNRESOLVED,
-            len(best),
+            len(consensus_builds),
             (),
         )
         if budget_exhausted
-        else sequence_consensus.sequence_assignment_consensus(best)
+        else sequence_consensus.sequence_assignment_consensus(consensus_builds)
     )
     representative = sequence_candidates.representative_build(best)
     holder_boundaries = candidate_resolution.holder_boundaries(search_scope)
