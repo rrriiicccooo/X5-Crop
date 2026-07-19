@@ -15,6 +15,7 @@ from tools.tests.frame_slot_solver_support import (
 from tools.tests.physical_gate_support import candidate_fixture
 from x5crop.detection.evidence.frame_scale import (
     FrameScaleSource,
+    _frame_height_observation,
     _frame_width_observations,
     frame_scale_observations,
 )
@@ -174,30 +175,103 @@ class FrameDimensionPhysicalModelTest(unittest.TestCase):
         self.assertEqual(sequence.sequence_inferred_frame_indexes, (6,))
         self.assertEqual(
             tuple(
-                str(item.provenance.observation_id)
+                str(item.provenance.observation_id).split(":")[:2]
                 for item in width_observations
             ),
-            tuple(f"frame_width_scale:{index}" for index in range(2, 5)),
+            tuple(["frame_width_scale", str(index)] for index in range(2, 5)),
         )
-        self.assertNotIn(
-            "frame_width_scale:5",
-            tuple(
-                str(item.provenance.observation_id)
-                for item in width_observations
+        self.assertEqual(
+            len(
+                {
+                    item.provenance.observation_id
+                    for item in width_observations
+                }
             ),
-        )
-        self.assertNotIn(
-            "frame_width_scale:6",
-            tuple(
-                str(item.provenance.observation_id)
-                for item in width_observations
-            ),
+            3,
         )
 
     def test_frame_scale_is_evidence_output_not_geometry_input(self) -> None:
         source = frame_scale_observations.__module__
 
         self.assertEqual(source, "x5crop.detection.evidence.frame_scale")
+
+    def test_frame_scale_identity_follows_physical_boundary_anchors(self) -> None:
+        def boundary(label: str) -> SimpleNamespace:
+            measurement = MeasurementProvenance(
+                MeasurementIdentity.BOUNDARY_PATHS,
+                ObservationId(f"frame_scale_path:{label}"),
+                (MeasurementIdentity.GRAY_WORK,),
+                "raw gray boundary path",
+            )
+            return SimpleNamespace(
+                independently_observed=True,
+                role_provenance=MeasurementProvenance(
+                    MeasurementIdentity.PHOTO_EDGES,
+                    ObservationId(f"frame_scale_role:{label}"),
+                    (MeasurementIdentity.BOUNDARY_PATHS,),
+                    "independent photo-edge role",
+                ),
+                measurement_provenance=measurement,
+            )
+
+        def width_geometry(label: str) -> SimpleNamespace:
+            return SimpleNamespace(
+                frame_dimension_prior=SimpleNamespace(
+                    frame_size_mm=(36.0, 24.0)
+                ),
+                layout="horizontal",
+                frame_slots=tuple(
+                    SimpleNamespace(
+                        index=index,
+                        leading=boundary(f"{label}:{index}:leading"),
+                        trailing=boundary(f"{label}:{index}:trailing"),
+                        width_px=PixelInterval.exact(100.0),
+                        sequence_inferred=False,
+                    )
+                    for index in (1, 2)
+                ),
+            )
+
+        first_width = _frame_width_observations(width_geometry("first"))
+        second_width = _frame_width_observations(width_geometry("second"))
+        self.assertTrue(first_width)
+        self.assertNotEqual(
+            first_width[0].provenance.observation_id,
+            second_width[0].provenance.observation_id,
+        )
+
+        def height_geometry(label: str) -> SimpleNamespace:
+            anchors = (
+                ObservationId(f"frame_height:{label}:top"),
+                ObservationId(f"frame_height:{label}:bottom"),
+            )
+            return SimpleNamespace(
+                frame_dimension_prior=SimpleNamespace(
+                    frame_size_mm=(36.0, 24.0)
+                ),
+                layout="horizontal",
+                photo_height_evidence=SimpleNamespace(
+                    state=EvidenceState.SUPPORTED,
+                    height_px=PixelInterval.exact(100.0),
+                    provenance=MeasurementProvenance(
+                        MeasurementIdentity.BOUNDARY_PATHS,
+                        ObservationId(f"frame_height:{label}"),
+                        (MeasurementIdentity.GRAY_WORK,),
+                        "shared photo-height evidence",
+                        anchors,
+                    ),
+                ),
+            )
+
+        first_height = _frame_height_observation(height_geometry("first"))
+        second_height = _frame_height_observation(height_geometry("second"))
+        self.assertIsNotNone(first_height)
+        self.assertIsNotNone(second_height)
+        assert first_height is not None and second_height is not None
+        self.assertNotEqual(
+            first_height.provenance.observation_id,
+            second_height.provenance.observation_id,
+        )
 
     def test_repeated_width_roles_do_not_emit_measured_frame_scale(self) -> None:
         def boundary(label: str) -> SimpleNamespace:
