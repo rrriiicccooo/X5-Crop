@@ -1321,6 +1321,41 @@ def _measured_frame_search_space(
         recurring_width_hypotheses=recurring_width_hypotheses,
     )
 
+def _ordered_dimension_placement_hypotheses(
+    search_space: _MeasuredFrameSearchSpace,
+    placement_widths: tuple[PixelInterval, ...],
+    physical_scale_constraint: FrameWidthPhysicalScaleConstraint | None,
+    *,
+    supported_separator_seed_available: bool,
+) -> tuple[width_resolution.DimensionPlacementHypothesis, ...]:
+    hypotheses = width_resolution.dimension_placement_hypotheses(
+        search_space.width_hypotheses,
+        search_space.recurring_width_hypotheses,
+        placement_widths,
+        physical_scale_constraint,
+    )
+    if supported_separator_seed_available:
+        return hypotheses
+    recurring_order = {
+        hypothesis.width_px: index
+        for index, hypothesis in enumerate(
+            search_space.recurring_width_hypotheses
+        )
+    }
+    indexed = tuple(enumerate(hypotheses))
+    return tuple(
+        hypothesis
+        for _, hypothesis in sorted(
+            indexed,
+            key=lambda item: (
+                not bool(item[1].boundary_anchors),
+                not bool(item[1].repeated_slot_count),
+                recurring_order.get(item[1].width_px, len(recurring_order)),
+                item[0],
+            ),
+        )
+    )
+
 
 def _measured_spacing(
     boundary_index: int,
@@ -1713,11 +1748,13 @@ def _measured_path_builds(
 
         dimension_hypotheses: tuple[width_resolution.DimensionPlacementHypothesis, ...] = ()
         if count > 1 and not complete_separator_sequence_build:
-            dimension_hypotheses = width_resolution.dimension_placement_hypotheses(
-                search_space.width_hypotheses,
-                search_space.recurring_width_hypotheses,
+            dimension_hypotheses = _ordered_dimension_placement_hypotheses(
+                search_space,
                 placement_widths,
                 physical_scale_constraint,
+                supported_separator_seed_available=(
+                    strong_dimension_seed_search
+                ),
             )
 
         holder_axis = _holder_axis_interval(

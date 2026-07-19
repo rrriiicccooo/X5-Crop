@@ -174,6 +174,13 @@ class FrameSequenceConstructionContractTest(unittest.TestCase):
             set(search_space.recurring_width_hypotheses),
             {plausible, frequent_texture},
         )
+        placements = construction._ordered_dimension_placement_hypotheses(
+            search_space,
+            (),
+            None,
+            supported_separator_seed_available=False,
+        )
+        self.assertEqual(placements[0].width_px, plausible.width_px)
 
     def test_separator_spacing_hint_precedes_short_axis_width_hint(
         self,

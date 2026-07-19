@@ -22,6 +22,17 @@ the validation evidence.
 
 ### 2026-07-19 — 无环观测权限 / Acyclic Observation Authority
 
+- Recurring-width branches without a supported internal separator seed now retain the
+  frame-width-focused order prepared by construction; separator-backed searches keep the
+  canonical contributor ranking. No hypothesis is deleted and budget exhaustion remains typed.
+  On the frozen `half/partial/pass_X5_00001` diagnostic, detection fell from 129.16 s to
+  80.71 s with 11 candidates and cache 41/6; the still-unresolved geometry became more
+  conservative and remained `REVIEW` / non-exportable. / 没有 supported internal separator
+  seed 的 recurring-width 分支现在保留 construction 已准备的 frame-width-focused 顺序；有
+  separator 权限的搜索继续使用 canonical contributor ranking。该变化不删除 hypothesis，
+  也不掩盖 typed budget exhaustion。冻结 `half/partial/pass_X5_00001` diagnostics 从
+  129.16 s 降至 80.71 s，仍为 11 个 candidate、cache 41/6；未解决几何更保守，并保持
+  `REVIEW`、不可导出。
 - Graph reachability now materializes each count-local fallback order once per boundary
   instead of re-sorting the same eligible options for every current node. On the frozen
   `half/partial/pass_X5_00001` diagnostic, detection fell from 199.28 s to 129.16 s while
