@@ -617,6 +617,36 @@ class FrameSequenceCandidateContractTest(unittest.TestCase):
         self.assertEqual(spacing.state, EvidenceState.UNAVAILABLE)
         self.assertFalse(spacing.supports_output_protection)
 
+    def test_separator_spacing_identity_includes_candidate_measurement_authority(
+        self,
+    ) -> None:
+        geometry = candidate_fixture().geometry
+        trailing = geometry.frame_slots[0].trailing
+        leading = geometry.frame_slots[1].leading
+
+        observed = candidate_builds.spacing_from_frame_edges(
+            1,
+            trailing,
+            leading,
+            separator_observation_supported=True,
+        )
+        hypothetical = candidate_builds.spacing_from_frame_edges(
+            1,
+            trailing,
+            leading,
+            separator_observation_supported=False,
+        )
+
+        self.assertEqual(observed.basis, InterFrameSpacingBasis.OBSERVED)
+        self.assertEqual(
+            hypothetical.basis,
+            InterFrameSpacingBasis.GEOMETRY_HYPOTHESIS,
+        )
+        self.assertNotEqual(
+            observed.provenance.observation_id,
+            hypothetical.provenance.observation_id,
+        )
+
     def test_repeated_width_role_does_not_measure_inter_frame_overlap(
         self,
     ) -> None:

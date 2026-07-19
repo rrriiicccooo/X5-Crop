@@ -28,6 +28,34 @@ from x5crop.domain import (
 
 
 class FrameSequenceCommonWidthContractTest(unittest.TestCase):
+    def test_common_width_identity_changes_with_physical_inputs(self) -> None:
+        def provenance(identity: str) -> SimpleNamespace:
+            return SimpleNamespace(observation_id=ObservationId(identity))
+
+        def contributor(leading_identity: str) -> SimpleNamespace:
+            return SimpleNamespace(
+                frame_index=2,
+                leading=SimpleNamespace(
+                    measurement_provenance=provenance(leading_identity),
+                    role_provenance=provenance(f"{leading_identity}:role"),
+                ),
+                trailing=SimpleNamespace(
+                    measurement_provenance=provenance("trailing_measurement"),
+                    role_provenance=provenance("trailing_role"),
+                ),
+            )
+
+        first = width_resolution._common_width_observation_id(
+            (contributor("first_leading_measurement"),),
+            None,
+        )
+        second = width_resolution._common_width_observation_id(
+            (contributor("second_leading_measurement"),),
+            None,
+        )
+
+        self.assertNotEqual(first, second)
+
     def test_measured_common_width_precedes_search_hint(self) -> None:
         measured = CommonWidthHypothesis(
             width_px=PixelInterval(100.0, 102.0),
@@ -177,6 +205,21 @@ class FrameSequenceCommonWidthContractTest(unittest.TestCase):
         )
 
         self.assertIsNone(measured_constraint_common_width(constraints, 3))
+
+    def test_two_disjoint_measured_slots_cannot_form_common_width(self) -> None:
+        constraints = tuple(
+            SimpleNamespace(
+                width_px=interval,
+                leading_holder_clip_supported=False,
+                trailing_holder_clip_supported=False,
+            )
+            for interval in (
+                PixelInterval(1083.0, 1142.0),
+                PixelInterval(2093.895621, 3154.345219),
+            )
+        )
+
+        self.assertIsNone(measured_constraint_common_width(constraints, 2))
 
     def test_non_dominated_widths_preserve_disjoint_measurements(self) -> None:
         measured_width = CommonWidthHypothesis(

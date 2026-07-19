@@ -681,6 +681,8 @@ class SeparatorBandAssignment:
             raise ValueError("assigned separator requires its supported measurement")
         if self.frame_width_px.minimum <= 0.0:
             raise ValueError("separator assignment requires a positive frame width")
+        if self.observation.width_px.minimum <= 0.0:
+            raise ValueError("separator assignment requires positive observed width")
         if self.observation.width_px.maximum >= self.frame_width_px.minimum:
             raise ValueError(
                 "separator assignment cannot consume a physically possible frame slot"
@@ -1032,8 +1034,10 @@ class FrameSequenceSolution:
             self.shared_short_axis.top.minimum < float(canvas.top)
             or self.shared_short_axis.bottom.maximum > float(canvas.bottom)
             or any(
-                slot.visible_long_axis.minimum < float(holder.left)
-                or slot.visible_long_axis.maximum > float(holder.right)
+                not self.holder_safety.contains_axis_interval(
+                    BoundaryAxis.LONG,
+                    slot.visible_long_axis,
+                )
                 for slot in self.frame_slots
             )
         ):

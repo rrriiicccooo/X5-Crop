@@ -256,6 +256,13 @@ def solve_frame_sequence(
         item
         for item in resolved_builds
         if sequence_candidates.frame_slots_are_strictly_monotonic(item[0].slots)
+        and all(
+            search_scope.holder_safety.contains_axis_interval(
+                BoundaryAxis.LONG,
+                slot.visible_long_axis,
+            )
+            for slot in item[0].slots
+        )
     )
     if not resolved_builds:
         return sequence_result.FrameSequenceSolveFailure(
@@ -335,7 +342,13 @@ def solve_frame_sequence(
             total_evaluations,
         )
     slots, long_axis_assignments = external_safety_geometry
-    if not sequence_candidates.frame_slots_are_strictly_monotonic(slots):
+    if not sequence_candidates.frame_slots_are_strictly_monotonic(slots) or any(
+        not search_scope.holder_safety.contains_axis_interval(
+            BoundaryAxis.LONG,
+            slot.visible_long_axis,
+        )
+        for slot in slots
+    ):
         return sequence_result.FrameSequenceSolveFailure(
             PhysicalSearchOutcome((PhysicalSearchFact.CONSTRAINTS_CONTRADICTED,)),
             total_evaluations,

@@ -132,7 +132,7 @@ def corroborate_build_roles_from_repeated_frame_width(
             holder_boundaries,
         )
     )
-    contributor_indexes = measurement_facts.largest_measurement_compatible_interval_indexes(
+    contributor_indexes = measurement_facts.largest_strict_intersection_indexes(
         tuple(slot.width_px for slot in candidates),
         MINIMUM_COMMON_FRAME_WIDTH_OBSERVATIONS,
     )

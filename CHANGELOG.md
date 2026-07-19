@@ -22,6 +22,24 @@ the validation evidence.
 
 ### 2026-07-19 — 无环观测权限 / Acyclic Observation Authority
 
+- 共同 frame width 现在要求实测宽度具有非空共享区间；不相交宽度不能再被宽 uncertainty
+  envelope 合并并获得 dimension-sequence proof。`135/partial/review_X5_00002` 因而从错误的
+  自动通过恢复为不可导出的 `REVIEW`。 / Common frame width now requires a non-empty
+  shared interval across measured widths; disjoint widths can no longer be merged by a
+  broad uncertainty envelope and gain dimension-sequence proof. Consequently,
+  `135/partial/review_X5_00002` returned from a false automatic approval to
+  non-exportable `REVIEW`.
+- Candidate resolution 现在先验证 proposed gray-path boundary 的正 slot extent，再构造
+  `FrameSlot`；宽度跨过 0 的 band 不能成为 separator binding/assignment。Common-width 与
+  candidate-local content-continuity/spacing identity 也纳入完整物理输入与测量权限，避免不同
+  观测或 authority 共用同一 ID。越过 holder 的可见 slot 会在 solver 内成为 typed
+  constraints failure，不再流入最终模型触发 runtime error。 /
+  Candidate resolution now verifies positive slot extent before constructing a
+  `FrameSlot`, and a band whose width crosses zero cannot become a separator binding or
+  assignment. Common-width and candidate-local content-continuity/spacing identities also
+  include their complete physical inputs and measurement authority so distinct observations
+  or authorities cannot share one ID. Visible slots outside the holder now become a typed
+  solver constraint failure instead of reaching the final model as a runtime error.
 - 真实样片期望现在分别记录人工 geometry reference、允许灰度观测的独立 proof 预期与自动
   decision 预期；文件名前缀只拥有 dataset intent，不能再作为 decision oracle。 /
   Real-sample expectations now record manual geometry reference, independent-proof

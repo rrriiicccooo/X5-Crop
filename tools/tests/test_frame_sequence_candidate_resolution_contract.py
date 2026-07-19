@@ -27,6 +27,7 @@ from x5crop.detection.physical.model import (
 from x5crop.detection.physical.short_axis import shared_short_axis_plan
 from x5crop.domain import (
     BoundaryAxis,
+    BoundaryPathSample,
     BoundarySide,
     EvidenceState,
     MeasurementIdentity,
@@ -44,6 +45,75 @@ _ALL_HOLDER_SIDES = (
 
 
 class FrameSequenceCandidateResolutionContractTest(unittest.TestCase):
+    def test_gray_path_assignment_rejects_nonpositive_slot_before_construction(
+        self,
+    ) -> None:
+        geometry = candidate_fixture().geometry
+        first, second = geometry.frame_slots
+        dimension_leading = ResolvedFrameBoundary(
+            position=PixelInterval(0.0, 149.0),
+            source=FrameBoundarySource.DIMENSION_CONSTRAINED,
+            geometry_state=BoundaryGeometryState.RESOLVED,
+            boundary_anchor=None,
+            inference_provenance=MeasurementProvenance(
+                MeasurementIdentity.FRAME_GEOMETRY,
+                ObservationId("broad_dimension_leading"),
+                (MeasurementIdentity.FRAME_DIMENSIONS,),
+                "synthetic broad dimension-constrained leading edge",
+            ),
+        )
+        constrained_first = replace(
+            first,
+            leading=dimension_leading,
+            visible_long_axis=PixelInterval(
+                dimension_leading.position.minimum,
+                first.trailing.position.maximum,
+            ),
+        )
+        build = candidate_builds.SequenceBuild(
+            slots=(constrained_first, second),
+            long_axis_assignments=geometry.long_axis_assignments,
+            separator_bindings=(),
+            spacings=geometry.inter_frame_spacings,
+            frame_width_px=geometry.common_frame_width.width_px,
+            short_axis=geometry.shared_short_axis,
+            residuals=geometry.residuals,
+            objectives=candidate_builds.SequenceBuildObjectives(
+                uncorroborated_overlap_extent_px=0.0,
+                unexplained_spacing_extent_px=0.0,
+                supported_separator_count=0,
+                internal_boundary_measurement_quality=0.0,
+                dimension_residual=0.0,
+                external_boundary_measurement_quality=1.0,
+                boundary_uncertainty_ratio=0.0,
+                inferred_boundary_count=1,
+            ),
+        )
+        crossing_path = path(
+            BoundaryAxis.LONG,
+            150.0,
+            "crossing_dimension_focused_path",
+        )
+        crossing_path = replace(
+            crossing_path,
+            samples=(
+                BoundaryPathSample(
+                    crossing_path.samples[0].orthogonal_interval,
+                    PixelInterval(149.0, 151.0),
+                ),
+            ),
+        )
+
+        assignment = candidate_resolution._boundary_path_assignment(
+            build,
+            0,
+            BoundarySide.LEADING,
+            crossing_path,
+            geometry.common_frame_width,
+        )
+
+        self.assertIsNone(assignment)
+
     def test_common_width_refinement_preserves_sequence_monotonicity(
         self,
     ) -> None:

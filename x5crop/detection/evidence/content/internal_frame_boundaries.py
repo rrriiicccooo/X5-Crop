@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
+import hashlib
 import math
 
 import numpy as np
@@ -304,6 +305,40 @@ def _gray_discontinuity_track_count(
     return int(column_support.max(initial=0))
 
 
+def _content_continuity_observation_id(
+    boundary_index: int,
+    left: FrameSlot,
+    right: FrameSlot,
+    anchor_ids: tuple[ObservationId, ...],
+) -> ObservationId:
+    signature_parts = [
+        f"boundary={boundary_index}",
+        f"left.index={left.index}",
+        f"right.index={right.index}",
+    ]
+    for name, interval in (
+        ("left.visible", left.visible_long_axis),
+        ("left.leading", left.leading.position),
+        ("left.trailing", left.trailing.position),
+        ("right.visible", right.visible_long_axis),
+        ("right.leading", right.leading.position),
+        ("right.trailing", right.trailing.position),
+    ):
+        signature_parts.extend(
+            (
+                f"{name}.minimum={float(interval.minimum).hex()}",
+                f"{name}.maximum={float(interval.maximum).hex()}",
+            )
+        )
+    signature_parts.extend(f"anchor={item}" for item in anchor_ids)
+    digest = hashlib.sha256(
+        "\x1f".join(signature_parts).encode("utf-8")
+    ).hexdigest()
+    return ObservationId(
+        f"internal_boundary_content_continuity:{boundary_index}:{digest}"
+    )
+
+
 def measure_internal_boundary_content_continuity(
     frame_slots: tuple[FrameSlot, ...],
     frame_content: FrameContentEvidence,
@@ -393,10 +428,11 @@ def measure_internal_boundary_content_continuity(
                 ),
                 provenance=MeasurementProvenance(
                     root_measurement=MeasurementIdentity.CONTENT_EVIDENCE_IMAGE,
-                    observation_id=ObservationId(
-                        f"internal_boundary_content_continuity:{boundary_index}:"
-                        f"{left.trailing.position.minimum:.6f}:"
-                        f"{right.leading.position.maximum:.6f}"
+                    observation_id=_content_continuity_observation_id(
+                        boundary_index,
+                        left,
+                        right,
+                        anchor_ids,
                     ),
                     dependencies=(
                         MeasurementIdentity.GRAY_WORK,

@@ -24,6 +24,9 @@ from x5crop.detection.evidence.content.internal_frame_boundaries import (
     measure_internal_boundary_content_continuity,
     internal_frame_boundary_preservation_evidence,
 )
+from x5crop.detection.evidence.content import (
+    internal_frame_boundaries as internal_boundary_measurements,
+)
 from x5crop.detection.evidence.content.regions import content_region_observation
 from x5crop.detection.evidence.frame_coverage import FrameCoverageEvidence
 from x5crop.detection.physical.model import (
@@ -215,6 +218,26 @@ def _measured_overlap_slots(*, width_pattern_roles: bool):
 
 
 class FrameContentSupportTest(unittest.TestCase):
+    def test_content_continuity_identity_includes_local_physical_inputs(
+        self,
+    ) -> None:
+        left, right = candidate_fixture().geometry.frame_slots
+
+        first = internal_boundary_measurements._content_continuity_observation_id(
+            1,
+            left,
+            right,
+            (ObservationId("first_boundary_anchor"),),
+        )
+        second = internal_boundary_measurements._content_continuity_observation_id(
+            1,
+            left,
+            right,
+            (ObservationId("second_boundary_anchor"),),
+        )
+
+        self.assertNotEqual(first, second)
+
     def test_smooth_content_across_an_inferred_cut_is_continuous(self) -> None:
         geometry = candidate_fixture().geometry
         rows, columns = 60, 310

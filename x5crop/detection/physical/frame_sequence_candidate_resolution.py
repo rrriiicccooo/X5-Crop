@@ -281,10 +281,14 @@ def _boundary_path_assignment(
     )
     resolution, assignment = sequence_candidates.resolve_edge_constraint(slot.index, side, constraint)
     assert assignment is not None
+    updated_leading = resolution if side == BoundarySide.LEADING else slot.leading
+    updated_trailing = resolution if side == BoundarySide.TRAILING else slot.trailing
+    if updated_trailing.position.minimum <= updated_leading.position.maximum:
+        return None
     updated_slot = replace(
         slot,
-        leading=(resolution if side == BoundarySide.LEADING else slot.leading),
-        trailing=(resolution if side == BoundarySide.TRAILING else slot.trailing),
+        leading=updated_leading,
+        trailing=updated_trailing,
         visible_long_axis=PixelInterval(
             (
                 resolution.position.minimum
@@ -303,8 +307,6 @@ def _boundary_path_assignment(
             updated_slot.width_px,
             common_width.width_px,
         )
-        or updated_slot.trailing.position.minimum
-        <= updated_slot.leading.position.maximum
     ):
         return None
     slots = list(build.slots)

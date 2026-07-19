@@ -99,6 +99,8 @@ class SeparatorBandBinding:
             or not self.cross_axis_measurement.complete_separator_supported
         ):
             raise ValueError("separator binding requires its cross-axis measurement")
+        if self.observation.width_px.minimum <= 0.0:
+            raise ValueError("separator binding requires positive observed width")
         if (
             self.preceding_trailing_edge.position != self.observation.leading_edge
             or self.following_leading_edge.position
@@ -479,7 +481,7 @@ def spacing_from_frame_edges(
     provenance = MeasurementProvenance(
         root_measurement=root_measurement,
         observation_id=ObservationId(
-            f"inter_frame_spacing:{boundary_index}:"
+            f"inter_frame_spacing:{root_measurement.value}:{boundary_index}:"
             f"{trailing_provenance.observation_id}:"
             f"{leading_provenance.observation_id}"
         ),

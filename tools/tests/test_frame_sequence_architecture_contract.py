@@ -16,7 +16,7 @@ _CANONICAL_OWNERS = {
         "MeasuredFrameConstraint",
         "interval_envelope",
         "measurement_intervals_are_compatible",
-        "largest_measurement_compatible_interval_indexes",
+        "largest_strict_intersection_indexes",
     },
     "frame_sequence_common_width.py": {
         "CommonWidthHypothesis",

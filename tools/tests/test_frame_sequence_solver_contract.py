@@ -1218,6 +1218,82 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
 
         self.assertIsInstance(solved, FrameSequenceSolveFailure)
 
+    def test_full_solver_rejects_visible_slot_geometry_beyond_holder(
+        self,
+    ) -> None:
+        search_scope = scope(
+            width=1_000,
+            height=100,
+            leading=0.0,
+            trailing=1_000.0,
+            top=0.0,
+            bottom=100.0,
+            holder_sides=_ALL_HOLDER_SIDES,
+        )
+        plan = shared_short_axis_plan(search_scope)
+
+        def edge(position: float, label: str) -> EdgeConstraint:
+            return EdgeConstraint(
+                position=PixelInterval.exact(position),
+                basis=FrameBoundarySource.DIMENSION_CONSTRAINED,
+                state=EvidenceState.UNAVAILABLE,
+                geometry_state=BoundaryGeometryState.RESOLVED,
+                provenance=MeasurementProvenance(
+                    MeasurementIdentity.FRAME_GEOMETRY,
+                    ObservationId(label),
+                    (),
+                    "synthetic dimension edge",
+                ),
+            )
+
+        constraints = (
+            MeasuredFrameConstraint(
+                leading=edge(0.0, "outside-holder-1-leading"),
+                trailing=edge(500.0, "outside-holder-1-trailing"),
+                width_px=PixelInterval.exact(500.0),
+                full_width_hypothesis_admissible=True,
+                leading_holder_clip_supported=False,
+                trailing_holder_clip_supported=False,
+                search_order_residual=0.0,
+            ),
+            MeasuredFrameConstraint(
+                leading=edge(510.0, "outside-holder-2-leading"),
+                trailing=edge(1_010.0, "outside-holder-2-trailing"),
+                width_px=PixelInterval.exact(500.0),
+                full_width_hypothesis_admissible=True,
+                leading_holder_clip_supported=False,
+                trailing_holder_clip_supported=False,
+                search_order_residual=0.0,
+            ),
+        )
+        build = _measured_sequence_build(
+            constraints,
+            plan.span,
+            search_scope.holder_safety.box,
+            allow_nominal_slot_sized_gap=False,
+        )
+        self.assertIsNotNone(build)
+        assert build is not None
+
+        with patch.object(
+            construction,
+            "sequence_builds_for_count",
+            return_value=((build,), 1, False),
+        ):
+            solved = solve_frame_sequence(
+                sequence_search_index(search_scope),
+                search_scope,
+                plan,
+                2,
+                dimensions(5.0, 1.0),
+                content(width=1_000, height=100, runs=()),
+                100,
+                strip_mode="full",
+                nominal_count=2,
+            )
+
+        self.assertIsInstance(solved, FrameSequenceSolveFailure)
+
     def test_stronger_direct_separator_sequence_survives_blank_alternatives(
         self,
     ) -> None:
@@ -1226,6 +1302,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
 
         anchored_slot = SimpleNamespace(
             sequence_inferred=False,
+            visible_long_axis=PixelInterval.exact(100.0),
             leading=SimpleNamespace(
                 independently_observed=True,
                 source=FrameBoundarySource.GRAY_PATH_OBSERVATION,
@@ -1344,6 +1421,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
 
         anchored_slot = SimpleNamespace(
             sequence_inferred=False,
+            visible_long_axis=PixelInterval.exact(100.0),
             leading=SimpleNamespace(
                 independently_observed=True,
                 source=FrameBoundarySource.GRAY_PATH_OBSERVATION,

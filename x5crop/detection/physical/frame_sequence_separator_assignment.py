@@ -173,6 +173,7 @@ def spacing_for_band(
     measurement = support.measurement
     supported = bool(
         measurement.complete_separator_supported
+        and band.width_px.minimum > 0.0
         and trailing.role_state == EvidenceState.SUPPORTED
         and leading.role_state == EvidenceState.SUPPORTED
         and trailing.source == FrameBoundarySource.SEPARATOR_EDGE_OBSERVATION
@@ -251,6 +252,7 @@ def separator_observation_assignment(
         common_width.state != EvidenceState.SUPPORTED
         or common_width.width_px is None
         or not support.measurement.complete_separator_supported
+        or support.observation.width_px.minimum <= 0.0
         or support.observation.width_px.maximum >= common_width.width_px.minimum
         or not 1 <= boundary_index < len(build.slots)
     ):
@@ -428,7 +430,11 @@ def separator_assignments_from_bindings(
     assert common_width.width_px is not None
     assignments: list[SeparatorBandAssignment] = []
     for binding in bindings:
-        if binding.observation.width_px.maximum >= common_width.width_px.minimum:
+        if (
+            binding.observation.width_px.minimum <= 0.0
+            or binding.observation.width_px.maximum
+            >= common_width.width_px.minimum
+        ):
             continue
         trailing = slots[binding.boundary_index - 1].trailing
         leading = slots[binding.boundary_index].leading

@@ -171,6 +171,106 @@ class FrameSequenceSeparatorAssignmentContractTest(unittest.TestCase):
             (support,),
         )
 
+    def test_crossing_width_band_cannot_become_separator_assignment(self) -> None:
+        geometry = candidate_fixture().geometry
+        first, second = geometry.frame_slots
+        assignment = geometry.separator_assignments[0]
+        uncertain_observation = replace(
+            assignment.observation,
+            leading_edge=PixelInterval(140.0, 170.0),
+            trailing_edge=PixelInterval(150.0, 180.0),
+        )
+        support = SeparatorBandCrossAxisSupport(
+            uncertain_observation,
+            assignment.cross_axis_measurement,
+        )
+
+        def inferred_boundary(
+            position: PixelInterval,
+            label: str,
+        ) -> ResolvedFrameBoundary:
+            return ResolvedFrameBoundary(
+                position=position,
+                source=FrameBoundarySource.DIMENSION_CONSTRAINED,
+                geometry_state=BoundaryGeometryState.RESOLVED,
+                boundary_anchor=None,
+                inference_provenance=MeasurementProvenance(
+                    MeasurementIdentity.FRAME_GEOMETRY,
+                    ObservationId(label),
+                    (MeasurementIdentity.FRAME_DIMENSIONS,),
+                    "synthetic unmeasured boundary pair",
+                ),
+            )
+
+        trailing = inferred_boundary(
+            uncertain_observation.leading_edge,
+            "uncertain_separator_leading_edge",
+        )
+        leading = inferred_boundary(
+            uncertain_observation.trailing_edge,
+            "uncertain_separator_trailing_edge",
+        )
+        slots = (
+            replace(
+                first,
+                trailing=trailing,
+                visible_long_axis=PixelInterval(
+                    first.leading.position.minimum,
+                    trailing.position.maximum,
+                ),
+            ),
+            replace(
+                second,
+                leading=leading,
+                visible_long_axis=PixelInterval(
+                    leading.position.minimum,
+                    second.trailing.position.maximum,
+                ),
+            ),
+        )
+        build = candidate_builds.SequenceBuild(
+            slots=slots,
+            long_axis_assignments=geometry.long_axis_assignments,
+            separator_bindings=(),
+            spacings=geometry.inter_frame_spacings,
+            frame_width_px=geometry.common_frame_width.width_px,
+            short_axis=geometry.shared_short_axis,
+            residuals=geometry.residuals,
+            objectives=candidate_builds.SequenceBuildObjectives(
+                uncorroborated_overlap_extent_px=0.0,
+                unexplained_spacing_extent_px=0.0,
+                supported_separator_count=0,
+                internal_boundary_measurement_quality=0.0,
+                dimension_residual=0.0,
+                external_boundary_measurement_quality=2.0,
+                boundary_uncertainty_ratio=0.0,
+                inferred_boundary_count=2,
+            ),
+        )
+
+        resolved = separator_assignment.separator_observation_assignment(
+            build,
+            1,
+            support,
+            geometry.common_frame_width,
+        )
+
+        self.assertIsNone(resolved)
+
+        with self.assertRaisesRegex(ValueError, "positive observed width"):
+            replace(
+                assignment,
+                observation=uncertain_observation,
+                preceding_trailing_edge=replace(
+                    assignment.preceding_trailing_edge,
+                    position=uncertain_observation.leading_edge,
+                ),
+                following_leading_edge=replace(
+                    assignment.following_leading_edge,
+                    position=uncertain_observation.trailing_edge,
+                ),
+            )
+
     def test_band_path_without_measured_edges_is_search_only(self) -> None:
         support = separator(
             190.0,

@@ -793,6 +793,17 @@ class HolderSafetyEnvelope:
             default=fallback_interval,
         )
 
+    def contains_axis_interval(
+        self,
+        axis: BoundaryAxis,
+        interval: PixelInterval,
+    ) -> bool:
+        safety = self.safe_axis_interval(axis)
+        return bool(
+            interval.minimum >= math.floor(safety.minimum)
+            and interval.maximum <= math.ceil(safety.maximum)
+        )
+
     @property
     def box(self) -> Box:
         long_axis = self.safe_axis_interval(BoundaryAxis.LONG)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
 
 import numpy as np
 
@@ -225,7 +226,7 @@ def measured_constraint_common_width(
 ) -> PixelInterval | None:
     if not constraints or count < len(constraints):
         raise ValueError("measured constraint sequence must fit its frame count")
-    contributor_indexes = measurements.largest_measurement_compatible_interval_indexes(
+    contributor_indexes = measurements.largest_strict_intersection_indexes(
         tuple(constraint.width_px for constraint in constraints),
         MINIMUM_COMMON_FRAME_WIDTH_OBSERVATIONS,
     )
@@ -236,13 +237,7 @@ def measured_constraint_common_width(
     )
     contributor_set = set(contributor_indexes)
     for index, constraint in enumerate(constraints):
-        if index in contributor_set or all(
-            measurements.measurement_intervals_are_compatible(
-                constraint.width_px,
-                constraints[contributor_index].width_px,
-            )
-            for contributor_index in contributor_indexes
-        ):
+        if index in contributor_set:
             continue
         leading_clip = bool(
             index == 0
@@ -582,6 +577,43 @@ def boundary_role_can_contribute_to_width_geometry(
     )
 
 
+def _common_width_observation_id(
+    contributors: tuple[FrameWidthMeasurementConstraint, ...],
+    used_scale: FrameWidthPhysicalScaleConstraint | None,
+) -> ObservationId:
+    signature_parts: list[str] = []
+    for constraint in contributors:
+        signature_parts.append(f"frame={constraint.frame_index}")
+        for side, boundary in (
+            (BoundarySide.LEADING, constraint.leading),
+            (BoundarySide.TRAILING, constraint.trailing),
+        ):
+            signature_parts.append(
+                f"{side.value}.measurement="
+                f"{boundary.measurement_provenance.observation_id}"
+            )
+            signature_parts.append(
+                f"{side.value}.role="
+                + (
+                    "none"
+                    if boundary.role_provenance is None
+                    else str(boundary.role_provenance.observation_id)
+                )
+            )
+    signature_parts.append(
+        "scale="
+        + (
+            "none"
+            if used_scale is None
+            else str(used_scale.provenance.observation_id)
+        )
+    )
+    digest = hashlib.sha256(
+        "\x1f".join(signature_parts).encode("utf-8")
+    ).hexdigest()
+    return ObservationId(f"common_frame_width:{digest}")
+
+
 def resolve_common_frame_width(
     slots: tuple[FrameSlot, ...],
     holder_boundaries: dict[BoundarySide, HolderBoundaryObservation],
@@ -625,7 +657,7 @@ def resolve_common_frame_width(
             for boundary in (constraint.leading, constraint.trailing)
         )
     )
-    contributor_indexes = measurements.largest_measurement_compatible_interval_indexes(
+    contributor_indexes = measurements.largest_strict_intersection_indexes(
         tuple(constraint.width_px for constraint in geometry_constraints),
         MINIMUM_COMMON_FRAME_WIDTH_OBSERVATIONS,
     )
@@ -731,12 +763,7 @@ def resolve_common_frame_width(
         )
     provenance = MeasurementProvenance(
         root_measurement=MeasurementIdentity.FRAME_DIMENSIONS,
-        observation_id=ObservationId(
-            "common_frame_width:"
-            + ":".join(
-                map(str, (item.frame_index for item in contributors) or (0,))
-            )
-        ),
+        observation_id=_common_width_observation_id(contributors, used_scale),
         dependencies=tuple(
             sorted(provenance_dependencies, key=lambda item: item.value)
         ),
@@ -792,7 +819,7 @@ def target_independent_common_width(
             for boundary in (constraint.leading, constraint.trailing)
         )
     )
-    contributor_indexes = measurements.largest_measurement_compatible_interval_indexes(
+    contributor_indexes = measurements.largest_strict_intersection_indexes(
         tuple(constraint.width_px for constraint in eligible),
         MINIMUM_COMMON_FRAME_WIDTH_OBSERVATIONS,
     )

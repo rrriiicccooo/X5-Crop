@@ -263,58 +263,6 @@ def largest_strict_intersection_indexes(
     return () if not candidates else max(candidates, key=lambda item: item[0])[1]
 
 
-def largest_measurement_compatible_interval_indexes(
-    intervals: tuple[PixelInterval, ...],
-    minimum_count: int,
-) -> tuple[int, ...]:
-    if minimum_count <= 0:
-        raise ValueError("common interval group requires a positive minimum count")
-    if len(intervals) < minimum_count:
-        return ()
-    coordinates = tuple(
-        dict.fromkeys(
-            coordinate
-            for interval in intervals
-            for coordinate in (
-                interval.minimum,
-                interval.midpoint,
-                interval.maximum,
-            )
-        )
-    )
-    candidates: list[tuple[tuple[int, float, tuple[int, ...]], tuple[int, ...]]] = []
-    for coordinate in coordinates:
-        center = PixelInterval.exact(coordinate)
-        indexes = tuple(
-            index
-            for index, interval in enumerate(intervals)
-            if measurement_intervals_are_compatible(interval, center)
-        )
-        if len(indexes) < minimum_count:
-            continue
-        if any(
-            not measurement_intervals_are_compatible(
-                intervals[left_index],
-                intervals[right_index],
-            )
-            for offset, left_index in enumerate(indexes)
-            for right_index in indexes[offset + 1 :]
-        ):
-            continue
-        envelope = interval_envelope(tuple(intervals[index] for index in indexes))
-        candidates.append(
-            (
-                (
-                    len(indexes),
-                    -(envelope.maximum - envelope.minimum),
-                    tuple(-index for index in indexes),
-                ),
-                indexes,
-            )
-        )
-    return () if not candidates else max(candidates, key=lambda item: item[0])[1]
-
-
 def separator_edge_path_measurement(constraint: EdgeConstraint):
     observation = constraint.separator
     measurement = constraint.separator_cross_axis
