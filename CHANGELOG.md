@@ -22,6 +22,15 @@ the validation evidence.
 
 ### 2026-07-19 — 无环观测权限 / Acyclic Observation Authority
 
+- Graph reachability now materializes each count-local fallback order once per boundary
+  instead of re-sorting the same eligible options for every current node. On the frozen
+  `half/partial/pass_X5_00001` diagnostic, detection fell from 199.28 s to 129.16 s while
+  preserving 933,677 assignment evaluations, 11 candidates, cache 41/6, a zero-diff current
+  report, and a byte-identical Debug Analysis JPG. / Graph reachability 现在每个 boundary
+  只物化一次 count-local fallback 顺序，不再为每个 current node 重排同一组 eligible options。
+  冻结 `half/partial/pass_X5_00001` diagnostics 从 199.28 s 降至 129.16 s，同时保持
+  933,677 次 assignment evaluation、11 个 candidate、cache 41/6、current report 0 diff 与
+  Debug Analysis JPG 字节一致。
 - Multi-slot geometry resolution now requires every ordinary slot width to intersect the
   supported common frame width, and holder-occlusion inference cannot resolve nominal
   boundaries outside the acquired workspace canvas. The 11 reference-violating automatic

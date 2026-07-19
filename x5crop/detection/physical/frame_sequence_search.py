@@ -525,6 +525,20 @@ def reachable_predecessors_for_boundary(
             ),
         )
     )
+    fallback_order = tuple(
+        sorted(
+            eligible_previous,
+            key=lambda index: (
+                (
+                    float(ordered[index].trailing.position.maximum)
+                    if context.coverages[index] is None
+                    else float(context.coverages[index][1])
+                ),
+                -index,
+            ),
+            reverse=True,
+        )
+    )
     cursor = 0
     reachable: dict[int, int] = {}
     for current_index in sorted(
@@ -576,30 +590,15 @@ def reachable_predecessors_for_boundary(
         ):
             reachable[current_index] = previous_index
             continue
-        fallback_indexes = sorted(
+        fallback_index = next(
             (
                 index
-                for index in eligible_previous
+                for index in fallback_order
                 if index != previous_index
                 and ordered[index].leading.position.maximum
                 < current.leading.position.minimum
                 and ordered[index].trailing.position.maximum
                 < current.trailing.position.minimum
-            ),
-            key=lambda index: (
-                (
-                    float(ordered[index].trailing.position.maximum)
-                    if context.coverages[index] is None
-                    else float(context.coverages[index][1])
-                ),
-                -index,
-            ),
-            reverse=True,
-        )
-        fallback_index = next(
-            (
-                index
-                for index in fallback_indexes
                 if _cached_sequence_graph_edge_supported(
                     index,
                     current_index,
@@ -710,6 +709,20 @@ def _reachable_successors_for_boundary(
             reverse=True,
         )
     )
+    fallback_order = tuple(
+        sorted(
+            eligible_following,
+            key=lambda index: (
+                -(
+                    float(ordered[index].leading.position.minimum)
+                    if context.coverages[index] is None
+                    else float(context.coverages[index][0])
+                ),
+                -index,
+            ),
+            reverse=True,
+        )
+    )
     cursor = 0
     reachable: dict[int, int] = {}
     for current_index in sorted(
@@ -762,30 +775,15 @@ def _reachable_successors_for_boundary(
         ):
             reachable[current_index] = following_index
             continue
-        fallback_indexes = sorted(
+        fallback_index = next(
             (
                 index
-                for index in eligible_following
+                for index in fallback_order
                 if index != following_index
                 and ordered[index].leading.position.minimum
                 > current.leading.position.maximum
                 and ordered[index].trailing.position.minimum
                 > current.trailing.position.maximum
-            ),
-            key=lambda index: (
-                -(
-                    float(ordered[index].leading.position.minimum)
-                    if context.coverages[index] is None
-                    else float(context.coverages[index][0])
-                ),
-                -index,
-            ),
-            reverse=True,
-        )
-        fallback_index = next(
-            (
-                index
-                for index in fallback_indexes
                 if _cached_sequence_graph_edge_supported(
                     current_index,
                     index,

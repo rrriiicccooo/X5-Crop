@@ -216,6 +216,85 @@ class DetectionCachePerformanceContractTest(unittest.TestCase):
         self.assertEqual(reachable, {1: 0})
         self.assertEqual(feasibility.call_count, 1)
 
+    def test_graph_fallback_order_is_materialized_once_per_boundary(self) -> None:
+        def edge(position: float, label: str):
+            return measurements.EdgeConstraint(
+                position=PixelInterval.exact(position),
+                basis=FrameBoundarySource.DIMENSION_CONSTRAINED,
+                state=EvidenceState.UNAVAILABLE,
+                geometry_state=BoundaryGeometryState.RESOLVED,
+                provenance=MeasurementProvenance(
+                    MeasurementIdentity.FRAME_GEOMETRY,
+                    ObservationId(label),
+                    (),
+                    "synthetic graph fallback-order edge",
+                ),
+            )
+
+        def frame(start: float, index: int):
+            return measurements.MeasuredFrameConstraint(
+                leading=edge(start, f"fallback-leading-{index}"),
+                trailing=edge(start + 10.0, f"fallback-trailing-{index}"),
+                width_px=PixelInterval.exact(10.0),
+                full_width_hypothesis_admissible=True,
+                leading_holder_clip_supported=False,
+                trailing_holder_clip_supported=False,
+                search_order_residual=0.0,
+            )
+
+        preceding = tuple(frame(float(index), index) for index in range(8))
+        following = tuple(
+            frame(100.0 + float(index), index + len(preceding))
+            for index in range(16)
+        )
+        ordered = (*preceding, *following)
+        preceding_indexes = tuple(range(len(preceding)))
+        following_indexes = tuple(range(len(preceding), len(ordered)))
+        context = sequence_search.sequence_graph_context(
+            ordered,
+            ContentRegionObservation(
+                region=Box(0, 0, 140, 100),
+                reliable_runs=(),
+                position_uncertainty_px=0,
+            ),
+            allow_nominal_slot_sized_gap=True,
+        )
+
+        with (
+            patch.object(
+                sequence_search,
+                "sorted",
+                wraps=sorted,
+                create=True,
+            ) as ordering,
+            patch.object(
+                sequence_search,
+                "_cached_sequence_graph_edge_supported",
+                return_value=False,
+            ),
+        ):
+            self.assertEqual(
+                sequence_search.reachable_predecessors_for_boundary(
+                    preceding_indexes,
+                    following_indexes,
+                    ordered,
+                    context,
+                ),
+                {},
+            )
+            self.assertLessEqual(ordering.call_count, 4)
+            ordering.reset_mock()
+            self.assertEqual(
+                sequence_search._reachable_successors_for_boundary(
+                    preceding_indexes,
+                    following_indexes,
+                    ordered,
+                    context,
+                ),
+                {},
+            )
+            self.assertLessEqual(ordering.call_count, 4)
+
     def test_contact_alternative_does_not_require_a_second_graph_optimization(
         self,
     ) -> None:
