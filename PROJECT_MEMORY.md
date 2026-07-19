@@ -13,7 +13,7 @@ authoritative.
 ## Frozen Checkpoint / 冻结检查点
 
 - Branch / 分支：`main`.
-- Candidate / 候选提交：`17a5a3e2` (`perf: reuse reachability subset ordering`), pushed to
+- Candidate / 候选提交：`239e6c8e` (`perf: batch graph predecessor ranking`), pushed to
   `origin/main`.
 - Worktree / 工作树：tracked files were clean immediately after that push; local `Test/`
   references and generated diagnostics are intentionally ignored and untracked.
@@ -64,7 +64,11 @@ authoritative.
 - `17a5a3e2` reuses exact coordinate/fallback ordering for identical index subsets only within
   one forward/backward reachability pass. It does not cache candidates, edge results, witnesses,
   or decisions, and leaves assignment-evaluation and budget accounting unchanged.
-- Current named diagnostics at `17a5a3e2` keep `pass_X5_00006` and
+- `239e6c8e` replaces per-option graph predecessor ranking with one bounded, vectorized
+  layer owner. It preserves every validity filter and the exact lexicographic rank order; the
+  old scalar API was deleted. Assignment evaluations, candidates, cache counts, report, and
+  Debug remain unchanged.
+- Current named diagnostics at `239e6c8e` keep `pass_X5_00006` and
   `unknown_X5_00038` unresolved and non-exportable. Representative
   `120-66/partial/pass_X5_00005` and `half/full/pass_X5_00001` also remain unresolved and
   non-exportable; both still expose typed `execution_budget_exhausted`, so the performance phase
@@ -91,6 +95,9 @@ authoritative.
 - `17a5a3e2` 只在单次前向/反向 reachability pass 内复用完全相同 index subset 的
   coordinate/fallback 顺序；不缓存 candidate、edge result、witness 或 decision，不改变
   assignment-evaluation 与 budget 计账。
+- `239e6c8e` 以唯一的有界 vectorized layer owner 取代逐 option predecessor ranking；所有
+  validity filter 与 lexicographic rank 顺序保持不变，旧 scalar API 已删除。assignment
+  evaluation、candidate、cache、report 与 Debug 均不变。
 
 ## Frozen Physical Rules / 冻结物理权限
 
@@ -128,16 +135,22 @@ authoritative.
 - `17a5a3e2`: 74.71 s detection with the same 971,842 assignment evaluations, 11 candidates,
   cache 41/6, a zero-diff current report, and byte-identical Debug Analysis. This closes the
   repeated subset-order materialization cost only; pass-required budget exhaustion remains.
+- `239e6c8e`: 50.27 s detection with the same 971,842 assignment evaluations, 11 candidates,
+  cache 41/6, a zero-diff current report, and byte-identical Debug Analysis. Global boundary
+  change-point caps at 16 or 24 removed a correct `120-67/full` resolution; 48 did not materially
+  improve the frozen sample. Skipping graph best-path evaluation changed real geometry. Those
+  routes are rejected, not latent tuning options.
 - Continue from measured call-stack costs. Only exact reuse/deduplication, physically complete
   interval or anchor pruning, branch-and-bound, delayed blank branching, and focused ordering
   are legal; performance, budget, Gate, or confidence cannot change physical authority.
 
 ## Next Actions / 下一步
 
-1. Continue profiling the fixed `half/partial/pass_X5_00001.tif` sample from `17a5a3e2`; the next
-   wave must reduce exact graph evaluations through a physically complete option/state reduction,
-   not merely wall-clock overhead. Do not reintroduce provisional raw-build incumbent or
-   separator-chain pruning.
+1. Profile the fixed `half/partial/pass_X5_00001.tif` sample from `239e6c8e` with a temporary high
+   solver budget. Measure the complete evaluation requirement before deciding whether the global
+   execution budget can be raised without changing physical or decision authority. Do not
+   reintroduce provisional raw-build incumbents, separator-chain pruning, boundary caps, or graph
+   witness skipping.
 2. Re-profile after each legal optimization wave; run focused contracts, `tools/verify full`,
    named reports, reference comparison, and Debug Analysis before an independent commit/push.
 3. Rerun all 113 TIFFs from a clean frozen commit. Require zero runtime/schema failure, zero
@@ -150,7 +163,9 @@ authoritative.
    requires a fresh forward audit. After zero known violations, prepare a context-independent
    reverse-order Audit B prompt for a new Codex task; do not execute Audit B in this task.
 
-1. 从 `ba408749` 继续剖析固定最慢样片；每个新残留类别都先增加失败合同，再做对应优化。
+1. 从 `239e6c8e` 对固定最慢样片做临时高 budget 完整剖析，先测清完成搜索所需 evaluation，
+   再判断是否能在不改变物理与 decision 权限的前提下调整全局 execution budget；不得恢复已否决
+   的 raw incumbent、separator-chain pruning、boundary cap 或 graph witness skipping。
 2. 每轮只做合法优化，并复核合同、全量 verifier、具名 report/reference 与 Debug 后独立提交推送。
 3. clean frozen commit 上重跑 113 张，要求 0 runtime/schema failure、0 resolved-wrong、
    0 unresolved export、0 wrong automatic export，且 pass-required 不得 budget exhausted。
