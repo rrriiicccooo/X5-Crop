@@ -22,6 +22,16 @@ the validation evidence.
 
 ### 2026-07-19 — 无环观测权限 / Acyclic Observation Authority
 
+- Forward and backward graph reachability now materialize coordinate/fallback ordering once for
+  each exact index subset within a single pass; no candidate, witness, edge result, or decision is
+  cached. On the frozen `half/partial/pass_X5_00001` diagnostic, detection fell from 80.71 s to
+  74.71 s while preserving 971,842 assignment evaluations, 11 candidates, cache 41/6, a zero-diff
+  current report, and a byte-identical Debug Analysis JPG. / 前向与反向 graph reachability
+  现在于单次 pass 内为每个完全相同的 index subset 只物化一次 coordinate/fallback
+  顺序；不缓存 candidate、witness、edge result 或 decision。冻结
+  `half/partial/pass_X5_00001` diagnostics 从 80.71 s 降至 74.71 s，同时保持
+  971,842 次 assignment evaluation、11 个 candidate、cache 41/6、current report 0 diff
+  与 Debug Analysis JPG 字节一致。
 - Recurring-width branches without a supported internal separator seed now retain the
   frame-width-focused order prepared by construction; separator-backed searches keep the
   canonical contributor ranking. No hypothesis is deleted and budget exhaustion remains typed.

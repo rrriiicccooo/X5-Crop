@@ -1429,9 +1429,13 @@ class FrameSequenceSearchContractTest(unittest.TestCase):
             side_effect=lambda left, right, _ordered, _context: (left, right)
             == (0, 2),
         ) as edge_supported:
-            reachable = sequence_search.reachable_predecessors_for_boundary(
-                (0, 1),
-                (2,),
+            previous_order = sequence_search._predecessor_reachability_order(
+                (0, 1), ordered, context
+            )
+            assert previous_order is not None
+            reachable = sequence_search._reachable_predecessors_for_orders(
+                previous_order,
+                sequence_search._predecessor_current_order((2,), ordered),
                 ordered,
                 context,
             )
@@ -1475,9 +1479,13 @@ class FrameSequenceSearchContractTest(unittest.TestCase):
             side_effect=lambda left, right, _ordered, _context: (left, right)
             == (0, 2),
         ) as edge_supported:
-            reachable = sequence_search._reachable_successors_for_boundary(
-                (0,),
-                (1, 2),
+            following_order = sequence_search._successor_reachability_order(
+                (1, 2), ordered, context
+            )
+            assert following_order is not None
+            reachable = sequence_search._reachable_successors_for_orders(
+                sequence_search._successor_current_order((0,), ordered),
+                following_order,
                 ordered,
                 context,
             )

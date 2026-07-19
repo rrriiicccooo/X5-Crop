@@ -491,19 +491,25 @@ def _fenwick_query(
         current -= current & -current
     return best
 
-def reachable_predecessors_for_boundary(
+@dataclass(frozen=True)
+class _BoundaryReachabilityOrder:
+    trailing_coordinates: tuple[float, ...]
+    sweep_order: tuple[int, ...]
+    fallback_order: tuple[int, ...]
+
+
+def _predecessor_reachability_order(
     previous_indexes: tuple[int, ...],
-    current_indexes: tuple[int, ...],
     ordered: tuple[measurement_facts.MeasuredFrameConstraint, ...],
     context: SequenceGraphContext,
-) -> dict[int, int]:
+) -> _BoundaryReachabilityOrder | None:
     eligible_previous = tuple(
         index
         for index in previous_indexes
         if not context.run_starts or context.coverages[index] is not None
     )
     if not eligible_previous:
-        return {}
+        return None
     trailing_coordinates = tuple(
         sorted(
             {
@@ -512,9 +518,6 @@ def reachable_predecessors_for_boundary(
             }
         )
     )
-    tree: list[tuple[float, int, int] | None] = [
-        None
-    ] * (len(trailing_coordinates) + 1)
     sorted_previous = tuple(
         sorted(
             eligible_previous,
@@ -539,23 +542,49 @@ def reachable_predecessors_for_boundary(
             reverse=True,
         )
     )
+    return _BoundaryReachabilityOrder(
+        trailing_coordinates,
+        sorted_previous,
+        fallback_order,
+    )
+
+
+def _predecessor_current_order(
+    current_indexes: tuple[int, ...],
+    ordered: tuple[measurement_facts.MeasuredFrameConstraint, ...],
+) -> tuple[int, ...]:
+    return tuple(
+        sorted(
+            current_indexes,
+            key=lambda index: (
+                ordered[index].leading.position.minimum,
+                ordered[index].trailing.position.minimum,
+                index,
+            ),
+        )
+    )
+
+
+def _reachable_predecessors_for_orders(
+    previous_order: _BoundaryReachabilityOrder,
+    current_order: tuple[int, ...],
+    ordered: tuple[measurement_facts.MeasuredFrameConstraint, ...],
+    context: SequenceGraphContext,
+) -> dict[int, int]:
+    trailing_coordinates = previous_order.trailing_coordinates
     cursor = 0
     reachable: dict[int, int] = {}
-    for current_index in sorted(
-        current_indexes,
-        key=lambda index: (
-            ordered[index].leading.position.minimum,
-            ordered[index].trailing.position.minimum,
-            index,
-        ),
-    ):
+    tree: list[tuple[float, int, int] | None] = [
+        None
+    ] * (len(trailing_coordinates) + 1)
+    for current_index in current_order:
         current = ordered[current_index]
         while (
-            cursor < len(sorted_previous)
-            and ordered[sorted_previous[cursor]].leading.position.maximum
+            cursor < len(previous_order.sweep_order)
+            and ordered[previous_order.sweep_order[cursor]].leading.position.maximum
             < current.leading.position.minimum
         ):
-            previous_index = sorted_previous[cursor]
+            previous_index = previous_order.sweep_order[cursor]
             coverage = context.coverages[previous_index]
             coverage_end = (
                 float(ordered[previous_index].trailing.position.maximum)
@@ -593,7 +622,7 @@ def reachable_predecessors_for_boundary(
         fallback_index = next(
             (
                 index
-                for index in fallback_order
+                for index in previous_order.fallback_order
                 if index != previous_index
                 and ordered[index].leading.position.maximum
                 < current.leading.position.minimum
@@ -611,6 +640,7 @@ def reachable_predecessors_for_boundary(
         if fallback_index is not None:
             reachable[current_index] = fallback_index
     return reachable
+
 
 def _reachable_predecessors(
     previous_indexes: tuple[int, ...],
@@ -630,17 +660,15 @@ def _reachable_predecessors(
             _separator_boundary_key(ordered[index].leading),
             [],
         ).append(index)
-    reachable: dict[int, int] = {}
+    boundary_pairs: list[tuple[tuple[int, ...], tuple[int, ...]]] = []
     for separator_key in sorted(
         previous_by_separator.keys() & current_by_separator.keys(),
         key=lambda item: "" if item is None else str(item),
     ):
-        reachable.update(
-            reachable_predecessors_for_boundary(
+        boundary_pairs.append(
+            (
                 tuple(previous_by_separator[separator_key]),
                 tuple(current_by_separator[separator_key]),
-                ordered,
-                context,
             )
         )
     unassigned_previous = tuple(previous_by_separator.get(None, ()))
@@ -648,13 +676,8 @@ def _reachable_predecessors(
         for separator_key, indexes in current_by_separator.items():
             if separator_key is None:
                 continue
-            reachable.update(
-                reachable_predecessors_for_boundary(
-                    unassigned_previous,
-                    tuple(indexes),
-                    ordered,
-                    context,
-                )
+            boundary_pairs.append(
+                (unassigned_previous, tuple(indexes))
             )
     unassigned_current = tuple(current_by_separator.get(None, ()))
     assigned_previous = tuple(
@@ -664,29 +687,49 @@ def _reachable_predecessors(
         for index in indexes
     )
     if assigned_previous and unassigned_current:
+        boundary_pairs.append(
+            (assigned_previous, unassigned_current)
+        )
+
+    previous_orders = {
+        indexes: _predecessor_reachability_order(indexes, ordered, context)
+        for indexes in dict.fromkeys(
+            previous for previous, _current in boundary_pairs
+        )
+    }
+    current_orders = {
+        indexes: _predecessor_current_order(indexes, ordered)
+        for indexes in dict.fromkeys(
+            current for _previous, current in boundary_pairs
+        )
+    }
+    reachable: dict[int, int] = {}
+    for previous_indexes, current_indexes in boundary_pairs:
+        previous_order = previous_orders[previous_indexes]
+        if previous_order is None:
+            continue
         reachable.update(
-            reachable_predecessors_for_boundary(
-                assigned_previous,
-                unassigned_current,
+            _reachable_predecessors_for_orders(
+                previous_order,
+                current_orders[current_indexes],
                 ordered,
                 context,
             )
         )
     return reachable
 
-def _reachable_successors_for_boundary(
-    current_indexes: tuple[int, ...],
+def _successor_reachability_order(
     following_indexes: tuple[int, ...],
     ordered: tuple[measurement_facts.MeasuredFrameConstraint, ...],
     context: SequenceGraphContext,
-) -> dict[int, int]:
+) -> _BoundaryReachabilityOrder | None:
     eligible_following = tuple(
         index
         for index in following_indexes
         if not context.run_starts or context.coverages[index] is not None
     )
     if not eligible_following:
-        return {}
+        return None
     reversed_trailing_coordinates = tuple(
         sorted(
             {
@@ -695,9 +738,6 @@ def _reachable_successors_for_boundary(
             }
         )
     )
-    tree: list[tuple[float, int, int] | None] = [
-        None
-    ] * (len(reversed_trailing_coordinates) + 1)
     sorted_following = tuple(
         sorted(
             eligible_following,
@@ -723,24 +763,50 @@ def _reachable_successors_for_boundary(
             reverse=True,
         )
     )
+    return _BoundaryReachabilityOrder(
+        reversed_trailing_coordinates,
+        sorted_following,
+        fallback_order,
+    )
+
+
+def _successor_current_order(
+    current_indexes: tuple[int, ...],
+    ordered: tuple[measurement_facts.MeasuredFrameConstraint, ...],
+) -> tuple[int, ...]:
+    return tuple(
+        sorted(
+            current_indexes,
+            key=lambda index: (
+                ordered[index].leading.position.maximum,
+                ordered[index].trailing.position.maximum,
+                -index,
+            ),
+            reverse=True,
+        )
+    )
+
+
+def _reachable_successors_for_orders(
+    current_order: tuple[int, ...],
+    following_order: _BoundaryReachabilityOrder,
+    ordered: tuple[measurement_facts.MeasuredFrameConstraint, ...],
+    context: SequenceGraphContext,
+) -> dict[int, int]:
+    reversed_trailing_coordinates = following_order.trailing_coordinates
     cursor = 0
     reachable: dict[int, int] = {}
-    for current_index in sorted(
-        current_indexes,
-        key=lambda index: (
-            ordered[index].leading.position.maximum,
-            ordered[index].trailing.position.maximum,
-            -index,
-        ),
-        reverse=True,
-    ):
+    tree: list[tuple[float, int, int] | None] = [
+        None
+    ] * (len(reversed_trailing_coordinates) + 1)
+    for current_index in current_order:
         current = ordered[current_index]
         while (
-            cursor < len(sorted_following)
-            and ordered[sorted_following[cursor]].leading.position.minimum
+            cursor < len(following_order.sweep_order)
+            and ordered[following_order.sweep_order[cursor]].leading.position.minimum
             > current.leading.position.maximum
         ):
-            following_index = sorted_following[cursor]
+            following_index = following_order.sweep_order[cursor]
             coverage = context.coverages[following_index]
             coverage_start = (
                 float(ordered[following_index].leading.position.minimum)
@@ -778,7 +844,7 @@ def _reachable_successors_for_boundary(
         fallback_index = next(
             (
                 index
-                for index in fallback_order
+                for index in following_order.fallback_order
                 if index != following_index
                 and ordered[index].leading.position.minimum
                 > current.leading.position.maximum
@@ -796,6 +862,7 @@ def _reachable_successors_for_boundary(
         if fallback_index is not None:
             reachable[current_index] = fallback_index
     return reachable
+
 
 def _reachable_successors(
     current_indexes: tuple[int, ...],
@@ -815,17 +882,15 @@ def _reachable_successors(
             _separator_boundary_key(ordered[index].leading),
             [],
         ).append(index)
-    reachable: dict[int, int] = {}
+    boundary_pairs: list[tuple[tuple[int, ...], tuple[int, ...]]] = []
     for separator_key in sorted(
         current_by_separator.keys() & following_by_separator.keys(),
         key=lambda item: "" if item is None else str(item),
     ):
-        reachable.update(
-            _reachable_successors_for_boundary(
+        boundary_pairs.append(
+            (
                 tuple(current_by_separator[separator_key]),
                 tuple(following_by_separator[separator_key]),
-                ordered,
-                context,
             )
         )
     unassigned_current = tuple(current_by_separator.get(None, ()))
@@ -836,27 +901,43 @@ def _reachable_successors(
         for index in indexes
     )
     if unassigned_current and assigned_following:
-        reachable.update(
-            _reachable_successors_for_boundary(
-                unassigned_current,
-                assigned_following,
-                ordered,
-                context,
-            )
+        boundary_pairs.append(
+            (unassigned_current, assigned_following)
         )
     unassigned_following = tuple(following_by_separator.get(None, ()))
     if unassigned_following:
         for separator_key, indexes in current_by_separator.items():
             if separator_key is None:
                 continue
-            reachable.update(
-                _reachable_successors_for_boundary(
-                    tuple(indexes),
-                    unassigned_following,
-                    ordered,
-                    context,
-                )
+            boundary_pairs.append(
+                (tuple(indexes), unassigned_following)
             )
+
+    current_orders = {
+        indexes: _successor_current_order(indexes, ordered)
+        for indexes in dict.fromkeys(
+            current for current, _following in boundary_pairs
+        )
+    }
+    following_orders = {
+        indexes: _successor_reachability_order(indexes, ordered, context)
+        for indexes in dict.fromkeys(
+            following for _current, following in boundary_pairs
+        )
+    }
+    reachable: dict[int, int] = {}
+    for current_indexes, following_indexes in boundary_pairs:
+        following_order = following_orders[following_indexes]
+        if following_order is None:
+            continue
+        reachable.update(
+            _reachable_successors_for_orders(
+                current_orders[current_indexes],
+                following_order,
+                ordered,
+                context,
+            )
+        )
     return reachable
 
 def _graph_sequence_for_target(

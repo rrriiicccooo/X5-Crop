@@ -162,6 +162,104 @@ class DetectionCachePerformanceContractTest(unittest.TestCase):
         self.assertIsNotNone(selected)
         self.assertLessEqual(intersection_calls, 2)
 
+    def test_reachability_reuses_identical_subset_order_within_one_pass(
+        self,
+    ) -> None:
+        def edge(position: float, label: str):
+            return measurements.EdgeConstraint(
+                position=PixelInterval.exact(position),
+                basis=FrameBoundarySource.DIMENSION_CONSTRAINED,
+                state=EvidenceState.UNAVAILABLE,
+                geometry_state=BoundaryGeometryState.RESOLVED,
+                provenance=MeasurementProvenance(
+                    MeasurementIdentity.FRAME_GEOMETRY,
+                    ObservationId(label),
+                    (),
+                    "synthetic reachability-order edge",
+                ),
+            )
+
+        def frame(start: float, label: str):
+            return measurements.MeasuredFrameConstraint(
+                leading=edge(start, f"{label}:leading"),
+                trailing=edge(start + 100.0, f"{label}:trailing"),
+                width_px=PixelInterval.exact(100.0),
+                full_width_hypothesis_admissible=True,
+                leading_holder_clip_supported=False,
+                trailing_holder_clip_supported=False,
+                search_order_residual=0.0,
+            )
+
+        predecessor = frame(0.0, "predecessor")
+        predecessor_currents = tuple(
+            frame(110.0 + offset * 10.0, f"predecessor-current-{offset}")
+            for offset in range(3)
+        )
+        successor_currents = tuple(
+            frame(300.0 + offset * 10.0, f"successor-current-{offset}")
+            for offset in range(3)
+        )
+        successor = frame(500.0, "successor")
+        ordered = (
+            predecessor,
+            *predecessor_currents,
+            *successor_currents,
+            successor,
+        )
+        context = sequence_search.sequence_graph_context(
+            ordered,
+            ContentRegionObservation(
+                region=Box(0, 0, 600, 100),
+                reliable_runs=(),
+                position_uncertainty_px=0,
+            ),
+            allow_nominal_slot_sized_gap=True,
+        )
+        separator_keys = {
+            ObservationId(f"predecessor-current-{offset}:leading"):
+                ObservationId(f"predecessor-separator-{offset}")
+            for offset in range(3)
+        } | {
+            ObservationId(f"successor-current-{offset}:trailing"):
+                ObservationId(f"successor-separator-{offset}")
+            for offset in range(3)
+        }
+        original_sorted = sorted
+        sort_calls = 0
+
+        def counted_sorted(*args, **kwargs):
+            nonlocal sort_calls
+            sort_calls += 1
+            return original_sorted(*args, **kwargs)
+
+        def separator_key(boundary):
+            return separator_keys.get(boundary.provenance.observation_id)
+
+        with (
+            patch("builtins.sorted", side_effect=counted_sorted),
+            patch.object(
+                sequence_search,
+                "_separator_boundary_key",
+                side_effect=separator_key,
+            ),
+        ):
+            predecessors = sequence_search._reachable_predecessors(
+                (0,),
+                (1, 2, 3),
+                ordered,
+                context,
+            )
+            successors = sequence_search._reachable_successors(
+                (4, 5, 6),
+                (7,),
+                ordered,
+                context,
+            )
+
+        self.assertEqual(set(predecessors), {1, 2, 3})
+        self.assertEqual(set(successors), {4, 5, 6})
+        self.assertLessEqual(sort_calls, 14)
+
     def test_graph_reachability_uses_one_cached_feasibility_check_per_edge(
         self,
     ) -> None:
@@ -206,9 +304,13 @@ class DetectionCachePerformanceContractTest(unittest.TestCase):
             "sequence_graph_edge_is_interval_feasible",
             wraps=sequence_search.sequence_graph_edge_is_interval_feasible,
         ) as feasibility:
-            reachable = sequence_search.reachable_predecessors_for_boundary(
-                (0,),
-                (1,),
+            previous_order = sequence_search._predecessor_reachability_order(
+                (0,), ordered, context
+            )
+            assert previous_order is not None
+            reachable = sequence_search._reachable_predecessors_for_orders(
+                previous_order,
+                sequence_search._predecessor_current_order((1,), ordered),
                 ordered,
                 context,
             )
@@ -273,10 +375,19 @@ class DetectionCachePerformanceContractTest(unittest.TestCase):
                 return_value=False,
             ),
         ):
+            previous_order = sequence_search._predecessor_reachability_order(
+                preceding_indexes,
+                ordered,
+                context,
+            )
+            assert previous_order is not None
             self.assertEqual(
-                sequence_search.reachable_predecessors_for_boundary(
-                    preceding_indexes,
-                    following_indexes,
+                sequence_search._reachable_predecessors_for_orders(
+                    previous_order,
+                    sequence_search._predecessor_current_order(
+                        following_indexes,
+                        ordered,
+                    ),
                     ordered,
                     context,
                 ),
@@ -284,10 +395,19 @@ class DetectionCachePerformanceContractTest(unittest.TestCase):
             )
             self.assertLessEqual(ordering.call_count, 4)
             ordering.reset_mock()
+            following_order = sequence_search._successor_reachability_order(
+                following_indexes,
+                ordered,
+                context,
+            )
+            assert following_order is not None
             self.assertEqual(
-                sequence_search._reachable_successors_for_boundary(
-                    preceding_indexes,
-                    following_indexes,
+                sequence_search._reachable_successors_for_orders(
+                    sequence_search._successor_current_order(
+                        preceding_indexes,
+                        ordered,
+                    ),
+                    following_order,
                     ordered,
                     context,
                 ),
