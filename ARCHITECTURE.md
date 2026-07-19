@@ -317,6 +317,17 @@ CandidateGate 不读取 scalar confidence，也不创建 final reason。
 - alternative geometries 与 assignment consensus 是否解决；
 - physical search 是否完整且未耗尽预算。
 
+多 slot 的 `frame_slots_resolved` 还要求每个普通实测 slot 的宽度与 supported common width
+相交；只有 typed sequence inference 或端点 occlusion 可以表达不完整的可见宽度。即使使用
+holder occlusion，nominal leading/trailing boundary 也必须留在已采集 workspace canvas 内；
+画布外几何不可观测，因此保持 unresolved。
+
+For multi-slot geometry, `frame_slots_resolved` additionally requires every ordinary
+measured slot width to intersect the supported common width; only typed sequence inference
+or endpoint occlusion may represent incomplete visible width. Nominal leading and trailing
+boundaries must also remain inside the acquired workspace canvas even when holder occlusion
+is present; geometry outside the canvas is unobservable and remains unresolved.
+
 Selection 只按 typed facts 确定性排序：先保护可见内容，再减少明确物理矛盾、优先独立 proof、
 partial 较大 count、较小 residual/uncertainty，最后使用稳定 source order。
 

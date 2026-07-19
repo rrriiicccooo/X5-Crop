@@ -36,13 +36,30 @@ def _sequence_frame_slots_resolved(
         and all(envelope.box.valid() for envelope in geometry.frame_crop_envelopes)
     ):
         return False
+    workspace = geometry.holder_safety.containment_fallback.box
+    if any(
+        slot.leading.position.minimum < float(workspace.left)
+        or slot.trailing.position.maximum > float(workspace.right)
+        for slot in slots
+    ):
+        return False
     if geometry.count == 1:
         slot = slots[0]
         return bool(
             boundary_role_is_independent_physical_measurement(slot.leading)
             and boundary_role_is_independent_physical_measurement(slot.trailing)
         )
-    return geometry.common_frame_width.state == EvidenceState.SUPPORTED
+    common_width = geometry.common_frame_width
+    return bool(
+        common_width.state == EvidenceState.SUPPORTED
+        and common_width.width_px is not None
+        and all(
+            slot.sequence_inferred
+            or slot.edge_occlusion is not None
+            or slot.width_px.intersects(common_width.width_px)
+            for slot in slots
+        )
+    )
 
 
 def _candidate_frame_slots_resolved(

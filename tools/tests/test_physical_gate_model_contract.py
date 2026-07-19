@@ -350,6 +350,7 @@ class PhysicalGateModelContractTest(unittest.TestCase):
             geometry_resolved=True,
             independently_observed=True,
             role_provenance=repeated_width_role,
+            position=PixelInterval.exact(50.0),
         )
         geometry = SimpleNamespace(
             count=1,
@@ -358,6 +359,84 @@ class PhysicalGateModelContractTest(unittest.TestCase):
             ),
             frame_crop_envelopes=(
                 SimpleNamespace(box=Box(0, 0, 100, 100)),
+            ),
+            holder_safety=SimpleNamespace(
+                containment_fallback=SimpleNamespace(box=Box(0, 0, 100, 100)),
+            ),
+        )
+
+        self.assertFalse(_sequence_frame_slots_resolved(geometry))
+
+    def test_common_width_does_not_resolve_incompatible_ordinary_slot(self) -> None:
+        boundary = SimpleNamespace(
+            geometry_resolved=True,
+            position=PixelInterval.exact(50.0),
+        )
+        geometry = SimpleNamespace(
+            count=2,
+            frame_slots=(
+                SimpleNamespace(
+                    leading=boundary,
+                    trailing=boundary,
+                    width_px=PixelInterval(40.0, 50.0),
+                    sequence_inferred=False,
+                    edge_occlusion=None,
+                ),
+                SimpleNamespace(
+                    leading=boundary,
+                    trailing=boundary,
+                    width_px=PixelInterval(100.0, 110.0),
+                    sequence_inferred=False,
+                    edge_occlusion=None,
+                ),
+            ),
+            frame_crop_envelopes=(
+                SimpleNamespace(box=Box(0, 0, 50, 100)),
+                SimpleNamespace(box=Box(60, 0, 170, 100)),
+            ),
+            common_frame_width=SimpleNamespace(
+                state=EvidenceState.SUPPORTED,
+                width_px=PixelInterval(100.0, 110.0),
+            ),
+            holder_safety=SimpleNamespace(
+                containment_fallback=SimpleNamespace(box=Box(0, 0, 170, 100)),
+            ),
+        )
+
+        self.assertFalse(_sequence_frame_slots_resolved(geometry))
+
+    def test_occlusion_outside_workspace_does_not_resolve_geometry(self) -> None:
+        def boundary(position: PixelInterval):
+            return SimpleNamespace(geometry_resolved=True, position=position)
+
+        geometry = SimpleNamespace(
+            count=2,
+            frame_slots=(
+                SimpleNamespace(
+                    leading=boundary(PixelInterval(-10.0, -5.0)),
+                    trailing=boundary(PixelInterval.exact(100.0)),
+                    width_px=PixelInterval(105.0, 110.0),
+                    sequence_inferred=False,
+                    edge_occlusion=object(),
+                ),
+                SimpleNamespace(
+                    leading=boundary(PixelInterval.exact(110.0)),
+                    trailing=boundary(PixelInterval.exact(215.0)),
+                    width_px=PixelInterval.exact(105.0),
+                    sequence_inferred=False,
+                    edge_occlusion=None,
+                ),
+            ),
+            frame_crop_envelopes=(
+                SimpleNamespace(box=Box(0, 0, 100, 100)),
+                SimpleNamespace(box=Box(110, 0, 215, 100)),
+            ),
+            common_frame_width=SimpleNamespace(
+                state=EvidenceState.SUPPORTED,
+                width_px=PixelInterval(100.0, 110.0),
+            ),
+            holder_safety=SimpleNamespace(
+                containment_fallback=SimpleNamespace(box=Box(0, 0, 220, 100)),
             ),
         )
 

@@ -22,6 +22,15 @@ the validation evidence.
 
 ### 2026-07-19 — 无环观测权限 / Acyclic Observation Authority
 
+- Multi-slot geometry resolution now requires every ordinary slot width to intersect the
+  supported common frame width, and holder-occlusion inference cannot resolve nominal
+  boundaries outside the acquired workspace canvas. The 11 reference-violating automatic
+  approvals found by the complete real-sample audit now remain typed, non-exportable
+  `REVIEW` instead of reporting resolved-wrong geometry. / 多 slot geometry resolution
+  现在要求每个普通 slot 宽度与 supported common frame width 相交；holder-occlusion inference
+  也不能把已采集 workspace canvas 之外的 nominal boundary 判为 resolved。完整真实样片审计
+  找到的 11 个 reference-violating 自动通过现在均保持 typed、不可导出的 `REVIEW`，不再报告
+  resolved-wrong geometry。
 - 共同 frame width 现在要求实测宽度具有非空共享区间；不相交宽度不能再被宽 uncertainty
   envelope 合并并获得 dimension-sequence proof。`135/partial/review_X5_00002` 因而从错误的
   自动通过恢复为不可导出的 `REVIEW`。 / Common frame width now requires a non-empty
