@@ -7,15 +7,19 @@ from ....cache.separator import cached_separator_profile_measurement
 from ....configuration.boundary import BoundaryPathParameters
 from ....configuration.separator import SeparatorConfiguration
 from ....domain import (
+    BoundaryAxis,
     BoundarySide,
     BoundaryMeasurementSet,
     Box,
+    HolderBoundaryObservation,
     HolderSafetyEnvelope,
     MeasurementIdentity,
     MeasurementProvenance,
     ObservationId,
     FrameSequenceSearchScope,
+    boundary_axis_for_side,
 )
+from ....image.content import ContentRegionObservation
 from ...physical.boundary_detection import boundary_measurements
 from ...physical.frame_sequence_construction import (
     FrameSequenceSearchIndex,
@@ -55,14 +59,39 @@ def cached_boundary_measurements(
     return cache.boundary_measurements[key]
 
 
+def holder_boundaries_without_reliable_content_crossing(
+    boundaries: tuple[HolderBoundaryObservation, ...],
+    workspace_content: ContentRegionObservation,
+) -> tuple[HolderBoundaryObservation, ...]:
+    return tuple(
+        boundary
+        for boundary in boundaries
+        if (
+            boundary_axis_for_side(boundary.side) != BoundaryAxis.LONG
+            or not workspace_content.reliable_content_intersects(
+                boundary.position
+            )
+        )
+    )
+
+
 def frame_sequence_search_scope(
     cache: MeasurementCache,
     parameters: BoundaryPathParameters,
+    workspace_content: ContentRegionObservation,
 ) -> FrameSequenceSearchScope:
     measured = cached_boundary_measurements(cache, parameters)
+    if workspace_content.region != measured.containment_fallback.box:
+        raise ValueError(
+            "holder-boundary refutation requires full-workspace content"
+        )
+    holder_boundaries = holder_boundaries_without_reliable_content_crossing(
+        measured.holder_boundaries,
+        workspace_content,
+    )
     return FrameSequenceSearchScope(
         holder_safety=HolderSafetyEnvelope(
-            measured.holder_boundaries,
+            holder_boundaries,
             measured.containment_fallback,
         ),
         raw_boundary_paths=measured.raw_paths,
@@ -72,6 +101,7 @@ def frame_sequence_search_scope(
             dependencies=(
                 MeasurementIdentity.GRAY_WORK,
                 MeasurementIdentity.IMAGE_MEASUREMENT_STATISTICS,
+                MeasurementIdentity.CONTENT_EVIDENCE_IMAGE,
                 *(
                     (MeasurementIdentity.WORKSPACE_TRANSFORM,)
                     if cache.transform_position_uncertainty_px > 0.0
@@ -81,7 +111,7 @@ def frame_sequence_search_scope(
             description="count-independent frame-sequence search scope",
             boundary_anchors=tuple(
                 item.provenance.observation_id
-                for item in measured.holder_boundaries
+                for item in holder_boundaries
             ),
         ),
     )

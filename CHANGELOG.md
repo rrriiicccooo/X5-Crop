@@ -20,6 +20,35 @@ PASS/REVIEW outcomes, report fields, and crop geometry are not compatibility
 targets; real TIFFs, current reports, Debug Analysis, and current contracts are
 the validation evidence.
 
+### 2026-07-20 — Holder 与内容反证闭环 / Holder And Content Refutation Closure
+
+- Full-workspace reliable content now refutes only a long-axis holder boundary it physically
+  crosses before the sequence search scope is built. `FrameCoverageEvidence` also merges the
+  exact cached workspace and holder-local content runs, so a false holder clip cannot hide an
+  omitted photo from preservation evidence. Content still cannot prove a holder, count, frame
+  edge, or automatic decision. / 完整 workspace 的 reliable content 现在只在实际穿过长轴
+  holder boundary 时，于 sequence search scope 建立前否定该边界；`FrameCoverageEvidence`
+  同时合并 exact-cache 的 workspace 与 holder-local content runs，使错误 holder clipping
+  不能再把遗漏照片藏到 preservation evidence 之外。Content 仍不能证明 holder、count、
+  frame edge 或自动 decision。
+- A geometry-corroborated observation wider than the interval allowed by an independent common
+  width and the opposite anchor is now resolved as their dimension-constrained intersection.
+  Direct and measurement-corroborated boundaries remain measured facts. This closes the broad
+  endpoint that previously let `120-66/partial` 00014 remain resolved-wrong. / 当
+  geometry-corroborated 观测区间宽于独立 common width 与对侧 anchor 允许的区间时，最终位置
+  现在改为两者的 dimension-constrained 交集；direct 与 measurement-corroborated 边界仍保持
+  实测事实。该规则关闭了此前使 `120-66/partial` 00014 保持 resolved-wrong 的宽端点。
+- Three frozen-HEAD contracts reproduced all three failures before the fix. Current verification
+  passes 803 tests and 14 configuration pairs. A fresh 113-TIFF diagnostics run completed with
+  zero runtime/schema failures; after source-pixel correction of three overly narrow manual
+  intervals, authority validation reports 51 conforming samples, 62 capability gaps, zero
+  evidence-contract conflicts, and zero physical violations. `unknown_X5_00038.tif` remains
+  `REVIEW`, geometry unavailable, and non-exportable. / 冻结 HEAD 上的三项合同在修复前均稳定
+  失败；当前 803 项测试与 14 组配置通过。全新 113 张 TIFF diagnostics 无 runtime/schema
+  failure；依据原图像素修正三条过窄人工区间后，authority validator 为 51 conforming、
+  62 capability gap、0 evidence-contract conflict、0 physical violation。
+  `unknown_X5_00038.tif` 保持 `REVIEW`、geometry unavailable、不可导出。
+
 ### 2026-07-19 — 无环观测权限 / Acyclic Observation Authority
 
 - Graph path predecessor ranking now evaluates each layer in bounded vectorized batches while

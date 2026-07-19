@@ -57,6 +57,7 @@ from x5crop.domain import (
     PhysicalSearchOutcome,
 )
 from x5crop.image.statistics import image_measurement_statistics
+from x5crop.image.content import ContentRegionObservation
 
 
 def _parent(lane):
@@ -180,6 +181,7 @@ class DualLaneAssessmentTest(unittest.TestCase):
         search_scope = frame_sequence_search_scope(
             context.measurement_cache,
             context.configuration.boundary_path,
+            ContentRegionObservation(Box(0, 0, 240, 120), (), 0),
         )
         with patch(
             "x5crop.detection.modes.dual_lane.measure_lane_dividers",
@@ -239,6 +241,16 @@ class DualLaneAssessmentTest(unittest.TestCase):
                     frame_sequence_search_scope(
                         lane_context.measurement_cache,
                         lane_context.configuration.boundary_path,
+                        ContentRegionObservation(
+                            Box(
+                                0,
+                                0,
+                                lane_context.measurement_cache.gray_work.shape[1],
+                                lane_context.measurement_cache.gray_work.shape[0],
+                            ),
+                            (),
+                            0,
+                        ),
                     ),
                     physical_search=PhysicalSearchOutcome(
                         (PhysicalSearchFact.MEASUREMENTS_UNAVAILABLE,),

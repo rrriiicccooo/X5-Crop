@@ -21,6 +21,7 @@ from . import frame_sequence_common_width as width_resolution
 from . import frame_sequence_measurements as measurement_facts
 from .model import (
     BoundaryGeometryState,
+    BoundaryRoleAuthority,
     CommonFrameWidthResolution,
     FrameEdgeAssignment,
     FrameBoundarySource,
@@ -94,9 +95,19 @@ def _resolved_dimension_boundary(
         }
         and boundary.role_state == EvidenceState.UNAVAILABLE
     )
+    geometry_corroborated_observation_assignment = bool(
+        boundary.source
+        in {
+            FrameBoundarySource.GRAY_PATH_OBSERVATION,
+            FrameBoundarySource.SEPARATOR_EDGE_OBSERVATION,
+        }
+        and boundary.role_authority
+        == BoundaryRoleAuthority.GEOMETRY_CORROBORATED
+    )
     dimension_candidate = bool(
         boundary.source == FrameBoundarySource.DIMENSION_CONSTRAINED
         or unproven_observation_assignment
+        or geometry_corroborated_observation_assignment
     )
     if (
         not dimension_candidate
@@ -105,9 +116,12 @@ def _resolved_dimension_boundary(
         or not anchor.geometry_resolved
     ):
         return boundary
-    if unproven_observation_assignment and measurement_facts.boundary_matches_holder(
-        boundary,
-        holder_boundary,
+    observed_assignment = bool(
+        unproven_observation_assignment
+        or geometry_corroborated_observation_assignment
+    )
+    if observed_assignment and measurement_facts.boundary_matches_holder(
+        boundary, holder_boundary
     ):
         return boundary
     expected = (
@@ -115,13 +129,15 @@ def _resolved_dimension_boundary(
         if side == BoundarySide.LEADING
         else anchor.position.plus(common_width.width_px)
     )
+    if unproven_observation_assignment and boundary.position.intersects(expected):
+        return boundary
     if (
-        unproven_observation_assignment
-        and boundary.position.intersects(expected)
+        geometry_corroborated_observation_assignment
+        and boundary.position.intersection(expected) == boundary.position
     ):
         return boundary
     resolved_position = boundary.position.intersection(expected)
-    if resolved_position is None and unproven_observation_assignment:
+    if resolved_position is None and observed_assignment:
         resolved_position = expected
     if resolved_position is None:
         return boundary

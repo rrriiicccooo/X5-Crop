@@ -29,6 +29,9 @@ from x5crop.detection.physical.short_axis import (
     resolve_shared_short_axis,
     shared_short_axis_plan,
 )
+from x5crop.detection.candidate.proposal.sequence import (
+    holder_boundaries_without_reliable_content_crossing,
+)
 from tools.tests.frame_slot_solver_support import (
     content as solver_content,
     dimensions as solver_dimensions,
@@ -250,6 +253,35 @@ def _long_holder_boundary(
 
 
 class FrameSlotSequenceContractTest(unittest.TestCase):
+    def test_reliable_content_refutes_only_crossed_long_axis_holder_boundary(
+        self,
+    ) -> None:
+        leading = _long_holder_boundary(BoundarySide.LEADING, 20.0)
+        trailing = _long_holder_boundary(BoundarySide.TRAILING, 900.0)
+        top_path = _path(
+            BoundaryAxis.SHORT,
+            20.0,
+            "content_refutation_top_holder",
+            kind=BoundaryKind.EDGE_ADJACENT_TRANSITION,
+        )
+        top = HolderBoundaryObservation(
+            BoundarySide.TOP,
+            top_path.position,
+            (top_path,),
+        )
+        content = ContentRegionObservation(
+            Box(0, 0, 1000, 200),
+            ((850, 980),),
+            10,
+        )
+
+        retained = holder_boundaries_without_reliable_content_crossing(
+            (leading, trailing, top),
+            content,
+        )
+
+        self.assertEqual(retained, (leading, top))
+
     def test_canvas_fallback_is_not_resolved_holder_geometry(self) -> None:
         provenance = _provenance("holder_canvas_fallback")
         envelope = HolderSafetyEnvelope(

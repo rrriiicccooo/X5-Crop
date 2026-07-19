@@ -304,6 +304,67 @@ class FrameSequenceCandidateResolutionContractTest(unittest.TestCase):
         self.assertTrue(narrowed[0].trailing.geometry_resolved)
         self.assertFalse(narrowed[0].trailing.independently_observed)
 
+    def test_common_width_narrows_geometry_corroborated_observation(self) -> None:
+        geometry = candidate_fixture().geometry
+        slot = geometry.frame_slots[1]
+        assert geometry.common_frame_width.width_px is not None
+        expected = slot.leading.position.plus(
+            geometry.common_frame_width.width_px
+        )
+        observation = path(
+            BoundaryAxis.LONG,
+            expected.midpoint,
+            "broad_geometry_corroborated_trailing",
+        )
+        broad_trailing = ResolvedFrameBoundary(
+            position=PixelInterval(
+                expected.minimum - 100.0,
+                expected.maximum + 100.0,
+            ),
+            source=FrameBoundarySource.GRAY_PATH_OBSERVATION,
+            geometry_state=BoundaryGeometryState.RESOLVED,
+            boundary_anchor=BoundaryAnchor(
+                observation=observation,
+                physical_role=BoundarySide.TRAILING,
+                role_state=EvidenceState.SUPPORTED,
+                role_authority=BoundaryRoleAuthority.GEOMETRY_CORROBORATED,
+                role_provenance=MeasurementProvenance(
+                    MeasurementIdentity.PHOTO_EDGES,
+                    ObservationId("geometry_corroborated_trailing_role"),
+                    (
+                        observation.provenance.root_measurement,
+                        MeasurementIdentity.FRAME_DIMENSIONS,
+                    ),
+                    "synthetic common-width-corroborated photo-edge role",
+                    boundary_anchors=(
+                        observation.provenance.observation_id,
+                    ),
+                ),
+            ),
+            inference_provenance=None,
+        )
+        broad_slot = replace(
+            slot,
+            trailing=broad_trailing,
+            visible_long_axis=PixelInterval(
+                slot.leading.position.minimum,
+                broad_trailing.position.maximum,
+            ),
+        )
+
+        narrowed = candidate_resolution.resolve_dimension_boundaries_from_common_width(
+            (broad_slot,),
+            geometry.common_frame_width,
+            {},
+        )
+
+        self.assertEqual(narrowed[0].trailing.position, expected)
+        self.assertEqual(
+            narrowed[0].trailing.source,
+            FrameBoundarySource.DIMENSION_CONSTRAINED,
+        )
+        self.assertFalse(narrowed[0].trailing.independently_observed)
+
     def test_common_width_can_resolve_geometry_from_unproven_position_anchor(
         self,
     ) -> None:

@@ -136,9 +136,20 @@ def _count_resolution(
 def _choose_standard_detection(context: DetectionContext) -> SelectionResult:
     configuration = context.configuration
     physical_spec = configuration.physical_spec
+    workspace_content = cached_content_region_observation(
+        context.measurement_cache,
+        Box(
+            0,
+            0,
+            context.measurement_cache.gray_work.shape[1],
+            context.measurement_cache.gray_work.shape[0],
+        ),
+        configuration.content,
+    )
     search_scope = frame_sequence_search_scope(
         context.measurement_cache,
         configuration.boundary_path,
+        workspace_content,
     )
     short_axis_plan = shared_short_axis_plan(search_scope)
     sequence_observations = frame_sequence_observations(

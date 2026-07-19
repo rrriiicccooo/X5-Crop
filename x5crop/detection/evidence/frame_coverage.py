@@ -5,8 +5,8 @@ from typing import TYPE_CHECKING
 
 from ...cache import MeasurementCache
 from ...configuration.content import ContentConfiguration
-from ...domain import EvidenceState
-from ...image.content import uncovered_content_runs
+from ...domain import Box, EvidenceState
+from ...image.content import ContentRegionObservation, uncovered_content_runs
 from .content.regions import cached_content_region_observation
 
 if TYPE_CHECKING:
@@ -88,6 +88,27 @@ def _frame_intervals(
     return intervals
 
 
+def _merged_reliable_content_runs(
+    observations: tuple[ContentRegionObservation, ...],
+    holder: Box,
+) -> tuple[tuple[int, int], ...]:
+    clipped = sorted(
+        {
+            (max(holder.left, start), min(holder.right, end))
+            for observation in observations
+            for start, end in observation.reliable_runs
+            if min(holder.right, end) > max(holder.left, start)
+        }
+    )
+    merged: list[tuple[int, int]] = []
+    for start, end in clipped:
+        if merged and start <= merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], end))
+        else:
+            merged.append((start, end))
+    return tuple(merged)
+
+
 def frame_coverage_evidence(
     geometry: FrameSequenceSolution,
     cache: MeasurementCache,
@@ -103,11 +124,27 @@ def frame_coverage_evidence(
         holder,
         content_configuration,
     )
+    workspace_content = cached_content_region_observation(
+        cache,
+        Box(
+            0,
+            0,
+            cache.gray_work.shape[1],
+            cache.gray_work.shape[0],
+        ),
+        content_configuration,
+    )
     return FrameCoverageEvidence(
         holder_long_axis_interval=(holder.left, holder.right),
         frame_slot_intervals=frame_intervals,
-        content_runs=content.reliable_runs,
-        content_position_uncertainty_px=content.position_uncertainty_px,
+        content_runs=_merged_reliable_content_runs(
+            (content, workspace_content),
+            holder,
+        ),
+        content_position_uncertainty_px=max(
+            content.position_uncertainty_px,
+            workspace_content.position_uncertainty_px,
+        ),
     )
 
 

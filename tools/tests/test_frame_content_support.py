@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
 import numpy as np
 
@@ -28,7 +30,10 @@ from x5crop.detection.evidence.content import (
     internal_frame_boundaries as internal_boundary_measurements,
 )
 from x5crop.detection.evidence.content.regions import content_region_observation
-from x5crop.detection.evidence.frame_coverage import FrameCoverageEvidence
+from x5crop.detection.evidence.frame_coverage import (
+    FrameCoverageEvidence,
+    frame_coverage_evidence,
+)
 from x5crop.detection.physical.model import (
     BoundaryAnchor,
     BoundaryRoleAuthority,
@@ -218,6 +223,42 @@ def _measured_overlap_slots(*, width_pattern_roles: bool):
 
 
 class FrameContentSupportTest(unittest.TestCase):
+    def test_full_workspace_content_can_refute_a_clipped_holder_sequence(
+        self,
+    ) -> None:
+        holder = Box(10, 0, 300, 100)
+        geometry = SimpleNamespace(
+            holder_safety=SimpleNamespace(box=holder),
+            frame_crop_envelopes=(
+                SimpleNamespace(box=Box(10, 0, 250, 100)),
+            ),
+        )
+        cache = SimpleNamespace(gray_work=np.zeros((100, 310), dtype=np.uint8))
+        holder_content = ContentRegionObservation(
+            holder,
+            ((50, 200),),
+            5,
+        )
+        workspace_content = ContentRegionObservation(
+            Box(0, 0, 310, 100),
+            ((270, 300),),
+            5,
+        )
+
+        with patch(
+            "x5crop.detection.evidence.frame_coverage."
+            "cached_content_region_observation",
+            side_effect=(holder_content, workspace_content),
+        ):
+            evidence = frame_coverage_evidence(
+                geometry,
+                cache,
+                ContentConfiguration(),
+            )
+
+        self.assertEqual(evidence.state, EvidenceState.CONTRADICTED)
+        self.assertEqual(evidence.uncovered_content, ((270, 300),))
+
     def test_content_continuity_identity_includes_local_physical_inputs(
         self,
     ) -> None:

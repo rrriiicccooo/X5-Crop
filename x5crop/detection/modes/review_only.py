@@ -11,6 +11,8 @@ from ..physical.model import (
     SequenceResiduals,
 )
 from ..physical.frame_dimensions import frame_dimension_priors
+from ..evidence.content.regions import cached_content_region_observation
+from ...domain import Box
 
 
 def unresolved_dual_lane_candidate(
@@ -25,6 +27,16 @@ def unresolved_dual_lane_candidate(
     scope = frame_sequence_search_scope(
         context.measurement_cache,
         context.configuration.boundary_path,
+        cached_content_region_observation(
+            context.measurement_cache,
+            Box(
+                0,
+                0,
+                context.measurement_cache.gray_work.shape[1],
+                context.measurement_cache.gray_work.shape[0],
+            ),
+            context.configuration.content,
+        ),
     )
     count = physical_spec.strip.default_count
     dimensions = frame_dimension_priors(
