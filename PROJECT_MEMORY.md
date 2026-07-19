@@ -2,142 +2,117 @@
 
 Updated / 更新：2026-07-19
 
-This file is the rolling, cross-session checkpoint for the current long-running
-task. It is a map, not an instruction source or proof. Read it only when the user
-explicitly resumes or updates this task; current user intent, tracked files,
-reports, Debug Analysis, and command output remain authoritative.
+This file is the concise cross-session checkpoint for the current long-running task. It is
+a map, not an instruction source or completion proof. Current user intent, Git, source,
+original TIFFs, manual references, current reports, Debug Analysis, and command output remain
+authoritative.
 
-本文件是当前长任务的跨会话滚动检查点，不是指令来源或证据。只有在用户明确恢复或更新本任务时
-才读取；当前用户意图、受跟踪文件、报告、Debug Analysis 和命令输出始终优先。
+本文件是当前长任务的简短跨会话检查点，不是指令来源或完成证明。当前用户目标、Git、源码、
+原 TIFF、人工 reference、current report、Debug Analysis 与现场命令始终优先。
 
-## Checkpoint / 检查点
+## Frozen Checkpoint / 冻结检查点
 
 - Branch / 分支：`main`.
-- Pre-migration base / 迁移前基线：`dda0e33a`.
-- Resume baseline / 恢复基线：使用包含本文件的当前提交；先运行 `git log -1 --oneline` 和
-  `git status --short` 确认，不依赖这里保存的旧提交号。
-- State / 状态：Shared Short Axis / Frame Slot 破坏性迁移已经进入受跟踪源码、测试、报告、
-  Debug 和文档；broad-uncertainty common-width contributor 分组合同已经补齐。Auditability /
-  Ownership Gate 十一个 behavior-neutral waves 已建立独立的 measurement-interval、common-width、search graph /
-  reachability / budget、candidate state / physical Pareto，以及 assignment-consensus canonical
-  owners；candidate-specific separator assignment、boundary-role corroboration 与 candidate
-  physical resolution（含唯一 gray-path assignment）也已有唯一 owner；blank/occlusion /
-  completion 现在统一由既有 `sequence_completion.py` 拥有，typed outcome 与最终物理结果事实
-  则由 `frame_sequence_result.py` 拥有。candidate construction 现在由
-  `frame_sequence_construction.py` 单独拥有，`solve_frame_sequence` 已收敛为薄编排 facade；
-  Phase 2 ownership gate 的结构迁移已完成，但剩余物理收口、完整样片复核、性能对比和
-  双轮架构审计尚未完成，不得称为架构或物理闭环。
-- Safety / 安全：不得 reset、restore 或恢复旧 `PhotoAperture`、旧 sequence solver、旧 schema
-  或任何兼容层；不要把当前检查点误称为物理或架构闭环。
+- Candidate / 候选提交：`a6d3295c` (`fix: reject unobservable frame geometry`), pushed to
+  `origin/main`.
+- Worktree / 工作树：tracked files were clean immediately after that push; local `Test/`
+  references and generated diagnostics are intentionally ignored and untracked.
+- Canonical verifier / 唯一验证入口：`tools/verify full` passed twice at this candidate
+  (direct run and push hook): 797 tests, 14 format/mode configuration pairs, V4.9.
+- Resume by checking `git log -1 --oneline`, `git status --short`, and current reports; do not
+  assume this snapshot is still current. / 恢复时先核对当前提交、工作树和报告，不把本快照当作
+  现场事实。
 
-## Durable Decisions / 长期决定
+## Closed Work / 已关闭工作
 
-- One shared safe short-axis span is resolved for the strip; the global solver
-  then resolves ordered frame slots and their long-axis boundaries.
-- Gray paths and separator bands are count-independent observations. Geometry
-  support, search state, candidate assessment, final decision, output protection,
-  report, and debug remain separate authorities.
-- One blank slot may be inferred only from a uniquely solved complete sequence.
-  Missing content, blank appearance, and repeated width are never independent
-  proof and never move measured real-frame edges.
-- Search budgets and hints do not prove geometry. Ambiguity remains typed
-  unresolved; physical Pareto replaces weighted residual scoring.
-- Cache only exact count/offset-independent measurements. Named TIFFs, current
-  reports, and Debug Analysis outrank aggregate PASS counts.
+- The protected dirty graph-witness and cross-axis continuity work was confirmed as two
+  independent physical classes, verified, committed, and pushed separately.
+- Graph search now preserves complete physical alternatives, separator cross-axis support
+  preserves a continuous qualifying component, and frame-scale identities retain their
+  anchor facts.
+- `pass_X5_00006` and the file now classified as
+  `Test/135/full/unknown_X5_00038.tif` no longer expose resolved-wrong/exportable geometry.
+  The user explicitly classifies 00038 as `unknown`, not `pass`.
+- The complete manual-reference audit added 111 geometry references for 113 TIFFs; the two
+  `review_required` samples intentionally have no geometry reference. Current local data pass:
 
-- 每条片条先解析一个共享安全短轴，再由全局 solver 联合解析有序 frame slots 和长轴边界。
-- 灰度路径与 separator band 是独立观测；几何、搜索、候选评估、最终决定、输出保护、报告和
-  Debug 的权限彼此分离。
-- 只有完整序列唯一成立时才允许推导一个空白 slot；缺少内容、空白外观和重复宽度都不是独立
-  证明，也不能移动真实实测边界。
-- 搜索预算和 hint 不能证明几何；歧义保持 typed unresolved，以物理 Pareto 代替加权残差评分。
+  ```bash
+  python3 -m tools.regression.sample_expectations \
+    Test/sample_expectations.jsonl \
+    Test/frame_slot_references.jsonl \
+    Test
+  ```
 
-## Verification State / 验证状态
+- The first all-sample baseline at `d798898e` produced 113 current reports with zero runtime
+  failures, 32 `approved_auto`, 81 `REVIEW`, and no outputs. Manual comparison found 21
+  conforming resolved results, 79 typed unresolved results, and 11 resolved-wrong results.
+- `a6d3295c` adds two current-only resolution contracts: every ordinary multi-slot width must
+  intersect the supported common frame width, and nominal geometry outside the acquired
+  workspace canvas cannot be resolved even through holder occlusion. Focused reruns confirmed
+  all 11 formerly resolved-wrong samples now remain typed, non-exportable `REVIEW`; the full
+  113-sample rerun is still pending and must not be inferred from focused evidence.
 
-- Fresh checkpoint verification / 当前检查点新验证：`tools/verify full` passed on 2026-07-19
-  with 764 unit/contract tests, 14 format/mode configuration pairs, compile,
-  macOS shell syntax, diff hygiene, release-package construction, and version
-  checks. Confirm the current commit and clean status at resume time.
-- The verifier proves source and contract consistency only. It does not prove
-  named-sample geometry, performance closure, visual Debug correctness, or the
-  two required architecture audits.
-- `tools.tests.test_sample_expectation_contract` verifies loader/contract code;
-  it does not validate the ignored local `Test/sample_expectations.jsonl` data.
-  The current local record for `pass_X5_00038.tif` still lacks its required own
-  geometry reference and must be repaired from real evidence before that dataset
-  can be called validated.
+- 已保护的 graph witness 与 cross-axis dirty work 属于两个独立物理类别，已分别验证、提交并
+  推送；search alternatives、连续 cross-axis support 与 anchor-backed frame-scale identity 已收口。
+- `pass_X5_00006` 与现已分类为 `unknown_X5_00038.tif` 的样片不再报告 resolved-wrong 或
+  exportable geometry；00038 的用户事实是 `unknown`。
+- 本地 113 张 TIFF 已有 111 条人工 geometry reference；两张 `review_required` 样片按设计无
+  reference。`d798898e` 全量基线有 0 runtime failure、32 auto approval、81 REVIEW、0 output，
+  人工比较为 21 matched、79 unresolved、11 violated。
+- `a6d3295c` 已把这 11 个 violated 样片逐一降为 typed、不可导出的 REVIEW；仍必须用该冻结提交
+  重跑全部 113 张，不能从局部结果外推全量通过。
 
-- 当前 `tools/verify full` 已通过 764 项 unit/contracts、14 组配置、compile、macOS shell syntax、
-  diff hygiene、发布包构建和版本检查；它仍不能证明具名样片几何、性能闭环、Debug 视觉正确性或
-  两轮架构审计。
-- sample-expectation 单元测试只验证加载器和契约代码；当前本地 `pass_X5_00038.tif` 记录仍缺少
-  必需的自身 geometry reference，在获得真实证据前不得称该本地数据集已验证。
+## Frozen Physical Rules / 冻结物理权限
 
-## Remaining Physical Work / 未完成物理工作
+- Geometry, evidence, CandidateGate, GeometryResolution, selection, DecisionGate, output
+  protection, report, and Debug remain separate one-way authorities.
+- Hints, budgets, scores, blank appearance, repeated widths, grids, and self-consistent
+  geometry are not physical proof. Budget exhaustion is typed unavailable.
+- Common width comes only from intersecting independent measurements. Separator assignments
+  are candidate-specific and preserve topology, cross-axis continuity, signed spacing, and
+  provenance.
+- At most one blank slot may be derived from a unique complete sequence. Holder occlusion is
+  endpoint-only and cannot resolve unobservable geometry outside the acquired canvas.
+- Only exact count/offset-independent measurements may be cached. Unresolved or provisional
+  geometry is never exportable, including under `--export-review`.
 
-- `pass_X5_00007`: sequence proof unavailable and output protection unresolved.
-- `pass_X5_00013`, `pass_X5_00018`, `pass_X5_00019`, `pass_X5_00032`:
-  assignment consensus remains unresolved. The focused `00018` contract now
-  rejects a broad width interval that would bridge mutually incompatible narrow
-  contributor groups, but the current selected geometry still has four distinct
-  assignments and therefore correctly remains non-exportable.
-- `pass_X5_00031`: common frame width and frame slots remain unresolved.
-- Representative geometry that looks visually correct is not enough when another
-  non-dominated, weaker dimension-heavy explanation remains.
+- 几何、evidence、各 gate、selection、output、report 与 Debug 权限单向分离；hint、budget、
+  score、blank appearance、重复宽度、grid 和几何自洽都不是物理证明。
+- common width 只来自相交的独立实测；separator 必须保持 candidate-specific topology、连续性、
+  signed spacing 与 provenance。最多推导一个唯一完整序列中的 blank；holder occlusion 只能在
+  端点，且不能解决画布外不可观测几何。任何 unresolved/provisional geometry 永不导出。
 
-- Phase 1 and all eleven Phase 2 ownership waves were behavior-neutral on the
-  same six frozen samples (`00007/13/18/19/31/32`): every adjacent current-schema
-  comparison had zero report diffs and all six Debug Analysis JPEGs were
-  byte-identical. The latest fresh visual inspection kept all six `REVIEW` /
-  non-exportable; `00018` and `00031` still show incomplete provisional geometry
-  and must not be upgraded.
-- The Phase 2 closing verifier passed 757 tests and 14 configuration pairs at
-  V4.9; this was structural evidence only, not named-sample physical closure.
-- Phase 3 found a real provenance-authority violation in current reports: 55
-  derived facts repeated their own root measurement in dependencies. The first
-  physical wave now rejects that state at the canonical type, removes all runtime
-  and fixture residue, and produces zero cyclic provenances. The six frozen
-  samples retain zero canonical report diffs, byte-identical Debug Analysis, and
-  their prior `REVIEW` / non-exportable decisions. The full verifier now passes
-  759 tests and 14 configuration pairs. Current-report validation also rejects
-  one `ObservationId` carrying conflicting provenance; all six fresh reports pass
-  that identity check with no collisions. The separator-feasibility audit also
-  closed a representable contradiction where an assigned hard separator could
-  coexist with geometry-hypothesis spacing: final sequence identity now requires
-  matching positive observed spacing with the same band provenance. It also
-  rejects cross-axis separator support measured on any span other than the
-  strip's exact shared short axis. Holder occlusion is now final-identity checked
-  as positive-width endpoint-only geometry; zero-width, wrong-side, and interior
-  states are rejected. Content overlap corroboration now requires both boundary
-  roles to be independently physical, so repeated-width roles cannot acquire
-  output-protection authority. The six frozen reports still have zero canonical
-  diffs and their Debug Analysis files remain byte-identical.
+## Performance Baseline / 性能基线
 
-以上样片仍需当前报告和 Debug Analysis 逐张复核；肉眼正确的代表解不能覆盖仍存在的非支配、
-dimension-heavy 替代解释。
+- The frozen diagnostic baseline identified
+  `Test/half/partial/pass_X5_00001.tif` as the long tail: 359.16 seconds and 933,677 assignment
+  evaluations at `d798898e` with `--deskew off --diagnostics`.
+- This is profiling evidence, not a current `a6d3295c` measurement. Before performance edits,
+  rerun the same sample and record wall/detection time, candidate builds, repeated
+  measurements, cache statistics, assignment evaluations, and the actual call-stack hotspot.
+- Only exact reuse/deduplication, interval or anchor pruning, branch-and-bound, delayed blank
+  branching, and focused ordering are legal. Performance, budget, Gate, or confidence must not
+  change physical authority.
 
 ## Next Actions / 下一步
 
-1. Continue Phase 3 with physical Pareto, consensus, and search
-   completeness; CandidateGate, GeometryResolution, selection, and DecisionGate;
-   FrameCropEnvelope, user bleed, local overlap protection; and current
-   report/debug/cache/output truth.
-2. For each demonstrated violation, first add and confirm a minimal failing
-   contract, then repair the canonical owner and remove the whole residue class.
-   Keep unresolved geometry typed unavailable/REVIEW.
-3. After each green physical wave, recheck current-schema reports and relevant
-   Debug Analysis before committing and pushing.
-4. Then finish all format-mode sample contracts, fixed-sample performance
-   comparison, and Test/test 2.
-5. Audit active runtime, tests, fixtures, helpers, reports, and Debug twice with
-   the same frozen checklist: forward Audit A, then a fresh-context reverse-order
-   Audit B.
-6. Only after physical validation and both audits, update the rolling checkpoint,
-   docs, commit, and push. Never manufacture PASS from unresolved geometry.
+1. Profile the fixed `half/partial/pass_X5_00001.tif` sample at the current frozen commit and
+   add a failing performance/residue contract before any optimization.
+2. Re-profile after each legal optimization wave; run focused contracts, `tools/verify full`,
+   named reports, reference comparison, and Debug Analysis before an independent commit/push.
+3. Rerun all 113 TIFFs from a clean frozen commit. Require zero runtime/schema failure, zero
+   resolved-wrong, zero unresolved export, zero wrong automatic export, and no pass-required
+   budget exhaustion.
+4. Rebuild stale `Test/test 2` only after physical and performance candidates freeze. Preserve
+   `Test/test 1`; include terminal manifest, current reports, Debug Analysis, summaries,
+   reference/proof validation, runtime/solver/budget/cache metrics, and test-1 comparison.
+5. Start Audit A only from a clean verified pushed candidate. Any root fix invalidates it and
+   requires a fresh forward audit. After zero known violations, prepare a context-independent
+   reverse-order Audit B prompt for a new Codex task; do not execute Audit B in this task.
 
-1. Phase 3 继续核对 Pareto/consensus/search completeness、
-   gates/selection/decision、crop/bleed/protection 以及 report/debug/cache/output truth。
-2. 每发现一类违规，先增加并确认最小失败合同，再修复 canonical owner 并清理整类残留；
-   未解决几何保持 typed unavailable/REVIEW。
-3. 每个绿色物理 wave 都要复核 current-schema report 与相关 Debug，完整验证后独立提交并推送。
-4. 之后完成全格式样片合同、性能、Test/test 2 与双轮审计；只有全部完成后才能宣称闭环。
+1. 在当前冻结提交上重新剖析固定最慢样片；任何优化前先增加能失败的性能/残留合同。
+2. 每轮只做合法优化，并复核合同、全量 verifier、具名 report/reference 与 Debug 后独立提交推送。
+3. clean frozen commit 上重跑 113 张，要求 0 runtime/schema failure、0 resolved-wrong、
+   0 unresolved export、0 wrong automatic export，且 pass-required 不得 budget exhausted。
+4. 物理与性能冻结后才重建旧 `Test/test 2`，再从 clean pushed candidate 执行 Audit A；Audit B
+   只留下全新任务 prompt，不在本任务中执行。
