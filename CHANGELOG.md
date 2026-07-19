@@ -27,6 +27,13 @@ the validation evidence.
   Real-sample expectations now record manual geometry reference, independent-proof
   expectation for allowed grayscale observations, and automatic-decision expectation
   separately; filename prefixes own dataset intent only and are no longer decision oracles.
+- 新的 real-sample validator 对齐仓库相对人工记录与 runtime 绝对 source，并把 current report
+  判定为 conforming、capability gap、evidence-contract conflict 或 physical violation；
+  unresolved export、resolved-wrong、review-required 自动通过和 runtime/schema failure 均不能
+  被标签掩盖。 / A new real-sample validator aligns repository-relative manual records with
+  absolute runtime sources and classifies each current report as conforming, a capability
+  gap, an evidence-contract conflict, or a physical violation; labels cannot hide unresolved
+  export, resolved-wrong geometry, review-required auto approval, or runtime/schema failure.
 - `MeasurementProvenance` 现在拒绝 root 同时出现在 dependencies 中；content、
   frame geometry、photo-edge role、spacing 和 dual-lane containment 的派生路径已清理同类
   自循环。 / `MeasurementProvenance` now rejects its root appearing again in

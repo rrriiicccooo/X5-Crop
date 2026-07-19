@@ -99,11 +99,11 @@ def _analysis_identity(
     }
 
 
-def _record() -> dict:
+def _record(source: str = "input.tif") -> dict:
     return report_record_for_final_detection(
         final_detection_fixture(),
         selection_fixture(),
-        source="input.tif",
+        source=source,
         profile=typed_read_model(_profile()),
         workspace_identity=WorkspaceIdentity(WorkspaceExtent(310, 100), "0" * 64),
         output_files=[],
@@ -114,7 +114,7 @@ def _record() -> dict:
         ),
         resolution_metadata=unavailable_resolution_metadata_fixture(),
         transform_geometry=transform_geometry_fixture(),
-        analysis_identity=_analysis_identity(),
+        analysis_identity=_analysis_identity(source_name=Path(source).name),
     )
 
 

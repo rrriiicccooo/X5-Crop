@@ -13,6 +13,7 @@ from tools.regression.frame_slot_reference import (
     FrameSlotReference,
     load_frame_slot_references,
 )
+from tools.regression.sample_identity import canonical_sample_source
 from x5crop.formats import FORMATS
 from x5crop.strip_modes import FULL, PARTIAL
 
@@ -221,23 +222,32 @@ def validate_sample_dataset(
     expectations: tuple[SampleExpectation, ...],
     references: tuple[FrameSlotReference, ...],
     sample_paths: Iterable[Path],
+    *,
+    workspace_root: Path | None = None,
 ) -> None:
+    root = Path.cwd() if workspace_root is None else workspace_root
     expectation_by_source = {
-        expectation.source: expectation for expectation in expectations
+        canonical_sample_source(expectation.source, root): expectation
+        for expectation in expectations
     }
     if len(expectation_by_source) != len(expectations):
         raise ValueError("sample expectation sources must be unique")
-    sample_sources = tuple(path.as_posix() for path in sample_paths)
+    sample_sources = tuple(
+        canonical_sample_source(path, root) for path in sample_paths
+    )
     if len(sample_sources) != len(set(sample_sources)):
         raise ValueError("sample file sources must be unique")
     if set(sample_sources) != set(expectation_by_source):
         raise ValueError("sample files and expectations must match exactly")
 
-    reference_by_source = {reference.source: reference for reference in references}
+    reference_by_source = {
+        canonical_sample_source(reference.source, root): reference
+        for reference in references
+    }
     if len(reference_by_source) != len(references):
         raise ValueError("frame-slot reference sources must be unique")
     required_references = {
-        expectation.geometry_reference
+        canonical_sample_source(expectation.geometry_reference, root)
         for expectation in expectations
         if expectation.geometry_reference is not None
     }
@@ -257,7 +267,7 @@ def validate_sample_dataset(
             raise ValueError("expected count and geometry reference count differ")
 
 
-def _sample_paths(root: Path) -> tuple[Path, ...]:
+def discover_sample_paths(root: Path) -> tuple[Path, ...]:
     return tuple(
         sorted(
             path
@@ -278,7 +288,11 @@ def main(argv: list[str] | None = None) -> int:
 
     expectations = load_sample_expectations(args.expectations)
     references = load_frame_slot_references(args.references)
-    validate_sample_dataset(expectations, references, _sample_paths(args.sample_root))
+    validate_sample_dataset(
+        expectations,
+        references,
+        discover_sample_paths(args.sample_root),
+    )
     print(
         f"samples={len(expectations)} references={len(references)} "
         "expectations=valid"

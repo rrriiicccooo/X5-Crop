@@ -223,6 +223,18 @@ class SampleExpectationContractTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             validate_sample_dataset((expectation,), (reference,), (source, Path("extra.tif")))
 
+    def test_dataset_identity_resolves_relative_records_against_workspace(self) -> None:
+        workspace_root = Path("/project")
+        expectation = sample_expectation_from_record(_record(expected_count=1))
+        reference = _reference(expectation.source)
+
+        validate_sample_dataset(
+            (expectation,),
+            (reference,),
+            (workspace_root / expectation.source,),
+            workspace_root=workspace_root,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

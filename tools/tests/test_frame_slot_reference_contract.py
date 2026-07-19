@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import replace
+from pathlib import Path
 import unittest
 
 from tools.regression.frame_slot_reference import (
@@ -70,7 +71,7 @@ def _reference_record(report: dict) -> dict:
     }
 
 
-def _unresolved_record() -> dict:
+def _unresolved_record(source: str = "input.tif") -> dict:
     selection = selection_fixture()
     selection = replace(
         selection,
@@ -97,7 +98,7 @@ def _unresolved_record() -> dict:
     return report_record_for_final_detection(
         detection,
         selection,
-        source="input.tif",
+        source=source,
         profile=typed_read_model(_profile()),
         workspace_identity=WorkspaceIdentity(WorkspaceExtent(310, 100), "0" * 64),
         output_files=[],
@@ -108,11 +109,26 @@ def _unresolved_record() -> dict:
         ),
         resolution_metadata=unavailable_resolution_metadata_fixture(),
         transform_geometry=transform,
-        analysis_identity=_analysis_identity(),
+        analysis_identity=_analysis_identity(source_name=Path(source).name),
     )
 
 
 class FrameSlotReferenceContractTest(unittest.TestCase):
+    def test_workspace_relative_reference_matches_absolute_report_source(self) -> None:
+        workspace_root = Path("/project")
+        relative_source = "Test/135/partial/pass_X5_99990.tif"
+        report = _record(str(workspace_root / relative_source))
+        reference_record = _reference_record(report)
+        reference_record["source"] = relative_source
+
+        result = compare_report_to_reference(
+            report,
+            frame_slot_reference_from_record(reference_record),
+            workspace_root=workspace_root,
+        )
+
+        self.assertEqual(result.outcome, ReferenceValidationOutcome.MATCHED)
+
     def test_resolved_frame_slots_match_manual_intervals(self) -> None:
         report = _record()
         reference = frame_slot_reference_from_record(_reference_record(report))

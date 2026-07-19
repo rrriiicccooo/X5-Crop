@@ -9,6 +9,7 @@ import json
 from pathlib import Path
 from typing import Any, Iterable
 
+from tools.regression.sample_identity import canonical_sample_source
 from x5crop.domain import PixelInterval
 from x5crop.report.validation import validate_current_report_record
 
@@ -176,9 +177,14 @@ def _interval_inside(actual: PixelInterval, accepted: PixelInterval) -> bool:
 def compare_report_to_reference(
     report: dict[str, Any],
     reference: FrameSlotReference,
+    *,
+    workspace_root: Path | None = None,
 ) -> ReferenceValidationResult:
     validate_current_report_record(report)
-    if report["source"] != reference.source:
+    root = Path.cwd() if workspace_root is None else workspace_root
+    if canonical_sample_source(
+        report["source"], root
+    ) != canonical_sample_source(reference.source, root):
         raise ValueError("report and frame-slot reference sources differ")
     if report["selection"]["geometry_resolution"]["state"] != "supported":
         return ReferenceValidationResult(
@@ -223,8 +229,13 @@ def compare_report_to_reference(
     )
 
 
-def _load_report_rows(paths: Iterable[Path]) -> dict[str, dict[str, Any]]:
-    reports: dict[str, dict[str, Any]] = {}
+def load_current_report_rows(
+    paths: Iterable[Path],
+    *,
+    workspace_root: Path | None = None,
+) -> dict[Path, dict[str, Any]]:
+    root = Path.cwd() if workspace_root is None else workspace_root
+    reports: dict[Path, dict[str, Any]] = {}
     for path in paths:
         with path.open("r", encoding="utf-8") as handle:
             for line in handle:
@@ -232,7 +243,7 @@ def _load_report_rows(paths: Iterable[Path]) -> dict[str, dict[str, Any]]:
                     continue
                 report = json.loads(stripped)
                 validate_current_report_record(report)
-                source = str(report["source"])
+                source = canonical_sample_source(str(report["source"]), root)
                 if source in reports:
                     raise ValueError(f"duplicate report source: {source}")
                 reports[source] = report
@@ -247,13 +258,25 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("reports", nargs="+", type=Path)
     args = parser.parse_args(argv)
     references = load_frame_slot_references(args.reference)
-    reports = _load_report_rows(args.reports)
+    workspace_root = Path.cwd()
+    reports = load_current_report_rows(
+        args.reports,
+        workspace_root=workspace_root,
+    )
     results: list[ReferenceValidationResult] = []
     for reference in references:
-        report = reports.get(reference.source)
+        report = reports.get(
+            canonical_sample_source(reference.source, workspace_root)
+        )
         if report is None:
             raise ValueError(f"missing report for reference: {reference.source}")
-        results.append(compare_report_to_reference(report, reference))
+        results.append(
+            compare_report_to_reference(
+                report,
+                reference,
+                workspace_root=workspace_root,
+            )
+        )
     for result in results:
         print(f"{result.outcome.value}: {result.source}")
         for violation in result.violations:

@@ -20,6 +20,7 @@ STANDALONE_TOOL_ROOTS = frozenset(
         "tools.build_standalone",
         "tools.regression.frame_slot_reference",
         "tools.regression.sample_expectations",
+        "tools.regression.sample_validation",
         "tools.regression.compare",
     }
 )
