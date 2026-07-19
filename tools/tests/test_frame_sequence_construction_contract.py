@@ -221,7 +221,6 @@ class FrameSequenceConstructionContractTest(unittest.TestCase):
             search_space.recurring_width_hypotheses[0],
             separator_aligned,
         )
-
     def test_separator_run_width_is_search_only_until_slots_are_bound(self) -> None:
         search_scope = scope(
             width=440,
@@ -420,6 +419,121 @@ class FrameSequenceConstructionContractTest(unittest.TestCase):
 
         self.assertEqual(incumbent_inputs[0], 0)
         self.assertTrue(all(value == 4 for value in incumbent_inputs[1:]))
+
+    def test_later_separator_incumbent_does_not_delete_raw_builds(
+        self,
+    ) -> None:
+        class Build:
+            __hash__ = object.__hash__
+
+            def __init__(self, supported_separator_count: int) -> None:
+                self.objectives = SimpleNamespace(
+                    supported_separator_count=supported_separator_count,
+                )
+
+        search_scope = scope(
+            width=220,
+            height=100,
+            leading=0.0,
+            trailing=220.0,
+            top=0.0,
+            bottom=100.0,
+            holder_sides=_ALL_HOLDER_SIDES,
+        )
+        plan = shared_short_axis_plan(search_scope)
+        prepared_search_index = sequence_search_index(
+            search_scope,
+            (separator(100.0, 110.0, plan, supported=True),),
+        )
+        earlier_width = PixelInterval.exact(120.0)
+        separator_width = PixelInterval.exact(100.0)
+        search_space = construction._MeasuredFrameSearchSpace(
+            leading_candidates=(),
+            trailing_candidates=(),
+            observed_constraints=(),
+            width_hypotheses=(),
+            recurring_width_hypotheses=(
+                width_resolution.RecurringBoundaryWidthHypothesis(
+                    earlier_width,
+                    2,
+                ),
+                width_resolution.RecurringBoundaryWidthHypothesis(
+                    separator_width,
+                    2,
+                ),
+            ),
+        )
+
+        def measured_builds(*args, **kwargs):
+            width = args[6][0]
+            return (
+                (Build(1 if width == separator_width else 0),),
+                1,
+                False,
+            )
+
+        def supported_separator_incumbent(builds, _visible_content):
+            return max(
+                (
+                    build.objectives.supported_separator_count
+                    for build in builds
+                ),
+                default=0,
+            )
+
+        with (
+            patch.object(
+                construction,
+                "_measured_frame_search_space",
+                return_value=search_space,
+            ),
+            patch.object(
+                construction,
+                "_dimension_frame_constraints",
+                return_value=(SimpleNamespace(),),
+            ),
+            patch.object(
+                construction,
+                "_canonical_measured_frame_constraints",
+                return_value=(SimpleNamespace(),),
+            ),
+            patch.object(
+                construction,
+                "_complete_separator_sequence_builds_dominate_dimension_inference",
+                return_value=False,
+            ),
+            patch.object(
+                construction,
+                "_supported_separator_incumbent",
+                side_effect=supported_separator_incumbent,
+            ),
+            patch.object(
+                construction,
+                "_measured_builds_for_options",
+                side_effect=measured_builds,
+            ),
+        ):
+            builds, _, _ = construction._measured_path_builds(
+                search_scope,
+                prepared_search_index,
+                (plan.span,),
+                (separator_width,),
+                separator_width,
+                2,
+                content(width=220, height=100),
+                100,
+                (),
+                physical_scale_constraint=None,
+                allow_nominal_slot_sized_gap=False,
+            )
+
+        self.assertEqual(
+            {
+                build.objectives.supported_separator_count
+                for build in builds
+            },
+            {0, 1},
+        )
 
     def test_separator_incumbent_prevents_raw_seed_fallback(self) -> None:
         class Build:

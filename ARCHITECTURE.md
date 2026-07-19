@@ -243,9 +243,12 @@ physical contracts target the canonical module directly.
 Construction preserves its frame-width-focused recurring-hypothesis order when no supported
 internal separator seed exists. Separator-backed searches retain canonical contributor priority;
 this is execution ordering only, deletes no physical hypothesis, and cannot change proof or
-budget authority. / 没有 supported internal separator seed 时，construction 保留其
-frame-width-focused recurring-hypothesis 顺序；separator-backed 搜索仍使用 canonical
-contributor 优先级。这只是执行顺序，不删除物理 hypothesis，也不改变 proof 或 budget 权限。
+budget authority. Raw builds remain available because later common-width resolution and unique
+observation assignment can change their final physical roles. / 没有 supported internal
+separator seed 时，construction 保留其 frame-width-focused recurring-hypothesis 顺序；
+separator-backed 搜索仍使用 canonical contributor 优先级。这只是执行顺序，不删除
+物理 hypothesis，也不改变 proof 或 budget 权限。Raw build 必须保留，因为后续
+common-width resolution 与 unique observation assignment 仍可改变其最终物理角色。
 
 Frame-sequence 证明代码按显式 owner 划分，不再把单个 solver 文件视为全部生命周期概念的共同
 owner。当前 measurement interval 只由 `frame_sequence_measurements.py` 拥有，common-width
