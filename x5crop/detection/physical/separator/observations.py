@@ -269,9 +269,16 @@ def _cross_axis_support_is_continuous(
     supported_rows = np.flatnonzero(mask)
     if supported_rows.size < minimum_supported_rows:
         return False
-    internal_breaks = np.diff(supported_rows) - 1
-    longest_break = int(internal_breaks.max()) if internal_breaks.size else 0
-    return longest_break <= maximum_break_rows
+    component_support = 1
+    for internal_break in np.diff(supported_rows) - 1:
+        component_support = (
+            1
+            if int(internal_break) > maximum_break_rows
+            else component_support + 1
+        )
+        if component_support >= minimum_supported_rows:
+            return True
+    return component_support >= minimum_supported_rows
 
 
 def _unavailable_cross_axis_path(

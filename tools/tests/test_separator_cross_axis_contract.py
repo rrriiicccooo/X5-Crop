@@ -664,6 +664,17 @@ class SeparatorCrossAxisContractTest(unittest.TestCase):
 
         self.assertTrue(continuity(support, 3, 50))
 
+    def test_distant_noise_does_not_refute_a_continuous_supported_component(
+        self,
+    ) -> None:
+        continuity = separator_observations._cross_axis_support_is_continuous
+        support = np.array(
+            [True] * 70 + [False] * 29 + [True],
+            dtype=bool,
+        )
+
+        self.assertTrue(continuity(support, 3, 50))
+
     def test_isolated_short_path_cannot_prove_cross_axis_continuity(self) -> None:
         continuity = separator_observations._cross_axis_support_is_continuous
         support = np.array(
