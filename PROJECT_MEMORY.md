@@ -13,12 +13,12 @@ authoritative.
 ## Frozen Checkpoint / 冻结检查点
 
 - Branch / 分支：`main`.
-- Candidate / 候选提交：`a6d3295c` (`fix: reject unobservable frame geometry`), pushed to
+- Candidate / 候选提交：`ba408749` (`perf: focus unseeded dimension searches`), pushed to
   `origin/main`.
 - Worktree / 工作树：tracked files were clean immediately after that push; local `Test/`
   references and generated diagnostics are intentionally ignored and untracked.
-- Canonical verifier / 唯一验证入口：`tools/verify full` passed twice at this candidate
-  (direct run and push hook): 797 tests, 14 format/mode configuration pairs, V4.9.
+- Canonical verifier / 唯一验证入口：`tools/verify full` passed before commit and again in the
+  push hook at this candidate: 798 tests, 14 format/mode configuration pairs, V4.9.
 - Resume by checking `git log -1 --oneline`, `git status --short`, and current reports; do not
   assume this snapshot is still current. / 恢复时先核对当前提交、工作树和报告，不把本快照当作
   现场事实。
@@ -51,6 +51,15 @@ authoritative.
   workspace canvas cannot be resolved even through holder occlusion. Focused reruns confirmed
   all 11 formerly resolved-wrong samples now remain typed, non-exportable `REVIEW`; the full
   113-sample rerun is still pending and must not be inferred from focused evidence.
+- `a8de0539` materializes each count-local graph fallback order once; `ba408749` preserves the
+  construction-owned, frame-width-focused recurring order when there is no supported internal
+  separator seed. Both changes reuse and reorder the complete physical search space; neither
+  deletes hypotheses nor changes proof, Gate, or budget authority.
+- Current named diagnostics at `ba408749` keep `pass_X5_00006` and
+  `unknown_X5_00038` unresolved and non-exportable. Representative
+  `120-66/partial/pass_X5_00005` and `half/full/pass_X5_00001` also remain unresolved and
+  non-exportable; both still expose typed `execution_budget_exhausted`, so the performance phase
+  is not closed.
 
 - 已保护的 graph witness 与 cross-axis dirty work 属于两个独立物理类别，已分别验证、提交并
   推送；search alternatives、连续 cross-axis support 与 anchor-backed frame-scale identity 已收口。
@@ -61,6 +70,11 @@ authoritative.
   人工比较为 21 matched、79 unresolved、11 violated。
 - `a6d3295c` 已把这 11 个 violated 样片逐一降为 typed、不可导出的 REVIEW；仍必须用该冻结提交
   重跑全部 113 张，不能从局部结果外推全量通过。
+- `a8de0539` 复用 count-local graph fallback 顺序；`ba408749` 在没有 supported internal
+  separator seed 时保留 construction 已聚焦的 recurring-width 顺序。两者都不删 hypothesis，
+  也不改变 proof、Gate 或 budget 权限。当前具名 diagnostics 均保持 unresolved、不可导出；
+  `120-66/partial/pass_X5_00005` 与 `half/full/pass_X5_00001` 仍有 typed budget exhaustion，
+  因此性能阶段尚未关闭。
 
 ## Frozen Physical Rules / 冻结物理权限
 
@@ -84,20 +98,21 @@ authoritative.
 
 ## Performance Baseline / 性能基线
 
-- The frozen diagnostic baseline identified
-  `Test/half/partial/pass_X5_00001.tif` as the long tail: 359.16 seconds and 933,677 assignment
-  evaluations at `d798898e` with `--deskew off --diagnostics`.
-- This is profiling evidence, not a current `a6d3295c` measurement. Before performance edits,
-  rerun the same sample and record wall/detection time, candidate builds, repeated
-  measurements, cache statistics, assignment evaluations, and the actual call-stack hotspot.
-- Only exact reuse/deduplication, interval or anchor pruning, branch-and-bound, delayed blank
-  branching, and focused ordering are legal. Performance, budget, Gate, or confidence must not
-  change physical authority.
+- Frozen diagnostic / 冻结样片：`Test/half/partial/pass_X5_00001.tif`, `half/partial`,
+  horizontal, auto count, `--deskew off --diagnostics --jobs 1`.
+- `1c798dd6`: 199.28 s detection, 933,677 assignment evaluations, 11 candidates, cache 41/6.
+- `a8de0539`: 129.16 s detection with the same evaluations, candidates, and cache counts.
+- `ba408749`: 80.71 s detection, 971,842 assignment evaluations, 11 candidates, cache 41/6.
+  The selected result remains typed unresolved `REVIEW` and non-exportable. The latest ordering
+  makes useful branches earlier but does not eliminate budget exhaustion.
+- Continue from measured call-stack costs. Only exact reuse/deduplication, physically complete
+  interval or anchor pruning, branch-and-bound, delayed blank branching, and focused ordering
+  are legal; performance, budget, Gate, or confidence cannot change physical authority.
 
 ## Next Actions / 下一步
 
-1. Profile the fixed `half/partial/pass_X5_00001.tif` sample at the current frozen commit and
-   add a failing performance/residue contract before any optimization.
+1. Continue profiling the fixed `half/partial/pass_X5_00001.tif` sample from `ba408749`; add a
+   failing contract for each newly identified residue before the corresponding optimization.
 2. Re-profile after each legal optimization wave; run focused contracts, `tools/verify full`,
    named reports, reference comparison, and Debug Analysis before an independent commit/push.
 3. Rerun all 113 TIFFs from a clean frozen commit. Require zero runtime/schema failure, zero
@@ -110,7 +125,7 @@ authoritative.
    requires a fresh forward audit. After zero known violations, prepare a context-independent
    reverse-order Audit B prompt for a new Codex task; do not execute Audit B in this task.
 
-1. 在当前冻结提交上重新剖析固定最慢样片；任何优化前先增加能失败的性能/残留合同。
+1. 从 `ba408749` 继续剖析固定最慢样片；每个新残留类别都先增加失败合同，再做对应优化。
 2. 每轮只做合法优化，并复核合同、全量 verifier、具名 report/reference 与 Debug 后独立提交推送。
 3. clean frozen commit 上重跑 113 张，要求 0 runtime/schema failure、0 resolved-wrong、
    0 unresolved export、0 wrong automatic export，且 pass-required 不得 budget exhausted。
