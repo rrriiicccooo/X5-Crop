@@ -1220,6 +1220,19 @@ class FrameSequenceSearchContractTest(unittest.TestCase):
         measured_trailing, _ = separator_assignment.observed_band_edges(
             one_sided_support
         )
+        second_one_sided_support = separator(
+            225.0,
+            235.0,
+            plan,
+            leading_supported=True,
+            trailing_supported=False,
+            band_supported=True,
+        )
+        second_measured_trailing, _ = (
+            separator_assignment.observed_band_edges(
+                second_one_sided_support
+            )
+        )
         two_sided_support = separator(
             210.0,
             220.0,
@@ -1283,7 +1296,7 @@ class FrameSequenceSearchContractTest(unittest.TestCase):
             frame(inferred_edge(10.0, "measured_1_leading"), measured_trailing),
             frame(
                 inferred_edge(125.0, "measured_2_leading"),
-                inferred_edge(225.0, "measured_2_trailing"),
+                second_measured_trailing,
             ),
             frame(
                 inferred_edge(240.0, "measured_3_leading"),
@@ -1328,7 +1341,11 @@ class FrameSequenceSearchContractTest(unittest.TestCase):
             sequence_search,
             "sequence_graph_best_path",
             wraps=sequence_search.sequence_graph_best_path,
-        ) as best_path:
+        ) as best_path, patch.object(
+            sequence_search,
+            "best_graph_predecessors",
+            wraps=sequence_search.best_graph_predecessors,
+        ) as best_predecessors:
             witnesses = sequence_search.sequence_graph_witnesses(
                 grouped,
                 ordered,
@@ -1348,24 +1365,31 @@ class FrameSequenceSearchContractTest(unittest.TestCase):
             ),
         )
         self.assertEqual(best_path.call_count, 1)
-        self.assertTrue(feasibility.evaluations.independent_edge_witnesses)
-        self.assertTrue(
-            all(
-                any(
-                    sequence_search._option_has_independent_separator_edge(
-                        ordered[option_index],
-                        edge_id,
-                        layer_index,
-                        len(feasibility.feasible) - 1,
+        self.assertEqual(best_predecessors.call_count, len(grouped) - 1)
+        independent_edges = feasibility.evaluations.independent_edge_witnesses
+        self.assertEqual(len(independent_edges), 2)
+        witnessed_edges = {
+            edge_id
+            for witness in witnesses
+            for layer_index, option in enumerate(witness)
+            for edge_id in (
+                sequence_search._one_sided_supported_separator_edge_ids(
+                    tuple(
+                        edge
+                        for edge in (
+                            option.leading if layer_index > 0 else None,
+                            (
+                                option.trailing
+                                if layer_index < len(witness) - 1
+                                else None
+                            ),
+                        )
+                        if edge is not None
                     )
-                    for layer_index, option_indexes in enumerate(
-                        feasibility.feasible
-                    )
-                    for option_index in option_indexes
                 )
-                for edge_id in feasibility.evaluations.independent_edge_witnesses
             )
-        )
+        }
+        self.assertLessEqual(independent_edges, witnessed_edges)
 
     def test_common_width_grouping_does_not_scan_every_option_per_coordinate(
         self,
