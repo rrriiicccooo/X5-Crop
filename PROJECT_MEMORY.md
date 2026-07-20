@@ -1,139 +1,129 @@
 # Project Memory / 项目记忆
 
-Updated / 更新：2026-07-20
+Updated / 更新：2026-07-19
 
-This is a concise cross-session checkpoint, not an instruction source or completion
-proof. Current user intent, Git, source, original TIFFs, manual references, current
-reports, Debug Analysis, and live command output remain authoritative.
+This is a concise cross-session map, not an instruction source or completion
+proof. Current user intent, Git, source, original TIFFs, manual references,
+current reports, Debug Analysis, and live command output remain authoritative.
 
-本文件只是简短的跨会话检查点，不是指令或完成证明。当前用户目标、Git、源码、原 TIFF、
+本文件只是简短的跨会话地图，不是指令或完成证明。当前用户目标、Git、源码、原 TIFF、
 人工 reference、current report、Debug Analysis 与现场命令始终优先。
 
 ## Frozen Checkpoint / 冻结检查点
 
 - Branch / 分支：`main`.
-- Candidate / 候选提交：`577b18fa`
-  (`fix: refute holder clipping with workspace content`), pushed to
-  `origin/main`.
-- Tracked worktree was clean immediately after that push. Local `Test/` TIFFs,
-  references, generated diagnostics, and `Test/test 2` remain ignored and
-  untracked.
-- `tools/verify full` passed before commit and again in the push hook:
-  803 tests, 14 format/mode configuration pairs, V4.9.
-- Resume by checking `git log -1 --oneline`, `git status --short`, and current
-  reports. Do not treat this snapshot as live truth.
+- Candidate / 候选提交：`4c48147c`
+  (`perf: reduce exact sequence search work`), pushed to `origin/main`.
+- The tracked worktree was clean immediately after the push. Local `Test/`
+  TIFFs, references, expectations, diagnostics, and `Test/test 2` remain ignored
+  and untracked. / 推送后 tracked worktree 为 clean；本地 `Test/` 样片、人工记录、
+  diagnostics 与 `Test/test 2` 仍是 ignored/untracked 验证资产。
+- `tools/verify full` passed before commit and again in the push hook: 811 tests,
+  14 format/mode configuration pairs, V4.9. / 提交前与 push hook 均通过 811 项测试、
+  14 组配置与 V4.9 检查。
+- Resume by checking `git log -1 --oneline`, `git status --short`, and fresh
+  reports. Do not treat this snapshot as live truth. / 恢复时先核对 Git 与现场报告，
+  不得把本快照当作当前证明。
 
-## Closed Physical Work / 已关闭物理工作
+## Closed Work / 已关闭工作
 
-- Full-workspace reliable content now refutes only a long-axis holder boundary
-  it physically crosses before the sequence search scope is built. Short-axis
-  holder boundaries are unaffected; content still cannot prove holder, count,
-  frame edge, or decision.
-- `FrameCoverageEvidence` merges exact cached full-workspace and holder-local
-  reliable runs, so a false holder clip cannot hide omitted photos.
-- A geometry-corroborated observation wider than the interval allowed by an
-  independent common width and the opposite anchor becomes their
-  dimension-constrained intersection. Direct and measurement-corroborated
-  boundaries remain measured facts.
-- Three frozen-`11ff1b7d` contracts reproduced these classes before the fix:
-  crossed holder retention, holder-clipped content coverage, and an unnarrowed
-  geometry-corroborated endpoint.
-- Named `120-66/partial` 00014, 00026, and 00031 now remain typed unresolved,
-  `REVIEW`, and non-exportable instead of resolved-wrong. The user-classified
-  `Test/135/full/unknown_X5_00038.tif` also remains geometry unavailable,
-  `REVIEW`, and non-exportable.
+- The exact-search wave deduplicates equal physical aspect priors, reuses one
+  boundary resolution and one role map per build, limits boundary-path matching
+  by a mathematically conservative interval window, and skips full-strip-only
+  completion work in partial mode. / 本轮对相同 physical aspect 去重，每个 build
+  只解析一次 boundary 与 role map，以保守区间窗口筛选 boundary path，并在 partial
+  模式跳过 full-only completion。
+- Graph reachability now drops prefix-unreachable nodes from its backward sweep;
+  lexicographic ranking stops after every row is unique; independent separator
+  witnesses are solved once per physical edge with a seen/unseen dynamic path.
+  Direct interval comparisons replace temporary `PixelInterval` objects. /
+  Graph backward sweep 只处理 prefix-reachable 节点；每行唯一后停止余下 rank；独立
+  separator witness 按 physical edge 以 seen/unseen 动态路径求解；临时 interval
+  分配已改为等价的数值比较。
+- Focused dimension ordering is used only when no complete two-sided separator
+  seed exists. This preserves the canonical physical order when separator proof
+  is available and prevents an earlier weak grid from displacing it. / 仅在没有
+  complete two-sided separator seed 时使用 focused dimension order；有 separator
+  证明时保留 canonical physical order，避免弱 grid 抢先占位。
+- Permanent contracts cover each optimization class and preserve graph witness,
+  ordering, geometry, proof, and budget semantics. No execution budget was
+  raised. / 永久合同覆盖上述各类，并保持 witness、排序、geometry、proof 与 budget
+  语义；默认 execution budget 仍为 100,000。
 
-- 完整 workspace 的 reliable content 只反证实际穿过的长轴 holder boundary；
-  `FrameCoverageEvidence` 合并 workspace 与 holder-local reliable runs，错误
-  holder clipping 不能再隐藏遗漏照片。
-- geometry-corroborated 宽观测区间会被独立 common width 与对侧 anchor 收敛为
-  dimension-constrained 交集；direct 与 measurement-corroborated 实测不变。
-- 旧 HEAD 上三项失败合同均稳定为红。120-66 partial 的 00014、00026、00031
-  已从 resolved-wrong 降为 typed unresolved / REVIEW / 不可导出；00038 的用户事实仍是
-  `unknown`，不是 `pass`。
+## Named Physical Truth / 具名物理事实
 
-## Current Real-Sample Authority / 当前真实样片权限
+- Fresh diagnostics at `4c48147c` keep `pass_X5_00006.tif` typed geometry
+  unavailable (`frame_slots_unresolved`, `assignment_consensus_unresolved`),
+  `REVIEW`, non-exportable, with no frame outputs. Search completed without
+  budget exhaustion; the sample remains a real `pass_required` capability gap.
+  / 00006 已不再 resolved-wrong，但仍是 `pass_required` capability gap。
+- The user-classified `Test/135/full/unknown_X5_00038.tif` is the canonical
+  identity. Fresh diagnostics keep it typed geometry unavailable
+  (`assignment_consensus_unresolved`), `REVIEW`, non-exportable, with no frame
+  outputs; authority validation classifies it as conforming. / 00038 的当前事实是
+  `unknown`，不是 `pass`；当前结果为 conforming 的 unresolved/REVIEW/不可导出。
+- Both fresh Debug Analysis images say `NOT EXPORTABLE` and show provisional
+  slots only. / 两张 Debug Analysis 均明确标注 `NOT EXPORTABLE`，只展示 provisional
+  slots。
 
-- Local dataset: 113 TIFFs, 113 expectations, 111 manual geometry references.
-  The two `review_required` samples intentionally have no geometry reference.
-- Fresh diagnostics at the code committed as `577b18fa` completed all 113
-  inputs: 0 runtime/schema failures, 29 `approved_auto`, 84 `REVIEW`,
-  29 supported/export-eligible geometries, 84 unavailable/non-exportable
-  geometries, and 0 unresolved exports.
-- Authority validation after source-pixel review:
-  51 conforming, 62 capability gaps, 0 evidence-contract conflicts,
-  0 physical violations.
-- Two `135/partial` files (`pass_X5_00003` and `unknown_X5_00008`) are
-  byte-identical. Their shared manual intervals were widened from the original
-  TIFF coordinate view to include visible slanted/overlapping transitions.
-  `120-66/partial/pass_X5_00029` frame-1 trailing was likewise widened to
-  include its visible 6030-6308 slanted span. These local reference corrections
-  were not copied from detector output.
-- Re-run authority with:
+## Real-Sample Authority / 真实样片权限
 
-  ```bash
-  python3 -m tools.regression.sample_expectations \
-    Test/sample_expectations.jsonl \
-    Test/frame_slot_references.jsonl \
-    Test
-
-  python3 -m tools.regression.sample_validation \
-    Test/sample_expectations.jsonl \
-    Test/frame_slot_references.jsonl \
-    Test \
-    <all seven current x5_crop_report.jsonl files>
-  ```
-
-## Frozen Physical Rules / 冻结物理权限
-
-- Geometry, evidence, CandidateGate, GeometryResolution, selection,
-  DecisionGate, output protection, report, and Debug remain separate one-way
-  authorities.
-- Hints, budgets, scores, blank appearance, repeated widths, grids, content
-  appearance, and self-consistent geometry are not proof. Budget exhaustion is
-  typed unavailable.
-- Content may refute omitted coverage or a crossed long-axis holder boundary;
-  it cannot create, move, or prove a frame boundary.
-- Common width comes only from intersecting independent measurements.
-  Separator assignments remain candidate-specific and conserve topology,
-  cross-axis continuity, signed spacing, and provenance.
-- At most one blank may be derived from a unique complete sequence. Holder
-  occlusion is endpoint-only and cannot resolve geometry outside the canvas.
-- Only exact count/offset-independent measurements may be cached. Unresolved or
-  provisional geometry is never exportable, including with `--export-review`.
+- Local dataset: 113 TIFFs, 113 expectations, 111 manual geometry references;
+  the two `review_required` samples intentionally have no reference. The manifest
+  validator reports `samples=113 references=111 expectations=valid`. / 本地数据为
+  113 张 TIFF、113 条 expectation、111 条人工 geometry reference；两张
+  `review_required` 有意保持 reference 为空。
+- `half/partial/pass_X5_00001` and `120-66/partial/pass_X5_00005` are still
+  `pass_required`, but their allowed observations cannot independently prove the
+  manual geometry even after complete high-budget searches. Their
+  `observation_proof_expectation` is therefore
+  `independent_proof_unavailable`; validators must report an explicit
+  evidence-contract conflict rather than loosen a Gate. / 这两张仍保持
+  `pass_required`，但允许观测无法独立证明人工 geometry，必须显式报告
+  evidence-contract conflict，不得放宽 Gate。
+- The prior 113-report authority summary predates those two expectation
+  corrections and is stale. Generate a fresh complete diagnostics set before
+  quoting aggregate conforming/gap/conflict counts. / 旧的 113-report 汇总早于上述
+  两项事实修正，已经过时；引用全量统计前必须重新生成当前报告。
 
 ## Performance State / 性能状态
 
-- Frozen sample: `Test/half/partial/pass_X5_00001.tif`, auto count,
-  `--deskew off --diagnostics --jobs 1`.
-- Accepted path to `11ff1b7d`: 199.28 s -> 129.16 s -> 80.71 s ->
-  74.71 s -> 50.27 s detection. The latest frozen run retained 971,842
-  assignment evaluations, 11 candidates, cache 41/6, a zero-diff report, and
-  byte-identical Debug.
-- The new physical candidate `577b18fa` has not yet been re-profiled in an
-  isolated performance run. The concurrent 113-sample diagnostics are not a
-  performance baseline.
-- Current authority still has six typed budget-exhausted samples; five are
-  `pass_required`: `half/full/pass_X5_00001`,
-  `half/partial/pass_X5_00001`, and `66/partial` 00005, 00010, 00011.
-  Performance acceptance is therefore open.
-- Rejected routes remain rejected: raw-build incumbent filtering,
-  separator-chain pruning, boundary caps, skipping graph best paths/witnesses,
-  candidate/result caching, or raising budget as reliability evidence.
+- Frozen command / 固定命令：
+
+  ```bash
+  python3 X5_Crop.py Test/half/partial/pass_X5_00001.tif \
+    --format half --strip partial --count 11 --deskew off \
+    --diagnostics --jobs 1 -o <output>
+  ```
+
+- With the unchanged 100,000 budget, frozen HEAD `7c38962c` took 9.04 s
+  detection and 102,974 assignment evaluations; `4c48147c` took 5.95 s and
+  101,127 evaluations, about 34% faster. The current report comparison is zero
+  diff and Debug Analysis is byte-identical. / 同一 10 万预算下 detection 从
+  9.04 s 降至 5.95 s（约 34%）；report 0 diff，Debug Analysis 字节一致。
+- The fixed sample remains typed `search_budget_exhausted`, geometry unavailable,
+  `REVIEW`, and non-exportable. A complete 742,637-evaluation probe still had no
+  independent proof, so more budget is not reliability evidence. / 固定样片仍为
+  typed budget exhaustion；完整搜索也没有独立 proof，增加预算不能成为可靠性证据。
+- Rejected routes remain rejected: heuristic branch caps, witness removal,
+  candidate/decision caching, Gate loosening, or treating budget/appearance/grid
+  as proof. / 继续禁止 heuristic branch cap、删除 witness、缓存 candidate/decision、
+  放宽 Gate，或把 budget/appearance/grid 当作证明。
 
 ## Next Actions / 下一步
 
-1. Re-profile the fixed half/partial sample from clean `577b18fa` and continue
-   only with exact transient reuse, physically complete interval/anchor pruning,
-   branch-and-bound, delayed blank branching, or focused ordering. Re-run named
-   reports, references, Debug, and `tools/verify full` after every accepted wave.
-2. Close all five `pass_required` budget-exhausted cases without moving proof,
-   Gate, selection, or decision authority.
-3. Rebuild stale `Test/test 2` only after the physical/performance candidate is
-   frozen. Preserve `Test/test 1`; include terminal manifests, all 113 current
-   reports, Debug Analysis, summaries, authority validation, runtime/solver/
-   budget/cache metrics, and the test-1 performance comparison.
+1. Continue exact performance closure on the remaining `pass_required`
+   budget-exhausted samples. Distinguish a completed-search evidence conflict
+   from an optimization opportunity; do not alter proof authority. / 继续关闭其余
+   `pass_required` budget exhaustion，并区分完整搜索后的证据冲突与可优化空间。
+2. Re-run the frozen sample and named 00006/00038 reports, reference validation,
+   Debug inspection, and `tools/verify full` after every accepted wave. / 每个
+   接受波次都复核固定样片、00006/00038、reference、Debug 与 full verifier。
+3. Generate a fresh complete 113-TIFF diagnostics set only after the physical and
+   performance candidate is frozen. Rebuild stale `Test/test 2` afterward while
+   preserving `Test/test 1`. / 物理与性能候选冻结后再生成 113 张当前 diagnostics，
+   随后重建 `Test/test 2`，保持 `Test/test 1` 不变。
 4. Start Audit A only from a clean, verified, committed, pushed candidate. Any
-   root fix invalidates it. After zero known violations, leave a
-   context-independent reverse-order Audit B prompt for a new Codex task; do not
-   execute Audit B in this task.
+   root fix invalidates it. Leave Audit B as a context-independent prompt for a
+   new task; do not execute it here. / Audit A 只能从 clean/pushed 候选开始；任何
+   根修复都会使其失效。Audit B 只留下新任务 Prompt，本任务不得执行。

@@ -51,6 +51,22 @@ the validation evidence.
 
 ### 2026-07-19 — 无环观测权限 / Acyclic Observation Authority
 
+- Exact frame-sequence search now deduplicates equal physical-aspect priors, reuses resolved
+  boundary and role facts, prunes prefix-unreachable backward states and interval-incompatible
+  path observations, stops lexicographic ranking once each row is unique, and computes each
+  independent-edge witness with one seen/unseen dynamic path. Partial mode skips full-only
+  completion work, while a complete two-sided separator seed preserves canonical physical
+  ordering. On the frozen count-11 `half/partial/pass_X5_00001` command with the unchanged
+  100,000 budget, detection fell from 9.04 s to 5.95 s and assignment evaluations from 102,974
+  to 101,127; the current report has zero diff and Debug Analysis is byte-identical. All 811
+  tests and 14 configuration pairs pass; no proof, Gate, or budget authority changed. / 精确
+  frame-sequence search 现在对相同 physical aspect 去重，复用 resolved boundary 与 role
+  facts，剪除 prefix-unreachable backward state 和区间不兼容 path observation，每行唯一后
+  停止余下字典序 ranking，并以一条 seen/unseen 动态路径计算每个 independent-edge witness。
+  Partial 模式跳过 full-only completion；存在完整双边 separator seed 时继续保留 canonical
+  physical order。固定 count-11、10 万预算的 `half/partial/pass_X5_00001` detection 从
+  9.04 s 降至 5.95 s，assignment evaluation 从 102,974 降至 101,127；report 0 diff，
+  Debug Analysis 字节一致。811 项测试与 14 组配置通过，proof、Gate 与 budget 权限均未改变。
 - Graph path predecessor ranking now evaluates each layer in bounded vectorized batches while
   retaining the exact physical-validity filters and lexicographic rank authority. The former
   per-option ranking API was deleted; no candidate, state, evaluation, or execution budget was
