@@ -267,7 +267,6 @@ class DetectionCachePerformanceContractTest(unittest.TestCase):
         }
         previous = sequence_search.graph_layer_state_index(
             states,
-            ordered,
             context,
         )
 
@@ -285,6 +284,16 @@ class DetectionCachePerformanceContractTest(unittest.TestCase):
         with (
             patch.object(PixelInterval, "intersection", counted_intersection),
             patch.object(
+                np,
+                "fromiter",
+                wraps=np.fromiter,
+            ) as option_array_materialization,
+            patch.object(
+                sequence_search,
+                "_observation_candidate_count",
+                wraps=sequence_search._observation_candidate_count,
+            ) as observation_candidate_count,
+            patch.object(
                 sequence_search,
                 "_retain_graph_rank",
                 wraps=sequence_search._retain_graph_rank,
@@ -300,6 +309,8 @@ class DetectionCachePerformanceContractTest(unittest.TestCase):
         self.assertIn(len(previous_options), selected)
         self.assertLessEqual(intersection_calls, 2)
         self.assertEqual(rank_step.call_count, 1)
+        self.assertEqual(option_array_materialization.call_count, 1)
+        observation_candidate_count.assert_not_called()
         self.assertFalse(hasattr(sequence_search, "best_graph_predecessor"))
 
     def test_graph_rank_materializes_only_still_ambiguous_rows(self) -> None:

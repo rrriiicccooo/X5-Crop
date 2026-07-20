@@ -345,6 +345,22 @@ def width_hypothesis_can_cover_reliable_content(
     return hypothesis.width_px.maximum * count >= required_extent
 
 @dataclass(frozen=True)
+class _SequenceGraphOptionIndex:
+    leading_minima: np.ndarray
+    leading_maxima: np.ndarray
+    trailing_minima: np.ndarray
+    trailing_maxima: np.ndarray
+    frame_width_minima: np.ndarray
+    frame_width_maxima: np.ndarray
+    coverage_starts: np.ndarray
+    coverage_ends: np.ndarray
+    leading_separator_keys: tuple[ObservationId | None, ...]
+    trailing_separator_keys: tuple[ObservationId | None, ...]
+    observation_candidate_counts: np.ndarray
+    boundary_uncertainties: np.ndarray
+
+
+@dataclass(frozen=True)
 class SequenceGraphContext:
     coverages: tuple[tuple[int, int] | None, ...]
     run_starts: tuple[int, ...]
@@ -353,6 +369,7 @@ class SequenceGraphContext:
     last_mask: int
     allow_nominal_slot_sized_gap: bool
     edge_support_cache: dict[tuple[int, int], bool]
+    option_index: _SequenceGraphOptionIndex
 
 def sequence_graph_context(
     ordered: tuple[measurement_facts.MeasuredFrameConstraint, ...],
@@ -383,6 +400,69 @@ def sequence_graph_context(
             and last_content_end <= coverage[1]
         ):
             last_mask |= bit
+    option_count = len(ordered)
+    option_index = _SequenceGraphOptionIndex(
+        leading_minima=np.fromiter(
+            (option.leading.position.minimum for option in ordered),
+            dtype=np.float64,
+            count=option_count,
+        ),
+        leading_maxima=np.fromiter(
+            (option.leading.position.maximum for option in ordered),
+            dtype=np.float64,
+            count=option_count,
+        ),
+        trailing_minima=np.fromiter(
+            (option.trailing.position.minimum for option in ordered),
+            dtype=np.float64,
+            count=option_count,
+        ),
+        trailing_maxima=np.fromiter(
+            (option.trailing.position.maximum for option in ordered),
+            dtype=np.float64,
+            count=option_count,
+        ),
+        frame_width_minima=np.fromiter(
+            (option.width_px.minimum for option in ordered),
+            dtype=np.float64,
+            count=option_count,
+        ),
+        frame_width_maxima=np.fromiter(
+            (option.width_px.maximum for option in ordered),
+            dtype=np.float64,
+            count=option_count,
+        ),
+        coverage_starts=np.asarray(
+            [
+                np.nan if coverage is None else coverage[0]
+                for coverage in coverages
+            ],
+            dtype=np.float64,
+        ),
+        coverage_ends=np.asarray(
+            [
+                np.nan if coverage is None else coverage[1]
+                for coverage in coverages
+            ],
+            dtype=np.float64,
+        ),
+        leading_separator_keys=tuple(
+            _separator_boundary_key(option.leading) for option in ordered
+        ),
+        trailing_separator_keys=tuple(
+            _separator_boundary_key(option.trailing) for option in ordered
+        ),
+        observation_candidate_counts=np.fromiter(
+            (_observation_candidate_count(option) for option in ordered),
+            dtype=np.int64,
+            count=option_count,
+        ),
+        boundary_uncertainties=np.fromiter(
+            (_constraint_uncertainty(option) for option in ordered),
+            dtype=np.float64,
+            count=option_count,
+        ),
+    )
     return SequenceGraphContext(
         coverages=coverages,
         run_starts=tuple(start for start, _ in runs),
@@ -391,6 +471,7 @@ def sequence_graph_context(
         last_mask=last_mask,
         allow_nominal_slot_sized_gap=allow_nominal_slot_sized_gap,
         edge_support_cache={},
+        option_index=option_index,
     )
 
 def sequence_graph_edge_is_interval_feasible(
@@ -401,8 +482,8 @@ def sequence_graph_edge_is_interval_feasible(
 ) -> bool:
     left = ordered[left_index]
     right = ordered[right_index]
-    left_separator_key = _separator_boundary_key(left.trailing)
-    right_separator_key = _separator_boundary_key(right.leading)
+    left_separator_key = context.option_index.trailing_separator_keys[left_index]
+    right_separator_key = context.option_index.leading_separator_keys[right_index]
     if (
         left_separator_key is not None
         and right_separator_key is not None
@@ -648,12 +729,12 @@ def _reachable_predecessors(
     current_by_separator: dict[ObservationId | None, list[int]] = {}
     for index in previous_indexes:
         previous_by_separator.setdefault(
-            _separator_boundary_key(ordered[index].trailing),
+            context.option_index.trailing_separator_keys[index],
             [],
         ).append(index)
     for index in current_indexes:
         current_by_separator.setdefault(
-            _separator_boundary_key(ordered[index].leading),
+            context.option_index.leading_separator_keys[index],
             [],
         ).append(index)
     boundary_pairs: list[tuple[tuple[int, ...], tuple[int, ...]]] = []
@@ -870,12 +951,12 @@ def _reachable_successors(
     following_by_separator: dict[ObservationId | None, list[int]] = {}
     for index in current_indexes:
         current_by_separator.setdefault(
-            _separator_boundary_key(ordered[index].trailing),
+            context.option_index.trailing_separator_keys[index],
             [],
         ).append(index)
     for index in following_indexes:
         following_by_separator.setdefault(
-            _separator_boundary_key(ordered[index].leading),
+            context.option_index.leading_separator_keys[index],
             [],
         ).append(index)
     boundary_pairs: list[tuple[tuple[int, ...], tuple[int, ...]]] = []
@@ -999,14 +1080,15 @@ class GraphLayerStateIndex:
 
 def graph_layer_state_index(
     states: dict[int, GraphPathState],
-    ordered: tuple[measurement_facts.MeasuredFrameConstraint, ...],
     context: SequenceGraphContext,
 ) -> GraphLayerStateIndex:
     option_indexes = tuple(states)
+    option_offsets = np.asarray(option_indexes, dtype=np.int64)
+    graph_options = context.option_index
     separator_offsets: dict[ObservationId | None, list[int]] = {}
     for offset, option_index in enumerate(option_indexes):
         separator_offsets.setdefault(
-            _separator_boundary_key(ordered[option_index].trailing),
+            graph_options.trailing_separator_keys[option_index],
             [],
         ).append(offset)
 
@@ -1019,46 +1101,16 @@ def graph_layer_state_index(
 
     return GraphLayerStateIndex(
         option_indexes=option_indexes,
-        leading_maxima=np.fromiter(
-            (ordered[index].leading.position.maximum for index in option_indexes),
-            dtype=np.float64,
-            count=len(option_indexes),
-        ),
-        trailing_minima=np.fromiter(
-            (ordered[index].trailing.position.minimum for index in option_indexes),
-            dtype=np.float64,
-            count=len(option_indexes),
-        ),
-        trailing_maxima=np.fromiter(
-            (ordered[index].trailing.position.maximum for index in option_indexes),
-            dtype=np.float64,
-            count=len(option_indexes),
-        ),
-        frame_width_minima=np.fromiter(
-            (ordered[index].width_px.minimum for index in option_indexes),
-            dtype=np.float64,
-            count=len(option_indexes),
-        ),
-        frame_width_maxima=np.fromiter(
-            (ordered[index].width_px.maximum for index in option_indexes),
-            dtype=np.float64,
-            count=len(option_indexes),
-        ),
+        leading_maxima=graph_options.leading_maxima[option_offsets],
+        trailing_minima=graph_options.trailing_minima[option_offsets],
+        trailing_maxima=graph_options.trailing_maxima[option_offsets],
+        frame_width_minima=graph_options.frame_width_minima[option_offsets],
+        frame_width_maxima=graph_options.frame_width_maxima[option_offsets],
         separator_offsets={
             key: np.asarray(offsets, dtype=np.int64)
             for key, offsets in separator_offsets.items()
         },
-        coverage_ends=np.asarray(
-            [
-                (
-                    np.nan
-                    if context.coverages[index] is None
-                    else context.coverages[index][1]
-                )
-                for index in option_indexes
-            ],
-            dtype=np.float64,
-        ),
+        coverage_ends=graph_options.coverage_ends[option_offsets],
         observation_candidate_counts=state_array(
             "observation_candidate_count",
             np.int64,
@@ -1291,6 +1343,7 @@ def best_graph_predecessors(
     previous_indexes = previous.option_indexes
     if not previous_indexes or not current_indexes:
         return {}
+    graph_options = context.option_index
     previous_count = len(previous_indexes)
     coordinate_component_count = len(previous.coordinate_keys[0])
     coordinate_rank_values = tuple(
@@ -1331,33 +1384,14 @@ def best_graph_predecessors(
         batch_indexes = current_indexes[
             batch_start : batch_start + _GRAPH_PREDECESSOR_BATCH_SIZE
         ]
+        batch_offsets = np.asarray(batch_indexes, dtype=np.int64)
         current = tuple(ordered[index] for index in batch_indexes)
         batch_count = len(current)
-        leading_minima = np.fromiter(
-            (option.leading.position.minimum for option in current),
-            dtype=np.float64,
-            count=batch_count,
-        )[:, None]
-        leading_maxima = np.fromiter(
-            (option.leading.position.maximum for option in current),
-            dtype=np.float64,
-            count=batch_count,
-        )[:, None]
-        trailing_minima = np.fromiter(
-            (option.trailing.position.minimum for option in current),
-            dtype=np.float64,
-            count=batch_count,
-        )[:, None]
-        width_minima = np.fromiter(
-            (option.width_px.minimum for option in current),
-            dtype=np.float64,
-            count=batch_count,
-        )[:, None]
-        width_maxima = np.fromiter(
-            (option.width_px.maximum for option in current),
-            dtype=np.float64,
-            count=batch_count,
-        )[:, None]
+        leading_minima = graph_options.leading_minima[batch_offsets, None]
+        leading_maxima = graph_options.leading_maxima[batch_offsets, None]
+        trailing_minima = graph_options.trailing_minima[batch_offsets, None]
+        width_minima = graph_options.frame_width_minima[batch_offsets, None]
+        width_maxima = graph_options.frame_width_maxima[batch_offsets, None]
         valid = np.logical_and(
             previous.leading_maxima[None, :] < leading_minima,
             previous.trailing_maxima[None, :] < trailing_minima,
@@ -1372,7 +1406,8 @@ def best_graph_predecessors(
         )
         common_width_available = common_width_maxima >= common_width_minima
         separator_keys = tuple(
-            _separator_boundary_key(option.leading) for option in current
+            graph_options.leading_separator_keys[index]
+            for index in batch_indexes
         )
         for row, separator_key in enumerate(separator_keys):
             if separator_key is None:
@@ -1390,17 +1425,10 @@ def best_graph_predecessors(
                 < common_width_minima
             )
         if context.run_starts:
-            coverage_starts = np.asarray(
-                [
-                    (
-                        np.nan
-                        if context.coverages[index] is None
-                        else float(context.coverages[index][0])
-                    )
-                    for index in batch_indexes
-                ],
-                dtype=np.float64,
-            )[:, None]
+            coverage_starts = graph_options.coverage_starts[
+                batch_offsets,
+                None,
+            ]
             valid &= np.isfinite(coverage_starts)
             valid &= np.isfinite(previous.coverage_ends)[None, :]
             uncovered = coverage_starts > previous.coverage_ends[None, :]
@@ -1529,7 +1557,7 @@ def best_graph_predecessors(
             best_offset = int(best_offsets[row])
             selected[current_index] = (
                 previous_indexes[best_offset],
-                _observation_candidate_count(current[row]),
+                int(graph_options.observation_candidate_counts[current_index]),
                 int(separator_supported[row, best_offset]),
                 float(internal_quality[row, best_offset]),
                 float(uncorroborated_overlap[row, best_offset]),
@@ -1547,7 +1575,9 @@ def _initial_graph_path_states(
 ) -> dict[int, GraphPathState]:
     return {
         option_index: GraphPathState(
-            observation_candidate_count=_observation_candidate_count(option),
+            observation_candidate_count=int(
+                context.option_index.observation_candidate_counts[option_index]
+            ),
             supported_separator_count=0,
             internal_measurement_quality=0.0,
             uncorroborated_overlap_extent_px=0.0,
@@ -1555,7 +1585,9 @@ def _initial_graph_path_states(
             unexplained_spacing_extent_px=0.0,
             uncorroborated_contact_count=0,
             frame_width_hint_residual=option.frame_width_hint_residual,
-            boundary_uncertainty_px=_constraint_uncertainty(option),
+            boundary_uncertainty_px=float(
+                context.option_index.boundary_uncertainties[option_index]
+            ),
             external_leading_quality=option.leading.measurement_quality,
             coordinate_key=(
                 -option.leading.position.midpoint,
@@ -1580,7 +1612,7 @@ def _advance_graph_path_states(
         return {}
     predecessors = best_graph_predecessors(
         tuple(option_index for option_index, _ in frame_options),
-        graph_layer_state_index(previous_states, ordered, context),
+        graph_layer_state_index(previous_states, context),
         ordered,
         context,
     )
@@ -1629,7 +1661,7 @@ def _advance_graph_path_states(
             ),
             boundary_uncertainty_px=(
                 previous.boundary_uncertainty_px
-                + _constraint_uncertainty(option)
+                + float(context.option_index.boundary_uncertainties[option_index])
             ),
             external_leading_quality=previous.external_leading_quality,
             coordinate_key=(

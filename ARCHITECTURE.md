@@ -261,6 +261,16 @@ budget accounting unchanged. / 在一次前向或反向 graph reachability pass 
 index subset 共用 coordinate sweep 与 fallback 顺序。该瞬时顺序物化不缓存 candidate、
 edge、witness、decision 或 result，也不改变 assignment-evaluation 与 budget 计账。
 
+Within one measured-frame search, `_SequenceGraphOptionIndex` materializes each ordered option's
+exact coordinates, width bounds, content coverage, separator identities, and intrinsic rank facts
+once. Graph layers select those immutable facts by option index instead of translating the same
+typed constraints into arrays again. The index is transient and owns no candidate, path state,
+witness, Gate, decision, result, or budget authority. / 在一次 measured-frame search 内，
+`_SequenceGraphOptionIndex` 只把每个 ordered option 的精确坐标、宽度边界、content coverage、
+separator identity 与固有 rank facts 物化一次；后续 graph layer 仅按 option index 选择这些
+不可变事实，不再重复把同一 typed constraint 翻译成数组。该索引是瞬时执行数据，不拥有
+candidate、path state、witness、Gate、decision、result 或 budget 权限。
+
 Frame-sequence 证明代码按显式 owner 划分，不再把单个 solver 文件视为全部生命周期概念的共同
 owner。当前 measurement interval 只由 `frame_sequence_measurements.py` 拥有，common-width
 假设、contributor 选择、独立 scale 佐证与最终 resolution 只由

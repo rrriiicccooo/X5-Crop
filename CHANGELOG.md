@@ -22,6 +22,25 @@ the validation evidence.
 
 ### 2026-07-20 — Holder 与内容反证闭环 / Holder And Content Refutation Closure
 
+- Measured-frame graph search now materializes immutable ordered-option coordinates, width bounds,
+  content coverage, separator identities, observation counts, and boundary uncertainty once per
+  search. Graph feasibility and best-path layers index those exact facts instead of repeatedly
+  translating the same typed options into NumPy arrays; no candidate, witness, Gate, decision,
+  result, or budget state is cached. On isolated `78c6d450` versus the candidate, the fixed
+  auto-count `half/partial/pass_X5_00001` detection changed from 35.10 s to 34.00/34.37 s, while
+  cProfile calls fell from 277.60 M to 255.52 M and profiler time from 77.26 s to 73.34 s.
+  All 963,127 assignment evaluations, 11 assessed candidates, cache 52/7, the current report, and
+  the byte-identical Debug Analysis remain unchanged. / Measured-frame graph search 现在于每次
+  search 只物化一次 ordered option 的不可变坐标、宽度边界、content coverage、separator
+  identity、observation count 与 boundary uncertainty；graph feasibility 与 best-path layer
+  只索引这些精确事实，不再重复把同一 typed option 翻译成 NumPy 数组，且不缓存 candidate、
+  witness、Gate、decision、result 或 budget state。隔离的 `78c6d450` 基线与候选对比中，固定
+  auto-count `half/partial/pass_X5_00001` detection 从 35.10 s 降至 34.00/34.37 s；cProfile
+  调用从 277.60 M 降至 255.52 M，profiler 时间从 77.26 s 降至 73.34 s。963,127 次
+  assignment evaluation、11 个 assessed candidate、cache 52/7、current report 与字节一致的
+  Debug Analysis 均保持不变。
+  The full verifier passes 813 tests and 14 format/mode configuration pairs. / 完整 verifier
+  通过 813 项测试与 14 组 format/mode 配置。
 - Full-workspace reliable content now refutes only a long-axis holder boundary it physically
   crosses before the sequence search scope is built. `FrameCoverageEvidence` also merges the
   exact cached workspace and holder-local content runs, so a false holder clip cannot hide an
