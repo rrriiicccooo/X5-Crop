@@ -318,10 +318,12 @@ class DetectionCachePerformanceContractTest(unittest.TestCase):
             dtype=np.float64,
         )
 
+        ambiguous_rows = np.asarray((1,), dtype=np.int64)
         with patch.object(np, "where", wraps=np.where) as materialize:
-            retained = sequence_search._retain_graph_rank(
+            retained, next_ambiguous_rows = sequence_search._retain_graph_rank(
                 remaining,
                 values,
+                ambiguous_rows,
                 maximize=True,
             )
 
@@ -337,6 +339,7 @@ class DetectionCachePerformanceContractTest(unittest.TestCase):
                 ),
             )
         )
+        self.assertEqual(len(next_ambiguous_rows), 0)
         self.assertEqual(materialize.call_args.args[0].shape, (1, 3))
 
     def test_reachability_reuses_identical_subset_order_within_one_pass(

@@ -1245,14 +1245,12 @@ _GRAPH_PREDECESSOR_BATCH_SIZE = 256
 def _retain_graph_rank(
     remaining: np.ndarray,
     values: np.ndarray,
+    ambiguous_rows: np.ndarray,
     *,
     maximize: bool,
-) -> np.ndarray:
-    ambiguous_rows = np.flatnonzero(
-        np.count_nonzero(remaining, axis=1) > 1
-    )
+) -> tuple[np.ndarray, np.ndarray]:
     if not len(ambiguous_rows):
-        return remaining
+        return remaining, ambiguous_rows
     active_remaining = remaining[ambiguous_rows]
     active_values = (
         values
@@ -1274,11 +1272,14 @@ def _retain_graph_rank(
         active_remaining,
         active_values == preferred[:, None],
     )
+    next_ambiguous_rows = ambiguous_rows[
+        np.flatnonzero(np.count_nonzero(retained, axis=1) > 1)
+    ]
     if len(ambiguous_rows) == remaining.shape[0]:
-        return retained
+        return retained, next_ambiguous_rows
     updated = remaining.copy()
     updated[ambiguous_rows] = retained
-    return updated
+    return updated, next_ambiguous_rows
 
 
 def best_graph_predecessors(
@@ -1509,13 +1510,17 @@ def best_graph_predecessors(
             *((coordinate_values, True) for coordinate_values in coordinate_rank_values),
         )
         remaining = valid
+        ambiguous_rows = np.flatnonzero(
+            np.count_nonzero(remaining, axis=1) > 1
+        )
         for rank_values, maximize in rank_criteria:
-            remaining = _retain_graph_rank(
+            remaining, ambiguous_rows = _retain_graph_rank(
                 remaining,
                 rank_values,
+                ambiguous_rows,
                 maximize=maximize,
             )
-            if np.all(np.count_nonzero(remaining, axis=1) <= 1):
+            if not len(ambiguous_rows):
                 break
         best_offsets = np.argmax(remaining, axis=1)
         for row, current_index in enumerate(batch_indexes):

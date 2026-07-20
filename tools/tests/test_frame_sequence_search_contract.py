@@ -45,6 +45,72 @@ _ALL_HOLDER_SIDES = (
 )
 
 class FrameSequenceSearchContractTest(unittest.TestCase):
+    def test_graph_rank_counts_ambiguous_rows_once_per_criterion(self) -> None:
+        def edge(position: float) -> EdgeConstraint:
+            return EdgeConstraint(
+                position=PixelInterval.exact(position),
+                basis=FrameBoundarySource.DIMENSION_CONSTRAINED,
+                state=EvidenceState.UNAVAILABLE,
+                geometry_state=BoundaryGeometryState.RESOLVED,
+                provenance=MeasurementProvenance(
+                    MeasurementIdentity.FRAME_GEOMETRY,
+                    ObservationId(f"rank_count_edge:{position}"),
+                    (),
+                    "synthetic graph rank edge",
+                ),
+            )
+
+        def frame(start: float) -> MeasuredFrameConstraint:
+            return MeasuredFrameConstraint(
+                leading=edge(start),
+                trailing=edge(start + 100.0),
+                width_px=PixelInterval.exact(100.0),
+                full_width_hypothesis_admissible=True,
+                leading_holder_clip_supported=False,
+                trailing_holder_clip_supported=False,
+                search_order_residual=0.0,
+            )
+
+        layers = tuple(
+            tuple(frame(base + offset) for offset in (0.0, 1.0, 2.0))
+            for base in (0.0, 110.0, 220.0)
+        )
+        ordered = tuple(option for layer in layers for option in layer)
+        grouped = tuple(
+            tuple(
+                (layer_index * 3 + offset, option)
+                for offset, option in enumerate(layer)
+            )
+            for layer_index, layer in enumerate(layers)
+        )
+        context = sequence_search.sequence_graph_context(
+            ordered,
+            content(width=322, height=100, runs=()),
+            allow_nominal_slot_sized_gap=False,
+        )
+
+        with patch.object(
+            sequence_search,
+            "_retain_graph_rank",
+            wraps=sequence_search._retain_graph_rank,
+        ) as retain_rank, patch.object(
+            sequence_search.np,
+            "count_nonzero",
+            wraps=sequence_search.np.count_nonzero,
+        ) as count_nonzero:
+            selected = sequence_search.sequence_graph_best_path(
+                grouped,
+                ordered,
+                context,
+            )
+
+        self.assertIsNotNone(selected)
+        self.assertGreater(retain_rank.call_count, 0)
+        self.assertLessEqual(
+            count_nonzero.call_count,
+            retain_rank.call_count + len(grouped) - 1,
+        )
+
     def test_graph_layer_state_index_is_built_once_per_transition(self) -> None:
         def edge(position: float) -> EdgeConstraint:
             return EdgeConstraint(
