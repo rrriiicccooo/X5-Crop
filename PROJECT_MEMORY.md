@@ -12,14 +12,14 @@ current reports, Debug Analysis, and live command output remain authoritative.
 ## Frozen Checkpoint / 冻结检查点
 
 - Branch / 分支：`main`.
-- Candidate / 候选提交：`ab5a91c9`
-  (`perf: reuse exact boundary window measurements`), pushed to `origin/main`.
+- Candidate / 候选提交：`fd0076d2`
+  (`perf: carry graph rank ambiguity forward`), pushed to `origin/main`.
 - The tracked worktree was clean immediately after the push. Local `Test/`
   TIFFs, references, expectations, diagnostics, and `Test/test 2` remain ignored
   and untracked. / 推送后 tracked worktree 为 clean；本地 `Test/` 样片、人工记录、
   diagnostics 与 `Test/test 2` 仍是 ignored/untracked 验证资产。
-- `tools/verify full` passed before commit and again in the push hook: 812 tests,
-  14 format/mode configuration pairs, V4.9. / 提交前与 push hook 均通过 812 项测试、
+- `tools/verify full` passed before commit and again in the push hook: 813 tests,
+  14 format/mode configuration pairs, V4.9. / 提交前与 push hook 均通过 813 项测试、
   14 组配置与 V4.9 检查。
 - Resume by checking `git log -1 --oneline`, `git status --short`, and fresh
   reports. Do not treat this snapshot as live truth. / 恢复时先核对 Git 与现场报告，
@@ -51,6 +51,11 @@ current reports, Debug Analysis, and live command output remain authoritative.
   cached. / Boundary appearance 只在单次 `boundary_measurements` 内复用 exact
   window statistic；typed key 由 axis-local section、direction、start/end 组成，
   不缓存 count、offset、candidate、Gate 或 decision。
+- Lexicographic graph ranking carries the exact still-ambiguous row indexes between
+  criteria, so each criterion performs one ambiguity reduction rather than two. The helper
+  has one current-only typed input/output shape; no compatibility branch remains. / Graph
+  字典序 ranking 在 criterion 之间传递精确的仍并列 row index，使每项只做一次 ambiguity
+  reduction；helper 只有一套 current-only typed 输入输出，没有兼容分支。
 - Permanent contracts cover each optimization class and preserve graph witness,
   ordering, geometry, proof, and budget semantics. No execution budget was
   raised. / 永久合同覆盖上述各类，并保持 witness、排序、geometry、proof 与 budget
@@ -58,7 +63,7 @@ current reports, Debug Analysis, and live command output remain authoritative.
 
 ## Named Physical Truth / 具名物理事实
 
-- Fresh diagnostics at `ab5a91c9` keep `pass_X5_00006.tif` typed geometry
+- Fresh diagnostics at `fd0076d2` keep `pass_X5_00006.tif` typed geometry
   unavailable (`frame_slots_unresolved`, `assignment_consensus_unresolved`),
   `REVIEW`, non-exportable, with no frame outputs. Search completed without
   budget exhaustion; the sample remains a real `pass_required` capability gap.
@@ -123,6 +128,20 @@ current reports, Debug Analysis, and live command output remain authoritative.
   `REVIEW`, and non-exportable. A complete 742,637-evaluation probe still had no
   independent proof, so more budget is not reliability evidence. / 固定样片仍为
   typed budget exhaustion；完整搜索也没有独立 proof，增加预算不能成为可靠性证据。
+- On the same complete fixed count-11 search, detection fell from 66.34 s to 63.02 s while
+  preserving 750,766 total assignment evaluations, current selection/Decision/output, and a
+  byte-identical Debug Analysis JPG. The default-budget run remains 5.96 s detection and
+  101,127 evaluations, so this exact wall-time wave does not close budget acceptance. / 同一
+  count-11 完整搜索的 detection 从 66.34 s 降至 63.02 s，保持 750,766 次总 evaluation、
+  current selection/Decision/output 与字节一致 Debug；默认预算仍为 5.96 s、101,127 次，
+  因此本轮 exact 墙钟优化尚未关闭 budget 验收。
+- Rejected probes: unioning all width hypotheses reduced evaluations but changed provisional
+  slots/common width/Debug; reverse-first or per-graph direction choice saved too little;
+  whole-branch and monotonic prefilters either cost more than they saved or removed only 53 of
+  19,039 options; cross-branch option/edge/path-state identities had no exact reusable matches.
+  / 已否决：全宽度联合会改变 provisional geometry/Debug；反向或逐图方向选择收益不足；
+  whole-branch 与单调预筛成本过高或仅移除 19,039 项中的 53 项；跨分支 option/edge/path
+  state 没有可合法复用的精确重复。
 - Rejected routes remain rejected: heuristic branch caps, witness removal,
   candidate/decision caching, Gate loosening, or treating budget/appearance/grid
   as proof. / 继续禁止 heuristic branch cap、删除 witness、缓存 candidate/decision、

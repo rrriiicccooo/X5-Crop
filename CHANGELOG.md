@@ -51,6 +51,23 @@ the validation evidence.
 
 ### 2026-07-19 — 无环观测权限 / Acyclic Observation Authority
 
+- Lexicographic graph ranking now carries the exact still-ambiguous row indexes from one
+  criterion to the next instead of reducing the full boolean matrix twice per criterion. A
+  permanent contract reproduced 38 ambiguity reductions for 19 rank criteria and now allows
+  only one per criterion plus one initialization per graph transition. On the complete fixed
+  `half/partial/pass_X5_00001` count-11 search, detection fell from 66.34 s to 63.02 s while
+  preserving 750,766 total assignment evaluations, selection, Decision, non-exportable output,
+  and a byte-identical Debug Analysis JPG. The unchanged 100,000-budget run remains typed
+  budget-exhausted at 101,127 evaluations; this wave improves exact work but does not treat
+  budget as proof. All 813 tests and 14 configuration pairs pass. / Graph 字典序 ranking 现在把
+  每轮仍并列的 row index 精确传给下一 criterion，不再为每个 criterion 对完整布尔矩阵做两次
+  reduction。永久合同在旧实现复现 19 个 rank criterion 对应 38 次 ambiguity reduction，
+  当前只允许每 criterion 一次，并在每个 graph transition 初始化一次。固定
+  `half/partial/pass_X5_00001` count-11 完整搜索的 detection 从 66.34 s 降至 63.02 s，
+  同时保持 750,766 次总 assignment evaluation、selection、Decision、不可导出 output 与
+  字节一致的 Debug Analysis JPG。默认 100,000 budget 仍以 101,127 次 evaluation 保持
+  typed budget exhaustion；本波次只减少精确计算，不把 budget 当作证明。813 项测试与
+  14 组配置均通过。
 - Boundary-path appearance now reuses exact local-window statistics within one
   `boundary_measurements` call, keyed by the typed axis-local section, scan direction, and
   complete start/end coordinates. No count, offset, candidate, Gate, or decision is cached. A
