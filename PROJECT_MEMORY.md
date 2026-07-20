@@ -12,23 +12,24 @@ current reports, Debug Analysis, and live command output remain authoritative.
 ## Frozen Checkpoint / 冻结检查点
 
 - Branch / 分支：`main`.
-- Candidate / 候选提交：`e69d2175`
-  (`fix: resolve photo-bounded separator consensus`), pushed to `origin/main`;
-  it includes the preceding pushed performance commit `bfd259ee`
-  (`perf: index graph option facts once`). / 当前候选为 `e69d2175`，已推送到
-  `origin/main`；其中包含此前已推送的性能提交 `bfd259ee`。
-- `HEAD` and `origin/main` are both `e69d2175`; the branch has no unpushed
-  commits. / 当前 `HEAD` 与 `origin/main` 均为 `e69d2175`，没有未推送提交。
-- The tracked worktree was clean immediately after the push. Local `Test/`
-  TIFFs, references, expectations, diagnostics, and `Test/test 2` remain ignored
-  and untracked. / 推送后 tracked worktree 为 clean；本地 `Test/` 样片、人工记录、
-  diagnostics 与 `Test/test 2` 仍是 ignored/untracked 验证资产。
-- `tools/verify full` passed before the memory update and again in the push hook:
-  815 tests, 14 format/mode configuration pairs, V4.9. / 记忆更新前与 push hook
-  均通过 815 项测试、14 组配置与 V4.9 检查。
-- `Test/test 2` is still the prior ignored validation set and has not been replaced;
-  it must be rebuilt only after a fresh all-113 current-schema run. / `Test/test 2`
-  仍是此前的 ignored 验证集，尚未替换；必须在当前 schema 的 113 张全量诊断完成后再重建。
+- Code checkpoint / 源码检查点：`7fd6fc1`
+  (`fix: allow unreferenced unknown expectations`), following the pushed
+  `e69d2175` physical-consensus repair and `bfd259ee` performance repair. This
+  memory update is the immediately following documentation commit. / 当前源码检查点为
+  `7fd6fc1`，其前序为已推送的 `e69d2175` 物理 consensus 修复与 `bfd259ee` 性能修复；
+  本次为紧随其后的项目记忆文档提交。
+- The tracked worktree was clean immediately after the push. Current `Test/`
+  TIFFs, references, and expectations remain ignored and untracked; retired
+  `Test/test 1` and `Test/test 2` are deleted. / 推送后 tracked worktree 为 clean；
+  当前 `Test/` 样片、人工记录与 expectations 仍是 ignored/untracked 验证资产，旧的
+  `Test/test 1` 与 `Test/test 2` 已删除。
+- `tools/verify full` passed before this memory update: 816 tests, 14 format/mode
+  configuration pairs, V4.9. / 本次记忆更新前 `tools/verify full` 通过 816 项测试、
+  14 组配置与 V4.9 检查。
+- The obsolete `Test/test 1`, `Test/test 2`, and the generated
+  `Test/135/full/x5_crop_output` are deleted. A new baseline must be generated
+  from the current 112-sample Test set. / 旧的 `Test/test 1`、`Test/test 2` 与生成目录
+  已删除；必须从当前 112 张 Test 样片重新生成 baseline。
 - Resume by checking `git log -1 --oneline`, `git status --short`, and fresh
   reports. Do not treat this snapshot as live truth. / 恢复时先核对 Git 与现场报告，
   不得把本快照当作当前证明。
@@ -77,6 +78,12 @@ current reports, Debug Analysis, and live command output remain authoritative.
   separator-binding topology，并使用真实 binding 数量；只有 `full`、photo-edge-bounded
   shared short axis、内部最多缺一个 separator 且覆盖严格多数时，近完整 topology 才能拥有
   consensus；holder-bounded、partial 与二选一情形继续保留替代解。
+- The sample-expectation contract now allows an unreferenced
+  `unknown`/`pass_preferred` sample to remain honestly REVIEW; `pass_required`
+  still requires a same-source manual geometry reference, and a supplied
+  `pass_preferred` reference must also be same-source. / 样片 expectation 合同现在允许
+  没有 reference 的 `unknown`/`pass_preferred` 诚实保持 REVIEW；`pass_required` 仍必须有
+  同源人工 geometry reference，`pass_preferred` 一旦提供 reference 也必须同源。
 
 ## Named Physical Truth / 具名物理事实
 
@@ -91,27 +98,33 @@ current reports, Debug Analysis, and live command output remain authoritative.
   other provisional cases remained protected by REVIEW. / `e69d2175` 的新鲜
   `135/full` diagnostics 将 `00001` 与 `00003` 提升为符合人工 reference 的自动 PASS；
   48 张全部完成，其中 11 张 approved、37 张 review，其余 provisional 结果继续由 REVIEW 保护。
-- The user-classified `Test/135/full/unknown_X5_00038.tif` is the canonical
+- The user-classified `Test/135/full/unknown_X5_00011.tif` is the canonical
   identity. Fresh diagnostics keep it typed geometry unavailable
   (`assignment_consensus_unresolved`), `REVIEW`, non-exportable, with no frame
-  outputs; authority validation classifies it as conforming. / 00038 的当前事实是
+  outputs; authority validation classifies it as conforming. / 00011 的当前事实是
   `unknown`，不是 `pass`；当前结果为 conforming 的 unresolved/REVIEW/不可导出。
 - Cross-format controls remain unresolved and non-exportable after the same wave:
   `half/full/pass_X5_00007`, `120-67/full/pass_X5_00002`, and
   `135/partial/pass_X5_00001`; their reference checks show no violation. / 同一波次的
   跨格式控制样片仍为 unresolved、不可导出，且 reference 无 violation。
+- The hand-labeled current set has no `review_required` samples: 88 files named
+  `pass` are `pass_required`, and all 24 files named `unknown` are
+  `pass_preferred`. / 当前手工标签集中不再有 `review_required`：88 张 `pass` 均为
+  `pass_required`，24 张 `unknown` 全部为 `pass_preferred`。
 - Fresh targeted Debug Analysis keeps the two new PASS cases physically aligned;
-  `unknown_X5_00038` remains marked `NOT EXPORTABLE` with provisional slots only. /
-  新 PASS 的 Debug Analysis 与物理边界一致；`unknown_X5_00038` 仍明确标注
+  `unknown_X5_00011` remains marked `NOT EXPORTABLE` with provisional slots only. /
+  新 PASS 的 Debug Analysis 与物理边界一致；`unknown_X5_00011` 仍明确标注
   `NOT EXPORTABLE`，只显示 provisional slots。
 
 ## Real-Sample Authority / 真实样片权限
 
-- Local dataset: 113 TIFFs, 113 expectations, 111 manual geometry references;
-  the two `review_required` samples intentionally have no reference. The manifest
-  validator reports `samples=113 references=111 expectations=valid`. / 本地数据为
-  113 张 TIFF、113 条 expectation、111 条人工 geometry reference；两张
-  `review_required` 有意保持 reference 为空。
+- Local dataset after the manual reset: 112 TIFFs, 112 expectations, and 111
+  manual geometry references. The unreferenced sample is
+  `Test/135/partial/unknown_X5_00009.tif`; the validator reports
+  `samples=112 references=111 expectations=valid`. / 手工重整后的本地数据为 112 张
+  TIFF、112 条 expectation、111 条人工 geometry reference；唯一无 reference 的样片是
+  `Test/135/partial/unknown_X5_00009.tif`，validator 报告为
+  `samples=112 references=111 expectations=valid`。
 - `half/partial/pass_X5_00001` and `120-66/partial/pass_X5_00005` are still
   `pass_required`, but their allowed observations cannot independently prove the
   manual geometry even after complete high-budget searches. Their
@@ -120,15 +133,12 @@ current reports, Debug Analysis, and live command output remain authoritative.
   evidence-contract conflict rather than loosen a Gate. / 这两张仍保持
   `pass_required`，但允许观测无法独立证明人工 geometry，必须显式报告
   evidence-contract conflict，不得放宽 Gate。
-- The latest assembled candidate authority check reports
-  `samples=113 conforming=53 capability_gap=58 evidence_contract_conflict=2
-  violation=0`. It combines fresh current `135/full` reports with the existing
-  `Test/test 2` rows for the other configurations, so it is directional evidence,
-  not the final all-113 freeze proof. A fresh all-113 current-schema run is still
-  required before replacing `Test/test 2`. / 当前拼接候选权限检查为
-  `113 / conforming 53 / capability gap 58 / evidence conflict 2 / violation 0`；
-  其中 `135/full` 是当前新报告，其余配置仍使用现有 `Test/test 2` 行，因此只能作为方向性证据，
-  不能作为最终 113 张冻结证明；替换 `Test/test 2` 前仍需用当前 schema 全量重跑。
+- The previous assembled `113 / conforming 53 / capability gap 58 /
+  evidence conflict 2 / violation 0` summary belongs to the retired sample set
+  and is no longer a current baseline. No current 112-sample diagnostics or
+  Test/test 2 exists after the reset. / 之前拼接的 `113 / conforming 53 / capability gap 58 /
+  evidence conflict 2 / violation 0` 属于已退役样片集，不再是当前 baseline；重整后尚未生成
+  当前 112 张 diagnostics 或 `Test/test 2`。
 
 ## Performance State / 性能状态
 
@@ -140,12 +150,13 @@ current reports, Debug Analysis, and live command output remain authoritative.
     --diagnostics --jobs 1 -o <output>
   ```
 
-- Isolated same-condition 113-sample benchmark: release `v4.2.8` took
+- Historical isolated same-condition 113-sample benchmark: release `v4.2.8` took
   276.63 s with 60 automatic PASS cases, of which 44 matched geometry and 16
   were wrong; V4.9 baseline took 495.17 s with 29 automatic PASS cases, all 29
   geometrically correct and 82 unresolved. / 同条件 113 张隔离实测：发布版
   `v4.2.8` 用时 276.63 秒、60 张自动 PASS，其中 44 张几何正确、16 张错误；V4.9 基线
-  用时 495.17 秒、29 张自动 PASS，29 张均几何正确，另有 82 张 unresolved。
+  用时 495.17 秒、29 张自动 PASS，29 张均几何正确，另有 82 张 unresolved；该结果属于旧的
+  113 张样片集，不能代替新的 112 张 baseline。
 - `bfd259ee` records a 2.6% real speedup on the fixed half/partial sample by
   indexing exact graph option facts once. The e69 correctness wave makes no
   unmeasured performance claim; full performance acceptance remains open. /
@@ -197,19 +208,17 @@ current reports, Debug Analysis, and live command output remain authoritative.
 
 ## Next Actions / 下一步
 
-1. Classify and close the remaining 58 capability gaps without promoting the 30
-   provisional geometries that already compare wrong against manual references;
-   keep the two evidence-contract conflicts explicit. / 分类并关闭剩余 58 个 capability
-   gaps，但不得提升与人工 reference 冲突的 30 个 provisional geometry；两项 evidence-contract
-   conflict 继续显式保留。
-2. Re-run the fixed performance samples, 00006/00038, cross-format controls,
+1. Run one fresh current-schema diagnostics pass over all 112 samples and create
+   the new `Test/test 2`; preserve no retired `test 1`/`test 2` copies. / 用当前 schema
+   对 112 张样片全量诊断并生成新的 `Test/test 2`，不保留旧 `test 1`/`test 2` 副本。
+2. Treat the 88 `pass` samples as mandatory pure-auto correctness targets;
+   treat all 24 `unknown` samples as REVIEW-acceptable, with auto-pass as an
+   optional improvement only when physical evidence supports it. / 88 张 `pass` 必须
+   纯自动且物理正确；24 张 `unknown` 可接受 REVIEW，只有物理证据支持时 auto-pass 才是额外收益。
+3. Re-run performance samples, renamed `unknown_X5_00011`/`unknown_X5_00009`,
    reference validation, Debug inspection, and `tools/verify full` after every
-   accepted wave. / 每个接受波次都复核固定性能样片、00006/00038、跨格式控制、reference、
-   Debug 与 full verifier。
-3. After the physical and performance candidate is frozen, run a fresh complete
-   113-TIFF current-schema diagnostics set and replace `Test/test 2` while
-   preserving `Test/test 1`. / 物理与性能候选冻结后，用当前 schema 全量重跑 113 张 diagnostics，
-   再替换 `Test/test 2`，保持 `Test/test 1` 不变。
+   accepted wave. / 每个接受波次都复核性能样片、改名后的两个 unknown、reference、Debug
+   与 full verifier。
 4. Start Audit A only from a clean, verified, committed, pushed candidate; any
    root fix invalidates it. Then run the independent Audit B freeze review. /
    Audit A 只能从 clean/verified/committed/pushed 候选开始；任何根修复都会使其失效，之后再运行
