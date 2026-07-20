@@ -12,8 +12,8 @@ current reports, Debug Analysis, and live command output remain authoritative.
 ## Frozen Checkpoint / 冻结检查点
 
 - Branch / 分支：`main`.
-- Candidate / 候选提交：`4c48147c`
-  (`perf: reduce exact sequence search work`), pushed to `origin/main`.
+- Candidate / 候选提交：`1a641ae7`
+  (`perf: share graph witness path index`), pushed to `origin/main`.
 - The tracked worktree was clean immediately after the push. Local `Test/`
   TIFFs, references, expectations, diagnostics, and `Test/test 2` remain ignored
   and untracked. / 推送后 tracked worktree 为 clean；本地 `Test/` 样片、人工记录、
@@ -34,12 +34,12 @@ current reports, Debug Analysis, and live command output remain authoritative.
   只解析一次 boundary 与 role map，以保守区间窗口筛选 boundary path，并在 partial
   模式跳过 full-only completion。
 - Graph reachability now drops prefix-unreachable nodes from its backward sweep;
-  lexicographic ranking stops after every row is unique; independent separator
-  witnesses are solved once per physical edge with a seen/unseen dynamic path.
-  Direct interval comparisons replace temporary `PixelInterval` objects. /
-  Graph backward sweep 只处理 prefix-reachable 节点；每行唯一后停止余下 rank；独立
-  separator witness 按 physical edge 以 seen/unseen 动态路径求解；临时 interval
-  分配已改为等价的数值比较。
+  lexicographic ranking stops after every row is unique; transition and
+  independent-edge witnesses now share one cached best-prefix/best-suffix path
+  index per graph. Direct interval comparisons replace temporary
+  `PixelInterval` objects. / Graph backward sweep 只处理 prefix-reachable 节点；
+  每行唯一后停止余下 rank；transition 与 independent-edge witness 在每张 graph 内
+  共用一套 best-prefix/best-suffix path index；临时 interval 分配已改为等价数值比较。
 - Focused dimension ordering is used only when no complete two-sided separator
   seed exists. This preserves the canonical physical order when separator proof
   is available and prevents an earlier weak grid from displacing it. / 仅在没有
@@ -52,7 +52,7 @@ current reports, Debug Analysis, and live command output remain authoritative.
 
 ## Named Physical Truth / 具名物理事实
 
-- Fresh diagnostics at `4c48147c` keep `pass_X5_00006.tif` typed geometry
+- Fresh diagnostics at `1a641ae7` keep `pass_X5_00006.tif` typed geometry
   unavailable (`frame_slots_unresolved`, `assignment_consensus_unresolved`),
   `REVIEW`, non-exportable, with no frame outputs. Search completed without
   budget exhaustion; the sample remains a real `pass_required` capability gap.
@@ -101,6 +101,13 @@ current reports, Debug Analysis, and live command output remain authoritative.
   101,127 evaluations, about 34% faster. The current report comparison is zero
   diff and Debug Analysis is byte-identical. / 同一 10 万预算下 detection 从
   9.04 s 降至 5.95 s（约 34%）；report 0 diff，Debug Analysis 字节一致。
+- On fixed `120-66/partial/pass_X5_00011`, count 3 and the same 100,000
+  budget, comparable cProfile detection fell from 10.52 s to 9.00 s. Graph
+  witness cumulative time fell from 2.58 s to 0.96 s and function calls from
+  39.00 M to 33.66 M; assignment evaluations remain exactly 106,989, the report
+  has zero diff, and Debug is byte-identical. / 固定 00011/count 3 的同预算 profile
+  中，detection 从 10.52 s 降至 9.00 s，graph witness 从 2.58 s 降至 0.96 s，
+  function calls 从 39.00 M 降至 33.66 M；evaluation、report 与 Debug 均未改变。
 - The fixed sample remains typed `search_budget_exhausted`, geometry unavailable,
   `REVIEW`, and non-exportable. A complete 742,637-evaluation probe still had no
   independent proof, so more budget is not reliability evidence. / 固定样片仍为

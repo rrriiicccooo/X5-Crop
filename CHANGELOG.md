@@ -51,6 +51,20 @@ the validation evidence.
 
 ### 2026-07-19 — 无环观测权限 / Acyclic Observation Authority
 
+- Transition and independent-separator-edge witnesses now share one cached
+  best-prefix/best-suffix path index per feasible graph instead of rerunning a two-state graph
+  search for every physical edge. A two-edge contract failed with nine predecessor traversals
+  on the frozen implementation and now needs only the two traversals of the ordinary best path.
+  On fixed `120-66/partial/pass_X5_00011`, count 3 and the unchanged 100,000 budget, comparable
+  cProfile detection fell from 10.52 s to 9.00 s, graph-witness cumulative time from 2.58 s to
+  0.96 s, and calls from 39.00 M to 33.66 M. Assignment evaluations remain 106,989; the report
+  has zero diff and Debug Analysis is byte-identical. / Transition 与 independent separator
+  edge witness 现在于每张可行 graph 内共用一套缓存的 best-prefix/best-suffix path index，
+  不再为每条 physical edge 重跑 two-state graph search。双 edge 合同在冻结实现上需要 9 次
+  predecessor traversal，现在只保留普通 best path 的 2 次。固定
+  `120-66/partial/pass_X5_00011`、count 3、10 万预算的可比 cProfile 中，detection 从
+  10.52 s 降至 9.00 s，graph witness 从 2.58 s 降至 0.96 s，调用量从 39.00 M 降至
+  33.66 M；assignment evaluation 仍为 106,989，report 0 diff，Debug Analysis 字节一致。
 - Exact frame-sequence search now deduplicates equal physical-aspect priors, reuses resolved
   boundary and role facts, prunes prefix-unreachable backward states and interval-incompatible
   path observations, stops lexicographic ranking once each row is unique, and computes each
