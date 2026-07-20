@@ -51,6 +51,19 @@ the validation evidence.
 
 ### 2026-07-19 — 无环观测权限 / Acyclic Observation Authority
 
+- Boundary-path appearance now reuses exact local-window statistics within one
+  `boundary_measurements` call, keyed by the typed axis-local section, scan direction, and
+  complete start/end coordinates. No count, offset, candidate, Gate, or decision is cached. A
+  synthetic holder contract exposed 12 duplicate physical windows and now finds zero. On the
+  same fixed `120-66/partial/pass_X5_00011` count-3 cProfile, window measurements fell from
+  2,920 to 2,782 and detection from 9.00 s to 8.90 s; assignment evaluations remain 106,989,
+  the report has zero diff, and Debug Analysis is byte-identical. / Boundary-path appearance
+  现在只在单次 `boundary_measurements` 内复用 exact local-window statistics，typed key
+  包含 axis-local section、scan direction 与完整 start/end 坐标；不缓存 count、offset、
+  candidate、Gate 或 decision。合成 holder 合同从 12 个重复物理窗口降为 0。固定
+  `120-66/partial/pass_X5_00011` count-3 cProfile 中，window measurement 从 2,920 降至
+  2,782，detection 从 9.00 s 降至 8.90 s；assignment evaluation 仍为 106,989，
+  report 0 diff，Debug Analysis 字节一致。
 - Transition and independent-separator-edge witnesses now share one cached
   best-prefix/best-suffix path index per feasible graph instead of rerunning a two-state graph
   search for every physical edge. A two-edge contract failed with nine predecessor traversals

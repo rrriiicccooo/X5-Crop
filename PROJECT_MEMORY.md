@@ -12,14 +12,14 @@ current reports, Debug Analysis, and live command output remain authoritative.
 ## Frozen Checkpoint / 冻结检查点
 
 - Branch / 分支：`main`.
-- Candidate / 候选提交：`1a641ae7`
-  (`perf: share graph witness path index`), pushed to `origin/main`.
+- Candidate / 候选提交：`ab5a91c9`
+  (`perf: reuse exact boundary window measurements`), pushed to `origin/main`.
 - The tracked worktree was clean immediately after the push. Local `Test/`
   TIFFs, references, expectations, diagnostics, and `Test/test 2` remain ignored
   and untracked. / 推送后 tracked worktree 为 clean；本地 `Test/` 样片、人工记录、
   diagnostics 与 `Test/test 2` 仍是 ignored/untracked 验证资产。
-- `tools/verify full` passed before commit and again in the push hook: 811 tests,
-  14 format/mode configuration pairs, V4.9. / 提交前与 push hook 均通过 811 项测试、
+- `tools/verify full` passed before commit and again in the push hook: 812 tests,
+  14 format/mode configuration pairs, V4.9. / 提交前与 push hook 均通过 812 项测试、
   14 组配置与 V4.9 检查。
 - Resume by checking `git log -1 --oneline`, `git status --short`, and fresh
   reports. Do not treat this snapshot as live truth. / 恢复时先核对 Git 与现场报告，
@@ -45,6 +45,12 @@ current reports, Debug Analysis, and live command output remain authoritative.
   is available and prevents an earlier weak grid from displacing it. / 仅在没有
   complete two-sided separator seed 时使用 focused dimension order；有 separator
   证明时保留 canonical physical order，避免弱 grid 抢先占位。
+- Boundary appearance now reuses an exact local window statistic only within one
+  `boundary_measurements` call. The typed key contains axis-local section,
+  direction, start, and end; no count, offset, candidate, Gate, or decision is
+  cached. / Boundary appearance 只在单次 `boundary_measurements` 内复用 exact
+  window statistic；typed key 由 axis-local section、direction、start/end 组成，
+  不缓存 count、offset、candidate、Gate 或 decision。
 - Permanent contracts cover each optimization class and preserve graph witness,
   ordering, geometry, proof, and budget semantics. No execution budget was
   raised. / 永久合同覆盖上述各类，并保持 witness、排序、geometry、proof 与 budget
@@ -52,7 +58,7 @@ current reports, Debug Analysis, and live command output remain authoritative.
 
 ## Named Physical Truth / 具名物理事实
 
-- Fresh diagnostics at `1a641ae7` keep `pass_X5_00006.tif` typed geometry
+- Fresh diagnostics at `ab5a91c9` keep `pass_X5_00006.tif` typed geometry
   unavailable (`frame_slots_unresolved`, `assignment_consensus_unresolved`),
   `REVIEW`, non-exportable, with no frame outputs. Search completed without
   budget exhaustion; the sample remains a real `pass_required` capability gap.
@@ -108,6 +114,11 @@ current reports, Debug Analysis, and live command output remain authoritative.
   has zero diff, and Debug is byte-identical. / 固定 00011/count 3 的同预算 profile
   中，detection 从 10.52 s 降至 9.00 s，graph witness 从 2.58 s 降至 0.96 s，
   function calls 从 39.00 M 降至 33.66 M；evaluation、report 与 Debug 均未改变。
+- On the same 00011 profile, typed exact-window reuse reduced physical window
+  measurements from 2,920 to 2,782 and detection from 9.00 s to 8.90 s.
+  Assignment evaluations remain 106,989; report and Debug remain identical. /
+  同一 00011 profile 的 window measurement 从 2,920 降至 2,782，detection 从
+  9.00 s 降至 8.90 s；evaluation、report 与 Debug 不变。该小波次不关闭预算问题。
 - The fixed sample remains typed `search_budget_exhausted`, geometry unavailable,
   `REVIEW`, and non-exportable. A complete 742,637-evaluation probe still had no
   independent proof, so more budget is not reliability evidence. / 固定样片仍为
