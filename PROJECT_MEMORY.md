@@ -1,6 +1,6 @@
 # Project Memory / 项目记忆
 
-Updated / 更新：2026-07-19
+Updated / 更新：2026-07-21
 
 This is a concise cross-session map, not an instruction source or completion
 proof. Current user intent, Git, source, original TIFFs, manual references,
@@ -12,15 +12,23 @@ current reports, Debug Analysis, and live command output remain authoritative.
 ## Frozen Checkpoint / 冻结检查点
 
 - Branch / 分支：`main`.
-- Candidate / 候选提交：`fd0076d2`
-  (`perf: carry graph rank ambiguity forward`), pushed to `origin/main`.
+- Candidate / 候选提交：`e69d2175`
+  (`fix: resolve photo-bounded separator consensus`), pushed to `origin/main`;
+  it includes the preceding pushed performance commit `bfd259ee`
+  (`perf: index graph option facts once`). / 当前候选为 `e69d2175`，已推送到
+  `origin/main`；其中包含此前已推送的性能提交 `bfd259ee`。
+- `HEAD` and `origin/main` are both `e69d2175`; the branch has no unpushed
+  commits. / 当前 `HEAD` 与 `origin/main` 均为 `e69d2175`，没有未推送提交。
 - The tracked worktree was clean immediately after the push. Local `Test/`
   TIFFs, references, expectations, diagnostics, and `Test/test 2` remain ignored
   and untracked. / 推送后 tracked worktree 为 clean；本地 `Test/` 样片、人工记录、
   diagnostics 与 `Test/test 2` 仍是 ignored/untracked 验证资产。
-- `tools/verify full` passed before commit and again in the push hook: 813 tests,
-  14 format/mode configuration pairs, V4.9. / 提交前与 push hook 均通过 813 项测试、
-  14 组配置与 V4.9 检查。
+- `tools/verify full` passed before the memory update and again in the push hook:
+  815 tests, 14 format/mode configuration pairs, V4.9. / 记忆更新前与 push hook
+  均通过 815 项测试、14 组配置与 V4.9 检查。
+- `Test/test 2` is still the prior ignored validation set and has not been replaced;
+  it must be rebuilt only after a fresh all-113 current-schema run. / `Test/test 2`
+  仍是此前的 ignored 验证集，尚未替换；必须在当前 schema 的 113 张全量诊断完成后再重建。
 - Resume by checking `git log -1 --oneline`, `git status --short`, and fresh
   reports. Do not treat this snapshot as live truth. / 恢复时先核对 Git 与现场报告，
   不得把本快照当作当前证明。
@@ -60,22 +68,42 @@ current reports, Debug Analysis, and live command output remain authoritative.
   ordering, geometry, proof, and budget semantics. No execution budget was
   raised. / 永久合同覆盖上述各类，并保持 witness、排序、geometry、proof 与 budget
   语义；默认 execution budget 仍为 100,000。
+- `e69d2175` canonicalizes separator-binding topology by boundary index and
+  observation identity, and uses the actual binding count. Only a `full` strip
+  with a photo-edge-bounded shared short axis, at most one missing internal
+  separator, and strict-majority binding coverage may let the near-complete
+  topology own consensus; holder-bounded, partial, and one-of-two cases retain
+  alternatives. / `e69d2175` 按 boundary index 与 observation identity 规范化
+  separator-binding topology，并使用真实 binding 数量；只有 `full`、photo-edge-bounded
+  shared short axis、内部最多缺一个 separator 且覆盖严格多数时，近完整 topology 才能拥有
+  consensus；holder-bounded、partial 与二选一情形继续保留替代解。
 
 ## Named Physical Truth / 具名物理事实
 
-- Fresh diagnostics at `fd0076d2` keep `pass_X5_00006.tif` typed geometry
+- Fresh diagnostics at `e69d2175` keep `pass_X5_00006.tif` typed geometry
   unavailable (`frame_slots_unresolved`, `assignment_consensus_unresolved`),
   `REVIEW`, non-exportable, with no frame outputs. Search completed without
   budget exhaustion; the sample remains a real `pass_required` capability gap.
   / 00006 已不再 resolved-wrong，但仍是 `pass_required` capability gap。
+- Fresh `135/full` diagnostics at `e69d2175` promote
+  `pass_X5_00001.tif` and `pass_X5_00003.tif` to reference-matched automatic
+  PASS. The 48-sample run completed 48/48 with 11 approved and 37 review; the
+  other provisional cases remained protected by REVIEW. / `e69d2175` 的新鲜
+  `135/full` diagnostics 将 `00001` 与 `00003` 提升为符合人工 reference 的自动 PASS；
+  48 张全部完成，其中 11 张 approved、37 张 review，其余 provisional 结果继续由 REVIEW 保护。
 - The user-classified `Test/135/full/unknown_X5_00038.tif` is the canonical
   identity. Fresh diagnostics keep it typed geometry unavailable
   (`assignment_consensus_unresolved`), `REVIEW`, non-exportable, with no frame
   outputs; authority validation classifies it as conforming. / 00038 的当前事实是
   `unknown`，不是 `pass`；当前结果为 conforming 的 unresolved/REVIEW/不可导出。
-- Both fresh Debug Analysis images say `NOT EXPORTABLE` and show provisional
-  slots only. / 两张 Debug Analysis 均明确标注 `NOT EXPORTABLE`，只展示 provisional
-  slots。
+- Cross-format controls remain unresolved and non-exportable after the same wave:
+  `half/full/pass_X5_00007`, `120-67/full/pass_X5_00002`, and
+  `135/partial/pass_X5_00001`; their reference checks show no violation. / 同一波次的
+  跨格式控制样片仍为 unresolved、不可导出，且 reference 无 violation。
+- Fresh targeted Debug Analysis keeps the two new PASS cases physically aligned;
+  `unknown_X5_00038` remains marked `NOT EXPORTABLE` with provisional slots only. /
+  新 PASS 的 Debug Analysis 与物理边界一致；`unknown_X5_00038` 仍明确标注
+  `NOT EXPORTABLE`，只显示 provisional slots。
 
 ## Real-Sample Authority / 真实样片权限
 
@@ -92,10 +120,15 @@ current reports, Debug Analysis, and live command output remain authoritative.
   evidence-contract conflict rather than loosen a Gate. / 这两张仍保持
   `pass_required`，但允许观测无法独立证明人工 geometry，必须显式报告
   evidence-contract conflict，不得放宽 Gate。
-- The prior 113-report authority summary predates those two expectation
-  corrections and is stale. Generate a fresh complete diagnostics set before
-  quoting aggregate conforming/gap/conflict counts. / 旧的 113-report 汇总早于上述
-  两项事实修正，已经过时；引用全量统计前必须重新生成当前报告。
+- The latest assembled candidate authority check reports
+  `samples=113 conforming=53 capability_gap=58 evidence_contract_conflict=2
+  violation=0`. It combines fresh current `135/full` reports with the existing
+  `Test/test 2` rows for the other configurations, so it is directional evidence,
+  not the final all-113 freeze proof. A fresh all-113 current-schema run is still
+  required before replacing `Test/test 2`. / 当前拼接候选权限检查为
+  `113 / conforming 53 / capability gap 58 / evidence conflict 2 / violation 0`；
+  其中 `135/full` 是当前新报告，其余配置仍使用现有 `Test/test 2` 行，因此只能作为方向性证据，
+  不能作为最终 113 张冻结证明；替换 `Test/test 2` 前仍需用当前 schema 全量重跑。
 
 ## Performance State / 性能状态
 
@@ -106,6 +139,21 @@ current reports, Debug Analysis, and live command output remain authoritative.
     --format half --strip partial --count 11 --deskew off \
     --diagnostics --jobs 1 -o <output>
   ```
+
+- Isolated same-condition 113-sample benchmark: release `v4.2.8` took
+  276.63 s with 60 automatic PASS cases, of which 44 matched geometry and 16
+  were wrong; V4.9 baseline took 495.17 s with 29 automatic PASS cases, all 29
+  geometrically correct and 82 unresolved. / 同条件 113 张隔离实测：发布版
+  `v4.2.8` 用时 276.63 秒、60 张自动 PASS，其中 44 张几何正确、16 张错误；V4.9 基线
+  用时 495.17 秒、29 张自动 PASS，29 张均几何正确，另有 82 张 unresolved。
+- `bfd259ee` records a 2.6% real speedup on the fixed half/partial sample by
+  indexing exact graph option facts once. The e69 correctness wave makes no
+  unmeasured performance claim; full performance acceptance remains open. /
+  `bfd259ee` 在固定 half/partial 样片上通过一次索引 exact graph option facts 获得 2.6% 实测
+  加速；e69 正确性波次未宣称未经测量的性能收益，全量性能验收仍未关闭。
+- The following exact-search timings are historical provenance from earlier
+  optimization waves, not measurements of current `HEAD`. / 以下 exact-search 用时是
+  早期性能波次的历史证据，不代表当前 `HEAD` 的新实测。
 
 - With the unchanged 100,000 budget, frozen HEAD `7c38962c` took 9.04 s
   detection and 102,974 assignment evaluations; `4c48147c` took 5.95 s and
@@ -149,18 +197,20 @@ current reports, Debug Analysis, and live command output remain authoritative.
 
 ## Next Actions / 下一步
 
-1. Continue exact performance closure on the remaining `pass_required`
-   budget-exhausted samples. Distinguish a completed-search evidence conflict
-   from an optimization opportunity; do not alter proof authority. / 继续关闭其余
-   `pass_required` budget exhaustion，并区分完整搜索后的证据冲突与可优化空间。
-2. Re-run the frozen sample and named 00006/00038 reports, reference validation,
-   Debug inspection, and `tools/verify full` after every accepted wave. / 每个
-   接受波次都复核固定样片、00006/00038、reference、Debug 与 full verifier。
-3. Generate a fresh complete 113-TIFF diagnostics set only after the physical and
-   performance candidate is frozen. Rebuild stale `Test/test 2` afterward while
-   preserving `Test/test 1`. / 物理与性能候选冻结后再生成 113 张当前 diagnostics，
-   随后重建 `Test/test 2`，保持 `Test/test 1` 不变。
-4. Start Audit A only from a clean, verified, committed, pushed candidate. Any
-   root fix invalidates it. Leave Audit B as a context-independent prompt for a
-   new task; do not execute it here. / Audit A 只能从 clean/pushed 候选开始；任何
-   根修复都会使其失效。Audit B 只留下新任务 Prompt，本任务不得执行。
+1. Classify and close the remaining 58 capability gaps without promoting the 30
+   provisional geometries that already compare wrong against manual references;
+   keep the two evidence-contract conflicts explicit. / 分类并关闭剩余 58 个 capability
+   gaps，但不得提升与人工 reference 冲突的 30 个 provisional geometry；两项 evidence-contract
+   conflict 继续显式保留。
+2. Re-run the fixed performance samples, 00006/00038, cross-format controls,
+   reference validation, Debug inspection, and `tools/verify full` after every
+   accepted wave. / 每个接受波次都复核固定性能样片、00006/00038、跨格式控制、reference、
+   Debug 与 full verifier。
+3. After the physical and performance candidate is frozen, run a fresh complete
+   113-TIFF current-schema diagnostics set and replace `Test/test 2` while
+   preserving `Test/test 1`. / 物理与性能候选冻结后，用当前 schema 全量重跑 113 张 diagnostics，
+   再替换 `Test/test 2`，保持 `Test/test 1` 不变。
+4. Start Audit A only from a clean, verified, committed, pushed candidate; any
+   root fix invalidates it. Then run the independent Audit B freeze review. /
+   Audit A 只能从 clean/verified/committed/pushed 候选开始；任何根修复都会使其失效，之后再运行
+   独立 Audit B 冻结审查。
