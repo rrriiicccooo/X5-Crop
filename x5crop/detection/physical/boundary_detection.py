@@ -50,6 +50,20 @@ class _LocalPathSample:
     upper_gradient: float
 
 
+_WindowStatistics = tuple[float, float, float, float]
+
+
+@dataclass(frozen=True)
+class _WindowStatisticsKey:
+    section_index: int
+    reverse: bool
+    start: int
+    end: int
+
+
+_WindowStatisticsCache = dict[_WindowStatisticsKey, _WindowStatistics]
+
+
 def _texture_image(gray: np.ndarray) -> np.ndarray:
     data = gray.astype(np.float32, copy=False)
     gx = np.abs(np.diff(data, axis=1, prepend=data[:, :1]))
@@ -253,7 +267,7 @@ def _window_statistics(
     texture: np.ndarray,
     start: int,
     end: int,
-) -> tuple[float, float, float, float]:
+) -> _WindowStatistics:
     values = intensity[start:end]
     texture_values = texture[start:end]
     if not values.size:
@@ -268,6 +282,21 @@ def _window_statistics(
     )
 
 
+def _exact_window_statistics(
+    cache: _WindowStatisticsCache,
+    key: _WindowStatisticsKey,
+    intensity: np.ndarray,
+    texture: np.ndarray,
+    start: int,
+    end: int,
+) -> _WindowStatistics:
+    measured = cache.get(key)
+    if measured is None:
+        measured = _window_statistics(intensity, texture, start, end)
+        cache[key] = measured
+    return measured
+
+
 def _local_sample(
     section_index: int,
     orthogonal_interval: PixelInterval,
@@ -277,6 +306,7 @@ def _local_sample(
     reverse: bool,
     parameters: BoundaryPathParameters,
     transform_position_uncertainty_px: float,
+    window_statistics: _WindowStatisticsCache,
 ) -> _LocalPathSample | None:
     coordinate = int(round(position.midpoint))
     extent = len(intensity)
@@ -291,13 +321,27 @@ def _local_sample(
     inner_end = min(extent, coordinate + sample_width)
     if outer_start >= coordinate or inner_end <= coordinate:
         return None
-    outward = _window_statistics(
+    outward = _exact_window_statistics(
+        window_statistics,
+        _WindowStatisticsKey(
+            section_index,
+            reverse,
+            outer_start,
+            coordinate,
+        ),
         intensity,
         texture,
         outer_start,
         coordinate,
     )
-    inward = _window_statistics(
+    inward = _exact_window_statistics(
+        window_statistics,
+        _WindowStatisticsKey(
+            section_index,
+            reverse,
+            coordinate,
+            inner_end,
+        ),
         intensity,
         texture,
         coordinate,
@@ -332,6 +376,7 @@ def _local_samples_for_kind(
     statistics: ImageMeasurementStatistics,
     parameters: BoundaryPathParameters,
     transform_position_uncertainty_px: float,
+    window_statistics: _WindowStatisticsCache,
 ) -> tuple[_LocalPathSample, ...]:
     reverse = side in {BoundarySide.TRAILING, BoundarySide.BOTTOM}
     samples: list[_LocalPathSample] = []
@@ -363,6 +408,7 @@ def _local_samples_for_kind(
                 reverse,
                 parameters,
                 transform_position_uncertainty_px,
+                window_statistics,
             )
             if sample is not None:
                 samples.append(sample)
@@ -620,6 +666,7 @@ def _paths_for_axis(
     *,
     scan_origin: BoundarySide | None = None,
     transform_position_uncertainty_px: float,
+    window_statistics: _WindowStatisticsCache,
 ) -> tuple[GrayBoundaryPathObservation, ...]:
     if scan_origin is not None and boundary_axis_for_side(scan_origin) != axis:
         raise ValueError("boundary scan origin must lie on the measured axis")
@@ -634,6 +681,7 @@ def _paths_for_axis(
         statistics,
         parameters,
         transform_position_uncertainty_px,
+        window_statistics,
     )
     clusterer = (
         _edge_adjacent_cluster
@@ -761,6 +809,10 @@ def boundary_measurements(
         BoundaryAxis.LONG: long_axis_profiles,
         BoundaryAxis.SHORT: short_axis_profiles,
     }
+    window_statistics_by_axis: dict[
+        BoundaryAxis,
+        _WindowStatisticsCache,
+    ] = {axis: {} for axis in profiles_by_axis}
     generic_paths: list[GrayBoundaryPathObservation] = []
     for axis, profiles in profiles_by_axis.items():
         measured_axis_paths: list[GrayBoundaryPathObservation] = []
@@ -775,6 +827,7 @@ def boundary_measurements(
                     transform_position_uncertainty_px=(
                         transform_position_uncertainty_px
                     ),
+                    window_statistics=window_statistics_by_axis[axis],
                 )
             )
         ranked_axis_paths = tuple(
@@ -796,6 +849,9 @@ def boundary_measurements(
             transform_position_uncertainty_px=(
                 transform_position_uncertainty_px
             ),
+            window_statistics=window_statistics_by_axis[
+                boundary_axis_for_side(side)
+            ],
         )
         for side in BoundarySide
     }

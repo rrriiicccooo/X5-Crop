@@ -74,6 +74,40 @@ class BoundaryDetectionTests(unittest.TestCase):
 
         self.assertEqual(difference.call_count, 1)
 
+    def test_boundary_appearance_reuses_each_exact_profile_window(self) -> None:
+        gray = np.full((120, 240), 255, dtype=np.uint8)
+        gray[20:100, 40:200] = 120
+        measured_windows: set[tuple[object, ...]] = set()
+        repeated_windows: list[tuple[object, ...]] = []
+
+        def record_window(
+            intensity: np.ndarray,
+            texture: np.ndarray,
+            start: int,
+            end: int,
+        ) -> tuple[float, float, float, float]:
+            key = (
+                intensity.__array_interface__["data"][0],
+                intensity.strides,
+                texture.__array_interface__["data"][0],
+                texture.strides,
+                start,
+                end,
+            )
+            if key in measured_windows:
+                repeated_windows.append(key)
+            measured_windows.add(key)
+            return _window_statistics(intensity, texture, start, end)
+
+        with patch(
+            "x5crop.detection.physical.boundary_detection._window_statistics",
+            side_effect=record_window,
+        ):
+            _measure(gray)
+
+        self.assertTrue(measured_windows)
+        self.assertEqual(repeated_windows, [])
+
     def test_transform_uncertainty_expands_measured_path_intervals(self) -> None:
         gray = np.full((120, 240), 255, dtype=np.uint8)
         gray[20:100, 40:200] = 120
