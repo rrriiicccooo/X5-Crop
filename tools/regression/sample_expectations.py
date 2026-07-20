@@ -112,8 +112,21 @@ class SampleExpectation:
                 raise ValueError("review-required sample needs a physical review basis")
             if self.dataset_role != DatasetRole.VALIDATION:
                 raise ValueError("review-required sample must be validation-only")
-        elif self.geometry_reference != self.source:
-            raise ValueError("automatic pass targets require their own geometry reference")
+        elif (
+            self.automatic_decision_expectation
+            == DecisionExpectation.PASS_REQUIRED
+        ):
+            if self.geometry_reference != self.source:
+                raise ValueError(
+                    "required automatic pass targets need their own geometry reference"
+                )
+        elif (
+            self.geometry_reference is not None
+            and self.geometry_reference != self.source
+        ):
+            raise ValueError(
+                "optional automatic pass references must match their source"
+            )
         if (
             self.automatic_decision_expectation == DecisionExpectation.PASS_PREFERRED
             and self.dataset_role != DatasetRole.VALIDATION

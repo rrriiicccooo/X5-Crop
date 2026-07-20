@@ -153,25 +153,30 @@ class SampleExpectationContractTest(unittest.TestCase):
                         sample_expectation_from_record(record)
 
     def test_pass_targets_require_manual_geometry_reference(self) -> None:
-        for source, expectation in (
-            ("Test/135/full/pass_X5_00001.tif", "pass_required"),
-            ("Test/135/full/unknown_X5_00001.tif", "pass_preferred"),
-        ):
-            with self.subTest(source=source):
-                with self.assertRaises(ValueError):
-                    sample_expectation_from_record(
-                        _record(
-                            source=source,
-                            dataset_intent=source.rsplit("/", 1)[-1].partition("_")[0],
-                            automatic_decision_expectation=expectation,
-                            geometry_reference=None,
-                            dataset_role=(
-                                "validation"
-                                if expectation == "pass_preferred"
-                                else "calibration"
-                            ),
-                        )
-                    )
+        with self.assertRaises(ValueError):
+            sample_expectation_from_record(
+                _record(
+                    source="Test/135/full/pass_X5_00001.tif",
+                    automatic_decision_expectation="pass_required",
+                    geometry_reference=None,
+                    dataset_role="calibration",
+                )
+            )
+
+    def test_unreferenced_unknown_can_prefer_pass_without_requiring_review(
+        self,
+    ) -> None:
+        expectation = sample_expectation_from_record(
+            _record(
+                source="Test/135/partial/unknown_X5_00009.tif",
+                dataset_intent="unknown",
+                automatic_decision_expectation="pass_preferred",
+                geometry_reference=None,
+                dataset_role="validation",
+            )
+        )
+
+        self.assertIsNone(expectation.geometry_reference)
 
     def test_review_requires_a_physical_review_basis(self) -> None:
         with self.assertRaises(ValueError):

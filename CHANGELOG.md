@@ -20,6 +20,27 @@ PASS/REVIEW outcomes, report fields, and crop geometry are not compatibility
 targets; real TIFFs, current reports, Debug Analysis, and current contracts are
 the validation evidence.
 
+### 2026-07-21 — Real-sample label reset 与 baseline 清理 / Real-Sample Label Reset And Baseline Cleanup
+
+- The local real-sample baseline now contains 112 TIFFs: 88 `pass` samples are
+  `pass_required`, and all 24 `unknown` samples are `pass_preferred`; there are
+  no `review_required` samples. `135/full/unknown_X5_00038` is now
+  `unknown_X5_00011`, `135/partial/review_X5_00002` is now
+  `unknown_X5_00009`, and the `67/partial` sample set was removed. / 当前本地真实
+  样片基线为 112 张：88 张 `pass` 为 `pass_required`，24 张 `unknown` 全部为
+  `pass_preferred`，不再有 `review_required`；`135/full/unknown_X5_00038` 已改名为
+  `unknown_X5_00011`，`135/partial/review_X5_00002` 已改名为 `unknown_X5_00009`，
+  `67/partial` 样片集已删除。
+- `pass_preferred` may omit a manual geometry reference when an `unknown` sample
+  is allowed to remain REVIEW; if a reference is present, it must belong to the
+  same source. A reference-free unknown must never be treated as physically
+  verified merely because it auto-passes. / 当 unknown 样片允许保持 REVIEW 时，
+  `pass_preferred` 可以没有人工 geometry reference；若有 reference，必须属于同一 source。
+  没有 reference 的 unknown 不能仅因 auto-pass 就被视为物理上已验证。
+- The obsolete `Test/test 1`, `Test/test 2`, and the generated
+  `Test/135/full/x5_crop_output` were removed to prepare a new baseline. / 为重新建立
+  基线，旧的 `Test/test 1`、`Test/test 2` 与生成的 `Test/135/full/x5_crop_output` 已删除。
+
 ### 2026-07-20 — Holder 与内容反证闭环 / Holder And Content Refutation Closure
 
 - Assignment-consensus input now lets a near-complete independent separator
@@ -39,8 +60,8 @@ the validation evidence.
   将 `135/full/pass_X5_00001` 与 `00003` 提升为符合人工 reference 的自动 PASS，同时 `00006`、
   `unknown_X5_00038`、`half/full/pass_X5_00007`、`120-67/full/pass_X5_00002` 与 holder-bounded
   `135/full/pass_X5_00010` 继续保持不可导出的 REVIEW。
-  The full verifier passes 815 tests and
-  14 format/mode configuration pairs. / 完整 verifier 通过 815 项测试与 14 组 format/mode 配置。
+  The full verifier passes 816 tests and
+  14 format/mode configuration pairs. / 完整 verifier 通过 816 项测试与 14 组 format/mode 配置。
 - Measured-frame graph search now materializes immutable ordered-option coordinates, width bounds,
   content coverage, separator identities, observation counts, and boundary uncertainty once per
   search. Graph feasibility and best-path layers index those exact facts instead of repeatedly
