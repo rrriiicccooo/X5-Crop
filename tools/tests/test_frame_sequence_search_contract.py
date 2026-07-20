@@ -1324,30 +1324,46 @@ class FrameSequenceSearchContractTest(unittest.TestCase):
         )
         self.assertIsNotNone(feasibility)
         assert feasibility is not None
-        witnesses = sequence_search.sequence_graph_witnesses(
-            grouped,
-            ordered,
-            graph_context,
-            feasibility=feasibility,
-        )
+        with patch.object(
+            sequence_search,
+            "sequence_graph_best_path",
+            wraps=sequence_search.sequence_graph_best_path,
+        ) as best_path:
+            witnesses = sequence_search.sequence_graph_witnesses(
+                grouped,
+                ordered,
+                graph_context,
+                feasibility=feasibility,
+            )
 
-        self.assertIn(measured, witnesses)
+        self.assertIn(
+            measured,
+            witnesses,
+            tuple(
+                tuple(
+                    str(option.leading.provenance.observation_id)
+                    for option in witness
+                )
+                for witness in witnesses
+            ),
+        )
+        self.assertEqual(best_path.call_count, 1)
         self.assertTrue(feasibility.evaluations.independent_edge_witnesses)
         self.assertTrue(
             all(
                 any(
-                    edge_id
-                    in sequence_search._one_sided_supported_separator_edge_ids(
-                        (
-                            ordered[option_index].leading,
-                            ordered[option_index].trailing,
-                        )
+                    sequence_search._option_has_independent_separator_edge(
+                        ordered[option_index],
+                        edge_id,
+                        layer_index,
+                        len(feasibility.feasible) - 1,
                     )
-                    for option_index in feasibility.feasible[layer_index]
+                    for layer_index, option_indexes in enumerate(
+                        feasibility.feasible
+                    )
+                    for option_index in option_indexes
                 )
-                for layer_index, edge_id in (
-                    feasibility.evaluations.independent_edge_witnesses
-                )
+                for edge_id in feasibility.evaluations.independent_edge_witnesses
             )
         )
 

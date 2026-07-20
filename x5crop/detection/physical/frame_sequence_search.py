@@ -18,15 +18,6 @@ from . import frame_sequence_common_width as width_resolution
 from . import frame_sequence_measurements as measurement_facts
 from .model import FrameBoundarySource
 
-def _measured_frame_precedes(
-    left: measurement_facts.MeasuredFrameConstraint,
-    right: measurement_facts.MeasuredFrameConstraint,
-) -> bool:
-    return bool(
-        right.leading.position.minimum > left.leading.position.maximum
-        and right.trailing.position.minimum > left.trailing.position.maximum
-    )
-
 def measured_frame_option_rank(
     option: measurement_facts.MeasuredFrameConstraint,
 ) -> tuple[bool, int, int, int, float, float, float, float, float]:
@@ -111,18 +102,6 @@ def _separator_edges_pair_at_boundary(
         left.trailing.separator == right.leading.separator
         and left.trailing.separator_cross_axis
         == right.leading.separator_cross_axis
-    )
-
-def _separator_boundary_keys_are_compatible(
-    left: measurement_facts.MeasuredFrameConstraint,
-    right: measurement_facts.MeasuredFrameConstraint,
-) -> bool:
-    left_key = _separator_boundary_key(left.trailing)
-    right_key = _separator_boundary_key(right.leading)
-    return bool(
-        left_key == right_key
-        or left_key is None
-        or right_key is None
     )
 
 def _common_width_coordinate_span(
@@ -422,16 +401,33 @@ def sequence_graph_edge_is_interval_feasible(
 ) -> bool:
     left = ordered[left_index]
     right = ordered[right_index]
-    if not _separator_boundary_keys_are_compatible(left, right):
+    left_separator_key = _separator_boundary_key(left.trailing)
+    right_separator_key = _separator_boundary_key(right.leading)
+    if (
+        left_separator_key is not None
+        and right_separator_key is not None
+        and left_separator_key != right_separator_key
+    ):
         return False
-    if not _measured_frame_precedes(left, right):
+    if not (
+        right.leading.position.minimum > left.leading.position.maximum
+        and right.trailing.position.minimum > left.trailing.position.maximum
+    ):
         return False
     if not context.allow_nominal_slot_sized_gap:
-        common_width = left.width_px.intersection(right.width_px)
+        common_width_minimum = max(
+            left.width_px.minimum,
+            right.width_px.minimum,
+        )
+        common_width_maximum = min(
+            left.width_px.maximum,
+            right.width_px.maximum,
+        )
         if (
-            common_width is None
-            or right.leading.position.minus(left.trailing.position).maximum
-            >= common_width.minimum
+            common_width_maximum < common_width_minimum
+            or right.leading.position.maximum
+            - left.trailing.position.minimum
+            >= common_width_minimum
         ):
             return False
     left_coverage = context.coverages[left_index]
@@ -1111,9 +1107,7 @@ class SequenceGraphEvaluations:
     states: frozenset[tuple[int, int]]
     edge_queries: frozenset[tuple[int, int]]
     witness_transitions: frozenset[tuple[int, int, int]]
-    independent_edge_witnesses: frozenset[
-        tuple[int, ObservationId]
-    ] = frozenset()
+    independent_edge_witnesses: frozenset[ObservationId] = frozenset()
 
     def incremental_cost(self, previous: "SequenceGraphEvaluations") -> int:
         return (
@@ -1185,7 +1179,7 @@ def _sequence_graph_evaluations(
     last_layer = len(feasible) - 1
     independent_edge_witnesses = (
         frozenset(
-            (layer_index, edge_id)
+            edge_id
             for layer_index, option_indexes in enumerate(feasible)
             for option_index in option_indexes
             for edge_id in _one_sided_supported_separator_edge_ids(
@@ -1254,12 +1248,37 @@ def _retain_graph_rank(
     *,
     maximize: bool,
 ) -> np.ndarray:
-    preferred = (
-        np.max(np.where(remaining, values, -np.inf), axis=1)
-        if maximize
-        else np.min(np.where(remaining, values, np.inf), axis=1)
+    ambiguous_rows = np.flatnonzero(
+        np.count_nonzero(remaining, axis=1) > 1
     )
-    return np.logical_and(remaining, values == preferred[:, None])
+    if not len(ambiguous_rows):
+        return remaining
+    active_remaining = remaining[ambiguous_rows]
+    active_values = (
+        values
+        if values.shape[0] == 1
+        else values[ambiguous_rows]
+    )
+    preferred = (
+        np.max(
+            np.where(active_remaining, active_values, -np.inf),
+            axis=1,
+        )
+        if maximize
+        else np.min(
+            np.where(active_remaining, active_values, np.inf),
+            axis=1,
+        )
+    )
+    retained = np.logical_and(
+        active_remaining,
+        active_values == preferred[:, None],
+    )
+    if len(ambiguous_rows) == remaining.shape[0]:
+        return retained
+    updated = remaining.copy()
+    updated[ambiguous_rows] = retained
+    return updated
 
 
 def best_graph_predecessors(
@@ -1476,48 +1495,28 @@ def best_graph_predecessors(
             + uncorroborated_contact
         )
 
-        remaining = _retain_graph_rank(valid, overlaps, maximize=False)
-        remaining = _retain_graph_rank(
-            remaining, frame_sized_gaps, maximize=False
+        rank_criteria = (
+            (overlaps, False),
+            (frame_sized_gaps, False),
+            (supported_counts, True),
+            (qualities, True),
+            (contacts, False),
+            (unexplained, False),
+            (previous.external_leading_qualities[None, :], True),
+            (previous.observation_candidate_counts[None, :], True),
+            (previous.boundary_uncertainties[None, :], False),
+            (previous.frame_width_hint_residuals[None, :], False),
+            *((coordinate_values, True) for coordinate_values in coordinate_rank_values),
         )
-        remaining = _retain_graph_rank(
-            remaining,
-            supported_counts,
-            maximize=True,
-        )
-        remaining = _retain_graph_rank(
-            remaining,
-            qualities,
-            maximize=True,
-        )
-        remaining = _retain_graph_rank(remaining, contacts, maximize=False)
-        remaining = _retain_graph_rank(
-            remaining, unexplained, maximize=False
-        )
-        remaining = _retain_graph_rank(
-            remaining,
-            previous.external_leading_qualities[None, :],
-            maximize=True,
-        )
-        remaining = _retain_graph_rank(
-            remaining,
-            previous.observation_candidate_counts[None, :],
-            maximize=True,
-        )
-        remaining = _retain_graph_rank(
-            remaining,
-            previous.boundary_uncertainties[None, :],
-            maximize=False,
-        )
-        remaining = _retain_graph_rank(
-            remaining,
-            previous.frame_width_hint_residuals[None, :],
-            maximize=False,
-        )
-        for coordinate_values in coordinate_rank_values:
+        remaining = valid
+        for rank_values, maximize in rank_criteria:
             remaining = _retain_graph_rank(
-                remaining, coordinate_values, maximize=True
+                remaining,
+                rank_values,
+                maximize=maximize,
             )
+            if np.all(np.count_nonzero(remaining, axis=1) <= 1):
+                break
         best_offsets = np.argmax(remaining, axis=1)
         for row, current_index in enumerate(batch_indexes):
             if not has_predecessor[row]:
@@ -1535,6 +1534,128 @@ def best_graph_predecessors(
             )
     return selected
 
+def _initial_graph_path_states(
+    frame_options: tuple[
+        tuple[int, measurement_facts.MeasuredFrameConstraint], ...
+    ],
+    context: SequenceGraphContext,
+) -> dict[int, GraphPathState]:
+    return {
+        option_index: GraphPathState(
+            observation_candidate_count=_observation_candidate_count(option),
+            supported_separator_count=0,
+            internal_measurement_quality=0.0,
+            uncorroborated_overlap_extent_px=0.0,
+            frame_sized_unexplained_gap_count=0,
+            unexplained_spacing_extent_px=0.0,
+            uncorroborated_contact_count=0,
+            frame_width_hint_residual=option.frame_width_hint_residual,
+            boundary_uncertainty_px=_constraint_uncertainty(option),
+            external_leading_quality=option.leading.measurement_quality,
+            coordinate_key=(
+                -option.leading.position.midpoint,
+                -option.trailing.position.midpoint,
+            ),
+            predecessor=None,
+        )
+        for option_index, option in frame_options
+        if context.first_mask & (1 << option_index)
+    }
+
+
+def _advance_graph_path_states(
+    previous_states: dict[int, GraphPathState],
+    frame_options: tuple[
+        tuple[int, measurement_facts.MeasuredFrameConstraint], ...
+    ],
+    ordered: tuple[measurement_facts.MeasuredFrameConstraint, ...],
+    context: SequenceGraphContext,
+) -> dict[int, GraphPathState]:
+    if not previous_states:
+        return {}
+    predecessors = best_graph_predecessors(
+        tuple(option_index for option_index, _ in frame_options),
+        graph_layer_state_index(previous_states, ordered, context),
+        ordered,
+        context,
+    )
+    current_states: dict[int, GraphPathState] = {}
+    for option_index, option in frame_options:
+        predecessor = predecessors.get(option_index)
+        if predecessor is None:
+            continue
+        (
+            predecessor_index,
+            observation_increment,
+            separator_increment,
+            quality_increment,
+            overlap_increment,
+            frame_sized_gap_increment,
+            unexplained_increment,
+            contact_increment,
+        ) = predecessor
+        previous = previous_states[predecessor_index]
+        current_states[option_index] = GraphPathState(
+            observation_candidate_count=(
+                previous.observation_candidate_count + observation_increment
+            ),
+            supported_separator_count=(
+                previous.supported_separator_count + separator_increment
+            ),
+            internal_measurement_quality=(
+                previous.internal_measurement_quality + quality_increment
+            ),
+            uncorroborated_overlap_extent_px=(
+                previous.uncorroborated_overlap_extent_px + overlap_increment
+            ),
+            frame_sized_unexplained_gap_count=(
+                previous.frame_sized_unexplained_gap_count
+                + frame_sized_gap_increment
+            ),
+            unexplained_spacing_extent_px=(
+                previous.unexplained_spacing_extent_px + unexplained_increment
+            ),
+            uncorroborated_contact_count=(
+                previous.uncorroborated_contact_count + contact_increment
+            ),
+            frame_width_hint_residual=(
+                previous.frame_width_hint_residual
+                + option.frame_width_hint_residual
+            ),
+            boundary_uncertainty_px=(
+                previous.boundary_uncertainty_px
+                + _constraint_uncertainty(option)
+            ),
+            external_leading_quality=previous.external_leading_quality,
+            coordinate_key=(
+                *previous.coordinate_key,
+                -option.leading.position.midpoint,
+                -option.trailing.position.midpoint,
+            ),
+            predecessor=predecessor_index,
+        )
+    return current_states
+
+
+def _graph_path_state_rank(
+    state: GraphPathState,
+    trailing_quality: float = 0.0,
+) -> tuple[object, ...]:
+    return (
+        -state.uncorroborated_overlap_extent_px,
+        -state.frame_sized_unexplained_gap_count,
+        state.supported_separator_count,
+        state.internal_measurement_quality,
+        -state.uncorroborated_contact_count,
+        -state.unexplained_spacing_extent_px,
+        state.external_leading_quality + trailing_quality,
+        state.observation_candidate_count,
+        -state.boundary_uncertainty_px,
+        -state.frame_width_hint_residual,
+        state.coordinate_key,
+    )
+
+
 def sequence_graph_best_path(
     grouped_options: tuple[
         tuple[tuple[int, measurement_facts.MeasuredFrameConstraint], ...],
@@ -1543,99 +1664,14 @@ def sequence_graph_best_path(
     ordered: tuple[measurement_facts.MeasuredFrameConstraint, ...],
     context: SequenceGraphContext,
 ) -> tuple[measurement_facts.MeasuredFrameConstraint, ...] | None:
-    states: list[dict[int, GraphPathState]] = [
-        {
-            option_index: GraphPathState(
-                observation_candidate_count=_observation_candidate_count(option),
-                supported_separator_count=0,
-                internal_measurement_quality=0.0,
-                uncorroborated_overlap_extent_px=0.0,
-                frame_sized_unexplained_gap_count=0,
-                unexplained_spacing_extent_px=0.0,
-                uncorroborated_contact_count=0,
-                frame_width_hint_residual=option.frame_width_hint_residual,
-                boundary_uncertainty_px=_constraint_uncertainty(option),
-                external_leading_quality=option.leading.measurement_quality,
-                coordinate_key=(
-                    -option.leading.position.midpoint,
-                    -option.trailing.position.midpoint,
-                ),
-                predecessor=None,
-            )
-            for option_index, option in grouped_options[0]
-            if context.first_mask & (1 << option_index)
-        }
-    ]
+    states = [_initial_graph_path_states(grouped_options[0], context)]
     for frame_options in grouped_options[1:]:
-        previous_index = graph_layer_state_index(
+        current_states = _advance_graph_path_states(
             states[-1],
+            frame_options,
             ordered,
             context,
         )
-        predecessors = best_graph_predecessors(
-            tuple(option_index for option_index, _ in frame_options),
-            previous_index,
-            ordered,
-            context,
-        )
-        current_states: dict[int, GraphPathState] = {}
-        for option_index, option in frame_options:
-            predecessor = predecessors.get(option_index)
-            if predecessor is None:
-                continue
-            (
-                predecessor_index,
-                observation_increment,
-                separator_increment,
-                quality_increment,
-                overlap_increment,
-                frame_sized_gap_increment,
-                unexplained_increment,
-                contact_increment,
-            ) = predecessor
-            previous = states[-1][predecessor_index]
-            current_states[option_index] = GraphPathState(
-                observation_candidate_count=(
-                    previous.observation_candidate_count
-                    + observation_increment
-                ),
-                supported_separator_count=(
-                    previous.supported_separator_count + separator_increment
-                ),
-                internal_measurement_quality=(
-                    previous.internal_measurement_quality + quality_increment
-                ),
-                uncorroborated_overlap_extent_px=(
-                    previous.uncorroborated_overlap_extent_px
-                    + overlap_increment
-                ),
-                frame_sized_unexplained_gap_count=(
-                    previous.frame_sized_unexplained_gap_count
-                    + frame_sized_gap_increment
-                ),
-                unexplained_spacing_extent_px=(
-                    previous.unexplained_spacing_extent_px
-                    + unexplained_increment
-                ),
-                uncorroborated_contact_count=(
-                    previous.uncorroborated_contact_count + contact_increment
-                ),
-                frame_width_hint_residual=(
-                    previous.frame_width_hint_residual
-                    + option.frame_width_hint_residual
-                ),
-                boundary_uncertainty_px=(
-                    previous.boundary_uncertainty_px
-                    + _constraint_uncertainty(option)
-                ),
-                external_leading_quality=previous.external_leading_quality,
-                coordinate_key=(
-                    *previous.coordinate_key,
-                    -option.leading.position.midpoint,
-                    -option.trailing.position.midpoint,
-                ),
-                predecessor=predecessor_index,
-            )
         if not current_states:
             return None
         states.append(current_states)
@@ -1648,19 +1684,9 @@ def sequence_graph_best_path(
         return None
     terminal_index = max(
         terminal_indexes,
-        key=lambda option_index: (
-            -states[-1][option_index].uncorroborated_overlap_extent_px,
-            -states[-1][option_index].frame_sized_unexplained_gap_count,
-            states[-1][option_index].supported_separator_count,
-            states[-1][option_index].internal_measurement_quality,
-            -states[-1][option_index].uncorroborated_contact_count,
-            -states[-1][option_index].unexplained_spacing_extent_px,
-            states[-1][option_index].external_leading_quality
-            + ordered[option_index].trailing.measurement_quality,
-            states[-1][option_index].observation_candidate_count,
-            -states[-1][option_index].boundary_uncertainty_px,
-            -states[-1][option_index].frame_width_hint_residual,
-            states[-1][option_index].coordinate_key,
+        key=lambda option_index: _graph_path_state_rank(
+            states[-1][option_index],
+            ordered[option_index].trailing.measurement_quality,
         ),
     )
     selected = [terminal_index]
@@ -1809,7 +1835,7 @@ def _sequence_graph_feasibility(
     }
     for layer_index in reversed(range(len(grouped_options) - 1)):
         backward[layer_index] = _reachable_successors(
-            tuple(option_index for option_index, _ in grouped_options[layer_index]),
+            tuple(forward[layer_index]),
             tuple(backward[layer_index + 1]),
             ordered,
             context,
@@ -1970,8 +1996,192 @@ def _physical_sequences_through_transitions(
             )
     return sequences
 
+def _option_has_independent_separator_edge(
+    option: measurement_facts.MeasuredFrameConstraint,
+    edge_id: ObservationId,
+    layer_index: int,
+    last_layer: int,
+) -> bool:
+    return edge_id in _one_sided_supported_separator_edge_ids(
+        tuple(
+            edge
+            for edge in (
+                option.leading if layer_index > 0 else None,
+                option.trailing if layer_index < last_layer else None,
+            )
+            if edge is not None
+        )
+    )
+
+
+def _best_graph_path_containing_independent_edge(
+    edge_id: ObservationId,
+    grouped_options: tuple[
+        tuple[tuple[int, measurement_facts.MeasuredFrameConstraint], ...],
+        ...,
+    ],
+    ordered: tuple[measurement_facts.MeasuredFrameConstraint, ...],
+    context: SequenceGraphContext,
+) -> tuple[measurement_facts.MeasuredFrameConstraint, ...] | None:
+    last_layer = len(grouped_options) - 1
+    matching_indexes = tuple(
+        frozenset(
+            option_index
+            for option_index, option in frame_options
+            if _option_has_independent_separator_edge(
+                option,
+                edge_id,
+                layer_index,
+                last_layer,
+            )
+        )
+        for layer_index, frame_options in enumerate(grouped_options)
+    )
+    if not any(matching_indexes):
+        return None
+
+    initial = _initial_graph_path_states(grouped_options[0], context)
+    unseen_states: list[dict[int, GraphPathState]] = [
+        {
+            option_index: state
+            for option_index, state in initial.items()
+            if option_index not in matching_indexes[0]
+        }
+    ]
+    seen_states: list[dict[int, GraphPathState]] = [
+        {
+            option_index: state
+            for option_index, state in initial.items()
+            if option_index in matching_indexes[0]
+        }
+    ]
+    seen_predecessor_was_seen: list[dict[int, bool]] = [{}]
+    seen_target_layers: list[dict[int, int]] = [
+        {option_index: 0 for option_index in seen_states[0]}
+    ]
+
+    for layer_index, frame_options in enumerate(
+        grouped_options[1:],
+        start=1,
+    ):
+        from_unseen = _advance_graph_path_states(
+            unseen_states[-1],
+            frame_options,
+            ordered,
+            context,
+        )
+        from_seen = _advance_graph_path_states(
+            seen_states[-1],
+            frame_options,
+            ordered,
+            context,
+        )
+        unseen_states.append(
+            {
+                option_index: state
+                for option_index, state in from_unseen.items()
+                if option_index not in matching_indexes[layer_index]
+            }
+        )
+
+        current_seen: dict[int, GraphPathState] = {}
+        current_sources: dict[int, bool] = {}
+        current_target_layers: dict[int, int] = {}
+        for option_index, _ in frame_options:
+            candidates: list[tuple[GraphPathState, bool, int]] = []
+            if (state := from_seen.get(option_index)) is not None:
+                assert state.predecessor is not None
+                candidates.append(
+                    (
+                        state,
+                        True,
+                        seen_target_layers[-1][state.predecessor],
+                    )
+                )
+            if (
+                option_index in matching_indexes[layer_index]
+                and (state := from_unseen.get(option_index)) is not None
+            ):
+                candidates.append((state, False, layer_index))
+            if not candidates:
+                continue
+            state, predecessor_was_seen, target_layer = max(
+                candidates,
+                key=lambda candidate: (
+                    _graph_path_state_rank(candidate[0]),
+                    -candidate[2],
+                ),
+            )
+            current_seen[option_index] = state
+            current_sources[option_index] = predecessor_was_seen
+            current_target_layers[option_index] = target_layer
+
+        option_order = {
+            option_index: offset
+            for offset, (option_index, _) in enumerate(frame_options)
+        }
+        seen_order = sorted(
+            current_seen,
+            key=lambda option_index: (
+                current_target_layers[option_index],
+                option_order[option_index],
+            ),
+        )
+        seen_states.append(
+            {option_index: current_seen[option_index] for option_index in seen_order}
+        )
+        seen_predecessor_was_seen.append(current_sources)
+        seen_target_layers.append(current_target_layers)
+
+    terminal_indexes = tuple(
+        option_index
+        for option_index in seen_states[-1]
+        if context.last_mask & (1 << option_index)
+    )
+    if not terminal_indexes:
+        return None
+    terminal_index = max(
+        terminal_indexes,
+        key=lambda option_index: (
+            _graph_path_state_rank(
+                seen_states[-1][option_index],
+                ordered[option_index].trailing.measurement_quality,
+            ),
+            -seen_target_layers[-1][option_index],
+        ),
+    )
+
+    selected = [terminal_index]
+    path_was_seen = True
+    for layer_index in reversed(range(1, len(grouped_options))):
+        layer_states = (
+            seen_states[layer_index]
+            if path_was_seen
+            else unseen_states[layer_index]
+        )
+        predecessor = layer_states[selected[-1]].predecessor
+        if predecessor is None:
+            raise ValueError("targeted graph path state lacks its predecessor")
+        if path_was_seen:
+            path_was_seen = seen_predecessor_was_seen[layer_index][
+                selected[-1]
+            ]
+        selected.append(predecessor)
+    selected.reverse()
+    sequence = tuple(ordered[index] for index in selected)
+    return (
+        sequence
+        if width_resolution.measured_constraint_common_width(
+            sequence,
+            len(sequence),
+        )
+        is not None
+        else None
+    )
+
+
 def _independent_separator_edge_witnesses(
-    witnesses: frozenset[tuple[int, ObservationId]],
+    witnesses: frozenset[ObservationId],
     grouped_options: tuple[
         tuple[tuple[int, measurement_facts.MeasuredFrameConstraint], ...],
         ...,
@@ -1979,62 +2189,18 @@ def _independent_separator_edge_witnesses(
     ordered: tuple[measurement_facts.MeasuredFrameConstraint, ...],
     context: SequenceGraphContext,
 ) -> tuple[tuple[measurement_facts.MeasuredFrameConstraint, ...], ...]:
-    best_by_edge: dict[
-        ObservationId,
-        tuple[measurement_facts.MeasuredFrameConstraint, ...],
-    ] = {}
-    last_layer = len(grouped_options) - 1
-    for layer_index, edge_id in sorted(
-        witnesses,
-        key=lambda item: (str(item[1]), item[0]),
-    ):
-        constrained = tuple(
-            (
-                tuple(
-                    (option_index, option)
-                    for option_index, option in frame_options
-                    if edge_id
-                    in _one_sided_supported_separator_edge_ids(
-                        tuple(
-                            edge
-                            for edge in (
-                                (
-                                    option.leading
-                                    if offset > 0
-                                    else None
-                                ),
-                                (
-                                    option.trailing
-                                    if offset < last_layer
-                                    else None
-                                ),
-                            )
-                            if edge is not None
-                        )
-                    )
-                )
-                if offset == layer_index
-                else frame_options
-            )
-            for offset, frame_options in enumerate(grouped_options)
-        )
-        sequence = sequence_graph_best_path(
-            constrained,
-            ordered,
-            context,
-        )
-        if sequence is None:
-            continue
-        existing = best_by_edge.get(edge_id)
-        if (
-            existing is None
-            or _graph_sequence_rank(sequence)
-            > _graph_sequence_rank(existing)
-        ):
-            best_by_edge[edge_id] = sequence
     return tuple(
-        best_by_edge[edge_id]
-        for edge_id in sorted(best_by_edge, key=str)
+        sequence
+        for edge_id in sorted(witnesses, key=str)
+        if (
+            sequence := _best_graph_path_containing_independent_edge(
+                edge_id,
+                grouped_options,
+                ordered,
+                context,
+            )
+        )
+        is not None
     )
 
 def sequence_graph_witnesses(

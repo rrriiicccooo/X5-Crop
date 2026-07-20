@@ -908,12 +908,14 @@ def _dimension_seed_candidates(
         )
     )
 
-def _has_supported_internal_separator_edge_seed(
+def _has_complete_internal_separator_seed(
     candidates: tuple[tuple[measurement_facts.EdgeConstraint, bool], ...],
 ) -> bool:
     return any(
         edge.external_side is None
         and measurement_facts.separator_edge_path_is_supported(edge)
+        and edge.separator_cross_axis is not None
+        and edge.separator_cross_axis.complete_separator_supported
         for edge, _ in candidates
     )
 
@@ -1233,6 +1235,7 @@ def prepare_frame_sequence_search_index(
         preparation_evaluations=evaluations,
     )
 
+
 def _measured_frame_search_space(
     search_index: FrameSequenceSearchIndex,
     search_widths: tuple[PixelInterval, ...],
@@ -1326,7 +1329,7 @@ def _ordered_dimension_placement_hypotheses(
     placement_widths: tuple[PixelInterval, ...],
     physical_scale_constraint: FrameWidthPhysicalScaleConstraint | None,
     *,
-    supported_separator_seed_available: bool,
+    complete_separator_seed_available: bool,
 ) -> tuple[width_resolution.DimensionPlacementHypothesis, ...]:
     hypotheses = width_resolution.dimension_placement_hypotheses(
         search_space.width_hypotheses,
@@ -1334,7 +1337,7 @@ def _ordered_dimension_placement_hypotheses(
         placement_widths,
         physical_scale_constraint,
     )
-    if supported_separator_seed_available:
+    if complete_separator_seed_available:
         return hypotheses
     recurring_order = {
         hypothesis.width_px: index
@@ -1694,10 +1697,10 @@ def _measured_path_builds(
         )
         dimension_leading_seeds = dimension_leading_candidates
         dimension_trailing_seeds = dimension_trailing_candidates
-        strong_dimension_seed_search = _has_supported_internal_separator_edge_seed(
+        complete_separator_seed_search = _has_complete_internal_separator_seed(
             (*dimension_leading_candidates, *dimension_trailing_candidates)
         )
-        if strong_dimension_seed_search:
+        if complete_separator_seed_search:
             dimension_leading_seeds = _dimension_seed_candidates(
                 dimension_leading_candidates
             )
@@ -1752,8 +1755,8 @@ def _measured_path_builds(
                 search_space,
                 placement_widths,
                 physical_scale_constraint,
-                supported_separator_seed_available=(
-                    strong_dimension_seed_search
+                complete_separator_seed_available=(
+                    complete_separator_seed_search
                 ),
             )
 
@@ -1784,7 +1787,7 @@ def _measured_path_builds(
                             dimension_trailing_candidates,
                         ),
                     )
-                    if strong_dimension_seed_search
+                    if complete_separator_seed_search
                     else ()
                 ),
             )
@@ -1836,7 +1839,7 @@ def _measured_path_builds(
                 if branch_truncated:
                     states_truncated = True
                     break
-                if strong_dimension_seed_search and separator_incumbent:
+                if complete_separator_seed_search and separator_incumbent:
                     break
                 if _supported_separator_incumbent(
                     tuple(branch_builds),

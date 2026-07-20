@@ -517,7 +517,7 @@ class FrameSequenceCompletionContractTest(unittest.TestCase):
                 )
             )
 
-    def test_common_width_resolves_unmeasured_boundary_before_width_check(
+    def test_common_width_check_consumes_resolved_boundary(
         self,
     ) -> None:
         def boundary(
@@ -544,27 +544,20 @@ class FrameSequenceCompletionContractTest(unittest.TestCase):
                 trailing=boundary(100.0, independently_observed=True),
             ),
         )
-        build = SimpleNamespace(slots=raw_slots)
+        self.assertNotEqual(raw_slots, resolved_slots)
+        resolved_build = SimpleNamespace(slots=resolved_slots)
         common_width = SimpleNamespace(
             state=EvidenceState.SUPPORTED,
             width_px=PixelInterval.exact(100.0),
         )
 
-        with (
-            patch.object(
-                candidate_resolution,
-                "resolve_build_physical_boundaries",
-                return_value=(SimpleNamespace(slots=resolved_slots), common_width),
-            ),
-        ):
-            self.assertTrue(
-                sequence_completion.build_does_not_contradict_common_width(
-                    build,
-                    {},
-                    SimpleNamespace(),
-                    SimpleNamespace(),
-                )
+        self.assertTrue(
+            sequence_completion.build_does_not_contradict_common_width(
+                resolved_build,
+                common_width,
+                {},
             )
+        )
 
     def test_common_width_resolution_cannot_create_non_monotonic_sequence(
         self,
@@ -572,7 +565,6 @@ class FrameSequenceCompletionContractTest(unittest.TestCase):
         def boundary(position: float) -> SimpleNamespace:
             return SimpleNamespace(position=PixelInterval.exact(position))
 
-        build = SimpleNamespace(slots=(SimpleNamespace(), SimpleNamespace()))
         resolved_slots = (
             SimpleNamespace(
                 leading=boundary(100.0),
@@ -588,23 +580,15 @@ class FrameSequenceCompletionContractTest(unittest.TestCase):
             width_px=PixelInterval.exact(100.0),
         )
 
-        with (
-            patch.object(
-                candidate_resolution,
-                "resolve_build_physical_boundaries",
-                return_value=(SimpleNamespace(slots=resolved_slots), common_width),
-            ),
-            patch.object(
-                width_resolution,
-                "slots_do_not_contradict_supported_common_width",
-                return_value=True,
-            ),
+        with patch.object(
+            width_resolution,
+            "slots_do_not_contradict_supported_common_width",
+            return_value=True,
         ):
             self.assertFalse(
                 sequence_completion.build_does_not_contradict_common_width(
-                    build,
+                    SimpleNamespace(slots=resolved_slots),
+                    common_width,
                     {},
-                    SimpleNamespace(),
-                    SimpleNamespace(),
                 )
             )

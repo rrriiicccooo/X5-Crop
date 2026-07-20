@@ -13,7 +13,7 @@ from ..model import AssessedCandidate
 from ..plan.model import CountHypothesis
 from ..proposal.sequence import FrameSequenceObservations
 from ..selection.choose import select_candidates
-from ...physical.frame_dimensions import frame_dimension_priors
+from ...physical.frame_dimensions import frame_dimension_search_priors
 from ...physical.short_axis import SharedShortAxisPlan
 from .model import CountHypothesisEvaluation
 
@@ -27,7 +27,7 @@ def _assess_count_hypothesis(
     visible_content: ContentRegionObservation,
 ) -> tuple[list[AssessedCandidate], PhysicalSearchOutcome]:
     outcomes = []
-    for dimensions in frame_dimension_priors(
+    for dimensions in frame_dimension_search_priors(
         context.configuration.physical_spec,
     ):
         outcome = build_sequence_candidate(

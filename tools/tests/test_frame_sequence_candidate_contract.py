@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import replace
 from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
 from tools.tests.frame_slot_solver_support import path
 from tools.tests.physical_gate_support import candidate_fixture
@@ -31,6 +32,41 @@ from x5crop.domain import (
 
 
 class FrameSequenceCandidateContractTest(unittest.TestCase):
+    def test_physical_preference_builds_each_boundary_role_map_once(self) -> None:
+        edge = SimpleNamespace(position=PixelInterval.exact(0.0))
+        builds = tuple(
+            SimpleNamespace(
+                slots=(
+                    SimpleNamespace(
+                        index=1,
+                        sequence_inferred=False,
+                        leading=edge,
+                        trailing=edge,
+                    ),
+                ),
+                objectives=candidate_builds.SequenceBuildObjectives(
+                    uncorroborated_overlap_extent_px=0.0,
+                    unexplained_spacing_extent_px=0.0,
+                    supported_separator_count=1,
+                    internal_boundary_measurement_quality=1.0,
+                    dimension_residual=0.0,
+                    external_boundary_measurement_quality=0.0,
+                    boundary_uncertainty_ratio=0.0,
+                ),
+            )
+            for _ in range(4)
+        )
+
+        with patch.object(
+            candidate_builds,
+            "_internal_boundary_role_map",
+            wraps=candidate_builds._internal_boundary_role_map,
+        ) as role_map:
+            retained = candidate_builds.physically_preferred_builds(builds)
+
+        self.assertEqual(retained, builds)
+        self.assertLessEqual(role_map.call_count, len(builds))
+
     def test_physical_pareto_prefers_stronger_physical_measurement_support(
         self,
     ) -> None:

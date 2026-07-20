@@ -240,13 +240,13 @@ def _internal_boundary_role_map(
 
 
 def _boundary_role_map_strictly_dominates(
-    left: SequenceBuild,
-    right: SequenceBuild,
+    left_inference_signature: tuple[int, ...],
+    left_roles: dict[tuple[int, BoundarySide], ResolvedFrameBoundary],
+    right_inference_signature: tuple[int, ...],
+    right_roles: dict[tuple[int, BoundarySide], ResolvedFrameBoundary],
 ) -> bool:
-    if _sequence_inference_signature(left) != _sequence_inference_signature(right):
+    if left_inference_signature != right_inference_signature:
         return False
-    left_roles = _internal_boundary_role_map(left)
-    right_roles = _internal_boundary_role_map(right)
     return bool(
         left_roles.keys() > right_roles.keys()
         and all(
@@ -268,8 +268,18 @@ def physically_preferred_builds(
 ) -> tuple[SequenceBuild, ...]:
     if not builds:
         raise ValueError("physical sequence ranking requires builds")
+    physical_facts_by_identity = {
+        id(build): (
+            _sequence_inference_signature(build),
+            _internal_boundary_role_map(build),
+        )
+        for build in builds
+    }
     independently_supported = tuple(
-        build for build in builds if _build_has_independent_boundary_support(build)
+        build
+        for build in builds
+        if build.objectives.supported_separator_count
+        or physical_facts_by_identity[id(build)][1]
     )
     if not independently_supported:
         return builds
@@ -288,7 +298,10 @@ def physically_preferred_builds(
         for build in builds
         if not any(
             other is not build
-            and _boundary_role_map_strictly_dominates(other, build)
+            and _boundary_role_map_strictly_dominates(
+                *physical_facts_by_identity[id(other)],
+                *physical_facts_by_identity[id(build)],
+            )
             for other in builds
         )
     )

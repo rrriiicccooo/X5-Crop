@@ -702,17 +702,10 @@ def build_satisfies_full_endpoint_extent(
 
 
 def build_does_not_contradict_common_width(
-    build: sequence_candidates.SequenceBuild,
+    resolved_build: sequence_candidates.SequenceBuild,
+    common_width: CommonFrameWidthResolution,
     holder_boundaries: dict[BoundarySide, HolderBoundaryObservation],
-    photo_height_evidence: PhotoHeightEvidence,
-    dimensions: FrameDimensionPrior,
 ) -> bool:
-    resolved_build, common_width = candidate_resolution.resolve_build_physical_boundaries(
-        build,
-        holder_boundaries,
-        photo_height_evidence,
-        dimensions,
-    )
     resolved_slots = resolved_build.slots
     return bool(
         sequence_candidates.frame_slots_are_strictly_monotonic(resolved_slots)

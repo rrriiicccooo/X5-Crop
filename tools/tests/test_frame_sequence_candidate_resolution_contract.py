@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 import unittest
+from unittest.mock import patch
 
 from tools.tests.frame_slot_solver_support import (
     content,
@@ -624,12 +625,25 @@ class FrameSequenceCandidateResolutionContractTest(unittest.TestCase):
             position.midpoint,
             "unique_dimension_focused_path",
         )
-
-        resolved = candidate_resolution.assign_unique_boundary_path_observations(
-            build,
-            geometry.common_frame_width,
-            (observation,),
+        distant_paths = tuple(
+            path(
+                BoundaryAxis.LONG,
+                10_000.0 + offset * 100.0,
+                f"distant_dimension_path_{offset}",
+            )
+            for offset in range(128)
         )
+
+        with patch.object(
+            candidate_resolution,
+            "_boundary_path_assignment",
+            wraps=candidate_resolution._boundary_path_assignment,
+        ) as assignment:
+            resolved = candidate_resolution.assign_unique_boundary_path_observations(
+                build,
+                geometry.common_frame_width,
+                (*distant_paths, observation),
+            )
 
         boundary = resolved.slots[1].leading
         self.assertEqual(boundary.source, FrameBoundarySource.GRAY_PATH_OBSERVATION)
@@ -641,3 +655,4 @@ class FrameSequenceCandidateResolutionContractTest(unittest.TestCase):
                 for assignment in resolved.long_axis_assignments
             )
         )
+        self.assertLessEqual(assignment.call_count, 2)

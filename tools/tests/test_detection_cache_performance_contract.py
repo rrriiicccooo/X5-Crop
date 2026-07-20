@@ -58,6 +58,137 @@ def _profile_measurement(width: int) -> SeparatorProfileMeasurement:
 
 
 class DetectionCachePerformanceContractTest(unittest.TestCase):
+    def test_backward_graph_sweep_skips_prefix_unreachable_options(self) -> None:
+        def edge(position: float, label: str):
+            return measurements.EdgeConstraint(
+                position=PixelInterval.exact(position),
+                basis=FrameBoundarySource.DIMENSION_CONSTRAINED,
+                state=EvidenceState.UNAVAILABLE,
+                geometry_state=BoundaryGeometryState.RESOLVED,
+                provenance=MeasurementProvenance(
+                    MeasurementIdentity.FRAME_GEOMETRY,
+                    ObservationId(label),
+                    (),
+                    "synthetic backward-sweep graph edge",
+                ),
+            )
+
+        def frame(start: float, label: str):
+            return measurements.MeasuredFrameConstraint(
+                leading=edge(start, f"{label}:leading"),
+                trailing=edge(start + 100.0, f"{label}:trailing"),
+                width_px=PixelInterval.exact(100.0),
+                full_width_hypothesis_admissible=True,
+                leading_holder_clip_supported=False,
+                trailing_holder_clip_supported=False,
+                search_order_residual=0.0,
+            )
+
+        ordered = (
+            frame(0.0, "first"),
+            frame(110.0, "reachable-middle"),
+            frame(0.0, "prefix-unreachable-middle"),
+            frame(220.0, "last"),
+        )
+        grouped = (
+            ((0, ordered[0]),),
+            ((1, ordered[1]), (2, ordered[2])),
+            ((3, ordered[3]),),
+        )
+        context = sequence_search.sequence_graph_context(
+            ordered,
+            ContentRegionObservation(
+                region=Box(0, 0, 320, 100),
+                reliable_runs=(),
+                position_uncertainty_px=0,
+            ),
+            allow_nominal_slot_sized_gap=True,
+        )
+        successor_inputs: list[tuple[int, ...]] = []
+        reachable_successors = sequence_search._reachable_successors
+
+        def capture_successor_inputs(current_indexes, *args):
+            successor_inputs.append(current_indexes)
+            return reachable_successors(current_indexes, *args)
+
+        with patch.object(
+            sequence_search,
+            "_reachable_successors",
+            side_effect=capture_successor_inputs,
+        ):
+            feasibility = sequence_search._sequence_graph_feasibility(
+                grouped,
+                ordered,
+                context,
+            )
+
+        self.assertIsNotNone(feasibility)
+        self.assertEqual(successor_inputs[0], (1,))
+
+    def test_graph_edge_feasibility_uses_interval_bounds_without_allocations(
+        self,
+    ) -> None:
+        def edge(position: float, label: str):
+            return measurements.EdgeConstraint(
+                position=PixelInterval.exact(position),
+                basis=FrameBoundarySource.DIMENSION_CONSTRAINED,
+                state=EvidenceState.UNAVAILABLE,
+                geometry_state=BoundaryGeometryState.RESOLVED,
+                provenance=MeasurementProvenance(
+                    MeasurementIdentity.FRAME_GEOMETRY,
+                    ObservationId(label),
+                    (),
+                    "synthetic allocation-free graph edge",
+                ),
+            )
+
+        def frame(start: float, index: int):
+            return measurements.MeasuredFrameConstraint(
+                leading=edge(start, f"allocation-leading-{index}"),
+                trailing=edge(start + 100.0, f"allocation-trailing-{index}"),
+                width_px=PixelInterval(99.0, 101.0),
+                full_width_hypothesis_admissible=True,
+                leading_holder_clip_supported=False,
+                trailing_holder_clip_supported=False,
+                search_order_residual=0.0,
+            )
+
+        ordered = (frame(0.0, 0), frame(110.0, 1))
+        context = sequence_search.sequence_graph_context(
+            ordered,
+            ContentRegionObservation(
+                region=Box(0, 0, 210, 100),
+                reliable_runs=(),
+                position_uncertainty_px=0,
+            ),
+            allow_nominal_slot_sized_gap=False,
+        )
+
+        with (
+            patch.object(
+                PixelInterval,
+                "intersection",
+                autospec=True,
+                side_effect=PixelInterval.intersection,
+            ) as intersection,
+            patch.object(
+                PixelInterval,
+                "minus",
+                autospec=True,
+                side_effect=PixelInterval.minus,
+            ) as minus,
+        ):
+            supported = sequence_search.sequence_graph_edge_is_interval_feasible(
+                0,
+                1,
+                ordered,
+                context,
+            )
+
+        self.assertTrue(supported)
+        intersection.assert_not_called()
+        minus.assert_not_called()
+
     def test_report_records_are_not_reused_as_detection_cache(self) -> None:
         from tools.tests.architecture_contracts import PROJECT_ROOT
         from x5crop.report.validation import CURRENT_REPORT_SECTIONS
@@ -75,7 +206,7 @@ class DetectionCachePerformanceContractTest(unittest.TestCase):
         )
         self.assertNotIn("analysis_reuse", CURRENT_REPORT_SECTIONS)
 
-    def test_graph_layer_predecessors_are_ranked_without_per_option_calls(
+    def test_graph_layer_ranking_stops_after_a_unique_physical_predecessor(
         self,
     ) -> None:
         def edge(position: float, label: str):
@@ -122,7 +253,7 @@ class DetectionCachePerformanceContractTest(unittest.TestCase):
                 observation_candidate_count=0,
                 supported_separator_count=0,
                 internal_measurement_quality=0.0,
-                uncorroborated_overlap_extent_px=0.0,
+                uncorroborated_overlap_extent_px=float(index),
                 frame_sized_unexplained_gap_count=0,
                 unexplained_spacing_extent_px=0.0,
                 uncorroborated_contact_count=0,
@@ -151,7 +282,14 @@ class DetectionCachePerformanceContractTest(unittest.TestCase):
             intersection_calls += 1
             return original_intersection(left, right)
 
-        with patch.object(PixelInterval, "intersection", counted_intersection):
+        with (
+            patch.object(PixelInterval, "intersection", counted_intersection),
+            patch.object(
+                sequence_search,
+                "_retain_graph_rank",
+                wraps=sequence_search._retain_graph_rank,
+            ) as rank_step,
+        ):
             selected = sequence_search.best_graph_predecessors(
                 (len(previous_options),),
                 previous,
@@ -161,7 +299,45 @@ class DetectionCachePerformanceContractTest(unittest.TestCase):
 
         self.assertIn(len(previous_options), selected)
         self.assertLessEqual(intersection_calls, 2)
+        self.assertEqual(rank_step.call_count, 1)
         self.assertFalse(hasattr(sequence_search, "best_graph_predecessor"))
+
+    def test_graph_rank_materializes_only_still_ambiguous_rows(self) -> None:
+        remaining = np.asarray(
+            (
+                (True, False, False),
+                (True, True, False),
+            ),
+            dtype=bool,
+        )
+        values = np.asarray(
+            (
+                (0.0, 2.0, 1.0),
+                (2.0, 1.0, 0.0),
+            ),
+            dtype=np.float64,
+        )
+
+        with patch.object(np, "where", wraps=np.where) as materialize:
+            retained = sequence_search._retain_graph_rank(
+                remaining,
+                values,
+                maximize=True,
+            )
+
+        self.assertTrue(
+            np.array_equal(
+                retained,
+                np.asarray(
+                    (
+                        (True, False, False),
+                        (True, False, False),
+                    ),
+                    dtype=bool,
+                ),
+            )
+        )
+        self.assertEqual(materialize.call_args.args[0].shape, (1, 3))
 
     def test_reachability_reuses_identical_subset_order_within_one_pass(
         self,

@@ -71,88 +71,84 @@ def solve_frame_sequence(
         )
     )
     holder_boundaries = candidate_resolution.holder_boundaries(search_scope)
-    direct_geometry_complete_before_inference = (
-        sequence_completion.direct_nominal_geometry_is_complete(
-            direct_builds,
-            visible_content,
-            holder_boundaries,
-            short_axis_plan.photo_height_evidence,
-            dimensions,
-        )
-    )
-    if (
-        sequence_completion_search_enabled
-        and not direct_exhausted
-        and not direct_geometry_complete_before_inference
-    ):
-        direct_builds = tuple(
-            sequence_completion.infer_unique_slot_in_direct_nominal_build(
-                build,
-                visible_content,
-                search_scope,
-                short_axis_plan.photo_height_evidence,
-                dimensions,
-            )
-            for build in direct_builds
-        )
-    direct_separator_sequence_complete = any(
-        len(build.separator_bindings) == count - 1
-        for build in direct_builds
-    )
-    direct_nominal_geometry_resolved = (
-        sequence_completion.direct_nominal_geometry_is_complete(
-            direct_builds,
-            visible_content,
-            holder_boundaries,
-            short_axis_plan.photo_height_evidence,
-            dimensions,
-        )
-    )
-    direct_common_width_supported = (
-        sequence_completion.preferred_direct_common_width_is_supported(
-            direct_builds,
-            visible_content,
-            holder_boundaries,
-            short_axis_plan.photo_height_evidence,
-            dimensions,
-        )
-    )
     completion_builds: tuple[sequence_candidates.SequenceBuild, ...] = ()
     completion_evaluations = 0
     completion_exhausted = False
-    if (
-        sequence_completion_search_enabled
-        and direct_common_width_supported
-        and not direct_separator_sequence_complete
-        and not direct_nominal_geometry_resolved
-    ):
-        remaining_evaluations = maximum_assignment_evaluations - direct_evaluations
-        if direct_exhausted or remaining_evaluations <= 0:
-            completion_exhausted = True
-        else:
-            (
-                real_frame_builds,
-                completion_evaluations,
-                completion_exhausted,
-            ) = (
-                construction.sequence_builds_for_count(
-                    search_index,
-                    search_scope,
-                    shared_short_axis,
-                    short_axis_plan.photo_height_evidence,
-                    count - 1,
-                    dimensions,
-                    visible_content,
-                    remaining_evaluations,
-                    allow_nominal_slot_sized_gap=True,
-                )
-            )
-            completion_builds = sequence_completion.sequence_completed_builds(
-                real_frame_builds,
-                search_scope,
+    if sequence_completion_search_enabled:
+        direct_geometry_complete_before_inference = (
+            sequence_completion.direct_nominal_geometry_is_complete(
+                direct_builds,
+                visible_content,
+                holder_boundaries,
                 short_axis_plan.photo_height_evidence,
                 dimensions,
             )
+        )
+        if not direct_exhausted and not direct_geometry_complete_before_inference:
+            direct_builds = tuple(
+                sequence_completion.infer_unique_slot_in_direct_nominal_build(
+                    build,
+                    visible_content,
+                    search_scope,
+                    short_axis_plan.photo_height_evidence,
+                    dimensions,
+                )
+                for build in direct_builds
+            )
+        direct_separator_sequence_complete = any(
+            len(build.separator_bindings) == count - 1
+            for build in direct_builds
+        )
+        direct_nominal_geometry_resolved = (
+            sequence_completion.direct_nominal_geometry_is_complete(
+                direct_builds,
+                visible_content,
+                holder_boundaries,
+                short_axis_plan.photo_height_evidence,
+                dimensions,
+            )
+        )
+        direct_common_width_supported = (
+            sequence_completion.preferred_direct_common_width_is_supported(
+                direct_builds,
+                visible_content,
+                holder_boundaries,
+                short_axis_plan.photo_height_evidence,
+                dimensions,
+            )
+        )
+        if (
+            direct_common_width_supported
+            and not direct_separator_sequence_complete
+            and not direct_nominal_geometry_resolved
+        ):
+            remaining_evaluations = maximum_assignment_evaluations - direct_evaluations
+            if direct_exhausted or remaining_evaluations <= 0:
+                completion_exhausted = True
+            else:
+                (
+                    real_frame_builds,
+                    completion_evaluations,
+                    completion_exhausted,
+                ) = (
+                    construction.sequence_builds_for_count(
+                        search_index,
+                        search_scope,
+                        shared_short_axis,
+                        short_axis_plan.photo_height_evidence,
+                        count - 1,
+                        dimensions,
+                        visible_content,
+                        remaining_evaluations,
+                        allow_nominal_slot_sized_gap=True,
+                    )
+                )
+                completion_builds = sequence_completion.sequence_completed_builds(
+                    real_frame_builds,
+                    search_scope,
+                    short_axis_plan.photo_height_evidence,
+                    dimensions,
+                )
     direct_selection_builds = direct_builds
     if completion_builds:
         strongest_completion_separator_count = max(
@@ -179,13 +175,7 @@ def solve_frame_sequence(
     builds = tuple(
         build
         for build in (*direct_selection_builds, *completion_builds)
-        if sequence_completion.build_does_not_contradict_common_width(
-            build,
-            holder_boundaries,
-            short_axis_plan.photo_height_evidence,
-            dimensions,
-        )
-        and (
+        if (
             strip_mode != FULL
             or any(slot.sequence_inferred for slot in build.slots)
             or sequence_completion.build_satisfies_full_endpoint_extent(
@@ -233,6 +223,12 @@ def solve_frame_sequence(
             short_axis_plan.photo_height_evidence,
             dimensions,
         )
+        if not sequence_completion.build_does_not_contradict_common_width(
+            resolved,
+            common_width,
+            holder_boundaries,
+        ):
+            continue
         assigned = separator_assignment.assign_unique_separator_observations(
             resolved,
             common_width,

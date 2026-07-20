@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from bisect import bisect_left, bisect_right
 from dataclasses import replace
 
 from ...domain import (
@@ -349,6 +350,22 @@ def assign_unique_boundary_path_observations(
         }
     )
     while remaining:
+        ordered_paths = tuple(
+            sorted(
+                (path for path in remaining if path.axis == BoundaryAxis.LONG),
+                key=lambda path: (
+                    path.position.midpoint,
+                    path.provenance.observation_id,
+                ),
+            )
+        )
+        if not ordered_paths:
+            break
+        path_midpoints = tuple(path.position.midpoint for path in ordered_paths)
+        maximum_path_uncertainty = max(
+            path.position.maximum - path.position.minimum
+            for path in ordered_paths
+        )
         candidates: dict[
             tuple[int, BoundarySide],
             list[
@@ -364,9 +381,35 @@ def assign_unique_boundary_path_observations(
             list[tuple[int, BoundarySide]],
         ] = {}
         for slot_offset in range(len(resolved.slots)):
+            slot = resolved.slots[slot_offset]
+            if slot.sequence_inferred:
+                continue
             for side in (BoundarySide.LEADING, BoundarySide.TRAILING):
+                boundary = (
+                    slot.leading
+                    if side == BoundarySide.LEADING
+                    else slot.trailing
+                )
+                if boundary.source != FrameBoundarySource.DIMENSION_CONSTRAINED:
+                    continue
+                maximum_interval_uncertainty = max(
+                    boundary.position.maximum - boundary.position.minimum,
+                    maximum_path_uncertainty,
+                )
+                search_radius = (
+                    maximum_interval_uncertainty
+                    + maximum_interval_uncertainty
+                )
+                start = bisect_left(
+                    path_midpoints,
+                    boundary.position.midpoint - search_radius,
+                )
+                end = bisect_right(
+                    path_midpoints,
+                    boundary.position.midpoint + search_radius,
+                )
                 key = slot_offset, side
-                for path in remaining:
+                for path in ordered_paths[start:end]:
                     assignment = _boundary_path_assignment(
                         resolved,
                         slot_offset,

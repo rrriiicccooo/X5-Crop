@@ -178,7 +178,7 @@ class FrameSequenceConstructionContractTest(unittest.TestCase):
             search_space,
             (),
             None,
-            supported_separator_seed_available=False,
+            complete_separator_seed_available=False,
         )
         self.assertEqual(placements[0].width_px, plausible.width_px)
 
@@ -1254,6 +1254,49 @@ class FrameSequenceConstructionContractTest(unittest.TestCase):
             construction._complete_separator_sequence_builds_dominate_dimension_inference(
                 (build,),
                 content(width=100, height=100),
+            )
+        )
+
+    def test_only_complete_separator_support_starts_incumbent_seed_pass(
+        self,
+    ) -> None:
+        search_scope = scope(
+            width=320,
+            height=100,
+            leading=0.0,
+            trailing=320.0,
+            top=0.0,
+            bottom=100.0,
+            holder_sides=_ALL_HOLDER_SIDES,
+        )
+        plan = shared_short_axis_plan(search_scope)
+        one_sided = separator(
+            100.0,
+            110.0,
+            plan,
+            leading_supported=True,
+            trailing_supported=False,
+            band_supported=True,
+        )
+        complete = separator(
+            210.0,
+            220.0,
+            plan,
+            leading_supported=True,
+            trailing_supported=True,
+            band_supported=True,
+        )
+        one_sided_edges = separator_assignment.observed_band_edges(one_sided)
+        complete_edges = separator_assignment.observed_band_edges(complete)
+
+        self.assertFalse(
+            construction._has_complete_internal_separator_seed(
+                tuple((edge, False) for edge in one_sided_edges)
+            )
+        )
+        self.assertTrue(
+            construction._has_complete_internal_separator_seed(
+                tuple((edge, False) for edge in complete_edges)
             )
         )
 

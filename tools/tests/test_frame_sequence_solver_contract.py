@@ -1142,6 +1142,127 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
 
         self.assertEqual(build_calls, 1)
 
+    def test_partial_mode_skips_nominal_blank_completion_assessments(self) -> None:
+        search_scope = scope(
+            width=220,
+            height=100,
+            leading=0.0,
+            trailing=220.0,
+            top=0.0,
+            bottom=100.0,
+            internal_paths=(100.0, 110.0),
+            holder_sides=_ALL_HOLDER_SIDES,
+        )
+        plan = shared_short_axis_plan(search_scope)
+        supports = (separator(100.0, 110.0, plan, supported=True),)
+
+        with (
+            patch.object(
+                sequence_completion,
+                "direct_nominal_geometry_is_complete",
+                wraps=sequence_completion.direct_nominal_geometry_is_complete,
+            ) as direct_complete,
+            patch.object(
+                sequence_completion,
+                "preferred_direct_common_width_is_supported",
+                wraps=sequence_completion.preferred_direct_common_width_is_supported,
+            ) as common_width_supported,
+        ):
+            solve_frame_sequence(
+                sequence_search_index(search_scope, supports),
+                search_scope,
+                plan,
+                2,
+                dimensions(1.0, 1.0),
+                content(width=220, height=100),
+                100_000,
+                strip_mode="partial",
+                nominal_count=2,
+            )
+
+        direct_complete.assert_not_called()
+        common_width_supported.assert_not_called()
+
+    def test_partial_common_width_filter_reuses_build_resolution(self) -> None:
+        class CapturedBuilds(Exception):
+            pass
+
+        slot = SimpleNamespace(
+            sequence_inferred=False,
+            visible_long_axis=PixelInterval(10.0, 110.0),
+        )
+        direct = SimpleNamespace(
+            slots=(slot,),
+            separator_bindings=(),
+            objectives=SimpleNamespace(supported_separator_count=0),
+        )
+        common_width = SimpleNamespace(state=EvidenceState.UNAVAILABLE)
+        search_scope = scope(
+            width=220,
+            height=100,
+            leading=0.0,
+            trailing=220.0,
+            top=0.0,
+            bottom=100.0,
+            holder_sides=_ALL_HOLDER_SIDES,
+        )
+        plan = shared_short_axis_plan(search_scope)
+
+        def capture(builds):
+            raise CapturedBuilds(builds)
+
+        with (
+            patch.object(
+                construction,
+                "sequence_builds_for_count",
+                return_value=((direct,), 0, False),
+            ),
+            patch.object(
+                candidate_resolution,
+                "resolve_build_physical_boundaries",
+                return_value=(direct, common_width),
+            ) as resolution,
+            patch.object(
+                separator_assignment,
+                "assign_unique_separator_observations",
+                side_effect=lambda build, *_args: build,
+            ),
+            patch.object(
+                candidate_resolution,
+                "assign_unique_boundary_path_observations",
+                side_effect=lambda build, *_args: build,
+            ),
+            patch.object(
+                candidate_builds,
+                "frame_slots_are_strictly_monotonic",
+                return_value=True,
+            ),
+            patch.object(
+                candidate_builds,
+                "build_preserves_visible_content",
+                return_value=True,
+            ),
+            patch.object(
+                candidate_builds,
+                "physically_preferred_builds",
+                side_effect=capture,
+            ),
+        ):
+            with self.assertRaises(CapturedBuilds):
+                solve_frame_sequence(
+                    sequence_search_index(search_scope),
+                    search_scope,
+                    plan,
+                    2,
+                    dimensions(1.0, 1.0),
+                    content(width=220, height=100),
+                    100_000,
+                    strip_mode="partial",
+                    nominal_count=2,
+                )
+
+        self.assertEqual(resolution.call_count, 1)
+
     def test_full_solver_rejects_a_sequence_isolated_inside_holder_slack(
         self,
     ) -> None:

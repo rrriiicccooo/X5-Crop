@@ -23,6 +23,7 @@ from x5crop.detection.physical.frame_dimensions import (
     FrameDimensionEvidence,
     frame_dimension_evidence,
     frame_dimension_priors,
+    frame_dimension_search_priors,
 )
 from x5crop.detection.physical.frame_sequence_solver import (
     solve_frame_sequence,
@@ -57,6 +58,12 @@ class FrameDimensionPhysicalModelTest(unittest.TestCase):
                         for option in physical_spec.frame.frame_size_mm_options
                     ),
                 )
+
+    def test_geometry_search_deduplicates_equal_physical_aspects(self) -> None:
+        priors = frame_dimension_search_priors(FORMATS["120-66"])
+
+        self.assertEqual(len(priors), 1)
+        self.assertEqual(priors[0].frame_size_mm, (56.0, 56.0))
 
     def test_separator_width_variation_does_not_contradict_frame_dimensions(self) -> None:
         evidence = FrameDimensionEvidence(

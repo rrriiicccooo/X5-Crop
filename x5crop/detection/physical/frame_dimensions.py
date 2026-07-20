@@ -143,6 +143,20 @@ def frame_dimension_priors(
     return tuple(priors)
 
 
+def frame_dimension_search_priors(
+    physical_spec: FormatSpec,
+) -> tuple[FrameDimensionPrior, ...]:
+    priors = frame_dimension_priors(physical_spec)
+    selected: list[FrameDimensionPrior] = []
+    seen_aspects: set[float] = set()
+    for prior in priors:
+        if prior.aspect in seen_aspects:
+            continue
+        seen_aspects.add(prior.aspect)
+        selected.append(prior)
+    return tuple(selected)
+
+
 def frame_dimension_evidence(
     geometry: FrameSequenceSolution,
 ) -> FrameDimensionEvidence:
