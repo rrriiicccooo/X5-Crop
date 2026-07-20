@@ -29,6 +29,7 @@ from x5crop.domain import (
     ObservationId,
     PixelInterval,
 )
+from x5crop.strip_modes import FULL, PARTIAL
 
 
 class FrameSequenceCandidateContractTest(unittest.TestCase):
@@ -464,6 +465,9 @@ class FrameSequenceCandidateContractTest(unittest.TestCase):
             return SimpleNamespace(
                 slots=slots,
                 separator_bindings=bindings,
+                short_axis=SimpleNamespace(
+                    basis=physical_model.SharedShortAxisBasis.HOLDER_EDGE_BOUNDED,
+                ),
                 objectives=candidate_builds.SequenceBuildObjectives(
                     uncorroborated_overlap_extent_px=0.0,
                     unexplained_spacing_extent_px=0.0,
@@ -483,8 +487,169 @@ class FrameSequenceCandidateContractTest(unittest.TestCase):
             (bound,),
         )
         self.assertEqual(
-            candidate_builds.assignment_consensus_builds((unbound, bound)),
+            candidate_builds.assignment_consensus_builds(
+                (unbound, bound),
+                strip_mode=FULL,
+            ),
             (unbound, bound),
+        )
+
+    def test_photo_bounded_near_complete_sequence_owns_full_strip_consensus(
+        self,
+    ) -> None:
+        edge = SimpleNamespace(
+            position=PixelInterval.exact(0.0),
+            independently_observed=False,
+            role_provenance=None,
+        )
+        slots = tuple(
+            SimpleNamespace(
+                index=index,
+                sequence_inferred=False,
+                leading=edge,
+                trailing=edge,
+            )
+            for index in range(1, 5)
+        )
+
+        def build(*, binding_count: int, identity: str) -> SimpleNamespace:
+            bindings = tuple(
+                SimpleNamespace(
+                    boundary_index=index,
+                    observation=SimpleNamespace(
+                        provenance=SimpleNamespace(
+                            observation_id=ObservationId(f"{identity}:{index}")
+                        )
+                    ),
+                )
+                for index in range(1, binding_count + 1)
+            )
+            return SimpleNamespace(
+                slots=slots,
+                separator_bindings=bindings,
+                short_axis=SimpleNamespace(
+                    basis=physical_model.SharedShortAxisBasis.PHOTO_EDGE_BOUNDED,
+                ),
+                objectives=candidate_builds.SequenceBuildObjectives(
+                    uncorroborated_overlap_extent_px=0.0,
+                    unexplained_spacing_extent_px=0.0,
+                    supported_separator_count=binding_count,
+                    internal_boundary_measurement_quality=float(binding_count),
+                    dimension_residual=0.0,
+                    external_boundary_measurement_quality=0.0,
+                    boundary_uncertainty_ratio=0.0,
+                ),
+            )
+
+        weak = build(binding_count=1, identity="weak_topology")
+        near_complete = build(binding_count=2, identity="near_complete_topology")
+
+        self.assertEqual(
+            candidate_builds.assignment_consensus_builds(
+                (weak, near_complete),
+                strip_mode=FULL,
+            ),
+            (near_complete,),
+        )
+        self.assertEqual(
+            candidate_builds.assignment_consensus_builds(
+                (weak, near_complete),
+                strip_mode=PARTIAL,
+            ),
+            (weak, near_complete),
+        )
+
+        direct_role = SimpleNamespace(
+            root_measurement=MeasurementIdentity.PHOTO_EDGES,
+            dependencies=(),
+        )
+        anchored_edge = SimpleNamespace(
+            position=PixelInterval.exact(100.0),
+            independently_observed=True,
+            role_provenance=direct_role,
+        )
+        small_slots = (
+            SimpleNamespace(**{**slots[0].__dict__, "trailing": anchored_edge}),
+            SimpleNamespace(**{**slots[1].__dict__, "leading": anchored_edge}),
+            slots[2],
+        )
+        small_unbound = SimpleNamespace(
+            **{
+                **build(binding_count=0, identity="small_unbound").__dict__,
+                "slots": small_slots,
+            }
+        )
+        small_single_separator = SimpleNamespace(
+            **{
+                **build(binding_count=1, identity="small_separator").__dict__,
+                "slots": small_slots,
+            }
+        )
+        self.assertEqual(
+            candidate_builds.assignment_consensus_builds(
+                (small_unbound, small_single_separator),
+                strip_mode=FULL,
+            ),
+            (small_unbound, small_single_separator),
+        )
+
+    def test_assignment_consensus_canonicalizes_binding_order(self) -> None:
+        edge = SimpleNamespace(
+            position=PixelInterval.exact(0.0),
+            independently_observed=False,
+            role_provenance=None,
+        )
+        slots = tuple(
+            SimpleNamespace(
+                index=index,
+                sequence_inferred=False,
+                leading=edge,
+                trailing=edge,
+            )
+            for index in range(1, 4)
+        )
+
+        def binding(boundary_index: int) -> SimpleNamespace:
+            return SimpleNamespace(
+                boundary_index=boundary_index,
+                observation=SimpleNamespace(
+                    provenance=SimpleNamespace(
+                        observation_id=ObservationId(f"separator:{boundary_index}")
+                    )
+                ),
+            )
+
+        bindings = (binding(1), binding(2))
+
+        def build(*, reverse_bindings: bool, overlap: float) -> SimpleNamespace:
+            return SimpleNamespace(
+                slots=slots,
+                separator_bindings=(
+                    tuple(reversed(bindings)) if reverse_bindings else bindings
+                ),
+                short_axis=SimpleNamespace(
+                    basis=physical_model.SharedShortAxisBasis.HOLDER_EDGE_BOUNDED,
+                ),
+                objectives=candidate_builds.SequenceBuildObjectives(
+                    uncorroborated_overlap_extent_px=overlap,
+                    unexplained_spacing_extent_px=0.0,
+                    supported_separator_count=len(bindings),
+                    internal_boundary_measurement_quality=2.0,
+                    dimension_residual=0.0,
+                    external_boundary_measurement_quality=0.0,
+                    boundary_uncertainty_ratio=0.0,
+                ),
+            )
+
+        preferred = build(reverse_bindings=False, overlap=0.0)
+        reversed_duplicate = build(reverse_bindings=True, overlap=1.0)
+
+        self.assertEqual(
+            candidate_builds.assignment_consensus_builds(
+                (preferred, reversed_duplicate),
+                strip_mode=FULL,
+            ),
+            (preferred,),
         )
 
     def test_independent_separator_sequence_precedes_small_unexplained_spacing(

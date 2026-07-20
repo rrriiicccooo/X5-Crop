@@ -18,6 +18,7 @@ from ...domain import (
     SeparatorCrossAxisMeasurement,
 )
 from ...image.content import ContentRegionObservation
+from ...strip_modes import FULL, STRIP_MODES
 from . import frame_sequence_measurements as measurement_facts
 from .model import (
     BoundaryAnchor,
@@ -27,6 +28,7 @@ from .model import (
     FrameSlot,
     ResolvedFrameBoundary,
     SequenceResiduals,
+    SharedShortAxisBasis,
     SharedShortAxisSafetySpan,
     boundary_role_is_independent_physical_measurement,
 )
@@ -327,23 +329,55 @@ def physically_preferred_builds(
 
 def assignment_consensus_builds(
     builds: tuple[SequenceBuild, ...],
+    *,
+    strip_mode: str,
 ) -> tuple[SequenceBuild, ...]:
     if not builds:
         raise ValueError("assignment consensus requires sequence builds")
+    if strip_mode not in STRIP_MODES:
+        raise ValueError("assignment consensus requires a physical strip mode")
     independently_supported = tuple(
         build for build in builds if _build_has_independent_boundary_support(build)
     )
+    consensus_builds = independently_supported or builds
+    internal_boundary_counts = {
+        len(build.slots) - 1 for build in consensus_builds
+    }
+    if len(internal_boundary_counts) != 1:
+        raise ValueError("assignment consensus requires one frame count")
+    internal_boundary_count = next(iter(internal_boundary_counts))
+    strongest_separator_count = max(
+        len(build.separator_bindings) for build in consensus_builds
+    )
+    if (
+        strip_mode == FULL
+        and all(
+            build.short_axis.basis == SharedShortAxisBasis.PHOTO_EDGE_BOUNDED
+            for build in consensus_builds
+        )
+        and strongest_separator_count <= internal_boundary_count
+        and internal_boundary_count - strongest_separator_count <= 1
+        and strongest_separator_count
+        > internal_boundary_count - strongest_separator_count
+    ):
+        consensus_builds = tuple(
+            build
+            for build in consensus_builds
+            if len(build.separator_bindings) == strongest_separator_count
+        )
     groups: dict[
         tuple[tuple[int, ObservationId], ...],
         list[SequenceBuild],
     ] = {}
-    for build in independently_supported or builds:
+    for build in consensus_builds:
         topology = tuple(
-            (
-                binding.boundary_index,
-                binding.observation.provenance.observation_id,
+            sorted(
+                (
+                    binding.boundary_index,
+                    binding.observation.provenance.observation_id,
+                )
+                for binding in build.separator_bindings
             )
-            for binding in build.separator_bindings
         )
         groups.setdefault(topology, []).append(build)
     return tuple(

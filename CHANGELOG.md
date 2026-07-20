@@ -22,6 +22,25 @@ the validation evidence.
 
 ### 2026-07-20 — Holder 与内容反证闭环 / Holder And Content Refutation Closure
 
+- Assignment-consensus input now lets a near-complete independent separator
+  sequence own a full-strip mapping only when the shared short axis is bounded
+  by measured photo edges, at most one internal separator is missing, and the
+  bindings cover a strict majority of internal boundaries. Binding topology is
+  keyed by boundary and observation identity rather than tuple order. Holder-bounded,
+  partial, and one-of-two separator cases retain every physical topology.
+  Focused diagnostics promote `135/full/pass_X5_00001` and `00003` to
+  reference-matched automatic PASS while `00006`, `unknown_X5_00038`,
+  `half/full/pass_X5_00007`, `120-67/full/pass_X5_00002`, and holder-bounded
+  `135/full/pass_X5_00010` remain non-exportable REVIEW. / Assignment-consensus
+  input 现在只在 full strip 的共享短轴由实测 photo edges 双侧界定、内部 separator 最多缺一且
+  bindings 覆盖严格多数内部边界时，才允许近完整独立 separator 序列拥有 mapping 权限；binding
+  topology 由 boundary 与 observation identity 标识，不受 tuple 顺序影响；
+  holder-bounded、partial 与二选一 separator 情形继续保留全部物理 topology。具名 diagnostics
+  将 `135/full/pass_X5_00001` 与 `00003` 提升为符合人工 reference 的自动 PASS，同时 `00006`、
+  `unknown_X5_00038`、`half/full/pass_X5_00007`、`120-67/full/pass_X5_00002` 与 holder-bounded
+  `135/full/pass_X5_00010` 继续保持不可导出的 REVIEW。
+  The full verifier passes 815 tests and
+  14 format/mode configuration pairs. / 完整 verifier 通过 815 项测试与 14 组 format/mode 配置。
 - Measured-frame graph search now materializes immutable ordered-option coordinates, width bounds,
   content coverage, separator identities, observation counts, and boundary uncertainty once per
   search. Graph feasibility and best-path layers index those exact facts instead of repeatedly

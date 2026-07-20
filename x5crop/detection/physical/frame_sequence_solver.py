@@ -281,7 +281,10 @@ def solve_frame_sequence(
         builds = content_preserving_builds
 
     best = sequence_candidates.physically_preferred_builds(builds)
-    consensus_builds = sequence_candidates.assignment_consensus_builds(builds)
+    consensus_builds = sequence_candidates.assignment_consensus_builds(
+        builds,
+        strip_mode=strip_mode,
+    )
     assignment_consensus = (
         BoundaryAssignmentConsensus(
             AssignmentConsensusOutcome.COMPONENT_UNRESOLVED,
