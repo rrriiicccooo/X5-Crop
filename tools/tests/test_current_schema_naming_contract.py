@@ -18,6 +18,7 @@ from x5crop.debug import canvas as debug_canvas
 from x5crop.debug.panels import make_separator_evidence_debug_rgb
 from x5crop.debug.separators import draw_separator_overlay
 from x5crop.detection.gate_checks import GateCheck
+from x5crop.detection.evidence.transform_geometry import TransformGeometryEvidence
 from x5crop.domain import Box, MeasurementProvenance, SeparatorBandObservation
 from x5crop.io.model import ImageProfile
 from x5crop.output.model import FrameBleedPlan
@@ -36,6 +37,19 @@ def _active_source() -> str:
 
 
 class CurrentSchemaNamingContractTest(unittest.TestCase):
+    def test_transform_geometry_has_only_current_physical_field_names(self) -> None:
+        self.assertEqual(
+            tuple(TransformGeometryEvidence.__dataclass_fields__),
+            (
+                "outcome",
+                "estimated_angle_degrees",
+                "projected_edge_drift_px",
+                "identity_drift_threshold_px",
+                "position_uncertainty_px",
+                "coordinate_transform",
+            ),
+        )
+
     def test_report_read_models_have_no_constructor_or_projection_wrappers(self) -> None:
         finalize = (
             PROJECT_ROOT / "x5crop/detection/final/finalize.py"
@@ -288,7 +302,7 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
         self.assertEqual(REPORT_SCHEMA_ID, "detection_report")
         self.assertEqual(
             REPORT_SCHEMA_REVISION,
-            "frame_slot_sequence_resolution",
+            "detection_owned_shared_short_axis",
         )
         self.assertNotIn("v4", REPORT_SCHEMA_REVISION)
 
@@ -352,7 +366,7 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
         self.assertNotIn("`CropEnvelope`", architecture)
         self.assertIn("`FrameSlot`", architecture)
         self.assertIn("`FrameSequenceSolution`", architecture)
-        self.assertIn("frame_slot_sequence_resolution", architecture)
+        self.assertIn("detection_owned_shared_short_axis", architecture)
 
     def test_user_docs_describe_current_sequence_and_bleed_model(self) -> None:
         quick_start = (PROJECT_ROOT / "快速启动_Quick_Start.md").read_text(

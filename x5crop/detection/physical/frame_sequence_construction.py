@@ -37,13 +37,11 @@ from .model import (
     FrameSlot,
     FrameWidthPhysicalScaleConstraint,
     HolderSpanScaleHint,
-    PhotoHeightEvidence,
     SequenceResiduals,
-    SharedShortAxisSafetySpan,
 )
 from .frame_dimensions import MINIMUM_COMMON_FRAME_WIDTH_OBSERVATIONS
 from .separator.observations import SeparatorSupportSet
-from .short_axis import frame_width_search_hint
+from .short_axis import SharedShortAxisPlan, frame_width_search_hint
 
 
 MINIMUM_COUNT_WITH_INTERIOR_FRAME = 3
@@ -87,7 +85,7 @@ class _BandSequenceHypothesis:
     band_edges: tuple[
         tuple[measurement_facts.EdgeConstraint, measurement_facts.EdgeConstraint], ...
     ]
-    short_axis: SharedShortAxisSafetySpan
+    short_axis: SharedShortAxisPlan
     frame_width_px: PixelInterval
     indexed_anchor_count: int
     paired_band_count: int
@@ -400,7 +398,7 @@ def _band_search_order(
 def _band_sequence_hypothesis(
     supports: tuple[SeparatorBandCrossAxisSupport, ...],
     band_edges: tuple[tuple[measurement_facts.EdgeConstraint, measurement_facts.EdgeConstraint], ...],
-    short_axis: SharedShortAxisSafetySpan,
+    short_axis: SharedShortAxisPlan,
     frame_width_px: PixelInterval,
     frame_width_hint: PixelInterval,
     indexed_anchor_count: int,
@@ -444,7 +442,7 @@ def _band_sequence_hypotheses(
     supports: tuple[SeparatorBandCrossAxisSupport, ...],
     search_scope: FrameSequenceSearchScope,
     count: int,
-    short_axis: SharedShortAxisSafetySpan,
+    short_axis: SharedShortAxisPlan,
     frame_width: PixelInterval,
     evaluation_budget: int,
 ) -> tuple[tuple[_BandSequenceHypothesis, ...], int, bool]:
@@ -1374,7 +1372,7 @@ def _measured_spacing(
 
 def _measured_sequence_build(
     constraints: tuple[measurement_facts.MeasuredFrameConstraint, ...],
-    short_axis: SharedShortAxisSafetySpan,
+    short_axis: SharedShortAxisPlan,
     holder: Box,
     *,
     allow_nominal_slot_sized_gap: bool,
@@ -1598,7 +1596,7 @@ def _complete_separator_sequence_builds_dominate_dimension_inference(
 
 def _measured_builds_for_options(
     options: tuple[measurement_facts.MeasuredFrameConstraint, ...],
-    short_axis: SharedShortAxisSafetySpan,
+    short_axis: SharedShortAxisPlan,
     holder: Box,
     count: int,
     visible_content: ContentRegionObservation,
@@ -1654,7 +1652,7 @@ def _supported_separator_incumbent(
 def _measured_path_builds(
     search_scope: FrameSequenceSearchScope,
     search_index: FrameSequenceSearchIndex,
-    short_axis_spans: tuple[SharedShortAxisSafetySpan, ...],
+    short_axis_spans: tuple[SharedShortAxisPlan, ...],
     search_widths: tuple[PixelInterval, ...],
     frame_width_hint: PixelInterval,
     count: int,
@@ -1876,7 +1874,7 @@ def _measured_path_builds(
 
 def _build_sequence(
     band_hypothesis: _BandSequenceHypothesis,
-    short_axis: SharedShortAxisSafetySpan,
+    short_axis: SharedShortAxisPlan,
     leading_endpoint: measurement_facts.EdgeConstraint,
     trailing_endpoint: measurement_facts.EdgeConstraint,
     frame_width: PixelInterval,
@@ -2203,8 +2201,7 @@ def _builds_for_hypotheses(
 def sequence_builds_for_count(
     search_index: FrameSequenceSearchIndex,
     search_scope: FrameSequenceSearchScope,
-    shared_short_axis: SharedShortAxisSafetySpan,
-    photo_height_evidence: PhotoHeightEvidence,
+    shared_short_axis: SharedShortAxisPlan,
     count: int,
     dimensions: FrameDimensionPrior,
     visible_content: ContentRegionObservation,
@@ -2222,7 +2219,7 @@ def sequence_builds_for_count(
         count,
     ).width_px
     physical_scale_constraint = width_resolution.frame_width_physical_scale_constraint(
-        photo_height_evidence,
+        shared_short_axis,
         dimensions,
     )
     separator_width_search_hints = _raw_separator_frame_width_search_hints(

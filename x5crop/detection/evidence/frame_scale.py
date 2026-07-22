@@ -6,7 +6,6 @@ import hashlib
 import math
 
 from ...domain import (
-    EvidenceState,
     MeasurementIdentity,
     MeasurementProvenance,
     ObservationId,
@@ -131,8 +130,8 @@ def _frame_width_observations(
 def _frame_height_observation(
     geometry: FrameSequenceSolution,
 ) -> FrameScaleObservation | None:
-    evidence = geometry.photo_height_evidence
-    if evidence.state != EvidenceState.SUPPORTED or evidence.height_px is None:
+    evidence = geometry.shared_short_axis
+    if not evidence.supports_safe_crop:
         return None
     height_mm = float(geometry.frame_dimension_prior.frame_size_mm[1])
     axis = "y" if is_horizontal_layout(geometry.layout) else "x"

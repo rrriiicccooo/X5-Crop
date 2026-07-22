@@ -13,16 +13,13 @@ from x5crop.detection.physical.separator.observations import (
     measure_separator_cross_axis_support,
     propose_separator_bands,
 )
-from x5crop.domain import Box, EvidenceState, PixelInterval
-from x5crop.domain import (
-    MeasurementIdentity,
-    MeasurementProvenance,
-    ObservationId,
+from x5crop.domain import BoundarySide, Box, EvidenceState, PixelInterval
+from x5crop.domain import ObservationId
+from x5crop.detection.physical.short_axis import (
+    SharedShortAxisPlan,
+    shared_short_axis_from_photo_edges,
 )
-from x5crop.detection.physical.model import (
-    SharedShortAxisBasis,
-    SharedShortAxisSafetySpan,
-)
+from tools.tests.frame_slot_solver_support import photo_edge_path
 from x5crop.image.statistics import (
     ImageMeasurementStatisticsParameters,
     image_measurement_statistics,
@@ -39,19 +36,18 @@ def _textured_workspace(height: int = 120, width: int = 240) -> np.ndarray:
     return ((3 * x + 5 * y + ((x * y) % 37)) % 256).astype(np.uint8)
 
 
-def _cross_axis(height: int) -> SharedShortAxisSafetySpan:
-    provenance = MeasurementProvenance(
-        MeasurementIdentity.BOUNDARY_PATHS,
-        ObservationId("synthetic_short_axis"),
-        (MeasurementIdentity.GRAY_WORK,),
-        "synthetic short axis",
-    )
-    return SharedShortAxisSafetySpan(
-        PixelInterval.exact(0.0),
-        PixelInterval.exact(float(height)),
-        SharedShortAxisBasis.PHOTO_EDGE_BOUNDED,
-        EvidenceState.SUPPORTED,
-        provenance,
+def _cross_axis(height: int) -> SharedShortAxisPlan:
+    return shared_short_axis_from_photo_edges(
+        photo_edge_path(
+            BoundarySide.TOP,
+            0.0,
+            "synthetic_top_photo_edge",
+        ),
+        photo_edge_path(
+            BoundarySide.BOTTOM,
+            float(height),
+            "synthetic_bottom_photo_edge",
+        ),
     )
 
 

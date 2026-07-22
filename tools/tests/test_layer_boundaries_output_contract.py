@@ -120,9 +120,10 @@ class LayerBoundariesOutputContractTest(unittest.TestCase):
         self.assertEqual(mark_box.call_args.args[-3:], (67, 33, "horizontal"))
 
     def test_output_bleed_reads_assessed_spacing_evidence(self) -> None:
-        source = (PROJECT_ROOT / "x5crop/runtime/frame_bleed.py").read_text(
-            encoding="utf-8"
-        )
+        self.assertFalse((PROJECT_ROOT / "x5crop/runtime/frame_bleed.py").exists())
+        source = (
+            PROJECT_ROOT / "x5crop/detection/output_preparation.py"
+        ).read_text(encoding="utf-8")
         self.assertIn("internal_frame_boundary_preservation", source)
         self.assertNotIn("geometry.inter_photo_spacings", source)
 
@@ -174,7 +175,9 @@ class LayerBoundariesOutputContractTest(unittest.TestCase):
 
     def test_frame_bleed_plan_has_explicit_physical_inputs(self) -> None:
         from x5crop.output.frame_bleed import frame_bleed_plan
-        from x5crop.runtime.frame_bleed import prepare_frame_bleed
+        from x5crop.detection.output_preparation import (
+            frame_bleed_plan_for_selection,
+        )
 
         self.assertEqual(
             tuple(signature(frame_bleed_plan).parameters),
@@ -187,7 +190,7 @@ class LayerBoundariesOutputContractTest(unittest.TestCase):
             ),
         )
         self.assertEqual(
-            tuple(signature(prepare_frame_bleed).parameters),
+            tuple(signature(frame_bleed_plan_for_selection).parameters),
             ("selection", "user_bleed"),
         )
 
@@ -195,7 +198,10 @@ class LayerBoundariesOutputContractTest(unittest.TestCase):
         source = (PROJECT_ROOT / "x5crop/runtime/workflow.py").read_text(
             encoding="utf-8"
         )
-        self.assertLess(source.index("prepare_frame_bleed("), source.index("apply_decision_gate("))
+        self.assertLess(
+            source.index("frame_bleed_plan_for_selection("),
+            source.index("apply_decision_gate("),
+        )
         self.assertLess(source.index("apply_decision_gate("), source.index("finalize_detection("))
 
     def test_finalization_only_applies_frame_bleed_geometry(self) -> None:

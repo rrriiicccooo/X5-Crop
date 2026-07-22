@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import Callable
 
-from ...cache.analysis import make_measurement_cache
 from ...domain import (
     Box,
     ContainmentFallback,
@@ -17,7 +16,6 @@ from ...domain import (
     combined_physical_search_outcome,
 )
 from ...geometry.layout import HORIZONTAL
-from ...image.statistics import image_measurement_statistics
 from ..candidate.composition.dual_lane import compose_dual_lane_candidate
 from ..candidate.model import BuiltCandidate
 from ..candidate.plan.model import CountHypothesis, CountHypothesisSource
@@ -25,6 +23,7 @@ from ..candidate.assessment.review_only import assess_review_only_candidate
 from ..candidate.selection.choose import select_candidates
 from ..candidate.selection.model import SelectionResult
 from ..context import DetectionContext
+from ..workspace import detection_workspace_region
 from .review_only import unresolved_dual_lane_candidate
 from ..physical.model import (
     combined_assignment_consensus,
@@ -35,7 +34,6 @@ from ..physical.model import (
 from ..physical.lane_divider import (
     DUAL_LANE_COUNT,
     LaneDividerEvidence,
-    measure_lane_dividers,
 )
 
 
@@ -45,32 +43,28 @@ StandardDetector = Callable[[DetectionContext], SelectionResult]
 def _lane_context(
     context: DetectionContext,
     lane: Box,
+    short_axis_index: int,
 ) -> DetectionContext:
     lane_configuration = context.lane_configuration
     if lane_configuration is None:
         raise ValueError("dual-lane context requires a resolved lane configuration")
-    lane_gray = context.measurement_cache.gray_work[lane.top : lane.bottom, lane.left : lane.right]
     lane_request = replace(
         context.request,
         layout=HORIZONTAL,
         strip_mode="full",
         requested_count=lane_configuration.physical_spec.strip.default_count,
     )
-    cache = make_measurement_cache(
-        lane_gray,
-        HORIZONTAL,
-        image_measurement_statistics(
-            lane_gray,
-            lane_configuration.preprocess.image_statistics,
-        ),
-        context.measurement_cache.transform_position_uncertainty_px,
-        context.measurement_cache.lookup_statistics,
+    workspace = detection_workspace_region(
+        context.workspace,
+        lane,
+        context.workspace.shared_short_axes[short_axis_index],
+        lane_configuration,
     )
     return DetectionContext(
         request=lane_request,
         configuration=lane_configuration,
         lane_configuration=None,
-        measurement_cache=cache,
+        workspace=workspace,
         execution_statistics=context.execution_statistics,
     )
 
@@ -89,7 +83,7 @@ def _parent_candidate(
     count = sum(candidate.geometry.count for candidate in lane_candidates)
     if count != physical_spec.strip.default_count:
         raise ValueError("dual-lane total count must match the nominal full strip")
-    work_height, work_width = context.measurement_cache.gray_work.shape
+    work_height, work_width = context.workspace.measurement_cache.gray_work.shape
     return BuiltCandidate(
         geometry=DualLaneFrameSolution(
             format_id=physical_spec.format_id,
@@ -136,50 +130,47 @@ def choose_dual_lane_detection(
         raise ValueError("dual-lane detector is only valid for full mode")
     if physical_spec.layout.lane_count != DUAL_LANE_COUNT:
         raise ValueError("dual-lane detector supports exactly two lanes")
-    divider_evidence = measure_lane_dividers(
-        context.measurement_cache.content_evidence_float_work,
-        context.configuration.candidate_plan.dual_lane_divider,
-    )
+    divider = context.workspace.lane_divider
     parent_candidates = []
     search_outcomes: list[PhysicalSearchOutcome] = []
     lane_geometry_unresolved = False
-    for divider in divider_evidence.candidates:
+    if divider is not None and len(context.workspace.shared_short_axes) == DUAL_LANE_COUNT:
         lanes = divider.lane_boxes(
-            context.measurement_cache.gray_work.shape[1],
-            context.measurement_cache.gray_work.shape[0],
+            context.workspace.measurement_cache.gray_work.shape[1],
+            context.workspace.measurement_cache.gray_work.shape[0],
         )
-        if any(not lane.valid() for lane in lanes):
-            continue
-        lane_selections = tuple(
-            standard_detector(_lane_context(context, lane)) for lane in lanes
-        )
-        search_outcomes.append(
-            combined_physical_search_outcome(
-                tuple(
-                    selection.geometry_resolution.physical_search
-                    for selection in lane_selections
+        if all(lane.valid() for lane in lanes):
+            lane_selections = tuple(
+                standard_detector(_lane_context(context, lane, index))
+                for index, lane in enumerate(lanes)
+            )
+            search_outcomes.append(
+                combined_physical_search_outcome(
+                    tuple(
+                        selection.geometry_resolution.physical_search
+                        for selection in lane_selections
+                    )
                 )
             )
-        )
-        if any(
-            not isinstance(selection.selected.geometry, FrameSequenceSolution)
-            for selection in lane_selections
-        ):
-            lane_geometry_unresolved = True
-            continue
-        built = _parent_candidate(
-            context,
-            divider,
-            lanes,
-            lane_selections,
-        )
-        parent_candidates.append(
-            compose_dual_lane_candidate(
-                built,
-                lane_selections,
-            )
-        )
-        context.execution_statistics.record_assessed_candidate()
+            if any(
+                not isinstance(selection.selected.geometry, FrameSequenceSolution)
+                for selection in lane_selections
+            ):
+                lane_geometry_unresolved = True
+            else:
+                built = _parent_candidate(
+                    context,
+                    divider,
+                    lanes,
+                    lane_selections,
+                )
+                parent_candidates.append(
+                    compose_dual_lane_candidate(
+                        built,
+                        lane_selections,
+                    )
+                )
+                context.execution_statistics.record_assessed_candidate()
     if not parent_candidates:
         parent_candidates.append(
             assess_review_only_candidate(
@@ -201,15 +192,6 @@ def choose_dual_lane_detection(
     else:
         physical_search = PhysicalSearchOutcome(
             (PhysicalSearchFact.MEASUREMENTS_UNAVAILABLE,),
-        )
-    if divider_evidence.budget_exhausted:
-        physical_search = combined_physical_search_outcome(
-            (
-                physical_search,
-                PhysicalSearchOutcome(
-                    (PhysicalSearchFact.EXECUTION_BUDGET_EXHAUSTED,),
-                ),
-            )
         )
     return select_candidates(
         tuple(parent_candidates),

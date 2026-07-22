@@ -23,10 +23,10 @@ from .model import (
     FrameSlot,
     FrameWidthMeasurementConstraint,
     FrameWidthPhysicalScaleConstraint,
-    PhotoHeightEvidence,
     ResolvedFrameBoundary,
     boundary_role_is_independent_physical_measurement,
 )
+from .short_axis import SharedShortAxisPlan
 
 
 STRICT_MAJORITY_DIVISOR = 2
@@ -495,17 +495,14 @@ def measured_width_hypotheses(
 
 
 def frame_width_physical_scale_constraint(
-    photo_height_evidence: PhotoHeightEvidence,
+    shared_short_axis: SharedShortAxisPlan,
     dimensions: FrameDimensionPrior,
 ) -> FrameWidthPhysicalScaleConstraint | None:
-    if (
-        photo_height_evidence.state != EvidenceState.SUPPORTED
-        or photo_height_evidence.height_px is None
-    ):
+    if not shared_short_axis.supports_safe_crop:
         return None
     photo_inputs = {
-        photo_height_evidence.provenance.root_measurement,
-        *photo_height_evidence.provenance.dependencies,
+        shared_short_axis.provenance.root_measurement,
+        *shared_short_axis.provenance.dependencies,
     }
     if (
         MeasurementIdentity.FRAME_GEOMETRY in photo_inputs
@@ -530,17 +527,17 @@ def frame_width_physical_scale_constraint(
         )
     )
     return FrameWidthPhysicalScaleConstraint(
-        width_px=photo_height_evidence.height_px.scaled(dimensions.aspect),
+        width_px=shared_short_axis.height_px.scaled(dimensions.aspect),
         provenance=MeasurementProvenance(
             root_measurement=MeasurementIdentity.FRAME_DIMENSIONS,
             observation_id=ObservationId(
                 "frame_width_physical_scale:"
-                f"{photo_height_evidence.provenance.observation_id}:"
+                f"{shared_short_axis.provenance.observation_id}:"
                 f"{dimensions.provenance.observation_id}"
             ),
             dependencies=dependencies,
             description="independent photo-height and physical-aspect width constraint",
-            boundary_anchors=photo_height_evidence.provenance.boundary_anchors,
+            boundary_anchors=shared_short_axis.provenance.boundary_anchors,
         ),
     )
 
@@ -617,7 +614,7 @@ def _common_width_observation_id(
 def resolve_common_frame_width(
     slots: tuple[FrameSlot, ...],
     holder_boundaries: dict[BoundarySide, HolderBoundaryObservation],
-    photo_height_evidence: PhotoHeightEvidence,
+    shared_short_axis: SharedShortAxisPlan,
     dimensions: FrameDimensionPrior,
 ) -> CommonFrameWidthResolution:
     all_measured_constraints = tuple(
@@ -667,7 +664,7 @@ def resolve_common_frame_width(
     if not measured_constraints and len(geometry_constraints) == 1:
         measured_constraints = geometry_constraints
     scale_constraint = frame_width_physical_scale_constraint(
-        photo_height_evidence,
+        shared_short_axis,
         dimensions,
     )
     shared: PixelInterval | None = None

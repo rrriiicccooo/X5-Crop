@@ -68,6 +68,42 @@ def appearance(provenance: MeasurementProvenance) -> GrayAppearanceObservation:
     )
 
 
+def photo_edge_path(
+    side: BoundarySide,
+    position: float,
+    source: str,
+    *,
+    orthogonal_extent: float = 1_000_000.0,
+) -> GrayBoundaryPathObservation:
+    if side not in {BoundarySide.TOP, BoundarySide.BOTTOM}:
+        raise ValueError("photo-edge fixture requires a short-axis side")
+    measurement_provenance = provenance(MeasurementIdentity.BOUNDARY_PATHS, source)
+    outer = GrayAppearanceObservation(
+        intensity_median=8.0,
+        intensity_mad=0.5,
+        texture_median=0.25,
+        gradient_median=0.5,
+        spatial_continuity=1.0,
+        intensity_tail=GrayIntensityTail.LOW,
+        provenance=measurement_provenance,
+    )
+    inner = appearance(measurement_provenance)
+    lower, upper = (outer, inner) if side == BoundarySide.TOP else (inner, outer)
+    return GrayBoundaryPathObservation(
+        axis=BoundaryAxis.SHORT,
+        kind=BoundaryKind.TONAL_TRANSITION,
+        samples=(
+            BoundaryPathSample(
+                PixelInterval(0.0, orthogonal_extent),
+                PixelInterval.exact(position),
+            ),
+        ),
+        lower_appearance=lower,
+        upper_appearance=upper,
+        provenance=measurement_provenance,
+    )
+
+
 def path(
     axis: BoundaryAxis,
     position: float,
@@ -113,27 +149,29 @@ def scope(
         BoundarySide.TOP: (BoundaryAxis.SHORT, top),
         BoundarySide.BOTTOM: (BoundaryAxis.SHORT, bottom),
     }
-    endpoints = {
-        side: path(
-            axis,
-            position,
-            f"{side.value}_frame_path",
-            kind=(
-                BoundaryKind.EDGE_ADJACENT_TRANSITION
-                if side in holder_sides and side not in holder_positions
-                else BoundaryKind.TONAL_TRANSITION
-            ),
-        )
-        for side, (axis, position) in endpoint_positions.items()
-    }
+    endpoints = {}
+    for side, (axis, position) in endpoint_positions.items():
+        if side in {BoundarySide.TOP, BoundarySide.BOTTOM}:
+            endpoints[side] = photo_edge_path(
+                side,
+                position,
+                f"{side.value}_photo_edge_path",
+            )
+        else:
+            endpoints[side] = path(
+                axis,
+                position,
+                f"{side.value}_frame_path",
+                kind=BoundaryKind.TONAL_TRANSITION,
+            )
     holder_paths = {
         side: path(
             endpoint_positions[side][0],
-            position,
+            holder_positions.get(side, endpoint_positions[side][1]),
             f"holder_{side.value}_path",
             kind=BoundaryKind.EDGE_ADJACENT_TRANSITION,
         )
-        for side, position in holder_positions.items()
+        for side in holder_sides
     }
     paths = (
         endpoints[BoundarySide.LEADING],
@@ -146,9 +184,6 @@ def scope(
         ),
         *holder_paths.values(),
     )
-    holder_path_by_side = {
-        side: holder_paths.get(side, endpoints[side]) for side in holder_sides
-    }
     fallback = ContainmentFallback(
         Box(0, 0, width, height),
         MeasurementProvenance(
@@ -161,8 +196,8 @@ def scope(
     holder_boundaries = tuple(
             HolderBoundaryObservation(
                 side,
-                holder_path_by_side[side].position,
-                (holder_path_by_side[side],),
+                holder_paths[side].position,
+                (holder_paths[side],),
             )
             for side in holder_sides
         )
@@ -250,7 +285,7 @@ def separator(
         observation=observation,
         measurement=SeparatorCrossAxisMeasurement(
             observation_id=measurement_provenance.observation_id,
-            short_axis_span=short_axis.span.measurement_span,
+            short_axis_span=short_axis.measurement_span,
             leading_edge_path=leading_path,
             trailing_edge_path=trailing_path,
             band_path=band_path,
@@ -315,7 +350,6 @@ def geometry(
         nominal_count=count if nominal_count is None else nominal_count,
         holder_safety=search_scope.holder_safety,
         shared_short_axis=solved.shared_short_axis,
-        photo_height_evidence=solved.photo_height_evidence,
         frame_width_search_hint=solved.frame_width_search_hint,
         holder_span_scale_hint=solved.holder_span_scale_hint,
         content_extent_constraint=solved.content_extent_constraint,

@@ -7,12 +7,13 @@ import unittest
 
 from tools.regression.frame_slot_reference import (
     ReferenceValidationOutcome,
+    _reference_in_detection_workspace,
     compare_report_to_reference,
     frame_slot_reference_from_record,
 )
 from tools.tests.physical_gate_support import (
+    detection_workspace_fixture,
     selection_fixture,
-    transform_geometry_fixture,
     unavailable_resolution_metadata_fixture,
 )
 from tools.tests.test_output_read_model_contract import (
@@ -26,20 +27,20 @@ from x5crop.detection.final.finalize import (
     finalization_plan_for_selection,
     finalize_detection,
 )
-from x5crop.domain import EvidenceState, WorkspaceExtent
-from x5crop.image.workspace import WorkspaceIdentity
+from x5crop.domain import EvidenceState, PixelInterval, WorkspaceExtent
+from x5crop.geometry.affine import AffineCoordinateTransform
 from x5crop.output.model import AxisBleedParameters
 from x5crop.report.configuration import detection_configuration_read_model
 from x5crop.report.read_models import typed_read_model
 from x5crop.report.record import report_record_for_final_detection
-from x5crop.runtime.frame_bleed import prepare_frame_bleed
+from x5crop.detection.output_preparation import frame_bleed_plan_for_selection
 
 
 def _reference_record(report: dict) -> dict:
     selected = report["selection"]["candidates"][
         int(report["selection"]["selected_rank"]) - 1
     ]["provisional_geometry"]
-    shared = selected["shared_short_axis"]
+    shared = selected["shared_short_axis"]["span"]
     return {
         "schema_id": "frame_slot_reference",
         "schema_revision": "acceptable_sequence_intervals",
@@ -80,8 +81,12 @@ def _unresolved_record(source: str = "input.tif") -> dict:
             frame_slots_resolved=False,
         ),
     )
-    bleed = prepare_frame_bleed(selection, AxisBleedParameters(20, 10))
-    transform = transform_geometry_fixture()
+    bleed = frame_bleed_plan_for_selection(
+        selection,
+        AxisBleedParameters(20, 10),
+    )
+    workspace = detection_workspace_fixture()
+    transform = workspace.transform_geometry
     detection = finalize_detection(
         apply_decision_gate(
             selection,
@@ -100,7 +105,7 @@ def _unresolved_record(source: str = "input.tif") -> dict:
         selection,
         source=source,
         profile=typed_read_model(_profile()),
-        workspace_identity=WorkspaceIdentity(WorkspaceExtent(310, 100), "0" * 64),
+        workspace=workspace,
         output_files=[],
         review_copy=None,
         warnings=[],
@@ -108,8 +113,10 @@ def _unresolved_record(source: str = "input.tif") -> dict:
             get_detection_configuration("135", "partial")
         ),
         resolution_metadata=unavailable_resolution_metadata_fixture(),
-        transform_geometry=transform,
-        analysis_identity=_analysis_identity(source_name=Path(source).name),
+        analysis_identity=_analysis_identity(
+            source_name=Path(source).name,
+            workspace_identity=workspace.identity,
+        ),
     )
 
 
@@ -137,6 +144,22 @@ class FrameSlotReferenceContractTest(unittest.TestCase):
 
         self.assertEqual(result.outcome, ReferenceValidationOutcome.MATCHED)
         self.assertEqual(result.violations, ())
+
+    def test_source_reference_uses_report_affine_coordinate_domain(self) -> None:
+        reference = frame_slot_reference_from_record(_reference_record(_record()))
+        transform = AffineCoordinateTransform.expanded_rotation(310, 100, 1.0)
+
+        mapped = _reference_in_detection_workspace(reference, transform)
+
+        self.assertNotEqual(mapped.shared_short_axis, reference.shared_short_axis)
+        expected_leading, _ = transform.map_intervals(
+            reference.frame_slots[0].leading,
+            PixelInterval(
+                reference.shared_short_axis.top.minimum,
+                reference.shared_short_axis.bottom.maximum,
+            ),
+        )
+        self.assertEqual(mapped.frame_slots[0].leading, expected_leading)
 
     def test_unresolved_geometry_is_honest(self) -> None:
         report = _unresolved_record()

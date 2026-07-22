@@ -25,15 +25,15 @@ def unresolved_dual_lane_candidate(
     if not diagnostic:
         raise ValueError("unresolved dual-lane geometry requires a diagnostic")
     scope = frame_sequence_search_scope(
-        context.measurement_cache,
+        context.workspace.measurement_cache,
         context.configuration.boundary_path,
         cached_content_region_observation(
-            context.measurement_cache,
+            context.workspace.measurement_cache,
             Box(
                 0,
                 0,
-                context.measurement_cache.gray_work.shape[1],
-                context.measurement_cache.gray_work.shape[0],
+                context.workspace.measurement_cache.gray_work.shape[1],
+                context.workspace.measurement_cache.gray_work.shape[0],
             ),
             context.configuration.content,
         ),

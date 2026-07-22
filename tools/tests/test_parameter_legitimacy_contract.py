@@ -13,11 +13,10 @@ from tools.tests.parameter_contracts import (
 )
 from x5crop.configuration.preprocess import PreprocessConfiguration
 from x5crop.image.evidence import (
-    DeskewFallbackEvidenceParameters,
     SeparatorEvidenceImageParameters,
     make_content_evidence_gray,
 )
-from x5crop.image.deskew_parameters import DeskewParameters
+from x5crop.configuration.transform import DeskewDetectionParameters
 from x5crop.configuration.content import ContentEvidenceParameters
 from x5crop.configuration.candidate import (
     SequenceSolverParameters,
@@ -64,6 +63,7 @@ class ParameterLegitimacyContractTest(unittest.TestCase):
             lambda: SeparatorObservationParameters(minimum_run_px=0),
             lambda: SeparatorObservationParameters(maximum_observations=0),
             lambda: SequenceSolverParameters(maximum_assignment_evaluations=0),
+            lambda: DeskewDetectionParameters(minimum_path_samples=0),
         )
         for factory in invalid_factories:
             with self.subTest(factory=factory), self.assertRaises(ValueError):
@@ -100,17 +100,27 @@ class ParameterLegitimacyContractTest(unittest.TestCase):
         }
         self.assertEqual(offenders, {})
 
-    def test_deskew_measurements_are_not_reduced_to_an_empirical_scalar(self) -> None:
-        for removed in (
-            "auto_quality_ok",
-            "fallback_quality_gain",
-            "quality_inlier_weight",
-        ):
-            self.assertNotIn(removed, DeskewParameters.__dataclass_fields__)
-        source = (
-            PROJECT_ROOT / "x5crop/image/deskew.py"
-        ).read_text(encoding="utf-8")
-        self.assertNotIn("deskew_measurement_quality", source)
+    def test_transform_thresholds_have_one_detection_owner(self) -> None:
+        self.assertEqual(
+            set(DeskewDetectionParameters.__dataclass_fields__),
+            {
+                "minimum_path_samples",
+                "minimum_common_support_ratio",
+                "minimum_photo_edge_intensity_range_ratio",
+                "minimum_holder_photo_gap_ratio",
+                "maximum_slope_delta",
+                "residual_floor_px",
+                "residual_height_ratio",
+                "identity_span_ratio",
+                "identity_span_min_px",
+                "identity_span_max_px",
+                "maximum_angle_degrees",
+            },
+        )
+        self.assertFalse((PROJECT_ROOT / "x5crop/image/deskew.py").exists())
+        self.assertFalse(
+            (PROJECT_ROOT / "x5crop/image/deskew_parameters.py").exists()
+        )
 
     def test_runtime_percentiles_are_explicit_parameters(self) -> None:
         self.assertEqual(hidden_runtime_percentiles(), [])
@@ -126,18 +136,6 @@ class ParameterLegitimacyContractTest(unittest.TestCase):
         self.assertNotIn(
             "tonal_light_mean",
             SeparatorEvidenceImageParameters.__dataclass_fields__,
-        )
-        self.assertNotIn(
-            "extreme_dark_threshold",
-            DeskewFallbackEvidenceParameters.__dataclass_fields__,
-        )
-        self.assertNotIn(
-            "extreme_light_threshold",
-            DeskewFallbackEvidenceParameters.__dataclass_fields__,
-        )
-        self.assertNotIn(
-            "footprint_dark_threshold",
-            DeskewParameters.__dataclass_fields__,
         )
 
     def test_foundation_measurement_budgets_and_floors_are_explicit(self) -> None:
@@ -173,8 +171,6 @@ class ParameterLegitimacyContractTest(unittest.TestCase):
                     "bleed",
                     "bleed_x",
                     "bleed_y",
-                    "deskew_min_angle",
-                    "deskew_max_angle",
                     "jobs",
                 ),
             ),
@@ -185,8 +181,6 @@ class ParameterLegitimacyContractTest(unittest.TestCase):
                     "page",
                     "bleed_x",
                     "bleed_y",
-                    "deskew_min_angle",
-                    "deskew_max_angle",
                     "jobs",
                 ),
             ),

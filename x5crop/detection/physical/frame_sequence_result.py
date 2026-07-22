@@ -24,22 +24,19 @@ from .model import (
     FrameBoundarySource,
     FrameEdgeAssignment,
     FrameSlot,
-    FrameWidthSearchHint,
     HolderSpanScaleHint,
     IndexedAnchorDistanceConstraint,
-    PhotoHeightEvidence,
     ResolvedFrameBoundary,
     SeparatorBandAssignment,
     SequenceResiduals,
-    SharedShortAxisSafetySpan,
     boundary_role_is_independent_physical_measurement,
 )
+from .short_axis import FrameWidthSearchHint, SharedShortAxisPlan
 
 
 @dataclass(frozen=True)
 class FrameSequenceSolveResult:
-    shared_short_axis: SharedShortAxisSafetySpan
-    photo_height_evidence: PhotoHeightEvidence
+    shared_short_axis: SharedShortAxisPlan
     frame_width_search_hint: FrameWidthSearchHint
     holder_span_scale_hint: HolderSpanScaleHint
     content_extent_constraint: ContentExtentConstraint

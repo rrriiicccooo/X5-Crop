@@ -41,7 +41,7 @@ def solve_frame_sequence(
     if maximum_assignment_evaluations <= 0:
         raise ValueError("frame sequence solver budget must be positive")
     supports = search_index.separator_supports.canonical_supports
-    shared_short_axis = short_axis_plan.span
+    shared_short_axis = short_axis_plan
     if not shared_short_axis.supports_safe_crop:
         return sequence_result.FrameSequenceSolveFailure(short_axis_plan.search_outcome, 0)
     if supports and any(
@@ -62,7 +62,6 @@ def solve_frame_sequence(
             search_index,
             search_scope,
             shared_short_axis,
-            short_axis_plan.photo_height_evidence,
             count,
             dimensions,
             visible_content,
@@ -80,7 +79,7 @@ def solve_frame_sequence(
                 direct_builds,
                 visible_content,
                 holder_boundaries,
-                short_axis_plan.photo_height_evidence,
+                short_axis_plan,
                 dimensions,
             )
         )
@@ -90,7 +89,7 @@ def solve_frame_sequence(
                     build,
                     visible_content,
                     search_scope,
-                    short_axis_plan.photo_height_evidence,
+                    short_axis_plan,
                     dimensions,
                 )
                 for build in direct_builds
@@ -104,7 +103,7 @@ def solve_frame_sequence(
                 direct_builds,
                 visible_content,
                 holder_boundaries,
-                short_axis_plan.photo_height_evidence,
+                short_axis_plan,
                 dimensions,
             )
         )
@@ -113,7 +112,7 @@ def solve_frame_sequence(
                 direct_builds,
                 visible_content,
                 holder_boundaries,
-                short_axis_plan.photo_height_evidence,
+                short_axis_plan,
                 dimensions,
             )
         )
@@ -135,7 +134,6 @@ def solve_frame_sequence(
                         search_index,
                         search_scope,
                         shared_short_axis,
-                        short_axis_plan.photo_height_evidence,
                         count - 1,
                         dimensions,
                         visible_content,
@@ -146,7 +144,7 @@ def solve_frame_sequence(
                 completion_builds = sequence_completion.sequence_completed_builds(
                     real_frame_builds,
                     search_scope,
-                    short_axis_plan.photo_height_evidence,
+                    short_axis_plan,
                     dimensions,
                 )
     direct_selection_builds = direct_builds
@@ -166,7 +164,7 @@ def solve_frame_sequence(
                     or sequence_completion.build_supports_resolved_nominal_slots(
                         build,
                         holder_boundaries,
-                        short_axis_plan.photo_height_evidence,
+                        short_axis_plan,
                         dimensions,
                     )
                 )
@@ -181,7 +179,7 @@ def solve_frame_sequence(
             or sequence_completion.build_satisfies_full_endpoint_extent(
                 build,
                 holder_boundaries,
-                short_axis_plan.photo_height_evidence,
+                short_axis_plan,
                 dimensions,
             )
         )
@@ -220,7 +218,7 @@ def solve_frame_sequence(
         resolved, common_width = candidate_resolution.resolve_build_physical_boundaries(
             build,
             holder_boundaries,
-            short_axis_plan.photo_height_evidence,
+            short_axis_plan,
             dimensions,
         )
         if not sequence_completion.build_does_not_contradict_common_width(
@@ -243,7 +241,7 @@ def solve_frame_sequence(
             resolved, common_width = candidate_resolution.resolve_build_physical_boundaries(
                 assigned,
                 holder_boundaries,
-                short_axis_plan.photo_height_evidence,
+                short_axis_plan,
                 dimensions,
             )
         resolved_builds.append((resolved, common_width))
@@ -299,7 +297,7 @@ def solve_frame_sequence(
     representative, common_width = candidate_resolution.resolve_build_physical_boundaries(
         representative,
         holder_boundaries,
-        short_axis_plan.photo_height_evidence,
+        short_axis_plan,
         dimensions,
     )
     if not sequence_candidates.frame_slots_are_strictly_monotonic(representative.slots):
@@ -374,7 +372,6 @@ def solve_frame_sequence(
     )
     return sequence_result.FrameSequenceSolveResult(
         shared_short_axis=representative.short_axis,
-        photo_height_evidence=short_axis_plan.photo_height_evidence,
         frame_width_search_hint=frame_width_search_hint(
             representative.short_axis,
             dimensions,

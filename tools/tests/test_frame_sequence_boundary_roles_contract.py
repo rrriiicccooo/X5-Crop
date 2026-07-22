@@ -24,7 +24,10 @@ from x5crop.detection.physical.frame_sequence_construction import (
 from x5crop.detection.physical.frame_sequence_solver import (
     solve_frame_sequence,
 )
-from x5crop.detection.physical.frame_sequence_result import FrameSequenceSolveResult
+from x5crop.detection.physical.frame_sequence_result import (
+    FrameSequenceSolveFailure,
+    FrameSequenceSolveResult,
+)
 from x5crop.detection.physical.model import (
     BoundaryAnchor,
     BoundaryGeometryState,
@@ -39,6 +42,7 @@ from x5crop.domain import (
     EvidenceState,
     InterFrameSpacingBasis,
     MeasurementIdentity,
+    PhysicalSearchFact,
     PixelInterval,
 )
 
@@ -141,7 +145,7 @@ class FrameSequenceBoundaryRolesContractTest(unittest.TestCase):
 
         build = _measured_sequence_build(
             constraints,
-            plan.span,
+            plan,
             search_scope.holder_safety.box,
             allow_nominal_slot_sized_gap=False,
         )
@@ -181,7 +185,7 @@ class FrameSequenceBoundaryRolesContractTest(unittest.TestCase):
         )
         overlap_build = _measured_sequence_build(
             certain_overlap_constraints,
-            plan.span,
+            plan,
             search_scope.holder_safety.box,
             allow_nominal_slot_sized_gap=False,
         )
@@ -324,7 +328,7 @@ class FrameSequenceBoundaryRolesContractTest(unittest.TestCase):
                 runs=((0, 100), (110, 210), (220, 320), (330, 430)),
             ),
             count=4,
-            frame_dimensions=dimensions(3.0, 1.0),
+            frame_dimensions=dimensions(1.0, 1.0),
         )
 
         self.assertIsInstance(solved, FrameSequenceSolveResult)
@@ -371,15 +375,10 @@ class FrameSequenceBoundaryRolesContractTest(unittest.TestCase):
             frame_dimensions=dimensions(1.0, 1.0),
         )
 
-        self.assertIsInstance(solved, FrameSequenceSolveResult)
-        assert isinstance(solved, FrameSequenceSolveResult)
-        self.assertEqual(solved.common_frame_width.state, EvidenceState.UNAVAILABLE)
-        self.assertTrue(
-            all(
-                boundary.role_authority == BoundaryRoleAuthority.UNAVAILABLE
-                for slot in solved.frame_slots[1:3]
-                for boundary in (slot.leading, slot.trailing)
-            )
+        self.assertIsInstance(solved, FrameSequenceSolveFailure)
+        self.assertIn(
+            PhysicalSearchFact.CONSTRAINTS_CONTRADICTED,
+            solved.search_outcome.facts,
         )
 
     def test_one_measured_contact_path_owns_both_adjacent_frame_side_roles(
@@ -545,8 +544,12 @@ class FrameSequenceBoundaryRolesContractTest(unittest.TestCase):
         assert isinstance(solved, FrameSequenceSolveResult)
         self.assertFalse(solved.frame_slots[0].leading.independently_observed)
         self.assertFalse(solved.frame_slots[-1].trailing.independently_observed)
-        self.assertEqual(solved.common_frame_width.state, EvidenceState.UNAVAILABLE)
-        self.assertIsNone(solved.common_frame_width.width_px)
+        self.assertEqual(solved.common_frame_width.state, EvidenceState.SUPPORTED)
+        self.assertEqual(
+            solved.common_frame_width.width_px,
+            PixelInterval.exact(100.0),
+        )
+        self.assertIsNotNone(solved.common_frame_width.physical_scale_constraint)
 
     def test_single_frame_ambiguous_content_brackets_do_not_gain_edge_roles(
         self,

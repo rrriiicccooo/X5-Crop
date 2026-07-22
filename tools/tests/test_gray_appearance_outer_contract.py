@@ -54,6 +54,7 @@ class GrayAppearanceOuterContractTests(unittest.TestCase):
             gray,
             statistics,
             BoundaryPathParameters(),
+            axes=(BoundaryAxis.LONG, BoundaryAxis.SHORT),
             transform_position_uncertainty_px=0.0,
         )
 
@@ -224,7 +225,7 @@ class GrayAppearanceOuterContractTests(unittest.TestCase):
     def test_current_schema_names_frame_slot_resolution(self) -> None:
         self.assertEqual(
             REPORT_SCHEMA_REVISION,
-            "frame_slot_sequence_resolution",
+            "detection_owned_shared_short_axis",
         )
 
     def test_boundary_measurements_have_one_typed_canonical_model(self) -> None:
@@ -361,6 +362,7 @@ class GrayAppearanceOuterContractTests(unittest.TestCase):
                 BoundaryPathParameters(),
                 maximum_change_points_per_section=64,
             ),
+            axes=(BoundaryAxis.LONG, BoundaryAxis.SHORT),
             transform_position_uncertainty_px=0.0,
         )
 

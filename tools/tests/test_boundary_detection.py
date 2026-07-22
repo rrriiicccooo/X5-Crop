@@ -12,6 +12,7 @@ from x5crop.detection.physical.boundary_detection import (
     _LocalPathSample,
     _adaptive_change_points,
     _cluster_samples,
+    _cross_section_profiles,
     _holder_boundary,
     _window_statistics,
     boundary_measurements,
@@ -43,11 +44,36 @@ def _measure(
             ImageMeasurementStatisticsParameters(),
         ),
         BoundaryPathParameters(),
+        axes=(BoundaryAxis.LONG, BoundaryAxis.SHORT),
         transform_position_uncertainty_px=transform_position_uncertainty_px,
     )
 
 
 class BoundaryDetectionTests(unittest.TestCase):
+    def test_requested_axis_is_the_only_cross_section_measured(self) -> None:
+        gray = np.zeros((40, 80), dtype=np.uint8)
+        statistics = image_measurement_statistics(
+            gray,
+            ImageMeasurementStatisticsParameters(),
+        )
+
+        with patch(
+            "x5crop.detection.physical.boundary_detection._cross_section_profiles",
+            wraps=_cross_section_profiles,
+        ) as profiles:
+            boundary_measurements(
+                gray,
+                statistics,
+                BoundaryPathParameters(),
+                axes=(BoundaryAxis.SHORT,),
+                transform_position_uncertainty_px=0.0,
+            )
+
+        self.assertEqual(
+            [call.kwargs["scan_axis"] for call in profiles.call_args_list],
+            [0],
+        )
+
     def test_change_point_spatial_bins_do_not_call_scalar_numpy_mean(self) -> None:
         signal = np.asarray(
             [0.0, 0.0, 3.0, 3.0, 1.0, 1.0, 4.0, 4.0],

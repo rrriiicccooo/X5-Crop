@@ -1,5 +1,12 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
+import numpy as np
+
+from x5crop.cache import MeasurementCacheStatistics
+from x5crop.cache.analysis import make_measurement_cache
+
 from x5crop.detection.candidate.assessment.candidate import (
     candidate_gate_for_evidence,
 )
@@ -68,6 +75,7 @@ from x5crop.detection.final.finalize import (
 )
 from x5crop.detection.final.model import FinalDetection
 from x5crop.detection.geometry_resolution import GeometryResolution
+from x5crop.detection.workspace import DetectionWorkspace
 from x5crop.detection.physical.frame_dimensions import frame_dimension_evidence
 from x5crop.detection.physical.model import (
     AssignmentConsensusOutcome,
@@ -79,19 +87,20 @@ from x5crop.detection.physical.model import (
     ContentExtentConstraint,
     FrameContentOccupancy,
     HolderSpanScaleHint,
-    FrameWidthSearchHint,
     FrameWidthMeasurementConstraint,
     FrameSequenceSolution,
     FrameSlot,
     FrameEdgeAssignment,
     FrameBoundarySource,
     ResolvedFrameBoundary,
-    PhotoHeightEvidence,
     ReviewOnlyContainment,
     SeparatorBandAssignment,
     SequenceResiduals,
-    SharedShortAxisBasis,
-    SharedShortAxisSafetySpan,
+)
+from x5crop.detection.physical.short_axis import (
+    FrameWidthSearchHint,
+    SharedShortAxisPlan,
+    shared_short_axis_from_photo_edges,
 )
 from x5crop.domain import (
     BoundaryAxis,
@@ -122,7 +131,11 @@ from x5crop.domain import (
     SeparatorCrossAxisMeasurement,
     WorkspaceExtent,
 )
-from x5crop.image.deskew import DeskewMeasurementOutcome
+from x5crop.geometry.affine import AffineCoordinateTransform
+from x5crop.image.statistics import (
+    ImageMeasurementStatisticsParameters,
+    image_measurement_statistics,
+)
 from x5crop.output.model import AxisBleedParameters, FrameBleedPlan, FrameSideBleed
 from x5crop.units import ResolutionMetadataObservation
 
@@ -187,26 +200,74 @@ def boundary_path_fixture(
     )
 
 
-def candidate_boundary_paths() -> tuple[GrayBoundaryPathObservation, ...]:
-    return tuple(
-        boundary_path_fixture(
-            side,
-            PixelInterval.exact(position),
-            BoundaryKind.EDGE_ADJACENT_TRANSITION,
-            MeasurementProvenance(
-                MeasurementIdentity.BOUNDARY_PATHS,
-                ObservationId(f"synthetic_holder_boundary:{side.value}"),
-                (MeasurementIdentity.GRAY_WORK,),
-                "synthetic holder boundary",
-            ),
-        )
-        for side, position in (
-            (BoundarySide.LEADING, float(_HOLDER_BOX.left)),
-            (BoundarySide.TRAILING, float(_HOLDER_BOX.right)),
-            (BoundarySide.TOP, float(_HOLDER_BOX.top)),
-            (BoundarySide.BOTTOM, float(_HOLDER_BOX.bottom)),
-        )
+def _photo_edge_path_fixture(
+    side: BoundarySide,
+    position: float,
+    source: str,
+) -> GrayBoundaryPathObservation:
+    provenance = MeasurementProvenance(
+        MeasurementIdentity.BOUNDARY_PATHS,
+        ObservationId(source),
+        (MeasurementIdentity.GRAY_WORK,),
+        "synthetic real-photo edge",
     )
+    outer = _appearance(provenance, texture=0.0)
+    inner = replace(
+        _appearance(provenance, texture=2.0),
+        intensity_median=64.0,
+        gradient_median=4.0,
+        intensity_tail=GrayIntensityTail.MIDRANGE,
+    )
+    lower, upper = (outer, inner) if side == BoundarySide.TOP else (inner, outer)
+    return GrayBoundaryPathObservation(
+        axis=BoundaryAxis.SHORT,
+        kind=BoundaryKind.TONAL_TRANSITION,
+        samples=(
+            BoundaryPathSample(
+                PixelInterval(0.0, float(_HOLDER_BOX.width)),
+                PixelInterval.exact(position),
+            ),
+        ),
+        lower_appearance=lower,
+        upper_appearance=upper,
+        provenance=provenance,
+    )
+
+
+def candidate_boundary_paths() -> tuple[GrayBoundaryPathObservation, ...]:
+    leading = boundary_path_fixture(
+        BoundarySide.LEADING,
+        PixelInterval.exact(float(_HOLDER_BOX.left)),
+        BoundaryKind.EDGE_ADJACENT_TRANSITION,
+        MeasurementProvenance(
+            MeasurementIdentity.BOUNDARY_PATHS,
+            ObservationId("synthetic_holder_boundary:leading"),
+            (MeasurementIdentity.GRAY_WORK,),
+            "synthetic holder boundary",
+        ),
+    )
+    trailing = boundary_path_fixture(
+        BoundarySide.TRAILING,
+        PixelInterval.exact(float(_HOLDER_BOX.right)),
+        BoundaryKind.EDGE_ADJACENT_TRANSITION,
+        MeasurementProvenance(
+            MeasurementIdentity.BOUNDARY_PATHS,
+            ObservationId("synthetic_holder_boundary:trailing"),
+            (MeasurementIdentity.GRAY_WORK,),
+            "synthetic holder boundary",
+        ),
+    )
+    top = _photo_edge_path_fixture(
+        BoundarySide.TOP,
+        float(_HOLDER_BOX.top),
+        "synthetic_photo_edge:top",
+    )
+    bottom = _photo_edge_path_fixture(
+        BoundarySide.BOTTOM,
+        float(_HOLDER_BOX.bottom),
+        "synthetic_photo_edge:bottom",
+    )
+    return leading, trailing, top, bottom
 
 
 def unavailable_resolution_metadata_fixture() -> ResolutionMetadataObservation:
@@ -238,7 +299,7 @@ def separator_observation(
 
 def separator_cross_axis_measurement(
     observation: SeparatorBandObservation,
-    shared_short_axis: SharedShortAxisSafetySpan,
+    shared_short_axis: SharedShortAxisPlan,
     state: EvidenceState = EvidenceState.SUPPORTED,
 ) -> SeparatorCrossAxisMeasurement:
     path = CrossAxisPathMeasurement(
@@ -329,22 +390,9 @@ def _candidate_geometry(
 ) -> FrameSequenceSolution:
     paths = candidate_boundary_paths()
     leading_path, trailing_path, top_path, bottom_path = paths
-    short_axis_provenance = MeasurementProvenance(
-        MeasurementIdentity.FRAME_GEOMETRY,
-        ObservationId("synthetic_shared_short_axis"),
-        (MeasurementIdentity.BOUNDARY_PATHS,),
-        "synthetic shared short-axis span",
-        boundary_anchors=(
-            top_path.provenance.observation_id,
-            bottom_path.provenance.observation_id,
-        ),
-    )
-    shared_short_axis = SharedShortAxisSafetySpan(
-        PixelInterval.exact(0.0),
-        PixelInterval.exact(100.0),
-        SharedShortAxisBasis.PHOTO_EDGE_BOUNDED,
-        EvidenceState.SUPPORTED,
-        short_axis_provenance,
+    shared_short_axis = shared_short_axis_from_photo_edges(
+        top_path,
+        bottom_path,
     )
     observation = separator_observation(
         sum(_SEPARATOR) / 2.0,
@@ -442,6 +490,27 @@ def _candidate_geometry(
             )
         ),
     )
+    holder_paths = (
+        leading_path,
+        trailing_path,
+        *(
+            boundary_path_fixture(
+                side,
+                PixelInterval.exact(position),
+                BoundaryKind.EDGE_ADJACENT_TRANSITION,
+                MeasurementProvenance(
+                    MeasurementIdentity.BOUNDARY_PATHS,
+                    ObservationId(f"synthetic_holder_boundary:{side.value}"),
+                    (MeasurementIdentity.GRAY_WORK,),
+                    "synthetic holder boundary",
+                ),
+            )
+            for side, position in (
+                (BoundarySide.TOP, float(_HOLDER_BOX.top)),
+                (BoundarySide.BOTTOM, float(_HOLDER_BOX.bottom)),
+            )
+        ),
+    )
     holder_boundaries = tuple(
         HolderBoundaryObservation(side, path.position, (path,))
         for side, path in zip(
@@ -451,7 +520,7 @@ def _candidate_geometry(
                 BoundarySide.TOP,
                 BoundarySide.BOTTOM,
             ),
-            paths,
+            holder_paths,
             strict=True,
         )
     )
@@ -484,11 +553,6 @@ def _candidate_geometry(
         nominal_count=6,
         holder_safety=holder_safety,
         shared_short_axis=shared_short_axis,
-        photo_height_evidence=PhotoHeightEvidence(
-            shared_short_axis.height_px,
-            EvidenceState.SUPPORTED,
-            shared_short_axis.provenance,
-        ),
         frame_width_search_hint=FrameWidthSearchHint(
             shared_short_axis.height_px.scaled(1.5),
             shared_short_axis.provenance,
@@ -554,7 +618,7 @@ def _candidate_geometry(
             1,
             (),
         ),
-        raw_boundary_paths=paths,
+        raw_boundary_paths=(*holder_paths, top_path, bottom_path),
     )
 
 
@@ -846,18 +910,75 @@ def frame_bleed_fixture(*, feasible: bool = True) -> FrameBleedPlan:
 
 def transform_geometry_fixture(
     state: EvidenceState = EvidenceState.SUPPORTED,
+    *,
+    width: int = _HOLDER_BOX.width,
+    height: int = _HOLDER_BOX.height,
 ) -> TransformGeometryEvidence:
+    outcome = {
+        EvidenceState.SUPPORTED: TransformOutcome.IDENTITY_WITHIN_TOLERANCE,
+        EvidenceState.UNAVAILABLE: TransformOutcome.PHOTO_EDGES_UNAVAILABLE,
+        EvidenceState.CONTRADICTED: TransformOutcome.ANGLE_OUT_OF_RANGE,
+    }.get(state)
+    if outcome is None:
+        raise ValueError("transform fixture requires a decision-relevant state")
+    measured = outcome == TransformOutcome.IDENTITY_WITHIN_TOLERANCE
     return TransformGeometryEvidence(
-        (
-            TransformOutcome.SPAN_BELOW_THRESHOLD
-            if state == EvidenceState.SUPPORTED
-            else TransformOutcome.ANGLE_OUT_OF_RANGE
+        outcome=outcome,
+        estimated_angle_degrees=(
+            0.0 if measured else None
         ),
+        projected_edge_drift_px=0.0 if measured else None,
+        identity_drift_threshold_px=1.0 if measured else None,
+        position_uncertainty_px=0.0,
+        coordinate_transform=AffineCoordinateTransform.identity(
+            width,
+            height,
+        ),
+    )
+
+
+def detection_workspace_fixture(
+    transform_state: EvidenceState = EvidenceState.SUPPORTED,
+    *,
+    width: int = _HOLDER_BOX.width,
+    height: int = _HOLDER_BOX.height,
+    gray_override: np.ndarray | None = None,
+) -> DetectionWorkspace:
+    gray = (
+        np.zeros((height, width), dtype=np.uint8)
+        if gray_override is None
+        else np.asarray(gray_override, dtype=np.uint8)
+    )
+    if gray.ndim != 2:
+        raise ValueError("detection workspace fixture gray must be two-dimensional")
+    height, width = gray.shape
+    statistics = image_measurement_statistics(
+        gray,
+        ImageMeasurementStatisticsParameters(),
+    )
+    cache = make_measurement_cache(
+        gray,
+        "horizontal",
+        statistics,
         0.0,
-        0.0,
-        1.0,
-        0.0,
-        DeskewMeasurementOutcome.MEASURED,
+        MeasurementCacheStatistics(),
+    )
+    plan = _candidate_geometry().shared_short_axis
+    transform = transform_geometry_fixture(
+        transform_state,
+        width=width,
+        height=height,
+    )
+    return DetectionWorkspace(
+        pixels=gray,
+        source_gray=gray,
+        gray=gray,
+        measurement_cache=cache,
+        source_shared_short_axes=(plan,),
+        shared_short_axes=(plan,),
+        source_lane_divider=None,
+        lane_divider=None,
+        transform_geometry=transform,
     )
 
 

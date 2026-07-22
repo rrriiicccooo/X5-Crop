@@ -26,6 +26,7 @@ from x5crop.configuration.diagnostics import (
     SeparatorOverlayParameters,
 )
 from x5crop.configuration.separator import SeparatorObservationParameters
+from x5crop.configuration.transform import DeskewDetectionParameters
 from x5crop.output.model import AxisBleedParameters
 from x5crop.formats import (
     FrameSizeMm,
@@ -33,9 +34,7 @@ from x5crop.formats import (
     StripHandlingSpec,
 )
 from x5crop.image.separator_profile import SeparatorProfileParameters
-from x5crop.image.deskew_parameters import DeskewParameters
 from x5crop.image.evidence import (
-    DeskewFallbackEvidenceParameters,
     SeparatorEvidenceImageParameters,
 )
 from x5crop.image.gray import BaseGrayParameters
@@ -114,10 +113,6 @@ PARAMETER_GROUPS = (
     _group(ImageMeasurementStatisticsParameters, ("edge_sample_ratio",), ParameterRole.ADAPTIVE_MEASUREMENT, "ratio", "preprocess", "Scale-independent edge sampling."),
     _group(ImageMeasurementStatisticsParameters, ("edge_sample_min_px",), ParameterRole.ADAPTIVE_MEASUREMENT, "px", "preprocess", "Minimum sampling support."),
     _group(ImageMeasurementStatisticsParameters, ("maximum_percentile_samples",), ParameterRole.ADAPTIVE_MEASUREMENT, "sample_count", "preprocess", "Deterministic percentile sampling support."),
-    _group(DeskewFallbackEvidenceParameters, ("low_percentile", "high_percentile"), ParameterRole.ADAPTIVE_MEASUREMENT, "percentile", "deskew", "Per-image fallback intensity normalization."),
-    _group(DeskewFallbackEvidenceParameters, ("shadow_gamma", "edge_weight", "shadow_blend_weight", "edge_blend_weight", "gutter_extreme_min_fraction", "gutter_activity_max", "gutter_run_width_ratio"), ParameterRole.ADAPTIVE_MEASUREMENT, "normalized", "deskew", "Fallback deskew evidence measurement."),
-    _group(DeskewFallbackEvidenceParameters, ("gutter_run_width_min",), ParameterRole.ADAPTIVE_MEASUREMENT, "px", "deskew", "Minimum gutter measurement support."),
-    _group(DeskewFallbackEvidenceParameters, ("maximum_percentile_samples",), ParameterRole.ADAPTIVE_MEASUREMENT, "sample_count", "deskew", "Deterministic percentile sampling support."),
     _group(SeparatorEvidenceImageParameters, ("low_percentile", "high_percentile"), ParameterRole.DIAGNOSTICS_ONLY, "percentile", "debug", "Debug-only separator image normalization."),
     _group(SeparatorEvidenceImageParameters, ("tonal_low_percentile", "tonal_high_percentile"), ParameterRole.DIAGNOSTICS_ONLY, "percentile", "debug", "Debug-only adaptive tonal-tail visualization."),
     _group(SeparatorEvidenceImageParameters, ("vertical_edge_smooth_ratio", "local_weight", "vertical_edge_weight", "tonal_band_weight"), ParameterRole.DIAGNOSTICS_ONLY, "normalized", "debug", "Debug-only separator visualization."),
@@ -170,10 +165,11 @@ PARAMETER_GROUPS = (
     _group(BoundaryPathParameters, ("maximum_path_fit_residual_ratio",), ParameterRole.ADAPTIVE_MEASUREMENT, "ratio", "boundary_path", "Rejects spatially incoherent boundary-path fits."),
     _group(BoundaryPathParameters, ("maximum_path_section_gap",), ParameterRole.ADAPTIVE_MEASUREMENT, "section_count", "boundary_path", "Maximum missing local sections within one continuous path."),
     _group(BoundaryPathParameters, ("maximum_change_points_per_section",), ParameterRole.ADAPTIVE_MEASUREMENT, "count", "boundary_path", "Bounds spatially representative local changes before cross-section path fitting."),
-    _group(DeskewParameters, ("min_footprint_width", "sample_width_px", "residual_min", "fit_tolerance_min", "span_skip_min", "span_skip_max"), ParameterRole.ADAPTIVE_MEASUREMENT, "px", "deskew", "Deskew footprint, fit-residual, and application-span measurements."),
-    _group(DeskewParameters, ("footprint_min_fraction", "min_col_content_ratio", "residual_height_ratio", "fit_tolerance_multiplier", "span_skip_ratio"), ParameterRole.ADAPTIVE_MEASUREMENT, "ratio", "deskew", "Scale-relative deskew sampling and fit support."),
-    _group(DeskewParameters, ("min_samples", "max_samples", "min_col_content", "fit_min_points"), ParameterRole.ADAPTIVE_MEASUREMENT, "sample_count", "deskew", "Deskew sampling and robust-fit support counts."),
-    _group(DeskewParameters, ("slope_delta_max",), ParameterRole.ADAPTIVE_MEASUREMENT, "slope", "deskew", "Maximum disagreement between independently measured strip edges."),
+    _group(DeskewDetectionParameters, ("minimum_path_samples",), ParameterRole.ADAPTIVE_MEASUREMENT, "sample_count", "detection_transform", "Minimum local samples required on each observed photo edge."),
+    _group(DeskewDetectionParameters, ("minimum_common_support_ratio", "minimum_photo_edge_intensity_range_ratio", "minimum_holder_photo_gap_ratio", "residual_height_ratio", "identity_span_ratio"), ParameterRole.ADAPTIVE_MEASUREMENT, "ratio", "detection_transform", "Scale-relative photo-edge independence, dual-edge support, fit, and identity measurements."),
+    _group(DeskewDetectionParameters, ("maximum_slope_delta",), ParameterRole.ADAPTIVE_MEASUREMENT, "slope", "detection_transform", "Maximum disagreement across the two photo-edge slopes and lanes."),
+    _group(DeskewDetectionParameters, ("residual_floor_px", "identity_span_min_px", "identity_span_max_px"), ParameterRole.ADAPTIVE_MEASUREMENT, "px", "detection_transform", "Pixel floors and bounds for dual-edge fit and identity decisions."),
+    _group(DeskewDetectionParameters, ("maximum_angle_degrees",), ParameterRole.ADAPTIVE_MEASUREMENT, "degrees", "detection_transform", "Maximum physically admissible correction angle."),
     _group(SeparatorOverlayParameters, ("tick_length_ratio",), ParameterRole.DIAGNOSTICS_ONLY, "ratio", "debug", "Debug-only separator tick length ratio."),
     _group(SeparatorOverlayParameters, ("tick_length_min", "observed_line_width", "dimension_line_width", "overlap_line_width"), ParameterRole.DIAGNOSTICS_ONLY, "px", "debug", "Debug-only separator mark dimensions."),
     _group(DebugStyleParameters, ("frame_fill_alpha",), ParameterRole.DIAGNOSTICS_ONLY, "ratio", "debug", "Debug-only frame fill opacity."),
@@ -187,7 +183,6 @@ PARAMETER_GROUPS = (
     _group(RuntimeOptions, ("requested_count",), ParameterRole.USER_PREFERENCE, "count", "runtime_input", "Optional user-selected frame count."),
     _group(RuntimeOptions, ("page",), ParameterRole.USER_PREFERENCE, "page_index", "input", "User-selected TIFF page."),
     _group(RuntimeOptions, ("bleed", "bleed_x", "bleed_y"), ParameterRole.USER_PREFERENCE, "px", "output", "Optional user-selected output margins."),
-    _group(RuntimeOptions, ("deskew_min_angle", "deskew_max_angle"), ParameterRole.USER_PREFERENCE, "degrees", "deskew", "User-selected deskew application bounds."),
     _group(RuntimeOptions, ("copy_review_files", "export_review", "dry_run", "overwrite", "report"), ParameterRole.USER_PREFERENCE, "boolean", "runtime", "User-selected runtime behavior."),
     _group(RuntimeOptions, ("debug", "debug_analysis", "diagnostics", "debug_errors"), ParameterRole.DIAGNOSTICS_ONLY, "boolean", "diagnostics", "User-selected diagnostics behavior."),
     _group(RuntimeOptions, ("jobs",), ParameterRole.EXECUTION_BUDGET, "worker_count", "runtime", "User-selected worker budget."),
@@ -195,7 +190,6 @@ PARAMETER_GROUPS = (
     _group(RunConfig, ("requested_count",), ParameterRole.USER_PREFERENCE, "count", "runtime_input", "Validated optional user-selected frame count."),
     _group(RunConfig, ("page",), ParameterRole.USER_PREFERENCE, "page_index", "input", "Validated user-selected TIFF page."),
     _group(RunConfig, ("bleed_x", "bleed_y"), ParameterRole.USER_PREFERENCE, "px", "output", "Validated user-selected output margins."),
-    _group(RunConfig, ("deskew_min_angle", "deskew_max_angle"), ParameterRole.USER_PREFERENCE, "degrees", "deskew", "Validated user-selected deskew application bounds."),
     _group(RunConfig, ("debug", "debug_analysis", "diagnostics", "debug_errors"), ParameterRole.DIAGNOSTICS_ONLY, "boolean", "diagnostics", "Validated diagnostics inputs."),
     _group(RunConfig, ("jobs",), ParameterRole.EXECUTION_BUDGET, "worker_count", "runtime", "Validated worker budget."),
 )
@@ -214,7 +208,7 @@ CONSTANT_PARAMETER_CONTRACTS = (
         "x5crop.image.transforms.BILINEAR_INTERPOLATION_POSITION_UNCERTAINTY_PX",
         ParameterRole.STANDARD_TRANSFORM,
         "px",
-        "deskew",
+        "image_transform",
         "Bilinear resampling support added to transformed boundary coordinates.",
         "fixed_by_algorithm",
     ),
@@ -352,6 +346,14 @@ CONSTANT_PARAMETER_CONTRACTS = (
         "degrees",
         "image_transform",
         "Avoids numerically meaningless rotation work.",
+        "fixed_by_contract",
+    ),
+    ParameterContract(
+        "x5crop.geometry.affine.AFFINE_INVERTIBILITY_FLOOR",
+        ParameterRole.NUMERICAL_SAFETY,
+        "determinant",
+        "geometry_transform",
+        "Rejects singular image-coordinate mappings.",
         "fixed_by_contract",
     ),
     ParameterContract(
@@ -512,22 +514,6 @@ CONSTANT_PARAMETER_CONTRACTS = (
         "worker_count",
         "runtime",
         "Bounds diagnostics process concurrency.",
-        "fixed_by_contract",
-    ),
-    ParameterContract(
-        "x5crop.runtime.options.DEFAULT_DESKEW_MIN_ANGLE_DEGREES",
-        ParameterRole.USER_PREFERENCE,
-        "degrees",
-        "deskew",
-        "Default user-facing minimum deskew angle.",
-        "fixed_by_contract",
-    ),
-    ParameterContract(
-        "x5crop.runtime.options.DEFAULT_DESKEW_MAX_ANGLE_DEGREES",
-        ParameterRole.USER_PREFERENCE,
-        "degrees",
-        "deskew",
-        "Default user-facing maximum deskew angle.",
         "fixed_by_contract",
     ),
     ParameterContract(

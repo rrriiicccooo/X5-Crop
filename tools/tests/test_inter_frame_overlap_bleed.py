@@ -18,7 +18,10 @@ from x5crop.domain import (
     PixelInterval,
 )
 from x5crop.output.frame_bleed import apply_frame_bleed, frame_bleed_plan
-from x5crop.runtime.frame_bleed import _frame_output_bounds, _overlap_requirements
+from x5crop.detection.output_preparation import (
+    _frame_output_bounds,
+    _overlap_requirements,
+)
 from x5crop.output.model import (
     AxisBleedParameters,
     FrameOverlapRequirement,

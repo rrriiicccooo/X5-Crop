@@ -38,6 +38,8 @@ Current stable release: v4.2.8
   metadata 和已知无损压缩行为。
 - 检测阶段依据物理证据决定自动导出或复核；任何未解决的张数、边界或替代裁切方案都会
   保持复核，而不会由置信度或历史输出强行转为自动裁切。
+- 自动校斜是 detection 不可关闭的第一阶段。它必须先同时找到真实照片的上下边缘；同一份
+  边缘证据同时决定校正角度和后续所有照片共用的短轴。证据缺失或冲突时结果为 REVIEW。
 
 ### 推荐下载
 
@@ -127,11 +129,13 @@ debug analysis? [y/n, return=no]:
 检测始终在灰度 workspace 中工作；片夹可以是亮、暗或中间灰度。原始通道、色彩 metadata 和
 TIFF DPI/PPI 只由 I/O 与报告保存，不会直接决定裁切几何。
 
-auto count 会从当前格式允许的较大张数开始检查。程序先确定整条片条的安全短轴范围，再联合判断
-每张照片的顺序、边界和片间关系。只有张数与裁切几何都已解决、不存在未解决的替代方案、且
-输出保护可行时，才会自动输出；否则保持 REVIEW。Full 模式最多允许一个由完整序列唯一推导的
-空白位置，缺少内容本身不算证据；两个空白位置或位置不唯一时保持 REVIEW。Partial auto 不会
-利用空白区域增加张数。
+auto count 会从当前格式允许的较大张数开始检查。Detection 先在原图找到真实照片的上下边缘，
+用它们建立唯一共享短轴并自动校正倾斜；校正后的 detection 直接映射和复用这份短轴，再联合判断
+每张照片的长轴顺序、边界和片间关系。这个阶段不可关闭，也不会退回扫描外沿、holder 边缘或
+单边缘。上下边缘证据不足或冲突时保持 REVIEW。只有张数与裁切几何都已解决、不存在未解决的
+替代方案、且输出保护可行时，才会自动输出。Full 模式最多允许一个由完整序列唯一推导的空白
+位置，缺少内容本身不算证据；两个空白位置或位置不唯一时保持 REVIEW。Partial auto 不会利用
+空白区域增加张数。
 
 内部物理证据、数据流和权限边界详见 `ARCHITECTURE.md`。
 
@@ -175,7 +179,7 @@ x5_crop_output/_debug_analysis/
 
 每张 Debug Analysis JPG 固定包含：
 
-- `Original gray context`: 原始灰度上下文。
+- `Detection gray context`: 完成必要仿射校正后的 detection 灰度上下文。
 - `Frame slot geometry`: 共享短轴、有序 frame slots、保守输出包络和最终裁切框；未解决时显示
   `Provisional frame slots - NOT EXPORTABLE`。
 - `Boundary and separator evidence`: raw paths/bands、实测边界、尺寸假设和叠片标记。
@@ -204,6 +208,7 @@ x5_crop_output/_debug_analysis/
 
 检查 Debug Analysis 时优先确认：
 
+- report 中 source 上下照片边缘与映射后的共享短轴是否对应同一组 observation IDs。
 - 全部绿色 `FrameSlot` 是否共用一组安全短轴，长轴顺序、宽度和数量是否合理。
 - 黄色虚线 blank slot 是否只出现在唯一可解释的完整序列中，且没有移动相邻真实照片边界。
 - 蓝色 `FrameCropEnvelope` 是否覆盖对应 slot 与 boundary uncertainty。
@@ -285,18 +290,6 @@ python3 X5_Crop.py . --format 135 --strip full --report --debug-analysis --dry-r
 python3 X5_Crop.py . --format 135 --strip partial --report
 ```
 
-关闭自动校斜：
-
-```bash
-python3 X5_Crop.py . --format 135 --strip full --deskew off
-```
-
-关闭 deskew fallback：
-
-```bash
-python3 X5_Crop.py . --format 135 --strip full --deskew-fallback off
-```
-
 关闭并行：
 
 ```bash
@@ -339,6 +332,9 @@ Windows: install/X5_Crop_win_uninstall.bat
   lossless compression behavior.
 - Detection uses physical evidence. Confirmed content loss, unresolved geometry,
   or physically inconsistent frame dimensions go to review.
+- Automatic deskew is a mandatory first detection stage. It must find both real
+  photo edges; the same evidence determines the correction and the shared crop
+  short axis. Missing or conflicting edge evidence remains in REVIEW.
 - Detection uses one grayscale workspace. Holder polarity is not assumed, and
   TIFF resolution metadata is used only after independent physical-scale
   corroboration. Original channels and color metadata remain an I/O concern.
@@ -433,11 +429,13 @@ It asks for `count` only when partial mode is enabled. Press Return or type
 Detection uses a grayscale workspace; source channels, color metadata, and TIFF
 DPI/PPI remain I/O and report data rather than direct crop geometry.
 
-Auto count checks the larger allowed counts first. The program resolves one safe
-short-axis span for the strip, then evaluates the frame order, boundaries, and
-spacing together. It exports automatically only when the count and crop geometry
-are resolved with no outstanding alternative and output protection is feasible.
-Full mode may uniquely infer one
+Auto count checks the larger allowed counts first. Detection observes both real
+photo edges in source coordinates, creates the sole shared short-axis plan, and
+automatically corrects tilt. It maps and reuses that same plan while solving the
+long-axis frame order, boundaries, and spacing. This stage cannot be disabled and
+does not fall back to scan extrema, holder edges, or a single edge. It exports
+automatically only when the count and crop geometry are resolved with no
+outstanding alternative and output protection is feasible. Full mode may uniquely infer one
 blank position from a complete sequence, but missing content is not evidence by
 itself. Two blank positions or ambiguous placement remain in review, and partial
 auto count never grows from a blank-looking region.
@@ -477,7 +475,7 @@ x5_crop_output/_debug_analysis/
 
 Each JPG contains the fixed panels:
 
-- `Original gray context`: source gray context.
+- `Detection gray context`: detection gray context after any required affine correction.
 - `Frame slot geometry`: shared short-axis span, ordered frame slots,
   conservative output envelopes, and final crop boxes; unresolved results are
   labeled `Provisional frame slots - NOT EXPORTABLE`.
@@ -575,18 +573,6 @@ Partial strip:
 
 ```bash
 python3 X5_Crop.py . --format 135 --strip partial --report
-```
-
-Disable deskew:
-
-```bash
-python3 X5_Crop.py . --format 135 --strip full --deskew off
-```
-
-Disable deskew fallback:
-
-```bash
-python3 X5_Crop.py . --format 135 --strip full --deskew-fallback off
 ```
 
 ### Uninstall

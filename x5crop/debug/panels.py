@@ -259,7 +259,7 @@ def make_debug_analysis_panel(
     original_gray = cached_labeled_preview_gray(
         render_cache,
         "original_gray",
-        "Original gray context",
+        "Detection gray context",
         gray,
         style.preview_max_side,
         style.label_height,

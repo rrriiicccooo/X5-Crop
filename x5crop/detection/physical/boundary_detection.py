@@ -783,6 +783,7 @@ def boundary_measurements(
     statistics: ImageMeasurementStatistics,
     parameters: BoundaryPathParameters,
     *,
+    axes: tuple[BoundaryAxis, ...],
     transform_position_uncertainty_px: float,
 ) -> BoundaryMeasurementSet:
     if gray.ndim != 2 or not gray.size:
@@ -792,23 +793,26 @@ def boundary_measurements(
         or transform_position_uncertainty_px < 0.0
     ):
         raise ValueError("transform position uncertainty must be finite")
+    if not axes or len(set(axes)) != len(axes) or any(
+        axis not in {BoundaryAxis.LONG, BoundaryAxis.SHORT} for axis in axes
+    ):
+        raise ValueError("boundary measurement requires unique spatial axes")
     texture = _texture_image(gray)
-    long_axis_profiles = _cross_section_profiles(
-        gray,
-        texture,
-        scan_axis=1,
-        parameters=parameters,
-    )
-    short_axis_profiles = _cross_section_profiles(
-        gray,
-        texture,
-        scan_axis=0,
-        parameters=parameters,
-    )
-    profiles_by_axis = {
-        BoundaryAxis.LONG: long_axis_profiles,
-        BoundaryAxis.SHORT: short_axis_profiles,
-    }
+    profiles_by_axis = {}
+    if BoundaryAxis.LONG in axes:
+        profiles_by_axis[BoundaryAxis.LONG] = _cross_section_profiles(
+            gray,
+            texture,
+            scan_axis=1,
+            parameters=parameters,
+        )
+    if BoundaryAxis.SHORT in axes:
+        profiles_by_axis[BoundaryAxis.SHORT] = _cross_section_profiles(
+            gray,
+            texture,
+            scan_axis=0,
+            parameters=parameters,
+        )
     window_statistics_by_axis: dict[
         BoundaryAxis,
         _WindowStatisticsCache,
@@ -854,6 +858,7 @@ def boundary_measurements(
             ],
         )
         for side in BoundarySide
+        if boundary_axis_for_side(side) in profiles_by_axis
     }
     edge_paths_by_side = {
         side: paths for side, paths in edge_measurements_by_side.items()

@@ -3,8 +3,7 @@ from __future__ import annotations
 from ..app_info import VERSION
 from ..detection.final.model import FinalDetection, FinalizationPlan
 from ..detection.candidate.selection.model import SelectionResult
-from ..detection.evidence.transform_geometry import TransformGeometryEvidence
-from ..image.workspace import WorkspaceIdentity
+from ..detection.workspace import DetectionWorkspace
 from ..output.model import OutputGeometry
 from ..units import ResolutionMetadataObservation
 from .identity import REPORT_SCHEMA_ID, REPORT_SCHEMA_REVISION, bind_runtime_facts
@@ -44,13 +43,12 @@ def report_record_for_final_detection(
     *,
     source: str,
     profile: dict,
-    workspace_identity: WorkspaceIdentity,
+    workspace: DetectionWorkspace,
     output_files: list[str],
     review_copy: str | None,
     warnings: list[str],
     configuration: dict,
     resolution_metadata: ResolutionMetadataObservation,
-    transform_geometry: TransformGeometryEvidence,
     analysis_identity: dict,
 ) -> dict:
     output_geometry = detection.output_geometry
@@ -61,9 +59,15 @@ def report_record_for_final_detection(
         "source": str(source),
         "input": {
             "profile": dict(profile),
-            "workspace_identity": typed_read_model(workspace_identity),
+            "workspace_identity": typed_read_model(workspace.identity),
             "resolution_metadata": typed_read_model(resolution_metadata),
-            "transform_geometry": typed_read_model(transform_geometry),
+            "transform_geometry": typed_read_model(workspace.transform_geometry),
+            "source_shared_short_axes": typed_read_model(
+                workspace.source_shared_short_axes
+            ),
+            "shared_short_axes": typed_read_model(workspace.shared_short_axes),
+            "source_lane_divider": typed_read_model(workspace.source_lane_divider),
+            "lane_divider": typed_read_model(workspace.lane_divider),
         },
         "configuration": dict(configuration),
         "selection": selection_read_model(selection),

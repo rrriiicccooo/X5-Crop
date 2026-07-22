@@ -36,9 +36,9 @@ from .model import (
     FrameSlot,
     FrameBoundarySource,
     ResolvedFrameBoundary,
-    PhotoHeightEvidence,
 )
 from .frame_dimensions import MINIMUM_COMMON_FRAME_WIDTH_OBSERVATIONS
+from .short_axis import SharedShortAxisPlan
 
 
 def measured_sequence_supports_slot_inference(
@@ -566,7 +566,7 @@ def _build_with_inserted_slot(
 def sequence_completed_builds(
     real_frame_builds: tuple[sequence_candidates.SequenceBuild, ...],
     search_scope: FrameSequenceSearchScope,
-    photo_height_evidence: PhotoHeightEvidence,
+    shared_short_axis: SharedShortAxisPlan,
     dimensions: FrameDimensionPrior,
 ) -> tuple[sequence_candidates.SequenceBuild, ...]:
     inferred: list[sequence_candidates.SequenceBuild] = []
@@ -575,7 +575,7 @@ def sequence_completed_builds(
         build, common_width = candidate_resolution.resolve_build_physical_boundaries(
             build,
             holder_boundaries,
-            photo_height_evidence,
+            shared_short_axis,
             dimensions,
         )
         if common_width.state != EvidenceState.SUPPORTED:
@@ -611,13 +611,13 @@ def sequence_completed_builds(
 def build_supports_resolved_nominal_slots(
     build: sequence_candidates.SequenceBuild,
     holder_boundaries: dict[BoundarySide, HolderBoundaryObservation],
-    photo_height_evidence: PhotoHeightEvidence,
+    shared_short_axis: SharedShortAxisPlan,
     dimensions: FrameDimensionPrior,
 ) -> bool:
     resolved_build, common_width = candidate_resolution.resolve_build_physical_boundaries(
         build,
         holder_boundaries,
-        photo_height_evidence,
+        shared_short_axis,
         dimensions,
     )
     resolved_slots = resolved_build.slots
@@ -677,13 +677,13 @@ def _endpoint_slack_is_sub_frame(
 def build_satisfies_full_endpoint_extent(
     build: sequence_candidates.SequenceBuild,
     holder_boundaries: dict[BoundarySide, HolderBoundaryObservation],
-    photo_height_evidence: PhotoHeightEvidence,
+    shared_short_axis: SharedShortAxisPlan,
     dimensions: FrameDimensionPrior,
 ) -> bool:
     resolved_build, common_width = candidate_resolution.resolve_build_physical_boundaries(
         build,
         holder_boundaries,
-        photo_height_evidence,
+        shared_short_axis,
         dimensions,
     )
     frame_width = (
@@ -777,14 +777,14 @@ def infer_unique_slot_in_direct_nominal_build(
     build: sequence_candidates.SequenceBuild,
     visible_content: ContentRegionObservation,
     search_scope: FrameSequenceSearchScope,
-    photo_height_evidence: PhotoHeightEvidence,
+    shared_short_axis: SharedShortAxisPlan,
     dimensions: FrameDimensionPrior,
 ) -> sequence_candidates.SequenceBuild:
     holder_boundaries = candidate_resolution.holder_boundaries(search_scope)
     resolved_build, common_width = candidate_resolution.resolve_build_physical_boundaries(
         build,
         holder_boundaries,
-        photo_height_evidence,
+        shared_short_axis,
         dimensions,
     )
     inference_indexes = _unexcluded_sequence_inference_indexes(
@@ -825,7 +825,7 @@ def direct_nominal_geometry_is_complete(
     builds: tuple[sequence_candidates.SequenceBuild, ...],
     visible_content: ContentRegionObservation,
     holder_boundaries: dict[BoundarySide, HolderBoundaryObservation],
-    photo_height_evidence: PhotoHeightEvidence,
+    shared_short_axis: SharedShortAxisPlan,
     dimensions: FrameDimensionPrior,
 ) -> bool:
     if not builds:
@@ -842,7 +842,7 @@ def direct_nominal_geometry_is_complete(
         build_supports_resolved_nominal_slots(
             build,
             holder_boundaries,
-            photo_height_evidence,
+            shared_short_axis,
             dimensions,
         )
         and not _unexcluded_sequence_inference_indexes(
@@ -858,7 +858,7 @@ def preferred_direct_common_width_is_supported(
     builds: tuple[sequence_candidates.SequenceBuild, ...],
     visible_content: ContentRegionObservation,
     holder_boundaries: dict[BoundarySide, HolderBoundaryObservation],
-    photo_height_evidence: PhotoHeightEvidence,
+    shared_short_axis: SharedShortAxisPlan,
     dimensions: FrameDimensionPrior,
 ) -> bool:
     if not builds:
@@ -874,7 +874,7 @@ def preferred_direct_common_width_is_supported(
             candidate_resolution.resolve_build_physical_boundaries(
                 build,
                 holder_boundaries,
-                photo_height_evidence,
+                shared_short_axis,
                 dimensions,
             )[1]
         )

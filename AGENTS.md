@@ -70,8 +70,10 @@ Chinese-English paired where practical.
 - Calibrate detection behavior from real samples after structural closure. Do
   not broadly loosen rules to make one file pass; recheck known-good formats,
   especially `135`.
-- Use `--deskew off` for fast detector regressions unless deskew or export is the
-  subject.
+- Named-TIFF and end-to-end regressions must run the complete detection flow,
+  including source photo-edge observation and transform assessment. Pure solver
+  unit tests may construct an explicit typed `DetectionWorkspace` fixture, but
+  production runtime must have no bypass.
 - Horizontal-strip wording is the baseline for directional requests; implement
   the rotated vertical behavior too.
 - Update user docs for changes to setup, usage, launchers, outputs, or release
@@ -150,7 +152,8 @@ For detection changes, compare current-schema reports with:
 python3 -m tools.regression.compare <baseline> <candidate>
 ```
 
-Inspect at least status/reasons, selected rank, geometry resolution, crop
+Inspect at least transform outcome/source and mapped shared short axes, lane
+divider mapping, status/reasons, selected rank, geometry resolution, crop
 envelopes, and final boxes. Report diffs are audit evidence, not historical-parity
 requirements.
 

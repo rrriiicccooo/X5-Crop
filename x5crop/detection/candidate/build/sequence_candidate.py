@@ -58,7 +58,7 @@ def build_sequence_candidate(
     *,
     solver_parameters: SequenceSolverParameters,
 ) -> SequenceCandidateBuildOutcome:
-    if not short_axis_plan.span.supports_safe_crop:
+    if not short_axis_plan.supports_safe_crop:
         return SequenceCandidateBuildOutcome(
             None,
             short_axis_plan.search_outcome,
@@ -100,7 +100,6 @@ def build_sequence_candidate(
         nominal_count=fmt.strip.default_count,
         holder_safety=search_scope.holder_safety,
         shared_short_axis=solved.shared_short_axis,
-        photo_height_evidence=solved.photo_height_evidence,
         frame_width_search_hint=solved.frame_width_search_hint,
         holder_span_scale_hint=solved.holder_span_scale_hint,
         content_extent_constraint=solved.content_extent_constraint,

@@ -12,10 +12,6 @@ from ..runtime.bootstrap import run_options
 from ..runtime.limits import STANDARD_JOB_LIMIT
 from ..runtime.options import (
     COMPRESSION_CHOICES,
-    DEFAULT_DESKEW_MAX_ANGLE_DEGREES,
-    DEFAULT_DESKEW_MIN_ANGLE_DEGREES,
-    DESKEW_CHOICES,
-    DESKEW_FALLBACK_CHOICES,
     LAYOUT_CHOICES,
     RuntimeOptions,
 )
@@ -43,11 +39,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--bleed", type=int, default=None, help="Bleed in pixels on all sides; overrides layout-aware defaults.")
     parser.add_argument("--bleed-x", type=int, default=None, help=f"Long-axis bleed override; default {DEFAULT_OUTPUT_BLEED.long_axis}, increased when signed overlap requires it. Horizontal scans: left/right. Vertical scans: top/bottom.")
     parser.add_argument("--bleed-y", type=int, default=None, help=f"Short-axis bleed override; default {DEFAULT_OUTPUT_BLEED.short_axis}. Horizontal scans: top/bottom. Vertical scans: left/right.")
-    parser.add_argument("--deskew", choices=DESKEW_CHOICES, default="auto", help="Deskew strip before detection/export.")
-    parser.add_argument("--deskew-fallback", choices=DESKEW_FALLBACK_CHOICES, default="auto", help="Fallback edge fitting for deskew angle selection. auto runs the fallback only when base deskew quality is weak; always evaluates it; off disables the fallback.")
     parser.add_argument("--compression", choices=COMPRESSION_CHOICES, default="same", help="TIFF output compression: same for known lossless source compression, or none.")
-    parser.add_argument("--deskew-min-angle", type=float, default=DEFAULT_DESKEW_MIN_ANGLE_DEGREES, help="Minimum absolute deskew angle in degrees.")
-    parser.add_argument("--deskew-max-angle", type=float, default=DEFAULT_DESKEW_MAX_ANGLE_DEGREES, help="Maximum absolute deskew angle in degrees.")
     parser.add_argument("--copy-review-files", dest="copy_review_files", action="store_true", default=True, help="Copy source TIFFs that require review to the review folder; default on.")
     parser.add_argument("--no-copy-review-files", dest="copy_review_files", action="store_false", help="Do not copy source TIFFs that require review.")
     parser.add_argument("--review-dir", default=None, help="Review folder; default output/needs_review.")
@@ -60,7 +52,7 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Write lightweight JPG previews with sequence and frame geometry.",
     )
-    parser.add_argument("--debug-analysis", action="store_true", help="Write one combined JPG with original gray, debug boxes, and separator evidence.")
+    parser.add_argument("--debug-analysis", action="store_true", help="Write one combined JPG with detection-workspace gray, debug boxes, and separator evidence.")
     parser.add_argument("--diagnostics", action="store_true", help="Read-only diagnostics mode; implies --report --debug-analysis --dry-run --no-copy-review-files.")
     parser.add_argument("--jobs", type=int, default=STANDARD_JOB_LIMIT, help="Parallel TIFF workers. Default 2. Normal runs cap at 2; diagnostics runs cap at 4.")
     parser.add_argument("--debug-errors", action="store_true", help="Print tracebacks on errors.")
@@ -79,8 +71,6 @@ def options_from_args(args: argparse.Namespace) -> RuntimeOptions:
         value = getattr(args, name)
         if value is not None and int(value) < 0:
             raise ValueError("Bleed cannot be negative")
-    if float(args.deskew_min_angle) < 0 or float(args.deskew_max_angle) <= 0:
-        raise ValueError("Deskew angle limits are invalid")
     if int(args.jobs) < 1:
         raise ValueError("--jobs must be 1 or greater")
 
@@ -96,10 +86,6 @@ def options_from_args(args: argparse.Namespace) -> RuntimeOptions:
         bleed=(None if args.bleed is None else int(args.bleed)),
         bleed_x=(None if args.bleed_x is None else int(args.bleed_x)),
         bleed_y=(None if args.bleed_y is None else int(args.bleed_y)),
-        deskew=str(args.deskew),
-        deskew_fallback=str(args.deskew_fallback),
-        deskew_min_angle=float(args.deskew_min_angle),
-        deskew_max_angle=float(args.deskew_max_angle),
         review_dir=Path(args.review_dir).expanduser().resolve() if args.review_dir else None,
         copy_review_files=False if diagnostics else bool(args.copy_review_files),
         export_review=bool(args.export_review),

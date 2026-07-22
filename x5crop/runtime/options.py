@@ -9,12 +9,8 @@ from ..geometry.layout import HORIZONTAL, VERTICAL
 from ..run_config import CompressionMode
 
 
-DEFAULT_DESKEW_MIN_ANGLE_DEGREES = 0.03
-DEFAULT_DESKEW_MAX_ANGLE_DEGREES = 2.0
 DEFAULT_OUTPUT_BLEED = AxisBleedParameters(long_axis=20, short_axis=10)
 LAYOUT_CHOICES = ("auto", HORIZONTAL, VERTICAL)
-DESKEW_CHOICES = ("off", "auto")
-DESKEW_FALLBACK_CHOICES = ("off", "auto", "always")
 COMPRESSION_CHOICES: tuple[CompressionMode, ...] = ("none", "same")
 
 
@@ -30,10 +26,6 @@ class RuntimeOptions:
     bleed: Optional[int]
     bleed_x: Optional[int]
     bleed_y: Optional[int]
-    deskew: str
-    deskew_fallback: str
-    deskew_min_angle: float
-    deskew_max_angle: float
     review_dir: Optional[Path]
     copy_review_files: bool
     export_review: bool

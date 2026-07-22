@@ -55,6 +55,7 @@ from x5crop.detection.physical.model import (
 )
 from x5crop.detection.physical.short_axis import shared_short_axis_plan
 from x5crop.domain import (
+    BoundaryAxis,
     BoundarySide,
     EvidenceState,
     InterFrameSpacingBasis,
@@ -243,7 +244,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             search_scope,
             plan,
             4,
-            dimensions(1.0, 1.0),
+            dimensions(0.9, 1.0),
             visible_content,
             100_000,
             strip_mode="full",
@@ -328,16 +329,21 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
         self.assertEqual(search_widths[-1], PixelInterval.exact(110.0))
 
     def test_unassigned_gray_path_has_no_physical_measurement_quality(self) -> None:
-        gray_path = scope(
-            width=200,
-            height=100,
-            leading=0.0,
-            trailing=200.0,
-            top=0.0,
-            bottom=100.0,
-            internal_paths=(100.0,),
-            holder_sides=_ALL_HOLDER_SIDES,
-        ).raw_boundary_paths[-1]
+        gray_path = next(
+            path
+            for path in scope(
+                width=200,
+                height=100,
+                leading=0.0,
+                trailing=200.0,
+                top=0.0,
+                bottom=100.0,
+                internal_paths=(100.0,),
+                holder_sides=_ALL_HOLDER_SIDES,
+            ).raw_boundary_paths
+            if path.axis == BoundaryAxis.LONG
+            and str(path.provenance.observation_id).startswith("internal_path:")
+        )
         constraint = EdgeConstraint(
             position=gray_path.position,
             basis=FrameBoundarySource.GRAY_PATH_OBSERVATION,
@@ -433,10 +439,11 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             supports=supports,
         )
 
-        self.assertIsInstance(solved, FrameSequenceSolveResult)
-        assert isinstance(solved, FrameSequenceSolveResult)
-        self.assertFalse(any(slot.sequence_inferred for slot in solved.frame_slots))
-        self.assertEqual(solved.common_frame_width.state, EvidenceState.UNAVAILABLE)
+        self.assertIsInstance(solved, FrameSequenceSolveFailure)
+        self.assertIn(
+            PhysicalSearchFact.CONSTRAINTS_CONTRADICTED,
+            solved.search_outcome.facts,
+        )
 
     def test_holder_adjacent_band_edges_close_separator_sequence_endpoints(
         self,
@@ -683,7 +690,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
         self.assertEqual(solved.frame_width_search_hint.width_px.midpoint, 300.0)
         self.assertEqual(solved.common_frame_width.state, EvidenceState.UNAVAILABLE)
 
-    def test_repeated_unassigned_gray_paths_are_not_pruned_by_width_search_hint(
+    def test_photo_edge_width_hint_constrains_repeated_unassigned_gray_paths(
         self,
     ) -> None:
         search_scope = scope(
@@ -706,7 +713,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             search_scope=search_scope,
             visible_content=visible_content,
             count=4,
-            frame_dimensions=dimensions(3.0, 1.0),
+            frame_dimensions=dimensions(1.0, 1.0),
         )
 
         self.assertIsInstance(solved, FrameSequenceSolveResult)
@@ -715,7 +722,10 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             tuple(slot.width_px for slot in solved.frame_slots),
             (PixelInterval.exact(100.0),) * 4,
         )
-        self.assertEqual(solved.frame_width_search_hint.width_px, PixelInterval.exact(300.0))
+        self.assertEqual(
+            solved.frame_width_search_hint.width_px,
+            PixelInterval.exact(100.0),
+        )
 
 
     def test_holder_adjacent_edges_do_not_create_common_width_without_complete_slot(
@@ -767,7 +777,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             separator(start, end, plan, supported=True)
             for start, end in ((100.0, 110.0), (210.0, 220.0), (320.0, 330.0))
         )
-        frame_dimensions = dimensions(3.0, 1.0)
+        frame_dimensions = dimensions(1.0, 1.0)
         solved = solve_sequence(
             search_scope=search_scope,
             visible_content=content(
@@ -804,50 +814,29 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
 
     def test_supported_common_width_applies_to_every_normal_frame_slot(self) -> None:
         search_scope = scope(
-            width=20_000,
-            height=2_067,
-            leading=290.0,
-            trailing=19_700.0,
+            width=18_800,
+            height=2_000,
+            leading=0.0,
+            trailing=18_800.0,
             top=0.0,
-            bottom=2_067.0,
-            internal_paths=(
-                330.0,
-                1_600.0,
-                2_543.0,
-                3_817.0,
-                5_691.0,
-                5_793.0,
-                8_885.0,
-                10_391.0,
-                11_025.0,
-                11_955.0,
-                12_917.0,
-                14_199.0,
-                15_603.0,
-                15_752.0,
-                16_600.0,
-                17_355.0,
-                17_660.0,
-                18_610.0,
-                19_213.0,
-                19_493.0,
-            ),
+            bottom=2_000.0,
+            internal_paths=(15_800.0,),
             holder_sides=_ALL_HOLDER_SIDES,
         )
         plan = shared_short_axis_plan(search_scope)
         supports = tuple(
             separator(start, end, plan, supported=True)
             for start, end in (
-                (3_391.0, 3_600.0),
-                (6_700.0, 6_900.0),
-                (10_000.0, 10_200.0),
-                (13_300.0, 13_500.0),
+                (3_000.0, 3_200.0),
+                (6_200.0, 6_400.0),
+                (9_400.0, 9_600.0),
+                (12_600.0, 12_800.0),
             )
         )
 
         solved = solve_sequence(
             search_scope=search_scope,
-            visible_content=content(width=20_000, height=2_067),
+            visible_content=content(width=18_800, height=2_000),
             count=6,
             frame_dimensions=dimensions(36.0, 24.0),
             supports=supports,
@@ -873,21 +862,13 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             ),
             tuple(slot.width_px for slot in solved.frame_slots),
         )
-        dimension_boundaries = tuple(
-            boundary
-            for slot in solved.frame_slots
-            for boundary in (slot.leading, slot.trailing)
-            if boundary.source == FrameBoundarySource.DIMENSION_CONSTRAINED
-        )
-        self.assertTrue(dimension_boundaries)
-        self.assertTrue(
-            all(boundary.geometry_resolved for boundary in dimension_boundaries)
-        )
-        self.assertTrue(
-            all(
-                not boundary.independently_observed
-                for boundary in dimension_boundaries
-            )
+        self.assertEqual(
+            tuple(
+                frame_index
+                for frame_index, slot in enumerate(solved.frame_slots, start=1)
+                if slot.sequence_inferred
+            ),
+            (6,),
         )
 
     def test_holder_occlusion_keeps_hidden_nominal_geometry_out_of_crop(self) -> None:
@@ -1313,7 +1294,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
         )
         build = _measured_sequence_build(
             constraints,
-            plan.span,
+            plan,
             search_scope.holder_safety.box,
             allow_nominal_slot_sized_gap=False,
         )
@@ -1389,7 +1370,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
         )
         build = _measured_sequence_build(
             constraints,
-            plan.span,
+            plan,
             search_scope.holder_safety.box,
             allow_nominal_slot_sized_gap=False,
         )
@@ -2000,7 +1981,13 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             FrameBoundarySource.SEPARATOR_EDGE_OBSERVATION,
         )
         self.assertTrue(trailing.independently_observed)
-        self.assertEqual(solved.separator_assignments, ())
+        self.assertEqual(
+            tuple(
+                assignment.observation.provenance.observation_id
+                for assignment in solved.separator_assignments
+            ),
+            (internal_separator.observation.provenance.observation_id,),
+        )
 
     def test_frame_sized_tonal_band_cannot_become_a_hard_separator(self) -> None:
         search_scope = scope(
@@ -2875,7 +2862,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             )
         )
 
-    def test_dense_paths_keep_global_geometry_unresolved(
+    def test_dense_paths_cannot_override_photo_edge_scale_geometry(
         self,
     ) -> None:
         search_scope = scope(
@@ -2909,7 +2896,14 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
         self.assertEqual(solved.common_frame_width.state, EvidenceState.SUPPORTED)
         self.assertEqual(
             solved.assignment_consensus.outcome,
-            AssignmentConsensusOutcome.DISAGREED,
+            AssignmentConsensusOutcome.UNCONTESTED,
+        )
+        self.assertEqual(
+            tuple(slot.visible_long_axis for slot in solved.frame_slots),
+            tuple(
+                PixelInterval(float(start), float(start + 200))
+                for start in range(0, 1_000, 200)
+            ),
         )
 
     def test_dense_twelve_slot_raw_paths_are_pruned_before_graph_budget(
@@ -2941,15 +2935,16 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             maximum_assignment_evaluations=20_000,
         )
 
-        self.assertIsInstance(solved, FrameSequenceSolveResult)
-        assert isinstance(solved, FrameSequenceSolveResult)
+        self.assertIsInstance(solved, FrameSequenceSolveFailure)
+        assert isinstance(solved, FrameSequenceSolveFailure)
         self.assertIn(
-            PhysicalSearchFact.SOLUTION_FOUND,
+            PhysicalSearchFact.CONSTRAINTS_CONTRADICTED,
             solved.search_outcome.facts,
         )
         self.assertFalse(solved.search_outcome.budget_exhausted)
+        self.assertLess(solved.assignment_evaluations, 20_000)
 
-    def test_dense_paths_do_not_turn_candidate_width_into_global_consensus(
+    def test_dense_paths_cannot_contest_supported_photo_edge_width(
         self,
     ) -> None:
         search_scope = scope(
@@ -3002,7 +2997,11 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
         self.assertEqual(solved.common_frame_width.state, EvidenceState.SUPPORTED)
         self.assertEqual(
             solved.assignment_consensus.outcome,
-            AssignmentConsensusOutcome.DISAGREED,
+            AssignmentConsensusOutcome.UNCONTESTED,
+        )
+        self.assertEqual(
+            tuple(slot.width_px for slot in solved.frame_slots),
+            (PixelInterval.exact(100.0),) * 5,
         )
         self.assertLessEqual(solved.assignment_evaluations, 20_000)
 
@@ -3252,7 +3251,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
         original_search = construction.sequence_builds_for_count
 
         def tracked_search(*args, **kwargs):
-            searched_counts.append(args[4])
+            searched_counts.append(args[3])
             return original_search(*args, **kwargs)
 
         with patch.object(

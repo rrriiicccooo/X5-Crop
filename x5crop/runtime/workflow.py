@@ -7,16 +7,15 @@ import traceback
 
 from .analysis_identity import make_analysis_identity
 from ..cache import MeasurementCache, MeasurementCacheStatistics
-from ..cache.analysis import make_measurement_cache
 from ..detection.context import (
     DetectionContext,
     DetectionExecutionStatistics,
     DetectionRequest,
 )
+from ..detection.workspace import prepare_detection_workspace
 from ..run_config import RunConfig
 from ..run_status import RunTerminalOutcome
-from .frame_bleed import prepare_frame_bleed
-from .deskew import apply_deskew
+from ..detection.output_preparation import frame_bleed_plan_for_selection
 from ..debug.outputs import write_debug_outputs
 from ..detection.decision.decision_gate import apply_decision_gate
 from ..detection.final.finalize import (
@@ -27,9 +26,7 @@ from ..detection.pipeline import choose_detection
 from ..domain import EvidenceState
 from ..output.model import AxisBleedParameters
 from ..export.actions import copy_for_review_if_needed, write_crops_if_allowed
-from ..geometry.layout import infer_layout, work_gray
-from ..image.gray import make_base_gray_u8
-from ..image.statistics import image_measurement_statistics
+from ..geometry.layout import infer_layout
 from ..io.tiff import read_tiff, read_tiff_profile
 from ..output.surface import output_surface_for_input
 from ..report.configuration import detection_configuration_read_model
@@ -77,40 +74,54 @@ def process_one(
         arr, profile, page_warnings = read_tiff(input_file, config.page)
         source_arr = arr
 
-        failure_stage = FailureStage.PREPROCESS
-        gray = make_base_gray_u8(
-            arr,
-            profile.axes,
-            profile.photometric,
-            initial_configuration.preprocess.base_gray,
-        )
         _extend_unique(warnings, page_warnings)
-        measurement_statistics = image_measurement_statistics(
-            work_gray(gray, config.layout),
-            initial_configuration.preprocess.image_statistics,
-        )
         resolution_metadata = resolution_metadata_observation(
             profile.resolution,
             profile.resolution_unit,
         )
-
-        workspace = apply_deskew(
-            arr,
-            gray,
-            profile,
-            config,
-            initial_configuration.preprocess,
-            measurement_statistics,
-            warnings,
-        )
-        arr = workspace.pixels
-        gray = workspace.gray
-        transform_geometry = workspace.transform_geometry
-        if transform_geometry.applied:
-            measurement_statistics = image_measurement_statistics(
-                work_gray(gray, config.layout),
-                initial_configuration.preprocess.image_statistics,
+        failure_stage = FailureStage.DETECTION
+        detection_started_at = perf_counter()
+        try:
+            lane_configuration = (
+                None
+                if fmt.layout.lane_format_id is None
+                else configuration_bundle.configuration_for(
+                    fmt.layout.lane_format_id,
+                    "full",
+                )
             )
+            workspace = prepare_detection_workspace(
+                arr,
+                profile,
+                config.layout,
+                initial_configuration,
+                lane_configuration,
+                measurement_cache_statistics,
+            )
+            arr = workspace.pixels
+            gray = workspace.gray
+            transform_geometry = workspace.transform_geometry
+            measurement_cache = workspace.measurement_cache
+            if transform_geometry.applied:
+                assert transform_geometry.applied_angle_degrees is not None
+                warnings.append(
+                    f"deskew applied: {transform_geometry.applied_angle_degrees:.4f} degrees"
+                )
+            detection_context = DetectionContext(
+                request=DetectionRequest(
+                    layout=config.layout,
+                    strip_mode=config.strip_mode,
+                    requested_count=config.requested_count,
+                ),
+                configuration=initial_configuration,
+                lane_configuration=lane_configuration,
+                workspace=workspace,
+                execution_statistics=execution_statistics,
+            )
+            selection = choose_detection(detection_context)
+        finally:
+            detection_seconds += perf_counter() - detection_started_at
+        selected_candidate = selection.selected
 
         analysis_identity = make_analysis_identity(
             input_file,
@@ -120,42 +131,8 @@ def process_one(
             workspace.identity,
         )
 
-        measurement_cache = make_measurement_cache(
-            gray,
-            config.layout,
-            measurement_statistics,
-            workspace.transform_geometry.position_uncertainty_px,
-            measurement_cache_statistics,
-        )
-        detection_context = DetectionContext(
-            request=DetectionRequest(
-                layout=config.layout,
-                strip_mode=config.strip_mode,
-                requested_count=config.requested_count,
-            ),
-            configuration=initial_configuration,
-            lane_configuration=(
-                None
-                if fmt.layout.lane_format_id is None
-                else configuration_bundle.configuration_for(
-                    fmt.layout.lane_format_id,
-                    "full",
-                )
-            ),
-            measurement_cache=measurement_cache,
-            execution_statistics=execution_statistics,
-        )
-
-        failure_stage = FailureStage.DETECTION
-        detection_started_at = perf_counter()
-        try:
-            selection = choose_detection(detection_context)
-        finally:
-            detection_seconds += perf_counter() - detection_started_at
-        selected_candidate = selection.selected
-
         failure_stage = FailureStage.DECISION
-        prepared_frame_bleed = prepare_frame_bleed(
+        frame_bleed = frame_bleed_plan_for_selection(
             selection,
             AxisBleedParameters(
                 long_axis=int(config.bleed_x),
@@ -164,7 +141,7 @@ def process_one(
         )
         decided_detection = apply_decision_gate(
             selection,
-            prepared_frame_bleed,
+            frame_bleed,
             transform_geometry,
             automatic_processing_eligibility=(
                 EvidenceState.SUPPORTED
@@ -181,7 +158,7 @@ def process_one(
         )
         detection = finalize_detection(
             decided_detection,
-            prepared_frame_bleed,
+            frame_bleed,
             finalization_plan,
         )
 
@@ -226,13 +203,12 @@ def process_one(
             detection,
             selection,
             profile,
-            workspace.identity,
+            workspace,
             list(artifacts.frame_outputs),
             artifacts.review_copy,
             warnings,
             configuration_detail=configuration_detail,
             resolution_metadata=resolution_metadata,
-            transform_geometry=transform_geometry,
             analysis_identity=analysis_identity,
         )
         return CompletedInput(

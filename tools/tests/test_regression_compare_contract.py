@@ -19,14 +19,16 @@ class RegressionCompareContractTest(unittest.TestCase):
         second_page["analysis_identity"]["source"]["page"] = 1
         second_page["analysis_identity"]["runtime_configuration"]["page"] = 1
         bind_runtime_facts(second_page)
-        second_deskew = deepcopy(first)
-        second_deskew["analysis_identity"]["runtime_configuration"]["deskew"] = "on"
-        bind_runtime_facts(second_deskew)
+        requested_count = deepcopy(first)
+        requested_count["analysis_identity"]["runtime_configuration"][
+            "requested_count"
+        ] = 2
+        bind_runtime_facts(requested_count)
 
         identities = {
             report_key(first),
             report_key(second_page),
-            report_key(second_deskew),
+            report_key(requested_count),
         }
         self.assertEqual(len(identities), 3)
         self.assertTrue(

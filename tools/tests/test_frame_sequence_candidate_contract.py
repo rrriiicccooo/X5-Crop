@@ -413,7 +413,7 @@ class FrameSequenceCandidateContractTest(unittest.TestCase):
             (clean_subset,),
         )
 
-    def test_assignment_consensus_preserves_each_separator_binding_topology(
+    def test_photo_bounded_complete_separator_topology_dominates_unbound(
         self,
     ) -> None:
         def boundary(position: float, independent: bool) -> SimpleNamespace:
@@ -465,9 +465,7 @@ class FrameSequenceCandidateContractTest(unittest.TestCase):
             return SimpleNamespace(
                 slots=slots,
                 separator_bindings=bindings,
-                short_axis=SimpleNamespace(
-                    basis=physical_model.SharedShortAxisBasis.HOLDER_EDGE_BOUNDED,
-                ),
+                short_axis=candidate_fixture().geometry.shared_short_axis,
                 objectives=candidate_builds.SequenceBuildObjectives(
                     uncorroborated_overlap_extent_px=0.0,
                     unexplained_spacing_extent_px=0.0,
@@ -491,7 +489,7 @@ class FrameSequenceCandidateContractTest(unittest.TestCase):
                 (unbound, bound),
                 strip_mode=FULL,
             ),
-            (unbound, bound),
+            (bound,),
         )
 
     def test_photo_bounded_near_complete_sequence_owns_full_strip_consensus(
@@ -527,9 +525,7 @@ class FrameSequenceCandidateContractTest(unittest.TestCase):
             return SimpleNamespace(
                 slots=slots,
                 separator_bindings=bindings,
-                short_axis=SimpleNamespace(
-                    basis=physical_model.SharedShortAxisBasis.PHOTO_EDGE_BOUNDED,
-                ),
+                short_axis=candidate_fixture().geometry.shared_short_axis,
                 objectives=candidate_builds.SequenceBuildObjectives(
                     uncorroborated_overlap_extent_px=0.0,
                     unexplained_spacing_extent_px=0.0,
@@ -627,9 +623,7 @@ class FrameSequenceCandidateContractTest(unittest.TestCase):
                 separator_bindings=(
                     tuple(reversed(bindings)) if reverse_bindings else bindings
                 ),
-                short_axis=SimpleNamespace(
-                    basis=physical_model.SharedShortAxisBasis.HOLDER_EDGE_BOUNDED,
-                ),
+                short_axis=candidate_fixture().geometry.shared_short_axis,
                 objectives=candidate_builds.SequenceBuildObjectives(
                     uncorroborated_overlap_extent_px=overlap,
                     unexplained_spacing_extent_px=0.0,

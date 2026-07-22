@@ -24,7 +24,7 @@ from ....configuration.separator import SeparatorObservationParameters
 from ....image.statistics import ImageMeasurementStatistics
 from ....image.separator_profile import SeparatorProfileMeasurement
 from ....utils import runs_from_mask
-from ..model import SharedShortAxisSafetySpan
+from ..short_axis import SharedShortAxisPlan
 
 
 SEPARATOR_EDGE_COUNT = 2
@@ -327,7 +327,7 @@ def _cross_axis_measurement(
     observation_id: ObservationId,
     row_measurements: _SeparatorBandRowMeasurements | None,
     boundary_row_support: _SeparatorBoundaryRowSupport | None,
-    shared_short_axis: SharedShortAxisSafetySpan,
+    shared_short_axis: SharedShortAxisPlan,
     statistics: ImageMeasurementStatistics,
     parameters: SeparatorObservationParameters,
 ) -> SeparatorCrossAxisMeasurement:
@@ -1029,7 +1029,7 @@ def measure_separator_cross_axis_support(
     corridor: Box,
     statistics: ImageMeasurementStatistics,
     parameters: SeparatorObservationParameters,
-    shared_short_axis: SharedShortAxisSafetySpan,
+    shared_short_axis: SharedShortAxisPlan,
 ) -> SeparatorSupportSet:
     measured: list[SeparatorBandCrossAxisSupport] = []
     for observation in proposed.observations:

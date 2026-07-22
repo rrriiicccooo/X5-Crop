@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ..cache import MeasurementCache
 from ..configuration.model import DetectionConfiguration
 from ..geometry.layout import require_work_layout
 from ..strip_modes import FULL, PARTIAL
+from .workspace import DetectionWorkspace
 
 
 @dataclass
@@ -41,13 +41,13 @@ class DetectionContext:
     request: DetectionRequest
     configuration: DetectionConfiguration
     lane_configuration: DetectionConfiguration | None
-    measurement_cache: MeasurementCache
+    workspace: DetectionWorkspace
     execution_statistics: DetectionExecutionStatistics
 
     def __post_init__(self) -> None:
         if self.request.strip_mode != self.configuration.strip_mode:
             raise ValueError("detection request and configuration mode must match")
-        if self.measurement_cache.layout != self.request.layout:
+        if self.workspace.measurement_cache.layout != self.request.layout:
             raise ValueError("measurement cache and detection request layout must match")
         if (
             self.request.requested_count is not None

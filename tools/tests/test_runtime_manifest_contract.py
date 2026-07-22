@@ -9,12 +9,14 @@ from unittest.mock import patch
 
 import numpy as np
 
-from tools.tests.physical_gate_support import final_detection_fixture
+from tools.tests.physical_gate_support import (
+    detection_workspace_fixture,
+    final_detection_fixture,
+)
 from tools.tests.physical_gate_support import (
     decide_candidate,
     frame_bleed_fixture,
     selection_fixture,
-    transform_geometry_fixture,
 )
 from x5crop.configuration.bundle import DetectionConfigurationBundle
 from x5crop.configuration.registry import get_detection_configuration
@@ -35,7 +37,6 @@ from x5crop.runtime.outcome import (
     RuntimeArtifacts,
     RuntimeMetrics,
 )
-from x5crop.runtime.prepared_workspace import PreparedWorkspace
 from x5crop.runtime.workflow import process_one
 
 
@@ -51,10 +52,6 @@ def _config(*, output_dir: Path) -> RunConfig:
         page=0,
         bleed_x=20,
         bleed_y=10,
-        deskew="off",
-        deskew_fallback="off",
-        deskew_min_angle=0.03,
-        deskew_max_angle=2.0,
         review_dir=None,
         copy_review_files=False,
         export_review=False,
@@ -283,10 +280,9 @@ class RuntimeManifestContractTest(unittest.TestCase):
             selection = selection_fixture()
             bleed = frame_bleed_fixture()
             final_detection = final_detection_fixture()
-            workspace = PreparedWorkspace(
-                pixels=pixels,
-                gray=pixels,
-                transform_geometry=transform_geometry_fixture(),
+            workspace = detection_workspace_fixture(
+                width=pixels.shape[1],
+                height=pixels.shape[0],
             )
             with (
                 patch(
@@ -302,30 +298,15 @@ class RuntimeManifestContractTest(unittest.TestCase):
                     return_value=(pixels, profile, []),
                 ),
                 patch(
-                    "x5crop.runtime.workflow.make_base_gray_u8",
-                    return_value=pixels,
-                ),
-                patch(
-                    "x5crop.runtime.workflow.image_measurement_statistics",
-                    return_value=SimpleNamespace(),
-                ),
-                patch(
-                    "x5crop.runtime.workflow.apply_deskew",
+                    "x5crop.runtime.workflow.prepare_detection_workspace",
                     return_value=workspace,
-                ),
-                patch(
-                    "x5crop.runtime.workflow.make_measurement_cache",
-                    return_value=SimpleNamespace(
-                        layout="horizontal",
-                        lookup_statistics=SimpleNamespace(hits=0, misses=0),
-                    ),
                 ),
                 patch(
                     "x5crop.runtime.workflow.choose_detection",
                     return_value=selection,
                 ),
                 patch(
-                    "x5crop.runtime.workflow.prepare_frame_bleed",
+                    "x5crop.runtime.workflow.frame_bleed_plan_for_selection",
                     return_value=bleed,
                 ),
                 patch(

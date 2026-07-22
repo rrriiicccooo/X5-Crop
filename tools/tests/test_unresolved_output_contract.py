@@ -11,6 +11,7 @@ import numpy as np
 
 from tools.tests.physical_gate_support import (
     candidate_fixture,
+    detection_workspace_fixture,
     frame_bleed_fixture,
     selection_fixture,
     transform_geometry_fixture,
@@ -29,10 +30,9 @@ from x5crop.detection.final.finalize import (
 from x5crop.debug.panels import debug_geometry
 from x5crop.debug.status import debug_status_parts
 from x5crop.domain import EvidenceState, WorkspaceExtent
-from x5crop.image.workspace import WorkspaceIdentity
 from x5crop.output.model import AxisBleedParameters
 from x5crop.output.surface import OutputSurface
-from x5crop.runtime.frame_bleed import prepare_frame_bleed
+from x5crop.detection.output_preparation import frame_bleed_plan_for_selection
 from x5crop.export.actions import write_crops_if_allowed
 from x5crop.report.configuration import detection_configuration_read_model
 from x5crop.report.read_models import typed_read_model
@@ -129,15 +129,13 @@ class UnresolvedOutputContractTest(unittest.TestCase):
         )
         self.assertEqual(geometry.final_boxes, ())
 
+        workspace = detection_workspace_fixture()
         record = report_record_for_final_detection(
             detection,
             selection,
             source="input.tif",
             profile=typed_read_model(_profile()),
-            workspace_identity=WorkspaceIdentity(
-                WorkspaceExtent(310, 100),
-                "0" * 64,
-            ),
+            workspace=workspace,
             output_files=outputs,
             review_copy=None,
             warnings=[],
@@ -145,8 +143,9 @@ class UnresolvedOutputContractTest(unittest.TestCase):
                 get_detection_configuration("135", "partial")
             ),
             resolution_metadata=unavailable_resolution_metadata_fixture(),
-            transform_geometry=transform,
-            analysis_identity=_analysis_identity(),
+            analysis_identity=_analysis_identity(
+                workspace_identity=workspace.identity,
+            ),
         )
         self.assertIsNotNone(record["output"]["finalization_plan"])
         self.assertIsNotNone(record["output"]["final_geometry"])
@@ -168,7 +167,10 @@ class UnresolvedOutputContractTest(unittest.TestCase):
         selection = selection_fixture(
             candidate_fixture(failed_candidate_check="sequence_proof")
         )
-        bleed = prepare_frame_bleed(selection, AxisBleedParameters(20, 10))
+        bleed = frame_bleed_plan_for_selection(
+            selection,
+            AxisBleedParameters(20, 10),
+        )
         detection = finalize_detection(
             apply_decision_gate(
                 selection,
@@ -216,7 +218,10 @@ class UnresolvedOutputContractTest(unittest.TestCase):
                 count_resolved=False,
             ),
         )
-        bleed = prepare_frame_bleed(selection, AxisBleedParameters(20, 10))
+        bleed = frame_bleed_plan_for_selection(
+            selection,
+            AxisBleedParameters(20, 10),
+        )
         transform = transform_geometry_fixture()
         detection = finalize_detection(
             apply_decision_gate(
@@ -266,12 +271,13 @@ class UnresolvedOutputContractTest(unittest.TestCase):
             )[1],
         )
 
+        workspace = detection_workspace_fixture()
         record = report_record_for_final_detection(
             detection,
             selection,
             source="input.tif",
             profile=typed_read_model(_profile()),
-            workspace_identity=WorkspaceIdentity(WorkspaceExtent(310, 100), "0" * 64),
+            workspace=workspace,
             output_files=outputs,
             review_copy=None,
             warnings=[],
@@ -279,8 +285,9 @@ class UnresolvedOutputContractTest(unittest.TestCase):
                 get_detection_configuration("135", "partial")
             ),
             resolution_metadata=unavailable_resolution_metadata_fixture(),
-            transform_geometry=transform,
-            analysis_identity=_analysis_identity(),
+            analysis_identity=_analysis_identity(
+                workspace_identity=workspace.identity,
+            ),
         )
         self.assertIsNone(record["output"]["finalization_plan"])
         self.assertIsNone(record["output"]["final_geometry"])

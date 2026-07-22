@@ -78,6 +78,9 @@ Windows: 双击 X5_Crop_win.bat
 开启 partial mode 后会询问 `count`。按 Return 或输入 `auto` 表示自动判断张数；
 也可以输入当前格式允许的具体张数。
 
+自动校斜是不可关闭的 detection 第一阶段；它会复用真实照片上下边缘作为共享裁切短轴，
+双边缘证据不足或冲突时结果保持 REVIEW。
+
 ### 7. Debug Analysis
 
 默认按 Return，保持 `no`。
@@ -194,6 +197,9 @@ Film does not fill the holder, including a head, tail, or short scan: type `y`.
 When partial mode is enabled, the launcher asks for `count`. Press Return or
 type `auto` to let the script estimate it. You can also enter a valid count for
 the selected format.
+
+Automatic deskew is a mandatory detection stage: the two real photo edges also
+define the shared crop short axis, and missing or conflicting evidence stays in REVIEW.
 
 ### 7. Debug Analysis
 

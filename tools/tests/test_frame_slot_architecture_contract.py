@@ -6,6 +6,7 @@ import unittest
 
 from tools.tests.architecture_contracts import PROJECT_ROOT
 from x5crop.detection.physical import model
+from x5crop.detection.physical import short_axis
 
 
 class FrameSlotArchitectureContractTest(unittest.TestCase):
@@ -34,7 +35,6 @@ class FrameSlotArchitectureContractTest(unittest.TestCase):
             "HolderSpanScaleHint",
             "ContentExtentConstraint",
             "IndexedAnchorDistanceConstraint",
-            "FrameWidthSearchHint",
             "FrameWidthMeasurementConstraint",
         ):
             with self.subTest(type_name=type_name):
@@ -47,7 +47,7 @@ class FrameSlotArchitectureContractTest(unittest.TestCase):
             model.HolderSpanScaleHint,
             model.ContentExtentConstraint,
             model.IndexedAnchorDistanceConstraint,
-            model.FrameWidthSearchHint,
+            short_axis.FrameWidthSearchHint,
         ):
             with self.subTest(constraint_type=constraint_type.__name__):
                 self.assertNotIn(
@@ -57,7 +57,6 @@ class FrameSlotArchitectureContractTest(unittest.TestCase):
 
     def test_canonical_frame_sequence_types_exist(self) -> None:
         expected = {
-            "SharedShortAxisSafetySpan",
             "ResolvedFrameBoundary",
             "FrameSlot",
             "FrameWidthMeasurementConstraint",
@@ -109,14 +108,18 @@ class FrameSlotArchitectureContractTest(unittest.TestCase):
         self.assertNotIn("top", slot_fields)
         self.assertNotIn("bottom", slot_fields)
 
-    def test_short_axis_basis_names_state_their_physical_boundary(self) -> None:
+    def test_short_axis_has_no_holder_resolved_basis(self) -> None:
+        self.assertFalse(hasattr(model, "SharedShortAxisBasis"))
+        self.assertFalse(hasattr(model, "SharedShortAxisSafetySpan"))
         self.assertEqual(
-            model.SharedShortAxisBasis.PHOTO_EDGE_BOUNDED.value,
-            "photo_edge_bounded",
-        )
-        self.assertEqual(
-            model.SharedShortAxisBasis.HOLDER_EDGE_BOUNDED.value,
-            "holder_edge_bounded",
+            set(short_axis.SharedShortAxisPlan.__dataclass_fields__),
+            {
+                "top_photo_edge",
+                "bottom_photo_edge",
+                "span",
+                "search_outcome",
+                "provenance",
+            },
         )
 
     def test_common_width_owns_measurement_constraints_not_index_copies(self) -> None:

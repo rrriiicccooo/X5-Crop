@@ -165,12 +165,10 @@ def frame_dimension_evidence(
     measured_intervals = tuple(
         constraint.width_px for constraint in common_width.constraints
     )
-    photo_height = geometry.photo_height_evidence
     observed_aspect = (
-        common_width.width_px.midpoint / photo_height.height_px.midpoint
+        common_width.width_px.midpoint / geometry.shared_short_axis.height_px.midpoint
         if common_width.state == EvidenceState.SUPPORTED
-        and photo_height.state == EvidenceState.SUPPORTED
-        and photo_height.height_px is not None
+        and geometry.shared_short_axis.supports_safe_crop
         else None
     )
     return FrameDimensionEvidence(

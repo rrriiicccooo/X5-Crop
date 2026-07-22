@@ -9,6 +9,8 @@ from .diagnostics import DiagnosticsConfiguration
 from .model import DetectionConfiguration
 from .preprocess import PreprocessConfiguration
 from .separator import SeparatorConfiguration
+from .transform import DeskewDetectionParameters
+
 
 def get_detection_configuration(
     format_id: str,
@@ -23,6 +25,7 @@ def get_detection_configuration(
         physical_spec=spec,
         strip_mode=strip_mode,
         preprocess=PreprocessConfiguration(),
+        deskew=DeskewDetectionParameters(),
         boundary_path=BoundaryPathParameters(),
         separator=SeparatorConfiguration(),
         content=ContentConfiguration(),

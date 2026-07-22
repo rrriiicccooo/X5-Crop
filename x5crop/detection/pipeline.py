@@ -32,7 +32,6 @@ from .evidence.content.regions import cached_content_region_observation
 from .physical.model import ReviewOnlyContainment
 from .physical.short_axis import (
     SharedShortAxisPlan,
-    shared_short_axis_plan,
 )
 from ..domain import (
     BoundaryAxis,
@@ -136,24 +135,27 @@ def _count_resolution(
 def _choose_standard_detection(context: DetectionContext) -> SelectionResult:
     configuration = context.configuration
     physical_spec = configuration.physical_spec
+    cache = context.workspace.measurement_cache
+    if len(context.workspace.shared_short_axes) != 1:
+        raise ValueError("standard detection requires one prepared shared short axis")
+    short_axis_plan = context.workspace.shared_short_axes[0]
     workspace_content = cached_content_region_observation(
-        context.measurement_cache,
+        cache,
         Box(
             0,
             0,
-            context.measurement_cache.gray_work.shape[1],
-            context.measurement_cache.gray_work.shape[0],
+            cache.gray_work.shape[1],
+            cache.gray_work.shape[0],
         ),
         configuration.content,
     )
     search_scope = frame_sequence_search_scope(
-        context.measurement_cache,
+        cache,
         configuration.boundary_path,
         workspace_content,
     )
-    short_axis_plan = shared_short_axis_plan(search_scope)
     sequence_observations = frame_sequence_observations(
-        context.measurement_cache,
+        cache,
         search_scope,
         short_axis_plan,
         configuration.separator,
@@ -164,17 +166,23 @@ def _choose_standard_detection(context: DetectionContext) -> SelectionResult:
     holder_long_axis = search_scope.holder_safety.safe_axis_interval(
         BoundaryAxis.LONG
     )
+    short_top = short_axis_plan.top.minimum if short_axis_plan.supports_safe_crop else 0.0
+    short_bottom = (
+        short_axis_plan.bottom.maximum
+        if short_axis_plan.supports_safe_crop
+        else float(cache.gray_work.shape[0])
+    )
     content_region = Box(
         floor(holder_long_axis.minimum),
-        floor(short_axis_plan.span.top.minimum),
+        floor(short_top),
         ceil(holder_long_axis.maximum),
-        ceil(short_axis_plan.span.bottom.maximum),
+        ceil(short_bottom),
     ).clamp(
-        context.measurement_cache.gray_work.shape[1],
-        context.measurement_cache.gray_work.shape[0],
+        cache.gray_work.shape[1],
+        cache.gray_work.shape[0],
     )
     visible_content = cached_content_region_observation(
-        context.measurement_cache,
+        cache,
         content_region,
         configuration.content,
     )
@@ -228,7 +236,7 @@ def _choose_standard_detection(context: DetectionContext) -> SelectionResult:
 
 def choose_detection(context: DetectionContext) -> SelectionResult:
     configuration = context.configuration
-    if context.measurement_cache.layout != context.request.layout:
+    if context.workspace.measurement_cache.layout != context.request.layout:
         raise ValueError("analysis cache layout does not match detection context")
     if configuration.detector_kind == "dual_lane":
         selection = choose_dual_lane_detection(

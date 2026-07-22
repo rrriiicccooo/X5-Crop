@@ -12,6 +12,11 @@ from x5crop.report.validation import validate_current_report_record
 
 
 DEFAULT_FIELDS = (
+    "input.transform_geometry",
+    "input.source_shared_short_axes",
+    "input.shared_short_axes",
+    "input.source_lane_divider",
+    "input.lane_divider",
     "decision.status",
     "decision.final_review_reasons",
     "selection.selected_rank",
@@ -29,10 +34,6 @@ class ReportComparisonIdentity:
     layout: str
     strip_mode: str
     requested_count: int | None
-    deskew: str
-    deskew_fallback: str
-    deskew_min_angle: float
-    deskew_max_angle: float
     bleed_x: int
     bleed_y: int
 
@@ -41,7 +42,7 @@ class ReportComparisonIdentity:
         return (
             f"{self.source}#page={self.page} "
             f"[{self.format_id}/{self.strip_mode}, layout={self.layout}, "
-            f"count={count}, deskew={self.deskew}/{self.deskew_fallback}, "
+            f"count={count}, "
             f"bleed={self.bleed_x}x{self.bleed_y}]"
         )
 
@@ -93,10 +94,6 @@ def report_key(row: dict[str, Any]) -> ReportComparisonIdentity:
             if config["requested_count"] is None
             else int(config["requested_count"])
         ),
-        deskew=str(config["deskew"]),
-        deskew_fallback=str(config["deskew_fallback"]),
-        deskew_min_angle=float(config["deskew_min_angle"]),
-        deskew_max_angle=float(config["deskew_max_angle"]),
         bleed_x=int(config["bleed_x"]),
         bleed_y=int(config["bleed_y"]),
     )

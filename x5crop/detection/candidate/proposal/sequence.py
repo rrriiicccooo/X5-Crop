@@ -8,7 +8,6 @@ from ....configuration.boundary import BoundaryPathParameters
 from ....configuration.separator import SeparatorConfiguration
 from ....domain import (
     BoundaryAxis,
-    BoundarySide,
     BoundaryMeasurementSet,
     Box,
     HolderBoundaryObservation,
@@ -40,7 +39,7 @@ class FrameSequenceObservations:
     search_index: FrameSequenceSearchIndex
 
 
-def cached_boundary_measurements(
+def cached_long_axis_boundary_measurements(
     cache: MeasurementCache,
     parameters: BoundaryPathParameters,
 ) -> BoundaryMeasurementSet:
@@ -52,6 +51,7 @@ def cached_boundary_measurements(
             cache.gray_work,
             cache.image_statistics,
             parameters,
+            axes=(BoundaryAxis.LONG,),
             transform_position_uncertainty_px=(
                 cache.transform_position_uncertainty_px
             ),
@@ -80,7 +80,7 @@ def frame_sequence_search_scope(
     parameters: BoundaryPathParameters,
     workspace_content: ContentRegionObservation,
 ) -> FrameSequenceSearchScope:
-    measured = cached_boundary_measurements(cache, parameters)
+    measured = cached_long_axis_boundary_measurements(cache, parameters)
     if workspace_content.region != measured.containment_fallback.box:
         raise ValueError(
             "holder-boundary refutation requires full-workspace content"
@@ -119,18 +119,16 @@ def frame_sequence_search_scope(
 
 def _separator_measurement_corridor(
     search_scope: FrameSequenceSearchScope,
+    short_axis_plan: SharedShortAxisPlan,
 ) -> Box:
     holder = search_scope.holder_safety.box
-    by_side = {
-        item.side: item for item in search_scope.holder_safety.boundaries
-    }
-    top = by_side.get(BoundarySide.TOP)
-    bottom = by_side.get(BoundarySide.BOTTOM)
+    if not short_axis_plan.supports_safe_crop:
+        return holder
     corridor = Box(
         holder.left,
-        int(round(top.position.maximum)) if top is not None else holder.top,
+        int(round(short_axis_plan.top.maximum)),
         holder.right,
-        int(round(bottom.position.minimum)) if bottom is not None else holder.bottom,
+        int(round(short_axis_plan.bottom.minimum)),
     )
     return corridor if corridor.valid() else holder
 
@@ -141,7 +139,7 @@ def frame_sequence_observations(
     short_axis_plan: SharedShortAxisPlan,
     configuration: SeparatorConfiguration,
 ) -> FrameSequenceObservations:
-    corridor = _separator_measurement_corridor(search_scope)
+    corridor = _separator_measurement_corridor(search_scope, short_axis_plan)
     profile_measurement = cached_separator_profile_measurement(
         cache,
         corridor,
@@ -159,14 +157,14 @@ def frame_sequence_observations(
     )
     supports = (
         SeparatorSupportSet((), False)
-        if not short_axis_plan.span.supports_safe_crop
+        if not short_axis_plan.supports_safe_crop
         else measure_separator_cross_axis_support(
             proposed,
             gray_work=cache.gray_work,
             corridor=corridor,
             statistics=cache.image_statistics,
             parameters=configuration.observation,
-            shared_short_axis=short_axis_plan.span,
+            shared_short_axis=short_axis_plan,
         )
     )
     return FrameSequenceObservations(

@@ -13,6 +13,7 @@ from ..configuration.content import ContentConfiguration
 from ..configuration.diagnostics import DiagnosticsConfiguration
 from ..configuration.preprocess import PreprocessConfiguration
 from ..configuration.separator import SeparatorConfiguration
+from ..configuration.transform import DeskewDetectionParameters
 from ..detection.decision.vocabulary import FINAL_REVIEW_REASONS
 from ..detection.candidate.assessment.model import (
     CandidateGateAssessment,
@@ -35,6 +36,8 @@ from ..detection.geometry_resolution import GeometryResolution
 from ..detection.final.model import FinalizationPlan, frame_export_eligibility
 from ..detection.gate_checks import GateCheck, GateRequirement, GateStage
 from ..detection.evidence.transform_geometry import TransformGeometryEvidence
+from ..detection.physical.lane_divider import LaneDividerEvidence
+from ..detection.physical.short_axis import SharedShortAxisPlan
 from ..detection.physical.model import (
     DualLaneFrameSolution,
     ReviewOnlyContainment,
@@ -609,6 +612,10 @@ def _input_valid(value: Any) -> bool:
             "workspace_identity",
             "resolution_metadata",
             "transform_geometry",
+            "source_shared_short_axes",
+            "shared_short_axes",
+            "source_lane_divider",
+            "lane_divider",
         }
         and _typed_value_valid(value["profile"], ImageProfile)
         and _typed_value_valid(value["workspace_identity"], WorkspaceIdentity)
@@ -618,6 +625,22 @@ def _input_valid(value: Any) -> bool:
         and _typed_value_valid(
             value["transform_geometry"],
             TransformGeometryEvidence,
+        )
+        and _typed_value_valid(
+            value["source_shared_short_axes"],
+            tuple[SharedShortAxisPlan, ...],
+        )
+        and _typed_value_valid(
+            value["shared_short_axes"],
+            tuple[SharedShortAxisPlan, ...],
+        )
+        and _typed_value_valid(
+            value["source_lane_divider"],
+            LaneDividerEvidence | None,
+        )
+        and _typed_value_valid(
+            value["lane_divider"],
+            LaneDividerEvidence | None,
         )
     )
 
@@ -646,6 +669,7 @@ def _configuration_valid(value: Any) -> bool:
     measurement_fields = {
         "boundary_path",
         "preprocess",
+        "deskew",
         "separator",
         "content",
     }
@@ -717,6 +741,7 @@ def _configuration_valid(value: Any) -> bool:
             BoundaryPathParameters,
         )
         and _typed_value_valid(measurement["preprocess"], PreprocessConfiguration)
+        and _typed_value_valid(measurement["deskew"], DeskewDetectionParameters)
         and _typed_value_valid(measurement["separator"], SeparatorConfiguration)
         and _typed_value_valid(measurement["content"], ContentConfiguration)
         and isinstance(execution, dict)
@@ -758,10 +783,6 @@ def _analysis_identity_valid(value: Any) -> bool:
         "strip_mode",
         "requested_count",
         "page",
-        "deskew",
-        "deskew_fallback",
-        "deskew_min_angle",
-        "deskew_max_angle",
         "bleed_x",
         "bleed_y",
     }
@@ -800,8 +821,6 @@ def _analysis_identity_valid(value: Any) -> bool:
                 "format_id",
                 "layout",
                 "strip_mode",
-                "deskew",
-                "deskew_fallback",
             )
         )
         and (
@@ -811,10 +830,6 @@ def _analysis_identity_valid(value: Any) -> bool:
         and all(
             _integer(runtime_configuration[field]) is not None
             for field in ("page", "bleed_x", "bleed_y")
-        )
-        and all(
-            _typed_value_valid(runtime_configuration[field], float)
-            for field in ("deskew_min_angle", "deskew_max_angle")
         )
     )
 

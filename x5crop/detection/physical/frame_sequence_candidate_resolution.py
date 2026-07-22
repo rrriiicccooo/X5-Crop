@@ -27,9 +27,9 @@ from .model import (
     FrameEdgeAssignment,
     FrameBoundarySource,
     FrameSlot,
-    PhotoHeightEvidence,
     ResolvedFrameBoundary,
 )
+from .short_axis import SharedShortAxisPlan
 
 
 def holder_boundaries(
@@ -227,7 +227,7 @@ def resolve_build_dimension_boundaries(
 def resolve_build_physical_boundaries(
     build: sequence_candidates.SequenceBuild,
     holder_boundaries: dict[BoundarySide, HolderBoundaryObservation],
-    photo_height_evidence: PhotoHeightEvidence,
+    shared_short_axis: SharedShortAxisPlan,
     dimensions: FrameDimensionPrior,
 ) -> tuple[sequence_candidates.SequenceBuild, CommonFrameWidthResolution]:
     resolved = boundary_roles.corroborate_build_roles_from_repeated_frame_width(
@@ -238,21 +238,21 @@ def resolve_build_physical_boundaries(
     resolved = boundary_roles.corroborate_build_roles_from_physical_scale(
         resolved,
         width_resolution.frame_width_physical_scale_constraint(
-            photo_height_evidence,
+            shared_short_axis,
             dimensions,
         ),
     )
     common_width = width_resolution.resolve_common_frame_width(
         resolved.slots,
         holder_boundaries,
-        photo_height_evidence,
+        shared_short_axis,
         dimensions,
     )
     resolved = boundary_roles.corroborate_build_boundary_roles(resolved, common_width)
     common_width = width_resolution.resolve_common_frame_width(
         resolved.slots,
         holder_boundaries,
-        photo_height_evidence,
+        shared_short_axis,
         dimensions,
     )
     resolved = resolve_build_dimension_boundaries(

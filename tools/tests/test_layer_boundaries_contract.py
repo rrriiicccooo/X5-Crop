@@ -62,13 +62,28 @@ def _cycles(graph: dict[str, frozenset[str]]) -> list[tuple[str, ...]]:
 
 
 class LayerBoundariesContractTest(unittest.TestCase):
-    def test_deskew_measurements_do_not_use_a_mutable_detail_bus(self) -> None:
-        source = (
-            PROJECT_ROOT / "x5crop/image/deskew.py"
+    def test_deskew_is_detection_owned_with_no_legacy_runtime_path(self) -> None:
+        for relative_path in (
+            "x5crop/image/deskew.py",
+            "x5crop/image/deskew_parameters.py",
+            "x5crop/runtime/deskew.py",
+            "x5crop/runtime/prepared_workspace.py",
+        ):
+            self.assertFalse((PROJECT_ROOT / relative_path).exists(), relative_path)
+        workspace_source = (
+            PROJECT_ROOT / "x5crop/detection/workspace.py"
         ).read_text(encoding="utf-8")
-        self.assertNotIn("dict[str, Any]", source)
-        self.assertNotIn("detail.get(", source)
-        self.assertNotIn('["source"] =', source)
+        self.assertIn("class DetectionWorkspace", workspace_source)
+        self.assertIn("def prepare_detection_workspace", workspace_source)
+        self.assertNotIn("shared_short_axis_plan(", (
+            PROJECT_ROOT / "x5crop/detection/pipeline.py"
+        ).read_text(encoding="utf-8"))
+        self.assertNotIn(
+            'PREPROCESS = "preprocess"',
+            (PROJECT_ROOT / "x5crop/runtime/outcome.py").read_text(
+                encoding="utf-8"
+            ),
+        )
 
     def test_active_source_import_graph_is_acyclic(self) -> None:
         self.assertEqual(_cycles(source_import_graph()), [])

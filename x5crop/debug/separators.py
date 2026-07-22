@@ -9,7 +9,6 @@ from ..detection.physical.model import (
     FrameSequenceSolution,
     FrameBoundarySource,
     ResolvedFrameBoundary,
-    SharedShortAxisBasis,
 )
 from ..domain import (
     BoundaryAxis,
@@ -248,24 +247,13 @@ def _draw_sequence_overlay(
             image_height=image_height,
             layout=layout,
         )
-        if solution.shared_short_axis.basis == SharedShortAxisBasis.PHOTO_EDGE_BOUNDED:
-            draw_preview_line(
-                rgb,
-                mark,
-                scale,
-                style.measured_boundary_color,
-                overlay.observed_line_width,
-            )
-        else:
-            draw_preview_dashed_line(
-                rgb,
-                mark,
-                scale,
-                style.holder_boundary_color,
-                overlay.observed_line_width,
-                dash_length=style.line_dash_length,
-                dash_gap=style.line_dash_gap,
-            )
+        draw_preview_line(
+            rgb,
+            mark,
+            scale,
+            style.measured_boundary_color,
+            overlay.observed_line_width,
+        )
     for slot in solution.frame_slots:
         for side, boundary in (
             (BoundarySide.LEADING, slot.leading),

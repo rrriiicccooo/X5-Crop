@@ -44,10 +44,6 @@ def runtime_configuration_identity(config: RunConfig) -> dict[str, Any]:
             None if config.requested_count is None else int(config.requested_count)
         ),
         "page": int(config.page),
-        "deskew": config.deskew,
-        "deskew_fallback": config.deskew_fallback,
-        "deskew_min_angle": float(config.deskew_min_angle),
-        "deskew_max_angle": float(config.deskew_max_angle),
         "bleed_x": int(config.bleed_x),
         "bleed_y": int(config.bleed_y),
     }

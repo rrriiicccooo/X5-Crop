@@ -6,7 +6,7 @@ from typing import Any
 
 
 REPORT_SCHEMA_ID = "detection_report"
-REPORT_SCHEMA_REVISION = "frame_slot_sequence_resolution"
+REPORT_SCHEMA_REVISION = "detection_owned_shared_short_axis"
 
 
 _IMMUTABLE_OUTPUT_FIELDS = (

@@ -1,493 +1,267 @@
 # X5 Crop 架构说明 / Architecture Guide
 
-本文件只描述当前 V4.9 的运行流程、物理模型和源码分层。用户操作见
-`README.md`，版本历史见 `CHANGELOG.md`，协作与封口规则见 `AGENTS.md`。
+本文件只描述当前 V4.9 的运行流、权限边界与源码分层。用户操作见 `README.md`，
+版本变化见 `CHANGELOG.md`，长期协作规则见 `AGENTS.md`。
 
-## 1. 运行流程 / Runtime Flow
+This document is the canonical description of the current V4.9 runtime flow,
+authority boundaries, and source layers. It does not duplicate user instructions,
+release history, or task status.
+
+## 1. 固定运行流 / Fixed Runtime Flow
 
 ```text
-entry
-  -> runtime bootstrap + DetectionConfigurationBundle
-  -> TIFF read + layout normalization + preprocess
-  -> PreparedWorkspace + DetectionContext + MeasurementCache
-  -> count-independent gray paths + separator bands + content observations
-  -> SharedShortAxisCropSpan
-  -> count hypotheses + FrameDimensionPrior
-  -> global FrameSequenceSolver -> FrameSequenceSolution candidates
-  -> physical evidence + CandidateGate
-  -> GeometryResolution + deterministic selection
-  -> FrameCropEnvelope + FrameBleedPlan
-  -> DecisionGateAssessment
-  -> finalization -> FinalDetection
-  -> TIFF export / current-schema report / three-panel Debug Analysis
+entry：CLI / interactive parsing
+  -> runtime：TIFF I/O + resolved DetectionConfigurationBundle
+  -> detection：原图短轴路径观测
+  -> SharedShortAxisPlan（每条 lane 一份）
+  -> detection：TransformGeometryEvidence
+  -> image：通用像素仿射变换
+  -> DetectionWorkspace（同一短轴计划和 lane divider 的坐标映射）
+  -> detection：长轴观测、frame sequence、CandidateGate、selection
+  -> detection.output_preparation：FrameBleedPlan
+  -> detection：DecisionGate
+  -> detection.final：finalization plan + FinalDetection
+  -> runtime/output：TIFF export / report / Debug Analysis
 ```
 
-### 1.1 权限边界 / Authority Boundaries
+Deskew 是 detection 的强制第一阶段，不是可选的图像预处理功能。Runtime 只编排 TIFF、
+配置、并发与写出副作用；它不判断角度、不拥有边缘模型，也不重新解释检测结果。
 
-| Stage | Canonical responsibility |
+Deskew is a mandatory first detection stage, not an optional image-preprocessing
+feature. Runtime orchestrates I/O and side effects but owns no transform decision
+or geometry.
+
+### 1.1 权限表 / Authority Table
+
+| Owner | 唯一职责 / Sole responsibility |
 |---|---|
-| Entry | 只解析 CLI 与 interactive 输入。 |
-| Runtime | 一次性解析 configuration，编排 worker、exact measurement cache 和写出副作用。 |
-| Preprocess | 读取 TIFF，统一 layout，生成唯一灰度 workspace，测量 deskew 与 metadata。 |
-| Observation | 生成 count-independent 灰度 path、separator band、content 与图像统计。 |
-| Physical solver | 求解共享短轴、长轴 frame slots、间距、count 与完整序列。 |
-| Evidence | 描述支持、矛盾、不可用或不适用，不决定最终状态。 |
-| CandidateGate | 判断候选是否具备物理证明且没有明确物理矛盾。 |
-| GeometryResolution | 唯一 early-stop 输入，确认 count、slots、替代解与搜索均已解决。 |
-| Selection | 按物理目标确定性排序，并聚合区间等价解。 |
-| FrameBleedPlan | 合并用户 bleed 与逐 boundary 的叠片保护。 |
-| DecisionGate | 唯一创建最终 status 和 `final_review_reasons`。 |
-| Finalization | 只应用输出计划和 canvas/lane clamp，不重新检测。 |
-| Report / Debug | 只读 typed results，不补算事实或参与裁决。 |
+| `entry` | 解析公开输入；不存在 deskew 开关或阈值入口。 / Parse public input; expose no deskew controls. |
+| `runtime` | 解析一次配置、读取 TIFF、调用 detection、写出产物。 / Resolve configuration once, perform TIFF I/O, call detection, write artifacts. |
+| `detection.workspace` | 原图短轴观测、transform 判断、坐标映射和 `DetectionWorkspace`。 / Own source short-axis observation, transform assessment, coordinate mapping, and workspace construction. |
+| `SharedShortAxisPlan` | 上下真实照片边缘与唯一共享短轴。 / Own the two real photo edges and the sole shared short axis. |
+| `TransformGeometryEvidence` | 唯一 transform outcome、测量和仿射映射。 / Own the single transform outcome, measurements, and affine map. |
+| `image` | 灰度、统计和通用像素变换；不知道 detection 语义。 / Provide gray/statistical and generic pixel operations without detection semantics. |
+| `DetectionWorkspace` | 保证 pixels、gray、cache、transform 与 mapped geometry 位于同一坐标域。 / Keep pixels, gray, cache, transform, and mapped geometry in one coordinate domain. |
+| physical solver | `solve_frame_sequence` 消费既有共享短轴，只求长轴 frame sequence。 / Consume the prepared short axis and solve only the long-axis sequence. |
+| `CandidateGate` | 判断一个候选的物理证明是否成立。 / Assess one candidate's physical proof. |
+| selection | 确定性选择物理解并保留替代解关系。 / Select geometry deterministically and retain alternatives. |
+| GeometryResolution | 唯一 early-stop 输入；判断几何、搜索与替代解是否已解决。 / Sole early-stop authority for geometry, search, and alternatives. |
+| `DecisionGate` | 唯一创建 final status 与 final reasons。 / Sole creator of final status and final reasons. |
+| report / debug | 只读 typed results；不测量、不补算、不裁决。 / Read typed results only; never measure, infer, or decide. |
 
-`CandidateGate` 与 `DecisionGate` 是唯一两个 Gate。CandidateGate PASS 不代表几何已经
-resolved，也不能触发 early-stop。只有 `GeometryResolution.supported` 可以结束候选扩展，只有
-DecisionGate 可以创建 `approved_auto` 或 `needs_review`。
+权限始终单向流动。`CandidateGate` 和 `DecisionGate` 是仅有的两个 Gate；只有
+`GeometryResolution.supported` 可以触发候选搜索 early-stop，只有 `DecisionGate` 可以创建
+`approved_auto` 或 `needs_review`。
 
-### 1.2 Runtime Configuration
+## 2. Detection 所有的共享短轴 / Detection-Owned Shared Short Axis
 
-Runtime 从 `FormatPhysicalSpec + strip_mode` 创建唯一 `DetectionConfiguration`。Format spec
-只保存真实 frame mm、derived aspect、允许 count、physical layout 与 occupancy trait。Format
-名字只用于 lookup，不拥有算法分支或 format-specific threshold。
+### 2.1 原图观测 / Source Observation
 
-Lower layers 只接收显式 physical spec、configuration group 或普通参数对象。它们不查询 registry，
-不根据 mode 字符串发明默认参数。TIFF resolution metadata 与 `ImageProfile` 停留在 I/O、runtime、
-report 与 export 数据流，不进入候选几何或 Gate。
+Detection 先在原始灰度坐标系测量短轴路径。每条可用照片带必须同时存在：
 
-## 2. Frame Slot 物理模型
+- `top_photo_edge`：上边界照片侧的 inner line；
+- `bottom_photo_edge`：下边界照片侧的 inner line；
+- 连续的照片内侧 appearance；
+- 相对整幅灰度动态范围足够的照片/外侧强度跨度；
+- 在每个共同截面中与 holder transition 保持独立的尺度化测量间隔；
+- 覆盖整条共享裁切域的共同长轴证据和足够的 path samples；
+- 合格的 line-fit residual；
+- 一致的两条 inner-line slope。
 
-### 2.1 共享短轴
+扫描画布外沿、holder transition、空白区域和单边缘都不能生成 resolved shared short axis。
+Holder observations 只服务 containment 与 provisional review。无法唯一选出真实双边缘时，
+计划保持 typed unresolved；不存在安全坐标的伪造回退。
 
-一条 strip 的所有照片共用同一组 top/bottom 边界。`SharedShortAxisCropSpan` 是每个
-`FrameSlot` 唯一使用的短轴范围，因此同一条 strip 不会出现逐张照片上下错位。
+Scan extrema, holder transitions, empty regions, and single-edge observations
+cannot resolve the shared short axis. A photo edge must have scale-adaptive tonal
+separation and remain spatially independent from a holder transition across their
+shared samples. Scoring may choose a representative only inside one overlapping
+physical edge-pair hypothesis; distinct pair hypotheses remain unresolved. Holder
+evidence remains containment-only. Automatic shared-crop safety requires common
+edge support across the complete long-axis crop domain; partial support remains a
+review candidate and is never extrapolated into an auto-safe strip-wide boundary.
 
-短轴 basis 只有两种：
+### 2.2 唯一模型 / Sole Model
 
-- `photo_edge_bounded`：上下照片边界都有独立测量，可同时提供安全输出范围和照片高度证据。
-- `holder_edge_bounded`：只可靠排除片夹。它可以保留片基并仍作为安全输出范围，但不能反推照片高度
-  或长轴宽度。
-
-精确排除片基是优选结果，不是自动处理的必要条件。Canvas fallback 只能进入
-`ContainmentFallback`，不能成为 resolved shared short axis。
-
-### 2.2 长轴 Frame Slots
-
-`FrameSlot` 表示一次物理卷片或曝光槽位。每个 slot 保存：
-
-- leading/trailing `LongAxisBoundaryResolution`；
-- nominal 与 visible long-axis interval；
-- content occupancy；
-- 可选的首尾 holder occlusion；
-- 可选的 `SequenceInferredSlotGeometry`。
-
-所有 slots 必须按长轴严格单调、正宽、不交叉。`CommonFrameWidthResolution` 只能由具有
-非空共同测量区间的独立完整 slots 建立；宽 uncertainty envelope 不能跨越互斥的不相交宽度。
-照片宽度稳定是主要物理约束；separator 宽度和片距可以变化。
-
-All slots must be strictly monotonic, positive-width, and non-crossing along the
-long axis. `CommonFrameWidthResolution` requires independently complete slots
-with a non-empty shared measurement interval; a broad uncertainty envelope
-cannot bridge mutually exclusive disjoint widths. Stable photo width is the
-primary physical constraint, while separator width and inter-frame spacing may
-vary.
-
-Measured boundary 与 geometry-derived boundary 是不同事实。Dimension constraint、holder
-occlusion 或 blank inference 可以解决几何，但其 measurement state 保持 unavailable，不能增加
-独立测量、hard separator 数量或 proof path。
-
-Holder occlusion is endpoint-only geometry: it must hide a positive extent and
-may occur only on the first slot's leading side or the final slot's trailing
-side. Candidate selection rejects visible slot extents outside
-`HolderSafetyEnvelope` before finalization. Final sequence identity retains the
-same containment invariant and rejects zero-width, wrong-side, and interior
-occlusion states rather than treating them as harmless annotations.
-
-Holder occlusion 只能表达端点几何：必须隐藏正宽度，并且只允许首 slot 的 leading side 或尾
-slot 的 trailing side。Candidate selection 在 finalization 前淘汰可见范围越过
-`HolderSafetyEnvelope` 的 slot；最终序列 identity 保留同一 containment invariant，并拒绝零宽、
-错误 side 与 interior occlusion，而不是把它们当作无害标注。
-
-### 2.3 Separator 与 Signed Spacing
-
-`SeparatorBandObservation` 是 count-independent 原始像素 band。一个正 separator 的两条边分别
-绑定相邻 slots：
+`SharedShortAxisPlan` 是共享短轴唯一模型：
 
 ```text
-band.start -> preceding slot trailing edge
-band.end   -> following slot leading edge
+top_photo_edge: GrayBoundaryPathObservation | None
+bottom_photo_edge: GrayBoundaryPathObservation | None
+span: ShortAxisMeasurementSpan | None
+search_outcome: PhysicalSearchOutcome
+provenance: MeasurementProvenance
 ```
 
-Candidate-specific assignment 必须同时满足位置、物理宽度、当前 strip 共享测量 span 上的跨短轴
-连续性、单调性和 provenance。
-足以容纳一张完整照片的宽 tonal run 不能成为一个 hard separator。灰度外观相似、低纹理或
-连续性本身都不能证明 material identity。
+当且仅当两条真实照片边缘形成有效 inner-line span 时，`span` 才存在。照片高度、安全性和
+不确定度都由这一个 span 派生。每个 `FrameSlot`、separator cross-axis measurement、
+`FrameCropEnvelope` 和最终框都消费这同一计划；后续 detection 不得再次求解短轴。
 
-`InterFrameSpacing` 使用 signed interval：正值是 separator，零是 contact，负值是 overlap。
-只有独立像素观测或独立约束共同佐证的 overlap 才能触发输出保护。Geometry 方程推导的负值
-不能证明自身，也不能自动增加 bleed。Content crossing 只能佐证两侧 physical roles 已经独立测得的
-overlap；由 dimension 或 `FRAME_WIDTH_PATTERN` 分配的 role 不能借 content 升级为
-`CORROBORATED_OVERLAP`。
+The span exists only when two real photo edges form a valid inner-line interval.
+Height, safety, uncertainty, frame crops, and cross-axis measurements derive from
+that one plan. No downstream stage re-detects it.
 
-Content crossing may corroborate overlap only when both physical boundary roles
-were independently measured. A role assigned by dimensions or
-`FRAME_WIDTH_PATTERN` cannot use content to upgrade geometry into
-`CORROBORATED_OVERLAP` or output-protection authority.
+### 2.3 Transform outcome
 
-Final sequence identity also conserves separator measurement and spacing
-authority: every typed separator assignment must use cross-axis continuity
-measured on the strip's exact shared short-axis span, bind the matching positive
-`OBSERVED` spacing at the same boundary, and retain the assigned band's
-observation identity. A foreign measurement span or geometry-hypothesis spacing
-cannot coexist with a hard separator assignment even when coordinates happen to
-match.
+两条 inner-line slope 的共同估计决定角度。`TransformGeometryEvidence` 只有以下 outcome：
 
-最终序列 identity 还必须守恒 separator measurement 与 spacing 权限：每个 typed separator
-assignment 必须使用当前 strip 精确共享短轴 span 上测得的跨轴连续性，在同一 boundary 绑定对应的
-正值 `OBSERVED` spacing，并保留已分配 band 的观测 identity。即使坐标碰巧一致，来自其他 span 的
-measurement 或 geometry-hypothesis spacing 也不能与 hard separator assignment 同时成立。
+| Outcome | State | Meaning |
+|---|---|---|
+| `photo_edges_unavailable` | unavailable | 没有完整真实双边缘。 |
+| `insufficient_common_support` | unavailable | 双边缘存在，但共同覆盖或 samples 不足。 |
+| `edge_slopes_disagree` | contradicted | 两条边或两 lane 的 slope 冲突。 |
+| `edge_fit_high_residual` | contradicted | inner-line fit residual 过高。 |
+| `identity_within_tolerance` | supported | 双边缘成立，倾斜在 identity 容差内。 |
+| `deskew_applied` | supported | 双边缘成立并已应用校正。 |
+| `angle_out_of_range` | contradicted | 所需校正超出可信范围。 |
 
-Every `MeasurementProvenance` is acyclic: its `root_measurement` cannot also
-appear in `dependencies`. A derived fact that consumes same-root inputs keeps
-their upstream dependencies instead of creating a self-authorizing provenance
-loop; runtime construction and current-report validation enforce the same rule.
-Within one current report, one `ObservationId` must also map to exactly one full
-provenance; conflicting reuse is an identity error, not an alternate description.
-Candidate-local measurement authority is part of that identity, so observed and
-geometry-hypothesis spacing derived from the same coordinates use distinct IDs.
+只有两个 supported outcome 能通过 transform 的 DecisionGate check。失败 outcome 的角度为
+`None`，不能以 `0°` 伪装成功。阈值只存在于 `DetectionConfiguration.deskew` 的 typed
+`DeskewDetectionParameters` 中；它们没有 CLI、interactive 或 runtime fallback 表面。
 
-每个 `MeasurementProvenance` 都必须无环：`root_measurement` 不得再出现在
-`dependencies` 中。派生事实消费同 root 输入时只保留其上游依赖，不得形成
-自我授权环；runtime 构造与 current-report 校验共用同一规则。
-同一份 current report 内，一个 `ObservationId` 也只能对应一套完整 provenance；
-冲突复用是 identity error，不是可接受的替代描述。Candidate-local measurement authority
-属于该 identity，因此同一组坐标派生的 observed spacing 与 geometry-hypothesis spacing
-必须使用不同 ID。
+### 2.4 仿射映射 / Affine Mapping
 
-### 2.4 空白 Frame Slot
+`image.rotate_array_expand` 只执行通用 expanded rotation，并同时返回唯一的
+`AffineCoordinateTransform`。Detection 使用该对象映射：
 
-空白曝光区域与 separator 可能在灰度上完全连续。脚本不检测“空白材料”，也不通过无内容、
-低纹理或伪造 separator 来证明空白槽位。
+- 每条边缘的 samples 和 fitted interval；
+- `SharedShortAxisPlan`；
+- dual-lane divider 与 lane boxes；
+- 后续在 workspace 中产生的 frame envelopes 和 final boxes。
 
-Full nominal sequence 最多允许一个唯一推导的空白 slot，位置可以是 leading、interior 或
-trailing。`SequenceInferredSlotGeometry` 必须满足：
+旋转后的 workspace 不重新测量短轴。Identity outcome 保留原坐标；applied outcome 对像素和
+所有几何使用完全相同的 matrix 与 expanded offset。仿射插值的不确定度进入 mapped path，
+不会成为可靠性证据。
 
-- 其余真实 slots 已安全解决；
-- `CommonFrameWidthResolution` 由独立完整 slots 支持；
-- nominal count 与唯一 placement 成立；
-- edge blank 有对应 holder safe boundary；
-- 推导不移动相邻真实照片的 measured boundaries；
-- 没有可靠的未覆盖内容或等价 count/placement；
-- execution budget 未耗尽。
+### 2.5 Dual lane
 
-Blank slot 的 geometry 可以 resolved，但 measurement state 固定为 unavailable。它不是 separator，
-不增加 hard separator 或 proof path。一个 supported blank slot 可以与整体 GeometryResolution PASS
-共存；两个 blank slots、位置歧义、共同宽度缺失或 holder safe boundary 缺失都会保持 unresolved。
+`135-dual` 先在原图坐标系唯一解析 lane divider，再在两条 source lane 内分别生成
+`SharedShortAxisPlan`。两 lane 都必须拥有真实双边缘，且四条 inner line 的 slope 一致，才可
+应用一个全局 transform。Divider 和两份计划随后一起映射。Divider 缺失、多解、任一 lane
+缺边或角度冲突都保持 REVIEW；不存在逐 lane 独立旋转或 runtime 旁路。
 
-Partial 可以输出额外空 frame，但空白区域不能帮助 auto count resolution。66/XPAN 的
-complete-underfilled trait 只改变 count availability 与 occupancy 解释，不绕过 geometry、coverage
-或 preservation。
+## 3. DetectionWorkspace 与配置 / Workspace And Configuration
 
-### 2.5 Global Frame Sequence Solver
-
-`solve_frame_sequence` 对每个允许 count 和 frame-size option 联合求解 `FrameSequenceSolution`：
-
-- 先求一次共享短轴，不枚举逐照片 top/bottom 组合；
-- 长轴 raw paths 与 separator bands 形成有序 anchors；
-- 完整 workspace 的 reliable content 只反证它实际穿过的长轴 holder boundary；短轴 holder
-  boundary 不受影响，content 也不能因此证明 holder、count 或 frame edge；
-- branch-and-bound 持续传播 count、共同宽度、剩余 span、content coverage 与 endpoint feasibility；
-- model boundary 只在共同宽度约束区间内辅助 focused search，不伪装成 measured separator；
-- content observations 只能淘汰漏掉可靠可见内容的几何，不能生成、移动或收缩边界；
-- geometry-corroborated 观测区间若宽于独立 common-width 与对侧 anchor 给出的预期区间，最终
-  位置取两者交集并改记为 dimension-constrained；直接或 measurement-corroborated 的实测边界不变；
-- assignment consensus 先按 boundary index 与 observation identity 规范化 separator-binding
-  topology，再默认保留每一种 topology，并要求其主要 slot
-  intervals 形成共同区间；只有 full strip 同时具备 photo-edge-bounded 共享短轴，且独立
-  separator bindings 最多缺一并覆盖严格多数内部边界时，较少 bindings 的 topology 才不能
-  否决这条近完整序列。holder-bounded、partial 与仅覆盖一半内部边界的序列仍保留全部替代解；
-- partial auto 从允许的较大 count 向较小 count 求解；
-- 未评估更大 count、替代几何未解决或预算耗尽时，GeometryResolution 保持 unavailable。
-
-`FrameDimensionPrior` 由 physical frame mm 与 derived aspect 约束搜索，不是 measurement evidence。
-只有独立 photo-edge measurements 可以形成 `FrameDimensionEvidence`。
-
-### 2.5 Sequence Solver Ownership / 序列求解职责
-
-Frame-sequence proof code uses explicit owner modules rather than treating one
-solver file as the owner of every lifecycle concept. The current canonical
-boundaries are:
-
-| Module | Canonical responsibility |
-|---|---|
-| `frame_sequence_measurements.py` | `EdgeConstraint`, `MeasuredFrameConstraint`, positive interval facts, measurement compatibility, and strict contributor grouping primitives. |
-| `frame_sequence_common_width.py` | Measured/recurring width hypotheses, contributor selection, independent physical-scale corroboration, and final `CommonFrameWidthResolution`. |
-| `frame_sequence_search.py` | Common-width option graph, reachability, graph witnesses, assignment-evaluation accounting, and typed budget exhaustion. |
-| `frame_sequence_candidates.py` | Candidate build state and rebuild primitives, boundary resolution, separator bindings, inter-frame spacing/objective facts, slot-topology invariants, geometry-alternative clustering, physical Pareto, representative selection, and visible-content conservation. |
-| `frame_sequence_consensus.py` | Assignment consensus, dimension-only internal uncertainty envelopes, external safety envelopes, and their provenance. |
-| `frame_sequence_separator_assignment.py` | Candidate-specific separator edge roles, double-edge binding, holder-band roles, unique observation assignment, spacing bindings, and final typed separator assignments. |
-| `frame_sequence_boundary_roles.py` | Repeated-width, physical-scale, common-width, and adjacent-measurement corroboration of typed boundary roles and provenance. |
-| `frame_sequence_candidate_resolution.py` | Holder-boundary lookup, common-width dimension-boundary resolution, unique gray-path assignment, and the ordered boundary-role/common-width physical-resolution pass for one candidate build. |
-| `sequence_completion.py` | Measured-sequence slot inference, blank-slot completion, content occupancy, holder-edge occlusion, endpoint/full-sequence eligibility, and completion selection. |
-| `frame_sequence_result.py` | Typed solve success/failure outcomes, content-extent and indexed-anchor constraints, and final spacing/overlap physical facts. |
-| `frame_sequence_construction.py` | Search-index preparation, canonical path/band/dimension hypotheses, bounded candidate-build enumeration, and count-specific construction. |
-| `frame_sequence_solver.py` | Thin top-level validation and lifecycle orchestration across construction, completion, consensus, selection, budget state, and typed result assembly. |
-
-Dependency direction is one way: common-width resolution consumes measurement
-facts; search consumes both lower owners; candidate state consumes measurement facts;
-consensus consumes candidate state; separator assignment consumes measurement facts
-and candidate state; boundary-role corroboration also consumes measurement facts and
-candidate state. Candidate physical resolution consumes measurement facts,
-common-width resolution, candidate state, and boundary-role corroboration. Sequence
-completion consumes measurement facts, common-width resolution, candidate state,
-and candidate physical resolution. Result facts consume measurement facts,
-common-width resolution, and candidate state. Construction consumes measurement,
-common-width, search, candidate-state, separator-assignment, and candidate-resolution
-owners. The solver facade consumes construction together with candidate resolution,
-candidate state, consensus, separator assignment, completion, and result facts. No
-lower owner imports construction or the solver, and neither facade re-exports migrated
-symbols. Architecture contracts check definition owners and import direction, while
-physical contracts target the canonical module directly.
-
-Construction preserves its frame-width-focused recurring-hypothesis order when no supported
-internal separator seed exists. Separator-backed searches retain canonical contributor priority;
-this is execution ordering only, deletes no physical hypothesis, and cannot change proof or
-budget authority. Raw builds remain available because later common-width resolution and unique
-observation assignment can change their final physical roles. / 没有 supported internal
-separator seed 时，construction 保留其 frame-width-focused recurring-hypothesis 顺序；
-separator-backed 搜索仍使用 canonical contributor 优先级。这只是执行顺序，不删除
-物理 hypothesis，也不改变 proof 或 budget 权限。Raw build 必须保留，因为后续
-common-width resolution 与 unique observation assignment 仍可改变其最终物理角色。
-
-Within one forward or backward graph-reachability pass, exact repeated index subsets share their
-coordinate sweep and fallback ordering. This transient order materialization does not cache
-candidates, edges, witnesses, decisions, or results, and it leaves assignment-evaluation and
-budget accounting unchanged. / 在一次前向或反向 graph reachability pass 内，完全相同的
-index subset 共用 coordinate sweep 与 fallback 顺序。该瞬时顺序物化不缓存 candidate、
-edge、witness、decision 或 result，也不改变 assignment-evaluation 与 budget 计账。
-
-Within one measured-frame search, `_SequenceGraphOptionIndex` materializes each ordered option's
-exact coordinates, width bounds, content coverage, separator identities, and intrinsic rank facts
-once. Graph layers select those immutable facts by option index instead of translating the same
-typed constraints into arrays again. The index is transient and owns no candidate, path state,
-witness, Gate, decision, result, or budget authority. / 在一次 measured-frame search 内，
-`_SequenceGraphOptionIndex` 只把每个 ordered option 的精确坐标、宽度边界、content coverage、
-separator identity 与固有 rank facts 物化一次；后续 graph layer 仅按 option index 选择这些
-不可变事实，不再重复把同一 typed constraint 翻译成数组。该索引是瞬时执行数据，不拥有
-candidate、path state、witness、Gate、decision、result 或 budget 权限。
-
-Frame-sequence 证明代码按显式 owner 划分，不再把单个 solver 文件视为全部生命周期概念的共同
-owner。当前 measurement interval 只由 `frame_sequence_measurements.py` 拥有，common-width
-假设、contributor 选择、独立 scale 佐证与最终 resolution 只由
-`frame_sequence_common_width.py` 拥有；graph options、reachability、witness 与 typed budget state
-只由 `frame_sequence_search.py` 拥有；candidate build state、物理 objectives、geometry alternative
-聚类、物理 Pareto、代表解、slot topology 与可见内容守恒只由
-`frame_sequence_candidates.py` 拥有；assignment consensus、dimension-only internal uncertainty
-与 external safety envelope 只由 `frame_sequence_consensus.py` 拥有；candidate-specific separator
-角色、双边绑定、唯一观测分配、spacing binding 与最终 typed assignment 只由
-`frame_sequence_separator_assignment.py` 拥有；repeated-width、physical-scale、common-width
-与相邻实测的 typed boundary-role corroboration 只由 `frame_sequence_boundary_roles.py` 拥有。
-holder boundary 映射、common-width dimension-boundary resolution、唯一 gray-path assignment，
-以及 boundary role 与 common-width 的有序 candidate physical-resolution pass 只由
-`frame_sequence_candidate_resolution.py` 拥有。measured-sequence slot inference、blank-slot
-completion、content occupancy、holder-edge occlusion、endpoint/full-sequence eligibility 与
-completion selection 只由 `sequence_completion.py` 拥有。typed solve outcome、content-extent /
-indexed-anchor constraints 与最终 spacing/overlap physical facts 只由
-`frame_sequence_result.py` 拥有。search-index 准备、规范 path/band/dimension hypotheses、
-有界 candidate-build 枚举与 count-specific construction 只由
-`frame_sequence_construction.py` 拥有；`frame_sequence_solver.py` 只保留入参校验、
-生命周期编排、budget state、selection 与 typed result 组装。
-依赖保持单向：measurement facts 供 common-width、search、candidate state、separator assignment
-与 boundary-role owner 消费；consensus、separator assignment 与 boundary-role owner 再消费
-candidate state；candidate physical resolution 只消费 measurement facts、common-width、candidate
-state 与 boundary-role owner；sequence completion 只消费 measurement facts、common-width、
-candidate state 与 candidate physical resolution；result facts 只消费 measurement facts、
-common-width 与 candidate state；construction 只消费 measurement、common-width、search、
-candidate state、separator assignment 与 candidate resolution owners；solver facade 再消费
-construction、candidate resolution/state、consensus、separator assignment、completion 与
-result facts。低层模块不得反向导入 construction 或 solver，两个 facade 也不兼容
-导出已经迁移的符号。
-
-## 3. Evidence、Assessment 与 Decision
-
-### 3.1 Candidate Evidence
-
-Standard candidate 的 canonical evidence 包括：
-
-- `FrameSlotTopologyEvidence`：slot 顺序、正宽与完整 count；
-- `FrameCoverageEvidence`：基础 envelopes 是否覆盖可靠可见内容；
-- internal/external frame boundary preservation；
-- separator sequence 与 frame dimensions；
-- holder boundary、holder occupancy、partial edge safety 与 frame scale observations；
-- measurement independence。
-
-Content measurement 只用于遗漏内容反证和 preservation。它不能定义 count、边界或 blank slot，
-也不能把“没有内容”提升为支持证据。完整 workspace 的可靠 content 可在 search scope 建立前
-否定被其穿过的长轴 holder boundary；最终 `FrameCoverageEvidence` 合并 holder-local 与完整
-workspace 的可靠 runs，避免错误 holder clipping 把未覆盖内容藏在 evidence 之外。同一份
-count-independent content observation 在 solver 与最终 evidence 中通过 exact cache 共享。
-
-### 3.2 CandidateGate
-
-CandidateGate 固定检查：
+`DetectionWorkspace` 集中持有：
 
 ```text
-frame_slot_topology
-content_preservation
-frame_dimension_consistency
-evidence_independence
-sequence_proof
+transformed pixels
+source gray + workspace gray
+exact MeasurementCache
+source SharedShortAxisPlan tuple
+mapped SharedShortAxisPlan tuple
+source/mapped lane divider
+TransformGeometryEvidence
+WorkspaceIdentity
 ```
 
-Proof paths 只有 `separator_sequence_led`、`dimension_sequence_led`、`partial_occupancy_led`；
-dual-lane composition 使用独立 mode proof。Blank inference 与 holder-bounded 短轴不增加 proof。
-CandidateGate 不读取 scalar confidence，也不创建 final reason。
+它验证 cache 使用当前 canonical gray，且 source/mapped plans 与 dividers 一一对应。
+`DetectionContext` 只接受这一个 workspace；standard 与 dual-lane pipeline 都直接消费已映射计划。
+Solver 合同测试可以显式构造 typed workspace fixture，但 production runtime 没有绕过
+`prepare_detection_workspace` 的路径。
 
-### 3.3 GeometryResolution、Selection 与 DecisionGate
+Runtime 由 `FormatPhysicalSpec + strip_mode` 解析唯一 `DetectionConfiguration`。Format spec、
+adaptive measurements、execution budgets、diagnostics 与用户偏好彼此分离。Lower layers 只接收
+显式 typed inputs，不查询 registry，也不生成默认值。
 
-`GeometryResolution` 单独回答：
+每个数值参数必须属于一个且仅一个正式角色：`physical_fact` 表示格式物理事实；
+`standard_transform` 表示固定的标准色彩/坐标变换；`adaptive_measurement` 表示由当前图像
+归一化的测量规则；`numerical_safety` 只防止数值退化；`execution_budget` 只限制工作量；
+`user_preference` 只控制输出偏好；`diagnostics_only` 只影响审计可视化。角色不能互相充当
+物理证据，尤其 budget、preference 与 diagnostics 永远不能提升可靠性。
 
-- count 是否解决；
-- frame slots 是否解决；
-- shared short axis 是否安全；
-- content preservation 是否兼容；
-- larger-count hypotheses 是否完成；
-- alternative geometries 与 assignment consensus 是否解决；
-- physical search 是否完整且未耗尽预算。
+`MeasurementCache` 只缓存 exact、count/offset-independent measurements：图像统计、长轴 raw
+paths、separator profiles/bands 与 content observations。它不缓存 plan、candidate、Gate、
+selection、decision 或 approximate geometry。Source/workspace gray 与 transform uncertainty
+属于 cache identity。
 
-多 slot 的 `frame_slots_resolved` 还要求每个普通实测 slot 的宽度与 supported common width
-相交；只有 typed sequence inference 或端点 occlusion 可以表达不完整的可见宽度。即使使用
-holder occlusion，nominal leading/trailing boundary 也必须留在已采集 workspace canvas 内；
-画布外几何不可观测，因此保持 unresolved。
+## 4. 长轴与最终决策 / Long Axis And Final Decision
 
-For multi-slot geometry, `frame_slots_resolved` additionally requires every ordinary
-measured slot width to intersect the supported common width; only typed sequence inference
-or endpoint occlusion may represent incomplete visible width. Nominal leading and trailing
-boundaries must also remain inside the acquired workspace canvas even when holder occlusion
-is present; geometry outside the canvas is unobservable and remains unresolved.
+### 4.1 Frame sequence
 
-Selection 只按 typed facts 确定性排序：先保护可见内容，再减少明确物理矛盾、优先独立 proof、
-partial 较大 count、较小 residual/uncertainty，最后使用稳定 source order。
+准备完成后，detection 只在 workspace 求长轴：
 
-DecisionGate 只消费 selected CandidateGate、GeometryResolution、selection consensus、
-FrameBleedPlan 和 transform geometry。它不重新测量 evidence，不生成候选，也不以低 confidence
-制造 REVIEW。
+1. 长轴 raw paths、holder containment、separator bands 与 content observations；
+2. count hypotheses 与 `FrameDimensionPrior`；
+3. global frame-sequence construction、assignment、common-width resolution 与 completion；
+4. `FrameSequenceSolution`、candidate evidence 和 `CandidateGate`；
+5. deterministic selection 与 `GeometryResolution`。
 
-## 4. Output、Report 与 Debug
+`FrameSlot` 必须正宽、单调且不交叉。稳定照片宽度是主要物理约束；separator 宽度和 signed
+spacing 可以变化。Measured boundary 与 geometry-derived boundary 是不同事实，后者不能给自己
+增加独立 proof。Content 只能反证遗漏，不能创造 count、边界或 blank slot。Full sequence 最多
+允许一个由完整物理序列唯一推导的 blank slot；partial 不得用空白区域增加 count。
 
-### 4.1 FrameCropEnvelope 与 Bleed
+Execution budget 只限制搜索量。Budget exhaustion 是 unavailable geometry，绝不是可靠性信号。
 
-每个 final frame 由以下顺序产生：
+### 4.2 Output 与 Gate
 
 ```text
 FrameSlot long-axis interval
-  x SharedShortAxisCropSpan
+  x mapped SharedShortAxisPlan.span
   -> FrameCropEnvelope
   -> FrameBleedPlan
-  -> final box
+  -> finalization plan
+  -> DecisionGate
+  -> FinalDetection / optional TIFF export
 ```
 
-Blank frame 使用自己的 `safe_output_interval`，可以保守包含连续片基、separator 或少量 holder，
-但不能改写任何真实照片的 crop envelope。用户 bleed 与 blank safe output 是不同概念。
+`CandidateGate` 检查 candidate-local 物理证明。`GeometryResolution` 单独确认 count、slots、
+共享短轴、content conservation、搜索完整性与替代解。`DecisionGate` 再消费 selected gate、
+geometry resolution、selection consensus、bleed feasibility 和 transform state；任何 transform
+失败都阻止 auto PASS。Bleed 与 finalization 只应用已决定的几何，不反向改变 evidence。
 
-Measured/corroborated overlap 只扩张相关内部 boundary 两侧；无关 frame 不受全局最大值影响。
-Bleed 不修改 frame slots、CandidateGate、GeometryResolution 或 status。Unresolved geometry 或
-FrameBleedPlan 中 unresolved overlap protection 永不导出 frame TIFF，即使用户启用
-`--export-review`；resolved geometry 可继续供诊断显示，但不获得导出权限。
+## 5. Report、Debug 与人工权威 / Audit Surfaces
 
-### 4.2 Current Report Schema
+Current report schema：
 
 ```text
 schema_id: detection_report
-schema_revision: frame_slot_sequence_resolution
+schema_revision: detection_owned_shared_short_axis
 ```
 
-Canonical sections：
+`input` 记录 source 上下边缘 observation IDs/coordinates、mapped plans、单一 transform outcome、
+物理命名的 `projected_edge_drift_px` / `identity_drift_threshold_px`、
+`AffineCoordinateTransform`、lane divider 和 workspace identity。`configuration` 只记录当前 typed
+configuration；`selection`、`decision` 与 `output` 分别保留各自权限。旧 `measurement_outcome`、
+`span_px`、`span_threshold_px`、fallback、disabled 或 compatibility 字段无效，旧 schema 不被解析。
 
-- `input`：TIFF profile、workspace extent、resolution metadata 与 transform geometry；
-- `configuration`：current `DetectionConfiguration` read model；
-- `selection`：candidates、FrameSequenceSolution、evidence、CandidateGate、GeometryResolution 与 clusters；
-- `decision`：status、DecisionGate 与 `final_review_reasons`；
-- `output`：FrameBleedPlan、optional finalization plan、optional final geometry 与实际写出结果。
-- `analysis_identity`：source、runtime configuration、implementation、detection configuration 与
-  workspace identity，仅用于审计和 regression 定位。
+Report 与 Debug Analysis 都是只读审计产物。Debug 展示 mapped frame geometry 和当前 evidence；
+人工 deskew 审阅图绑定冻结 survey 的 source/mapped typed facts；重建图时若 production
+workspace 与 survey 任一事实不完全相同即失败，绝不由图像工具另算一套几何。
 
-Report、regression tools 与 tests 只接受该 schema；旧 schema 直接无效。Report 是审计事实，
-不是 detection cache；validation 不补算 selection 或 decision，也不进入 runtime 输出路径。
+`manual_baseline.jsonl` 是人工裁切权威。旧 frame-slot reference 与 sample expectation 只用于
+追踪和测试 seed，不能提升为人眼确认，也不能写回 baseline。它们的 source-pixel interval 进入
+current report 比较前，必须先经该 report 的同一 `AffineCoordinateTransform` 映射；禁止直接
+混比 source/workspace 坐标。人工 deskew 历史的 rejection 与新一轮 pending review 分层保存：
+历史结论用于审计，新模型候选在用户确认前始终是 pending。
 
-### 4.3 Debug Analysis
-
-Debug Analysis 固定三联图：原始灰度上下文、FrameSlot/输出几何、boundary/separator evidence。
-它只读取 final typed model。内置图例由 diagnostics configuration 生成：
-
-- white dashed: `Holder boundary`；
-- yellow: `Raw observation`；
-- red: `Measured frame / separator edge`；
-- purple dashed: `Dimension-only provisional edge`；
-- cyan: `Corroborated overlap`；
-- green: `FrameSlot`；
-- yellow dashed: `Sequence-inferred FrameSlot`；
-- blue dashed: `FrameCropEnvelope / export-eligible final box`。
-
-Unresolved geometry 明确标记 `NOT EXPORTABLE`。Debug 可以用彩色线条解释灰度检测，但颜色不
-回流 detection。
-
-## 5. 源码分层 / Source Layers
+## 6. 源码分层 / Source Layers
 
 | Layer | Canonical responsibility |
 |---|---|
-| `x5crop.entry` | CLI、interactive parsing 与用户文本输出。 |
-| `x5crop.runtime` | Bootstrap、workflow、workers、analysis identity 与 output side effects。 |
-| `x5crop.formats` | Format identity 与真实 physical spec。 |
-| `x5crop.configuration` | Adaptive parameters、execution budgets 与 runtime assembly。 |
-| `x5crop.cache` | Exact count-independent measurement cache。 |
-| `x5crop.geometry` | 纯 box、layout 与 sampling 算法。 |
-| `x5crop.image` | Gray、statistics、deskew 与 pixel transforms。 |
-| `x5crop.io` | TIFF read/write 与 metadata ownership。 |
-| `x5crop.detection.physical` | Raw observations、shared short axis、frame dimensions 与 global solver。 |
-| `x5crop.detection.evidence` | Typed physical measurements，不 Gate、不 decision。 |
-| `x5crop.detection.candidate` | Count plan、build、assessment、execution 与 selection。 |
-| `x5crop.detection.decision` | DecisionGate 与 final reason vocabulary。 |
-| `x5crop.detection.final` | Finalization plan 与 FinalDetection assembly。 |
-| `x5crop.output` | Frame bleed、output geometry 与 side-effect-free plans。 |
-| `x5crop.export` | Output path 与 TIFF export orchestration。 |
-| `x5crop.report` | Current-schema serialization 与 validation。 |
-| `x5crop.debug` | Read-only three-panel visualization。 |
-| `tools.tests` | Runtime、physical invariant 与 architecture contracts。 |
-| `tools.regression` | Current-schema diff 与 frame-slot reference validation。 |
+| `x5crop.entry` | CLI、interactive parsing 与用户消息。 |
+| `x5crop.runtime` | Bootstrap、workflow、workers、manifest 与 I/O side effects；无几何所有权。 |
+| `x5crop.formats` | Format identity 与物理规格。 |
+| `x5crop.configuration` | Typed detection、transform、solver、output 与 diagnostics 参数。 |
+| `x5crop.cache` | Exact measurement cache 与 lookup statistics。 |
+| `x5crop.geometry` | Box/layout/sampling 与通用 `AffineCoordinateTransform`。 |
+| `x5crop.image` | Gray、statistics、content/evidence images 与通用 pixel transforms。 |
+| `x5crop.io` | TIFF read/write、profile 与 metadata preservation。 |
+| `x5crop.detection.workspace` | Source short-axis detection、transform assessment、mapping、workspace preparation。 |
+| `x5crop.detection.physical` | Typed observations、`SharedShortAxisPlan`、frame dimensions 与 sequence solver。 |
+| `x5crop.detection.evidence` | Typed evidence，包括单一 transform outcome；不 Gate、不 decision。 |
+| `x5crop.detection.output_preparation` | 将 selected detection evidence 单向翻译成 `FrameBleedPlan`。 |
+| `x5crop.detection.candidate` | Proposal、build、assessment、execution 与 selection。 |
+| `x5crop.detection.decision` | `DecisionGate` 与 final reason vocabulary。 |
+| `x5crop.detection.final` | Finalization plan 与 `FinalDetection` assembly。 |
+| `x5crop.output` | Bleed、crop envelopes 与 side-effect-free output plans。 |
+| `x5crop.export` | Output paths 与 validated TIFF export orchestration。 |
+| `x5crop.report` | Current-schema serialization、identity 与 validation。 |
+| `x5crop.debug` | Read-only visualization。 |
+| `tools.tests` | Physical、schema、layer、metadata 与 no-residue contracts。 |
+| `tools.regression` | Current-schema comparison 与人工 reference validation。 |
 
-`SampleExpectation` 把人工 `geometry_reference`、允许灰度观测的
-`observation_proof_expectation` 与 `automatic_decision_expectation` 分开保存；文件名前缀只记录
-`dataset_intent`，不能生成 proof 或自动决策期望。 / `SampleExpectation` stores the manual
-`geometry_reference`, allowed-gray `observation_proof_expectation`, and
-`automatic_decision_expectation` as separate authorities; the filename prefix records only
-`dataset_intent` and cannot create proof or an automatic-decision expectation.
-
-`pass_required` 必须拥有同源人工 `geometry_reference`；`pass_preferred` 只表示 unknown 样片
-更希望自动通过，可以没有 reference 而诚实保持 REVIEW，但若提供 reference 必须同源。没有
-reference 的 `pass_preferred` 自动通过不能被报告为已完成物理正确性验收。 /
-`pass_required` requires a same-source manual `geometry_reference`; `pass_preferred` means an
-unknown sample is preferred to auto-pass and may honestly remain REVIEW without a reference, but
-any supplied reference must be same-source. A reference-free `pass_preferred` auto-pass is not
-physical-correctness acceptance.
-
-`sample_validation` 以显式 workspace root 对齐相对人工记录与绝对 runtime source，逐样片输出
-`conforming`、`capability_gap`、`evidence_contract_conflict` 或 `violation`。只有人工 reference
-可以判定 resolved geometry；current report 只能作为被验证对象，不能写回 reference。 /
-`sample_validation` uses an explicit workspace root to align relative manual records with
-absolute runtime sources and emits `conforming`, `capability_gap`,
-`evidence_contract_conflict`, or `violation` per sample. Only a manual reference can judge
-resolved geometry; a current report is the subject under test and cannot write back a
-reference.
-
-## 6. 参数与缓存边界
-
-影响检测或输出的数值只能属于 `physical_fact`、`standard_transform`、
-`adaptive_measurement`、`numerical_safety`、`execution_budget`、`user_preference` 或
-`diagnostics_only`。Format 名字不拥有算法 threshold，隐藏数值不能改变 crop、Gate 或 output。
-
-MeasurementCache 只缓存 exact、count/offset-independent measurements，例如图像统计、raw paths、
-separator bands 与 content observations。Candidate、Gate、GeometryResolution、decision、blank
-inference 和 approximate geometry 都不缓存。
-
-Execution budget 只限制搜索量。预算耗尽必须产生 typed unavailable，不能成为可靠性或自动处理
-信号。
+依赖方向是 `entry/runtime -> detection -> geometry/image/cache`，report/debug 只消费上游结果。
+Foundation code 不知道 format identity、Gate、decision 或 report schema。新增概念必须有一个名称、
+一个 typed owner 和一个真相来源；被替代的 API、字段、别名、包装层与测试在同一变更中删除。

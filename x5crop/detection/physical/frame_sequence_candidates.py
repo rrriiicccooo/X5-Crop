@@ -28,10 +28,9 @@ from .model import (
     FrameSlot,
     ResolvedFrameBoundary,
     SequenceResiduals,
-    SharedShortAxisBasis,
-    SharedShortAxisSafetySpan,
     boundary_role_is_independent_physical_measurement,
 )
+from .short_axis import SharedShortAxisPlan
 
 
 @dataclass(frozen=True)
@@ -118,7 +117,7 @@ class SequenceBuild:
     separator_bindings: tuple[SeparatorBandBinding, ...]
     spacings: tuple[InterFrameSpacing, ...]
     frame_width_px: PixelInterval
-    short_axis: SharedShortAxisSafetySpan
+    short_axis: SharedShortAxisPlan
     residuals: SequenceResiduals
     objectives: SequenceBuildObjectives
 
@@ -351,10 +350,6 @@ def assignment_consensus_builds(
     )
     if (
         strip_mode == FULL
-        and all(
-            build.short_axis.basis == SharedShortAxisBasis.PHOTO_EDGE_BOUNDED
-            for build in consensus_builds
-        )
         and strongest_separator_count <= internal_boundary_count
         and internal_boundary_count - strongest_separator_count <= 1
         and strongest_separator_count

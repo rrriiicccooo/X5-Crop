@@ -24,96 +24,15 @@ from ...domain import (
     PixelInterval,
     SeparatorCrossAxisMeasurement,
     SeparatorBandObservation,
-    ShortAxisMeasurementSpan,
 )
 from ...geometry.layout import HORIZONTAL, require_work_layout
 from ...strip_modes import FULL, PARTIAL
 from .lane_divider import LaneDividerEvidence
+from .short_axis import FrameWidthSearchHint, SharedShortAxisPlan
 
 
 class GeometryIdentityError(ValueError):
     code = "geometry_identity_mismatch"
-
-
-class SharedShortAxisBasis(str, Enum):
-    PHOTO_EDGE_BOUNDED = "photo_edge_bounded"
-    HOLDER_EDGE_BOUNDED = "holder_edge_bounded"
-    CONTAINMENT_FALLBACK = "containment_fallback"
-
-
-@dataclass(frozen=True)
-class SharedShortAxisSafetySpan:
-    top: PixelInterval
-    bottom: PixelInterval
-    basis: SharedShortAxisBasis
-    state: EvidenceState
-    provenance: MeasurementProvenance
-
-    def __post_init__(self) -> None:
-        if not isinstance(self.basis, SharedShortAxisBasis):
-            raise TypeError("shared short-axis span requires a typed basis")
-        if not isinstance(self.state, EvidenceState):
-            raise TypeError("shared short-axis span requires a typed state")
-        if self.bottom.minimum <= self.top.maximum:
-            raise ValueError("shared short-axis span must have positive extent")
-        if self.state == EvidenceState.NOT_APPLICABLE:
-            raise ValueError("shared short-axis crop span is always applicable")
-
-    @property
-    def height_px(self) -> PixelInterval:
-        return self.bottom.minus(self.top)
-
-    @property
-    def supports_safe_crop(self) -> bool:
-        return bool(
-            self.state == EvidenceState.SUPPORTED
-            and self.basis != SharedShortAxisBasis.CONTAINMENT_FALLBACK
-        )
-
-    @property
-    def uncertainty_px(self) -> float:
-        return float(
-            self.top.maximum
-            - self.top.minimum
-            + self.bottom.maximum
-            - self.bottom.minimum
-        )
-
-    @property
-    def measurement_span(self) -> ShortAxisMeasurementSpan:
-        return ShortAxisMeasurementSpan(
-            top=self.top,
-            bottom=self.bottom,
-            provenance=self.provenance,
-        )
-
-
-@dataclass(frozen=True)
-class PhotoHeightEvidence:
-    height_px: PixelInterval | None
-    state: EvidenceState
-    provenance: MeasurementProvenance
-
-    def __post_init__(self) -> None:
-        if not isinstance(self.state, EvidenceState):
-            raise TypeError("photo height evidence requires a typed state")
-        if self.state == EvidenceState.SUPPORTED:
-            if self.height_px is None or self.height_px.minimum <= 0.0:
-                raise ValueError("supported photo height requires a positive interval")
-        elif self.height_px is not None:
-            raise ValueError("unresolved photo height cannot claim a measurement")
-        if self.state == EvidenceState.NOT_APPLICABLE:
-            raise ValueError("photo height evidence is always applicable")
-
-
-@dataclass(frozen=True)
-class FrameWidthSearchHint:
-    width_px: PixelInterval
-    provenance: MeasurementProvenance
-
-    def __post_init__(self) -> None:
-        if self.width_px.minimum <= 0.0:
-            raise ValueError("frame-width search hint must be positive")
 
 
 @dataclass(frozen=True)
@@ -508,7 +427,7 @@ class FrameSlot:
 
     def crop_envelope(
         self,
-        short_axis: SharedShortAxisSafetySpan,
+        short_axis: SharedShortAxisPlan,
     ) -> FrameCropEnvelope:
         long_axis = (
             self.sequence_inference.safe_output_interval
@@ -894,7 +813,7 @@ def _frame_sequence_provenance(
     layout: str,
     strip_mode: str,
     holder_safety: HolderSafetyEnvelope,
-    shared_short_axis: SharedShortAxisSafetySpan,
+    shared_short_axis: SharedShortAxisPlan,
     frame_slots: tuple[FrameSlot, ...],
     long_axis_assignments: tuple[FrameEdgeAssignment, ...],
     separator_assignments: tuple[SeparatorBandAssignment, ...],
@@ -934,8 +853,8 @@ def _frame_sequence_provenance(
         strip_mode,
         str(len(frame_slots)),
         f"{box.left},{box.top},{box.right},{box.bottom}",
-        shared_short_axis.basis.value,
         shared_short_axis.state.value,
+        str(shared_short_axis.provenance.observation_id),
         *(
             f"{slot.index}:{boundary.source.value}:"
             f"{boundary.role_state.value}:{boundary.role_authority.value}:"
@@ -963,8 +882,7 @@ class FrameSequenceSolution:
     count: int
     nominal_count: int
     holder_safety: HolderSafetyEnvelope
-    shared_short_axis: SharedShortAxisSafetySpan
-    photo_height_evidence: PhotoHeightEvidence
+    shared_short_axis: SharedShortAxisPlan
     frame_width_search_hint: FrameWidthSearchHint
     holder_span_scale_hint: HolderSpanScaleHint
     content_extent_constraint: ContentExtentConstraint

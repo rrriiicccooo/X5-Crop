@@ -45,7 +45,7 @@ class DecisionOwnershipOutputContractTest(unittest.TestCase):
     def test_workflow_prepares_frame_bleed_before_decision(self) -> None:
         source = (PROJECT_ROOT / "x5crop/runtime/workflow.py").read_text()
         self.assertLess(
-            source.index("prepare_frame_bleed("),
+            source.index("frame_bleed_plan_for_selection("),
             source.index("apply_decision_gate("),
         )
 

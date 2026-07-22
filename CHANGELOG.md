@@ -20,6 +20,81 @@ PASS/REVIEW outcomes, report fields, and crop geometry are not compatibility
 targets; real TIFFs, current reports, Debug Analysis, and current contracts are
 the validation evidence.
 
+### 2026-07-22 — Detection 所有的共享短轴 / Detection-Owned Shared Short Axis
+
+- Deskew is now the mandatory first stage of detection. Detection measures two
+  real source-photo inner edges once, creates the sole `SharedShortAxisPlan`,
+  derives the transform from those same edges, and maps that plan into the
+  `DetectionWorkspace`; downstream frame solving never searches for another
+  short axis. `image` owns only the generic pixel transform, `geometry` owns
+  `AffineCoordinateTransform`, and runtime owns only orchestration and I/O. /
+  Deskew 现已收归 detection 的强制第一阶段：只在原图测量一次真实照片双内缘，建立唯一
+  `SharedShortAxisPlan`，由同一证据决定 transform，并将同一计划映射进
+  `DetectionWorkspace`；后续 frame solver 不再搜索短轴。`image` 只拥有通用像素变换，
+  `geometry` 拥有 `AffineCoordinateTransform`，runtime 只编排与执行 I/O。
+- The only supported transform outcomes are `identity_within_tolerance` and
+  `deskew_applied`. Missing, single, holder, scan-extrema, low-support,
+  high-residual, slope-conflicting, and out-of-range evidence blocks automatic
+  PASS through `DecisionGate`. Dual-lane correction requires one source divider,
+  two resolved photo-edge pairs, and one consistent global angle. / 只有
+  `identity_within_tolerance` 与 `deskew_applied` 支持 transform；缺边、单边、holder、扫描
+  外沿、覆盖不足、残差过高、斜率冲突或超角度都由 `DecisionGate` 阻止自动 PASS。Dual lane
+  必须先有唯一 source divider、两组真实双边缘和一致的全局角度。
+- Photo-edge qualification now requires a scale-adaptive tonal span and a
+  per-cross-section gap from holder transitions. Scores select only among
+  overlapping observations of one physical edge pair; they cannot choose between
+  distinct pair hypotheses. This specifically prevents scan-footprint extrema and
+  weak holder-adjacent transitions from becoming resolved crop geometry. / 照片
+  边缘资格现要求相对灰度动态范围足够的强度跨度，并在每个共同截面与 holder transition
+  保持尺度化间隔；评分只能在同一物理边缘对的重叠观测中选代表，不能替互斥边缘假设裁决，
+  从而阻止扫描外沿和 holder 邻近弱 transition 成为 resolved 裁切几何。
+- A strip-wide shared crop is auto-safe only when both photo edges share support
+  across the complete long-axis crop domain. Partial edge support remains visible
+  as REVIEW evidence but is not linearly extrapolated into crop geometry. This
+  closes the content-cut risk found by affine comparison of the previously
+  60%–67%-supported S015, S023, and S099 candidates. / 只有上下照片边缘共同覆盖完整长轴
+  裁切域时，整条共享短轴才可自动安全；局部覆盖仍作为 REVIEW 证据显示，但不得线性外推为
+  裁切几何。该合同关闭了仿射人工基线审计在原 60%–67% 覆盖的 S015、S023、S099 上发现的
+  内容切入风险。
+- Removed `--deskew`, `--deskew-fallback`, `--deskew-min-angle`, and
+  `--deskew-max-angle` from CLI, interactive/runtime configuration, cache
+  identity, reports, and comparison tools. The current-only report revision is
+  `detection_owned_shared_short_axis`, with source observations, the single
+  transform outcome/map, physically named edge-drift measurements, and mapped
+  plans; old `measurement_outcome`, `span_px`, and `span_threshold_px` fields
+  have no shim. /
+  CLI、交互/runtime 配置、cache identity、报告和比较工具已删除上述四个 deskew 参数；当前
+  report revision 为 `detection_owned_shared_short_axis`，记录物理命名的边缘投影漂移；旧
+  `measurement_outcome`、`span_px` 与 `span_threshold_px` 字段不提供兼容层。
+- The local 112-scenario review baseline records 41
+  `scan_footprint_extrema_not_photo_edges` and 2 `empty_region_offset`
+  rejections, withdraws the old S054/S109/S111 assistant support, and resets all
+  new candidates to pending. Historical 4 user-confirmed and 13
+  assistant-reviewed records remain audit history only; `manual_baseline.jsonl`
+  remains the sole manual crop authority. / 本地 112 场景基线记录 41 条扫描外沿否定与 S054、
+  S061 两条空白区偏移否定，撤回 S054/S109/S111 的旧 assistant 支持，并将新模型 112 条候选
+  全部重置为 pending；旧 4 条 user-confirmed 与 13 条 assistant-reviewed 仅作历史审计，
+  `manual_baseline.jsonl` 仍是唯一人工裁切权威。
+- Validation covers 820 contract/unit tests and all 14 format/mode
+  configurations. A fresh default-flow run produced 112 valid current-schema
+  reports and 112 Debug Analysis images: all 112 remain non-exportable REVIEW,
+  with transform outcomes 103 `photo_edges_unavailable`, 8
+  `insufficient_common_support`, and 1 `edge_fit_high_residual`. Affine comparison
+  against `manual_baseline.jsonl` found zero resolved content-cut risks. All 112
+  new short-axis review candidates remain pending, and two consecutive read-only
+  architecture audits passed the same frozen ownership/residue checklist. /
+  验证覆盖 820 项合同/单元测试与全部 14 组 format/mode 配置。全新默认流程生成 112 份有效
+  current-schema report 与 112 张 Debug Analysis：112 组全部保持不可导出的 REVIEW；transform
+  outcome 为 103 个 `photo_edges_unavailable`、8 个 `insufficient_common_support` 与 1 个
+  `edge_fit_high_residual`。与 `manual_baseline.jsonl` 的仿射对照未发现任何已解析内容切入
+  风险；112 个新短轴审阅候选全部保持 pending，同一冻结所有权/残留清单的两轮连续只读
+  架构审计均通过。
+- Rollback must restore the complete pre-change source, CLI, and report schema as
+  one unit. Mixing old optional deskew or scan/holder-derived spans with the new
+  detection workspace is unsupported because it restores evidence already
+  rejected by physical review. / 回滚只能整体恢复变更前源码、CLI 与 report schema；不得把旧的
+  可关闭 deskew 或 scan/holder 短轴混入新 workspace，因为那会恢复已被人工物理审阅否定的证据。
+
 ### 2026-07-21 — Real-sample label reset 与 baseline 清理 / Real-Sample Label Reset And Baseline Cleanup
 
 - The local real-sample baseline now contains 112 TIFFs: 88 `pass` samples are

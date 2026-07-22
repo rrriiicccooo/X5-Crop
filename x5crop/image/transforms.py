@@ -4,6 +4,7 @@ import math
 
 import numpy as np
 
+from ..geometry.affine import AffineCoordinateTransform
 from ..utils import spatial_shape
 
 
@@ -48,38 +49,30 @@ def rotate_array_expand(
     axes: str,
     *,
     background_value: int | float,
-) -> np.ndarray:
+) -> tuple[np.ndarray, AffineCoordinateTransform]:
+    h, w = spatial_shape(arr)
     if abs(angle_degrees) < ROTATION_IDENTITY_EPSILON_DEGREES:
-        return arr
+        return arr, AffineCoordinateTransform.identity(w, h)
     if axes == "SYX":
-        rotated = rotate_array_expand(
+        rotated, transform = rotate_array_expand(
             np.moveaxis(arr, 0, -1),
             angle_degrees,
             "YXS",
             background_value=background_value,
         )
-        return np.moveaxis(rotated, -1, 0)
+        return np.moveaxis(rotated, -1, 0), transform
     angle = math.radians(angle_degrees)
     cos_a = math.cos(angle)
     sin_a = math.sin(angle)
-    h, w = spatial_shape(arr)
-    corners = np.array(
-        [[0, 0], [w - 1, 0], [0, h - 1], [w - 1, h - 1]],
-        dtype=np.float64,
+    transform = AffineCoordinateTransform.expanded_rotation(
+        w,
+        h,
+        angle_degrees,
     )
     cx = (w - 1) / 2.0
     cy = (h - 1) / 2.0
-    centered = corners - np.array([cx, cy])
-    rot = np.column_stack(
-        [
-            centered[:, 0] * cos_a - centered[:, 1] * sin_a,
-            centered[:, 0] * sin_a + centered[:, 1] * cos_a,
-        ]
-    )
-    min_xy = rot.min(axis=0)
-    max_xy = rot.max(axis=0)
-    out_w = int(math.ceil(max_xy[0] - min_xy[0] + 1))
-    out_h = int(math.ceil(max_xy[1] - min_xy[1] + 1))
+    out_w = transform.output_extent.width
+    out_h = transform.output_extent.height
     out_shape = (out_h, out_w) + tuple(arr.shape[2:])
     out = np.full(out_shape, background_value, dtype=arr.dtype)
 
@@ -125,5 +118,5 @@ def rotate_array_expand(
             out_chunk = out[y0:y1, :]
             out_chunk[valid] = _cast_interpolated(value[valid], arr.dtype)
         else:
-            raise ValueError(f"Unsupported axes for deskew rotation: {axes}")
-    return out
+            raise ValueError(f"Unsupported axes for image rotation: {axes}")
+    return out, transform

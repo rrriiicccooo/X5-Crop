@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import fields, replace
 from pathlib import Path
 import inspect
-from types import SimpleNamespace
 import unittest
 from typing import get_type_hints
 
@@ -41,6 +40,7 @@ from x5crop.report.record import report_record_for_final_detection
 from x5crop.domain import Box, FrameCropEnvelope
 from x5crop.output.model import OutputGeometry
 from tools.tests.physical_gate_support import (
+    detection_workspace_fixture,
     selection_fixture,
 )
 from x5crop.detection.evidence.frame_scale import (
@@ -72,33 +72,36 @@ class DetectionStageTypeContractTests(unittest.TestCase):
         full = get_detection_configuration("135", "full")
         dual = get_detection_configuration("135-dual", "full")
         lane = get_detection_configuration("135", "full")
+        horizontal_workspace = detection_workspace_fixture()
+        vertical_workspace = detection_workspace_fixture()
+        vertical_workspace.measurement_cache.layout = "horizontal"
         invalid_contexts = (
             lambda: DetectionContext(
                 DetectionRequest("horizontal", "partial", None),
                 full,
                 None,
-                SimpleNamespace(layout="horizontal"),
+                horizontal_workspace,
                 DetectionExecutionStatistics(),
             ),
             lambda: DetectionContext(
                 DetectionRequest("vertical", "full", None),
                 full,
                 None,
-                SimpleNamespace(layout="horizontal"),
+                vertical_workspace,
                 DetectionExecutionStatistics(),
             ),
             lambda: DetectionContext(
                 DetectionRequest("horizontal", "full", None),
                 full,
                 lane,
-                SimpleNamespace(layout="horizontal"),
+                horizontal_workspace,
                 DetectionExecutionStatistics(),
             ),
             lambda: DetectionContext(
                 DetectionRequest("horizontal", "full", None),
                 dual,
                 None,
-                SimpleNamespace(layout="horizontal"),
+                horizontal_workspace,
                 DetectionExecutionStatistics(),
             ),
         )

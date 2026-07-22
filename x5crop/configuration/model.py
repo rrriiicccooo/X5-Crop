@@ -10,6 +10,7 @@ from .content import ContentConfiguration
 from .diagnostics import DiagnosticsConfiguration
 from .preprocess import PreprocessConfiguration
 from .separator import SeparatorConfiguration
+from .transform import DeskewDetectionParameters
 
 
 @dataclass(frozen=True)
@@ -17,6 +18,7 @@ class DetectionConfiguration:
     physical_spec: FormatSpec
     strip_mode: str
     preprocess: PreprocessConfiguration
+    deskew: DeskewDetectionParameters
     boundary_path: BoundaryPathParameters
     separator: SeparatorConfiguration
     content: ContentConfiguration

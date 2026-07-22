@@ -34,6 +34,7 @@ from x5crop.detection.candidate.model import (
     CandidateAssessment,
 )
 from x5crop.domain import (
+    BoundaryPathSample,
     BoundarySide,
     Box,
     ContainmentFallback,
@@ -45,6 +46,9 @@ from x5crop.domain import (
     PixelInterval,
     PhysicalSearchFact,
     PhysicalSearchOutcome,
+)
+from x5crop.detection.physical.short_axis import (
+    shared_short_axis_from_photo_edges,
 )
 from x5crop.detection.physical.model import (
     FrameBoundarySource,
@@ -115,11 +119,24 @@ def _with_leading_interval(candidate, interval: PixelInterval, source: str):
 def _with_shifted_short_axis(candidate, offset: float):
     geometry = candidate.geometry
     short_axis = geometry.shared_short_axis
-    shifted_short_axis = replace(
-        short_axis,
-        top=short_axis.top.plus(PixelInterval.exact(offset)),
-        bottom=short_axis.bottom.plus(PixelInterval.exact(offset)),
-        provenance=_geometry_hypothesis("shifted_shared_short_axis"),
+    assert short_axis.top_photo_edge is not None
+    assert short_axis.bottom_photo_edge is not None
+
+    def shifted(path):
+        return replace(
+            path,
+            samples=tuple(
+                BoundaryPathSample(
+                    sample.orthogonal_interval,
+                    sample.position.plus(PixelInterval.exact(offset)),
+                )
+                for sample in path.samples
+            ),
+        )
+
+    shifted_short_axis = shared_short_axis_from_photo_edges(
+        shifted(short_axis.top_photo_edge),
+        shifted(short_axis.bottom_photo_edge),
     )
     updated = replace(
         geometry,

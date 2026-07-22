@@ -9,10 +9,9 @@ import numpy as np
 
 from tools.tests.physical_gate_support import (
     candidate_fixture,
+    detection_workspace_fixture,
     selection_fixture,
 )
-from x5crop.cache import MeasurementCacheStatistics
-from x5crop.cache.analysis import make_measurement_cache
 from x5crop.configuration.candidate import DualLaneDividerParameters
 from x5crop.configuration.registry import get_detection_configuration
 from x5crop.detection.candidate.composition.dual_lane import (
@@ -31,9 +30,9 @@ from x5crop.detection.context import (
     DetectionRequest,
 )
 from x5crop.detection.modes.dual_lane import _lane_context, choose_dual_lane_detection
+from x5crop.detection.workspace import _translate_plan_to_parent
 from x5crop.detection.physical.lane_divider import (
     LaneDividerEvidence,
-    LaneDividerEvidenceSet,
     measure_lane_dividers,
 )
 from x5crop.detection.physical.model import (
@@ -56,7 +55,6 @@ from x5crop.domain import (
     PhysicalSearchFact,
     PhysicalSearchOutcome,
 )
-from x5crop.image.statistics import image_measurement_statistics
 from x5crop.image.content import ContentRegionObservation
 
 
@@ -122,34 +120,58 @@ def _lane_selection(candidate, *, resolved: bool = True):
     )
 
 
+def _supported_divider() -> LaneDividerEvidence:
+    return LaneDividerEvidence(
+        center=100,
+        gutter=Box(0, 98, 240, 102),
+        normalized_gutter_residual=0.0,
+        normalized_lane_residuals=(1.0, 1.0),
+        provenance=MeasurementProvenance(
+            MeasurementIdentity.LANE_DIVIDER_PROFILE,
+            ObservationId("supported_test_divider"),
+            (MeasurementIdentity.CONTENT_EVIDENCE_IMAGE,),
+            "supported dual-lane test divider",
+        ),
+    )
+
+
+def _context(
+    divider: LaneDividerEvidence | None = None,
+) -> DetectionContext:
+    configuration = get_detection_configuration("135-dual", "full")
+    lane_configuration = get_detection_configuration("135", "full")
+    workspace = detection_workspace_fixture(width=240, height=200)
+    plan = workspace.shared_short_axes[0]
+    plans = (
+        ()
+        if divider is None
+        else (plan, _translate_plan_to_parent(plan, divider.center))
+    )
+    workspace = replace(
+        workspace,
+        source_shared_short_axes=plans,
+        shared_short_axes=plans,
+        source_lane_divider=divider,
+        lane_divider=divider,
+    )
+    return DetectionContext(
+        DetectionRequest("horizontal", "full", None),
+        configuration,
+        lane_configuration,
+        workspace,
+        DetectionExecutionStatistics(),
+    )
+
+
 class DualLaneAssessmentTest(unittest.TestCase):
     def test_lane_caches_share_one_lookup_statistics_owner(self) -> None:
-        configuration = get_detection_configuration("135-dual", "full")
-        lane_configuration = get_detection_configuration("135", "full")
-        gray = np.full((120, 240), 128, dtype=np.uint8)
-        statistics = image_measurement_statistics(
-            gray,
-            configuration.preprocess.image_statistics,
-        )
-        context = DetectionContext(
-            DetectionRequest("horizontal", "full", None),
-            configuration,
-            lane_configuration,
-            make_measurement_cache(
-                gray,
-                "horizontal",
-                statistics,
-                0.0,
-                MeasurementCacheStatistics(),
-            ),
-            DetectionExecutionStatistics(),
-        )
+        context = _context(_supported_divider())
 
-        lane_context = _lane_context(context, Box(0, 0, 240, 60))
+        lane_context = _lane_context(context, Box(0, 0, 240, 100), 0)
 
         self.assertIs(
-            lane_context.measurement_cache.lookup_statistics,
-            context.measurement_cache.lookup_statistics,
+            lane_context.workspace.measurement_cache.lookup_statistics,
+            context.workspace.measurement_cache.lookup_statistics,
         )
 
     def test_dual_lane_assessment_consumes_lane_selections(self) -> None:
@@ -158,35 +180,13 @@ class DualLaneAssessmentTest(unittest.TestCase):
         self.assertNotIn("lane_geometry_resolved", parameters)
 
     def test_missing_lane_divider_keeps_review_only_geometry(self) -> None:
-        configuration = get_detection_configuration("135-dual", "full")
-        lane_configuration = get_detection_configuration("135", "full")
-        gray = np.full((120, 240), 128, dtype=np.uint8)
-        statistics = image_measurement_statistics(
-            gray,
-            configuration.preprocess.image_statistics,
-        )
-        context = DetectionContext(
-            DetectionRequest("horizontal", "full", None),
-            configuration,
-            lane_configuration,
-            make_measurement_cache(
-                gray,
-                "horizontal",
-                statistics,
-                0.0,
-                MeasurementCacheStatistics(),
-            ),
-            DetectionExecutionStatistics(),
-        )
+        context = _context()
         search_scope = frame_sequence_search_scope(
-            context.measurement_cache,
+            context.workspace.measurement_cache,
             context.configuration.boundary_path,
-            ContentRegionObservation(Box(0, 0, 240, 120), (), 0),
+            ContentRegionObservation(Box(0, 0, 240, 200), (), 0),
         )
         with patch(
-            "x5crop.detection.modes.dual_lane.measure_lane_dividers",
-            return_value=LaneDividerEvidenceSet((), False),
-        ), patch(
             "x5crop.detection.modes.review_only.frame_sequence_search_scope",
             return_value=search_scope,
         ):
@@ -206,31 +206,8 @@ class DualLaneAssessmentTest(unittest.TestCase):
         )
 
     def test_unresolved_lane_keeps_dual_lane_result_review_only(self) -> None:
-        configuration = get_detection_configuration("135-dual", "full")
-        lane_configuration = get_detection_configuration("135", "full")
-        gray = np.full((120, 240), 128, dtype=np.uint8)
-        statistics = image_measurement_statistics(
-            gray,
-            configuration.preprocess.image_statistics,
-        )
-        context = DetectionContext(
-            DetectionRequest("horizontal", "full", None),
-            configuration,
-            lane_configuration,
-            make_measurement_cache(
-                gray,
-                "horizontal",
-                statistics,
-                0.0,
-                MeasurementCacheStatistics(),
-            ),
-            DetectionExecutionStatistics(),
-        )
-        divider_evidence = measure_lane_dividers(
-            np.zeros((120, 240), dtype=np.float32),
-            DualLaneDividerParameters(proposal_count=1),
-        )
-        self.assertTrue(divider_evidence.candidates)
+        divider = _supported_divider()
+        context = _context(divider)
 
         def unresolved_lane(lane_context: DetectionContext):
             count = lane_context.configuration.physical_spec.strip.default_count
@@ -239,14 +216,14 @@ class DualLaneAssessmentTest(unittest.TestCase):
                     lane_context,
                     count,
                     frame_sequence_search_scope(
-                        lane_context.measurement_cache,
+                        lane_context.workspace.measurement_cache,
                         lane_context.configuration.boundary_path,
                         ContentRegionObservation(
                             Box(
                                 0,
                                 0,
-                                lane_context.measurement_cache.gray_work.shape[1],
-                                lane_context.measurement_cache.gray_work.shape[0],
+                                lane_context.workspace.measurement_cache.gray_work.shape[1],
+                                lane_context.workspace.measurement_cache.gray_work.shape[0],
                             ),
                             (),
                             0,
@@ -265,11 +242,7 @@ class DualLaneAssessmentTest(unittest.TestCase):
                 ),
             )
 
-        with patch(
-            "x5crop.detection.modes.dual_lane.measure_lane_dividers",
-            return_value=divider_evidence,
-        ):
-            selection = choose_dual_lane_detection(context, unresolved_lane)
+        selection = choose_dual_lane_detection(context, unresolved_lane)
 
         self.assertIsInstance(selection.selected.geometry, ReviewOnlyContainment)
 

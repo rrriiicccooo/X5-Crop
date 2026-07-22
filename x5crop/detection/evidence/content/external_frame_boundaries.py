@@ -25,8 +25,8 @@ if TYPE_CHECKING:
     from ...physical.model import (
         FrameSequenceSolution,
         FrameSlot,
-        SharedShortAxisSafetySpan,
     )
+    from ...physical.short_axis import SharedShortAxisPlan
 
 from ...physical.model import FrameBoundarySource
 
@@ -158,7 +158,7 @@ class ExternalFramePreservationEvidence:
 
 def _boundary_regions(
     frame: FrameSlot,
-    short_axis: SharedShortAxisSafetySpan,
+    short_axis: SharedShortAxisPlan,
     side: BoundarySide,
     band: int,
     workspace: Box,

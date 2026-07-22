@@ -8,7 +8,11 @@ from dataclasses import replace
 
 import numpy as np
 
-from x5crop.cache import MeasurementCache, MeasurementRegionKey
+from x5crop.cache import (
+    MeasurementCache,
+    MeasurementCacheStatistics,
+    MeasurementRegionKey,
+)
 from x5crop.cache.separator import cached_separator_profile_measurement
 from x5crop.domain import (
     Box,
@@ -28,10 +32,13 @@ from x5crop.image.statistics import ImageMeasurementStatisticsParameters, image_
 from x5crop.configuration.bundle import DetectionConfigurationBundle
 from x5crop.configuration.registry import get_detection_configuration
 from x5crop.detection.evidence.content.frame_content import frame_content_evidence
+from x5crop.detection.workspace import prepare_detection_workspace
 from tools.tests.physical_gate_support import candidate_fixture
 from x5crop.runtime.analysis_identity import detection_configuration_fingerprint
 from x5crop.configuration.boundary import BoundaryPathParameters
-from x5crop.detection.candidate.proposal.sequence import cached_boundary_measurements
+from x5crop.detection.candidate.proposal.sequence import (
+    cached_long_axis_boundary_measurements,
+)
 from x5crop.detection.physical import frame_sequence_measurements as measurements
 from x5crop.detection.physical import frame_sequence_search as sequence_search
 from x5crop.detection.physical.model import (
@@ -58,6 +65,34 @@ def _profile_measurement(width: int) -> SeparatorProfileMeasurement:
 
 
 class DetectionCachePerformanceContractTest(unittest.TestCase):
+    def test_unrotated_detection_reuses_the_source_measurement_cache(self) -> None:
+        from tools.tests.test_output_read_model_contract import _profile
+        from x5crop.cache.analysis import make_measurement_cache
+
+        gray = np.zeros((100, 310), dtype=np.uint8)
+        with (
+            patch(
+                "x5crop.detection.workspace.image_measurement_statistics",
+                wraps=image_measurement_statistics,
+            ) as statistics,
+            patch(
+                "x5crop.detection.workspace.make_measurement_cache",
+                wraps=make_measurement_cache,
+            ) as cache_factory,
+        ):
+            workspace = prepare_detection_workspace(
+                gray,
+                _profile(),
+                "horizontal",
+                get_detection_configuration("135", "partial"),
+                None,
+                MeasurementCacheStatistics(),
+            )
+
+        self.assertFalse(workspace.transform_geometry.applied)
+        self.assertEqual(statistics.call_count, 1)
+        self.assertEqual(cache_factory.call_count, 1)
+
     def test_backward_graph_sweep_skips_prefix_unreachable_options(self) -> None:
         def edge(position: float, label: str):
             return measurements.EdgeConstraint(
@@ -805,8 +840,8 @@ class DetectionCachePerformanceContractTest(unittest.TestCase):
         with patch(
             "x5crop.detection.candidate.proposal.sequence.boundary_measurements",
         ) as measurement:
-            first = cached_boundary_measurements(cache, parameters)
-            second = cached_boundary_measurements(cache, parameters)
+            first = cached_long_axis_boundary_measurements(cache, parameters)
+            second = cached_long_axis_boundary_measurements(cache, parameters)
         self.assertIs(first, second)
         measurement.assert_called_once()
 

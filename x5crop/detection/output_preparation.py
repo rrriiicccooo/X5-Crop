@@ -2,12 +2,16 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from ..detection.candidate.model import CandidateEvidence, DualLaneEvidence
-from ..detection.candidate.selection.model import SelectionResult
+from .candidate.model import CandidateEvidence, DualLaneEvidence
+from .candidate.selection.model import SelectionResult
+from .physical.model import DualLaneFrameSolution
 from ..domain import Box, InterFrameBoundaryReference, InterFrameSpacingKind
 from ..output.frame_bleed import frame_bleed_plan
-from ..output.model import AxisBleedParameters, FrameBleedPlan, FrameOverlapRequirement
-from ..detection.physical.model import DualLaneFrameSolution
+from ..output.model import (
+    AxisBleedParameters,
+    FrameBleedPlan,
+    FrameOverlapRequirement,
+)
 
 
 def _frame_output_bounds(selection: SelectionResult) -> tuple[Box, ...]:
@@ -56,7 +60,9 @@ def _overlap_requirements(
     if isinstance(evidence, CandidateEvidence):
         relations = tuple(
             observation.spacing_evidence
-            for observation in evidence.internal_frame_boundary_preservation.observations
+            for observation in (
+                evidence.internal_frame_boundary_preservation.observations
+            )
         )
     elif isinstance(evidence, DualLaneEvidence):
         relations = tuple(
@@ -101,7 +107,7 @@ def _overlap_requirements(
     return tuple(requirements)
 
 
-def prepare_frame_bleed(
+def frame_bleed_plan_for_selection(
     selection: SelectionResult,
     user_bleed: AxisBleedParameters,
 ) -> FrameBleedPlan:

@@ -403,7 +403,7 @@ class FrameSequenceConstructionContractTest(unittest.TestCase):
             construction._measured_path_builds(
                 search_scope,
                 prepared_search_index,
-                (plan.span,),
+                (plan,),
                 (PixelInterval.exact(100.0),),
                 PixelInterval.exact(100.0),
                 6,
@@ -516,7 +516,7 @@ class FrameSequenceConstructionContractTest(unittest.TestCase):
             builds, _, _ = construction._measured_path_builds(
                 search_scope,
                 prepared_search_index,
-                (plan.span,),
+                (plan,),
                 (separator_width,),
                 separator_width,
                 2,
@@ -628,7 +628,7 @@ class FrameSequenceConstructionContractTest(unittest.TestCase):
             construction._measured_path_builds(
                 search_scope,
                 prepared_search_index,
-                (plan.span,),
+                (plan,),
                 (PixelInterval.exact(100.0),),
                 PixelInterval.exact(100.0),
                 2,
@@ -699,7 +699,7 @@ class FrameSequenceConstructionContractTest(unittest.TestCase):
             construction._measured_path_builds(
                 search_scope,
                 prepared_search_index,
-                (plan.span,),
+                (plan,),
                 (PixelInterval.exact(100.0),),
                 PixelInterval.exact(100.0),
                 4,
@@ -763,7 +763,7 @@ class FrameSequenceConstructionContractTest(unittest.TestCase):
         self.assertIsNone(
             _measured_sequence_build(
                 constraints,
-                shared_short_axis_plan(search_scope).span,
+                shared_short_axis_plan(search_scope),
                 search_scope.holder_safety.box,
                 allow_nominal_slot_sized_gap=False,
             )
@@ -1059,13 +1059,13 @@ class FrameSequenceConstructionContractTest(unittest.TestCase):
         )
         aligned = _measured_sequence_build(
             (*shared, constraint((220.0, 220.0), (318.0, 324.0), "aligned")),
-            shared_short_axis_plan(search_scope).span,
+            shared_short_axis_plan(search_scope),
             search_scope.holder_safety.box,
             allow_nominal_slot_sized_gap=False,
         )
         overcontained = _measured_sequence_build(
             (*shared, constraint((220.0, 220.0), (320.0, 328.0), "wide")),
-            shared_short_axis_plan(search_scope).span,
+            shared_short_axis_plan(search_scope),
             search_scope.holder_safety.box,
             allow_nominal_slot_sized_gap=False,
         )

@@ -135,6 +135,7 @@ class ArchitectureOwnershipContractTest(unittest.TestCase):
                 "physical_spec",
                 "strip_mode",
                 "preprocess",
+                "deskew",
                 "boundary_path",
                 "separator",
                 "content",

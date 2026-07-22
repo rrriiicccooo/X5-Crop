@@ -14,67 +14,12 @@ from ..utils import (
     require_nonnegative,
     require_percentile,
     require_positive,
-    require_unit_interval,
-    runs_from_mask,
     sampled_percentile,
     smooth_1d,
 )
 
 
 CONTENT_EVIDENCE_NEIGHBORHOOD_RADIUS_PX = 1
-
-
-@dataclass(frozen=True)
-class DeskewFallbackEvidenceParameters:
-    low_percentile: float = 0.5
-    high_percentile: float = 99.5
-    shadow_gamma: float = 0.72
-    edge_weight: float = 2.0
-    shadow_blend_weight: float = 0.82
-    edge_blend_weight: float = 0.18
-    gutter_extreme_min_fraction: float = 0.82
-    gutter_activity_max: float = 0.10
-    gutter_run_width_ratio: float = 1.0 / 14.0
-    gutter_run_width_min: int = 3
-    maximum_percentile_samples: int = 1_000_000
-
-    def __post_init__(self) -> None:
-        require_percentile("deskew fallback low percentile", self.low_percentile)
-        require_percentile("deskew fallback high percentile", self.high_percentile)
-        if self.high_percentile <= self.low_percentile:
-            raise ValueError("deskew fallback high percentile must follow low")
-        require_positive("deskew fallback shadow gamma", self.shadow_gamma)
-        require_nonnegative("deskew fallback edge weight", self.edge_weight)
-        require_nonnegative(
-            "deskew fallback shadow blend weight",
-            self.shadow_blend_weight,
-        )
-        require_nonnegative(
-            "deskew fallback edge blend weight",
-            self.edge_blend_weight,
-        )
-        if self.shadow_blend_weight + self.edge_blend_weight <= 0.0:
-            raise ValueError("deskew fallback blend requires positive support")
-        require_unit_interval(
-            "deskew fallback gutter extreme fraction",
-            self.gutter_extreme_min_fraction,
-        )
-        require_unit_interval(
-            "deskew fallback gutter activity",
-            self.gutter_activity_max,
-        )
-        require_nonnegative(
-            "deskew fallback gutter width ratio",
-            self.gutter_run_width_ratio,
-        )
-        require_positive(
-            "deskew fallback gutter minimum width",
-            self.gutter_run_width_min,
-        )
-        require_positive(
-            "deskew fallback percentile sample budget",
-            self.maximum_percentile_samples,
-        )
 
 
 @dataclass(frozen=True)
@@ -176,45 +121,6 @@ def spatially_supported_activation_mask(
     if int(np.count_nonzero(supported)) < minimum_active_pixels:
         return np.zeros(values.shape, dtype=bool)
     return supported
-
-
-def make_deskew_fallback_gray(
-    gray: np.ndarray,
-    params: DeskewFallbackEvidenceParameters,
-) -> np.ndarray:
-    data = gray.astype(np.float32)
-    lo, hi = sampled_percentile(
-        data,
-        [params.low_percentile, params.high_percentile],
-        params.maximum_percentile_samples,
-    )
-    if hi <= lo:
-        return gray.copy()
-    stretched = np.clip((data - lo) / (hi - lo), 0.0, 1.0)
-    shadow_lift = np.power(stretched, params.shadow_gamma)
-    gx = np.abs(np.diff(shadow_lift, axis=1, prepend=shadow_lift[:, :1]))
-    gy = np.abs(np.diff(shadow_lift, axis=0, prepend=shadow_lift[:1, :]))
-    edge = np.clip((gx + gy) * params.edge_weight, 0.0, 1.0)
-    fallback = np.clip(
-        shadow_lift * params.shadow_blend_weight + edge * params.edge_blend_weight,
-        0.0,
-        1.0,
-    )
-    extreme = ((data <= lo) | (data >= hi)).mean(axis=0)
-    activity = (gx + gy).mean(axis=0)
-    gutter_cols = (
-        (extreme >= params.gutter_extreme_min_fraction)
-        & (activity <= params.gutter_activity_max)
-    )
-    for start, end in runs_from_mask(gutter_cols):
-        if end - start <= max(
-            params.gutter_run_width_min,
-            int(round(gray.shape[1] * params.gutter_run_width_ratio)),
-        ):
-            fallback[:, start:end] = stretched[:, start:end]
-    return (
-        fallback * UINT8_MAX_VALUE + UINT8_ROUNDING_OFFSET
-    ).astype(np.uint8)
 
 
 def make_separator_evidence_gray(

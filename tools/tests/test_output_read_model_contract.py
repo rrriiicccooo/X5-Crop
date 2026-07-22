@@ -10,16 +10,13 @@ import numpy as np
 from dataclasses import fields
 
 from tools.tests.physical_gate_support import (
+    detection_workspace_fixture,
     final_detection_fixture,
     selection_fixture,
     transform_geometry_fixture,
     unavailable_resolution_metadata_fixture,
 )
 from x5crop.detection.final.model import FinalDetection
-from x5crop.detection.evidence.transform_geometry import (
-    TransformGeometryEvidence,
-    TransformOutcome,
-)
 from x5crop.io.model import ImageProfile, TiffMetadata
 from x5crop.io.tiff import compression_for_write
 from x5crop.configuration.registry import get_detection_configuration
@@ -60,11 +57,11 @@ def _analysis_identity(
     source_name: str = "input.tif",
     shape: tuple[int, int] = (100, 310),
     workspace_shape: tuple[int, int] | None = None,
+    workspace_identity: WorkspaceIdentity | None = None,
 ) -> dict:
     workspace_shape = shape if workspace_shape is None else workspace_shape
-    workspace_identity = WorkspaceIdentity(
-        WorkspaceExtent(workspace_shape[1], workspace_shape[0]),
-        "0" * 64,
+    workspace_identity = workspace_identity or WorkspaceIdentity(
+        WorkspaceExtent(workspace_shape[1], workspace_shape[0]), "0" * 64
     )
     return {
         "script": "X5_Crop.py",
@@ -87,10 +84,6 @@ def _analysis_identity(
             "strip_mode": strip_mode,
             "requested_count": None,
             "page": 0,
-            "deskew": "off",
-            "deskew_fallback": "off",
-            "deskew_min_angle": 0.03,
-            "deskew_max_angle": 2.0,
             "bleed_x": 20,
             "bleed_y": 10,
         },
@@ -100,12 +93,13 @@ def _analysis_identity(
 
 
 def _record(source: str = "input.tif") -> dict:
+    workspace = detection_workspace_fixture()
     return report_record_for_final_detection(
         final_detection_fixture(),
         selection_fixture(),
         source=source,
         profile=typed_read_model(_profile()),
-        workspace_identity=WorkspaceIdentity(WorkspaceExtent(310, 100), "0" * 64),
+        workspace=workspace,
         output_files=[],
         review_copy=None,
         warnings=[],
@@ -113,8 +107,10 @@ def _record(source: str = "input.tif") -> dict:
             get_detection_configuration("135", "partial")
         ),
         resolution_metadata=unavailable_resolution_metadata_fixture(),
-        transform_geometry=transform_geometry_fixture(),
-        analysis_identity=_analysis_identity(source_name=Path(source).name),
+        analysis_identity=_analysis_identity(
+            source_name=Path(source).name,
+            workspace_identity=workspace.identity,
+        ),
     )
 
 
@@ -123,7 +119,7 @@ class OutputReadModelContractTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             compression_for_write(_profile(), "invalid")
 
-    def test_transform_geometry_is_preprocess_input_not_diagnostics(self) -> None:
+    def test_transform_geometry_is_detection_input_not_diagnostics(self) -> None:
         record = _record()
         self.assertIn("transform_geometry", record["input"])
         self.assertNotIn("diagnostics", record)
@@ -222,23 +218,15 @@ class OutputReadModelContractTest(unittest.TestCase):
         from x5crop.report.configuration import detection_configuration_read_model
         from x5crop.report.record import report_record_for_final_detection
         from x5crop.report.validation import current_report_record_errors
-        from x5crop.runtime.frame_bleed import prepare_frame_bleed
+        from x5crop.detection.output_preparation import (
+            frame_bleed_plan_for_selection,
+        )
         from x5crop.output.model import AxisBleedParameters
         from tools.tests.physical_gate_support import transform_geometry_fixture
 
         configuration = get_detection_configuration("135-dual", "partial")
         gray = np.full((120, 240), 255, dtype=np.uint8)
-        statistics = image_measurement_statistics(
-            gray,
-            configuration.preprocess.image_statistics,
-        )
-        cache = make_measurement_cache(
-            gray,
-            "horizontal",
-            statistics,
-            0.0,
-            MeasurementCacheStatistics(),
-        )
+        workspace = detection_workspace_fixture(width=240, height=120)
         profile = ImageProfile(
             shape=gray.shape,
             dtype="uint8",
@@ -258,7 +246,7 @@ class OutputReadModelContractTest(unittest.TestCase):
             request=DetectionRequest("horizontal", "partial", None),
             configuration=configuration,
             lane_configuration=None,
-            measurement_cache=cache,
+            workspace=workspace,
             execution_statistics=DetectionExecutionStatistics(),
         )
         selection = choose_detection(context)
@@ -274,7 +262,7 @@ class OutputReadModelContractTest(unittest.TestCase):
             "separator_observations",
             selection.selected.geometry.__dataclass_fields__,
         )
-        bleed = prepare_frame_bleed(
+        bleed = frame_bleed_plan_for_selection(
             selection,
             AxisBleedParameters(20, 10),
         )
@@ -301,18 +289,18 @@ class OutputReadModelContractTest(unittest.TestCase):
             selection,
             source="synthetic.tif",
             profile=typed_read_model(profile),
-            workspace_identity=WorkspaceIdentity(WorkspaceExtent(240, 120), "0" * 64),
+            workspace=workspace,
             output_files=[],
             review_copy=None,
             warnings=[],
             configuration=detection_configuration_read_model(configuration),
             resolution_metadata=unavailable_resolution_metadata_fixture(),
-            transform_geometry=transform_geometry_fixture(),
             analysis_identity=_analysis_identity(
                 "135-dual",
                 "partial",
                 "synthetic.tif",
                 (120, 240),
+                workspace_identity=workspace.identity,
             ),
         )
         self.assertEqual(current_report_record_errors(record), [])
@@ -476,20 +464,14 @@ class OutputReadModelContractTest(unittest.TestCase):
             with self.subTest(mutation=mutation):
                 self.assertTrue(current_report_record_errors(record))
 
-    def test_unavailable_transform_span_remains_explicitly_unavailable(self) -> None:
-        transform = TransformGeometryEvidence(
-            TransformOutcome.DISABLED,
-            0.0,
-            None,
-            None,
-            0.0,
-        )
+    def test_unavailable_transform_drift_remains_explicitly_unavailable(self) -> None:
+        workspace = detection_workspace_fixture(EvidenceState.UNAVAILABLE)
         record = report_record_for_final_detection(
             final_detection_fixture(),
             selection_fixture(),
             source="input.tif",
             profile=typed_read_model(_profile()),
-            workspace_identity=WorkspaceIdentity(WorkspaceExtent(310, 100), "0" * 64),
+            workspace=workspace,
             output_files=[],
             review_copy=None,
             warnings=[],
@@ -497,15 +479,16 @@ class OutputReadModelContractTest(unittest.TestCase):
                 get_detection_configuration("135", "partial")
             ),
             resolution_metadata=unavailable_resolution_metadata_fixture(),
-            transform_geometry=transform,
-            analysis_identity=_analysis_identity(),
+            analysis_identity=_analysis_identity(
+                workspace_identity=workspace.identity,
+            ),
         )
         self.assertIsNone(
-            record["input"]["transform_geometry"]["span_px"]
+            record["input"]["transform_geometry"]["projected_edge_drift_px"]
         )
         self.assertEqual(
             record["input"]["transform_geometry"]["outcome"],
-            "deskew_disabled",
+            "photo_edges_unavailable",
         )
         self.assertEqual(current_report_record_errors(record), [])
 
@@ -627,7 +610,7 @@ class OutputReadModelContractTest(unittest.TestCase):
         )
 
         missing_transform = _record()
-        missing_transform["input"]["transform_geometry"].pop("state")
+        missing_transform["input"]["transform_geometry"].pop("outcome")
         self.assertIn(
             "input_incomplete",
             current_report_record_errors(missing_transform),
@@ -655,7 +638,7 @@ class OutputReadModelContractTest(unittest.TestCase):
         self.assertEqual(record["schema_id"], "detection_report")
         self.assertEqual(
             record["schema_revision"],
-            "frame_slot_sequence_resolution",
+            "detection_owned_shared_short_axis",
         )
         self.assertNotIn("v4", record["schema_revision"])
 
@@ -676,6 +659,11 @@ class OutputReadModelContractTest(unittest.TestCase):
         self.assertEqual(
             DEFAULT_FIELDS,
             (
+                "input.transform_geometry",
+                "input.source_shared_short_axes",
+                "input.shared_short_axes",
+                "input.source_lane_divider",
+                "input.lane_divider",
                 "decision.status",
                 "decision.final_review_reasons",
                 "selection.selected_rank",

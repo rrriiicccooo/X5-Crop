@@ -69,21 +69,21 @@ def assess_candidate(
     frame_dimensions = frame_dimension_evidence(geometry)
     coverage = frame_coverage_evidence(
         geometry,
-        context.measurement_cache,
+        context.workspace.measurement_cache,
         context.configuration.content,
     )
     content = frame_content_evidence(
         geometry,
-        context.measurement_cache,
+        context.workspace.measurement_cache,
         context.configuration.content,
     )
     content_continuity = measure_internal_boundary_content_continuity(
         geometry.frame_slots,
         content,
         coverage,
-        context.measurement_cache.content_evidence_float_work,
-        context.measurement_cache.gray_work,
-        context.measurement_cache.image_statistics,
+        context.workspace.measurement_cache.content_evidence_float_work,
+        context.workspace.measurement_cache.gray_work,
+        context.workspace.measurement_cache.image_statistics,
         context.configuration.content.evidence,
     )
     internal_boundaries = internal_frame_boundary_preservation_evidence(
@@ -93,12 +93,12 @@ def assess_candidate(
     )
     holder_boundary = holder_boundary_evidence(
         geometry,
-        context.measurement_cache.image_statistics.edge_texture_limit,
+        context.workspace.measurement_cache.image_statistics.edge_texture_limit,
     )
     candidate_scale = frame_scale_observations(geometry)
     external_preservation = external_frame_preservation_evidence(
         geometry,
-        context.measurement_cache,
+        context.workspace.measurement_cache,
         context.configuration.content.evidence,
         coverage,
     )

@@ -6,11 +6,7 @@ from ..app_info import SCRIPT_NAME, VERSION
 from ..formats import FORMATS
 from ..runtime.bootstrap import run_options
 from ..runtime.limits import DIAGNOSTICS_JOB_LIMIT, STANDARD_JOB_LIMIT
-from ..runtime.options import (
-    DEFAULT_DESKEW_MAX_ANGLE_DEGREES,
-    DEFAULT_DESKEW_MIN_ANGLE_DEGREES,
-    RuntimeOptions,
-)
+from ..runtime.options import RuntimeOptions
 
 
 FORMAT_ALIASES = {
@@ -134,10 +130,6 @@ def interactive_options(diagnostics: bool = False) -> RuntimeOptions:
         bleed=None,
         bleed_x=None,
         bleed_y=None,
-        deskew="auto",
-        deskew_fallback="auto",
-        deskew_min_angle=DEFAULT_DESKEW_MIN_ANGLE_DEGREES,
-        deskew_max_angle=DEFAULT_DESKEW_MAX_ANGLE_DEGREES,
         review_dir=None,
         copy_review_files=False if diagnostics else True,
         export_review=False,

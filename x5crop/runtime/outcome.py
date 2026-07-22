@@ -12,7 +12,6 @@ from ..report.model import ReportResult
 class FailureStage(str, Enum):
     INPUT_PROFILE = "input_profile"
     IMAGE_READ = "image_read"
-    PREPROCESS = "preprocess"
     DETECTION = "detection"
     DECISION = "decision"
     FINALIZATION = "finalization"

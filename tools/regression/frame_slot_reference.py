@@ -1,4 +1,4 @@
-"""Validate resolved frame slots against manual boundary intervals."""
+"""Validate workspace geometry against source-pixel reference intervals."""
 
 from __future__ import annotations
 
@@ -10,7 +10,9 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from tools.regression.sample_identity import canonical_sample_source
-from x5crop.domain import PixelInterval
+from x5crop.domain import PixelInterval, WorkspaceExtent
+from x5crop.geometry.affine import AffineCoordinateTransform
+from x5crop.geometry.layout import is_horizontal_layout, require_work_layout
 from x5crop.report.validation import validate_current_report_record
 
 
@@ -54,6 +56,7 @@ class FrameSlotReference:
     def __post_init__(self) -> None:
         if not self.source:
             raise ValueError("frame-slot reference requires a source")
+        require_work_layout(self.layout)
         indexes = tuple(item.index for item in self.frame_slots)
         if not indexes or indexes != tuple(range(1, len(indexes) + 1)):
             raise ValueError("frame-slot references require consecutive indexes")
@@ -174,6 +177,105 @@ def _interval_inside(actual: PixelInterval, accepted: PixelInterval) -> bool:
     )
 
 
+def _coordinate_transform_from_report(
+    report: dict[str, Any],
+) -> AffineCoordinateTransform:
+    value = report["input"]["transform_geometry"]["coordinate_transform"]
+    return AffineCoordinateTransform(
+        matrix=tuple(
+            tuple(float(item) for item in row)
+            for row in value["matrix"]
+        ),
+        source_extent=WorkspaceExtent(
+            width=int(value["source_extent"]["width"]),
+            height=int(value["source_extent"]["height"]),
+        ),
+        output_extent=WorkspaceExtent(
+            width=int(value["output_extent"]["width"]),
+            height=int(value["output_extent"]["height"]),
+        ),
+    )
+
+
+def _map_work_interval(
+    transform: AffineCoordinateTransform,
+    layout: str,
+    orthogonal: PixelInterval,
+    position: PixelInterval,
+) -> PixelInterval:
+    if is_horizontal_layout(layout):
+        mapped_position, _ = transform.map_intervals(position, orthogonal)
+        return mapped_position
+    _, mapped_position = transform.map_intervals(orthogonal, position)
+    return mapped_position
+
+
+def _map_short_interval(
+    transform: AffineCoordinateTransform,
+    layout: str,
+    orthogonal: PixelInterval,
+    position: PixelInterval,
+) -> PixelInterval:
+    if is_horizontal_layout(layout):
+        _, mapped_position = transform.map_intervals(orthogonal, position)
+        return mapped_position
+    mapped_position, _ = transform.map_intervals(position, orthogonal)
+    return mapped_position
+
+
+def _reference_in_detection_workspace(
+    reference: FrameSlotReference,
+    transform: AffineCoordinateTransform,
+) -> FrameSlotReference:
+    long_extent = PixelInterval(
+        reference.frame_slots[0].leading.minimum,
+        reference.frame_slots[-1].trailing.maximum,
+    )
+    short_extent = PixelInterval(
+        reference.shared_short_axis.top.minimum,
+        reference.shared_short_axis.bottom.maximum,
+    )
+    return FrameSlotReference(
+        source=reference.source,
+        format_id=reference.format_id,
+        strip_mode=reference.strip_mode,
+        layout=reference.layout,
+        shared_short_axis=SharedShortAxisReference(
+            top=_map_short_interval(
+                transform,
+                reference.layout,
+                long_extent,
+                reference.shared_short_axis.top,
+            ),
+            bottom=_map_short_interval(
+                transform,
+                reference.layout,
+                long_extent,
+                reference.shared_short_axis.bottom,
+            ),
+        ),
+        frame_slots=tuple(
+            FrameSlotIntervalReference(
+                index=slot.index,
+                leading=_map_work_interval(
+                    transform,
+                    reference.layout,
+                    short_extent,
+                    slot.leading,
+                ),
+                trailing=_map_work_interval(
+                    transform,
+                    reference.layout,
+                    short_extent,
+                    slot.trailing,
+                ),
+            )
+            for slot in reference.frame_slots
+        ),
+        notes=reference.notes,
+    )
+
+
 def compare_report_to_reference(
     report: dict[str, Any],
     reference: FrameSlotReference,
@@ -200,17 +302,25 @@ def compare_report_to_reference(
     )
     if identity != (reference.format_id, reference.strip_mode, reference.layout):
         raise ValueError("report and frame-slot reference identities differ")
+    accepted_reference = _reference_in_detection_workspace(
+        reference,
+        _coordinate_transform_from_report(report),
+    )
     violations: list[str] = []
-    actual_short_axis = geometry["shared_short_axis"]
+    actual_short_axis = geometry["shared_short_axis"]["span"]
     for side in ("top", "bottom"):
         actual = _interval_from_record(actual_short_axis[side])
-        accepted = getattr(reference.shared_short_axis, side)
+        accepted = getattr(accepted_reference.shared_short_axis, side)
         if not _interval_inside(actual, accepted):
             violations.append(f"shared_short_axis:{side}:outside_reference")
     actual_slots = geometry["frame_slots"]
-    if len(actual_slots) != len(reference.frame_slots):
+    if len(actual_slots) != len(accepted_reference.frame_slots):
         violations.append("frame_count_outside_reference")
-    for actual, accepted in zip(actual_slots, reference.frame_slots, strict=False):
+    for actual, accepted in zip(
+        actual_slots,
+        accepted_reference.frame_slots,
+        strict=False,
+    ):
         if int(actual["index"]) != accepted.index:
             violations.append(f"frame:{accepted.index}:index_mismatch")
             continue

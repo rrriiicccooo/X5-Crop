@@ -20,10 +20,6 @@ class RunConfig:
     page: int
     bleed_x: int
     bleed_y: int
-    deskew: str
-    deskew_fallback: str
-    deskew_min_angle: float
-    deskew_max_angle: float
     review_dir: Path | None
     copy_review_files: bool
     export_review: bool

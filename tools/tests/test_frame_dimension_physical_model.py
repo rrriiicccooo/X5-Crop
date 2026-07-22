@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import replace
 from types import SimpleNamespace
 import unittest
 
@@ -29,12 +28,10 @@ from x5crop.detection.physical.frame_sequence_solver import (
     solve_frame_sequence,
 )
 from x5crop.detection.physical.frame_sequence_result import FrameSequenceSolveResult
-from x5crop.detection.physical.model import (
-    PhotoHeightEvidence,
-    SharedShortAxisBasis,
-    SharedShortAxisSafetySpan,
+from x5crop.detection.physical.short_axis import (
+    SharedShortAxisPlan,
+    shared_short_axis_plan,
 )
-from x5crop.detection.physical.short_axis import shared_short_axis_plan
 from x5crop.domain import (
     BoundarySide,
     EvidenceState,
@@ -42,6 +39,8 @@ from x5crop.domain import (
     MeasurementProvenance,
     ObservationId,
     PixelInterval,
+    PhysicalSearchFact,
+    PhysicalSearchOutcome,
 )
 from x5crop.formats import FORMATS
 
@@ -83,27 +82,26 @@ class FrameDimensionPhysicalModelTest(unittest.TestCase):
         self.assertEqual(evidence.state, EvidenceState.SUPPORTED)
         self.assertIsNotNone(evidence.separator_width_cv)
 
-    def test_holder_bounded_short_axis_is_not_photo_height_evidence(self) -> None:
+    def test_unresolved_short_axis_has_no_photo_height(self) -> None:
         candidate = candidate_fixture()
         geometry_value = candidate.geometry
         short_axis = geometry_value.shared_short_axis
-        holder_bounded = SharedShortAxisSafetySpan(
-            top=short_axis.top,
-            bottom=short_axis.bottom,
-            basis=SharedShortAxisBasis.HOLDER_EDGE_BOUNDED,
-            state=EvidenceState.SUPPORTED,
+        unresolved = SharedShortAxisPlan(
+            top_photo_edge=None,
+            bottom_photo_edge=None,
+            span=None,
+            search_outcome=PhysicalSearchOutcome(
+                (PhysicalSearchFact.MEASUREMENTS_UNAVAILABLE,)
+            ),
             provenance=short_axis.provenance,
         )
 
         evidence = frame_dimension_evidence(
-            replace(
-                geometry_value,
-                shared_short_axis=holder_bounded,
-                photo_height_evidence=PhotoHeightEvidence(
-                    None,
-                    EvidenceState.UNAVAILABLE,
-                    holder_bounded.provenance,
-                ),
+            SimpleNamespace(
+                frame_dimension_prior=geometry_value.frame_dimension_prior,
+                common_frame_width=geometry_value.common_frame_width,
+                shared_short_axis=unresolved,
+                separator_assignments=geometry_value.separator_assignments,
             )
         )
 
@@ -257,14 +255,14 @@ class FrameDimensionPhysicalModelTest(unittest.TestCase):
                     frame_size_mm=(36.0, 24.0)
                 ),
                 layout="horizontal",
-                photo_height_evidence=SimpleNamespace(
-                    state=EvidenceState.SUPPORTED,
+                shared_short_axis=SimpleNamespace(
+                    supports_safe_crop=True,
                     height_px=PixelInterval.exact(100.0),
                     provenance=MeasurementProvenance(
                         MeasurementIdentity.BOUNDARY_PATHS,
                         ObservationId(f"frame_height:{label}"),
                         (MeasurementIdentity.GRAY_WORK,),
-                        "shared photo-height evidence",
+                        "shared short-axis measurement",
                         anchors,
                     ),
                 ),

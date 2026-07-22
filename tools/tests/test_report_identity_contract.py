@@ -1,13 +1,14 @@
 from __future__ import annotations
 
+from dataclasses import replace
 import unittest
 
 import numpy as np
 
 from tools.tests.physical_gate_support import (
+    detection_workspace_fixture,
     frame_bleed_fixture,
     selection_fixture,
-    transform_geometry_fixture,
     unavailable_resolution_metadata_fixture,
 )
 from tools.tests.test_output_read_model_contract import (
@@ -27,27 +28,32 @@ from x5crop.report.read_models import typed_read_model
 from x5crop.report.record import report_record_for_final_detection
 from x5crop.report.validation import current_report_record_errors
 from x5crop.domain import WorkspaceExtent
-from x5crop.image.workspace import WorkspaceIdentity
 
 
 class ReportIdentityContractTest(unittest.TestCase):
-    def test_prepared_workspace_owns_exact_gray_identity(self) -> None:
-        from x5crop.runtime.prepared_workspace import PreparedWorkspace
+    def test_detection_workspace_owns_exact_gray_identity(self) -> None:
+        first_gray = np.zeros((100, 310), dtype=np.uint8)
+        changed_gray = first_gray.copy()
+        changed_gray[-1, -1] = 1
+        first = detection_workspace_fixture(gray_override=first_gray)
+        changed = detection_workspace_fixture(gray_override=changed_gray)
 
-        transform = transform_geometry_fixture()
-        first = PreparedWorkspace(
-            pixels=np.zeros((2, 3), dtype=np.uint8),
-            gray=np.zeros((2, 3), dtype=np.uint8),
-            transform_geometry=transform,
-        )
-        changed = PreparedWorkspace(
-            pixels=np.zeros((2, 3), dtype=np.uint8),
-            gray=np.array(((0, 0, 0), (0, 0, 1)), dtype=np.uint8),
-            transform_geometry=transform,
-        )
-
-        self.assertEqual(first.identity.extent, WorkspaceExtent(3, 2))
+        self.assertEqual(first.identity.extent, WorkspaceExtent(310, 100))
         self.assertNotEqual(first.identity.gray_sha256, changed.identity.gray_sha256)
+
+    def test_detection_workspace_rejects_mixed_coordinate_domains(self) -> None:
+        workspace = detection_workspace_fixture(width=310, height=100)
+
+        with self.assertRaises(ValueError):
+            replace(
+                workspace,
+                pixels=np.zeros((101, 310), dtype=np.uint8),
+            )
+        with self.assertRaises(ValueError):
+            replace(
+                workspace,
+                source_gray=np.zeros((99, 310), dtype=np.uint8),
+            )
 
     def test_implementation_fingerprint_covers_source_bytes(self) -> None:
         from x5crop.runtime.implementation import (
@@ -59,10 +65,11 @@ class ReportIdentityContractTest(unittest.TestCase):
 
         self.assertNotEqual(first, changed)
 
-    def test_deskew_workspace_extent_owns_output_identity(self) -> None:
+    def test_detection_workspace_extent_owns_output_identity(self) -> None:
         selection = selection_fixture()
         frame_bleed = frame_bleed_fixture()
-        transform = transform_geometry_fixture(EvidenceState.SUPPORTED)
+        workspace = detection_workspace_fixture(width=330, height=120)
+        transform = workspace.transform_geometry
         final_detection = finalize_detection(
             apply_decision_gate(
                 selection,
@@ -81,7 +88,7 @@ class ReportIdentityContractTest(unittest.TestCase):
             selection,
             source="input.tif",
             profile=typed_read_model(_profile()),
-            workspace_identity=WorkspaceIdentity(WorkspaceExtent(330, 120), "0" * 64),
+            workspace=workspace,
             output_files=[],
             review_copy=None,
             warnings=[],
@@ -89,9 +96,9 @@ class ReportIdentityContractTest(unittest.TestCase):
                 get_detection_configuration("135", "partial")
             ),
             resolution_metadata=unavailable_resolution_metadata_fixture(),
-            transform_geometry=transform,
             analysis_identity=_analysis_identity(
-                workspace_shape=(120, 330)
+                workspace_shape=(120, 330),
+                workspace_identity=workspace.identity,
             ),
         )
 
@@ -122,7 +129,8 @@ class ReportIdentityContractTest(unittest.TestCase):
     def test_current_schema_rejects_decision_detached_from_transform(self) -> None:
         selection = selection_fixture()
         frame_bleed = frame_bleed_fixture()
-        transform = transform_geometry_fixture(EvidenceState.CONTRADICTED)
+        workspace = detection_workspace_fixture(EvidenceState.CONTRADICTED)
+        transform = workspace.transform_geometry
         final_detection = finalize_detection(
             apply_decision_gate(
                 selection,
@@ -141,7 +149,7 @@ class ReportIdentityContractTest(unittest.TestCase):
             selection,
             source="input.tif",
             profile=typed_read_model(_profile()),
-            workspace_identity=WorkspaceIdentity(WorkspaceExtent(310, 100), "0" * 64),
+            workspace=workspace,
             output_files=[],
             review_copy=None,
             warnings=[],
@@ -149,8 +157,9 @@ class ReportIdentityContractTest(unittest.TestCase):
                 get_detection_configuration("135", "partial")
             ),
             resolution_metadata=unavailable_resolution_metadata_fixture(),
-            transform_geometry=transform,
-            analysis_identity=_analysis_identity(),
+            analysis_identity=_analysis_identity(
+                workspace_identity=workspace.identity,
+            ),
         )
         transform_check = next(
             check
