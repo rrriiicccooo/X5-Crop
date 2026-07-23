@@ -2,12 +2,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import numpy as np
-
 from ..run_config import RunConfig
 from ..run_status import RunTerminalOutcome
 from ..detection.final.model import FinalDetection
 from ..detection.candidate.model import AssessedCandidate
+from ..detection.workspace import DetectionWorkspace
 from ..output.surface import display_generated_path
 from ..configuration.diagnostics import DiagnosticsConfiguration
 from .writer import write_debug_analysis, write_debug_preview
@@ -15,7 +14,7 @@ from .canvas import DebugRenderCache
 
 
 def write_debug_outputs(
-    gray: np.ndarray,
+    workspace: DetectionWorkspace,
     detection: FinalDetection,
     selected_candidate: AssessedCandidate,
     output_dir: Path,
@@ -30,7 +29,7 @@ def write_debug_outputs(
     if config.debug and not config.debug_analysis:
         debug_path = output_dir / "_debug" / f"{input_stem}_debug.jpg"
         write_debug_preview(
-            gray,
+            workspace,
             detection,
             selected_candidate,
             debug_path,
@@ -41,7 +40,7 @@ def write_debug_outputs(
         warnings.append(f"debug preview: {display_generated_path(debug_path, config)}")
     if config.debug_analysis:
         debug_analysis = write_debug_analysis(
-            gray,
+            workspace,
             detection,
             selected_candidate,
             output_dir,

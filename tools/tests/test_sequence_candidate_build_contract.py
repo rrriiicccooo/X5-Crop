@@ -30,7 +30,7 @@ from x5crop.detection.physical.frame_sequence_solver import (
     solve_frame_sequence,
 )
 from x5crop.detection.physical.frame_sequence_result import FrameSequenceSolveResult
-from x5crop.detection.physical.short_axis import shared_short_axis_plan
+from tools.tests.photo_edge_support import shared_short_axis_fixture
 from x5crop.domain import EvidenceState
 from x5crop.domain import BoundarySide
 from x5crop.image.content import ContentRegionObservation
@@ -46,7 +46,7 @@ class SequenceCandidateBuildContractTest(unittest.TestCase):
 
         self.assertIn("short_axis_plan", parameters)
         self.assertIn("sequence_observations", parameters)
-        self.assertNotIn("shared_short_axis_plan(", source)
+        self.assertNotIn("shared_short_axis_fixture(", source)
         self.assertNotIn("cached_separator_profile", source)
         self.assertNotIn("propose_separator_bands", source)
         self.assertNotIn("measure_separator_cross_axis_support", source)
@@ -61,7 +61,7 @@ class SequenceCandidateBuildContractTest(unittest.TestCase):
             bottom=110.0,
             holder_sides=(BoundarySide.TOP, BoundarySide.BOTTOM),
         )
-        cross_axis_plan = shared_short_axis_plan(search_scope)
+        cross_axis_plan = shared_short_axis_fixture(search_scope)
         frame_dimensions = dimensions(100.0, 100.0)
         observation = separator(
             100.0,

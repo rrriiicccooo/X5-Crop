@@ -35,6 +35,9 @@ def _dimensions(state: EvidenceState) -> FrameDimensionEvidence:
         (10.0,),
         state,
         1.0,
+        None,
+        None,
+        PixelInterval.exact(100.0),
     )
 
 

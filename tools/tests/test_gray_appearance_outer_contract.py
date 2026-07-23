@@ -8,6 +8,7 @@ import unittest
 import numpy as np
 
 from x5crop.configuration.boundary import BoundaryPathParameters
+from x5crop.configuration.path_sampling import BoundaryPathSamplingParameters
 from x5crop.detection.candidate.assessment.model import (
     SEQUENCE_PROOF_PATH_CODES,
 )
@@ -225,7 +226,7 @@ class GrayAppearanceOuterContractTests(unittest.TestCase):
     def test_current_schema_names_frame_slot_resolution(self) -> None:
         self.assertEqual(
             REPORT_SCHEMA_REVISION,
-            "detection_owned_shared_short_axis",
+            "scan_canvas_photo_edge_evidence",
         )
 
     def test_boundary_measurements_have_one_typed_canonical_model(self) -> None:
@@ -254,7 +255,7 @@ class GrayAppearanceOuterContractTests(unittest.TestCase):
         points = _adaptive_change_points(
             np.asarray(([0.0] * 5 + [1.0] * 5) * 20, dtype=np.float32),
             replace(
-                BoundaryPathParameters(),
+                BoundaryPathSamplingParameters(),
                 maximum_change_points_per_section=1,
             ),
         )
@@ -271,7 +272,7 @@ class GrayAppearanceOuterContractTests(unittest.TestCase):
         points = _adaptive_change_points(
             signal,
             replace(
-                BoundaryPathParameters(),
+                BoundaryPathSamplingParameters(),
                 change_point_percentile=45.0,
             ),
         )
@@ -291,7 +292,7 @@ class GrayAppearanceOuterContractTests(unittest.TestCase):
         points = _adaptive_change_points(
             signal,
             replace(
-                BoundaryPathParameters(),
+                BoundaryPathSamplingParameters(),
                 change_point_percentile=99.0,
                 maximum_change_points_per_section=4,
             ),
@@ -308,7 +309,7 @@ class GrayAppearanceOuterContractTests(unittest.TestCase):
 
         points = _adaptive_change_points(
             signal,
-            BoundaryPathParameters(),
+            BoundaryPathSamplingParameters(),
         )
 
         self.assertTrue(
@@ -322,7 +323,7 @@ class GrayAppearanceOuterContractTests(unittest.TestCase):
             gray,
             _texture_image(gray),
             scan_axis=0,
-            parameters=BoundaryPathParameters(),
+            parameters=BoundaryPathSamplingParameters(),
         )
 
         self.assertEqual(profiles[0].orthogonal_interval.minimum, 0.0)
@@ -360,7 +361,10 @@ class GrayAppearanceOuterContractTests(unittest.TestCase):
             statistics,
             replace(
                 BoundaryPathParameters(),
-                maximum_change_points_per_section=64,
+                path_sampling=replace(
+                    BoundaryPathSamplingParameters(),
+                    maximum_change_points_per_section=64,
+                ),
             ),
             axes=(BoundaryAxis.LONG, BoundaryAxis.SHORT),
             transform_position_uncertainty_px=0.0,

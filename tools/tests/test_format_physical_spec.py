@@ -81,9 +81,9 @@ class FormatSpecTests(unittest.TestCase):
             "135-dual": 36.0 / 24.0,
             "half": 18.0 / 24.0,
             "xpan": 65.0 / 24.0,
-            "120-645": 42.0 / 56.0,
-            "120-66": 56.0 / 56.0,
-            "120-67": 70.0 / 56.0,
+            "120-645": 42.0 / 54.0,
+            "120-66": 54.0 / 54.0,
+            "120-67": 70.0 / 54.0,
         }
 
         for format_id, expected in expected_aspects.items():
@@ -123,7 +123,7 @@ class FormatSpecTests(unittest.TestCase):
         spec = FORMATS["120-66"]
         self.assertEqual(
             [(item.width_mm, item.height_mm) for item in spec.frame.frame_size_mm_options],
-            [(56.0, 56.0), (54.0, 54.0)],
+            [(54.0, 54.0), (56.0, 56.0)],
         )
         self.assertTrue(
             all(
@@ -131,6 +131,24 @@ class FormatSpecTests(unittest.TestCase):
                 for item in spec.frame.frame_size_mm_options
             )
         )
+
+    def test_all_120_formats_keep_discrete_54_and_56_short_axes(self) -> None:
+        expected = {
+            "120-645": ((42.0, 54.0), (42.0, 56.0)),
+            "120-66": ((54.0, 54.0), (56.0, 56.0)),
+            "120-67": ((70.0, 54.0), (70.0, 56.0)),
+        }
+        for format_id, sizes in expected.items():
+            with self.subTest(format_id=format_id):
+                self.assertEqual(
+                    tuple(
+                        (item.width_mm, item.height_mm)
+                        for item in FORMATS[
+                            format_id
+                        ].frame.frame_size_mm_options
+                    ),
+                    sizes,
+                )
 
     def test_only_xpan_and_medium_square_can_be_complete_underfilled_strips(self) -> None:
         expected = {

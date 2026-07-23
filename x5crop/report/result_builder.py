@@ -7,7 +7,6 @@ from ..detection.final.model import FinalDetection
 from ..detection.candidate.selection.model import SelectionResult
 from ..detection.workspace import DetectionWorkspace
 from ..io.model import ImageProfile
-from ..units import ResolutionMetadataObservation
 from .model import ReportResult
 from .read_models import typed_read_model
 from .record import report_record_for_final_detection
@@ -24,7 +23,6 @@ def result_from_detection(
     warnings: list[str],
     *,
     configuration_detail: dict[str, Any],
-    resolution_metadata: ResolutionMetadataObservation,
     analysis_identity: dict[str, Any],
 ) -> ReportResult:
     record = report_record_for_final_detection(
@@ -37,7 +35,6 @@ def result_from_detection(
         review_copy=review_copy,
         warnings=warnings,
         configuration=configuration_detail,
-        resolution_metadata=resolution_metadata,
         analysis_identity=analysis_identity,
     )
     return ReportResult(record=record)

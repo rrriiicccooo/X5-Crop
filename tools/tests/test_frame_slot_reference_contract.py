@@ -14,7 +14,6 @@ from tools.regression.frame_slot_reference import (
 from tools.tests.physical_gate_support import (
     detection_workspace_fixture,
     selection_fixture,
-    unavailable_resolution_metadata_fixture,
 )
 from tools.tests.test_output_read_model_contract import (
     _analysis_identity,
@@ -91,6 +90,7 @@ def _unresolved_record(source: str = "input.tif") -> dict:
         apply_decision_gate(
             selection,
             bleed,
+            workspace.scan_canvas_evidence,
             transform,
             automatic_processing_eligibility=EvidenceState.SUPPORTED,
         ),
@@ -112,7 +112,6 @@ def _unresolved_record(source: str = "input.tif") -> dict:
         configuration=detection_configuration_read_model(
             get_detection_configuration("135", "partial")
         ),
-        resolution_metadata=unavailable_resolution_metadata_fixture(),
         analysis_identity=_analysis_identity(
             source_name=Path(source).name,
             workspace_identity=workspace.identity,

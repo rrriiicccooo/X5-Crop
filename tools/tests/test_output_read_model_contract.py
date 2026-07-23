@@ -7,14 +7,20 @@ import os
 from tempfile import TemporaryDirectory
 import unittest
 import numpy as np
-from dataclasses import fields
+from dataclasses import fields, replace
 
 from tools.tests.physical_gate_support import (
     detection_workspace_fixture,
     final_detection_fixture,
+    frame_bleed_fixture,
     selection_fixture,
     transform_geometry_fixture,
-    unavailable_resolution_metadata_fixture,
+)
+from x5crop.detection.decision.decision_gate import apply_decision_gate
+from x5crop.detection.evidence.scan_canvas import observe_scan_canvas
+from x5crop.detection.final.finalize import (
+    finalization_plan_for_selection,
+    finalize_detection,
 )
 from x5crop.detection.final.model import FinalDetection
 from x5crop.io.model import ImageProfile, TiffMetadata
@@ -106,7 +112,6 @@ def _record(source: str = "input.tif") -> dict:
         configuration=detection_configuration_read_model(
             get_detection_configuration("135", "partial")
         ),
-        resolution_metadata=unavailable_resolution_metadata_fixture(),
         analysis_identity=_analysis_identity(
             source_name=Path(source).name,
             workspace_identity=workspace.identity,
@@ -124,12 +129,92 @@ class OutputReadModelContractTest(unittest.TestCase):
         self.assertIn("transform_geometry", record["input"])
         self.assertNotIn("diagnostics", record)
 
-    def test_input_records_resolution_metadata_not_candidate_calibration(self) -> None:
+    def test_input_records_effective_scan_canvas_not_tiff_dpi(self) -> None:
         input_detail = _record()["input"]
-        self.assertIn("resolution_metadata", input_detail)
+        self.assertIn("scan_canvas_evidence", input_detail)
+        scale = input_detail["scan_canvas_evidence"]["pixel_scale"]
+        if scale is None:
+            self.assertNotIn(
+                "effective_ppi",
+                input_detail["scan_canvas_evidence"],
+            )
+        else:
+            effective_ppi = input_detail["scan_canvas_evidence"][
+                "effective_ppi"
+            ]
+            self.assertAlmostEqual(
+                effective_ppi["long_axis"],
+                scale["long_axis_px_per_mm"] * 25.4,
+            )
+            self.assertAlmostEqual(
+                effective_ppi["short_axis"],
+                scale["short_axis_px_per_mm"] * 25.4,
+            )
+        self.assertNotIn("resolution_metadata", input_detail)
         self.assertNotIn("scan_calibration", input_detail)
-        candidate = _record()["selection"]["candidates"][0]
-        self.assertIn("frame_scale_observations", candidate["evidence"])
+
+    def test_current_schema_validates_canvas_derived_ppi(self) -> None:
+        configuration = get_detection_configuration("135", "partial")
+        workspace = detection_workspace_fixture(width=720, height=100)
+        scan_canvas = observe_scan_canvas(
+            720,
+            100,
+            "horizontal",
+            configuration.scan_canvas,
+        )
+        workspace = replace(
+            workspace,
+            scan_canvas_evidence=scan_canvas,
+        )
+        selection = selection_fixture()
+        bleed = frame_bleed_fixture()
+        detection = finalize_detection(
+            apply_decision_gate(
+                selection,
+                bleed,
+                scan_canvas,
+                workspace.transform_geometry,
+                automatic_processing_eligibility=EvidenceState.SUPPORTED,
+            ),
+            bleed,
+            finalization_plan_for_selection(
+                selection,
+                workspace_extent=WorkspaceExtent(720, 100),
+            ),
+        )
+        profile = replace(_profile(), shape=(100, 720))
+        record = report_record_for_final_detection(
+            detection,
+            selection,
+            source="input.tif",
+            profile=typed_read_model(profile),
+            workspace=workspace,
+            output_files=[],
+            review_copy=None,
+            warnings=[],
+            configuration=detection_configuration_read_model(
+                configuration
+            ),
+            analysis_identity=_analysis_identity(
+                shape=(100, 720),
+                workspace_shape=(100, 720),
+                workspace_identity=workspace.identity,
+            ),
+        )
+
+        scale = record["input"]["scan_canvas_evidence"]["pixel_scale"]
+        effective_ppi = record["input"]["scan_canvas_evidence"][
+            "effective_ppi"
+        ]
+        self.assertAlmostEqual(
+            effective_ppi["long_axis"],
+            scale["long_axis_px_per_mm"] * 25.4,
+        )
+        self.assertAlmostEqual(
+            effective_ppi["short_axis"],
+            scale["short_axis_px_per_mm"] * 25.4,
+        )
+        self.assertEqual(current_report_record_errors(record), [])
 
     def test_configuration_report_includes_boundary_path_measurements(self) -> None:
         configuration = get_detection_configuration("135", "full")
@@ -269,6 +354,7 @@ class OutputReadModelContractTest(unittest.TestCase):
         detection = apply_decision_gate(
             selection,
             bleed,
+            detection_workspace_fixture().scan_canvas_evidence,
             transform_geometry_fixture(),
             automatic_processing_eligibility=EvidenceState.CONTRADICTED,
         )
@@ -294,7 +380,6 @@ class OutputReadModelContractTest(unittest.TestCase):
             review_copy=None,
             warnings=[],
             configuration=detection_configuration_read_model(configuration),
-            resolution_metadata=unavailable_resolution_metadata_fixture(),
             analysis_identity=_analysis_identity(
                 "135-dual",
                 "partial",
@@ -478,7 +563,6 @@ class OutputReadModelContractTest(unittest.TestCase):
             configuration=detection_configuration_read_model(
                 get_detection_configuration("135", "partial")
             ),
-            resolution_metadata=unavailable_resolution_metadata_fixture(),
             analysis_identity=_analysis_identity(
                 workspace_identity=workspace.identity,
             ),
@@ -488,7 +572,7 @@ class OutputReadModelContractTest(unittest.TestCase):
         )
         self.assertEqual(
             record["input"]["transform_geometry"]["outcome"],
-            "photo_edges_unavailable",
+            "photo_edge_pair_unavailable",
         )
         self.assertEqual(current_report_record_errors(record), [])
 
@@ -633,12 +717,18 @@ class OutputReadModelContractTest(unittest.TestCase):
         self.assertNotIn("candidate_table", record)
         self.assertNotIn("evidence_summary", record)
 
+    def test_report_excludes_temporary_photo_edge_section_turns(self) -> None:
+        serialized = json.dumps(_record(), sort_keys=True)
+
+        self.assertNotIn("section_index", serialized)
+        self.assertNotIn("local_short_axis_boundary_pair", serialized)
+
     def test_schema_identity_is_descriptive_not_version_named(self) -> None:
         record = _record()
         self.assertEqual(record["schema_id"], "detection_report")
         self.assertEqual(
             record["schema_revision"],
-            "detection_owned_shared_short_axis",
+            "scan_canvas_photo_edge_evidence",
         )
         self.assertNotIn("v4", record["schema_revision"])
 
@@ -659,8 +749,10 @@ class OutputReadModelContractTest(unittest.TestCase):
         self.assertEqual(
             DEFAULT_FIELDS,
             (
+                "input.scan_canvas_evidence",
                 "input.transform_geometry",
-                "input.source_shared_short_axes",
+                "input.source_photo_edge_pairs",
+                "input.mapped_photo_edge_pairs",
                 "input.shared_short_axes",
                 "input.source_lane_divider",
                 "input.lane_divider",

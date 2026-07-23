@@ -13,7 +13,7 @@ class FrameSlotArchitectureContractTest(unittest.TestCase):
     def test_short_axis_plan_has_one_canonical_owner(self) -> None:
         owners: dict[str, list[str]] = {
             "SharedShortAxisPlan": [],
-            "shared_short_axis_plan": [],
+            "shared_short_axis_from_photo_edge_pair": [],
         }
         physical_root = PROJECT_ROOT / "x5crop/detection/physical"
         for path in physical_root.glob("*.py"):
@@ -24,7 +24,10 @@ class FrameSlotArchitectureContractTest(unittest.TestCase):
                         owners[node.name].append(path.name)
 
         self.assertEqual(owners["SharedShortAxisPlan"], ["short_axis.py"])
-        self.assertEqual(owners["shared_short_axis_plan"], ["short_axis.py"])
+        self.assertEqual(
+            owners["shared_short_axis_from_photo_edge_pair"],
+            ["short_axis.py"],
+        )
 
     def test_frame_width_constraint_families_have_distinct_canonical_types(
         self,
@@ -114,10 +117,10 @@ class FrameSlotArchitectureContractTest(unittest.TestCase):
         self.assertEqual(
             set(short_axis.SharedShortAxisPlan.__dataclass_fields__),
             {
-                "top_photo_edge",
-                "bottom_photo_edge",
+                "photo_edge_pair_id",
                 "span",
-                "search_outcome",
+                "outcome",
+                "position_uncertainty_px",
                 "provenance",
             },
         )

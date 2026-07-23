@@ -131,22 +131,28 @@ FORMATS: dict[str, FormatSpec] = {
     ),
     "120-645": FormatSpec(
         format_id="120-645",
-        frame=FramePhysicalSpec((FrameSizeMm(42.0, 56.0),)),
+        frame=FramePhysicalSpec((
+            FrameSizeMm(42.0, 54.0),
+            FrameSizeMm(42.0, 56.0),
+        )),
         strip=StripHandlingSpec(4, (1, 2, 3)),
         layout=ScanLayoutSpec(),
     ),
     "120-66": FormatSpec(
         format_id="120-66",
         frame=FramePhysicalSpec((
-            FrameSizeMm(56.0, 56.0),
             FrameSizeMm(54.0, 54.0),
+            FrameSizeMm(56.0, 56.0),
         )),
         strip=StripHandlingSpec(3, (1, 2, 3), True),
         layout=ScanLayoutSpec(),
     ),
     "120-67": FormatSpec(
         format_id="120-67",
-        frame=FramePhysicalSpec((FrameSizeMm(70.0, 56.0),)),
+        frame=FramePhysicalSpec((
+            FrameSizeMm(70.0, 54.0),
+            FrameSizeMm(70.0, 56.0),
+        )),
         strip=StripHandlingSpec(3, (1, 2)),
         layout=ScanLayoutSpec(),
     ),

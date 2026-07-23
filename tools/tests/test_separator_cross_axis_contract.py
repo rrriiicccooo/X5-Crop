@@ -15,10 +15,8 @@ from x5crop.detection.physical.separator.observations import (
 )
 from x5crop.domain import BoundarySide, Box, EvidenceState, PixelInterval
 from x5crop.domain import ObservationId
-from x5crop.detection.physical.short_axis import (
-    SharedShortAxisPlan,
-    shared_short_axis_from_photo_edges,
-)
+from x5crop.detection.physical.short_axis import SharedShortAxisPlan
+from tools.tests.photo_edge_support import shared_short_axis_fixture_from_edges
 from tools.tests.frame_slot_solver_support import photo_edge_path
 from x5crop.image.statistics import (
     ImageMeasurementStatisticsParameters,
@@ -37,7 +35,7 @@ def _textured_workspace(height: int = 120, width: int = 240) -> np.ndarray:
 
 
 def _cross_axis(height: int) -> SharedShortAxisPlan:
-    return shared_short_axis_from_photo_edges(
+    return shared_short_axis_fixture_from_edges(
         photo_edge_path(
             BoundarySide.TOP,
             0.0,

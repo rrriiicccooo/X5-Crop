@@ -10,6 +10,7 @@ from unittest.mock import patch
 from tools.tests.physical_gate_support import (
     candidate_evidence_fixture,
     candidate_fixture,
+    detection_workspace_fixture,
     frame_bleed_fixture,
     selection_fixture,
     transform_geometry_fixture,
@@ -47,9 +48,7 @@ from x5crop.domain import (
     PhysicalSearchFact,
     PhysicalSearchOutcome,
 )
-from x5crop.detection.physical.short_axis import (
-    shared_short_axis_from_photo_edges,
-)
+from tools.tests.photo_edge_support import shared_short_axis_fixture_from_edges
 from x5crop.detection.physical.model import (
     FrameBoundarySource,
     SequenceResiduals,
@@ -119,8 +118,13 @@ def _with_leading_interval(candidate, interval: PixelInterval, source: str):
 def _with_shifted_short_axis(candidate, offset: float):
     geometry = candidate.geometry
     short_axis = geometry.shared_short_axis
-    assert short_axis.top_photo_edge is not None
-    assert short_axis.bottom_photo_edge is not None
+    paths_by_id = {
+        path.provenance.observation_id: path
+        for path in geometry.raw_boundary_paths
+    }
+    top_id, bottom_id = short_axis.provenance.boundary_anchors
+    top_photo_edge = paths_by_id[top_id]
+    bottom_photo_edge = paths_by_id[bottom_id]
 
     def shifted(path):
         return replace(
@@ -134,9 +138,9 @@ def _with_shifted_short_axis(candidate, offset: float):
             ),
         )
 
-    shifted_short_axis = shared_short_axis_from_photo_edges(
-        shifted(short_axis.top_photo_edge),
-        shifted(short_axis.bottom_photo_edge),
+    shifted_short_axis = shared_short_axis_fixture_from_edges(
+        shifted(top_photo_edge),
+        shifted(bottom_photo_edge),
     )
     updated = replace(
         geometry,
@@ -177,6 +181,7 @@ class PhysicalGateModelContractTest(unittest.TestCase):
         return apply_decision_gate(
             selection,
             frame_bleed_fixture(),
+            detection_workspace_fixture().scan_canvas_evidence,
             transform_geometry_fixture(),
             automatic_processing_eligibility=EvidenceState.SUPPORTED,
         )
@@ -516,11 +521,12 @@ class PhysicalGateModelContractTest(unittest.TestCase):
     def test_final_reason_vocabulary_is_finite_and_physical(self) -> None:
         from x5crop.detection.decision.vocabulary import FINAL_REVIEW_REASONS
 
-        self.assertEqual(len(FINAL_REVIEW_REASONS), 11)
+        self.assertEqual(len(FINAL_REVIEW_REASONS), 12)
         self.assertIn("content_preservation_unresolved", FINAL_REVIEW_REASONS)
         self.assertIn("sequence_evidence_insufficient", FINAL_REVIEW_REASONS)
         self.assertIn("count_resolution_unavailable", FINAL_REVIEW_REASONS)
         self.assertIn("geometry_resolution_unavailable", FINAL_REVIEW_REASONS)
+        self.assertIn("scan_canvas_profile_unresolved", FINAL_REVIEW_REASONS)
 
 
 if __name__ == "__main__":

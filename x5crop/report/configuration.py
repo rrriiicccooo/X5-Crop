@@ -35,9 +35,11 @@ def detection_configuration_read_model(
             ),
         },
         "measurement": {
+            "scan_canvas": typed_read_model(configuration.scan_canvas),
             "boundary_path": typed_read_model(configuration.boundary_path),
             "preprocess": typed_read_model(configuration.preprocess),
-            "deskew": typed_read_model(configuration.deskew),
+            "photo_edges": typed_read_model(configuration.photo_edges),
+            "transform": typed_read_model(configuration.transform),
             "separator": typed_read_model(configuration.separator),
             "content": typed_read_model(configuration.content),
         },

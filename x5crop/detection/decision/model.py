@@ -13,6 +13,7 @@ from .vocabulary import (
     FINAL_REASON_EVIDENCE_INDEPENDENCE_FAILED,
     FINAL_REASON_GEOMETRY_RESOLUTION_UNAVAILABLE,
     FINAL_REASON_OUTPUT_PROTECTION_UNRESOLVED,
+    FINAL_REASON_SCAN_CANVAS_PROFILE_UNRESOLVED,
     FINAL_REASON_SEQUENCE_EVIDENCE_INSUFFICIENT,
     FINAL_REASON_SELECTION_GEOMETRY_DISAGREEMENT,
     FINAL_REASON_TRANSFORM_GEOMETRY_UNCERTAIN,
@@ -28,6 +29,7 @@ DECISION_FINAL_CHECK_CODES = (
     "automatic_processing_eligibility",
     "selection_geometry_consensus",
     "output_content_protection",
+    "scan_canvas_geometry",
     "transform_geometry_integrity",
 )
 DECISION_GATE_REASON_BY_CODE = {
@@ -41,6 +43,7 @@ DECISION_GATE_REASON_BY_CODE = {
     "automatic_processing_eligibility": FINAL_REASON_AUTOMATIC_PROCESSING_NOT_SUPPORTED,
     "selection_geometry_consensus": FINAL_REASON_SELECTION_GEOMETRY_DISAGREEMENT,
     "output_content_protection": FINAL_REASON_OUTPUT_PROTECTION_UNRESOLVED,
+    "scan_canvas_geometry": FINAL_REASON_SCAN_CANVAS_PROFILE_UNRESOLVED,
     "transform_geometry_integrity": FINAL_REASON_TRANSFORM_GEOMETRY_UNCERTAIN,
 }
 

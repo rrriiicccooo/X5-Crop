@@ -1,18 +1,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
 import math
 
+from ...configuration.photo_edges import PhotoEdgeDetectionParameters
 from ...domain import (
-    BoundaryAxis,
-    BoundaryKind,
-    BoundaryPathFit,
     BoundarySide,
     EvidenceState,
     FrameDimensionPrior,
-    FrameSequenceSearchScope,
-    GrayBoundaryPathObservation,
-    HolderBoundaryObservation,
     MeasurementIdentity,
     MeasurementProvenance,
     ObservationId,
@@ -20,6 +16,10 @@ from ...domain import (
     PhysicalSearchOutcome,
     PixelInterval,
     ShortAxisMeasurementSpan,
+)
+from ..evidence.photo_edges import (
+    PhotoEdgePairEvidence,
+    photo_edge_inner_line,
 )
 
 
@@ -33,64 +33,69 @@ class FrameWidthSearchHint:
             raise ValueError("frame-width search hint must be positive")
 
 
+class SharedShortAxisOutcome(str, Enum):
+    SUPPORTED = "supported"
+    PHOTO_EDGE_PAIR_UNAVAILABLE = "photo_edge_pair_unavailable"
+    EXTRAPOLATION_UNCERTAINTY_TOO_LARGE = (
+        "extrapolation_uncertainty_too_large"
+    )
+    MAPPED_GEOMETRY_CONTRADICTED = "mapped_geometry_contradicted"
+
+
 @dataclass(frozen=True)
 class SharedShortAxisPlan:
-    top_photo_edge: GrayBoundaryPathObservation | None
-    bottom_photo_edge: GrayBoundaryPathObservation | None
+    photo_edge_pair_id: ObservationId
     span: ShortAxisMeasurementSpan | None
-    search_outcome: PhysicalSearchOutcome
+    outcome: SharedShortAxisOutcome
+    position_uncertainty_px: float | None
     provenance: MeasurementProvenance
 
     def __post_init__(self) -> None:
-        edges_observed = (
-            self.top_photo_edge is not None
-            and self.bottom_photo_edge is not None
-        )
-        if (self.top_photo_edge is None) != (self.bottom_photo_edge is None):
-            raise ValueError("shared short axis requires both photo edges together")
-        if self.span is not None and not edges_observed:
-            raise ValueError("shared short-axis span requires both photo edges")
-        if edges_observed:
-            assert self.top_photo_edge is not None
-            assert self.bottom_photo_edge is not None
-            top = self.top_photo_edge
-            bottom = self.bottom_photo_edge
-            if (
-                top.kind == BoundaryKind.EDGE_ADJACENT_TRANSITION
-                or bottom.kind == BoundaryKind.EDGE_ADJACENT_TRANSITION
-                or not _path_contacts_active_image(top, BoundarySide.TOP)
-                or not _path_contacts_active_image(bottom, BoundarySide.BOTTOM)
-            ):
-                raise ValueError(
-                    "shared short axis requires two qualified real-photo edges"
-                )
-            if bottom.position.minimum <= top.position.maximum:
-                raise ValueError("shared short-axis photo edges must be ordered")
-            expected_provenance = _span_provenance(top, bottom)
-            if self.provenance != expected_provenance:
-                raise ValueError(
-                    "shared short-axis provenance must come from its photo edges"
-                )
-            if self.span is not None:
-                expected_span = _inner_line_span(
-                    top,
-                    bottom,
-                    expected_provenance,
-                )
-                if self.span != expected_span:
-                    raise ValueError(
-                        "shared short-axis span must be the two photo-side inner lines"
-                    )
-        resolved = self.span is not None
-        solution_found = PhysicalSearchFact.SOLUTION_FOUND in self.search_outcome.facts
-        if solution_found != resolved:
-            raise ValueError("short-axis search facts must match resolved photo edges")
+        if not isinstance(self.photo_edge_pair_id, ObservationId):
+            raise TypeError("shared short axis requires a photo-edge evidence identity")
+        if not isinstance(self.outcome, SharedShortAxisOutcome):
+            raise TypeError("shared short axis requires a typed consumer outcome")
+        supported = self.outcome == SharedShortAxisOutcome.SUPPORTED
+        if supported != (self.span is not None):
+            raise ValueError("shared short-axis outcome must match span availability")
+        if supported != (self.position_uncertainty_px is not None):
+            raise ValueError(
+                "shared short-axis uncertainty must match span availability"
+            )
+        if self.position_uncertainty_px is not None and (
+            not math.isfinite(self.position_uncertainty_px)
+            or self.position_uncertainty_px < 0.0
+        ):
+            raise ValueError("shared short-axis uncertainty must be finite")
         if self.span is not None and self.span.provenance != self.provenance:
             raise ValueError("shared short-axis span must preserve plan provenance")
+        if self.provenance.root_measurement != MeasurementIdentity.PHOTO_EDGES:
+            raise ValueError("shared short axis must derive from photo-edge evidence")
 
     @property
     def state(self) -> EvidenceState:
-        return self.search_outcome.state
+        if self.outcome == SharedShortAxisOutcome.SUPPORTED:
+            return EvidenceState.SUPPORTED
+        if self.outcome in {
+            SharedShortAxisOutcome.PHOTO_EDGE_PAIR_UNAVAILABLE,
+            SharedShortAxisOutcome.EXTRAPOLATION_UNCERTAINTY_TOO_LARGE,
+        }:
+            return EvidenceState.UNAVAILABLE
+        return EvidenceState.CONTRADICTED
+
+    @property
+    def physical_search(self) -> PhysicalSearchOutcome:
+        return PhysicalSearchOutcome(
+            (
+                PhysicalSearchFact.SOLUTION_FOUND
+                if self.state == EvidenceState.SUPPORTED
+                else (
+                    PhysicalSearchFact.MEASUREMENTS_UNAVAILABLE
+                    if self.state == EvidenceState.UNAVAILABLE
+                    else PhysicalSearchFact.CONSTRAINTS_CONTRADICTED
+                ),
+            )
+        )
 
     @property
     def supports_safe_crop(self) -> bool:
@@ -116,12 +121,9 @@ class SharedShortAxisPlan:
 
     @property
     def uncertainty_px(self) -> float:
-        return float(
-            self.top.maximum
-            - self.top.minimum
-            + self.bottom.maximum
-            - self.bottom.minimum
-        )
+        if self.position_uncertainty_px is None:
+            raise ValueError("unresolved shared short axis has no uncertainty")
+        return self.position_uncertainty_px
 
     @property
     def measurement_span(self) -> ShortAxisMeasurementSpan:
@@ -130,287 +132,111 @@ class SharedShortAxisPlan:
         return self.span
 
 
-def _path_contacts_active_image(
-    path: GrayBoundaryPathObservation,
-    side: BoundarySide,
-) -> bool:
-    if side not in {BoundarySide.TOP, BoundarySide.BOTTOM}:
-        raise ValueError("photo-edge contact requires a short-axis boundary")
-    if path.axis != BoundaryAxis.SHORT:
-        return False
-    if side == BoundarySide.TOP:
-        outer = path.lower_appearance
-        inner = path.upper_appearance
-    else:
-        outer = path.upper_appearance
-        inner = path.lower_appearance
-    return bool(
-        inner.intensity_tail != outer.intensity_tail
-        and inner.texture_median > outer.texture_median
-        and inner.gradient_median > outer.gradient_median
-        and inner.spatial_continuity > 0.0
-    )
-
-
-def _photo_edge_contrast(
-    path: GrayBoundaryPathObservation,
-    side: BoundarySide,
-) -> float:
-    if side == BoundarySide.TOP:
-        outer = path.lower_appearance
-        inner = path.upper_appearance
-    else:
-        outer = path.upper_appearance
-        inner = path.lower_appearance
-    return float(
-        inner.texture_median
-        - outer.texture_median
-        + inner.gradient_median
-        - outer.gradient_median
-    )
-
-
-def photo_edge_is_independent(
-    path: GrayBoundaryPathObservation,
-    side: BoundarySide,
-    holder_boundary: HolderBoundaryObservation | None,
-    *,
-    minimum_intensity_contrast: float,
-    minimum_holder_gap: float,
-) -> bool:
-    """Return whether one path is distinct evidence for a real photo edge."""
-    thresholds = (minimum_intensity_contrast, minimum_holder_gap)
-    if any(not math.isfinite(value) or value < 0.0 for value in thresholds):
-        raise ValueError("photo-edge thresholds must be finite and non-negative")
-    if not _path_contacts_active_image(path, side):
-        return False
-    if side == BoundarySide.TOP:
-        outer = path.lower_appearance
-        inner = path.upper_appearance
-    elif side == BoundarySide.BOTTOM:
-        outer = path.upper_appearance
-        inner = path.lower_appearance
-    else:
-        raise ValueError("photo-edge independence requires a short-axis side")
-    if (
-        abs(inner.intensity_median - outer.intensity_median)
-        < minimum_intensity_contrast
-    ):
-        return False
-    if holder_boundary is None:
-        return True
-    if holder_boundary.side != side:
-        raise ValueError("photo edge and holder boundary must use the same side")
-    local_gaps = []
-    for photo_sample in path.samples:
-        for holder_path in holder_boundary.supporting_paths:
-            for holder_sample in holder_path.samples:
-                if photo_sample.orthogonal_interval.intersection(
-                    holder_sample.orthogonal_interval
-                ) is None:
-                    continue
-                local_gaps.append(
-                    (
-                        photo_sample.position.minimum
-                        - holder_sample.position.maximum
-                    )
-                    if side == BoundarySide.TOP
-                    else (
-                        holder_sample.position.minimum
-                        - photo_sample.position.maximum
-                    )
-                )
-    return not local_gaps or min(local_gaps) >= minimum_holder_gap
-
-
-def _photo_edge_pair_score(
-    top: GrayBoundaryPathObservation,
-    bottom: GrayBoundaryPathObservation,
-) -> tuple[float, int, float, float]:
-    top_fit = BoundaryPathFit(top)
-    bottom_fit = BoundaryPathFit(bottom)
-    common = top_fit.orthogonal_extent.intersection(bottom_fit.orthogonal_extent)
-    common_support = 0.0 if common is None else common.maximum - common.minimum
-    maximum_residual = max(
-        top_fit.minimum_line.residual,
-        top_fit.maximum_line.residual,
-        bottom_fit.minimum_line.residual,
-        bottom_fit.maximum_line.residual,
-    )
-    return (
-        common_support,
-        min(len(top.samples), len(bottom.samples)),
-        _photo_edge_contrast(top, BoundarySide.TOP)
-        + _photo_edge_contrast(bottom, BoundarySide.BOTTOM),
-        -maximum_residual,
-    )
-
-
-def _same_photo_edge_pair(
-    left: SharedShortAxisPlan,
-    right: SharedShortAxisPlan,
-) -> bool:
-    if (
-        left.top_photo_edge is None
-        or left.bottom_photo_edge is None
-        or right.top_photo_edge is None
-        or right.bottom_photo_edge is None
-    ):
-        return False
-    return bool(
-        left.top_photo_edge.position.intersection(
-            right.top_photo_edge.position
-        )
-        is not None
-        and left.bottom_photo_edge.position.intersection(
-            right.bottom_photo_edge.position
-        )
-        is not None
-    )
-
-
-def _span_provenance(
-    top: GrayBoundaryPathObservation,
-    bottom: GrayBoundaryPathObservation,
+def _plan_provenance(
+    evidence: PhotoEdgePairEvidence,
 ) -> MeasurementProvenance:
-    paths = (top, bottom)
-    anchors = tuple(path.provenance.observation_id for path in paths)
-    dependencies = tuple(
-        sorted(
-            {
-                dependency
-                for path in paths
-                for dependency in (
-                    path.provenance.root_measurement,
-                    *path.provenance.dependencies,
-                )
-                if dependency != MeasurementIdentity.PHOTO_EDGES
-            },
-            key=lambda item: item.value,
+    selected = evidence.selected_candidates
+    anchors = (
+        ()
+        if selected is None
+        else tuple(
+            candidate.path.provenance.observation_id
+            for candidate in selected
         )
     )
     return MeasurementProvenance(
         root_measurement=MeasurementIdentity.PHOTO_EDGES,
         observation_id=ObservationId(
-            "shared_short_axis:photo_edges:" + ":".join(map(str, anchors))
+            f"shared_short_axis:{evidence.observation_id}"
         ),
-        dependencies=dependencies,
-        description="shared short axis from two real photo edges",
+        dependencies=tuple(
+            dependency
+            for dependency in evidence.provenance.dependencies
+            if dependency != MeasurementIdentity.PHOTO_EDGES
+        ),
+        description="shared short axis derived from mapped photo-edge pair",
         boundary_anchors=anchors,
     )
 
 
-def _inner_line_span(
-    top: GrayBoundaryPathObservation,
-    bottom: GrayBoundaryPathObservation,
-    provenance: MeasurementProvenance,
-) -> ShortAxisMeasurementSpan | None:
-    top_fit = BoundaryPathFit(top)
-    bottom_fit = BoundaryPathFit(bottom)
-    common_extent = top_fit.orthogonal_extent.intersection(
-        bottom_fit.orthogonal_extent
-    )
-    if common_extent is None:
-        return None
-    top_bounds = top_fit.maximum_line.bounds_within(common_extent)
-    bottom_bounds = bottom_fit.minimum_line.bounds_within(common_extent)
-    top_interval = PixelInterval(*top_bounds)
-    bottom_interval = PixelInterval(*bottom_bounds)
-    if bottom_interval.minimum <= top_interval.maximum:
-        return None
-    return ShortAxisMeasurementSpan(
-        top=top_interval,
-        bottom=bottom_interval,
-        provenance=provenance,
-    )
-
-
-def shared_short_axis_plan(
-    search_scope: FrameSequenceSearchScope,
+def shared_short_axis_from_photo_edge_pair(
+    evidence: PhotoEdgePairEvidence,
+    workspace_long_axis_extent: int,
+    parameters: PhotoEdgeDetectionParameters,
 ) -> SharedShortAxisPlan:
-    unavailable = SharedShortAxisPlan(
-        top_photo_edge=None,
-        bottom_photo_edge=None,
-        span=None,
-        search_outcome=PhysicalSearchOutcome(
-            (PhysicalSearchFact.MEASUREMENTS_UNAVAILABLE,)
-        ),
-        provenance=search_scope.provenance,
-    )
-    paths = tuple(
-        path
-        for path in search_scope.raw_boundary_paths
-        if path.axis == BoundaryAxis.SHORT
-        and path.kind != BoundaryKind.EDGE_ADJACENT_TRANSITION
-    )
-    top_candidates = tuple(
-        path
-        for path in paths
-        if _path_contacts_active_image(path, BoundarySide.TOP)
-    )
-    bottom_candidates = tuple(
-        path
-        for path in paths
-        if _path_contacts_active_image(path, BoundarySide.BOTTOM)
-    )
-    scored = tuple(
-        (
-            _photo_edge_pair_score(top, bottom),
-            shared_short_axis_from_photo_edges(top, bottom),
-        )
-        for top in top_candidates
-        for bottom in bottom_candidates
-        if bottom.position.minimum > top.position.maximum
-    )
-    if not scored:
-        return unavailable
-    plans = tuple(plan for _, plan in scored)
-    if any(
-        not _same_photo_edge_pair(left, right)
-        for index, left in enumerate(plans)
-        for right in plans[index + 1 :]
-    ):
-        return unavailable
-    return max(
-        scored,
-        key=lambda item: (
-            item[0],
-            str(item[1].top_photo_edge.provenance.observation_id),
-            str(item[1].bottom_photo_edge.provenance.observation_id),
-        ),
-    )[1]
-
-
-def shared_short_axis_from_photo_edges(
-    top: GrayBoundaryPathObservation,
-    bottom: GrayBoundaryPathObservation,
-) -> SharedShortAxisPlan:
-    if (
-        top.kind == BoundaryKind.EDGE_ADJACENT_TRANSITION
-        or bottom.kind == BoundaryKind.EDGE_ADJACENT_TRANSITION
-        or not _path_contacts_active_image(top, BoundarySide.TOP)
-        or not _path_contacts_active_image(bottom, BoundarySide.BOTTOM)
-    ):
-        raise ValueError(
-            "shared short axis requires two qualified real-photo edges"
-        )
-    provenance = _span_provenance(top, bottom)
-    span = _inner_line_span(top, bottom, provenance)
-    if span is None:
+    if workspace_long_axis_extent <= 0:
+        raise ValueError("shared short-axis projection requires a positive domain")
+    provenance = _plan_provenance(evidence)
+    if evidence.selected_candidates is None:
         return SharedShortAxisPlan(
-            top_photo_edge=top,
-            bottom_photo_edge=bottom,
+            photo_edge_pair_id=evidence.observation_id,
             span=None,
-            search_outcome=PhysicalSearchOutcome(
-                (PhysicalSearchFact.MEASUREMENTS_UNAVAILABLE,)
-            ),
+            outcome=SharedShortAxisOutcome.PHOTO_EDGE_PAIR_UNAVAILABLE,
+            position_uncertainty_px=None,
             provenance=provenance,
         )
+    top_candidate, bottom_candidate = evidence.selected_candidates
+    top_line = photo_edge_inner_line(top_candidate, side=BoundarySide.TOP)
+    bottom_line = photo_edge_inner_line(
+        bottom_candidate,
+        side=BoundarySide.BOTTOM,
+    )
+    coordinates = (0.0, float(workspace_long_axis_extent))
+    top_positions = tuple(
+        top_line.position_interval_at(coordinate)
+        for coordinate in coordinates
+    )
+    bottom_positions = tuple(
+        bottom_line.position_interval_at(coordinate)
+        for coordinate in coordinates
+    )
+    top = PixelInterval(
+        min(item.minimum for item in top_positions),
+        max(item.maximum for item in top_positions),
+    )
+    bottom = PixelInterval(
+        min(item.minimum for item in bottom_positions),
+        max(item.maximum for item in bottom_positions),
+    )
+    if bottom.minimum <= top.maximum:
+        return SharedShortAxisPlan(
+            photo_edge_pair_id=evidence.observation_id,
+            span=None,
+            outcome=SharedShortAxisOutcome.MAPPED_GEOMETRY_CONTRADICTED,
+            position_uncertainty_px=None,
+            provenance=provenance,
+        )
+    height = bottom.minus(top)
+    uncertainty = (
+        top.maximum
+        - top.minimum
+        + bottom.maximum
+        - bottom.minimum
+    )
+    uncertainty_limit = max(
+        parameters.shared_axis_uncertainty_floor_px,
+        height.midpoint * parameters.maximum_shared_axis_uncertainty_ratio,
+    )
+    if uncertainty > uncertainty_limit:
+        return SharedShortAxisPlan(
+            photo_edge_pair_id=evidence.observation_id,
+            span=None,
+            outcome=(
+                SharedShortAxisOutcome.EXTRAPOLATION_UNCERTAINTY_TOO_LARGE
+            ),
+            position_uncertainty_px=None,
+            provenance=provenance,
+        )
+    span = ShortAxisMeasurementSpan(
+        top=top,
+        bottom=bottom,
+        provenance=provenance,
+    )
     return SharedShortAxisPlan(
-        top_photo_edge=top,
-        bottom_photo_edge=bottom,
+        photo_edge_pair_id=evidence.observation_id,
         span=span,
-        search_outcome=PhysicalSearchOutcome((PhysicalSearchFact.SOLUTION_FOUND,)),
+        outcome=SharedShortAxisOutcome.SUPPORTED,
+        position_uncertainty_px=uncertainty,
         provenance=provenance,
     )
 

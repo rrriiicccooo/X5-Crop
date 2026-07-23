@@ -11,9 +11,11 @@ from ..configuration.candidate import CandidatePlanParameters
 from ..configuration.boundary import BoundaryPathParameters
 from ..configuration.content import ContentConfiguration
 from ..configuration.diagnostics import DiagnosticsConfiguration
+from ..configuration.photo_edges import PhotoEdgeDetectionParameters
 from ..configuration.preprocess import PreprocessConfiguration
 from ..configuration.separator import SeparatorConfiguration
-from ..configuration.transform import DeskewDetectionParameters
+from ..configuration.scan_canvas import ScanCanvasDetectionConfiguration
+from ..configuration.transform import TransformDetectionParameters
 from ..detection.decision.vocabulary import FINAL_REVIEW_REASONS
 from ..detection.candidate.assessment.model import (
     CandidateGateAssessment,
@@ -35,6 +37,7 @@ from ..detection.candidate.selection.model import (
 from ..detection.geometry_resolution import GeometryResolution
 from ..detection.final.model import FinalizationPlan, frame_export_eligibility
 from ..detection.gate_checks import GateCheck, GateRequirement, GateStage
+from ..detection.evidence.photo_edges import PhotoEdgePairEvidence
 from ..detection.evidence.transform_geometry import TransformGeometryEvidence
 from ..detection.physical.lane_divider import LaneDividerEvidence
 from ..detection.physical.short_axis import SharedShortAxisPlan
@@ -56,13 +59,13 @@ from ..image.workspace import WorkspaceIdentity
 from ..io.model import ImageProfile
 from ..formats import FrameSizeMm
 from ..output.model import FrameBleedPlan, OutputGeometry
-from ..units import ResolutionMetadataObservation
+from ..detection.evidence.scan_canvas import ScanCanvasEvidence
 from .identity import (
     REPORT_SCHEMA_ID,
     REPORT_SCHEMA_REVISION,
     runtime_facts_sha256,
 )
-from .read_models import typed_read_model
+from .read_models import scan_canvas_evidence_read_model, typed_read_model
 
 
 CURRENT_REPORT_SECTIONS = (
@@ -236,6 +239,22 @@ def _typed_value_valid(value: Any, annotation: Any) -> bool:
     except (KeyError, TypeError, ValueError):
         return False
     return True
+
+
+def _scan_canvas_evidence_valid(value: Any) -> bool:
+    if not isinstance(value, dict):
+        return False
+    base_fields = {field.name for field in fields(ScanCanvasEvidence)}
+    if not base_fields.issubset(value):
+        return False
+    try:
+        evidence = _typed_value_from_read_model(
+            {name: value[name] for name in base_fields},
+            ScanCanvasEvidence,
+        )
+    except (KeyError, TypeError, ValueError):
+        return False
+    return value == scan_canvas_evidence_read_model(evidence)
 
 
 def _integer(value: Any) -> int | None:
@@ -610,25 +629,28 @@ def _input_valid(value: Any) -> bool:
         and set(value) == {
             "profile",
             "workspace_identity",
-            "resolution_metadata",
+            "scan_canvas_evidence",
             "transform_geometry",
-            "source_shared_short_axes",
+            "source_photo_edge_pairs",
+            "mapped_photo_edge_pairs",
             "shared_short_axes",
             "source_lane_divider",
             "lane_divider",
         }
         and _typed_value_valid(value["profile"], ImageProfile)
         and _typed_value_valid(value["workspace_identity"], WorkspaceIdentity)
-        and _typed_value_valid(
-            value["resolution_metadata"], ResolutionMetadataObservation
-        )
+        and _scan_canvas_evidence_valid(value["scan_canvas_evidence"])
         and _typed_value_valid(
             value["transform_geometry"],
             TransformGeometryEvidence,
         )
         and _typed_value_valid(
-            value["source_shared_short_axes"],
-            tuple[SharedShortAxisPlan, ...],
+            value["source_photo_edge_pairs"],
+            tuple[PhotoEdgePairEvidence, ...],
+        )
+        and _typed_value_valid(
+            value["mapped_photo_edge_pairs"],
+            tuple[PhotoEdgePairEvidence, ...],
         )
         and _typed_value_valid(
             value["shared_short_axes"],
@@ -667,9 +689,11 @@ def _configuration_valid(value: Any) -> bool:
         "complete_strip_can_be_underfilled",
     }
     measurement_fields = {
+        "scan_canvas",
         "boundary_path",
         "preprocess",
-        "deskew",
+        "photo_edges",
+        "transform",
         "separator",
         "content",
     }
@@ -737,11 +761,22 @@ def _configuration_valid(value: Any) -> bool:
         and isinstance(measurement, dict)
         and set(measurement) == measurement_fields
         and _typed_value_valid(
+            measurement["scan_canvas"],
+            ScanCanvasDetectionConfiguration,
+        )
+        and _typed_value_valid(
             measurement["boundary_path"],
             BoundaryPathParameters,
         )
         and _typed_value_valid(measurement["preprocess"], PreprocessConfiguration)
-        and _typed_value_valid(measurement["deskew"], DeskewDetectionParameters)
+        and _typed_value_valid(
+            measurement["photo_edges"],
+            PhotoEdgeDetectionParameters,
+        )
+        and _typed_value_valid(
+            measurement["transform"],
+            TransformDetectionParameters,
+        )
         and _typed_value_valid(measurement["separator"], SeparatorConfiguration)
         and _typed_value_valid(measurement["content"], ContentConfiguration)
         and isinstance(execution, dict)

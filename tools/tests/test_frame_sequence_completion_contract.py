@@ -28,7 +28,7 @@ from x5crop.detection.physical.model import (
     FrameSlot,
     ResolvedFrameBoundary,
 )
-from x5crop.detection.physical.short_axis import shared_short_axis_plan
+from tools.tests.photo_edge_support import shared_short_axis_fixture
 from x5crop.domain import (
     BoundaryAxis,
     BoundarySide,
@@ -58,7 +58,7 @@ class FrameSequenceCompletionContractTest(unittest.TestCase):
             internal_paths=(100.0, 110.0, 210.0, 220.0, 320.0, 330.0),
             holder_sides=_ALL_HOLDER_SIDES,
         )
-        plan = shared_short_axis_plan(search_scope)
+        plan = shared_short_axis_fixture(search_scope)
         supports = (
             separator(100.0, 110.0, plan, supported=True),
             separator(210.0, 220.0, plan, supported=True),

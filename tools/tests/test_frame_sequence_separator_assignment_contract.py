@@ -18,7 +18,7 @@ from x5crop.detection.physical.model import (
     FrameBoundarySource,
     ResolvedFrameBoundary,
 )
-from x5crop.detection.physical.short_axis import shared_short_axis_plan
+from tools.tests.photo_edge_support import shared_short_axis_fixture
 from x5crop.domain import (
     BoundaryAxis,
     BoundarySide,
@@ -50,7 +50,7 @@ class FrameSequenceSeparatorAssignmentContractTest(unittest.TestCase):
             bottom=100.0,
             holder_sides=_HOLDER_SIDES,
         )
-        self.short_axis = shared_short_axis_plan(self.search_scope)
+        self.short_axis = shared_short_axis_fixture(self.search_scope)
 
     def test_one_sided_path_is_a_boundary_anchor_not_a_hard_separator(
         self,

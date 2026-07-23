@@ -35,7 +35,7 @@ from x5crop.detection.physical.model import (
     FrameBoundarySource,
     ResolvedFrameBoundary,
 )
-from x5crop.detection.physical.short_axis import shared_short_axis_plan
+from tools.tests.photo_edge_support import shared_short_axis_fixture
 from x5crop.domain import (
     BoundaryAxis,
     BoundarySide,
@@ -74,7 +74,7 @@ class FrameSequenceBoundaryRolesContractTest(unittest.TestCase):
             for path in search_scope.raw_boundary_paths
             if path.axis == BoundaryAxis.LONG
         }
-        plan = shared_short_axis_plan(search_scope)
+        plan = shared_short_axis_fixture(search_scope)
         separator_support = separator(210.0, 220.0, plan, supported=True)
 
         def raw(position: float, interval: PixelInterval) -> EdgeConstraint:
@@ -210,7 +210,7 @@ class FrameSequenceBoundaryRolesContractTest(unittest.TestCase):
             internal_paths=(100.0,),
             holder_sides=_ALL_HOLDER_SIDES,
         )
-        plan = shared_short_axis_plan(search_scope)
+        plan = shared_short_axis_fixture(search_scope)
         gray_path = next(
             observation
             for observation in search_scope.raw_boundary_paths
@@ -272,7 +272,7 @@ class FrameSequenceBoundaryRolesContractTest(unittest.TestCase):
             bottom=100.0,
             holder_sides=_ALL_HOLDER_SIDES,
         )
-        plan = shared_short_axis_plan(search_scope)
+        plan = shared_short_axis_fixture(search_scope)
         holder_band = separator(100.0, 300.0, plan, supported=True)
 
         search_index = sequence_search_index(search_scope, (holder_band,))
@@ -520,7 +520,7 @@ class FrameSequenceBoundaryRolesContractTest(unittest.TestCase):
             bottom=100.0,
             holder_sides=_ALL_HOLDER_SIDES,
         )
-        plan = shared_short_axis_plan(search_scope)
+        plan = shared_short_axis_fixture(search_scope)
         supports = (
             separator(110.0, 120.0, plan, supported=True),
             separator(220.0, 230.0, plan, supported=True),
@@ -636,7 +636,7 @@ class FrameSequenceBoundaryRolesContractTest(unittest.TestCase):
             height=100,
             runs=((0, 100), (110, 210), (220, 320), (330, 430), (440, 540)),
         )
-        plan = shared_short_axis_plan(search_scope)
+        plan = shared_short_axis_fixture(search_scope)
         supports = tuple(
             separator(start, end, plan, supported=True)
             for start, end in ((100, 110), (210, 220), (320, 330), (430, 440))

@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from pathlib import Path
-import numpy as np
 
 from ..detection.final.model import FinalDetection
 from ..detection.candidate.model import AssessedCandidate
+from ..detection.workspace import DetectionWorkspace
 from ..configuration.diagnostics import DiagnosticsConfiguration
 from ..run_status import RunTerminalOutcome
 from .canvas import DebugRenderCache, write_rgb_jpeg
@@ -13,7 +13,7 @@ from .status import add_status_bar
 
 
 def write_debug_preview(
-    gray: np.ndarray,
+    workspace: DetectionWorkspace,
     detection: FinalDetection,
     selected_candidate: AssessedCandidate,
     output_path: Path,
@@ -23,7 +23,7 @@ def write_debug_preview(
 ) -> None:
     rgb = add_status_bar(
         make_debug_preview_rgb(
-            gray,
+            workspace,
             detection,
             selected_candidate,
             diagnostics.style,
@@ -37,7 +37,7 @@ def write_debug_preview(
 
 
 def write_debug_analysis(
-    gray: np.ndarray,
+    workspace: DetectionWorkspace,
     detection: FinalDetection,
     selected_candidate: AssessedCandidate,
     output_dir: Path,
@@ -50,7 +50,7 @@ def write_debug_analysis(
     panel_path = analysis_dir / f"{stem}_debug_analysis.jpg"
     write_rgb_jpeg(
         make_debug_analysis_panel(
-            gray,
+            workspace,
             detection,
             selected_candidate,
             diagnostics,

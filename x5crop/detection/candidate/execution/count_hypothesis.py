@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from ....domain import (
     FrameSequenceSearchScope,
+    PhysicalSearchFact,
     PhysicalSearchOutcome,
     combined_physical_search_outcome,
 )
@@ -26,10 +27,30 @@ def _assess_count_hypothesis(
     sequence_observations: FrameSequenceObservations,
     visible_content: ContentRegionObservation,
 ) -> tuple[list[AssessedCandidate], PhysicalSearchOutcome]:
-    outcomes = []
-    for dimensions in frame_dimension_search_priors(
+    try:
+        pair_index = context.workspace.shared_short_axes.index(
+            short_axis_plan
+        )
+    except ValueError as exc:
+        raise ValueError(
+            "count hypothesis requires an owned shared short axis"
+        ) from exc
+    pair_evidence = context.workspace.mapped_photo_edge_pairs[pair_index]
+    physical_selection = pair_evidence.physical_selection
+    dimension_priors = frame_dimension_search_priors(
         context.configuration.physical_spec,
-    ):
+        (
+            None
+            if physical_selection is None
+            else physical_selection.frame_size_mm
+        ),
+    )
+    if not dimension_priors:
+        return [], PhysicalSearchOutcome(
+            (PhysicalSearchFact.MEASUREMENTS_UNAVAILABLE,)
+        )
+    outcomes = []
+    for dimensions in dimension_priors:
         outcome = build_sequence_candidate(
             context.request,
             context.configuration.physical_spec,

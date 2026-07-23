@@ -16,9 +16,13 @@ from x5crop.detection.physical.model import (
     ResolvedFrameBoundary,
 )
 from x5crop.detection.physical.short_axis import (
+    SharedShortAxisOutcome,
     SharedShortAxisPlan,
-    shared_short_axis_from_photo_edges,
-    shared_short_axis_plan,
+)
+from tools.tests.photo_edge_support import (
+    photo_edge_pair_fixture,
+    shared_short_axis_fixture,
+    shared_short_axis_fixture_from_edges,
 )
 from x5crop.domain import (
     BoundaryAxis,
@@ -38,9 +42,7 @@ from x5crop.domain import (
     MeasurementProvenance,
     ObservationId,
     PhysicalSearchFact,
-    PhysicalSearchOutcome,
     PixelInterval,
-    ShortAxisMeasurementSpan,
 )
 from x5crop.image.content import ContentRegionObservation
 
@@ -216,12 +218,12 @@ class FrameSlotSequenceContractTest(unittest.TestCase):
             photo_inside=True,
         )
 
-        plan = shared_short_axis_plan(_search_scope(top=top, bottom=bottom))
+        plan = shared_short_axis_fixture(_search_scope(top=top, bottom=bottom))
+        evidence = photo_edge_pair_fixture(top, bottom)
 
         self.assertIsInstance(plan, SharedShortAxisPlan)
         self.assertTrue(plan.supports_safe_crop)
-        self.assertIs(plan.top_photo_edge, top)
-        self.assertIs(plan.bottom_photo_edge, bottom)
+        self.assertEqual(plan.photo_edge_pair_id, evidence.observation_id)
         self.assertEqual(plan.top, PixelInterval.exact(20.0))
         self.assertEqual(plan.bottom, PixelInterval.exact(180.0))
 
@@ -237,7 +239,7 @@ class FrameSlotSequenceContractTest(unittest.TestCase):
             raw_boundary_paths=paths,
         )
 
-        plan = shared_short_axis_plan(search_scope)
+        plan = shared_short_axis_fixture(search_scope)
 
         self.assertTrue(plan.supports_safe_crop)
 
@@ -253,11 +255,13 @@ class FrameSlotSequenceContractTest(unittest.TestCase):
             raw_boundary_paths=paths,
         )
 
-        plan = shared_short_axis_plan(search_scope)
+        plan = shared_short_axis_fixture(search_scope)
 
         self.assertFalse(plan.supports_safe_crop)
-        self.assertIsNone(plan.top_photo_edge)
-        self.assertIsNone(plan.bottom_photo_edge)
+        self.assertEqual(
+            plan.outcome,
+            SharedShortAxisOutcome.PHOTO_EDGE_PAIR_UNAVAILABLE,
+        )
 
     def test_single_edge_never_manufactures_containment_coordinates(self) -> None:
         top = _short_path(
@@ -267,13 +271,13 @@ class FrameSlotSequenceContractTest(unittest.TestCase):
             photo_inside=True,
         )
 
-        plan = shared_short_axis_plan(_search_scope(top=top, bottom=None))
+        plan = shared_short_axis_fixture(_search_scope(top=top, bottom=None))
 
         self.assertFalse(plan.supports_safe_crop)
         self.assertIsNone(plan.span)
         self.assertIn(
             PhysicalSearchFact.MEASUREMENTS_UNAVAILABLE,
-            plan.search_outcome.facts,
+            plan.physical_search.facts,
         )
 
     def test_holder_edges_cannot_resolve_shared_short_axis(self) -> None:
@@ -290,58 +294,46 @@ class FrameSlotSequenceContractTest(unittest.TestCase):
             photo_inside=False,
         )
 
-        plan = shared_short_axis_plan(_search_scope(top=top, bottom=bottom))
+        plan = shared_short_axis_fixture(_search_scope(top=top, bottom=bottom))
 
         self.assertFalse(plan.supports_safe_crop)
-        self.assertIsNone(plan.top_photo_edge)
-        self.assertIsNone(plan.bottom_photo_edge)
+        self.assertEqual(
+            plan.outcome,
+            SharedShortAxisOutcome.PHOTO_EDGE_PAIR_UNAVAILABLE,
+        )
 
         with self.assertRaises(ValueError):
-            shared_short_axis_from_photo_edges(top, bottom)
-        forged_provenance = _provenance("forged_holder_short_axis")
-        with self.assertRaises(ValueError):
-            SharedShortAxisPlan(
-                top_photo_edge=top,
-                bottom_photo_edge=bottom,
-                span=ShortAxisMeasurementSpan(
-                    top=PixelInterval.exact(20.0),
-                    bottom=PixelInterval.exact(180.0),
-                    provenance=forged_provenance,
-                ),
-                search_outcome=PhysicalSearchOutcome(
-                    (PhysicalSearchFact.SOLUTION_FOUND,)
-                ),
-                provenance=forged_provenance,
-            )
+            shared_short_axis_fixture_from_edges(top, bottom)
 
-    def test_shared_short_axis_span_cannot_diverge_from_photo_inner_lines(
+    def test_shared_short_axis_references_pair_without_copying_edges(
         self,
     ) -> None:
-        plan = shared_short_axis_from_photo_edges(
-            _short_path(
-                BoundarySide.TOP,
-                20.0,
-                "top_photo_edge_for_span_contract",
-                photo_inside=True,
-            ),
-            _short_path(
-                BoundarySide.BOTTOM,
-                180.0,
-                "bottom_photo_edge_for_span_contract",
-                photo_inside=True,
-            ),
+        top = _short_path(
+            BoundarySide.TOP,
+            20.0,
+            "top_photo_edge_for_reference_contract",
+            photo_inside=True,
         )
-        with self.assertRaises(ValueError):
-            replace(
-                plan,
-                span=ShortAxisMeasurementSpan(
-                    top=PixelInterval.exact(0.0),
-                    bottom=PixelInterval.exact(200.0),
-                    provenance=plan.provenance,
-                ),
-            )
+        bottom = _short_path(
+            BoundarySide.BOTTOM,
+            180.0,
+            "bottom_photo_edge_for_reference_contract",
+            photo_inside=True,
+        )
+        evidence = photo_edge_pair_fixture(top, bottom)
+        plan = shared_short_axis_fixture_from_edges(top, bottom)
 
-    def test_every_frame_crop_reuses_one_shared_short_axis_plan(self) -> None:
+        self.assertEqual(plan.photo_edge_pair_id, evidence.observation_id)
+        self.assertNotIn(
+            "top_photo_edge",
+            SharedShortAxisPlan.__dataclass_fields__,
+        )
+        self.assertNotIn(
+            "bottom_photo_edge",
+            SharedShortAxisPlan.__dataclass_fields__,
+        )
+
+    def test_every_frame_crop_reuses_one_shared_short_axis_fixture(self) -> None:
         geometry = candidate_fixture().geometry
         plan = geometry.shared_short_axis
 

@@ -9,10 +9,9 @@ from ...geometry.affine import AffineCoordinateTransform
 
 
 class TransformOutcome(str, Enum):
-    PHOTO_EDGES_UNAVAILABLE = "photo_edges_unavailable"
-    INSUFFICIENT_COMMON_SUPPORT = "insufficient_common_support"
+    PHOTO_EDGE_PAIR_UNAVAILABLE = "photo_edge_pair_unavailable"
+    ANGLE_ESTIMATION_UNAVAILABLE = "angle_estimation_unavailable"
     EDGE_SLOPES_DISAGREE = "edge_slopes_disagree"
-    EDGE_FIT_HIGH_RESIDUAL = "edge_fit_high_residual"
     IDENTITY_WITHIN_TOLERANCE = "identity_within_tolerance"
     DESKEW_APPLIED = "deskew_applied"
     ANGLE_OUT_OF_RANGE = "angle_out_of_range"
@@ -88,8 +87,8 @@ class TransformGeometryEvidence:
         }:
             return EvidenceState.SUPPORTED
         if self.outcome in {
-            TransformOutcome.PHOTO_EDGES_UNAVAILABLE,
-            TransformOutcome.INSUFFICIENT_COMMON_SUPPORT,
+            TransformOutcome.PHOTO_EDGE_PAIR_UNAVAILABLE,
+            TransformOutcome.ANGLE_ESTIMATION_UNAVAILABLE,
         }:
             return EvidenceState.UNAVAILABLE
         return EvidenceState.CONTRADICTED

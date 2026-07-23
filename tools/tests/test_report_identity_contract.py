@@ -9,7 +9,6 @@ from tools.tests.physical_gate_support import (
     detection_workspace_fixture,
     frame_bleed_fixture,
     selection_fixture,
-    unavailable_resolution_metadata_fixture,
 )
 from tools.tests.test_output_read_model_contract import (
     _analysis_identity,
@@ -74,6 +73,7 @@ class ReportIdentityContractTest(unittest.TestCase):
             apply_decision_gate(
                 selection,
                 frame_bleed,
+                workspace.scan_canvas_evidence,
                 transform,
                 automatic_processing_eligibility=EvidenceState.SUPPORTED,
             ),
@@ -95,7 +95,6 @@ class ReportIdentityContractTest(unittest.TestCase):
             configuration=detection_configuration_read_model(
                 get_detection_configuration("135", "partial")
             ),
-            resolution_metadata=unavailable_resolution_metadata_fixture(),
             analysis_identity=_analysis_identity(
                 workspace_shape=(120, 330),
                 workspace_identity=workspace.identity,
@@ -135,6 +134,7 @@ class ReportIdentityContractTest(unittest.TestCase):
             apply_decision_gate(
                 selection,
                 frame_bleed,
+                workspace.scan_canvas_evidence,
                 transform,
                 automatic_processing_eligibility=EvidenceState.SUPPORTED,
             ),
@@ -156,7 +156,6 @@ class ReportIdentityContractTest(unittest.TestCase):
             configuration=detection_configuration_read_model(
                 get_detection_configuration("135", "partial")
             ),
-            resolution_metadata=unavailable_resolution_metadata_fixture(),
             analysis_identity=_analysis_identity(
                 workspace_identity=workspace.identity,
             ),

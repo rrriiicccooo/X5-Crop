@@ -32,9 +32,6 @@ from ..output.surface import output_surface_for_input
 from ..report.configuration import detection_configuration_read_model
 from ..configuration.bundle import DetectionConfigurationBundle
 from ..report.result_builder import result_from_detection
-from ..units import (
-    resolution_metadata_observation,
-)
 from ..utils import spatial_shape_from_shape
 from .outcome import (
     CompletedInput,
@@ -60,7 +57,7 @@ def process_one(
     output_surface = output_surface_for_input(input_file, config)
     output_dir = output_surface.root
     artifacts = RuntimeArtifacts.empty()
-    gray = None
+    workspace = None
     detection = None
     selected_candidate = None
     try:
@@ -75,10 +72,6 @@ def process_one(
         source_arr = arr
 
         _extend_unique(warnings, page_warnings)
-        resolution_metadata = resolution_metadata_observation(
-            profile.resolution,
-            profile.resolution_unit,
-        )
         failure_stage = FailureStage.DETECTION
         detection_started_at = perf_counter()
         try:
@@ -99,7 +92,6 @@ def process_one(
                 measurement_cache_statistics,
             )
             arr = workspace.pixels
-            gray = workspace.gray
             transform_geometry = workspace.transform_geometry
             measurement_cache = workspace.measurement_cache
             if transform_geometry.applied:
@@ -142,6 +134,7 @@ def process_one(
         decided_detection = apply_decision_gate(
             selection,
             frame_bleed,
+            workspace.scan_canvas_evidence,
             transform_geometry,
             automatic_processing_eligibility=(
                 EvidenceState.SUPPORTED
@@ -185,7 +178,7 @@ def process_one(
 
         failure_stage = FailureStage.DEBUG
         debug_analysis = write_debug_outputs(
-            gray,
+            workspace,
             detection,
             selected_candidate,
             output_dir,
@@ -208,7 +201,6 @@ def process_one(
             artifacts.review_copy,
             warnings,
             configuration_detail=configuration_detail,
-            resolution_metadata=resolution_metadata,
             analysis_identity=analysis_identity,
         )
         return CompletedInput(
@@ -225,13 +217,13 @@ def process_one(
         traceback_text = traceback.format_exc()
         if (
             detection is not None
-            and gray is not None
+            and workspace is not None
             and selected_candidate is not None
             and failure_stage != FailureStage.DEBUG
         ):
             try:
                 debug_analysis = write_debug_outputs(
-                    gray,
+                    workspace,
                     detection,
                     selected_candidate,
                     output_dir,

@@ -24,6 +24,7 @@ class DecisionOwnershipSourceContractTest(unittest.TestCase):
         for name in (
             "selection",
             "frame_bleed_plan",
+            "scan_canvas_evidence",
             "transform_geometry",
         ):
             self.assertIs(parameters[name].default, Parameter.empty)
@@ -32,6 +33,7 @@ class DecisionOwnershipSourceContractTest(unittest.TestCase):
             (
                 "selection",
                 "frame_bleed_plan",
+                "scan_canvas_evidence",
                 "transform_geometry",
                 "automatic_processing_eligibility",
             ),

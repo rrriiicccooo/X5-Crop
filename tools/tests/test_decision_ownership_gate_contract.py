@@ -7,12 +7,14 @@ from tools.tests.physical_gate_support import (
     candidate_fixture,
     candidate_gate_fixture,
     decide_candidate,
+    detection_workspace_fixture,
     final_detection_fixture,
     frame_bleed_fixture,
     review_only_candidate_fixture,
     selection_fixture,
     transform_geometry_fixture,
 )
+from x5crop.configuration.registry import get_detection_configuration
 from x5crop.detection.decision.decision_gate import apply_decision_gate
 from x5crop.detection.decision.vocabulary import (
     FINAL_REASON_AUTOMATIC_PROCESSING_NOT_SUPPORTED,
@@ -21,6 +23,7 @@ from x5crop.detection.decision.vocabulary import (
     FINAL_REASON_CONTENT_PRESERVATION_UNRESOLVED,
     FINAL_REASON_GEOMETRY_RESOLUTION_UNAVAILABLE,
     FINAL_REASON_OUTPUT_PROTECTION_UNRESOLVED,
+    FINAL_REASON_SCAN_CANVAS_PROFILE_UNRESOLVED,
     FINAL_REASON_SELECTION_GEOMETRY_DISAGREEMENT,
     FINAL_REASON_TRANSFORM_GEOMETRY_UNCERTAIN,
 )
@@ -30,6 +33,7 @@ from x5crop.domain import (
     PhysicalSearchOutcome,
 )
 from x5crop.detection.decision.model import DecisionGateAssessment
+from x5crop.detection.evidence.scan_canvas import observe_scan_canvas
 
 
 class DecisionOwnershipGateContractTest(unittest.TestCase):
@@ -162,6 +166,7 @@ class DecisionOwnershipGateContractTest(unittest.TestCase):
                 decided = apply_decision_gate(
                     replace(base, geometry_resolution=resolution),
                     frame_bleed_fixture(),
+                    detection_workspace_fixture().scan_canvas_evidence,
                     transform_geometry_fixture(),
                     automatic_processing_eligibility=EvidenceState.SUPPORTED,
                 )
@@ -191,6 +196,63 @@ class DecisionOwnershipGateContractTest(unittest.TestCase):
             decided.final_review_reasons,
         )
 
+    def test_transform_uncertainty_remains_blocking_before_count_resolution(
+        self,
+    ) -> None:
+        selection = selection_fixture()
+        selection = replace(
+            selection,
+            geometry_resolution=replace(
+                selection.geometry_resolution,
+                larger_count_search_complete=False,
+            ),
+        )
+
+        decided = apply_decision_gate(
+            selection,
+            frame_bleed_fixture(),
+            detection_workspace_fixture().scan_canvas_evidence,
+            transform_geometry_fixture(EvidenceState.UNAVAILABLE),
+            automatic_processing_eligibility=EvidenceState.SUPPORTED,
+        )
+        check = next(
+            item
+            for item in decided.checks
+            if item.code == "transform_geometry_integrity"
+        )
+
+        self.assertEqual(check.state, EvidenceState.UNAVAILABLE)
+        self.assertEqual(
+            check.requirement.value,
+            "supported_required",
+        )
+        self.assertTrue(check.blocks)
+        self.assertIn(
+            FINAL_REASON_TRANSFORM_GEOMETRY_UNCERTAIN,
+            decided.final_review_reasons,
+        )
+
+    def test_unresolved_known_scan_canvas_blocks_with_owned_reason(self) -> None:
+        canvas = observe_scan_canvas(
+            1_000,
+            1_000,
+            "horizontal",
+            get_detection_configuration("135", "full").scan_canvas,
+        )
+        decided = apply_decision_gate(
+            selection_fixture(),
+            frame_bleed_fixture(),
+            canvas,
+            transform_geometry_fixture(),
+            automatic_processing_eligibility=EvidenceState.SUPPORTED,
+        )
+
+        self.assertEqual(decided.status, "needs_review")
+        self.assertIn(
+            FINAL_REASON_SCAN_CANVAS_PROFILE_UNRESOLVED,
+            decided.final_review_reasons,
+        )
+
     def test_review_only_mode_blocks_automatic_processing(self) -> None:
         decided = decide_candidate(
             review_only_candidate_fixture(),
@@ -206,6 +268,7 @@ class DecisionOwnershipGateContractTest(unittest.TestCase):
         decided = apply_decision_gate(
             selection,
             frame_bleed_fixture(),
+            detection_workspace_fixture().scan_canvas_evidence,
             transform_geometry_fixture(),
             automatic_processing_eligibility=EvidenceState.SUPPORTED,
         )

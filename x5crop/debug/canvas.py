@@ -18,9 +18,6 @@ class DebugRenderCache:
     previews: dict[tuple[str, int], tuple[np.ndarray, float]] = field(
         default_factory=dict
     )
-    labeled_panels: dict[tuple[str, str, int], np.ndarray] = field(
-        default_factory=dict
-    )
 
 
 FRAME_FILL_COLORS = (
@@ -67,36 +64,6 @@ def cached_preview_gray(
         return rgb, scale
     rgb, scale = cached
     return rgb.copy(), float(scale)
-
-
-def cached_labeled_preview_gray(
-    cache: DebugRenderCache,
-    key: str,
-    label: str,
-    gray: np.ndarray,
-    max_side: int,
-    label_height: int,
-    label_origin: tuple[int, int],
-    background: int,
-    text_color: tuple[int, int, int],
-) -> tuple[np.ndarray, float]:
-    cache_key = (str(key), str(label), int(max_side))
-    cached = cache.labeled_panels.get(cache_key)
-    if cached is None:
-        rgb, scale = cached_preview_gray(cache, key, gray, max_side)
-        labeled = add_panel_label(
-            rgb,
-            label,
-            height=label_height,
-            origin=label_origin,
-            background=background,
-            text_color=text_color,
-        )
-        cache.labeled_panels[cache_key] = labeled.copy()
-        return labeled, scale
-    preview = cache.previews.get((str(key), int(max_side)))
-    scale = float(preview[1]) if preview is not None else 1.0
-    return cached.copy(), float(scale)
 
 
 def draw_preview_rect(
@@ -174,6 +141,55 @@ def draw_preview_line(
         max(0, y - t // 2):min(h, y + (t + 1) // 2),
         left:right,
     ] = color
+
+
+def draw_preview_segment(
+    rgb: np.ndarray,
+    start: tuple[float, float],
+    end: tuple[float, float],
+    scale: float,
+    color: tuple[int, int, int],
+    thickness: int,
+    *,
+    dash_length: int | None = None,
+    dash_gap: int | None = None,
+) -> None:
+    points = tuple(
+        (float(x) * scale, float(y) * scale)
+        for x, y in (start, end)
+    )
+    image = Image.fromarray(rgb, mode="RGB")
+    draw = ImageDraw.Draw(image)
+    if dash_length is None or dash_gap is None:
+        draw.line(points, fill=color, width=max(1, int(thickness)))
+    else:
+        start_x, start_y = points[0]
+        end_x, end_y = points[1]
+        delta_x = end_x - start_x
+        delta_y = end_y - start_y
+        length = math.hypot(delta_x, delta_y)
+        if length > 0.0:
+            dash = max(1.0, float(dash_length))
+            period = dash + max(1.0, float(dash_gap))
+            offset = 0.0
+            while offset < length:
+                segment_end = min(length, offset + dash)
+                draw.line(
+                    (
+                        (
+                            start_x + delta_x * offset / length,
+                            start_y + delta_y * offset / length,
+                        ),
+                        (
+                            start_x + delta_x * segment_end / length,
+                            start_y + delta_y * segment_end / length,
+                        ),
+                    ),
+                    fill=color,
+                    width=max(1, int(thickness)),
+                )
+                offset += period
+    np.copyto(rgb, np.asarray(image))
 
 
 def draw_preview_dashed_line(

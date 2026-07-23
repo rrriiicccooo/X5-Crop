@@ -20,7 +20,94 @@ PASS/REVIEW outcomes, report fields, and crop geometry are not compatibility
 targets; real TIFFs, current reports, Debug Analysis, and current contracts are
 the validation evidence.
 
-### 2026-07-22 — Detection 所有的共享短轴 / Detection-Owned Shared Short Axis
+### 2026-07-23 — 片夹物理画布与照片边缘证据 / Physical Canvas And Photo-Edge Evidence
+
+- Added the sole `ScanCanvasPhysicalSpec` catalog for `135_standard`
+  (32.22 × 232 mm), `135_narrow` (25.4 × 232 mm), `120_standard`
+  (60 × 226 mm), `120_wide` (63.44 × 224.5 mm), and
+  `120_66_three_frame` (63.44 × 188.5 mm). A format-compatible profile is
+  selected from source pixel aspect with a 0.5% limit, then becomes the sole
+  `CanvasPixelScale`; no TIFF DPI interpretation or final-geometry scale
+  inference remains. / 新增唯一 `ScanCanvasPhysicalSpec` 目录，按 format 兼容集合与原图
+  像素长短比在 0.5% 限制内唯一匹配片夹画布，再生成唯一 `CanvasPixelScale`；TIFF DPI
+  不再被解释，也不再从最终几何反推尺度。
+- `FramePhysicalSpec` now keeps photo facts separate from holder-scan facts.
+  120-645, 120-66, and 120-67 retain discrete 54 mm / 56 mm short-axis options;
+  no 55 mm average is generated. The sole centered-band formula is
+  `(canvas_short_mm - photo_short_mm) / 2`, and theory constrains search but
+  never creates supported evidence. / 照片事实与片夹画布事实由不同 owner 保存；120 的
+  54/56 mm 是离散选项，不生成 55 mm 平均值。理论居中公式只约束搜索，不能生成
+  supported 证据；没有 selected pair 绑定时，frame solver 不选择默认 54/56。
+- Single-strip observation is now pair-first: each cross-section forms a
+  physically allowed top/bottom point pair before joint tracking. Equivalent
+  confidence tracks are merged deterministically; candidates retain at least
+  three sections, while supported pairs require five robust inliers per edge,
+  80% inliers, three supported local windows distributed across at least two of
+  three bins, role-specific photo-side structure on top/bottom inner sides,
+  compatible 95% slope intervals, and full physical-band containment. Holder
+  coincidence is neutral, scan extrema cannot self-prove, and a strong outer
+  holder transition without photo-side structure remains unavailable.
+  / 单条片夹先在每个截面形成物理允许的上下点对，再共同连接与确定性合并；pair 的局部
+  支持、稳健拟合、斜率和 95% 物理约束分别验证。holder 重合保持 neutral，扫描外沿不能
+  自证。
+- Removed the entire observed-leverage concept, including configuration,
+  calculation, report, comparison, and tests; no coverage ratio, photo-height
+  multiple, renamed substitute, generic short-axis boundary dependency, TIFF
+  resolution-evidence chain, or `FrameScaleObservation` remains. Observation
+  extent survives only as raw intervals, sample distribution, and fit
+  confidence. / 完整删除 observed leverage 及所有改名替代，也删除 photo-edge 对通用
+  boundary measurement 的依赖、TIFF resolution 证据链和重复 frame scale；观测范围只以
+  原始区间、样本分布和拟合置信带存在。
+- `PhotoEdgePairEvidence` is the sole edge-identity truth. Transform,
+  `SharedShortAxisPlan`, and frame-dimension validation consume it independently:
+  source edge identity may be supported while angle estimation or strip-wide
+  extrapolation remains unavailable. Affine correction maps the same evidence
+  and never re-observes a short axis. `DecisionGate` now always consumes the
+  actual canvas and transform states, even before count resolution. /
+  `PhotoEdgePairEvidence` 是唯一边缘身份真相；校斜、共享短轴和照片尺寸分别消费。同一
+  source pair 可以已成立而角度或整幅外推仍 unavailable；仿射后只映射不复测，
+  `DecisionGate` 始终消费真实 canvas/transform state。
+- `135-dual` remains `not_applicable` to fixed-canvas calibration. It resolves a
+  source divider and observes each lane from image evidence; only two unique
+  pairs with compatible angle intervals can produce one global correction. /
+  `135-dual` 不虚构统一物理画布，先解 source divider，再由两条 lane 的图像证据进入同一
+  pair 与消费模型。
+- The current-only report revision is `scan_canvas_photo_edge_evidence`. It
+  records canvas matching, effective px/mm, theoretical bands, retained
+  candidates plus typed summaries, source/mapped pair evidence, affine mapping,
+  shared-axis outcomes, and frame-size binding. Raw local section turns,
+  legacy deskew fields, resolution judgments, and duplicate scale fields are not
+  serialized. Debug Analysis now shows source physical evidence, mapped/shared
+  geometry, and long-axis evidence in three read-only panels. / 当前 report
+  revision 为 `scan_canvas_photo_edge_evidence`；不序列化局部 section 转折、旧 deskew、
+  DPI 判断或重复尺度字段。Debug 三联图只读显示 source、mapped/shared 和长轴证据。
+- Manual review remains paused. Existing candidate confirmations and rejections
+  are read-only regression seeds; runtime reads no whitelist, writes no new
+  human label, and never describes a machine-supported pair as human-confirmed.
+  / 人工审阅继续暂停；现有确认与否定只作只读回归种子，runtime 不读白名单、不写新标签，
+  也不把机器 supported 描述成人工确认。
+- Validation covers 832 contract/unit tests and all 14 format/mode
+  configurations. A fresh default-flow run produced 112 valid current-schema
+  reports and 112 readable Debug Analysis images: 69 `135_standard`, 8
+  `135_narrow`, 3 `120_standard`, and 32 `120_wide`; all 112 remain REVIEW.
+  All nine user-confirmed edge pairs are retained in one physically compatible
+  hypothesis, while no supported hypothesis overlaps the 41 scan-extrema or
+  S054/S061 empty-region rejection coordinates. Two independent S010 runs
+  compare with zero current-schema differences. These checks consume existing
+  labels only and create no new human confirmation. / 验证覆盖 832 项合同/单元测试与
+  14 组 format/mode 配置；全新默认流程生成 112 份有效 current-schema report 和
+  112 张可读 Debug Analysis，profile 计数为 69/8/3/32，全部保持 REVIEW。九组已有
+  人工确认的上下边缘均保留在同一物理兼容 hypothesis 中，任何 supported hypothesis
+  均不与 41 组扫描外沿及 S054/S061 空白区否定坐标重合；S010 两次独立运行的
+  current-schema 差异为零。这些检查只消费既有标签，不产生新人工确认。
+- Rollback must restore the complete physical catalog, detection model,
+  workspace, report schema, contracts, and documentation as one unit. Mixing
+  TIFF-DPI scale, generic short-axis paths, optional deskew, or an older report
+  model into this flow is unsupported. / 回滚必须整体恢复物理目录、检测模型、workspace、
+  report schema、合同与文档；不得混入 TIFF-DPI 尺度、通用短轴路径、可关闭 deskew 或旧
+  report 模型。
+
+### 2026-07-22 — 已被物理画布模型取代的共享短轴阶段 / Superseded Shared-Axis Stage
 
 - Deskew is now the mandatory first stage of detection. Detection measures two
   real source-photo inner edges once, creates the sole `SharedShortAxisPlan`,

@@ -53,7 +53,7 @@ from x5crop.detection.physical.model import (
     GeometryIdentityError,
     SeparatorBandAssignment,
 )
-from x5crop.detection.physical.short_axis import shared_short_axis_plan
+from tools.tests.photo_edge_support import shared_short_axis_fixture
 from x5crop.domain import (
     BoundaryAxis,
     BoundarySide,
@@ -89,7 +89,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             internal_paths=(100.0, 110.0, 210.0, 220.0, 320.0, 330.0),
             holder_sides=_ALL_HOLDER_SIDES,
         )
-        plan = shared_short_axis_plan(search_scope)
+        plan = shared_short_axis_fixture(search_scope)
         supports = tuple(
             separator(start, end, plan, supported=True)
             for start, end in (
@@ -215,7 +215,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             bottom=100.0,
             holder_sides=_ALL_HOLDER_SIDES,
         )
-        plan = shared_short_axis_plan(search_scope)
+        plan = shared_short_axis_fixture(search_scope)
         supports = (
             separator(90.0, 100.0, plan, supported=True),
             separator(290.0, 300.0, plan, supported=True),
@@ -275,7 +275,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             bottom=100.0,
             holder_sides=_ALL_HOLDER_SIDES,
         )
-        plan = shared_short_axis_plan(search_scope)
+        plan = shared_short_axis_fixture(search_scope)
         supports = tuple(
             separator(start, end, plan, supported=True)
             for start, end in (
@@ -377,7 +377,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             ),
             holder_sides=_ALL_HOLDER_SIDES,
         )
-        plan = shared_short_axis_plan(search_scope)
+        plan = shared_short_axis_fixture(search_scope)
         supports = (
             separator(100.0, 110.0, plan, supported=False),
             separator(210.0, 220.0, plan, supported=False),
@@ -421,7 +421,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             internal_paths=(540.0,),
             holder_sides=_ALL_HOLDER_SIDES,
         )
-        plan = shared_short_axis_plan(search_scope)
+        plan = shared_short_axis_fixture(search_scope)
         supports = tuple(
             separator(start, end, plan, supported=True)
             for start, end in (
@@ -457,7 +457,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             bottom=380.0,
             holder_sides=_ALL_HOLDER_SIDES,
         )
-        plan = shared_short_axis_plan(search_scope)
+        plan = shared_short_axis_fixture(search_scope)
         supports = (
             separator(10.0, 20.0, plan, supported=True),
             separator(470.0, 510.0, plan, supported=True),
@@ -519,7 +519,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
                 BoundarySide.BOTTOM: 100.0,
             },
         )
-        plan = shared_short_axis_plan(search_scope)
+        plan = shared_short_axis_fixture(search_scope)
         supports = (
             separator(100.0, 110.0, plan, supported=True),
             separator(210.0, 220.0, plan, supported=True),
@@ -569,7 +569,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
                 BoundarySide.BOTTOM: 100.0,
             },
         )
-        plan = shared_short_axis_plan(search_scope)
+        plan = shared_short_axis_fixture(search_scope)
         supports = (
             separator(210.0, 220.0, plan, supported=True),
             separator(400.0, 410.0, plan, supported=True),
@@ -618,7 +618,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
                 BoundarySide.BOTTOM: 100.0,
             },
         )
-        plan = shared_short_axis_plan(search_scope)
+        plan = shared_short_axis_fixture(search_scope)
         supports = (
             separator(0.0, 10.0, plan, supported=True),
             separator(210.0, 220.0, plan, supported=True),
@@ -666,7 +666,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             height=100,
             runs=((0, 100), (110, 210)),
         )
-        plan = shared_short_axis_plan(search_scope)
+        plan = shared_short_axis_fixture(search_scope)
         support = separator(100.0, 110.0, plan, supported=True)
 
         solved = solve_frame_sequence(
@@ -741,7 +741,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             internal_paths=(100.0, 110.0),
             holder_sides=_ALL_HOLDER_SIDES,
         )
-        plan = shared_short_axis_plan(search_scope)
+        plan = shared_short_axis_fixture(search_scope)
 
         solved = solve_sequence(
             search_scope=search_scope,
@@ -772,7 +772,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             holder_sides=_ALL_HOLDER_SIDES,
         )
 
-        plan = shared_short_axis_plan(search_scope)
+        plan = shared_short_axis_fixture(search_scope)
         supports = tuple(
             separator(start, end, plan, supported=True)
             for start, end in ((100.0, 110.0), (210.0, 220.0), (320.0, 330.0))
@@ -801,7 +801,9 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             (2, 3),
         )
         dimension_evidence = frame_dimension_evidence(
-            geometry(search_scope, supports, frame_dimensions, solved)
+            geometry(search_scope, supports, frame_dimensions, solved),
+            None,
+            None,
         )
         self.assertEqual(dimension_evidence.state, EvidenceState.SUPPORTED)
         self.assertEqual(
@@ -823,7 +825,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             internal_paths=(15_800.0,),
             holder_sides=_ALL_HOLDER_SIDES,
         )
-        plan = shared_short_axis_plan(search_scope)
+        plan = shared_short_axis_fixture(search_scope)
         supports = tuple(
             separator(start, end, plan, supported=True)
             for start, end in (
@@ -884,7 +886,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
         )
 
         frame_dimensions = dimensions(1.0, 1.0)
-        plan = shared_short_axis_plan(search_scope)
+        plan = shared_short_axis_fixture(search_scope)
         supports = (
             separator(100.0, 110.0, plan, supported=True),
             separator(210.0, 220.0, plan, supported=True),
@@ -1015,7 +1017,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
                 BoundarySide.BOTTOM: 120.0,
             },
         )
-        plan = shared_short_axis_plan(search_scope)
+        plan = shared_short_axis_fixture(search_scope)
         supports = tuple(
             separator(start, end, plan, supported=True)
             for start, end in ((100.0, 110.0), (210.0, 220.0), (320.0, 330.0))
@@ -1056,7 +1058,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             bottom=110.0,
             holder_sides=_ALL_HOLDER_SIDES,
         )
-        plan = shared_short_axis_plan(search_scope)
+        plan = shared_short_axis_fixture(search_scope)
         build_calls = 0
 
         def sequence_builds(*args, **kwargs):
@@ -1134,7 +1136,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             internal_paths=(100.0, 110.0),
             holder_sides=_ALL_HOLDER_SIDES,
         )
-        plan = shared_short_axis_plan(search_scope)
+        plan = shared_short_axis_fixture(search_scope)
         supports = (separator(100.0, 110.0, plan, supported=True),)
 
         with (
@@ -1187,7 +1189,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             bottom=100.0,
             holder_sides=_ALL_HOLDER_SIDES,
         )
-        plan = shared_short_axis_plan(search_scope)
+        plan = shared_short_axis_fixture(search_scope)
 
         def capture(builds):
             raise CapturedBuilds(builds)
@@ -1256,7 +1258,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             bottom=100.0,
             holder_sides=_ALL_HOLDER_SIDES,
         )
-        plan = shared_short_axis_plan(search_scope)
+        plan = shared_short_axis_fixture(search_scope)
 
         def edge(position: float, label: str) -> EdgeConstraint:
             return EdgeConstraint(
@@ -1332,7 +1334,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             bottom=100.0,
             holder_sides=_ALL_HOLDER_SIDES,
         )
-        plan = shared_short_axis_plan(search_scope)
+        plan = shared_short_axis_fixture(search_scope)
 
         def edge(position: float, label: str) -> EdgeConstraint:
             return EdgeConstraint(
@@ -1435,7 +1437,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             bottom=110.0,
             holder_sides=_ALL_HOLDER_SIDES,
         )
-        plan = shared_short_axis_plan(search_scope)
+        plan = shared_short_axis_fixture(search_scope)
 
         def capture(builds):
             raise CapturedBuilds(builds)
@@ -1563,7 +1565,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             bottom=110.0,
             holder_sides=_ALL_HOLDER_SIDES,
         )
-        plan = shared_short_axis_plan(search_scope)
+        plan = shared_short_axis_fixture(search_scope)
 
         def resolve(build, *_args):
             return (
@@ -1670,7 +1672,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             height=100,
             runs=((0, 100), (110, 210), (220, 320)),
         )
-        plan = shared_short_axis_plan(search_scope)
+        plan = shared_short_axis_fixture(search_scope)
         supports = (
             separator(100.0, 110.0, plan, supported=True),
             separator(210.0, 220.0, plan, supported=True),
@@ -1715,7 +1717,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             height=100,
             runs=((0, 150), (160, 310)),
         )
-        plan = shared_short_axis_plan(search_scope)
+        plan = shared_short_axis_fixture(search_scope)
         support = separator(150.0, 160.0, plan, supported=True)
 
         solved = solve_frame_sequence(
@@ -1751,7 +1753,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             bottom=100.0,
             holder_sides=_ALL_HOLDER_SIDES,
         )
-        plan = shared_short_axis_plan(search_scope)
+        plan = shared_short_axis_fixture(search_scope)
         support = separator(100.0, 110.0, plan, supported=True)
 
         preceding, following = separator_assignment.observed_band_edges(support)
@@ -1776,7 +1778,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             height=100,
             runs=((0, 100), (110, 180), (230, 330)),
         )
-        plan = shared_short_axis_plan(search_scope)
+        plan = shared_short_axis_fixture(search_scope)
         first_separator = separator(100.0, 110.0, plan, supported=True)
         merged_underexposure = separator(180.0, 230.0, plan, supported=True)
 
@@ -1824,7 +1826,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             height=100,
             runs=((0, 100), (110, 180), (230, 260)),
         )
-        plan = shared_short_axis_plan(search_scope)
+        plan = shared_short_axis_fixture(search_scope)
         first_separator = separator(100.0, 110.0, plan, supported=True)
         merged_underexposure = separator(180.0, 230.0, plan, supported=True)
 
@@ -1890,7 +1892,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
                 (560, 660),
             ),
         )
-        plan = shared_short_axis_plan(search_scope)
+        plan = shared_short_axis_fixture(search_scope)
         supports = tuple(
             separator(start, end, plan, supported=True)
             for start, end in (
@@ -1953,7 +1955,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             height=100,
             runs=((0, 100), (110, 210)),
         )
-        plan = shared_short_axis_plan(search_scope)
+        plan = shared_short_axis_fixture(search_scope)
         internal_separator = separator(100.0, 110.0, plan, supported=True)
         trailing_holder_band = separator(210.0, 220.0, plan, supported=True)
 
@@ -2005,7 +2007,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             height=100,
             runs=((0, 140), (160, 300)),
         )
-        plan = shared_short_axis_plan(search_scope)
+        plan = shared_short_axis_fixture(search_scope)
         oversized = separator(75.0, 225.0, plan, supported=True)
 
         solved = solve_frame_sequence(
@@ -2039,7 +2041,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             height=100,
             runs=((0, 100), (105, 205), (225, 325), (335, 435)),
         )
-        plan = shared_short_axis_plan(search_scope)
+        plan = shared_short_axis_fixture(search_scope)
         supports = (
             separator(100.0, 105.0, plan, supported=True),
             separator(205.0, 225.0, plan, supported=True),
@@ -2084,7 +2086,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
                 (450, 550),
             ),
         )
-        plan = shared_short_axis_plan(search_scope)
+        plan = shared_short_axis_fixture(search_scope)
         hard_separators = tuple(
             separator(start, end, plan, supported=True)
             for start, end in ((110, 120), (220, 230), (330, 340))
@@ -2153,7 +2155,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
                 (440, 543),
             ),
         )
-        plan = shared_short_axis_plan(search_scope)
+        plan = shared_short_axis_fixture(search_scope)
 
         def uncertain_separator(
             start: PixelInterval,
@@ -2230,7 +2232,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             height=100,
             runs=((0, 100), (110, 210), (220, 320), (330, 430)),
         )
-        plan = shared_short_axis_plan(search_scope)
+        plan = shared_short_axis_fixture(search_scope)
         raw_bands = tuple(
             separator(start, end, plan, supported=False)
             for start, end in (
@@ -2403,7 +2405,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             ),
         )
         search_scope = replace(search_scope, raw_boundary_paths=tuple(raw_paths))
-        plan = shared_short_axis_plan(search_scope)
+        plan = shared_short_axis_fixture(search_scope)
 
         solved = solve_sequence(
             search_scope=search_scope,
@@ -2610,7 +2612,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             height=100,
             runs=((0, 100), (105, 205), (225, 325)),
         )
-        plan = shared_short_axis_plan(search_scope)
+        plan = shared_short_axis_fixture(search_scope)
         solved = solve_frame_sequence(
             sequence_search_index(
                 search_scope,
@@ -2667,7 +2669,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
         )
 
         def solve(search_scope):
-            plan = shared_short_axis_plan(search_scope)
+            plan = shared_short_axis_fixture(search_scope)
             return solve_frame_sequence(
                 sequence_search_index(
                     search_scope,
@@ -2732,7 +2734,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             ),
             holder_sides=_ALL_HOLDER_SIDES,
         )
-        plan = shared_short_axis_plan(search_scope)
+        plan = shared_short_axis_fixture(search_scope)
         supported = tuple(
             separator(start, end, plan, supported=True)
             for start, end in (
@@ -2804,7 +2806,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             height=100,
             runs=((0, 100), (105, 205), (225, 325), (335, 435)),
         )
-        plan = shared_short_axis_plan(search_scope)
+        plan = shared_short_axis_fixture(search_scope)
         solved = solve_frame_sequence(
             sequence_search_index(
                 search_scope,
@@ -2976,7 +2978,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             height=100,
             runs=((0, 100), (110, 210), (220, 320), (330, 430), (440, 540)),
         )
-        plan = shared_short_axis_plan(search_scope)
+        plan = shared_short_axis_fixture(search_scope)
 
         solved = solve_frame_sequence(
             sequence_search_index(search_scope),
@@ -3018,7 +3020,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             internal_paths=(100.0, 110.0, 210.0, 220.0, 320.0, 330.0, 430.0, 440.0),
             holder_sides=_ALL_HOLDER_SIDES,
         )
-        plan = shared_short_axis_plan(search_scope)
+        plan = shared_short_axis_fixture(search_scope)
         supports = tuple(
             separator(start, end, plan, supported=True)
             for start, end in (
@@ -3067,7 +3069,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             height=100,
             runs=((0, 100), (110, 210), (220, 320), (330, 430), (440, 540)),
         )
-        plan = shared_short_axis_plan(search_scope)
+        plan = shared_short_axis_fixture(search_scope)
         solved = solve_frame_sequence(
             sequence_search_index(
                 search_scope,
@@ -3157,7 +3159,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             height=100,
             runs=((0, 100), (110, 210), (220, 320)),
         )
-        plan = shared_short_axis_plan(search_scope)
+        plan = shared_short_axis_fixture(search_scope)
         supported = (
             separator(100.0, 110.0, plan, supported=True),
             separator(210.0, 220.0, plan, supported=True),
@@ -3242,7 +3244,7 @@ class FrameSequenceSolverContractTest(unittest.TestCase):
             height=120,
             runs=((0, 100), (110, 210), (220, 320), (330, 430), (440, 540)),
         )
-        plan = shared_short_axis_plan(search_scope)
+        plan = shared_short_axis_fixture(search_scope)
         supports = tuple(
             separator(start, end, plan, supported=True)
             for start, end in ((100, 110), (210, 220), (320, 330), (430, 440))

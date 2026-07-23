@@ -43,9 +43,9 @@ from tools.tests.physical_gate_support import (
     detection_workspace_fixture,
     selection_fixture,
 )
-from x5crop.detection.evidence.frame_scale import (
-    FrameScaleObservation,
-    FrameScaleSource,
+from x5crop.detection.evidence.scan_canvas import (
+    CanvasPixelScale,
+    ScanCanvasOutcome,
 )
 
 
@@ -136,9 +136,10 @@ class DetectionStageTypeContractTests(unittest.TestCase):
             FrameBoundarySource,
         )
         self.assertIs(
-            get_type_hints(FrameScaleObservation)["source"],
-            FrameScaleSource,
+            get_type_hints(CanvasPixelScale)["source_long_axis"],
+            str,
         )
+        self.assertTrue(issubclass(ScanCanvasOutcome, str))
         provenance_hints = get_type_hints(MeasurementProvenance)
         self.assertIs(provenance_hints["root_measurement"], MeasurementIdentity)
         self.assertIs(provenance_hints["observation_id"], ObservationId)

@@ -14,7 +14,6 @@ from ...evidence.content.external_frame_boundaries import (
     external_frame_preservation_evidence,
 )
 from ...evidence.partial_edge import partial_edge_safety_evidence
-from ...evidence.frame_scale import frame_scale_observations
 from ...evidence.frame_slot_topology import frame_slot_topology_evidence
 from ...physical.model import FrameSequenceSolution
 from ...physical.frame_dimensions import frame_dimension_evidence
@@ -66,7 +65,15 @@ def assess_candidate(
     geometry = candidate.geometry
     if not isinstance(geometry, FrameSequenceSolution):
         raise ValueError("standard candidate assessment requires sequence geometry")
-    frame_dimensions = frame_dimension_evidence(geometry)
+    frame_dimensions = frame_dimension_evidence(
+        geometry,
+        context.workspace.scan_canvas_evidence.pixel_scale,
+        (
+            context.configuration.photo_edges.maximum_photo_dimension_deviation_mm
+            if context.workspace.scan_canvas_evidence.pixel_scale is not None
+            else None
+        ),
+    )
     coverage = frame_coverage_evidence(
         geometry,
         context.workspace.measurement_cache,
@@ -95,7 +102,6 @@ def assess_candidate(
         geometry,
         context.workspace.measurement_cache.image_statistics.edge_texture_limit,
     )
-    candidate_scale = frame_scale_observations(geometry)
     external_preservation = external_frame_preservation_evidence(
         geometry,
         context.workspace.measurement_cache,
@@ -128,7 +134,6 @@ def assess_candidate(
         frame_content=content,
         internal_frame_boundary_preservation=internal_boundaries,
         holder_boundary=holder_boundary,
-        frame_scale_observations=candidate_scale,
         external_frame_preservation=external_preservation,
         holder_occupancy=occupancy,
         partial_edge_safety=partial_edge,

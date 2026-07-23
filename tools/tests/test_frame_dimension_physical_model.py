@@ -1,47 +1,18 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from types import SimpleNamespace
 import unittest
 
-from tools.tests.frame_slot_solver_support import (
-    content,
-    dimensions,
-    geometry,
-    separator,
-    sequence_search_index,
-    scope,
-)
 from tools.tests.physical_gate_support import candidate_fixture
-from x5crop.detection.evidence.frame_scale import (
-    FrameScaleSource,
-    _frame_height_observation,
-    _frame_width_observations,
-    frame_scale_observations,
-)
 from x5crop.detection.physical.frame_dimensions import (
     FrameDimensionEvidence,
     frame_dimension_evidence,
     frame_dimension_priors,
     frame_dimension_search_priors,
 )
-from x5crop.detection.physical.frame_sequence_solver import (
-    solve_frame_sequence,
-)
-from x5crop.detection.physical.frame_sequence_result import FrameSequenceSolveResult
-from x5crop.detection.physical.short_axis import (
-    SharedShortAxisPlan,
-    shared_short_axis_plan,
-)
-from x5crop.domain import (
-    BoundarySide,
-    EvidenceState,
-    MeasurementIdentity,
-    MeasurementProvenance,
-    ObservationId,
-    PixelInterval,
-    PhysicalSearchFact,
-    PhysicalSearchOutcome,
-)
+from x5crop.detection.physical.short_axis import SharedShortAxisOutcome
+from x5crop.domain import EvidenceState, PixelInterval
 from x5crop.formats import FORMATS
 
 
@@ -58,13 +29,34 @@ class FrameDimensionPhysicalModelTest(unittest.TestCase):
                     ),
                 )
 
-    def test_geometry_search_deduplicates_equal_physical_aspects(self) -> None:
-        priors = frame_dimension_search_priors(FORMATS["120-66"])
+    def test_geometry_search_requires_photo_edge_size_binding(self) -> None:
+        self.assertEqual(
+            frame_dimension_search_priors(FORMATS["120-66"], None),
+            (),
+        )
 
-        self.assertEqual(len(priors), 1)
-        self.assertEqual(priors[0].frame_size_mm, (56.0, 56.0))
+        selected = frame_dimension_search_priors(
+            FORMATS["120-66"],
+            FORMATS["120-66"].frame.frame_size_mm_options[1],
+        )
+        self.assertEqual(
+            tuple(prior.frame_size_mm for prior in selected),
+            ((56.0, 56.0),),
+        )
+        self.assertEqual(
+            tuple(
+                prior.frame_size_mm
+                for prior in frame_dimension_search_priors(
+                    FORMATS["135"],
+                    None,
+                )
+            ),
+            ((36.0, 24.0),),
+        )
 
-    def test_separator_width_variation_does_not_contradict_frame_dimensions(self) -> None:
+    def test_separator_width_variation_does_not_contradict_frame_dimensions(
+        self,
+    ) -> None:
         evidence = FrameDimensionEvidence(
             frame_width_mm=36.0,
             frame_height_mm=24.0,
@@ -77,6 +69,9 @@ class FrameDimensionPhysicalModelTest(unittest.TestCase):
             separator_widths_px=(2.0, 18.0),
             common_width_state=EvidenceState.SUPPORTED,
             observed_aspect=1.5,
+            expected_width_px=None,
+            expected_height_px=None,
+            observed_height_px=PixelInterval(99.0, 101.0),
         )
 
         self.assertEqual(evidence.state, EvidenceState.SUPPORTED)
@@ -86,14 +81,11 @@ class FrameDimensionPhysicalModelTest(unittest.TestCase):
         candidate = candidate_fixture()
         geometry_value = candidate.geometry
         short_axis = geometry_value.shared_short_axis
-        unresolved = SharedShortAxisPlan(
-            top_photo_edge=None,
-            bottom_photo_edge=None,
+        unresolved = replace(
+            short_axis,
             span=None,
-            search_outcome=PhysicalSearchOutcome(
-                (PhysicalSearchFact.MEASUREMENTS_UNAVAILABLE,)
-            ),
-            provenance=short_axis.provenance,
+            outcome=SharedShortAxisOutcome.PHOTO_EDGE_PAIR_UNAVAILABLE,
+            position_uncertainty_px=None,
         )
 
         evidence = frame_dimension_evidence(
@@ -102,221 +94,12 @@ class FrameDimensionPhysicalModelTest(unittest.TestCase):
                 common_frame_width=geometry_value.common_frame_width,
                 shared_short_axis=unresolved,
                 separator_assignments=geometry_value.separator_assignments,
-            )
+            ),
+            None,
+            None,
         )
 
         self.assertIsNone(evidence.observed_aspect)
-
-    def test_blank_and_geometry_derived_slots_are_excluded_from_scale(self) -> None:
-        search_scope = scope(
-            width=660,
-            height=120,
-            leading=0.0,
-            trailing=540.0,
-            top=10.0,
-            bottom=110.0,
-            internal_paths=(
-                100.0,
-                110.0,
-                210.0,
-                220.0,
-                320.0,
-                330.0,
-                430.0,
-                440.0,
-            ),
-            holder_sides=(
-                BoundarySide.LEADING,
-                BoundarySide.TRAILING,
-                BoundarySide.TOP,
-                BoundarySide.BOTTOM,
-            ),
-            holder_positions={
-                BoundarySide.LEADING: 0.0,
-                BoundarySide.TRAILING: 660.0,
-                BoundarySide.TOP: 0.0,
-                BoundarySide.BOTTOM: 120.0,
-            },
-        )
-        visible_content = content(
-            width=660,
-            height=120,
-            runs=((0, 100), (110, 210), (220, 320), (330, 430), (440, 540)),
-        )
-        prior = dimensions(1.0, 1.0)
-        plan = shared_short_axis_plan(search_scope)
-        supports = tuple(
-            separator(start, end, plan, supported=True)
-            for start, end in ((100, 110), (210, 220), (320, 330), (430, 440))
-        )
-        solved = solve_frame_sequence(
-            sequence_search_index(search_scope, supports),
-            search_scope,
-            plan,
-            6,
-            prior,
-            visible_content,
-            100_000,
-            strip_mode="full",
-            nominal_count=6,
-        )
-        self.assertIsInstance(solved, FrameSequenceSolveResult)
-        assert isinstance(solved, FrameSequenceSolveResult)
-        sequence = geometry(
-            search_scope,
-            supports,
-            prior,
-            solved,
-            nominal_count=6,
-        )
-
-        observations = frame_scale_observations(sequence)
-
-        width_observations = tuple(
-            item
-            for item in observations
-            if item.source == FrameScaleSource.FRAME_WIDTH_INTERVAL
-        )
-        self.assertEqual(sequence.sequence_inferred_frame_indexes, (6,))
-        self.assertEqual(
-            tuple(
-                str(item.provenance.observation_id).split(":")[:2]
-                for item in width_observations
-            ),
-            tuple(["frame_width_scale", str(index)] for index in range(2, 5)),
-        )
-        self.assertEqual(
-            len(
-                {
-                    item.provenance.observation_id
-                    for item in width_observations
-                }
-            ),
-            3,
-        )
-
-    def test_frame_scale_is_evidence_output_not_geometry_input(self) -> None:
-        source = frame_scale_observations.__module__
-
-        self.assertEqual(source, "x5crop.detection.evidence.frame_scale")
-
-    def test_frame_scale_identity_follows_physical_boundary_anchors(self) -> None:
-        def boundary(label: str) -> SimpleNamespace:
-            measurement = MeasurementProvenance(
-                MeasurementIdentity.BOUNDARY_PATHS,
-                ObservationId(f"frame_scale_path:{label}"),
-                (MeasurementIdentity.GRAY_WORK,),
-                "raw gray boundary path",
-            )
-            return SimpleNamespace(
-                independently_observed=True,
-                role_provenance=MeasurementProvenance(
-                    MeasurementIdentity.PHOTO_EDGES,
-                    ObservationId(f"frame_scale_role:{label}"),
-                    (MeasurementIdentity.BOUNDARY_PATHS,),
-                    "independent photo-edge role",
-                ),
-                measurement_provenance=measurement,
-            )
-
-        def width_geometry(label: str) -> SimpleNamespace:
-            return SimpleNamespace(
-                frame_dimension_prior=SimpleNamespace(
-                    frame_size_mm=(36.0, 24.0)
-                ),
-                layout="horizontal",
-                frame_slots=tuple(
-                    SimpleNamespace(
-                        index=index,
-                        leading=boundary(f"{label}:{index}:leading"),
-                        trailing=boundary(f"{label}:{index}:trailing"),
-                        width_px=PixelInterval.exact(100.0),
-                        sequence_inferred=False,
-                    )
-                    for index in (1, 2)
-                ),
-            )
-
-        first_width = _frame_width_observations(width_geometry("first"))
-        second_width = _frame_width_observations(width_geometry("second"))
-        self.assertTrue(first_width)
-        self.assertNotEqual(
-            first_width[0].provenance.observation_id,
-            second_width[0].provenance.observation_id,
-        )
-
-        def height_geometry(label: str) -> SimpleNamespace:
-            anchors = (
-                ObservationId(f"frame_height:{label}:top"),
-                ObservationId(f"frame_height:{label}:bottom"),
-            )
-            return SimpleNamespace(
-                frame_dimension_prior=SimpleNamespace(
-                    frame_size_mm=(36.0, 24.0)
-                ),
-                layout="horizontal",
-                shared_short_axis=SimpleNamespace(
-                    supports_safe_crop=True,
-                    height_px=PixelInterval.exact(100.0),
-                    provenance=MeasurementProvenance(
-                        MeasurementIdentity.BOUNDARY_PATHS,
-                        ObservationId(f"frame_height:{label}"),
-                        (MeasurementIdentity.GRAY_WORK,),
-                        "shared short-axis measurement",
-                        anchors,
-                    ),
-                ),
-            )
-
-        first_height = _frame_height_observation(height_geometry("first"))
-        second_height = _frame_height_observation(height_geometry("second"))
-        self.assertIsNotNone(first_height)
-        self.assertIsNotNone(second_height)
-        assert first_height is not None and second_height is not None
-        self.assertNotEqual(
-            first_height.provenance.observation_id,
-            second_height.provenance.observation_id,
-        )
-
-    def test_repeated_width_roles_do_not_emit_measured_frame_scale(self) -> None:
-        def boundary(label: str) -> SimpleNamespace:
-            measurement = MeasurementProvenance(
-                MeasurementIdentity.BOUNDARY_PATHS,
-                ObservationId(f"frame_scale_repeated_width_path:{label}"),
-                (MeasurementIdentity.GRAY_WORK,),
-                "raw gray boundary path",
-            )
-            repeated_width_role = MeasurementProvenance(
-                MeasurementIdentity.PHOTO_EDGES,
-                ObservationId(f"frame_scale_repeated_width_role:{label}"),
-                (
-                    MeasurementIdentity.BOUNDARY_PATHS,
-                    MeasurementIdentity.FRAME_WIDTH_PATTERN,
-                ),
-                "photo-edge role assigned by repeated-width geometry",
-            )
-            return SimpleNamespace(
-                independently_observed=True,
-                role_provenance=repeated_width_role,
-                measurement_provenance=measurement,
-            )
-
-        geometry = SimpleNamespace(
-            frame_dimension_prior=SimpleNamespace(frame_size_mm=(36.0, 24.0)),
-            layout="horizontal",
-            frame_slots=tuple(
-                SimpleNamespace(
-                    index=index,
-                    leading=boundary(f"{index}:leading"),
-                    trailing=boundary(f"{index}:trailing"),
-                    width_px=PixelInterval.exact(100.0),
-                    sequence_inferred=False,
-                )
-                for index in (1, 2)
-            ),
-        )
-
-        self.assertEqual(_frame_width_observations(geometry), ())
 
 
 if __name__ == "__main__":

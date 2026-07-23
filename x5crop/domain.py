@@ -56,6 +56,7 @@ class MeasurementIdentity(str, Enum):
     LANE_DIVIDER_PROFILE = "lane_divider_profile"
     PHYSICAL_FRAME_ASPECT = "physical_frame_aspect"
     PHOTO_EDGES = "photo_edges"
+    SCAN_CANVAS_GEOMETRY = "scan_canvas_geometry"
     SEPARATOR_PROFILE = "separator_profile"
     WORKSPACE_TRANSFORM = "workspace_transform"
 

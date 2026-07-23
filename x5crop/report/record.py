@@ -5,11 +5,11 @@ from ..detection.final.model import FinalDetection, FinalizationPlan
 from ..detection.candidate.selection.model import SelectionResult
 from ..detection.workspace import DetectionWorkspace
 from ..output.model import OutputGeometry
-from ..units import ResolutionMetadataObservation
 from .identity import REPORT_SCHEMA_ID, REPORT_SCHEMA_REVISION, bind_runtime_facts
 from .read_models import (
     decision_gate_detail,
     frame_bleed_plan_read_model,
+    scan_canvas_evidence_read_model,
     selection_read_model,
     typed_read_model,
 )
@@ -48,7 +48,6 @@ def report_record_for_final_detection(
     review_copy: str | None,
     warnings: list[str],
     configuration: dict,
-    resolution_metadata: ResolutionMetadataObservation,
     analysis_identity: dict,
 ) -> dict:
     output_geometry = detection.output_geometry
@@ -60,10 +59,15 @@ def report_record_for_final_detection(
         "input": {
             "profile": dict(profile),
             "workspace_identity": typed_read_model(workspace.identity),
-            "resolution_metadata": typed_read_model(resolution_metadata),
+            "scan_canvas_evidence": scan_canvas_evidence_read_model(
+                workspace.scan_canvas_evidence
+            ),
             "transform_geometry": typed_read_model(workspace.transform_geometry),
-            "source_shared_short_axes": typed_read_model(
-                workspace.source_shared_short_axes
+            "source_photo_edge_pairs": typed_read_model(
+                workspace.source_photo_edge_pairs
+            ),
+            "mapped_photo_edge_pairs": typed_read_model(
+                workspace.mapped_photo_edge_pairs
             ),
             "shared_short_axes": typed_read_model(workspace.shared_short_axes),
             "source_lane_divider": typed_read_model(workspace.source_lane_divider),

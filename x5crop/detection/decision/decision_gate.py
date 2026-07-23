@@ -5,6 +5,7 @@ from ..candidate.assessment.model import CandidateGateAssessment
 from ..candidate.selection.model import SelectionConsensus, SelectionResult
 from x5crop.domain import EvidenceState
 from ..gate_checks import GateCheck, GateRequirement, GateStage
+from ..evidence.scan_canvas import ScanCanvasEvidence
 from ..evidence.transform_geometry import TransformGeometryEvidence
 from .model import DECISION_GATE_REASON_BY_CODE, DecisionGateAssessment
 
@@ -49,6 +50,7 @@ def decision_gate_assessment(
     automatic_processing_eligibility: EvidenceState,
     selection_consensus: EvidenceState,
     output_protection: EvidenceState,
+    scan_canvas_geometry: EvidenceState,
     transform_geometry: EvidenceState,
     count_resolution: EvidenceState,
     geometry_resolution: EvidenceState,
@@ -108,13 +110,18 @@ def decision_gate_assessment(
             ),
         ),
         _decision_check(
-            "transform_geometry_integrity",
-            transform_geometry,
+            "scan_canvas_geometry",
+            scan_canvas_geometry,
             (
                 GateRequirement.NOT_CONTRADICTED
-                if transform_geometry == EvidenceState.NOT_APPLICABLE
+                if scan_canvas_geometry == EvidenceState.NOT_APPLICABLE
                 else GateRequirement.SUPPORTED_REQUIRED
             ),
+        ),
+        _decision_check(
+            "transform_geometry_integrity",
+            transform_geometry,
+            GateRequirement.SUPPORTED_REQUIRED,
         ),
     )
     return DecisionGateAssessment(checks=checks)
@@ -123,6 +130,7 @@ def decision_gate_assessment(
 def apply_decision_gate(
     selection: SelectionResult,
     frame_bleed_plan: FrameBleedPlan,
+    scan_canvas_evidence: ScanCanvasEvidence,
     transform_geometry: TransformGeometryEvidence,
     *,
     automatic_processing_eligibility: EvidenceState,
@@ -162,22 +170,19 @@ def apply_decision_gate(
             if resolution.supported
             else EvidenceState.NOT_APPLICABLE
         )
-        transform_geometry_state = (
-            transform_geometry.state
-            if resolution.supported
-            else EvidenceState.NOT_APPLICABLE
-        )
     else:
         count_resolution_state = EvidenceState.NOT_APPLICABLE
         geometry_resolution_state = EvidenceState.NOT_APPLICABLE
         selection_consensus_state = EvidenceState.NOT_APPLICABLE
         output_protection_state = EvidenceState.NOT_APPLICABLE
-        transform_geometry_state = EvidenceState.NOT_APPLICABLE
+    scan_canvas_geometry_state = scan_canvas_evidence.state
+    transform_geometry_state = transform_geometry.state
     decision_gate = decision_gate_assessment(
         candidate_gate=candidate_gate,
         automatic_processing_eligibility=automatic_processing_eligibility,
         selection_consensus=selection_consensus_state,
         output_protection=output_protection_state,
+        scan_canvas_geometry=scan_canvas_geometry_state,
         transform_geometry=transform_geometry_state,
         count_resolution=count_resolution_state,
         geometry_resolution=geometry_resolution_state,

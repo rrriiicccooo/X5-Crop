@@ -6,6 +6,7 @@ from typing import Any
 
 from ..detection.candidate.model import AssessedCandidate
 from ..detection.decision.model import DecisionGateAssessment
+from ..detection.evidence.scan_canvas import ScanCanvasEvidence
 from ..detection.gate_checks import GateCheck
 from ..detection.candidate.selection.model import SelectionResult
 from ..detection.physical.model import (
@@ -15,6 +16,9 @@ from ..detection.physical.model import (
 )
 from ..domain import InterFrameSpacing
 from ..output.model import FrameBleedPlan
+
+
+MILLIMETERS_PER_INCH = 25.4
 
 
 def typed_read_model(value: Any) -> Any:
@@ -46,6 +50,23 @@ def typed_read_model(value: Any) -> Any:
     if isinstance(value, (list, tuple)):
         return [typed_read_model(item) for item in value]
     return value
+
+
+def scan_canvas_evidence_read_model(
+    evidence: ScanCanvasEvidence,
+) -> dict[str, Any]:
+    detail = typed_read_model(evidence)
+    scale = evidence.pixel_scale
+    if scale is not None:
+        detail["effective_ppi"] = {
+            "long_axis": (
+                scale.long_axis_px_per_mm * MILLIMETERS_PER_INCH
+            ),
+            "short_axis": (
+                scale.short_axis_px_per_mm * MILLIMETERS_PER_INCH
+            ),
+        }
+    return detail
 
 
 def gate_check_read_model(check: GateCheck) -> dict[str, Any]:

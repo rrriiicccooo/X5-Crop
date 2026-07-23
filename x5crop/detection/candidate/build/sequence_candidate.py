@@ -61,7 +61,7 @@ def build_sequence_candidate(
     if not short_axis_plan.supports_safe_crop:
         return SequenceCandidateBuildOutcome(
             None,
-            short_axis_plan.search_outcome,
+            short_axis_plan.physical_search,
             0,
         )
     support_set = sequence_observations.search_index.separator_supports

@@ -11,7 +11,8 @@ from ...domain import (
     ObservationId,
     PixelInterval,
 )
-from ...formats import FormatSpec
+from ...formats import FormatSpec, FrameSizeMm
+from ..evidence.scan_canvas import CanvasPixelScale
 from .model import FrameSequenceSolution
 
 
@@ -39,6 +40,9 @@ class FrameDimensionEvidence:
     separator_widths_px: tuple[float, ...]
     common_width_state: EvidenceState
     observed_aspect: float | None
+    expected_width_px: PixelInterval | None
+    expected_height_px: PixelInterval | None
+    observed_height_px: PixelInterval | None
     state: EvidenceState = field(init=False)
     reason: str = field(init=False)
     frame_aspect: float = field(init=False)
@@ -58,6 +62,12 @@ class FrameDimensionEvidence:
                 raise ValueError("supported common frame width must be positive")
         elif self.common_width_px is not None:
             raise ValueError("unresolved common frame width cannot claim a value")
+        if (self.expected_width_px is None) != (
+            self.expected_height_px is None
+        ):
+            raise ValueError(
+                "expected physical frame dimensions must correspond"
+            )
         measured_widths = tuple(
             interval.midpoint for interval in self.measured_width_intervals_px
         )
@@ -79,12 +89,51 @@ class FrameDimensionEvidence:
             if self.observed_aspect is not None
             else None
         )
-        if width_contradiction:
+        physical_width_contradiction = bool(
+            self.expected_width_px is not None
+            and self.common_width_px is not None
+            and not self.common_width_px.intersects(self.expected_width_px)
+        )
+        physical_height_contradiction = bool(
+            self.expected_height_px is not None
+            and self.observed_height_px is not None
+            and not self.observed_height_px.intersects(self.expected_height_px)
+        )
+        physical_dimensions_contained = bool(
+            self.expected_width_px is not None
+            and self.expected_height_px is not None
+            and self.common_width_px is not None
+            and self.observed_height_px is not None
+            and (
+                self.expected_width_px.minimum
+                <= self.common_width_px.minimum
+                <= self.common_width_px.maximum
+                <= self.expected_width_px.maximum
+            )
+            and (
+                self.expected_height_px.minimum
+                <= self.observed_height_px.minimum
+                <= self.observed_height_px.maximum
+                <= self.expected_height_px.maximum
+            )
+        )
+        if (
+            width_contradiction
+            or physical_width_contradiction
+            or physical_height_contradiction
+        ):
             state = EvidenceState.CONTRADICTED
-            reason = "common_frame_width_contradicted"
+            reason = "physical_frame_dimensions_contradicted"
         elif self.common_width_state == EvidenceState.SUPPORTED:
-            state = EvidenceState.SUPPORTED
-            reason = "common_frame_width_supported"
+            if self.expected_width_px is None:
+                state = EvidenceState.SUPPORTED
+                reason = "common_frame_width_supported"
+            elif physical_dimensions_contained:
+                state = EvidenceState.SUPPORTED
+                reason = "physical_frame_dimensions_supported"
+            else:
+                state = EvidenceState.UNAVAILABLE
+                reason = "physical_frame_dimensions_uncertain"
         else:
             state = EvidenceState.UNAVAILABLE
             reason = "common_frame_width_unavailable"
@@ -145,21 +194,43 @@ def frame_dimension_priors(
 
 def frame_dimension_search_priors(
     physical_spec: FormatSpec,
+    selected_frame_size_mm: FrameSizeMm | None,
 ) -> tuple[FrameDimensionPrior, ...]:
     priors = frame_dimension_priors(physical_spec)
-    selected: list[FrameDimensionPrior] = []
-    seen_aspects: set[float] = set()
-    for prior in priors:
-        if prior.aspect in seen_aspects:
-            continue
-        seen_aspects.add(prior.aspect)
-        selected.append(prior)
-    return tuple(selected)
+    if selected_frame_size_mm is None:
+        return priors if len(priors) == 1 else ()
+    selected_size = (
+        float(selected_frame_size_mm.width_mm),
+        float(selected_frame_size_mm.height_mm),
+    )
+    selected = tuple(
+        prior
+        for prior in priors
+        if prior.frame_size_mm == selected_size
+    )
+    if len(selected) != 1:
+        raise ValueError(
+            "selected photo-edge frame size must exist in format facts"
+        )
+    return selected
 
 
 def frame_dimension_evidence(
     geometry: FrameSequenceSolution,
+    pixel_scale: CanvasPixelScale | None,
+    maximum_dimension_deviation_mm: float | None,
 ) -> FrameDimensionEvidence:
+    if (pixel_scale is None) != (
+        maximum_dimension_deviation_mm is None
+    ):
+        raise ValueError(
+            "frame-dimension scale and physical deviation must correspond"
+        )
+    if (
+        maximum_dimension_deviation_mm is not None
+        and maximum_dimension_deviation_mm <= 0.0
+    ):
+        raise ValueError("frame-dimension physical deviation must be positive")
     frame_width_mm, frame_height_mm = geometry.frame_dimension_prior.frame_size_mm
     common_width = geometry.common_frame_width
     measured_intervals = tuple(
@@ -170,6 +241,26 @@ def frame_dimension_evidence(
         if common_width.state == EvidenceState.SUPPORTED
         and geometry.shared_short_axis.supports_safe_crop
         else None
+    )
+    expected_width_px = (
+        None
+        if pixel_scale is None
+        else PixelInterval(
+            (frame_width_mm - maximum_dimension_deviation_mm)
+            * pixel_scale.long_axis_px_per_mm,
+            (frame_width_mm + maximum_dimension_deviation_mm)
+            * pixel_scale.long_axis_px_per_mm,
+        )
+    )
+    expected_height_px = (
+        None
+        if pixel_scale is None
+        else PixelInterval(
+            (frame_height_mm - maximum_dimension_deviation_mm)
+            * pixel_scale.short_axis_px_per_mm,
+            (frame_height_mm + maximum_dimension_deviation_mm)
+            * pixel_scale.short_axis_px_per_mm,
+        )
     )
     return FrameDimensionEvidence(
         frame_width_mm=float(frame_width_mm),
@@ -185,6 +276,13 @@ def frame_dimension_evidence(
         ),
         common_width_state=common_width.state,
         observed_aspect=observed_aspect,
+        expected_width_px=expected_width_px,
+        expected_height_px=expected_height_px,
+        observed_height_px=(
+            geometry.shared_short_axis.height_px
+            if geometry.shared_short_axis.supports_safe_crop
+            else None
+        ),
     )
 
 

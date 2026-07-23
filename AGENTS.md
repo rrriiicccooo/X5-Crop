@@ -71,9 +71,12 @@ Chinese-English paired where practical.
   not broadly loosen rules to make one file pass; recheck known-good formats,
   especially `135`.
 - Named-TIFF and end-to-end regressions must run the complete detection flow,
-  including source photo-edge observation and transform assessment. Pure solver
-  unit tests may construct an explicit typed `DetectionWorkspace` fixture, but
-  production runtime must have no bypass.
+  including scan-canvas matching, source photo-edge observation, and transform
+  assessment. Pure solver unit tests may construct an explicit typed
+  `DetectionWorkspace` fixture, but production runtime must have no bypass.
+- Keep photo dimensions in `FramePhysicalSpec` and holder-scan dimensions in the
+  sole `ScanCanvasPhysicalSpec` catalog. TIFF resolution tags are preserved I/O
+  metadata, never detection scale, evidence, or decision input.
 - Horizontal-strip wording is the baseline for directional requests; implement
   the rotated vertical behavior too.
 - Update user docs for changes to setup, usage, launchers, outputs, or release
@@ -83,7 +86,8 @@ Chinese-English paired where practical.
 
 除非用户明确改变要求，否则必须保持 TIFF 位深、通道、ICC/色彩空间、分辨率、元数据和
 已知无损压缩行为。结构重构以当前物理真实性为准，不以历史输出一致性为目标；检测校准必须
-回到真实样片，不能为单个文件普遍放宽规则。
+回到真实样片，不能为单个文件普遍放宽规则。照片规格与片夹扫描画布必须由不同 typed owner
+保存；TIFF resolution 标签只作 I/O metadata，不得成为检测尺度或决策输入。
 
 ## Extreme Cleanliness Contract / 极致干净合同
 

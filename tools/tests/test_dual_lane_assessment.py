@@ -30,7 +30,13 @@ from x5crop.detection.context import (
     DetectionRequest,
 )
 from x5crop.detection.modes.dual_lane import _lane_context, choose_dual_lane_detection
-from x5crop.detection.workspace import _translate_plan_to_parent
+from x5crop.detection.evidence.photo_edges import (
+    map_photo_edge_pair_evidence,
+    translate_photo_edge_pair_evidence,
+)
+from x5crop.detection.physical.short_axis import (
+    shared_short_axis_from_photo_edge_pair,
+)
 from x5crop.detection.physical.lane_divider import (
     LaneDividerEvidence,
     measure_lane_dividers,
@@ -141,15 +147,38 @@ def _context(
     configuration = get_detection_configuration("135-dual", "full")
     lane_configuration = get_detection_configuration("135", "full")
     workspace = detection_workspace_fixture(width=240, height=200)
-    plan = workspace.shared_short_axes[0]
-    plans = (
+    source_pairs = (
         ()
         if divider is None
-        else (plan, _translate_plan_to_parent(plan, divider.center))
+        else (
+            workspace.source_photo_edge_pairs[0],
+            translate_photo_edge_pair_evidence(
+                workspace.source_photo_edge_pairs[0],
+                divider.center,
+            ),
+        )
+    )
+    mapped_pairs = tuple(
+        map_photo_edge_pair_evidence(
+            evidence,
+            workspace.transform_geometry.coordinate_transform,
+            workspace.measurement_cache.layout,
+            workspace.transform_geometry.position_uncertainty_px,
+        )
+        for evidence in source_pairs
+    )
+    plans = tuple(
+        shared_short_axis_from_photo_edge_pair(
+            evidence,
+            workspace.measurement_cache.gray_work.shape[1],
+            lane_configuration.photo_edges,
+        )
+        for evidence in mapped_pairs
     )
     workspace = replace(
         workspace,
-        source_shared_short_axes=plans,
+        source_photo_edge_pairs=source_pairs,
+        mapped_photo_edge_pairs=mapped_pairs,
         shared_short_axes=plans,
         source_lane_divider=divider,
         lane_divider=divider,

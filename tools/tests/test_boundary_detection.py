@@ -7,6 +7,9 @@ from unittest.mock import patch
 import numpy as np
 
 from x5crop.configuration.boundary import BoundaryPathParameters
+from x5crop.configuration.path_sampling import (
+    BoundaryPathSamplingParameters,
+)
 from tools.tests.frame_slot_solver_support import path as _path
 from x5crop.detection.physical.boundary_detection import (
     _LocalPathSample,
@@ -16,6 +19,7 @@ from x5crop.detection.physical.boundary_detection import (
     _holder_boundary,
     _window_statistics,
     boundary_measurements,
+    short_axis_boundary_path_pairs,
 )
 from x5crop.domain import (
     BoundaryAxis,
@@ -86,7 +90,7 @@ class BoundaryDetectionTests(unittest.TestCase):
         ):
             points = _adaptive_change_points(
                 signal,
-                BoundaryPathParameters(),
+                BoundaryPathParameters().path_sampling,
             )
 
         self.assertTrue(points)
@@ -187,7 +191,10 @@ class BoundaryDetectionTests(unittest.TestCase):
             samples,
             extent=1_000,
             section_count=5,
-            parameters=BoundaryPathParameters(),
+            parameters=BoundaryPathParameters().path_sampling,
+            minimum_path_support_ratio=(
+                BoundaryPathParameters().minimum_path_support_ratio
+            ),
         )
 
         self.assertEqual(
@@ -196,6 +203,56 @@ class BoundaryDetectionTests(unittest.TestCase):
                 (PixelInterval.exact(100.0),) * 5,
                 (PixelInterval.exact(103.0),) * 5,
             },
+        )
+
+    def test_short_axis_pair_tracking_rejects_unpaired_transitions_before_paths(
+        self,
+    ) -> None:
+        gray = np.full((200, 500), 230, dtype=np.uint8)
+        for top, bottom, value in (
+            (20, 50, 30),
+            (50, 80, 180),
+            (80, 120, 60),
+            (120, 150, 200),
+            (150, 180, 80),
+        ):
+            gray[top:bottom, :] = value
+        statistics = image_measurement_statistics(
+            gray,
+            ImageMeasurementStatisticsParameters(),
+        )
+
+        pairs = short_axis_boundary_path_pairs(
+            gray,
+            statistics,
+            BoundaryPathSamplingParameters(),
+            minimum_path_samples=3,
+            matching_constraint_ids=(
+                lambda _coordinate, top, bottom: (
+                    ("physical_pair",)
+                    if 45.0 <= top <= 55.0
+                    and 145.0 <= bottom <= 155.0
+                    else ()
+                )
+            ),
+            observation_prefix="fixture",
+        )
+
+        self.assertEqual(len(pairs), 1)
+        self.assertEqual(pairs[0].constraint_id, "physical_pair")
+        self.assertGreaterEqual(len(pairs[0].top_path.samples), 5)
+        self.assertGreaterEqual(len(pairs[0].bottom_path.samples), 5)
+        self.assertTrue(
+            all(
+                45.0 <= sample.position.midpoint <= 55.0
+                for sample in pairs[0].top_path.samples
+            )
+        )
+        self.assertTrue(
+            all(
+                145.0 <= sample.position.midpoint <= 155.0
+                for sample in pairs[0].bottom_path.samples
+            )
         )
 
     def test_edge_adjacent_paths_locate_all_four_holder_contacts(self) -> None:

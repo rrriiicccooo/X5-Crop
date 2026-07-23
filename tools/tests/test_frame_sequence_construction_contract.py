@@ -38,7 +38,7 @@ from x5crop.detection.physical.model import (
     BoundaryGeometryState,
     FrameBoundarySource,
 )
-from x5crop.detection.physical.short_axis import shared_short_axis_plan
+from tools.tests.photo_edge_support import shared_short_axis_fixture
 from x5crop.domain import (
     BoundaryAxis,
     BoundarySide,
@@ -110,7 +110,7 @@ class FrameSequenceConstructionContractTest(unittest.TestCase):
             bottom=100.0,
             holder_sides=_ALL_HOLDER_SIDES,
         )
-        plan = shared_short_axis_plan(search_scope)
+        plan = shared_short_axis_fixture(search_scope)
         weak = separator(100.0, 120.0, plan, supported=False)
 
         geometry_leading, geometry_trailing = (
@@ -231,7 +231,7 @@ class FrameSequenceConstructionContractTest(unittest.TestCase):
             bottom=100.0,
             holder_sides=_ALL_HOLDER_SIDES,
         )
-        plan = shared_short_axis_plan(search_scope)
+        plan = shared_short_axis_fixture(search_scope)
         supports = tuple(
             separator(start, end, plan, supported=True)
             for start, end in (
@@ -266,7 +266,7 @@ class FrameSequenceConstructionContractTest(unittest.TestCase):
             bottom=100.0,
             holder_sides=_ALL_HOLDER_SIDES,
         )
-        plan = shared_short_axis_plan(search_scope)
+        plan = shared_short_axis_fixture(search_scope)
         sparse_supports = tuple(
             separator(start, start + 10.0, plan, supported=True)
             for start in (100.0, 320.0, 540.0)
@@ -348,7 +348,7 @@ class FrameSequenceConstructionContractTest(unittest.TestCase):
             bottom=100.0,
             holder_sides=_ALL_HOLDER_SIDES,
         )
-        plan = shared_short_axis_plan(search_scope)
+        plan = shared_short_axis_fixture(search_scope)
         prepared_search_index = sequence_search_index(search_scope)
         search_space = construction._MeasuredFrameSearchSpace(
             leading_candidates=(),
@@ -440,7 +440,7 @@ class FrameSequenceConstructionContractTest(unittest.TestCase):
             bottom=100.0,
             holder_sides=_ALL_HOLDER_SIDES,
         )
-        plan = shared_short_axis_plan(search_scope)
+        plan = shared_short_axis_fixture(search_scope)
         prepared_search_index = sequence_search_index(
             search_scope,
             (separator(100.0, 110.0, plan, supported=True),),
@@ -564,7 +564,7 @@ class FrameSequenceConstructionContractTest(unittest.TestCase):
             bottom=100.0,
             holder_sides=_ALL_HOLDER_SIDES,
         )
-        plan = shared_short_axis_plan(search_scope)
+        plan = shared_short_axis_fixture(search_scope)
         support = separator(100.0, 110.0, plan, supported=True)
         prepared_search_index = sequence_search_index(
             search_scope,
@@ -653,7 +653,7 @@ class FrameSequenceConstructionContractTest(unittest.TestCase):
             bottom=100.0,
             holder_sides=_ALL_HOLDER_SIDES,
         )
-        plan = shared_short_axis_plan(search_scope)
+        plan = shared_short_axis_fixture(search_scope)
         prepared_search_index = sequence_search_index(search_scope)
         search_space = construction._MeasuredFrameSearchSpace(
             leading_candidates=(),
@@ -763,7 +763,7 @@ class FrameSequenceConstructionContractTest(unittest.TestCase):
         self.assertIsNone(
             _measured_sequence_build(
                 constraints,
-                shared_short_axis_plan(search_scope),
+                shared_short_axis_fixture(search_scope),
                 search_scope.holder_safety.box,
                 allow_nominal_slot_sized_gap=False,
             )
@@ -1059,13 +1059,13 @@ class FrameSequenceConstructionContractTest(unittest.TestCase):
         )
         aligned = _measured_sequence_build(
             (*shared, constraint((220.0, 220.0), (318.0, 324.0), "aligned")),
-            shared_short_axis_plan(search_scope),
+            shared_short_axis_fixture(search_scope),
             search_scope.holder_safety.box,
             allow_nominal_slot_sized_gap=False,
         )
         overcontained = _measured_sequence_build(
             (*shared, constraint((220.0, 220.0), (320.0, 328.0), "wide")),
-            shared_short_axis_plan(search_scope),
+            shared_short_axis_fixture(search_scope),
             search_scope.holder_safety.box,
             allow_nominal_slot_sized_gap=False,
         )
@@ -1125,7 +1125,7 @@ class FrameSequenceConstructionContractTest(unittest.TestCase):
             bottom=100.0,
             holder_sides=_ALL_HOLDER_SIDES,
         )
-        plan = shared_short_axis_plan(search_scope)
+        plan = shared_short_axis_fixture(search_scope)
         holder_band = separator(320.0, 330.0, plan, supported=True)
         trailing_endpoint, _ = separator_assignment.observed_band_edges(holder_band)
         trailing_endpoint = replace(
@@ -1182,7 +1182,7 @@ class FrameSequenceConstructionContractTest(unittest.TestCase):
             ),
             holder_sides=_ALL_HOLDER_SIDES,
         )
-        plan = shared_short_axis_plan(search_scope)
+        plan = shared_short_axis_fixture(search_scope)
         supports = tuple(
             separator(start, end, plan, supported=True)
             for start, end in (
@@ -1269,7 +1269,7 @@ class FrameSequenceConstructionContractTest(unittest.TestCase):
             bottom=100.0,
             holder_sides=_ALL_HOLDER_SIDES,
         )
-        plan = shared_short_axis_plan(search_scope)
+        plan = shared_short_axis_fixture(search_scope)
         one_sided = separator(
             100.0,
             110.0,

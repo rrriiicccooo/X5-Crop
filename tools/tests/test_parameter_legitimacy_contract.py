@@ -16,7 +16,8 @@ from x5crop.image.evidence import (
     SeparatorEvidenceImageParameters,
     make_content_evidence_gray,
 )
-from x5crop.configuration.transform import DeskewDetectionParameters
+from x5crop.configuration.photo_edges import PhotoEdgeDetectionParameters
+from x5crop.configuration.transform import TransformDetectionParameters
 from x5crop.configuration.content import ContentEvidenceParameters
 from x5crop.configuration.candidate import (
     SequenceSolverParameters,
@@ -63,7 +64,8 @@ class ParameterLegitimacyContractTest(unittest.TestCase):
             lambda: SeparatorObservationParameters(minimum_run_px=0),
             lambda: SeparatorObservationParameters(maximum_observations=0),
             lambda: SequenceSolverParameters(maximum_assignment_evaluations=0),
-            lambda: DeskewDetectionParameters(minimum_path_samples=0),
+            lambda: PhotoEdgeDetectionParameters(minimum_candidate_sections=0),
+            lambda: TransformDetectionParameters(maximum_angle_degrees=0.0),
         )
         for factory in invalid_factories:
             with self.subTest(factory=factory), self.assertRaises(ValueError):
@@ -100,21 +102,36 @@ class ParameterLegitimacyContractTest(unittest.TestCase):
         }
         self.assertEqual(offenders, {})
 
-    def test_transform_thresholds_have_one_detection_owner(self) -> None:
+    def test_photo_edge_and_transform_thresholds_have_distinct_owners(self) -> None:
         self.assertEqual(
-            set(DeskewDetectionParameters.__dataclass_fields__),
+            set(PhotoEdgeDetectionParameters.__dataclass_fields__),
             {
-                "minimum_path_samples",
-                "minimum_common_support_ratio",
-                "minimum_photo_edge_intensity_range_ratio",
-                "minimum_holder_photo_gap_ratio",
-                "maximum_slope_delta",
-                "residual_floor_px",
-                "residual_height_ratio",
+                "path_sampling",
+                "minimum_candidate_sections",
+                "minimum_fit_inliers",
+                "minimum_inlier_ratio",
+                "minimum_supported_windows",
+                "minimum_support_distribution_bins",
+                "minimum_local_effect",
+                "local_window_height_ratio",
+                "local_window_min_px",
+                "robust_mad_multiplier",
+                "maximum_separation_drift_ratio",
+                "maximum_shared_axis_uncertainty_ratio",
+                "shared_axis_uncertainty_floor_px",
+                "maximum_center_offset_mm",
+                "maximum_photo_dimension_deviation_mm",
+            },
+        )
+        self.assertEqual(
+            set(TransformDetectionParameters.__dataclass_fields__),
+            {
                 "identity_span_ratio",
                 "identity_span_min_px",
                 "identity_span_max_px",
                 "maximum_angle_degrees",
+                "maximum_lane_slope_delta",
+                "maximum_projected_uncertainty_height_ratio",
             },
         )
         self.assertFalse((PROJECT_ROOT / "x5crop/image/deskew.py").exists())

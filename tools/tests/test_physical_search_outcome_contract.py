@@ -25,7 +25,7 @@ from x5crop.detection.physical.frame_sequence_solver import (
     solve_frame_sequence,
 )
 from x5crop.detection.physical.frame_sequence_result import FrameSequenceSolveFailure
-from x5crop.detection.physical.short_axis import shared_short_axis_plan
+from tools.tests.photo_edge_support import shared_short_axis_fixture
 from x5crop.domain import (
     BoundaryAxis,
     EvidenceState,
@@ -165,7 +165,7 @@ class PhysicalSearchOutcomeContractTest(unittest.TestCase):
             (),
             0,
         )
-        cross_axis_plan = shared_short_axis_plan(search_scope)
+        cross_axis_plan = shared_short_axis_fixture(search_scope)
         solved = solve_frame_sequence(
             sequence_search_index(search_scope),
             search_scope,

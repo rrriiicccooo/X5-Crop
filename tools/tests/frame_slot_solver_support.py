@@ -11,10 +11,8 @@ from x5crop.detection.physical.frame_sequence_result import (
     FrameSequenceSolveFailure,
     FrameSequenceSolveResult,
 )
-from x5crop.detection.physical.short_axis import (
-    SharedShortAxisPlan,
-    shared_short_axis_plan,
-)
+from x5crop.detection.physical.short_axis import SharedShortAxisPlan
+from tools.tests.photo_edge_support import shared_short_axis_fixture
 from x5crop.detection.physical.model import FrameSequenceSolution
 from x5crop.detection.physical.separator.observations import SeparatorSupportSet
 from x5crop.domain import (
@@ -317,7 +315,7 @@ def solve_sequence(
     nominal_count: int | None = None,
     maximum_assignment_evaluations: int = 100_000,
 ) -> FrameSequenceSolveResult | FrameSequenceSolveFailure:
-    plan = shared_short_axis_plan(search_scope)
+    plan = shared_short_axis_fixture(search_scope)
     return solve_frame_sequence(
         sequence_search_index(search_scope, supports),
         search_scope,

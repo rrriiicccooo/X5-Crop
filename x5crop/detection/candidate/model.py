@@ -38,10 +38,6 @@ from ..evidence.frame_coverage import (
     FrameCoverageEvidence,
     frame_coverage_matches_geometry,
 )
-from ..evidence.frame_scale import (
-    FrameScaleObservation,
-    frame_scale_observations_match_geometry,
-)
 from ..evidence.frame_slot_topology import (
     FrameSlotTopologyEvidence,
     frame_slot_topology_evidence,
@@ -94,7 +90,6 @@ class CandidateEvidence:
     frame_content: FrameContentEvidence
     internal_frame_boundary_preservation: InternalFrameBoundaryPreservationEvidence
     holder_boundary: HolderBoundaryEvidence
-    frame_scale_observations: tuple[FrameScaleObservation, ...]
     external_frame_preservation: ExternalFramePreservationEvidence
     holder_occupancy: HolderOccupancyEvidence
     partial_edge_safety: PartialEdgeSafetyEvidence
@@ -517,10 +512,6 @@ def _candidate_evidence_matches_geometry(
             evidence.internal_frame_boundary_preservation,
         )
         and evidence.independence == evidence_independence_evidence(geometry)
-        and frame_scale_observations_match_geometry(
-            geometry,
-            evidence.frame_scale_observations,
-        )
     )
 
 

@@ -30,6 +30,8 @@ class DebugStyleParameters:
     frame_slot_line_width: int = 3
     sequence_inferred_slot_line_width: int = 3
     containment_fallback_line_width: int = 2
+    photo_edge_line_width: int = 2
+    photo_edge_confidence_line_width: int = 1
     frame_slot_color: tuple[int, int, int] = (0, 255, 0)
     sequence_inferred_slot_color: tuple[int, int, int] = (255, 210, 0)
     frame_crop_envelope_color: tuple[int, int, int] = (40, 120, 255)
@@ -76,6 +78,11 @@ class DebugStyleParameters:
             (
                 "debug containment fallback line width",
                 self.containment_fallback_line_width,
+            ),
+            ("debug photo-edge line width", self.photo_edge_line_width),
+            (
+                "debug photo-edge confidence line width",
+                self.photo_edge_confidence_line_width,
             ),
             ("debug panel spacing", self.panel_spacing),
             ("debug label height", self.label_height),

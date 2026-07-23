@@ -54,7 +54,6 @@ from x5crop.detection.evidence.content.internal_frame_boundaries import (
     internal_frame_boundary_preservation_evidence,
 )
 from x5crop.detection.evidence.frame_coverage import FrameCoverageEvidence
-from x5crop.detection.evidence.frame_scale import frame_scale_observations
 from x5crop.detection.evidence.frame_slot_topology import (
     frame_slot_topology_evidence,
 )
@@ -68,6 +67,16 @@ from x5crop.detection.evidence.separator_sequence import separator_sequence_evid
 from x5crop.detection.evidence.transform_geometry import (
     TransformGeometryEvidence,
     TransformOutcome,
+)
+from x5crop.configuration.photo_edges import PhotoEdgeDetectionParameters
+from x5crop.configuration.scan_canvas import ScanCanvasDetectionConfiguration
+from x5crop.detection.evidence.photo_edges import (
+    map_photo_edge_pair_evidence,
+)
+from x5crop.detection.evidence.scan_canvas import observe_scan_canvas
+from tools.tests.photo_edge_support import (
+    photo_edge_pair_fixture,
+    shared_short_axis_fixture_from_edges,
 )
 from x5crop.detection.final.finalize import (
     finalization_plan_for_selection,
@@ -100,7 +109,7 @@ from x5crop.detection.physical.model import (
 from x5crop.detection.physical.short_axis import (
     FrameWidthSearchHint,
     SharedShortAxisPlan,
-    shared_short_axis_from_photo_edges,
+    shared_short_axis_from_photo_edge_pair,
 )
 from x5crop.domain import (
     BoundaryAxis,
@@ -137,7 +146,6 @@ from x5crop.image.statistics import (
     image_measurement_statistics,
 )
 from x5crop.output.model import AxisBleedParameters, FrameBleedPlan, FrameSideBleed
-from x5crop.units import ResolutionMetadataObservation
 
 
 _HOLDER_BOX = Box(0, 0, 310, 100)
@@ -204,6 +212,8 @@ def _photo_edge_path_fixture(
     side: BoundarySide,
     position: float,
     source: str,
+    *,
+    orthogonal_length: float = float(_HOLDER_BOX.width),
 ) -> GrayBoundaryPathObservation:
     provenance = MeasurementProvenance(
         MeasurementIdentity.BOUNDARY_PATHS,
@@ -224,7 +234,7 @@ def _photo_edge_path_fixture(
         kind=BoundaryKind.TONAL_TRANSITION,
         samples=(
             BoundaryPathSample(
-                PixelInterval(0.0, float(_HOLDER_BOX.width)),
+                PixelInterval(0.0, orthogonal_length),
                 PixelInterval.exact(position),
             ),
         ),
@@ -268,10 +278,6 @@ def candidate_boundary_paths() -> tuple[GrayBoundaryPathObservation, ...]:
         "synthetic_photo_edge:bottom",
     )
     return leading, trailing, top, bottom
-
-
-def unavailable_resolution_metadata_fixture() -> ResolutionMetadataObservation:
-    return ResolutionMetadataObservation(None, None, ("test_metadata_unavailable",))
 
 
 def separator_observation(
@@ -390,7 +396,7 @@ def _candidate_geometry(
 ) -> FrameSequenceSolution:
     paths = candidate_boundary_paths()
     leading_path, trailing_path, top_path, bottom_path = paths
-    shared_short_axis = shared_short_axis_from_photo_edges(
+    shared_short_axis = shared_short_axis_fixture_from_edges(
         top_path,
         bottom_path,
     )
@@ -695,7 +701,7 @@ def candidate_evidence_fixture(
             for index in range(1, geometry.count + 1)
         ),
     )
-    dimensions = frame_dimension_evidence(geometry)
+    dimensions = frame_dimension_evidence(geometry, None, None)
     holder = holder_boundary_evidence(geometry, 1.0)
     continuity = tuple(
         InternalBoundaryContentContinuityObservation(
@@ -781,7 +787,6 @@ def candidate_evidence_fixture(
         frame_content=content,
         internal_frame_boundary_preservation=internal,
         holder_boundary=holder,
-        frame_scale_observations=frame_scale_observations(geometry),
         external_frame_preservation=external,
         holder_occupancy=HolderOccupancyEvidence(
             completeness,
@@ -916,7 +921,7 @@ def transform_geometry_fixture(
 ) -> TransformGeometryEvidence:
     outcome = {
         EvidenceState.SUPPORTED: TransformOutcome.IDENTITY_WITHIN_TOLERANCE,
-        EvidenceState.UNAVAILABLE: TransformOutcome.PHOTO_EDGES_UNAVAILABLE,
+        EvidenceState.UNAVAILABLE: TransformOutcome.PHOTO_EDGE_PAIR_UNAVAILABLE,
         EvidenceState.CONTRADICTED: TransformOutcome.ANGLE_OUT_OF_RANGE,
     }.get(state)
     if outcome is None:
@@ -963,18 +968,48 @@ def detection_workspace_fixture(
         0.0,
         MeasurementCacheStatistics(),
     )
-    plan = _candidate_geometry().shared_short_axis
+    top_path = _photo_edge_path_fixture(
+        BoundarySide.TOP,
+        0.0,
+        "synthetic_workspace_photo_edge:top",
+        orthogonal_length=float(width),
+    )
+    bottom_path = _photo_edge_path_fixture(
+        BoundarySide.BOTTOM,
+        min(float(_HOLDER_BOX.bottom), float(height)),
+        "synthetic_workspace_photo_edge:bottom",
+        orthogonal_length=float(width),
+    )
+    photo_edge_pairs = photo_edge_pair_fixture(top_path, bottom_path)
     transform = transform_geometry_fixture(
         transform_state,
         width=width,
         height=height,
+    )
+    mapped_photo_edge_pairs = map_photo_edge_pair_evidence(
+        photo_edge_pairs,
+        transform.coordinate_transform,
+        "horizontal",
+        transform.position_uncertainty_px,
+    )
+    plan = shared_short_axis_from_photo_edge_pair(
+        mapped_photo_edge_pairs,
+        width,
+        PhotoEdgeDetectionParameters(),
     )
     return DetectionWorkspace(
         pixels=gray,
         source_gray=gray,
         gray=gray,
         measurement_cache=cache,
-        source_shared_short_axes=(plan,),
+        scan_canvas_evidence=observe_scan_canvas(
+            width,
+            height,
+            "horizontal",
+            ScanCanvasDetectionConfiguration(()),
+        ),
+        source_photo_edge_pairs=(photo_edge_pairs,),
+        mapped_photo_edge_pairs=(mapped_photo_edge_pairs,),
         shared_short_axes=(plan,),
         source_lane_divider=None,
         lane_divider=None,
@@ -1002,6 +1037,7 @@ def decide_candidate(
     return apply_decision_gate(
         selection,
         frame_bleed,
+        detection_workspace_fixture().scan_canvas_evidence,
         transform_geometry_fixture(transform_state),
         automatic_processing_eligibility=(
             EvidenceState.SUPPORTED
@@ -1023,6 +1059,7 @@ def final_detection_fixture(
         apply_decision_gate(
             selection,
             bleed,
+            detection_workspace_fixture().scan_canvas_evidence,
             transform_geometry_fixture(),
             automatic_processing_eligibility=EvidenceState.SUPPORTED,
         ),

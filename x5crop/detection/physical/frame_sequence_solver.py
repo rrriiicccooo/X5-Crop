@@ -43,7 +43,10 @@ def solve_frame_sequence(
     supports = search_index.separator_supports.canonical_supports
     shared_short_axis = short_axis_plan
     if not shared_short_axis.supports_safe_crop:
-        return sequence_result.FrameSequenceSolveFailure(short_axis_plan.search_outcome, 0)
+        return sequence_result.FrameSequenceSolveFailure(
+            short_axis_plan.physical_search,
+            0,
+        )
     if supports and any(
         support.measurement.short_axis_span
         != shared_short_axis.measurement_span
@@ -186,8 +189,7 @@ def solve_frame_sequence(
     )
     total_evaluations = direct_evaluations + completion_evaluations
     budget_exhausted = bool(
-        short_axis_plan.search_outcome.budget_exhausted
-        or direct_exhausted
+        direct_exhausted
         or completion_exhausted
     )
     if not builds:

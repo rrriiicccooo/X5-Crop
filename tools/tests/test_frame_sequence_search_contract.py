@@ -26,7 +26,7 @@ from x5crop.detection.physical.model import (
     BoundaryGeometryState,
     FrameBoundarySource,
 )
-from x5crop.detection.physical.short_axis import shared_short_axis_plan
+from tools.tests.photo_edge_support import shared_short_axis_fixture
 from x5crop.domain import (
     BoundaryAxis,
     BoundarySide,
@@ -280,7 +280,7 @@ class FrameSequenceSearchContractTest(unittest.TestCase):
             bottom=100.0,
             holder_sides=_ALL_HOLDER_SIDES,
         )
-        plan = shared_short_axis_plan(search_scope)
+        plan = shared_short_axis_fixture(search_scope)
         separator_support = separator(1_100.0, 1_110.0, plan, supported=True)
         bad_first_trailing, bad_second_leading = (
             separator_assignment.observed_band_edges(separator_support)
@@ -686,7 +686,7 @@ class FrameSequenceSearchContractTest(unittest.TestCase):
             internal_paths=(50.0, 100.0, 110.0, 160.0),
             holder_sides=_ALL_HOLDER_SIDES,
         )
-        plan = shared_short_axis_plan(search_scope)
+        plan = shared_short_axis_fixture(search_scope)
         support = separator(100.0, 110.0, plan, supported=True)
         preceding_trailing, following_leading = (
             separator_assignment.observed_band_edges(support)
@@ -799,7 +799,7 @@ class FrameSequenceSearchContractTest(unittest.TestCase):
             internal_paths=(230.0,),
             holder_sides=_ALL_HOLDER_SIDES,
         )
-        plan = shared_short_axis_plan(search_scope)
+        plan = shared_short_axis_fixture(search_scope)
         internal_separator = separator(100.0, 110.0, plan, supported=True)
         trailing_holder_band = separator(320.0, 330.0, plan, supported=True)
         first_trailing, second_leading = separator_assignment.observed_band_edges(
@@ -962,7 +962,7 @@ class FrameSequenceSearchContractTest(unittest.TestCase):
             bottom=100.0,
             holder_sides=_ALL_HOLDER_SIDES,
         )
-        plan = shared_short_axis_plan(search_scope)
+        plan = shared_short_axis_fixture(search_scope)
         holder_band = separator(0.0, 10.0, plan, supported=True)
         _, external_leading = separator_assignment.observed_band_edges(holder_band)
         external_leading = replace(
@@ -1208,7 +1208,7 @@ class FrameSequenceSearchContractTest(unittest.TestCase):
             bottom=100.0,
             holder_sides=_ALL_HOLDER_SIDES,
         )
-        plan = shared_short_axis_plan(search_scope)
+        plan = shared_short_axis_fixture(search_scope)
         band_leading, band_trailing = separator_assignment.observed_band_edges(
             separator(100.0, 110.0, plan, supported=True)
         )
@@ -1274,7 +1274,7 @@ class FrameSequenceSearchContractTest(unittest.TestCase):
             bottom=100.0,
             holder_sides=_ALL_HOLDER_SIDES,
         )
-        plan = shared_short_axis_plan(search_scope)
+        plan = shared_short_axis_fixture(search_scope)
         one_sided_support = separator(
             110.0,
             120.0,
@@ -1752,7 +1752,7 @@ class FrameSequenceSearchContractTest(unittest.TestCase):
             solve_frame_sequence(
                 search_index,
                 search_scope,
-                shared_short_axis_plan(search_scope),
+                shared_short_axis_fixture(search_scope),
                 3,
                 dimensions(3.0, 1.0),
                 content(width=900, height=100, runs=((0, 900),)),

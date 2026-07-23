@@ -75,7 +75,7 @@ class LayerBoundariesContractTest(unittest.TestCase):
         ).read_text(encoding="utf-8")
         self.assertIn("class DetectionWorkspace", workspace_source)
         self.assertIn("def prepare_detection_workspace", workspace_source)
-        self.assertNotIn("shared_short_axis_plan(", (
+        self.assertNotIn("shared_short_axis_fixture(", (
             PROJECT_ROOT / "x5crop/detection/pipeline.py"
         ).read_text(encoding="utf-8"))
         self.assertNotIn(
@@ -83,6 +83,67 @@ class LayerBoundariesContractTest(unittest.TestCase):
             (PROJECT_ROOT / "x5crop/runtime/outcome.py").read_text(
                 encoding="utf-8"
             ),
+        )
+
+    def test_scan_canvas_photo_edge_model_has_no_superseded_inputs(self) -> None:
+        active_source = "\n".join(
+            path.read_text(encoding="utf-8")
+            for path in (PROJECT_ROOT / "x5crop").rglob("*.py")
+        )
+        for forbidden in (
+            "minimum_observed_leverage",
+            "observed_leverage",
+            "photo_height_multiple",
+            "ResolutionMetadataObservation",
+            "FrameScaleObservation",
+            "resolution_metadata",
+            "source_shared_short_axes",
+        ):
+            self.assertNotIn(forbidden, active_source)
+
+        photo_edge_source = (
+            PROJECT_ROOT / "x5crop/detection/evidence/photo_edges.py"
+        ).read_text(encoding="utf-8")
+        photo_edge_configuration = (
+            PROJECT_ROOT / "x5crop/configuration/photo_edges.py"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn("minimum_path_support_ratio", photo_edge_source)
+        self.assertNotIn(
+            "minimum_path_support_ratio",
+            photo_edge_configuration,
+        )
+
+        workspace_source = (
+            PROJECT_ROOT / "x5crop/detection/workspace.py"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn("boundary_paths_in_domain", workspace_source)
+        self.assertEqual(
+            workspace_source.count("short_axis_boundary_path_pairs("),
+            1,
+        )
+        self.assertEqual(
+            workspace_source.count("short_axis_boundary_paths("),
+            1,
+        )
+        self.assertNotIn("boundary_measurements", workspace_source)
+        self.assertIn("if scan_canvas is None:", workspace_source)
+
+    def test_scan_canvas_dimensions_have_one_catalog_owner(self) -> None:
+        physical_tokens = ("32.22", "63.44", "224.5", "188.5")
+        owners = {
+            token: tuple(
+                path.relative_to(PROJECT_ROOT).as_posix()
+                for path in (PROJECT_ROOT / "x5crop").rglob("*.py")
+                if token in path.read_text(encoding="utf-8")
+            )
+            for token in physical_tokens
+        }
+        self.assertEqual(
+            owners,
+            {
+                token: ("x5crop/formats/scan_canvas.py",)
+                for token in physical_tokens
+            },
         )
 
     def test_active_source_import_graph_is_acyclic(self) -> None:

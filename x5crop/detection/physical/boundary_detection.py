@@ -2,10 +2,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from statistics import fmean, median
+from typing import Callable
 
 import numpy as np
 
 from ...configuration.boundary import BoundaryPathParameters
+from ...configuration.path_sampling import BoundaryPathSamplingParameters
 from ...domain import (
     BoundaryAxis,
     BoundaryKind,
@@ -50,6 +52,45 @@ class _LocalPathSample:
     upper_gradient: float
 
 
+@dataclass(frozen=True)
+class _TypedLocalPathSample:
+    kind: BoundaryKind
+    sample: _LocalPathSample
+
+
+@dataclass(frozen=True)
+class _LocalShortAxisBoundaryPair:
+    constraint_id: str
+    top: _TypedLocalPathSample
+    bottom: _TypedLocalPathSample
+
+
+@dataclass(frozen=True)
+class ShortAxisBoundaryPathPairObservation:
+    constraint_id: str
+    top_path: GrayBoundaryPathObservation
+    bottom_path: GrayBoundaryPathObservation
+
+    def __post_init__(self) -> None:
+        if not self.constraint_id:
+            raise ValueError(
+                "short-axis boundary pair requires a constraint identity"
+            )
+        if (
+            self.top_path.axis != BoundaryAxis.SHORT
+            or self.bottom_path.axis != BoundaryAxis.SHORT
+        ):
+            raise ValueError(
+                "short-axis boundary pair requires short-axis paths"
+            )
+        if self.top_path.provenance.observation_id == (
+            self.bottom_path.provenance.observation_id
+        ):
+            raise ValueError(
+                "short-axis boundary pair requires distinct paths"
+            )
+
+
 _WindowStatistics = tuple[float, float, float, float]
 
 
@@ -76,7 +117,7 @@ def _cross_section_profiles(
     texture: np.ndarray,
     *,
     scan_axis: int,
-    parameters: BoundaryPathParameters,
+    parameters: BoundaryPathSamplingParameters,
 ) -> tuple[_CrossSectionProfile, ...]:
     orthogonal_extent = gray.shape[0] if scan_axis == 1 else gray.shape[1]
     scan_extent = gray.shape[1] if scan_axis == 1 else gray.shape[0]
@@ -130,8 +171,13 @@ def _edge_reference_mask(
     parameters: BoundaryPathParameters,
 ) -> np.ndarray:
     window = max(
-        parameters.minimum_local_measurement_window_px,
-        int(round(len(intensity) * parameters.local_measurement_window_ratio)),
+        parameters.path_sampling.minimum_local_measurement_window_px,
+        int(
+            round(
+                len(intensity)
+                * parameters.path_sampling.local_measurement_window_ratio
+            )
+        ),
     )
     window = min(len(intensity), window)
     seed_intensity = intensity[:window]
@@ -168,8 +214,13 @@ def _edge_adjacent_transition(
         parameters,
     )
     window = max(
-        parameters.minimum_local_measurement_window_px,
-        int(round(len(reference) * parameters.local_measurement_window_ratio)),
+        parameters.path_sampling.minimum_local_measurement_window_px,
+        int(
+            round(
+                len(reference)
+                * parameters.path_sampling.local_measurement_window_ratio
+            )
+        ),
     )
     window = min(len(reference), window)
     required_nonreference = int(
@@ -189,7 +240,7 @@ def _edge_adjacent_transition(
 
 def _adaptive_change_points(
     signal: np.ndarray,
-    parameters: BoundaryPathParameters,
+    parameters: BoundaryPathSamplingParameters,
 ) -> tuple[PixelInterval, ...]:
     if signal.size <= 1:
         return ()
@@ -304,7 +355,7 @@ def _local_sample(
     intensity: np.ndarray,
     texture: np.ndarray,
     reverse: bool,
-    parameters: BoundaryPathParameters,
+    parameters: BoundaryPathSamplingParameters,
     transform_position_uncertainty_px: float,
     window_statistics: _WindowStatisticsCache,
 ) -> _LocalPathSample | None:
@@ -374,10 +425,15 @@ def _local_samples_for_kind(
     side: BoundarySide,
     kind: BoundaryKind,
     statistics: ImageMeasurementStatistics,
-    parameters: BoundaryPathParameters,
+    parameters: BoundaryPathSamplingParameters | BoundaryPathParameters,
     transform_position_uncertainty_px: float,
     window_statistics: _WindowStatisticsCache,
 ) -> tuple[_LocalPathSample, ...]:
+    sampling = (
+        parameters.path_sampling
+        if isinstance(parameters, BoundaryPathParameters)
+        else parameters
+    )
     reverse = side in {BoundarySide.TRAILING, BoundarySide.BOTTOM}
     samples: list[_LocalPathSample] = []
     for section_index, profile in enumerate(profiles):
@@ -386,6 +442,10 @@ def _local_samples_for_kind(
         intensity = source_intensity[::-1] if reverse else source_intensity
         texture = source_texture[::-1] if reverse else source_texture
         if kind == BoundaryKind.EDGE_ADJACENT_TRANSITION:
+            if not isinstance(parameters, BoundaryPathParameters):
+                raise TypeError(
+                    "edge-adjacent samples require boundary path parameters"
+                )
             positions = _edge_adjacent_transition(
                 intensity,
                 texture,
@@ -393,9 +453,9 @@ def _local_samples_for_kind(
                 parameters,
             )
         elif kind == BoundaryKind.TONAL_TRANSITION:
-            positions = _adaptive_change_points(intensity, parameters)
+            positions = _adaptive_change_points(intensity, sampling)
         elif kind == BoundaryKind.TEXTURE_TRANSITION:
-            positions = _adaptive_change_points(texture, parameters)
+            positions = _adaptive_change_points(texture, sampling)
         else:
             raise ValueError(f"unsupported boundary path kind: {kind}")
         for position in positions:
@@ -406,7 +466,7 @@ def _local_samples_for_kind(
                 intensity,
                 texture,
                 reverse,
-                parameters,
+                sampling,
                 transform_position_uncertainty_px,
                 window_statistics,
             )
@@ -419,16 +479,33 @@ def _cluster_samples(
     samples: tuple[_LocalPathSample, ...],
     extent: int,
     section_count: int,
-    parameters: BoundaryPathParameters,
+    parameters: BoundaryPathSamplingParameters,
+    minimum_path_samples: int | None = None,
+    minimum_path_support_ratio: float | None = None,
 ) -> tuple[tuple[_LocalPathSample, ...], ...]:
+    if (
+        minimum_path_samples is None
+        and minimum_path_support_ratio is None
+    ):
+        raise ValueError(
+            "path clustering requires a count or support-ratio contract"
+        )
     tolerance = max(
         float(parameters.path_cluster_tolerance_min_px),
         float(extent) * float(parameters.path_cluster_tolerance_ratio),
     )
-    minimum_support = max(
-        1,
-        int(np.ceil(section_count * parameters.minimum_path_support_ratio)),
-    )
+    if minimum_path_samples is not None:
+        minimum_support = max(1, int(minimum_path_samples))
+    else:
+        assert minimum_path_support_ratio is not None
+        minimum_support = max(
+            1,
+            int(
+                np.ceil(
+                    section_count * minimum_path_support_ratio
+                )
+            ),
+        )
     by_section = {
         section_index: tuple(
             sample for sample in samples if sample.section_index == section_index
@@ -574,10 +651,15 @@ def _edge_adjacent_cluster(
     extent: int,
     section_count: int,
     parameters: BoundaryPathParameters,
+    minimum_path_samples: int | None = None,
 ) -> tuple[tuple[_LocalPathSample, ...], ...]:
-    minimum_support = max(
-        1,
-        int(np.ceil(section_count * parameters.minimum_path_support_ratio)),
+    minimum_support = (
+        max(1, int(minimum_path_samples))
+        if minimum_path_samples is not None
+        else max(
+            1,
+            int(np.ceil(section_count * parameters.minimum_path_support_ratio)),
+        )
     )
     if len(samples) < minimum_support:
         return ()
@@ -588,8 +670,9 @@ def _edge_adjacent_cluster(
     center = float(np.median(positions))
     mad = float(np.median(np.abs(positions - center)))
     tolerance = max(
-        float(parameters.path_cluster_tolerance_min_px),
-        float(extent) * float(parameters.path_cluster_tolerance_ratio),
+        float(parameters.path_sampling.path_cluster_tolerance_min_px),
+        float(extent)
+        * float(parameters.path_sampling.path_cluster_tolerance_ratio),
         mad * float(parameters.path_inlier_mad_multiplier),
     )
     inliers = tuple(
@@ -600,7 +683,7 @@ def _edge_adjacent_cluster(
     if len(inliers) < minimum_support:
         return ()
     maximum_residual = max(
-        float(parameters.path_cluster_tolerance_min_px),
+        float(parameters.path_sampling.path_cluster_tolerance_min_px),
         float(extent) * float(parameters.maximum_path_fit_residual_ratio),
     )
     if _path_fit_residual(inliers) > maximum_residual:
@@ -614,8 +697,11 @@ def _provenance(
     path_index: int,
     scan_origin: BoundarySide | None,
     transform_position_uncertainty_px: float,
+    observation_prefix: str | None = None,
 ) -> MeasurementProvenance:
     source = f"{kind.value}:{axis.value}:{path_index}"
+    if observation_prefix is not None:
+        source = f"{observation_prefix}:{source}"
     if scan_origin is not None:
         source = f"{source}:scan_from_{scan_origin.value}"
     return MeasurementProvenance(
@@ -662,11 +748,13 @@ def _paths_for_axis(
     profiles: tuple[_CrossSectionProfile, ...],
     statistics: ImageMeasurementStatistics,
     kind: BoundaryKind,
-    parameters: BoundaryPathParameters,
+    parameters: BoundaryPathSamplingParameters | BoundaryPathParameters,
     *,
     scan_origin: BoundarySide | None = None,
+    minimum_path_samples: int | None,
     transform_position_uncertainty_px: float,
     window_statistics: _WindowStatisticsCache,
+    observation_prefix: str | None = None,
 ) -> tuple[GrayBoundaryPathObservation, ...]:
     if scan_origin is not None and boundary_axis_for_side(scan_origin) != axis:
         raise ValueError("boundary scan origin must lie on the measured axis")
@@ -683,17 +771,36 @@ def _paths_for_axis(
         transform_position_uncertainty_px,
         window_statistics,
     )
-    clusterer = (
-        _edge_adjacent_cluster
-        if kind == BoundaryKind.EDGE_ADJACENT_TRANSITION
-        else _cluster_samples
-    )
-    clusters = clusterer(
-        local_samples,
-        extent,
-        len(profiles),
-        parameters,
-    )
+    if kind == BoundaryKind.EDGE_ADJACENT_TRANSITION:
+        if not isinstance(parameters, BoundaryPathParameters):
+            raise TypeError(
+                "edge-adjacent paths require boundary path parameters"
+            )
+        clusters = _edge_adjacent_cluster(
+            local_samples,
+            extent,
+            len(profiles),
+            parameters,
+            minimum_path_samples,
+        )
+    else:
+        sampling = (
+            parameters.path_sampling
+            if isinstance(parameters, BoundaryPathParameters)
+            else parameters
+        )
+        clusters = _cluster_samples(
+            local_samples,
+            extent,
+            len(profiles),
+            sampling,
+            minimum_path_samples,
+            (
+                parameters.minimum_path_support_ratio
+                if isinstance(parameters, BoundaryPathParameters)
+                else None
+            ),
+        )
     paths: list[GrayBoundaryPathObservation] = []
     for path_index, cluster in enumerate(clusters):
         samples = tuple(
@@ -706,6 +813,7 @@ def _paths_for_axis(
             path_index,
             scan_origin,
             transform_position_uncertainty_px,
+            observation_prefix,
         )
         support_ratio = len(cluster) / float(len(profiles))
         paths.append(
@@ -731,6 +839,556 @@ def _paths_for_axis(
             )
         )
     return tuple(paths)
+
+
+def _local_transition_strength(item: _TypedLocalPathSample) -> float:
+    sample = item.sample
+    return max(
+        abs(sample.upper_intensity - sample.lower_intensity),
+        abs(sample.upper_texture - sample.lower_texture),
+        abs(sample.upper_gradient - sample.lower_gradient),
+    )
+
+
+def _merge_equivalent_local_samples(
+    samples: tuple[_TypedLocalPathSample, ...],
+) -> tuple[_TypedLocalPathSample, ...]:
+    groups: list[list[_TypedLocalPathSample]] = []
+    for item in sorted(
+        samples,
+        key=lambda candidate: (
+            candidate.sample.section_index,
+            candidate.sample.position.midpoint,
+            candidate.kind.value,
+        ),
+    ):
+        group = next(
+            (
+                existing
+                for existing in groups
+                if existing[0].sample.section_index
+                == item.sample.section_index
+                and all(
+                    member.sample.position.intersection(
+                        item.sample.position
+                    )
+                    is not None
+                    for member in existing
+                )
+            ),
+            None,
+        )
+        if group is None:
+            groups.append([item])
+        else:
+            group.append(item)
+    return tuple(
+        min(
+            group,
+            key=lambda item: (
+                -_local_transition_strength(item),
+                item.sample.position.maximum
+                - item.sample.position.minimum,
+                item.kind.value,
+                item.sample.position.midpoint,
+            ),
+        )
+        for group in groups
+    )
+
+
+def _local_short_axis_boundary_pairs(
+    samples: tuple[_TypedLocalPathSample, ...],
+    matching_constraint_ids: Callable[
+        [float, float, float],
+        tuple[str, ...],
+    ],
+) -> tuple[_LocalShortAxisBoundaryPair, ...]:
+    by_section = {
+        section_index: tuple(
+            item
+            for item in samples
+            if item.sample.section_index == section_index
+        )
+        for section_index in sorted(
+            {item.sample.section_index for item in samples}
+        )
+    }
+    pairs: list[_LocalShortAxisBoundaryPair] = []
+    for section_samples in by_section.values():
+        ordered = tuple(
+            sorted(
+                section_samples,
+                key=lambda item: (
+                    item.sample.position.midpoint,
+                    item.kind.value,
+                ),
+            )
+        )
+        for top_index, top in enumerate(ordered):
+            coordinate = top.sample.orthogonal_interval.midpoint
+            for bottom in ordered[top_index + 1 :]:
+                if (
+                    bottom.sample.position.midpoint
+                    <= top.sample.position.midpoint
+                ):
+                    continue
+                constraint_ids = matching_constraint_ids(
+                    coordinate,
+                    top.sample.position.midpoint,
+                    bottom.sample.position.midpoint,
+                )
+                if len(set(constraint_ids)) != len(constraint_ids):
+                    raise ValueError(
+                        "short-axis boundary constraints must be unique"
+                    )
+                if any(not constraint_id for constraint_id in constraint_ids):
+                    raise ValueError(
+                        "short-axis boundary constraints cannot be empty"
+                    )
+                pairs.extend(
+                    _LocalShortAxisBoundaryPair(
+                        constraint_id,
+                        top,
+                        bottom,
+                    )
+                    for constraint_id in constraint_ids
+                )
+    return tuple(pairs)
+
+
+def _paired_sample_prediction(
+    track: tuple[_LocalShortAxisBoundaryPair, ...],
+    coordinate: float,
+    role: str,
+) -> float:
+    typed_samples = tuple(getattr(item, role) for item in track)
+    coordinates = tuple(
+        item.sample.orthogonal_interval.midpoint
+        for item in typed_samples
+    )
+    positions = tuple(
+        item.sample.position.midpoint for item in typed_samples
+    )
+    if len(track) == 1:
+        return positions[0]
+    coordinate_center = sum(coordinates) / float(len(coordinates))
+    position_center = sum(positions) / float(len(positions))
+    denominator = sum(
+        (item - coordinate_center) ** 2 for item in coordinates
+    )
+    if denominator <= 0.0:
+        return position_center
+    slope = sum(
+        (item - coordinate_center) * (position - position_center)
+        for item, position in zip(coordinates, positions, strict=True)
+    ) / denominator
+    return position_center + slope * (
+        float(coordinate) - coordinate_center
+    )
+
+
+def _cluster_local_short_axis_boundary_pairs(
+    pairs: tuple[_LocalShortAxisBoundaryPair, ...],
+    short_axis_extent: int,
+    section_count: int,
+    parameters: BoundaryPathSamplingParameters,
+    minimum_path_samples: int,
+) -> tuple[tuple[_LocalShortAxisBoundaryPair, ...], ...]:
+    tolerance = max(
+        float(parameters.path_cluster_tolerance_min_px),
+        float(short_axis_extent)
+        * float(parameters.path_cluster_tolerance_ratio),
+    )
+    completed: list[tuple[_LocalShortAxisBoundaryPair, ...]] = []
+    for constraint_id in sorted(
+        {item.constraint_id for item in pairs}
+    ):
+        by_section = {
+            section_index: tuple(
+                item
+                for item in pairs
+                if item.constraint_id == constraint_id
+                and item.top.sample.section_index == section_index
+            )
+            for section_index in range(section_count)
+        }
+        active: list[tuple[_LocalShortAxisBoundaryPair, ...]] = []
+        for section_index in range(section_count):
+            section_pairs = by_section[section_index]
+            eligible: list[tuple[_LocalShortAxisBoundaryPair, ...]] = []
+            for track in active:
+                gap = (
+                    section_index
+                    - track[-1].top.sample.section_index
+                )
+                if (
+                    0
+                    < gap
+                    <= parameters.maximum_path_section_gap + 1
+                ):
+                    eligible.append(track)
+                else:
+                    completed.append(track)
+
+            associations: list[tuple[float, float, int, int]] = []
+            for track_index, track in enumerate(eligible):
+                gap = (
+                    section_index
+                    - track[-1].top.sample.section_index
+                )
+                for pair_index, pair in enumerate(section_pairs):
+                    coordinate = (
+                        pair.top.sample.orthogonal_interval.midpoint
+                    )
+                    top_residual = abs(
+                        pair.top.sample.position.midpoint
+                        - _paired_sample_prediction(
+                            track,
+                            coordinate,
+                            "top",
+                        )
+                    )
+                    bottom_residual = abs(
+                        pair.bottom.sample.position.midpoint
+                        - _paired_sample_prediction(
+                            track,
+                            coordinate,
+                            "bottom",
+                        )
+                    )
+                    maximum_residual = max(
+                        top_residual,
+                        bottom_residual,
+                    )
+                    if maximum_residual <= tolerance * float(gap):
+                        associations.append(
+                            (
+                                maximum_residual,
+                                top_residual + bottom_residual,
+                                track_index,
+                                pair_index,
+                            )
+                        )
+            assigned_tracks: dict[int, int] = {}
+            assigned_pairs: set[int] = set()
+            for _, _, track_index, pair_index in sorted(associations):
+                if (
+                    track_index in assigned_tracks
+                    or pair_index in assigned_pairs
+                ):
+                    continue
+                assigned_tracks[track_index] = pair_index
+                assigned_pairs.add(pair_index)
+
+            next_tracks: list[
+                tuple[_LocalShortAxisBoundaryPair, ...]
+            ] = []
+            for track_index, track in enumerate(eligible):
+                pair_index = assigned_tracks.get(track_index)
+                if pair_index is not None:
+                    next_tracks.append(
+                        (*track, section_pairs[pair_index])
+                    )
+                    continue
+                gap = (
+                    section_index
+                    - track[-1].top.sample.section_index
+                )
+                if gap <= parameters.maximum_path_section_gap:
+                    next_tracks.append(track)
+                else:
+                    completed.append(track)
+            next_tracks.extend(
+                (pair,)
+                for pair_index, pair in enumerate(section_pairs)
+                if pair_index not in assigned_pairs
+            )
+            active = next_tracks
+        completed.extend(active)
+
+    supported = tuple(
+        track
+        for track in completed
+        if len(track) >= minimum_path_samples
+    )
+
+    def same_track(
+        left: tuple[_LocalShortAxisBoundaryPair, ...],
+        right: tuple[_LocalShortAxisBoundaryPair, ...],
+    ) -> bool:
+        if left[0].constraint_id != right[0].constraint_id:
+            return False
+        left_by_section = {
+            item.top.sample.section_index: item for item in left
+        }
+        right_by_section = {
+            item.top.sample.section_index: item for item in right
+        }
+        shared = left_by_section.keys() & right_by_section.keys()
+        if len(shared) != min(len(left), len(right)):
+            return False
+        return all(
+            left_by_section[index].top.sample.position
+            == right_by_section[index].top.sample.position
+            and left_by_section[index].bottom.sample.position
+            == right_by_section[index].bottom.sample.position
+            for index in shared
+        )
+
+    ranked = tuple(
+        sorted(
+            supported,
+            key=lambda track: (
+                track[0].constraint_id,
+                -len(track),
+                max(
+                    _path_fit_residual(
+                        tuple(item.top.sample for item in track)
+                    ),
+                    _path_fit_residual(
+                        tuple(item.bottom.sample for item in track)
+                    ),
+                ),
+                median(
+                    item.top.sample.position.midpoint
+                    for item in track
+                ),
+                median(
+                    item.bottom.sample.position.midpoint
+                    for item in track
+                ),
+            ),
+        )
+    )
+    canonical: list[tuple[_LocalShortAxisBoundaryPair, ...]] = []
+    for track in ranked:
+        if any(same_track(track, accepted) for accepted in canonical):
+            continue
+        canonical.append(track)
+    return tuple(canonical)
+
+
+def _dominant_pair_path_kind(
+    samples: tuple[_TypedLocalPathSample, ...],
+) -> BoundaryKind:
+    counts = {
+        kind: sum(item.kind == kind for item in samples)
+        for kind in {
+            item.kind for item in samples
+        }
+    }
+    return min(
+        counts,
+        key=lambda kind: (-counts[kind], kind.value),
+    )
+
+
+def _paired_path_provenance(
+    observation_prefix: str,
+    constraint_id: str,
+    pair_index: int,
+    role: str,
+) -> MeasurementProvenance:
+    return MeasurementProvenance(
+        root_measurement=MeasurementIdentity.BOUNDARY_PATHS,
+        observation_id=ObservationId(
+            f"{observation_prefix}:{constraint_id}:"
+            f"pair_{pair_index}:{role}"
+        ),
+        dependencies=(
+            MeasurementIdentity.GRAY_WORK,
+            MeasurementIdentity.IMAGE_MEASUREMENT_STATISTICS,
+        ),
+        description="measured paired short-axis boundary path",
+    )
+
+
+def _paired_path_observation(
+    samples: tuple[_TypedLocalPathSample, ...],
+    statistics: ImageMeasurementStatistics,
+    section_count: int,
+    provenance: MeasurementProvenance,
+) -> GrayBoundaryPathObservation:
+    cluster = tuple(item.sample for item in samples)
+    support_ratio = len(cluster) / float(section_count)
+    return GrayBoundaryPathObservation(
+        axis=BoundaryAxis.SHORT,
+        kind=_dominant_pair_path_kind(samples),
+        samples=tuple(
+            BoundaryPathSample(
+                item.orthogonal_interval,
+                item.position,
+            )
+            for item in cluster
+        ),
+        lower_appearance=_appearance(
+            cluster,
+            "lower",
+            provenance,
+            statistics,
+            support_ratio,
+        ),
+        upper_appearance=_appearance(
+            cluster,
+            "upper",
+            provenance,
+            statistics,
+            support_ratio,
+        ),
+        provenance=provenance,
+    )
+
+
+def short_axis_boundary_path_pairs(
+    gray: np.ndarray,
+    statistics: ImageMeasurementStatistics,
+    parameters: BoundaryPathSamplingParameters,
+    *,
+    minimum_path_samples: int,
+    matching_constraint_ids: Callable[
+        [float, float, float],
+        tuple[str, ...],
+    ],
+    observation_prefix: str,
+) -> tuple[ShortAxisBoundaryPathPairObservation, ...]:
+    if gray.ndim != 2 or not gray.size:
+        raise ValueError(
+            "short-axis pair measurement requires non-empty grayscale"
+        )
+    if minimum_path_samples <= 0:
+        raise ValueError(
+            "short-axis pair retention must be positive"
+        )
+    if not observation_prefix:
+        raise ValueError(
+            "short-axis pair observations require an identity prefix"
+        )
+    texture = _texture_image(gray)
+    profiles = _cross_section_profiles(
+        gray,
+        texture,
+        scan_axis=0,
+        parameters=parameters,
+    )
+    window_statistics: _WindowStatisticsCache = {}
+    local_samples = _merge_equivalent_local_samples(
+        tuple(
+            _TypedLocalPathSample(kind, sample)
+            for kind in (
+                BoundaryKind.TONAL_TRANSITION,
+                BoundaryKind.TEXTURE_TRANSITION,
+            )
+            for sample in _local_samples_for_kind(
+                profiles,
+                BoundarySide.TOP,
+                kind,
+                statistics,
+                parameters,
+                0.0,
+                window_statistics,
+            )
+        )
+    )
+    local_pairs = _local_short_axis_boundary_pairs(
+        local_samples,
+        matching_constraint_ids,
+    )
+    tracks = _cluster_local_short_axis_boundary_pairs(
+        local_pairs,
+        gray.shape[0],
+        len(profiles),
+        parameters,
+        minimum_path_samples,
+    )
+    observations: list[ShortAxisBoundaryPathPairObservation] = []
+    for pair_index, track in enumerate(tracks):
+        constraint_id = track[0].constraint_id
+        top_provenance = _paired_path_provenance(
+            observation_prefix,
+            constraint_id,
+            pair_index,
+            "top",
+        )
+        bottom_provenance = _paired_path_provenance(
+            observation_prefix,
+            constraint_id,
+            pair_index,
+            "bottom",
+        )
+        observations.append(
+            ShortAxisBoundaryPathPairObservation(
+                constraint_id=constraint_id,
+                top_path=_paired_path_observation(
+                    tuple(item.top for item in track),
+                    statistics,
+                    len(profiles),
+                    top_provenance,
+                ),
+                bottom_path=_paired_path_observation(
+                    tuple(item.bottom for item in track),
+                    statistics,
+                    len(profiles),
+                    bottom_provenance,
+                ),
+            )
+        )
+    return tuple(observations)
+
+
+def short_axis_boundary_paths(
+    gray: np.ndarray,
+    statistics: ImageMeasurementStatistics,
+    parameters: BoundaryPathSamplingParameters,
+    *,
+    minimum_path_samples: int,
+    observation_prefix: str,
+) -> tuple[GrayBoundaryPathObservation, ...]:
+    if gray.ndim != 2 or not gray.size:
+        raise ValueError(
+            "short-axis path measurement requires non-empty grayscale"
+        )
+    if minimum_path_samples <= 0:
+        raise ValueError(
+            "short-axis path retention must be positive"
+        )
+    if not observation_prefix:
+        raise ValueError(
+            "short-axis path observations require an identity prefix"
+        )
+    texture = _texture_image(gray)
+    profiles = _cross_section_profiles(
+        gray,
+        texture,
+        scan_axis=0,
+        parameters=parameters,
+    )
+    window_statistics: _WindowStatisticsCache = {}
+    measured = tuple(
+        path
+        for kind in (
+            BoundaryKind.TONAL_TRANSITION,
+            BoundaryKind.TEXTURE_TRANSITION,
+        )
+        for path in _paths_for_axis(
+            BoundaryAxis.SHORT,
+            profiles,
+            statistics,
+            kind,
+            parameters,
+            minimum_path_samples=minimum_path_samples,
+            transform_position_uncertainty_px=0.0,
+            window_statistics=window_statistics,
+            observation_prefix=observation_prefix,
+        )
+    )
+    return tuple(
+        sorted(
+            dict.fromkeys(measured),
+            key=_generic_path_rank,
+            reverse=True,
+        )
+    )
 
 
 def _generic_path_rank(
@@ -784,6 +1442,7 @@ def boundary_measurements(
     parameters: BoundaryPathParameters,
     *,
     axes: tuple[BoundaryAxis, ...],
+    minimum_path_samples: int | None = None,
     transform_position_uncertainty_px: float,
 ) -> BoundaryMeasurementSet:
     if gray.ndim != 2 or not gray.size:
@@ -797,6 +1456,8 @@ def boundary_measurements(
         axis not in {BoundaryAxis.LONG, BoundaryAxis.SHORT} for axis in axes
     ):
         raise ValueError("boundary measurement requires unique spatial axes")
+    if minimum_path_samples is not None and minimum_path_samples <= 0:
+        raise ValueError("boundary path retention count must be positive")
     texture = _texture_image(gray)
     profiles_by_axis = {}
     if BoundaryAxis.LONG in axes:
@@ -804,14 +1465,14 @@ def boundary_measurements(
             gray,
             texture,
             scan_axis=1,
-            parameters=parameters,
+            parameters=parameters.path_sampling,
         )
     if BoundaryAxis.SHORT in axes:
         profiles_by_axis[BoundaryAxis.SHORT] = _cross_section_profiles(
             gray,
             texture,
             scan_axis=0,
-            parameters=parameters,
+            parameters=parameters.path_sampling,
         )
     window_statistics_by_axis: dict[
         BoundaryAxis,
@@ -828,6 +1489,7 @@ def boundary_measurements(
                     statistics,
                     kind,
                     parameters,
+                    minimum_path_samples=minimum_path_samples,
                     transform_position_uncertainty_px=(
                         transform_position_uncertainty_px
                     ),
@@ -850,6 +1512,7 @@ def boundary_measurements(
             BoundaryKind.EDGE_ADJACENT_TRANSITION,
             parameters,
             scan_origin=side,
+            minimum_path_samples=minimum_path_samples,
             transform_position_uncertainty_px=(
                 transform_position_uncertainty_px
             ),

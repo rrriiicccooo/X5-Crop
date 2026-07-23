@@ -12,8 +12,10 @@ from x5crop.report.validation import validate_current_report_record
 
 
 DEFAULT_FIELDS = (
+    "input.scan_canvas_evidence",
     "input.transform_geometry",
-    "input.source_shared_short_axes",
+    "input.source_photo_edge_pairs",
+    "input.mapped_photo_edge_pairs",
     "input.shared_short_axes",
     "input.source_lane_divider",
     "input.lane_divider",

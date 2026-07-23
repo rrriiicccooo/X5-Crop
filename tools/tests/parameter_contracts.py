@@ -25,14 +25,18 @@ from x5crop.configuration.diagnostics import (
     DebugStyleParameters,
     SeparatorOverlayParameters,
 )
+from x5crop.configuration.photo_edges import PhotoEdgeDetectionParameters
+from x5crop.configuration.path_sampling import BoundaryPathSamplingParameters
+from x5crop.configuration.scan_canvas import ScanCanvasDetectionConfiguration
 from x5crop.configuration.separator import SeparatorObservationParameters
-from x5crop.configuration.transform import DeskewDetectionParameters
+from x5crop.configuration.transform import TransformDetectionParameters
 from x5crop.output.model import AxisBleedParameters
 from x5crop.formats import (
     FrameSizeMm,
     ScanLayoutSpec,
     StripHandlingSpec,
 )
+from x5crop.formats.scan_canvas import ScanCanvasPhysicalSpec
 from x5crop.image.separator_profile import SeparatorProfileParameters
 from x5crop.image.evidence import (
     SeparatorEvidenceImageParameters,
@@ -86,6 +90,8 @@ def _group(
 
 PARAMETER_GROUPS = (
     _group(FrameSizeMm, ("width_mm", "height_mm"), ParameterRole.PHYSICAL_FACT, "mm", "format", "Nominal physical frame dimensions."),
+    _group(ScanCanvasPhysicalSpec, ("short_axis_mm", "long_axis_mm"), ParameterRole.PHYSICAL_FACT, "mm", "scan_canvas", "Nominal physical scan-canvas dimensions."),
+    _group(ScanCanvasDetectionConfiguration, ("maximum_aspect_error_ratio",), ParameterRole.ADAPTIVE_MEASUREMENT, "ratio", "scan_canvas", "Maximum observed canvas-aspect deviation from one physical profile."),
     _group(StripHandlingSpec, ("default_count",), ParameterRole.PHYSICAL_FACT, "count", "format", "Nominal strip frame count."),
     _group(StripHandlingSpec, ("allowed_partial_counts",), ParameterRole.PHYSICAL_FACT, "count_set", "format", "Supported partial-strip handling counts."),
     _group(StripHandlingSpec, ("complete_strip_can_be_underfilled",), ParameterRole.PHYSICAL_FACT, "boolean", "format", "Whether a complete strip may occupy less than the holder span."),
@@ -155,28 +161,38 @@ PARAMETER_GROUPS = (
     _group(DualLaneDividerParameters, ("proposal_count",), ParameterRole.EXECUTION_BUDGET, "count", "dual_lane_measurement", "Bounds lane-divider candidate expansion."),
     _group(SequenceSolverParameters, ("maximum_assignment_evaluations",), ParameterRole.EXECUTION_BUDGET, "count", "sequence_solver", "Bounds frame-sequence assignment search."),
     _group(BoundaryPathParameters, ("edge_reference_mad_multiplier",), ParameterRole.ADAPTIVE_MEASUREMENT, "multiplier", "boundary_path", "Robust per-image canvas-edge reference measurement."),
-    _group(BoundaryPathParameters, ("change_point_percentile",), ParameterRole.ADAPTIVE_MEASUREMENT, "percentile", "boundary_path", "Robust per-image change-point measurement."),
-    _group(BoundaryPathParameters, ("maximum_section_width_ratio_to_scan_extent", "minimum_path_support_ratio", "local_measurement_window_ratio", "edge_transition_persistence_ratio"), ParameterRole.ADAPTIVE_MEASUREMENT, "ratio", "boundary_path", "Scale-independent local boundary-path sampling and aggregation."),
-    _group(BoundaryPathParameters, ("minimum_local_measurement_window_px",), ParameterRole.ADAPTIVE_MEASUREMENT, "px", "boundary_path", "Minimum support window for robust local boundary measurement."),
-    _group(BoundaryPathParameters, ("minimum_cross_sections",), ParameterRole.ADAPTIVE_MEASUREMENT, "section_count", "boundary_path", "Minimum local sampling density for one spatial boundary path."),
-    _group(BoundaryPathParameters, ("path_cluster_tolerance_ratio",), ParameterRole.ADAPTIVE_MEASUREMENT, "ratio", "boundary_path", "Scale-relative clustering tolerance for local change points."),
-    _group(BoundaryPathParameters, ("path_cluster_tolerance_min_px",), ParameterRole.ADAPTIVE_MEASUREMENT, "px", "boundary_path", "Minimum clustering tolerance for local change points."),
+    _group(BoundaryPathSamplingParameters, ("change_point_percentile",), ParameterRole.ADAPTIVE_MEASUREMENT, "percentile", "boundary_path_sampling", "Robust per-image change-point measurement."),
+    _group(BoundaryPathSamplingParameters, ("maximum_section_width_ratio_to_scan_extent", "local_measurement_window_ratio"), ParameterRole.ADAPTIVE_MEASUREMENT, "ratio", "boundary_path_sampling", "Scale-independent local boundary-path sampling."),
+    _group(BoundaryPathSamplingParameters, ("minimum_local_measurement_window_px",), ParameterRole.ADAPTIVE_MEASUREMENT, "px", "boundary_path_sampling", "Minimum support window for robust local boundary measurement."),
+    _group(BoundaryPathSamplingParameters, ("minimum_cross_sections",), ParameterRole.ADAPTIVE_MEASUREMENT, "section_count", "boundary_path_sampling", "Minimum local sampling density for one spatial boundary path."),
+    _group(BoundaryPathSamplingParameters, ("path_cluster_tolerance_ratio",), ParameterRole.ADAPTIVE_MEASUREMENT, "ratio", "boundary_path_sampling", "Scale-relative clustering tolerance for local change points."),
+    _group(BoundaryPathSamplingParameters, ("path_cluster_tolerance_min_px",), ParameterRole.ADAPTIVE_MEASUREMENT, "px", "boundary_path_sampling", "Minimum clustering tolerance for local change points."),
+    _group(BoundaryPathSamplingParameters, ("maximum_path_section_gap",), ParameterRole.ADAPTIVE_MEASUREMENT, "section_count", "boundary_path_sampling", "Maximum missing local sections within one continuous path."),
+    _group(BoundaryPathSamplingParameters, ("maximum_change_points_per_section",), ParameterRole.ADAPTIVE_MEASUREMENT, "count", "boundary_path_sampling", "Bounds spatially representative local changes before path fitting."),
+    _group(BoundaryPathParameters, ("minimum_path_support_ratio", "edge_transition_persistence_ratio"), ParameterRole.ADAPTIVE_MEASUREMENT, "ratio", "boundary_path", "Generic boundary-path support and canvas-edge persistence."),
     _group(BoundaryPathParameters, ("path_inlier_mad_multiplier",), ParameterRole.ADAPTIVE_MEASUREMENT, "multiplier", "boundary_path", "Robust path inlier tolerance from measured cross-section dispersion."),
     _group(BoundaryPathParameters, ("maximum_path_fit_residual_ratio",), ParameterRole.ADAPTIVE_MEASUREMENT, "ratio", "boundary_path", "Rejects spatially incoherent boundary-path fits."),
-    _group(BoundaryPathParameters, ("maximum_path_section_gap",), ParameterRole.ADAPTIVE_MEASUREMENT, "section_count", "boundary_path", "Maximum missing local sections within one continuous path."),
-    _group(BoundaryPathParameters, ("maximum_change_points_per_section",), ParameterRole.ADAPTIVE_MEASUREMENT, "count", "boundary_path", "Bounds spatially representative local changes before cross-section path fitting."),
-    _group(DeskewDetectionParameters, ("minimum_path_samples",), ParameterRole.ADAPTIVE_MEASUREMENT, "sample_count", "detection_transform", "Minimum local samples required on each observed photo edge."),
-    _group(DeskewDetectionParameters, ("minimum_common_support_ratio", "minimum_photo_edge_intensity_range_ratio", "minimum_holder_photo_gap_ratio", "residual_height_ratio", "identity_span_ratio"), ParameterRole.ADAPTIVE_MEASUREMENT, "ratio", "detection_transform", "Scale-relative photo-edge independence, dual-edge support, fit, and identity measurements."),
-    _group(DeskewDetectionParameters, ("maximum_slope_delta",), ParameterRole.ADAPTIVE_MEASUREMENT, "slope", "detection_transform", "Maximum disagreement across the two photo-edge slopes and lanes."),
-    _group(DeskewDetectionParameters, ("residual_floor_px", "identity_span_min_px", "identity_span_max_px"), ParameterRole.ADAPTIVE_MEASUREMENT, "px", "detection_transform", "Pixel floors and bounds for dual-edge fit and identity decisions."),
-    _group(DeskewDetectionParameters, ("maximum_angle_degrees",), ParameterRole.ADAPTIVE_MEASUREMENT, "degrees", "detection_transform", "Maximum physically admissible correction angle."),
+    _group(PhotoEdgeDetectionParameters, ("minimum_candidate_sections",), ParameterRole.ADAPTIVE_MEASUREMENT, "section_count", "photo_edge_observation", "Minimum distributed cross-sections retained as a raw photo-edge candidate."),
+    _group(PhotoEdgeDetectionParameters, ("minimum_fit_inliers", "minimum_supported_windows"), ParameterRole.ADAPTIVE_MEASUREMENT, "sample_count", "photo_edge_evidence", "Minimum robust fit and local photo-band observations."),
+    _group(PhotoEdgeDetectionParameters, ("minimum_support_distribution_bins",), ParameterRole.ADAPTIVE_MEASUREMENT, "bin_count", "photo_edge_evidence", "Minimum spatial distribution across the observed baseline."),
+    _group(PhotoEdgeDetectionParameters, ("minimum_inlier_ratio", "maximum_separation_drift_ratio", "maximum_shared_axis_uncertainty_ratio"), ParameterRole.ADAPTIVE_MEASUREMENT, "ratio", "photo_edge_evidence", "Scale-relative robust fit, paired-line stability, and shared-axis extrapolation limits."),
+    _group(PhotoEdgeDetectionParameters, ("minimum_local_effect",), ParameterRole.ADAPTIVE_MEASUREMENT, "noise_multiple", "photo_edge_evidence", "Minimum local boundary contrast and role-specific photo-side structure relative to its exterior."),
+    _group(PhotoEdgeDetectionParameters, ("local_window_height_ratio",), ParameterRole.ADAPTIVE_MEASUREMENT, "ratio", "photo_edge_evidence", "Scale-relative local photo-band observation window."),
+    _group(PhotoEdgeDetectionParameters, ("local_window_min_px",), ParameterRole.ADAPTIVE_MEASUREMENT, "px", "photo_edge_evidence", "Minimum local photo-band observation window."),
+    _group(PhotoEdgeDetectionParameters, ("robust_mad_multiplier",), ParameterRole.ADAPTIVE_MEASUREMENT, "multiplier", "photo_edge_evidence", "Robust path inlier tolerance from measured residual dispersion."),
+    _group(PhotoEdgeDetectionParameters, ("shared_axis_uncertainty_floor_px",), ParameterRole.ADAPTIVE_MEASUREMENT, "px", "shared_short_axis", "Minimum absolute uncertainty allowance for full-workspace extrapolation."),
+    _group(PhotoEdgeDetectionParameters, ("maximum_center_offset_mm", "maximum_photo_dimension_deviation_mm"), ParameterRole.PHYSICAL_FACT, "mm", "photo_edge_search", "Conservative physical deviation allowed around the nominal centered photo aperture."),
+    _group(TransformDetectionParameters, ("identity_span_ratio", "maximum_projected_uncertainty_height_ratio"), ParameterRole.ADAPTIVE_MEASUREMENT, "ratio", "detection_transform", "Scale-relative identity and projected angle uncertainty limits."),
+    _group(TransformDetectionParameters, ("identity_span_min_px", "identity_span_max_px"), ParameterRole.ADAPTIVE_MEASUREMENT, "px", "detection_transform", "Pixel bounds for the identity decision."),
+    _group(TransformDetectionParameters, ("maximum_lane_slope_delta",), ParameterRole.ADAPTIVE_MEASUREMENT, "slope", "detection_transform", "Maximum cross-lane slope disagreement."),
+    _group(TransformDetectionParameters, ("maximum_angle_degrees",), ParameterRole.ADAPTIVE_MEASUREMENT, "degrees", "detection_transform", "Maximum physically admissible correction angle."),
     _group(SeparatorOverlayParameters, ("tick_length_ratio",), ParameterRole.DIAGNOSTICS_ONLY, "ratio", "debug", "Debug-only separator tick length ratio."),
     _group(SeparatorOverlayParameters, ("tick_length_min", "observed_line_width", "dimension_line_width", "overlap_line_width"), ParameterRole.DIAGNOSTICS_ONLY, "px", "debug", "Debug-only separator mark dimensions."),
     _group(DebugStyleParameters, ("frame_fill_alpha",), ParameterRole.DIAGNOSTICS_ONLY, "ratio", "debug", "Debug-only frame fill opacity."),
     _group(DebugStyleParameters, ("frame_slot_color", "sequence_inferred_slot_color", "frame_crop_envelope_color", "holder_boundary_color", "text_color", "measured_boundary_color", "raw_observation_color", "corroborated_overlap_color", "dimension_hypothesis_color", "pass_color", "review_color"), ParameterRole.DIAGNOSTICS_ONLY, "rgb_byte_triplet", "debug", "Debug-only RGB colors."),
     _group(DebugStyleParameters, ("panel_background", "dark_background"), ParameterRole.DIAGNOSTICS_ONLY, "uint8_value", "debug", "Debug-only grayscale backgrounds."),
     _group(DebugStyleParameters, ("label_origin", "text_fallback_size", "status_origin"), ParameterRole.DIAGNOSTICS_ONLY, "px_pair", "debug", "Debug-only text coordinates and fallback dimensions."),
-    _group(DebugStyleParameters, ("preview_max_side", "frame_crop_envelope_line_width", "frame_slot_line_width", "sequence_inferred_slot_line_width", "containment_fallback_line_width", "panel_spacing", "label_height", "status_bar_height", "status_outline_width", "status_text_stroke_width", "detail_gap", "detail_baseline", "line_dash_length", "line_dash_gap", "legend_row_height", "legend_sample_width", "legend_text_gap"), ParameterRole.DIAGNOSTICS_ONLY, "px", "debug", "Debug-only canvas, legend, and stroke dimensions."),
+    _group(DebugStyleParameters, ("preview_max_side", "frame_crop_envelope_line_width", "frame_slot_line_width", "sequence_inferred_slot_line_width", "containment_fallback_line_width", "photo_edge_line_width", "photo_edge_confidence_line_width", "panel_spacing", "label_height", "status_bar_height", "status_outline_width", "status_text_stroke_width", "detail_gap", "detail_baseline", "line_dash_length", "line_dash_gap", "legend_row_height", "legend_sample_width", "legend_text_gap"), ParameterRole.DIAGNOSTICS_ONLY, "px", "debug", "Debug-only canvas, legend, and stroke dimensions."),
     _group(DebugStyleParameters, ("jpeg_quality",), ParameterRole.DIAGNOSTICS_ONLY, "jpeg_quality", "debug", "Debug-only JPEG encoding quality."),
     _group(DebugStyleParameters, ("reason_display_limit",), ParameterRole.DIAGNOSTICS_ONLY, "count", "debug", "Maximum final reasons shown in the debug status bar."),
     _group(AxisBleedParameters, ("long_axis", "short_axis"), ParameterRole.USER_PREFERENCE, "px", "output", "User-selected output margin."),
@@ -196,6 +212,54 @@ PARAMETER_GROUPS = (
 
 
 CONSTANT_PARAMETER_CONTRACTS = (
+    ParameterContract(
+        "x5crop.formats.scan_canvas.SCAN_CANVAS_PHYSICAL_SPECS",
+        ParameterRole.PHYSICAL_FACT,
+        "physical_registry",
+        "scan_canvas",
+        "Canonical scan-canvas physical facts and format compatibility.",
+        "fixed_by_contract",
+    ),
+    ParameterContract(
+        "x5crop.report.read_models.MILLIMETERS_PER_INCH",
+        ParameterRole.STANDARD_TRANSFORM,
+        "mm_per_inch",
+        "report_display",
+        "Standard unit conversion used only to display derived effective PPI.",
+        "fixed_by_standard",
+    ),
+    ParameterContract(
+        "x5crop.configuration.photo_edges.PHOTO_EDGE_SUPPORT_BIN_COUNT",
+        ParameterRole.STANDARD_TRANSFORM,
+        "bin_count",
+        "photo_edge_evidence",
+        "Splits an observed path baseline into fixed spatial support regions.",
+        "fixed_by_algorithm",
+    ),
+    ParameterContract(
+        "x5crop.detection.evidence.photo_edges.ROBUST_FIT_MINIMUM_POSITION_UNCERTAINTY_PX",
+        ParameterRole.NUMERICAL_SAFETY,
+        "px",
+        "photo_edge_evidence",
+        "Preserves subpixel positional uncertainty for an otherwise exact sampled fit.",
+        "fixed_by_algorithm",
+    ),
+    ParameterContract(
+        "x5crop.detection.evidence.photo_edges.ROBUST_SLOPE_INTERVAL_PERCENTILES",
+        ParameterRole.STANDARD_TRANSFORM,
+        "percentile_pair",
+        "photo_edge_evidence",
+        "Defines the deterministic central 95 percent pairwise-slope interval.",
+        "fixed_by_algorithm",
+    ),
+    ParameterContract(
+        "x5crop.detection.evidence.photo_edges.POSITION_INTERVAL_SIDE_COUNT",
+        ParameterRole.STANDARD_TRANSFORM,
+        "side_count",
+        "detection_transform",
+        "Projects positional uncertainty on both sides of a fitted line.",
+        "fixed_by_algorithm",
+    ),
     ParameterContract(
         "x5crop.image.separator_profile.SYMMETRIC_WINDOW_SIDE_COUNT",
         ParameterRole.NUMERICAL_SAFETY,
@@ -421,22 +485,6 @@ CONSTANT_PARAMETER_CONTRACTS = (
         "fixed_by_contract",
     ),
     ParameterContract(
-        "x5crop.units.MILLIMETERS_PER_INCH",
-        ParameterRole.STANDARD_TRANSFORM,
-        "mm_per_inch",
-        "units",
-        "Exact inch-to-millimeter conversion.",
-        "fixed_by_contract",
-    ),
-    ParameterContract(
-        "x5crop.units.MILLIMETERS_PER_CENTIMETER",
-        ParameterRole.STANDARD_TRANSFORM,
-        "mm_per_centimeter",
-        "units",
-        "Exact centimeter-to-millimeter conversion.",
-        "fixed_by_contract",
-    ),
-    ParameterContract(
         "x5crop.utils.PERCENTILE_MAX",
         ParameterRole.STANDARD_TRANSFORM,
         "percentile",
@@ -530,6 +578,7 @@ CONSTANT_PARAMETER_CONTRACTS = (
 EXPLICIT_PARAMETER_MODELS = frozenset(
     {
         FrameSizeMm,
+        ScanCanvasPhysicalSpec,
         ScanLayoutSpec,
         StripHandlingSpec,
         RunConfig,

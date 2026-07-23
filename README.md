@@ -38,8 +38,10 @@ Current stable release: v4.2.8
   metadata 和已知无损压缩行为。
 - 检测阶段依据物理证据决定自动导出或复核；任何未解决的张数、边界或替代裁切方案都会
   保持复核，而不会由置信度或历史输出强行转为自动裁切。
-- 自动校斜是 detection 不可关闭的第一阶段。它必须先同时找到真实照片的上下边缘；同一份
-  边缘证据同时决定校正角度和后续所有照片共用的短轴。证据缺失或冲突时结果为 REVIEW。
+- 自动校斜是 detection 不可关闭的阶段。Detection 先同时找到真实照片的上下边缘；同一份
+  边缘证据分别供校斜、共享裁切短轴和照片尺寸验证消费。证据缺失或冲突时结果为 REVIEW。
+- 单条片夹会由原图像素长短比识别已知物理画布并自动计算 px/mm；未知或竞争画布保持
+  REVIEW。理论照片带只缩小搜索范围，不能替代真实像素证据。
 
 ### 推荐下载
 
@@ -127,15 +129,18 @@ debug analysis? [y/n, return=no]:
 
 只有开启 partial mode 后才会询问 `count`。按 Return 或输入 `auto` 表示自动判断张数。
 检测始终在灰度 workspace 中工作；片夹可以是亮、暗或中间灰度。原始通道、色彩 metadata 和
-TIFF DPI/PPI 只由 I/O 与报告保存，不会直接决定裁切几何。
+TIFF resolution 标签由 I/O 原样保存。DPI/PPI 不参与画布匹配、尺度计算、证据、可信度或
+最终判断；报告即使记录 source metadata，也不会解释它。
 
-auto count 会从当前格式允许的较大张数开始检查。Detection 先在原图找到真实照片的上下边缘，
-用它们建立唯一共享短轴并自动校正倾斜；校正后的 detection 直接映射和复用这份短轴，再联合判断
-每张照片的长轴顺序、边界和片间关系。这个阶段不可关闭，也不会退回扫描外沿、holder 边缘或
-单边缘。上下边缘证据不足或冲突时保持 REVIEW。只有张数与裁切几何都已解决、不存在未解决的
-替代方案、且输出保护可行时，才会自动输出。Full 模式最多允许一个由完整序列唯一推导的空白
-位置，缺少内容本身不算证据；两个空白位置或位置不唯一时保持 REVIEW。Partial auto 不会利用
-空白区域增加张数。
+auto count 会从当前格式允许的较大张数开始检查。单条片夹先按 format 允许的已知物理画布匹配
+原图像素长短比，再由画布尺寸计算长短轴 px/mm，并在理论照片带内寻找真实上下边缘。Detection
+由同一边缘对估计校斜角度；仿射后只映射这份证据，再检查整幅共享短轴、照片尺寸、长轴顺序、
+边界和片间关系。120 的 54 mm 与 56 mm 是离散选项；两个假设同时成立时保持 REVIEW。
+`135-dual` 没有统一画布假设，先解 lane divider，再从两条 lane 的图像证据进入同一消费模型。
+流程不可关闭，也不会退回扫描外沿、holder 边缘或单边缘。只有张数与裁切几何都已解决、不存在
+未解决替代方案、且输出保护可行时，才会自动输出。Full 模式最多允许一个由完整序列唯一推导的
+空白位置，缺少内容本身不算证据；两个空白位置或位置不唯一时保持 REVIEW。Partial auto 不会
+利用空白区域增加张数，也不会在缺少物理事实时平均分配长轴空白。
 
 内部物理证据、数据流和权限边界详见 `ARCHITECTURE.md`。
 
@@ -179,10 +184,13 @@ x5_crop_output/_debug_analysis/
 
 每张 Debug Analysis JPG 固定包含：
 
-- `Detection gray context`: 完成必要仿射校正后的 detection 灰度上下文。
-- `Frame slot geometry`: 共享短轴、有序 frame slots、保守输出包络和最终裁切框；未解决时显示
-  `Provisional frame slots - NOT EXPORTABLE`。
-- `Boundary and separator evidence`: raw paths/bands、实测边界、尺寸假设和叠片标记。
+- source physical photo-edge evidence：理论照片带、有效或竞争 pair、拟合置信带，以及其余
+  失败候选的 typed reason / 区段 / 数量摘要；
+- mapped photo edges / shared short axis / frame geometry：仿射后同一边缘对、共享短轴、
+  有序 `FrameSlot`、保守输出包络和最终裁切框；
+- long-axis boundary / separator evidence：长轴 raw paths、实测边界、尺寸约束和片间证据。
+
+没有 selected pair 时第一联仍显示理论带、候选摘要和失败原因，不会用空白图隐藏观测过程。
 
 第三联图的内置图例由当前 diagnostics configuration 生成：
 
@@ -332,12 +340,17 @@ Windows: install/X5_Crop_win_uninstall.bat
   lossless compression behavior.
 - Detection uses physical evidence. Confirmed content loss, unresolved geometry,
   or physically inconsistent frame dimensions go to review.
-- Automatic deskew is a mandatory first detection stage. It must find both real
-  photo edges; the same evidence determines the correction and the shared crop
-  short axis. Missing or conflicting edge evidence remains in REVIEW.
-- Detection uses one grayscale workspace. Holder polarity is not assumed, and
-  TIFF resolution metadata is used only after independent physical-scale
-  corroboration. Original channels and color metadata remain an I/O concern.
+- Automatic deskew is a mandatory detection stage. Detection first finds both
+  real photo edges; the same evidence is consumed independently by deskew,
+  shared-short-axis safety, and frame-size validation. Missing or conflicting
+  evidence remains in REVIEW.
+- A single-strip scan is matched to a known physical canvas from its pixel
+  aspect, then calibrated in px/mm. An unknown or competing canvas remains in
+  REVIEW. A theoretical photo band narrows the search but never substitutes for
+  pixel evidence.
+- Detection uses one grayscale workspace and does not assume holder polarity.
+  TIFF resolution metadata is preserved by I/O but is never used for canvas
+  matching, scale, evidence, confidence, or the final decision.
 - Automatic output requires resolved geometry and a final safety decision.
   Historical confidence or output parity is not used.
 
@@ -426,25 +439,31 @@ debug analysis? [y/n, return=no]:
 
 It asks for `count` only when partial mode is enabled. Press Return or type
 `auto` to let the script estimate the partial count.
-Detection uses a grayscale workspace; source channels, color metadata, and TIFF
-DPI/PPI remain I/O and report data rather than direct crop geometry.
+Detection uses a grayscale workspace. Source channels, color metadata, and TIFF
+resolution tags remain I/O data. DPI/PPI is not interpreted by detection or by
+the report decision.
 
-Auto count checks the larger allowed counts first. Detection observes both real
-photo edges in source coordinates, creates the sole shared short-axis plan, and
-automatically corrects tilt. It maps and reuses that same plan while solving the
-long-axis frame order, boundaries, and spacing. This stage cannot be disabled and
-does not fall back to scan extrema, holder edges, or a single edge. It exports
-automatically only when the count and crop geometry are resolved with no
-outstanding alternative and output protection is feasible. Full mode may uniquely infer one
-blank position from a complete sequence, but missing content is not evidence by
-itself. Two blank positions or ambiguous placement remain in review, and partial
-auto count never grows from a blank-looking region.
+Auto count checks the larger allowed counts first. For a single strip,
+detection matches one format-compatible physical canvas from source pixel
+aspect, derives long/short-axis px/mm, and searches for real top/bottom edges
+inside the theoretical photo bands. The same pair determines deskew; after the
+affine transform, detection maps rather than re-observes it, then assesses the
+strip-wide shared axis, frame dimensions, long-axis order, boundaries, and
+spacing. The 120 54 mm and 56 mm sizes remain discrete; simultaneous valid
+hypotheses stay in REVIEW. `135-dual` has no fixed canvas assumption: it resolves
+the lane divider and enters the same evidence-consumer model from lane image
+evidence. The process cannot be disabled and does not fall back to scan extrema,
+holder edges, or a single edge. Automatic export requires resolved count and
+geometry, no outstanding physical alternative, and feasible output protection.
+Full mode may uniquely infer one blank position from a complete sequence, but
+missing content is not evidence itself. Partial mode neither grows the count
+from blank-looking regions nor distributes unused long-axis space without a
+physical origin or pitch fact.
 
 See `ARCHITECTURE.md` for internal evidence, data flow, and authority boundaries.
 
-`--export-review` exports REVIEW crops only when geometry is resolved and output
-protection is feasible. Unresolved provisional geometry or overlap protection is
-never exportable.
+`--export-review` exports REVIEW crops only when geometry is resolved and output protection is feasible.
+Unresolved provisional geometry or overlap protection is never exportable.
 
 ### Formats
 
@@ -473,14 +492,19 @@ Output:
 x5_crop_output/_debug_analysis/
 ```
 
-Each JPG contains the fixed panels:
+Each JPG contains three fixed audit panels:
 
-- `Detection gray context`: detection gray context after any required affine correction.
-- `Frame slot geometry`: shared short-axis span, ordered frame slots,
-  conservative output envelopes, and final crop boxes; unresolved results are
-  labeled `Provisional frame slots - NOT EXPORTABLE`.
-- `Boundary and separator evidence`: raw paths/bands, measured boundaries,
-  dimension hypotheses, and overlap markers.
+- source physical photo-edge evidence: theoretical bands, valid or competing
+  pairs, fit confidence bands, and typed reason/region/count summaries for all
+  other failed candidates;
+- mapped photo edges / shared short axis / frame geometry: the same pair after
+  affine mapping, shared-axis result, ordered `FrameSlot` objects, conservative
+  envelopes, and final boxes;
+- long-axis boundary / separator evidence: long-axis raw paths, measured
+  boundaries, dimension constraints, and inter-frame evidence.
+
+When no pair is selected, the first panel still shows the theoretical bands,
+candidate summaries, and typed failure reasons instead of a blank review image.
 
 The third panel carries a legend derived from the current diagnostics configuration:
 

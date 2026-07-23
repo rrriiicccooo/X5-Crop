@@ -127,7 +127,7 @@ class LayerBoundariesOutputContractTest(unittest.TestCase):
         self.assertIn("internal_frame_boundary_preservation", source)
         self.assertNotIn("geometry.inter_photo_spacings", source)
 
-    def test_debug_analysis_has_one_fixed_three_panel_contract(self) -> None:
+    def test_debug_analysis_has_one_fixed_three_panel_evidence_contract(self) -> None:
         import x5crop.configuration.diagnostics as diagnostics_model
         from x5crop.configuration.registry import get_detection_configuration
         from x5crop.debug.panels import (
@@ -149,7 +149,7 @@ class LayerBoundariesOutputContractTest(unittest.TestCase):
         self.assertEqual(
             tuple(signature(stack_debug_panels).parameters),
             (
-                "original_gray",
+                "source_photo_edges",
                 "debug_boxes",
                 "separator_evidence",
                 "horizontal",

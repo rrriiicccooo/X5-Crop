@@ -15,7 +15,6 @@ from tools.tests.physical_gate_support import (
     frame_bleed_fixture,
     selection_fixture,
     transform_geometry_fixture,
-    unavailable_resolution_metadata_fixture,
 )
 from tools.tests.test_output_read_model_contract import (
     _analysis_identity,
@@ -49,6 +48,7 @@ class UnresolvedOutputContractTest(unittest.TestCase):
         approved = apply_decision_gate(
             selection,
             safe_bleed,
+            detection_workspace_fixture().scan_canvas_evidence,
             transform_geometry_fixture(),
             automatic_processing_eligibility=EvidenceState.SUPPORTED,
         )
@@ -76,6 +76,7 @@ class UnresolvedOutputContractTest(unittest.TestCase):
             apply_decision_gate(
                 selection,
                 bleed,
+                detection_workspace_fixture().scan_canvas_evidence,
                 transform,
                 automatic_processing_eligibility=EvidenceState.SUPPORTED,
             ),
@@ -142,7 +143,6 @@ class UnresolvedOutputContractTest(unittest.TestCase):
             configuration=detection_configuration_read_model(
                 get_detection_configuration("135", "partial")
             ),
-            resolution_metadata=unavailable_resolution_metadata_fixture(),
             analysis_identity=_analysis_identity(
                 workspace_identity=workspace.identity,
             ),
@@ -175,6 +175,7 @@ class UnresolvedOutputContractTest(unittest.TestCase):
             apply_decision_gate(
                 selection,
                 bleed,
+                detection_workspace_fixture().scan_canvas_evidence,
                 transform_geometry_fixture(),
                 automatic_processing_eligibility=EvidenceState.SUPPORTED,
             ),
@@ -227,6 +228,7 @@ class UnresolvedOutputContractTest(unittest.TestCase):
             apply_decision_gate(
                 selection,
                 bleed,
+                detection_workspace_fixture().scan_canvas_evidence,
                 transform,
                 automatic_processing_eligibility=EvidenceState.SUPPORTED,
             ),
@@ -284,7 +286,6 @@ class UnresolvedOutputContractTest(unittest.TestCase):
             configuration=detection_configuration_read_model(
                 get_detection_configuration("135", "partial")
             ),
-            resolution_metadata=unavailable_resolution_metadata_fixture(),
             analysis_identity=_analysis_identity(
                 workspace_identity=workspace.identity,
             ),
