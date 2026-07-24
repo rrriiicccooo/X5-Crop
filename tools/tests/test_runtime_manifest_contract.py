@@ -9,11 +9,11 @@ from unittest.mock import patch
 
 import numpy as np
 
-from tools.tests.physical_gate_support import (
+from tools.tests.support.physical_gates import (
     detection_workspace_fixture,
     final_detection_fixture,
 )
-from tools.tests.physical_gate_support import (
+from tools.tests.support.physical_gates import (
     decide_candidate,
     frame_bleed_fixture,
     selection_fixture,

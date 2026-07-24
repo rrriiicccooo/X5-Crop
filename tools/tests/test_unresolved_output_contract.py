@@ -9,16 +9,16 @@ from unittest.mock import patch
 
 import numpy as np
 
-from tools.tests.physical_gate_support import (
+from tools.tests.support.physical_gates import (
     candidate_fixture,
     detection_workspace_fixture,
     frame_bleed_fixture,
     selection_fixture,
     transform_geometry_fixture,
 )
-from tools.tests.test_output_read_model_contract import (
-    _analysis_identity,
-    _profile,
+from tools.tests.support.report import (
+    analysis_identity_fixture,
+    image_profile_fixture,
 )
 from x5crop.configuration.registry import get_detection_configuration
 from x5crop.detection.decision.decision_gate import apply_decision_gate
@@ -101,7 +101,7 @@ class UnresolvedOutputContractTest(unittest.TestCase):
                 Path("input.tif"),
                 np.zeros((100, 310), dtype=np.uint8),
                 np.zeros((100, 310), dtype=np.uint8),
-                _profile(),
+                image_profile_fixture(),
                 detection,
                 SimpleNamespace(export_review=True, dry_run=False),
                 False,
@@ -135,7 +135,7 @@ class UnresolvedOutputContractTest(unittest.TestCase):
             detection,
             selection,
             source="input.tif",
-            profile=typed_read_model(_profile()),
+            profile=typed_read_model(image_profile_fixture()),
             workspace=workspace,
             output_files=outputs,
             review_copy=None,
@@ -143,7 +143,7 @@ class UnresolvedOutputContractTest(unittest.TestCase):
             configuration=detection_configuration_read_model(
                 get_detection_configuration("135", "partial")
             ),
-            analysis_identity=_analysis_identity(
+            analysis_identity=analysis_identity_fixture(
                 workspace_identity=workspace.identity,
             ),
         )
@@ -199,7 +199,7 @@ class UnresolvedOutputContractTest(unittest.TestCase):
                 Path("input.tif"),
                 np.zeros((100, 310), dtype=np.uint8),
                 np.zeros((100, 310), dtype=np.uint8),
-                _profile(),
+                image_profile_fixture(),
                 detection,
                 SimpleNamespace(export_review=True, dry_run=False),
                 False,
@@ -243,7 +243,7 @@ class UnresolvedOutputContractTest(unittest.TestCase):
                 Path("input.tif"),
                 np.zeros((100, 310), dtype=np.uint8),
                 np.zeros((100, 310), dtype=np.uint8),
-                _profile(),
+                image_profile_fixture(),
                 detection,
                 SimpleNamespace(export_review=True, dry_run=False),
                 False,
@@ -278,7 +278,7 @@ class UnresolvedOutputContractTest(unittest.TestCase):
             detection,
             selection,
             source="input.tif",
-            profile=typed_read_model(_profile()),
+            profile=typed_read_model(image_profile_fixture()),
             workspace=workspace,
             output_files=outputs,
             review_copy=None,
@@ -286,7 +286,7 @@ class UnresolvedOutputContractTest(unittest.TestCase):
             configuration=detection_configuration_read_model(
                 get_detection_configuration("135", "partial")
             ),
-            analysis_identity=_analysis_identity(
+            analysis_identity=analysis_identity_fixture(
                 workspace_identity=workspace.identity,
             ),
         )

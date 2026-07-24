@@ -16,8 +16,8 @@ from x5crop.detection.physical.separator.observations import (
 from x5crop.domain import BoundarySide, Box, EvidenceState, PixelInterval
 from x5crop.domain import ObservationId
 from x5crop.detection.physical.short_axis import SharedShortAxisPlan
-from tools.tests.photo_edge_support import shared_short_axis_fixture_from_edges
-from tools.tests.frame_slot_solver_support import photo_edge_path
+from tools.tests.support.photo_edges import shared_short_axis_fixture_from_edges
+from tools.tests.support.frame_sequence import photo_edge_path
 from x5crop.image.statistics import (
     ImageMeasurementStatisticsParameters,
     image_measurement_statistics,

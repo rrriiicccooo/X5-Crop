@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-from tools.tests.architecture_contracts import PROJECT_ROOT
+from tools.tests.support.architecture import PROJECT_ROOT
 from x5crop.configuration.bundle import DetectionConfigurationBundle
 from x5crop.run_config import RunConfig
 from x5crop.runtime.app import run_runtime

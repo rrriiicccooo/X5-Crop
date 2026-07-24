@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-from tools.tests.frame_slot_solver_support import (
+from tools.tests.support.frame_sequence import (
     content,
     path,
     scope,
@@ -38,7 +38,7 @@ from x5crop.detection.physical.model import (
     BoundaryGeometryState,
     FrameBoundarySource,
 )
-from tools.tests.photo_edge_support import shared_short_axis_fixture
+from tools.tests.support.photo_edges import shared_short_axis_fixture
 from x5crop.domain import (
     BoundaryAxis,
     BoundarySide,

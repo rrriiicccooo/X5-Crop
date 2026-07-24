@@ -4,7 +4,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-from tools.tests.frame_slot_solver_support import (
+from tools.tests.support.frame_sequence import (
     content,
     dimensions,
     scope,

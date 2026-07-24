@@ -7,7 +7,7 @@ import unittest
 from unittest.mock import patch
 
 from x5crop.configuration.candidate import SequenceSolverParameters
-from tools.tests.frame_slot_solver_support import (
+from tools.tests.support.frame_sequence import (
     content,
     dimensions,
     geometry,
@@ -16,7 +16,7 @@ from tools.tests.frame_slot_solver_support import (
     sequence_search_index,
     solve_sequence,
 )
-from tools.tests.physical_gate_support import candidate_fixture
+from tools.tests.support.physical_gates import candidate_fixture
 from x5crop.detection.evidence.separator_sequence import separator_sequence_evidence
 from x5crop.detection.candidate.model import sequence_proof_paths_for_geometry
 from x5crop.detection.physical import frame_sequence_candidates as candidate_builds
@@ -53,7 +53,7 @@ from x5crop.detection.physical.model import (
     GeometryIdentityError,
     SeparatorBandAssignment,
 )
-from tools.tests.photo_edge_support import shared_short_axis_fixture
+from tools.tests.support.photo_edges import shared_short_axis_fixture
 from x5crop.domain import (
     BoundaryAxis,
     BoundarySide,

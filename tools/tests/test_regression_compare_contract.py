@@ -8,13 +8,13 @@ from tools.regression.compare import (
     compare_report_rows,
     report_key,
 )
-from tools.tests.test_output_read_model_contract import _record
+from tools.tests.support.report import report_record_fixture
 from x5crop.report.identity import bind_runtime_facts
 
 
 class RegressionCompareContractTest(unittest.TestCase):
     def test_comparison_identity_includes_page_and_request_configuration(self) -> None:
-        first = _record()
+        first = report_record_fixture()
         second_page = deepcopy(first)
         second_page["analysis_identity"]["source"]["page"] = 1
         second_page["analysis_identity"]["runtime_configuration"]["page"] = 1
@@ -36,7 +36,7 @@ class RegressionCompareContractTest(unittest.TestCase):
         )
 
     def test_duplicate_comparison_identity_is_rejected(self) -> None:
-        row = _record()
+        row = report_record_fixture()
         with self.assertRaises(ValueError):
             compare_report_rows((row, deepcopy(row)), (row,))
 

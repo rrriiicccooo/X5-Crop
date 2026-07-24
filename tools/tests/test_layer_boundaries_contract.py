@@ -5,7 +5,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
-from tools.tests.architecture_contracts import (
+from tools.tests.support.architecture import (
     PROJECT_ROOT,
     RUNTIME_ROOTS,
     SOURCE_LAYER_PREFIXES,
@@ -331,7 +331,7 @@ class LayerBoundariesContractTest(unittest.TestCase):
             )
             module = SourceModule("x5crop.fixture", path)
             with patch(
-                "tools.tests.architecture_contracts.source_modules",
+                "tools.tests.support.architecture.source_modules",
                 return_value={module.name: module},
             ):
                 self.assertEqual(

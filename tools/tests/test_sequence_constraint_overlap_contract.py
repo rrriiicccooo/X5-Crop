@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from tools.tests.frame_slot_solver_support import path
+from tools.tests.support.frame_sequence import path
 from x5crop.detection.physical import frame_sequence_candidates as candidate_builds
 from x5crop.detection.physical import (
     frame_sequence_candidate_resolution as candidate_resolution,

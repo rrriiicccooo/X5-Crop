@@ -4,7 +4,7 @@ from dataclasses import replace
 import unittest
 from unittest.mock import patch
 
-from tools.tests.frame_slot_solver_support import (
+from tools.tests.support.frame_sequence import (
     content,
     dimensions,
     path,
@@ -12,7 +12,7 @@ from tools.tests.frame_slot_solver_support import (
     separator,
     solve_sequence,
 )
-from tools.tests.physical_gate_support import candidate_fixture
+from tools.tests.support.physical_gates import candidate_fixture
 from x5crop.detection.physical import (
     frame_sequence_candidate_resolution as candidate_resolution,
 )
@@ -25,7 +25,7 @@ from x5crop.detection.physical.model import (
     FrameBoundarySource,
     ResolvedFrameBoundary,
 )
-from tools.tests.photo_edge_support import shared_short_axis_fixture
+from tools.tests.support.photo_edges import shared_short_axis_fixture
 from x5crop.domain import (
     BoundaryAxis,
     BoundaryPathSample,

@@ -8,7 +8,7 @@ import unittest
 
 import numpy as np
 
-from tools.tests.architecture_contracts import PROJECT_ROOT
+from tools.tests.support.architecture import PROJECT_ROOT
 from x5crop.configuration.diagnostics import (
     DebugStyleParameters,
     DiagnosticsConfiguration,
@@ -348,7 +348,7 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
         )
         test_offenders = [
             path.relative_to(PROJECT_ROOT).as_posix()
-            for path in (PROJECT_ROOT / "tools/tests").glob("*.py")
+            for path in (PROJECT_ROOT / "tools/tests").rglob("*.py")
             if path != Path(__file__)
             and any(
                 removed in path.read_text(encoding="utf-8")
@@ -387,18 +387,6 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
         self.assertNotRegex(readme, r"(?<!Frame)\bCropEnvelope\b")
         self.assertIn("FrameSlot", readme)
         self.assertIn("FrameCropEnvelope", readme)
-        for legend_label in (
-            "Holder boundary",
-            "Raw observation",
-            "Measured frame / separator edge",
-            "Dimension-only provisional edge",
-            "External safety envelope",
-            "Corroborated overlap",
-            "FrameSlot",
-            "Sequence-inferred FrameSlot",
-            "FrameCropEnvelope / export-eligible final box",
-        ):
-            self.assertIn(legend_label, readme)
         for stale in (
             "observed-width evidence",
             "content position",
@@ -407,6 +395,21 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
             "between each base frame and its `CropEnvelope`",
         ):
             self.assertNotIn(stale, readme)
+        for internal_type in (
+            "PhotoEdgeNormalFeasibleRegion",
+            "NormalRegionCell",
+            "GeometryWorkBudget",
+        ):
+            self.assertNotIn(internal_type, readme)
+            self.assertNotIn(internal_type, quick_start)
+        for duplicated_guide in (
+            "## 中文用户手册",
+            "## English User Guide",
+            "## 中文快速启动",
+            "## English Quick Start",
+        ):
+            self.assertNotIn(duplicated_guide, readme)
+            self.assertNotIn(duplicated_guide, quick_start)
 
         candidate_plan = (
             PROJECT_ROOT / "x5crop/detection/candidate/plan/__init__.py"

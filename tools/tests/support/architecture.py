@@ -9,18 +9,15 @@ from importlib.util import resolve_name
 from pathlib import Path
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
 SOURCE_ROOT = PROJECT_ROOT / "x5crop"
 
 RUNTIME_ROOTS = frozenset({"x5crop.entry.cli"})
 STANDALONE_ROOTS = frozenset({"x5crop.configuration.consistency"})
 STANDALONE_TOOL_ROOTS = frozenset(
     {
-        "tools.build_release",
-        "tools.build_standalone",
-        "tools.regression.frame_slot_reference",
-        "tools.regression.sample_expectations",
-        "tools.regression.sample_validation",
+        "tools.release.build",
+        "tools.release.standalone",
         "tools.regression.compare",
     }
 )

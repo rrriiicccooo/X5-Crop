@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import numpy as np
 
-from tools.tests.architecture_contracts import PROJECT_ROOT, forbidden_import_edges
+from tools.tests.support.architecture import PROJECT_ROOT, forbidden_import_edges
 
 
 class LayerBoundariesOutputContractTest(unittest.TestCase):
@@ -76,7 +76,7 @@ class LayerBoundariesOutputContractTest(unittest.TestCase):
         self.assertNotIn(".detail", source)
 
     def test_separator_overlay_uses_explicit_workspace_extent(self) -> None:
-        from tools.tests.physical_gate_support import (
+        from tools.tests.support.physical_gates import (
             candidate_fixture,
         )
         from x5crop.configuration.registry import get_detection_configuration
@@ -94,7 +94,7 @@ class LayerBoundariesOutputContractTest(unittest.TestCase):
         )
 
     def test_separator_overlay_never_reverse_engineers_source_dimensions(self) -> None:
-        from tools.tests.physical_gate_support import (
+        from tools.tests.support.physical_gates import (
             candidate_fixture,
         )
         from x5crop.configuration.registry import get_detection_configuration

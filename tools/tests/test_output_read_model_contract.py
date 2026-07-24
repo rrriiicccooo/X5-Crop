@@ -9,12 +9,17 @@ import unittest
 import numpy as np
 from dataclasses import fields, replace
 
-from tools.tests.physical_gate_support import (
+from tools.tests.support.physical_gates import (
     detection_workspace_fixture,
     final_detection_fixture,
     frame_bleed_fixture,
     selection_fixture,
     transform_geometry_fixture,
+)
+from tools.tests.support.report import (
+    analysis_identity_fixture,
+    image_profile_fixture,
+    report_record_fixture,
 )
 from x5crop.detection.decision.decision_gate import apply_decision_gate
 from x5crop.detection.evidence.scan_canvas import observe_scan_canvas
@@ -32,105 +37,24 @@ from x5crop.report.record import report_record_for_final_detection
 from x5crop.report.read_models import typed_read_model
 from x5crop.report.validation import current_report_record_errors
 from x5crop.domain import EvidenceState, WorkspaceExtent
-from x5crop.image.workspace import WorkspaceIdentity
 from tools.regression.compare import DEFAULT_FIELDS
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
-def _profile() -> ImageProfile:
-    return ImageProfile(
-        shape=(100, 310),
-        dtype="uint8",
-        axes="YX",
-        photometric="MINISBLACK",
-        compression="NONE",
-        sample_format=None,
-        bits_per_sample=8,
-        samples_per_pixel=1,
-        planar_config=None,
-        resolution=None,
-        resolution_unit=None,
-        icc_profile=None,
-        metadata=TiffMetadata(None, None, None, ()),
-    )
-
-
-def _analysis_identity(
-    format_id: str = "135",
-    strip_mode: str = "partial",
-    source_name: str = "input.tif",
-    shape: tuple[int, int] = (100, 310),
-    workspace_shape: tuple[int, int] | None = None,
-    workspace_identity: WorkspaceIdentity | None = None,
-) -> dict:
-    workspace_shape = shape if workspace_shape is None else workspace_shape
-    workspace_identity = workspace_identity or WorkspaceIdentity(
-        WorkspaceExtent(workspace_shape[1], workspace_shape[0]), "0" * 64
-    )
-    return {
-        "script": "X5_Crop.py",
-        "script_version": "4.9",
-        "implementation_fingerprint": "0" * 64,
-        "source": {
-            "name": source_name,
-            "size": 1,
-            "mtime_ns": 1,
-            "content_sha256": "0" * 64,
-            "page": 0,
-            "shape": list(shape),
-            "dtype": "uint8",
-            "axes": "YX",
-            "photometric": "MINISBLACK",
-        },
-        "runtime_configuration": {
-            "format_id": format_id,
-            "layout": "horizontal",
-            "strip_mode": strip_mode,
-            "requested_count": None,
-            "page": 0,
-            "bleed_x": 20,
-            "bleed_y": 10,
-        },
-        "detection_configuration_fingerprint": "0" * 64,
-        "workspace_identity": typed_read_model(workspace_identity),
-    }
-
-
-def _record(source: str = "input.tif") -> dict:
-    workspace = detection_workspace_fixture()
-    return report_record_for_final_detection(
-        final_detection_fixture(),
-        selection_fixture(),
-        source=source,
-        profile=typed_read_model(_profile()),
-        workspace=workspace,
-        output_files=[],
-        review_copy=None,
-        warnings=[],
-        configuration=detection_configuration_read_model(
-            get_detection_configuration("135", "partial")
-        ),
-        analysis_identity=_analysis_identity(
-            source_name=Path(source).name,
-            workspace_identity=workspace.identity,
-        ),
-    )
-
-
 class OutputReadModelContractTest(unittest.TestCase):
     def test_tiff_compression_mode_is_exhaustive(self) -> None:
         with self.assertRaises(ValueError):
-            compression_for_write(_profile(), "invalid")
+            compression_for_write(image_profile_fixture(), "invalid")
 
     def test_transform_geometry_is_detection_input_not_diagnostics(self) -> None:
-        record = _record()
+        record = report_record_fixture()
         self.assertIn("transform_geometry", record["input"])
         self.assertNotIn("diagnostics", record)
 
     def test_input_records_effective_scan_canvas_not_tiff_dpi(self) -> None:
-        input_detail = _record()["input"]
+        input_detail = report_record_fixture()["input"]
         self.assertIn("scan_canvas_evidence", input_detail)
         scale = input_detail["scan_canvas_evidence"]["pixel_scale"]
         if scale is None:
@@ -182,7 +106,7 @@ class OutputReadModelContractTest(unittest.TestCase):
                 workspace_extent=WorkspaceExtent(720, 100),
             ),
         )
-        profile = replace(_profile(), shape=(100, 720))
+        profile = replace(image_profile_fixture(), shape=(100, 720))
         record = report_record_for_final_detection(
             detection,
             selection,
@@ -195,7 +119,7 @@ class OutputReadModelContractTest(unittest.TestCase):
             configuration=detection_configuration_read_model(
                 configuration
             ),
-            analysis_identity=_analysis_identity(
+            analysis_identity=analysis_identity_fixture(
                 shape=(100, 720),
                 workspace_shape=(100, 720),
                 workspace_identity=workspace.identity,
@@ -226,23 +150,23 @@ class OutputReadModelContractTest(unittest.TestCase):
         )
 
     def test_current_schema_rejects_missing_or_changed_boundary_path_parameters(self) -> None:
-        missing = _record()
+        missing = report_record_fixture()
         missing["configuration"]["measurement"].pop("boundary_path", None)
         self.assertTrue(current_report_record_errors(missing))
 
-        changed = _record()
+        changed = report_record_fixture()
         changed["configuration"]["measurement"]["boundary_path"] = {}
         self.assertTrue(current_report_record_errors(changed))
 
     def test_output_has_one_canonical_finalization_plan(self) -> None:
-        output = _record()["output"]
+        output = report_record_fixture()["output"]
         self.assertIn("finalization_plan", output)
         self.assertIn("frame_bleed_plan", output)
         self.assertNotIn("decision_geometry", output)
         self.assertNotIn("frame_bleed_plan", output["finalization_plan"])
 
     def test_candidate_report_does_not_duplicate_geometry_invariants(self) -> None:
-        candidate = _record()["selection"]["candidates"][0]
+        candidate = report_record_fixture()["selection"]["candidates"][0]
         self.assertIn("inter_frame_spacings", candidate["provisional_geometry"])
         self.assertNotIn("sequence_conservation", candidate["evidence"])
         self.assertNotIn("frame_sequence", candidate["evidence"])
@@ -307,7 +231,7 @@ class OutputReadModelContractTest(unittest.TestCase):
             frame_bleed_plan_for_selection,
         )
         from x5crop.output.model import AxisBleedParameters
-        from tools.tests.physical_gate_support import transform_geometry_fixture
+        from tools.tests.support.physical_gates import transform_geometry_fixture
 
         configuration = get_detection_configuration("135-dual", "partial")
         gray = np.full((120, 240), 255, dtype=np.uint8)
@@ -380,7 +304,7 @@ class OutputReadModelContractTest(unittest.TestCase):
             review_copy=None,
             warnings=[],
             configuration=detection_configuration_read_model(configuration),
-            analysis_identity=_analysis_identity(
+            analysis_identity=analysis_identity_fixture(
                 "135-dual",
                 "partial",
                 "synthetic.tif",
@@ -430,10 +354,10 @@ class OutputReadModelContractTest(unittest.TestCase):
         self.assertNotIn("restore", FinalDetection.__dict__)
 
     def test_fresh_record_is_current_schema_valid(self) -> None:
-        self.assertEqual(current_report_record_errors(_record()), [])
+        self.assertEqual(current_report_record_errors(report_record_fixture()), [])
 
     def test_json_round_trip_preserves_current_schema_identity(self) -> None:
-        persisted = json.loads(json.dumps(_record()))
+        persisted = json.loads(json.dumps(report_record_fixture()))
 
         self.assertEqual(current_report_record_errors(persisted), [])
 
@@ -441,7 +365,7 @@ class OutputReadModelContractTest(unittest.TestCase):
         from x5crop.report.validation import CURRENT_REPORT_SECTIONS
 
         self.assertNotIn("schema_validation", CURRENT_REPORT_SECTIONS)
-        self.assertNotIn("schema_validation", _record())
+        self.assertNotIn("schema_validation", report_record_fixture())
 
     def test_report_uses_one_typed_projection_path(self) -> None:
         configuration_source = (
@@ -477,7 +401,7 @@ class OutputReadModelContractTest(unittest.TestCase):
                 "global_overlap_bleed", 0
             ),
         )
-        baseline = _record()
+        baseline = report_record_fixture()
         for mutation in mutations:
             record = deepcopy(baseline)
             mutation(record)
@@ -485,7 +409,7 @@ class OutputReadModelContractTest(unittest.TestCase):
                 self.assertTrue(current_report_record_errors(record))
 
     def test_superseded_geometry_resolution_shape_is_not_current(self) -> None:
-        record = _record()
+        record = report_record_fixture()
         resolution = record["selection"]["geometry_resolution"]
         resolution["coverage_resolved"] = resolution.pop(
             "content_preservation_compatible"
@@ -496,17 +420,17 @@ class OutputReadModelContractTest(unittest.TestCase):
         )
 
     def test_malformed_current_record_is_rejected_without_raising(self) -> None:
-        record = _record()
+        record = report_record_fixture()
         record["selection"]["candidates"][0]["provisional_geometry"][
             "count"
         ] = "not-an-integer"
         self.assertTrue(current_report_record_errors(record))
 
-        invalid_counts = _record()
+        invalid_counts = report_record_fixture()
         invalid_counts["configuration"]["physical"]["allowed_partial_counts"] = [[]]
         self.assertTrue(current_report_record_errors(invalid_counts))
 
-        invalid_candidate = _record()
+        invalid_candidate = report_record_fixture()
         invalid_candidate["selection"]["candidates"][0] = None
         self.assertTrue(current_report_record_errors(invalid_candidate))
 
@@ -544,7 +468,7 @@ class OutputReadModelContractTest(unittest.TestCase):
             ),
         )
         for mutation in mutations:
-            record = _record()
+            record = report_record_fixture()
             mutation(record)
             with self.subTest(mutation=mutation):
                 self.assertTrue(current_report_record_errors(record))
@@ -555,7 +479,7 @@ class OutputReadModelContractTest(unittest.TestCase):
             final_detection_fixture(),
             selection_fixture(),
             source="input.tif",
-            profile=typed_read_model(_profile()),
+            profile=typed_read_model(image_profile_fixture()),
             workspace=workspace,
             output_files=[],
             review_copy=None,
@@ -563,7 +487,7 @@ class OutputReadModelContractTest(unittest.TestCase):
             configuration=detection_configuration_read_model(
                 get_detection_configuration("135", "partial")
             ),
-            analysis_identity=_analysis_identity(
+            analysis_identity=analysis_identity_fixture(
                 workspace_identity=workspace.identity,
             ),
         )
@@ -585,12 +509,12 @@ class OutputReadModelContractTest(unittest.TestCase):
             "output",
             "analysis_identity",
         ):
-            record = _record()
+            record = report_record_fixture()
             record.pop(key)
             self.assertTrue(current_report_record_errors(record), key)
 
     def test_unknown_final_reason_is_rejected(self) -> None:
-        record = _record()
+        record = report_record_fixture()
         record["decision"]["status"] = "needs_review"
         record["decision"]["gate"]["passed"] = False
         record["decision"]["final_review_reasons"] = [
@@ -602,7 +526,7 @@ class OutputReadModelContractTest(unittest.TestCase):
         )
 
     def test_status_and_decision_gate_must_agree(self) -> None:
-        record = _record()
+        record = report_record_fixture()
         record["decision"]["gate"]["passed"] = False
         self.assertIn(
             "decision_gate_status_mismatch",
@@ -610,14 +534,14 @@ class OutputReadModelContractTest(unittest.TestCase):
         )
 
     def test_current_schema_rejects_duplicate_decision_check_codes(self) -> None:
-        record = _record()
+        record = report_record_fixture()
         record["decision"]["gate"]["checks"].append(
             deepcopy(record["decision"]["gate"]["checks"][0])
         )
         self.assertTrue(current_report_record_errors(record))
 
     def test_current_schema_rejects_conflicting_observation_identity(self) -> None:
-        record = _record()
+        record = report_record_fixture()
         provenances: list[dict] = []
 
         def collect(value) -> None:
@@ -660,7 +584,7 @@ class OutputReadModelContractTest(unittest.TestCase):
         )
 
     def test_candidate_gate_cannot_carry_decision_stage_authority(self) -> None:
-        record = _record()
+        record = report_record_fixture()
         check = record["selection"]["candidates"][0]["candidate_gate"][
             "checks"
         ][0]
@@ -669,7 +593,7 @@ class OutputReadModelContractTest(unittest.TestCase):
         self.assertTrue(current_report_record_errors(record))
 
     def test_final_reasons_are_derived_from_decision_checks(self) -> None:
-        record = _record()
+        record = report_record_fixture()
         record["decision"]["status"] = "needs_review"
         record["decision"]["gate"]["passed"] = False
         record["decision"]["gate"]["checks"][0]["state"] = "contradicted"
@@ -684,7 +608,7 @@ class OutputReadModelContractTest(unittest.TestCase):
         )
 
     def test_current_schema_fields_are_required(self) -> None:
-        missing_provenance = _record()
+        missing_provenance = report_record_fixture()
         missing_provenance["selection"]["candidates"][0][
             "provisional_geometry"
         ]["separator_observations"][0]["provenance"].pop("boundary_anchors")
@@ -693,14 +617,14 @@ class OutputReadModelContractTest(unittest.TestCase):
             current_report_record_errors(missing_provenance),
         )
 
-        missing_transform = _record()
+        missing_transform = report_record_fixture()
         missing_transform["input"]["transform_geometry"].pop("outcome")
         self.assertIn(
             "input_incomplete",
             current_report_record_errors(missing_transform),
         )
 
-        missing_frame_sides = _record()
+        missing_frame_sides = report_record_fixture()
         missing_frame_sides["output"]["frame_bleed_plan"].pop("frame_sides")
         self.assertIn(
             "output_incomplete",
@@ -708,7 +632,7 @@ class OutputReadModelContractTest(unittest.TestCase):
         )
 
     def test_report_has_no_generic_detail_or_legacy_reason_surface(self) -> None:
-        record = _record()
+        record = report_record_fixture()
         self.assertNotIn("detail", record)
         self.assertNotIn("review_reasons", record)
         self.assertIn("final_review_reasons", record["decision"])
@@ -718,13 +642,13 @@ class OutputReadModelContractTest(unittest.TestCase):
         self.assertNotIn("evidence_summary", record)
 
     def test_report_excludes_temporary_photo_edge_section_turns(self) -> None:
-        serialized = json.dumps(_record(), sort_keys=True)
+        serialized = json.dumps(report_record_fixture(), sort_keys=True)
 
         self.assertNotIn("section_index", serialized)
         self.assertNotIn("local_short_axis_boundary_pair", serialized)
 
     def test_schema_identity_is_descriptive_not_version_named(self) -> None:
-        record = _record()
+        record = report_record_fixture()
         self.assertEqual(record["schema_id"], "detection_report")
         self.assertEqual(
             record["schema_revision"],
@@ -766,12 +690,12 @@ class OutputReadModelContractTest(unittest.TestCase):
         )
 
     def test_analysis_identity_binds_implementation_and_workspace(self) -> None:
-        identity = _record()["analysis_identity"]
+        identity = report_record_fixture()["analysis_identity"]
 
         self.assertEqual(len(identity["implementation_fingerprint"]), 64)
         self.assertEqual(
             identity["workspace_identity"],
-            _record()["input"]["workspace_identity"],
+            report_record_fixture()["input"]["workspace_identity"],
         )
 
     def test_report_and_debug_do_not_recompute_decision(self) -> None:

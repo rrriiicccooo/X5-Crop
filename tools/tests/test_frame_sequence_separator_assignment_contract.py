@@ -3,8 +3,8 @@ from __future__ import annotations
 from dataclasses import replace
 import unittest
 
-from tools.tests.frame_slot_solver_support import path, scope, separator
-from tools.tests.physical_gate_support import candidate_fixture
+from tools.tests.support.frame_sequence import path, scope, separator
+from tools.tests.support.physical_gates import candidate_fixture
 from x5crop.detection.physical import frame_sequence_candidates as candidate_builds
 from x5crop.detection.physical import frame_sequence_measurements as measurements
 from x5crop.detection.physical import (
@@ -18,7 +18,7 @@ from x5crop.detection.physical.model import (
     FrameBoundarySource,
     ResolvedFrameBoundary,
 )
-from tools.tests.photo_edge_support import shared_short_axis_fixture
+from tools.tests.support.photo_edges import shared_short_axis_fixture
 from x5crop.domain import (
     BoundaryAxis,
     BoundarySide,

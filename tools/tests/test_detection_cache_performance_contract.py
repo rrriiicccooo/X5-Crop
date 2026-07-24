@@ -33,7 +33,7 @@ from x5crop.configuration.bundle import DetectionConfigurationBundle
 from x5crop.configuration.registry import get_detection_configuration
 from x5crop.detection.evidence.content.frame_content import frame_content_evidence
 from x5crop.detection.workspace import prepare_detection_workspace
-from tools.tests.physical_gate_support import candidate_fixture
+from tools.tests.support.physical_gates import candidate_fixture
 from x5crop.runtime.analysis_identity import detection_configuration_fingerprint
 from x5crop.configuration.boundary import BoundaryPathParameters
 from x5crop.detection.candidate.proposal.sequence import (
@@ -66,7 +66,7 @@ def _profile_measurement(width: int) -> SeparatorProfileMeasurement:
 
 class DetectionCachePerformanceContractTest(unittest.TestCase):
     def test_unrotated_detection_reuses_the_source_measurement_cache(self) -> None:
-        from tools.tests.test_output_read_model_contract import _profile
+        from tools.tests.support.report import image_profile_fixture
         from x5crop.cache.analysis import make_measurement_cache
 
         gray = np.zeros((100, 310), dtype=np.uint8)
@@ -82,7 +82,7 @@ class DetectionCachePerformanceContractTest(unittest.TestCase):
         ):
             workspace = prepare_detection_workspace(
                 gray,
-                _profile(),
+                image_profile_fixture(),
                 "horizontal",
                 get_detection_configuration("135", "partial"),
                 None,
@@ -226,7 +226,7 @@ class DetectionCachePerformanceContractTest(unittest.TestCase):
         minus.assert_not_called()
 
     def test_report_records_are_not_reused_as_detection_cache(self) -> None:
-        from tools.tests.architecture_contracts import PROJECT_ROOT
+        from tools.tests.support.architecture import PROJECT_ROOT
         from x5crop.report.validation import CURRENT_REPORT_SECTIONS
         from x5crop.run_config import RunConfig
         from x5crop.runtime.options import RuntimeOptions
@@ -733,7 +733,7 @@ class DetectionCachePerformanceContractTest(unittest.TestCase):
             )
 
     def test_analysis_identity_does_not_rebuild_detection_gray(self) -> None:
-        from tools.tests.architecture_contracts import PROJECT_ROOT
+        from tools.tests.support.architecture import PROJECT_ROOT
 
         source = (
             PROJECT_ROOT / "x5crop/runtime/analysis_identity.py"

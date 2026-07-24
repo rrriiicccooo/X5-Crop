@@ -33,7 +33,7 @@ check_diff_hygiene() {
 
 run_full() {
     python3 -m unittest discover -s tools/tests
-    python3 -m compileall -q X5_Crop.py x5crop tools/regression tools/build_release.py tools/release_manifest.py
+    python3 -m compileall -q X5_Crop.py x5crop tools
     python3 -m x5crop.configuration.consistency
     for script in \
         X5_Crop_Mac.command \

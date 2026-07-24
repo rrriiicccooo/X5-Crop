@@ -66,6 +66,33 @@ class RepositoryVerifierContractTest(unittest.TestCase):
         self.assertNotIn("split_output", uninstallers)
         self.assertIn("x5_crop_output", gitignore)
         self.assertIn("x5_crop_output", uninstallers)
+        self.assertIn("\n/release/\n", gitignore)
+        self.assertNotIn("\nrelease/\n", gitignore)
+
+    def test_tools_layout_has_only_current_owners(self) -> None:
+        self.assertTrue((PROJECT_ROOT / "tools/verify").is_file())
+        self.assertTrue((PROJECT_ROOT / "tools/git/install_hooks.sh").is_file())
+        self.assertTrue((PROJECT_ROOT / "tools/release/build.py").is_file())
+        self.assertTrue((PROJECT_ROOT / "tools/release/manifest.py").is_file())
+        self.assertTrue((PROJECT_ROOT / "tools/release/standalone.py").is_file())
+        self.assertEqual(
+            {
+                path.name
+                for path in (PROJECT_ROOT / "tools/regression").glob("*.py")
+            },
+            {"__init__.py", "compare.py"},
+        )
+        for removed in (
+            "tools/build_release.py",
+            "tools/build_standalone.py",
+            "tools/release_manifest.py",
+            "tools/install_git_hooks.sh",
+            "tools/regression/frame_slot_reference.py",
+            "tools/regression/sample_expectations.py",
+            "tools/regression/sample_identity.py",
+            "tools/regression/sample_validation.py",
+        ):
+            self.assertFalse((PROJECT_ROOT / removed).exists(), removed)
 
 
 if __name__ == "__main__":

@@ -59,6 +59,9 @@ Chinese-English paired where practical.
   resumes app or native packaging.
 - Root `ARCHITECTURE.md` is the only architecture document; there is no `docs/`
   mirror.
+- Manual review is currently reset: no local baseline, expectation, reference,
+  or human-confirmed edge set is authoritative. A new review cycle must define
+  one current schema before recording labels.
 
 ## Standing Implementation Rules / 长期实现规则
 
@@ -174,7 +177,7 @@ inspect current reports and Debug Analysis before a physical-completion claim.
 
 ## Completion And Sync / 完成与同步
 
-- Enable the versioned hooks once per clone with `tools/install_git_hooks.sh` and
+- Enable the versioned hooks once per clone with `tools/git/install_hooks.sh` and
   never use `--no-verify`.
 - After Codex changes tracked source, docs, configuration, launchers, or release
   metadata, verify, commit, and push the current branch unless the user explicitly
@@ -205,8 +208,9 @@ inspect current reports and Debug Analysis before a physical-completion claim.
 
 ## Release Packages / 发布包
 
-- `tools/release_manifest.py` is the exact package-content owner.
-- Build a user zip with `python3 -m tools.build_release --version <version>`.
+- `tools/release/manifest.py` is the exact package-content owner.
+- Build a user zip with
+  `python3 -m tools.release.build --version <version>`.
 - The builder must generate the standalone script, package only manifest entries,
   preserve executable launchers, and use Python `zipfile` so Chinese names carry
   UTF-8 metadata.
@@ -216,5 +220,5 @@ inspect current reports and Debug Analysis before a physical-completion claim.
   installer executable and remove quarantine attributes when available. Never
   establish permanent system-wide trust.
 
-`tools/release_manifest.py` 是发布内容的唯一清单；发布构建器只能打包清单条目，并正确保存中文
+`tools/release/manifest.py` 是发布内容的唯一清单；发布构建器只能打包清单条目，并正确保存中文
 文件名和启动器权限。发布包不得包含模块化源码、测试、内部文档、诊断启动器、样片或生成输出。

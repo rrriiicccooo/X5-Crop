@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import fields
 import unittest
 
-from tools.tests.architecture_contracts import (
+from tools.tests.support.architecture import (
     PROJECT_ROOT,
     duplicate_dataclass_models,
     duplicate_top_level_symbols,

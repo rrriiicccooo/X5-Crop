@@ -12,7 +12,7 @@ from x5crop.detection.physical.frame_sequence_result import (
     FrameSequenceSolveResult,
 )
 from x5crop.detection.physical.short_axis import SharedShortAxisPlan
-from tools.tests.photo_edge_support import shared_short_axis_fixture
+from tools.tests.support.photo_edges import shared_short_axis_fixture
 from x5crop.detection.physical.model import FrameSequenceSolution
 from x5crop.detection.physical.separator.observations import SeparatorSupportSet
 from x5crop.domain import (

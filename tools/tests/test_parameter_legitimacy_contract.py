@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import unittest
 
-from tools.tests.architecture_contracts import PROJECT_ROOT
-from tools.tests.parameter_contracts import (
+from tools.tests.support.architecture import PROJECT_ROOT
+from tools.tests.support.parameters import (
     ParameterRole,
     hidden_runtime_numeric_literals,
     hidden_runtime_percentiles,

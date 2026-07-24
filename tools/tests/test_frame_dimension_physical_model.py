@@ -4,7 +4,7 @@ from dataclasses import replace
 from types import SimpleNamespace
 import unittest
 
-from tools.tests.physical_gate_support import candidate_fixture
+from tools.tests.support.physical_gates import candidate_fixture
 from x5crop.detection.physical.frame_dimensions import (
     FrameDimensionEvidence,
     frame_dimension_evidence,

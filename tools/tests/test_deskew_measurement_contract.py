@@ -6,7 +6,7 @@ import unittest
 
 import numpy as np
 
-from tools.tests.photo_edge_support import photo_edge_pair_fixture
+from tools.tests.support.photo_edges import photo_edge_pair_fixture
 from x5crop.configuration.photo_edges import PhotoEdgeDetectionParameters
 from x5crop.configuration.registry import get_detection_configuration
 from x5crop.configuration.shared_short_axis import SharedShortAxisParameters

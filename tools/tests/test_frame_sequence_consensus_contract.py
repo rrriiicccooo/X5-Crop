@@ -4,7 +4,7 @@ from dataclasses import replace
 from types import SimpleNamespace
 import unittest
 
-from tools.tests.frame_slot_solver_support import path
+from tools.tests.support.frame_sequence import path
 from x5crop.detection.physical import frame_sequence_consensus as sequence_consensus
 from x5crop.detection.physical.model import (
     AssignmentConsensusOutcome,

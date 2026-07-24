@@ -3,12 +3,12 @@ from __future__ import annotations
 from dataclasses import replace
 import unittest
 
-from tools.tests.frame_slot_solver_support import (
+from tools.tests.support.frame_sequence import (
     dimensions,
     scope,
     sequence_search_index,
 )
-from tools.tests.physical_gate_support import candidate_fixture
+from tools.tests.support.physical_gates import candidate_fixture
 from x5crop.detection.candidate.execution.model import CountHypothesisEvaluation
 from x5crop.detection.candidate.plan.model import (
     CountHypothesis,
@@ -25,7 +25,7 @@ from x5crop.detection.physical.frame_sequence_solver import (
     solve_frame_sequence,
 )
 from x5crop.detection.physical.frame_sequence_result import FrameSequenceSolveFailure
-from tools.tests.photo_edge_support import shared_short_axis_fixture
+from tools.tests.support.photo_edges import shared_short_axis_fixture
 from x5crop.domain import (
     BoundaryAxis,
     EvidenceState,

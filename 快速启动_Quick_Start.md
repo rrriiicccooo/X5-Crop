@@ -1,184 +1,56 @@
 # 快速启动 / Quick Start
 
-本文件是面向 Release 用户的快速操作指南，覆盖首次安装、文件摆放和启动器选择。
-完整说明请参阅 `README.md` 或 Release 包里的 `README.txt`。
+本页只说明 Release 的首次运行。完整说明见 `README.md` 或 Release 包中的 `README.txt`。
 
-This is the short operation guide for Release users. It covers first install,
-file placement, and launcher choices. For full details, read `README.md` or
-`README.txt` in the Release package.
+This page covers the first Release run only. See `README.md` or the packaged
+`README.txt` for the full guide.
 
-## 中文快速启动
+## 1. 下载 / Download
 
-### 1. 下载 Release 包
+从 GitHub Releases 下载 `X5-Crop-vX.X.zip`；不要下载 GitHub 自动生成的 Source code。
 
-从 GitHub Releases 下载 `X5-Crop-vX.X.zip`。
+Download `X5-Crop-vX.X.zip` from GitHub Releases; do not use the generated
+Source code archive.
 
-不要下载 GitHub 自动生成的 `Source code` 压缩包；该压缩包是开发源码结构，
-不是用户发布包。
+## 2. 安装 / Install
 
-### 2. 安装依赖
+解压后运行：
 
-解压后运行安装启动器：
+After unzipping, run:
 
 ```text
 macOS:   install/X5_Crop_Mac_install.command
 Windows: install/X5_Crop_win_install.bat
 ```
 
-macOS 如果无法通过双击打开安装器，打开 Terminal，输入 `cd `，将 X5 Crop
-文件夹拖入窗口，按 Return，然后运行：
+macOS 无法双击时，在该文件夹的 Terminal 中运行：
+
+If macOS blocks double-click launch, run:
 
 ```bash
 /bin/bash install/X5_Crop_Mac_install.command
 ```
 
-### 3. 文件摆放
-
-将以下文件和要裁切的 TIFF 长图放在同一个文件夹：
+## 3. 放入 TIFF 并启动 / Add TIFFs And Launch
 
 ```text
 X5_Crop.py
-X5_Crop_Mac.command 或 X5_Crop_win.bat
+X5_Crop_Mac.command 或 / or X5_Crop_win.bat
 *.tif / *.tiff
 ```
 
-启动器和 `X5_Crop.py` 必须位于同一个文件夹。单独移动启动器无法运行。
-
-### 4. 启动
-
 ```text
-macOS:   双击 X5_Crop_Mac.command
-Windows: 双击 X5_Crop_win.bat
+macOS:   双击 / double-click X5_Crop_Mac.command
+Windows: 双击 / double-click X5_Crop_win.bat
 ```
 
-如果 macOS 主启动器无法通过双击打开，在同一个 TIFF 文件夹里运行：
+启动器必须与 `X5_Crop.py` 和 TIFF 位于同一文件夹。
 
-```bash
-/bin/bash X5_Crop_Mac.command
-```
+The launcher, `X5_Crop.py`, and TIFF files must stay in the same folder.
 
-### 5. 选择格式
+## 4. 选择格式 / Choose Format
 
-| 输入 | 格式 | 完整片条张数 |
-|---|---|---:|
-| 回车 / `135` | 普通 135 | 6 |
-| `dual` / `135 dual` / `135-dual` | 双条 135 | 12 |
-| `half` | 半格 | 12 |
-| `xpan` | XPAN | 3 |
-| `645` | 120-645 | 4 |
-| `66` | 120-66 | 3 |
-| `67` | 120-67 | 3 |
-
-### 6. partial mode
-
-照片铺满片夹：按 Return，保持 `no`。
-
-照片没有铺满片夹，包括片头、片尾和局部片条：输入 `y`。
-
-开启 partial mode 后会询问 `count`。按 Return 或输入 `auto` 表示自动判断张数；
-也可以输入当前格式允许的具体张数。
-
-Detection 会先由已知片夹画布自动定标，在分帧前跨任意清晰区域联合寻找真实照片上下边缘，
-再强制执行校斜并复用同一边缘对作为共享短轴；画布未知、竞争或证据不足时保持 REVIEW。
-
-### 7. Debug Analysis
-
-默认按 Return，保持 `no`。
-
-输入 `y` 会进入试运行：
-
-- 不导出正式裁切 TIFF。
-- 生成 Debug Analysis JPG。
-- 生成 `x5_crop_report.jsonl` 和 `x5_crop_summary.csv`。
-
-适合正式裁切前检查片条范围、逐张照片边界、片间观测和最终裁切范围。
-
-### 8. 输出和复核
-
-输出目录：
-
-```text
-x5_crop_output/
-```
-
-只有张数、边界和最终裁切范围都已安全解决的结果才会导出为新的单张 TIFF。
-其他图片会进入：
-
-```text
-x5_crop_output/needs_review/
-```
-
-`needs_review/` 里的文件是原始 TIFF 副本。原始 TIFF 不会被修改。
-
-自动裁切输出会保留原 TIFF 的位深、通道结构、ICC / 色彩空间、resolution 和
-metadata。裁切不会主动降位深、改色、压缩或重采样。
-
-### 9. 卸载
-
-删除 X5 Crop 文件夹即可移除脚本和本文件夹里的输出。
-
-如需清理用户级 Python 依赖，运行：
-
-```text
-macOS:   install/X5_Crop_Mac_uninstall.command
-Windows: install/X5_Crop_win_uninstall.bat
-```
-
-## English Quick Start
-
-### 1. Download Release Package
-
-Download `X5-Crop-vX.X.zip` from GitHub Releases.
-
-Do not use GitHub's auto-generated `Source code` zip. That is the development
-source layout, not the user package.
-
-### 2. Install Dependencies
-
-After unzipping, run the installer:
-
-```text
-macOS:   install/X5_Crop_Mac_install.command
-Windows: install/X5_Crop_win_install.bat
-```
-
-If macOS does not open the installer by double-clicking, open Terminal, type
-`cd `, drag the X5 Crop folder into the window, press Return, then run:
-
-```bash
-/bin/bash install/X5_Crop_Mac_install.command
-```
-
-### 3. File Placement
-
-Put these files and the TIFF scans in the same folder:
-
-```text
-X5_Crop.py
-X5_Crop_Mac.command or X5_Crop_win.bat
-*.tif / *.tiff
-```
-
-The launcher and `X5_Crop.py` must stay together. A launcher moved by itself
-cannot run.
-
-### 4. Launch
-
-```text
-macOS:   double-click X5_Crop_Mac.command
-Windows: double-click X5_Crop_win.bat
-```
-
-If macOS does not open the launcher by double-clicking, run this inside the same
-TIFF folder:
-
-```bash
-/bin/bash X5_Crop_Mac.command
-```
-
-### 5. Choose Format
-
-| Input | Format | Full-strip count |
+| 输入 / Input | 格式 / Format | Full 张数 / Count |
 |---|---|---:|
 | Return / `135` | 135 | 6 |
 | `dual` / `135 dual` / `135-dual` | dual-lane 135 | 12 |
@@ -188,61 +60,45 @@ TIFF folder:
 | `66` | 120-66 | 3 |
 | `67` | 120-67 | 3 |
 
-### 6. Partial Mode
+## 5. Full、Partial 与 Debug
 
-Film fills the holder: press Return and keep `no`.
+- 照片铺满片夹：`partial mode = no`。 / Film fills the holder: use full.
+- 片头、片尾、局部片条或未铺满：`partial mode = yes`。 / Head, tail, short,
+  or unfilled scan: use partial.
+- Partial 的 `count` 按 Return 或输入 `auto` 可自动判断。 / In partial mode,
+  press Return or enter `auto` for automatic count.
+- `debug analysis = yes` 只生成 JPG 与报告，不导出正式裁切。 / Debug Analysis
+  writes JPG/report artifacts without exporting final crops.
 
-Film does not fill the holder, including a head, tail, or short scan: type `y`.
+Detection 会由已知画布自动定标，在分帧前联合真实照片上下边缘，并强制使用同一证据完成
+deskew 与共享短轴；未知画布或证据不足保持 REVIEW。
 
-When partial mode is enabled, the launcher asks for `count`. Press Return or
-type `auto` to let the script estimate it. You can also enter a valid count for
-the selected format.
+Detection auto-calibrates a known canvas, joins the real top/bottom photo edges
+before frame solving, and reuses that evidence for mandatory deskew and the shared
+short axis. Unknown or insufficient evidence remains in REVIEW.
 
-Detection first auto-calibrates from a known holder canvas and joins evidence
-from any clear source region into both real photo edges before frame detection.
-Mandatory deskew and the shared crop axis reuse that pair; unknown, competing,
-or insufficient evidence stays in REVIEW.
-
-### 7. Debug Analysis
-
-Default: press Return and keep `no`.
-
-Type `y` for a dry run:
-
-- It does not export final crop TIFFs.
-- It writes Debug Analysis JPGs.
-- It writes `x5_crop_report.jsonl` and `x5_crop_summary.csv`.
-
-Use it before final cropping to inspect the strip span, each frame boundary,
-inter-frame observations, and the final crop range.
-
-### 8. Output And Review
-
-Output folder:
+## 6. 输出 / Output
 
 ```text
 x5_crop_output/
+  *_01.tif
+  *_02.tif
+  needs_review/
+  _debug_analysis/
 ```
 
-Only results with a resolved count, boundaries, and safe final crop range are
-exported as new TIFF files. All other files go to:
+只有安全解决的结果才导出。`needs_review/` 保存原始 TIFF 副本；原始 TIFF 永不修改。
+输出保留位深、通道、ICC、resolution metadata 和其它 metadata。
 
-```text
-x5_crop_output/needs_review/
-```
+Only safely resolved results are exported. `needs_review/` contains source-TIFF
+copies; originals are never modified. Output preserves bit depth, channels, ICC,
+resolution metadata, and other metadata.
 
-Files in `needs_review/` are source-TIFF copies. Original TIFF files are not
-modified.
+## 7. 卸载 / Uninstall
 
-Auto-cropped TIFF output preserves source bit depth, channel layout, ICC /
-color space, resolution, and metadata. Cropping does not intentionally lower bit
-depth, recolor, compress, or resample.
+删除 X5 Crop 文件夹即可移除程序。清理用户级依赖可运行：
 
-### 9. Uninstall
-
-Delete the X5 Crop folder to remove the script and outputs in that folder.
-
-To remove user-level Python dependencies, run:
+Delete the X5 Crop folder to remove the program. To remove user-level dependencies:
 
 ```text
 macOS:   install/X5_Crop_Mac_uninstall.command

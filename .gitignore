@@ -20,7 +20,7 @@ build/
 !x5crop/detection/candidate/build/
 !x5crop/detection/candidate/build/*.py
 dist/
-release/
+/release/
 *.spec.bak
 native/build*/
 

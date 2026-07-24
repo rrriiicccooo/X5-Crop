@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import replace
 import unittest
 
-from tools.tests.frame_slot_solver_support import (
+from tools.tests.support.frame_sequence import (
     content,
     dimensions,
     geometry,
@@ -35,7 +35,7 @@ from x5crop.detection.physical.model import (
     FrameBoundarySource,
     ResolvedFrameBoundary,
 )
-from tools.tests.photo_edge_support import shared_short_axis_fixture
+from tools.tests.support.photo_edges import shared_short_axis_fixture
 from x5crop.domain import (
     BoundaryAxis,
     BoundarySide,

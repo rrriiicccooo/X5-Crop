@@ -5,8 +5,8 @@ import unittest
 from pathlib import Path
 from zipfile import ZipFile
 
-from tools.build_release import build_release
-from tools.release_manifest import RELEASE_PATHS
+from tools.release.build import build_release
+from tools.release.manifest import RELEASE_PATHS
 
 
 EXPECTED_RELEASE_PATHS = (

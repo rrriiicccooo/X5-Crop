@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-from tools.tests.physical_gate_support import (
+from tools.tests.support.physical_gates import (
     candidate_evidence_fixture,
     candidate_fixture,
     detection_workspace_fixture,
@@ -50,7 +50,7 @@ from x5crop.domain import (
     PhysicalSearchFact,
     PhysicalSearchOutcome,
 )
-from tools.tests.photo_edge_support import shared_short_axis_fixture_from_edges
+from tools.tests.support.photo_edges import shared_short_axis_fixture_from_edges
 from x5crop.detection.physical.model import (
     FrameBoundarySource,
     SequenceResiduals,

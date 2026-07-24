@@ -5,15 +5,15 @@ import unittest
 
 import numpy as np
 
-from tools.tests.physical_gate_support import (
+from tools.tests.support.physical_gates import (
     detection_workspace_fixture,
     frame_bleed_fixture,
     selection_fixture,
 )
-from tools.tests.test_output_read_model_contract import (
-    _analysis_identity,
-    _profile,
-    _record,
+from tools.tests.support.report import (
+    analysis_identity_fixture,
+    image_profile_fixture,
+    report_record_fixture,
 )
 from x5crop.configuration.registry import get_detection_configuration
 from x5crop.detection.decision.decision_gate import apply_decision_gate
@@ -87,7 +87,7 @@ class ReportIdentityContractTest(unittest.TestCase):
             final_detection,
             selection,
             source="input.tif",
-            profile=typed_read_model(_profile()),
+            profile=typed_read_model(image_profile_fixture()),
             workspace=workspace,
             output_files=[],
             review_copy=None,
@@ -95,7 +95,7 @@ class ReportIdentityContractTest(unittest.TestCase):
             configuration=detection_configuration_read_model(
                 get_detection_configuration("135", "partial")
             ),
-            analysis_identity=_analysis_identity(
+            analysis_identity=analysis_identity_fixture(
                 workspace_shape=(120, 330),
                 workspace_identity=workspace.identity,
             ),
@@ -108,7 +108,7 @@ class ReportIdentityContractTest(unittest.TestCase):
         self.assertEqual(current_report_record_errors(record), [])
 
     def test_report_has_one_runtime_fact_fingerprint(self) -> None:
-        record = _record()
+        record = report_record_fixture()
 
         self.assertEqual(len(record["runtime_facts_sha256"]), 64)
         record["decision"]["status"] = "needs_review"
@@ -118,7 +118,7 @@ class ReportIdentityContractTest(unittest.TestCase):
         )
 
     def test_current_schema_rejects_incomplete_decision_gate(self) -> None:
-        record = _record()
+        record = report_record_fixture()
         record["decision"]["gate"]["checks"] = record["decision"]["gate"][
             "checks"
         ][:1]
@@ -148,7 +148,7 @@ class ReportIdentityContractTest(unittest.TestCase):
             final_detection,
             selection,
             source="input.tif",
-            profile=typed_read_model(_profile()),
+            profile=typed_read_model(image_profile_fixture()),
             workspace=workspace,
             output_files=[],
             review_copy=None,
@@ -156,7 +156,7 @@ class ReportIdentityContractTest(unittest.TestCase):
             configuration=detection_configuration_read_model(
                 get_detection_configuration("135", "partial")
             ),
-            analysis_identity=_analysis_identity(
+            analysis_identity=analysis_identity_fixture(
                 workspace_identity=workspace.identity,
             ),
         )
@@ -175,7 +175,7 @@ class ReportIdentityContractTest(unittest.TestCase):
         self.assertTrue(current_report_record_errors(record))
 
     def test_current_schema_binds_output_geometry_to_selected_geometry(self) -> None:
-        record = _record()
+        record = report_record_fixture()
         record["output"]["finalization_plan"]["base_geometry"][
             "frame_crop_envelopes"
         ].reverse()
@@ -184,7 +184,7 @@ class ReportIdentityContractTest(unittest.TestCase):
         self.assertTrue(current_report_record_errors(record))
 
     def test_current_schema_rejects_output_coordinate_drift(self) -> None:
-        record = _record()
+        record = report_record_fixture()
         record["output"]["finalization_plan"]["base_geometry"][
             "final_boxes"
         ][0]["right"] -= 1
@@ -193,7 +193,7 @@ class ReportIdentityContractTest(unittest.TestCase):
         self.assertTrue(current_report_record_errors(record))
 
     def test_current_schema_binds_separator_sequence_to_geometry(self) -> None:
-        record = _record()
+        record = report_record_fixture()
         sequence = record["selection"]["candidates"][0]["evidence"][
             "separator_sequence"
         ]
@@ -202,7 +202,7 @@ class ReportIdentityContractTest(unittest.TestCase):
         self.assertTrue(current_report_record_errors(record))
 
     def test_current_schema_binds_holder_boundary_to_geometry(self) -> None:
-        record = _record()
+        record = report_record_fixture()
         path = record["selection"]["candidates"][0]["evidence"][
             "holder_boundary"
         ]["boundaries"][0]
@@ -212,7 +212,7 @@ class ReportIdentityContractTest(unittest.TestCase):
         self.assertTrue(current_report_record_errors(record))
 
     def test_current_schema_rejects_frame_slot_geometry_drift(self) -> None:
-        record = _record()
+        record = report_record_fixture()
         interval = record["selection"]["candidates"][0]["provisional_geometry"][
             "frame_slots"
         ][0]["leading"]["position"]
@@ -224,7 +224,7 @@ class ReportIdentityContractTest(unittest.TestCase):
         self.assertIn("runtime_facts_fingerprint_mismatch", errors)
 
     def test_current_schema_binds_dimension_evidence_to_frame_slots(self) -> None:
-        record = _record()
+        record = report_record_fixture()
         interval = record["selection"]["candidates"][0]["provisional_geometry"][
             "frame_slots"
         ][0]["trailing"]["position"]

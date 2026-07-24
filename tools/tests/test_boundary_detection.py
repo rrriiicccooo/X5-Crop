@@ -7,7 +7,7 @@ from unittest.mock import patch
 import numpy as np
 
 from x5crop.configuration.boundary import BoundaryPathParameters
-from tools.tests.frame_slot_solver_support import path as _path
+from tools.tests.support.frame_sequence import path as _path
 from x5crop.detection.physical.boundary_detection import (
     _LocalPathSample,
     _adaptive_change_points,

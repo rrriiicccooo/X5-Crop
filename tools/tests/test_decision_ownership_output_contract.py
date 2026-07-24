@@ -4,7 +4,7 @@ import inspect
 from pathlib import Path
 import unittest
 
-from tools.tests.physical_gate_support import candidate_fixture, decide_candidate
+from tools.tests.support.physical_gates import candidate_fixture, decide_candidate
 from x5crop.detection.decision.decision_gate import apply_decision_gate
 from x5crop.report.read_models import candidate_gate_read_model, decision_gate_detail
 

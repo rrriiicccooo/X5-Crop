@@ -4,7 +4,7 @@ import ast
 from dataclasses import fields
 import unittest
 
-from tools.tests.architecture_contracts import PROJECT_ROOT
+from tools.tests.support.architecture import PROJECT_ROOT
 from x5crop.detection.physical import model
 from x5crop.detection.physical import short_axis
 

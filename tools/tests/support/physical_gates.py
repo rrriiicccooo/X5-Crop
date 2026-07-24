@@ -75,7 +75,7 @@ from x5crop.detection.evidence.photo_edges import (
     map_photo_edge_pair_evidence,
 )
 from x5crop.detection.evidence.scan_canvas import observe_scan_canvas
-from tools.tests.photo_edge_support import (
+from tools.tests.support.photo_edges import (
     photo_edge_pair_fixture,
     shared_short_axis_fixture_from_edges,
 )

@@ -35,7 +35,7 @@ from x5crop.image.statistics import (
     image_measurement_statistics,
 )
 from x5crop.report.identity import REPORT_SCHEMA_REVISION
-from tools.tests.physical_gate_support import candidate_fixture
+from tools.tests.support.physical_gates import candidate_fixture
 
 
 class GrayAppearanceOuterContractTests(unittest.TestCase):

@@ -10,11 +10,15 @@ import tempfile
 from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile
 
-from tools.build_standalone import build_standalone_text, package_names, read_sources
-from tools.release_manifest import RELEASE_FILES
+from tools.release.manifest import RELEASE_FILES
+from tools.release.standalone import (
+    build_standalone_text,
+    package_names,
+    read_sources,
+)
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 VERSION_PATTERN = re.compile(r"v[0-9A-Za-z][0-9A-Za-z._-]*")
 
 

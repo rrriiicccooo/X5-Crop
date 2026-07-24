@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import numpy as np
 
-from tools.tests.physical_gate_support import (
+from tools.tests.support.physical_gates import (
     boundary_path_fixture,
     candidate_fixture,
 )

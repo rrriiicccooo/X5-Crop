@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import unittest
 
-from tools.tests.frame_slot_solver_support import scope
-from tools.tests.physical_gate_support import candidate_fixture
+from tools.tests.support.frame_sequence import scope
+from tools.tests.support.physical_gates import candidate_fixture
 from x5crop.detection.evidence.holder_occupancy import (
     HolderOccupancyEvidence,
     HolderOccupancyState,

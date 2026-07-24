@@ -4,7 +4,7 @@ import ast
 from inspect import Parameter, signature
 import unittest
 
-from tools.tests.architecture_contracts import PROJECT_ROOT
+from tools.tests.support.architecture import PROJECT_ROOT
 
 
 DECISION_ROOT = PROJECT_ROOT / "x5crop/detection/decision"

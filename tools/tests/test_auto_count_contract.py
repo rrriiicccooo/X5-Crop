@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-from tools.tests.physical_gate_support import (
+from tools.tests.support.physical_gates import (
     candidate_evidence_fixture,
     candidate_fixture,
     selection_fixture,

@@ -5,7 +5,7 @@ from pathlib import Path
 import unittest
 from unittest.mock import patch
 
-from tools.tests.frame_slot_solver_support import (
+from tools.tests.support.frame_sequence import (
     dimensions,
     scope,
     separator,
@@ -30,7 +30,7 @@ from x5crop.detection.physical.frame_sequence_solver import (
     solve_frame_sequence,
 )
 from x5crop.detection.physical.frame_sequence_result import FrameSequenceSolveResult
-from tools.tests.photo_edge_support import shared_short_axis_fixture
+from tools.tests.support.photo_edges import shared_short_axis_fixture
 from x5crop.domain import EvidenceState
 from x5crop.domain import BoundarySide
 from x5crop.image.content import ContentRegionObservation

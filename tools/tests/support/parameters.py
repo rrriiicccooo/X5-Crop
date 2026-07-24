@@ -7,7 +7,7 @@ import importlib
 from types import UnionType
 from typing import Any, get_args, get_origin
 
-from tools.tests.architecture_contracts import (
+from tools.tests.support.architecture import (
     PROJECT_ROOT,
     parsed_source,
     source_modules,

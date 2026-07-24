@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import replace
 import unittest
 
-from tools.tests.physical_gate_support import (
+from tools.tests.support.physical_gates import (
     candidate_fixture,
     candidate_gate_fixture,
     decide_candidate,

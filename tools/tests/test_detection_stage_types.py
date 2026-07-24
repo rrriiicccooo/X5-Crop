@@ -39,7 +39,7 @@ from x5crop.report.result_builder import result_from_detection
 from x5crop.report.record import report_record_for_final_detection
 from x5crop.domain import Box, FrameCropEnvelope
 from x5crop.output.model import OutputGeometry
-from tools.tests.physical_gate_support import (
+from tools.tests.support.physical_gates import (
     detection_workspace_fixture,
     selection_fixture,
 )
@@ -276,7 +276,7 @@ class DetectionStageTypeContractTests(unittest.TestCase):
 
     def test_sequence_solution_rejects_incomplete_frame_structure(self) -> None:
         from dataclasses import replace
-        from tools.tests.physical_gate_support import candidate_fixture
+        from tools.tests.support.physical_gates import candidate_fixture
 
         with self.assertRaises(ValueError):
             replace(candidate_fixture().geometry, frame_slots=())

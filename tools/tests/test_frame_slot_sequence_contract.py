@@ -3,8 +3,8 @@ from __future__ import annotations
 from dataclasses import replace
 import unittest
 
-from tools.tests.architecture_contracts import PROJECT_ROOT
-from tools.tests.physical_gate_support import candidate_fixture
+from tools.tests.support.architecture import PROJECT_ROOT
+from tools.tests.support.physical_gates import candidate_fixture
 from x5crop.detection.candidate.proposal.sequence import (
     holder_boundaries_without_reliable_content_crossing,
 )
@@ -19,7 +19,7 @@ from x5crop.detection.physical.short_axis import (
     SharedShortAxisOutcome,
     SharedShortAxisPlan,
 )
-from tools.tests.photo_edge_support import (
+from tools.tests.support.photo_edges import (
     photo_edge_pair_fixture,
     shared_short_axis_fixture,
     shared_short_axis_fixture_from_edges,

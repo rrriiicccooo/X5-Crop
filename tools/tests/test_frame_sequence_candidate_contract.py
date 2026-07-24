@@ -5,8 +5,8 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-from tools.tests.frame_slot_solver_support import path
-from tools.tests.physical_gate_support import candidate_fixture
+from tools.tests.support.frame_sequence import path
+from tools.tests.support.physical_gates import candidate_fixture
 from x5crop.detection.physical import frame_sequence_candidates as candidate_builds
 from x5crop.detection.physical import model as physical_model
 from x5crop.detection.physical.model import (

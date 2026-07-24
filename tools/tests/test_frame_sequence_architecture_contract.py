@@ -5,7 +5,7 @@ from dataclasses import fields
 from pathlib import Path
 import unittest
 
-from tools.tests.architecture_contracts import PROJECT_ROOT
+from tools.tests.support.architecture import PROJECT_ROOT
 
 
 _PHYSICAL_ROOT = PROJECT_ROOT / "x5crop/detection/physical"
