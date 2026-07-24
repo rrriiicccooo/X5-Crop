@@ -12,22 +12,26 @@ output remain authoritative.
 
 ## Current Objective / 当前目标
 
-The immediate goal is to make source-photo top and bottom edge identity stable
-and accurate. Those two observed edges are the shared source for deskew and the
-shared short axis; frame-sequence detection follows them.
+The immediate task is to build a new no-bleed manual crop baseline for all 112
+original TIFF samples through independent visual inspection, without using X5
+Crop detection, reports, Debug Analysis, or retired labels to choose geometry.
 
-当前首要目标是稳定、准确地识别原图中的真实照片上下边缘。同一对边缘同时供 deskew 与
-共享短轴消费，随后才进行长轴与帧序列检测。
+当前任务是对全部 112 张原始 TIFF 进行独立肉眼式检查，标出准确且无 bleed 的裁切位置并
+生成 JPG 供用户审阅。不得使用 X5 Crop detector、report、Debug 或旧标签来决定坐标。
 
-- Detection joins clear evidence from any source region before frame splitting.
-  It does not know which frame supplied an observation. / 分帧前联合任意清晰区域，
-  detector 不知道 observation 属于哪一帧。
-- Short, local evidence may establish edge identity without proving a precise
-  transform or a safe full-workspace crop. / 短而清晰的局部证据可以证明边缘身份，
-  但不自动证明 deskew 精度或全域裁切安全。
-- Ambiguous or insufficient evidence remains typed unavailable/contradicted and
-  reaches `REVIEW`; theoretical geometry never manufactures pixel evidence. /
-  证据不足或冲突时保持 typed 状态并进入 `REVIEW`，理论位置不能制造像素证据。
+- Generic TIFF rendering, tonal views, zoom tiles, and deterministic overlay
+  drawing are allowed only as visual-inspection aids; they must not discover or
+  move boundaries automatically. / 通用 TIFF 渲染、明暗视图、放大切片和坐标绘图只能
+  辅助肉眼观察，不能自动寻找或移动边界。
+- Every proposal binds the source SHA-256 and original-raster coordinates.
+  Visually indeterminate geometry remains unresolved rather than invented. /
+  每个提案绑定 source SHA-256 与原图坐标；看不清的边界保持 unresolved。
+- Generated coordinates and JPGs are pending proposals. Only an explicit user
+  approval may promote them into the sole manual baseline. / 生成坐标和 JPG 都只是
+  pending；只有用户明确确认后才能进入唯一人工基线。
+- Aggregate observations from this work may guide later detector calibration,
+  but the project may not become an input to its own reference. / 审阅中发现的规律可用于
+  后续优化，但项目输出不能反过来生成自己的基准。
 
 ## Current Checkpoint / 当前检查点
 
@@ -107,33 +111,33 @@ frame-slot reference 或 human-confirmed 机器结果；旧结论均不再具有
 - The cross-region detector has structural and synthetic coverage, but its
   thresholds and real-sample behavior have not been newly human-calibrated. /
   当前 detector 已完成结构与合成验证，但尚未用新人工标签校准真实样片。
-- There is no current 112-sample verdict table, current full Debug batch, or
-  human-approved top/bottom pair inventory. / 当前没有 112 张 verdict 表、
-  全量 Debug 批次或人工确认边缘清单。
-- A strong local fragment can still leave competing physical models; preserving
-  `REVIEW` is correct until source evidence uniquely resolves them. /
-  清晰局部片段仍可能产生竞争模型；未唯一证明前保持 `REVIEW`。
+- The new visual annotation cycle has not yet produced an approved coordinate,
+  review sheet, or baseline record. / 新一轮肉眼标注尚未产生任何已确认坐标、审阅图或
+  baseline 记录。
+- Some source boundaries may remain visually ambiguous even after tonal and
+  native-scale inspection. Accuracy outranks completing 112 resolved entries. /
+  个别原图边界可能仍不可辨；准确性优先于强行让 112 张全部 resolved。
 - Mechanical verification does not establish physical correctness. Any accuracy
-  claim must cite original TIFF coordinates, current report/Debug evidence, and
-  a new explicit user review. / 物理准确性必须由原 TIFF 坐标、当前证据与新的用户审阅证明。
+  claim must cite original TIFF coordinates and a new explicit user review. /
+  物理准确性必须由原 TIFF 坐标与新的用户审阅证明。
 
 ## Next Actions / 下一步
 
-1. Define one minimal, current-only manual-review schema for source top/bottom
-   edge identity. Do not restore old candidate IDs, decisions, or geometry. /
-   为 source 上下边缘身份设计唯一的新人工审阅 schema，不迁移旧 ID 或结论。
-2. Select a small representative first batch across current formats and failure
-   modes; do not immediately label all 112 files. / 先选小规模代表批次，不立即审阅全量。
-3. Generate review artifacts only from
-   `cross_region_photo_edge_geometry`, showing source evidence and typed
-   uncertainty without turning proposals into labels. / 只用 current schema
-   生成审阅证据，pending proposal 不写成人工真相。
-4. Ask the user to judge top/bottom edge identity first. Angle, mapped shared
-   axis, and final crop require their own evidence and must not be implied by
-   edge confirmation. / 第一轮只确认边缘身份，不连带确认角度、共享短轴或最终裁切。
-5. Calibrate numerical gates only after confirmed positives and rejected
-   coordinates exist, then expand review deliberately. / 有正反人工证据后再校准阈值，
-   随后有计划地扩展样片。
+1. Freeze a new stable `S001–S112` manifest from sorted source paths and
+   SHA-256 values; do not reuse an old ID mapping. / 按当前路径与 SHA-256 建立新清单，
+   不复活旧 S 编号权限。
+2. Define one current-only source-coordinate schema for no-bleed frame crop
+   geometry and pending review state. / 定义唯一的新 source-coordinate schema。
+3. Produce a small layout pilot, obtain user approval of review readability,
+   then visually annotate all 112 originals and generate one primary review JPG
+   per sample with native-scale detail panels where necessary. / 先确认版式，再完成
+   112 张独立肉眼标注与审阅 JPG。
+4. Perform a second visual pass, record unresolved cases honestly, and write a
+   concise findings report for detector improvement. / 二次肉眼复核，并记录有助于项目的
+   真实规律。
+5. After the user reviews the JPGs, promote only explicitly approved entries
+   into one manual baseline; pending or rejected proposals remain outside it. /
+   用户确认后才写入唯一人工基线。
 
 ## Exact Resume / 精确恢复
 
@@ -151,5 +155,6 @@ rg 'REPORT_SCHEMA_REVISION' x5crop
 
 Resume prompt / 恢复提示：
 
-> 从零设计新的照片上下边缘人工审阅 schema，并只生成第一批代表性审阅图；
-> 不导入任何旧标签，不先做 112 张全量审阅。
+> 不使用 X5 Crop 脚本、report、Debug 或旧人工标签来决定几何；独立肉眼检查全部
+> 112 张原始 TIFF，画出无 bleed 的 source-coordinate 裁切位置并生成 JPG 供我审阅。
+> 所有结果先保持 pending，看不清则 unresolved；只有我的明确确认才能进入人工基线。
