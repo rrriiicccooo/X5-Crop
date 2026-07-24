@@ -176,6 +176,23 @@ adapters and must call it rather than duplicate its commands.
 
 `tools/verify` 是唯一可执行验证入口；Hook 和 CI 只能作为薄适配器调用它，不能复制命令。
 
+- `.githooks/pre-commit` owns staged hygiene through `tools/verify staged`;
+  `.githooks/pre-push` owns final full validation through
+  `tools/verify pre-push`.
+- In the normal commit-and-push path, validate each exact tree once per scope.
+  Do not manually run `tools/verify full` immediately before `git push`; the
+  successful pre-push hook is the single final full verification.
+- Run `tools/verify full` manually only when no push will follow or when its
+  output is needed to diagnose a failure. If the tree changes after a successful
+  run, that result is stale and the next push hook must validate the new tree.
+
+`.githooks/pre-commit` 负责 staged hygiene，`.githooks/pre-push` 负责最终 full
+validation。正常提交并推送时，同一棵代码、同一验证范围只跑一次：不要在 `git push` 前
+手工重复 `tools/verify full`，以成功的 pre-push hook 作为唯一最终完整验证。只有不准备推送
+或需要排障输出时才手工运行 full；验证后代码有变化，旧结果立即失效。
+
+When no push will follow:
+
 ```bash
 tools/verify full
 ```
@@ -207,12 +224,15 @@ inspect current reports and Debug Analysis before a physical-completion claim.
 - Enable the versioned hooks once per clone with `tools/git/install_hooks.sh` and
   never use `--no-verify`.
 - After Codex changes tracked source, docs, configuration, launchers, or release
-  metadata, verify, commit, and push the current branch unless the user explicitly
-  says not to. This is standing authorization for a verified push.
+  metadata, commit and push the current branch unless the user explicitly says
+  not to. Rely on the enabled hooks for routine staged and full verification
+  instead of manually duplicating them. This is standing authorization for a
+  verified push.
 - Before committing, confirm staged and unstaged changes are intentional. If a
   commit or push fails, report the blocker and leave the safest possible state.
 
-每次修改受跟踪内容后，除非用户明确禁止，都应完成验证、提交并推送当前分支；不得绕过 Hook。
+每次修改受跟踪内容后，除非用户明确禁止，都应提交并推送当前分支，以已启用的 Hook 完成常规
+staged 与 full 验证，不再手工重复；不得绕过 Hook。
 
 ## Git And Local Files / Git 与本地文件
 
