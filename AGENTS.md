@@ -63,11 +63,20 @@ Chinese-English paired where practical.
 - When manual review restarts, define one current schema before recording labels.
   Never restore or migrate retired labels, candidate IDs, decisions, or runtime
   whitelists.
+- Never use model inspection of a complete long TIFF to author reference
+  boundaries. A baseline may contain only source-SHA-bound original coordinates
+  created and explicitly confirmed by the user, or an independently calibrated
+  external measurement. OpenCV, SciPy, X5 Crop, model vision, generated JPGs,
+  and algorithm agreement may create non-authoritative proposals only; visual
+  ambiguity remains unresolved.
 
 `PROJECT_MEMORY.md` 是唯一跨会话交接文件；不得建立平行 handoff。只有用户明确要求恢复、
 交接或更新项目记忆时才读写它。项目记忆只保存当前目标、已验证检查点、验证边界、开放风险与
 精确下一步；现场 Git、源码、原 TIFF、current report、Debug 与命令输出始终优先。人工审阅
 重新开始时先定义唯一 current schema，不恢复或迁移旧标签、ID、结论或运行时白名单。
+不得让模型查看整张长 TIFF 后代写 reference 边界。Baseline 只能来自绑定 source SHA 的
+原图坐标，并由用户直接点击后明确确认，或来自独立校准的外部测量。OpenCV、SciPy、X5 Crop、
+模型视觉、生成 JPG 与算法一致只能产生非权威 proposal；看不清的边界保持 unresolved。
 
 ## Current Scope / 当前范围
 

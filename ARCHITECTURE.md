@@ -288,10 +288,15 @@ Debug Analysis 只读取报告证据，显示 corridor/halo、compact fragments�
 active/witness observations、source pair uncertainty envelope、mapped pair 和 shared short
 axis；它不重算几何。
 
-当前人工审阅已归零：没有有效的 manual crop、deskew、photo-edge label、reference 或
-expectation。Runtime、tools 和 tests 均不读取人工标签或白名单，机器 supported 不能称为
-human-confirmed。下一轮人工审阅必须从原始 TIFF 和 current-schema evidence 建立一套新的
-本地权威，不得导入旧 candidate ID、旧坐标结论或旧 schema。
+当前没有有效的 manual crop、deskew、photo-edge label、reference 或 expectation。
+未跟踪的 `Test/manual_review/` 只保存 111 张 source identity manifest 与用户点击专用
+annotator；活动 proposal 和 confirmed baseline 均为空。Runtime、tools 和 tests 均不读取
+人工标签或白名单，机器 supported 不能称为 human-confirmed。
+
+Baseline 是 runtime 外部的独立审计输入。只有绑定 source SHA 的原图坐标，并由用户直接点击
+后明确确认，或由独立校准的外部测量产生，才可能进入它。完整长图的模型视觉、OpenCV、
+SciPy、X5 Crop、生成 JPG 或多个算法相互同意都只能形成非权威 proposal；看不清的边界必须
+保持 unresolved。已退役的 AI 长图草稿只留作本地历史审计，不得迁移到 current schema。
 
 ## 10. 源码分层 / Source Layers
 

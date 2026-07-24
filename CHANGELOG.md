@@ -14,6 +14,21 @@ V4.9 是 current-only 的物理模型与源码重构。历史 PASS/REVIEW、报�
 Historical decisions, schemas, human labels, and crop geometry are not compatibility
 targets.
 
+### 2026-07-25 — 基准权限与本地审阅收束 / Baseline Authority
+
+- 退役“由模型连续查看完整长 TIFF 并代画边界”的流程。大图本身可快速解码，但反复进入
+  模型上下文会造成上下文膨胀与停滞，而且模型坐标不是独立真值。 /
+  Retired model-authored boundary drawing from complete long TIFFs; it exhausts
+  model context and cannot provide independent ground truth.
+- 本地 `Test/manual_review/` 已建立 111 张 source identity manifest 与用户点击专用
+  annotator。旧 `S027` 六条 AI 草稿及 JPG 已移入非权威历史归档；当前活动 proposal 与
+  confirmed baseline 均为 0。 / The local annotator now accepts user clicks only;
+  retired S027 drafts are archived and no active or confirmed baseline exists.
+- 未来 V5 的大依赖方向仍是 OpenCV 与 SciPy。它们可提供本地图像变换、滤波、优化和候选
+  测量，但自动坐标或算法一致不能创建 baseline。本次未改变发布依赖。 /
+  OpenCV and SciPy remain possible V5 backends, not ground-truth authorities;
+  current release dependencies are unchanged.
+
 ### 2026-07-24 — Tools、文档与人工审阅归零
 
 - `tools/` 只保留四类当前职责：`verify`、`release/`、`regression/compare.py` 和
