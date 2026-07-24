@@ -12,16 +12,20 @@ Git、源码、原始 TIFF、current report、Debug Analysis 与现场命令始�
 
 ## Current Objective / 当前目标
 
-The assistant-authored long-image boundary workflow is retired. The immediate
-objective is to keep the local review workspace clean, preserve its historical
-evidence without authority, and choose an independent baseline method before
-any further detector calibration.
+The manual-reference workspace is restarting from zero. Keep the current
+111-source manifest and user-click annotator, remove all assistant-authored or
+retired reference material, and collect any future baseline only through the
+current direct-user-click schema.
 
-由模型连续查看长图并代画边界的流程已经退役。当前目标是整理本地人工审阅区、无权限地保留
-历史证据，并在继续校准 detector 前先决定独立基准的建立方式。
+manual reference 工作区从零重新开始。保留当前 111-source manifest 与用户点击 annotator，
+移除全部模型生成或已退役的 reference 材料；以后只通过 current direct-user-click schema
+重新建立 baseline。
 
 - Do not send complete long TIFFs to model vision for coordinate authorship. /
   不再让模型通过完整长 TIFF 生成 reference 坐标。
+- Do not restore, reconstruct, import, or migrate deleted assistant proposals
+  or retired reference files. / 不恢复、不重建、不导入、不迁移已删除的模型草稿或旧
+  reference 文件。
 - Do not promote X5 Crop, OpenCV, SciPy, model vision, generated JPGs, hashes,
   or algorithm agreement into ground truth. / 项目输出、图像算法、生成物与算法一致均不是
   ground truth。
@@ -29,14 +33,15 @@ any further detector calibration.
   by the user, or an independently calibrated external measurement, may enter a
   baseline. Visually indeterminate geometry remains unresolved. / Baseline 只能
   接受用户直接点击并明确确认的原图坐标，或独立校准的外部测量；看不清保持 unresolved。
-- Detector calibration is paused until the user chooses that authority model. /
-  用户决定基准权限模型前，不继续用样片调 detector。
+- Detector calibration is paused until the new user-confirmed baseline has
+  representative coverage. / 新一轮用户确认 baseline 达到代表性覆盖前，不继续用样片
+  调 detector。
 
 ## Verified Checkpoint / 已核对检查点
 
 - Branch / 分支：`main`.
-- Pre-sync base / 本次同步起点：`07a9f3a3`
-  (`Update staged calibration handoff`); always check live `HEAD` when resuming.
+- Reset base / 本次归零起点：`7abdbd30`
+  (`Avoid duplicate hook verification`); always check live `HEAD` when resuming.
 - Current report revision / 当前报告 revision：
   `cross_region_photo_edge_geometry`.
 - The local source library contains 111 original TIFFs: 47 `135/full`,
@@ -60,10 +65,10 @@ any further detector calibration.
   verifier 通过 826 项测试与 14 组配置；它只证明机械一致性。
 - `Test/manual_review/findings.md` contains no current visual finding. /
   当前没有样片视觉结论。
-- The abandoned S027 experiment is preserved only at
-  `Test/manual_review/archive/20260725_assistant_visual_abandoned/`: six old
-  proposal rows, assistant coordinates on F1–F2, empty F3–F6, and one generated
-  JPG. It must not be imported or migrated. / S027 旧实验只作历史审计，禁止迁移。
+- All previous assistant-authored proposals and review artifacts have been
+  deleted. No retired proposal, baseline, or review JPG is retained in the
+  active workspace. / 旧模型 proposal 与审阅材料已全部删除；当前工作区不保留
+  退役 proposal、baseline 或 review JPG。
 - The tooling audit remains closed around `tools/verify`, `tools/git/`,
   `tools/release/`, `tools/regression/compare.py`, and `tools/tests/`. /
   tracked tools 的职责边界未改变。
@@ -114,11 +119,12 @@ OpenCV 5.0.0 与 SciPy 1.18.0，但 V4.9 没有引入它们。
 
 There is no current manual crop, deskew, photo-edge, frame-slot, expectation, or
 human-confirmed machine baseline. Active proposals and confirmed baseline rows
-are both zero. The retired S027 model-vision experiment is historical evidence
-only and must never be migrated into the current user-click schema.
+are both zero. No previous reference material remains; the next row must be
+created afresh from a direct user click in the current schema.
 
 当前没有任何有效人工或 human-confirmed baseline；活动 proposal 与确认 baseline 均为
-0。已退役的 S027 模型视觉实验只作历史审计，不得迁移进当前用户点击 schema。
+0，也不再保留旧 reference 材料。下一条记录必须由用户在 current schema 中重新直接点击
+产生。
 
 ## Validation Boundary And Open Risks / 验证边界与开放风险
 
@@ -139,16 +145,14 @@ only and must never be migrated into the current user-click schema.
 
 ## Next Decision And Actions / 下一决策与行动
 
-1. Choose the baseline authority:
-   - practical reference: user clicks and explicitly confirms original-raster
-     coordinates, leaving ambiguity unresolved;
-   - physical reference: add an independently measured scan target, holder
-     aperture, or other external calibration;
-   - machine assistance: let OpenCV/SciPy generate candidates in a separate
-     non-authoritative store, followed by blind user review.
-2. Define one schema for the chosen authority before recording any new label.
-   Do not migrate the archived S027 rows. / 先定唯一 schema，再写新标签；禁止迁移
-   S027 旧草稿。
+1. Start a new blind pass from the retained 111-source manifest and current
+   `x5crop_user_manual_proposal_v1` / `x5crop_user_manual_baseline_v1` schemas.
+   Create coordinates only from direct user clicks and explicit confirmation;
+   leave ambiguous geometry unresolved. / 从保留的 manifest 与 current schema
+   开始全新盲标，只接受用户点击与明确确认，看不清则 unresolved。
+2. Confirm representative gold-cohort frames before expanding the pass. Do not
+   reconstruct or import any deleted reference material. / 先确认代表样片，再扩展
+   审阅；不重建或导入任何已删除的 reference 材料。
 3. If V5 is authorized, isolate and pin OpenCV/SciPy in the project environment,
    define their exact role, and keep automated geometry outside the baseline
    write path. / 若启动 V5，先隔离并锁定依赖，并保证自动几何无法写 baseline。
@@ -173,6 +177,6 @@ rg 'REPORT_SCHEMA_REVISION' x5crop
 
 Resume prompt / 恢复提示：
 
-> 从当前 111-source manifest 与用户点击专用 annotator 恢复。活动 proposal 和
-> baseline 应均为 0；S027 AI 草稿只在退役归档中，不得迁移。先由用户决定采用直接点击、
-> 外部物理校准或 OpenCV/SciPy 非权威候选哪一种基准权限，再定义唯一 schema 并继续。
+> 从当前 111-source manifest 与用户点击专用 annotator 重新开始。活动 proposal 和
+> baseline 均应为 0，旧 reference 材料不再存在。使用 current schema 从用户直接点击建立
+> 第一批全新 reference；任何看不清的几何保持 unresolved，不恢复旧材料。
