@@ -49,6 +49,26 @@ Chinese-English paired where practical.
 不要复制长篇解释；应链接到唯一所有者。面向用户的长期文档必须简洁、专业、当前、
 互不重叠，并在适合时保持中英文对应。
 
+## Handoff And Project Memory / 交接与项目记忆
+
+- `PROJECT_MEMORY.md` is the sole cross-session handoff. Do not create parallel
+  `SESSION_HANDOFF.md`, `NEXT_ACTIONS.md`, `DECISIONS.md`, or equivalent files.
+- Read or update it only when the user explicitly resumes, requests a handoff,
+  or asks to change project memory.
+- Keep only the current objective, verified checkpoint, validation boundary,
+  open risks, and exact next action. Architecture and history stay with their
+  canonical documents.
+- Git, source, original TIFFs, current reports, Debug Analysis, and live command
+  output always outrank memory.
+- When manual review restarts, define one current schema before recording labels.
+  Never restore or migrate retired labels, candidate IDs, decisions, or runtime
+  whitelists.
+
+`PROJECT_MEMORY.md` 是唯一跨会话交接文件；不得建立平行 handoff。只有用户明确要求恢复、
+交接或更新项目记忆时才读写它。项目记忆只保存当前目标、已验证检查点、验证边界、开放风险与
+精确下一步；现场 Git、源码、原 TIFF、current report、Debug 与命令输出始终优先。人工审阅
+重新开始时先定义唯一 current schema，不恢复或迁移旧标签、ID、结论或运行时白名单。
+
 ## Current Scope / 当前范围
 
 - Active entry point / 当前入口：`X5_Crop.py` V4.9.
@@ -59,9 +79,7 @@ Chinese-English paired where practical.
   resumes app or native packaging.
 - Root `ARCHITECTURE.md` is the only architecture document; there is no `docs/`
   mirror.
-- Manual review is currently reset: no local baseline, expectation, reference,
-  or human-confirmed edge set is authoritative. A new review cycle must define
-  one current schema before recording labels.
+- Current task and manual-review status live only in `PROJECT_MEMORY.md`.
 
 ## Standing Implementation Rules / 长期实现规则
 

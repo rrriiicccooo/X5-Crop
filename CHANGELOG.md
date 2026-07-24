@@ -34,6 +34,10 @@ targets.
 - README 与 Quick Start 改为中英文共用结构；CHANGELOG 只保留当前版本事实；
   ARCHITECTURE 继续独占运行流与数值合同。 / User docs now share one concise bilingual
   structure, while architecture remains the sole design owner.
+- `PROJECT_MEMORY.md` 已重写为唯一跨会话检查点，只保存当前短轴目标、可验证边界、
+  人工审阅归零状态与精确下一步；`AGENTS.md` 只保存长期 handoff 政策，禁止平行交接文档。
+  / Project memory is now the sole concise handoff; agent policy forbids parallel
+  status documents.
 
 ### V4.9 当前累计行为 / Current Cumulative Behavior
 

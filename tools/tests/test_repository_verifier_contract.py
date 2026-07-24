@@ -94,6 +94,35 @@ class RepositoryVerifierContractTest(unittest.TestCase):
         ):
             self.assertFalse((PROJECT_ROOT / removed).exists(), removed)
 
+    def test_project_memory_is_the_only_current_handoff(self) -> None:
+        agents = (PROJECT_ROOT / "AGENTS.md").read_text(encoding="utf-8")
+        memory = (PROJECT_ROOT / "PROJECT_MEMORY.md").read_text(encoding="utf-8")
+
+        self.assertIn("PROJECT_MEMORY.md` is the sole cross-session handoff", agents)
+        self.assertIn("sole cross-session checkpoint", memory)
+        self.assertIn("Current Objective / 当前目标", memory)
+        self.assertIn("Manual Review Reset / 人工审阅归零", memory)
+        self.assertIn("cross_region_photo_edge_geometry", memory)
+
+        for parallel_handoff in (
+            "SESSION_HANDOFF.md",
+            "NEXT_ACTIONS.md",
+            "DECISIONS.md",
+        ):
+            self.assertFalse((PROJECT_ROOT / parallel_handoff).exists())
+
+        for retired_state in (
+            "7fd6fc1",
+            "--deskew off",
+            "Test/test 2",
+            "pass_required",
+            "sample_expectations.jsonl",
+            "frame_slot_references.jsonl",
+            "user_confirmed_supported",
+            "manual_deskew_baseline.jsonl",
+        ):
+            self.assertNotIn(retired_state, memory)
+
 
 if __name__ == "__main__":
     unittest.main()
