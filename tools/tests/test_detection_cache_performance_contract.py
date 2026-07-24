@@ -87,6 +87,7 @@ class DetectionCachePerformanceContractTest(unittest.TestCase):
                 get_detection_configuration("135", "partial"),
                 None,
                 MeasurementCacheStatistics(),
+                "0" * 64,
             )
 
         self.assertFalse(workspace.transform_geometry.applied)

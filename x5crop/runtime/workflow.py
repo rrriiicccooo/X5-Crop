@@ -5,7 +5,7 @@ from pathlib import Path
 from time import perf_counter
 import traceback
 
-from .analysis_identity import make_analysis_identity
+from .analysis_identity import make_analysis_identity, source_analysis_identity
 from ..cache import MeasurementCache, MeasurementCacheStatistics
 from ..detection.context import (
     DetectionContext,
@@ -70,6 +70,11 @@ def process_one(
         failure_stage = FailureStage.IMAGE_READ
         arr, profile, page_warnings = read_tiff(input_file, config.page)
         source_arr = arr
+        source_identity = source_analysis_identity(
+            input_file,
+            profile,
+            config.page,
+        )
 
         _extend_unique(warnings, page_warnings)
         failure_stage = FailureStage.DETECTION
@@ -90,6 +95,7 @@ def process_one(
                 initial_configuration,
                 lane_configuration,
                 measurement_cache_statistics,
+                source_identity["content_sha256"],
             )
             arr = workspace.pixels
             transform_geometry = workspace.transform_geometry
@@ -116,8 +122,7 @@ def process_one(
         selected_candidate = selection.selected
 
         analysis_identity = make_analysis_identity(
-            input_file,
-            profile,
+            source_identity,
             config,
             configuration_bundle,
             workspace.identity,

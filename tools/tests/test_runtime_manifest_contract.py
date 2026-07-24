@@ -294,6 +294,20 @@ class RuntimeManifestContractTest(unittest.TestCase):
                     return_value={},
                 ),
                 patch(
+                    "x5crop.runtime.workflow.source_analysis_identity",
+                    return_value={
+                        "name": source.name,
+                        "size": 0,
+                        "mtime_ns": 0,
+                        "content_sha256": "0" * 64,
+                        "page": 0,
+                        "shape": list(profile.shape),
+                        "dtype": profile.dtype,
+                        "axes": profile.axes,
+                        "photometric": profile.photometric,
+                    },
+                ),
+                patch(
                     "x5crop.runtime.workflow.read_tiff",
                     return_value=(pixels, profile, []),
                 ),

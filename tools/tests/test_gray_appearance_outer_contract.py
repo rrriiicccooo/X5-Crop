@@ -226,7 +226,7 @@ class GrayAppearanceOuterContractTests(unittest.TestCase):
     def test_current_schema_names_frame_slot_resolution(self) -> None:
         self.assertEqual(
             REPORT_SCHEMA_REVISION,
-            "scan_canvas_photo_edge_evidence",
+            "cross_region_photo_edge_geometry",
         )
 
     def test_boundary_measurements_have_one_typed_canonical_model(self) -> None:

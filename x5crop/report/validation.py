@@ -15,6 +15,7 @@ from ..configuration.photo_edges import PhotoEdgeDetectionParameters
 from ..configuration.preprocess import PreprocessConfiguration
 from ..configuration.separator import SeparatorConfiguration
 from ..configuration.scan_canvas import ScanCanvasDetectionConfiguration
+from ..configuration.shared_short_axis import SharedShortAxisParameters
 from ..configuration.transform import TransformDetectionParameters
 from ..detection.decision.vocabulary import FINAL_REVIEW_REASONS
 from ..detection.candidate.assessment.model import (
@@ -37,7 +38,10 @@ from ..detection.candidate.selection.model import (
 from ..detection.geometry_resolution import GeometryResolution
 from ..detection.final.model import FinalizationPlan, frame_export_eligibility
 from ..detection.gate_checks import GateCheck, GateRequirement, GateStage
-from ..detection.evidence.photo_edges import PhotoEdgePairEvidence
+from ..detection.evidence.photo_edges import (
+    DualLanePhotoEdgeJointRegion,
+    PhotoEdgePairEvidence,
+)
 from ..detection.evidence.transform_geometry import TransformGeometryEvidence
 from ..detection.physical.lane_divider import LaneDividerEvidence
 from ..detection.physical.short_axis import SharedShortAxisPlan
@@ -632,6 +636,7 @@ def _input_valid(value: Any) -> bool:
             "scan_canvas_evidence",
             "transform_geometry",
             "source_photo_edge_pairs",
+            "dual_lane_photo_edge_geometry",
             "mapped_photo_edge_pairs",
             "shared_short_axes",
             "source_lane_divider",
@@ -647,6 +652,10 @@ def _input_valid(value: Any) -> bool:
         and _typed_value_valid(
             value["source_photo_edge_pairs"],
             tuple[PhotoEdgePairEvidence, ...],
+        )
+        and _typed_value_valid(
+            value["dual_lane_photo_edge_geometry"],
+            DualLanePhotoEdgeJointRegion | None,
         )
         and _typed_value_valid(
             value["mapped_photo_edge_pairs"],
@@ -694,6 +703,7 @@ def _configuration_valid(value: Any) -> bool:
         "preprocess",
         "photo_edges",
         "transform",
+        "shared_short_axis",
         "separator",
         "content",
     }
@@ -776,6 +786,10 @@ def _configuration_valid(value: Any) -> bool:
         and _typed_value_valid(
             measurement["transform"],
             TransformDetectionParameters,
+        )
+        and _typed_value_valid(
+            measurement["shared_short_axis"],
+            SharedShortAxisParameters,
         )
         and _typed_value_valid(measurement["separator"], SeparatorConfiguration)
         and _typed_value_valid(measurement["content"], ContentConfiguration)

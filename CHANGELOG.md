@@ -20,6 +20,53 @@ PASS/REVIEW outcomes, report fields, and crop geometry are not compatibility
 targets; real TIFFs, current reports, Debug Analysis, and current contracts are
 the validation evidence.
 
+### 2026-07-24 — 跨区域全局短轴几何 / Cross-Region Global Short-Axis Geometry
+
+- Replaced section/path-based short-axis discovery with dense, chunked,
+  multiscale local transition measurements. Overlapping scale/channel responses
+  become one material- and polarity-independent observation; connected support
+  becomes an indivisible ridge fragment. Three non-overlapping real measurement
+  footprints per side are the sole count minimum—there is no coverage, bin,
+  leverage, inlier-ratio, or minimum-span gate. / 以分块、密集、多尺度局部 transition
+  观测取代 section/path 短轴发现；尺度与 channel 重复合并为一个材料和极性无关的
+  observation，连续 support 成为不可拆 fragment。每侧三个不重叠真实测量 footprint 是唯一
+  数量下限，不再存在覆盖率、分桶、leverage、inlier ratio 或最小跨度门槛。
+- Added the deterministic normal-form joint geometry
+  `n(theta)·p = d_top/d_bottom`. Fixed-canvas observations are converted through
+  centered anisotropic px/mm coordinates. Every retained interval cell carries
+  an outward enclosure and a fully revalidated feasible witness; complete
+  `FrameSizeMm` labels, containment, maximal-consensus branching, numerical
+  indeterminacy, curvature, and shared global work budgets remain explicit. /
+  新增法向联合区域；每个保留 cell 同时保存 outward enclosure 与完整重验 witness，并显式
+  保留完整 `FrameSizeMm`、containment、maximal consensus 分支、数值不确定、曲率和全局预算。
+- The theoretical corridor is now computation-only and is surrounded by a full
+  measurement halo; boundary-touching measurements are censored and cannot
+  self-prove. Holder/photo shared anchors only deduplicate. Pair identity,
+  transform precision, and strip-wide inward shared-axis extrema are separate
+  consumers of one source pair, with ±1 px interpolation uncertainty applied
+  only after real rotation. / 理论 corridor 只限制计算并带完整 halo；触边 measurement
+  为 censored。Holder/photo 共用 anchor 只去重。Pair identity、transform 精度和整幅内向
+  shared-axis 极值分别消费同一 source pair，真实旋转后才加入 ±1 px 插值不确定度。
+- `135-dual` now retains a typed joint region whose lanes share one pixel angle
+  and perpendicular height, without inventing canvas dimensions or treating
+  numerical resolution as physical tolerance. The current report revision is
+  `cross_region_photo_edge_geometry`; dense responses, temporary seeds, repeated
+  observations, prior short-axis paths, old deskew models, DPI geometry, aliases,
+  shims, and compatibility parsing are absent. / `135-dual` 保留共享 pixel angle 与
+  法向高度的联合区域，不虚构画布尺寸或物理容差。当前 report revision 为
+  `cross_region_photo_edge_geometry`；不保留 dense response、临时 seed、重复 observation、
+  旧短轴路径、旧 deskew、DPI 几何、别名、shim 或兼容解析。
+- Manual review remains paused. This change can establish machine evidence and
+  structural verification only; it does not create human-confirmed labels or
+  claim production accuracy closure. The current contract/unit suite completed
+  850 tests. At the user's direction, the full 112-sample rerun,
+  `tools/verify full`, current-schema comparison, and two full frozen audits were
+  skipped for this delivery and are not claimed as validation evidence. /
+  人工审阅继续暂停；本变更只能完成机器证据与结构验证，不新增人工确认，也不宣称生产
+  准确性闭合。当前合同/单元测试共完成 850 项；按用户要求，本次交付跳过 112 组全量重跑、
+  `tools/verify full`、current-schema compare 和两轮完整冻结审计，不将其描述为已完成的
+  验证证据。
+
 ### 2026-07-23 — 片夹物理画布与照片边缘证据 / Physical Canvas And Photo-Edge Evidence
 
 - Added the sole `ScanCanvasPhysicalSpec` catalog for `135_standard`

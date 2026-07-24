@@ -66,8 +66,7 @@ def detection_configuration_fingerprint(
 
 
 def make_analysis_identity(
-    input_file: Path,
-    profile: ImageProfile,
+    source_identity: dict[str, Any],
     config: RunConfig,
     configuration_bundle: DetectionConfigurationBundle,
     workspace_identity: WorkspaceIdentity,
@@ -76,7 +75,7 @@ def make_analysis_identity(
         "script": SCRIPT_NAME,
         "script_version": VERSION,
         "implementation_fingerprint": active_implementation_fingerprint(),
-        "source": source_analysis_identity(input_file, profile, config.page),
+        "source": dict(source_identity),
         "runtime_configuration": runtime_configuration_identity(config),
         "detection_configuration_fingerprint": (
             detection_configuration_fingerprint(configuration_bundle)

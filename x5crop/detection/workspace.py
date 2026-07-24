@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from math import atan, degrees
-from statistics import median
 
 import numpy as np
 
@@ -12,10 +11,7 @@ from ..configuration.model import DetectionConfiguration
 from ..configuration.scan_canvas import ScanCanvasDetectionConfiguration
 from ..configuration.transform import TransformDetectionParameters
 from ..domain import (
-    BoundaryMeasurementSet,
-    BoundarySide,
     Box,
-    ContainmentFallback,
     EvidenceState,
     MeasurementIdentity,
     MeasurementProvenance,
@@ -25,10 +21,7 @@ from ..domain import (
 from ..geometry.affine import AffineCoordinateTransform
 from ..geometry.layout import HORIZONTAL, is_horizontal_layout, work_gray
 from ..image.gray import make_base_gray_u8
-from ..image.statistics import (
-    ImageMeasurementStatistics,
-    image_measurement_statistics,
-)
+from ..image.statistics import image_measurement_statistics
 from ..image.transforms import (
     BILINEAR_INTERPOLATION_POSITION_UNCERTAINTY_PX,
     photometric_background_value,
@@ -38,13 +31,11 @@ from ..image.workspace import WorkspaceIdentity, workspace_identity_for_gray
 from ..io.model import ImageProfile
 from ..utils import clamp_float, spatial_shape
 from .evidence.photo_edges import (
-    POSITION_INTERVAL_SIDE_COUNT,
-    PhotoEdgePathPairProposal,
+    DualLanePhotoEdgeJointRegion,
+    NumericInterval,
+    PhotoEdgeCoordinateSpace,
     PhotoEdgePairEvidence,
     map_photo_edge_pair_evidence,
-    observe_photo_edge_pairs,
-    photo_edge_search_bands,
-    photo_edge_inner_line,
     translate_photo_edge_pair_evidence,
 )
 from .evidence.scan_canvas import (
@@ -55,11 +46,12 @@ from .evidence.transform_geometry import (
     TransformGeometryEvidence,
     TransformOutcome,
 )
-from .physical.boundary_detection import (
-    short_axis_boundary_paths,
-    short_axis_boundary_path_pairs,
-)
 from .physical.lane_divider import LaneDividerEvidence, measure_lane_dividers
+from .physical.photo_edge_detection import (
+    observe_fixed_canvas_photo_edges,
+    observe_image_only_lane_photo_edges,
+)
+from .physical.photo_edge_geometry import join_dual_lane_hypotheses
 from .physical.short_axis import (
     SharedShortAxisPlan,
     shared_short_axis_from_photo_edge_pair,
@@ -74,6 +66,7 @@ class DetectionWorkspace:
     measurement_cache: MeasurementCache
     scan_canvas_evidence: ScanCanvasEvidence
     source_photo_edge_pairs: tuple[PhotoEdgePairEvidence, ...]
+    dual_lane_photo_edge_geometry: DualLanePhotoEdgeJointRegion | None
     mapped_photo_edge_pairs: tuple[PhotoEdgePairEvidence, ...]
     shared_short_axes: tuple[SharedShortAxisPlan, ...]
     source_lane_divider: LaneDividerEvidence | None
@@ -118,6 +111,22 @@ class DetectionWorkspace:
             )
         if (self.source_lane_divider is None) != (self.lane_divider is None):
             raise ValueError("source and workspace lane divider must correspond")
+        if self.dual_lane_photo_edge_geometry is not None:
+            joint = self.dual_lane_photo_edge_geometry
+            if len(self.source_photo_edge_pairs) != 2:
+                raise ValueError(
+                    "dual-lane joint geometry requires exactly two lane pairs"
+                )
+            if joint.state == EvidenceState.SUPPORTED:
+                assert joint.selected_pair_ids is not None
+                selected = tuple(
+                    evidence.selected_pair_id
+                    for evidence in self.source_photo_edge_pairs
+                )
+                if selected != joint.selected_pair_ids:
+                    raise ValueError(
+                        "dual-lane joint geometry must select the lane pairs"
+                    )
         source_work = work_gray(
             self.source_gray,
             self.measurement_cache.layout,
@@ -140,18 +149,29 @@ class DetectionWorkspace:
             ("workspace", self.mapped_photo_edge_pairs, workspace_work),
         ):
             for evidence in evidence_set:
-                for candidate in evidence.candidates:
-                    for sample in candidate.path.samples:
-                        if (
-                            sample.orthogonal_interval.minimum < 0.0
-                            or sample.orthogonal_interval.maximum
-                            > float(work.shape[1])
-                            or sample.position.minimum < 0.0
-                            or sample.position.maximum > float(work.shape[0])
-                        ):
-                            raise ValueError(
-                                f"{label} photo-edge sample lies outside its coordinate domain"
-                            )
+                for observation in evidence.audit_observations:
+                    if (
+                        observation.long_axis_footprint.minimum < 0.0
+                        or observation.long_axis_footprint.maximum
+                        > float(work.shape[1])
+                        or observation.short_axis_position_interval.minimum
+                        < 0.0
+                        or observation.short_axis_position_interval.maximum
+                        > float(work.shape[0])
+                    ):
+                        raise ValueError(
+                            f"{label} photo-edge observation lies outside "
+                            "its coordinate domain"
+                        )
+                expected_space = (
+                    PhotoEdgeCoordinateSpace.SOURCE
+                    if label == "source"
+                    else PhotoEdgeCoordinateSpace.MAPPED
+                )
+                if evidence.coordinate_space != expected_space:
+                    raise ValueError(
+                        f"{label} photo-edge evidence has the wrong coordinate space"
+                    )
         for plan, evidence in zip(
             self.shared_short_axes,
             self.mapped_photo_edge_pairs,
@@ -199,32 +219,32 @@ class DetectionWorkspace:
                 raise ValueError(
                     "mapped photo-edge evidence must preserve source identity"
                 )
-            if mapped.search_bands:
+            if mapped.search_corridors:
                 raise ValueError(
-                    "mapped photo-edge evidence cannot retain source-coordinate bands"
+                    "mapped photo-edge evidence cannot retain source corridors"
                 )
             if mapped.physical_selection != source.physical_selection:
                 raise ValueError(
                     "mapped photo-edge evidence must preserve physical selection"
                 )
-            if len(source.candidates) != len(mapped.candidates):
+            if len(source.hypotheses) != len(mapped.hypotheses):
                 raise ValueError(
-                    "mapped photo-edge evidence must preserve every candidate"
+                    "mapped photo-edge evidence must preserve every hypothesis"
                 )
-            for source_candidate, mapped_candidate in zip(
-                source.candidates,
-                mapped.candidates,
+            for source_hypothesis, mapped_hypothesis in zip(
+                source.hypotheses,
+                mapped.hypotheses,
                 strict=True,
             ):
                 if (
-                    mapped_candidate.path.provenance.observation_id
+                    mapped_hypothesis.provenance.observation_id
                     != ObservationId(
                         "workspace:"
-                        f"{source_candidate.path.provenance.observation_id}"
+                        f"{source_hypothesis.provenance.observation_id}"
                     )
                 ):
                     raise ValueError(
-                        "mapped photo-edge candidate must preserve raw path identity"
+                        "mapped photo-edge hypothesis must preserve source identity"
                     )
         if not transform.is_identity and self.source_lane_divider is not None:
             assert self.lane_divider is not None
@@ -242,120 +262,34 @@ class DetectionWorkspace:
         object.__setattr__(self, "identity", workspace_identity_for_gray(self.gray))
 
 
-def _measure_photo_edges(
-    gray_work: np.ndarray,
-    statistics: ImageMeasurementStatistics,
-    configuration: DetectionConfiguration,
-    *,
-    observation_id: str,
-    scan_canvas: ScanCanvasEvidence | None,
-) -> PhotoEdgePairEvidence:
-    if scan_canvas is None:
-        paths = short_axis_boundary_paths(
-            gray_work,
-            statistics,
-            configuration.photo_edges.path_sampling,
-            minimum_path_samples=(
-                configuration.photo_edges.minimum_candidate_sections
-            ),
-            observation_prefix=observation_id,
-        )
-        search_bands = ()
-        path_pair_proposals = None
-    else:
-        search_bands = photo_edge_search_bands(
-            scan_canvas,
-            configuration.physical_spec.frame.frame_size_mm_options,
-            configuration.photo_edges,
-            configuration.transform.maximum_angle_degrees,
-        )
-        measured_pairs = (
-            short_axis_boundary_path_pairs(
-                gray_work,
-                statistics,
-                configuration.photo_edges.path_sampling,
-                minimum_path_samples=(
-                    configuration.photo_edges.minimum_candidate_sections
-                ),
-                matching_constraint_ids=(
-                    lambda coordinate, top_position, bottom_position: tuple(
-                        band.band_id
-                        for band in search_bands
-                        if band.allows_pair(
-                            coordinate,
-                            top_position,
-                            bottom_position,
-                        )
-                    )
-                ),
-                observation_prefix=observation_id,
-            )
-            if search_bands
-            else ()
-        )
-        paths_by_id = {
-            path.provenance.observation_id: path
-            for pair in measured_pairs
-            for path in (pair.top_path, pair.bottom_path)
-        }
-        paths = tuple(
-            paths_by_id[observation_id]
-            for observation_id in sorted(paths_by_id, key=str)
-        )
-        path_pair_proposals = tuple(
-            PhotoEdgePathPairProposal(
-                pair.top_path.provenance.observation_id,
-                pair.bottom_path.provenance.observation_id,
-                pair.constraint_id,
-            )
-            for pair in measured_pairs
-        )
-    measured = BoundaryMeasurementSet(
-        raw_paths=paths,
-        holder_boundaries=(),
-        containment_fallback=ContainmentFallback(
-            Box(0, 0, gray_work.shape[1], gray_work.shape[0]),
-            MeasurementProvenance(
-                root_measurement=MeasurementIdentity.CANVAS,
-                observation_id=ObservationId(
-                    f"{observation_id}:canvas"
-                ),
-                dependencies=(MeasurementIdentity.GRAY_WORK,),
-                description="photo-edge observation-domain containment",
-            ),
-        ),
-    )
-    return observe_photo_edge_pairs(
-        gray_work,
-        measured,
-        configuration.photo_edges,
-        observation_id=observation_id,
-        search_bands=search_bands,
-        path_pair_proposals=path_pair_proposals,
-    )
-
-
 def _source_photo_edge_pairs(
     source_cache: MeasurementCache,
     scan_canvas: ScanCanvasEvidence,
     configuration: DetectionConfiguration,
     lane_configuration: DetectionConfiguration | None,
-) -> tuple[tuple[PhotoEdgePairEvidence, ...], LaneDividerEvidence | None]:
+    source_sha256: str,
+) -> tuple[
+    tuple[PhotoEdgePairEvidence, ...],
+    LaneDividerEvidence | None,
+    DualLanePhotoEdgeJointRegion | None,
+]:
     if configuration.physical_spec.layout.kind != "dual_lane":
         return (
             (
-                _measure_photo_edges(
+                observe_fixed_canvas_photo_edges(
                     source_cache.gray_work,
-                    source_cache.image_statistics,
-                    configuration,
+                    scan_canvas,
+                    configuration.physical_spec.frame.frame_size_mm_options,
+                    configuration.photo_edges,
+                    source_sha256=source_sha256,
                     observation_id="source_photo_edge_pair_evidence",
-                    scan_canvas=scan_canvas,
                 ),
             ),
             None,
+            None,
         )
     if lane_configuration is None:
-        return (), None
+        return (), None, None
     divider_set = measure_lane_dividers(
         source_cache.content_evidence_float_work,
         configuration.candidate_plan.dual_lane_divider,
@@ -366,8 +300,15 @@ def _source_photo_edge_pairs(
         if divider.state == EvidenceState.SUPPORTED
     )
     if len(supported) != 1:
-        return (), None
+        return (), None, None
     divider = supported[0]
+    frame_sizes = (
+        lane_configuration.physical_spec.frame.frame_size_mm_options
+    )
+    if len(frame_sizes) != 1:
+        raise ValueError(
+            "dual-lane image-only geometry requires one lane frame size"
+        )
     evidence_set: list[PhotoEdgePairEvidence] = []
     for lane_index, lane in enumerate(
         divider.lane_boxes(
@@ -380,24 +321,25 @@ def _source_photo_edge_pairs(
             lane.top : lane.bottom,
             lane.left : lane.right,
         ]
-        lane_statistics = image_measurement_statistics(
+        local = observe_image_only_lane_photo_edges(
             lane_gray,
-            lane_configuration.preprocess.image_statistics,
-        )
-        local = _measure_photo_edges(
-            lane_gray,
-            lane_statistics,
-            lane_configuration,
+            frame_sizes[0],
+            lane_configuration.photo_edges,
+            source_sha256=source_sha256,
             observation_id=f"source_lane_{lane_index}_photo_edge_pair_evidence",
-            scan_canvas=None,
         )
         evidence_set.append(
             translate_photo_edge_pair_evidence(
                 local,
                 lane.top,
+                PhotoEdgeCoordinateSpace.SOURCE,
             )
         )
-    return tuple(evidence_set), divider
+    joint = join_dual_lane_hypotheses(
+        evidence_set[0].hypotheses,
+        evidence_set[1].hypotheses,
+    )
+    return tuple(evidence_set), divider, joint
 
 
 def _unapplied_transform_evidence(
@@ -405,12 +347,14 @@ def _unapplied_transform_evidence(
     transform: AffineCoordinateTransform,
     *,
     estimated_angle_degrees: float | None = None,
+    pixel_angle_interval_degrees: NumericInterval | None = None,
     projected_edge_drift_px: float | None = None,
     identity_drift_threshold_px: float | None = None,
 ) -> TransformGeometryEvidence:
     return TransformGeometryEvidence(
         outcome=outcome,
         estimated_angle_degrees=estimated_angle_degrees,
+        pixel_angle_interval_degrees=pixel_angle_interval_degrees,
         projected_edge_drift_px=projected_edge_drift_px,
         identity_drift_threshold_px=identity_drift_threshold_px,
         position_uncertainty_px=0.0,
@@ -420,6 +364,7 @@ def _unapplied_transform_evidence(
 
 def _transform_geometry(
     evidence_set: tuple[PhotoEdgePairEvidence, ...],
+    dual_lane_geometry: DualLanePhotoEdgeJointRegion | None,
     source_work_width: int,
     source_width: int,
     source_height: int,
@@ -427,101 +372,127 @@ def _transform_geometry(
     parameters: TransformDetectionParameters,
 ) -> TransformGeometryEvidence:
     identity = AffineCoordinateTransform.identity(source_width, source_height)
+    if (
+        dual_lane_geometry is not None
+        and dual_lane_geometry.state != EvidenceState.SUPPORTED
+    ):
+        return _unapplied_transform_evidence(
+            TransformOutcome.PHOTO_EDGE_PAIR_UNAVAILABLE,
+            identity,
+        )
     if not evidence_set or any(
         evidence.state != EvidenceState.SUPPORTED
-        or evidence.selected_candidates is None
+        or evidence.selected_geometry is None
         for evidence in evidence_set
     ):
         return _unapplied_transform_evidence(
             TransformOutcome.PHOTO_EDGE_PAIR_UNAVAILABLE,
             identity,
         )
-    pair_lines = tuple(
-        (
-            photo_edge_inner_line(top, BoundarySide.TOP),
-            photo_edge_inner_line(bottom, BoundarySide.BOTTOM),
-            evidence.selected_pair,
+    geometries = tuple(evidence.selected_geometry for evidence in evidence_set)
+    assert all(geometry is not None for geometry in geometries)
+    typed_geometries = tuple(
+        geometry for geometry in geometries if geometry is not None
+    )
+    if dual_lane_geometry is None:
+        minimum_slope = max(
+            geometry.pixel_slope_interval.minimum
+            for geometry in typed_geometries
         )
-        for evidence in evidence_set
-        for selected in (evidence.selected_candidates,)
-        if selected is not None
-        for top, bottom in (selected,)
-    )
-    lane_slopes = tuple(
-        float(median((top.slope, bottom.slope)))
-        for top, bottom, _ in pair_lines
-    )
-    if (
-        len(lane_slopes) > 1
-        and max(lane_slopes) - min(lane_slopes)
-        > parameters.maximum_lane_slope_delta
-    ):
+        maximum_slope = min(
+            geometry.pixel_slope_interval.maximum
+            for geometry in typed_geometries
+        )
+    else:
+        minimum_slope = min(
+            cell.pixel_slope.minimum
+            for cell in dual_lane_geometry.cells
+        )
+        maximum_slope = max(
+            cell.pixel_slope.maximum
+            for cell in dual_lane_geometry.cells
+        )
+    if maximum_slope < minimum_slope:
         return _unapplied_transform_evidence(
-            TransformOutcome.EDGE_SLOPES_DISAGREE,
+            TransformOutcome.ANGLE_ESTIMATION_UNAVAILABLE,
             identity,
         )
-    projected_uncertainties = []
-    for top, bottom, hypothesis in pair_lines:
-        assert hypothesis is not None
-        assert hypothesis.photo_height_px is not None
-        projected_uncertainty = max(
-            (
-                line.slope_interval.maximum
-                - line.slope_interval.minimum
-            )
-            * float(source_work_width)
-            + POSITION_INTERVAL_SIDE_COUNT * line.position_uncertainty_px
-            for line in (top, bottom)
-        )
-        projected_uncertainties.append(projected_uncertainty)
-        if projected_uncertainty > (
-            hypothesis.photo_height_px.midpoint
-            * parameters.maximum_projected_uncertainty_height_ratio
-        ):
-            return _unapplied_transform_evidence(
-                TransformOutcome.ANGLE_ESTIMATION_UNAVAILABLE,
-                identity,
-            )
-    slopes = tuple(
-        line.slope
-        for top, bottom, _ in pair_lines
-        for line in (top, bottom)
+    slope_interval = NumericInterval(minimum_slope, maximum_slope)
+    projected_uncertainty = (
+        slope_interval.width * float(max(0, source_work_width - 1))
     )
-    work_slope = float(median(slopes))
+    minimum_photo_height_px = (
+        min(
+            geometry.photo_height_px.minimum
+            for geometry in typed_geometries
+        )
+        if dual_lane_geometry is None
+        else min(
+            cell.perpendicular_height_px.minimum
+            for cell in dual_lane_geometry.cells
+        )
+    )
+    allowed_projected_uncertainty = (
+        minimum_photo_height_px
+        * parameters.maximum_projected_uncertainty_photo_height_ratio
+    )
+    if projected_uncertainty > allowed_projected_uncertainty:
+        return _unapplied_transform_evidence(
+            TransformOutcome.ANGLE_ESTIMATION_UNAVAILABLE,
+            identity,
+        )
+    work_slope = slope_interval.midpoint
     work_angle = degrees(atan(work_slope))
     estimated_angle = work_angle if is_horizontal_layout(layout) else -work_angle
-    projected_drift = abs(work_slope * float(source_work_width))
+    work_angle_interval = NumericInterval(
+        degrees(atan(slope_interval.minimum)),
+        degrees(atan(slope_interval.maximum)),
+    )
+    angle_interval = (
+        work_angle_interval
+        if is_horizontal_layout(layout)
+        else NumericInterval(
+            -work_angle_interval.maximum,
+            -work_angle_interval.minimum,
+        )
+    )
+    projected_drift = abs(
+        work_slope * float(max(0, source_work_width - 1))
+    )
     identity_drift_threshold = clamp_float(
         source_work_width * parameters.identity_span_ratio,
         parameters.identity_span_min_px,
         parameters.identity_span_max_px,
     )
-    if abs(estimated_angle) > parameters.maximum_angle_degrees:
+    if (
+        angle_interval.minimum < -parameters.maximum_angle_degrees
+        or angle_interval.maximum > parameters.maximum_angle_degrees
+    ):
         return _unapplied_transform_evidence(
             TransformOutcome.ANGLE_OUT_OF_RANGE,
             identity,
         )
-    if projected_drift <= identity_drift_threshold:
+    maximum_projected_drift = max(
+        abs(slope_interval.minimum),
+        abs(slope_interval.maximum),
+    ) * float(max(0, source_work_width - 1))
+    if maximum_projected_drift <= identity_drift_threshold:
         return _unapplied_transform_evidence(
             TransformOutcome.IDENTITY_WITHIN_TOLERANCE,
             identity,
             estimated_angle_degrees=estimated_angle,
+            pixel_angle_interval_degrees=angle_interval,
             projected_edge_drift_px=projected_drift,
             identity_drift_threshold_px=identity_drift_threshold,
         )
-    line_uncertainty = max(
-        line.position_uncertainty_px
-        for top, bottom, _ in pair_lines
-        for line in (top, bottom)
-    )
     return TransformGeometryEvidence(
         outcome=TransformOutcome.DESKEW_APPLIED,
         estimated_angle_degrees=estimated_angle,
+        pixel_angle_interval_degrees=angle_interval,
         projected_edge_drift_px=projected_drift,
         identity_drift_threshold_px=identity_drift_threshold,
         position_uncertainty_px=(
             BILINEAR_INTERPOLATION_POSITION_UNCERTAINTY_PX
-            + line_uncertainty
         ),
         coordinate_transform=AffineCoordinateTransform.expanded_rotation(
             source_width,
@@ -629,6 +600,7 @@ def prepare_detection_workspace(
     configuration: DetectionConfiguration,
     lane_configuration: DetectionConfiguration | None,
     lookup_statistics: MeasurementCacheStatistics,
+    source_sha256: str,
 ) -> DetectionWorkspace:
     source_gray = make_base_gray_u8(
         pixels,
@@ -653,15 +625,21 @@ def prepare_detection_workspace(
         layout,
         configuration.scan_canvas,
     )
-    source_photo_edges, source_divider = _source_photo_edge_pairs(
+    (
+        source_photo_edges,
+        source_divider,
+        dual_lane_photo_edge_geometry,
+    ) = _source_photo_edge_pairs(
         source_cache,
         scan_canvas_evidence,
         configuration,
         lane_configuration,
+        source_sha256,
     )
     source_height, source_width = spatial_shape(pixels)
     transform_geometry = _transform_geometry(
         source_photo_edges,
+        dual_lane_photo_edge_geometry,
         source_cache.gray_work.shape[1],
         source_width,
         source_height,
@@ -714,12 +692,13 @@ def prepare_detection_workspace(
     shared_short_axes = tuple(
         shared_short_axis_from_photo_edge_pair(
             evidence,
+            transform_geometry,
             cache.gray_work.shape[1],
             (
-                lane_configuration.photo_edges
+                lane_configuration.shared_short_axis
                 if lane_configuration is not None
                 and configuration.physical_spec.layout.kind == "dual_lane"
-                else configuration.photo_edges
+                else configuration.shared_short_axis
             ),
         )
         for evidence in mapped_photo_edges
@@ -738,6 +717,7 @@ def prepare_detection_workspace(
         measurement_cache=cache,
         scan_canvas_evidence=scan_canvas_evidence,
         source_photo_edge_pairs=source_photo_edges,
+        dual_lane_photo_edge_geometry=dual_lane_photo_edge_geometry,
         mapped_photo_edge_pairs=mapped_photo_edges,
         shared_short_axes=shared_short_axes,
         source_lane_divider=source_divider,
@@ -765,6 +745,7 @@ def detection_workspace_region(
     local_source_evidence = translate_photo_edge_pair_evidence(
         workspace.mapped_photo_edge_pairs[index],
         -region.top,
+        PhotoEdgeCoordinateSpace.SOURCE,
     )
     statistics = image_measurement_statistics(
         gray,
@@ -784,18 +765,20 @@ def detection_workspace_region(
         HORIZONTAL,
         0.0,
     )
-    local_plan = shared_short_axis_from_photo_edge_pair(
-        local_mapped_evidence,
-        region.width,
-        configuration.photo_edges,
-    )
     local_transform = TransformGeometryEvidence(
         outcome=TransformOutcome.IDENTITY_WITHIN_TOLERANCE,
         estimated_angle_degrees=0.0,
+        pixel_angle_interval_degrees=NumericInterval.exact(0.0),
         projected_edge_drift_px=0.0,
         identity_drift_threshold_px=1.0,
         position_uncertainty_px=0.0,
         coordinate_transform=identity,
+    )
+    local_plan = shared_short_axis_from_photo_edge_pair(
+        local_mapped_evidence,
+        local_transform,
+        region.width,
+        configuration.shared_short_axis,
     )
     local_scan_canvas = observe_scan_canvas(
         region.width,
@@ -810,6 +793,7 @@ def detection_workspace_region(
         measurement_cache=cache,
         scan_canvas_evidence=local_scan_canvas,
         source_photo_edge_pairs=(local_source_evidence,),
+        dual_lane_photo_edge_geometry=None,
         mapped_photo_edge_pairs=(local_mapped_evidence,),
         shared_short_axes=(local_plan,),
         source_lane_divider=None,

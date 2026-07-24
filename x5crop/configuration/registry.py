@@ -11,6 +11,7 @@ from .photo_edges import PhotoEdgeDetectionParameters
 from .preprocess import PreprocessConfiguration
 from .separator import SeparatorConfiguration
 from .scan_canvas import ScanCanvasDetectionConfiguration
+from .shared_short_axis import SharedShortAxisParameters
 from .transform import TransformDetectionParameters
 from ..formats.scan_canvas import scan_canvas_specs_for_format
 
@@ -33,6 +34,7 @@ def get_detection_configuration(
         ),
         photo_edges=PhotoEdgeDetectionParameters(),
         transform=TransformDetectionParameters(),
+        shared_short_axis=SharedShortAxisParameters(),
         boundary_path=BoundaryPathParameters(),
         separator=SeparatorConfiguration(),
         content=ContentConfiguration(),

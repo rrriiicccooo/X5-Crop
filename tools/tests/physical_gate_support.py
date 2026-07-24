@@ -68,9 +68,10 @@ from x5crop.detection.evidence.transform_geometry import (
     TransformGeometryEvidence,
     TransformOutcome,
 )
-from x5crop.configuration.photo_edges import PhotoEdgeDetectionParameters
 from x5crop.configuration.scan_canvas import ScanCanvasDetectionConfiguration
+from x5crop.configuration.shared_short_axis import SharedShortAxisParameters
 from x5crop.detection.evidence.photo_edges import (
+    NumericInterval,
     map_photo_edge_pair_evidence,
 )
 from x5crop.detection.evidence.scan_canvas import observe_scan_canvas
@@ -932,6 +933,9 @@ def transform_geometry_fixture(
         estimated_angle_degrees=(
             0.0 if measured else None
         ),
+        pixel_angle_interval_degrees=(
+            NumericInterval.exact(0.0) if measured else None
+        ),
         projected_edge_drift_px=0.0 if measured else None,
         identity_drift_threshold_px=1.0 if measured else None,
         position_uncertainty_px=0.0,
@@ -994,8 +998,9 @@ def detection_workspace_fixture(
     )
     plan = shared_short_axis_from_photo_edge_pair(
         mapped_photo_edge_pairs,
+        transform,
         width,
-        PhotoEdgeDetectionParameters(),
+        SharedShortAxisParameters(),
     )
     return DetectionWorkspace(
         pixels=gray,
@@ -1009,6 +1014,7 @@ def detection_workspace_fixture(
             ScanCanvasDetectionConfiguration(()),
         ),
         source_photo_edge_pairs=(photo_edge_pairs,),
+        dual_lane_photo_edge_geometry=None,
         mapped_photo_edge_pairs=(mapped_photo_edge_pairs,),
         shared_short_axes=(plan,),
         source_lane_divider=None,

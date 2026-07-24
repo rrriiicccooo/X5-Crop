@@ -35,6 +35,8 @@ from x5crop.detection.candidate.model import (
     CandidateAssessment,
 )
 from x5crop.domain import (
+    BoundaryAxis,
+    BoundaryKind,
     BoundaryPathSample,
     BoundarySide,
     Box,
@@ -118,13 +120,18 @@ def _with_leading_interval(candidate, interval: PixelInterval, source: str):
 def _with_shifted_short_axis(candidate, offset: float):
     geometry = candidate.geometry
     short_axis = geometry.shared_short_axis
-    paths_by_id = {
-        path.provenance.observation_id: path
-        for path in geometry.raw_boundary_paths
-    }
-    top_id, bottom_id = short_axis.provenance.boundary_anchors
-    top_photo_edge = paths_by_id[top_id]
-    bottom_photo_edge = paths_by_id[bottom_id]
+    photo_edges = tuple(
+        sorted(
+            (
+                path
+                for path in geometry.raw_boundary_paths
+                if path.axis == BoundaryAxis.SHORT
+                and path.kind != BoundaryKind.EDGE_ADJACENT_TRANSITION
+            ),
+            key=lambda path: path.position.midpoint,
+        )
+    )
+    top_photo_edge, bottom_photo_edge = photo_edges[0], photo_edges[-1]
 
     def shifted(path):
         return replace(

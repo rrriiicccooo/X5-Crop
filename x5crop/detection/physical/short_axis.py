@@ -4,9 +4,8 @@ from dataclasses import dataclass
 from enum import Enum
 import math
 
-from ...configuration.photo_edges import PhotoEdgeDetectionParameters
+from ...configuration.shared_short_axis import SharedShortAxisParameters
 from ...domain import (
-    BoundarySide,
     EvidenceState,
     FrameDimensionPrior,
     MeasurementIdentity,
@@ -17,10 +16,8 @@ from ...domain import (
     PixelInterval,
     ShortAxisMeasurementSpan,
 )
-from ..evidence.photo_edges import (
-    PhotoEdgePairEvidence,
-    photo_edge_inner_line,
-)
+from ..evidence.photo_edges import PhotoEdgePairEvidence
+from ..evidence.transform_geometry import TransformGeometryEvidence
 
 
 @dataclass(frozen=True)
@@ -36,6 +33,7 @@ class FrameWidthSearchHint:
 class SharedShortAxisOutcome(str, Enum):
     SUPPORTED = "supported"
     PHOTO_EDGE_PAIR_UNAVAILABLE = "photo_edge_pair_unavailable"
+    TRANSFORM_UNAVAILABLE = "transform_unavailable"
     EXTRAPOLATION_UNCERTAINTY_TOO_LARGE = (
         "extrapolation_uncertainty_too_large"
     )
@@ -52,12 +50,18 @@ class SharedShortAxisPlan:
 
     def __post_init__(self) -> None:
         if not isinstance(self.photo_edge_pair_id, ObservationId):
-            raise TypeError("shared short axis requires a photo-edge evidence identity")
+            raise TypeError(
+                "shared short axis requires a photo-edge evidence identity"
+            )
         if not isinstance(self.outcome, SharedShortAxisOutcome):
-            raise TypeError("shared short axis requires a typed consumer outcome")
+            raise TypeError(
+                "shared short axis requires a typed consumer outcome"
+            )
         supported = self.outcome == SharedShortAxisOutcome.SUPPORTED
         if supported != (self.span is not None):
-            raise ValueError("shared short-axis outcome must match span availability")
+            raise ValueError(
+                "shared short-axis outcome must match span availability"
+            )
         if supported != (self.position_uncertainty_px is not None):
             raise ValueError(
                 "shared short-axis uncertainty must match span availability"
@@ -66,11 +70,17 @@ class SharedShortAxisPlan:
             not math.isfinite(self.position_uncertainty_px)
             or self.position_uncertainty_px < 0.0
         ):
-            raise ValueError("shared short-axis uncertainty must be finite")
+            raise ValueError(
+                "shared short-axis uncertainty must be finite"
+            )
         if self.span is not None and self.span.provenance != self.provenance:
-            raise ValueError("shared short-axis span must preserve plan provenance")
+            raise ValueError(
+                "shared short-axis span must preserve plan provenance"
+            )
         if self.provenance.root_measurement != MeasurementIdentity.PHOTO_EDGES:
-            raise ValueError("shared short axis must derive from photo-edge evidence")
+            raise ValueError(
+                "shared short axis must derive from photo-edge evidence"
+            )
 
     @property
     def state(self) -> EvidenceState:
@@ -78,6 +88,7 @@ class SharedShortAxisPlan:
             return EvidenceState.SUPPORTED
         if self.outcome in {
             SharedShortAxisOutcome.PHOTO_EDGE_PAIR_UNAVAILABLE,
+            SharedShortAxisOutcome.TRANSFORM_UNAVAILABLE,
             SharedShortAxisOutcome.EXTRAPOLATION_UNCERTAINTY_TOO_LARGE,
         }:
             return EvidenceState.UNAVAILABLE
@@ -122,28 +133,23 @@ class SharedShortAxisPlan:
     @property
     def uncertainty_px(self) -> float:
         if self.position_uncertainty_px is None:
-            raise ValueError("unresolved shared short axis has no uncertainty")
+            raise ValueError(
+                "unresolved shared short axis has no uncertainty"
+            )
         return self.position_uncertainty_px
 
     @property
     def measurement_span(self) -> ShortAxisMeasurementSpan:
         if self.span is None:
-            raise ValueError("unresolved shared short axis has no measurement span")
+            raise ValueError(
+                "unresolved shared short axis has no measurement span"
+            )
         return self.span
 
 
 def _plan_provenance(
     evidence: PhotoEdgePairEvidence,
 ) -> MeasurementProvenance:
-    selected = evidence.selected_candidates
-    anchors = (
-        ()
-        if selected is None
-        else tuple(
-            candidate.path.provenance.observation_id
-            for candidate in selected
-        )
-    )
     return MeasurementProvenance(
         root_measurement=MeasurementIdentity.PHOTO_EDGES,
         observation_id=ObservationId(
@@ -154,20 +160,35 @@ def _plan_provenance(
             for dependency in evidence.provenance.dependencies
             if dependency != MeasurementIdentity.PHOTO_EDGES
         ),
-        description="shared short axis derived from mapped photo-edge pair",
-        boundary_anchors=anchors,
+        description="shared short axis consumed from mapped photo-edge pair",
+        boundary_anchors=tuple(
+            observation.observation_id
+            for observation in evidence.audit_observations
+        ),
     )
 
 
 def shared_short_axis_from_photo_edge_pair(
     evidence: PhotoEdgePairEvidence,
+    transform_geometry: TransformGeometryEvidence,
     workspace_long_axis_extent: int,
-    parameters: PhotoEdgeDetectionParameters,
+    parameters: SharedShortAxisParameters,
 ) -> SharedShortAxisPlan:
     if workspace_long_axis_extent <= 0:
-        raise ValueError("shared short-axis projection requires a positive domain")
+        raise ValueError(
+            "shared short-axis projection requires a positive domain"
+        )
     provenance = _plan_provenance(evidence)
-    if evidence.selected_candidates is None:
+    if transform_geometry.state != EvidenceState.SUPPORTED:
+        return SharedShortAxisPlan(
+            photo_edge_pair_id=evidence.observation_id,
+            span=None,
+            outcome=SharedShortAxisOutcome.TRANSFORM_UNAVAILABLE,
+            position_uncertainty_px=None,
+            provenance=provenance,
+        )
+    geometry = evidence.selected_geometry
+    if geometry is None or not geometry.cells:
         return SharedShortAxisPlan(
             photo_edge_pair_id=evidence.observation_id,
             span=None,
@@ -175,30 +196,22 @@ def shared_short_axis_from_photo_edge_pair(
             position_uncertainty_px=None,
             provenance=provenance,
         )
-    top_candidate, bottom_candidate = evidence.selected_candidates
-    top_line = photo_edge_inner_line(top_candidate, side=BoundarySide.TOP)
-    bottom_line = photo_edge_inner_line(
-        bottom_candidate,
-        side=BoundarySide.BOTTOM,
-    )
-    coordinates = (0.0, float(workspace_long_axis_extent))
-    top_positions = tuple(
-        top_line.position_interval_at(coordinate)
+    coordinates = (0.0, float(workspace_long_axis_extent - 1))
+    top_intervals = tuple(
+        geometry.edge_position_interval(coordinate, top=True)
         for coordinate in coordinates
     )
-    bottom_positions = tuple(
-        bottom_line.position_interval_at(coordinate)
+    bottom_intervals = tuple(
+        geometry.edge_position_interval(coordinate, top=False)
         for coordinate in coordinates
     )
-    top = PixelInterval(
-        min(item.minimum for item in top_positions),
-        max(item.maximum for item in top_positions),
-    )
-    bottom = PixelInterval(
-        min(item.minimum for item in bottom_positions),
-        max(item.maximum for item in bottom_positions),
-    )
-    if bottom.minimum <= top.maximum:
+    safe_top = max(interval.maximum for interval in top_intervals)
+    safe_bottom = min(interval.minimum for interval in bottom_intervals)
+    if (
+        safe_bottom <= safe_top
+        or safe_top < 0.0
+        or safe_bottom > float(geometry.work_short_axis_extent_px - 1)
+    ):
         return SharedShortAxisPlan(
             photo_edge_pair_id=evidence.observation_id,
             span=None,
@@ -206,18 +219,17 @@ def shared_short_axis_from_photo_edge_pair(
             position_uncertainty_px=None,
             provenance=provenance,
         )
-    height = bottom.minus(top)
-    uncertainty = (
-        top.maximum
-        - top.minimum
-        + bottom.maximum
-        - bottom.minimum
+    endpoint_uncertainty = max(
+        interval.maximum - interval.minimum
+        for interval in (*top_intervals, *bottom_intervals)
     )
+    safe_height = safe_bottom - safe_top
     uncertainty_limit = max(
-        parameters.shared_axis_uncertainty_floor_px,
-        height.midpoint * parameters.maximum_shared_axis_uncertainty_ratio,
+        parameters.minimum_endpoint_uncertainty_px,
+        safe_height
+        * parameters.maximum_endpoint_uncertainty_photo_height_ratio,
     )
-    if uncertainty > uncertainty_limit:
+    if endpoint_uncertainty > uncertainty_limit:
         return SharedShortAxisPlan(
             photo_edge_pair_id=evidence.observation_id,
             span=None,
@@ -228,15 +240,15 @@ def shared_short_axis_from_photo_edge_pair(
             provenance=provenance,
         )
     span = ShortAxisMeasurementSpan(
-        top=top,
-        bottom=bottom,
+        top=PixelInterval.exact(safe_top),
+        bottom=PixelInterval.exact(safe_bottom),
         provenance=provenance,
     )
     return SharedShortAxisPlan(
         photo_edge_pair_id=evidence.observation_id,
         span=span,
         outcome=SharedShortAxisOutcome.SUPPORTED,
-        position_uncertainty_px=uncertainty,
+        position_uncertainty_px=endpoint_uncertainty,
         provenance=provenance,
     )
 
@@ -246,7 +258,9 @@ def frame_width_search_hint(
     dimensions: FrameDimensionPrior,
 ) -> FrameWidthSearchHint:
     if not shared_short_axis.supports_safe_crop:
-        raise ValueError("frame-width hint requires a resolved shared short axis")
+        raise ValueError(
+            "frame-width hint requires a resolved shared short axis"
+        )
     provenance = MeasurementProvenance(
         root_measurement=MeasurementIdentity.FRAME_GEOMETRY,
         observation_id=ObservationId(

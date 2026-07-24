@@ -5,10 +5,7 @@ import numpy as np
 
 from ..detection.final.model import FinalDetection
 from ..detection.candidate.model import AssessedCandidate
-from ..detection.evidence.photo_edges import (
-    POSITION_INTERVAL_SIDE_COUNT,
-    PhotoEdgePairEvidence,
-)
+from ..detection.evidence.photo_edges import PhotoEdgePairEvidence
 from ..detection.physical.short_axis import SharedShortAxisPlan
 from ..detection.workspace import DetectionWorkspace
 from ..domain import Box, EvidenceState, FrameCropEnvelope
@@ -105,7 +102,7 @@ def make_debug_preview_rgb(
         workspace.measurement_cache.gray_work.shape[1],
         scale,
         style,
-        include_search_bands=False,
+        include_search_corridors=False,
     )
     return rgb
 
@@ -146,23 +143,23 @@ def _draw_work_segment(
     )
 
 
-def _draw_search_bands(
+def _draw_search_corridors(
     rgb: np.ndarray,
     evidence: PhotoEdgePairEvidence,
     layout: str,
     scale: float,
     style: DebugStyleParameters,
 ) -> None:
-    for band in evidence.search_bands:
+    for corridor in evidence.search_corridors:
         coordinates = (
             0.0,
-            (
-                float(band.work_long_axis_px)
-                / POSITION_INTERVAL_SIDE_COUNT
-            ),
-            float(band.work_long_axis_px),
+            0.5 * float(corridor.work_long_axis_px - 1),
+            float(corridor.work_long_axis_px - 1),
         )
-        for nominal in (band.nominal_top_px, band.nominal_bottom_px):
+        for nominal in (
+            corridor.nominal_top_px,
+            corridor.nominal_bottom_px,
+        ):
             _draw_work_segment(
                 rgb,
                 layout,
@@ -176,21 +173,36 @@ def _draw_search_bands(
                 style,
                 dashed=True,
             )
-        intervals = tuple(
-            band.position_intervals_at(coordinate)
-            for coordinate in coordinates
-        )
-        for edge_index in range(int(POSITION_INTERVAL_SIDE_COUNT)):
+        for top in (True, False):
+            intervals = tuple(
+                corridor.side_interval_at(coordinate, top=top)
+                for coordinate in coordinates
+            )
+            halo_intervals = tuple(
+                type(interval)(
+                    max(
+                        0.0,
+                        interval.minimum
+                        - float(corridor.measurement_halo_short_px),
+                    ),
+                    min(
+                        float(corridor.work_short_axis_px - 1),
+                        interval.maximum
+                        + float(corridor.measurement_halo_short_px),
+                    ),
+                )
+                for interval in intervals
+            )
             for bound in ("minimum", "maximum"):
                 for left_index in range(len(coordinates) - 1):
                     _draw_work_segment(
                         rgb,
                         layout,
                         coordinates[left_index],
-                        getattr(intervals[left_index][edge_index], bound),
+                        getattr(intervals[left_index], bound),
                         coordinates[left_index + 1],
                         getattr(
-                            intervals[left_index + 1][edge_index],
+                            intervals[left_index + 1],
                             bound,
                         ),
                         scale,
@@ -199,74 +211,163 @@ def _draw_search_bands(
                         style,
                         dashed=True,
                     )
+                    _draw_work_segment(
+                        rgb,
+                        layout,
+                        coordinates[left_index],
+                        getattr(halo_intervals[left_index], bound),
+                        coordinates[left_index + 1],
+                        getattr(
+                            halo_intervals[left_index + 1],
+                            bound,
+                        ),
+                        scale,
+                        style.raw_observation_color,
+                        style.photo_edge_confidence_line_width,
+                        style,
+                        dashed=True,
+                    )
 
 
-def _draw_pair_candidates(
+def _draw_pair_evidence(
     rgb: np.ndarray,
     evidence: PhotoEdgePairEvidence,
     layout: str,
     scale: float,
     style: DebugStyleParameters,
 ) -> None:
-    visible_candidate_ids = frozenset(
-        candidate_id
-        for hypothesis in evidence.hypotheses
-        if hypothesis.state == EvidenceState.SUPPORTED
-        for candidate_id in (
-            hypothesis.top_candidate_id,
-            hypothesis.bottom_candidate_id,
-        )
-    )
-    selected_ids = (
+    selected = evidence.selected_pair
+    selected_fragment_ids = (
         frozenset()
-        if evidence.selected_pair is None
+        if selected is None
         else frozenset(
-            (
-                evidence.selected_pair.top_candidate_id,
-                evidence.selected_pair.bottom_candidate_id,
-            )
+            (*selected.top_fragment_ids, *selected.bottom_fragment_ids)
         )
     )
-    for candidate in evidence.candidates:
-        if candidate.observation_id not in visible_candidate_ids:
-            continue
-        fit = candidate.fit
-        start = fit.orthogonal_extent.minimum
-        end = fit.orthogonal_extent.maximum
+    for fragment in evidence.fragment_summaries:
+        start = fragment.long_axis_footprint.minimum
+        end = fragment.long_axis_footprint.maximum
         color = (
             style.corroborated_overlap_color
-            if candidate.observation_id in selected_ids
+            if fragment.fragment_id in selected_fragment_ids
             else style.raw_observation_color
         )
         _draw_work_segment(
             rgb,
             layout,
             start,
-            fit.intercept + fit.slope * start,
+            fragment.short_axis_position_interval.midpoint,
             end,
-            fit.intercept + fit.slope * end,
+            fragment.short_axis_position_interval.midpoint,
             scale,
             color,
             style.photo_edge_line_width,
             style,
-            dashed=False,
+            dashed=fragment.censored,
         )
-        for bound in ("minimum", "maximum"):
-            start_interval = fit.position_interval_at(start)
-            end_interval = fit.position_interval_at(end)
+        for bound in (
+            fragment.short_axis_position_interval.minimum,
+            fragment.short_axis_position_interval.maximum,
+        ):
             _draw_work_segment(
                 rgb,
                 layout,
                 start,
-                getattr(start_interval, bound),
+                bound,
                 end,
-                getattr(end_interval, bound),
+                bound,
                 scale,
                 color,
                 style.photo_edge_confidence_line_width,
                 style,
                 dashed=True,
             )
+    active_ids = {
+        identity
+        for fragment in evidence.fragment_summaries
+        for identity in fragment.active_observation_ids
+    }
+    witness_ids = {
+        identity
+        for fragment in evidence.fragment_summaries
+        for identity in fragment.minimum_support_witness_ids
+    }
+    for observation in evidence.audit_observations:
+        if observation.observation_id not in active_ids | witness_ids:
+            continue
+        _draw_work_segment(
+            rgb,
+            layout,
+            observation.long_axis_footprint.minimum,
+            observation.short_axis_position_interval.midpoint,
+            observation.long_axis_footprint.maximum,
+            observation.short_axis_position_interval.midpoint,
+            scale,
+            (
+                style.measured_boundary_color
+                if observation.observation_id in active_ids
+                else style.corroborated_overlap_color
+            ),
+            style.photo_edge_line_width,
+            style,
+            dashed=False,
+        )
+    visible_hypotheses = tuple(
+        hypothesis
+        for hypothesis in evidence.hypotheses
+        if hypothesis.geometry is not None
+        and (
+            hypothesis is selected
+            or hypothesis.state != EvidenceState.CONTRADICTED
+        )
+    )
+    for hypothesis in visible_hypotheses:
+        assert hypothesis.geometry is not None
+        color = (
+            style.corroborated_overlap_color
+            if hypothesis is selected
+            else style.dimension_hypothesis_color
+        )
+        end = float(hypothesis.geometry.work_long_axis_extent_px - 1)
+        for top in (True, False):
+            start_interval = hypothesis.geometry.edge_position_interval(
+                0.0,
+                top=top,
+            )
+            end_interval = hypothesis.geometry.edge_position_interval(
+                end,
+                top=top,
+            )
+            _draw_work_segment(
+                rgb,
+                layout,
+                0.0,
+                start_interval.midpoint,
+                end,
+                end_interval.midpoint,
+                scale,
+                color,
+                style.photo_edge_line_width,
+                style,
+                dashed=False,
+            )
+            for start_bound, end_bound in (
+                (start_interval.minimum, end_interval.minimum),
+                (start_interval.maximum, end_interval.maximum),
+            ):
+                _draw_work_segment(
+                    rgb,
+                    layout,
+                    0.0,
+                    start_bound,
+                    end,
+                    end_bound,
+                    scale,
+                    color,
+                    style.photo_edge_confidence_line_width,
+                    style,
+                    dashed=True,
+                )
 
 
 def _draw_shared_short_axes(
@@ -286,7 +387,7 @@ def _draw_shared_short_axes(
                 layout,
                 0.0,
                 edge.midpoint,
-                float(work_long_axis_px),
+                float(max(0, work_long_axis_px - 1)),
                 edge.midpoint,
                 scale,
                 style.measured_boundary_color,
@@ -300,7 +401,7 @@ def _draw_shared_short_axes(
                     layout,
                     0.0,
                     bound,
-                    float(work_long_axis_px),
+                    float(max(0, work_long_axis_px - 1)),
                     bound,
                     scale,
                     style.measured_boundary_color,
@@ -319,12 +420,12 @@ def draw_photo_edge_overlay(
     scale: float,
     style: DebugStyleParameters,
     *,
-    include_search_bands: bool,
+    include_search_corridors: bool,
 ) -> None:
     for evidence in evidence_set:
-        if include_search_bands:
-            _draw_search_bands(rgb, evidence, layout, scale, style)
-        _draw_pair_candidates(rgb, evidence, layout, scale, style)
+        if include_search_corridors:
+            _draw_search_corridors(rgb, evidence, layout, scale, style)
+        _draw_pair_evidence(rgb, evidence, layout, scale, style)
     _draw_shared_short_axes(
         rgb,
         shared_short_axes,
@@ -354,7 +455,7 @@ def make_source_photo_edge_debug_rgb(
         workspace.scan_canvas_evidence.observed_long_axis_px,
         scale,
         style,
-        include_search_bands=True,
+        include_search_corridors=True,
     )
     return rgb
 
@@ -374,26 +475,35 @@ def _photo_edge_summary(workspace: DetectionWorkspace) -> str:
         for evidence in workspace.source_photo_edge_pairs
         for fact in evidence.facts
     )
-    candidate_count = sum(
-        len(evidence.candidates)
+    retained_fragment_count = sum(
+        len(evidence.fragment_summaries)
         for evidence in workspace.source_photo_edge_pairs
     )
-    summarized_candidate_count = sum(
-        summary.candidate_count
+    total_fragment_count = sum(
+        evidence.measurement_summary.fragment_count
         for evidence in workspace.source_photo_edge_pairs
-        for summary in evidence.candidate_summaries
+    )
+    observation_count = sum(
+        evidence.measurement_summary.canonical_observation_count
+        for evidence in workspace.source_photo_edge_pairs
     )
     valid_pair_count = sum(
         hypothesis.state == EvidenceState.SUPPORTED
         for evidence in workspace.source_photo_edge_pairs
         for hypothesis in evidence.hypotheses
     )
+    censored_count = sum(
+        evidence.measurement_summary.censored_component_count
+        for evidence in workspace.source_photo_edge_pairs
+    )
     suffix = f" | facts={facts}" if facts else ""
     return (
         f"Source photo edges | canvas={profile}"
         f" | pair={states or 'none'}"
-        f" | retained={candidate_count}"
-        f" | summarized={summarized_candidate_count}"
+        f" | retained_fragments={retained_fragment_count}/"
+        f"{total_fragment_count}"
+        f" | canonical_observations={observation_count}"
+        f" | censored={censored_count}"
         f" | valid_pairs={valid_pair_count}{suffix}"
     )
 

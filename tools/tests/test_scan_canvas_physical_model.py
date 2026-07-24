@@ -256,18 +256,19 @@ class ScanCanvasPhysicalModelTests(unittest.TestCase):
             get_detection_configuration("135", "full"),
             None,
             MeasurementCacheStatistics(),
+            "0" * 64,
         )
         evidence = workspace.source_photo_edge_pairs[0]
 
         self.assertEqual(evidence.state, EvidenceState.SUPPORTED)
-        self.assertEqual(len(evidence.candidates), 2)
+        self.assertEqual(len(evidence.fragment_summaries), 2)
         self.assertEqual(len(evidence.hypotheses), 1)
-        self.assertTrue(
-            all(
-                candidate.physical_band_ids
-                == ("135_standard:36x24",)
-                for candidate in evidence.candidates
-            )
+        self.assertEqual(
+            tuple(
+                label.identity
+                for label in evidence.hypotheses[0].physical_labels
+            ),
+            ("135_standard:36x24",),
         )
         self.assertIsNotNone(evidence.selected_pair_id)
         assert evidence.physical_selection is not None
@@ -283,21 +284,12 @@ class ScanCanvasPhysicalModelTests(unittest.TestCase):
             (36.0, 24.0),
         )
         mapped = workspace.mapped_photo_edge_pairs[0]
-        self.assertEqual(mapped.search_bands, ())
+        self.assertEqual(mapped.search_corridors, ())
         self.assertEqual(
             mapped.physical_selection,
             evidence.physical_selection,
         )
-        self.assertEqual(
-            tuple(
-                candidate.physical_band_ids
-                for candidate in mapped.candidates
-            ),
-            tuple(
-                candidate.physical_band_ids
-                for candidate in evidence.candidates
-            ),
-        )
+        self.assertEqual(len(mapped.fragment_summaries), 2)
         self.assertEqual(
             workspace.shared_short_axes[0].photo_edge_pair_id,
             mapped.observation_id,
@@ -336,6 +328,7 @@ class ScanCanvasPhysicalModelTests(unittest.TestCase):
             get_detection_configuration("120-67", "full"),
             None,
             MeasurementCacheStatistics(),
+            "0" * 64,
         )
         evidence = workspace.source_photo_edge_pairs[0]
 
@@ -344,11 +337,11 @@ class ScanCanvasPhysicalModelTests(unittest.TestCase):
             evidence.facts,
             (PhotoEdgeFact.COMPETING_PAIRS_UNRESOLVED,),
         )
-        self.assertEqual(len(evidence.candidates), 4)
-        self.assertEqual(len(evidence.hypotheses), 6)
+        self.assertEqual(len(evidence.fragment_summaries), 4)
+        self.assertEqual(len(evidence.hypotheses), 4)
         self.assertEqual(
             {
-                hypothesis.physical_band_id
+                hypothesis.physical_labels[0].identity
                 for hypothesis in evidence.hypotheses
                 if hypothesis.state == EvidenceState.SUPPORTED
             },
@@ -358,7 +351,7 @@ class ScanCanvasPhysicalModelTests(unittest.TestCase):
             },
         )
 
-    def test_photo_side_evidence_rejects_outer_holder_transition(
+    def test_material_agnostic_transitions_remain_competing(
         self,
     ) -> None:
         pixels = np.full((322, 2320), 230, dtype=np.uint8)
@@ -388,40 +381,23 @@ class ScanCanvasPhysicalModelTests(unittest.TestCase):
             get_detection_configuration("135", "full"),
             None,
             MeasurementCacheStatistics(),
+            "0" * 64,
         )
         evidence = workspace.source_photo_edge_pairs[0]
 
-        self.assertEqual(evidence.state, EvidenceState.SUPPORTED)
-        selected = evidence.selected_pair
-        self.assertIsNotNone(selected)
-        assert selected is not None
-        selected_bottom = next(
-            candidate
-            for candidate in evidence.candidates
-            if candidate.observation_id
-            == selected.bottom_candidate_id
+        self.assertEqual(evidence.state, EvidenceState.UNAVAILABLE)
+        self.assertEqual(
+            evidence.facts,
+            (PhotoEdgeFact.COMPETING_PAIRS_UNRESOLVED,),
         )
-        self.assertLess(selected_bottom.path.position.midpoint, 285.0)
-        outer = tuple(
-            hypothesis
-            for hypothesis in evidence.hypotheses
-            if next(
-                candidate
-                for candidate in evidence.candidates
-                if candidate.observation_id
-                == hypothesis.bottom_candidate_id
-            ).path.position.midpoint
-            > 285.0
+        self.assertGreaterEqual(
+            sum(
+                hypothesis.state != EvidenceState.CONTRADICTED
+                for hypothesis in evidence.hypotheses
+            ),
+            2,
         )
-        self.assertTrue(outer)
-        self.assertTrue(
-            all(
-                hypothesis.state == EvidenceState.UNAVAILABLE
-                and PhotoEdgeFact.PHOTO_BAND_EVIDENCE_UNAVAILABLE
-                in hypothesis.facts
-                for hypothesis in outer
-            )
-        )
+        self.assertIsNone(evidence.selected_pair_id)
 
 
 if __name__ == "__main__":

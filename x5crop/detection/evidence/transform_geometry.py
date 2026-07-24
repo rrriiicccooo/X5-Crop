@@ -6,12 +6,12 @@ import math
 
 from ...domain import EvidenceState
 from ...geometry.affine import AffineCoordinateTransform
+from .photo_edges import NumericInterval
 
 
 class TransformOutcome(str, Enum):
     PHOTO_EDGE_PAIR_UNAVAILABLE = "photo_edge_pair_unavailable"
     ANGLE_ESTIMATION_UNAVAILABLE = "angle_estimation_unavailable"
-    EDGE_SLOPES_DISAGREE = "edge_slopes_disagree"
     IDENTITY_WITHIN_TOLERANCE = "identity_within_tolerance"
     DESKEW_APPLIED = "deskew_applied"
     ANGLE_OUT_OF_RANGE = "angle_out_of_range"
@@ -21,6 +21,7 @@ class TransformOutcome(str, Enum):
 class TransformGeometryEvidence:
     outcome: TransformOutcome
     estimated_angle_degrees: float | None
+    pixel_angle_interval_degrees: NumericInterval | None
     projected_edge_drift_px: float | None
     identity_drift_threshold_px: float | None
     position_uncertainty_px: float
@@ -44,6 +45,12 @@ class TransformGeometryEvidence:
         ):
             raise ValueError(
                 "transform angle and projected edge drift must be present together"
+            )
+        if (self.estimated_angle_degrees is None) != (
+            self.pixel_angle_interval_degrees is None
+        ):
+            raise ValueError(
+                "transform angle and its joint interval must be present together"
             )
         if self.projected_edge_drift_px is not None and (
             not math.isfinite(self.projected_edge_drift_px)
@@ -89,9 +96,10 @@ class TransformGeometryEvidence:
         if self.outcome in {
             TransformOutcome.PHOTO_EDGE_PAIR_UNAVAILABLE,
             TransformOutcome.ANGLE_ESTIMATION_UNAVAILABLE,
+            TransformOutcome.ANGLE_OUT_OF_RANGE,
         }:
             return EvidenceState.UNAVAILABLE
-        return EvidenceState.CONTRADICTED
+        raise ValueError("transform outcome has no evidence-state mapping")
 
     @property
     def applied(self) -> bool:

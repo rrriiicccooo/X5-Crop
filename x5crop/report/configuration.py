@@ -40,6 +40,9 @@ def detection_configuration_read_model(
             "preprocess": typed_read_model(configuration.preprocess),
             "photo_edges": typed_read_model(configuration.photo_edges),
             "transform": typed_read_model(configuration.transform),
+            "shared_short_axis": typed_read_model(
+                configuration.shared_short_axis
+            ),
             "separator": typed_read_model(configuration.separator),
             "content": typed_read_model(configuration.content),
         },

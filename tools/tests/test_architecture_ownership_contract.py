@@ -138,6 +138,7 @@ class ArchitectureOwnershipContractTest(unittest.TestCase):
                 "scan_canvas",
                 "photo_edges",
                 "transform",
+                "shared_short_axis",
                 "boundary_path",
                 "separator",
                 "content",

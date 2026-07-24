@@ -6,7 +6,7 @@ from typing import Any
 
 
 REPORT_SCHEMA_ID = "detection_report"
-REPORT_SCHEMA_REVISION = "scan_canvas_photo_edge_evidence"
+REPORT_SCHEMA_REVISION = "cross_region_photo_edge_geometry"
 
 
 _IMMUTABLE_OUTPUT_FIELDS = (

@@ -25,9 +25,13 @@ from x5crop.configuration.diagnostics import (
     DebugStyleParameters,
     SeparatorOverlayParameters,
 )
-from x5crop.configuration.photo_edges import PhotoEdgeDetectionParameters
+from x5crop.configuration.photo_edges import (
+    PhotoEdgeDetectionParameters,
+    PhotoEdgeGeometryParameters,
+)
 from x5crop.configuration.path_sampling import BoundaryPathSamplingParameters
 from x5crop.configuration.scan_canvas import ScanCanvasDetectionConfiguration
+from x5crop.configuration.shared_short_axis import SharedShortAxisParameters
 from x5crop.configuration.separator import SeparatorObservationParameters
 from x5crop.configuration.transform import TransformDetectionParameters
 from x5crop.output.model import AxisBleedParameters
@@ -172,19 +176,22 @@ PARAMETER_GROUPS = (
     _group(BoundaryPathParameters, ("minimum_path_support_ratio", "edge_transition_persistence_ratio"), ParameterRole.ADAPTIVE_MEASUREMENT, "ratio", "boundary_path", "Generic boundary-path support and canvas-edge persistence."),
     _group(BoundaryPathParameters, ("path_inlier_mad_multiplier",), ParameterRole.ADAPTIVE_MEASUREMENT, "multiplier", "boundary_path", "Robust path inlier tolerance from measured cross-section dispersion."),
     _group(BoundaryPathParameters, ("maximum_path_fit_residual_ratio",), ParameterRole.ADAPTIVE_MEASUREMENT, "ratio", "boundary_path", "Rejects spatially incoherent boundary-path fits."),
-    _group(PhotoEdgeDetectionParameters, ("minimum_candidate_sections",), ParameterRole.ADAPTIVE_MEASUREMENT, "section_count", "photo_edge_observation", "Minimum distributed cross-sections retained as a raw photo-edge candidate."),
-    _group(PhotoEdgeDetectionParameters, ("minimum_fit_inliers", "minimum_supported_windows"), ParameterRole.ADAPTIVE_MEASUREMENT, "sample_count", "photo_edge_evidence", "Minimum robust fit and local photo-band observations."),
-    _group(PhotoEdgeDetectionParameters, ("minimum_support_distribution_bins",), ParameterRole.ADAPTIVE_MEASUREMENT, "bin_count", "photo_edge_evidence", "Minimum spatial distribution across the observed baseline."),
-    _group(PhotoEdgeDetectionParameters, ("minimum_inlier_ratio", "maximum_separation_drift_ratio", "maximum_shared_axis_uncertainty_ratio"), ParameterRole.ADAPTIVE_MEASUREMENT, "ratio", "photo_edge_evidence", "Scale-relative robust fit, paired-line stability, and shared-axis extrapolation limits."),
-    _group(PhotoEdgeDetectionParameters, ("minimum_local_effect",), ParameterRole.ADAPTIVE_MEASUREMENT, "noise_multiple", "photo_edge_evidence", "Minimum local boundary contrast and role-specific photo-side structure relative to its exterior."),
-    _group(PhotoEdgeDetectionParameters, ("local_window_height_ratio",), ParameterRole.ADAPTIVE_MEASUREMENT, "ratio", "photo_edge_evidence", "Scale-relative local photo-band observation window."),
-    _group(PhotoEdgeDetectionParameters, ("local_window_min_px",), ParameterRole.ADAPTIVE_MEASUREMENT, "px", "photo_edge_evidence", "Minimum local photo-band observation window."),
-    _group(PhotoEdgeDetectionParameters, ("robust_mad_multiplier",), ParameterRole.ADAPTIVE_MEASUREMENT, "multiplier", "photo_edge_evidence", "Robust path inlier tolerance from measured residual dispersion."),
-    _group(PhotoEdgeDetectionParameters, ("shared_axis_uncertainty_floor_px",), ParameterRole.ADAPTIVE_MEASUREMENT, "px", "shared_short_axis", "Minimum absolute uncertainty allowance for full-workspace extrapolation."),
+    _group(PhotoEdgeDetectionParameters, ("minimum_independent_observations",), ParameterRole.PHYSICAL_FACT, "observation_count", "photo_edge_observation", "Three independent footprints are the mathematical minimum for checking a line."),
+    _group(PhotoEdgeDetectionParameters, ("minimum_local_effect", "local_noise_floor_u8"), ParameterRole.ADAPTIVE_MEASUREMENT, "u8_level", "photo_edge_observation", "Canonical base-gray transition effect and quantization-aware noise floor."),
+    _group(PhotoEdgeDetectionParameters, ("local_window_height_ratio",), ParameterRole.ADAPTIVE_MEASUREMENT, "ratio", "photo_edge_observation", "Short-axis local measurement depth relative to the observed canvas."),
+    _group(PhotoEdgeDetectionParameters, ("local_window_min_px", "long_support_width_px", "long_anchor_stride_px"), ParameterRole.ADAPTIVE_MEASUREMENT, "px", "photo_edge_observation", "Local measurement footprint and dense anchor spacing."),
+    _group(PhotoEdgeDetectionParameters, ("multiscale_factors",), ParameterRole.ADAPTIVE_MEASUREMENT, "scale_tuple", "photo_edge_observation", "Short-axis measurement scales combined into one canonical observation."),
+    _group(PhotoEdgeDetectionParameters, ("minimum_supporting_scales",), ParameterRole.ADAPTIVE_MEASUREMENT, "scale_count", "photo_edge_observation", "Independent scale agreement required for a supported transition."),
+    _group(PhotoEdgeDetectionParameters, ("multiscale_position_tolerance_ratio",), ParameterRole.ADAPTIVE_MEASUREMENT, "ratio", "photo_edge_observation", "Position agreement envelope for merging detections of one transition across scales."),
+    _group(PhotoEdgeDetectionParameters, ("chunk_size_px",), ParameterRole.EXECUTION_BUDGET, "px", "photo_edge_observation", "Bounds dense measurement working memory without changing evidence."),
+    _group(PhotoEdgeDetectionParameters, ("maximum_search_angle_degrees",), ParameterRole.ADAPTIVE_MEASUREMENT, "degrees", "photo_edge_search", "Search envelope angle kept separate from transform acceptance."),
     _group(PhotoEdgeDetectionParameters, ("maximum_center_offset_mm", "maximum_photo_dimension_deviation_mm"), ParameterRole.PHYSICAL_FACT, "mm", "photo_edge_search", "Conservative physical deviation allowed around the nominal centered photo aperture."),
-    _group(TransformDetectionParameters, ("identity_span_ratio", "maximum_projected_uncertainty_height_ratio"), ParameterRole.ADAPTIVE_MEASUREMENT, "ratio", "detection_transform", "Scale-relative identity and projected angle uncertainty limits."),
+    _group(PhotoEdgeGeometryParameters, ("subpixel_resolution_px",), ParameterRole.NUMERICAL_SAFETY, "px", "photo_edge_geometry", "Outward interval-grid resolution for deterministic geometry classification."),
+    _group(PhotoEdgeGeometryParameters, ("maximum_subdivision_depth", "maximum_region_cells", "maximum_consensus_states"), ParameterRole.EXECUTION_BUDGET, "count", "photo_edge_geometry", "Per-sample global bounds for interval subdivision and consensus branching."),
+    _group(SharedShortAxisParameters, ("maximum_endpoint_uncertainty_photo_height_ratio",), ParameterRole.ADAPTIVE_MEASUREMENT, "ratio", "shared_short_axis", "Maximum full-domain endpoint envelope relative to mapped photo height."),
+    _group(SharedShortAxisParameters, ("minimum_endpoint_uncertainty_px",), ParameterRole.ADAPTIVE_MEASUREMENT, "px", "shared_short_axis", "Absolute floor for mapped endpoint uncertainty."),
+    _group(TransformDetectionParameters, ("identity_span_ratio", "maximum_projected_uncertainty_photo_height_ratio"), ParameterRole.ADAPTIVE_MEASUREMENT, "ratio", "detection_transform", "Scale-relative identity and projected angle uncertainty limits."),
     _group(TransformDetectionParameters, ("identity_span_min_px", "identity_span_max_px"), ParameterRole.ADAPTIVE_MEASUREMENT, "px", "detection_transform", "Pixel bounds for the identity decision."),
-    _group(TransformDetectionParameters, ("maximum_lane_slope_delta",), ParameterRole.ADAPTIVE_MEASUREMENT, "slope", "detection_transform", "Maximum cross-lane slope disagreement."),
     _group(TransformDetectionParameters, ("maximum_angle_degrees",), ParameterRole.ADAPTIVE_MEASUREMENT, "degrees", "detection_transform", "Maximum physically admissible correction angle."),
     _group(SeparatorOverlayParameters, ("tick_length_ratio",), ParameterRole.DIAGNOSTICS_ONLY, "ratio", "debug", "Debug-only separator tick length ratio."),
     _group(SeparatorOverlayParameters, ("tick_length_min", "observed_line_width", "dimension_line_width", "overlap_line_width"), ParameterRole.DIAGNOSTICS_ONLY, "px", "debug", "Debug-only separator mark dimensions."),
@@ -227,38 +234,6 @@ CONSTANT_PARAMETER_CONTRACTS = (
         "report_display",
         "Standard unit conversion used only to display derived effective PPI.",
         "fixed_by_standard",
-    ),
-    ParameterContract(
-        "x5crop.configuration.photo_edges.PHOTO_EDGE_SUPPORT_BIN_COUNT",
-        ParameterRole.STANDARD_TRANSFORM,
-        "bin_count",
-        "photo_edge_evidence",
-        "Splits an observed path baseline into fixed spatial support regions.",
-        "fixed_by_algorithm",
-    ),
-    ParameterContract(
-        "x5crop.detection.evidence.photo_edges.ROBUST_FIT_MINIMUM_POSITION_UNCERTAINTY_PX",
-        ParameterRole.NUMERICAL_SAFETY,
-        "px",
-        "photo_edge_evidence",
-        "Preserves subpixel positional uncertainty for an otherwise exact sampled fit.",
-        "fixed_by_algorithm",
-    ),
-    ParameterContract(
-        "x5crop.detection.evidence.photo_edges.ROBUST_SLOPE_INTERVAL_PERCENTILES",
-        ParameterRole.STANDARD_TRANSFORM,
-        "percentile_pair",
-        "photo_edge_evidence",
-        "Defines the deterministic central 95 percent pairwise-slope interval.",
-        "fixed_by_algorithm",
-    ),
-    ParameterContract(
-        "x5crop.detection.evidence.photo_edges.POSITION_INTERVAL_SIDE_COUNT",
-        ParameterRole.STANDARD_TRANSFORM,
-        "side_count",
-        "detection_transform",
-        "Projects positional uncertainty on both sides of a fitted line.",
-        "fixed_by_algorithm",
     ),
     ParameterContract(
         "x5crop.image.separator_profile.SYMMETRIC_WINDOW_SIDE_COUNT",
@@ -745,7 +720,13 @@ def _structural_compare(node: ast.Constant, parents: dict[ast.AST, ast.AST]) -> 
     expression = ast.unparse(parent)
     return any(
         marker in expression
-        for marker in ("len(", "shape", ".ndim", "lane_count")
+        for marker in (
+            "len(",
+            "shape",
+            ".ndim",
+            "lane_count",
+            "expected",
+        )
     )
 
 
@@ -790,7 +771,7 @@ def _structural_formula(node: ast.Constant, parents: dict[ast.AST, ast.AST]) -> 
         and node.value in {2, 2.0}
     ) or (
         isinstance(parent.op, ast.Mult)
-        and node.value == 0.5
+        and node.value in {0.5, 2, 2.0}
     ):
         names = {
             item.id
@@ -822,6 +803,11 @@ def _structural_formula(node: ast.Constant, parents: dict[ast.AST, ast.AST]) -> 
             "out_h",
             "t",
             "band_width",
+            "depth",
+            "positions",
+            "work_long_axis_px",
+            "long_extent_px",
+            "short_extent_px",
         }
         return bool(
             names & coordinate_terms
@@ -836,6 +822,13 @@ def _structural_formula(node: ast.Constant, parents: dict[ast.AST, ast.AST]) -> 
                         "_bottom",
                         "_width",
                         "_height",
+                        "_extent_px",
+                        "_deviation_px",
+                        "_offset_mm",
+                        "_slope",
+                        "_observations",
+                        "_width_px",
+                        "_axis_px",
                     )
                 )
                 for name in names

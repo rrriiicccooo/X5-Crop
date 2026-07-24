@@ -117,16 +117,18 @@ class LayerBoundariesContractTest(unittest.TestCase):
             PROJECT_ROOT / "x5crop/detection/workspace.py"
         ).read_text(encoding="utf-8")
         self.assertNotIn("boundary_paths_in_domain", workspace_source)
+        self.assertNotIn("short_axis_boundary_path_pairs(", workspace_source)
+        self.assertNotIn("short_axis_boundary_paths(", workspace_source)
         self.assertEqual(
-            workspace_source.count("short_axis_boundary_path_pairs("),
+            workspace_source.count("observe_fixed_canvas_photo_edges("),
             1,
         )
         self.assertEqual(
-            workspace_source.count("short_axis_boundary_paths("),
+            workspace_source.count("observe_image_only_lane_photo_edges("),
             1,
         )
         self.assertNotIn("boundary_measurements", workspace_source)
-        self.assertIn("if scan_canvas is None:", workspace_source)
+        self.assertNotIn("if scan_canvas is None:", workspace_source)
 
     def test_scan_canvas_dimensions_have_one_catalog_owner(self) -> None:
         physical_tokens = ("32.22", "63.44", "224.5", "188.5")

@@ -31,6 +31,7 @@ from x5crop.detection.context import (
 )
 from x5crop.detection.modes.dual_lane import _lane_context, choose_dual_lane_detection
 from x5crop.detection.evidence.photo_edges import (
+    PhotoEdgeCoordinateSpace,
     map_photo_edge_pair_evidence,
     translate_photo_edge_pair_evidence,
 )
@@ -155,6 +156,7 @@ def _context(
             translate_photo_edge_pair_evidence(
                 workspace.source_photo_edge_pairs[0],
                 divider.center,
+                PhotoEdgeCoordinateSpace.SOURCE,
             ),
         )
     )
@@ -170,8 +172,9 @@ def _context(
     plans = tuple(
         shared_short_axis_from_photo_edge_pair(
             evidence,
+            workspace.transform_geometry,
             workspace.measurement_cache.gray_work.shape[1],
-            lane_configuration.photo_edges,
+            lane_configuration.shared_short_axis,
         )
         for evidence in mapped_pairs
     )

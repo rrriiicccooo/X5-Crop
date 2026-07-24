@@ -43,6 +43,7 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
             (
                 "outcome",
                 "estimated_angle_degrees",
+                "pixel_angle_interval_degrees",
                 "projected_edge_drift_px",
                 "identity_drift_threshold_px",
                 "position_uncertainty_px",
@@ -302,7 +303,7 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
         self.assertEqual(REPORT_SCHEMA_ID, "detection_report")
         self.assertEqual(
             REPORT_SCHEMA_REVISION,
-            "scan_canvas_photo_edge_evidence",
+            "cross_region_photo_edge_geometry",
         )
         self.assertNotIn("v4", REPORT_SCHEMA_REVISION)
 
@@ -366,7 +367,7 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
         self.assertNotIn("`CropEnvelope`", architecture)
         self.assertIn("`FrameSlot`", architecture)
         self.assertIn("`FrameSequenceSolution`", architecture)
-        self.assertIn("scan_canvas_photo_edge_evidence", architecture)
+        self.assertIn("cross_region_photo_edge_geometry", architecture)
 
     def test_user_docs_describe_current_sequence_and_bleed_model(self) -> None:
         quick_start = (PROJECT_ROOT / "快速启动_Quick_Start.md").read_text(

@@ -66,6 +66,9 @@ def report_record_for_final_detection(
             "source_photo_edge_pairs": typed_read_model(
                 workspace.source_photo_edge_pairs
             ),
+            "dual_lane_photo_edge_geometry": typed_read_model(
+                workspace.dual_lane_photo_edge_geometry
+            ),
             "mapped_photo_edge_pairs": typed_read_model(
                 workspace.mapped_photo_edge_pairs
             ),

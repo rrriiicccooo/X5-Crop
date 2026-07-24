@@ -38,10 +38,11 @@ Current stable release: v4.2.8
   metadata 和已知无损压缩行为。
 - 检测阶段依据物理证据决定自动导出或复核；任何未解决的张数、边界或替代裁切方案都会
   保持复核，而不会由置信度或历史输出强行转为自动裁切。
-- 自动校斜是 detection 不可关闭的阶段。Detection 先同时找到真实照片的上下边缘；同一份
-  边缘证据分别供校斜、共享裁切短轴和照片尺寸验证消费。证据缺失或冲突时结果为 REVIEW。
+- 自动校斜是 detection 不可关闭的阶段。Detection 在分帧前从整条原图任意清晰区域联合
+  找到真实照片的上下边缘；同一份边缘证据分别供校斜、共享裁切短轴和照片尺寸验证消费。
+  边缘身份、角度或全域外推任一项证据不足时结果为 REVIEW。
 - 单条片夹会由原图像素长短比识别已知物理画布并自动计算 px/mm；未知或竞争画布保持
-  REVIEW。理论照片带只缩小搜索范围，不能替代真实像素证据。
+  REVIEW。理论照片 corridor 只缩小计算范围，完整测量 halo 内的真实像素才是证据。
 
 ### 推荐下载
 
@@ -133,9 +134,11 @@ TIFF resolution 标签由 I/O 原样保存。DPI/PPI 不参与画布匹配、尺
 最终判断；报告即使记录 source metadata，也不会解释它。
 
 auto count 会从当前格式允许的较大张数开始检查。单条片夹先按 format 允许的已知物理画布匹配
-原图像素长短比，再由画布尺寸计算长短轴 px/mm，并在理论照片带内寻找真实上下边缘。Detection
-由同一边缘对估计校斜角度；仿射后只映射这份证据，再检查整幅共享短轴、照片尺寸、长轴顺序、
-边界和片间关系。120 的 54 mm 与 56 mm 是离散选项；两个假设同时成立时保持 REVIEW。
+原图像素长短比，再由画布尺寸计算长短轴 px/mm。Detection 在理论 corridor 和完整 halo 中
+密集测量局部 transition，将同一连续 ridge 合并为紧凑 fragment，并从任意清晰短区域联合求出
+上下边缘。它不需要先知道第几张照片，也不要求证据覆盖整条长图。由同一边缘对估计校斜角度；
+仿射后只映射这份证据，再独立检查整幅共享短轴、照片尺寸、长轴顺序、边界和片间关系。
+120 的 54 mm 与 56 mm 是离散选项；两个假设同时成立时保持 REVIEW。
 `135-dual` 没有统一画布假设，先解 lane divider，再从两条 lane 的图像证据进入同一消费模型。
 流程不可关闭，也不会退回扫描外沿、holder 边缘或单边缘。只有张数与裁切几何都已解决、不存在
 未解决替代方案、且输出保护可行时，才会自动输出。Full 模式最多允许一个由完整序列唯一推导的
@@ -184,13 +187,14 @@ x5_crop_output/_debug_analysis/
 
 每张 Debug Analysis JPG 固定包含：
 
-- source physical photo-edge evidence：理论照片带、有效或竞争 pair、拟合置信带，以及其余
-  失败候选的 typed reason / 区段 / 数量摘要；
+- source physical photo-edge evidence：理论 corridor 与 measurement halo、紧凑 fragment、
+  active / witness observations、有效或竞争 pair 及其 geometry uncertainty envelope；
 - mapped photo edges / shared short axis / frame geometry：仿射后同一边缘对、共享短轴、
   有序 `FrameSlot`、保守输出包络和最终裁切框；
 - long-axis boundary / separator evidence：长轴 raw paths、实测边界、尺寸约束和片间证据。
 
-没有 selected pair 时第一联仍显示理论带、候选摘要和失败原因，不会用空白图隐藏观测过程。
+没有 selected pair 时第一联仍显示 corridor、fragment 摘要和 typed failure facts，不会用
+空白图隐藏观测过程，也不会绘制密集 response 或重复 observation。
 
 第三联图的内置图例由当前 diagnostics configuration 生成：
 
@@ -340,14 +344,15 @@ Windows: install/X5_Crop_win_uninstall.bat
   lossless compression behavior.
 - Detection uses physical evidence. Confirmed content loss, unresolved geometry,
   or physically inconsistent frame dimensions go to review.
-- Automatic deskew is a mandatory detection stage. Detection first finds both
-  real photo edges; the same evidence is consumed independently by deskew,
-  shared-short-axis safety, and frame-size validation. Missing or conflicting
+- Automatic deskew is a mandatory detection stage. Before frame detection,
+  local evidence from any clear source region is joined into both real photo
+  edges. Deskew, shared-short-axis safety, and frame-size validation consume
+  that same pair independently. Insufficient identity, angle, or extrapolation
   evidence remains in REVIEW.
 - A single-strip scan is matched to a known physical canvas from its pixel
   aspect, then calibrated in px/mm. An unknown or competing canvas remains in
-  REVIEW. A theoretical photo band narrows the search but never substitutes for
-  pixel evidence.
+  REVIEW. A theoretical corridor only bounds computation; real pixels in the
+  complete measurement halo remain the evidence.
 - Detection uses one grayscale workspace and does not assume holder polarity.
   TIFF resolution metadata is preserved by I/O but is never used for canvas
   matching, scale, evidence, confidence, or the final decision.
@@ -445,10 +450,13 @@ the report decision.
 
 Auto count checks the larger allowed counts first. For a single strip,
 detection matches one format-compatible physical canvas from source pixel
-aspect, derives long/short-axis px/mm, and searches for real top/bottom edges
-inside the theoretical photo bands. The same pair determines deskew; after the
-affine transform, detection maps rather than re-observes it, then assesses the
-strip-wide shared axis, frame dimensions, long-axis order, boundaries, and
+aspect and derives long/short-axis px/mm. Dense local transitions are measured
+inside a theoretical corridor plus its complete halo, merged into compact
+continuous-ridge fragments, and joined from any clear short region into the
+top/bottom pair. This happens before frame detection and requires neither a
+frame identity nor strip-wide coverage. The same pair determines deskew; after
+the affine transform, detection maps rather than re-observes it, then assesses
+the strip-wide shared axis, frame dimensions, long-axis order, boundaries, and
 spacing. The 120 54 mm and 56 mm sizes remain discrete; simultaneous valid
 hypotheses stay in REVIEW. `135-dual` has no fixed canvas assumption: it resolves
 the lane divider and enters the same evidence-consumer model from lane image
@@ -494,17 +502,18 @@ x5_crop_output/_debug_analysis/
 
 Each JPG contains three fixed audit panels:
 
-- source physical photo-edge evidence: theoretical bands, valid or competing
-  pairs, fit confidence bands, and typed reason/region/count summaries for all
-  other failed candidates;
+- source physical photo-edge evidence: theoretical corridor and measurement
+  halo, compact fragments, active/witness observations, valid or competing
+  pairs, and geometry uncertainty envelopes;
 - mapped photo edges / shared short axis / frame geometry: the same pair after
   affine mapping, shared-axis result, ordered `FrameSlot` objects, conservative
   envelopes, and final boxes;
 - long-axis boundary / separator evidence: long-axis raw paths, measured
   boundaries, dimension constraints, and inter-frame evidence.
 
-When no pair is selected, the first panel still shows the theoretical bands,
-candidate summaries, and typed failure reasons instead of a blank review image.
+When no pair is selected, the first panel still shows the corridor, fragment
+summary, and typed failure facts. Dense responses and duplicate observations
+are never rendered.
 
 The third panel carries a legend derived from the current diagnostics configuration:
 
