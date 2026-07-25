@@ -224,4 +224,5 @@ macOS:   install/X5_Crop_Mac_uninstall.command
 Windows: install/X5_Crop_win_uninstall.bat
 ```
 
-License: MIT，见 / see [LICENSE](LICENSE).
+License: MIT，见 / see
+[GitHub LICENSE](https://github.com/rrriiicccooo/X5-Crop/blob/main/LICENSE).

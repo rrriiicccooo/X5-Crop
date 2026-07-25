@@ -240,10 +240,18 @@ staged 与 full 验证，不再手工重复；不得绕过 Hook。
   explicit permission.
 - Keep `.gitignore`, `.github/`, and `tools/` visible. `install/` is also kept
   visible so release inputs participate in routine validation.
-- Keep the complete current tracked tree visible. Historical source belongs in
-  Git history and tags, not a duplicated `archive/`; generated `release/` remains
-  ignored. / 当前受跟踪树应完整可见；历史源码只保存在 Git history 与 tags，不建立
-  重复 `archive/`，生成的 `release/` 继续忽略。
+- Keep the current tracked tree visible except `LICENSE`, which remains
+  authoritative on GitHub and is excluded from this local checkout. Historical
+  source belongs in Git history and tags, not a duplicated `archive/`; generated
+  `release/` remains ignored. / 除只由 GitHub 保存、在本地检出中排除的 `LICENSE`
+  外，当前受跟踪树应完整可见；历史源码只保存在 Git history 与 tags，不建立重复
+  `archive/`，生成的 `release/` 继续忽略。
+- Intended local sparse checkout / 预期本地稀疏检出：
+
+  ```text
+  /*
+  !/LICENSE
+  ```
 - When the user explicitly requests a clean handoff, remove ignored caches,
   compiled bytecode, Finder metadata, and generated outputs after the final
   hook-driven push. / 用户明确要求干净交接时，在最终 Hook 推送完成后再次清除 ignored
