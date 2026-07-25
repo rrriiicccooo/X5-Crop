@@ -75,6 +75,7 @@ class RepositoryVerifierContractTest(unittest.TestCase):
         self.assertTrue((PROJECT_ROOT / "tools/release/build.py").is_file())
         self.assertTrue((PROJECT_ROOT / "tools/release/manifest.py").is_file())
         self.assertTrue((PROJECT_ROOT / "tools/release/standalone.py").is_file())
+        self.assertFalse((PROJECT_ROOT / "archive").exists())
         self.assertEqual(
             {
                 path.name

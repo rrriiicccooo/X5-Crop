@@ -14,6 +14,26 @@ V4.9 是 current-only 的物理模型与源码重构。历史 PASS/REVIEW、报�
 Historical decisions, schemas, human labels, and crop geometry are not compatibility
 targets.
 
+### 2026-07-26 — 黄金基线完成与仓库收束 / Golden Baseline And Cleanup
+
+- 九张黄金样片均已由用户确认，形成绑定原图、标注副本、proposal snapshot 与复核 JPG
+  hash 的完整本地基线。八张属于 `nominal_calibration`；非矩形、片距不稳的 `S098`
+  作为 `irregular_geometry_stress` 保留，但不参与正常容差估计。本次仍未改变 runtime
+  detector 阈值。 / All nine local gold samples are user-confirmed. Eight form
+  the nominal calibration subset; irregular `S098` is held out as stress evidence.
+  Production thresholds are still unchanged.
+- `S055` 的正确帧数为四。红线转换器现在会拒绝“声明帧数少于强短边证据”的输入，不能
+  排序后静默丢弃人工笔迹。 / `S055` has four frames; the local converter now
+  rejects declared counts that would silently discard strong user-drawn boundaries.
+- 删除 641 个受跟踪历史源码快照；它们与 Git 自身重复，当前源码、tests 与 release
+  manifest 均不读取。历史版本继续由 Git history 与 tags 恢复，当前树不再维护
+  `archive/`。 / Removed 641 tracked source snapshots duplicated by Git history.
+  Tags and history remain the rollback source; no current owner consumes `archive/`.
+- 当前测试审计未发现重复 test body、空测试模块、未使用 public support owner 或无静态
+  owner 的 active Python module，因此没有猜测性删除 current contracts。 /
+  The current test audit found no provable duplicate or orphaned contracts, so
+  current tests were retained.
+
 ### 2026-07-25 — 基准权限与本地审阅收束 / Baseline Authority
 
 - 退役“由模型连续查看完整长 TIFF 并代画边界”的流程。大图本身可快速解码，但反复进入
@@ -99,10 +119,9 @@ targets.
 - Unit/contract、compile、configuration 和 release-package 检查证明结构一致性，不证明
   真实照片边缘已经达到生产准确性。 / Mechanical checks prove structural consistency,
   not production photo-edge accuracy.
-- 当前已有两条由用户红线转换得到、等待明确确认的 fit proposal，但仍不存在
-  human-confirmed PASS、pair 或 crop baseline。 /
-  Two user-markup fit proposals await explicit confirmation; no human-confirmed
-  PASS, pair, or crop baseline exists yet.
+- 本地已有九条用户确认 crop baseline，但 production detector 尚未通过这组基线完成
+  方向性误差量化或阈值校准。 / Nine local crop baselines are user-confirmed;
+  production directional error and thresholds are not yet calibrated against them.
 
 ## v4.2.8 — 当前稳定发布 / Stable Release
 
@@ -119,3 +138,6 @@ v4.2.8 remains the stable GitHub Release; V4.9 has not replaced it.
   report schema、contracts 与文档；不得混用旧人工基线、旧 deskew 或旧 schema。 /
   Rollback must restore the model, configuration, workspace, schema, contracts,
   and docs as one unit.
+- 历史源码从 Git history 与 release tags 恢复，不在 current tree 中复制
+  `archive/`。 / Restore historical source from Git history and release tags;
+  do not duplicate it in a current-tree `archive/`.

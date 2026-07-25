@@ -240,14 +240,14 @@ staged 与 full 验证，不再手工重复；不得绕过 Hook。
   explicit permission.
 - Keep `.gitignore`, `.github/`, and `tools/` visible. `install/` is also kept
   visible so release inputs participate in routine validation.
-- Intended sparse checkout / 预期稀疏检出：
-
-  ```text
-  /*
-  !/archive/
-  !/release/
-  !/LICENSE
-  ```
+- Keep the complete current tracked tree visible. Historical source belongs in
+  Git history and tags, not a duplicated `archive/`; generated `release/` remains
+  ignored. / 当前受跟踪树应完整可见；历史源码只保存在 Git history 与 tags，不建立
+  重复 `archive/`，生成的 `release/` 继续忽略。
+- When the user explicitly requests a clean handoff, remove ignored caches,
+  compiled bytecode, Finder metadata, and generated outputs after the final
+  hook-driven push. / 用户明确要求干净交接时，在最终 Hook 推送完成后再次清除 ignored
+  cache、bytecode、Finder metadata 与生成输出。
 
 - Never commit `.venv/`, `.venv-build/`, `build/`, `dist/`, `release/`, caches,
   `.DS_Store`, `downloaded_apps/`, `Test/`, generated `x5_crop_output/`, or large
