@@ -67,40 +67,46 @@ JPG 前，拟合始终只是 proposal。
   gold sources with their format/mode layout preserved. The untouched originals
   remain the SHA and coordinate authority. / 九张黄金副本已按 format/mode 保存，未修改
   原图仍是 SHA 与坐标权威。
-- The user marked `S027` (`135/full/pass_X5_00027.tif`) and `S062`
-  (`66/partial/pass_X5_00001.tif`) in red. Preview preserved raster dimensions
-  and top-left orientation while rewriting RGB TIFFs as RGBA. / 用户已标注 S027
-  与 S062；Preview 保持尺寸和方向，只把 RGB TIFF 改写为 RGBA。
+- The user marked all nine gold copies in red. Preview preserved each source's
+  raster dimensions and top-left orientation while rewriting RGB TIFFs as RGBA.
+  / 用户已完成全部九张黄金副本的红线标注；Preview 保持原图尺寸与左上方向，只把
+  RGB TIFF 改写为 RGBA。
 - `Test/manual_review/red_markup_converter.py` uses source-vs-marked RGB deltas,
   NumPy, tifffile/imagecodecs, OpenCV, SciPy, and Pillow. It does not inspect the
   complete TIFF through model vision or import the production detector. /
   新转换器完全本地运行，不消费模型视觉或 production detector。
-- `S027` recovered 183,941 red pixels, two shared edges, twelve short boundaries,
-  and six polygons. Maximum shared-edge MAD is `0.136 px`; parallel angle
-  difference is `0.0140°`; maximum divider perpendicular error is `0.1387°`. /
-  S027 已恢复 2+12 条线和 6 个 polygon，拟合数值如上。
-- `S062` recovered 85,005 red pixels, two shared edges, six short boundaries,
-  and three polygons. Maximum shared-edge MAD is `0.125 px`; parallel angle
-  difference is `0.0140°`; maximum divider perpendicular error is `0.0493°`. /
-  S062 已恢复 2+6 条线和 3 个 polygon，拟合数值如上。
-- Native-resolution review files are
-  `review_jpg/S027_red_markup_fit.jpg` (`17263×2397`) and
-  `review_jpg/S062_red_markup_fit.jpg` (`2797×9899`). Red is recovered user
-  markup, cyan is the fitted shared edge, green is the fitted polygon, and
-  yellow marks intersections. / 两张原生分辨率复核图已生成，颜色职责固定。
-- Exact pending review JPG SHA-256 values are
-  `bf0dfe7f934dbdf69dc585e9a17007f5645107459232be5960c196d5d4fa3613`
-  for S027 and
-  `3dc83771a1d81a56ebb4bc0d329ecbd3b8b298a7945cce55b5db247806eeea87`
-  for S062. User confirmation must refer to these exact artifacts. / 用户确认必须
-  对应上述确切复核图。
-- `red_markup_fit_proposals.jsonl` contains two
-  `x5crop_red_markup_fit_proposal_v1` records, both
-  `pending_explicit_user_confirmation`. There is still no confirmed baseline
-  row. / 当前只有两条待用户明确确认的 proposal，confirmed baseline 仍为 0。
+- `red_markup_fit_proposals.jsonl` contains nine source/marked/JPG-SHA-bound
+  `x5crop_red_markup_fit_proposal_v1` records. Every proposal remains
+  `pending_explicit_user_confirmation`; confirmation authority lives only in the
+  separate baseline file. / 当前有九条绑定 source、marked copy 与复核 JPG hash 的
+  proposal；proposal 本身始终是 pending，确认权限只存在于独立 baseline 文件。
+- The user explicitly confirmed the exact current `S027` and `S062` JPGs.
+  `user_confirmed_golden_baseline.jsonl` now contains two immutable
+  `x5crop_user_confirmed_golden_baseline_v1` rows: six frames for `S027` and
+  three for `S062`. Repeating confirmation is byte-idempotent, and `fit` refuses
+  to recompute either confirmed sample. / 用户已明确确认当前确切的 S027 与 S062
+  JPG；baseline 现有 2 行，重复确认不改字节，且 converter 拒绝重新拟合已确认样片。
+- All nine native-resolution review JPGs exist. Red is recovered user markup,
+  cyan is the fitted shared edge, green is the fitted polygon, and yellow marks
+  intersections. Exact artifact identities and states are:
+
+| ID | Group | Frames | Strip | State | Review JPG SHA-256 |
+|---|---|---:|---|---|---|
+| `S027` | `135/full` | 6 | horizontal | confirmed | `bf0dfe7f934dbdf69dc585e9a17007f5645107459232be5960c196d5d4fa3613` |
+| `S035` | `135/full` | 6 | horizontal | pending | `5f0194e6bab9c7a8d4dfc6a36c57e3cbb50865e0802be5fc6afebb8febb2b497` |
+| `S051` | `135/partial` | 3 | horizontal | pending | `288b6a247e2022e0525b0f139c671b701a829e40ebb8230ef244a408ab9f8b3f` |
+| `S055` | `135/partial` | 3 | horizontal | pending | `730573792c7f94bda95b6ef4543e9df39a1829f2361caf56c9abba989528df56` |
+| `S062` | `66/partial` | 3 | vertical | confirmed | `3dc83771a1d81a56ebb4bc0d329ecbd3b8b298a7945cce55b5db247806eeea87` |
+| `S091` | `66/partial` | 3 | vertical | pending | `d28f8fdbf95389037f2273a58df83ef6cc3a1509c6a66cfb77c2c0bcd2b3cd38` |
+| `S094` | `67/full` | 3 | horizontal | pending | `88e6470a8b535c4b0b8a680c11674a5a83d6553933ec389440002a82b5a96782` |
+| `S098` | `half/full` | 12 | horizontal | pending | `6c346b94454b9ae030aa6908b3c2d7a427e28cd12dd7fef9e3f51faf29a56ca4` |
+| `S109` | `half/partial` | 7 | horizontal | pending | `fb824fd1335bd895f3f1e1ed6cd4cbd349117ced38bcb483f6e6f781987abb44` |
+
+  The hashes above, rather than filenames alone, identify what the user reviews.
+  / 上述 hash 而非文件名本身，定义用户实际确认的 artifact。
 - The browser blind selector, launcher, machine candidates, browser pending
-  proposal, old blind-review JPG, caches, and local `.DS_Store` residue were
-  removed. / 浏览器盲选器及其机器候选、遗留 proposal、旧图和缓存已删除。
+  proposal, old blind-review JPG, and caches remain removed. / 浏览器盲选器及其
+  机器候选、遗留 proposal、旧图和缓存保持删除。
 - The tooling audit remains closed around `tools/verify`, `tools/git/`,
   `tools/release/`, `tools/regression/compare.py`, and `tools/tests/`. /
   tracked tools 的职责边界未改变。
@@ -172,15 +178,24 @@ still does not depend on them.
 
 ## Validation Boundary And Open Risks / 验证边界与开放风险
 
-- The fit verifier proves source/marked hashes, exact line counts, polygon shape,
-  native JPG dimensions, and low stroke-fit residuals. It does not prove the
-  selected physical boundary. / 拟合 verifier 只证明 hash、线数、polygon、JPG 尺寸与
-  笔迹拟合残差，不证明物理边缘选择。
+- The fit verifier proves all nine source/marked/JPG hashes, exact line counts,
+  boundary order, in-bounds positive polygons, native JPG dimensions, and
+  low stroke-fit residuals; it also verifies both confirmed baseline snapshots.
+  It does not prove the selected physical boundary. / verifier 已检查九张的 hash、
+  线数、boundary 顺序、界内正面积 polygon、原生 JPG 尺寸与两条 confirmed snapshot；
+  仍不证明物理边缘选择。
 - Preview-associated alpha rewriting creates red-like RGB deltas in some image
   content. The converter therefore fits the outermost continuous stroke per axis
   coordinate rather than clustering every red-delta pixel. Both horizontal S027
   and vertical S062 pass this contract. / Preview 的 associated alpha 会在少量画面
   内容中形成伪红差；转换器按每个轴坐标的最外连续笔迹拟合，不能聚类全部红像素。
+- Partial-strip shared edges are supported only between the first and last
+  annotated frame boundaries; a synthetic contract covers this rule. `S098`
+  uses a Hough long-stroke fallback because one slanted boundary overlaps its
+  neighbor in axis projection; a separate overlapping-divider contract covers
+  that recovery path. These are conversion mechanics, not physical evidence. /
+  partial strip 的共享边只使用首尾 frame boundary 间的支持区；S098 因斜线投影重叠
+  使用 Hough fallback。两条 synthetic contract 只保证转换机制，不增加物理证据。
 - JPG is only the human review surface; coordinates are recovered from the TIFF
   delta, never measured from lossy JPEG pixels. / JPG 只供人工复核，坐标不从有损 JPG
   反测。
@@ -198,22 +213,18 @@ still does not depend on them.
 
 ## Next Decision And Actions / 下一决策与行动
 
-1. The user inspects `S027_red_markup_fit.jpg` and
-   `S062_red_markup_fit.jpg` at native pixels and explicitly confirms both, or
-   identifies the sample/frame/edge that must be redrawn. / 用户先原生像素审阅两张 JPG，
-   明确确认，或指出需重画的样片、Frame 与边。
-2. On explicit confirmation, freeze the two current proposals without
-   recomputing them and write source-SHA-bound rows in
-   `x5crop_user_confirmed_golden_baseline_v1`. / 确认后原样冻结当前 proposal，
-   不重新拟合，再写入目标 baseline schema。
-3. The user marks the remaining seven gold copies with the same red-only
-   protocol; run the converter and require explicit JPG confirmation for each. /
-   剩余七张沿用同一红线协议和逐图确认。
-4. Calibrate acceptance tolerances from the complete confirmed cohort using
+1. The user inspects `S035`, `S051`, `S055`, `S091`, `S094`, `S098`, and `S109`
+   review JPGs at native pixels and either confirms the exact current artifacts
+   or names the sample/frame/edge that must be redrawn. / 用户以原生像素审阅剩余七张
+   JPG，确认当前确切 artifact，或指出需重画的样片、Frame 与边。
+2. On explicit confirmation, promote the unchanged proposal snapshots into
+   `x5crop_user_confirmed_golden_baseline_v1`; never recompute an already
+   confirmed sample. / 明确确认后原样提升 proposal snapshot，不重新拟合已确认样片。
+3. Calibrate acceptance tolerances from the complete confirmed cohort using
    normal-distance edge error, parallel/perpendicular angle error, safe
    containment, and content loss. Bleed stays separate. / 完成黄金集后再按法向距离、
    角度、安全包含与内容损失校准容差，bleed 独立。
-5. Only after representative confirmed coverage should detector calibration,
+4. Only after representative confirmed coverage should detector calibration,
    performance profiling, and the 111-sample audit resume. / 有代表性 confirmed
    baseline 后再恢复 detector 调整、性能与 111 样片审计。
 
@@ -233,6 +244,7 @@ rg 'REPORT_SCHEMA_REVISION' x5crop
 
 Resume prompt / 恢复提示：
 
-> 从 S027 与 S062 两张 `pending_explicit_user_confirmation` 红线拟合 proposal 继续。
-> 先让用户审阅两张原生分辨率 JPG；只有明确确认后才原样冻结为
+> 从 9 条红线拟合 proposal、2 条 confirmed baseline（S027、S062）与 7 张待确认
+> JPG 继续。先让用户审阅 S035、S051、S055、S091、S094、S098、S109 的当前确切
+> 原生分辨率 JPG；只有明确确认后才原样提升为
 > `x5crop_user_confirmed_golden_baseline_v1`。盲选器与机器候选已删除，不恢复旧材料。
