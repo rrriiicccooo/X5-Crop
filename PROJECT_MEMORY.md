@@ -1,6 +1,6 @@
 # Project Memory / 项目记忆
 
-Updated / 更新：2026-07-25
+Updated / 更新：2026-07-26
 
 This is the sole cross-session checkpoint for X5 Crop. It is a concise map, not
 an instruction source or completion proof. Current user intent, Git, source,
@@ -49,6 +49,10 @@ JPG 前，拟合始终只是 proposal。
   crossing, inward content loss, and containment; it will not create a single
   undirected score. / 保留当前 typed evidence、唯一坐标映射、uncertainty、两级 Gate 与
   unresolved；黄金集按法向误差、角度、危险外越界、向内内容损失与 containment 校准。
+- Golden truth and tolerance calibration are separate roles. User-confirmed
+  irregular geometry remains valuable truth, but it must not broaden nominal
+  directional or pitch tolerances. / 黄金真值与容差校准是不同角色；用户确认的非规则
+  几何仍是真值，但不得用来放宽正常方向或片距容差。
 
 ## Verified Checkpoint / 已核对检查点
 
@@ -80,12 +84,13 @@ JPG 前，拟合始终只是 proposal。
   `pending_explicit_user_confirmation`; confirmation authority lives only in the
   separate baseline file. / 当前有九条绑定 source、marked copy 与复核 JPG hash 的
   proposal；proposal 本身始终是 pending，确认权限只存在于独立 baseline 文件。
-- The user explicitly confirmed the exact current `S027` and `S062` JPGs.
-  `user_confirmed_golden_baseline.jsonl` now contains two immutable
-  `x5crop_user_confirmed_golden_baseline_v1` rows: six frames for `S027` and
-  three for `S062`. Repeating confirmation is byte-idempotent, and `fit` refuses
-  to recompute either confirmed sample. / 用户已明确确认当前确切的 S027 与 S062
-  JPG；baseline 现有 2 行，重复确认不改字节，且 converter 拒绝重新拟合已确认样片。
+- The user explicitly confirmed the exact current JPGs for `S027`, `S035`,
+  `S051`, `S062`, `S091`, `S094`, `S098`, and `S109`.
+  `user_confirmed_golden_baseline.jsonl` now contains eight immutable
+  `x5crop_user_confirmed_golden_baseline_v1` rows. Repeating confirmation is
+  byte-idempotent, and `fit` refuses to recompute confirmed samples. / 用户已明确
+  确认上述八张当前确切 JPG；baseline 现有 8 行，重复确认不改字节，且 converter
+  拒绝重新拟合已确认样片。
 - All nine native-resolution review JPGs exist. Red is recovered user markup,
   cyan is the fitted shared edge, green is the fitted polygon, and yellow marks
   intersections. Exact artifact identities and states are:
@@ -93,14 +98,14 @@ JPG 前，拟合始终只是 proposal。
 | ID | Group | Frames | Strip | State | Review JPG SHA-256 |
 |---|---|---:|---|---|---|
 | `S027` | `135/full` | 6 | horizontal | confirmed | `bf0dfe7f934dbdf69dc585e9a17007f5645107459232be5960c196d5d4fa3613` |
-| `S035` | `135/full` | 6 | horizontal | pending | `5f0194e6bab9c7a8d4dfc6a36c57e3cbb50865e0802be5fc6afebb8febb2b497` |
-| `S051` | `135/partial` | 3 | horizontal | pending | `288b6a247e2022e0525b0f139c671b701a829e40ebb8230ef244a408ab9f8b3f` |
-| `S055` | `135/partial` | 3 | horizontal | pending | `730573792c7f94bda95b6ef4543e9df39a1829f2361caf56c9abba989528df56` |
+| `S035` | `135/full` | 6 | horizontal | confirmed | `5f0194e6bab9c7a8d4dfc6a36c57e3cbb50865e0802be5fc6afebb8febb2b497` |
+| `S051` | `135/partial` | 3 | horizontal | confirmed | `288b6a247e2022e0525b0f139c671b701a829e40ebb8230ef244a408ab9f8b3f` |
+| `S055` | `135/partial` | 4 | horizontal | pending | `f5e54e3a305dee31ea91d05bb3f8a3397d77f3a84cb33ce3dd242a3017d1ea42` |
 | `S062` | `66/partial` | 3 | vertical | confirmed | `3dc83771a1d81a56ebb4bc0d329ecbd3b8b298a7945cce55b5db247806eeea87` |
-| `S091` | `66/partial` | 3 | vertical | pending | `d28f8fdbf95389037f2273a58df83ef6cc3a1509c6a66cfb77c2c0bcd2b3cd38` |
-| `S094` | `67/full` | 3 | horizontal | pending | `88e6470a8b535c4b0b8a680c11674a5a83d6553933ec389440002a82b5a96782` |
-| `S098` | `half/full` | 12 | horizontal | pending | `6c346b94454b9ae030aa6908b3c2d7a427e28cd12dd7fef9e3f51faf29a56ca4` |
-| `S109` | `half/partial` | 7 | horizontal | pending | `fb824fd1335bd895f3f1e1ed6cd4cbd349117ced38bcb483f6e6f781987abb44` |
+| `S091` | `66/partial` | 3 | vertical | confirmed | `d28f8fdbf95389037f2273a58df83ef6cc3a1509c6a66cfb77c2c0bcd2b3cd38` |
+| `S094` | `67/full` | 3 | horizontal | confirmed | `88e6470a8b535c4b0b8a680c11674a5a83d6553933ec389440002a82b5a96782` |
+| `S098` | `half/full` | 12 | horizontal | confirmed | `6c346b94454b9ae030aa6908b3c2d7a427e28cd12dd7fef9e3f51faf29a56ca4` |
+| `S109` | `half/partial` | 7 | horizontal | confirmed | `fb824fd1335bd895f3f1e1ed6cd4cbd349117ced38bcb483f6e6f781987abb44` |
 
   The hashes above, rather than filenames alone, identify what the user reviews.
   / 上述 hash 而非文件名本身，定义用户实际确认的 artifact。
@@ -113,23 +118,29 @@ JPG 前，拟合始终只是 proposal。
 
 ## Selected Gold Cohort / 已选黄金集
 
-These nine originals remain useful representatives, but selection is not a
-label or confirmation:
+The golden truth set retains all nine originals, while calibration role controls
+how each confirmed sample may influence thresholds:
 
-下列 9 张仍可作为代表样片，但“入选”不等于已有标签或确认：
+黄金真值保留全部九张；校准角色决定 confirmed 样片能否影响阈值：
 
-| Group / 类别 | Sources / 样片 |
-|---|---|
-| `135/full` | `pass_X5_00027.tif`, `pass_X5_00035.tif` |
-| `135/partial` | `pass_X5_00004.tif`, `unknown_X5_00003.tif` |
-| `66/partial` | `pass_X5_00001.tif`, `pass_X5_00030.tif` |
-| `67/full` | `pass_X5_00001.tif` |
-| `half/full` | `pass_X5_00002.tif` |
-| `half/partial` | `pass_X5_00003.tif` |
+| Role / 角色 | Samples / 样片 | Use / 用途 |
+|---|---|---|
+| `nominal_calibration` | `S027`, `S035`, `S051`, `S055`, `S062`, `S091`, `S094`, `S109` | Estimate normal directional, containment, and pitch tolerances after confirmation / 确认后估计正常方向、安全包含与片距容差 |
+| `irregular_geometry_stress` | `S098` | Excluded from nominal tolerance estimation; validate non-rectangular, nonuniform-pitch behavior and safe REVIEW fallback / 不参与正常容差估计；验证非矩形、不等片距与安全 REVIEW |
 
 Full identities live only in the current manifest; same basenames in different
 groups are different sources. / 完整身份只以 current manifest 为准，不同目录的同名
 文件不是同一身份。
+
+`S098` remains correct user-confirmed geometry. Camera aging makes its frames
+non-rectangular and pitch unstable, so dividers are physically not all
+perpendicular to the shared long edges. Confirmation establishes truth; it does
+not authorize the runtime to force observed edges perpendicular, assume equal
+pitch, or create automatic PASS. A rectangular output must be conservatively
+contained inside the observed quadrilateral; otherwise the sample remains
+REVIEW. / S098 的人工几何仍正确；老化相机造成非矩形、片距不稳与非垂直短边。
+确认只建立真值，不授权 runtime 强迫物理边缘垂直、假设等片距或自动 PASS；矩形输出
+必须保守包含在观测四边形内，否则保持 REVIEW。
 
 ## V5 Dependency Boundary / V5 依赖边界
 
@@ -180,9 +191,9 @@ still does not depend on them.
 
 - The fit verifier proves all nine source/marked/JPG hashes, exact line counts,
   boundary order, in-bounds positive polygons, native JPG dimensions, and
-  low stroke-fit residuals; it also verifies both confirmed baseline snapshots.
+  low stroke-fit residuals; it also verifies all eight confirmed baseline snapshots.
   It does not prove the selected physical boundary. / verifier 已检查九张的 hash、
-  线数、boundary 顺序、界内正面积 polygon、原生 JPG 尺寸与两条 confirmed snapshot；
+  线数、boundary 顺序、界内正面积 polygon、原生 JPG 尺寸与八条 confirmed snapshot；
   仍不证明物理边缘选择。
 - Preview-associated alpha rewriting creates red-like RGB deltas in some image
   content. The converter therefore fits the outermost continuous stroke per axis
@@ -196,6 +207,12 @@ still does not depend on them.
   that recovery path. These are conversion mechanics, not physical evidence. /
   partial strip 的共享边只使用首尾 frame boundary 间的支持区；S098 因斜线投影重叠
   使用 Hough fallback。两条 synthetic contract 只保证转换机制，不增加物理证据。
+- `S055` exposed a declared-count failure: the earlier command requested three
+  frames even though the markup had eight strong short boundaries. Converter
+  revision `preview_red_delta_robust_line_fit_v2` now rejects excess strong
+  strokes instead of ranking and silently dropping them. The corrected proposal
+  contains four frames and remains pending. / S055 旧命令错误声明三帧；v2 现在会拒绝
+  多余强短边而不是静默丢弃。修正 proposal 为四帧，仍待确认。
 - JPG is only the human review surface; coordinates are recovered from the TIFF
   delta, never measured from lossy JPEG pixels. / JPG 只供人工复核，坐标不从有损 JPG
   反测。
@@ -213,18 +230,23 @@ still does not depend on them.
 
 ## Next Decision And Actions / 下一决策与行动
 
-1. The user inspects `S035`, `S051`, `S055`, `S091`, `S094`, `S098`, and `S109`
-   review JPGs at native pixels and either confirms the exact current artifacts
-   or names the sample/frame/edge that must be redrawn. / 用户以原生像素审阅剩余七张
-   JPG，确认当前确切 artifact，或指出需重画的样片、Frame 与边。
+1. The user inspects the corrected four-frame `S055_red_markup_fit.jpg` at
+   native pixels and either confirms the exact current artifact or names the
+   frame/edge that must be redrawn. / 用户以原生像素审阅修正后的四帧 S055 JPG，
+   确认当前确切 artifact，或指出需重画的 Frame 与边。
 2. On explicit confirmation, promote the unchanged proposal snapshots into
    `x5crop_user_confirmed_golden_baseline_v1`; never recompute an already
    confirmed sample. / 明确确认后原样提升 proposal snapshot，不重新拟合已确认样片。
-3. Calibrate acceptance tolerances from the complete confirmed cohort using
+3. Calibrate nominal acceptance tolerances from the confirmed
+   `nominal_calibration` subset using
    normal-distance edge error, parallel/perpendicular angle error, safe
    containment, and content loss. Bleed stays separate. / 完成黄金集后再按法向距离、
-   角度、安全包含与内容损失校准容差，bleed 独立。
-4. Only after representative confirmed coverage should detector calibration,
+   角度、安全包含与内容损失校准正常容差，bleed 独立；S098 不参与阈值估计。
+4. Validate `S098` separately as `irregular_geometry_stress`: do not force
+   perpendicular dividers or equal pitch; require an evidence-backed safe crop
+   or typed REVIEW. / 单独用 S098 验证非规则几何，不强迫垂直或等片距；只能形成有证据
+   的安全裁切，否则保持 typed REVIEW。
+5. Only after representative confirmed coverage should detector calibration,
    performance profiling, and the 111-sample audit resume. / 有代表性 confirmed
    baseline 后再恢复 detector 调整、性能与 111 样片审计。
 
@@ -244,7 +266,8 @@ rg 'REPORT_SCHEMA_REVISION' x5crop
 
 Resume prompt / 恢复提示：
 
-> 从 9 条红线拟合 proposal、2 条 confirmed baseline（S027、S062）与 7 张待确认
-> JPG 继续。先让用户审阅 S035、S051、S055、S091、S094、S098、S109 的当前确切
-> 原生分辨率 JPG；只有明确确认后才原样提升为
+> 从 9 条红线拟合 proposal、8 条 confirmed baseline 与 1 张待确认的四帧 S055 JPG
+> 继续。先让用户审阅 S055 当前确切原生分辨率 JPG；只有明确确认后才原样提升为
 > `x5crop_user_confirmed_golden_baseline_v1`。盲选器与机器候选已删除，不恢复旧材料。
+> S098 保留为 confirmed 黄金真值，但角色是 `irregular_geometry_stress`，不参与
+> nominal tolerance estimation。
