@@ -101,7 +101,14 @@ class RepositoryVerifierContractTest(unittest.TestCase):
         self.assertIn("PROJECT_MEMORY.md` is the sole cross-session handoff", agents)
         self.assertIn("sole cross-session checkpoint", memory)
         self.assertIn("Current Objective / 当前目标", memory)
-        self.assertIn("Manual Review Reset / 人工审阅归零", memory)
+        self.assertIn(
+            "Current Manual Review Contract / 当前人工审阅合同",
+            memory,
+        )
+        self.assertIn("x5crop_red_markup_fit_proposal_v1", memory)
+        self.assertIn("x5crop_user_confirmed_golden_baseline_v1", memory)
+        self.assertIn("pending_explicit_user_confirmation", memory)
+        self.assertRegex(memory, r"Only an\s+explicit user confirmation")
         self.assertIn("cross_region_photo_edge_geometry", memory)
 
         for parallel_handoff in (

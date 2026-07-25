@@ -37,7 +37,30 @@ The short axis is observed once in source pixels. Deskew is a mandatory
 detection consumer. The mapped workspace reuses that evidence and never
 measures another short axis.
 
-### 1.1 权限表 / Authority Table
+### 1.1 操作几何主链与校准边界 / Operational Geometry
+
+水平方向措辞下的唯一主链是：
+
+```text
+共享照片上下边缘
+  -> deskew + mapped 共享短轴
+  -> 每张照片成对的长轴边缘
+  -> inward-safe FrameCropEnvelope
+  -> output-only bleed
+```
+
+垂直片条执行完全旋转等价的流程。这个主链保留 typed evidence、唯一 affine 坐标映射、
+uncertainty propagation、`CandidateGate`、`DecisionGate` 与 typed unresolved；任何
+消费者证据不足都保持 REVIEW，不能用理论位置、score 或 bleed 补证。
+
+黄金集的验收目标不是每个边界达到数学 `0 px`，而是在用户确认基准所校准的方向性容差内，
+得到足够准确且不会危险越界的基础裁切。容差应分别检查边缘法向距离、角度、向外越界、
+向内内容损失与 uncertainty containment，不能压缩成一个无方向总分。Bleed 只在基础几何
+和 Gate 之后扩张输出，可以覆盖物理边缘起伏与直线近似中的微小误差，但不能改变 evidence、
+resolution、status 或掩盖明显错误。当前 V4.9 尚未从新黄金集冻结这些容差；基准确认前仍按
+现有严格证据合同保持 unresolved / REVIEW。
+
+### 1.2 权限表 / Authority Table
 
 | Owner | 唯一职责 / Sole responsibility |
 |---|---|
@@ -292,8 +315,14 @@ Baseline 是 runtime 外部的独立审计输入。Runtime、tools 和 tests 均
 白名单，机器 supported 不能称为 human-confirmed。只有绑定 source SHA 的原图坐标，并由
 用户直接点击后明确确认，或由独立校准的外部测量产生，才可能进入 baseline。完整长图的
 模型视觉、OpenCV、SciPy、X5 Crop、生成 JPG 或多个算法相互同意都只能形成非权威
-proposal；看不清的边界必须保持 unresolved。当前人工审阅状态只见
-`PROJECT_MEMORY.md`。
+proposal；看不清的边界必须保持 unresolved。
+
+用户也可以在保持原始尺寸与方向的 TIFF 副本上直接画红线。外部转换器只能用未修改原图与
+标注副本的像素差拟合笔迹中心，并生成原生分辨率复核 JPG；坐标不得从有损 JPG 反测。拟合
+记录必须同时绑定 source SHA 与 marked-copy SHA，并保持 pending。只有用户明确确认指定
+复核 JPG 后，连续线、交点及确定的整数转换结果才可写入 current baseline schema。这个
+项目权威 baseline 表示实用容差内的安全无 bleed 目标，不声称数学零误差；输出 bleed 始终
+是独立扩张，不能修复错误基础几何。当前人工审阅状态只见 `PROJECT_MEMORY.md`。
 
 ## 10. 源码分层 / Source Layers
 

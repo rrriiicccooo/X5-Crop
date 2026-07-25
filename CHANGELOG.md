@@ -24,6 +24,20 @@ targets.
   proposal。当前本地状态只由 `PROJECT_MEMORY.md` 保存，本次不改变 runtime。 /
   Manual authority now excludes model-authored geometry; current local status
   remains solely in `PROJECT_MEMORY.md`, with no runtime change.
+- 当前人工流程改为：用户在保持尺寸与方向的黄金 TIFF 副本上画红线，本地转换器通过原图
+  像素差拟合中心线并生成原生分辨率复核 JPG；只有用户明确确认后才写 baseline。浏览器
+  盲选器与机器候选已退役。 /
+  Manual review now uses user-drawn red markup, source-delta line fitting, and
+  native-resolution confirmation JPGs. The browser blind selector and machine
+  candidates are retired; fitted rows remain proposals until explicit confirmation.
+- 后续检测校准采用组合主链：共享照片边缘 → deskew/共享短轴 → 成对长轴边缘 → 安全矩形
+  → 独立 bleed；保留 typed evidence、坐标映射、uncertainty、Gate 与 unresolved。验收从
+  “数学 0 px”改为黄金集校准的方向性容差，危险向外越界不得通过，bleed 只能覆盖微小物理
+  起伏与直线近似误差。该容差尚未冻结，不应描述为当前已实现阈值。 /
+  Future calibration keeps the typed pipeline while replacing mathematical
+  zero-pixel acceptance with gold-calibrated directional safety tolerances.
+  Unsafe outward crossing remains disallowed; bleed stays output-only, and the
+  new tolerances are not yet frozen as implemented V4.9 thresholds.
 - 未来 V5 的大依赖方向仍是 OpenCV 与 SciPy。它们可提供本地图像变换、滤波、优化和候选
   测量，但自动坐标或算法一致不能创建 baseline。本次未改变发布依赖。 /
   OpenCV and SciPy remain possible V5 backends, not ground-truth authorities;
@@ -85,9 +99,10 @@ targets.
 - Unit/contract、compile、configuration 和 release-package 检查证明结构一致性，不证明
   真实照片边缘已经达到生产准确性。 / Mechanical checks prove structural consistency,
   not production photo-edge accuracy.
-- 当前人工审阅已归零，因此不存在 human-confirmed PASS、pair 或 crop baseline。
-  恢复人工审阅前，只能声明机器证据与结构验证。 /
-  With manual review reset, no human-confirmed PASS, pair, or crop baseline exists.
+- 当前已有两条由用户红线转换得到、等待明确确认的 fit proposal，但仍不存在
+  human-confirmed PASS、pair 或 crop baseline。 /
+  Two user-markup fit proposals await explicit confirmation; no human-confirmed
+  PASS, pair, or crop baseline exists yet.
 
 ## v4.2.8 — 当前稳定发布 / Stable Release
 
