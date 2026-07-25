@@ -370,23 +370,43 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
         self.assertIn("cross_region_photo_edge_geometry", architecture)
 
     def test_user_docs_describe_current_sequence_and_bleed_model(self) -> None:
-        quick_start = (PROJECT_ROOT / "快速启动_Quick_Start.md").read_text(
-            encoding="utf-8"
-        )
-        self.assertNotIn("检查外框", quick_start)
-        self.assertNotIn("inspect the outer box", quick_start)
-        self.assertNotIn("可见序列边界", quick_start)
-        self.assertNotIn("visible-sequence boundaries", quick_start)
-
         readme = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
-        self.assertNotIn("可用容量由可信 scan calibration", readme)
-        self.assertNotIn(
-            "Capacity is resolved from trusted scan calibration",
-            readme,
+        public_docs = {
+            path: (PROJECT_ROOT / path).read_text(encoding="utf-8")
+            for path in (
+                "docs/user-guide.zh-CN.md",
+                "docs/user-guide.en.md",
+                "docs/quick-start.zh-CN.md",
+                "docs/quick-start.en.md",
+            )
+        }
+        self.assertFalse((PROJECT_ROOT / "快速启动_Quick_Start.md").exists())
+        for path in public_docs:
+            self.assertIn(path, readme)
+
+        guides = (
+            public_docs["docs/user-guide.zh-CN.md"],
+            public_docs["docs/user-guide.en.md"],
         )
-        self.assertNotRegex(readme, r"(?<!Frame)\bCropEnvelope\b")
-        self.assertIn("FrameSlot", readme)
-        self.assertIn("FrameCropEnvelope", readme)
+        quick_starts = (
+            public_docs["docs/quick-start.zh-CN.md"],
+            public_docs["docs/quick-start.en.md"],
+        )
+        for quick_start in quick_starts:
+            self.assertNotIn("检查外框", quick_start)
+            self.assertNotIn("inspect the outer box", quick_start)
+            self.assertNotIn("可见序列边界", quick_start)
+            self.assertNotIn("visible-sequence boundaries", quick_start)
+
+        for guide in guides:
+            self.assertNotIn("可用容量由可信 scan calibration", guide)
+            self.assertNotIn(
+                "Capacity is resolved from trusted scan calibration",
+                guide,
+            )
+            self.assertNotRegex(guide, r"(?<!Frame)\bCropEnvelope\b")
+            self.assertIn("FrameSlot", guide)
+            self.assertIn("FrameCropEnvelope", guide)
         for stale in (
             "observed-width evidence",
             "content position",
@@ -394,22 +414,15 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
             "five fixed offsets",
             "between each base frame and its `CropEnvelope`",
         ):
-            self.assertNotIn(stale, readme)
+            for text in public_docs.values():
+                self.assertNotIn(stale, text)
         for internal_type in (
             "PhotoEdgeNormalFeasibleRegion",
             "NormalRegionCell",
             "GeometryWorkBudget",
         ):
-            self.assertNotIn(internal_type, readme)
-            self.assertNotIn(internal_type, quick_start)
-        for duplicated_guide in (
-            "## 中文用户手册",
-            "## English User Guide",
-            "## 中文快速启动",
-            "## English Quick Start",
-        ):
-            self.assertNotIn(duplicated_guide, readme)
-            self.assertNotIn(duplicated_guide, quick_start)
+            for text in public_docs.values():
+                self.assertNotIn(internal_type, text)
 
         candidate_plan = (
             PROJECT_ROOT / "x5crop/detection/candidate/plan/__init__.py"
@@ -434,16 +447,22 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
         self.assertNotIn('"content_' + 'guidance"', active_detection)
 
     def test_docs_launchers_and_contracts_use_current_runtime_truth(self) -> None:
-        readme = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
+        english_guide = (PROJECT_ROOT / "docs/user-guide.en.md").read_text(
+            encoding="utf-8"
+        )
+        chinese_guide = (PROJECT_ROOT / "docs/user-guide.zh-CN.md").read_text(
+            encoding="utf-8"
+        )
         cli = (PROJECT_ROOT / "x5crop/entry/cli.py").read_text(encoding="utf-8")
         architecture = (PROJECT_ROOT / "ARCHITECTURE.md").read_text(encoding="utf-8")
         ownership_test = (
             PROJECT_ROOT / "tools/tests/test_architecture_ownership_contract.py"
         ).read_text(encoding="utf-8")
 
-        for source in (cli, readme):
+        for source in (cli, english_guide):
             self.assertIn("geometry is resolved", source)
             self.assertIn("output protection is feasible", source)
+        self.assertIn("只有几何已经解决且输出保护可行", chinese_guide)
         self.assertNotIn("PhotoSequenceSolver", architecture)
         self.assertNotIn("PhotoSequenceEnvelope", architecture)
         self.assertIn("solve_frame_sequence", architecture)

@@ -1,12 +1,10 @@
-# X5 Crop 架构说明 / Architecture Guide
+# X5 Crop 架构说明
 
 本文件是 V4.9 当前运行流、数值几何合同和源码分层的唯一架构说明。用户操作见
-`README.md`，版本变化见 `CHANGELOG.md`，长期协作规则见 `AGENTS.md`。
+`docs/user-guide.zh-CN.md` 与 `docs/user-guide.en.md`，版本变化见 `CHANGELOG.md`，
+长期协作规则见 `AGENTS.md`。
 
-This document is the sole description of the current V4.9 runtime flow,
-numerical geometry contract, and source layering.
-
-## 1. 固定运行流 / Fixed Runtime Flow
+## 1. 固定运行流
 
 ```text
 entry: public input
@@ -33,11 +31,7 @@ entry: public input
 预处理；旋转后只映射同一份证据，禁止再次从 pixels 寻找短轴。Runtime 只编排配置、
 I/O 和副作用，`image` 只拥有灰度、统计和通用像素变换。
 
-The short axis is observed once in source pixels. Deskew is a mandatory
-detection consumer. The mapped workspace reuses that evidence and never
-measures another short axis.
-
-### 1.1 操作几何主链与校准边界 / Operational Geometry
+### 1.1 操作几何主链与校准边界
 
 水平方向措辞下的唯一主链是：
 
@@ -60,35 +54,35 @@ uncertainty propagation、`CandidateGate`、`DecisionGate` 与 typed unresolved�
 resolution、status 或掩盖明显错误。当前 V4.9 尚未从新黄金集冻结这些容差；基准确认前仍按
 现有严格证据合同保持 unresolved / REVIEW。
 
-### 1.2 权限表 / Authority Table
+### 1.2 权限表
 
-| Owner | 唯一职责 / Sole responsibility |
+| Owner | 唯一职责 |
 |---|---|
-| `FramePhysicalSpec` | 照片尺寸事实与离散 `FrameSizeMm`。 / Photo dimensions and discrete frame sizes. |
-| `ScanCanvasPhysicalSpec` | 片夹扫描画布事实及 format 兼容关系。 / Holder-scan canvas facts and format compatibility. |
-| `ScanCanvasEvidence` | 从 source 像素长短比选择唯一、无匹配或竞争 profile。 / Resolve unique, unmatched, or competing profiles. |
-| `CanvasPixelScale` | 唯一 long/short px/mm 尺度与轴向映射。 / Sole pixel scale and work-axis mapping. |
-| `PhotoEdgeObservation` | 材料、场景与极性无关的局部像素测量。 / Material-, scene-, and polarity-independent local measurements. |
-| `PhotoEdgeFragment` | 同一连续 ridge 的最大、不可拆 build-stage 单元。 / Maximal indivisible continuous-ridge build unit. |
-| `PhotoEdgePairEvidence` | 唯一 top/bottom 边缘身份真相与完整 physical label。 / Sole edge-identity truth and complete physical label. |
-| `TransformGeometryEvidence` | selected source pair 或 dual joint region 的 transform 消费结果。 / Transform-consumer outcome. |
-| `SharedShortAxisPlan` | mapped pair 的全 workspace 安全裁切消费结果。 / Strip-wide safe-crop consumer of the mapped pair. |
-| `DetectionWorkspace` | 同一坐标域的 pixels、gray、cache、source/mapped evidence 和 transform。 / Coordinate-domain integrity. |
-| `CandidateGate` | 候选自身的物理证明。 / Candidate-local physical proof. |
-| GeometryResolution | 唯一 early-stop 输入；判断几何与替代解是否解决。 / Sole early-stop authority. |
-| `DecisionGate` | 唯一创建 final status 与 final reasons。 / Sole creator of final status and reasons. |
-| report / debug | 只读 typed evidence，不重测、不重算、不裁决。 / Read typed evidence only. |
+| `FramePhysicalSpec` | 照片尺寸事实与离散 `FrameSizeMm`。 |
+| `ScanCanvasPhysicalSpec` | 片夹扫描画布事实及 format 兼容关系。 |
+| `ScanCanvasEvidence` | 从 source 像素长短比选择唯一、无匹配或竞争 profile。 |
+| `CanvasPixelScale` | 唯一 long/short px/mm 尺度与轴向映射。 |
+| `PhotoEdgeObservation` | 与材料、场景和极性无关的局部像素测量。 |
+| `PhotoEdgeFragment` | 同一连续 ridge 的最大、不可拆 build-stage 单元。 |
+| `PhotoEdgePairEvidence` | 唯一 top/bottom 边缘身份真相与完整 physical label。 |
+| `TransformGeometryEvidence` | selected source pair 或 dual joint region 的 transform 消费结果。 |
+| `SharedShortAxisPlan` | mapped pair 的全 workspace 安全裁切消费结果。 |
+| `DetectionWorkspace` | 同一坐标域的 pixels、gray、cache、source/mapped evidence 与 transform。 |
+| `CandidateGate` | 候选自身的物理证明。 |
+| GeometryResolution | 唯一 early-stop 输入；判断几何与替代解是否解决。 |
+| `DecisionGate` | 唯一创建 final status 与 final reasons。 |
+| report / debug | 只读 typed evidence，不重测、不重算、不裁决。 |
 
 理论位置、搜索顺序、分数和执行预算都不是物理证明。`CandidateGate` 与
 `DecisionGate` 是仅有的两个 Gate，只有 `DecisionGate` 创建
 `approved_auto` 或 `needs_review`。
 
-## 2. 物理画布与坐标 / Physical Canvas And Coordinates
+## 2. 物理画布与坐标
 
 照片与画布由不同目录保存。单条片夹按允许 profile 与 source 像素长短比在 0.5%
 限制内匹配：
 
-| Profile | 短轴 × 长轴 / Short × long |
+| Profile | 短轴 × 长轴 |
 |---|---:|
 | `135_standard` | 32.22 × 232 mm |
 | `135_narrow` | 25.4 × 232 mm |
@@ -112,7 +106,7 @@ v_mm = (v_px - (short_extent_px - 1) / 2) / short_axis_px_per_mm
 接触 halo 或画布测量边界的 component 是 censored，只能贡献 unavailable 诊断。
 Corridor 不能裁窄位置包络，也不能生成 supported evidence。
 
-## 3. 跨区域局部观测 / Cross-Region Local Observation
+## 3. 跨区域局部观测
 
 Detector 在分帧前工作，不知道 transition 属于哪一张照片。证据可以全部来自一个很短的
 连续区域，也可以来自多个不连续区域；不要求跨 frame、最小跨度、覆盖率、分桶或上下
@@ -146,7 +140,7 @@ pixel support 的 gap 必须断开 fragment。每侧唯一数量下限是三个 
 互不重叠的 supported observations；除此之外没有最小长度。恰好三个时必须全部共同可行，
 不能删除其中一个再用两个点成立。
 
-## 4. 联合法向几何 / Joint Normal Geometry
+## 4. 联合法向几何
 
 固定画布 pair 使用：
 
@@ -185,7 +179,7 @@ unavailable。Region cell 与 consensus state 使用 sample/lane 级共享
 为 unavailable；始终只有同一 label 才可能 supported；始终有 label 但身份不唯一为
 competing。下游不能只保存高度后重新选择 120 的 54/56 或 frame width。
 
-## 5. Maximal Consensus 与曲率 / Maximal Consensus And Curvature
+## 5. Maximal Consensus 与曲率
 
 Consensus 的 admissible region 是以下约束的交集：
 
@@ -228,7 +222,7 @@ Holder 与 photo edge 共用 transition anchor 时只去重，不能同时成为
 1/16 px 只属于 interval solver，不是经验物理容差。每个 J cell 同样需要 outer enclosure
 与 verified witness；J 的存在性、唯一性和精度分别由 typed evidence 与消费者判断。
 
-## 7. Transform、映射与共享短轴 / Consumers
+## 7. Transform、映射与共享短轴
 
 Pair identity、transform 和全域裁切是三个独立判断：
 
@@ -267,7 +261,7 @@ safe_bottom = minimum(mapped bottom envelope)
 端点 uncertainty 超过 max(照片高度的 2%, 3 px) 时 `span=None`，不得制造 containment
 坐标。
 
-## 8. Workspace、配置、缓存与长轴 / Runtime Detection
+## 8. Workspace、配置、缓存与长轴
 
 `DetectionConfiguration` 分别持有 `scan_canvas`、`photo_edges`、`transform`、
 `shared_short_axis` 和既有长轴/sequence 参数。Runtime 一次解析；lower layer 不查询
@@ -292,9 +286,9 @@ Selected pair 已绑定 frame dimensions。之后 `solve_frame_sequence` 只求�
 Content 可以反证遗漏，不能创造 count 或边界。Execution budget 只限制工作，不能成为
 可靠性证据。
 
-## 9. Report、Debug 与人工审阅 / Audit Surfaces
+## 9. Report、Debug 与人工审阅
 
-Current report identity：
+当前报告标识：
 
 ```text
 schema_id: detection_report
@@ -324,7 +318,7 @@ proposal；看不清的边界必须保持 unresolved。
 项目权威 baseline 表示实用容差内的安全无 bleed 目标，不声称数学零误差；输出 bleed 始终
 是独立扩张，不能修复错误基础几何。当前人工审阅状态只见 `PROJECT_MEMORY.md`。
 
-## 10. 源码分层 / Source Layers
+## 10. 源码分层
 
 | Layer | Canonical responsibility |
 |---|---|

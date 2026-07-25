@@ -13,8 +13,10 @@ EXPECTED_RELEASE_PATHS = (
     "X5_Crop.py",
     "X5_Crop_Mac.command",
     "X5_Crop_win.bat",
-    "README.txt",
-    "快速启动_Quick_Start.txt",
+    "README_中文.txt",
+    "README_English.txt",
+    "快速启动.txt",
+    "Quick_Start.txt",
     "install/X5_Crop_Mac_install.command",
     "install/X5_Crop_win_install.bat",
     "install/X5_Crop_Mac_uninstall.command",
@@ -36,8 +38,15 @@ class ReleasePackageContractTest(unittest.TestCase):
                 self.assertEqual(tuple(package.namelist()), EXPECTED_RELEASE_PATHS)
                 standalone = package.read("X5_Crop.py").decode("utf-8")
                 self.assertIn("_X5_EMBEDDED_SOURCES", standalone)
-                self.assertTrue(
-                    package.getinfo("快速启动_Quick_Start.txt").flag_bits & 0x800
+                self.assertTrue(package.getinfo("README_中文.txt").flag_bits & 0x800)
+                self.assertTrue(package.getinfo("快速启动.txt").flag_bits & 0x800)
+                self.assertIn(
+                    "# X5 Crop 用户手册",
+                    package.read("README_中文.txt").decode("utf-8"),
+                )
+                self.assertIn(
+                    "# X5 Crop User Guide",
+                    package.read("README_English.txt").decode("utf-8"),
                 )
                 for path in (
                     "X5_Crop.py",

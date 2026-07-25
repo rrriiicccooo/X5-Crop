@@ -1,279 +1,193 @@
-# Codex Agent Rules / Codex 协作规则
+# Codex 协作规则
 
-This file contains short, binding repository rules. It owns standing policy,
-document roles, release policy, and verification priorities—not architecture,
-history, or task status.
+本文件只保存简短且强制的仓库政策：文档职责、实现边界、验证、发布和交接规则。
+架构、历史与当前任务状态由各自唯一文档负责。
 
-本文件只保存简短且强制的仓库规则：长期政策、文档职责、发布政策和验证优先级。
-架构、历史和当前任务状态不属于这里。
+## 开始工作
 
-## First Moves / 开始工作
-
-1. Read `README.md` before editing. Read `PROJECT_MEMORY.md` only when the user
-   explicitly resumes, updates, or requests the cross-session handoff.
-2. Check the current branch and working tree:
+1. 编辑前阅读根 `README.md`。只有用户明确恢复、更新或请求跨会话交接时，才读取
+   `PROJECT_MEMORY.md`。
+2. 核对当前分支与工作树：
 
    ```bash
    git branch --show-current
    git status --short
    ```
 
-3. Treat GitHub as authoritative for tracked source and docs. NAS and copied
-   folders are transport or testing surfaces only.
+3. GitHub 是受跟踪源码与文档的权威来源；NAS 和复制目录只用于传输或测试。
 
-开始编辑前阅读 `README.md`。只有在用户明确恢复、更新或请求跨会话交接时才读取
-`PROJECT_MEMORY.md`。始终先核对分支和工作树；GitHub 是受跟踪源码与文档的权威来源。
-
-Repository / 仓库：
+仓库：
 
 ```text
 git@github.com:rrriiicccooo/X5-Crop.git
 https://github.com/rrriiicccooo/X5-Crop
 ```
 
-## Document Ownership / 文档职责
+## 文档职责与语言
 
-| File / 文件 | Canonical responsibility / 唯一职责 |
-|---|---|
-| `快速启动_Quick_Start.md` | Release quick-start / 发布版快速启动 |
-| `README.md` | Complete user manual / 完整用户手册 |
-| `ARCHITECTURE.md` | Current runtime flow and source layering / 当前运行流与源码分层 |
-| `CHANGELOG.md` | Version-level behavior, validation, and rollback context / 版本级行为、验证与回滚信息 |
-| `PROJECT_MEMORY.md` | On-demand rolling checkpoint for cross-session continuation / 按需读取的跨会话滚动检查点 |
-| `AGENTS.md` | Standing coordination policy only / 仅长期协作政策 |
+| 文件 | 唯一职责 | 语言 |
+|---|---|---|
+| `README.md` | GitHub 简短入口与语言选择 | 精简中英双语 |
+| `docs/user-guide.zh-CN.md` | 中文完整用户手册 | 中文 |
+| `docs/user-guide.en.md` | 英文完整用户手册 | English |
+| `docs/quick-start.zh-CN.md` | 中文发布版快速启动 | 中文 |
+| `docs/quick-start.en.md` | 英文发布版快速启动 | English |
+| `ARCHITECTURE.md` | 当前运行流、数值合同与源码分层 | 中文 |
+| `CHANGELOG.md` | 版本级行为、验证边界与回滚背景 | 中文 |
+| `PROJECT_MEMORY.md` | 按需读取的唯一跨会话检查点 | 中文 |
+| `AGENTS.md` | 长期协作政策 | 中文 |
 
-Do not duplicate long explanations. Link to the canonical owner. User-readable
-durable docs must remain concise, professional, current, non-overlapping, and
-Chinese-English paired where practical.
+- 内部文档只写中文正文，保留必要的英文标识、类型名、命令与 schema 名。
+- 公共中英文文档按语言分开，不在同一文件逐段重复。
+- 默认不读取英文公共文档；只有英文文档、发布或对应事实校验任务才读取。
+- 用户可见的设置、用法、启动器、输出或发布包变化，必须在同一变更中更新两种公共语言。
+- 不复制长篇说明；链接到唯一 owner。文档必须简洁、专业、当前且互不重叠。
+- 根 `ARCHITECTURE.md` 是唯一架构文档；`docs/` 只保存公共用户文档，不建立架构镜像。
 
-不要复制长篇解释；应链接到唯一所有者。面向用户的长期文档必须简洁、专业、当前、
-互不重叠，并在适合时保持中英文对应。
+## 交接与项目记忆
 
-## Handoff And Project Memory / 交接与项目记忆
+- `PROJECT_MEMORY.md` 是唯一跨会话交接；不得创建 `SESSION_HANDOFF.md`、
+  `NEXT_ACTIONS.md`、`DECISIONS.md` 或同类平行文件。
+- 仅在用户明确恢复、请求交接或要求更新项目记忆时读写。
+- 只保留当前目标、已验证检查点、验证边界、开放风险和精确下一步。架构与历史留在各自
+  owner。
+- Git、源码、原 TIFF、current report、Debug Analysis 和现场命令输出始终优先于记忆。
+- 人工审阅重新开始时，先定义唯一 current schema；不恢复或迁移旧标签、candidate ID、
+  决策或 runtime 白名单。
+- 不得让模型查看完整长 TIFF 后代写 reference 边界。Baseline 只能来自绑定 source SHA
+  的原图坐标，并由用户直接点击后明确确认，或来自独立校准的外部测量。OpenCV、SciPy、
+  X5 Crop、模型视觉、生成 JPG 和算法一致只能产生非权威 proposal；歧义保持 unresolved。
 
-- `PROJECT_MEMORY.md` is the sole cross-session handoff. Do not create parallel
-  `SESSION_HANDOFF.md`, `NEXT_ACTIONS.md`, `DECISIONS.md`, or equivalent files.
-- Read or update it only when the user explicitly resumes, requests a handoff,
-  or asks to change project memory.
-- Keep only the current objective, verified checkpoint, validation boundary,
-  open risks, and exact next action. Architecture and history stay with their
-  canonical documents.
-- Git, source, original TIFFs, current reports, Debug Analysis, and live command
-  output always outrank memory.
-- When manual review restarts, define one current schema before recording labels.
-  Never restore or migrate retired labels, candidate IDs, decisions, or runtime
-  whitelists.
-- Never use model inspection of a complete long TIFF to author reference
-  boundaries. A baseline may contain only source-SHA-bound original coordinates
-  created and explicitly confirmed by the user, or an independently calibrated
-  external measurement. OpenCV, SciPy, X5 Crop, model vision, generated JPGs,
-  and algorithm agreement may create non-authoritative proposals only; visual
-  ambiguity remains unresolved.
+## 当前范围
 
-`PROJECT_MEMORY.md` 是唯一跨会话交接文件；不得建立平行 handoff。只有用户明确要求恢复、
-交接或更新项目记忆时才读写它。项目记忆只保存当前目标、已验证检查点、验证边界、开放风险与
-精确下一步；现场 Git、源码、原 TIFF、current report、Debug 与命令输出始终优先。人工审阅
-重新开始时先定义唯一 current schema，不恢复或迁移旧标签、ID、结论或运行时白名单。
-不得让模型查看整张长 TIFF 后代写 reference 边界。Baseline 只能来自绑定 source SHA 的
-原图坐标，并由用户直接点击后明确确认，或来自独立校准的外部测量。OpenCV、SciPy、X5 Crop、
-模型视觉、生成 JPG 与算法一致只能产生非权威 proposal；看不清的边界保持 unresolved。
+- 当前入口：`X5_Crop.py` V4.9。
+- 当前稳定 GitHub Release：`v4.2.8`。
+- 开发源码位于 `x5crop/`；Release 可嵌入为单文件 `X5_Crop.py`。
+- 除非用户明确恢复 app 或 native packaging，只处理 standalone X5 Crop workflow。
+- 当前任务和人工审阅状态只保存在 `PROJECT_MEMORY.md`。
 
-## Current Scope / 当前范围
+## 长期实现规则
 
-- Active entry point / 当前入口：`X5_Crop.py` V4.9.
-- Stable GitHub Release / 当前稳定发布：`v4.2.8`.
-- Development source lives under `x5crop/`; releases may embed it into one
-  standalone `X5_Crop.py`.
-- Keep work on the standalone X5 Crop workflow unless the user explicitly
-  resumes app or native packaging.
-- Root `ARCHITECTURE.md` is the only architecture document; there is no `docs/`
-  mirror.
-- Current task and manual-review status live only in `PROJECT_MEMORY.md`.
+- 除非用户明确改变要求，保持 TIFF 位深、通道结构、ICC/色彩空间、resolution、
+  metadata 与已知无损压缩行为。
+- 结构清理不需要保持历史 PASS/REVIEW、geometry、confidence、reason、schema、debug
+  或 cache parity；优先当前物理真实性。
+- 结构闭合后才用真实样片校准 detection。不得为单个文件普遍放宽规则；必须复查已知
+  正常格式，尤其是 `135`。
+- Named-TIFF 与端到端回归必须运行完整 detection flow，包括 scan-canvas matching、
+  source photo-edge observation 与 transform assessment。纯 solver 单测可显式构造
+  typed `DetectionWorkspace` fixture；production runtime 不得 bypass。
+- 照片尺寸只属于 `FramePhysicalSpec`；片夹扫描画布只属于
+  `ScanCanvasPhysicalSpec` catalog。TIFF resolution 只作 I/O metadata，不得进入检测
+  尺度、证据或决策。
+- 方向性需求以水平片条措辞为基准，同时实现旋转等价的垂直行为。
+- Runtime flow 或 source layering 变化更新 `ARCHITECTURE.md`；版本行为、打包、验证或
+  回滚变化更新 `CHANGELOG.md`。
 
-## Standing Implementation Rules / 长期实现规则
+## 极致干净合同
 
-- Preserve TIFF bit depth, channel structure, ICC/color space, resolution,
-  metadata, and known lossless compression behavior unless explicitly changed.
-- Structural cleanup need not preserve historical PASS/REVIEW, geometry,
-  confidence, reason, schema, debug, or cache parity. Prefer the cleaner and
-  more physically truthful current model.
-- Calibrate detection behavior from real samples after structural closure. Do
-  not broadly loosen rules to make one file pass; recheck known-good formats,
-  especially `135`.
-- Named-TIFF and end-to-end regressions must run the complete detection flow,
-  including scan-canvas matching, source photo-edge observation, and transform
-  assessment. Pure solver unit tests may construct an explicit typed
-  `DetectionWorkspace` fixture, but production runtime must have no bypass.
-- Keep photo dimensions in `FramePhysicalSpec` and holder-scan dimensions in the
-  sole `ScanCanvasPhysicalSpec` catalog. TIFF resolution tags are preserved I/O
-  metadata, never detection scale, evidence, or decision input.
-- Horizontal-strip wording is the baseline for directional requests; implement
-  the rotated vertical behavior too.
-- Update user docs for changes to setup, usage, launchers, outputs, or release
-  packaging; update `ARCHITECTURE.md` for runtime flow or source-layer changes;
-  update `CHANGELOG.md` for version-level behavior, packaging, validation, or
-  rollback changes.
+- 每个 active concept 只有一个 canonical name、type、owner 和真相来源。
+- 权限只沿 proposal、build、evidence、assessment、selection、decision、
+  finalization、output、report、debug 单向流动。
+- `CandidateGate` 和 `DecisionGate` 是仅有的两个 Gate；只有 `DecisionGate` 创建 final
+  status 与 final reasons。
+- Format spec、adaptive measurement、runtime configuration 和 report description
+  保持分离。配置只在 runtime boundary 解析；lower layer 接收显式 typed input，不查询
+  registry 或发明默认值。
+- Foundation code 只知道 geometry、pixels、TIFF I/O、cache mechanics 与 units，不知道
+  format identity、decision state 或 report schema。
+- Runtime、tests、tools、report 与 debug 只消费 current schema。Report 是审计产物，
+  不是 detection cache；只缓存精确且与 count/offset 无关的 measurement。
+- 被替代的 API、字段、alias、import、reducer、shim、test 和兼容分支必须同批删除。
+- 不保留 dead file、unreachable helper、pass-through wrapper、重复 model、隐藏 decision
+  constant，或只搬运复杂度的 abstraction。
+- 只有消除真实重复或职责歧义时才增加 abstraction；名称必须表达物理事实或生命周期职责。
+- 代码、contract tests、`ARCHITECTURE.md`、current reports 与 Debug Analysis 必须描述
+  同一系统。
+- 每发现一类残留，先增加能失败的 contract，再删除整类残留并保留 contract。
+- 架构清理只有在 full verifier 通过，且同一冻结 checklist 连续两次只读审计无已知问题后
+  才闭合。只有明确 contract violation、无法表达的物理事实或真正不兼容能力才能重新打开。
 
-除非用户明确改变要求，否则必须保持 TIFF 位深、通道、ICC/色彩空间、分辨率、元数据和
-已知无损压缩行为。结构重构以当前物理真实性为准，不以历史输出一致性为目标；检测校准必须
-回到真实样片，不能为单个文件普遍放宽规则。照片规格与片夹扫描画布必须由不同 typed owner
-保存；TIFF resolution 标签只作 I/O metadata，不得成为检测尺度或决策输入。
+## 检测与性能
 
-## Extreme Cleanliness Contract / 极致干净合同
+- Search hint、blank appearance、重复宽度和执行预算不是物理证明；未解决几何保持 typed
+  unresolved。
+- Early-stop 只来自 resolved geometry。预算耗尽表示 geometry unavailable，不能成为
+  reliability evidence；candidate 与 final decision 权限分离。
+- 优化前固定一个真实样片，记录 wall/detection time、candidate builds、重复 measurement
+  与真实 call-stack hotspot。
+- 只缓存带 typed key 的精确 count/offset-independent measurement；不缓存 candidate、
+  Gate、decision、final reason 或近似 geometry。
+- 每轮优化后复测同一样片，再运行 contracts、代表性 format/mode、current-schema
+  validation，并人工检查 Debug Analysis。输出差异是校准证据，不是历史 parity gate。
 
-- Every active concept has one canonical name, type, owner, and source of truth.
-- Data and authority flow one way through proposal, build, evidence, assessment,
-  selection, decision, finalization, output, report, and debug.
-- `CandidateGate` and `DecisionGate` are the only gates. Only `DecisionGate`
-  creates final status and final reasons.
-- Format specs, adaptive measurements, runtime configuration, and report
-  descriptions remain separate. Resolve configuration at the runtime boundary;
-  lower layers receive explicit typed inputs and never query registries or invent
-  defaults.
-- Foundation code knows geometry, pixels, TIFF I/O, cache mechanics, and units—not
-  format identity, decision state, or report schema.
-- Runtime, tests, tools, report, and debug consume the current schema only. Reports
-  are audit artifacts, never a detection cache; only exact count/offset-independent
-  measurements may be cached. Delete superseded APIs, fields, aliases, imports,
-  reducers, shims, tests, and compatibility branches in the same change.
-- Keep no dead files, unreachable helpers, pass-through wrappers, duplicate
-  models, hidden decision constants, or abstractions that merely move complexity.
-- Add an abstraction only when it removes real duplication or ownership
-  ambiguity. Names must state physical facts or lifecycle responsibility.
-- Code, contract tests, `ARCHITECTURE.md`, current reports, and Debug Analysis must
-  describe the same system.
-- For each newly discovered residue, add a contract that fails on that class,
-  remove the whole class, and retain the contract. Tests and fixtures obey the
-  same current-only and physical-truth rules as runtime code.
-- Architecture cleanup closes only after the full verifier passes and two
-  consecutive read-only audits using the same frozen checklist find no known
-  violations. Reopen it only for a demonstrated contract violation, an
-  unrepresentable physical fact, or a genuinely incompatible capability.
+## 验证
 
-每个概念只能有一个名称、类型、所有者和真相来源；权限单向流动。删除而不是兼容，复用现有
-typed object 而不是重复翻译，只有消除真实重复或职责歧义时才增加抽象。代码、测试、架构、
-当前报告和 Debug 必须描述同一个系统。
+`tools/verify` 是唯一可执行验证入口；Hook 与 CI 只能薄调用，不能复制命令。
 
-## Detection And Performance / 检测与性能
+- `.githooks/pre-commit` 通过 `tools/verify staged` 负责 staged hygiene。
+- `.githooks/pre-push` 通过 `tools/verify pre-push` 负责最终 full validation。
+- 正常 commit-and-push 流程中，同一棵 tree、同一 scope 只验证一次。不要在 `git push`
+  前手工重复 `tools/verify full`；成功的 pre-push Hook 是唯一最终完整验证。
+- 只有不准备 push，或需要 full 输出排障时才手工运行：
 
-- Search hints, blank appearance, repeated-width patterns, and execution budgets
-  are not physical proof. Unresolved geometry remains typed unresolved.
-- Early-stop comes only from resolved geometry. Budget exhaustion is unavailable
-  geometry, never reliability evidence; candidate and final decisions remain
-  separate authorities.
-- Profile one fixed real sample before optimizing. Record wall/detection time,
-  candidate builds, repeated measurements, and the actual call-stack hotspot.
-- Cache only exact count/offset-independent measurements with typed keys—never
-  candidates, gates, decisions, final reasons, or approximate geometry.
-- Re-profile the same sample after each optimization wave, then run contracts,
-  representative format/mode samples, current-schema validation, and visual Debug
-  Analysis inspection. Output diffs are calibration evidence, not parity gates.
+  ```bash
+  tools/verify full
+  ```
 
-## Verification / 验证
+- 验证后 tree 变化，旧结果立即失效。
+- Detection 变化应比较 current-schema report：
 
-`tools/verify` is the canonical executable verifier. Hooks and CI are thin
-adapters and must call it rather than duplicate its commands.
+  ```bash
+  python3 -m tools.regression.compare <baseline> <candidate>
+  ```
 
-`tools/verify` 是唯一可执行验证入口；Hook 和 CI 只能作为薄适配器调用它，不能复制命令。
+- 至少检查 transform outcome/source、mapped shared short axes、lane divider mapping、
+  status/reasons、selected rank、geometry resolution、crop envelopes 与 final boxes。
+- `Test/` fixture 未受跟踪，其目录布局不是源码合同。验证时动态发现 TIFF：
 
-- `.githooks/pre-commit` owns staged hygiene through `tools/verify staged`;
-  `.githooks/pre-push` owns final full validation through
-  `tools/verify pre-push`.
-- In the normal commit-and-push path, validate each exact tree once per scope.
-  Do not manually run `tools/verify full` immediately before `git push`; the
-  successful pre-push hook is the single final full verification.
-- Run `tools/verify full` manually only when no push will follow or when its
-  output is needed to diagnose a failure. If the tree changes after a successful
-  run, that result is stale and the next push hook must validate the new tree.
+  ```bash
+  find Test -type f \( -iname '*.tif' -o -iname '*.tiff' \) | sort
+  ```
 
-`.githooks/pre-commit` 负责 staged hygiene，`.githooks/pre-push` 负责最终 full
-validation。正常提交并推送时，同一棵代码、同一验证范围只跑一次：不要在 `git push` 前
-手工重复 `tools/verify full`，以成功的 pre-push hook 作为唯一最终完整验证。只有不准备推送
-或需要排障输出时才手工运行 full；验证后代码有变化，旧结果立即失效。
+- 样片可用时覆盖代表性 `135/full`、`120-66/partial`、`half/full` 与 `120-67/full`。
+  Unit tests 通过不证明 named-TIFF geometry；物理完成声明前必须检查 current reports 与
+  Debug Analysis。
 
-When no push will follow:
+## 完成与同步
 
-```bash
-tools/verify full
-```
+- 每个 clone 运行一次 `tools/git/install_hooks.sh`，不得使用 `--no-verify`。
+- Codex 修改 tracked source、docs、configuration、launcher 或 release metadata 后，
+  除非用户明确禁止，应提交并推送当前分支；依赖已启用 Hook，不重复手工验证。
+- Commit 前确认 staged 与 unstaged 变化均为预期。失败时报告 blocker 并保留最安全状态。
 
-For detection changes, compare current-schema reports with:
+## Git 与本地文件
 
-```bash
-python3 -m tools.regression.compare <baseline> <candidate>
-```
-
-Inspect at least transform outcome/source and mapped shared short axes, lane
-divider mapping, status/reasons, selected rank, geometry resolution, crop
-envelopes, and final boxes. Report diffs are audit evidence, not historical-parity
-requirements.
-
-Local `Test/` fixtures are untracked and their layout is not a source contract.
-Discover available TIFFs at verification time:
-
-```bash
-find Test -type f \( -iname '*.tif' -o -iname '*.tiff' \) | sort
-```
-
-When available, cover representative `135/full`, `120-66/partial`, `half/full`,
-and `120-67/full` inputs. Unit-test success alone never proves named TIFF geometry;
-inspect current reports and Debug Analysis before a physical-completion claim.
-
-## Completion And Sync / 完成与同步
-
-- Enable the versioned hooks once per clone with `tools/git/install_hooks.sh` and
-  never use `--no-verify`.
-- After Codex changes tracked source, docs, configuration, launchers, or release
-  metadata, commit and push the current branch unless the user explicitly says
-  not to. Rely on the enabled hooks for routine staged and full verification
-  instead of manually duplicating them. This is standing authorization for a
-  verified push.
-- Before committing, confirm staged and unstaged changes are intentional. If a
-  commit or push fails, report the blocker and leave the safest possible state.
-
-每次修改受跟踪内容后，除非用户明确禁止，都应提交并推送当前分支，以已启用的 Hook 完成常规
-staged 与 full 验证，不再手工重复；不得绕过 Hook。
-
-## Git And Local Files / Git 与本地文件
-
-- Preserve user and other-session changes; never reset or restore them without
-  explicit permission.
-- Keep `.gitignore`, `.github/`, and `tools/` visible. `install/` is also kept
-  visible so release inputs participate in routine validation.
-- Keep the current tracked tree visible except `LICENSE`, which remains
-  authoritative on GitHub and is excluded from this local checkout. Historical
-  source belongs in Git history and tags, not a duplicated `archive/`; generated
-  `release/` remains ignored. / 除只由 GitHub 保存、在本地检出中排除的 `LICENSE`
-  外，当前受跟踪树应完整可见；历史源码只保存在 Git history 与 tags，不建立重复
-  `archive/`，生成的 `release/` 继续忽略。
-- Intended local sparse checkout / 预期本地稀疏检出：
+- 保留用户和其它 session 的修改；没有明确许可不得 reset 或 restore。
+- `.gitignore`、`.github/`、`tools/` 与 `install/` 必须可见。
+- 除 `LICENSE` 外，当前 tracked tree 完整可见。`LICENSE` 由 GitHub 保存，在本地 sparse
+  checkout 中排除。历史源码只保存在 Git history 与 tags，不维护 `archive/`。
+- 预期本地 sparse checkout：
 
   ```text
   /*
   !/LICENSE
   ```
-- When the user explicitly requests a clean handoff, remove ignored caches,
-  compiled bytecode, Finder metadata, and generated outputs after the final
-  hook-driven push. / 用户明确要求干净交接时，在最终 Hook 推送完成后再次清除 ignored
-  cache、bytecode、Finder metadata 与生成输出。
 
-- Never commit `.venv/`, `.venv-build/`, `build/`, `dist/`, `release/`, caches,
-  `.DS_Store`, `downloaded_apps/`, `Test/`, generated `x5_crop_output/`, or large
-  TIFF samples unless explicitly approved as Git LFS fixtures.
+- 用户明确要求干净交接时，在最终 Hook push 后再次删除 ignored cache、compiled bytecode、
+  Finder metadata 与 generated output。
+- 不提交 `.venv/`、`.venv-build/`、`build/`、`dist/`、`release/`、cache、`.DS_Store`、
+  `downloaded_apps/`、`Test/`、生成的 `x5_crop_output/` 或大 TIFF；除非用户明确批准其
+  作为 Git LFS fixture。
 
-## Release Packages / 发布包
+## 发布包
 
-- `tools/release/manifest.py` is the exact package-content owner.
-- Build a user zip with
-  `python3 -m tools.release.build --version <version>`.
-- The builder must generate the standalone script, package only manifest entries,
-  preserve executable launchers, and use Python `zipfile` so Chinese names carry
-  UTF-8 metadata.
-- User packages exclude modular source, tests, internal docs, diagnostics
-  launchers, local samples, and generated outputs.
-- On macOS, prepare only the current release folder: mark the main launcher and
-  installer executable and remove quarantine attributes when available. Never
-  establish permanent system-wide trust.
-
-`tools/release/manifest.py` 是发布内容的唯一清单；发布构建器只能打包清单条目，并正确保存中文
-文件名和启动器权限。发布包不得包含模块化源码、测试、内部文档、诊断启动器、样片或生成输出。
+- `tools/release/manifest.py` 是 package content 的唯一 owner。
+- 使用 `python3 -m tools.release.build --version <version>` 构建用户 ZIP。
+- Builder 必须生成 standalone script，只打包 manifest entries，保持 launcher executable，
+  并使用 Python `zipfile` 保存中文文件名的 UTF-8 metadata。
+- 发布包分别提供中文与英文用户手册、快速启动，不使用逐段中英混排文档。
+- 用户包不包含 modular source、tests、内部文档、diagnostics launcher、本地样片或 generated
+  output。
+- macOS 只准备当前 Release folder：标记主 launcher 与 installer executable，并在可用时
+  移除 quarantine attribute；不得建立永久 system-wide trust。

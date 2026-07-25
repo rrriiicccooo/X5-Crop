@@ -1,143 +1,75 @@
-# X5 Crop 更新日志 / Changelog
+# X5 Crop 更新日志
 
-本文件只记录版本级行为、验证边界和回滚背景。当前架构见 `ARCHITECTURE.md`，用户操作见
-`README.md`。 / This file records version behavior, validation boundaries, and
-rollback context. See `ARCHITECTURE.md` for design and `README.md` for usage.
+本文件只记录版本级行为、验证边界与回滚背景。当前架构见 `ARCHITECTURE.md`，用户操作见
+`docs/user-guide.zh-CN.md` 与 `docs/user-guide.en.md`。
 
-- 当前开发版本 / Active development: **V4.9**
-- 当前稳定发布 / Stable release: **v4.2.8**
+- 当前开发版本：**V4.9**
+- 当前稳定发布：**v4.2.8**
 
-## V4.9 — 当前开发线 / Current Development
+## V4.9 当前开发线
 
-V4.9 是 current-only 的物理模型与源码重构。历史 PASS/REVIEW、报告 schema、人工标签和
-裁切几何不是兼容目标。 / V4.9 is a current-only physical-model and source rewrite.
-Historical decisions, schemas, human labels, and crop geometry are not compatibility
-targets.
+V4.9 是 current-only 的物理模型与源码重构。历史 PASS/REVIEW、report schema、人工标签
+和裁切 geometry 不是兼容目标。
 
-### 2026-07-26 — 黄金基线完成与仓库收束 / Golden Baseline And Cleanup
+### 2026-07-26：黄金基线、文档与仓库收束
 
 - 九张黄金样片均已由用户确认，形成绑定原图、标注副本、proposal snapshot 与复核 JPG
-  hash 的完整本地基线。八张属于 `nominal_calibration`；非矩形、片距不稳的 `S098`
-  作为 `irregular_geometry_stress` 保留，但不参与正常容差估计。本次仍未改变 runtime
-  detector 阈值。 / All nine local gold samples are user-confirmed. Eight form
-  the nominal calibration subset; irregular `S098` is held out as stress evidence.
-  Production thresholds are still unchanged.
-- `S055` 的正确帧数为四。红线转换器现在会拒绝“声明帧数少于强短边证据”的输入，不能
-  排序后静默丢弃人工笔迹。 / `S055` has four frames; the local converter now
-  rejects declared counts that would silently discard strong user-drawn boundaries.
-- 删除 641 个受跟踪历史源码快照；它们与 Git 自身重复，当前源码、tests 与 release
-  manifest 均不读取。历史版本继续由 Git history 与 tags 恢复，当前树不再维护
-  `archive/`。 / Removed 641 tracked source snapshots duplicated by Git history.
-  Tags and history remain the rollback source; no current owner consumes `archive/`.
-- 当前测试审计未发现重复 test body、空测试模块、未使用 public support owner 或无静态
-  owner 的 active Python module，因此没有猜测性删除 current contracts。 /
-  The current test audit found no provable duplicate or orphaned contracts, so
-  current tests were retained.
+  hash 的本地 baseline。八张属于 `nominal_calibration`；非矩形、片距不稳的 `S098`
+  作为 `irregular_geometry_stress` 保留，但不参与正常容差估计。Production detector
+  阈值仍未据此调整。
+- `S055` 的正确帧数为四。红线转换器会拒绝“声明帧数少于强短边证据”的输入，不能排序后
+  静默丢弃人工笔迹。
+- 人工 baseline 权限只来自绑定 source SHA 的用户直接标注与明确 JPG 确认，或独立校准的
+  外部测量。模型视觉、OpenCV、SciPy、X5 Crop、生成 JPG 与算法一致只能产生非权威
+  proposal。
+- 校准目标采用“共享照片边缘 → deskew/共享短轴 → 成对长轴边缘 → 安全矩形 → 独立
+  bleed”。验收使用黄金集校准的方向性容差，不追求数学 `0 px`；危险向外越界不得通过，
+  bleed 不能掩盖错误基础几何。
+- 删除 641 个与 Git history 重复的 tracked source snapshot；历史版本由 Git history 与
+  release tags 恢复，current tree 不再维护 `archive/`。
+- 测试审计未发现重复 test body、空 test module、未使用 public support owner 或无静态
+  owner 的 active Python module，因此保留全部 current contracts。
+- 文档改为中文内部真相源与独立中英文公共发布文档。根 `README.md` 只保留精简双语入口；
+  发布包改为 `README_中文.txt`、`README_English.txt`、`快速启动.txt` 与
+  `Quick_Start.txt`，不再包含逐段中英混排文档或旧文件名。
+- `LICENSE` 保留在 GitHub，本地 sparse checkout 不保存。
 
-### 2026-07-25 — 基准权限与本地审阅收束 / Baseline Authority
-
-- 退役“由模型连续查看完整长 TIFF 并代画边界”的流程。大图本身可快速解码，但反复进入
-  模型上下文会造成上下文膨胀与停滞，而且模型坐标不是独立真值。 /
-  Retired model-authored boundary drawing from complete long TIFFs; it exhausts
-  model context and cannot provide independent ground truth.
-- 人工审阅只接受用户直接点击或独立外部测量作为权限来源；模型与算法坐标只能是非权威
-  proposal。当前本地状态只由 `PROJECT_MEMORY.md` 保存，本次不改变 runtime。 /
-  Manual authority now excludes model-authored geometry; current local status
-  remains solely in `PROJECT_MEMORY.md`, with no runtime change.
-- 当前人工流程改为：用户在保持尺寸与方向的黄金 TIFF 副本上画红线，本地转换器通过原图
-  像素差拟合中心线并生成原生分辨率复核 JPG；只有用户明确确认后才写 baseline。浏览器
-  盲选器与机器候选已退役。 /
-  Manual review now uses user-drawn red markup, source-delta line fitting, and
-  native-resolution confirmation JPGs. The browser blind selector and machine
-  candidates are retired; fitted rows remain proposals until explicit confirmation.
-- 后续检测校准采用组合主链：共享照片边缘 → deskew/共享短轴 → 成对长轴边缘 → 安全矩形
-  → 独立 bleed；保留 typed evidence、坐标映射、uncertainty、Gate 与 unresolved。验收从
-  “数学 0 px”改为黄金集校准的方向性容差，危险向外越界不得通过，bleed 只能覆盖微小物理
-  起伏与直线近似误差。该容差尚未冻结，不应描述为当前已实现阈值。 /
-  Future calibration keeps the typed pipeline while replacing mathematical
-  zero-pixel acceptance with gold-calibrated directional safety tolerances.
-  Unsafe outward crossing remains disallowed; bleed stays output-only, and the
-  new tolerances are not yet frozen as implemented V4.9 thresholds.
-- 未来 V5 的大依赖方向仍是 OpenCV 与 SciPy。它们可提供本地图像变换、滤波、优化和候选
-  测量，但自动坐标或算法一致不能创建 baseline。本次未改变发布依赖。 /
-  OpenCV and SciPy remain possible V5 backends, not ground-truth authorities;
-  current release dependencies are unchanged.
-
-### 2026-07-24 — Tools、文档与人工审阅归零
-
-- `tools/` 只保留四类当前职责：`verify`、`release/`、`regression/compare.py` 和
-  `tests/`。Release builder、manifest 与 standalone builder 归入 `tools/release/`；
-  Git Hook 安装器归入 `tools/git/`；共享测试 fixture 与静态合同归入
-  `tools/tests/support/`。 / Tooling now has four current roles: verification,
-  release construction, report comparison, and contracts. Files are grouped by owner.
-- 删除旧 `frame_slot_reference`、`sample_expectations`、`sample_validation`、
-  `sample_identity` 及其专用测试。这些模块只服务已撤销的人工基线，不再有当前输入。
-  / Removed the legacy manual-reference regression chain and its dedicated tests.
-- 清空本地旧人工审阅：manual crop、deskew、photo-edge 标签、清单、审阅图、survey 和
-  comparison 全部退出工作区；不迁移任何旧结论。原始 TIFF 样片保留。 /
-  Reset all local manual-review labels and generated review artifacts without
-  migrating conclusions; source TIFF samples remain.
-- 当前没有人工基线或 human-confirmed photo-edge authority。Runtime、tests 和 tools
-  均不读取人工白名单；下一轮人工审阅必须以新 schema 从零建立。 /
-  No human baseline is current. A future review cycle must start from a new schema.
-- README 与 Quick Start 改为中英文共用结构；CHANGELOG 只保留当前版本事实；
-  ARCHITECTURE 继续独占运行流与数值合同。 / User docs now share one concise bilingual
-  structure, while architecture remains the sole design owner.
-- `PROJECT_MEMORY.md` 已重写为唯一跨会话检查点，只保存当前短轴目标、可验证边界、
-  人工审阅归零状态与精确下一步；`AGENTS.md` 只保存长期 handoff 政策，禁止平行交接文档。
-  / Project memory is now the sole concise handoff; agent policy forbids parallel
-  status documents.
-
-### V4.9 当前累计行为 / Current Cumulative Behavior
+### 当前累计行为
 
 - `FramePhysicalSpec` 只保存照片尺寸；`ScanCanvasPhysicalSpec` 只保存片夹扫描画布。
-  TIFF DPI/PPI 仅作 I/O metadata。 / Photo and scan-canvas facts have separate owners;
-  TIFF resolution is metadata only.
+  TIFF DPI/PPI 仅作 I/O metadata。
 - 已知单条画布由 source pixel aspect 唯一匹配并生成 `CanvasPixelScale`；无匹配或竞争
-  profile 保持 typed unresolved。`135-dual` 不虚构固定画布。 /
-  Known canvases resolve one physical pixel scale; unmatched, competing, and
-  dual-lane cases preserve their typed state.
-- 分帧前从任意清晰区域形成材料与极性无关的 photo-edge observations。连续 ridge 成为
-  不可拆 fragment；法向联合区域同时约束 top、bottom、照片高度、中心、containment 和
-  完整 `FrameSizeMm`。 / Cross-region observations feed one joint normal geometry
-  model with complete physical labels.
+  profile 保持 typed unresolved。`135-dual` 不虚构固定画布。
+- 分帧前从任意清晰区域形成与材料和极性无关的 photo-edge observation。连续 ridge
+  成为不可拆 fragment；法向联合区域同时约束 top、bottom、照片高度、中心、
+  containment 与完整 `FrameSizeMm`。
 - `PhotoEdgePairEvidence` 是唯一边缘身份真相。Deskew、mapped pair、
-  `SharedShortAxisPlan` 和 frame sequence 只消费同一 selected pair；旋转后不重新测量
-  短轴。 / All downstream consumers reuse one source pair.
+  `SharedShortAxisPlan` 与 frame sequence 只消费同一 selected pair；旋转后不重新测量
+  短轴。
 - Pair identity、transform precision 与全 workspace shared-axis safety 独立判断。
-  `CandidateGate` 判断候选，`DecisionGate` 独占最终 PASS/REVIEW。 /
-  Identity, transform, and crop safety are separate consumers; only `DecisionGate`
-  creates final status.
-- 当前 report revision 为 `cross_region_photo_edge_geometry`。Report 与 Debug
-  只读 typed evidence，不保存 dense responses，不重算几何，也不作为 detection cache。
-  / Report and Debug are read-only audit surfaces for the current schema.
+  `CandidateGate` 判断候选，`DecisionGate` 独占最终 PASS/REVIEW。
+- 当前 report revision 为 `cross_region_photo_edge_geometry`。Report 与 Debug 只读
+  typed evidence，不保存 dense response、不重算 geometry，也不作为 detection cache。
+- `tools/` 的 current owner 只有 `verify`、`git/`、`release/`、
+  `regression/compare.py` 与 `tests/`；退役 manual-reference regression chain 不再存在。
 
-## 验证边界 / Validation Boundary
+## 验证边界
 
-- `tools/verify` 是唯一机械验证入口；Hook 与 CI 只调用它。 /
-  `tools/verify` is the sole mechanical verifier used by hooks and CI.
-- Unit/contract、compile、configuration 和 release-package 检查证明结构一致性，不证明
-  真实照片边缘已经达到生产准确性。 / Mechanical checks prove structural consistency,
-  not production photo-edge accuracy.
-- 本地已有九条用户确认 crop baseline，但 production detector 尚未通过这组基线完成
-  方向性误差量化或阈值校准。 / Nine local crop baselines are user-confirmed;
-  production directional error and thresholds are not yet calibrated against them.
+- `tools/verify` 是唯一机械验证入口；Hook 与 CI 只调用它。
+- Unit/contract、compile、configuration 与 release-package 检查只能证明结构一致性，
+  不能证明真实照片边缘已经达到 production accuracy。
+- 本地已有九条 user-confirmed crop baseline，但 production detector 尚未通过它们完成
+  方向性误差量化或阈值校准。
 
-## v4.2.8 — 当前稳定发布 / Stable Release
+## v4.2.8 稳定发布
 
-v4.2.8 仍是面向普通用户的稳定 GitHub Release。V4.9 尚未替代稳定发布。 /
-v4.2.8 remains the stable GitHub Release; V4.9 has not replaced it.
+v4.2.8 仍是面向普通用户的稳定 GitHub Release；V4.9 尚未替代它。
 
-## 发布与回滚 / Release And Rollback
+## 发布与回滚
 
-- 发布包由 `tools/release/manifest.py` 独占内容清单，由
-  `python3 -m tools.release.build --version <version>` 构建。 /
-  `tools/release/manifest.py` owns package contents; `tools.release.build` creates
-  the archive.
-- V4.9 为破坏性 current-only 迁移。回滚必须整体恢复物理模型、配置、workspace、
-  report schema、contracts 与文档；不得混用旧人工基线、旧 deskew 或旧 schema。 /
-  Rollback must restore the model, configuration, workspace, schema, contracts,
-  and docs as one unit.
-- 历史源码从 Git history 与 release tags 恢复，不在 current tree 中复制
-  `archive/`。 / Restore historical source from Git history and release tags;
-  do not duplicate it in a current-tree `archive/`.
+- 发布包内容由 `tools/release/manifest.py` 独占，通过
+  `python3 -m tools.release.build --version <version>` 构建。
+- V4.9 是破坏性 current-only 迁移。回滚必须整体恢复物理模型、configuration、
+  workspace、report schema、contracts 与 docs；不得混用旧人工 baseline、旧 deskew
+  或旧 schema。
+- 历史源码从 Git history 与 release tags 恢复，不在 current tree 复制 `archive/`。

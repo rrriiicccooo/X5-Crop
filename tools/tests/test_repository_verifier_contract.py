@@ -99,17 +99,14 @@ class RepositoryVerifierContractTest(unittest.TestCase):
         agents = (PROJECT_ROOT / "AGENTS.md").read_text(encoding="utf-8")
         memory = (PROJECT_ROOT / "PROJECT_MEMORY.md").read_text(encoding="utf-8")
 
-        self.assertIn("PROJECT_MEMORY.md` is the sole cross-session handoff", agents)
-        self.assertIn("sole cross-session checkpoint", memory)
-        self.assertIn("Current Objective / 当前目标", memory)
-        self.assertIn(
-            "Current Manual Review Contract / 当前人工审阅合同",
-            memory,
-        )
+        self.assertIn("`PROJECT_MEMORY.md` 是唯一跨会话交接", agents)
+        self.assertIn("唯一跨会话检查点", memory)
+        self.assertIn("## 当前目标", memory)
+        self.assertIn("## 当前人工审阅合同", memory)
         self.assertIn("x5crop_red_markup_fit_proposal_v1", memory)
         self.assertIn("x5crop_user_confirmed_golden_baseline_v1", memory)
         self.assertIn("pending_explicit_user_confirmation", memory)
-        self.assertRegex(memory, r"Only an\s+explicit user confirmation")
+        self.assertRegex(memory, r"只有用户明确确认确切 review JPG")
         self.assertIn("cross_region_photo_edge_geometry", memory)
 
         for parallel_handoff in (
