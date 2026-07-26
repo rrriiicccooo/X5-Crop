@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+from bisect import bisect_left, bisect_right
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
+from functools import cached_property
 from hashlib import sha256
 import math
+from types import MappingProxyType
 
 import numpy as np
 
@@ -29,86 +33,308 @@ _PREFIX_WORKING_BUFFER_COUNT = 2
 
 
 @dataclass(frozen=True)
-class PhotoEdgeFragment:
-    fragment_id: ObservationId
-    observations: tuple[PhotoEdgeObservation, ...]
-    censored: bool
-    provenance: MeasurementProvenance
+class PhotoEdgeRidgeNode:
+    node_id: ObservationId
+    observation: PhotoEdgeObservation
 
     def __post_init__(self) -> None:
-        if not self.observations:
-            raise ValueError("photo-edge fragments require observations")
-        if tuple(
-            sorted(
-                self.observations,
-                key=lambda item: (
-                    item.long_axis_footprint.minimum,
-                    item.short_axis_position_interval.minimum,
-                    str(item.observation_id),
-                ),
+        if self.node_id != self.observation.observation_id:
+            raise ValueError(
+                "photo-edge ridge node identity must match its observation"
             )
-        ) != self.observations:
-            raise ValueError("photo-edge fragment observations must be ordered")
+
+
+@dataclass(frozen=True, order=True)
+class PhotoEdgeRidgeEdge:
+    source_node_id: ObservationId
+    target_node_id: ObservationId
+
+    def __post_init__(self) -> None:
+        if self.source_node_id == self.target_node_id:
+            raise ValueError("photo-edge ridge edges cannot be self-referential")
+
+
+@dataclass(frozen=True)
+class PhotoEdgeFragment:
+    fragment_id: ObservationId
+    node_ids: tuple[ObservationId, ...]
+
+    def __post_init__(self) -> None:
+        if not self.node_ids:
+            raise ValueError("photo-edge fragments require ridge node references")
+        if len(set(self.node_ids)) != len(self.node_ids):
+            raise ValueError("photo-edge fragment node references must be unique")
+
+
+@dataclass(frozen=True)
+class PhotoEdgeRidgeGraph:
+    nodes: tuple[PhotoEdgeRidgeNode, ...]
+    edges: tuple[PhotoEdgeRidgeEdge, ...]
+
+    def __post_init__(self) -> None:
+        node_ids = tuple(node.node_id for node in self.nodes)
+        if len(set(node_ids)) != len(node_ids):
+            raise ValueError("photo-edge ridge graph node identities must be unique")
         if any(
-            observation.state != LocalTransitionState.SUPPORTED
-            for observation in self.observations
+            node.observation.state != LocalTransitionState.SUPPORTED
+            for node in self.nodes
         ):
             raise ValueError(
-                "persisted photo-edge fragments contain supported transitions only"
+                "photo-edge ridge graph contains unsupported observations"
             )
-        if self.provenance.observation_id != self.fragment_id:
+        if tuple(
+            sorted(
+                self.nodes,
+                key=lambda node: (
+                    node.observation.long_axis_footprint.minimum,
+                    node.observation.short_axis_position_interval.minimum,
+                    str(node.node_id),
+                ),
+            )
+        ) != self.nodes:
+            raise ValueError("photo-edge ridge graph nodes must be ordered")
+        if len(set(self.edges)) != len(self.edges):
+            raise ValueError("photo-edge ridge graph edges must be unique")
+        node_map = {node.node_id: node for node in self.nodes}
+        for edge in self.edges:
+            if (
+                edge.source_node_id not in node_map
+                or edge.target_node_id not in node_map
+            ):
+                raise ValueError(
+                    "photo-edge ridge graph edges require existing nodes"
+                )
+            source = node_map[edge.source_node_id].observation
+            target = node_map[edge.target_node_id].observation
+            if (
+                target.long_axis_footprint.minimum
+                <= source.long_axis_footprint.minimum
+            ):
+                raise ValueError(
+                    "photo-edge ridge graph edges must advance the long axis"
+                )
+            if (
+                target.long_axis_footprint.minimum
+                > source.long_axis_footprint.maximum
+            ):
+                raise ValueError(
+                    "photo-edge ridge graph edges cannot bridge observation gaps"
+                )
+            if not source.short_axis_position_interval.intersects(
+                target.short_axis_position_interval
+            ):
+                raise ValueError(
+                    "photo-edge ridge graph edges require direct position support"
+                )
+
+    @cached_property
+    def node_map(self) -> Mapping[ObservationId, PhotoEdgeRidgeNode]:
+        return MappingProxyType(
+            {node.node_id: node for node in self.nodes}
+        )
+
+    @cached_property
+    def _edge_pairs(
+        self,
+    ) -> frozenset[tuple[ObservationId, ObservationId]]:
+        return frozenset(
+            (edge.source_node_id, edge.target_node_id)
+            for edge in self.edges
+        )
+
+    @cached_property
+    def path_count(self) -> int:
+        if not self.nodes:
+            return 0
+        outgoing = self._outgoing_nodes
+        incoming = self._incoming_nodes
+        counts: dict[ObservationId, int] = {}
+        for node in reversed(self.nodes):
+            targets = outgoing[node.node_id]
+            counts[node.node_id] = (
+                1
+                if not targets
+                else sum(counts[target] for target in targets)
+            )
+        return sum(
+            counts[node.node_id]
+            for node in self.nodes
+            if not incoming[node.node_id]
+        )
+
+    def observations_for(
+        self,
+        fragment: PhotoEdgeFragment,
+    ) -> tuple[PhotoEdgeObservation, ...]:
+        node_map = self.node_map
+        try:
+            observations = tuple(
+                node_map[node_id].observation
+                for node_id in fragment.node_ids
+            )
+        except KeyError as exc:
             raise ValueError(
-                "photo-edge fragment identity must match its provenance"
+                "photo-edge fragment references a node outside its graph"
+            ) from exc
+        if any(
+            pair not in self._edge_pairs
+            for pair in zip(
+                fragment.node_ids,
+                fragment.node_ids[1:],
+                strict=False,
             )
+        ):
+            raise ValueError(
+                "photo-edge fragment is not a legal ridge-graph path"
+            )
+        incoming = self._incoming_nodes
+        outgoing = self._outgoing_nodes
+        if (
+            incoming[fragment.node_ids[0]]
+            or outgoing[fragment.node_ids[-1]]
+        ):
+            raise ValueError(
+                "photo-edge fragments must be complete source-to-sink paths"
+            )
+        if any(
+            observations[index].long_axis_footprint.minimum
+            >= observations[index + 1].long_axis_footprint.minimum
+            for index in range(len(observations) - 1)
+        ):
+            raise ValueError("photo-edge fragment node order is not monotone")
+        return observations
 
-    @property
-    def long_axis_footprint(self) -> PixelInterval:
+    def long_axis_footprint(
+        self,
+        fragment: PhotoEdgeFragment,
+    ) -> PixelInterval:
+        observations = self.observations_for(fragment)
+        return PixelInterval(
+            min(item.long_axis_footprint.minimum for item in observations),
+            max(item.long_axis_footprint.maximum for item in observations),
+        )
+
+    def short_axis_position_interval(
+        self,
+        fragment: PhotoEdgeFragment,
+    ) -> PixelInterval:
+        observations = self.observations_for(fragment)
         return PixelInterval(
             min(
-                observation.long_axis_footprint.minimum
-                for observation in self.observations
+                item.short_axis_position_interval.minimum
+                for item in observations
             ),
             max(
-                observation.long_axis_footprint.maximum
-                for observation in self.observations
+                item.short_axis_position_interval.maximum
+                for item in observations
             ),
         )
 
-    @property
-    def short_axis_position_interval(self) -> PixelInterval:
-        return PixelInterval(
-            min(
-                observation.short_axis_position_interval.minimum
-                for observation in self.observations
-            ),
-            max(
-                observation.short_axis_position_interval.maximum
-                for observation in self.observations
-            ),
+    def fragment_is_censored(self, fragment: PhotoEdgeFragment) -> bool:
+        return any(
+            observation.censored
+            for observation in self.observations_for(fragment)
         )
 
-    @property
-    def constraint_sha256(self) -> str:
-        return fragment_constraint_hash(self.observations)
+    def fragment_constraint_sha256(
+        self,
+        fragment: PhotoEdgeFragment,
+    ) -> str:
+        return fragment_constraint_hash(self.observations_for(fragment))
+
+    def iter_fragments(self, observation_prefix: str) -> Iterator[PhotoEdgeFragment]:
+        outgoing = self._outgoing_nodes
+        incoming = self._incoming_nodes
+        sources = tuple(
+            sorted(
+                (
+                    node.node_id
+                    for node in self.nodes
+                    if not incoming[node.node_id]
+                ),
+                key=str,
+            )
+        )
+        stack: list[tuple[ObservationId, tuple[ObservationId, ...]]] = [
+            (source, (source,))
+            for source in reversed(sources)
+        ]
+        while stack:
+            node_id, path = stack.pop()
+            targets = outgoing[node_id]
+            if not targets:
+                digest = sha256(
+                    "|".join(str(identity) for identity in path).encode("utf-8")
+                ).hexdigest()[:16]
+                yield PhotoEdgeFragment(
+                    fragment_id=ObservationId(
+                        f"{observation_prefix}:fragment:{digest}"
+                    ),
+                    node_ids=path,
+                )
+                continue
+            for target in reversed(targets):
+                stack.append((target, (*path, target)))
+
+    @cached_property
+    def _outgoing_nodes(
+        self,
+    ) -> Mapping[ObservationId, tuple[ObservationId, ...]]:
+        values: dict[ObservationId, list[ObservationId]] = {
+            node.node_id: [] for node in self.nodes
+        }
+        for edge in self.edges:
+            values[edge.source_node_id].append(edge.target_node_id)
+        return MappingProxyType(
+            {
+                node_id: tuple(sorted(targets, key=str))
+                for node_id, targets in values.items()
+            }
+        )
+
+    @cached_property
+    def _incoming_nodes(
+        self,
+    ) -> Mapping[ObservationId, tuple[ObservationId, ...]]:
+        values: dict[ObservationId, list[ObservationId]] = {
+            node.node_id: [] for node in self.nodes
+        }
+        for edge in self.edges:
+            values[edge.target_node_id].append(edge.source_node_id)
+        return MappingProxyType(
+            {
+                node_id: tuple(sorted(sources, key=str))
+                for node_id, sources in values.items()
+            }
+        )
 
 
 @dataclass(frozen=True)
 class PhotoEdgeObservationResult:
-    fragments: tuple[PhotoEdgeFragment, ...]
+    graph: PhotoEdgeRidgeGraph
     summary: PhotoEdgeMeasurementSummary
 
 
 @dataclass(frozen=True)
-class _ScalePeak:
+class _ChannelScaleSupport:
+    channel: str
     scale: float
     depth: int
     position: float
-    threshold_support_interval: PixelInterval
-    intensity_effect: float
-    texture_effect: float
-    gradient_effect: float
+    support_interval: PixelInterval
+    effect: float
     local_noise: float
     censored: bool
+
+    @property
+    def identity(self) -> tuple[object, ...]:
+        return (
+            self.channel,
+            self.scale,
+            self.depth,
+            self.support_interval.minimum,
+            self.support_interval.maximum,
+        )
 
 
 @dataclass(frozen=True)
@@ -121,6 +347,7 @@ class _AnchorTransition:
     texture_effect: float
     gradient_effect: float
     local_noise: float
+    channels: tuple[str, ...]
     scales: tuple[float, ...]
     censored: bool
 
@@ -157,26 +384,35 @@ def _deterministic_median(values: np.ndarray) -> float:
     return 0.5 * float(ordered[midpoint - 1] + ordered[midpoint])
 
 
-def _first_difference_mad(
+def _local_noise_at_positions(
     values: np.ndarray,
-) -> float:
-    if values.shape[0] <= 1:
-        return 0.0
-    differences = np.abs(np.diff(values))
-    median = _deterministic_median(differences)
-    return _deterministic_median(np.abs(differences - median))
-
-
-def _local_noise_at(
-    values: np.ndarray,
-    position: int,
+    positions: np.ndarray,
     depth: int,
     floor: float,
-) -> float:
-    return max(
+) -> np.ndarray:
+    if positions.size == 0:
+        return np.empty(0, dtype=np.float64)
+    if depth <= 1:
+        return np.full(positions.shape, floor, dtype=np.float64)
+    differences = np.abs(np.diff(values))
+    offsets = np.arange(depth - 1, dtype=np.int64)
+    left = differences[
+        positions[:, None] - depth + offsets[None, :]
+    ]
+    right = differences[
+        positions[:, None] + offsets[None, :]
+    ]
+
+    def row_mad(windows: np.ndarray) -> np.ndarray:
+        medians = np.median(windows, axis=1)
+        return np.median(
+            np.abs(windows - medians[:, None]),
+            axis=1,
+        )
+
+    return np.maximum(
         floor,
-        _first_difference_mad(values[position - depth : position]),
-        _first_difference_mad(values[position : position + depth]),
+        np.maximum(row_mad(left), row_mad(right)),
     )
 
 
@@ -355,7 +591,7 @@ def _measurement_domain(
     return tuple(sorted(domains, key=lambda item: item.interval))
 
 
-def _local_peaks_for_scale(
+def _channel_supports_for_scale(
     row_intensity: np.ndarray,
     row_texture: np.ndarray,
     row_gradient: np.ndarray,
@@ -363,49 +599,16 @@ def _local_peaks_for_scale(
     depth: int,
     scale: float,
     parameters: PhotoEdgeDetectionParameters,
-) -> tuple[_ScalePeak, ...]:
+) -> tuple[_ChannelScaleSupport, ...]:
     short_extent = row_intensity.shape[0]
     if 2 * depth + 1 >= short_extent:
         return ()
-    negative_intensity = _rolling_mean(row_intensity, depth)[: -depth]
-    positive_intensity = _rolling_mean(row_intensity, depth)[depth:]
-    negative_texture = _rolling_mean(row_texture, depth)[: -depth]
-    positive_texture = _rolling_mean(row_texture, depth)[depth:]
-    negative_gradient = _rolling_mean(row_gradient, depth)[: -depth]
-    positive_gradient = _rolling_mean(row_gradient, depth)[depth:]
     candidate_positions = np.arange(
         depth,
         short_extent - depth + 1,
         dtype=np.int64,
     )
     expected = candidate_positions.shape[0]
-    arrays = (
-        negative_intensity,
-        positive_intensity,
-        negative_texture,
-        positive_texture,
-        negative_gradient,
-        positive_gradient,
-    )
-    arrays = tuple(array[:expected] for array in arrays)
-    (
-        negative_intensity,
-        positive_intensity,
-        negative_texture,
-        positive_texture,
-        negative_gradient,
-        positive_gradient,
-    ) = arrays
-    intensity_effect = np.abs(positive_intensity - negative_intensity)
-    texture_effect = np.abs(positive_texture - negative_texture)
-    gradient_effect = np.abs(positive_gradient - negative_gradient)
-    response = np.maximum.reduce(
-        (intensity_effect, texture_effect, gradient_effect)
-    )
-    supported = response >= (
-        parameters.minimum_local_effect
-        + parameters.local_noise_floor_u8
-    )
     domain_mask = np.zeros(expected, dtype=bool)
     for domain in domains:
         domain_mask |= (
@@ -418,105 +621,101 @@ def _local_peaks_for_scale(
                 <= math.ceil(domain.interval.maximum)
             )
         )
-    supported &= domain_mask
-    supported_indices = np.flatnonzero(supported)
-    components = tuple(
-        component
-        for component in np.split(
-            supported_indices,
-            np.flatnonzero(np.diff(supported_indices) > 1) + 1,
+    supports: list[_ChannelScaleSupport] = []
+    for channel, profile in (
+        ("gradient", row_gradient),
+        ("intensity", row_intensity),
+        ("texture", row_texture),
+    ):
+        rolling_mean = _rolling_mean(profile, depth)
+        negative = rolling_mean[: -depth][:expected]
+        positive = rolling_mean[depth:][:expected]
+        effects = np.abs(positive - negative)
+        eligible_indices = np.flatnonzero(
+            (
+                effects
+                >= (
+                    parameters.minimum_local_effect
+                    + parameters.local_noise_floor_u8
+                )
+            )
+            & domain_mask
         )
-        if component.size
-    )
-    peaks: list[_ScalePeak] = []
-    for component in components:
-        component_responses = response[component]
-        candidate_indices: list[int] = []
-        plateau_start = 0
-        while plateau_start < component.size:
-            plateau_end = plateau_start + 1
-            plateau_response = component_responses[plateau_start]
-            while (
-                plateau_end < component.size
-                and component_responses[plateau_end] == plateau_response
-            ):
-                plateau_end += 1
-            left_response = (
-                component_responses[plateau_start - 1]
-                if plateau_start > 0
-                else -math.inf
+        eligible_positions = candidate_positions[eligible_indices]
+        local_noise_values = _local_noise_at_positions(
+            profile,
+            eligible_positions,
+            depth,
+            parameters.local_noise_floor_u8,
+        )
+        supported_indices = eligible_indices[
+            effects[eligible_indices]
+            >= parameters.minimum_local_effect + local_noise_values
+        ]
+        components = tuple(
+            component
+            for component in np.split(
+                supported_indices,
+                np.flatnonzero(np.diff(supported_indices) > 1) + 1,
             )
-            right_response = (
-                component_responses[plateau_end]
-                if plateau_end < component.size
-                else -math.inf
+            if component.size
+        )
+        for component in components:
+            representative_index = min(
+                (int(index) for index in component),
+                key=lambda index: (
+                    -float(effects[index]),
+                    int(candidate_positions[index]),
+                ),
             )
-            if (
-                plateau_response >= left_response
-                and plateau_response >= right_response
-                and (
-                    plateau_response > left_response
-                    or plateau_response > right_response
-                )
-            ):
-                plateau_midpoint = (
-                    plateau_start + plateau_end - 1
-                ) // _EVEN_DIVISOR
-                candidate_indices.append(
-                    int(component[plateau_midpoint])
-                )
-            plateau_start = plateau_end
-        for index in candidate_indices:
-            local_noise = _local_noise_at(
-                row_intensity,
-                int(candidate_positions[index]),
-                depth,
-                parameters.local_noise_floor_u8,
-            )
-            if response[index] < (
-                parameters.minimum_local_effect + local_noise
-            ):
-                continue
-            position = int(candidate_positions[index])
-            threshold_support_interval = PixelInterval(
-                float(position) - _HALF_PIXEL_POSITION_ENVELOPE,
-                float(position) + _HALF_PIXEL_POSITION_ENVELOPE,
+            position = int(candidate_positions[representative_index])
+            support_interval = PixelInterval(
+                float(candidate_positions[int(component[0])])
+                - _HALF_PIXEL_POSITION_ENVELOPE,
+                float(candidate_positions[int(component[-1])])
+                + _HALF_PIXEL_POSITION_ENVELOPE,
             )
             containing_domains = tuple(
                 domain
                 for domain in domains
-                if domain.interval.intersects(threshold_support_interval)
+                if domain.interval.intersects(support_interval)
             )
             censored = not any(
                 domain.uncensored_interval is not None
                 and (
-                    threshold_support_interval.minimum
+                    support_interval.minimum
                     > domain.uncensored_interval.minimum
                 )
                 and (
-                    threshold_support_interval.maximum
+                    support_interval.maximum
                     < domain.uncensored_interval.maximum
                 )
                 for domain in containing_domains
             )
-            peaks.append(
-                _ScalePeak(
+            supports.append(
+                _ChannelScaleSupport(
+                    channel=channel,
                     scale=scale,
                     depth=depth,
                     position=float(position),
-                    threshold_support_interval=threshold_support_interval,
-                    intensity_effect=float(intensity_effect[index]),
-                    texture_effect=float(texture_effect[index]),
-                    gradient_effect=float(gradient_effect[index]),
-                    local_noise=local_noise,
+                    support_interval=support_interval,
+                    effect=float(effects[representative_index]),
+                    local_noise=float(
+                        local_noise_values[
+                            np.searchsorted(
+                                eligible_indices,
+                                representative_index,
+                            )
+                        ]
+                    ),
                     censored=censored,
                 )
             )
-    return tuple(peaks)
+    return tuple(supports)
 
 
-def _cluster_scale_peaks(
-    peaks: tuple[_ScalePeak, ...],
+def _group_channel_scale_supports(
+    supports: tuple[_ChannelScaleSupport, ...],
     row_intensity: np.ndarray,
     row_texture: np.ndarray,
     row_gradient: np.ndarray,
@@ -525,48 +724,71 @@ def _cluster_scale_peaks(
     position_tolerance_ratio: float,
     footprint: PixelInterval,
 ) -> tuple[tuple[_AnchorTransition, ...], int]:
-    if not peaks:
+    if not supports:
         return (), 0
     tolerance = max(
         1.0,
         position_tolerance_ratio * float(base_depth),
     )
-    groups: list[list[_ScalePeak]] = []
+    groups: list[list[_ChannelScaleSupport]] = []
     common_support: list[PixelInterval] = []
-    for peak in sorted(peaks, key=lambda item: (item.position, item.scale)):
+    support_identities: set[tuple[object, ...]] = set()
+    duplicate_identity_count = 0
+    for support in sorted(
+        supports,
+        key=lambda item: (
+            item.support_interval.midpoint,
+            item.identity,
+            item.position,
+        ),
+    ):
+        if support.identity in support_identities:
+            duplicate_identity_count += 1
+            continue
+        support_identities.add(support.identity)
         if not groups:
-            groups.append([peak])
-            common_support.append(peak.threshold_support_interval)
+            groups.append([support])
+            common_support.append(support.support_interval)
             continue
         current = groups[-1]
         shared = common_support[-1].intersection(
-            peak.threshold_support_interval
+            support.support_interval
         )
         if (
             shared is not None
-            and peak.position - current[0].position <= tolerance
+            and (
+                max(
+                    support.position,
+                    *(item.position for item in current),
+                )
+                - min(
+                    support.position,
+                    *(item.position for item in current),
+                )
+                <= tolerance
+            )
         ):
-            current.append(peak)
+            current.append(support)
             common_support[-1] = shared
         else:
-            groups.append([peak])
-            common_support.append(peak.threshold_support_interval)
+            groups.append([support])
+            common_support.append(support.support_interval)
     transitions: list[_AnchorTransition] = []
-    merged_duplicate_count = 0
+    merged_duplicate_count = duplicate_identity_count
     for group in groups:
         scales = tuple(sorted({item.scale for item in group}))
         if len(scales) < minimum_scales:
             continue
         merged_duplicate_count += max(0, len(group) - 1)
-        positions = tuple(item.position for item in group)
         interval = PixelInterval(
-            min(positions) - _HALF_PIXEL_POSITION_ENVELOPE,
-            max(positions) + _HALF_PIXEL_POSITION_ENVELOPE,
+            min(item.support_interval.minimum for item in group),
+            max(item.support_interval.maximum for item in group),
         )
         representative = min(
             group,
             key=lambda item: (
                 abs(item.scale - 1.0),
+                item.channel,
                 item.position,
             ),
         )
@@ -594,15 +816,33 @@ def _cluster_scale_peaks(
                     row_gradient[positive_slice],
                 ),
                 intensity_effect=max(
-                    item.intensity_effect for item in group
+                    (
+                        item.effect
+                        for item in group
+                        if item.channel == "intensity"
+                    ),
+                    default=0.0,
                 ),
                 texture_effect=max(
-                    item.texture_effect for item in group
+                    (
+                        item.effect
+                        for item in group
+                        if item.channel == "texture"
+                    ),
+                    default=0.0,
                 ),
                 gradient_effect=max(
-                    item.gradient_effect for item in group
+                    (
+                        item.effect
+                        for item in group
+                        if item.channel == "gradient"
+                    ),
+                    default=0.0,
                 ),
                 local_noise=max(item.local_noise for item in group),
+                channels=tuple(
+                    sorted({item.channel for item in group})
+                ),
                 scales=scales,
                 censored=any(item.censored for item in group),
             )
@@ -645,10 +885,10 @@ def _anchor_transitions(
             int(round(base_depth * scale)),
         )
         scale_by_depth.setdefault(depth, scale)
-    peaks = tuple(
-        peak
+    supports = tuple(
+        support
         for depth, scale in sorted(scale_by_depth.items())
-        for peak in _local_peaks_for_scale(
+        for support in _channel_supports_for_scale(
             row_intensity,
             row_texture,
             row_gradient,
@@ -658,8 +898,8 @@ def _anchor_transitions(
             parameters,
         )
     )
-    transitions, duplicate_count = _cluster_scale_peaks(
-        peaks,
+    transitions, duplicate_count = _group_channel_scale_supports(
+        supports,
         row_intensity,
         row_texture,
         row_gradient,
@@ -671,181 +911,166 @@ def _anchor_transitions(
     return transitions, duplicate_count
 
 
-def _connected_components(
-    transitions: tuple[_AnchorTransition, ...],
-) -> tuple[tuple[_AnchorTransition, ...], ...]:
-    ordered = tuple(
-        sorted(
-            transitions,
-            key=lambda item: (
-                item.long_axis_footprint.minimum,
-                item.position_interval.minimum,
-            ),
-        )
-    )
-    parents = list(range(len(ordered)))
-
-    def find(index: int) -> int:
-        while parents[index] != index:
-            parents[index] = parents[parents[index]]
-            index = parents[index]
-        return index
-
-    def union(left: int, right: int) -> None:
-        left_root = find(left)
-        right_root = find(right)
-        if left_root != right_root:
-            parents[max(left_root, right_root)] = min(left_root, right_root)
-
-    for right_index, right in enumerate(ordered):
-        for left_index in range(right_index - 1, -1, -1):
-            left = ordered[left_index]
-            overlap = min(
-                left.long_axis_footprint.maximum,
-                right.long_axis_footprint.maximum,
-            ) - max(
-                left.long_axis_footprint.minimum,
-                right.long_axis_footprint.minimum,
-            )
-            if (
-                right.long_axis_footprint.minimum
-                > left.long_axis_footprint.maximum + 1.0
-            ):
-                break
-            if overlap < -1.0:
-                continue
-            if left.position_interval.expanded(1.0).intersects(
-                right.position_interval
-            ):
-                union(left_index, right_index)
-    groups: dict[int, list[_AnchorTransition]] = {}
-    for index, transition in enumerate(ordered):
-        groups.setdefault(find(index), []).append(transition)
-    return tuple(
-        tuple(group)
-        for _, group in sorted(
-            groups.items(),
-            key=lambda item: (
-                min(
-                    transition.long_axis_footprint.minimum
-                    for transition in item[1]
-                ),
-                min(
-                    transition.position_interval.minimum
-                    for transition in item[1]
-                ),
-            ),
-        )
-    )
-
-
-def _canonical_observations(
-    component: tuple[_AnchorTransition, ...],
+def _transition_observation(
+    transition: _AnchorTransition,
     source_sha256: str,
     observation_prefix: str,
-    component_index: int,
-    support_width: int,
-) -> tuple[PhotoEdgeObservation, ...]:
-    minimum = int(
-        math.floor(
-            min(item.long_axis_footprint.minimum for item in component)
-            / float(support_width)
-        )
-        * support_width
+) -> PhotoEdgeObservation:
+    identity_payload = (
+        f"{transition.long_axis_footprint.minimum:.16g}|"
+        f"{transition.long_axis_footprint.maximum:.16g}|"
+        f"{transition.position_interval.minimum:.16g}|"
+        f"{transition.position_interval.maximum:.16g}|"
+        f"{transition.intensity_effect:.16g}|"
+        f"{transition.texture_effect:.16g}|"
+        f"{transition.gradient_effect:.16g}|"
+        f"{transition.local_noise:.16g}|"
+        f"{','.join(transition.channels)}|"
+        f"{','.join(f'{scale:.16g}' for scale in transition.scales)}|"
+        f"{int(transition.censored)}"
     )
-    maximum = int(
-        math.ceil(
-            max(item.long_axis_footprint.maximum for item in component)
-            / float(support_width)
-        )
-        * support_width
+    digest = sha256(identity_payload.encode("utf-8")).hexdigest()[:20]
+    observation_id = ObservationId(
+        f"{observation_prefix}:ridge_node:{digest}"
     )
-    observations: list[PhotoEdgeObservation] = []
-    for start in range(minimum, maximum, support_width):
-        end = start + support_width
-        covering = tuple(
-            item
-            for item in component
-            if (
-                item.long_axis_footprint.minimum <= float(start)
-                and item.long_axis_footprint.maximum >= float(end - 1)
+    return PhotoEdgeObservation(
+        observation_id=observation_id,
+        source_sha256=source_sha256,
+        long_axis_footprint=transition.long_axis_footprint,
+        short_axis_position_interval=transition.position_interval,
+        negative_side_statistics=transition.negative,
+        positive_side_statistics=transition.positive,
+        absolute_intensity_effect=transition.intensity_effect,
+        absolute_texture_effect=transition.texture_effect,
+        absolute_gradient_effect=transition.gradient_effect,
+        local_noise_u8=transition.local_noise,
+        multiscale_position_interval=transition.position_interval,
+        state=LocalTransitionState.SUPPORTED,
+        measurement_channels=transition.channels,
+        measurement_scales=transition.scales,
+        censored=transition.censored,
+        provenance=MeasurementProvenance(
+            root_measurement=MeasurementIdentity.PHOTO_EDGES,
+            observation_id=observation_id,
+            dependencies=(MeasurementIdentity.GRAY_WORK,),
+            description="channel-local multiscale photo-edge transition",
+        ),
+    )
+
+
+def _ridge_graph(
+    transitions: tuple[_AnchorTransition, ...],
+    source_sha256: str,
+    observation_prefix: str,
+    anchor_stride: int,
+) -> PhotoEdgeRidgeGraph:
+    observations = {
+        observation.observation_id: observation
+        for observation in (
+            _transition_observation(
+                transition,
+                source_sha256,
+                observation_prefix,
             )
+            for transition in transitions
         )
-        if not covering:
-            continue
-        position = PixelInterval(
-            min(item.position_interval.minimum for item in covering),
-            max(item.position_interval.maximum for item in covering),
+    }
+    nodes = tuple(
+        PhotoEdgeRidgeNode(
+            node_id=observation.observation_id,
+            observation=observation,
         )
-        observation_id = ObservationId(
-            f"{observation_prefix}:component_{component_index:04d}:"
-            f"u_{start}_{end}"
-        )
-        representative = min(
-            covering,
+        for observation in sorted(
+            observations.values(),
             key=lambda item: (
-                item.position_interval.maximum
-                - item.position_interval.minimum,
-                item.position_interval.midpoint,
+                item.long_axis_footprint.minimum,
+                item.short_axis_position_interval.minimum,
+                str(item.observation_id),
             ),
         )
-        channels = tuple(
-            channel
-            for channel, effect in (
-                ("gradient", representative.gradient_effect),
-                ("intensity", representative.intensity_effect),
-                ("texture", representative.texture_effect),
-            )
-            if effect > 0.0
+    )
+    by_start: dict[float, list[PhotoEdgeRidgeNode]] = {}
+    for node in nodes:
+        by_start.setdefault(
+            node.observation.long_axis_footprint.minimum,
+            [],
+        ).append(node)
+    edges: set[PhotoEdgeRidgeEdge] = set()
+    for start, source_nodes in by_start.items():
+        target_nodes = by_start.get(start + float(anchor_stride), ())
+        target_minima = tuple(
+            node.observation.short_axis_position_interval.minimum
+            for node in target_nodes
         )
-        observations.append(
-            PhotoEdgeObservation(
-                observation_id=observation_id,
-                source_sha256=source_sha256,
-                long_axis_footprint=PixelInterval(
-                    float(start),
-                    float(end - 1),
-                ),
-                short_axis_position_interval=position,
-                negative_side_statistics=representative.negative,
-                positive_side_statistics=representative.positive,
-                absolute_intensity_effect=max(
-                    item.intensity_effect for item in covering
-                ),
-                absolute_texture_effect=max(
-                    item.texture_effect for item in covering
-                ),
-                absolute_gradient_effect=max(
-                    item.gradient_effect for item in covering
-                ),
-                local_noise_u8=max(item.local_noise for item in covering),
-                multiscale_position_interval=position,
-                state=LocalTransitionState.SUPPORTED,
-                measurement_channels=channels,
-                measurement_scales=tuple(
-                    sorted(
-                        {
-                            scale
-                            for item in covering
-                            for scale in item.scales
-                        }
+        prefix_maxima: list[float] = []
+        for target in target_nodes:
+            maximum = (
+                target.observation.short_axis_position_interval.maximum
+            )
+            prefix_maxima.append(
+                maximum
+                if not prefix_maxima
+                else max(prefix_maxima[-1], maximum)
+            )
+        for source in source_nodes:
+            source_interval = (
+                source.observation.short_axis_position_interval
+            )
+            upper = bisect_right(target_minima, source_interval.maximum)
+            lower = bisect_left(
+                prefix_maxima,
+                source_interval.minimum,
+                0,
+                upper,
+            )
+            for target in target_nodes[lower:upper]:
+                if (
+                    target.observation.short_axis_position_interval.maximum
+                    >= source_interval.minimum
+                ):
+                    edges.add(
+                        PhotoEdgeRidgeEdge(
+                            source.node_id,
+                            target.node_id,
+                        )
                     )
-                ),
-                censored=any(item.censored for item in covering),
-                provenance=MeasurementProvenance(
-                    root_measurement=MeasurementIdentity.PHOTO_EDGES,
-                    observation_id=observation_id,
-                    dependencies=(MeasurementIdentity.GRAY_WORK,),
-                    description=(
-                        "canonical multiscale local photo-edge transition"
-                    ),
-                ),
+    return PhotoEdgeRidgeGraph(
+        nodes=nodes,
+        edges=tuple(sorted(edges)),
+    )
+
+
+def _censored_component_count(graph: PhotoEdgeRidgeGraph) -> int:
+    if not graph.nodes:
+        return 0
+    adjacent = {
+        node.node_id: set[ObservationId]() for node in graph.nodes
+    }
+    node_map = graph.node_map
+    for edge in graph.edges:
+        adjacent[edge.source_node_id].add(edge.target_node_id)
+        adjacent[edge.target_node_id].add(edge.source_node_id)
+    unseen = set(adjacent)
+    count = 0
+    while unseen:
+        start = min(unseen, key=str)
+        component: set[ObservationId] = set()
+        pending = [start]
+        while pending:
+            node_id = pending.pop()
+            if node_id not in unseen:
+                continue
+            unseen.remove(node_id)
+            component.add(node_id)
+            pending.extend(
+                sorted(adjacent[node_id] & unseen, key=str, reverse=True)
             )
-        )
-    return tuple(observations)
+        if any(node_map[node_id].observation.censored for node_id in component):
+            count += 1
+    return count
 
 
-def observe_photo_edge_fragments(
+def observe_photo_edge_ridge_graph(
     gray_work: np.ndarray,
     corridors: tuple[PhotoEdgeSearchCorridor, ...],
     parameters: PhotoEdgeDetectionParameters,
@@ -928,64 +1153,22 @@ def observe_photo_edge_fragments(
             if not observed:
                 neutral_anchor_count += 1
             transitions.extend(observed)
-    components = _connected_components(tuple(transitions))
-    fragments: list[PhotoEdgeFragment] = []
-    canonical_count = 0
-    censored_count = 0
-    for component_index, component in enumerate(components, start=1):
-        observations = _canonical_observations(
-            component,
-            source_sha256,
-            observation_prefix,
-            component_index,
-            parameters.long_support_width_px,
-        )
-        if not observations:
-            continue
-        canonical_count += len(observations)
-        censored = any(observation.censored for observation in observations)
-        if censored:
-            censored_count += 1
-        digest = sha256(
-            fragment_constraint_hash(observations).encode("ascii")
-        ).hexdigest()[:16]
-        fragment_id = ObservationId(
-            f"{observation_prefix}:fragment:{digest}"
-        )
-        fragments.append(
-            PhotoEdgeFragment(
-                fragment_id=fragment_id,
-                observations=observations,
-                censored=censored,
-                provenance=MeasurementProvenance(
-                    root_measurement=MeasurementIdentity.PHOTO_EDGES,
-                    observation_id=fragment_id,
-                    dependencies=(MeasurementIdentity.GRAY_WORK,),
-                    description="maximal continuous photo-edge ridge fragment",
-                    boundary_anchors=tuple(
-                        observation.observation_id
-                        for observation in observations
-                    ),
-                ),
-            )
-        )
-    fragments.sort(
-        key=lambda fragment: (
-            fragment.long_axis_footprint.minimum,
-            fragment.short_axis_position_interval.minimum,
-            str(fragment.fragment_id),
-        )
+    graph = _ridge_graph(
+        tuple(transitions),
+        source_sha256,
+        observation_prefix,
+        parameters.long_anchor_stride_px,
     )
     return PhotoEdgeObservationResult(
-        fragments=tuple(fragments),
+        graph=graph,
         summary=PhotoEdgeMeasurementSummary(
             raw_anchor_count=raw_anchor_count,
             supported_transition_count=len(transitions),
             neutral_anchor_count=neutral_anchor_count,
-            censored_component_count=censored_count,
+            censored_component_count=_censored_component_count(graph),
             merged_duplicate_count=merged_duplicate_count,
-            fragment_count=len(fragments),
-            canonical_observation_count=canonical_count,
+            fragment_count=graph.path_count,
+            canonical_observation_count=len(graph.nodes),
             chunk_size_px=parameters.chunk_size_px,
             peak_temporary_buffer_bytes=peak_buffer_bytes,
         ),

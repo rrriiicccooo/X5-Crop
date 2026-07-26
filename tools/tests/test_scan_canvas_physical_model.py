@@ -222,7 +222,9 @@ class ScanCanvasPhysicalModelTests(unittest.TestCase):
         ).scan_canvas
         self.assertEqual(configuration.maximum_aspect_error_ratio, 0.005)
 
-    def test_equivalent_measurement_tracks_form_one_physical_pair(self) -> None:
+    def test_branching_measurement_tracks_do_not_form_a_partial_pair(
+        self,
+    ) -> None:
         pixels = np.full((322, 2320), 230, dtype=np.uint8)
         photo_texture = (
             70
@@ -260,42 +262,30 @@ class ScanCanvasPhysicalModelTests(unittest.TestCase):
         )
         evidence = workspace.source_photo_edge_pairs[0]
 
-        self.assertEqual(evidence.state, EvidenceState.SUPPORTED)
-        self.assertEqual(len(evidence.fragment_summaries), 2)
-        self.assertEqual(len(evidence.hypotheses), 1)
+        self.assertEqual(evidence.state, EvidenceState.UNAVAILABLE)
         self.assertEqual(
-            tuple(
-                label.identity
-                for label in evidence.hypotheses[0].physical_labels
-            ),
-            ("135_standard:36x24",),
+            evidence.facts,
+            (PhotoEdgeFact.PAIR_GEOMETRY_UNAVAILABLE,),
         )
-        self.assertIsNotNone(evidence.selected_pair_id)
-        assert evidence.physical_selection is not None
-        self.assertEqual(
-            evidence.physical_selection.scan_canvas_profile_id,
-            "135_standard",
+        self.assertGreater(
+            evidence.measurement_summary.supported_transition_count,
+            0,
         )
-        self.assertEqual(
-            (
-                evidence.physical_selection.frame_size_mm.width_mm,
-                evidence.physical_selection.frame_size_mm.height_mm,
-            ),
-            (36.0, 24.0),
-        )
+        self.assertEqual(evidence.fragment_summaries, ())
+        self.assertEqual(evidence.hypotheses, ())
+        self.assertIsNone(evidence.selected_pair_id)
+        self.assertIsNone(evidence.physical_selection)
         mapped = workspace.mapped_photo_edge_pairs[0]
         self.assertEqual(mapped.search_corridors, ())
-        self.assertEqual(
-            mapped.physical_selection,
-            evidence.physical_selection,
-        )
-        self.assertEqual(len(mapped.fragment_summaries), 2)
+        self.assertEqual(mapped.state, EvidenceState.UNAVAILABLE)
+        self.assertIsNone(mapped.physical_selection)
+        self.assertEqual(mapped.fragment_summaries, ())
         self.assertEqual(
             workspace.shared_short_axes[0].photo_edge_pair_id,
             mapped.observation_id,
         )
 
-    def test_overlapping_120_height_options_remain_explicitly_unresolved(
+    def test_overlapping_120_branching_remains_unavailable(
         self,
     ) -> None:
         pixels = np.full((600, 2260), 230, dtype=np.uint8)
@@ -335,23 +325,16 @@ class ScanCanvasPhysicalModelTests(unittest.TestCase):
         self.assertEqual(evidence.state, EvidenceState.UNAVAILABLE)
         self.assertEqual(
             evidence.facts,
-            (PhotoEdgeFact.COMPETING_PAIRS_UNRESOLVED,),
+            (PhotoEdgeFact.PAIR_GEOMETRY_UNAVAILABLE,),
         )
-        self.assertEqual(len(evidence.fragment_summaries), 4)
-        self.assertEqual(len(evidence.hypotheses), 4)
-        self.assertEqual(
-            {
-                hypothesis.physical_labels[0].identity
-                for hypothesis in evidence.hypotheses
-                if hypothesis.state == EvidenceState.SUPPORTED
-            },
-            {
-                "120_standard:70x54",
-                "120_standard:70x56",
-            },
+        self.assertGreater(
+            evidence.measurement_summary.supported_transition_count,
+            0,
         )
+        self.assertEqual(evidence.fragment_summaries, ())
+        self.assertEqual(evidence.hypotheses, ())
 
-    def test_material_agnostic_transitions_remain_competing(
+    def test_material_agnostic_branching_remains_unavailable(
         self,
     ) -> None:
         pixels = np.full((322, 2320), 230, dtype=np.uint8)
@@ -388,15 +371,13 @@ class ScanCanvasPhysicalModelTests(unittest.TestCase):
         self.assertEqual(evidence.state, EvidenceState.UNAVAILABLE)
         self.assertEqual(
             evidence.facts,
-            (PhotoEdgeFact.COMPETING_PAIRS_UNRESOLVED,),
+            (PhotoEdgeFact.PAIR_GEOMETRY_UNAVAILABLE,),
         )
-        self.assertGreaterEqual(
-            sum(
-                hypothesis.state != EvidenceState.CONTRADICTED
-                for hypothesis in evidence.hypotheses
-            ),
-            2,
+        self.assertGreater(
+            evidence.measurement_summary.supported_transition_count,
+            0,
         )
+        self.assertEqual(evidence.hypotheses, ())
         self.assertIsNone(evidence.selected_pair_id)
 
 

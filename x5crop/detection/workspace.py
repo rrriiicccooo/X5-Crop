@@ -51,7 +51,10 @@ from .physical.photo_edge_detection import (
     observe_fixed_canvas_photo_edges,
     observe_image_only_lane_photo_edges,
 )
-from .physical.photo_edge_geometry import join_dual_lane_hypotheses
+from .physical.photo_edge_geometry import (
+    join_dual_lane_hypotheses,
+    normalize_pixel_slope_components,
+)
 from .physical.short_axis import (
     SharedShortAxisPlan,
     shared_short_axis_from_photo_edge_pair,
@@ -362,6 +365,28 @@ def _unapplied_transform_evidence(
     )
 
 
+def _shared_slope_components(
+    component_sets: tuple[tuple[NumericInterval, ...], ...],
+) -> tuple[NumericInterval, ...]:
+    if not component_sets:
+        return ()
+    shared = component_sets[0]
+    for components in component_sets[1:]:
+        shared = normalize_pixel_slope_components(
+            tuple(
+                NumericInterval(
+                    max(left.minimum, right.minimum),
+                    min(left.maximum, right.maximum),
+                )
+                for left in shared
+                for right in components
+                if min(left.maximum, right.maximum)
+                >= max(left.minimum, right.minimum)
+            )
+        )
+    return shared
+
+
 def _transform_geometry(
     evidence_set: tuple[PhotoEdgePairEvidence, ...],
     dual_lane_geometry: DualLanePhotoEdgeJointRegion | None,
@@ -395,29 +420,27 @@ def _transform_geometry(
         geometry for geometry in geometries if geometry is not None
     )
     if dual_lane_geometry is None:
-        minimum_slope = max(
-            geometry.pixel_slope_interval.minimum
-            for geometry in typed_geometries
-        )
-        maximum_slope = min(
-            geometry.pixel_slope_interval.maximum
-            for geometry in typed_geometries
+        slope_components = _shared_slope_components(
+            tuple(
+                normalize_pixel_slope_components(
+                    tuple(cell.pixel_slope for cell in geometry.cells)
+                )
+                for geometry in typed_geometries
+            )
         )
     else:
-        minimum_slope = min(
-            cell.pixel_slope.minimum
-            for cell in dual_lane_geometry.cells
+        slope_components = normalize_pixel_slope_components(
+            tuple(
+                cell.pixel_slope
+                for cell in dual_lane_geometry.cells
+            )
         )
-        maximum_slope = max(
-            cell.pixel_slope.maximum
-            for cell in dual_lane_geometry.cells
-        )
-    if maximum_slope < minimum_slope:
+    if len(slope_components) != 1:
         return _unapplied_transform_evidence(
             TransformOutcome.ANGLE_ESTIMATION_UNAVAILABLE,
             identity,
         )
-    slope_interval = NumericInterval(minimum_slope, maximum_slope)
+    slope_interval = slope_components[0]
     projected_uncertainty = (
         slope_interval.width * float(max(0, source_work_width - 1))
     )

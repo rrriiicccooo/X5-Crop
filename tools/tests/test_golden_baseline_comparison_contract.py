@@ -162,6 +162,16 @@ class GoldenBaselineComparisonContractTest(unittest.TestCase):
         self.assertEqual(result["aggregate"]["unsafe_outward_crossing_max_px"], 0.0)
         self.assertEqual(result["aggregate"]["inward_content_loss_max_px"], 0.0)
         self.assertEqual(result["aggregate"]["angle_difference_abs_max_deg"], 0.0)
+        self.assertEqual(
+            result["production"]["final_boxes"],
+            [
+                {"left": 0, "top": 0, "right": 170, "bottom": 100},
+                {"left": 140, "top": 0, "right": 310, "bottom": 100},
+            ],
+        )
+        self.assertNotIn("unsafe_outward_edge_count", result["aggregate"])
+        self.assertNotIn("inward_content_loss_edge_count", result["aggregate"])
+        self.assertNotIn("resolved-safe", str(result))
         self.assertTrue(
             all(
                 frame["containment_relationship"] == "mutual"
@@ -191,6 +201,7 @@ class GoldenBaselineComparisonContractTest(unittest.TestCase):
         )
         self.assertEqual(result["frames"], [])
         self.assertIsNone(result["aggregate"])
+        self.assertIsNone(result["production"]["final_boxes"])
 
     def test_source_hash_mismatch_is_rejected(self) -> None:
         baseline = _confirmed_baseline()

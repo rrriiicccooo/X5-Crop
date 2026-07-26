@@ -18,7 +18,7 @@ PRODUCTION_GEOMETRY_SOURCE = (
     "output.finalization_plan.base_geometry.frame_crop_envelopes"
 )
 EDGE_ROLES = ("top", "right", "bottom", "left")
-GEOMETRY_EPSILON = 1e-9
+NUMERIC_ZERO_EPSILON = 1e-9
 
 Point = tuple[float, float]
 Polygon = tuple[Point, Point, Point, Point]
@@ -53,7 +53,7 @@ def _polygon(value: Any, label: str) -> Polygon:
         _point(item, f"{label}[{index}]")
         for index, item in enumerate(value)
     )
-    if _signed_area(points) <= GEOMETRY_EPSILON:
+    if _signed_area(points) <= NUMERIC_ZERO_EPSILON:
         raise ValueError(
             f"{label} must be a positive clockwise polygon in source raster coordinates"
         )
@@ -81,7 +81,7 @@ def _inverse_affine_point(
     a, b, c = (float(item) for item in matrix[0])
     d, e, f = (float(item) for item in matrix[1])
     determinant = a * e - b * d
-    if abs(determinant) <= GEOMETRY_EPSILON:
+    if abs(determinant) <= NUMERIC_ZERO_EPSILON:
         raise ValueError("coordinate transform matrix must be invertible")
     output_x = float(x) - c
     output_y = float(y) - f
@@ -137,7 +137,7 @@ def _edge_measurement(
     production_dy = production_end[1] - production_start[1]
     confirmed_length = math.hypot(confirmed_dx, confirmed_dy)
     production_length = math.hypot(production_dx, production_dy)
-    if min(confirmed_length, production_length) <= GEOMETRY_EPSILON:
+    if min(confirmed_length, production_length) <= NUMERIC_ZERO_EPSILON:
         raise ValueError("polygon edges must have positive length")
 
     outward_x = confirmed_dy / confirmed_length
@@ -183,7 +183,7 @@ def _contains_polygon(
         if any(
             (point[0] - start[0]) * outward_x
             + (point[1] - start[1]) * outward_y
-            > GEOMETRY_EPSILON
+            > NUMERIC_ZERO_EPSILON
             for point in candidate
         ):
             return False
@@ -287,6 +287,7 @@ def _production_detail(report: dict[str, Any]) -> dict[str, Any]:
     identity = report["analysis_identity"]
     geometry_resolution = report["selection"]["geometry_resolution"]
     transform = report["input"]["transform_geometry"]
+    final_geometry = report["output"]["final_geometry"]
     return {
         "report_source": str(report["source"]),
         "script_version": str(report["script_version"]),
@@ -306,6 +307,14 @@ def _production_detail(report: dict[str, Any]) -> dict[str, Any]:
         ),
         "transform_outcome": str(transform["outcome"]),
         "estimated_angle_degrees": transform["estimated_angle_degrees"],
+        "final_boxes": (
+            None
+            if final_geometry is None
+            else [
+                dict(box)
+                for box in final_geometry["final_boxes"]
+            ]
+        ),
     }
 
 
@@ -336,14 +345,6 @@ def _aggregate_frames(frames: Sequence[dict[str, Any]]) -> dict[str, Any]:
         ),
         "angle_difference_abs_max_deg": max(
             abs(edge["angle_difference_degrees"]) for edge in edges
-        ),
-        "unsafe_outward_edge_count": sum(
-            edge["unsafe_outward_crossing_px"] > GEOMETRY_EPSILON
-            for edge in edges
-        ),
-        "inward_content_loss_edge_count": sum(
-            edge["inward_content_loss_px"] > GEOMETRY_EPSILON
-            for edge in edges
         ),
         "containment_relationship_counts": relationships,
     }
@@ -406,8 +407,9 @@ def compare_baseline_record_to_report(
         selected_count == confirmed_count == output_count
     )
     if not result["frame_count"]["match"]:
-        result["comparison_state"] = "frame_count_mismatch"
-        return result
+        raise ValueError(
+            f"{sample_id}: production frame count does not match the confirmed baseline"
+        )
 
     expected_indices = list(range(1, confirmed_count + 1))
     if [envelope["frame_index"] for envelope in envelopes] != expected_indices:

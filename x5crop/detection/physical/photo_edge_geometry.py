@@ -2,11 +2,15 @@ from __future__ import annotations
 
 from bisect import bisect_left
 from collections import deque
-from collections.abc import Callable
-from dataclasses import dataclass
+from collections.abc import Callable, Hashable
+from dataclasses import dataclass, field, replace
 from hashlib import sha256
+import heapq
 from itertools import combinations, product
 import math
+from typing import Protocol, TypeVar
+
+import numpy as np
 
 from ...configuration.photo_edges import PhotoEdgeDetectionParameters
 from ...domain import (
@@ -14,7 +18,6 @@ from ...domain import (
     MeasurementIdentity,
     MeasurementProvenance,
     ObservationId,
-    PixelInterval,
 )
 from ...formats import FrameSizeMm
 from ...geometry.affine import AFFINE_INVERTIBILITY_FLOOR
@@ -38,7 +41,10 @@ from ..evidence.photo_edges import (
     RegionSetRelation,
 )
 from ..evidence.scan_canvas import CanvasPixelScale
-from .photo_edge_observation import PhotoEdgeFragment
+from .photo_edge_observation import (
+    PhotoEdgeFragment,
+    PhotoEdgeRidgeGraph,
+)
 
 
 _POLYGON_EPSILON = 1e-12
@@ -53,31 +59,294 @@ class GeometryWorkBudget:
     maximum_consensus_states: int
     consumed_region_cells: int = 0
     consumed_consensus_states: int = 0
-    exhausted: bool = False
     discovery_incomplete: bool = False
+    region_search_incomplete: bool = False
+    consensus_search_incomplete: bool = False
+    _consensus_state_ids: set[object] = field(
+        default_factory=set,
+        init=False,
+        repr=False,
+    )
+
+    def __post_init__(self) -> None:
+        if min(
+            self.maximum_region_cells,
+            self.maximum_consensus_states,
+        ) <= 0:
+            raise ValueError("photo-edge work budgets must be positive")
+
+    @property
+    def remaining_region_cells(self) -> int:
+        return self.maximum_region_cells - self.consumed_region_cells
+
+    @property
+    def exhausted(self) -> bool:
+        return bool(
+            self.region_search_incomplete
+            or self.consensus_search_incomplete
+        )
 
     def consume_region_cell(self) -> bool:
         if self.consumed_region_cells >= self.maximum_region_cells:
-            self.exhausted = True
+            self.region_search_incomplete = True
             return False
         self.consumed_region_cells += 1
         return True
 
-    def consume_consensus_state(self) -> bool:
+    def register_consensus_state(self, identity: object) -> bool:
+        if identity in self._consensus_state_ids:
+            return True
         if self.consumed_consensus_states >= self.maximum_consensus_states:
-            self.exhausted = True
+            self.consensus_search_incomplete = True
             return False
+        self._consensus_state_ids.add(identity)
         self.consumed_consensus_states += 1
         return True
+
+
+@dataclass(frozen=True)
+class GeometryWorkStatistics:
+    consumed_region_cells: int
+    consumed_consensus_states: int
+    discovered_hypothesis_count: int
+    completed_hypothesis_count: int
+    unsearched_hypothesis_count: int
+    peak_active_searches: int
+    peak_pending_cells: int
+    discovery_incomplete: bool
+    region_search_incomplete: bool
+    consensus_search_incomplete: bool
+
+
+@dataclass
+class _GeometrySchedulerDiagnostics:
+    discovered_hypothesis_count: int = 0
+    completed_hypothesis_count: int = 0
+    unsearched_hypothesis_count: int = 0
+    peak_active_searches: int = 0
+    peak_pending_cells: int = 0
+
+
+class _RegionSearch(Protocol):
+    order_key: tuple[object, ...]
+
+    @property
+    def complete(self) -> bool: ...
+
+    @property
+    def pending_cell_count(self) -> int: ...
+
+    def remaining_cell_upper_bound(self) -> int: ...
+
+    def step(self) -> None: ...
+
+    def mark_incomplete(self) -> None: ...
+
+
+_StateKey = TypeVar("_StateKey", bound=Hashable)
+_SearchState = TypeVar("_SearchState", bound=_RegionSearch)
+
+
+def _run_region_searches(
+    searches: tuple[_RegionSearch, ...],
+    budget: GeometryWorkBudget,
+    diagnostics: _GeometrySchedulerDiagnostics,
+) -> tuple[_RegionSearch, ...]:
+    diagnostics.discovered_hypothesis_count += len(searches)
+    available = budget.remaining_region_cells
+    admitted: list[_RegionSearch] = []
+    reserved = 0
+    for search in sorted(searches, key=lambda item: item.order_key):
+        required = search.remaining_cell_upper_bound()
+        if required <= available - reserved:
+            admitted.append(search)
+            reserved += required
+        else:
+            search.mark_incomplete()
+            diagnostics.unsearched_hypothesis_count += 1
+            budget.region_search_incomplete = True
+    diagnostics.peak_active_searches = max(
+        diagnostics.peak_active_searches,
+        len(admitted),
+    )
+    diagnostics.peak_pending_cells = max(
+        diagnostics.peak_pending_cells,
+        sum(search.pending_cell_count for search in admitted),
+    )
+    if (
+        sum(search.pending_cell_count for search in admitted)
+        > budget.remaining_region_cells
+    ):
+        raise RuntimeError(
+            "photo-edge pending cell count exceeded remaining budget"
+        )
+    queue: list[
+        tuple[tuple[object, ...], int, _RegionSearch]
+    ] = [
+        (search.order_key, index, search)
+        for index, search in enumerate(admitted)
+    ]
+    heapq.heapify(queue)
+    while queue:
+        _, index, search = heapq.heappop(queue)
+        before = search.remaining_cell_upper_bound()
+        if not budget.consume_region_cell():
+            search.mark_incomplete()
+            for _, _, pending_search in queue:
+                pending_search.mark_incomplete()
+            break
+        search.step()
+        after = search.remaining_cell_upper_bound()
+        if after > before - 1:
+            raise RuntimeError(
+                "photo-edge subdivision exceeded its reserved work bound"
+            )
+        reserved -= before - after
+        if reserved > budget.remaining_region_cells:
+            raise RuntimeError(
+                "photo-edge pending work exceeded remaining cell budget"
+            )
+        pending_cell_count = (
+            sum(item.pending_cell_count for _, _, item in queue)
+            + search.pending_cell_count
+        )
+        if pending_cell_count > budget.remaining_region_cells:
+            raise RuntimeError(
+                "photo-edge pending cell count exceeded remaining budget"
+            )
+        diagnostics.peak_pending_cells = max(
+            diagnostics.peak_pending_cells,
+            pending_cell_count,
+        )
+        if search.complete:
+            diagnostics.completed_hypothesis_count += 1
+        else:
+            heapq.heappush(queue, (search.order_key, index, search))
+    return tuple(admitted)
+
+
+def _register_and_run_searches(
+    namespace: str,
+    candidates: tuple[tuple[_StateKey, _SearchState], ...],
+    budget: GeometryWorkBudget,
+    diagnostics: _GeometrySchedulerDiagnostics,
+) -> tuple[
+    tuple[tuple[_StateKey, _SearchState], ...],
+    tuple[_StateKey, ...],
+]:
+    ordered = tuple(
+        sorted(candidates, key=lambda item: item[1].order_key)
+    )
+    registered: list[tuple[_StateKey, _SearchState]] = []
+    rejected: list[_StateKey] = []
+    for index, (state, search) in enumerate(ordered):
+        if not budget.register_consensus_state((namespace, state)):
+            unregistered = ordered[index:]
+            diagnostics.discovered_hypothesis_count += len(unregistered)
+            diagnostics.unsearched_hypothesis_count += len(unregistered)
+            rejected.extend(item[0] for item in unregistered)
+            break
+        registered.append((state, search))
+    admitted = _run_region_searches(
+        tuple(search for _, search in registered),
+        budget,
+        diagnostics,
+    )
+    admitted_ids = {id(search) for search in admitted}
+    completed: list[tuple[_StateKey, _SearchState]] = []
+    for state, search in registered:
+        if id(search) in admitted_ids:
+            completed.append((state, search))
+        else:
+            rejected.append(state)
+    return tuple(completed), tuple(rejected)
+
+
+def _work_statistics(
+    budget: GeometryWorkBudget,
+    *,
+    diagnostics: _GeometrySchedulerDiagnostics,
+) -> GeometryWorkStatistics:
+    return GeometryWorkStatistics(
+        consumed_region_cells=budget.consumed_region_cells,
+        consumed_consensus_states=budget.consumed_consensus_states,
+        discovered_hypothesis_count=(
+            diagnostics.discovered_hypothesis_count
+        ),
+        completed_hypothesis_count=(
+            diagnostics.completed_hypothesis_count
+        ),
+        unsearched_hypothesis_count=(
+            diagnostics.unsearched_hypothesis_count
+        ),
+        peak_active_searches=diagnostics.peak_active_searches,
+        peak_pending_cells=diagnostics.peak_pending_cells,
+        discovery_incomplete=budget.discovery_incomplete,
+        region_search_incomplete=budget.region_search_incomplete,
+        consensus_search_incomplete=budget.consensus_search_incomplete,
+    )
+
+
+def _geometry_with_work_statistics(
+    geometry: PhotoEdgePairGeometry | None,
+    statistics: GeometryWorkStatistics,
+) -> PhotoEdgePairGeometry | None:
+    if geometry is None or geometry.normal_region is None:
+        return geometry
+    return replace(
+        geometry,
+        normal_region=replace(
+            geometry.normal_region,
+            consumed_region_cells=statistics.consumed_region_cells,
+            consumed_consensus_states=(
+                statistics.consumed_consensus_states
+            ),
+        ),
+    )
+
+
+def _hypotheses_with_work_statistics(
+    hypotheses: tuple[PhotoEdgePairHypothesis, ...],
+    statistics: GeometryWorkStatistics,
+) -> tuple[PhotoEdgePairHypothesis, ...]:
+    return tuple(
+        replace(
+            hypothesis,
+            geometry=_geometry_with_work_statistics(
+                hypothesis.geometry,
+                statistics,
+            ),
+        )
+        for hypothesis in hypotheses
+    )
+
 
 @dataclass(frozen=True)
 class PhotoEdgeGeometryResult:
     hypotheses: tuple[PhotoEdgePairHypothesis, ...]
     fragment_summaries: tuple[PhotoEdgeFragmentSummary, ...]
     audit_observations: tuple[PhotoEdgeObservation, ...]
-    attempted_hypothesis_count: int
     budget_exhausted: bool
     search_unavailable: bool
+    work_statistics: GeometryWorkStatistics
+
+
+def _path_discovery_unavailable_result(
+    budget: GeometryWorkBudget,
+    diagnostics: _GeometrySchedulerDiagnostics,
+) -> PhotoEdgeGeometryResult:
+    budget.discovery_incomplete = True
+    return PhotoEdgeGeometryResult(
+        hypotheses=(),
+        fragment_summaries=(),
+        audit_observations=(),
+        budget_exhausted=True,
+        search_unavailable=False,
+        work_statistics=_work_statistics(
+            budget,
+            diagnostics=diagnostics,
+        ),
+    )
 
 
 @dataclass(frozen=True)
@@ -85,15 +354,76 @@ class _PixelLineFeasibleRegion:
     polygons: tuple[tuple[tuple[float, float], ...], ...]
 
     @property
-    def slope_interval(self) -> NumericInterval | None:
-        slopes = tuple(
-            point[0]
-            for polygon in self.polygons
-            for point in polygon
+    def slope_intervals(self) -> tuple[NumericInterval, ...]:
+        return normalize_pixel_slope_components(
+            tuple(
+                NumericInterval(
+                    min(point[0] for point in polygon),
+                    max(point[0] for point in polygon),
+                )
+                for polygon in self.polygons
+                if polygon
+            )
         )
-        if not slopes:
-            return None
-        return NumericInterval(min(slopes), max(slopes))
+
+
+def normalize_pixel_slope_components(
+    intervals: tuple[NumericInterval, ...],
+) -> tuple[NumericInterval, ...]:
+    merged: list[NumericInterval] = []
+    for interval in sorted(
+        intervals,
+        key=lambda item: (item.minimum, item.maximum),
+    ):
+        if (
+            not merged
+            or interval.minimum
+            > merged[-1].maximum + _POLYGON_EPSILON
+        ):
+            merged.append(interval)
+        else:
+            merged[-1] = NumericInterval(
+                merged[-1].minimum,
+                max(merged[-1].maximum, interval.maximum),
+            )
+    return tuple(merged)
+
+
+def _shared_slope_intervals(
+    top: _PixelLineFeasibleRegion,
+    bottom: _PixelLineFeasibleRegion,
+) -> tuple[NumericInterval, ...]:
+    return normalize_pixel_slope_components(
+        tuple(
+            shared
+            for top_interval in top.slope_intervals
+            for bottom_interval in bottom.slope_intervals
+            for shared in (
+                _intersect_numeric(top_interval, bottom_interval),
+            )
+            if shared is not None
+        )
+    )
+
+
+def _cell_work_upper_bound(
+    interval: NumericInterval,
+    *,
+    resolution: float,
+    maximum_depth: int,
+) -> int:
+    if not math.isfinite(resolution) or resolution <= 0.0:
+        raise ValueError("photo-edge cell resolution must be positive")
+    if maximum_depth < 0:
+        raise ValueError("photo-edge cell maximum depth cannot be negative")
+    if interval.width <= resolution:
+        depth = 0
+    else:
+        depth = min(
+            maximum_depth,
+            math.ceil(math.log2(interval.width / resolution)),
+        )
+    return (1 << (depth + 1)) - 1
 
 
 def _clip_polygon(
@@ -337,228 +667,274 @@ def _point_in_physical_band(
     )
 
 
-def _projection_interval_at_theta(
-    observation: PhotoEdgeObservation,
-    theta: float,
+@dataclass(frozen=True)
+class _ProjectionWorkspace:
+    observations: tuple[PhotoEdgeObservation, ...]
+    observation_ids: tuple[ObservationId, ...]
+    u_corners: np.ndarray
+    v_corners: np.ndarray
+    long_values: np.ndarray
+    short_half_mm: float
+
+
+def _projection_workspace(
+    observations: tuple[PhotoEdgeObservation, ...],
     scale: CanvasPixelScale,
     long_extent_px: int,
     short_extent_px: int,
-) -> NumericInterval:
+) -> _ProjectionWorkspace:
+    if not observations:
+        raise ValueError("projection workspace requires observations")
     long_center = 0.5 * float(long_extent_px - 1)
     short_center = 0.5 * float(short_extent_px - 1)
-    corners = tuple(
-        (
-            (long_value - long_center) / scale.long_axis_px_per_mm,
-            (short_value - short_center) / scale.short_axis_px_per_mm,
-        )
-        for long_value in (
-            observation.long_axis_footprint.minimum,
-            observation.long_axis_footprint.maximum,
-        )
-        for short_value in (
-            observation.short_axis_position_interval.minimum,
-            observation.short_axis_position_interval.maximum,
-        )
+    u_corners = np.asarray(
+        [
+            [
+                (long_value - long_center)
+                / scale.long_axis_px_per_mm
+                for long_value, _ in (
+                    (
+                        observation.long_axis_footprint.minimum,
+                        observation.short_axis_position_interval.minimum,
+                    ),
+                    (
+                        observation.long_axis_footprint.minimum,
+                        observation.short_axis_position_interval.maximum,
+                    ),
+                    (
+                        observation.long_axis_footprint.maximum,
+                        observation.short_axis_position_interval.minimum,
+                    ),
+                    (
+                        observation.long_axis_footprint.maximum,
+                        observation.short_axis_position_interval.maximum,
+                    ),
+                )
+            ]
+            for observation in observations
+        ],
+        dtype=np.float64,
     )
-    projections = tuple(
-        -math.sin(theta) * u + math.cos(theta) * v
-        for u, v in corners
+    v_corners = np.asarray(
+        [
+            [
+                (short_value - short_center)
+                / scale.short_axis_px_per_mm
+                for _, short_value in (
+                    (
+                        observation.long_axis_footprint.minimum,
+                        observation.short_axis_position_interval.minimum,
+                    ),
+                    (
+                        observation.long_axis_footprint.minimum,
+                        observation.short_axis_position_interval.maximum,
+                    ),
+                    (
+                        observation.long_axis_footprint.maximum,
+                        observation.short_axis_position_interval.minimum,
+                    ),
+                    (
+                        observation.long_axis_footprint.maximum,
+                        observation.short_axis_position_interval.maximum,
+                    ),
+                )
+            ]
+            for observation in observations
+        ],
+        dtype=np.float64,
     )
-    return NumericInterval(min(projections), max(projections))
+    long_values = np.asarray(
+        [
+            (coordinate - long_center) / scale.long_axis_px_per_mm
+            for observation in observations
+            for coordinate in (
+                observation.long_axis_footprint.minimum,
+                observation.long_axis_footprint.maximum,
+            )
+        ],
+        dtype=np.float64,
+    )
+    for values in (u_corners, v_corners, long_values):
+        values.setflags(write=False)
+    return _ProjectionWorkspace(
+        observations=observations,
+        observation_ids=tuple(
+            observation.observation_id
+            for observation in observations
+        ),
+        u_corners=u_corners,
+        v_corners=v_corners,
+        long_values=long_values,
+        short_half_mm=(
+            0.5
+            * float(short_extent_px - 1)
+            / scale.short_axis_px_per_mm
+        ),
+    )
 
 
-def _projection_interval_over_theta(
-    observation: PhotoEdgeObservation,
+def _linear_trig_bounds(
+    sin_coefficient: np.ndarray,
+    cos_coefficient: np.ndarray,
     theta: NumericInterval,
-    scale: CanvasPixelScale,
-    long_extent_px: int,
-    short_extent_px: int,
-) -> NumericInterval:
-    long_center = 0.5 * float(long_extent_px - 1)
-    short_center = 0.5 * float(short_extent_px - 1)
-    corners = tuple(
-        (
-            (long_value - long_center) / scale.long_axis_px_per_mm,
-            (short_value - short_center) / scale.short_axis_px_per_mm,
-        )
-        for long_value in (
-            observation.long_axis_footprint.minimum,
-            observation.long_axis_footprint.maximum,
-        )
-        for short_value in (
-            observation.short_axis_position_interval.minimum,
-            observation.short_axis_position_interval.maximum,
-        )
+) -> tuple[np.ndarray, np.ndarray]:
+    lower_value = (
+        sin_coefficient * math.sin(theta.minimum)
+        + cos_coefficient * math.cos(theta.minimum)
     )
-    values: list[float] = []
-    for u, v in corners:
-        radius = math.hypot(u, v)
-        phase = math.atan2(u, v)
-        candidates = [theta.minimum, theta.maximum]
-        if radius > 0.0:
-            lower_index = math.floor(
-                (theta.minimum + phase) / math.pi
-            ) - 1
-            upper_index = math.ceil(
-                (theta.maximum + phase) / math.pi
-            ) + 1
-            for index in range(lower_index, upper_index + 1):
-                critical = index * math.pi - phase
-                if theta.minimum <= critical <= theta.maximum:
-                    candidates.append(critical)
-        values.extend(
-            -math.sin(candidate) * u + math.cos(candidate) * v
-            for candidate in candidates
-        )
-    return NumericInterval(min(values), max(values))
+    upper_value = (
+        sin_coefficient * math.sin(theta.maximum)
+        + cos_coefficient * math.cos(theta.maximum)
+    )
+    minimum = np.minimum(lower_value, upper_value)
+    maximum = np.maximum(lower_value, upper_value)
+    radius = np.hypot(sin_coefficient, cos_coefficient)
+    phase = np.arctan2(sin_coefficient, cos_coefficient)
+    period = math.tau
+
+    maximum_first = np.ceil((theta.minimum - phase) / period)
+    maximum_last = np.floor((theta.maximum - phase) / period)
+    has_maximum = maximum_first <= maximum_last
+    maximum = np.where(has_maximum, radius, maximum)
+
+    minimum_phase = phase + math.pi
+    minimum_first = np.ceil(
+        (theta.minimum - minimum_phase) / period
+    )
+    minimum_last = np.floor(
+        (theta.maximum - minimum_phase) / period
+    )
+    has_minimum = minimum_first <= minimum_last
+    minimum = np.where(has_minimum, -radius, minimum)
+    return minimum, maximum
 
 
-def _common_offset_interval_at_theta(
-    observations: tuple[PhotoEdgeObservation, ...],
+def _workspace_projection_at_theta(
+    workspace: _ProjectionWorkspace,
     theta: float,
-    scale: CanvasPixelScale,
-    long_extent_px: int,
-    short_extent_px: int,
-) -> NumericInterval | None:
-    intervals = tuple(
-        _projection_interval_at_theta(
-            observation,
-            theta,
-            scale,
-            long_extent_px,
-            short_extent_px,
-        )
-        for observation in observations
+) -> tuple[np.ndarray, np.ndarray]:
+    values = (
+        -math.sin(theta) * workspace.u_corners
+        + math.cos(theta) * workspace.v_corners
     )
-    minimum = max(interval.minimum for interval in intervals)
-    maximum = min(interval.maximum for interval in intervals)
-    if maximum < minimum:
-        return None
-    return NumericInterval(minimum, maximum)
+    return np.min(values, axis=1), np.max(values, axis=1)
 
 
-def _common_offset_outer_interval(
-    observations: tuple[PhotoEdgeObservation, ...],
+def _workspace_common_offset_at_theta(
+    workspace: _ProjectionWorkspace,
+    theta: float,
+) -> NumericInterval | None:
+    minimums, maximums = _workspace_projection_at_theta(
+        workspace,
+        theta,
+    )
+    minimum = float(np.max(minimums))
+    maximum = float(np.min(maximums))
+    return (
+        None
+        if maximum < minimum
+        else NumericInterval(minimum, maximum)
+    )
+
+
+def _workspace_common_offset_outer(
+    workspace: _ProjectionWorkspace,
     theta: NumericInterval,
-    scale: CanvasPixelScale,
-    long_extent_px: int,
-    short_extent_px: int,
 ) -> NumericInterval | None:
-    intervals = tuple(
-        _projection_interval_over_theta(
-            observation,
-            theta,
-            scale,
-            long_extent_px,
-            short_extent_px,
-        )
-        for observation in observations
+    lower, upper = _linear_trig_bounds(
+        -workspace.u_corners,
+        workspace.v_corners,
+        theta,
     )
-    minimum = max(interval.minimum for interval in intervals)
-    maximum = min(interval.maximum for interval in intervals)
-    if maximum < minimum:
-        return None
-    return NumericInterval(minimum, maximum)
+    minimum = float(np.max(np.min(lower, axis=1)))
+    maximum = float(np.min(np.max(upper, axis=1)))
+    return (
+        None
+        if maximum < minimum
+        else NumericInterval(minimum, maximum)
+    )
 
 
-def _containment_offset_interval(
-    observations: tuple[PhotoEdgeObservation, ...],
+def _workspace_containment_at_theta(
+    workspace: _ProjectionWorkspace,
     theta: float,
-    scale: CanvasPixelScale,
-    long_extent_px: int,
-    short_extent_px: int,
 ) -> NumericInterval:
-    long_center = 0.5 * float(long_extent_px - 1)
-    short_half_mm = (
-        0.5 * float(short_extent_px - 1)
-        / scale.short_axis_px_per_mm
-    )
-    long_values = tuple(
-        (coordinate - long_center) / scale.long_axis_px_per_mm
-        for observation in observations
-        for coordinate in (
-            observation.long_axis_footprint.minimum,
-            observation.long_axis_footprint.maximum,
+    lower = float(
+        np.max(
+            -math.sin(theta) * workspace.long_values
+            - math.cos(theta) * workspace.short_half_mm
         )
     )
-    lower = max(
-        -math.sin(theta) * u - math.cos(theta) * short_half_mm
-        for u in long_values
-    )
-    upper = min(
-        -math.sin(theta) * u + math.cos(theta) * short_half_mm
-        for u in long_values
+    upper = float(
+        np.min(
+            -math.sin(theta) * workspace.long_values
+            + math.cos(theta) * workspace.short_half_mm
+        )
     )
     return NumericInterval(lower, upper)
 
 
-def _linear_trig_interval(
-    sin_coefficient: float,
-    cos_coefficient: float,
+def _workspace_containment_outer(
+    workspace: _ProjectionWorkspace,
     theta: NumericInterval,
-) -> NumericInterval:
-    values = [
-        (
-            sin_coefficient * math.sin(candidate)
-            + cos_coefficient * math.cos(candidate)
-        )
-        for candidate in (theta.minimum, theta.maximum)
-    ]
-    phase = math.atan2(
-        sin_coefficient,
-        cos_coefficient,
-    )
-    first = math.floor((theta.minimum - phase) / math.pi) - 1
-    last = math.ceil((theta.maximum - phase) / math.pi) + 1
-    for index in range(first, last + 1):
-        critical = phase + index * math.pi
-        if theta.minimum <= critical <= theta.maximum:
-            values.append(
-                sin_coefficient * math.sin(critical)
-                + cos_coefficient * math.cos(critical)
-            )
-    return NumericInterval(min(values), max(values))
-
-
-def _containment_offset_outer_interval(
-    observations: tuple[PhotoEdgeObservation, ...],
-    theta: NumericInterval,
-    scale: CanvasPixelScale,
-    long_extent_px: int,
-    short_extent_px: int,
 ) -> NumericInterval | None:
-    long_center = 0.5 * float(long_extent_px - 1)
-    short_half_mm = (
-        0.5 * float(short_extent_px - 1)
-        / scale.short_axis_px_per_mm
+    lower_minimum, _ = _linear_trig_bounds(
+        -workspace.long_values,
+        np.full_like(
+            workspace.long_values,
+            -workspace.short_half_mm,
+        ),
+        theta,
     )
-    long_values = tuple(
-        (coordinate - long_center) / scale.long_axis_px_per_mm
-        for observation in observations
-        for coordinate in (
-            observation.long_axis_footprint.minimum,
-            observation.long_axis_footprint.maximum,
+    _, upper_maximum = _linear_trig_bounds(
+        -workspace.long_values,
+        np.full_like(
+            workspace.long_values,
+            workspace.short_half_mm,
+        ),
+        theta,
+    )
+    lower = float(np.max(lower_minimum))
+    upper = float(np.min(upper_maximum))
+    return None if upper < lower else NumericInterval(lower, upper)
+
+
+def _workspace_active_constraints(
+    workspace: _ProjectionWorkspace,
+    theta: float,
+) -> tuple[ObservationId, ...]:
+    minimums, maximums = _workspace_projection_at_theta(
+        workspace,
+        theta,
+    )
+    lower = float(np.max(minimums))
+    upper = float(np.min(maximums))
+    lower_ids = tuple(
+        identity
+        for identity, value in zip(
+            workspace.observation_ids,
+            minimums,
+            strict=True,
+        )
+        if abs(float(value) - lower) <= _ACTIVE_CONSTRAINT_TOLERANCE
+    )
+    upper_ids = tuple(
+        identity
+        for identity, value in zip(
+            workspace.observation_ids,
+            maximums,
+            strict=True,
+        )
+        if abs(float(value) - upper) <= _ACTIVE_CONSTRAINT_TOLERANCE
+    )
+    return tuple(
+        dict.fromkeys(
+            (
+                min(lower_ids, key=str),
+                min(upper_ids, key=str),
+            )
         )
     )
-    lower_bound = max(
-        _linear_trig_interval(
-            -u,
-            -short_half_mm,
-            theta,
-        ).minimum
-        for u in long_values
-    )
-    upper_bound = min(
-        _linear_trig_interval(
-            -u,
-            short_half_mm,
-            theta,
-        ).maximum
-        for u in long_values
-    )
-    if upper_bound < lower_bound:
-        return None
-    return NumericInterval(lower_bound, upper_bound)
 
 
 def _intersect_numeric(
@@ -596,6 +972,24 @@ def _theta_interval_for_pixel_search(
     return NumericInterval(-physical_angle, physical_angle)
 
 
+def _theta_interval_from_pixel_slope(
+    pixel_slope: NumericInterval,
+    scale: CanvasPixelScale,
+) -> NumericInterval:
+    values = tuple(
+        math.atan(
+            slope
+            * scale.long_axis_px_per_mm
+            / scale.short_axis_px_per_mm
+        )
+        for slope in (
+            pixel_slope.minimum,
+            pixel_slope.maximum,
+        )
+    )
+    return NumericInterval(min(values), max(values))
+
+
 def _cell_theta_resolution(
     parameters: PhotoEdgeDetectionParameters,
     scale: CanvasPixelScale,
@@ -613,91 +1007,31 @@ def _cell_theta_resolution(
     return max(math.atan(physical_slope), _POLYGON_EPSILON)
 
 
-def _active_constraints(
-    observations: tuple[PhotoEdgeObservation, ...],
-    theta: float,
-    scale: CanvasPixelScale,
-    long_extent_px: int,
-    short_extent_px: int,
-) -> tuple[ObservationId, ...]:
-    intervals = tuple(
-        (
-            observation,
-            _projection_interval_at_theta(
-                observation,
-                theta,
-                scale,
-                long_extent_px,
-                short_extent_px,
-            ),
-        )
-        for observation in observations
-    )
-    lower = max(interval.minimum for _, interval in intervals)
-    upper = min(interval.maximum for _, interval in intervals)
-    tolerance = _ACTIVE_CONSTRAINT_TOLERANCE
-    lower_ids = tuple(
-        observation.observation_id
-        for observation, interval in intervals
-        if abs(interval.minimum - lower) <= tolerance
-    )
-    upper_ids = tuple(
-        observation.observation_id
-        for observation, interval in intervals
-        if abs(interval.maximum - upper) <= tolerance
-    )
-    return tuple(
-        dict.fromkeys(
-            (
-                min(lower_ids, key=str),
-                min(upper_ids, key=str),
-            )
-        )
-    )
-
-
-def _witness_for_label_at_theta(
-    top_observations: tuple[PhotoEdgeObservation, ...],
-    bottom_observations: tuple[PhotoEdgeObservation, ...],
+def _workspace_witness_for_label_at_theta(
+    top_workspace: _ProjectionWorkspace,
+    bottom_workspace: _ProjectionWorkspace,
     theta: float,
     label: PhotoEdgePhysicalLabel,
-    scale: CanvasPixelScale,
-    long_extent_px: int,
-    short_extent_px: int,
     parameters: PhotoEdgeDetectionParameters,
 ) -> NormalRegionWitness | None:
-    top = _common_offset_interval_at_theta(
-        top_observations,
+    top = _workspace_common_offset_at_theta(
+        top_workspace,
         theta,
-        scale,
-        long_extent_px,
-        short_extent_px,
     )
-    bottom = _common_offset_interval_at_theta(
-        bottom_observations,
+    bottom = _workspace_common_offset_at_theta(
+        bottom_workspace,
         theta,
-        scale,
-        long_extent_px,
-        short_extent_px,
     )
     if top is None or bottom is None:
         return None
-    top_containment = _containment_offset_interval(
-        top_observations,
-        theta,
-        scale,
-        long_extent_px,
-        short_extent_px,
+    top = _intersect_numeric(
+        top,
+        _workspace_containment_at_theta(top_workspace, theta),
     )
-    bottom_containment = _containment_offset_interval(
-        bottom_observations,
-        theta,
-        scale,
-        long_extent_px,
-        short_extent_px,
+    bottom = _intersect_numeric(
+        bottom,
+        _workspace_containment_at_theta(bottom_workspace, theta),
     )
-    top = _intersect_numeric(top, top_containment)
-    bottom = _intersect_numeric(bottom, bottom_containment)
     if top is None or bottom is None:
         return None
     polygon = _physical_polygon(
@@ -710,47 +1044,33 @@ def _witness_for_label_at_theta(
         return None
     top_value = sum(point[0] for point in polygon) / float(len(polygon))
     bottom_value = sum(point[1] for point in polygon) / float(len(polygon))
-    witness = NormalRegionWitness(
-        physical_angle_radians=theta,
-        top_normal_offset_mm=top_value,
-        bottom_normal_offset_mm=bottom_value,
-        physical_label=label,
+    top_minimums, top_maximums = _workspace_projection_at_theta(
+        top_workspace,
+        theta,
     )
-    for observation in top_observations:
-        if not (
-            _projection_interval_at_theta(
-                observation,
-                theta,
-                scale,
-                long_extent_px,
-                short_extent_px,
-            ).minimum
-            - _POLYGON_EPSILON
+    bottom_minimums, bottom_maximums = _workspace_projection_at_theta(
+        bottom_workspace,
+        theta,
+    )
+    if not bool(
+        np.all(
+            top_minimums - _POLYGON_EPSILON
             <= top_value
-            <= _projection_interval_at_theta(
-                observation,
-                theta,
-                scale,
-                long_extent_px,
-                short_extent_px,
-            ).maximum
-            + _POLYGON_EPSILON
-        ):
-            return None
-    for observation in bottom_observations:
-        interval = _projection_interval_at_theta(
-            observation,
-            theta,
-            scale,
-            long_extent_px,
-            short_extent_px,
         )
-        if not (
-            interval.minimum - _POLYGON_EPSILON
+        and np.all(
+            top_value
+            <= top_maximums + _POLYGON_EPSILON
+        )
+        and np.all(
+            bottom_minimums - _POLYGON_EPSILON
             <= bottom_value
-            <= interval.maximum + _POLYGON_EPSILON
-        ):
-            return None
+        )
+        and np.all(
+            bottom_value
+            <= bottom_maximums + _POLYGON_EPSILON
+        )
+    ):
+        return None
     if not _point_in_physical_band(
         (top_value, bottom_value),
         label,
@@ -758,7 +1078,12 @@ def _witness_for_label_at_theta(
         parameters.maximum_photo_dimension_deviation_mm,
     ):
         return None
-    return witness
+    return NormalRegionWitness(
+        physical_angle_radians=theta,
+        top_normal_offset_mm=top_value,
+        bottom_normal_offset_mm=bottom_value,
+        physical_label=label,
+    )
 
 
 def _normal_cell_signature(
@@ -810,14 +1135,12 @@ def _raw_subset_labels(
 
 
 def _build_normal_cell(
-    top_observations: tuple[PhotoEdgeObservation, ...],
-    bottom_observations: tuple[PhotoEdgeObservation, ...],
+    top_workspace: _ProjectionWorkspace,
+    bottom_workspace: _ProjectionWorkspace,
     theta_path: str,
     theta: NumericInterval,
     labels: tuple[PhotoEdgePhysicalLabel, ...],
     scale: CanvasPixelScale,
-    long_extent_px: int,
-    short_extent_px: int,
     parameters: PhotoEdgeDetectionParameters,
 ) -> tuple[
     NormalRegionCell | None,
@@ -826,38 +1149,26 @@ def _build_normal_cell(
     bool,
     bool,
 ]:
-    top_outer = _common_offset_outer_interval(
-        top_observations,
+    top_outer = _workspace_common_offset_outer(
+        top_workspace,
         theta,
-        scale,
-        long_extent_px,
-        short_extent_px,
     )
-    bottom_outer = _common_offset_outer_interval(
-        bottom_observations,
+    bottom_outer = _workspace_common_offset_outer(
+        bottom_workspace,
         theta,
-        scale,
-        long_extent_px,
-        short_extent_px,
     )
     if top_outer is None or bottom_outer is None:
         return None, RegionSetRelation.DISJOINT, False, False, False
     raw = _ordered_polygon(top_outer, bottom_outer)
     if not raw:
         return None, RegionSetRelation.DISJOINT, False, False, False
-    top_containment = _containment_offset_outer_interval(
-        top_observations,
+    top_containment = _workspace_containment_outer(
+        top_workspace,
         theta,
-        scale,
-        long_extent_px,
-        short_extent_px,
     )
-    bottom_containment = _containment_offset_outer_interval(
-        bottom_observations,
+    bottom_containment = _workspace_containment_outer(
+        bottom_workspace,
         theta,
-        scale,
-        long_extent_px,
-        short_extent_px,
     )
     if top_containment is None or bottom_containment is None:
         return None, RegionSetRelation.DISJOINT, False, True, False
@@ -891,14 +1202,11 @@ def _build_normal_cell(
     )
     witness_grid = {
         (label.identity, candidate_theta): (
-            _witness_for_label_at_theta(
-                top_observations,
-                bottom_observations,
+            _workspace_witness_for_label_at_theta(
+                top_workspace,
+                bottom_workspace,
                 candidate_theta,
                 label,
-                scale,
-                long_extent_px,
-                short_extent_px,
                 parameters,
             )
         )
@@ -937,19 +1245,13 @@ def _build_normal_cell(
     active = tuple(
         dict.fromkeys(
             (
-                *_active_constraints(
-                    top_observations,
+                *_workspace_active_constraints(
+                    top_workspace,
                     theta.midpoint,
-                    scale,
-                    long_extent_px,
-                    short_extent_px,
                 ),
-                *_active_constraints(
-                    bottom_observations,
+                *_workspace_active_constraints(
+                    bottom_workspace,
                     theta.midpoint,
-                    scale,
-                    long_extent_px,
-                    short_extent_px,
                 ),
             )
         )
@@ -1091,40 +1393,70 @@ def _normal_to_line_cell(
     )
 
 
-def solve_normal_region(
-    top_observations: tuple[PhotoEdgeObservation, ...],
-    bottom_observations: tuple[PhotoEdgeObservation, ...],
-    corridors: tuple[PhotoEdgeSearchCorridor, ...],
-    scale: CanvasPixelScale,
-    parameters: PhotoEdgeDetectionParameters,
-    budget: GeometryWorkBudget,
-    *,
-    long_extent_px: int,
-    short_extent_px: int,
-) -> tuple[PhotoEdgePairGeometry | None, EvidenceState, tuple[PhotoEdgeFact, ...]]:
-    labels = _label_order(corridors)
-    initial_theta = _theta_interval_for_pixel_search(
-        parameters.maximum_search_angle_degrees,
-        scale,
+@dataclass
+class _NormalRegionSearchState:
+    order_key: tuple[object, ...]
+    top_workspace: _ProjectionWorkspace
+    bottom_workspace: _ProjectionWorkspace
+    labels: tuple[PhotoEdgePhysicalLabel, ...]
+    scale: CanvasPixelScale
+    parameters: PhotoEdgeDetectionParameters
+    long_extent_px: int
+    short_extent_px: int
+    theta_resolution: float
+    initial_theta: NumericInterval
+    pending: list[tuple[str, NumericInterval, int]] = field(
+        init=False
     )
-    theta_resolution = _cell_theta_resolution(
-        parameters,
-        scale,
-        long_extent_px,
+    retained: list[NormalRegionCell] = field(
+        default_factory=list,
+        init=False,
     )
-    pending: list[tuple[str, NumericInterval, int]] = [
-        ("", initial_theta, 0)
-    ]
-    retained: list[NormalRegionCell] = []
-    relations: list[RegionSetRelation] = []
-    indeterminate = False
-    observation_geometry_possible = False
-    contained_geometry_possible = False
-    while pending:
-        theta_path, theta, depth = pending.pop(0)
-        if not budget.consume_region_cell():
-            indeterminate = True
-            break
+    relations: list[RegionSetRelation] = field(
+        default_factory=list,
+        init=False,
+    )
+    indeterminate: bool = field(default=False, init=False)
+    observation_geometry_possible: bool = field(
+        default=False,
+        init=False,
+    )
+    contained_geometry_possible: bool = field(
+        default=False,
+        init=False,
+    )
+
+    def __post_init__(self) -> None:
+        self.pending = [("", self.initial_theta, 0)]
+
+    @property
+    def complete(self) -> bool:
+        return not self.pending
+
+    @property
+    def pending_cell_count(self) -> int:
+        return len(self.pending)
+
+    def remaining_cell_upper_bound(self) -> int:
+        return sum(
+            _cell_work_upper_bound(
+                theta,
+                resolution=self.theta_resolution,
+                maximum_depth=max(
+                    0,
+                    self.parameters.geometry.maximum_subdivision_depth
+                    - depth,
+                ),
+            )
+            for _, theta, depth in self.pending
+        )
+
+    def mark_incomplete(self) -> None:
+        self.indeterminate = True
+        self.pending.clear()
+
+    def step(self) -> None:
+        theta_path, theta, depth = self.pending.pop(0)
         (
             cell,
             relation,
@@ -1132,33 +1464,32 @@ def solve_normal_region(
             observation_cell_possible,
             contained_cell_possible,
         ) = _build_normal_cell(
-            top_observations,
-            bottom_observations,
+            self.top_workspace,
+            self.bottom_workspace,
             theta_path,
             theta,
-            labels,
-            scale,
-            long_extent_px,
-            short_extent_px,
-            parameters,
+            self.labels,
+            self.scale,
+            self.parameters,
         )
-        observation_geometry_possible = (
-            observation_geometry_possible
+        self.observation_geometry_possible = (
+            self.observation_geometry_possible
             or observation_cell_possible
         )
-        contained_geometry_possible = (
-            contained_geometry_possible
+        self.contained_geometry_possible = (
+            self.contained_geometry_possible
             or contained_cell_possible
         )
         if relation == RegionSetRelation.DISJOINT:
-            continue
+            return
         if (
             needs_subdivision
-            and depth < parameters.geometry.maximum_subdivision_depth
-            and theta.width > theta_resolution
+            and depth
+            < self.parameters.geometry.maximum_subdivision_depth
+            and theta.width > self.theta_resolution
         ):
             midpoint = theta.midpoint
-            pending.extend(
+            self.pending.extend(
                 (
                     (
                         f"{theta_path}0",
@@ -1172,110 +1503,229 @@ def solve_normal_region(
                     ),
                 )
             )
-            continue
+            return
         if cell is None:
-            indeterminate = True
-            relations.append(RegionSetRelation.NUMERICALLY_INDETERMINATE)
-            continue
-        retained.append(cell)
-        relations.append(relation)
-    unique_cells = {
-        cell.canonical_signature: cell for cell in retained
-    }
-    cells = tuple(unique_cells[key] for key in sorted(unique_cells))
-    if not cells and not indeterminate:
-        if not observation_geometry_possible:
-            state = EvidenceState.UNAVAILABLE
-            fact = PhotoEdgeFact.PAIR_GEOMETRY_UNAVAILABLE
-        elif not contained_geometry_possible:
-            state = EvidenceState.CONTRADICTED
-            fact = PhotoEdgeFact.CONTAINMENT_CONTRADICTED
-        else:
-            state = EvidenceState.CONTRADICTED
-            fact = PhotoEdgeFact.PAIR_GEOMETRY_CONTRADICTED
-        return (
-            None,
-            state,
-            (fact,),
-        )
-    if indeterminate or any(
-        relation == RegionSetRelation.NUMERICALLY_INDETERMINATE
-        for relation in relations
-    ):
-        relation = RegionSetRelation.NUMERICALLY_INDETERMINATE
-        state = EvidenceState.UNAVAILABLE
-        facts = (PhotoEdgeFact.PAIR_GEOMETRY_UNAVAILABLE,)
-    elif all(
-        relation == RegionSetRelation.SUBSET for relation in relations
-    ):
-        all_labels = {
-            label.identity: label
-            for cell in cells
-            for label in cell.possible_physical_labels
+            self.indeterminate = True
+            self.relations.append(
+                RegionSetRelation.NUMERICALLY_INDETERMINATE
+            )
+            return
+        self.retained.append(cell)
+        self.relations.append(relation)
+
+    def result(
+        self,
+    ) -> tuple[
+        PhotoEdgePairGeometry | None,
+        EvidenceState,
+        tuple[PhotoEdgeFact, ...],
+    ]:
+        unique_cells = {
+            cell.canonical_signature: cell for cell in self.retained
         }
-        if len(all_labels) == 1:
-            relation = RegionSetRelation.SUBSET
-            state = EvidenceState.SUPPORTED
-            facts = ()
+        cells = tuple(
+            unique_cells[key] for key in sorted(unique_cells)
+        )
+        if not cells and not self.indeterminate:
+            if not self.observation_geometry_possible:
+                state = EvidenceState.UNAVAILABLE
+                fact = PhotoEdgeFact.PAIR_GEOMETRY_UNAVAILABLE
+            elif not self.contained_geometry_possible:
+                state = EvidenceState.CONTRADICTED
+                fact = PhotoEdgeFact.CONTAINMENT_CONTRADICTED
+            else:
+                state = EvidenceState.CONTRADICTED
+                fact = PhotoEdgeFact.PAIR_GEOMETRY_CONTRADICTED
+            return None, state, (fact,)
+        if self.indeterminate or any(
+            relation == RegionSetRelation.NUMERICALLY_INDETERMINATE
+            for relation in self.relations
+        ):
+            relation = RegionSetRelation.NUMERICALLY_INDETERMINATE
+            state = EvidenceState.UNAVAILABLE
+            facts = (PhotoEdgeFact.PAIR_GEOMETRY_UNAVAILABLE,)
+        elif all(
+            relation == RegionSetRelation.SUBSET
+            for relation in self.relations
+        ):
+            all_labels = {
+                label.identity: label
+                for cell in cells
+                for label in cell.possible_physical_labels
+            }
+            if len(all_labels) == 1:
+                relation = RegionSetRelation.SUBSET
+                state = EvidenceState.SUPPORTED
+                facts = ()
+            else:
+                relation = RegionSetRelation.PARTIAL_INTERSECTION
+                state = EvidenceState.UNAVAILABLE
+                facts = (PhotoEdgeFact.COMPETING_PAIRS_UNRESOLVED,)
         else:
+            all_labels = {
+                label.identity
+                for cell in cells
+                for label in cell.possible_physical_labels
+            }
             relation = RegionSetRelation.PARTIAL_INTERSECTION
             state = EvidenceState.UNAVAILABLE
-            facts = (PhotoEdgeFact.COMPETING_PAIRS_UNRESOLVED,)
-    else:
-        all_labels = {
-            label.identity
-            for cell in cells
-            for label in cell.possible_physical_labels
-        }
-        relation = RegionSetRelation.PARTIAL_INTERSECTION
-        state = EvidenceState.UNAVAILABLE
-        facts = (
-            (
-                PhotoEdgeFact.COMPETING_PAIRS_UNRESOLVED
-                if len(all_labels) > 1
-                else PhotoEdgeFact.PAIR_GEOMETRY_UNAVAILABLE
-            ),
-        )
-    if not cells:
-        return None, EvidenceState.UNAVAILABLE, (
-            PhotoEdgeFact.PAIR_GEOMETRY_UNAVAILABLE,
-        )
-    normal_region = PhotoEdgeNormalFeasibleRegion(
-        cells=cells,
-        set_relation=relation,
-        numerically_indeterminate=indeterminate,
-        consumed_region_cells=budget.consumed_region_cells,
-        consumed_consensus_states=budget.consumed_consensus_states,
-    )
-    geometry = PhotoEdgePairGeometry(
-        cells=tuple(
-            _normal_to_line_cell(
-                cell,
-                scale,
-                long_extent_px,
-                short_extent_px,
+            facts = (
+                (
+                    PhotoEdgeFact.COMPETING_PAIRS_UNRESOLVED
+                    if len(all_labels) > 1
+                    else PhotoEdgeFact.PAIR_GEOMETRY_UNAVAILABLE
+                ),
             )
-            for cell in cells
-        ),
-        normal_region=normal_region,
-        work_long_axis_extent_px=long_extent_px,
-        work_short_axis_extent_px=short_extent_px,
-        interpolation_position_uncertainty_px=0.0,
-        coordinate_space=PhotoEdgeCoordinateSpace.SOURCE,
-        numerically_indeterminate=indeterminate,
+        if not cells:
+            return None, EvidenceState.UNAVAILABLE, (
+                PhotoEdgeFact.PAIR_GEOMETRY_UNAVAILABLE,
+            )
+        normal_region = PhotoEdgeNormalFeasibleRegion(
+            cells=cells,
+            set_relation=relation,
+            numerically_indeterminate=self.indeterminate,
+        )
+        return (
+            PhotoEdgePairGeometry(
+                cells=tuple(
+                    _normal_to_line_cell(
+                        cell,
+                        self.scale,
+                        self.long_extent_px,
+                        self.short_extent_px,
+                    )
+                    for cell in cells
+                ),
+                normal_region=normal_region,
+                work_long_axis_extent_px=self.long_extent_px,
+                work_short_axis_extent_px=self.short_extent_px,
+                interpolation_position_uncertainty_px=0.0,
+                coordinate_space=PhotoEdgeCoordinateSpace.SOURCE,
+                numerically_indeterminate=self.indeterminate,
+            ),
+            state,
+            facts,
+        )
+
+
+def _normal_region_search(
+    top_observations: tuple[PhotoEdgeObservation, ...],
+    bottom_observations: tuple[PhotoEdgeObservation, ...],
+    corridors: tuple[PhotoEdgeSearchCorridor, ...],
+    scale: CanvasPixelScale,
+    parameters: PhotoEdgeDetectionParameters,
+    theta: NumericInterval,
+    order_key: tuple[object, ...],
+    *,
+    long_extent_px: int,
+    short_extent_px: int,
+) -> _NormalRegionSearchState:
+    resolution = _cell_theta_resolution(
+        parameters,
+        scale,
+        long_extent_px,
     )
-    return geometry, state, facts
+    return _NormalRegionSearchState(
+        order_key=order_key,
+        top_workspace=_projection_workspace(
+            top_observations,
+            scale,
+            long_extent_px,
+            short_extent_px,
+        ),
+        bottom_workspace=_projection_workspace(
+            bottom_observations,
+            scale,
+            long_extent_px,
+            short_extent_px,
+        ),
+        labels=_label_order(corridors),
+        scale=scale,
+        parameters=parameters,
+        long_extent_px=long_extent_px,
+        short_extent_px=short_extent_px,
+        theta_resolution=resolution,
+        initial_theta=theta,
+    )
+
+
+def solve_normal_region(
+    top_observations: tuple[PhotoEdgeObservation, ...],
+    bottom_observations: tuple[PhotoEdgeObservation, ...],
+    corridors: tuple[PhotoEdgeSearchCorridor, ...],
+    scale: CanvasPixelScale,
+    parameters: PhotoEdgeDetectionParameters,
+    budget: GeometryWorkBudget,
+    initial_theta_intervals: tuple[NumericInterval, ...],
+    *,
+    long_extent_px: int,
+    short_extent_px: int,
+) -> tuple[
+    PhotoEdgePairGeometry | None,
+    EvidenceState,
+    tuple[PhotoEdgeFact, ...],
+]:
+    if len(initial_theta_intervals) != 1:
+        raise ValueError(
+            "each normal-region search requires one theta component"
+        )
+    theta = initial_theta_intervals[0]
+    resolution = _cell_theta_resolution(
+        parameters,
+        scale,
+        long_extent_px,
+    )
+    search = _normal_region_search(
+        top_observations,
+        bottom_observations,
+        corridors,
+        scale,
+        parameters,
+        theta,
+        (
+            _cell_work_upper_bound(
+                theta,
+                resolution=resolution,
+                maximum_depth=(
+                    parameters.geometry.maximum_subdivision_depth
+                ),
+            ),
+            (),
+            (),
+            theta.minimum,
+            theta.maximum,
+        ),
+        long_extent_px=long_extent_px,
+        short_extent_px=short_extent_px,
+    )
+    diagnostics = _GeometrySchedulerDiagnostics()
+    _run_region_searches(
+        (search,),
+        budget,
+        diagnostics,
+    )
+    geometry, state, facts = search.result()
+    statistics = _work_statistics(
+        budget,
+        diagnostics=diagnostics,
+    )
+    return (
+        _geometry_with_work_statistics(geometry, statistics),
+        state,
+        facts,
+    )
 
 
 def _fragment_role_eligible(
     fragment: PhotoEdgeFragment,
+    graph: PhotoEdgeRidgeGraph,
     corridors: tuple[PhotoEdgeSearchCorridor, ...],
     *,
     top: bool,
 ) -> bool:
     observations = tuple(
         observation
-        for observation in fragment.observations
+        for observation in graph.observations_for(fragment)
         if not observation.censored
     )
     if not observations:
@@ -1294,6 +1744,7 @@ def _fragment_role_eligible(
 
 def _minimal_support_groups(
     fragments: tuple[PhotoEdgeFragment, ...],
+    graph: PhotoEdgeRidgeGraph,
     minimum_observations: int,
     line_regions: dict[ObservationId, _PixelLineFeasibleRegion],
     parameters: PhotoEdgeDetectionParameters,
@@ -1329,7 +1780,9 @@ def _minimal_support_groups(
                         tuple(
                             observation
                             for fragment in selected
-                            for observation in fragment.observations
+                            for observation in graph.observations_for(
+                                fragment
+                            )
                             if not observation.censored
                         ),
                         parameters.maximum_search_angle_degrees,
@@ -1337,28 +1790,45 @@ def _minimal_support_groups(
                         short_extent_px=short_extent_px,
                     )
                 region_cache[fragment_ids] = region
-            slope = region.slope_interval
+            slopes = region.slope_intervals
+            representative_slope = min(
+                slopes,
+                key=lambda interval: (
+                    abs(interval.midpoint),
+                    interval.minimum,
+                    interval.maximum,
+                ),
+                default=None,
+            )
             return (
                 0.5
                 * (
                     min(
-                        fragment.short_axis_position_interval.minimum
+                        graph.short_axis_position_interval(
+                            fragment
+                        ).minimum
                         for fragment in selected
                     )
                     + max(
-                        fragment.short_axis_position_interval.maximum
+                        graph.short_axis_position_interval(
+                            fragment
+                        ).maximum
                         for fragment in selected
                     )
                 ),
-                0.0 if slope is None else slope.midpoint,
+                (
+                    0.0
+                    if representative_slope is None
+                    else representative_slope.midpoint
+                ),
                 0.5
                 * (
                     min(
-                        fragment.long_axis_footprint.minimum
+                        graph.long_axis_footprint(fragment).minimum
                         for fragment in selected
                     )
                     + max(
-                        fragment.long_axis_footprint.maximum
+                        graph.long_axis_footprint(fragment).maximum
                         for fragment in selected
                     )
                 ),
@@ -1387,11 +1857,11 @@ def _minimal_support_groups(
             ),
             key=lambda fragment: (
                 -(
-                    fragment.long_axis_footprint.maximum
-                    - fragment.long_axis_footprint.minimum
+                    graph.long_axis_footprint(fragment).maximum
+                    - graph.long_axis_footprint(fragment).minimum
                 ),
-                fragment.short_axis_position_interval.midpoint,
-                fragment.long_axis_footprint.minimum,
+                graph.short_axis_position_interval(fragment).midpoint,
+                graph.long_axis_footprint(fragment).minimum,
                 str(fragment.fragment_id),
             ),
         )
@@ -1401,7 +1871,7 @@ def _minimal_support_groups(
     for fragment in ordered:
         observations = tuple(
             observation
-            for observation in fragment.observations
+            for observation in graph.observations_for(fragment)
             if not observation.censored
         )
         if len(
@@ -1416,9 +1886,11 @@ def _minimal_support_groups(
     limit = parameters.geometry.maximum_consensus_states
     if len(groups) >= limit:
         balanced = ordered_groups(groups)
-        return balanced[:limit], len(groups) > limit
-    inspected = 0
-    incomplete = False
+        return balanced[:limit], bool(
+            len(groups) > limit
+            or len(under_supported)
+            >= _MULTI_FRAGMENT_GROUP_MINIMUM_SIZE
+        )
     maximum_group_size = min(
         minimum_observations,
         len(under_supported),
@@ -1428,14 +1900,10 @@ def _minimal_support_groups(
         maximum_group_size + 1,
     ):
         for selected in combinations(under_supported, size):
-            if inspected >= limit or len(groups) >= limit:
-                incomplete = True
-                break
-            inspected += 1
             observations = tuple(
                 observation
                 for fragment in selected
-                for observation in fragment.observations
+                for observation in graph.observations_for(fragment)
                 if not observation.censored
             )
             if len(
@@ -1452,7 +1920,7 @@ def _minimal_support_groups(
                             observation
                             for other in selected
                             if other is not fragment
-                            for observation in other.observations
+                            for observation in graph.observations_for(other)
                             if not observation.censored
                         ),
                         minimum_observations,
@@ -1469,6 +1937,8 @@ def _minimal_support_groups(
                 short_extent_px=short_extent_px,
             ).polygons:
                 continue
+            if len(groups) >= limit:
+                return ordered_groups(groups), True
             groups.append(
                 tuple(
                     sorted(
@@ -1480,16 +1950,13 @@ def _minimal_support_groups(
                     )
                 )
             )
-        if incomplete:
-            break
-    return ordered_groups(groups), incomplete
+    return ordered_groups(groups), False
 
 
 def _diagonal_seed_pairs(
     top_groups: tuple[tuple[ObservationId, ...], ...],
     bottom_groups: tuple[tuple[ObservationId, ...], ...],
     *,
-    maximum_inspections: int,
     maximum_seeds: int,
     pair_is_possible: Callable[
         [tuple[ObservationId, ...], tuple[ObservationId, ...]],
@@ -1507,32 +1974,23 @@ def _diagonal_seed_pairs(
     seeds: list[
         tuple[tuple[ObservationId, ...], tuple[ObservationId, ...]]
     ] = []
-    inspected = 0
-    incomplete = False
     diagonal_count = len(top_groups) + len(bottom_groups) - 1
     for diagonal in range(max(0, diagonal_count)):
         top_start = max(0, diagonal - len(bottom_groups) + 1)
         top_end = min(len(top_groups), diagonal + 1)
         for top_index in range(top_start, top_end):
-            if (
-                inspected >= maximum_inspections
-                or len(seeds) >= maximum_seeds
-            ):
-                incomplete = True
-                break
             bottom_index = diagonal - top_index
             top_ids = top_groups[top_index]
             bottom_ids = bottom_groups[bottom_index]
-            inspected += 1
             if (
                 set(top_ids) & set(bottom_ids)
                 or not pair_is_possible(top_ids, bottom_ids)
             ):
                 continue
+            if len(seeds) >= maximum_seeds:
+                return tuple(seeds), True
             seeds.append((top_ids, bottom_ids))
-        if incomplete:
-            break
-    return tuple(seeds), incomplete
+    return tuple(seeds), False
 
 
 @dataclass
@@ -1570,7 +2028,6 @@ def _coordinate_seed_pairs(
     top_groups: tuple[tuple[ObservationId, ...], ...],
     bottom_groups: tuple[tuple[ObservationId, ...], ...],
     *,
-    maximum_inspections: int,
     maximum_seeds: int,
     pair_is_possible: Callable[
         [tuple[ObservationId, ...], tuple[ObservationId, ...]],
@@ -1696,22 +2153,12 @@ def _coordinate_seed_pairs(
         tuple[tuple[ObservationId, ...], tuple[ObservationId, ...]],
         None,
     ] = {}
-    inspected = 0
     depth = 0
-    while (
-        tasks
-        and inspected < maximum_inspections
-        and len(seeds) < maximum_seeds
-    ):
+    while tasks:
         advanced = False
         for _, top_fixed, current in tasks[
             : min(depth + 1, len(tasks))
         ]:
-            if (
-                inspected >= maximum_inspections
-                or len(seeds) >= maximum_seeds
-            ):
-                break
             coordinates = (
                 bottom_coordinates if top_fixed else top_coordinates
             )
@@ -1739,11 +2186,16 @@ def _coordinate_seed_pairs(
             else:
                 top_ids = ordered_top[counterpart_index]
                 bottom_ids = fixed_group
-            inspected += 1
             if (
                 not set(top_ids) & set(bottom_ids)
                 and pair_is_possible(top_ids, bottom_ids)
             ):
+                identity = (top_ids, bottom_ids)
+                if (
+                    identity not in seeds
+                    and len(seeds) >= maximum_seeds
+                ):
+                    return tuple(seeds), True
                 seeds[(top_ids, bottom_ids)] = None
         if not advanced and depth + 1 >= len(tasks):
             break
@@ -1774,26 +2226,49 @@ def _coordinate_seed_pairs(
 def _observations_for_fragments(
     fragment_ids: tuple[ObservationId, ...],
     fragments: dict[ObservationId, PhotoEdgeFragment],
+    graph: PhotoEdgeRidgeGraph,
 ) -> tuple[PhotoEdgeObservation, ...]:
-    return tuple(
-        observation
+    observations = {
+        observation.observation_id: observation
         for fragment_id in fragment_ids
-        for observation in fragments[fragment_id].observations
+        for observation in graph.observations_for(fragments[fragment_id])
         if not observation.censored
+    }
+    return tuple(
+        sorted(
+            observations.values(),
+            key=lambda observation: (
+                observation.long_axis_footprint.minimum,
+                observation.short_axis_position_interval.minimum,
+                str(observation.observation_id),
+            ),
+        )
     )
+
+
+def _bounded_usable_fragments(
+    graph: PhotoEdgeRidgeGraph,
+    observation_prefix: str,
+    maximum_fragments: int,
+) -> tuple[tuple[PhotoEdgeFragment, ...], bool]:
+    fragments: list[PhotoEdgeFragment] = []
+    for fragment in graph.iter_fragments(observation_prefix):
+        if not any(
+            not observation.censored
+            for observation in graph.observations_for(fragment)
+        ):
+            continue
+        if len(fragments) >= maximum_fragments:
+            return tuple(fragments), True
+        fragments.append(fragment)
+    return tuple(fragments), False
 
 
 def _regions_share_slope(
     top: _PixelLineFeasibleRegion,
     bottom: _PixelLineFeasibleRegion,
 ) -> bool:
-    top_slope = top.slope_interval
-    bottom_slope = bottom.slope_interval
-    return bool(
-        top_slope is not None
-        and bottom_slope is not None
-        and _intersect_numeric(top_slope, bottom_slope) is not None
-    )
+    return bool(_shared_slope_intervals(top, bottom))
 
 
 def _fixed_pair_outer_admissible(
@@ -1802,65 +2277,64 @@ def _fixed_pair_outer_admissible(
     corridors: tuple[PhotoEdgeSearchCorridor, ...],
     scale: CanvasPixelScale,
     parameters: PhotoEdgeDetectionParameters,
+    pixel_slope_intervals: tuple[NumericInterval, ...],
     *,
     long_extent_px: int,
     short_extent_px: int,
 ) -> bool:
-    theta = _theta_interval_for_pixel_search(
-        parameters.maximum_search_angle_degrees,
-        scale,
-    )
-    top_outer = _common_offset_outer_interval(
+    top_workspace = _projection_workspace(
         top_observations,
-        theta,
         scale,
         long_extent_px,
         short_extent_px,
     )
-    bottom_outer = _common_offset_outer_interval(
+    bottom_workspace = _projection_workspace(
         bottom_observations,
-        theta,
         scale,
         long_extent_px,
         short_extent_px,
     )
-    if top_outer is None or bottom_outer is None:
-        return False
-    top_containment = _containment_offset_outer_interval(
-        top_observations,
-        theta,
-        scale,
-        long_extent_px,
-        short_extent_px,
-    )
-    bottom_containment = _containment_offset_outer_interval(
-        bottom_observations,
-        theta,
-        scale,
-        long_extent_px,
-        short_extent_px,
-    )
-    if top_containment is None or bottom_containment is None:
-        return False
-    top_outer = _intersect_numeric(top_outer, top_containment)
-    bottom_outer = _intersect_numeric(
-        bottom_outer,
-        bottom_containment,
-    )
-    if top_outer is None or bottom_outer is None:
-        return False
-    raw = _ordered_polygon(top_outer, bottom_outer)
-    if not raw:
-        return False
-    return any(
-        _physical_polygon(
-            raw,
-            label,
-            parameters.maximum_center_offset_mm,
-            parameters.maximum_photo_dimension_deviation_mm,
+    for pixel_slope in pixel_slope_intervals:
+        theta = _theta_interval_from_pixel_slope(pixel_slope, scale)
+        top_outer = _workspace_common_offset_outer(
+            top_workspace,
+            theta,
         )
-        for label in _label_order(corridors)
-    )
+        bottom_outer = _workspace_common_offset_outer(
+            bottom_workspace,
+            theta,
+        )
+        if top_outer is None or bottom_outer is None:
+            continue
+        top_containment = _workspace_containment_outer(
+            top_workspace,
+            theta,
+        )
+        bottom_containment = _workspace_containment_outer(
+            bottom_workspace,
+            theta,
+        )
+        if top_containment is None or bottom_containment is None:
+            continue
+        top_outer = _intersect_numeric(top_outer, top_containment)
+        bottom_outer = _intersect_numeric(
+            bottom_outer,
+            bottom_containment,
+        )
+        if top_outer is None or bottom_outer is None:
+            continue
+        raw = _ordered_polygon(top_outer, bottom_outer)
+        if raw and any(
+            _physical_polygon(
+                raw,
+                label,
+                parameters.maximum_center_offset_mm,
+                parameters.maximum_photo_dimension_deviation_mm,
+            )
+            for label in _label_order(corridors)
+        ):
+            return True
+    return False
 
 
 def _minimum_support_witnesses(
@@ -1906,33 +2380,85 @@ def _hypothesis_id(
     return ObservationId(f"{prefix}:pair:{digest}")
 
 
-def _solve_hypothesis(
-    prefix: str,
+def _fixed_hypothesis_order_key(
+    top_ids: tuple[ObservationId, ...],
+    bottom_ids: tuple[ObservationId, ...],
+    shared_pixel_slope: NumericInterval,
+    scale: CanvasPixelScale,
+    parameters: PhotoEdgeDetectionParameters,
+    long_extent_px: int,
+) -> tuple[object, ...]:
+    theta = _theta_interval_from_pixel_slope(
+        shared_pixel_slope,
+        scale,
+    )
+    return (
+        _cell_work_upper_bound(
+            theta,
+            resolution=_cell_theta_resolution(
+                parameters,
+                scale,
+                long_extent_px,
+            ),
+            maximum_depth=parameters.geometry.maximum_subdivision_depth,
+        ),
+        tuple(str(identity) for identity in top_ids),
+        tuple(str(identity) for identity in bottom_ids),
+        (shared_pixel_slope.minimum, shared_pixel_slope.maximum),
+    )
+
+
+def _fixed_hypothesis_search(
     top_ids: tuple[ObservationId, ...],
     bottom_ids: tuple[ObservationId, ...],
     fragment_map: dict[ObservationId, PhotoEdgeFragment],
+    graph: PhotoEdgeRidgeGraph,
+    shared_pixel_slope: NumericInterval,
     corridors: tuple[PhotoEdgeSearchCorridor, ...],
     scale: CanvasPixelScale,
     parameters: PhotoEdgeDetectionParameters,
-    budget: GeometryWorkBudget,
     long_extent_px: int,
     short_extent_px: int,
-) -> PhotoEdgePairHypothesis:
-    top_observations = _observations_for_fragments(top_ids, fragment_map)
-    bottom_observations = _observations_for_fragments(
-        bottom_ids,
-        fragment_map,
+) -> _NormalRegionSearchState:
+    theta = _theta_interval_from_pixel_slope(
+        shared_pixel_slope,
+        scale,
     )
-    geometry, state, facts = solve_normal_region(
-        top_observations,
-        bottom_observations,
+    return _normal_region_search(
+        _observations_for_fragments(
+            top_ids,
+            fragment_map,
+            graph,
+        ),
+        _observations_for_fragments(
+            bottom_ids,
+            fragment_map,
+            graph,
+        ),
         corridors,
         scale,
         parameters,
-        budget,
+        theta,
+        _fixed_hypothesis_order_key(
+            top_ids,
+            bottom_ids,
+            shared_pixel_slope,
+            scale,
+            parameters,
+            long_extent_px,
+        ),
         long_extent_px=long_extent_px,
         short_extent_px=short_extent_px,
     )
+
+
+def _fixed_hypothesis_from_search(
+    prefix: str,
+    top_ids: tuple[ObservationId, ...],
+    bottom_ids: tuple[ObservationId, ...],
+    search: _NormalRegionSearchState,
+) -> PhotoEdgePairHypothesis:
+    geometry, state, facts = search.result()
     physical_labels = tuple(
         {
             label.identity: label
@@ -1987,12 +2513,13 @@ def _solve_hypothesis(
 
 def _pixel_line_supports_fragment(
     fragment: PhotoEdgeFragment,
+    graph: PhotoEdgeRidgeGraph,
     slope: float,
     intercept: float,
 ) -> bool:
     observations = tuple(
         observation
-        for observation in fragment.observations
+        for observation in graph.observations_for(fragment)
         if not observation.censored
     )
     return bool(
@@ -2015,6 +2542,7 @@ def _pixel_line_supports_fragment(
 def _witness_saturated_states(
     hypothesis: PhotoEdgePairHypothesis,
     ordered_fragments: tuple[PhotoEdgeFragment, ...],
+    graph: PhotoEdgeRidgeGraph,
     top_eligible: frozenset[ObservationId],
     bottom_eligible: frozenset[ObservationId],
 ) -> tuple[
@@ -2050,6 +2578,7 @@ def _witness_saturated_states(
                         fragment.fragment_id in top_eligible
                         and _pixel_line_supports_fragment(
                             fragment,
+                            graph,
                             witness.pixel_slope,
                             witness.top_intercept_px,
                         )
@@ -2069,6 +2598,7 @@ def _witness_saturated_states(
                         and fragment.fragment_id in bottom_eligible
                         and _pixel_line_supports_fragment(
                             fragment,
+                            graph,
                             witness.pixel_slope,
                             witness.bottom_intercept_px,
                         )
@@ -2085,10 +2615,15 @@ def _witness_saturated_states(
 def _grow_maximal_hypotheses(
     prefix: str,
     seeds: tuple[
-        tuple[tuple[ObservationId, ...], tuple[ObservationId, ...]],
+        tuple[
+            tuple[ObservationId, ...],
+            tuple[ObservationId, ...],
+            NumericInterval,
+        ],
         ...,
     ],
     fragment_map: dict[ObservationId, PhotoEdgeFragment],
+    graph: PhotoEdgeRidgeGraph,
     line_regions: dict[ObservationId, _PixelLineFeasibleRegion],
     top_eligible: frozenset[ObservationId],
     bottom_eligible: frozenset[ObservationId],
@@ -2096,100 +2631,212 @@ def _grow_maximal_hypotheses(
     scale: CanvasPixelScale,
     parameters: PhotoEdgeDetectionParameters,
     budget: GeometryWorkBudget,
+    diagnostics: _GeometrySchedulerDiagnostics,
     long_extent_px: int,
     short_extent_px: int,
 ) -> tuple[PhotoEdgePairHypothesis, ...]:
     queue = list(seeds)
     visited: set[
-        tuple[tuple[ObservationId, ...], tuple[ObservationId, ...]]
+        tuple[
+            tuple[ObservationId, ...],
+            tuple[ObservationId, ...],
+            NumericInterval,
+        ]
     ] = set()
     solved: dict[
-        tuple[tuple[ObservationId, ...], tuple[ObservationId, ...]],
+        tuple[
+            tuple[ObservationId, ...],
+            tuple[ObservationId, ...],
+            NumericInterval,
+        ],
         PhotoEdgePairHypothesis,
     ] = {}
+    unsearched: set[
+        tuple[
+            tuple[ObservationId, ...],
+            tuple[ObservationId, ...],
+            NumericInterval,
+        ]
+    ] = set()
+    group_regions: dict[
+        tuple[ObservationId, ...],
+        _PixelLineFeasibleRegion,
+    ] = {}
+
+    def group_region(
+        fragment_ids: tuple[ObservationId, ...],
+    ) -> _PixelLineFeasibleRegion:
+        existing = group_regions.get(fragment_ids)
+        if existing is not None:
+            return existing
+        if len(fragment_ids) == 1:
+            region = line_regions[fragment_ids[0]]
+        else:
+            region = _pixel_line_feasible_region(
+                _observations_for_fragments(
+                    fragment_ids,
+                    fragment_map,
+                    graph,
+                ),
+                parameters.maximum_search_angle_degrees,
+                long_extent_px=long_extent_px,
+                short_extent_px=short_extent_px,
+            )
+        group_regions[fragment_ids] = region
+        return region
+
+    def component_states(
+        top_ids: tuple[ObservationId, ...],
+        bottom_ids: tuple[ObservationId, ...],
+    ) -> tuple[
+        tuple[
+            tuple[ObservationId, ...],
+            tuple[ObservationId, ...],
+            NumericInterval,
+        ],
+        ...,
+    ]:
+        return tuple(
+            (top_ids, bottom_ids, interval)
+            for interval in _shared_slope_intervals(
+                group_region(top_ids),
+                group_region(bottom_ids),
+            )
+        )
     ordered_fragments = tuple(
         sorted(
             fragment_map.values(),
             key=lambda fragment: (
                 -(
-                    fragment.long_axis_footprint.maximum
-                    - fragment.long_axis_footprint.minimum
+                    graph.long_axis_footprint(fragment).maximum
+                    - graph.long_axis_footprint(fragment).minimum
                 ),
-                fragment.short_axis_position_interval.midpoint,
-                fragment.long_axis_footprint.minimum,
+                graph.short_axis_position_interval(fragment).midpoint,
+                graph.long_axis_footprint(fragment).minimum,
                 str(fragment.fragment_id),
             ),
         )
     )
 
-    def solve(
-        state: tuple[
-            tuple[ObservationId, ...],
-            tuple[ObservationId, ...],
+    def solve_many(
+        states: tuple[
+            tuple[
+                tuple[ObservationId, ...],
+                tuple[ObservationId, ...],
+                NumericInterval,
+            ],
+            ...,
         ],
-    ) -> PhotoEdgePairHypothesis | None:
-        existing = solved.get(state)
-        if existing is not None:
-            return existing
-        if not budget.consume_consensus_state():
-            return None
-        hypothesis = _solve_hypothesis(
-            prefix,
-            state[0],
-            state[1],
-            fragment_map,
-            corridors,
-            scale,
-            parameters,
+    ) -> None:
+        candidates: list[
+            tuple[
+                tuple[
+                    tuple[ObservationId, ...],
+                    tuple[ObservationId, ...],
+                    NumericInterval,
+                ],
+                _NormalRegionSearchState,
+            ]
+        ] = []
+        for state in set(states):
+            if state in solved or state in unsearched:
+                continue
+            candidates.append(
+                (
+                    state,
+                    _fixed_hypothesis_search(
+                        state[0],
+                        state[1],
+                        fragment_map,
+                        graph,
+                        state[2],
+                        corridors,
+                        scale,
+                        parameters,
+                        long_extent_px,
+                        short_extent_px,
+                    ),
+                )
+            )
+        searched, rejected = _register_and_run_searches(
+            "fixed",
+            tuple(candidates),
             budget,
-            long_extent_px,
-            short_extent_px,
+            diagnostics,
         )
-        solved[state] = hypothesis
-        return hypothesis
+        unsearched.update(rejected)
+        for state, search in searched:
+            solved[state] = _fixed_hypothesis_from_search(
+                prefix,
+                state[0],
+                state[1],
+                search,
+            )
 
+    solve_many(tuple(queue))
     maximal: list[PhotoEdgePairHypothesis] = []
-    while queue and not budget.exhausted:
-        top_ids, bottom_ids = queue.pop(0)
-        key = (top_ids, bottom_ids)
+    while queue:
+        top_ids, bottom_ids, shared_slope = queue.pop(0)
+        key = (top_ids, bottom_ids, shared_slope)
         if key in visited:
             continue
         visited.add(key)
-        hypothesis = solve(key)
+        hypothesis = solved.get(key)
         if hypothesis is None:
-            break
+            continue
         if hypothesis.state == EvidenceState.CONTRADICTED:
             continue
         if hypothesis.geometry is None:
             maximal.append(hypothesis)
             continue
-        saturated_addition = False
-        saturated_queue: list[
-            tuple[tuple[ObservationId, ...], tuple[ObservationId, ...]]
+        saturated_candidates: list[
+            tuple[
+                tuple[ObservationId, ...],
+                tuple[ObservationId, ...],
+                NumericInterval,
+            ]
         ] = []
-        for saturated in _witness_saturated_states(
+        for saturated_pair in _witness_saturated_states(
             hypothesis,
             ordered_fragments,
+            graph,
             top_eligible,
             bottom_eligible,
         ):
+            for saturated in component_states(*saturated_pair):
+                if (
+                    saturated == key
+                    or not set(top_ids).issubset(saturated[0])
+                    or not set(bottom_ids).issubset(saturated[1])
+                ):
+                    continue
+                saturated_candidates.append(saturated)
+        solve_many(tuple(saturated_candidates))
+        saturated_queue = [
+            saturated
+            for saturated in saturated_candidates
             if (
-                saturated == key
-                or not set(top_ids).issubset(saturated[0])
-                or not set(bottom_ids).issubset(saturated[1])
-            ):
-                continue
-            preview = solve(saturated)
-            if (
-                preview is not None
+                (preview := solved.get(saturated)) is not None
                 and preview.state != EvidenceState.CONTRADICTED
                 and preview.geometry is not None
-            ):
-                saturated_addition = True
-                if saturated not in visited:
-                    saturated_queue.append(saturated)
-        if saturated_addition:
-            queue.extend(sorted(set(saturated_queue)))
+            )
+        ]
+        if saturated_queue:
+            queue.extend(
+                sorted(
+                    set(saturated_queue),
+                    key=lambda state: (
+                        _fixed_hypothesis_order_key(
+                            state[0],
+                            state[1],
+                            state[2],
+                            scale,
+                            parameters,
+                            long_extent_px,
+                        )
+                    ),
+                )
+            )
             continue
         additions: list[
             tuple[tuple[ObservationId, ...], tuple[ObservationId, ...]]
@@ -2228,25 +2875,46 @@ def _grow_maximal_hypotheses(
                         tuple(sorted((*bottom_ids, fragment_id), key=str)),
                     )
                 )
-        feasible_addition = False
-        feasible_queue: list[
-            tuple[tuple[ObservationId, ...], tuple[ObservationId, ...]]
+        feasible_candidates: list[
+            tuple[
+                tuple[ObservationId, ...],
+                tuple[ObservationId, ...],
+                NumericInterval,
+            ]
         ] = []
-        for addition in additions:
-            if addition in visited:
-                continue
-            preview = solve(addition)
+        for addition_pair in additions:
+            for addition in component_states(*addition_pair):
+                if addition in visited:
+                    continue
+                feasible_candidates.append(addition)
+        solve_many(tuple(feasible_candidates))
+        feasible_queue = [
+            addition
+            for addition in feasible_candidates
             if (
-                preview is not None
+                (preview := solved.get(addition)) is not None
                 and preview.state != EvidenceState.CONTRADICTED
                 and preview.geometry is not None
-            ):
-                feasible_addition = True
-                feasible_queue.append(addition)
-        if not feasible_addition:
+            )
+        ]
+        if not feasible_queue:
             maximal.append(hypothesis)
         else:
-            queue.extend(sorted(set(feasible_queue)))
+            queue.extend(
+                sorted(
+                    set(feasible_queue),
+                    key=lambda state: (
+                        _fixed_hypothesis_order_key(
+                            state[0],
+                            state[1],
+                            state[2],
+                            scale,
+                            parameters,
+                            long_extent_px,
+                        )
+                    ),
+                )
+            )
     subset_maximal = tuple(
         hypothesis
         for hypothesis in maximal
@@ -2288,6 +2956,7 @@ def _grow_maximal_hypotheses(
 
 def _audit_surfaces(
     fragments: tuple[PhotoEdgeFragment, ...],
+    graph: PhotoEdgeRidgeGraph,
     hypotheses: tuple[PhotoEdgePairHypothesis, ...],
     minimum_observations: int,
 ) -> tuple[
@@ -2322,6 +2991,7 @@ def _audit_surfaces(
                 _observations_for_fragments(
                     side_ids,
                     fragment_map,
+                    graph,
                 ),
                 minimum_observations,
             )
@@ -2333,39 +3003,51 @@ def _audit_surfaces(
     summaries = tuple(
         PhotoEdgeFragmentSummary(
             fragment_id=fragment.fragment_id,
-            long_axis_footprint=fragment.long_axis_footprint,
+            long_axis_footprint=graph.long_axis_footprint(fragment),
             short_axis_position_interval=(
-                fragment.short_axis_position_interval
+                graph.short_axis_position_interval(fragment)
             ),
-            canonical_observation_count=len(fragment.observations),
-            ordered_constraint_sha256=fragment.constraint_sha256,
-            censored=fragment.censored,
+            canonical_observation_count=len(fragment.node_ids),
+            ordered_constraint_sha256=graph.fragment_constraint_sha256(
+                fragment
+            ),
+            censored=graph.fragment_is_censored(fragment),
             active_observation_ids=tuple(
                 observation.observation_id
-                for observation in fragment.observations
+                for observation in graph.observations_for(fragment)
                 if observation.observation_id in active_ids
             ),
             minimum_support_witness_ids=tuple(
                 observation.observation_id
-                for observation in fragment.observations
+                for observation in graph.observations_for(fragment)
                 if observation.observation_id in witness_ids
             ),
         )
         for fragment in fragments
         if fragment.fragment_id in retained_fragment_ids
     )
-    observations = tuple(
-        observation
+    observation_map = {
+        observation.observation_id: observation
         for fragment in fragments
         if fragment.fragment_id in retained_fragment_ids
-        for observation in fragment.observations
+        for observation in graph.observations_for(fragment)
         if observation.observation_id in audit_ids
+    }
+    observations = tuple(
+        sorted(
+            observation_map.values(),
+            key=lambda observation: (
+                observation.long_axis_footprint.minimum,
+                observation.short_axis_position_interval.minimum,
+                str(observation.observation_id),
+            ),
+        )
     )
     return summaries, observations
 
 
 def solve_fixed_canvas_photo_edge_geometry(
-    fragments: tuple[PhotoEdgeFragment, ...],
+    graph: PhotoEdgeRidgeGraph,
     corridors: tuple[PhotoEdgeSearchCorridor, ...],
     scale: CanvasPixelScale,
     parameters: PhotoEdgeDetectionParameters,
@@ -2380,14 +3062,17 @@ def solve_fixed_canvas_photo_edge_geometry(
             parameters.geometry.maximum_consensus_states
         ),
     )
-    usable = tuple(
-        fragment
-        for fragment in fragments
-        if any(
-            not observation.censored
-            for observation in fragment.observations
-        )
+    diagnostics = _GeometrySchedulerDiagnostics()
+    usable, path_discovery_incomplete = _bounded_usable_fragments(
+        graph,
+        observation_prefix,
+        parameters.geometry.maximum_consensus_states,
     )
+    if path_discovery_incomplete:
+        return _path_discovery_unavailable_result(
+            budget,
+            diagnostics,
+        )
     fragment_map = {
         fragment.fragment_id: fragment for fragment in usable
     }
@@ -2395,7 +3080,7 @@ def solve_fixed_canvas_photo_edge_geometry(
         fragment.fragment_id: _pixel_line_feasible_region(
             tuple(
                 observation
-                for observation in fragment.observations
+                for observation in graph.observations_for(fragment)
                 if not observation.censored
             ),
             parameters.maximum_search_angle_degrees,
@@ -2407,12 +3092,22 @@ def solve_fixed_canvas_photo_edge_geometry(
     top_role_candidates = tuple(
         fragment
         for fragment in usable
-        if _fragment_role_eligible(fragment, corridors, top=True)
+        if _fragment_role_eligible(
+            fragment,
+            graph,
+            corridors,
+            top=True,
+        )
     )
     bottom_role_candidates = tuple(
         fragment
         for fragment in usable
-        if _fragment_role_eligible(fragment, corridors, top=False)
+        if _fragment_role_eligible(
+            fragment,
+            graph,
+            corridors,
+            top=False,
+        )
     )
     top = tuple(
         fragment
@@ -2426,6 +3121,7 @@ def solve_fixed_canvas_photo_edge_geometry(
     )
     top_groups, top_incomplete = _minimal_support_groups(
         top,
+        graph,
         parameters.minimum_independent_observations,
         line_regions,
         parameters,
@@ -2434,6 +3130,7 @@ def solve_fixed_canvas_photo_edge_geometry(
     )
     bottom_groups, bottom_incomplete = _minimal_support_groups(
         bottom,
+        graph,
         parameters.minimum_independent_observations,
         line_regions,
         parameters,
@@ -2452,7 +3149,11 @@ def solve_fixed_canvas_photo_edge_geometry(
         if existing is not None:
             return existing
         region = _pixel_line_feasible_region(
-            _observations_for_fragments(fragment_ids, fragment_map),
+            _observations_for_fragments(
+                fragment_ids,
+                fragment_map,
+                graph,
+            ),
             parameters.maximum_search_angle_degrees,
             long_extent_px=long_extent_px,
             short_extent_px=short_extent_px,
@@ -2464,23 +3165,32 @@ def solve_fixed_canvas_photo_edge_geometry(
         top_ids: tuple[ObservationId, ...],
         bottom_ids: tuple[ObservationId, ...],
     ) -> bool:
-        if not _regions_share_slope(
+        shared_slopes = _shared_slope_intervals(
             group_region(top_ids),
             group_region(bottom_ids),
-        ):
+        )
+        if not shared_slopes:
             return False
         return _fixed_pair_outer_admissible(
-            _observations_for_fragments(top_ids, fragment_map),
-            _observations_for_fragments(bottom_ids, fragment_map),
+            _observations_for_fragments(
+                top_ids,
+                fragment_map,
+                graph,
+            ),
+            _observations_for_fragments(
+                bottom_ids,
+                fragment_map,
+                graph,
+            ),
             corridors,
             scale,
             parameters,
+            shared_slopes,
             long_extent_px=long_extent_px,
             short_extent_px=short_extent_px,
         )
 
     long_center_px = 0.5 * float(long_extent_px - 1)
-    short_center_px = 0.5 * float(short_extent_px - 1)
 
     def discovery_coordinate(
         fragment_ids: tuple[ObservationId, ...],
@@ -2496,132 +3206,41 @@ def solve_fixed_canvas_photo_edge_geometry(
             )
         return NumericInterval(min(projected), max(projected)).midpoint
 
-    def nominal_deviation_mm(
-        fragment_ids: tuple[ObservationId, ...],
-        *,
-        top_side: bool,
-    ) -> float:
-        observations = _observations_for_fragments(
-            fragment_ids,
-            fragment_map,
-        )
-
-        def interval_distance(
-            interval: PixelInterval,
-            coordinate: float,
-        ) -> float:
-            if coordinate < interval.minimum:
-                return interval.minimum - coordinate
-            if coordinate > interval.maximum:
-                return coordinate - interval.maximum
-            return 0.0
-
-        return min(
-            max(
-                interval_distance(
-                    observation.short_axis_position_interval,
-                    (
-                        corridor.nominal_top_px
-                        if top_side
-                        else corridor.nominal_bottom_px
-                    ),
-                )
-                for observation in observations
-            )
-            / scale.short_axis_px_per_mm
-            for corridor in corridors
-        )
-
-    def seed_order_key(
-        top_ids: tuple[ObservationId, ...],
-        bottom_ids: tuple[ObservationId, ...],
-    ) -> tuple[object, ...]:
-        top_coordinate = discovery_coordinate(top_ids)
-        bottom_coordinate = discovery_coordinate(bottom_ids)
-        top_slope = group_region(top_ids).slope_interval
-        bottom_slope = group_region(bottom_ids).slope_interval
-        if top_slope is None or bottom_slope is None:
-            raise ValueError(
-                "photo-edge discovery group requires a slope interval"
-            )
-        shared_slope = _intersect_numeric(top_slope, bottom_slope)
-        if shared_slope is None:
-            raise ValueError(
-                "photo-edge discovery seed requires a shared slope"
-            )
-        representative_pixel_slope = shared_slope.midpoint
-        physical_slope = (
-            representative_pixel_slope
-            * scale.long_axis_px_per_mm
-            / scale.short_axis_px_per_mm
-        )
-        normalizer = math.sqrt(1.0 + physical_slope**2)
-        pair_center_px = NumericInterval(
-            min(top_coordinate, bottom_coordinate),
-            max(top_coordinate, bottom_coordinate),
-        ).midpoint
-        center_offset_mm = abs(
-            (pair_center_px - short_center_px)
-            / scale.short_axis_px_per_mm
-            / normalizer
-        )
-        physical_height_mm = (
-            (bottom_coordinate - top_coordinate)
-            / scale.short_axis_px_per_mm
-            / normalizer
-        )
-        height_deviation_mm = min(
-            abs(
-                physical_height_mm
-                - label.frame_size_mm.height_mm
-            )
-            for label in _label_order(corridors)
-        )
-        center_ratio = (
-            center_offset_mm / parameters.maximum_center_offset_mm
-        )
-        height_ratio = (
-            height_deviation_mm
-            / parameters.maximum_photo_dimension_deviation_mm
-        )
-        nominal_ratio = max(
-            nominal_deviation_mm(top_ids, top_side=True),
-            nominal_deviation_mm(bottom_ids, top_side=False),
-        ) / max(
-            parameters.maximum_center_offset_mm,
-            parameters.maximum_photo_dimension_deviation_mm,
-        )
-        return (
-            nominal_ratio,
-            max(center_ratio, height_ratio),
-            center_ratio,
-            height_ratio,
-            abs(representative_pixel_slope),
-            tuple(str(identity) for identity in top_ids),
-            tuple(str(identity) for identity in bottom_ids),
-        )
-
-    seeds, seed_incomplete = _coordinate_seed_pairs(
+    pair_seeds, seed_incomplete = _coordinate_seed_pairs(
         top_groups,
         bottom_groups,
-        maximum_inspections=parameters.geometry.maximum_region_cells,
         maximum_seeds=parameters.geometry.maximum_consensus_states,
         pair_is_possible=pair_is_possible,
         top_discovery_coordinate=discovery_coordinate,
         bottom_discovery_coordinate=discovery_coordinate,
-        top_group_order_key=lambda fragment_ids: (
-            nominal_deviation_mm(fragment_ids, top_side=True),
-            tuple(str(identity) for identity in fragment_ids),
-        ),
-        bottom_group_order_key=lambda fragment_ids: (
-            nominal_deviation_mm(fragment_ids, top_side=False),
-            tuple(str(identity) for identity in fragment_ids),
-        ),
+        top_group_order_key=None,
+        bottom_group_order_key=None,
         paired_coordinate_sum=float(short_extent_px - 1),
-        seed_order_key=seed_order_key,
+        seed_order_key=None,
+    )
+    seeds = tuple(
+        sorted(
+            (
+                (top_ids, bottom_ids, slope_interval)
+                for top_ids, bottom_ids in pair_seeds
+                for slope_interval in _shared_slope_intervals(
+                    group_region(top_ids),
+                    group_region(bottom_ids),
+                )
+            ),
+            key=lambda state: _fixed_hypothesis_order_key(
+                state[0],
+                state[1],
+                state[2],
+                scale,
+                parameters,
+                long_extent_px,
+            ),
+        )
     )
     budget.discovery_incomplete = (
-        top_incomplete
+        path_discovery_incomplete
+        or top_incomplete
         or bottom_incomplete
         or seed_incomplete
     )
@@ -2629,6 +3248,7 @@ def solve_fixed_canvas_photo_edge_geometry(
         observation_prefix,
         seeds,
         fragment_map,
+        graph,
         line_regions,
         frozenset(fragment.fragment_id for fragment in top),
         frozenset(fragment.fragment_id for fragment in bottom),
@@ -2636,11 +3256,21 @@ def solve_fixed_canvas_photo_edge_geometry(
         scale,
         parameters,
         budget,
+        diagnostics,
         long_extent_px,
         short_extent_px,
     )
+    statistics = _work_statistics(
+        budget,
+        diagnostics=diagnostics,
+    )
+    hypotheses = _hypotheses_with_work_statistics(
+        hypotheses,
+        statistics,
+    )
     summaries, audit = _audit_surfaces(
-        fragments,
+        usable,
+        graph,
         hypotheses,
         parameters.minimum_independent_observations,
     )
@@ -2648,7 +3278,6 @@ def solve_fixed_canvas_photo_edge_geometry(
         hypotheses=hypotheses,
         fragment_summaries=summaries,
         audit_observations=audit,
-        attempted_hypothesis_count=budget.consumed_consensus_states,
         budget_exhausted=(
             budget.exhausted or budget.discovery_incomplete
         ),
@@ -2659,7 +3288,9 @@ def solve_fixed_canvas_photo_edge_geometry(
                         tuple(
                             observation
                             for fragment in top_role_candidates
-                            for observation in fragment.observations
+                            for observation in graph.observations_for(
+                                fragment
+                            )
                             if not observation.censored
                         ),
                         parameters.minimum_independent_observations,
@@ -2674,7 +3305,9 @@ def solve_fixed_canvas_photo_edge_geometry(
                         tuple(
                             observation
                             for fragment in bottom_role_candidates
-                            for observation in fragment.observations
+                            for observation in graph.observations_for(
+                                fragment
+                            )
                             if not observation.censored
                         ),
                         parameters.minimum_independent_observations,
@@ -2684,6 +3317,7 @@ def solve_fixed_canvas_photo_edge_geometry(
                 and not bottom_groups
             )
         ),
+        work_statistics=statistics,
     )
 
 
@@ -2805,47 +3439,68 @@ def _pixel_pair_witness(
     )
 
 
-def solve_image_only_pair_geometry(
-    top_observations: tuple[PhotoEdgeObservation, ...],
-    bottom_observations: tuple[PhotoEdgeObservation, ...],
-    frame_size_mm: FrameSizeMm,
-    parameters: PhotoEdgeDetectionParameters,
-    budget: GeometryWorkBudget,
-    *,
-    long_extent_px: int,
-    short_extent_px: int,
-) -> tuple[PhotoEdgePairGeometry | None, EvidenceState, tuple[PhotoEdgeFact, ...]]:
-    label = PhotoEdgePhysicalLabel(None, None, frame_size_mm)
-    maximum_slope = math.tan(
-        math.radians(parameters.maximum_search_angle_degrees)
+@dataclass
+class _ImageRegionSearchState:
+    order_key: tuple[object, ...]
+    top_observations: tuple[PhotoEdgeObservation, ...]
+    bottom_observations: tuple[PhotoEdgeObservation, ...]
+    label: PhotoEdgePhysicalLabel
+    parameters: PhotoEdgeDetectionParameters
+    long_extent_px: int
+    short_extent_px: int
+    slope_resolution: float
+    initial_slope: NumericInterval
+    pending: list[tuple[str, NumericInterval, int]] = field(init=False)
+    cells: list[PhotoEdgeLineRegionCell] = field(
+        default_factory=list,
+        init=False,
     )
-    slope_resolution = (
-        parameters.geometry.subpixel_resolution_px
-        / float(max(1, long_extent_px - 1))
-    )
-    pending: list[tuple[str, NumericInterval, int]] = [
-        ("", NumericInterval(-maximum_slope, maximum_slope), 0)
-    ]
-    cells: list[PhotoEdgeLineRegionCell] = []
-    indeterminate = False
-    while pending:
-        path, slope, depth = pending.pop(0)
-        if not budget.consume_region_cell():
-            indeterminate = True
-            break
+    indeterminate: bool = field(default=False, init=False)
+
+    def __post_init__(self) -> None:
+        self.pending = [("", self.initial_slope, 0)]
+
+    @property
+    def complete(self) -> bool:
+        return not self.pending
+
+    @property
+    def pending_cell_count(self) -> int:
+        return len(self.pending)
+
+    def remaining_cell_upper_bound(self) -> int:
+        return sum(
+            _cell_work_upper_bound(
+                slope,
+                resolution=self.slope_resolution,
+                maximum_depth=max(
+                    0,
+                    self.parameters.geometry.maximum_subdivision_depth
+                    - depth,
+                ),
+            )
+            for _, slope, depth in self.pending
+        )
+
+    def mark_incomplete(self) -> None:
+        self.indeterminate = True
+        self.pending.clear()
+
+    def step(self) -> None:
+        path, slope, depth = self.pending.pop(0)
         top_outer = _pixel_intercept_outer_interval(
-            top_observations,
+            self.top_observations,
             slope,
         )
         bottom_outer = _pixel_intercept_outer_interval(
-            bottom_observations,
+            self.bottom_observations,
             slope,
         )
         if top_outer is None or bottom_outer is None:
-            continue
+            return
         raw = _ordered_polygon(top_outer, bottom_outer)
         if not raw:
-            continue
+            return
         slope_values = tuple(
             dict.fromkeys((slope.midpoint, slope.minimum, slope.maximum))
         )
@@ -2854,22 +3509,22 @@ def solve_image_only_pair_geometry(
             for slope_value in slope_values
             for witness in (
                 _pixel_pair_witness(
-                    top_observations,
-                    bottom_observations,
+                    self.top_observations,
+                    self.bottom_observations,
                     slope_value,
-                    short_extent_px,
-                    label,
+                    self.short_extent_px,
+                    self.label,
                 ),
             )
             if witness is not None
         )
         if (
             len(witnesses) < len(slope_values)
-            and depth < parameters.geometry.maximum_subdivision_depth
-            and slope.width > slope_resolution
+            and depth < self.parameters.geometry.maximum_subdivision_depth
+            and slope.width > self.slope_resolution
         ):
             midpoint = slope.midpoint
-            pending.extend(
+            self.pending.extend(
                 (
                     (
                         f"{path}0",
@@ -2883,10 +3538,10 @@ def solve_image_only_pair_geometry(
                     ),
                 )
             )
-            continue
+            return
         if not witnesses:
-            indeterminate = True
-            continue
+            self.indeterminate = True
+            return
         unique_witnesses = tuple(
             {
                 (
@@ -2911,11 +3566,11 @@ def solve_image_only_pair_geometry(
             dict.fromkeys(
                 (
                     *_active_pixel_constraints(
-                        top_observations,
+                        self.top_observations,
                         slope.midpoint,
                     ),
                     *_active_pixel_constraints(
-                        bottom_observations,
+                        self.bottom_observations,
                         slope.midpoint,
                     ),
                 )
@@ -2929,49 +3584,86 @@ def solve_image_only_pair_geometry(
                 + ",".join(str(identity) for identity in active)
             ).encode("utf-8")
         ).hexdigest()
-        cells.append(
+        self.cells.append(
             PhotoEdgeLineRegionCell(
                 source_cell_signature=signature,
                 pixel_slope=slope,
                 top_intercept_px=top_outer,
                 bottom_intercept_px=bottom_outer,
-                possible_physical_labels=(label,),
+                possible_physical_labels=(self.label,),
                 verified_witnesses=unique_witnesses,
                 active_constraint_ids=active,
             )
         )
-    unique = {
-        cell.source_cell_signature: cell for cell in cells
-    }
-    retained = tuple(unique[key] for key in sorted(unique))
-    if not retained:
-        return (
-            None,
-            EvidenceState.UNAVAILABLE,
-            (PhotoEdgeFact.PAIR_GEOMETRY_UNAVAILABLE,),
+
+    def result(
+        self,
+    ) -> tuple[
+        PhotoEdgePairGeometry | None,
+        EvidenceState,
+        tuple[PhotoEdgeFact, ...],
+    ]:
+        unique = {
+            cell.source_cell_signature: cell for cell in self.cells
+        }
+        retained = tuple(unique[key] for key in sorted(unique))
+        if not retained:
+            return (
+                None,
+                EvidenceState.UNAVAILABLE,
+                (PhotoEdgeFact.PAIR_GEOMETRY_UNAVAILABLE,),
+            )
+        state = (
+            EvidenceState.UNAVAILABLE
+            if self.indeterminate
+            else EvidenceState.SUPPORTED
         )
-    state = (
-        EvidenceState.UNAVAILABLE
-        if indeterminate
-        else EvidenceState.SUPPORTED
+        facts = (
+            (PhotoEdgeFact.PAIR_GEOMETRY_UNAVAILABLE,)
+            if self.indeterminate
+            else ()
+        )
+        return (
+            PhotoEdgePairGeometry(
+                cells=retained,
+                normal_region=None,
+                work_long_axis_extent_px=self.long_extent_px,
+                work_short_axis_extent_px=self.short_extent_px,
+                interpolation_position_uncertainty_px=0.0,
+                coordinate_space=PhotoEdgeCoordinateSpace.SOURCE,
+                numerically_indeterminate=self.indeterminate,
+            ),
+            state,
+            facts,
+        )
+
+
+def _image_region_search(
+    top_observations: tuple[PhotoEdgeObservation, ...],
+    bottom_observations: tuple[PhotoEdgeObservation, ...],
+    frame_size_mm: FrameSizeMm,
+    parameters: PhotoEdgeDetectionParameters,
+    slope: NumericInterval,
+    order_key: tuple[object, ...],
+    *,
+    long_extent_px: int,
+    short_extent_px: int,
+) -> _ImageRegionSearchState:
+    label = PhotoEdgePhysicalLabel(None, None, frame_size_mm)
+    slope_resolution = (
+        parameters.geometry.subpixel_resolution_px
+        / float(max(1, long_extent_px - 1))
     )
-    facts = (
-        (PhotoEdgeFact.PAIR_GEOMETRY_UNAVAILABLE,)
-        if indeterminate
-        else ()
-    )
-    return (
-        PhotoEdgePairGeometry(
-            cells=retained,
-            normal_region=None,
-            work_long_axis_extent_px=long_extent_px,
-            work_short_axis_extent_px=short_extent_px,
-            interpolation_position_uncertainty_px=0.0,
-            coordinate_space=PhotoEdgeCoordinateSpace.SOURCE,
-            numerically_indeterminate=indeterminate,
-        ),
-        state,
-        facts,
+    return _ImageRegionSearchState(
+        order_key=order_key,
+        top_observations=top_observations,
+        bottom_observations=bottom_observations,
+        label=label,
+        parameters=parameters,
+        long_extent_px=long_extent_px,
+        short_extent_px=short_extent_px,
+        slope_resolution=slope_resolution,
+        initial_slope=slope,
     )
 
 
@@ -3014,26 +3706,66 @@ def _active_pixel_constraints(
     )
 
 
-def _image_hypothesis(
-    prefix: str,
+def _image_hypothesis_order_key(
+    top_ids: tuple[ObservationId, ...],
+    bottom_ids: tuple[ObservationId, ...],
+    shared_pixel_slope: NumericInterval,
+    parameters: PhotoEdgeDetectionParameters,
+    long_extent_px: int,
+) -> tuple[object, ...]:
+    resolution = (
+        parameters.geometry.subpixel_resolution_px
+        / float(max(1, long_extent_px - 1))
+    )
+    return (
+        _cell_work_upper_bound(
+            shared_pixel_slope,
+            resolution=resolution,
+            maximum_depth=parameters.geometry.maximum_subdivision_depth,
+        ),
+        tuple(str(identity) for identity in top_ids),
+        tuple(str(identity) for identity in bottom_ids),
+        (shared_pixel_slope.minimum, shared_pixel_slope.maximum),
+    )
+
+
+def _image_hypothesis_search(
     top_ids: tuple[ObservationId, ...],
     bottom_ids: tuple[ObservationId, ...],
     fragment_map: dict[ObservationId, PhotoEdgeFragment],
+    graph: PhotoEdgeRidgeGraph,
+    shared_pixel_slope: NumericInterval,
     frame_size_mm: FrameSizeMm,
     parameters: PhotoEdgeDetectionParameters,
-    budget: GeometryWorkBudget,
     long_extent_px: int,
     short_extent_px: int,
-) -> PhotoEdgePairHypothesis:
-    geometry, state, facts = solve_image_only_pair_geometry(
-        _observations_for_fragments(top_ids, fragment_map),
-        _observations_for_fragments(bottom_ids, fragment_map),
+) -> _ImageRegionSearchState:
+    return _image_region_search(
+        _observations_for_fragments(top_ids, fragment_map, graph),
+        _observations_for_fragments(bottom_ids, fragment_map, graph),
         frame_size_mm,
         parameters,
-        budget,
+        shared_pixel_slope,
+        _image_hypothesis_order_key(
+            top_ids,
+            bottom_ids,
+            shared_pixel_slope,
+            parameters,
+            long_extent_px,
+        ),
         long_extent_px=long_extent_px,
         short_extent_px=short_extent_px,
     )
+
+
+def _image_hypothesis_from_search(
+    prefix: str,
+    top_ids: tuple[ObservationId, ...],
+    bottom_ids: tuple[ObservationId, ...],
+    frame_size_mm: FrameSizeMm,
+    search: _ImageRegionSearchState,
+) -> PhotoEdgePairHypothesis:
+    geometry, state, facts = search.result()
     label = PhotoEdgePhysicalLabel(None, None, frame_size_mm)
     signature = (
         "disjoint"
@@ -3072,7 +3804,7 @@ def _image_hypothesis(
 
 
 def solve_image_only_lane_geometry(
-    fragments: tuple[PhotoEdgeFragment, ...],
+    graph: PhotoEdgeRidgeGraph,
     frame_size_mm: FrameSizeMm,
     parameters: PhotoEdgeDetectionParameters,
     *,
@@ -3084,14 +3816,17 @@ def solve_image_only_lane_geometry(
         parameters.geometry.maximum_region_cells,
         parameters.geometry.maximum_consensus_states,
     )
-    usable = tuple(
-        fragment
-        for fragment in fragments
-        if any(
-            not observation.censored
-            for observation in fragment.observations
-        )
+    diagnostics = _GeometrySchedulerDiagnostics()
+    usable, path_discovery_incomplete = _bounded_usable_fragments(
+        graph,
+        observation_prefix,
+        parameters.geometry.maximum_consensus_states,
     )
+    if path_discovery_incomplete:
+        return _path_discovery_unavailable_result(
+            budget,
+            diagnostics,
+        )
     fragment_map = {
         fragment.fragment_id: fragment for fragment in usable
     }
@@ -3099,7 +3834,7 @@ def solve_image_only_lane_geometry(
         fragment.fragment_id: _pixel_line_feasible_region(
             tuple(
                 observation
-                for observation in fragment.observations
+                for observation in graph.observations_for(fragment)
                 if not observation.censored
             ),
             parameters.maximum_search_angle_degrees,
@@ -3110,6 +3845,7 @@ def solve_image_only_lane_geometry(
     }
     groups, group_incomplete = _minimal_support_groups(
         usable,
+        graph,
         parameters.minimum_independent_observations,
         line_regions,
         parameters,
@@ -3128,7 +3864,11 @@ def solve_image_only_lane_geometry(
         if existing is not None:
             return existing
         region = _pixel_line_feasible_region(
-            _observations_for_fragments(fragment_ids, fragment_map),
+            _observations_for_fragments(
+                fragment_ids,
+                fragment_map,
+                graph,
+            ),
             parameters.maximum_search_angle_degrees,
             long_extent_px=long_extent_px,
             short_extent_px=short_extent_px,
@@ -3142,11 +3882,15 @@ def solve_image_only_lane_geometry(
     ) -> bool:
         return bool(
             max(
-                fragment_map[identity].short_axis_position_interval.midpoint
+                graph.short_axis_position_interval(
+                    fragment_map[identity]
+                ).midpoint
                 for identity in top_ids
             )
             < min(
-                fragment_map[identity].short_axis_position_interval.midpoint
+                graph.short_axis_position_interval(
+                    fragment_map[identity]
+                ).midpoint
                 for identity in bottom_ids
             )
             and _regions_share_slope(
@@ -3155,61 +3899,129 @@ def solve_image_only_lane_geometry(
             )
         )
 
-    seeds, seed_incomplete = _diagonal_seed_pairs(
+    pair_seeds, seed_incomplete = _diagonal_seed_pairs(
         groups,
         groups,
-        maximum_inspections=parameters.geometry.maximum_region_cells,
         maximum_seeds=parameters.geometry.maximum_consensus_states,
         pair_is_possible=pair_is_possible,
     )
-    budget.discovery_incomplete = group_incomplete or seed_incomplete
+    seeds = tuple(
+        sorted(
+            (
+                (top_ids, bottom_ids, slope_interval)
+                for top_ids, bottom_ids in pair_seeds
+                for slope_interval in _shared_slope_intervals(
+                    group_region(top_ids),
+                    group_region(bottom_ids),
+                )
+            ),
+            key=lambda state: _image_hypothesis_order_key(
+                state[0],
+                state[1],
+                state[2],
+                parameters,
+                long_extent_px,
+            ),
+        )
+    )
+    budget.discovery_incomplete = bool(
+        path_discovery_incomplete
+        or group_incomplete
+        or seed_incomplete
+    )
     queue = list(seeds)
     visited: set[
-        tuple[tuple[ObservationId, ...], tuple[ObservationId, ...]]
+        tuple[
+            tuple[ObservationId, ...],
+            tuple[ObservationId, ...],
+            NumericInterval,
+        ]
     ] = set()
     solved: dict[
-        tuple[tuple[ObservationId, ...], tuple[ObservationId, ...]],
+        tuple[
+            tuple[ObservationId, ...],
+            tuple[ObservationId, ...],
+            NumericInterval,
+        ],
         PhotoEdgePairHypothesis,
     ] = {}
+    unsearched: set[
+        tuple[
+            tuple[ObservationId, ...],
+            tuple[ObservationId, ...],
+            NumericInterval,
+        ]
+    ] = set()
 
-    def solve(
-        state: tuple[
-            tuple[ObservationId, ...],
-            tuple[ObservationId, ...],
+    def solve_many(
+        states: tuple[
+            tuple[
+                tuple[ObservationId, ...],
+                tuple[ObservationId, ...],
+                NumericInterval,
+            ],
+            ...,
         ],
-    ) -> PhotoEdgePairHypothesis | None:
-        existing = solved.get(state)
-        if existing is not None:
-            return existing
-        if not budget.consume_consensus_state():
-            return None
-        hypothesis = _image_hypothesis(
-            observation_prefix,
-            state[0],
-            state[1],
-            fragment_map,
-            frame_size_mm,
-            parameters,
+    ) -> None:
+        candidates: list[
+            tuple[
+                tuple[
+                    tuple[ObservationId, ...],
+                    tuple[ObservationId, ...],
+                    NumericInterval,
+                ],
+                _ImageRegionSearchState,
+            ]
+        ] = []
+        for state in set(states):
+            if state in solved or state in unsearched:
+                continue
+            candidates.append(
+                (
+                    state,
+                    _image_hypothesis_search(
+                        state[0],
+                        state[1],
+                        fragment_map,
+                        graph,
+                        state[2],
+                        frame_size_mm,
+                        parameters,
+                        long_extent_px,
+                        short_extent_px,
+                    ),
+                )
+            )
+        searched, rejected = _register_and_run_searches(
+            "image",
+            tuple(candidates),
             budget,
-            long_extent_px,
-            short_extent_px,
+            diagnostics,
         )
-        solved[state] = hypothesis
-        return hypothesis
+        unsearched.update(rejected)
+        for state, search in searched:
+            solved[state] = _image_hypothesis_from_search(
+                observation_prefix,
+                state[0],
+                state[1],
+                frame_size_mm,
+                search,
+            )
 
+    solve_many(tuple(queue))
     maximal_hypotheses: list[PhotoEdgePairHypothesis] = []
-    while queue and not budget.exhausted:
+    while queue:
         state = queue.pop(0)
         if state in visited:
             continue
         visited.add(state)
-        hypothesis = solve(state)
+        hypothesis = solved.get(state)
         if (
             hypothesis is None
             or hypothesis.state == EvidenceState.CONTRADICTED
         ):
             continue
-        top_ids, bottom_ids = state
+        top_ids, bottom_ids, _ = state
         used = set(top_ids) | set(bottom_ids)
         additions = tuple(
             addition
@@ -3226,17 +4038,45 @@ def solve_image_only_lane_geometry(
                 ),
             )
         )
-        feasible_additions = tuple(
-            addition
+        addition_states = tuple(
+            state_addition
             for addition in additions
+            for state_addition in (
+                (
+                    addition[0],
+                    addition[1],
+                    slope_interval,
+                )
+                for slope_interval in _shared_slope_intervals(
+                    group_region(addition[0]),
+                    group_region(addition[1]),
+                )
+            )
+            if state_addition not in visited
+        )
+        solve_many(addition_states)
+        feasible_additions = tuple(
+            state_addition
+            for state_addition in addition_states
             if (
-                (preview := solve(addition)) is not None
+                (preview := solved.get(state_addition)) is not None
                 and preview.state != EvidenceState.CONTRADICTED
                 and preview.geometry is not None
             )
         )
         if feasible_additions:
-            queue.extend(feasible_additions)
+            queue.extend(
+                sorted(
+                    set(feasible_additions),
+                    key=lambda item: _image_hypothesis_order_key(
+                        item[0],
+                        item[1],
+                        item[2],
+                        parameters,
+                        long_extent_px,
+                    ),
+                )
+            )
         else:
             maximal_hypotheses.append(hypothesis)
     maximal = tuple(
@@ -3270,8 +4110,17 @@ def solve_image_only_lane_geometry(
         ).hexdigest()
         canonical.setdefault(signature, hypothesis)
     retained = tuple(canonical[key] for key in sorted(canonical))
+    statistics = _work_statistics(
+        budget,
+        diagnostics=diagnostics,
+    )
+    retained = _hypotheses_with_work_statistics(
+        retained,
+        statistics,
+    )
     summaries, audit = _audit_surfaces(
-        fragments,
+        usable,
+        graph,
         retained,
         parameters.minimum_independent_observations,
     )
@@ -3279,7 +4128,6 @@ def solve_image_only_lane_geometry(
         hypotheses=retained,
         fragment_summaries=summaries,
         audit_observations=audit,
-        attempted_hypothesis_count=budget.consumed_consensus_states,
         budget_exhausted=(
             budget.exhausted or budget.discovery_incomplete
         ),
@@ -3290,7 +4138,7 @@ def solve_image_only_lane_geometry(
                     tuple(
                         observation
                         for fragment in usable
-                        for observation in fragment.observations
+                        for observation in graph.observations_for(fragment)
                         if not observation.censored
                     ),
                     parameters.minimum_independent_observations,
@@ -3298,6 +4146,7 @@ def solve_image_only_lane_geometry(
             )
             >= parameters.minimum_independent_observations
         ),
+        work_statistics=statistics,
     )
 
 

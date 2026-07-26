@@ -405,8 +405,8 @@ class PhotoEdgeNormalFeasibleRegion:
     cells: tuple[NormalRegionCell, ...]
     set_relation: RegionSetRelation
     numerically_indeterminate: bool
-    consumed_region_cells: int
-    consumed_consensus_states: int
+    consumed_region_cells: int = 0
+    consumed_consensus_states: int = 0
 
     def __post_init__(self) -> None:
         if not isinstance(self.set_relation, RegionSetRelation):
@@ -418,7 +418,7 @@ class PhotoEdgeNormalFeasibleRegion:
             self.consumed_region_cells,
             self.consumed_consensus_states,
         ) < 0:
-            raise ValueError("geometry work counters cannot be negative")
+            raise ValueError("geometry work snapshots cannot be negative")
         if (
             self.set_relation == RegionSetRelation.DISJOINT
             and self.cells
@@ -563,15 +563,6 @@ class PhotoEdgePairGeometry:
         return PixelInterval(
             min(interval.minimum for interval in intervals),
             max(interval.maximum for interval in intervals),
-        )
-
-    @property
-    def pixel_slope_interval(self) -> NumericInterval:
-        if not self.cells:
-            raise ValueError("unresolved photo-edge geometry has no slope")
-        return NumericInterval(
-            min(cell.pixel_slope.minimum for cell in self.cells),
-            max(cell.pixel_slope.maximum for cell in self.cells),
         )
 
     @property

@@ -12,7 +12,8 @@ entry: public input
   -> detection: ScanCanvasEvidence or lane containment
   -> temporary dense local transition measurements
   -> PhotoEdgeObservation
-  -> PhotoEdgeFragment
+  -> PhotoEdgeRidgeGraph
+  -> lazy complete PhotoEdgeFragment paths
   -> maximal admissible pair hypotheses
   -> PhotoEdgePairEvidence
       -> TransformGeometryEvidence
@@ -63,7 +64,8 @@ resolution、status 或掩盖明显错误。当前 V4.9 尚未从新黄金集冻
 | `ScanCanvasEvidence` | 从 source 像素长短比选择唯一、无匹配或竞争 profile。 |
 | `CanvasPixelScale` | 唯一 long/short px/mm 尺度与轴向映射。 |
 | `PhotoEdgeObservation` | 与材料、场景和极性无关的局部像素测量。 |
-| `PhotoEdgeFragment` | 同一连续 ridge 的最大、不可拆 build-stage 单元。 |
+| `PhotoEdgeRidgeGraph` | 唯一拥有 observation 的连续证据图；edge 只表示相邻 anchor 间的直接证据。 |
+| `PhotoEdgeFragment` | graph 中完整 source-to-sink path 的不可变 node-ID 引用；不拥有 observation。 |
 | `PhotoEdgePairEvidence` | 唯一 top/bottom 边缘身份真相与完整 physical label。 |
 | `TransformGeometryEvidence` | selected source pair 或 dual joint region 的 transform 消费结果。 |
 | `SharedShortAxisPlan` | mapped pair 的全 workspace 安全裁切消费结果。 |
@@ -113,9 +115,15 @@ Detector 在分帧前工作，不知道 transition 属于哪一张照片。证�
 观测域重叠。
 
 所有强度计算只使用 `make_base_gray_u8`。每个 anchor 使用 0.5×、1×、2× 三个短轴
-尺度，长轴 footprint 始终由一个 `long_support_width` 决定。至少两个尺度的位置包络
-相容，并且绝对 intensity、texture 或 gradient effect 明确超过局部 noise，才产生
-`supported` transition。不同尺度和 channel 在同一原始位置只合并为一个 observation。
+尺度，长轴 footprint 始终由一个 `long_support_width` 决定。Intensity、texture、
+gradient 各自从自己的 profile 计算 response、local noise 与连续 support interval；
+任一 channel 可独立贡献，不要求三者同时出现。每个连续 support 段的端点外扩半个像素，
+peak 只作统计，不缩窄位置包络。
+
+实际参加同一 transition 的 support 必须具有非空共同位置交集，并达到不同尺度数量下限。
+Support 按区间中心和稳定 identity 顺序扫描；加入下一项会令累计交集为空时立即结束当前
+组，因此仅靠传递重叠不能桥接两个 transition。同一 support identity 只计一次，最终
+observation 的位置包络是全部参加区间的保守外包。
 
 局部状态只有：
 
@@ -135,10 +143,18 @@ d ∈ [min(n(θ)·corner(R)), max(n(θ)·corner(R))]
 ```
 
 它不声称 ridge 覆盖 rectangle 的全部长轴宽度。Dense response、anchor、threshold pixels
-和尺度重复都是临时数据。实际 support pixels 的 8 连通关系形成 component；没有连续
-pixel support 的 gap 必须断开 fragment。每侧唯一数量下限是三个 uncensored、footprint
-互不重叠的 supported observations；除此之外没有最小长度。恰好三个时必须全部共同可行，
-不能删除其中一个再用两个点成立。
+和尺度重复都是临时数据。每个 graph node 唯一拥有一个 observation；edge 仅在相邻采样
+位置存在直接连续 support 时建立。没有直接证据就不建 edge，也没有 gap tolerance；真实
+缺口形成不同 component。Junction observation 仍只属于一个 node。
+
+`PhotoEdgeFragment` 由 graph 按 source node ID 和每级 outgoing node ID 的字典序惰性生成，
+只保存完整 source-to-sink node-ID tuple。无 junction 的单链曲线只生成一条完整 path，
+geometry 无权摘取局部直线。Geometry 通过 node ID 解析 observation，并始终按 observation
+ID 去重；多条 path 共用 junction 时不能重复贡献证据。不同 component 可以作为完整 path
+进入同一 consensus，但这只表示共同支持一个几何集合，不表示 component 之间观测连续。
+
+每侧唯一数量下限是三个 uncensored、footprint 互不重叠的 supported observations；除此
+之外没有最小长度。恰好三个时必须全部共同可行，不能删除其中一个再用两个点成立。
 
 ## 4. 联合法向几何
 
@@ -169,10 +185,36 @@ Search 与 transform 接受角均以 pixel angle 配置；search 的 4° 包络�
 physical labels，以及逐条重新代入所有 observation、order、containment、physical-band
 约束后成立的 witness。Outer 非空只证明“可能”，只有 verified witness 证明“存在”。
 
+Line feasible region 始终是 polygon 集合。约束逐 polygon 精确相交，slope 投影也逐项
+相交；不再用全局 `min/max slope` 把多个不相连分量填成凸包。结果规范化为排序后的多个
+slope/θ 连通分量，只有重叠或间距不超过既有 `_POLYGON_EPSILON` 才合并。每个分量建立独立
+hypothesis；fixed-canvas、image-only、seed、outer admissibility 与 slope-sharing 检查
+消费同一精确集合。
+
 统一集合关系是 `DISJOINT`、`SUBSET`、`PARTIAL_INTERSECTION` 和
 `NUMERICALLY_INDETERMINATE`。达到 1/16 px 对应 offset/θ 分辨率仍不能证明的区域只能
 unavailable。Region cell 与 consensus state 使用 sample/lane 级共享
-`GeometryWorkBudget`；预算不会为 hypothesis 重置，耗尽也只能 unavailable。
+`GeometryWorkBudget`。它是唯一 mutable 计数 owner：`maximum_consensus_states` 限制
+累计首次注册的唯一 consensus state，`maximum_region_cells` 限制累计实际调用 evaluator
+的 cell 数；暂停、恢复和重复访问不重复扣费，pending 或预约也不扣费。
+`GeometryWorkStatistics` 只在求解结束时生成一次不可变快照，不形成第二套计数。预算不会
+为 hypothesis 重置，耗尽也只能 unavailable。Production report 为保持既有 schema，
+只把同一最终快照的两个累计计数投影到 normal region；这些只读字段不是预算 owner。
+
+θ 区间宽度 `w`、既有 resolution `r` 与最大深度 `D` 的预约上界固定为：
+
+```text
+d = 0                              if w <= r
+d = min(D, ceil(log2(w / r)))      if w > r
+cell_upper_bound = 2^(d + 1) - 1
+```
+
+它只用于 admission、预约和执行顺序。稳定顺序键是
+`(cell_upper_bound, top_path_id, bottom_path_id, theta_component_id)`；不能进入
+evidence、confidence、selection、Gate 或 report。Scheduler 惰性发现 path 与 hypothesis，
+保留可恢复 subtree state，并确保预约总量和 pending cell 都不超过剩余 cell 预算。窄候选
+先执行；未开始的宽候选可被更窄候选替换。只有 evaluator 调用前才累计扣除一个 cell，
+提前剪枝立即释放未用预约。
 
 每个可行模型携带完整 label：scan-canvas profile、physical band 和完整
 `FrameSizeMm(width_mm, height_mm)`。所有模型无 label 为 contradicted；部分模型无 label
@@ -190,9 +232,15 @@ observation rectangles
 ∩ union(allowed complete physical labels)
 ```
 
-确定性最小 seed 遇到互斥可加入 fragment 时必须分支。最终只保留按 fragment 集合包含关系
-maximal 的 consensus，并按固定网格 cell signature 合并等价区域；不能按点数、残差、
-score 或 margin 选一个。全局 state/cell 预算超限时返回 unavailable，不静默截断。
+确定性最小 seed 遇到互斥可加入 fragment 时必须分支。Consensus 只在父 hypothesis 完成
+后惰性创建，并在唯一 state ID 首次注册时扣除累计预算。最终只保留按 fragment 集合包含
+关系 maximal 的 consensus，并按固定网格 cell signature 合并等价区域；不能按点数、
+残差、score 或 margin 选一个。
+
+Path 或 hypothesis 未枚举、候选未预约、cell search 未完成，或 consensus 分支未覆盖，
+都会标记搜索不完整。此时 runtime pair geometry 必须为 `unavailable`，无 selection，也
+不进入 finalization；局部完成 witness 无权改变结论。已经确认 path discovery 不完整时
+立即停止后续 polygon/search 工作，是 typed unavailable 的执行结果，不是成功 early-stop。
 
 同一连续 ridge 不可拆。位置包络能吸收的轻微偏离仍属于一个直线区域；系统性弯曲、单边
 弯曲或连续 ridge 上的多个局部直线不能切出局部三点解。完整 fragment 无 admissible
@@ -303,7 +351,15 @@ observations。
 
 Debug Analysis 只读取报告证据，显示 corridor/halo、compact fragments、censored summary、
 active/witness observations、source pair uncertainty envelope、mapped pair 和 shared short
-axis；它不重算几何。
+axis；它不重算几何。Graph 分叉、junction ownership 和 path 完整性由 contracts 与一次性
+只读内部审计验证，不扩充 production report schema。Debug 人工检查只回答最终正式边缘
+是否落在真实照片边界；没有正式 geometry 时无边缘可批准。
+
+黄金比较器位于 runtime 外部。Runtime 只产生正式 geometry，或产生 `unavailable` 且不
+进入 finalization；比较器才记录 `compared` 或 `production_geometry_unavailable`。存在
+正式 geometry 时，比较器分别测量每条边的角度、signed normal distance、危险向外越界、
+向内内容损失与 containment。`1e-9` 只作数值零判断，不是实用安全容差；在方向性容差另行
+校准并获批前，比较器不据这些数值自动声明 `resolved-safe`。
 
 Baseline 是 runtime 外部的独立审计输入。Runtime、tools 和 tests 均不读取人工标签或
 白名单，机器 supported 不能称为 human-confirmed。只有绑定 source SHA 的原图坐标，并由

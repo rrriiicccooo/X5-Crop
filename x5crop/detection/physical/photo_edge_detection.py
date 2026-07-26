@@ -28,7 +28,7 @@ from .photo_edge_geometry import (
     solve_fixed_canvas_photo_edge_geometry,
     solve_image_only_lane_geometry,
 )
-from .photo_edge_observation import observe_photo_edge_fragments
+from .photo_edge_observation import observe_photo_edge_ridge_graph
 
 
 _PHOTO_EDGE_SIDE_COUNT = 2
@@ -263,7 +263,7 @@ def observe_fixed_canvas_photo_edges(
         frame_size_options,
         parameters,
     )
-    observed = observe_photo_edge_fragments(
+    observed = observe_photo_edge_ridge_graph(
         gray_work,
         corridors,
         parameters,
@@ -271,7 +271,7 @@ def observe_fixed_canvas_photo_edges(
         observation_prefix=observation_id,
     )
     geometry = solve_fixed_canvas_photo_edge_geometry(
-        observed.fragments,
+        observed.graph,
         corridors,
         scale,
         parameters,
@@ -325,7 +325,7 @@ def observe_image_only_lane_photo_edges(
     source_sha256: str,
     observation_id: str,
 ) -> PhotoEdgePairEvidence:
-    observed = observe_photo_edge_fragments(
+    observed = observe_photo_edge_ridge_graph(
         gray_work,
         (),
         parameters,
@@ -333,7 +333,7 @@ def observe_image_only_lane_photo_edges(
         observation_prefix=observation_id,
     )
     geometry = solve_image_only_lane_geometry(
-        observed.fragments,
+        observed.graph,
         frame_size_mm,
         parameters,
         observation_prefix=observation_id,

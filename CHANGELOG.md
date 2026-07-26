@@ -11,6 +11,45 @@
 V4.9 是 current-only 的物理模型与源码重构。历史 PASS/REVIEW、report schema、人工标签
 和裁切 geometry 不是兼容目标。
 
+### 2026-07-26：S027 边缘表示与搜索完整性
+
+- Photo-edge observation 改为 channel-local uncertainty：intensity、texture、gradient
+  各自用本 channel 的 response 与 local noise 形成连续 support interval；任一 channel
+  可独立贡献，多尺度合并要求所有实际参加的 support 具有共同交集，不再用传递重叠连接
+  两个 transition。
+- `PhotoEdgeRidgeGraph` 成为 observation 与 ridge identity 的唯一 owner。Node 唯一拥有
+  observation，edge 只表示相邻 anchor 的直接连续证据；`PhotoEdgeFragment` 只引用完整
+  source-to-sink node-ID path。没有直接证据不建 gap edge，geometry 按 observation ID
+  去重，也不能从单链曲线截取局部直线。
+- Line feasible region 保留逐 polygon 的精确交集与全部不相连 slope/θ 分量，不再用全局
+  slope 外包填回中间禁区。只有既有 `_POLYGON_EPSILON` 可合并数值接触的分量。
+- `GeometryWorkBudget` 继续独占可变计数：consensus state 与实际 cell evaluation 都按
+  整个求解累计，pending 和预约不扣费。Scheduler 使用固定完整二叉树工作量上界和稳定
+  顺序，先完成窄候选；统计只在结束时生成不可变快照。任何 path、hypothesis、region 或
+  consensus 分支未覆盖，runtime 都返回 `unavailable`、无 selection、无 finalization。
+  Path discovery 已确定不完整时不再继续构造无权采用的 polygon 或局部 witness。
+- 固定画布与 image-only lane 共用 graph、scheduler、budget owner 和统计语义；水平与垂直
+  使用同一 canonical observer/geometry 流。旧 observations-owning fragment、aggregate
+  slope interval、逐 hypothesis 重置预算和相关兼容入口已删除。
+- 黄金比较器仍是 runtime 外部只读工具。正式 geometry 才记录 `compared` 并输出逐边角度、
+  signed normal distance、危险向外越界、向内内容损失、containment、transform 与 final
+  boxes；无正式 geometry 记录 `production_geometry_unavailable` 并保持 `needs_review`。
+  `1e-9` 只作数值零判断，本轮不新增方向性 pass threshold，也不自动声明
+  `resolved-safe`。
+- 验证范围固定为新增表示/预算/调度/旋转与 dual-lane contracts、八张 nominal cohort、
+  额外 `half/full`、`S098` stress、current-schema comparison 与 Debug Analysis。`S098`
+  不作为 nominal 门槛；S027 的方向性容差校准与最终安全批准仍属于后续独立任务。
+- 同配置 S027 修改前 wall time 中位数为 36.03 秒；修复后 warm-up 加三次测量为
+  40.49 / 40.70 / 41.06 秒，中位数 40.70 秒、范围 0.57 秒。新增成本来自各 channel
+  正确归属的 local noise，不作为物理安全阈值。内部审计记录 118,234 nodes、225,900
+  direct edges、8,937 components、85,727 junction nodes、0 个重复 observation owner；
+  path discovery 不完整时累计执行 0 cells、注册 0 consensus states，并保持 unavailable。
+- 八张 nominal 的外部比较结果均为 `production_geometry_unavailable` / `needs_review`；
+  `S051`、`S055`、`S109` 的 count 仍分别为 `5/3`、`5/4`、`11/7`，其余五张 count
+  相符但没有正式 geometry。额外 `half/full` 与 `S098` 均无崩溃、无 finalization。
+  Debug Analysis 显示 retained fragments 为零，没有可供物理批准的最终边缘。
+- CLI、用户配置、production report schema、人工 baseline schema 与公共用户文档不变。
+
 ### 2026-07-26：黄金基线、文档与仓库收束
 
 - 九张黄金样片均已由用户确认，形成绑定原图、标注副本、proposal snapshot 与复核 JPG

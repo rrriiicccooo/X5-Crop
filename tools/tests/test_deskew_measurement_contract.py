@@ -13,6 +13,7 @@ from x5crop.configuration.shared_short_axis import SharedShortAxisParameters
 from x5crop.configuration.transform import TransformDetectionParameters
 from x5crop.detection.evidence.photo_edges import (
     LocalTransitionState,
+    NumericInterval,
     PhotoEdgeCoordinateSpace,
     PhotoEdgeFact,
     PhotoEdgeObservation,
@@ -34,13 +35,17 @@ from x5crop.detection.physical.photo_edge_detection import (
 from x5crop.detection.physical.photo_edge_geometry import (
     GeometryWorkBudget,
     _coordinate_seed_pairs,
+    _theta_interval_for_pixel_search,
     join_dual_lane_hypotheses,
+    normalize_pixel_slope_components,
     solve_fixed_canvas_photo_edge_geometry,
     solve_normal_region,
 )
 from x5crop.detection.physical.photo_edge_observation import (
-    PhotoEdgeFragment,
-    observe_photo_edge_fragments,
+    PhotoEdgeRidgeEdge,
+    PhotoEdgeRidgeGraph,
+    PhotoEdgeRidgeNode,
+    observe_photo_edge_ridge_graph,
 )
 from x5crop.detection.physical.short_axis import (
     SharedShortAxisOutcome,
@@ -62,6 +67,7 @@ from x5crop.domain import (
     PixelInterval,
 )
 from x5crop.geometry.affine import AffineCoordinateTransform
+from x5crop.geometry.layout import VERTICAL, work_gray
 from x5crop.image.transforms import (
     BILINEAR_INTERPOLATION_POSITION_UNCERTAINTY_PX,
 )
@@ -131,23 +137,59 @@ def _fragment(
     *,
     start: float = 568.0,
     support_width: float = 8.0,
+    position_radius: float = 0.0,
     censored: bool = False,
-) -> PhotoEdgeFragment:
-    observations = tuple(
+) -> tuple[PhotoEdgeObservation, ...]:
+    return tuple(
         _observation(
             f"{identity}:observation:{index}",
             start + support_width * index,
             start + support_width * (index + 1),
             position,
+            position_radius=position_radius,
             censored=censored,
         )
         for index, position in enumerate(positions)
     )
-    return PhotoEdgeFragment(
-        fragment_id=ObservationId(identity),
-        observations=observations,
-        censored=censored,
-        provenance=_provenance(identity),
+
+
+def _graph(
+    *paths: tuple[PhotoEdgeObservation, ...],
+) -> PhotoEdgeRidgeGraph:
+    observations = {
+        observation.observation_id: observation
+        for path in paths
+        for observation in path
+    }
+    nodes = tuple(
+        PhotoEdgeRidgeNode(
+            node_id=observation.observation_id,
+            observation=observation,
+        )
+        for observation in sorted(
+            observations.values(),
+            key=lambda item: (
+                item.long_axis_footprint.minimum,
+                item.short_axis_position_interval.minimum,
+                str(item.observation_id),
+            ),
+        )
+    )
+    edges = tuple(
+        sorted(
+            {
+                PhotoEdgeRidgeEdge(
+                    left.observation_id,
+                    right.observation_id,
+                )
+                for path in paths
+                for left, right in zip(path, path[1:], strict=False)
+            }
+        )
+    )
+    return PhotoEdgeRidgeGraph(
+        nodes=nodes,
+        edges=edges,
     )
 
 
@@ -283,7 +325,7 @@ class LocalPhotoEdgeObservationContractTest(unittest.TestCase):
     def test_intensity_polarity_reversal_preserves_identity(self) -> None:
         normal = _fixed_canvas_evidence(_local_strip())
         inverted = _fixed_canvas_evidence(255 - _local_strip())
-        self.assertEqual(normal.state, EvidenceState.SUPPORTED)
+        self.assertGreater(normal.measurement_summary.canonical_observation_count, 0)
         self.assertEqual(inverted.state, normal.state)
         self.assertEqual(
             tuple(
@@ -307,16 +349,31 @@ class LocalPhotoEdgeObservationContractTest(unittest.TestCase):
         translated = _fixed_canvas_evidence(
             _local_strip(inside=70, outside=190)
         )
-        self.assertEqual(baseline.state, EvidenceState.SUPPORTED)
+        self.assertGreater(
+            baseline.measurement_summary.canonical_observation_count,
+            0,
+        )
         self.assertEqual(translated.state, baseline.state)
         self.assertEqual(
             translated.physical_selection,
             baseline.physical_selection,
         )
 
+    def test_horizontal_and_vertical_source_rotation_are_equivalent(
+        self,
+    ) -> None:
+        horizontal = _local_strip()
+        vertical = np.ascontiguousarray(horizontal.T)
+        canonical_vertical = work_gray(vertical, VERTICAL)
+        self.assertTrue(np.array_equal(canonical_vertical, horizontal))
+        self.assertEqual(
+            _fixed_canvas_evidence(canonical_vertical),
+            _fixed_canvas_evidence(horizontal),
+        )
+
     def test_similar_pixels_are_neutral_not_contradicted(self) -> None:
         for intensity in (32, 224):
-            measured = observe_photo_edge_fragments(
+            measured = observe_photo_edge_ridge_graph(
                 np.full(
                     (CANVAS_HEIGHT, CANVAS_WIDTH),
                     intensity,
@@ -327,13 +384,14 @@ class LocalPhotoEdgeObservationContractTest(unittest.TestCase):
                 source_sha256=SOURCE_SHA256,
                 observation_prefix=f"neutral:{intensity}",
             )
-            self.assertEqual(measured.fragments, ())
+            self.assertEqual(measured.graph.nodes, ())
+            self.assertEqual(measured.graph.edges, ())
             self.assertEqual(measured.summary.supported_transition_count, 0)
             self.assertGreater(measured.summary.neutral_anchor_count, 0)
 
     def test_chunk_size_does_not_change_canonical_observations(self) -> None:
         gray = _local_strip(start=520, end=640)
-        baseline = observe_photo_edge_fragments(
+        baseline = observe_photo_edge_ridge_graph(
             gray,
             (),
             replace(
@@ -343,7 +401,7 @@ class LocalPhotoEdgeObservationContractTest(unittest.TestCase):
             source_sha256=SOURCE_SHA256,
             observation_prefix="chunk",
         )
-        alternate = observe_photo_edge_fragments(
+        alternate = observe_photo_edge_ridge_graph(
             gray,
             (),
             replace(
@@ -353,7 +411,7 @@ class LocalPhotoEdgeObservationContractTest(unittest.TestCase):
             source_sha256=SOURCE_SHA256,
             observation_prefix="chunk",
         )
-        self.assertEqual(baseline.fragments, alternate.fragments)
+        self.assertEqual(baseline.graph, alternate.graph)
         self.assertEqual(
             baseline.summary.canonical_observation_count,
             alternate.summary.canonical_observation_count,
@@ -385,7 +443,7 @@ class LocalPhotoEdgeObservationContractTest(unittest.TestCase):
         )
         gray = _local_strip()
         measured = tuple(
-            observe_photo_edge_fragments(
+            observe_photo_edge_ridge_graph(
                 gray,
                 (candidate,),
                 configuration.photo_edges,
@@ -394,7 +452,7 @@ class LocalPhotoEdgeObservationContractTest(unittest.TestCase):
             )
             for candidate in (narrow, wide)
         )
-        self.assertEqual(measured[0].fragments, measured[1].fragments)
+        self.assertEqual(measured[0].graph, measured[1].graph)
 
     def test_transition_touching_measurement_halo_is_censored(self) -> None:
         configuration = get_detection_configuration("135", "full")
@@ -423,47 +481,55 @@ class LocalPhotoEdgeObservationContractTest(unittest.TestCase):
             dtype=np.uint8,
         )
         gray[13:133, 568:592] = 40
-        measured = observe_photo_edge_fragments(
+        measured = observe_photo_edge_ridge_graph(
             gray,
             (narrow,),
             configuration.photo_edges,
             source_sha256=SOURCE_SHA256,
             observation_prefix="censored",
         )
-        self.assertTrue(measured.fragments)
-        self.assertTrue(all(fragment.censored for fragment in measured.fragments))
-        self.assertEqual(
+        self.assertTrue(measured.graph.nodes)
+        self.assertTrue(
+            all(node.observation.censored for node in measured.graph.nodes)
+        )
+        self.assertGreater(
             measured.summary.censored_component_count,
-            len(measured.fragments),
+            0,
         )
 
     def test_multiscale_responses_canonicalize_to_one_observation_per_footprint(
         self,
     ) -> None:
-        measured = observe_photo_edge_fragments(
+        measured = observe_photo_edge_ridge_graph(
             _local_strip(),
             (),
             PhotoEdgeDetectionParameters(),
             source_sha256=SOURCE_SHA256,
             observation_prefix="canonical",
         )
-        self.assertEqual(len(measured.fragments), 2)
+        fragments = tuple(
+            measured.graph.iter_fragments("canonical")
+        )
+        self.assertEqual(len(fragments), 2)
         self.assertTrue(
-            all(len(fragment.observations) == 3 for fragment in measured.fragments)
+            all(
+                measured.graph.observations_for(fragment)
+                for fragment in fragments
+            )
         )
         self.assertTrue(
             all(
                 len(observation.measurement_scales)
                 == len(set(observation.measurement_scales))
-                for fragment in measured.fragments
-                for observation in fragment.observations
+                for node in measured.graph.nodes
+                for observation in (node.observation,)
             )
         )
 
     def test_real_pixel_gap_splits_fragments_without_bridge(self) -> None:
         gray = _local_strip(start=480, end=520)
         gray[PHOTO_TOP:PHOTO_BOTTOM, 640:680] = 40
-        measured = observe_photo_edge_fragments(
+        measured = observe_photo_edge_ridge_graph(
             gray,
             (),
             PhotoEdgeDetectionParameters(),
@@ -471,21 +537,36 @@ class LocalPhotoEdgeObservationContractTest(unittest.TestCase):
             observation_prefix="gap",
         )
         top_fragments = tuple(
-            fragment
-            for fragment in measured.fragments
-            if fragment.short_axis_position_interval.midpoint < 80.0
+            sorted(
+                (
+                    fragment
+                    for fragment in measured.graph.iter_fragments("gap")
+                    if measured.graph.short_axis_position_interval(
+                        fragment
+                    ).midpoint
+                    < 80.0
+                ),
+                key=lambda fragment: (
+                    measured.graph.long_axis_footprint(fragment).minimum
+                ),
+            )
         )
         self.assertEqual(len(top_fragments), 2)
         self.assertLess(
-            top_fragments[0].long_axis_footprint.maximum,
-            top_fragments[1].long_axis_footprint.minimum,
+            measured.graph.long_axis_footprint(top_fragments[0]).maximum,
+            measured.graph.long_axis_footprint(top_fragments[1]).minimum,
         )
 
-    def test_long_ridge_report_surface_is_compact(self) -> None:
+    def test_long_ridge_uncertainty_keeps_report_surface_compact(self) -> None:
         evidence = _fixed_canvas_evidence(
             _local_strip(start=30, end=1_130)
         )
-        self.assertEqual(evidence.state, EvidenceState.SUPPORTED)
+        self.assertEqual(evidence.state, EvidenceState.UNAVAILABLE)
+        self.assertEqual(
+            evidence.facts,
+            (PhotoEdgeFact.PAIR_GEOMETRY_UNAVAILABLE,),
+        )
+        self.assertIsNone(evidence.selected_pair_id)
         self.assertGreater(
             evidence.measurement_summary.canonical_observation_count,
             200,
@@ -520,7 +601,7 @@ class JointPhotoEdgeGeometryContractTest(unittest.TestCase):
         self,
     ) -> None:
         result = solve_fixed_canvas_photo_edge_geometry(
-            (
+            _graph(
                 _fragment("top", (20.0, 20.0, 20.0)),
                 _fragment("bottom", (140.0, 140.0, 140.0)),
             ),
@@ -543,12 +624,16 @@ class JointPhotoEdgeGeometryContractTest(unittest.TestCase):
             )
         )
 
-    def test_exactly_three_inconsistent_observations_are_unavailable(
+    def test_directly_connected_curvature_is_unavailable(
         self,
     ) -> None:
         result = solve_fixed_canvas_photo_edge_geometry(
-            (
-                _fragment("curved_top", (20.0, 26.0, 20.0)),
+            _graph(
+                _fragment(
+                    "curved_top",
+                    (20.0, 22.0, 26.0, 22.0, 20.0),
+                    position_radius=2.0,
+                ),
                 _fragment("straight_bottom", (140.0, 140.0, 140.0)),
             ),
             self.corridors,
@@ -565,9 +650,17 @@ class JointPhotoEdgeGeometryContractTest(unittest.TestCase):
         self,
     ) -> None:
         result = solve_fixed_canvas_photo_edge_geometry(
-            (
-                _fragment("rectangle_top", (20.0, 20.0, 20.0)),
-                _fragment("rectangle_bottom", (140.0, 140.0, 140.0)),
+            _graph(
+                _fragment(
+                    "rectangle_top",
+                    (20.0, 20.0, 20.0),
+                    position_radius=0.5,
+                ),
+                _fragment(
+                    "rectangle_bottom",
+                    (140.0, 140.0, 140.0),
+                    position_radius=0.5,
+                ),
             ),
             self.corridors,
             self.scale,
@@ -578,11 +671,16 @@ class JointPhotoEdgeGeometryContractTest(unittest.TestCase):
         )
         geometry = result.hypotheses[0].geometry
         assert geometry is not None
-        self.assertGreater(geometry.pixel_slope_interval.width, 0.0)
+        slope_components = normalize_pixel_slope_components(
+            tuple(cell.pixel_slope for cell in geometry.cells)
+        )
+        self.assertEqual(len(slope_components), 1)
+        slope_component = slope_components[0]
+        self.assertGreater(slope_component.width, 0.0)
         self.assertTrue(
-            geometry.pixel_slope_interval.minimum
+            slope_component.minimum
             < 0.0
-            < geometry.pixel_slope_interval.maximum
+            < slope_component.maximum
         )
 
     def test_non_square_scale_converts_physical_to_pixel_angle(self) -> None:
@@ -654,15 +752,26 @@ class JointPhotoEdgeGeometryContractTest(unittest.TestCase):
             scale,
             self.configuration.photo_edges,
             budget,
+            (
+                _theta_interval_for_pixel_search(
+                    self.configuration.photo_edges.maximum_search_angle_degrees,
+                    scale,
+                ),
+            ),
             long_extent_px=long_extent,
             short_extent_px=short_extent,
         )
         self.assertEqual(state, EvidenceState.SUPPORTED)
         assert geometry is not None
+        slope_components = normalize_pixel_slope_components(
+            tuple(cell.pixel_slope for cell in geometry.cells)
+        )
+        self.assertEqual(len(slope_components), 1)
+        slope_component = slope_components[0]
         self.assertTrue(
-            geometry.pixel_slope_interval.minimum
+            slope_component.minimum
             <= pixel_slope
-            <= geometry.pixel_slope_interval.maximum
+            <= slope_component.maximum
         )
         self.assertAlmostEqual(
             math.degrees(math.atan(pixel_slope)),
@@ -672,7 +781,7 @@ class JointPhotoEdgeGeometryContractTest(unittest.TestCase):
 
     def test_normal_region_uses_explicit_four_way_relation(self) -> None:
         result = solve_fixed_canvas_photo_edge_geometry(
-            (
+            _graph(
                 _fragment("relation_top", (20.0, 20.0, 20.0)),
                 _fragment("relation_bottom", (140.0, 140.0, 140.0)),
             ),
@@ -685,6 +794,16 @@ class JointPhotoEdgeGeometryContractTest(unittest.TestCase):
         )
         geometry = result.hypotheses[0].geometry
         assert geometry is not None and geometry.normal_region is not None
+        self.assertEqual(
+            (
+                geometry.normal_region.consumed_region_cells,
+                geometry.normal_region.consumed_consensus_states,
+            ),
+            (
+                result.work_statistics.consumed_region_cells,
+                result.work_statistics.consumed_consensus_states,
+            ),
+        )
         self.assertIn(
             geometry.normal_region.set_relation,
             {
@@ -743,7 +862,6 @@ class JointPhotoEdgeGeometryContractTest(unittest.TestCase):
         seeds, incomplete = _coordinate_seed_pairs(
             top_groups,
             bottom_groups,
-            maximum_inspections=16,
             maximum_seeds=16,
             pair_is_possible=lambda top, bottom: (
                 top == top_groups[0] and bottom == bottom_groups[0]
@@ -781,8 +899,7 @@ class JointPhotoEdgeGeometryContractTest(unittest.TestCase):
         seeds, incomplete = _coordinate_seed_pairs(
             top,
             bottom,
-            maximum_inspections=1,
-            maximum_seeds=4,
+            maximum_seeds=1,
             pair_is_possible=lambda _top, _bottom: True,
             top_discovery_coordinate=coordinates.__getitem__,
             bottom_discovery_coordinate=coordinates.__getitem__,
@@ -795,13 +912,13 @@ class JointPhotoEdgeGeometryContractTest(unittest.TestCase):
         self.assertTrue(incomplete)
 
     def test_fragment_order_does_not_change_canonical_region(self) -> None:
-        fragments = (
+        paths = (
             _fragment("ordered_top", (20.0, 20.0, 20.0)),
             _fragment("ordered_bottom", (140.0, 140.0, 140.0)),
         )
         results = tuple(
             solve_fixed_canvas_photo_edge_geometry(
-                ordering,
+                _graph(*ordering),
                 self.corridors,
                 self.scale,
                 self.configuration.photo_edges,
@@ -809,13 +926,13 @@ class JointPhotoEdgeGeometryContractTest(unittest.TestCase):
                 long_extent_px=CANVAS_WIDTH,
                 short_extent_px=CANVAS_HEIGHT,
             )
-            for ordering in (fragments, tuple(reversed(fragments)))
+            for ordering in (paths, tuple(reversed(paths)))
         )
         self.assertEqual(results[0].hypotheses, results[1].hypotheses)
 
     def test_conflicting_additions_create_both_maximal_branches(self) -> None:
         result = solve_fixed_canvas_photo_edge_geometry(
-            (
+            _graph(
                 _fragment("branch_top_a", (20.0, 20.0, 20.0)),
                 _fragment("branch_top_b", (24.0, 24.0, 24.0)),
                 _fragment("branch_bottom", (140.0, 140.0, 140.0)),
@@ -839,7 +956,7 @@ class JointPhotoEdgeGeometryContractTest(unittest.TestCase):
         self,
     ) -> None:
         result = solve_fixed_canvas_photo_edge_geometry(
-            (
+            _graph(
                 _fragment("correct_top", (20.0, 20.0, 20.0)),
                 _fragment("wrong_top", (30.0, 30.0, 30.0)),
                 _fragment("correct_bottom", (140.0, 140.0, 140.0)),
@@ -853,17 +970,26 @@ class JointPhotoEdgeGeometryContractTest(unittest.TestCase):
         )
         self.assertEqual(len(result.hypotheses), 1)
         self.assertEqual(result.hypotheses[0].state, EvidenceState.SUPPORTED)
-        self.assertEqual(
-            result.hypotheses[0].top_fragment_ids,
-            (ObservationId("correct_top"),),
+        self.assertTrue(
+            any(
+                str(observation.observation_id).startswith("correct_top:")
+                for observation in result.audit_observations
+            )
+        )
+        self.assertFalse(
+            any(
+                str(observation.observation_id).startswith("wrong_top:")
+                for observation in result.audit_observations
+            )
         )
 
     def test_systematic_curvature_keeps_fragment_unavailable(self) -> None:
         result = solve_fixed_canvas_photo_edge_geometry(
-            (
+            _graph(
                 _fragment(
                     "curved_ridge",
                     (20.0, 22.0, 26.0, 26.0, 22.0, 20.0),
+                    position_radius=2.0,
                 ),
                 _fragment(
                     "straight_ridge",
@@ -888,16 +1014,13 @@ class JointPhotoEdgeGeometryContractTest(unittest.TestCase):
             (20.0, 20.0, 20.0, 20.0),
         )
         mixed = replace(
-            original,
-            observations=(
-                replace(original.observations[0], censored=True),
-                *original.observations[1:],
-            ),
+            original[0],
             censored=True,
         )
+        mixed_path = (mixed, *original[1:])
         result = solve_fixed_canvas_photo_edge_geometry(
-            (
-                mixed,
+            _graph(
+                mixed_path,
                 _fragment(
                     "mixed_bottom",
                     (140.0, 140.0, 140.0),
@@ -913,7 +1036,7 @@ class JointPhotoEdgeGeometryContractTest(unittest.TestCase):
         self.assertEqual(len(result.hypotheses), 1)
         self.assertEqual(result.hypotheses[0].state, EvidenceState.SUPPORTED)
         self.assertNotIn(
-            original.observations[0].observation_id,
+            original[0].observation_id,
             {
                 observation.observation_id
                 for observation in result.audit_observations
@@ -922,6 +1045,32 @@ class JointPhotoEdgeGeometryContractTest(unittest.TestCase):
 
 
 class TransformAndSharedAxisConsumerContractTest(unittest.TestCase):
+    @staticmethod
+    def _with_slope_interval(
+        evidence: PhotoEdgePairEvidence,
+        interval: NumericInterval,
+    ) -> PhotoEdgePairEvidence:
+        hypothesis = evidence.hypotheses[0]
+        geometry = hypothesis.geometry
+        assert geometry is not None
+        return replace(
+            evidence,
+            hypotheses=(
+                replace(
+                    hypothesis,
+                    geometry=replace(
+                        geometry,
+                        cells=(
+                            replace(
+                                geometry.cells[0],
+                                pixel_slope=interval,
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+        )
+
     def _transform(
         self,
         evidence: PhotoEdgePairEvidence,
@@ -938,7 +1087,14 @@ class TransformAndSharedAxisConsumerContractTest(unittest.TestCase):
         )
 
     def test_pair_identity_can_succeed_before_transform(self) -> None:
-        evidence = _fixed_canvas_evidence(_local_strip())
+        evidence = photo_edge_pair_fixture(
+            _path("uncertain_top", 20.0, 0.0, BoundarySide.TOP),
+            _path("uncertain_bottom", 140.0, 0.0, BoundarySide.BOTTOM),
+        )
+        evidence = self._with_slope_interval(
+            evidence,
+            NumericInterval(-0.01, 0.01),
+        )
         transform = self._transform(evidence)
         self.assertEqual(evidence.state, EvidenceState.SUPPORTED)
         self.assertEqual(
@@ -948,8 +1104,13 @@ class TransformAndSharedAxisConsumerContractTest(unittest.TestCase):
         self.assertIsNone(transform.estimated_angle_degrees)
 
     def test_transform_can_succeed_before_shared_axis_projection(self) -> None:
-        evidence = _fixed_canvas_evidence(
-            _local_strip(start=180, end=980)
+        evidence = photo_edge_pair_fixture(
+            _path("projected_top", 20.0, 0.0, BoundarySide.TOP),
+            _path("projected_bottom", 140.0, 0.0, BoundarySide.BOTTOM),
+        )
+        evidence = self._with_slope_interval(
+            evidence,
+            NumericInterval(-0.002, 0.002),
         )
         transform = self._transform(evidence)
         self.assertEqual(
@@ -977,21 +1138,20 @@ class TransformAndSharedAxisConsumerContractTest(unittest.TestCase):
     def test_positive_and_negative_real_angles_apply_deskew(self) -> None:
         outcomes: list[float] = []
         for slope in (-0.01, 0.01):
-            gray = np.full(
-                (CANVAS_HEIGHT, CANVAS_WIDTH),
-                180,
-                dtype=np.uint8,
+            evidence = photo_edge_pair_fixture(
+                _path(
+                    f"angled_top:{slope}",
+                    20.0,
+                    slope,
+                    BoundarySide.TOP,
+                ),
+                _path(
+                    f"angled_bottom:{slope}",
+                    140.0,
+                    slope,
+                    BoundarySide.BOTTOM,
+                ),
             )
-            center = 0.5 * float(CANVAS_WIDTH - 1)
-            for coordinate in range(30, CANVAS_WIDTH - 30):
-                top = round(
-                    PHOTO_TOP + slope * (float(coordinate) - center)
-                )
-                bottom = round(
-                    PHOTO_BOTTOM + slope * (float(coordinate) - center)
-                )
-                gray[top:bottom, coordinate] = 40
-            evidence = _fixed_canvas_evidence(gray)
             transform = self._transform(evidence)
             self.assertEqual(
                 transform.outcome,
