@@ -25,6 +25,15 @@ V4.9 是 current-only 的物理模型与源码重构。历史 PASS/REVIEW、repo
 - 校准目标采用“共享照片边缘 → deskew/共享短轴 → 成对长轴边缘 → 安全矩形 → 独立
   bleed”。验收使用黄金集校准的方向性容差，不追求数学 `0 px`；危险向外越界不得通过，
   bleed 不能掩盖错误基础几何。
+- 增加只读黄金基线比较器：只消费 current-schema report 与 user-confirmed baseline，
+  将无 bleed 的 production envelope 通过报告中的同一 affine 变换反算回原 TIFF，
+  分别记录逐边 signed normal distance、角度、危险向外越界、向内内容损失与 containment；
+  没有 final geometry 时保留 `production_geometry_unavailable`，不得拿 provisional
+  candidate 冒充输出。
+- 八张 `nominal_calibration` 的现场 diagnostics 均为
+  `photo_edge_pair_unavailable`，因此尚无 final geometry 可做逐边容差统计；其中
+  `S051`、`S055`、`S109` 的 auto count 分别为 `5/5/11`，与确认的 `3/4/7` 不一致。
+  这说明第一个 production gap 位于 photo-edge pair resolution，而不是方向性容差过严。
 - 删除 641 个与 Git history 重复的 tracked source snapshot；历史版本由 Git history 与
   release tags 恢复，current tree 不再维护 `archive/`。
 - 测试审计未发现重复 test body、空 test module、未使用 public support owner 或无静态
@@ -51,15 +60,17 @@ V4.9 是 current-only 的物理模型与源码重构。历史 PASS/REVIEW、repo
 - 当前 report revision 为 `cross_region_photo_edge_geometry`。Report 与 Debug 只读
   typed evidence，不保存 dense response、不重算 geometry，也不作为 detection cache。
 - `tools/` 的 current owner 只有 `verify`、`git/`、`release/`、
-  `regression/compare.py` 与 `tests/`；退役 manual-reference regression chain 不再存在。
+  `regression/compare.py`、`regression/golden_baseline.py` 与 `tests/`；退役
+  manual-reference regression chain 不再存在。
 
 ## 验证边界
 
 - `tools/verify` 是唯一机械验证入口；Hook 与 CI 只调用它。
 - Unit/contract、compile、configuration 与 release-package 检查只能证明结构一致性，
   不能证明真实照片边缘已经达到 production accuracy。
-- 本地已有九条 user-confirmed crop baseline，但 production detector 尚未通过它们完成
-  方向性误差量化或阈值校准。
+- 本地已有九条 user-confirmed crop baseline。八张 nominal 样片已完成 current-schema
+  只读审计，但因 production 均未形成 final geometry，尚不能完成逐边方向性误差统计或
+  阈值校准。
 
 ## v4.2.8 稳定发布
 

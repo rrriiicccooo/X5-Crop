@@ -19,6 +19,7 @@ STANDALONE_TOOL_ROOTS = frozenset(
         "tools.release.build",
         "tools.release.standalone",
         "tools.regression.compare",
+        "tools.regression.golden_baseline",
     }
 )
 

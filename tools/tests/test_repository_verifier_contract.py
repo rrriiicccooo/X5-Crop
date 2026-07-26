@@ -81,7 +81,7 @@ class RepositoryVerifierContractTest(unittest.TestCase):
                 path.name
                 for path in (PROJECT_ROOT / "tools/regression").glob("*.py")
             },
-            {"__init__.py", "compare.py"},
+            {"__init__.py", "compare.py", "golden_baseline.py"},
         )
         for removed in (
             "tools/build_release.py",
