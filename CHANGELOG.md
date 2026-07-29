@@ -13,6 +13,14 @@ V4.9 是破坏性的 current-only 物理模型重构。旧 runtime/schema/compat
 
 ### 2026-07-29：source-core 安全基线原子替换
 
+#### CI 依赖闭合
+
+- GitHub `Verify` 现在与 macOS/Windows installer 一致安装
+  `numpy`、`scipy`、`tifffile`、`imagecodecs` 与 `Pillow`，避免干净 runner 在导入
+  source-core 时缺少 `scipy.ndimage`。
+- Current-only contract 固定检查 CI 与两套 installer 的 runtime package 集合，防止后续
+  依赖漂移再次造成“本地 Hook 通过、远端 workflow 失败”。
+
 #### Current-only 残留收口
 
 - 删除不可达的自动批准与 Debug PASS 分支；当前成功处理只有 `needs_review`。

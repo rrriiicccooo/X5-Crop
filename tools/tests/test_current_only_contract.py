@@ -70,6 +70,18 @@ class CurrentOnlyContractTest(unittest.TestCase):
         ignore = (ROOT / ".gitignore").read_text(encoding="utf-8")
         self.assertNotIn("x5crop/detection/candidate/build", ignore)
 
+    def test_ci_and_installers_share_runtime_dependencies(self) -> None:
+        package_list = "numpy scipy tifffile imagecodecs Pillow"
+        owners = (
+            ".github/workflows/verify.yml",
+            "install/X5_Crop_Mac_install.command",
+            "install/X5_Crop_win_install.bat",
+        )
+        for relative in owners:
+            with self.subTest(path=relative):
+                text = (ROOT / relative).read_text(encoding="utf-8")
+                self.assertIn(package_list, text)
+
     def test_old_pixel_bleed_and_dead_export_switches_are_rejected(self) -> None:
         parser = build_parser()
         option_strings = {
