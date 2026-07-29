@@ -71,7 +71,7 @@ class CurrentOnlyContractTest(unittest.TestCase):
         self.assertNotIn("x5crop/detection/candidate/build", ignore)
 
     def test_ci_and_installers_share_runtime_dependencies(self) -> None:
-        package_list = "numpy scipy tifffile imagecodecs Pillow"
+        package_list = "numpy tifffile imagecodecs Pillow"
         owners = (
             ".github/workflows/verify.yml",
             "install/X5_Crop_Mac_install.command",
@@ -81,6 +81,32 @@ class CurrentOnlyContractTest(unittest.TestCase):
             with self.subTest(path=relative):
                 text = (ROOT / relative).read_text(encoding="utf-8")
                 self.assertIn(package_list, text)
+
+    def test_current_runtime_excludes_future_analysis_dependencies(self) -> None:
+        surfaces = (
+            "X5_Crop_Mac.command",
+            "X5_Crop_Mac_diagnostics.command",
+            "X5_Crop_win.bat",
+            "install/X5_Crop_Mac_install.command",
+            "install/X5_Crop_Mac_uninstall.command",
+            "install/X5_Crop_win_install.bat",
+            "install/X5_Crop_win_uninstall.bat",
+            ".github/workflows/verify.yml",
+            "docs/user-guide.zh-CN.md",
+            "docs/user-guide.en.md",
+            "docs/quick-start.zh-CN.md",
+            "docs/quick-start.en.md",
+        )
+        active_text = "\n".join(read_sources().values()).lower()
+        self.assertNotIn("scipy", active_text)
+        self.assertNotIn("opencv", active_text)
+        self.assertNotIn("cv2", active_text)
+        for relative in surfaces:
+            with self.subTest(path=relative):
+                text = (ROOT / relative).read_text(encoding="utf-8").lower()
+                self.assertNotIn("scipy", text)
+                self.assertNotIn("opencv", text)
+                self.assertNotIn("cv2", text)
 
     def test_old_pixel_bleed_and_dead_export_switches_are_rejected(self) -> None:
         parser = build_parser()

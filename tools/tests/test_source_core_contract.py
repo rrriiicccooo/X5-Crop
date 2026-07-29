@@ -110,6 +110,37 @@ class SourceCoreMeasurementContractTest(unittest.TestCase):
             self.assertEqual(array.dtype, np.int32)
             self.assertFalse(array.flags.writeable)
 
+    def test_run_sweep_bridges_overlaps_but_not_diagonal_contacts(self) -> None:
+        domain = SourceStripValidationDomain(
+            lane_id="lane:0",
+            work_box=Box(10, 20, 18, 26),
+            source_axis_long="x",
+            authority_profile_id="test_canvas",
+        )
+        mask = np.zeros((6, 8), dtype=bool)
+        mask[0, 1:3] = True
+        mask[0, 5:7] = True
+        mask[1, 2:6] = True
+        mask[3, 1:3] = True
+        mask[4, 3:5] = True
+
+        components, table, raw_count, peak_bytes = _compact_components(
+            mask,
+            domain,
+            minimum_active_pixels=3,
+            provenance=_content_provenance(),
+        )
+
+        self.assertEqual(raw_count, 3)
+        self.assertEqual(len(components), 1)
+        self.assertEqual(components[0].positive_cells, 8)
+        self.assertEqual(components[0].footprint, Box(11, 20, 17, 22))
+        self.assertEqual(table.run_count, 3)
+        np.testing.assert_array_equal(table.rows, np.asarray((20, 20, 21)))
+        np.testing.assert_array_equal(table.lefts, np.asarray((11, 15, 12)))
+        np.testing.assert_array_equal(table.rights, np.asarray((13, 17, 16)))
+        self.assertGreater(peak_bytes, 0)
+
     def test_positive_content_is_intersection_of_independent_channels(self) -> None:
         domain = SourceStripValidationDomain(
             lane_id="lane:0",

@@ -29,7 +29,7 @@ if [ ! -f "$SCRIPT" ]; then
 fi
 
 find_python() {
-    REQUIRED_IMPORTS="import numpy, scipy, PIL, tifffile, imagecodecs"
+    REQUIRED_IMPORTS="import numpy, PIL, tifffile, imagecodecs"
     CHECKED=""
 
     try_python() {

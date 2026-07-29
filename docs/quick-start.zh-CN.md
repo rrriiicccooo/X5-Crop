@@ -12,7 +12,7 @@ macOS:   install/X5_Crop_Mac_install.command
 Windows: install/X5_Crop_win_install.bat
 ```
 
-安装器准备 `numpy`、`scipy`、`tifffile`、`imagecodecs` 与 `Pillow`。
+安装器准备 `numpy`、`tifffile`、`imagecodecs` 与 `Pillow`。
 
 ## 2. 放入 TIFF 并启动
 

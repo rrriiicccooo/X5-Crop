@@ -14,7 +14,7 @@ macOS:   install/X5_Crop_Mac_install.command
 Windows: install/X5_Crop_win_install.bat
 ```
 
-The installer prepares `numpy`, `scipy`, `tifffile`, `imagecodecs`, and `Pillow`.
+The installer prepares `numpy`, `tifffile`, `imagecodecs`, and `Pillow`.
 
 ## 2. Add TIFFs And Launch
 

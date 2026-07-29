@@ -21,7 +21,7 @@ macOS:   install/X5_Crop_Mac_install.command
 Windows: install/X5_Crop_win_install.bat
 ```
 
-安装器检查或安装 `numpy`、`scipy`、`tifffile`、`imagecodecs` 和 `Pillow`。macOS
+安装器检查或安装 `numpy`、`tifffile`、`imagecodecs` 和 `Pillow`。macOS
 安装器只处理当前 Release 文件夹的权限和 quarantine，不建立系统级信任。
 
 将入口、启动器和 TIFF 放在同一文件夹：

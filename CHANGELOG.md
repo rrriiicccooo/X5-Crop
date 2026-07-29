@@ -13,13 +13,15 @@ V4.9 是破坏性的 current-only 物理模型重构。旧 runtime/schema/compat
 
 ### 2026-07-29：source-core 安全基线原子替换
 
-#### CI 依赖闭合
+#### Current runtime 依赖闭合
 
-- GitHub `Verify` 现在与 macOS/Windows installer 一致安装
-  `numpy`、`scipy`、`tifffile`、`imagecodecs` 与 `Pillow`，避免干净 runner 在导入
-  source-core 时缺少 `scipy.ndimage`。
-- Current-only contract 固定检查 CI 与两套 installer 的 runtime package 集合，防止后续
-  依赖漂移再次造成“本地 Hook 通过、远端 workflow 失败”。
+- Positive-content 严格 4-connectivity 改由 NumPy RLE 与确定性 union-find 实现，不再依赖
+  `scipy.ndimage`。Current runtime、CI、macOS/Windows launcher 与 installer 的用户依赖
+  统一为 `numpy`、`tifffile`、`imagecodecs` 与 `Pillow`。
+- SciPy 与 OpenCV 只保留为未来版本可能评估的能力，不是当前依赖，也没有 optional import、
+  fallback 或兼容分支。
+- Current-only contract 固定检查 CI、installer、launcher、公共文档与 active source 的依赖
+  集合，防止再次出现“本地 Hook 通过、远端 workflow 失败”的漂移。
 
 #### Current-only 残留收口
 
@@ -93,8 +95,8 @@ V4.9 是破坏性的 current-only 物理模型重构。旧 runtime/schema/compat
   writer 作为独立 foundation 保留。Contracts 继续验证 identity 精确切片、ROI/reference
   像素一致以及 dtype、axes、ICC、resolution、metadata、NONE/LZW compression 保真。
 - Current development docs 明确只生成 review/report。稳定公开 Release 仍为 v4.2.8。
-- Standalone `X5_Crop.py` 继续由唯一 release builder 从 modular tree 生成；SciPy 加入
-  launcher/installer 的明确 runtime dependency。
+- Standalone `X5_Crop.py` 继续由唯一 release builder 从 modular tree 生成；启动器和
+  installer 只检查当前四项 runtime dependency。
 
 #### 原型证据边界
 
@@ -127,6 +129,9 @@ dirty patch。它不会进入 Git 或 Release。
   S098；预期均为 review、无 frame output。
 - 固定 24 张 detector-only 诊断使用 `--jobs 2`，cold 单列，三次中位数必须严格小于
   `5.0 秒/张`才说明保留未来生产余量；这不是正式性能 PASS。
+- 移除 SciPy 后，NumPy RLE/union-find 在 600 组独立 oracle mask 与 111 张 current
+  样片上保持严格 4-connectivity/content geometry 一致；固定 24 张三轮中位数为
+  `2.216 秒/张`（`--jobs 2`）。
 - 当前没有 auto-export capability，真实 24 张 TIFF 写出认证必须为 `not_certified`。
   独立 Grid authority 恢复输出后，才要求三次真实写出并复读的中位数
   `<=5.0 秒/张`。

@@ -24,7 +24,7 @@ macOS:   install/X5_Crop_Mac_install.command
 Windows: install/X5_Crop_win_install.bat
 ```
 
-The installer checks `numpy`, `scipy`, `tifffile`, `imagecodecs`, and `Pillow`.
+The installer checks `numpy`, `tifffile`, `imagecodecs`, and `Pillow`.
 On macOS, it prepares only the current Release folder and does not establish
 system-wide trust.
 

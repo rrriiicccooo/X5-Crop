@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from enum import Enum
 from time import perf_counter
 import numpy as np
-from scipy import ndimage
 
 from ..configuration.content import ContentConfiguration
 from ..domain import (
@@ -377,6 +376,186 @@ def _empty_run_table() -> ContentRowRunTable:
     return ContentRowRunTable(*arrays)
 
 
+def _four_connected_run_components(
+    positive_mask: np.ndarray,
+) -> tuple[
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    int,
+]:
+    """Label strict 4-connected row runs with a vectorized overlap graph."""
+    starts_mask = positive_mask.copy()
+    starts_mask[:, 1:] &= ~positive_mask[:, :-1]
+    ends_mask = positive_mask.copy()
+    ends_mask[:, :-1] &= ~positive_mask[:, 1:]
+    start_rows, start_columns = np.nonzero(starts_mask)
+    end_rows, end_columns = np.nonzero(ends_mask)
+    if (
+        start_rows.size != end_rows.size
+        or not np.array_equal(start_rows, end_rows)
+    ):
+        raise RuntimeError("content RLE extraction lost row identity")
+
+    run_rows = start_rows.astype(np.int32, copy=False)
+    run_lefts = start_columns.astype(np.int32, copy=False)
+    run_rights = (end_columns + 1).astype(np.int32, copy=False)
+    run_count = int(run_rows.size)
+    if run_count == 0:
+        empty = np.empty(0, dtype=np.int32)
+        return (
+            empty,
+            empty.copy(),
+            empty.copy(),
+            empty.copy(),
+            np.empty(0, dtype=np.int64),
+            sum(
+                item.nbytes
+                for item in (
+                    starts_mask,
+                    ends_mask,
+                    start_rows,
+                    start_columns,
+                    end_rows,
+                    end_columns,
+                )
+            ),
+        )
+
+    row_counts = np.bincount(
+        run_rows,
+        minlength=positive_mask.shape[0],
+    ).astype(np.int64, copy=False)
+    row_offsets = np.empty(row_counts.size + 1, dtype=np.int64)
+    row_offsets[0] = 0
+    np.cumsum(row_counts, out=row_offsets[1:])
+
+    previous_edge_chunks: list[np.ndarray] = []
+    current_edge_chunks: list[np.ndarray] = []
+    for row in range(1, positive_mask.shape[0]):
+        previous_start = int(row_offsets[row - 1])
+        previous_stop = int(row_offsets[row])
+        current_start = previous_stop
+        current_stop = int(row_offsets[row + 1])
+        if previous_start == previous_stop or current_start == current_stop:
+            continue
+        previous_lefts = run_lefts[previous_start:previous_stop]
+        previous_rights = run_rights[previous_start:previous_stop]
+        current_lefts = run_lefts[current_start:current_stop]
+        current_rights = run_rights[current_start:current_stop]
+        first_overlaps = np.searchsorted(
+            previous_rights,
+            current_lefts,
+            side="right",
+        )
+        overlap_stops = np.searchsorted(
+            previous_lefts,
+            current_rights,
+            side="left",
+        )
+        overlap_counts = overlap_stops - first_overlaps
+        connected = overlap_counts > 0
+        if not np.any(connected):
+            continue
+        overlap_counts = overlap_counts[connected]
+        first_overlaps = first_overlaps[connected]
+        current_indices = np.arange(
+            current_start,
+            current_stop,
+            dtype=np.int32,
+        )[connected]
+        group_starts = np.cumsum(overlap_counts, dtype=np.int64)
+        group_starts -= overlap_counts
+        edge_count = int(np.sum(overlap_counts, dtype=np.int64))
+        edge_positions = np.arange(edge_count, dtype=np.int32)
+        previous_bases = (
+            previous_start
+            + first_overlaps.astype(np.int64, copy=False)
+            - group_starts
+        ).astype(np.int32)
+        previous_edge_chunks.append(
+            edge_positions
+            + np.repeat(previous_bases, overlap_counts),
+        )
+        current_edge_chunks.append(
+            np.repeat(current_indices, overlap_counts),
+        )
+
+    if previous_edge_chunks:
+        edge_chunk_bytes = sum(
+            item.nbytes
+            for item in (*previous_edge_chunks, *current_edge_chunks)
+        )
+        previous_edges = np.concatenate(previous_edge_chunks)
+        current_edges = np.concatenate(current_edge_chunks)
+        previous_edge_chunks.clear()
+        current_edge_chunks.clear()
+    else:
+        edge_chunk_bytes = 0
+        previous_edges = np.empty(0, dtype=np.int32)
+        current_edges = np.empty(0, dtype=np.int32)
+
+    parents = np.arange(run_count, dtype=np.int32)
+    while previous_edges.size:
+        while True:
+            grandparents = parents[parents]
+            if np.array_equal(grandparents, parents):
+                break
+            parents[:] = grandparents
+        previous_roots = parents[previous_edges]
+        current_roots = parents[current_edges]
+        higher_roots = np.maximum(previous_roots, current_roots)
+        lower_roots = np.minimum(previous_roots, current_roots)
+        if not np.any(lower_roots < parents[higher_roots]):
+            break
+        np.minimum.at(parents, higher_roots, lower_roots)
+
+    while True:
+        roots = parents[parents]
+        if np.array_equal(roots, parents):
+            break
+        parents[:] = roots
+    roots = parents
+    unique_roots, run_components = np.unique(
+        roots,
+        return_inverse=True,
+    )
+    run_components = run_components.astype(np.int32, copy=False)
+    component_cells = np.zeros(unique_roots.size, dtype=np.int64)
+    run_lengths = run_rights.astype(np.int64) - run_lefts
+    np.add.at(component_cells, run_components, run_lengths)
+    work_bytes = sum(
+        item.nbytes
+        for item in (
+            starts_mask,
+            ends_mask,
+            start_rows,
+            start_columns,
+            end_rows,
+            end_columns,
+            parents,
+            row_counts,
+            row_offsets,
+            previous_edges,
+            current_edges,
+            unique_roots,
+            run_components,
+            run_lengths,
+            component_cells,
+        )
+    ) + edge_chunk_bytes
+    return (
+        run_rows,
+        run_lefts,
+        run_rights,
+        run_components,
+        component_cells,
+        work_bytes,
+    )
+
+
 def _compact_components(
     positive_mask: np.ndarray,
     domain: SourceStripValidationDomain,
@@ -395,63 +574,71 @@ def _compact_components(
         or positive_mask.shape != (box.height, box.width)
     ):
         raise ValueError("content component mask must match the lane domain")
-    labels, raw_component_count = ndimage.label(
+    (
+        local_run_rows,
+        local_run_lefts,
+        local_run_rights,
+        raw_run_components,
+        component_cells,
+        run_stage_bytes,
+    ) = _four_connected_run_components(
         positive_mask,
-        structure=np.asarray(
-            ((0, 1, 0), (1, 1, 1), (0, 1, 0)),
-            dtype=np.uint8,
-        ),
     )
-    counts = np.bincount(labels.ravel())
-    keep = counts >= int(minimum_active_pixels)
-    keep[0] = False
-    kept_labels = np.flatnonzero(keep).astype(np.int32)
-    if not kept_labels.size:
+    raw_component_count = int(component_cells.size)
+    keep = component_cells >= int(minimum_active_pixels)
+    kept_components = np.flatnonzero(keep).astype(np.int32)
+    if not kept_components.size:
         peak_bytes = (
-            labels.nbytes
-            + counts.nbytes
+            run_stage_bytes
             + keep.nbytes
-            + kept_labels.nbytes
+            + kept_components.nbytes
         )
         return (), _empty_run_table(), int(raw_component_count), peak_bytes
 
-    label_to_component = np.full(counts.size, -1, dtype=np.int32)
-    label_to_component[kept_labels] = np.arange(
-        kept_labels.size,
+    component_map = np.full(component_cells.size, -1, dtype=np.int32)
+    component_map[kept_components] = np.arange(
+        kept_components.size,
         dtype=np.int32,
     )
-    kept_mask = keep[labels]
-    starts_mask = kept_mask.copy()
-    starts_mask[:, 1:] &= ~kept_mask[:, :-1]
-    ends_mask = kept_mask.copy()
-    ends_mask[:, :-1] &= ~kept_mask[:, 1:]
-    start_rows, start_columns = np.nonzero(starts_mask)
-    end_rows, end_columns = np.nonzero(ends_mask)
-    if (
-        start_rows.size != end_rows.size
-        or not np.array_equal(start_rows, end_rows)
-    ):
-        raise RuntimeError("content RLE extraction lost row identity")
-    run_components = label_to_component[
-        labels[start_rows, start_columns]
-    ]
+    kept_runs = keep[raw_run_components]
+    run_components = component_map[raw_run_components[kept_runs]]
+    run_rows = (local_run_rows[kept_runs] + box.top).astype(
+        np.int32,
+        copy=False,
+    )
+    run_lefts = (local_run_lefts[kept_runs] + box.left).astype(
+        np.int32,
+        copy=False,
+    )
+    run_rights = (local_run_rights[kept_runs] + box.left).astype(
+        np.int32,
+        copy=False,
+    )
     order = np.argsort(run_components, kind="stable")
     run_components = run_components[order].astype(np.int32, copy=False)
-    run_rows = (start_rows[order] + box.top).astype(np.int32)
-    run_lefts = (start_columns[order] + box.left).astype(np.int32)
-    run_rights = (end_columns[order] + box.left + 1).astype(np.int32)
+    run_rows = run_rows[order]
+    run_lefts = run_lefts[order]
+    run_rights = run_rights[order]
 
     run_counts = np.bincount(
         run_components,
-        minlength=kept_labels.size,
+        minlength=kept_components.size,
     ).astype(np.int64)
     offsets = np.concatenate(
         (np.zeros(1, dtype=np.int64), np.cumsum(run_counts[:-1]))
     )
-    minimum_rows = np.full(kept_labels.size, np.iinfo(np.int32).max, np.int32)
-    maximum_rows = np.full(kept_labels.size, -1, np.int32)
-    minimum_lefts = np.full(kept_labels.size, np.iinfo(np.int32).max, np.int32)
-    maximum_rights = np.full(kept_labels.size, -1, np.int32)
+    minimum_rows = np.full(
+        kept_components.size,
+        np.iinfo(np.int32).max,
+        np.int32,
+    )
+    maximum_rows = np.full(kept_components.size, -1, np.int32)
+    minimum_lefts = np.full(
+        kept_components.size,
+        np.iinfo(np.int32).max,
+        np.int32,
+    )
+    maximum_rights = np.full(kept_components.size, -1, np.int32)
     np.minimum.at(minimum_rows, run_components, run_rows)
     np.maximum.at(maximum_rows, run_components, run_rows)
     np.minimum.at(minimum_lefts, run_components, run_lefts)
@@ -466,14 +653,14 @@ def _compact_components(
         component_indices=run_components,
     )
     components: list[SourceContentComponent] = []
-    for component_index, label in enumerate(kept_labels):
+    for component_index, raw_component in enumerate(kept_components):
         footprint = Box(
             int(minimum_lefts[component_index]),
             int(minimum_rows[component_index]),
             int(maximum_rights[component_index]),
             int(maximum_rows[component_index]) + 1,
         )
-        cells = int(counts[int(label)])
+        cells = int(component_cells[int(raw_component)])
         components.append(
             SourceContentComponent(
                 component_id=(
@@ -504,18 +691,10 @@ def _compact_components(
     peak_bytes = sum(
         item.nbytes
         for item in (
-            labels,
-            counts,
             keep,
-            kept_labels,
-            label_to_component,
-            kept_mask,
-            starts_mask,
-            ends_mask,
-            start_rows,
-            start_columns,
-            end_rows,
-            end_columns,
+            kept_components,
+            component_map,
+            kept_runs,
             run_components,
             order,
             run_rows,
@@ -528,7 +707,7 @@ def _compact_components(
             minimum_lefts,
             maximum_rights,
         )
-    )
+    ) + run_stage_bytes
     return (
         tuple(components),
         table,
