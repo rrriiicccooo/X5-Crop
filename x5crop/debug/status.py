@@ -24,10 +24,9 @@ def debug_status_parts(
             ),
             style.review_color,
         )
-    passed = detection.decision.status == "approved_auto"
-    status = "PASS" if passed else "REVIEW"
+    status = "REVIEW"
     detail = f"status: {detection.decision.status}"
-    color = style.pass_color if passed else style.review_color
+    color = style.review_color
     reasons = detection.decision.final_review_reasons
     if reasons:
         detail += " | " + ",".join(reasons[: style.reason_display_limit])

@@ -13,6 +13,14 @@ V4.9 是破坏性的 current-only 物理模型重构。旧 runtime/schema/compat
 
 ### 2026-07-29：source-core 安全基线原子替换
 
+#### Current-only 残留收口
+
+- 删除不可达的自动批准与 Debug PASS 分支；当前成功处理只有 `needs_review`。
+- 删除永远返回空列表的 frame-export runtime 包装；独立 ROI/TIFF foundation 保持不变。
+- `SourceContentComponent` 不再重复保存与 `positive_cells` 相同的 channel cell 数；分 channel
+  总量仍由唯一 measurement statistics owner 保存。
+- 删除已经不存在的 candidate build 目录在 `.gitignore` 中的过期例外。
+
 #### 能力收紧
 
 - 当前运行流固定为：

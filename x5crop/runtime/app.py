@@ -95,13 +95,13 @@ def _handle_input_outcome(
     source: Path,
     outcome: InputProcessingOutcome,
     config: RunConfig,
-) -> tuple[bool, str | None]:
+) -> bool:
     if isinstance(outcome, FailedInput):
         append_run_manifest(source, config, _failure_manifest(outcome))
         print(f"  error: {outcome.error_message}", file=sys.stderr)
         if config.debug_errors and outcome.traceback_text:
             print(outcome.traceback_text, file=sys.stderr, end="")
-        return False, None
+        return False
 
     result = outcome.result
     try:
@@ -120,7 +120,7 @@ def _handle_input_outcome(
         print(f"  error: {failure.error_message}", file=sys.stderr)
         if config.debug_errors and failure.traceback_text:
             print(failure.traceback_text, file=sys.stderr, end="")
-        return False, None
+        return False
 
     append_run_manifest(
         source,
@@ -137,18 +137,16 @@ def _handle_input_outcome(
         ),
     )
     print_report_result(result, outcome.artifacts, config)
-    return True, str(result.record["decision"]["status"])
+    return True
 
 
 def process_parallel_files(
     invocation: RuntimeInvocation,
-) -> tuple[int, int, int, int]:
+) -> tuple[int, int]:
     config = invocation.config
     files = invocation.files
-    ok = 0
+    completed = 0
     failed = 0
-    approved = 0
-    review = 0
     total = len(files)
     try:
         executor_context = concurrent.futures.ProcessPoolExecutor(max_workers=config.jobs)
@@ -176,28 +174,22 @@ def process_parallel_files(
                     FailureStage.WORKER,
                     exc,
                 )
-            succeeded, status = _handle_input_outcome(path, outcome, config)
+            succeeded = _handle_input_outcome(path, outcome, config)
             if succeeded:
-                ok += 1
-                approved += int(status == "approved_auto")
-                review += int(status == "needs_review")
+                completed += 1
             else:
                 failed += 1
-    return ok, failed, approved, review
+    return completed, failed
 
 
 def run_runtime(invocation: RuntimeInvocation) -> int:
     config = invocation.config
     files = invocation.files
-    ok = 0
+    completed = 0
     failed = 0
-    approved = 0
-    review = 0
     total = len(files)
     if total > 1 and config.jobs > 1:
-        ok, failed, approved, review = process_parallel_files(
-            invocation,
-        )
+        completed, failed = process_parallel_files(invocation)
     else:
         for index, path in enumerate(files, start=1):
             print(f"\n[{index}/{total}] {path.name}")
@@ -209,13 +201,11 @@ def run_runtime(invocation: RuntimeInvocation) -> int:
                     FailureStage.WORKER,
                     exc,
                 )
-            succeeded, status = _handle_input_outcome(path, outcome, config)
+            succeeded = _handle_input_outcome(path, outcome, config)
             if succeeded:
-                ok += 1
-                approved += int(status == "approved_auto")
-                review += int(status == "needs_review")
+                completed += 1
             else:
                 failed += 1
 
-    print(f"\ndone: ok={ok} failed={failed} approved={approved} review={review}")
+    print(f"\ndone: review={completed} failed={failed}")
     return 0 if failed == 0 else 1

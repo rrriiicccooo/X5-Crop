@@ -30,10 +30,6 @@ def _lane_read_model(lane: object) -> dict[str, object]:
                     "footprint": typed_read_model(component.footprint),
                     "row_run_count": component.row_run_count,
                     "positive_cells": component.positive_cells,
-                    "intensity_active_cells": (
-                        component.intensity_active_cells
-                    ),
-                    "texture_active_cells": component.texture_active_cells,
                     "censored": component.censored,
                     "provenance": typed_read_model(component.provenance),
                 }

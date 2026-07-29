@@ -39,6 +39,10 @@ class DecisionGateAssessment:
             for check in self.checks
         ):
             raise ValueError("decision checks require canonical reasons")
+        if not self.blocking_checks:
+            raise ValueError(
+                "current source-core baseline requires a blocking decision check"
+            )
 
     @property
     def blocking_checks(self) -> tuple[GateCheck, ...]:
@@ -66,4 +70,4 @@ class DecisionGateAssessment:
 
     @property
     def status(self) -> str:
-        return "approved_auto" if self.passed else "needs_review"
+        return "needs_review"

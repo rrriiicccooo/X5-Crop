@@ -6,6 +6,17 @@ from pathlib import Path
 import unittest
 
 from tools.release.standalone import read_sources
+from x5crop.detection.decision.model import (
+    DECISION_GATE_CHECK_CODES,
+    DECISION_GATE_REASON_BY_CODE,
+    DecisionGateAssessment,
+)
+from x5crop.detection.gate_checks import (
+    GateCheck,
+    GateRequirement,
+    GateStage,
+)
+from x5crop.domain import EvidenceState
 from x5crop.entry.cli import build_parser
 from x5crop.report.identity import (
     REPORT_SCHEMA_ID,
@@ -41,16 +52,23 @@ class CurrentOnlyContractTest(unittest.TestCase):
             "FrameBleed",
             "AxisBleedParameters",
             "TransformGeometryEvidence",
+            "approved_auto",
             "shared_short_axis",
             "rotated_gray",
             "bleed_x",
             "bleed_y",
+            "copy_for_review_if_needed",
+            "write_crops_if_allowed",
         )
         sources = read_sources()
         combined = "\n".join(sources.values())
         for token in forbidden:
             with self.subTest(token=token):
                 self.assertNotIn(token, combined)
+
+    def test_gitignore_has_no_obsolete_source_exceptions(self) -> None:
+        ignore = (ROOT / ".gitignore").read_text(encoding="utf-8")
+        self.assertNotIn("x5crop/detection/candidate/build", ignore)
 
     def test_old_pixel_bleed_and_dead_export_switches_are_rejected(self) -> None:
         parser = build_parser()
@@ -80,6 +98,20 @@ class CurrentOnlyContractTest(unittest.TestCase):
             REPORT_SCHEMA_REVISION,
             "source_core_grid_authority",
         )
+
+    def test_decision_gate_cannot_express_auto_approval(self) -> None:
+        supported_checks = tuple(
+            GateCheck(
+                code=code,
+                stage=GateStage.DECISION,
+                state=EvidenceState.SUPPORTED,
+                requirement=GateRequirement.SUPPORTED_REQUIRED,
+                final_review_reason=DECISION_GATE_REASON_BY_CODE[code],
+            )
+            for code in DECISION_GATE_CHECK_CODES
+        )
+        with self.assertRaises(ValueError):
+            DecisionGateAssessment(supported_checks)
 
     def test_launcher_remains_thin_and_release_embeds_modular_tree(self) -> None:
         launcher = (ROOT / "X5_Crop.py").read_text(encoding="utf-8")

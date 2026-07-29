@@ -1,1 +1,1 @@
-"""Final PASS / REVIEW decision package marker."""
+"""Final review decision package marker."""

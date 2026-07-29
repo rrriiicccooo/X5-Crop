@@ -4,13 +4,11 @@ from dataclasses import dataclass
 
 from ...domain import Box
 from ..decision.model import DecisionGateAssessment
+from ..decision.vocabulary import (
+    FINAL_REASON_FRAME_GRID_AUTHORITY_UNAVAILABLE,
+)
 from ..pipeline import SourceCoreCandidate
 from ..source_core import SourceCoreEvidence
-
-
-FRAME_EXPORT_REASON_GRID_AUTHORITY_UNAVAILABLE = (
-    "frame_grid_authority_unavailable"
-)
 
 
 @dataclass(frozen=True)
@@ -34,4 +32,4 @@ class FinalDetection:
 
     @property
     def frame_export_reason(self) -> str:
-        return FRAME_EXPORT_REASON_GRID_AUTHORITY_UNAVAILABLE
+        return FINAL_REASON_FRAME_GRID_AUTHORITY_UNAVAILABLE

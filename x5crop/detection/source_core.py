@@ -62,8 +62,6 @@ class SourceContentComponent:
     row_run_offset: int
     row_run_count: int
     footprint: Box
-    intensity_active_cells: int
-    texture_active_cells: int
     positive_cells: int
     censored: bool
     provenance: MeasurementProvenance
@@ -77,8 +75,6 @@ class SourceContentComponent:
             or self.positive_cells <= 0
         ):
             raise ValueError("source content component requires positive evidence")
-        if min(self.intensity_active_cells, self.texture_active_cells) < 0:
-            raise ValueError("source content channel counts cannot be negative")
         if self.provenance.root_measurement != MeasurementIdentity.SOURCE_CONTENT:
             raise ValueError("source content requires source-content provenance")
 
@@ -486,8 +482,6 @@ def _compact_components(
                 row_run_offset=int(offsets[component_index]),
                 row_run_count=int(run_counts[component_index]),
                 footprint=footprint,
-                intensity_active_cells=cells,
-                texture_active_cells=cells,
                 positive_cells=cells,
                 censored=(
                     footprint.left == box.left

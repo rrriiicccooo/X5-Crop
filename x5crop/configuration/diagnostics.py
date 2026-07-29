@@ -24,7 +24,6 @@ class DebugStyleParameters:
     dark_background: int = 18
     text_color: tuple[int, int, int] = (245, 245, 245)
     jpeg_quality: int = 92
-    pass_color: tuple[int, int, int] = (40, 180, 90)
     review_color: tuple[int, int, int] = (230, 80, 70)
     reason_display_limit: int = 3
     text_fallback_size: tuple[int, int] = (8, 12)
@@ -54,7 +53,6 @@ class DebugStyleParameters:
             self.domain_color,
             self.content_color,
             self.text_color,
-            self.pass_color,
             self.review_color,
         )
         if any(

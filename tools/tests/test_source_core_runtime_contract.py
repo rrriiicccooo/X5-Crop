@@ -123,6 +123,10 @@ class SourceCoreRuntimeContractTest(unittest.TestCase):
             content["component_examples_truncated"],
             content["component_count"] > 64,
         )
+        for component in content["component_examples"]:
+            self.assertNotIn("intensity_active_cells", component)
+            self.assertNotIn("texture_active_cells", component)
+            self.assertGreater(component["positive_cells"], 0)
 
     def test_core_hash_excludes_measurement_wall_time(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

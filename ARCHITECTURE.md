@@ -117,7 +117,7 @@ positive_content
 `int32` RLE 表保存，组件只引用连续 span；report/Debug 只输出有界摘要。每个组件保存：
 
 - 完整半开 footprint；
-- channel 支持与 positive cell 数；
+- positive cell 数；两个 channel 的总体 measurement 统计由 observation owner 保存；
 - row-run offset/count；
 - censored 状态；
 - source measurement provenance。

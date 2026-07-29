@@ -12,7 +12,7 @@ from ..detection.decision.decision_gate import apply_decision_gate
 from ..detection.final.finalize import finalize_detection
 from ..detection.pipeline import choose_detection
 from ..detection.workspace import DetectionWorkspace, prepare_detection_workspace
-from ..export.actions import copy_for_review_if_needed, write_crops_if_allowed
+from ..export.actions import prepare_review_artifact
 from ..geometry.layout import infer_layout
 from ..io.tiff import read_tiff, read_tiff_profile
 from ..output.surface import output_surface_for_input
@@ -120,7 +120,7 @@ def process_one(
         )
 
         failure_stage = FailureStage.OUTPUT
-        review_copy = copy_for_review_if_needed(
+        review_copy = prepare_review_artifact(
             input_file,
             output_surface.root,
             config,
@@ -128,13 +128,6 @@ def process_one(
             warnings,
         )
         artifacts = replace(artifacts, review_copy=review_copy)
-        frame_outputs = write_crops_if_allowed(
-            input_file,
-            detection,
-            config,
-            output_surface,
-        )
-        artifacts = replace(artifacts, frame_outputs=tuple(frame_outputs))
 
         failure_stage = FailureStage.DEBUG
         debug_analysis = write_debug_outputs(
