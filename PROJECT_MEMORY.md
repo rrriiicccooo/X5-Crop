@@ -1,114 +1,250 @@
 # 项目记忆
 
-更新：2026-07-26
+更新：2026-07-29
 
-这是 X5 Crop 唯一跨会话检查点，只保存当前目标、已验证状态、验证边界、开放风险和精确
-下一步。Git、源码、原始 TIFF、current report、Debug Analysis 与现场命令始终优先。
+这是 X5 Crop 唯一跨会话检查点，只保存当前目标、已验证状态、能力边界、开放风险和精确
+下一步。详细运行合同见 `ARCHITECTURE.md`，版本历史见 `CHANGELOG.md`。Git、源码、原始
+TIFF、current report、Debug Analysis 与现场命令输出始终优先于本文件。
+
+## 当前检查点
+
+- 分支：`main`。
+- 当前提交：`4a5ac722d2a0c489a7da4bd84fbb6adadd3d5254`，已推送并与
+  `origin/main` 一致。
+- Tracked 工作区干净；ignored 内容只有 `Test/` 本地样片与证据。
+- 当前 runtime：`X5_Crop.py` V4.9 source-core 安全基线。
+- 当前稳定公开 Release：`v4.2.8`。
+- Runtime schema：
+
+  ```text
+  schema_id       = detection_report
+  schema_revision = source_core_grid_authority
+  ```
+
+- 当前没有获批的独立 `FrameGridEvidence` phase authority。所有需要定位 frame 的输入
+  正式得到：
+
+  ```text
+  status = needs_review
+  reason = frame_grid_authority_unavailable
+  frame boxes = ()
+  frame TIFF outputs = ()
+  ```
+
+这不是 detector 失败后的 fallback，而是 current runtime 的真实能力边界。
 
 ## 当前目标
 
-使用已经完成的用户确认黄金基线，量化并校准 V4.9 detector：
+下一阶段要找到并证明一个**独立的 Frame Grid phase authority**。只有它成立后，系统才
+有资格继续建立 frame slots、逐帧照片 containment 和自动输出。
+
+目标数据流：
 
 ```text
-共享照片长边
-→ deskew 与共享短轴
-→ 成对长轴分隔边缘
-→ 保守包含的安全矩形
-→ 仅输出阶段应用 bleed
+source pixels
+→ 独立 Grid phase authority
+→ finite frame slots
+→ per-frame positive content + design height + lane authority
+→ shared safe containment
+→ millimetre output protection
+→ optional non-blocking Visual Deskew
+→ inverse-affine ROI
+→ TIFF
 ```
 
-- 目标是在黄金集校准的方向性容差内形成足够准确的安全裁切，不追求数学 `0 px`。
-- 保留 typed evidence、唯一 affine 坐标映射、uncertainty、`CandidateGate`、
-  `DecisionGate` 与 typed unresolved。
-- Bleed 只在基础几何之后扩张，不能掩盖错误几何。
-- 不恢复退役审阅机制、历史 schema、alias、shim、兼容 fallback 或 runtime 白名单。
+固定约束：
+
+- Grid authority 必须物理独立、可审计，并传播完整 uncertainty。
+- Separator、photo edge、outer、positive content、设计宽度或 baseline 都不能单独补出
+  Grid phase。
+- Content 只能验证或否定已有 slot，不能创建 phase、ordinal 或 separator identity。
+- Protection 与 Visual Deskew 都是后置消费者，不能选择核心 geometry。
+- 缺少权威证据时继续 `needs_review`；不得恢复 score、Top-K、retry、fallback、样片规则
+  或 compatibility layer。
+- 新 authority 一旦获批，应作为一次决策完整的实施套餐；普通工程修复不再拆成连续
+  微型审批。
+
+## 当前运行与状态语义
+
+唯一运行流：
+
+```text
+TIFF source pixels
+→ base gray / statistics，各一次
+→ ScanCanvasEvidence
+→ independent long/short scale intervals
+→ SourceStripValidationDomain
+→ immutable positive-content components
+→ FrameGridEvidence(NO_INDEPENDENT_PHASE_AUTHORITY)
+→ CandidateGate
+→ DecisionGate
+→ review copy / current report / Debug Analysis
+```
+
+已经成立：
+
+- 设计 aperture 保持离散 format components，不取 hull。
+- Long/short scale 分轴传播，TIFF DPI 不参与检测。
+- Validation domain 只来自唯一 scan canvas/lane 与 source extent。
+- Positive content 由独立 intensity/texture fields、strict 4-connectivity 和 immutable
+  RLE 产生；它是确定性 measurement，无 Grid 权限。
+- 当前无组合搜索，因此没有 `PhysicalAuditBudget`。
+
+当前未运行：
+
+- Separator 与 photo edge：没有 active detector 或 runtime type。
+- Frame Grid：固定 `NO_INDEPENDENT_PHASE_AUTHORITY`。
+- Photo containment：`NOT_APPLICABLE_FRAME_GRID_UNAVAILABLE`。
+- Visual Deskew：`NOT_APPLICABLE_CORE_UNAVAILABLE`。
+- Blank/contact/overlap：没有 current measurement owner，不进入 current schema。
+- Millimetre protection：只报告 authority；没有 frame geometry 时 `applied=false`。
+- ROI/TIFF exporter：独立 foundation 保留，但 current runtime 没有合法 boxes。
+
+系统只有两个 Gate：
+
+1. `CandidateGate` 检查 source-core facts，不创建 final status/reason。
+2. `DecisionGate` 是 final status 与 typed reason 的唯一 owner。
+
+术语：
+
+- `unavailable`：evidence owner 缺少足够权威事实，不是负质量分数。
+- `needs_review`：DecisionGate 把阻断 evidence 映射成用户可见 final status。
+- `unsolvable`：不是 current runtime/schema 术语，不得作为 alias 加入。
+- `contradicted`：只表示完整物理约束明确否定，不能代替 incomplete。
+
+正常 source core 完整但 Grid 缺 authority 时只产生
+`frame_grid_authority_unavailable`。若 scan canvas/content 自身不可用，追加各自 typed
+reason；被 Grid 阻断的下游只标记 `NOT_APPLICABLE`。
 
 ## 已验证检查点
 
-- 分支：`main`。
-- 当前 runtime：`X5_Crop.py` V4.9。
-- 报告 revision：`cross_region_photo_edge_geometry`。
-- 稳定发布：`v4.2.8`。
-- 本地有 111 张未修改源 TIFF：47 张 `135/full`、14 张 `135/partial`、32 张
-  `66/partial`、3 张 `67/full`、10 张 `half/full`、5 张 `half/partial`。
-- `manifest.jsonl` 绑定同样的 111 个 source identity，并标出 9 张黄金样片。
-- 人工证据链完整：9 张标注 TIFF、9 张原生分辨率复核 JPG、9 条
-  `x5crop_red_markup_fit_proposal_v1`、9 条
-  `x5crop_user_confirmed_golden_baseline_v1`。
-- `S027=6`、`S035=6`、`S051=3`、`S055=4`、`S062=3`、`S091=3`、`S094=3`、
-  `S098=12`、`S109=7`。
-- `S027`、`S035`、`S051`、`S055`、`S062`、`S091`、`S094`、`S109` 属于
-  `nominal_calibration`。
-- `S098` 因老化相机造成非矩形与不稳定片距，属于 `irregular_geometry_stress`，不参与
-  正常容差估计；runtime 不得强迫其 divider 垂直、等片距或自动 PASS。
-- `red_markup_converter.py verify` 已检查 source/marked/JPG hash、线数、顺序、界内正面积
-  polygon、原生 JPG 尺寸、拟合残差、proposal snapshot 与全部 confirmed row。
-- Converter revision `preview_red_delta_robust_line_fit_v2` 会拒绝与强红线数量冲突的声明
-  帧数，不能静默丢弃用户笔迹。
+### Current-only tree
 
-## 当前人工审阅合同
+- Source-core 原子替换：`0a4a93fcab94cf620cec0bc30b27eeb6f898a48f`。
+- 极致收口：`4a5ac722d2a0c489a7da4bd84fbb6adadd3d5254`。
+- Active tree 已原子删除旧 PhotoEdge/separator/sequence/transform/rotated-gray/pixel-bleed
+  链及 reader、alias、shim、adapter、feature flag 和双实现。
+- 不可达的 auto-approval/Debug PASS、空 export wrapper、重复 content fields 与过期 ignore
+  例外也已删除。
+- 两轮相同 checklist 均为零残留：无 legacy token、空 source 目录、无 owner module 或
+  文档断链。
 
-- 未修改原 TIFF 拥有 raster coordinate 与 source SHA；标注副本只保存用户直接笔迹。
-- Proposal 始终保持 `pending_explicit_user_confirmation` observation，即使另有 confirmed
-  row，也不会提升自身权限。
-- 只有用户明确确认确切 review JPG，才能创建 baseline authority。
-- 每条 confirmed row 绑定 source SHA、marked-copy SHA、不可变 proposal snapshot SHA、
-  review JPG SHA、连续 source-pixel geometry 与确认后的 integer polygon。
-- 模型视觉、OpenCV、SciPy、生成 JPG、hash、residual 或算法一致不能独立创建真值；
-  歧义 geometry 保持 unresolved。
-- `nominal_calibration` 用于估计方向、containment、content loss 与 pitch tolerance；
-  `irregular_geometry_stress` 不参与阈值统计。
+### Contracts、样片与性能
+
+- Pre-push full：26/26 tests、compileall、14/14 format/mode、shell syntax、diff hygiene
+  和 version check 全部通过。
+- Named audit：S027、S035、S051、S055、S062、S091、S094、S109、S098 共 9/9 正常
+  `needs_review`，0 frame output。S098 只作 `irregular_geometry_stress`。
+- 111 张 invariant：111 completed、0 failure、0 frame output。
+- 固定 24 张 detector-only、`--jobs 2`：
+
+  ```text
+  cold       1.797 秒/张
+  measured   1.801 / 1.807 / 1.816 秒/张
+  median     1.807 秒/张
+  ```
+
+  受限环境中 process worker 不可用，实际降级为两个 thread workers；且没有 frame TIFF
+  写出，因此只是 `diagnostic_only`。它证明安全基线保有 `<5.0 秒/张`的未来余量，不是
+  正式输出性能认证。
+- 正式性能仍要求独立 Grid authority 恢复输出后，用固定 24 张、`--jobs 2`、真实 TIFF
+  写出和复读，三次中位数 `<=5.0 秒/张`。当前状态必须是 `not_certified`。
+- 人工证据链重新验证：111 条 source manifest、9 条 fit proposal、9 条 user-confirmed
+  baseline；outer-noise、overlapping-divider 与 declared-frame-count contracts 均通过。
+
+## 本地证据与历史边界
+
+本地有 111 张未修改 source TIFF：47 张 135/full、14 张 135/partial、32 张
+120-66/partial、3 张 120-67/full、10 张 half/full、5 张 half/partial。九张黄金样片的
+source/marked/JPG/proposal/baseline hashes 完整保留；八张属于 nominal calibration，
+S098 属于 stress。
+
+Baseline 只能在 detector/output receipt 冻结后用于 comparator，不参与检测、Grid、
+deskew 或输出选择。
+
+重启前原型证据：
+
+```text
+Test/local_audit_evidence/2026-07-29-source-core-cutover/
+```
+
+该 ignored 目录含 SHA manifest、cutover patch、原型脚本、决定性输出与 validation
+receipt，不得随 cache 清理。它只否定特定表示或 measurement 合同：
+
+- exact top × bottom photo-edge 未在八张 nominal 上形成唯一 pair；
+- leading × trailing 笛卡尔积覆盖不完整且超预算；
+- 原子暗带、width conservation、section connectivity、dense row-band、
+  fragment/K-message、full-axis sparse 与 full-height origin proposal 都没有形成普遍、
+  唯一、有限工作量的 separator identity；
+- release outer/holder continuity 只能提供 proposal 或向外 containment 线索；
+- confirmed-line signal matrix 否定的是
+  `base_gray_u8 + current local-noise/integration` 的普遍可用性，不证明原始高位深 TIFF
+  没有物理信号。
+
+旧版只借鉴计算与工程纪律：base gray/statistics 各一次、vectorized measurement、
+source-coordinate cache、快速 proposal、事后 comparator、单次 inverse-affine ROI、
+固定 cohort 与 Hook 验证。不得恢复 score/rank/Top-K/retry/format override/candidate cap、
+outer-as-photo-edge、width oracle、baseline selection 或兼容层。
 
 ## 文档与工作区
 
-- 根 `README.md` 只是精简双语 GitHub 入口。
-- `docs/` 中的中文与英文用户手册、快速启动分别面向 GitHub 和 Release。
-- `AGENTS.md`、`ARCHITECTURE.md`、`CHANGELOG.md` 与本文件只写中文正文。
-- 受跟踪 current owner 是根文档/launcher、`docs/`、`install/`、`x5crop/` 与 `tools/`。
-  历史版本只由 Git history 与 tags 保存，不维护 `archive/`。
-- `Test/` 是 ignored 本地证据，不是 tracked source contract。原 TIFF、九张标注副本、
-  确认 JPG、proposal、baseline、manifest、converter 与两份本地中文说明必须保留；
-  cache、`.DS_Store`、临时文件和 generated output 不保留。
-- `LICENSE` 保留在 GitHub，本地 sparse checkout 不保存。
+- `README.md`：精简中英双语入口。
+- `ARCHITECTURE.md`：当前 runtime 与数值合同唯一 owner。
+- `CHANGELOG.md`：版本行为、验证边界与历史。
+- `docs/user-guide.*`、`docs/quick-start.*`：分离的中英文公共文档。
+- `PROJECT_MEMORY.md`：唯一跨会话检查点；不得新增平行 handoff 文档。
+- `Test/`：ignored 本地样片与证据。原 TIFF、manual review、baseline 和
+  `local_audit_evidence` 必须保留；cache、`.DS_Store` 与 generated output 不保留。
 
-## 验证边界与开放风险
+## 开放风险
 
-- 九条确认记录建立项目实用的 safe no-bleed reference，不是独立物理测量的数学 oracle。
-- Production detector 尚未对完整黄金基线进行方向性误差量化或阈值校准；`tools/verify`
-  通过不能证明 named-TIFF geometry 准确。
-- 比较必须经过唯一坐标映射，并分别保留 unsafe outward crossing、inward content loss、
-  signed normal distance、angle 与 containment，不能压缩为无方向总分。
-- OpenCV 与 SciPy 只用于本地校准/转换，尚未进入 V4.9 runtime 或 Release；当前发布依赖
-  仍为 NumPy、tifffile、imagecodecs 与 Pillow。
-- 最近的 tracked test 审计未发现重复 test body、空 test module、未使用 public support
-  owner 或无静态 incoming owner 的 active Python module；不做猜测性删除。
+1. 没有独立 Grid phase authority，当前不能定位 frame。
+2. 没有 frame assignment，containment、protection、deskew、blank/contact/overlap 尚无
+   runtime 语义。
+3. Positive content 无权提供 phase。
+4. 若重新研究 separator，必须先提出新的独立 source evidence owner，不能继续优化已
+   终局失败的 proposal/fragment 图。
+5. XPan 与 120-645 缺少真实 fixture，不能声明准确性覆盖。
+6. Detector-only 余量不能代替真实 frame TIFF 性能合同。
+7. Green tests、PASS、hash 或 comparator 一致不能代替原 TIFF 坐标中的物理确认。
 
-## 精确下一步
+## 新任务的精确下一步
 
-1. 定义 production output 到 confirmed source-coordinate polygon 的只读比较合同，纳入
-   现有 deskew mapping。
-2. 不先调参，测量八张 `nominal_calibration`：逐边 signed normal distance、angle、
-   unsafe outward crossing、inward content loss、containment、status/reasons 与
-   geometry resolution。
-3. 只从 nominal subset 推导方向性验收容差，再单独验证 `S098`。
-4. 由一个 focused failing contract 定位第一个 production gap，修复 canonical owner，
-   比较 current-schema report 与 Debug Analysis，最终 full 验证交给 push Hook。
+新任务的第一交付物是一份**决策完整的独立 Grid phase authority 方案**，不是另一个零散
+separator 微型原型，也不是立即修改 tracked detector。
 
-恢复时先运行：
+开始时核对：
 
 ```bash
-git log -1 --oneline
+git log -1 --oneline --decorate
 git status --short
+git rev-parse origin/main
+rg 'REPORT_SCHEMA_REVISION' x5crop
 python3 -B Test/manual_review/red_markup_converter.py verify
 wc -l Test/manual_review/manifest.jsonl
-wc -l Test/manual_review/red_markup_fit_proposals.jsonl
 wc -l Test/manual_review/user_confirmed_golden_baseline.jsonl
-rg 'REPORT_SCHEMA_REVISION' x5crop
 ```
 
-恢复提示：
+方案必须一次锁定：
 
-> 从 9/9 user-confirmed 黄金基线继续：8 张 `nominal_calibration`，S098 为
-> `irregular_geometry_stress`。先建立 production output 到 confirmed 原图 polygon 的
-> 只读方向性比较，不先放宽 detector；随后用 named TIFF、current report 与
-> Debug Analysis 定位第一个真实 gap。
+1. authority 的独立物理来源、唯一 owner 与 provenance；
+2. 它为何不消费 separator、content、baseline 或待证明 geometry；
+3. source-coordinate measurement、完整 uncertainty 与多 component 行为；
+4. full/partial、horizontal/vertical、dual-lane 和缺 fixture format 的 capability；
+5. Grid/ordinal/slot/content assignment/per-frame containment 的单向权限；
+6. `unavailable`、`contradicted`、`needs_review` 与 finalization 的关系；
+7. bounded work、Named TIFF、S098、24 张真实输出和 111 张 invariant 合同；
+8. current-only tree 的保留、增加与原子删除清单；
+9. 普通工程问题在同一授权内修复，只有改变物理 authority 或扩大范围才重新询问。
+
+获得用户明确批准前，不修改 tracked detector，不恢复旧 detector/compatibility，不让
+Grid、content、outer、protection 或 deskew 反向授权，也不声明自动裁切、deskew 物理
+精度或正式输出性能通过。
+
+新任务恢复提示：
+
+> 继续 X5 Crop。读取 `README.md`、`AGENTS.md`、`PROJECT_MEMORY.md` 与
+> `ARCHITECTURE.md`，核对 `main@4a5ac72` 和干净工作区。当前是 review-only
+> source-core 安全基线，唯一核心缺口是独立 Frame Grid phase authority。先提交一份
+> 决策完整、无循环证据、有限工作量、current-only 的 authority 方案；不要恢复
+> separator/photo-edge/outer 旧 detector，不要先修改 tracked 文件。
