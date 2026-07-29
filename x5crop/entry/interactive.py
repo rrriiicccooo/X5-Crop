@@ -91,10 +91,10 @@ def interactive_options(diagnostics: bool = False) -> RuntimeOptions:
     print()
     if diagnostics:
         print("This is a local development diagnostics launcher.")
-        print("It always runs dry run + Debug Analysis + diagnostics.")
-        print("No cropped TIFF files will be exported, and review files will not be copied.")
+        print("It writes report + Debug Analysis without copying review files.")
     else:
-        print("This will process TIFF files in this folder.")
+        print("This audits TIFF files in this folder for source-core review.")
+        print("The current build does not export cropped frame TIFFs.")
         print("Existing output files will not be overwritten.")
     print()
 
@@ -108,12 +108,11 @@ def interactive_options(diagnostics: bool = False) -> RuntimeOptions:
     if diagnostics:
         print("diagnostics: enabled")
         print("debug analysis: enabled")
-        print("dry run: enabled")
     elif debug_analysis:
         print("debug analysis: enabled")
-        print("dry run: no cropped TIFF files will be written.")
     else:
         print("debug analysis: off")
+    print("frame TIFF export: unavailable without independent Grid authority")
     print(f"strip mode: {strip_mode}")
     if partial:
         print(f"count: {'auto' if requested_count is None else requested_count}")
@@ -127,16 +126,11 @@ def interactive_options(diagnostics: bool = False) -> RuntimeOptions:
         strip_mode=strip_mode,
         requested_count=requested_count,
         page=0,
-        bleed=None,
-        bleed_x=None,
-        bleed_y=None,
         review_dir=None,
         copy_review_files=False if diagnostics else True,
-        export_review=False,
         compression="same",
         debug=False,
         debug_analysis=debug_analysis,
-        dry_run=debug_analysis or diagnostics,
         diagnostics=diagnostics,
         overwrite=False,
         report=debug_analysis or diagnostics,

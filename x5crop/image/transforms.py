@@ -1,15 +1,13 @@
 from __future__ import annotations
 
-import math
-
 import numpy as np
 
+from ..domain import Box
 from ..geometry.affine import AffineCoordinateTransform
 from ..utils import spatial_shape
 
 
-ROTATION_IDENTITY_EPSILON_DEGREES = 1e-9
-ROTATION_ROW_CHUNK_SIZE = 256
+AFFINE_ROW_CHUNK_SIZE = 256
 BILINEAR_INTERPOLATION_POSITION_UNCERTAINTY_PX = 1.0
 
 
@@ -32,7 +30,7 @@ def photometric_background_value(
         return limits[0] if minimum_is_white else limits[1]
     finite = arr[np.isfinite(arr)]
     if not finite.size:
-        raise ValueError("rotation background requires finite image samples")
+        raise ValueError("affine background requires finite image samples")
     return float(finite.min() if minimum_is_white else finite.max())
 
 
@@ -43,80 +41,113 @@ def _cast_interpolated(value: np.ndarray, dtype: np.dtype) -> np.ndarray:
     return value.astype(dtype)
 
 
-def rotate_array_expand(
+def sample_affine_roi(
     arr: np.ndarray,
-    angle_degrees: float,
     axes: str,
+    transform: AffineCoordinateTransform,
+    box: Box,
     *,
     background_value: int | float,
-) -> tuple[np.ndarray, AffineCoordinateTransform]:
-    h, w = spatial_shape(arr)
-    if abs(angle_degrees) < ROTATION_IDENTITY_EPSILON_DEGREES:
-        return arr, AffineCoordinateTransform.identity(w, h)
+) -> np.ndarray:
+    """Sample one half-open output ROI through the supplied affine transform."""
+    source_height, source_width = spatial_shape(arr)
+    if (source_width, source_height) != (
+        transform.source_extent.width,
+        transform.source_extent.height,
+    ):
+        raise ValueError("affine source array must match the transform extent")
+    if (
+        not box.valid()
+        or box.left < 0
+        or box.top < 0
+        or box.right > transform.output_extent.width
+        or box.bottom > transform.output_extent.height
+    ):
+        raise ValueError("affine ROI must lie inside the expanded output domain")
     if axes == "SYX":
-        rotated, transform = rotate_array_expand(
+        sampled = sample_affine_roi(
             np.moveaxis(arr, 0, -1),
-            angle_degrees,
             "YXS",
+            transform,
+            box,
             background_value=background_value,
         )
-        return np.moveaxis(rotated, -1, 0), transform
-    angle = math.radians(angle_degrees)
-    cos_a = math.cos(angle)
-    sin_a = math.sin(angle)
-    transform = AffineCoordinateTransform.expanded_rotation(
-        w,
-        h,
-        angle_degrees,
-    )
-    cx = (w - 1) / 2.0
-    cy = (h - 1) / 2.0
-    out_w = transform.output_extent.width
-    out_h = transform.output_extent.height
-    out_shape = (out_h, out_w) + tuple(arr.shape[2:])
-    out = np.full(out_shape, background_value, dtype=arr.dtype)
-
-    out_cx = (out_w - 1) / 2.0
-    out_cy = (out_h - 1) / 2.0
-    chunk = ROTATION_ROW_CHUNK_SIZE
-    for y0 in range(0, out_h, chunk):
-        y1 = min(out_h, y0 + chunk)
-        yy, xx = np.mgrid[y0:y1, 0:out_w].astype(np.float64)
-        x_rel = xx - out_cx
-        y_rel = yy - out_cy
-        src_x = x_rel * cos_a + y_rel * sin_a + cx
-        src_y = -x_rel * sin_a + y_rel * cos_a + cy
-        valid = (src_x >= 0) & (src_x <= w - 1) & (src_y >= 0) & (src_y <= h - 1)
+        return np.moveaxis(sampled, -1, 0)
+    if arr.ndim == 2:
+        if axes != "YX":
+            raise ValueError(f"Unsupported axes for grayscale affine sampling: {axes}")
+    elif arr.ndim == 3:
+        if axes != "YXS":
+            raise ValueError(f"Unsupported axes for image affine sampling: {axes}")
+    else:
+        raise ValueError("affine sampling requires a 2D or 3D image")
+    if transform.is_identity:
+        return arr[box.top : box.bottom, box.left : box.right]
+    output_shape = (box.height, box.width) + tuple(arr.shape[2:])
+    output = np.full(output_shape, background_value, dtype=arr.dtype)
+    inverse = transform.inverse_matrix
+    for output_row in range(0, box.height, AFFINE_ROW_CHUNK_SIZE):
+        row_end = min(box.height, output_row + AFFINE_ROW_CHUNK_SIZE)
+        expanded_y = np.arange(
+            box.top + output_row,
+            box.top + row_end,
+            dtype=np.float64,
+        )[:, None]
+        expanded_x = np.arange(
+            box.left,
+            box.right,
+            dtype=np.float64,
+        )[None, :]
+        source_x = (
+            inverse[0][0] * expanded_x
+            + inverse[0][1] * expanded_y
+            + inverse[0][2]
+        )
+        source_y = (
+            inverse[1][0] * expanded_x
+            + inverse[1][1] * expanded_y
+            + inverse[1][2]
+        )
+        valid = (
+            (source_x >= 0.0)
+            & (source_x <= source_width - 1)
+            & (source_y >= 0.0)
+            & (source_y <= source_height - 1)
+        )
         if not valid.any():
             continue
-        x0f = np.floor(src_x).astype(np.int64)
-        y0f = np.floor(src_y).astype(np.int64)
-        x1f = np.clip(x0f + 1, 0, w - 1)
-        y1f = np.clip(y0f + 1, 0, h - 1)
-        x0f = np.clip(x0f, 0, w - 1)
-        y0f = np.clip(y0f, 0, h - 1)
-        wx = src_x - x0f
-        wy = src_y - y0f
+        x0 = np.clip(
+            np.floor(source_x).astype(np.int64),
+            0,
+            source_width - 1,
+        )
+        y0 = np.clip(
+            np.floor(source_y).astype(np.int64),
+            0,
+            source_height - 1,
+        )
+        x1 = np.clip(x0 + 1, 0, source_width - 1)
+        y1 = np.clip(y0 + 1, 0, source_height - 1)
+        weight_x = source_x - x0
+        weight_y = source_y - y0
         if arr.ndim == 2:
             value = (
-                arr[y0f, x0f] * (1 - wx) * (1 - wy)
-                + arr[y0f, x1f] * wx * (1 - wy)
-                + arr[y1f, x0f] * (1 - wx) * wy
-                + arr[y1f, x1f] * wx * wy
+                arr[y0, x0] * (1.0 - weight_x) * (1.0 - weight_y)
+                + arr[y0, x1] * weight_x * (1.0 - weight_y)
+                + arr[y1, x0] * (1.0 - weight_x) * weight_y
+                + arr[y1, x1] * weight_x * weight_y
             )
-            out[y0:y1, :][valid] = _cast_interpolated(
-                value[valid],
-                arr.dtype,
-            )
-        elif axes == "YXS":
-            value = (
-                arr[y0f, x0f].astype(np.float64) * ((1 - wx) * (1 - wy))[..., None]
-                + arr[y0f, x1f].astype(np.float64) * (wx * (1 - wy))[..., None]
-                + arr[y1f, x0f].astype(np.float64) * ((1 - wx) * wy)[..., None]
-                + arr[y1f, x1f].astype(np.float64) * (wx * wy)[..., None]
-            )
-            out_chunk = out[y0:y1, :]
-            out_chunk[valid] = _cast_interpolated(value[valid], arr.dtype)
         else:
-            raise ValueError(f"Unsupported axes for image rotation: {axes}")
-    return out, transform
+            value = (
+                arr[y0, x0].astype(np.float64)
+                * ((1.0 - weight_x) * (1.0 - weight_y))[..., None]
+                + arr[y0, x1].astype(np.float64)
+                * (weight_x * (1.0 - weight_y))[..., None]
+                + arr[y1, x0].astype(np.float64)
+                * ((1.0 - weight_x) * weight_y)[..., None]
+                + arr[y1, x1].astype(np.float64)
+                * (weight_x * weight_y)[..., None]
+            )
+        chunk = output[output_row:row_end]
+        chunk[valid] = _cast_interpolated(value[valid], arr.dtype)
+    return output

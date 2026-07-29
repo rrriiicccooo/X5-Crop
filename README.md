@@ -5,15 +5,14 @@
 [中文快速启动](docs/quick-start.zh-CN.md) ·
 [English Quick Start](docs/quick-start.en.md)
 
-X5 Crop 将 Hasselblad / Imacon X5 片夹扫描得到的长条 TIFF 自动拆分为单张 TIFF。
-只有几何已经解决且输出保护可行的结果才会导出，其余文件进入复核。
+X5 Crop 用于审计 Hasselblad / Imacon X5 片夹扫描 TIFF。当前 V4.9 开发版只生成
+source-core 复核证据；在独立 Frame Grid authority 成立前，不导出单张 frame TIFF。
+稳定发布仍为 **v4.2.8**。
 
-X5 Crop splits long TIFF scans from Hasselblad / Imacon X5 holders into
-individual TIFF frames. It exports a result only when geometry is resolved and
-output protection is feasible; every other result remains in review.
-
-- 当前开发版本 / Active development: **V4.9**
-- 当前稳定发布 / Stable release: **v4.2.8**
+X5 Crop audits TIFF scans from Hasselblad / Imacon X5 holders. The current V4.9
+development build emits source-core review evidence only; it does not export
+individual frame TIFFs until an independent Frame Grid authority exists. The
+stable release remains **v4.2.8**.
 
 请从 [GitHub Releases](https://github.com/rrriiicccooo/X5-Crop/releases) 下载
 `X5-Crop-vX.X.zip`，不要下载 GitHub 自动生成的 Source code。

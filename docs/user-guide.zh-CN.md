@@ -1,35 +1,36 @@
 # X5 Crop 用户手册
 
-- 当前开发版本：**V4.9**
+- 当前开发版本：**V4.9 source-core 安全基线**
 - 当前稳定发布：**v4.2.8**
 
-X5 Crop 将 Hasselblad / Imacon X5 片夹扫描得到的长条 TIFF 自动拆分为单张 TIFF。
-只有几何已经解决且输出保护可行的结果才会导出，其余文件进入复核。
+当前 V4.9 开发版读取 X5 片夹扫描 TIFF，建立 scan-canvas、分轴尺度与 positive-content
+审计，并生成复核副本、报告和 Debug Analysis。因为尚无获批的独立 Frame Grid phase
+authority，所有输入都保持 `needs_review`，不导出单张 frame TIFF。
 
-日常使用请从 [GitHub Releases](https://github.com/rrriiicccooo/X5-Crop/releases)
-下载 `X5-Crop-vX.X.zip`，不要下载 GitHub 自动生成的 Source code 压缩包。
+这不是自动裁切失败后的 fallback，而是当前版本的正式能力边界。
 
-## 安装与启动
+## 安装
 
-首次使用时运行对应安装器：
+从 [GitHub Releases](https://github.com/rrriiicccooo/X5-Crop/releases) 下载
+`X5-Crop-vX.X.zip`，不要下载 GitHub 自动生成的 Source code。
+
+首次运行对应安装器：
 
 ```text
 macOS:   install/X5_Crop_Mac_install.command
 Windows: install/X5_Crop_win_install.bat
 ```
 
-安装器检查或安装 `numpy`、`tifffile`、`imagecodecs` 和 `Pillow`。macOS 安装器只处理
-当前 Release 文件夹的启动权限和 quarantine，不建立系统级信任。
+安装器检查或安装 `numpy`、`scipy`、`tifffile`、`imagecodecs` 和 `Pillow`。macOS
+安装器只处理当前 Release 文件夹的权限和 quarantine，不建立系统级信任。
 
-将入口、启动器和 TIFF 放在同一个文件夹：
+将入口、启动器和 TIFF 放在同一文件夹：
 
 ```text
 X5_Crop.py
 X5_Crop_Mac.command 或 X5_Crop_win.bat
 *.tif / *.tiff
 ```
-
-启动方式：
 
 ```text
 macOS:   双击 X5_Crop_Mac.command
@@ -42,115 +43,127 @@ macOS 无法双击时，在该文件夹的 Terminal 中运行：
 /bin/bash X5_Crop_Mac.command
 ```
 
-交互启动器依次询问：
-
-```text
-format:
-partial mode? [y/n, return=no]:
-count:
-debug analysis? [y/n, return=no]:
-```
-
-只有 partial mode 会询问 `count`；Return 或 `auto` 表示自动判断。
-
 ## 格式与模式
 
-| 输入 | 格式 | Full 张数 |
+| 输入 | 格式 | Full 设计张数 |
 |---|---|---:|
 | Return / `135` | 135 | 6 |
 | `dual` / `135 dual` / `135-dual` | 135 双条 | 12 |
 | `half` | 半格 | 12 |
-| `xpan` | XPAN | 3 |
+| `xpan` | XPan | 3 |
 | `645` | 120-645 | 4 |
 | `66` | 120-66 | 3 |
 | `67` | 120-67 | 3 |
 
-- 照片铺满片夹时使用 full。
-- 片头、片尾、局部片条或未铺满片夹时使用 partial。
-- XPAN 和 120-66 的完整三张片条如果未铺满画布，也使用 partial。
-- `135-dual` 主要用于完整双条；证据不足时保持 REVIEW。
+- Full 与 partial 使用同一个完整 scan-canvas/lane 短轴 domain。
+- Partial count 只描述若干张完整设计 slot，不表示残缺照片。
+- 当前 count 与格式进入审计身份，但不会在没有 Grid authority 时生成 frame。
+- `135-dual` 分 lane 审计并固定保持 review。
 
-## 检测与安全边界
+## 当前检测事实
 
-- 原始 TIFF 永不修改；输出写入新文件。
-- 输出保留位深、通道结构、ICC/色彩空间、resolution metadata、其它 metadata 和已知
-  无损压缩行为。
-- TIFF DPI/PPI 只作为 I/O metadata 保存，不参与检测。已知单条片夹由像素长短比匹配
-  物理画布并计算 px/mm；未知或竞争画布保持 REVIEW。
-- 自动校斜不可关闭。Detection 在分帧前联合观测真实照片的共享边缘；deskew、mapped
-  pair、共享短轴和照片尺寸消费同一证据，旋转后不重新测量短轴。
-- 理论位置只缩小计算范围，不能产生 supported evidence。扫描外沿、单边缘、分数或执行
-  预算都不能代替真实双边像素证据。
-- 只有基础几何安全解决后才应用 bleed。Bleed 不能改变 geometry、Gate 或 output
-  protection。
+每个 TIFF 只建立一次 base gray 和 image statistics。已知 scan canvas 必须从像素长短比
+唯一匹配；无匹配或多个 profile 同时成立都保持 review。
 
-## Debug Analysis
+Long/short px/mm 分别计算，互不扩宽。TIFF DPI/PPI 只作为输出 metadata 保存，不参与
+检测。
 
-Debug Analysis 是 dry run：执行完整检测并写出 JPG 与报告，但不导出正式裁切 TIFF。
+Positive content 使用两份独立 field：
 
 ```text
-x5_crop_output/_debug_analysis/
+intensity = abs(I - five_point_local_mean(I)) / 255
+texture   = (abs(dx) + abs(dy)) / 510
+positive  = intensity_supported AND texture_supported
 ```
 
-每张 JPG 固定显示：
+组件使用严格 4-connectivity 和只读 RLE 保存。它只能描述 source content，不能创建
+frame phase、separator、照片边或 deskew。
 
-1. source 物理画布、照片共享边缘 fragment、witness 与不确定度；
-2. mapped pair、共享短轴、`FrameSlot` 与 `FrameCropEnvelope`；
-3. 长轴 boundary、separator 与最终框。
+当前 Grid outcome 固定为：
 
-没有 selected pair 时仍显示 typed failure 和紧凑观测摘要。Report 与 Debug 只读取
-detection evidence，不重算几何，也不作为 cache。
+```text
+NO_INDEPENDENT_PHASE_AUTHORITY
+```
 
-状态：
+因此：
 
-- `PASS`：自动导出。
-- `REVIEW`：不自动导出。
-- `RUNTIME ERROR`：detection 已完成，但后续运行阶段失败。
+- 状态：`needs_review`
+- 原因：`frame_grid_authority_unavailable`
+- containment：`NOT_APPLICABLE_FRAME_GRID_UNAVAILABLE`
+- visual deskew：`NOT_APPLICABLE_CORE_UNAVAILABLE`
+- frame outputs：空
 
-## 输出
+如果 scan canvas 或 content measurement 本身不可用，报告会追加独立 typed reason。
+
+## 运行与输出
+
+普通命令：
+
+```bash
+python3 X5_Crop.py . --format 135 --strip full --report
+```
+
+诊断命令：
+
+```bash
+python3 X5_Crop.py . --format 135 --strip full --diagnostics
+```
+
+完整参数：
+
+```bash
+python3 X5_Crop.py --help
+```
+
+默认使用 `--jobs 2`。当前输出目录可能包含：
 
 ```text
 x5_crop_output/
-  *_01.tif
-  *_02.tif
   needs_review/
+  _debug/
   _debug_analysis/
   x5_crop_report.jsonl
   x5_crop_summary.csv
   x5_crop_run_manifest.jsonl
 ```
 
-- `needs_review/` 保存原始 TIFF 副本，供外部人工处理。
-- `x5_crop_report.jsonl` 是 current-schema 机器审计记录。
-- `x5_crop_run_manifest.jsonl` 记录每个输入的最终结果、实际输出和运行指标。
-- 普通运行不会覆盖已有裁切；`--overwrite` 可显式覆盖。
+- `needs_review/` 默认保存原始 TIFF 副本；`--no-copy-review-files` 可关闭复制。
+- `--report` 写 current-only JSONL/CSV。
+- `--debug-analysis` 写 domain 与 positive-content 的有界可视化摘要。
+- `--diagnostics` 等价于 report + Debug Analysis + 不复制复核文件。
+- 原始 TIFF 永不修改。
 
-默认 bleed 为长轴 20 px、短轴 10 px，只影响最终输出。
+Current schema：
 
-## 命令行
-
-```bash
-# 完整参数
-python3 X5_Crop.py --help
-
-# 交互模式
-python3 X5_Crop.py --interactive
-
-# full 自动裁切
-python3 X5_Crop.py . --format 135 --strip full
-
-# Debug Analysis dry run
-python3 X5_Crop.py . --format 135 --strip full --report --debug-analysis --dry-run
-
-# partial
-python3 X5_Crop.py . --format 135 --strip partial --report
-
-# 单进程
-python3 X5_Crop.py . --format 135 --strip full --jobs 1
+```text
+schema_id       = detection_report
+schema_revision = source_core_grid_authority
 ```
 
-`--export-review` 只允许导出几何已经解决且输出保护可行的 REVIEW crop；它不能绕过
-provisional geometry 或未解决的保护范围。
+旧 `--bleed`、`--bleed-x`、`--bleed-y`、`--export-review` 与 `--dry-run` 已删除，
+传入时会被拒绝。格式级毫米 protection authority 只记录于报告；没有 frame geometry 时
+不会应用，也没有用户 override。
+
+## ROI/TIFF foundation
+
+虽然 current runtime 不导出 frame，inverse-affine ROI 与 TIFF writer 仍作为独立 foundation
+保留并验证：
+
+- identity 为精确半开切片；
+- affine ROI 与 test reference 逐像素一致；
+- 原始 RGB 每个 ROI 只采样一次；
+- 保持 dtype、axes、ICC、resolution、metadata 与 NONE/LZW compression；
+- 越界直接报错，不 clamp。
+
+这些 foundation contracts 不等于当前已具备自动裁切能力。
+
+## 性能声明边界
+
+当前固定 24 张 detector-only 诊断只有在 `--jobs 2`、三次中位数严格小于
+`5.0 秒/张`时，才能说明仍有未来生产余量。它不是正式输出性能 PASS。
+
+24 张真实 frame TIFF 写出、复读和 `<=5.0 秒/张`的认证，要等独立 Grid authority 恢复
+自动输出后才能执行。当前认证状态必须是 `not_certified`。
 
 ## 卸载与许可
 

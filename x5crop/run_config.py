@@ -18,15 +18,11 @@ class RunConfig:
     strip_mode: str
     requested_count: int | None
     page: int
-    bleed_x: int
-    bleed_y: int
     review_dir: Path | None
     copy_review_files: bool
-    export_review: bool
     compression: CompressionMode
     debug: bool
     debug_analysis: bool
-    dry_run: bool
     diagnostics: bool
     overwrite: bool
     report: bool

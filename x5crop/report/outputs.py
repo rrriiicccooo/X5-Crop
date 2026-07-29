@@ -24,9 +24,6 @@ def append_summary_csv(path: Path, result: ReportResult) -> None:
     record = result.record
     script_version = record["script_version"]
     output_files = record["output"]["output_files"]
-    selection = record["selection"]
-    selected = selection["candidates"][selection["selected_rank"] - 1]
-    geometry = selected["provisional_geometry"]
     decision = record["decision"]
     path.parent.mkdir(parents=True, exist_ok=True)
     fields = [
@@ -37,7 +34,7 @@ def append_summary_csv(path: Path, result: ReportResult) -> None:
         "format_id",
         "layout",
         "strip_mode",
-        "count",
+        "frame_grid_outcome",
         "final_review_reasons",
         "output_count",
     ]
@@ -52,10 +49,14 @@ def append_summary_csv(path: Path, result: ReportResult) -> None:
                 "script_version": script_version,
                 "configuration_id": record["configuration"]["configuration_id"],
                 "status": decision["status"],
-                "format_id": geometry["format_id"],
-                "layout": geometry["layout"],
-                "strip_mode": geometry["strip_mode"],
-                "count": geometry["count"],
+                "format_id": record["configuration"]["format_id"],
+                "layout": record["analysis_identity"][
+                    "runtime_configuration"
+                ]["layout"],
+                "strip_mode": record["configuration"]["strip_mode"],
+                "frame_grid_outcome": record["source_core"][
+                    "frame_grid"
+                ]["outcome"],
                 "final_review_reasons": ";".join(
                     decision["final_review_reasons"]
                 ),

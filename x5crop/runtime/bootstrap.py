@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from ..geometry.layout import infer_layout
 from ..strip_modes import FULL, PARTIAL
-from .options import DEFAULT_OUTPUT_BLEED
 from ..configuration.bundle import DetectionConfigurationBundle
 from ..run_config import RunConfig
 from .app import print_run_header, run_runtime
@@ -44,17 +43,6 @@ def runtime_invocation_from_options(options: RuntimeOptions) -> RuntimeInvocatio
 
     layout_auto = options.layout == "auto"
     layout = infer_layout(width, height) if layout_auto else options.layout
-    bleed_x_default = (
-        DEFAULT_OUTPUT_BLEED.long_axis if options.bleed is None else int(options.bleed)
-    )
-    bleed_y_default = (
-        DEFAULT_OUTPUT_BLEED.short_axis if options.bleed is None else int(options.bleed)
-    )
-    bleed_x = int(bleed_x_default if options.bleed_x is None else options.bleed_x)
-    bleed_y = int(bleed_y_default if options.bleed_y is None else options.bleed_y)
-    if bleed_x < 0 or bleed_y < 0:
-        raise ValueError("Bleed cannot be negative")
-
     jobs_cap = DIAGNOSTICS_JOB_LIMIT if options.diagnostics else STANDARD_JOB_LIMIT
     config = RunConfig(
         input_path=options.input_path,
@@ -65,15 +53,11 @@ def runtime_invocation_from_options(options: RuntimeOptions) -> RuntimeInvocatio
         strip_mode=options.strip_mode,
         requested_count=options.requested_count,
         page=options.page,
-        bleed_x=bleed_x,
-        bleed_y=bleed_y,
         review_dir=options.review_dir,
         copy_review_files=options.copy_review_files,
-        export_review=options.export_review,
         compression=options.compression,
         debug=options.debug,
         debug_analysis=options.debug_analysis,
-        dry_run=options.dry_run,
         diagnostics=options.diagnostics,
         overwrite=options.overwrite,
         report=options.report,

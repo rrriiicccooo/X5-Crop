@@ -1,0 +1,633 @@
+"""Run the fixed production TIFF throughput cohort."""
+
+from __future__ import annotations
+
+import argparse
+from dataclasses import dataclass
+import hashlib
+import json
+from pathlib import Path
+import statistics
+import subprocess
+import sys
+import tempfile
+import time
+from typing import Any, Sequence
+
+from x5crop.app_info import RUN_MANIFEST_JSONL_NAME, TIFF_SUFFIXES
+from x5crop.formats import FORMAT_CHOICES
+from x5crop.geometry.layout import infer_layout
+from x5crop.io.tiff import read_tiff_page_shape, read_tiff_profile
+from x5crop.strip_modes import STRIP_MODES
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_COHORT = Path(__file__).with_name("cohorts") / "production_performance.jsonl"
+PERFORMANCE_RESULT_SCHEMA = "x5crop_production_performance_v2"
+COHORT_FIELDS = (
+    "sample_id",
+    "source_sha256",
+    "format_id",
+    "strip_mode",
+    "compression",
+)
+MEASURED_RUN_COUNT = 3
+PRODUCTION_JOBS = 2
+SECONDS_PER_INPUT_LIMIT = 5.0
+EXCLUDED_SOURCE_DIRECTORIES = frozenset(
+    {
+        "manual_review",
+        "needs_review",
+        "x5_crop_output",
+        "__pycache__",
+    }
+)
+FORMAT_DIRECTORY_TO_ID = {
+    "66": "120-66",
+    "67": "120-67",
+}
+
+
+@dataclass(frozen=True)
+class PerformanceCohortEntry:
+    sample_id: str
+    source_sha256: str
+    format_id: str
+    strip_mode: str
+    compression: str
+
+    def __post_init__(self) -> None:
+        if not self.sample_id:
+            raise ValueError("performance sample_id must not be empty")
+        digest = self.source_sha256.lower()
+        if len(digest) != 64 or any(character not in "0123456789abcdef" for character in digest):
+            raise ValueError(
+                f"performance source_sha256 is invalid for {self.sample_id}"
+            )
+        if self.format_id not in FORMAT_CHOICES:
+            raise ValueError(
+                f"performance format_id is invalid for {self.sample_id}: "
+                f"{self.format_id}"
+            )
+        if self.strip_mode not in STRIP_MODES:
+            raise ValueError(
+                f"performance strip_mode is invalid for {self.sample_id}: "
+                f"{self.strip_mode}"
+            )
+        if not self.compression or self.compression != self.compression.upper():
+            raise ValueError(
+                f"performance compression must be an uppercase TIFF name for "
+                f"{self.sample_id}"
+            )
+
+
+@dataclass(frozen=True)
+class LocalSampleIdentity:
+    sample_id: str
+    source_sha256: str
+    format_id: str
+    strip_mode: str
+
+
+@dataclass(frozen=True)
+class ResolvedPerformanceSource:
+    cohort: PerformanceCohortEntry
+    path: Path
+    layout: str
+
+
+@dataclass(frozen=True, order=True)
+class PerformanceRunGroup:
+    format_id: str
+    strip_mode: str
+    layout: str
+
+    @property
+    def directory_name(self) -> str:
+        return f"{self.format_id}_{self.strip_mode}_{self.layout}"
+
+
+@dataclass(frozen=True)
+class PerformanceTiming:
+    label: str
+    wall_seconds: float
+    input_count: int
+    completed_inputs: int
+    frame_output_count: int
+
+    @property
+    def seconds_per_input(self) -> float:
+        return self.wall_seconds / self.input_count
+
+    def as_record(self) -> dict[str, Any]:
+        return {
+            "label": self.label,
+            "wall_seconds": self.wall_seconds,
+            "input_count": self.input_count,
+            "completed_inputs": self.completed_inputs,
+            "frame_output_count": self.frame_output_count,
+            "seconds_per_input": self.seconds_per_input,
+        }
+
+
+@dataclass(frozen=True)
+class ProductionPerformanceResult:
+    cold: PerformanceTiming
+    measured: tuple[PerformanceTiming, ...]
+    output_root: Path
+    detector_only: bool
+
+    def __post_init__(self) -> None:
+        if len(self.measured) != MEASURED_RUN_COUNT:
+            raise ValueError(
+                f"production performance requires {MEASURED_RUN_COUNT} measured runs"
+            )
+        input_counts = {self.cold.input_count}
+        input_counts.update(timing.input_count for timing in self.measured)
+        if len(input_counts) != 1:
+            raise ValueError("performance runs must use one fixed input count")
+
+    @property
+    def median_seconds_per_input(self) -> float:
+        return statistics.median(
+            timing.seconds_per_input for timing in self.measured
+        )
+
+    @property
+    def passed(self) -> bool:
+        timing_passed = (
+            self.median_seconds_per_input < SECONDS_PER_INPUT_LIMIT
+            if self.detector_only
+            else self.median_seconds_per_input <= SECONDS_PER_INPUT_LIMIT
+        )
+        if self.detector_only:
+            return timing_passed
+        return timing_passed and all(
+            timing.frame_output_count > 0
+            for timing in (self.cold, *self.measured)
+        )
+
+    @property
+    def certification_status(self) -> str:
+        if self.detector_only:
+            return "diagnostic_only" if self.passed else "failed"
+        if all(
+            timing.frame_output_count == 0
+            for timing in (self.cold, *self.measured)
+        ):
+            return "not_certified"
+        return "certified" if self.passed else "failed"
+
+    def as_record(self) -> dict[str, Any]:
+        return {
+            "schema": PERFORMANCE_RESULT_SCHEMA,
+            "jobs": PRODUCTION_JOBS,
+            "compression": "same",
+            "mode": "detector_only" if self.detector_only else "real_tiff_output",
+            "seconds_per_input_limit": SECONDS_PER_INPUT_LIMIT,
+            "cold": self.cold.as_record(),
+            "measured": [timing.as_record() for timing in self.measured],
+            "median_seconds_per_input": self.median_seconds_per_input,
+            "certification_status": self.certification_status,
+            "passed": self.passed,
+        }
+
+
+def _load_jsonl(path: Path) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    with path.open("r", encoding="utf-8") as stream:
+        for line_number, line in enumerate(stream, start=1):
+            stripped = line.strip()
+            if not stripped:
+                continue
+            value = json.loads(stripped)
+            if not isinstance(value, dict):
+                raise ValueError(f"{path}:{line_number} must be a JSON object")
+            rows.append(value)
+    return rows
+
+
+def load_performance_cohort(path: Path) -> tuple[PerformanceCohortEntry, ...]:
+    entries: list[PerformanceCohortEntry] = []
+    for line_number, row in enumerate(_load_jsonl(path), start=1):
+        if tuple(row) != COHORT_FIELDS:
+            raise ValueError(
+                f"{path}:{line_number} must contain exactly "
+                f"{', '.join(COHORT_FIELDS)} in canonical order"
+            )
+        entries.append(
+            PerformanceCohortEntry(
+                sample_id=str(row["sample_id"]),
+                source_sha256=str(row["source_sha256"]).lower(),
+                format_id=str(row["format_id"]),
+                strip_mode=str(row["strip_mode"]),
+                compression=str(row["compression"]),
+            )
+        )
+    if not entries:
+        raise ValueError("performance cohort must not be empty")
+    sample_ids = tuple(entry.sample_id for entry in entries)
+    digests = tuple(entry.source_sha256 for entry in entries)
+    if len(sample_ids) != len(set(sample_ids)):
+        raise ValueError("performance cohort sample_id values must be unique")
+    if len(digests) != len(set(digests)):
+        raise ValueError("performance cohort source_sha256 values must be unique")
+    return tuple(entries)
+
+
+def load_local_sample_catalog(path: Path) -> dict[str, LocalSampleIdentity]:
+    catalog: dict[str, LocalSampleIdentity] = {}
+    for line_number, row in enumerate(_load_jsonl(path), start=1):
+        required = {
+            "sample_id",
+            "source_sha256",
+            "format_directory",
+            "strip_mode",
+        }
+        if not required.issubset(row):
+            missing = ", ".join(sorted(required - set(row)))
+            raise ValueError(f"{path}:{line_number} is missing {missing}")
+        format_directory = str(row["format_directory"])
+        identity = LocalSampleIdentity(
+            sample_id=str(row["sample_id"]),
+            source_sha256=str(row["source_sha256"]).lower(),
+            format_id=FORMAT_DIRECTORY_TO_ID.get(format_directory, format_directory),
+            strip_mode=str(row["strip_mode"]),
+        )
+        if identity.sample_id in catalog:
+            raise ValueError(
+                f"local sample catalog repeats sample_id {identity.sample_id}"
+            )
+        catalog[identity.sample_id] = identity
+    return catalog
+
+
+def validate_cohort_identities(
+    cohort: Sequence[PerformanceCohortEntry],
+    catalog: dict[str, LocalSampleIdentity],
+) -> None:
+    for entry in cohort:
+        identity = catalog.get(entry.sample_id)
+        if identity is None:
+            raise ValueError(
+                f"local sample catalog has no identity for {entry.sample_id}"
+            )
+        expected = (
+            entry.source_sha256,
+            entry.format_id,
+            entry.strip_mode,
+        )
+        actual = (
+            identity.source_sha256,
+            identity.format_id,
+            identity.strip_mode,
+        )
+        if actual != expected:
+            raise ValueError(
+                f"local sample identity disagrees with tracked cohort for "
+                f"{entry.sample_id}"
+            )
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def index_local_tiff_sources(source_root: Path) -> dict[str, tuple[Path, ...]]:
+    indexed: dict[str, list[Path]] = {}
+    for path in sorted(source_root.rglob("*")):
+        if (
+            not path.is_file()
+            or path.suffix.lower() not in TIFF_SUFFIXES
+            or any(part in EXCLUDED_SOURCE_DIRECTORIES for part in path.parts)
+            or any(part.startswith(".") for part in path.relative_to(source_root).parts)
+        ):
+            continue
+        indexed.setdefault(_sha256(path), []).append(path.resolve())
+    return {digest: tuple(paths) for digest, paths in indexed.items()}
+
+
+def resolve_performance_sources(
+    cohort: Sequence[PerformanceCohortEntry],
+    source_index: dict[str, tuple[Path, ...]],
+) -> tuple[ResolvedPerformanceSource, ...]:
+    resolved: list[ResolvedPerformanceSource] = []
+    for entry in cohort:
+        matches = source_index.get(entry.source_sha256, ())
+        if len(matches) != 1:
+            raise ValueError(
+                f"{entry.sample_id} source SHA resolved to {len(matches)} local TIFFs"
+            )
+        path = matches[0]
+        profile, _warnings = read_tiff_profile(path, 0)
+        if profile.compression.upper() != entry.compression:
+            raise ValueError(
+                f"{entry.sample_id} compression is {profile.compression}, "
+                f"not {entry.compression}"
+            )
+        height, width = read_tiff_page_shape(path, 0)
+        resolved.append(
+            ResolvedPerformanceSource(
+                cohort=entry,
+                path=path,
+                layout=infer_layout(width, height),
+            )
+        )
+    return tuple(resolved)
+
+
+def group_performance_sources(
+    sources: Sequence[ResolvedPerformanceSource],
+) -> tuple[tuple[PerformanceRunGroup, tuple[ResolvedPerformanceSource, ...]], ...]:
+    grouped: dict[PerformanceRunGroup, list[ResolvedPerformanceSource]] = {}
+    for source in sources:
+        key = PerformanceRunGroup(
+            source.cohort.format_id,
+            source.cohort.strip_mode,
+            source.layout,
+        )
+        grouped.setdefault(key, []).append(source)
+    return tuple(
+        (
+            key,
+            tuple(sorted(grouped[key], key=lambda item: item.cohort.sample_id)),
+        )
+        for key in sorted(grouped)
+    )
+
+
+def _stage_inputs(
+    sources: Sequence[ResolvedPerformanceSource],
+    staging_root: Path,
+) -> tuple[tuple[PerformanceRunGroup, Path, tuple[ResolvedPerformanceSource, ...]], ...]:
+    staged: list[
+        tuple[PerformanceRunGroup, Path, tuple[ResolvedPerformanceSource, ...]]
+    ] = []
+    for group, members in group_performance_sources(sources):
+        input_directory = staging_root / group.directory_name
+        input_directory.mkdir(parents=True)
+        for source in members:
+            suffix = source.path.suffix.lower()
+            (input_directory / f"{source.cohort.sample_id}{suffix}").symlink_to(
+                source.path
+            )
+        staged.append((group, input_directory, members))
+    return tuple(staged)
+
+
+def build_group_command(
+    group: PerformanceRunGroup,
+    input_directory: Path,
+    output_directory: Path,
+) -> tuple[str, ...]:
+    return (
+        sys.executable,
+        str(PROJECT_ROOT / "X5_Crop.py"),
+        str(input_directory),
+        "--output",
+        str(output_directory),
+        "--format",
+        group.format_id,
+        "--strip",
+        group.strip_mode,
+        "--layout",
+        group.layout,
+        "--compression",
+        "same",
+        "--jobs",
+        str(PRODUCTION_JOBS),
+        "--no-copy-review-files",
+    )
+
+
+def _read_run_manifest(path: Path) -> tuple[dict[str, Any], ...]:
+    rows = tuple(_load_jsonl(path))
+    if not rows:
+        raise RuntimeError(f"performance run manifest is empty: {path}")
+    return rows
+
+
+def _validate_group_outputs(
+    output_directory: Path,
+    members: Sequence[ResolvedPerformanceSource],
+) -> tuple[int, int]:
+    manifest_path = output_directory / RUN_MANIFEST_JSONL_NAME
+    rows = _read_run_manifest(manifest_path)
+    if len(rows) != len(members):
+        raise RuntimeError(
+            f"{manifest_path} contains {len(rows)} records for {len(members)} inputs"
+        )
+    expected_by_name = {
+        f"{source.cohort.sample_id}{source.path.suffix.lower()}": source
+        for source in members
+    }
+    completed = 0
+    frame_output_count = 0
+    seen: set[str] = set()
+    for row in rows:
+        source_name = Path(str(row.get("source", ""))).name
+        source = expected_by_name.get(source_name)
+        if source is None or source_name in seen:
+            raise RuntimeError(
+                f"{manifest_path} contains an unexpected source: {source_name}"
+            )
+        seen.add(source_name)
+        if row.get("terminal_outcome") != "completed":
+            raise RuntimeError(
+                f"{source.cohort.sample_id} did not complete during performance run"
+            )
+        completed += 1
+        artifacts = row.get("artifacts")
+        if not isinstance(artifacts, dict):
+            raise RuntimeError(
+                f"{source.cohort.sample_id} has no runtime artifacts record"
+            )
+        frame_outputs = artifacts.get("frame_outputs")
+        if not isinstance(frame_outputs, list):
+            raise RuntimeError(
+                f"{source.cohort.sample_id} frame outputs are malformed"
+            )
+        for value in frame_outputs:
+            output_path = Path(str(value))
+            if not output_path.is_file():
+                raise RuntimeError(f"written TIFF is missing: {output_path}")
+            profile, _warnings = read_tiff_profile(output_path, 0)
+            if profile.compression.upper() != source.cohort.compression:
+                raise RuntimeError(
+                    f"{source.cohort.sample_id} output compression changed from "
+                    f"{source.cohort.compression} to {profile.compression}"
+                )
+            frame_output_count += 1
+    if seen != set(expected_by_name):
+        raise RuntimeError(f"{manifest_path} omitted one or more cohort inputs")
+    return completed, frame_output_count
+
+
+def _run_once(
+    label: str,
+    staged_groups: Sequence[
+        tuple[PerformanceRunGroup, Path, tuple[ResolvedPerformanceSource, ...]]
+    ],
+    output_root: Path,
+) -> PerformanceTiming:
+    run_output = output_root / label
+    run_output.mkdir(parents=True, exist_ok=False)
+    started = time.perf_counter()
+    for group, input_directory, members in staged_groups:
+        group_output = run_output / group.directory_name
+        command = build_group_command(group, input_directory, group_output)
+        completed = subprocess.run(command, cwd=PROJECT_ROOT, check=False)
+        if completed.returncode != 0:
+            raise RuntimeError(
+                f"performance group failed with exit code {completed.returncode}: "
+                f"{group.directory_name}"
+            )
+    wall_seconds = time.perf_counter() - started
+
+    completed_inputs = 0
+    frame_output_count = 0
+    for group, _input_directory, members in staged_groups:
+        group_completed, group_outputs = _validate_group_outputs(
+            run_output / group.directory_name,
+            members,
+        )
+        completed_inputs += group_completed
+        frame_output_count += group_outputs
+    input_count = sum(len(members) for _group, _directory, members in staged_groups)
+    return PerformanceTiming(
+        label=label,
+        wall_seconds=wall_seconds,
+        input_count=input_count,
+        completed_inputs=completed_inputs,
+        frame_output_count=frame_output_count,
+    )
+
+
+def run_production_performance(
+    sources: Sequence[ResolvedPerformanceSource],
+    output_root: Path,
+    *,
+    detector_only: bool = False,
+) -> ProductionPerformanceResult:
+    if output_root.exists() and any(output_root.iterdir()):
+        raise ValueError(f"performance output root must be empty: {output_root}")
+    output_root.mkdir(parents=True, exist_ok=True)
+    staging_root = output_root / "inputs"
+    staging_root.mkdir()
+    staged_groups = _stage_inputs(sources, staging_root)
+    cold = _run_once("cold", staged_groups, output_root)
+    measured = tuple(
+        _run_once(f"measured-{index}", staged_groups, output_root)
+        for index in range(1, MEASURED_RUN_COUNT + 1)
+    )
+    result = ProductionPerformanceResult(
+        cold,
+        measured,
+        output_root,
+        detector_only,
+    )
+    (output_root / "performance_result.json").write_text(
+        json.dumps(result.as_record(), ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    return result
+
+
+def _print_result(result: ProductionPerformanceResult) -> None:
+    print(
+        f"cold: {result.cold.wall_seconds:.3f}s "
+        f"({result.cold.seconds_per_input:.3f}s/input)"
+    )
+    for timing in result.measured:
+        print(
+            f"{timing.label}: {timing.wall_seconds:.3f}s "
+            f"({timing.seconds_per_input:.3f}s/input)"
+        )
+    outcome = "PASS" if result.passed else "FAIL"
+    print(
+        f"median: {result.median_seconds_per_input:.3f}s/input "
+        f"(limit {SECONDS_PER_INPUT_LIMIT:.1f}s/input) {outcome}"
+    )
+    print(f"certification: {result.certification_status}")
+    print(f"artifacts: {result.output_root}")
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="Run the fixed X5 Crop production performance cohort."
+    )
+    parser.add_argument(
+        "--source-root",
+        type=Path,
+        required=True,
+        help="Local root containing original TIFF samples.",
+    )
+    parser.add_argument(
+        "--detector-only",
+        action="store_true",
+        help=(
+            "Measure the source-core review flow. This is diagnostic only "
+            "and never certifies real TIFF frame output."
+        ),
+    )
+    parser.add_argument(
+        "--catalog",
+        type=Path,
+        default=None,
+        help="Local sample identity catalog; default SOURCE_ROOT/manual_review/manifest.jsonl.",
+    )
+    parser.add_argument(
+        "--cohort",
+        type=Path,
+        default=DEFAULT_COHORT,
+        help="Tracked performance cohort definition.",
+    )
+    parser.add_argument(
+        "--output-root",
+        type=Path,
+        default=None,
+        help="Fresh benchmark output root; default a new directory under /private/tmp.",
+    )
+    return parser
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    source_root = args.source_root.expanduser().resolve()
+    catalog_path = (
+        args.catalog.expanduser().resolve()
+        if args.catalog is not None
+        else source_root / "manual_review" / "manifest.jsonl"
+    )
+    cohort = load_performance_cohort(args.cohort.expanduser().resolve())
+    catalog = load_local_sample_catalog(catalog_path)
+    validate_cohort_identities(cohort, catalog)
+    sources = resolve_performance_sources(
+        cohort,
+        index_local_tiff_sources(source_root),
+    )
+    output_root = (
+        args.output_root.expanduser().resolve()
+        if args.output_root is not None
+        else Path(
+            tempfile.mkdtemp(
+                prefix="x5crop-production-performance-",
+                dir="/private/tmp",
+            )
+        )
+    )
+    result = run_production_performance(
+        sources,
+        output_root,
+        detector_only=bool(args.detector_only),
+    )
+    _print_result(result)
+    return 0 if result.passed else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

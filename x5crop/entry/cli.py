@@ -7,7 +7,6 @@ from pathlib import Path
 
 from ..app_info import REPORT_JSONL_NAME, SCRIPT_NAME, SUMMARY_CSV_NAME, VERSION
 from ..formats import FORMAT_CHOICES
-from ..runtime.options import DEFAULT_OUTPUT_BLEED
 from ..runtime.bootstrap import run_options
 from ..runtime.limits import STANDARD_JOB_LIMIT
 from ..runtime.options import (
@@ -23,7 +22,12 @@ CLI_USAGE_ERROR_EXIT_CODE = 2
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description=f"X5 Crop V{VERSION} single-strip TIFF film cropper.")
+    parser = argparse.ArgumentParser(
+        description=(
+            f"X5 Crop V{VERSION} source-core TIFF audit. "
+            "The current build emits review evidence, not frame TIFFs."
+        )
+    )
     parser.add_argument("input", nargs="?", default=".", help="TIFF file or directory; default current directory.")
     parser.add_argument("-o", "--output", default=None, help="Output directory; default input/x5_crop_output.")
     parser.add_argument("--format", choices=FORMAT_CHOICES, help="Film format. Required unless --interactive is used.")
@@ -34,26 +38,21 @@ def build_parser() -> argparse.ArgumentParser:
         default="full",
         help="Holder occupancy: full when film fills the holder, partial when it does not.",
     )
-    parser.add_argument("-n", "--count", type=int, default=None, help="Override frame count.")
+    parser.add_argument("-n", "--count", type=int, default=None, help="Record an allowed complete-slot count for partial-mode audit.")
     parser.add_argument("--page", type=int, default=0, help="TIFF page index; default 0.")
-    parser.add_argument("--bleed", type=int, default=None, help="Bleed in pixels on all sides; overrides layout-aware defaults.")
-    parser.add_argument("--bleed-x", type=int, default=None, help=f"Long-axis bleed override; default {DEFAULT_OUTPUT_BLEED.long_axis}, increased when signed overlap requires it. Horizontal scans: left/right. Vertical scans: top/bottom.")
-    parser.add_argument("--bleed-y", type=int, default=None, help=f"Short-axis bleed override; default {DEFAULT_OUTPUT_BLEED.short_axis}. Horizontal scans: top/bottom. Vertical scans: left/right.")
-    parser.add_argument("--compression", choices=COMPRESSION_CHOICES, default="same", help="TIFF output compression: same for known lossless source compression, or none.")
+    parser.add_argument("--compression", choices=COMPRESSION_CHOICES, default="same", help="TIFF foundation compression authority; the current review-only build writes no frame TIFF.")
     parser.add_argument("--copy-review-files", dest="copy_review_files", action="store_true", default=True, help="Copy source TIFFs that require review to the review folder; default on.")
     parser.add_argument("--no-copy-review-files", dest="copy_review_files", action="store_false", help="Do not copy source TIFFs that require review.")
     parser.add_argument("--review-dir", default=None, help="Review folder; default output/needs_review.")
-    parser.add_argument("--export-review", action="store_true", help="Export REVIEW crops only when geometry is resolved and output protection is feasible.")
-    parser.add_argument("--dry-run", action="store_true", help="Detect only; do not write cropped TIFFs.")
     parser.add_argument("--overwrite", action="store_true", help="Overwrite existing outputs.")
     parser.add_argument("--report", action="store_true", help=f"Write {REPORT_JSONL_NAME} and {SUMMARY_CSV_NAME}.")
     parser.add_argument(
         "--debug",
         action="store_true",
-        help="Write lightweight JPG previews with sequence and frame geometry.",
+        help="Write a lightweight JPG preview with source-core evidence.",
     )
-    parser.add_argument("--debug-analysis", action="store_true", help="Write one combined JPG with detection-workspace gray, debug boxes, and separator evidence.")
-    parser.add_argument("--diagnostics", action="store_true", help="Read-only diagnostics mode; implies --report --debug-analysis --dry-run --no-copy-review-files.")
+    parser.add_argument("--debug-analysis", action="store_true", help="Write one combined JPG with source-core domains and bounded content summaries.")
+    parser.add_argument("--diagnostics", action="store_true", help="Read-only diagnostics mode; implies --report --debug-analysis --no-copy-review-files.")
     parser.add_argument("--jobs", type=int, default=STANDARD_JOB_LIMIT, help="Parallel TIFF workers. Default 2. Normal runs cap at 2; diagnostics runs cap at 4.")
     parser.add_argument("--debug-errors", action="store_true", help="Print tracebacks on errors.")
     parser.add_argument("--interactive", action="store_true", help="Prompt for format, mode, and Debug Analysis options.")
@@ -67,10 +66,6 @@ def options_from_args(args: argparse.Namespace) -> RuntimeOptions:
         raise ValueError("--format is required unless --interactive is used")
     if int(args.page) < 0:
         raise ValueError("--page must be 0 or greater")
-    for name in ("bleed", "bleed_x", "bleed_y"):
-        value = getattr(args, name)
-        if value is not None and int(value) < 0:
-            raise ValueError("Bleed cannot be negative")
     if int(args.jobs) < 1:
         raise ValueError("--jobs must be 1 or greater")
 
@@ -83,16 +78,11 @@ def options_from_args(args: argparse.Namespace) -> RuntimeOptions:
         strip_mode=str(args.strip),
         requested_count=(None if args.count is None else int(args.count)),
         page=int(args.page),
-        bleed=(None if args.bleed is None else int(args.bleed)),
-        bleed_x=(None if args.bleed_x is None else int(args.bleed_x)),
-        bleed_y=(None if args.bleed_y is None else int(args.bleed_y)),
         review_dir=Path(args.review_dir).expanduser().resolve() if args.review_dir else None,
         copy_review_files=False if diagnostics else bool(args.copy_review_files),
-        export_review=bool(args.export_review),
         compression=str(args.compression),
         debug=bool(args.debug),
         debug_analysis=bool(args.debug_analysis or diagnostics),
-        dry_run=bool(args.dry_run or diagnostics),
         diagnostics=diagnostics,
         overwrite=bool(args.overwrite),
         report=bool(args.report or diagnostics),

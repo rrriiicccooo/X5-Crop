@@ -5,8 +5,6 @@ from typing import Any, Iterable, Optional
 
 import numpy as np
 
-from .domain import Box
-
 
 PERCENTILE_MAX = 100.0
 RGB_CHANNEL_COUNT = 3
@@ -32,14 +30,6 @@ def require_percentile(name: str, value: int | float) -> None:
 def require_unit_interval(name: str, value: int | float) -> None:
     if not math.isfinite(float(value)) or not 0.0 <= float(value) <= 1.0:
         raise ValueError(f"{name} must be within [0, 1]")
-
-
-def clamp_int(value: float, lower: int, upper: int) -> int:
-    return int(max(lower, min(upper, int(round(value)))))
-
-
-def clamp_float(value: float, lower: float, upper: float) -> float:
-    return float(max(lower, min(upper, float(value))))
 
 
 def enum_name(value: Any, default: str = "") -> str:
@@ -119,41 +109,3 @@ def sampled_percentile(
     if sample.size == 0:
         return np.array([0.0 for _ in percentiles], dtype=np.float64)
     return np.percentile(sample, list(percentiles))
-
-
-def smooth_1d(values: np.ndarray, window: int) -> np.ndarray:
-    window = max(1, int(window))
-    if window <= 1:
-        return values.astype(np.float32, copy=False)
-    kernel = np.ones(window, dtype=np.float32) / float(window)
-    return np.convolve(values.astype(np.float32), kernel, mode="same")
-
-
-def runs_from_mask(mask: np.ndarray) -> list[tuple[int, int]]:
-    runs: list[tuple[int, int]] = []
-    start: Optional[int] = None
-    for i, flag in enumerate(mask.astype(bool)):
-        if flag and start is None:
-            start = i
-        elif not flag and start is not None:
-            runs.append((start, i))
-            start = None
-    if start is not None:
-        runs.append((start, len(mask)))
-    return runs
-
-
-def bbox_from_mask(
-    mask: np.ndarray,
-    min_row_fraction: float,
-    min_col_fraction: float,
-) -> Optional[Box]:
-    if mask.size == 0:
-        return None
-    row_has = mask.mean(axis=1) >= min_row_fraction
-    col_has = mask.mean(axis=0) >= min_col_fraction
-    rows = np.flatnonzero(row_has)
-    cols = np.flatnonzero(col_has)
-    if rows.size == 0 or cols.size == 0:
-        return None
-    return Box(int(cols[0]), int(rows[0]), int(cols[-1]) + 1, int(rows[-1]) + 1)

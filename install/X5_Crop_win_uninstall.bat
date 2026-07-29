@@ -10,7 +10,7 @@ echo This project is a portable script. Removing the folder removes the script,
 echo launchers, reports, and output files in this folder.
 echo.
 echo This helper can also uninstall the user-level Python packages installed for X5 Crop:
-echo numpy tifffile imagecodecs Pillow
+echo numpy scipy tifffile imagecodecs Pillow
 echo.
 echo Important: those packages may also be used by other Python scripts on this PC.
 echo Python itself will NOT be removed by this helper.
@@ -46,7 +46,7 @@ echo Skipped Python package uninstall.
 goto cache_prompt
 
 :uninstall_deps
-%PYTHON_BASE% -m pip uninstall -y numpy tifffile imagecodecs Pillow
+%PYTHON_BASE% -m pip uninstall -y numpy scipy tifffile imagecodecs Pillow
 
 :cache_prompt
 echo.

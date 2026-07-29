@@ -63,7 +63,7 @@ echo.
 echo.
 echo Installing dependencies for this user...
 %PYTHON_BASE% -m ensurepip --upgrade >nul 2>nul
-%PYTHON_BASE% -m pip install --user -U numpy tifffile imagecodecs Pillow
+%PYTHON_BASE% -m pip install --user -U numpy scipy tifffile imagecodecs Pillow
 if errorlevel 1 (
     echo Failed to install dependencies.
     echo.
@@ -73,7 +73,7 @@ if errorlevel 1 (
 
 echo.
 echo Verifying dependencies...
-%PYTHON_BASE% -c "import numpy, tifffile, imagecodecs; from PIL import Image; print('Dependencies OK')"
+%PYTHON_BASE% -c "import numpy, scipy, tifffile, imagecodecs; from PIL import Image; print('Dependencies OK')"
 if errorlevel 1 (
     echo Dependency verification failed.
     echo.

@@ -1,17 +1,21 @@
 # X5 Crop User Guide
 
-- Active development: **V4.9**
+- Active development: **V4.9 source-core safety baseline**
 - Stable release: **v4.2.8**
 
-X5 Crop splits long TIFF scans from Hasselblad / Imacon X5 holders into
-individual TIFF frames. It exports a result only when geometry is resolved and
-output protection is feasible; every other result remains in review.
+The current V4.9 development build reads X5 holder-scan TIFFs, audits the scan
+canvas, independent axis scales, and positive source content, then emits review
+copies, reports, and Debug Analysis. It has no approved independent Frame Grid
+phase authority, so every input remains `needs_review` and no frame TIFF is
+exported.
 
-For normal use, download `X5-Crop-vX.X.zip` from
+This is the formal capability boundary, not a fallback after auto-cropping fails.
+
+## Install
+
+Download `X5-Crop-vX.X.zip` from
 [GitHub Releases](https://github.com/rrriiicccooo/X5-Crop/releases). Do not use
 GitHub's generated Source code archive.
-
-## Install And Run
 
 Run the platform installer once:
 
@@ -20,9 +24,9 @@ macOS:   install/X5_Crop_Mac_install.command
 Windows: install/X5_Crop_win_install.bat
 ```
 
-The installer checks `numpy`, `tifffile`, `imagecodecs`, and `Pillow`. On macOS,
-it prepares only the current Release folder and does not establish system-wide
-trust.
+The installer checks `numpy`, `scipy`, `tifffile`, `imagecodecs`, and `Pillow`.
+On macOS, it prepares only the current Release folder and does not establish
+system-wide trust.
 
 Keep the entry script, launcher, and TIFF scans in the same folder:
 
@@ -32,143 +36,152 @@ X5_Crop_Mac.command or X5_Crop_win.bat
 *.tif / *.tiff
 ```
 
-Launch:
-
 ```text
 macOS:   double-click X5_Crop_Mac.command
 Windows: double-click X5_Crop_win.bat
 ```
 
-If macOS blocks double-click launch, run this in the same folder:
+If macOS blocks double-click launch, run:
 
 ```bash
 /bin/bash X5_Crop_Mac.command
 ```
 
-The interactive launcher asks:
-
-```text
-format:
-partial mode? [y/n, return=no]:
-count:
-debug analysis? [y/n, return=no]:
-```
-
-`count` is asked only in partial mode; Return or `auto` enables automatic count.
-
 ## Formats And Modes
 
-| Input | Format | Full count |
+| Input | Format | Full design count |
 |---|---|---:|
 | Return / `135` | 135 | 6 |
 | `dual` / `135 dual` / `135-dual` | dual-lane 135 | 12 |
 | `half` | half-frame | 12 |
-| `xpan` | XPAN | 3 |
+| `xpan` | XPan | 3 |
 | `645` | 120-645 | 4 |
 | `66` | 120-66 | 3 |
 | `67` | 120-67 | 3 |
 
-- Use full when film fills the holder.
-- Use partial for heads, tails, short strips, or scans that do not fill the holder.
-- A complete three-frame XPAN or 120-66 scan that does not fill its canvas also
-  uses partial.
-- `135-dual` is intended for complete dual strips and remains in REVIEW when lane
-  evidence is incomplete.
+- Full and partial use the same complete scan-canvas/lane short-axis domain.
+- A partial count describes complete design slots, never a partial photograph.
+- Format and count remain audit identity, but cannot create frames without Grid
+  authority.
+- `135-dual` is audited per lane and remains in review.
 
-## Detection And Safety
+## Current Detection Facts
 
-- Source TIFFs are never modified; output is written to new files.
-- Output preserves bit depth, channels, ICC/color space, resolution metadata,
-  other metadata, and known lossless compression behavior.
-- TIFF DPI/PPI is preserved I/O metadata and never a detection input. A known
-  single-strip canvas is matched from pixel aspect and supplies px/mm; unknown or
-  competing canvases remain in REVIEW.
-- Automatic deskew is mandatory. Before frame solving, detection joins the real
-  shared photo edges; deskew, mapped geometry, shared-axis safety, and frame size
-  consume the same evidence without post-rotation remeasurement.
-- Theory only bounds computation. Scan extrema, a single edge, scores, or work
-  budgets cannot replace observed paired pixels.
-- Bleed is applied only after safe base geometry is resolved. It cannot change
-  geometry, gates, or output protection.
+Each TIFF produces one base gray and one image-statistics measurement. A known
+scan canvas must match uniquely from pixel aspect; no match or competing matches
+remain in review.
 
-## Debug Analysis
+Long/short px/mm scales are calculated independently. TIFF DPI/PPI is preserved
+I/O metadata and is never a detection input.
 
-Debug Analysis is a dry run: it runs complete detection and writes JPG/report
-artifacts without exporting final crop TIFFs.
+Positive content uses two independent fields:
 
 ```text
-x5_crop_output/_debug_analysis/
+intensity = abs(I - five_point_local_mean(I)) / 255
+texture   = (abs(dx) + abs(dy)) / 510
+positive  = intensity_supported AND texture_supported
 ```
 
-Each JPG shows:
+Components use strict 4-connectivity and immutable RLE. Content can describe
+source pixels; it cannot create frame phase, separators, photo edges, or deskew.
 
-1. source physical canvas, shared photo-edge fragments, witnesses, and uncertainty;
-2. mapped pair, shared short axis, `FrameSlot`, and `FrameCropEnvelope`;
-3. long-axis boundaries, separators, and final boxes.
+The current Grid outcome is fixed:
 
-When no pair is selected, typed failures and compact observation summaries remain
-visible. Reports and Debug read detection evidence; they neither recompute
-geometry nor act as a cache.
+```text
+NO_INDEPENDENT_PHASE_AUTHORITY
+```
 
-Status:
+Therefore:
 
-- `PASS`: automatically exported.
-- `REVIEW`: not automatically exported.
-- `RUNTIME ERROR`: detection completed, but a later runtime stage failed.
+- status: `needs_review`
+- reason: `frame_grid_authority_unavailable`
+- containment: `NOT_APPLICABLE_FRAME_GRID_UNAVAILABLE`
+- visual deskew: `NOT_APPLICABLE_CORE_UNAVAILABLE`
+- frame outputs: empty
 
-## Output
+If scan-canvas or content measurement is itself unavailable, the report adds its
+independent typed reason.
+
+## Run And Output
+
+Normal command:
+
+```bash
+python3 X5_Crop.py . --format 135 --strip full --report
+```
+
+Diagnostics:
+
+```bash
+python3 X5_Crop.py . --format 135 --strip full --diagnostics
+```
+
+Full help:
+
+```bash
+python3 X5_Crop.py --help
+```
+
+The default is `--jobs 2`. The output directory may contain:
 
 ```text
 x5_crop_output/
-  *_01.tif
-  *_02.tif
   needs_review/
+  _debug/
   _debug_analysis/
   x5_crop_report.jsonl
   x5_crop_summary.csv
   x5_crop_run_manifest.jsonl
 ```
 
-- `needs_review/` contains source-TIFF copies for external handling.
-- `x5_crop_report.jsonl` is the current-schema machine audit record.
-- `x5_crop_run_manifest.jsonl` records each input's terminal outcome, actual
-  outputs, and runtime metrics.
-- Normal runs do not overwrite existing crops; `--overwrite` opts in.
+- `needs_review/` contains source-TIFF copies by default;
+  `--no-copy-review-files` disables copying.
+- `--report` writes current-only JSONL/CSV.
+- `--debug-analysis` writes bounded domain and positive-content visuals.
+- `--diagnostics` enables report and Debug Analysis without review copying.
+- Source TIFFs are never modified.
 
-Default bleed is 20 px on the long axis and 10 px on the short axis. It affects
-final output only.
+Current schema:
 
-## Command Line
-
-```bash
-# Full help
-python3 X5_Crop.py --help
-
-# Interactive mode
-python3 X5_Crop.py --interactive
-
-# Normal full crop
-python3 X5_Crop.py . --format 135 --strip full
-
-# Debug Analysis dry run
-python3 X5_Crop.py . --format 135 --strip full --report --debug-analysis --dry-run
-
-# Partial
-python3 X5_Crop.py . --format 135 --strip partial --report
-
-# Disable parallel workers
-python3 X5_Crop.py . --format 135 --strip full --jobs 1
+```text
+schema_id       = detection_report
+schema_revision = source_core_grid_authority
 ```
 
-`--export-review` exports a REVIEW crop only when geometry is resolved and output
-protection is feasible. It cannot bypass provisional geometry or unresolved
-safety.
+The old `--bleed`, `--bleed-x`, `--bleed-y`, `--export-review`, and `--dry-run`
+options have been removed and are rejected. Format-level millimetre protection
+authority is reported but cannot be applied without frame geometry and has no
+user override.
+
+## ROI/TIFF Foundation
+
+The current runtime does not export frames, but the inverse-affine ROI and TIFF
+writer remain independently verified:
+
+- identity is an exact half-open slice;
+- affine ROI pixels equal the test reference;
+- source RGB is sampled once per ROI;
+- dtype, axes, ICC, resolution, metadata, and NONE/LZW compression are preserved;
+- out-of-authority geometry raises instead of clamping.
+
+These foundation contracts do not claim that automatic cropping is currently
+available.
+
+## Performance Boundary
+
+The fixed 24-input detector-only diagnostic indicates future production headroom
+only when the `--jobs 2` median of three measured runs is strictly below
+`5.0 seconds/input`. It is not a formal output performance PASS.
+
+Certification with 24 real frame TIFF writes, read-back verification, and
+`<=5.0 seconds/input` can run only after independent Grid authority restores
+automatic output. The current certification status must be `not_certified`.
 
 ## Uninstall And License
 
-Delete the X5 Crop folder to remove the program and its local outputs.
-Uninstallers remove user-level dependencies, not Python itself; those
-dependencies may be shared.
+Delete the X5 Crop folder to remove the program and local output. Uninstallers
+remove user-level Python dependencies, not Python itself; those dependencies may
+be shared.
 
 ```text
 macOS:   install/X5_Crop_Mac_uninstall.command

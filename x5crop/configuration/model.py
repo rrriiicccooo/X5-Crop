@@ -4,16 +4,10 @@ from dataclasses import dataclass
 
 from ..formats import FormatSpec
 from ..strip_modes import FULL, PARTIAL
-from .boundary import BoundaryPathParameters
-from .candidate import CandidatePlanParameters
 from .content import ContentConfiguration
 from .diagnostics import DiagnosticsConfiguration
-from .photo_edges import PhotoEdgeDetectionParameters
 from .preprocess import PreprocessConfiguration
-from .separator import SeparatorConfiguration
 from .scan_canvas import ScanCanvasDetectionConfiguration
-from .shared_short_axis import SharedShortAxisParameters
-from .transform import TransformDetectionParameters
 
 
 @dataclass(frozen=True)
@@ -22,13 +16,7 @@ class DetectionConfiguration:
     strip_mode: str
     preprocess: PreprocessConfiguration
     scan_canvas: ScanCanvasDetectionConfiguration
-    photo_edges: PhotoEdgeDetectionParameters
-    transform: TransformDetectionParameters
-    shared_short_axis: SharedShortAxisParameters
-    boundary_path: BoundaryPathParameters
-    separator: SeparatorConfiguration
     content: ContentConfiguration
-    candidate_plan: CandidatePlanParameters
     diagnostics: DiagnosticsConfiguration
 
     def __post_init__(self) -> None:
@@ -42,9 +30,7 @@ class DetectionConfiguration:
 
     @property
     def detector_kind(self) -> str:
-        if self.physical_spec.layout.kind != "dual_lane":
-            return "standard_strip"
-        return "dual_lane" if self.strip_mode == FULL else "review_only"
+        return "source_core_review"
 
     @property
     def configuration_id(self) -> str:

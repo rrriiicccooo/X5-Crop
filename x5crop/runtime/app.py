@@ -38,8 +38,6 @@ def print_run_header(invocation: RuntimeInvocation) -> None:
         mode_parts.append("debug analysis")
     if config.diagnostics:
         mode_parts.append("diagnostics")
-    if config.dry_run:
-        mode_parts.append("dry run")
     print("; ".join(mode_parts))
     if len(files) > 1 and config.jobs > 1:
         print(f"parallel: {config.jobs} workers")

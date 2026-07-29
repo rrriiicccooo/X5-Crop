@@ -1,45 +1,51 @@
 from __future__ import annotations
 
 from ..app_info import VERSION
-from ..detection.final.model import FinalDetection, FinalizationPlan
-from ..detection.candidate.selection.model import SelectionResult
+from ..detection.final.model import FinalDetection
 from ..detection.workspace import DetectionWorkspace
-from ..output.model import OutputGeometry
-from .identity import REPORT_SCHEMA_ID, REPORT_SCHEMA_REVISION, bind_runtime_facts
-from .read_models import (
-    decision_gate_detail,
-    frame_bleed_plan_read_model,
-    scan_canvas_evidence_read_model,
-    selection_read_model,
-    typed_read_model,
+from .identity import (
+    REPORT_SCHEMA_ID,
+    REPORT_SCHEMA_REVISION,
+    bind_core_facts,
 )
+from .read_models import gate_read_model, typed_read_model
 
 
-def _geometry_read_model(geometry: OutputGeometry) -> dict[str, object]:
+def _lane_read_model(lane: object) -> dict[str, object]:
+    content = lane.content
     return {
-        "frame_crop_envelopes": typed_read_model(
-            geometry.frame_crop_envelopes
-        ),
-        "final_boxes": typed_read_model(geometry.final_boxes),
-    }
-
-
-def _finalization_plan_read_model(
-    plan: FinalizationPlan | None,
-) -> dict[str, object] | None:
-    if plan is None:
-        return None
-    return {
-        "layout": plan.layout,
-        "image_width": int(plan.image_width),
-        "image_height": int(plan.image_height),
-        "base_geometry": _geometry_read_model(plan.base_geometry),
+        "domain": typed_read_model(lane.domain),
+        "scan_canvas": typed_read_model(lane.scan_canvas),
+        "axis_scale_intervals": typed_read_model(lane.scales),
+        "content": {
+            "state": content.state.value,
+            "intensity_threshold": content.intensity_threshold,
+            "texture_threshold": content.texture_threshold,
+            "statistics": typed_read_model(content.statistics),
+            "component_count": len(content.components),
+            "component_examples_truncated": len(content.components) > 64,
+            "component_examples": [
+                {
+                    "component_id": component.component_id,
+                    "footprint": typed_read_model(component.footprint),
+                    "row_run_count": component.row_run_count,
+                    "positive_cells": component.positive_cells,
+                    "intensity_active_cells": (
+                        component.intensity_active_cells
+                    ),
+                    "texture_active_cells": component.texture_active_cells,
+                    "censored": component.censored,
+                    "provenance": typed_read_model(component.provenance),
+                }
+                for component in content.components[:64]
+            ],
+            "provenance": typed_read_model(content.provenance),
+        },
     }
 
 
 def report_record_for_final_detection(
     detection: FinalDetection,
-    selection: SelectionResult,
     *,
     source: str,
     profile: dict,
@@ -50,7 +56,7 @@ def report_record_for_final_detection(
     configuration: dict,
     analysis_identity: dict,
 ) -> dict:
-    output_geometry = detection.output_geometry
+    core = detection.source_core
     record = {
         "schema_id": REPORT_SCHEMA_ID,
         "schema_revision": REPORT_SCHEMA_REVISION,
@@ -59,47 +65,33 @@ def report_record_for_final_detection(
         "input": {
             "profile": dict(profile),
             "workspace_identity": typed_read_model(workspace.identity),
-            "scan_canvas_evidence": scan_canvas_evidence_read_model(
-                workspace.scan_canvas_evidence
-            ),
-            "transform_geometry": typed_read_model(workspace.transform_geometry),
-            "source_photo_edge_pairs": typed_read_model(
-                workspace.source_photo_edge_pairs
-            ),
-            "dual_lane_photo_edge_geometry": typed_read_model(
-                workspace.dual_lane_photo_edge_geometry
-            ),
-            "mapped_photo_edge_pairs": typed_read_model(
-                workspace.mapped_photo_edge_pairs
-            ),
-            "shared_short_axes": typed_read_model(workspace.shared_short_axes),
-            "source_lane_divider": typed_read_model(workspace.source_lane_divider),
-            "lane_divider": typed_read_model(workspace.lane_divider),
         },
         "configuration": dict(configuration),
-        "selection": selection_read_model(selection),
+        "source_core": {
+            "lanes": [_lane_read_model(lane) for lane in core.lanes],
+            "scan_canvas_state": core.scan_canvas_state.value,
+            "content_state": core.content_state.value,
+            "frame_grid": typed_read_model(core.grid),
+            "photo_containment": typed_read_model(core.containment),
+            "output_protection_authority": typed_read_model(
+                core.protection_authority
+            ),
+            "visual_deskew_outcome": core.visual_deskew_outcome.value,
+            "incomplete_reasons": list(core.incomplete_reasons),
+        },
+        "candidate_gate": gate_read_model(detection.candidate.gate),
         "decision": {
             "status": detection.decision.status,
             "final_review_reasons": list(
                 detection.decision.final_review_reasons
             ),
-            "gate": decision_gate_detail(detection.decision),
+            "gate": gate_read_model(detection.decision),
         },
         "output": {
-            "frame_bleed_plan": frame_bleed_plan_read_model(
-                detection.frame_bleed_plan
-            ),
-            "finalization_plan": _finalization_plan_read_model(
-                detection.finalization_plan
-            ),
-            "final_geometry": (
-                None
-                if output_geometry is None
-                else _geometry_read_model(output_geometry)
-            ),
-            "export_eligibility": {
+            "finalization": {
                 "frame_export_eligible": detection.frame_export_eligible,
                 "reason": detection.frame_export_reason,
+                "final_boxes": typed_read_model(detection.final_boxes),
             },
             "output_files": list(output_files),
             "review_copy": review_copy,
@@ -107,4 +99,4 @@ def report_record_for_final_detection(
         },
         "analysis_identity": dict(analysis_identity),
     }
-    return bind_runtime_facts(record)
+    return bind_core_facts(record)

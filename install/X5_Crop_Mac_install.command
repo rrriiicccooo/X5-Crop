@@ -67,14 +67,14 @@ echo
 echo
 echo "Installing dependencies for this user..."
 $PYTHON_BASE -m ensurepip --upgrade >/dev/null 2>&1 || true
-if ! $PYTHON_BASE -m pip install --user -U numpy tifffile imagecodecs Pillow; then
+if ! $PYTHON_BASE -m pip install --user -U numpy scipy tifffile imagecodecs Pillow; then
     echo
     echo "Standard user install failed."
     echo "On newer macOS/Homebrew Python this can be caused by externally-managed Python protection."
     read -r -p "Retry with --break-system-packages --user? [y/N] " ANSWER
     case "$ANSWER" in
         y|Y|yes|YES)
-            $PYTHON_BASE -m pip install --user --break-system-packages -U numpy tifffile imagecodecs Pillow || finish 1
+            $PYTHON_BASE -m pip install --user --break-system-packages -U numpy scipy tifffile imagecodecs Pillow || finish 1
             ;;
         *)
             finish 1
@@ -86,6 +86,7 @@ echo
 echo "Verifying dependencies..."
 if ! $PYTHON_BASE - <<'PY'
 import numpy
+import scipy
 import tifffile
 import imagecodecs
 from PIL import Image

@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import math
 
-from ..domain import Box, PixelInterval, WorkspaceExtent
+from ..domain import Box, WorkspaceExtent
 
 
 AFFINE_INVERTIBILITY_FLOOR = 1e-12
@@ -127,7 +127,46 @@ class AffineCoordinateTransform:
             + self.matrix[1][2],
         )
 
-    def map_box(self, box: Box) -> Box:
+    @property
+    def inverse_matrix(
+        self,
+    ) -> tuple[
+        tuple[float, float, float],
+        tuple[float, float, float],
+        tuple[float, float, float],
+    ]:
+        a, b, tx = self.matrix[0]
+        c, d, ty = self.matrix[1]
+        determinant = a * d - b * c
+        inverse_a = d / determinant
+        inverse_b = -b / determinant
+        inverse_c = -c / determinant
+        inverse_d = a / determinant
+        return (
+            (
+                inverse_a,
+                inverse_b,
+                -(inverse_a * tx + inverse_b * ty),
+            ),
+            (
+                inverse_c,
+                inverse_d,
+                -(inverse_c * tx + inverse_d * ty),
+            ),
+            (0.0, 0.0, 1.0),
+        )
+
+    def map_half_open_box_outward(self, box: Box) -> Box:
+        if (
+            not box.valid()
+            or box.left < 0
+            or box.top < 0
+            or box.right > self.source_extent.width
+            or box.bottom > self.source_extent.height
+        ):
+            raise ValueError("source half-open box lies outside affine authority")
+        if self.is_identity:
+            return box
         points = tuple(
             self.map_point(x, y)
             for x, y in (
@@ -137,30 +176,24 @@ class AffineCoordinateTransform:
                 (float(box.right), float(box.bottom)),
             )
         )
-        return Box(
-            math.floor(min(point[0] for point in points)),
-            math.floor(min(point[1] for point in points)),
-            math.ceil(max(point[0] for point in points)),
-            math.ceil(max(point[1] for point in points)),
-        ).clamp(self.output_extent.width, self.output_extent.height)
-
-    def map_intervals(
-        self,
-        x: PixelInterval,
-        y: PixelInterval,
-    ) -> tuple[PixelInterval, PixelInterval]:
-        points = tuple(
-            self.map_point(x_value, y_value)
-            for x_value in (x.minimum, x.maximum)
-            for y_value in (y.minimum, y.maximum)
+        minimum_x = math.floor(
+            math.nextafter(min(point[0] for point in points), -math.inf)
         )
-        return (
-            PixelInterval(
-                min(point[0] for point in points),
-                max(point[0] for point in points),
-            ),
-            PixelInterval(
-                min(point[1] for point in points),
-                max(point[1] for point in points),
-            ),
+        minimum_y = math.floor(
+            math.nextafter(min(point[1] for point in points), -math.inf)
         )
+        maximum_x = math.ceil(
+            math.nextafter(max(point[0] for point in points), math.inf)
+        )
+        maximum_y = math.ceil(
+            math.nextafter(max(point[1] for point in points), math.inf)
+        )
+        mapped = Box(minimum_x, minimum_y, maximum_x, maximum_y)
+        if (
+            mapped.left < 0
+            or mapped.top < 0
+            or mapped.right > self.output_extent.width
+            or mapped.bottom > self.output_extent.height
+        ):
+            raise ValueError("mapped half-open box exceeds affine output authority")
+        return mapped

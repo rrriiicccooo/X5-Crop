@@ -1,4 +1,4 @@
-"""Report comparison helpers for X5 Crop regression checks."""
+"""Compare two current source-core report sets."""
 
 from __future__ import annotations
 
@@ -12,23 +12,15 @@ from x5crop.report.validation import validate_current_report_record
 
 
 DEFAULT_FIELDS = (
-    "input.scan_canvas_evidence",
-    "input.transform_geometry",
-    "input.source_photo_edge_pairs",
-    "input.mapped_photo_edge_pairs",
-    "input.shared_short_axes",
-    "input.source_lane_divider",
-    "input.lane_divider",
-    "decision.status",
-    "decision.final_review_reasons",
-    "selection.selected_rank",
-    "selection.geometry_resolution",
-    "output.final_geometry.frame_crop_envelopes",
-    "output.final_geometry.final_boxes",
+    "source_core",
+    "candidate_gate",
+    "decision",
+    "output.finalization",
+    "core_facts_sha256",
 )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, order=True)
 class ReportComparisonIdentity:
     source: str
     page: int
@@ -36,17 +28,6 @@ class ReportComparisonIdentity:
     layout: str
     strip_mode: str
     requested_count: int | None
-    bleed_x: int
-    bleed_y: int
-
-    def __str__(self) -> str:
-        count = "auto" if self.requested_count is None else str(self.requested_count)
-        return (
-            f"{self.source}#page={self.page} "
-            f"[{self.format_id}/{self.strip_mode}, layout={self.layout}, "
-            f"count={count}, "
-            f"bleed={self.bleed_x}x{self.bleed_y}]"
-        )
 
 
 @dataclass(frozen=True)
@@ -59,32 +40,28 @@ class ReportDiff:
 
 def field_value(row: dict[str, Any], field: str) -> Any:
     value: Any = row
-    for part in str(field).split("."):
-        if value is None:
-            return None
+    for part in field.split("."):
         if not isinstance(value, dict) or part not in value:
-            raise ValueError(f"Current report field is missing: {field}")
+            raise ValueError(f"current report field is missing: {field}")
         value = value[part]
     return value
 
 
 def load_jsonl_report(path: Path) -> list[dict[str, Any]]:
-    rows: list[dict[str, Any]] = []
     with path.open("r", encoding="utf-8") as handle:
-        for line in handle:
-            line = line.strip()
-            if line:
-                rows.append(json.loads(line))
-    return rows
+        return [
+            json.loads(line)
+            for line in handle
+            if line.strip()
+        ]
 
 
 def report_key(row: dict[str, Any]) -> ReportComparisonIdentity:
     validate_current_report_record(row)
-    analysis_identity = row["analysis_identity"]
-    source = analysis_identity["source"]
-    config = analysis_identity["runtime_configuration"]
+    source = row["analysis_identity"]["source"]
+    config = row["analysis_identity"]["runtime_configuration"]
     if int(source["page"]) != int(config["page"]):
-        raise ValueError("report source and configuration page disagree")
+        raise ValueError("report source and runtime page disagree")
     return ReportComparisonIdentity(
         source=str(row["source"]),
         page=int(source["page"]),
@@ -96,8 +73,6 @@ def report_key(row: dict[str, Any]) -> ReportComparisonIdentity:
             if config["requested_count"] is None
             else int(config["requested_count"])
         ),
-        bleed_x=int(config["bleed_x"]),
-        bleed_y=int(config["bleed_y"]),
     )
 
 
@@ -122,7 +97,7 @@ def compare_report_rows(
     baseline = _indexed_rows(baseline_rows, "baseline")
     candidate = _indexed_rows(candidate_rows, "candidate")
     diffs: list[ReportDiff] = []
-    for key in sorted(set(baseline) | set(candidate), key=str):
+    for key in sorted(set(baseline) | set(candidate)):
         if key not in baseline:
             diffs.append(ReportDiff(key, "__row__", None, "added"))
             continue
@@ -145,27 +120,23 @@ def compare_report_files(
     return compare_report_rows(
         load_jsonl_report(baseline_path),
         load_jsonl_report(candidate_path),
-        fields=fields,
+        fields,
     )
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Compare two X5 Crop JSONL reports.")
+    parser = argparse.ArgumentParser(description="Compare current X5 Crop reports")
     parser.add_argument("baseline", type=Path)
     parser.add_argument("candidate", type=Path)
-    parser.add_argument("--field", action="append", dest="fields", help="Field to compare. Can be repeated.")
+    parser.add_argument("--field", action="append", dest="fields")
     args = parser.parse_args(argv)
     fields = tuple(args.fields) if args.fields else DEFAULT_FIELDS
-    diffs = compare_report_files(args.baseline, args.candidate, fields=fields)
-    print(f"baseline rows: {len(load_jsonl_report(args.baseline))}")
-    print(f"candidate rows: {len(load_jsonl_report(args.candidate))}")
+    diffs = compare_report_files(args.baseline, args.candidate, fields)
     print(f"diff count: {len(diffs)}")
     for diff in diffs[:200]:
         print(f"{diff.identity}: {diff.field}")
         print(f"  before: {diff.before}")
         print(f"  after:  {diff.after}")
-    if len(diffs) > 200:
-        print(f"... {len(diffs) - 200} more diffs")
     return 0
 
 

@@ -1,24 +1,19 @@
 from __future__ import annotations
 
 from hashlib import sha256
+from copy import deepcopy
 import json
 from typing import Any
 
 
 REPORT_SCHEMA_ID = "detection_report"
-REPORT_SCHEMA_REVISION = "cross_region_photo_edge_geometry"
+REPORT_SCHEMA_REVISION = "source_core_grid_authority"
 
 
-_IMMUTABLE_OUTPUT_FIELDS = (
-    "frame_bleed_plan",
-    "finalization_plan",
-    "final_geometry",
-    "export_eligibility",
-)
-
-
-def runtime_facts_sha256(record: dict[str, Any]) -> str:
-    output = record["output"]
+def core_facts_sha256(record: dict[str, Any]) -> str:
+    source_core = deepcopy(record["source_core"])
+    for lane in source_core["lanes"]:
+        lane["content"]["statistics"].pop("deterministic_seconds", None)
     payload = {
         "schema_id": record["schema_id"],
         "schema_revision": record["schema_revision"],
@@ -26,9 +21,10 @@ def runtime_facts_sha256(record: dict[str, Any]) -> str:
         "source": record["source"],
         "input": record["input"],
         "configuration": record["configuration"],
-        "selection": record["selection"],
+        "source_core": source_core,
+        "candidate_gate": record["candidate_gate"],
         "decision": record["decision"],
-        "output": {field: output[field] for field in _IMMUTABLE_OUTPUT_FIELDS},
+        "finalization": record["output"]["finalization"],
         "analysis_identity": record["analysis_identity"],
     }
     encoded = json.dumps(
@@ -40,6 +36,6 @@ def runtime_facts_sha256(record: dict[str, Any]) -> str:
     return sha256(encoded).hexdigest()
 
 
-def bind_runtime_facts(record: dict[str, Any]) -> dict[str, Any]:
-    record["runtime_facts_sha256"] = runtime_facts_sha256(record)
+def bind_core_facts(record: dict[str, Any]) -> dict[str, Any]:
+    record["core_facts_sha256"] = core_facts_sha256(record)
     return record

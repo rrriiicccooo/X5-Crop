@@ -44,8 +44,6 @@ def runtime_configuration_identity(config: RunConfig) -> dict[str, Any]:
             None if config.requested_count is None else int(config.requested_count)
         ),
         "page": int(config.page),
-        "bleed_x": int(config.bleed_x),
-        "bleed_y": int(config.bleed_y),
     }
 
 

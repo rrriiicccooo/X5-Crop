@@ -10,6 +10,7 @@ from ...domain import (
     MeasurementIdentity,
     MeasurementProvenance,
     ObservationId,
+    PositiveInterval,
 )
 from ...formats.scan_canvas import ScanCanvasPhysicalSpec
 from ...geometry.layout import is_horizontal_layout
@@ -23,20 +24,15 @@ class ScanCanvasOutcome(str, Enum):
 
 
 @dataclass(frozen=True)
-class CanvasPixelScale:
-    long_axis_px_per_mm: float
-    short_axis_px_per_mm: float
+class CanvasAxisScaleIntervals:
+    component_id: str
+    long_axis_px_per_mm: PositiveInterval
+    short_axis_px_per_mm: PositiveInterval
     source_long_axis: str
 
     def __post_init__(self) -> None:
-        if any(
-            not math.isfinite(value) or value <= 0.0
-            for value in (
-                self.long_axis_px_per_mm,
-                self.short_axis_px_per_mm,
-            )
-        ):
-            raise ValueError("canvas pixel scale must be finite and positive")
+        if not self.component_id:
+            raise ValueError("canvas scale component requires an identity")
         if self.source_long_axis not in {"x", "y"}:
             raise ValueError("source long axis must be x or y")
 
@@ -63,7 +59,7 @@ class ScanCanvasEvidence:
     observed_short_axis_px: int
     matches: tuple[ScanCanvasProfileMatch, ...]
     selected_profile: ScanCanvasPhysicalSpec | None
-    pixel_scale: CanvasPixelScale | None
+    axis_scales: CanvasAxisScaleIntervals | None
     provenance: MeasurementProvenance
 
     def __post_init__(self) -> None:
@@ -83,12 +79,12 @@ class ScanCanvasEvidence:
             if (
                 len(self.matches) != 1
                 or self.selected_profile != self.matches[0].profile
-                or self.pixel_scale is None
+                or self.axis_scales is None
             ):
                 raise ValueError(
                     "supported scan canvas requires one profile and scale"
                 )
-        elif self.selected_profile is not None or self.pixel_scale is not None:
+        elif self.selected_profile is not None or self.axis_scales is not None:
             raise ValueError(
                 "unresolved scan canvas cannot claim a profile or scale"
             )
@@ -144,10 +140,7 @@ def observe_scan_canvas(
     provenance = MeasurementProvenance(
         root_measurement=MeasurementIdentity.SCAN_CANVAS_GEOMETRY,
         observation_id=ObservationId("source_scan_canvas"),
-        dependencies=(
-            MeasurementIdentity.CANVAS,
-            MeasurementIdentity.FORMAT_PHYSICAL_SPEC,
-        ),
+        dependencies=(),
         description="source scan-canvas physical profile observation",
     )
     if not configuration.profiles:
@@ -157,7 +150,7 @@ def observe_scan_canvas(
             observed_short_axis_px=work_height_px,
             matches=(),
             selected_profile=None,
-            pixel_scale=None,
+            axis_scales=None,
             provenance=provenance,
         )
     observed_aspect = float(work_width_px) / float(work_height_px)
@@ -179,7 +172,7 @@ def observe_scan_canvas(
             observed_short_axis_px=work_height_px,
             matches=(),
             selected_profile=None,
-            pixel_scale=None,
+            axis_scales=None,
             provenance=provenance,
         )
     if len(matches) > 1:
@@ -189,7 +182,7 @@ def observe_scan_canvas(
             observed_short_axis_px=work_height_px,
             matches=matches,
             selected_profile=None,
-            pixel_scale=None,
+            axis_scales=None,
             provenance=provenance,
         )
     profile = matches[0].profile
@@ -199,11 +192,12 @@ def observe_scan_canvas(
         observed_short_axis_px=work_height_px,
         matches=matches,
         selected_profile=profile,
-        pixel_scale=CanvasPixelScale(
-            long_axis_px_per_mm=(
+        axis_scales=CanvasAxisScaleIntervals(
+            component_id=profile.profile_id,
+            long_axis_px_per_mm=PositiveInterval.exact(
                 float(work_width_px) / profile.long_axis_mm
             ),
-            short_axis_px_per_mm=(
+            short_axis_px_per_mm=PositiveInterval.exact(
                 float(work_height_px) / profile.short_axis_mm
             ),
             source_long_axis="x" if is_horizontal_layout(layout) else "y",

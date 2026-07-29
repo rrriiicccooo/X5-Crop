@@ -2,17 +2,11 @@ from __future__ import annotations
 
 from ..formats import FORMAT_CHOICES, format_spec
 from ..strip_modes import STRIP_MODES
-from .boundary import BoundaryPathParameters
-from .candidate import CandidatePlanParameters
 from .content import ContentConfiguration
 from .diagnostics import DiagnosticsConfiguration
 from .model import DetectionConfiguration
-from .photo_edges import PhotoEdgeDetectionParameters
 from .preprocess import PreprocessConfiguration
-from .separator import SeparatorConfiguration
 from .scan_canvas import ScanCanvasDetectionConfiguration
-from .shared_short_axis import SharedShortAxisParameters
-from .transform import TransformDetectionParameters
 from ..formats.scan_canvas import scan_canvas_specs_for_format
 
 
@@ -32,12 +26,6 @@ def get_detection_configuration(
         scan_canvas=ScanCanvasDetectionConfiguration(
             scan_canvas_specs_for_format(format_id)
         ),
-        photo_edges=PhotoEdgeDetectionParameters(),
-        transform=TransformDetectionParameters(),
-        shared_short_axis=SharedShortAxisParameters(),
-        boundary_path=BoundaryPathParameters(),
-        separator=SeparatorConfiguration(),
         content=ContentConfiguration(),
-        candidate_plan=CandidatePlanParameters(),
         diagnostics=DiagnosticsConfiguration(),
     )

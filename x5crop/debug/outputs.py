@@ -5,7 +5,6 @@ from pathlib import Path
 from ..run_config import RunConfig
 from ..run_status import RunTerminalOutcome
 from ..detection.final.model import FinalDetection
-from ..detection.candidate.model import AssessedCandidate
 from ..detection.workspace import DetectionWorkspace
 from ..output.surface import display_generated_path
 from ..configuration.diagnostics import DiagnosticsConfiguration
@@ -16,7 +15,6 @@ from .canvas import DebugRenderCache
 def write_debug_outputs(
     workspace: DetectionWorkspace,
     detection: FinalDetection,
-    selected_candidate: AssessedCandidate,
     output_dir: Path,
     input_stem: str,
     config: RunConfig,
@@ -31,7 +29,6 @@ def write_debug_outputs(
         write_debug_preview(
             workspace,
             detection,
-            selected_candidate,
             debug_path,
             diagnostics,
             render_cache,
@@ -42,7 +39,6 @@ def write_debug_outputs(
         debug_analysis = write_debug_analysis(
             workspace,
             detection,
-            selected_candidate,
             output_dir,
             input_stem,
             diagnostics,
