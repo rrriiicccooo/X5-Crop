@@ -9,8 +9,9 @@ TIFF、current report、Debug Analysis 与现场命令输出始终优先于本�
 ## 当前检查点
 
 - 分支：`main`。
-- 当前提交：`4a5ac722d2a0c489a7da4bd84fbb6adadd3d5254`，已推送并与
-  `origin/main` 一致。
+- Source-core 实现检查点：
+  `4a5ac722d2a0c489a7da4bd84fbb6adadd3d5254`。本文件由后续 docs-only 提交更新；
+  恢复时以现场 `HEAD == origin/main` 为准，不在文档内硬编码自身提交 SHA。
 - Tracked 工作区干净；ignored 内容只有 `Test/` 本地样片与证据。
 - 当前 runtime：`X5_Crop.py` V4.9 source-core 安全基线。
 - 当前稳定公开 Release：`v4.2.8`。
@@ -244,7 +245,8 @@ Grid、content、outer、protection 或 deskew 反向授权，也不声明自动
 新任务恢复提示：
 
 > 继续 X5 Crop。读取 `README.md`、`AGENTS.md`、`PROJECT_MEMORY.md` 与
-> `ARCHITECTURE.md`，核对 `main@4a5ac72` 和干净工作区。当前是 review-only
-> source-core 安全基线，唯一核心缺口是独立 Frame Grid phase authority。先提交一份
-> 决策完整、无循环证据、有限工作量、current-only 的 authority 方案；不要恢复
-> separator/photo-edge/outer 旧 detector，不要先修改 tracked 文件。
+> `ARCHITECTURE.md`，核对 `main` 与 `origin/main` 一致、tracked 工作区干净，并确认
+> `4a5ac72` 是 source-core 实现检查点。当前是 review-only source-core 安全基线，唯一
+> 核心缺口是独立 Frame Grid phase authority。先提交一份决策完整、无循环证据、有限
+> 工作量、current-only 的 authority 方案；不要恢复 separator/photo-edge/outer 旧
+> detector，不要先修改 tracked 文件。
