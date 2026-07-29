@@ -10,10 +10,12 @@ TIFF、current report、Debug Analysis 与现场命令输出始终优先于本�
 
 - 分支：`main`。
 - Source-core 实现检查点：
-  `4a5ac722d2a0c489a7da4bd84fbb6adadd3d5254`。本文件由后续 docs-only 提交更新；
+  `5f8b96eac9823a6b6c93f5fa208df2e0820a2f02`。本文件由后续 docs-only 提交更新；
   恢复时以现场 `HEAD == origin/main` 为准，不在文档内硬编码自身提交 SHA。
 - Tracked 工作区干净；ignored 内容只有 `Test/` 本地样片与证据。
 - 当前 runtime：`X5_Crop.py` V4.9 source-core 安全基线。
+- 当前用户 runtime 依赖：`numpy`、`tifffile`、`imagecodecs` 与 `Pillow`；SciPy 与
+  OpenCV 不是 current runtime dependency。
 - 当前稳定公开 Release：`v4.2.8`。
 - Runtime schema：
 
@@ -123,6 +125,9 @@ reason；被 Grid 阻断的下游只标记 `NOT_APPLICABLE`。
 
 - Source-core 原子替换：`0a4a93fcab94cf620cec0bc30b27eeb6f898a48f`。
 - 极致收口：`4a5ac722d2a0c489a7da4bd84fbb6adadd3d5254`。
+- Runtime 依赖闭合：`5f8b96eac9823a6b6c93f5fa208df2e0820a2f02`；strict
+  4-connectivity 改由 NumPy RLE 与确定性 union-find 实现，active runtime 不再依赖
+  SciPy。
 - Active tree 已原子删除旧 PhotoEdge/separator/sequence/transform/rotated-gray/pixel-bleed
   链及 reader、alias、shim、adapter、feature flag 和双实现。
 - 不可达的 auto-approval/Debug PASS、空 export wrapper、重复 content fields 与过期 ignore
@@ -137,12 +142,13 @@ reason；被 Grid 阻断的下游只标记 `NOT_APPLICABLE`。
 - Named audit：S027、S035、S051、S055、S062、S091、S094、S109、S098 共 9/9 正常
   `needs_review`，0 frame output。S098 只作 `irregular_geometry_stress`。
 - 111 张 invariant：111 completed、0 failure、0 frame output。
+- NumPy RLE/union-find 在 600 组独立 oracle mask 与 111 张 current 样片上保持 strict
+  4-connectivity/content geometry 一致。
 - 固定 24 张 detector-only、`--jobs 2`：
 
   ```text
-  cold       1.797 秒/张
-  measured   1.801 / 1.807 / 1.816 秒/张
-  median     1.807 秒/张
+  cold       单独记录
+  median     2.216 秒/张（三次 measured runs）
   ```
 
   受限环境中 process worker 不可用，实际降级为两个 thread workers；且没有 frame TIFF
@@ -246,7 +252,7 @@ Grid、content、outer、protection 或 deskew 反向授权，也不声明自动
 
 > 继续 X5 Crop。读取 `README.md`、`AGENTS.md`、`PROJECT_MEMORY.md` 与
 > `ARCHITECTURE.md`，核对 `main` 与 `origin/main` 一致、tracked 工作区干净，并确认
-> `4a5ac72` 是 source-core 实现检查点。当前是 review-only source-core 安全基线，唯一
+> `5f8b96ea` 是 source-core 实现检查点。当前是 review-only source-core 安全基线，唯一
 > 核心缺口是独立 Frame Grid phase authority。先提交一份决策完整、无循环证据、有限
 > 工作量、current-only 的 authority 方案；不要恢复 separator/photo-edge/outer 旧
 > detector，不要先修改 tracked 文件。
