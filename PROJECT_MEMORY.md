@@ -34,38 +34,58 @@ TIFF、current report、Debug Analysis 与现场命令输出始终优先于本�
   frame TIFF outputs = ()
   ```
 
-这不是 detector 失败后的 fallback，而是 current runtime 的真实能力边界。
+这不是 detector 失败后的 fallback，而是 current runtime 的真实能力边界；它不再代表
+项目最终成功标准。
+
+## 不可偏移的产品宗旨
+
+X5 Crop 的目标是在用户已经提供 format 与 count 后，自动生成**足够安全、不切掉真实照片
+内容**的逐帧 TIFF。它不是照片边界测量工具，不要求唯一还原真实边界，也不追求手术刀式
+贴边；合理的 outward over-retention 优于 inward content loss。
+
+固定产品合同：
+
+- 用户输入的 format 与 count 是 runtime authority，detector 不重新猜测这两项。
+- Separator、content、outer、expected position、格式尺寸、score 与其它模型线索可以参与
+  bounded proposal、assessment 和 selection。Report/Debug 必须区分 observed 与
+  inferred，但模型推断本身不是送审理由。
+- `approved_auto` 表示最终保护后的输出满足有界安全合同；不表示 Grid phase、separator
+  或照片边被唯一证明。
+- `needs_review` 只表示存在 protection 无法吸收的具体输出风险，例如整格/ordinal
+  歧义、count 无法成立、已知内容仍会被切掉、候选会混入错误相邻照片，或 geometry
+  越出 source/lane authority。
+- Partial 可以推断真实照片位于哪些 slots；blank 保留 slot；contact/overlap 可以让相邻
+  输出框重叠并重复保留共享像素。只有 slot ownership 或安全包络无法有界时才送审。
+- 多个精确 geometry 不唯一但输出等价时允许自动批准。回归验收关注 count、顺序、slot
+  ownership、真实内容 containment、允许的向外多保留与 TIFF 保真，不要求复刻历史 box。
+- `CandidateGate` 只检查候选与输出安全事实；只有 `DecisionGate` 创建 final status 与
+  final reasons。
 
 ## 当前目标
 
-下一阶段要找到并证明一个**独立的 Frame Grid phase authority**。只有它成立后，系统才
-有资格继续建立 frame slots、逐帧照片 containment 和自动输出。
+下一阶段要在上述安全输出合同下，重新评估此前提出的 separator-anchor / model Grid
+方案。第一交付物仍是决策完整的设计，而不是立即修改 detector，但它不再要求唯一独立的
+真实 Grid phase。
 
-目标数据流：
+目标数据流的待讨论骨架：
 
 ```text
-source pixels
-→ 独立 Grid phase authority
-→ finite frame slots
-→ per-frame positive content + design height + lane authority
-→ shared safe containment
-→ millimetre output protection
+source pixels + authoritative format/count
+→ bounded observations and model Grid proposals
+→ finite slot hypotheses and assignment
+→ conservative per-frame safe crop envelope
+→ millimetre output protection / overlap allowance
+→ CandidateGate safety facts
+→ DecisionGate
 → optional non-blocking Visual Deskew
 → inverse-affine ROI
 → TIFF
 ```
 
-固定约束：
-
-- Grid authority 必须物理独立、可审计，并传播完整 uncertainty。
-- Separator、photo edge、outer、positive content、设计宽度或 baseline 都不能单独补出
-  Grid phase。
-- Content 只能验证或否定已有 slot，不能创建 phase、ordinal 或 separator identity。
-- Protection 与 Visual Deskew 都是后置消费者，不能选择核心 geometry。
-- 缺少权威证据时继续 `needs_review`；不得恢复 score、Top-K、retry、fallback、样片规则
-  或 compatibility layer。
-- 新 authority 一旦获批，应作为一次决策完整的实施套餐；普通工程修复不再拆成连续
-  微型审批。
+方案必须保持有限工作量、observed/inferred provenance、source-coordinate geometry、
+typed uncertainty 与单向生命周期权限；不得恢复旧 schema、兼容层或按样片写死的
+whitelist。Score、expected position、Top-K 或其它选择机制不再被概念性禁止，但只有在
+新 current schema 中职责明确、工作量有界且不绕过 Gate 时才能采用。
 
 ## 当前运行与状态语义
 
@@ -154,8 +174,9 @@ reason；被 Grid 阻断的下游只标记 `NOT_APPLICABLE`。
   受限环境中 process worker 不可用，实际降级为两个 thread workers；且没有 frame TIFF
   写出，因此只是 `diagnostic_only`。它证明安全基线保有 `<5.0 秒/张`的未来余量，不是
   正式输出性能认证。
-- 正式性能仍要求独立 Grid authority 恢复输出后，用固定 24 张、`--jobs 2`、真实 TIFF
-  写出和复读，三次中位数 `<=5.0 秒/张`。当前状态必须是 `not_certified`。
+- 正式性能仍要求 bounded Grid proposal 与 safe crop envelope 恢复输出后，用固定
+  24 张、`--jobs 2`、真实 TIFF 写出和复读，三次中位数 `<=5.0 秒/张`。当前状态必须是
+  `not_certified`。
 - 人工证据链重新验证：111 条 source manifest、9 条 fit proposal、9 条 user-confirmed
   baseline；outer-noise、overlapping-divider 与 declared-frame-count contracts 均通过。
 
@@ -188,10 +209,11 @@ receipt，不得随 cache 清理。它只否定特定表示或 measurement 合�
   `base_gray_u8 + current local-noise/integration` 的普遍可用性，不证明原始高位深 TIFF
   没有物理信号。
 
-旧版只借鉴计算与工程纪律：base gray/statistics 各一次、vectorized measurement、
-source-coordinate cache、快速 proposal、事后 comparator、单次 inverse-affine ROI、
-固定 cohort 与 Hook 验证。不得恢复 score/rank/Top-K/retry/format override/candidate cap、
-outer-as-photo-edge、width oracle、baseline selection 或兼容层。
+旧版可借鉴 base gray/statistics 各一次、vectorized measurement、source-coordinate
+cache、快速 proposal、模型 Grid、score/rank、事后 comparator、单次 inverse-affine ROI、
+固定 cohort 与 Hook 验证。不得原样恢复旧 runtime/schema、format override、
+outer-as-photo-edge、width oracle、baseline selection、样片 whitelist 或兼容层；有价值的
+概念只能按新的安全输出合同和 current typed owners 重新实现。
 
 ## 文档与工作区
 
@@ -205,20 +227,22 @@ outer-as-photo-edge、width oracle、baseline selection 或兼容层。
 
 ## 开放风险
 
-1. 没有独立 Grid phase authority，当前不能定位 frame。
-2. 没有 frame assignment，containment、protection、deskew、blank/contact/overlap 尚无
-   runtime 语义。
-3. Positive content 无权提供 phase。
-4. 若重新研究 separator，必须先提出新的独立 source evidence owner，不能继续优化已
-   终局失败的 proposal/fragment 图。
+1. 当前没有 bounded Grid proposal、slot assignment 与 safe crop envelope，所以仍不能
+   定位或输出 frame。
+2. Containment、protection、blank/contact/overlap 尚无 current runtime 语义。
+3. 需要定义哪些 observed/inferred hypotheses 属于同一 slot ownership，以及何时多个
+   hypothesis 的 union 会混入错误相邻照片。
+4. 需要给 expected-position、anchor count、candidate 数量与搜索预算建立有限合同，避免
+   无 expected position 的组合爆炸。
 5. XPan 与 120-645 缺少真实 fixture，不能声明准确性覆盖。
 6. Detector-only 余量不能代替真实 frame TIFF 性能合同。
-7. Green tests、PASS、hash 或 comparator 一致不能代替原 TIFF 坐标中的物理确认。
+7. Green tests、历史 PASS、hash 或 comparator 一致不能单独证明安全输出；Named TIFF
+   必须检查真实内容 containment，但不要求精确贴合人工边界。
 
 ## 新任务的精确下一步
 
-新任务的第一交付物是一份**决策完整的独立 Grid phase authority 方案**，不是另一个零散
-separator 微型原型，也不是立即修改 tracked detector。
+新任务的第一交付物是重新审阅此前提出的 separator-anchor / model Grid 方案，并按“安全
+输出而非唯一边界真值”形成一份决策完整的方案。此阶段不是立即修改 tracked detector。
 
 开始时核对：
 
@@ -234,25 +258,28 @@ wc -l Test/manual_review/user_confirmed_golden_baseline.jsonl
 
 方案必须一次锁定：
 
-1. authority 的独立物理来源、唯一 owner 与 provenance；
-2. 它为何不消费 separator、content、baseline 或待证明 geometry；
-3. source-coordinate measurement、完整 uncertainty 与多 component 行为；
-4. full/partial、horizontal/vertical、dual-lane 和缺 fixture format 的 capability；
-5. Grid/ordinal/slot/content assignment/per-frame containment 的单向权限；
-6. `unavailable`、`contradicted`、`needs_review` 与 finalization 的关系；
-7. bounded work、Named TIFF、S098、24 张真实输出和 111 张 invariant 合同；
-8. current-only tree 的保留、增加与原子删除清单；
-9. 普通工程问题在同一授权内修复，只有改变物理 authority 或扩大范围才重新询问。
+1. 用户 format/count authority 与 Grid proposal 的唯一 current owners；
+2. observed separator anchors、expected position、格式尺寸、content/outer clues 与 inferred
+   positions 如何进入有限 proposal、assessment 和 selection；
+3. anchor count 不同、无 separator、full/partial、horizontal/vertical、dual-lane 的
+   candidate domain 与 bounded work；
+4. ordinal、slot ownership、blank、contact、overlap 与 per-frame safe crop envelope；
+5. 多个 hypotheses 何时输出等价、如何 union/overlap，以及何时 protection 无法吸收而必须
+   review；
+6. CandidateGate safety checks 与 DecisionGate 的唯一 final status/reason 映射；
+7. source-coordinate geometry、typed uncertainty、optional deskew 与 inverse-affine output；
+8. PASS/review cohort、九张人工 baseline、S098 stress、24 张真实输出和 111 张验证合同；
+9. current-only tree 的保留、增加与原子删除清单。
 
 获得用户明确批准前，不修改 tracked detector，不恢复旧 detector/compatibility，不让
-Grid、content、outer、protection 或 deskew 反向授权，也不声明自动裁切、deskew 物理
-精度或正式输出性能通过。
+任何 lower layer 绕过两级 Gate，也不声明自动裁切或正式输出性能已经通过。
 
 新任务恢复提示：
 
 > 继续 X5 Crop。读取 `README.md`、`AGENTS.md`、`PROJECT_MEMORY.md` 与
 > `ARCHITECTURE.md`，核对 `main` 与 `origin/main` 一致、tracked 工作区干净，并确认
-> `5f8b96ea` 是 source-core 实现检查点。当前是 review-only source-core 安全基线，唯一
-> 核心缺口是独立 Frame Grid phase authority。先提交一份决策完整、无循环证据、有限
-> 工作量、current-only 的 authority 方案；不要恢复 separator/photo-edge/outer 旧
-> detector，不要先修改 tracked 文件。
+> `5f8b96ea` 是 source-core 实现检查点。当前 runtime 仍是 review-only，但产品宗旨是
+> 在用户提供 format/count 后保守自动裁切、不切真实内容，而不是唯一证明照片边界。
+> 重新审阅此前的 separator-anchor / model Grid 方案，先形成 bounded proposal、safe crop
+> envelope、partial/blank/overlap 与两级 Gate 的决策完整设计；不要先修改 tracked
+> detector，也不要原样恢复旧 runtime/schema。

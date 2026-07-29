@@ -1,6 +1,7 @@
 # X5 Crop 快速启动
 
-本页说明当前 V4.9 source-core 安全基线。完整说明见 `README_中文.txt`。
+本页说明当前 V4.9 source-core 安全基线。项目目标是在用户提供 format/count 后保守裁切、
+不切真实照片内容，而不是唯一测量照片边界；完整说明见 `README_中文.txt`。
 
 ## 1. 下载与安装
 
@@ -41,7 +42,8 @@ Windows: 双击 X5_Crop_win.bat
 - 不导出 `*_01.tif` 等 frame TIFF；
 - 可生成复核副本、current report 与 Debug Analysis。
 
-这不是 fallback，也不能用 content、设计宽度或旧 detector 补出 frame。
+这不是 fallback；current source-core 没有 active Grid proposal builder，不能直接用
+content、设计宽度或旧 detector 补出 frame。它不代表未来自动批准必须唯一证明真实边界。
 
 命令行示例：
 

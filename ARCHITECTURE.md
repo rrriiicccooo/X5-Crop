@@ -3,13 +3,40 @@
 本文件是 V4.9 当前运行流、数值合同与源码分层的唯一架构说明。用户操作见
 `docs/user-guide.zh-CN.md` 与 `docs/user-guide.en.md`，版本行为见 `CHANGELOG.md`。
 
+## 产品目标与成功合同
+
+X5 Crop 的产品目标是在用户已经提供 format 与 count 后，生成足够安全的逐帧 TIFF：
+优先保证不切掉真实照片内容，允许在保护范围内向外多保留像素。目标不是唯一重建照片的
+真实物理边界，也不要求手术刀式贴边。
+
+未来自动输出必须遵守：
+
+- format 与 count 是 runtime authority，不由 detector 重新推断；
+- observed separator/content/outer 与模型 inferred Grid 必须分开记录，但都可以参与有限
+  proposal、assessment 与 selection；
+- 精确边界或 Grid phase 没有唯一真值，不自动等于 `needs_review`；多个候选若具有相同
+  slot ownership，且差异可被同一个保守输出包络与 protection 吸收，仍可
+  `approved_auto`；
+- blank 保留设计 slot；partial 可以推断 slot placement；contact/overlap 可以让相邻输出
+  框重叠并重复保留共享像素；
+- `approved_auto` 只声明最终输出满足有界安全合同，不声明每条边界被证明；
+- `needs_review` 只用于会改变 ordinal/slot ownership、无法满足 count、仍可能切掉已知
+  内容、会混入错误相邻照片或越出 source/lane authority 的具体风险；
+- `CandidateGate` 只保存安全事实，只有 `DecisionGate` 创建 final status 与 final
+  reasons。
+
+回归验收以 count、顺序、slot ownership、内容 containment、允许的 outward
+over-retention 与 TIFF 保真为准，不要求复刻历史 box 或逼近人工边界。下述 current
+source-core 尚未实现该自动输出合同；当前全量 review 是能力检查点，不是产品最终目标。
+
 ## 1. 当前能力边界
 
 V4.9 当前开发树是一个物理诚实的 source-core 安全基线。系统尚无获批的独立
 `FrameGridEvidence` phase authority，因此所有需要定位 frame 的输入都保持
 `needs_review`，不写出 frame TIFF。
 
-这不是临时 fallback。它是 current runtime 的正式能力边界：
+这是 current runtime 的正式能力边界，但“独立且唯一的 Grid phase 证明”不再是未来
+`approved_auto` 的产品前提：
 
 - separator、photo edge、outer、positive content 与设计宽度都不能自行补出 Grid phase；
 - containment 因没有 frame assignment 而为
@@ -56,7 +83,7 @@ owner。
 | 120-67 | `70 × 54`、`70 × 56 mm` |
 
 不同 component 不取 hull，也不混用 width/height。当前这些事实只进入配置、报告与未来
-Grid 合同；不能在没有 phase authority 时定位 frame。
+Grid 合同；单独使用设计 aperture 不能确定位置，但可以约束有限模型 proposal。
 
 ### 3.2 Scan canvas 与分轴 scale
 
@@ -139,6 +166,11 @@ frame_slots = ()
 
 不存在休眠 detector、feature flag、baseline runtime 入口或 manual phase 注入。
 
+`NO_INDEPENDENT_PHASE_AUTHORITY` 只描述当前树为何没有 boxes，不定义未来批准门槛。后续
+方案可以在用户 format/count 约束内结合 observed evidence、expected position 与格式模型
+建立 bounded Grid hypotheses，并把输出等价的多个 hypotheses 合并为保守安全包络；无需
+先证明唯一真实 phase。
+
 `CandidateGate` 依次检查：
 
 1. `scan_canvas_authority`
@@ -159,6 +191,12 @@ containment、protection 与 deskew 只标记 `NOT_APPLICABLE`，不重复制造
 `FinalDetection` 不含 final boxes，`frame_export_eligible` 永远为 false。Unavailable 不得
 进入 frame finalization。
 
+未来恢复自动输出时，`CandidateGate` 应检查 format/count、box 数量与顺序、
+source/lane bounds、已知内容 inward loss、slot ownership 和 uncertainty 是否已被
+protection 吸收。精确边界为 inferred、separator 不完整、blank slot 或多个输出等价
+hypotheses 都不是独立否决项。`DecisionGate` 仍是 `approved_auto` / `needs_review` 与
+typed reasons 的唯一 owner。
+
 ## 6. 毫米 output protection authority
 
 Pixel bleed 接口与模型已删除。唯一 owner 是格式级毫米设计表：
@@ -172,8 +210,10 @@ Pixel bleed 接口与模型已删除。唯一 owner 是格式级毫米设计表�
 | XPan | `0.45 mm` | `0.25 mm` |
 | 120-67 | `0.50 mm` | `0.25 mm` |
 
-当前没有 frame geometry，所以 authority 只进入 report，`applied=false`。它不能补救
-Grid、选择候选或创建输出。
+当前没有 frame geometry，所以 authority 只进入 report，`applied=false`。当前代码不能
+用它创建输出。未来 protection 是 output-safety assessment 的组成部分：它可以吸收
+bounded Grid/edge uncertainty 和 contact/overlap 风险，但不能把无界或整格错位的
+placement 变成安全输出。
 
 ## 7. Report、Debug 与 comparator
 
@@ -271,7 +311,8 @@ median(detector wall / 24) < 5.0 秒/张
 
 它只证明安全基线仍有未来生产余量，不是正式输出性能 PASS。
 
-真实 TIFF 认证只有未来独立 Grid authority 恢复 frame export 后才可执行：
+真实 TIFF 认证只有未来 bounded Grid proposal 与 safe crop envelope 恢复 frame export
+后才可执行：
 
 ```text
 24 张真实 TIFF 写出并复读

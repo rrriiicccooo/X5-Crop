@@ -11,6 +11,29 @@
 V4.9 是破坏性的 current-only 物理模型重构。旧 runtime/schema/compatibility 不是迁移
 目标。
 
+### 2026-07-29：产品目标与自动批准合同纠偏
+
+这是设计合同变更，尚未改变 current review-only runtime。
+
+- 产品成功标准从“唯一证明真实照片边界与独立 Grid phase”改回“在用户提供 format/count
+  后，生成足够安全且不切掉真实内容的保守裁切”。向外多保留少量像素可以接受，不追求
+  手术刀式边界精度。
+- Format/count 是 authoritative runtime input。Separator、content、outer、expected
+  position、格式模型与 score 可以参与 bounded proposal、assessment 和 selection；
+  observed/inferred provenance 仍必须保留。
+- `approved_auto` 表示 protection 后的输出满足安全合同，不表示所有边界均被观测或唯一
+  证明。精确 geometry 不唯一但 slot ownership 与安全输出等价时可以自动批准。
+- `needs_review` 只用于 protection 无法吸收的实际风险：整格/ordinal 或照片归属歧义、
+  count 无法成立、已知内容仍会被切掉、候选会混入错误相邻照片，或越出 source/lane
+  authority。
+- Partial 可推断 slot placement；blank 保留 slot；contact/overlap 可让相邻输出框重叠并
+  重复保留共享像素。
+- `CandidateGate` 仍只记录候选与安全事实；只有 `DecisionGate` 创建 final status 与
+  reasons。回归验收改以 count、顺序、slot ownership、真实内容 containment、允许的
+  outward over-retention 与 TIFF 保真为目标，不要求历史 box parity。
+- 下一步先按新宗旨重新审阅此前的 separator-anchor / model Grid 方案；在用户批准
+  决策完整设计前不修改 tracked detector，也不原样恢复旧 runtime/schema。
+
 ### 2026-07-29：source-core 安全基线原子替换
 
 #### Current runtime 依赖闭合
@@ -118,7 +141,8 @@ dirty patch。它不会进入 Git 或 Release。
   缺少物理信号。
 
 因此 current tree 不再临时追加 separator 补丁，也不借旧 detector 维持自动输出。未来
-只有新的、独立批准且完整审计的 Grid phase authority 才能重新打开 frame finalization。
+只有新的、决策完整且有界审计的 Grid proposal 与 safe crop envelope flow 才能重新打开
+frame finalization；它不需要唯一证明真实 Grid phase。
 
 #### 验证与性能边界
 
@@ -133,8 +157,8 @@ dirty patch。它不会进入 Git 或 Release。
   样片上保持严格 4-connectivity/content geometry 一致；固定 24 张三轮中位数为
   `2.216 秒/张`（`--jobs 2`）。
 - 当前没有 auto-export capability，真实 24 张 TIFF 写出认证必须为 `not_certified`。
-  独立 Grid authority 恢复输出后，才要求三次真实写出并复读的中位数
-  `<=5.0 秒/张`。
+  Bounded Grid proposal 与 safe crop envelope 恢复输出后，才要求三次真实写出并复读的
+  中位数 `<=5.0 秒/张`。
 - 111 张只作一次发布前 source-core invariant 审计。
 
 ### 2026-07-26：人工 baseline 与仓库 owner 收束

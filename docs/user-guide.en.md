@@ -11,6 +11,20 @@ exported.
 
 This is the formal capability boundary, not a fallback after auto-cropping fails.
 
+## Product Goal
+
+X5 Crop aims for automatic crops that are safe enough not to cut real photo
+content; it is not a tool for uniquely measuring the true physical boundary. The
+user-supplied format and count are authoritative inputs. A future Grid/output
+flow may combine observed clues with format-model inference and conservatively
+retain extra pixels through millimetre protection.
+
+`approved_auto` will mean that the protected output satisfies the safety
+contract, not that every separator, photo edge, or Grid phase was uniquely
+proven. Only a concrete wrong-slot, ownership, or inward-content-loss risk that
+protection cannot absorb should become `needs_review`. V4.9 has not implemented
+that flow yet and therefore retains the review-only behavior described below.
+
 ## Install
 
 Download `X5-Crop-vX.X.zip` from
@@ -61,8 +75,9 @@ If macOS blocks double-click launch, run:
 
 - Full and partial use the same complete scan-canvas/lane short-axis domain.
 - A partial count describes complete design slots, never a partial photograph.
-- Format and count remain audit identity, but cannot create frames without Grid
-  authority.
+- The user-supplied format and count are authoritative inputs for future
+  automatic cropping; the current build records them as audit identity but does
+  not create frames.
 - `135-dual` is audited per lane and remains in review.
 
 ## Current Detection Facts
@@ -174,8 +189,9 @@ only when the `--jobs 2` median of three measured runs is strictly below
 `5.0 seconds/input`. It is not a formal output performance PASS.
 
 Certification with 24 real frame TIFF writes, read-back verification, and
-`<=5.0 seconds/input` can run only after independent Grid authority restores
-automatic output. The current certification status must be `not_certified`.
+`<=5.0 seconds/input` can run only after a bounded Grid proposal and safe crop
+envelope restore automatic output. The current certification status must be
+`not_certified`.
 
 ## Uninstall And License
 

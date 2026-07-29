@@ -1,6 +1,8 @@
 # X5 Crop Quick Start
 
-This page covers the current V4.9 source-core safety baseline. See
+This page covers the current V4.9 source-core safety baseline. The product aims
+to crop conservatively from a user-supplied format/count without cutting real
+photo content, not to uniquely measure photo boundaries. See
 `README_English.txt` for the full guide.
 
 ## 1. Download And Install
@@ -45,8 +47,10 @@ authority. Every TIFF therefore:
 - exports no frame TIFF such as `*_01.tif`;
 - may write a review copy, current report, and Debug Analysis.
 
-This is not a fallback, and content, design width, or an old detector cannot
-create frame phase.
+This is not a fallback. The current source core has no active Grid proposal
+builder, so content, design width, or an old detector cannot directly create
+frames. This does not mean that future auto-approval must uniquely prove the
+true boundary.
 
 Examples:
 

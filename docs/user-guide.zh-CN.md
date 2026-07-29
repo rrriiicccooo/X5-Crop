@@ -9,6 +9,17 @@ authority，所有输入都保持 `needs_review`，不导出单张 frame TIFF。
 
 这不是自动裁切失败后的 fallback，而是当前版本的正式能力边界。
 
+## 产品目标
+
+X5 Crop 的自动裁切目标是“足够安全且不切掉真实照片内容”，不是唯一测量照片边界。用户
+提供的 format 与 count 是输入前提；未来 Grid/output flow 可以结合已观测线索与格式模型
+推断位置，并用毫米 protection 保守向外多留像素。
+
+`approved_auto` 将表示保护后的输出满足安全合同，不表示每条 separator、照片边或 Grid
+phase 都被唯一证明。只有具体且无法被 protection 吸收的错格、照片归属或 inward content
+loss 风险才应进入 `needs_review`。当前 V4.9 尚未实现这套 flow，所以仍保持下述全量
+review 行为。
+
 ## 安装
 
 从 [GitHub Releases](https://github.com/rrriiicccooo/X5-Crop/releases) 下载
@@ -57,7 +68,8 @@ macOS 无法双击时，在该文件夹的 Terminal 中运行：
 
 - Full 与 partial 使用同一个完整 scan-canvas/lane 短轴 domain。
 - Partial count 只描述若干张完整设计 slot，不表示残缺照片。
-- 当前 count 与格式进入审计身份，但不会在没有 Grid authority 时生成 frame。
+- 用户提供的 count 与格式是未来自动裁切的 authoritative input；当前版本只把它们写入
+  审计身份，尚不生成 frame。
 - `135-dual` 分 lane 审计并固定保持 review。
 
 ## 当前检测事实
@@ -162,8 +174,8 @@ schema_revision = source_core_grid_authority
 当前固定 24 张 detector-only 诊断只有在 `--jobs 2`、三次中位数严格小于
 `5.0 秒/张`时，才能说明仍有未来生产余量。它不是正式输出性能 PASS。
 
-24 张真实 frame TIFF 写出、复读和 `<=5.0 秒/张`的认证，要等独立 Grid authority 恢复
-自动输出后才能执行。当前认证状态必须是 `not_certified`。
+24 张真实 frame TIFF 写出、复读和 `<=5.0 秒/张`的认证，要等 bounded Grid proposal 与
+safe crop envelope 恢复自动输出后才能执行。当前认证状态必须是 `not_certified`。
 
 ## 卸载与许可
 
