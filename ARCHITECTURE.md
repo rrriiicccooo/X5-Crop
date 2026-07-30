@@ -412,6 +412,13 @@ Runtime boundary 唯一解析 authoritative format、mode 与 typed `FrameCountR
 | `partial + auto` | `count_candidates = 1..default_count`，再由唯一匹配片夹的容量排除装不下的 count |
 | `135-dual/full` | source 总数 12；两个 authoritative lane 各自为 6 |
 
+用户入口语义同时冻结：CLI 的 partial 模式不传 `--count` 即为 `auto`，传
+`--count N` 即为 `explicit`；交互入口的回车或 `auto` 同样表示 `auto`，整数表示
+`explicit`。Full 不传 count 时建立 `fixed_full`，若显式传入 count，只接受
+`default_count` 并仍规范化为 `fixed_full`。不增加第二个 auto-count 开关，也不让 lower
+layer 从裸 `None` 猜 mode；runtime boundary 必须把 `strip_mode + requested_count` 一次解析
+成明确的 `FrameCountRequest`。
+
 所有支持 partial 的单 lane format 都允许显式或自动选择到 format 最大 count；不再用
 `complete_strip_can_be_underfilled` 区分哪些格式可以在 partial mode 使用最大值。片夹
 `ScanCanvasFormatFit.maximum_frame_count` 仍是更窄的物理上界，例如 188.5 mm 片夹上的
@@ -487,6 +494,7 @@ receipt，不重测、不选择、不裁决。
 | `OneSidedBoundaryObservation` | 保存单侧 photo↔background transition 与方向，只提供单侧 containment bound |
 | `BoundaryCandidate` | 把 observation 或 model-only interval 绑定到一个 local corridor；不拥有 final cut |
 | `FrameGridProposal` | 保存 frame count、ordered boundaries、pitch/phase interval、slot assignment、observed/inferred provenance、residual 与 work receipt |
+| `FrameCountDominanceAssessment` | 保存两个 surviving proposal 的逐维、归一化跨 count 比较与 `dominates/incomparable` 结果；不拥有 Gate/status |
 | `FrameSlot` | 保存 lane-local ordinal、design component、左右 boundary role 与 occupancy/interaction facts |
 | `BoundaryInteractionObservation` | 保存 separated、contact/overlap 或 appearance-unresolved，以及有界 shared interval |
 | `FrameEnvelopeProposal` | 一个 Grid proposal 下的逐帧 primary outward containment |
@@ -664,15 +672,52 @@ auto count 的额外工作隐藏在单一总数中。
 G_MAX = 3  # 非支配 FrameGridProposal
 ```
 
-先拒绝违反 hard constraints 的 proposal。Explicit/fixed 模式只比较 requested count；
-auto 模式先合并各 count 的 surviving proposals，`G_MAX` 是合并后的全局上限而不是
-“每个 count 各保留 3 个”。不同 count 不能合并为 output-equivalent。随后按以下稳定顺序
-比较：更少物理冲突、更多
-ordinal-compatible observed support、更小 normalized pitch/phase residual、更少未解释的
-strong observation、更小但仍安全的 outward envelope，最后才按稳定 provenance id
-打破完全相等。Score 只负责排序。超过 3 个非等价、非支配 proposal 时记录
-`search_incomplete`，并使用同一 output-relevant 规则决定是否阻断；dual lane 分别选择，
-不建立 lane proposal 的笛卡尔积。
+Hard rejection 只允许来自可执行的物理不可能或安全冲突：
+
+1. count 不在 `FrameCountRequest` candidate set，或超过已选 scan-canvas 容量；
+2. placement/slot 非单调、面积非正，或 pitch、phase、endpoint 越出对应的 hard physical
+   interval；
+3. 应用 fixed protection 前的 primary/safe geometry 越出 source/lane authority；
+4. 已知 primary content 无法在当前 count 下完成有界 ordinal assignment 与 containment，
+   或只能通过 whole-pitch ownership 错位才能容纳。
+
+这里的 hard physical interval 只能来自 `FramePhysicalSpec`、`ScanCanvasPhysicalSpec` 与
+明确的单位/容量规则；经验样片的 min/max、典型 prior corridor 或纯 ranking tolerance
+不得升级为 hard rejection。超出典型值但仍在物理 admissibility 内时，只能进入 residual
+与 dominance assessment。
+
+缺少 separator、没有 observed support、model-only、blank、较低 score、较大的但仍有界
+outward retention，以及 fixed protection 的 authority saturation 都不是 hard rejection。
+
+Explicit/fixed 模式只比较 requested count。Auto 模式先合并各 count 的 surviving
+proposals，`G_MAX` 是合并后的全局上限而不是“每个 count 各保留 3 个”；不同 count 不能
+合并为 output-equivalent。每对跨 count proposal 必须产生
+`FrameCountDominanceAssessment`，并逐维记录：
+
+- endpoint/placement compatibility；
+- `ordinal-compatible observed support / applicable internal corridors`；
+- 以对应 physical interval 归一化的 pitch/phase residual；
+- `unexplained strong observations / lane strong observations`；
+- primary content assignment、containment 与 authority 是否保持有界。
+
+Count 1 没有 internal corridor，该维度是结构性 `NOT_APPLICABLE`，不得伪装成零分或满分。
+任一 pair 中结构性 `NOT_APPLICABLE` 的维度从该次支配比较排除，不能使任何一方自动更好；
+lane strong observation 总数为 0 时对应比例同样排除。
+其它 count 没看到 separator 时 observed-support 覆盖为 0，但这本身不 hard reject；
+model-only proposal 仍可凭 endpoint、normalized residual、containment 与 authority 支配
+其它 model-only count。所有比例和 residual 必须按 applicable corridor、同一 lane
+measurement 与 physical interval 归一化，不能因 count 较大、divider 较多而天然占优。
+
+Proposal A 只有在所有适用的 output-relevant 维度都不差于 B，且至少一维严格更好时，才
+支配 B；每一维先按冻结的 equality interval 归约为
+`better/equivalent/worse/not_applicable`，不能用浮点微差制造严格更好。否则两者是
+`incomparable`。Safe envelope 的像素大小只在其保持有界后参与同 count
+稳定排序，不进入跨 count 支配，避免把“更贴边”重新变成审批要求。Scalar score、
+provenance id 与稳定 tie-break 都只能排列已经得到的结果，不能删除跨 count 的
+`incomparable` proposal。仍有改变输出张数或 primary ownership 的非支配 count 时，
+`frame_count` 必须阻断；超过 3 个非等价、非支配 proposal 时另记 `search_incomplete`，
+并使用同一 output-relevant 规则判断遗漏是否影响输出。Dual lane 分别选择，不建立 lane
+proposal 的笛卡尔积。
 
 ### 12.7 Slot、blank、contact/overlap 与安全包络
 
@@ -783,7 +828,8 @@ schema_revision = bounded_safe_crop_grid
 ```
 
 同批删除 `source_core_grid_authority` reader/branch，不提供 alias。新 report 至少保存
-count request mode、requested/candidate/selected count、逐 count work 与 rejection、
+count request mode、requested/candidate/selected count、逐 count work、hard rejection 与
+pairwise dominance assessment、
 prior/calibration identity、seed、corridor candidates、observed/inferred roles、DP work、
 retained/rejected/conflicting proposals、output-equivalence、slots、interactions、raw/safe/
 protected envelopes、primary/shared/fixed-protection retention provenance、protection
@@ -833,7 +879,8 @@ lane、两个 120 components、partial 任意位置、blank、contact/overlap、
 union、每侧 protection、authority 饱和、protection 带入相邻照片仍批准、whole-pitch
 primary ownership 错位送审、outward affine、两级 Gate 与 forbidden legacy tokens。
 
-任何 threshold tuning 前还必须使用已经 materialize 的 validation-only cohort：
+任何 threshold tuning 前必须先校验已经 materialize 的 validation-only cohort identity；
+原子 runtime 切换后再由同一 cohort 执行 accuracy completion：
 
 ```text
 schema = x5crop_safe_crop_acceptance_cohort_v1
@@ -865,6 +912,56 @@ evaluation role 与 confirmed baseline geometry oracle。当前 cohort **只包�
 DecisionGate 的 `approved_auto`；`auto_or_review` 优先自动批准，只有实际 Gate 阻断事实
 成立时 review 才可接受。Partial 黄金样片在 explicit 与 auto 两种 count mode 下都运行；
 auto 必须选择 cohort 的 expected count，才能形成自动输出。
+
+原子实现必须同时建立唯一 runner：
+
+```text
+owner          = tools/regression/safe_crop_acceptance.py
+result_schema  = x5crop_safe_crop_acceptance_result_v1
+summary_schema = x5crop_safe_crop_acceptance_summary_v1
+result_file    = safe_crop_acceptance_results.jsonl
+summary_file   = safe_crop_acceptance_summary.json
+```
+
+规范调用为：
+
+```bash
+python3 -m tools.regression.safe_crop_acceptance \
+  --source-root . \
+  --baseline Test/manual_review/user_confirmed_golden_baseline.jsonl \
+  --output-root <fresh-directory>
+```
+
+Runner 默认读取 tracked cohort，先按 `sample_id + source_sha256` 校验九张 current source、
+confirmed baseline、format/mode/count/expectation/role，再把 4 张 full 各展开为一个
+`fixed_full` 场景、5 张 partial 各展开为 `explicit + auto`，合计恰好 14 个场景。逐场景
+JSONL 至少保存输入 identity、count request/selected count、DecisionGate status/reasons、
+输出 count/order、confirmed content containment、final boxes 与比较结果；summary 保存
+12 个 `must_approve_safe` 场景和 2 个 S055 `auto_or_review` 场景的通过/失败明细。
+`must_approve_safe` 只接受 `approved_auto`；S055 的 review 只有携带实际 DecisionGate
+阻断事实才可接受，若批准则 selected count 必须为 4。任一自动批准场景都必须命中
+expected count，并包含对应 confirmed content。
+
+Containment comparator 只在 source coordinates 工作：按 ordinal 取得 final output sampling
+footprint 经 inverse transform 后的 source polygon，使用冻结的 half-open pixel-boundary
+语义，要求它完整包含 baseline 对应的 `confirmed_integer_boundary_polygon`。允许 footprint
+更大、相邻 ordinal footprint 重叠或包含邻片像素；不比较 IoU、box parity 或贴边误差。
+Output root 必须是新建空目录；全部 completion expectations 满足时 exit 0，合法运行但
+completion gate 失败时 exit 1，identity/schema/path 等 preflight 失败时 exit 2。
+
+Partial 全量 audit 不盲扫 `Test/`；唯一 validation inventory 是
+`Test/manual_review/manifest.jsonl` 中的 canonical current records。对其中
+`strip_mode=partial` 的 basename，filename parser 只接受
+`^(pass|unknown)_X5_([1-9][0-9]*)_([0-9]+)\.(tif|tiff)$`（TIFF suffix
+大小写不敏感）；标注 count 必须位于该 format 的有效范围，并与黄金 cohort/baseline 中的
+count 一致。未被 manifest 引用、仅为不可变 confirmed baseline 保留的旧路径/symlink 可以
+按 SHA 解析 oracle，但不属于 filename audit，不得造成错误。Manifest 内重复 `sample_id`、
+重复 canonical path、缺失/畸形 filename 或越界 count 是 regression preflight error；
+重复 source SHA 允许存在，但必须分组报告，不能宣称为相互独立的真实样片。上述 preflight
+错误都不是 detector 结果，不得转成 `needs_review`。标准 Hook/CI 不依赖 ignored
+`Test/`；runner 的纯
+schema/preflight contracts 进入 `tools/verify full`，具备本地黄金 TIFF 时的 14 场景运行
+才是物理 completion gate。
 
 其余 102 张没有人工确认 geometry，不参与 accuracy 完成判定，也不叫真实 holdout。它们
 仍可用于 read-only measurement calibration、coverage matrix、性能与回归观察。当前 51 张
@@ -901,7 +998,12 @@ XPan 与 120-645 当前没有真实 fixture，短期也不把补样片列为前�
    不用这些结果代替九张 accuracy gate；
 5. 运行 dual/vertical、所有 count、片夹容量边界、XPan、120-645 与未覆盖 interaction 的
    独立 synthetic contracts，并单列 real-sample coverage gap；
-6. 固定 24 张、`--jobs 2`、cold 单列、三个新输出目录，真实 TIFF 写出并复读，
+6. 固定 24 张、`--jobs 2`、cold 单列、三个新输出目录，真实 TIFF 写出并复读；正式认证
+   固定使用 full=`fixed_full`、partial=`auto`，并在 performance result 的每个 group 明确
+   记录 count mode，不依赖“恰好省略 `--count`”的隐式行为。Explicit partial 只可作为
+   另行标记的诊断 benchmark，不进入正式 median。原子切换时
+   `PERFORMANCE_RESULT_SCHEMA` 更新为 `x5crop_production_performance_v3`，group receipt
+   保存 `format_id/strip_mode/layout/count_mode/input_count`，不保留 v2 reader。正式合同仍是
    `median(total wall / 24) <= 5.0 秒/张`；这只认证性能与 TIFF 保真，不把未确认 geometry
    变成 accuracy truth；
 7. 人工检查九张 current report、Debug Analysis 与 final output 中 observed/inferred、

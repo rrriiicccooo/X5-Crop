@@ -11,6 +11,33 @@
 V4.9 是破坏性的 current-only 物理模型重构。旧 runtime/schema/compatibility 不是迁移
 目标。
 
+### 2026-07-30：Auto-count 支配与验收执行合同闭合
+
+这是 docs-only 计划闭合；current detector、CLI、report schema、性能 runner 与
+review-only 输出行为均未改变。
+
+- 冻结入口语义：partial 的 CLI 省略 `--count`、交互回车或 `auto` 都表示 bounded auto；
+  整数表示 explicit。Full 始终规范化为 `fixed_full`，lower layer 不再从裸 `None` 猜
+  count mode。
+- 跨 count selection 新增唯一 `FrameCountDominanceAssessment`。Hard rejection 只来自
+  容量、非法 geometry、source/lane escape 或已知内容无法有界归属/包含；幸存 proposal
+  必须在归一化的 endpoint、observed support、pitch/phase residual、未解释 strong
+  observation 与 containment/authority 维度全部不差且至少一维更好，才能支配另一 count。
+  Scalar score、较小 envelope 与 tie-break 不能删除 `incomparable` count。
+- 冻结唯一黄金验收 runner 路径为
+  `tools/regression/safe_crop_acceptance.py`。实现后校验 tracked cohort、ignored confirmed
+  baseline 与 filename labels，并将九张黄金样片展开为 14 个 fixed/explicit/auto 场景；
+  结果与汇总分别使用 `x5crop_safe_crop_acceptance_result_v1` 和
+  `x5crop_safe_crop_acceptance_summary_v1`。全量 filename audit 只消费 manifest 的
+  canonical current records，不盲扫 confirmed-baseline symlink；重复 source SHA 分组报告
+  而不冒充独立样片。Preflight 错误不转换成 runtime review。
+- 固定 24 张正式性能认证明确使用 full=`fixed_full`、partial=`auto`，performance result
+  原子更新为 `x5crop_production_performance_v3` 并逐 group 记录 count mode；explicit
+  partial benchmark 只作非认证诊断。
+- 完成本次补充后，Grid、safe envelope、Gate、auto count、验收与性能计划视为
+  design-complete；下一任务进入 contracts、只读 calibration 与最小纵切，不再增加新的
+  proof-only authority 或普通黄金样片前置条件。
+
 ### 2026-07-30：Partial auto count 与黄金验收范围更正
 
 这是 plan/data-only 修订；current detector、CLI、report schema 与 review-only 输出行为

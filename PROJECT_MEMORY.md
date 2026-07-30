@@ -339,6 +339,9 @@ receipt，不得随 cache 清理。它只否定特定表示或 measurement 合�
   lane format 都允许到 `default_count`，再由唯一片夹的 `maximum_frame_count` 收窄；
   135-dual/full 两个 lane 各自 6。Ordinal 始终是当前 count proposal 的 lane-local
   `1..count`。
+- 用户入口已冻结为：partial 时 CLI 不传 `--count`、交互输入回车或 `auto` 都建立
+  `FrameCountRequest(auto)`；`--count N` 或交互整数建立 `explicit`。Full 规范化为
+  `fixed_full`。Lower layer 不从裸 `None` 猜 count mode。
 - 原子切换时 `StripHandlingSpec` 改为 `default_count + partial_mode_supported`；partial
   range 统一从 `1..default_count` 推导，同批删除 `allowed_partial_counts` 与
   `complete_strip_can_be_underfilled`，不保留兼容分支。
@@ -346,6 +349,14 @@ receipt，不得随 cache 清理。它只否定特定表示或 measurement 合�
   bounded prior、endpoint、separator/edge-pair 与 containment 推断并批准，不要求唯一物理
   边界证明；只有仍有改变输出张数/primary ownership 的非支配 count 时，`frame_count`
   事实才阻断并由 DecisionGate 产生 `automatic_count_unresolved`。
+- 跨 count 支配使用逐对 `FrameCountDominanceAssessment`，不是 scalar score。先只按容量、
+  非法 geometry、source/lane escape、已知内容无法有界归属/包含作 hard rejection；幸存
+  proposal 的 endpoint、按 applicable corridor 归一化的 observed support、按 physical
+  interval 归一化的 residual、未解释 strong observation 与 containment/authority 必须
+  所有适用维度不差且至少一维更好才能支配。Count 1 的 internal-corridor 维度是
+  `NOT_APPLICABLE` 并从该 pair 比较排除；每维先按 equality interval 归约，浮点微差不能
+  建立支配。Hard interval 只能来自物理/容量规则，不来自样片 min/max。安全 envelope
+  大小不参与跨 count 支配；score/tie-break 不能删除 `incomparable` count。
 - `FrameGridSearchPrior` 只保存按 format/mode/component 校准的 pitch、gutter、phase
   corridor 与 endpoint interval，不是 observation 或 Decision authority。
 - 每个 lane/component 最多 6 个非重复 placement seeds；每个 internal corridor 最多 2 个
@@ -394,6 +405,17 @@ receipt，不得随 cache 清理。它只否定特定表示或 measurement 合�
   filename 已由用户写入 count；41 张 pass partial 的 count 命中与 auto approval 是
   非阻断质量目标。Filename annotation 只由 regression preflight 读取，不进入 detector、
   Gate 或 runtime。
+- 原子实现时建立唯一 `tools/regression/safe_crop_acceptance.py`。它校验 current
+  source/baseline/cohort identity，把九张黄金样片展开为 14 个场景（4 个 `fixed_full`，
+  5 个 partial 各 `explicit + auto`），写
+  `x5crop_safe_crop_acceptance_result_v1` JSONL 与
+  `x5crop_safe_crop_acceptance_summary_v1`。全量 filename audit 只读取 manifest 的
+  canonical current records，不盲扫供 confirmed baseline 保留的旧 symlink；重复
+  sample/path、filename 畸形或越界属于 regression preflight error，不得变成 runtime
+  review。重复 source SHA 只分组报告，不冒充独立样片。标准 Hook/CI 不依赖 ignored
+  `Test/`；本地 14 场景运行是物理 completion gate。
+- 固定 24 张正式性能认证使用 full=`fixed_full`、partial=`auto`，每个 performance group
+  显式记录 count mode；explicit partial 只能作为非认证诊断 benchmark。
 - 当前计划完成不要求新增黄金样片。只有扩大 real-TIFF accuracy 声明，或实现暴露出九张
   黄金与独立 synthetic contracts 均未覆盖的新物理类别时，才定向补充；随机增加普通黄金
   样片不是前置任务。
@@ -401,6 +423,10 @@ receipt，不得随 cache 清理。它只否定特定表示或 measurement 合�
   单张输入的 review reason；它们使用明确 physical-rule prior、通用 bounded flow 与
   synthetic contracts。获得真实样片前只声明 contract coverage，不声明 real-TIFF
   accuracy、回归或性能覆盖。
+- 至此 Grid、partial/blank/contact-overlap、safe envelope/protection、两级 Gate、auto
+  count、黄金验收与性能计划均为 design-complete。下一任务只生成 calibration receipt 并
+  实现已冻结合同；除非出现命名明确、现有合同无法表达的物理反例，不再新增架构分支或普通
+  黄金样片前置条件。
 
 ## 文档与工作区
 
@@ -452,13 +478,15 @@ wc -l Test/manual_review/user_confirmed_golden_baseline.jsonl
 
 实施顺序：
 
-1. 先校验已 tracked 的九张
+1. 先为唯一 acceptance runner 建立 cohort/baseline/filename parser 的纯 contracts，并校验
+   已 tracked 的九张
    `tools/regression/cohorts/safe_crop_acceptance.jsonl` 与 ignored confirmed baseline：
    current source path/SHA、count、八条 `must_approve_safe`、S055
    `auto_or_review`、八张 calibration 与 S098 stress 必须一致。
 2. 按架构第 12.1–12.8 节建立 `FrameCountRequest`、explicit/auto count、inclusive
-   format maximum、片夹容量收窄、逐 count proposal、总工作上限、其它 types、构造不变量、
-   Gate vocabulary 与独立 synthetic contracts；current runtime 仍保持 review-only。
+   format maximum、片夹容量收窄、逐 count proposal、总工作上限、
+  `FrameCountDominanceAssessment`、其它 types、构造不变量、Gate vocabulary 与独立
+  synthetic contracts；current runtime 仍保持 review-only。
 3. 用现有真实样片生成 per-format/mode/component 的 read-only prior/measurement audit；
    冻结 coverage matrix、calibration receipt、candidate/work distributions。经验值只调
    搜索中心、排序与典型 corridor，硬边界来自物理合同；S098 不估计 nominal tolerance。
@@ -472,12 +500,16 @@ wc -l Test/manual_review/user_confirmed_golden_baseline.jsonl
 6. 一次原子替换 runtime、两级 Gate、finalization、report/Debug/comparator 与旧
    placeholders；同批更新中英文公共文档，不建立 feature flag、fallback、compatibility 或
    格式白名单。
-7. Accuracy completion 只运行九张黄金 cohort：八张 pass 必须 `approved_auto`，S055 可
-   自动批准或因具体 Gate 风险 review；五张 partial 同时跑 explicit/auto，四张 pass 必须
-   auto 选中 confirmed count 并批准。完整 111 张只作非阻断 coverage audit，单列 51 张
-   partial 的 count confusion matrix 与 41 张 pass partial 的 auto-approval 结果。
+7. 通过唯一 acceptance runner 运行九张黄金 cohort 的 14 个场景：八张 pass 对应的 12 个
+   场景必须 `approved_auto`，S055 两个场景可自动批准或因具体 Gate 风险 review；四张 pass
+   partial 的 auto 场景必须选中 confirmed count 并批准。完整 111 张只作非阻断 coverage
+   audit，单列 51 张 partial 的 count confusion matrix 与 41 张 pass partial 的
+   auto-approval 结果。
 8. 再运行未覆盖情形的独立 synthetic contracts 与固定 24 张真实 TIFF 写出/复读，检查
-   `<=5.0 秒/张`正式性能合同及 TIFF 保真；未确认样片的性能结果不转化为 accuracy truth。
+   full=`fixed_full`、partial=`auto` 下 `<=5.0 秒/张`正式性能合同及 TIFF 保真；explicit
+   partial benchmark 只作诊断；performance result 原子更新为
+   `x5crop_production_performance_v3` 并逐 group 保存 count mode。未确认样片的性能结果不
+   转化为 accuracy truth。
 
 任一阶段都不得让 lower layer 创建 final status/reason，也不得在物理输出尚未检查时声明
 自动裁切或正式性能完成。
