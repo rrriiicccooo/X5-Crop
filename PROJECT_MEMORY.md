@@ -40,23 +40,25 @@ TIFF、current report、Debug Analysis 与现场命令输出始终优先于本�
 
 ## 不可偏移的产品宗旨
 
-X5 Crop 的目标是在用户已经提供 format 与 count 后，自动生成**足够安全、不切掉真实照片
-内容**的逐帧 TIFF。它不是照片边界测量工具，不要求唯一还原真实边界，也不追求手术刀式
-贴边；合理的 outward over-retention 优于 inward content loss。
+X5 Crop 的目标是在用户已经提供 format 后，自动生成**足够安全、不切掉真实照片内容**
+的逐帧 TIFF。Full 使用固定张数；partial 同时支持用户显式 count 与 bounded `auto count`。
+它不是照片边界测量工具，不要求唯一还原真实边界，也不追求手术刀式贴边；合理的 outward
+over-retention 优于 inward content loss。
 
 固定产品合同：
 
-- 用户输入的 format 与 count 是 runtime authority，detector 不重新猜测这两项。
+- 用户输入的 format 始终是 runtime authority。显式 count 是 authority；auto count 只在
+  format 与唯一匹配片夹容量限定的有限整数集合内选择，不自动猜 format。
 - Separator、content、outer、expected position、格式尺寸、score 与其它模型线索可以参与
   bounded proposal、assessment 和 selection。Report/Debug 必须区分 observed 与
   inferred，但模型推断本身不是送审理由。
 - `approved_auto` 表示最终保护后的输出满足有界安全合同；不表示 Grid phase、separator
   或照片边被唯一证明，也不保证输出只含本 slot 的像素。Fixed protection 与 bounded
   shared interval 可以带入相邻照片像素。
-- `needs_review` 只表示存在 protection 无法吸收的具体输出风险，例如整格/ordinal
-  歧义、count 无法成立、primary slot ownership 无法有界、已知内容仍会被切掉，或
-  geometry 在应用固定 protection 前就越出 source/lane authority。Protection/shared
-  interval 内出现邻片像素不是 ownership 失败。
+- `needs_review` 只表示存在 protection 无法吸收的具体输出风险，例如非支配 count/
+  ordinal 竞争、显式 count 无法成立、primary slot ownership 无法有界、已知内容仍会被
+  切掉，或 geometry 在应用固定 protection 前就越出 source/lane authority。
+  Protection/shared interval 内出现邻片像素不是 ownership 失败。
 - Partial 可以推断真实照片位于哪些 slots；blank 保留 slot；contact/overlap 可以让相邻
   输出框重叠并重复保留共享像素。只有 slot ownership 或安全包络无法有界时才送审。
 - 多个精确 geometry 不唯一但输出等价时允许自动批准。回归验收关注 count、顺序、slot
@@ -76,7 +78,7 @@ authority；没有实现 Grid proposal、改变 Gate 决策或启用 frame outpu
 冻结的目标数据流：
 
 ```text
-source pixels + authoritative format/count
+source pixels + authoritative format/mode + fixed/explicit/auto FrameCountRequest
 → source-core measurements
 → bounded prior / placement / corridor observations
 → ordered DP FrameGridProposal
@@ -203,8 +205,11 @@ reason；被 Grid 阻断的下游只标记 `NOT_APPLICABLE`。
 本地有 111 张未修改 source TIFF：47 张 135/full、14 张 135/partial、32 张
 120-66/partial、3 张 120-67/full、10 张 half/full、5 张 half/partial。九张黄金样片的
 source/marked/JPG/proposal/baseline hashes 完整保留；八张属于 nominal calibration，
-S098 属于 stress。当前 source manifest 同时包含 88 张 `pass_*` 与 23 张 `unknown_*`；
-前者全部是下一版 `must_approve_safe`，后者是 `auto_or_review`。
+S098 属于 stress。当前 source manifest 同时包含 88 张 `pass_*` 与 23 张 `unknown_*`，
+但这些 filename labels 不再构成 accuracy completion gate；只有九张 confirmed baseline
+有该权限。51 张 partial 的 canonical 原图名已加入用户标注 count。五条 ignored 相对
+symlink 只保留 confirmed proposal/baseline 的 immutable 旧 source path；普通
+`find -type f` 不会把它们当作额外样片，SHA 仍指向同一原图。
 
 Baseline 只能在 detector/output receipt 冻结后用于 comparator，不参与检测、Grid、
 deskew 或输出选择。
@@ -311,8 +316,9 @@ receipt，不得随 cache 清理。它只否定特定表示或 measurement 合�
 
 #### 明确不恢复
 
-- 自动猜 format/count、partial count candidates、五个固定 partial offsets 或按样片写死的
-  offset/threshold；
+- 自动猜 format、无 format/片夹容量上界的 count 搜索、旧版 count heuristic、五个固定
+  partial offsets 或按样片写死的 offset/threshold；当前设计的 typed bounded auto count
+  不属于历史 heuristic；
 - 无 corridor 的全轴 band 笛卡尔积、dense ridge/fragment/sequence graph，以及用预算耗尽
   选择当前最好答案；
 - `equal/grid/content` fallback 身份、ordinary/wide/enhanced retry branch、feature flag、
@@ -329,17 +335,27 @@ receipt，不得随 cache 清理。它只否定特定表示或 measurement 合�
 详细数值与生命周期合同唯一见 `ARCHITECTURE.md` 第 12 节。下一个任务不得重新把这些项目
 降级为开放架构问题：
 
-- Full 使用 format `default_count`；partial 必须由用户显式提供 allowed count；135-dual
-  两个 lane 各自 6。Ordinal 始终是本次输出的 lane-local `1..count`。
+- Full 使用 format `default_count`；partial 支持 explicit 与 auto。所有支持 partial 的单
+  lane format 都允许到 `default_count`，再由唯一片夹的 `maximum_frame_count` 收窄；
+  135-dual/full 两个 lane 各自 6。Ordinal 始终是当前 count proposal 的 lane-local
+  `1..count`。
+- 原子切换时 `StripHandlingSpec` 改为 `default_count + partial_mode_supported`；partial
+  range 统一从 `1..default_count` 推导，同批删除 `allowed_partial_counts` 与
+  `complete_strip_can_be_underfilled`，不保留兼容分支。
+- 每个 `FrameGridProposal` 携带 count；不同 count 永远不 output-equivalent。Auto 可以用
+  bounded prior、endpoint、separator/edge-pair 与 containment 推断并批准，不要求唯一物理
+  边界证明；只有仍有改变输出张数/primary ownership 的非支配 count 时，`frame_count`
+  事实才阻断并由 DecisionGate 产生 `automatic_count_unresolved`。
 - `FrameGridSearchPrior` 只保存按 format/mode/component 校准的 pitch、gutter、phase
   corridor 与 endpoint interval，不是 observation 或 Decision authority。
 - 每个 lane/component 最多 6 个非重复 placement seeds；每个 internal corridor 最多 2 个
   image-observed candidates 加 1 个 model-only candidate；每个 lane 最多 3 个非支配
   `FrameGridProposal`。
-- 对 count 12，每个 lane/component 的 ordered DP 上限为 198 states、558 transitions。
-  超限只产生 typed `search_incomplete`；只有被省略 alternative 可能改变
-  count/ordinal/primary ownership，或使 containment/authority 无法由 bounded union 表达时
-  才阻断。可由 shared/fixed protection 吸收的 box 差异不阻断。
+- 对单个 count 12，每个 lane/component 的 ordered DP 上限为 198 states、558
+  transitions；auto 遍历完整 `1..12` 时总上限为 1188 states、3168 transitions，并复用
+  同一 measurement field。超限只产生 typed `search_incomplete`；只有被省略 alternative
+  可能改变 count/ordinal/primary ownership，或使 containment/authority 无法由 bounded
+  union 表达时才阻断。可由 shared/fixed protection 吸收的 box 差异不阻断。
 - Separator-first 不做 raw band 全配对；按 band、有限 ordinal difference 与 pitch interval
   作有界查询，再最多保留两个 seed。
 - Anchor `2+ / 1 / 0` 分别走有限 pitch/phase fit、有限 ordinal assignment、model-only
@@ -367,12 +383,20 @@ receipt，不得随 cache 清理。它只否定特定表示或 measurement 合�
   data，不是待重新设计的权限问题。现有样片可以校准搜索中心、排序与典型 measurement，
   但样片 min/max 不是硬 admissibility bound；覆盖缺口只限制验证声明。S098 只作
   irregular-geometry stress、不估计 nominal tolerance，但仍必须自动批准。
-- Threshold tuning 前建立 source-SHA-bound
-  `x5crop_safe_crop_acceptance_cohort_v1`。2026-07-30 的用户确认已冻结：88 条
-  `pass_*` 是 `must_approve_safe`，包括 S098；23 条 `unknown_*` 是
-  `auto_or_review`。Expectation 与 `calibration | holdout | stress` role 正交；
-  calibration 与真实 holdout 分开报告。路径标签只用于 materialize validation cohort，
-  不进入 detector、Gate 或 runtime。
+- 已 materialize tracked
+  `tools/regression/cohorts/safe_crop_acceptance.jsonl`
+  (`x5crop_safe_crop_acceptance_cohort_v1`)：accuracy completion gate 只含九张用户确认
+  geometry 的黄金样片，八条 `must_approve_safe`、一条 S055 `auto_or_review`。八张
+  nominal 是 calibration，S098 是 `must_approve_safe + stress`；当前没有真实 accuracy
+  holdout，必须明确报告 `real_holdout = unavailable`。
+- 五张 partial 黄金样片同时验证 explicit 与 auto count；四张 pass partial 必须由 auto
+  选中 confirmed count 并批准。其余 102 张不是 accuracy truth。当前 51 张 partial 的
+  filename 已由用户写入 count；41 张 pass partial 的 count 命中与 auto approval 是
+  非阻断质量目标。Filename annotation 只由 regression preflight 读取，不进入 detector、
+  Gate 或 runtime。
+- 当前计划完成不要求新增黄金样片。只有扩大 real-TIFF accuracy 声明，或实现暴露出九张
+  黄金与独立 synthetic contracts 均未覆盖的新物理类别时，才定向补充；随机增加普通黄金
+  样片不是前置任务。
 - XPan 与 120-645 暂无且短期不补真实 fixture。这不是实现 blocker、format denylist 或
   单张输入的 review reason；它们使用明确 physical-rule prior、通用 bounded flow 与
   synthetic contracts。获得真实样片前只声明 contract coverage，不声明 real-TIFF
@@ -392,20 +416,22 @@ receipt，不得随 cache 清理。它只否定特定表示或 measurement 合�
 
 1. 当前没有 bounded Grid proposal、slot assignment 与 safe crop envelope，所以仍不能
    定位或输出 frame。
-2. Prior、separator/edge-pair、one-sided edge 与 interaction thresholds 尚未基于 current
+2. Typed auto count、逐 count proposal selection、`automatic_count_unresolved` 与总工作
+   上限尚未实现；current partial runtime 仍要求显式 count。
+3. Prior、separator/edge-pair、one-sided edge 与 interaction thresholds 尚未基于 current
    source-coordinate named audit 校准；旧值只能作为比较材料。
-3. Current positive-content 是已知内容的保守 measurement，不保证观察全部真实内容；实现
+4. Current positive-content 是已知内容的保守 measurement，不保证观察全部真实内容；实现
    必须依靠物理 prior、outward envelope 与 protection，而不是把 content absence 当 blank
    真值。
-4. XPan 与 120-645 缺少真实 fixture；短期接受这项 coverage gap，不等待补样片。实现必须
+5. XPan 与 120-645 缺少真实 fixture；短期接受这项 coverage gap，不等待补样片。实现必须
    用 physical-rule prior 与 synthetic contracts 覆盖结构，同时不宣称 real-TIFF
    accuracy、回归或性能已验证。
-5. Detector-only 余量不能代替真实 frame TIFF 性能合同。
-6. Green tests、历史 PASS、hash 或 comparator 一致不能单独证明安全输出；Named TIFF
-   必须检查真实内容 containment，但不要求精确贴合人工边界。
-7. Acceptance authority 已明确，但 current tree 尚未 materialize source-SHA-bound cohort
-   与 calibration/holdout/stress role。下一任务必须先生成并核对 88/23 映射；不得让
-   文件名进入 runtime，也不得用 calibration 结果冒充独立 holdout。
+6. Detector-only 余量不能代替真实 frame TIFF 性能合同。
+7. Green tests、非黄金 `pass_*`、hash 或 comparator 一致不能单独证明安全输出；九张黄金
+   TIFF 必须检查真实内容 containment，但不要求精确贴合人工边界。
+8. 九张 accuracy cohort 已冻结，但八张 nominal 都用于 calibration、S098 用于 stress，
+   当前没有独立真实 holdout。此项不阻止当前计划完成，但必须限制 real-TIFF accuracy
+   声明；102 张未确认样片不能填补这个 authority gap。
 
 ## 新任务的精确下一步
 
@@ -426,27 +452,32 @@ wc -l Test/manual_review/user_confirmed_golden_baseline.jsonl
 
 实施顺序：
 
-1. 先从 current source manifest materialize validation-only acceptance cohort：逐条绑定
-   source SHA，核对 88 条 `must_approve_safe` 与 23 条 `auto_or_review`，并在任何 tuning
-   前冻结 calibration/holdout/stress role。S098 标为 `must_approve_safe + stress`。
-2. 按架构第 12.3–12.8 节建立 types、构造不变量、Gate vocabulary 与 synthetic contracts；
-   current runtime 仍保持 review-only。
+1. 先校验已 tracked 的九张
+   `tools/regression/cohorts/safe_crop_acceptance.jsonl` 与 ignored confirmed baseline：
+   current source path/SHA、count、八条 `must_approve_safe`、S055
+   `auto_or_review`、八张 calibration 与 S098 stress 必须一致。
+2. 按架构第 12.1–12.8 节建立 `FrameCountRequest`、explicit/auto count、inclusive
+   format maximum、片夹容量收窄、逐 count proposal、总工作上限、其它 types、构造不变量、
+   Gate vocabulary 与独立 synthetic contracts；current runtime 仍保持 review-only。
 3. 用现有真实样片生成 per-format/mode/component 的 read-only prior/measurement audit；
    冻结 coverage matrix、calibration receipt、candidate/work distributions。经验值只调
    搜索中心、排序与典型 corridor，硬边界来自物理合同；S098 不估计 nominal tolerance。
    XPan/120-645 不等待真实 fixture，使用明确 physical-rule prior 与 synthetic contracts。
-4. 完成 seed、canonical separator/edge-pair、model-only corridor、ordered DP、slot、
-   safe envelope、毫米 protection 与 identity output geometry 的最小纵切；先审计
-   135/full 与 120-66/partial，不开放 export。
+4. 完成 seed、canonical separator/edge-pair、model-only corridor、ordered DP、跨 count
+   selection、slot、safe envelope、毫米 protection 与 identity output geometry 的最小
+   纵切；先审计 135/full 与 120-66/partial 的 explicit/auto 模式，不开放 export。
 5. 加入 partial endpoints、blank、contact/overlap、output-equivalence 与 learned
    one-sided gutter。Wide/nearby/local-drift/advanced frame fit/deskew 只在 named gap
    证明需要时逐项加入。
 6. 一次原子替换 runtime、两级 Gate、finalization、report/Debug/comparator 与旧
    placeholders；同批更新中英文公共文档，不建立 feature flag、fallback、compatibility 或
    格式白名单。
-7. 完整运行 111 张：88 条 `pass_*` 必须 `approved_auto`，23 条 `unknown_*` 可自动批准或
-   因具体 Gate 风险 review；再运行未覆盖情形的 synthetic contracts 与固定 24 张真实
-   TIFF 写出/复读，检查 `<=5.0 秒/张`正式性能合同及 TIFF 保真。
+7. Accuracy completion 只运行九张黄金 cohort：八张 pass 必须 `approved_auto`，S055 可
+   自动批准或因具体 Gate 风险 review；五张 partial 同时跑 explicit/auto，四张 pass 必须
+   auto 选中 confirmed count 并批准。完整 111 张只作非阻断 coverage audit，单列 51 张
+   partial 的 count confusion matrix 与 41 张 pass partial 的 auto-approval 结果。
+8. 再运行未覆盖情形的独立 synthetic contracts 与固定 24 张真实 TIFF 写出/复读，检查
+   `<=5.0 秒/张`正式性能合同及 TIFF 保真；未确认样片的性能结果不转化为 accuracy truth。
 
 任一阶段都不得让 lower layer 创建 final status/reason，也不得在物理输出尚未检查时声明
 自动裁切或正式性能完成。
@@ -458,12 +489,16 @@ wc -l Test/manual_review/user_confirmed_golden_baseline.jsonl
 > `5f8b96ea` 是 source-core 原子替换基线、current HEAD 已包含 7-profile scan-canvas
 > catalog/capacity 更正。保持 `120_wide_223`、`120_wide_188_5`、`135_dual` 与
 > resolved-count filtering；不要恢复旧 `120_66_three_frame` / `120_wide` identity。
-> 当前 runtime 仍是 review-only，但产品宗旨是在用户提供 format/count 后保守自动裁切、
-> 不切真实内容，而不是唯一证明照片边界。
+> 当前 runtime 仍是 review-only，但产品宗旨是在用户提供 format 后保守自动裁切、不切
+> 真实内容；full count 固定，partial 同时支持 explicit 与 bounded auto count，而不是唯一
+> 证明照片边界。
 > 历史机制审查与 bounded-safe-crop 设计均已冻结。直接按架构第 12 节实施
 > contracts、acceptance cohort、read-only calibration 与最小纵切；保持 `P_MAX=6`、
 > `K_MAX=3`、`G_MAX=3`、DecisionGate-only final decision、允许 protection 含邻片像素、
-> 每侧毫米 protection 和原子 schema cutover。Acceptance 已冻结为 88 条 `pass_*`
-> 必须自动批准（含 S098）、23 条 `unknown_*` 可自动批准或因具体 Gate 风险 review；
-> 样片覆盖缺口只限制声明。XPan/120-645 不等待真实 fixture，使用 physical-rule prior
-> 与 synthetic contracts。不要另建平行计划，也不要原样恢复旧 runtime/schema。
+> 每侧毫米 protection 和原子 schema cutover。Acceptance 已 materialize 为九张黄金样片：
+> 八张 pass 必须自动批准（含 S098），S055 可批准或因具体 Gate 风险 review；五张 partial
+> 同时验证 explicit/auto，四张 pass 必须 auto 命中 confirmed count 并批准。其余 102 张
+> 只作 calibration/coverage/性能观察，51 张 filename count 不得进入 runtime。当前没有
+> 真实 holdout；样片覆盖缺口只限制声明。XPan/120-645 不等待真实 fixture，使用
+> physical-rule prior 与 synthetic contracts。不要另建平行计划，也不要原样恢复旧
+> runtime/schema。

@@ -1,9 +1,10 @@
 # X5 Crop Quick Start
 
 This page covers the current V4.9 source-core safety baseline. The product aims
-to crop conservatively from a user-supplied format/count without cutting real
-photo content, not to uniquely measure photo boundaries. See
-`README_English.txt` for the full guide.
+to crop conservatively from a user-supplied format without cutting real photo
+content. Full uses its fixed count, while partial is intended to support either
+an explicit or automatic count. The goal is not to uniquely measure photo
+boundaries. See `README_English.txt` for the full guide.
 
 ## 1. Download And Install
 
@@ -35,7 +36,8 @@ Windows: double-click X5_Crop_win.bat
 
 Supported inputs are `135`, `135-dual`, `half`, `xpan`, `645`, `66`, and `67`.
 Full means the complete design count; a partial count still describes complete
-design slots.
+design slots. Current V4.9 still requires an explicit partial count; automatic
+count belongs to the not-yet-implemented Grid/output contract.
 
 ## 4. Current Result
 

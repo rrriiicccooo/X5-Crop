@@ -11,6 +11,39 @@
 V4.9 是破坏性的 current-only 物理模型重构。旧 runtime/schema/compatibility 不是迁移
 目标。
 
+### 2026-07-30：Partial auto count 与黄金验收范围更正
+
+这是 plan/data-only 修订；current detector、CLI、report schema 与 review-only 输出行为
+均未改变。本条取代同日较早“partial 必须显式 count”与“111 张 filename labels 全部构成
+accuracy gate”的计划表述。
+
+- Format 继续是用户提供的 runtime authority。Full 使用固定 `default_count`；partial
+  同时支持 explicit 与 bounded auto count。所有支持 partial 的单 lane format 都允许到
+  format 最大 count，再由唯一匹配片夹的 `maximum_frame_count` 排除物理上装不下的值。
+- 原子切换时 `StripHandlingSpec` 只保留 `default_count` 与
+  `partial_mode_supported`；删除 `allowed_partial_counts`、
+  `complete_strip_can_be_underfilled` 及其兼容分支。`135-dual` 当前仍只支持 full。
+- Auto count 复用一次 source measurement，分别运行有限 count 的 placement/corridor/
+  ordered DP；不同 count 不 output-equivalent。单 count 12 的上限仍为 198 states、558
+  transitions，完整 `1..12` auto search 的总上限为 1188 states、3168 transitions。只有
+  改变输出张数/primary ownership 的非支配 count 竞争才由 `frame_count` 阻断，并由
+  DecisionGate 产生 `automatic_count_unresolved`。
+- 用户已将 51 张 partial 原图命名为 `X5_<count>_<index>.tif`。Count 是
+  validation-only 用户标注；regression preflight 可以读取，runtime detector、prior、
+  score、Gate 与 selection 不得读取 filename。41 张 `pass_*` partial 的 auto-count 命中
+  与自动批准作为质量目标报告。
+- 首次 materialize tracked
+  `tools/regression/cohorts/safe_crop_acceptance.jsonl`
+  (`x5crop_safe_crop_acceptance_cohort_v1`)。Accuracy completion gate 只包含九张
+  user-confirmed 黄金样片：八张 `must_approve_safe`，S055 为 `auto_or_review`；五张
+  partial 同时跑 explicit/auto，四张 pass partial 必须 auto 命中 confirmed count 并批准。
+- 其余 102 张可以用于 measurement calibration、coverage、性能和非阻断诊断，但不作为
+  accuracy truth 或真实 holdout。当前八张 nominal 全部用于 calibration，S098 用于 stress，
+  因而必须声明 `real_holdout = unavailable`。
+- 当前计划完成不要求新增黄金样片。只有扩大 real-TIFF accuracy 声明，或实现暴露出九张
+  黄金与独立 synthetic contracts 都未覆盖的新物理类别时，才定向补充；随机增加普通样片
+  不是前置任务。
+
 ### 2026-07-30：Scan-canvas 物理 catalog 与容量更正
 
 - 将 `120_66_three_frame` 删除并改为 format-neutral 的
@@ -36,7 +69,8 @@ V4.9 是破坏性的 current-only 物理模型重构。旧 runtime/schema/compat
 
 这是 docs-only 计划修订；current detector、schema 与 review-only 输出行为均未改变。
 本条取代同日较早计划中“`pass_*` 不构成 expectation”及“stress 可作为独立 expectation”
-的表述。
+的表述；其 111 张 88/23 accuracy-gate 范围已被上方“Partial auto count 与黄金验收范围
+更正”取代。
 
 - 用户明确确认 current source manifest 中 88 条 `pass_*` 都是
   `must_approve_safe`，S098 也不例外；23 条 `unknown_*` 是 `auto_or_review`，能满足

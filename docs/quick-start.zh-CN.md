@@ -1,7 +1,8 @@
 # X5 Crop 快速启动
 
-本页说明当前 V4.9 source-core 安全基线。项目目标是在用户提供 format/count 后保守裁切、
-不切真实照片内容，而不是唯一测量照片边界；完整说明见 `README_中文.txt`。
+本页说明当前 V4.9 source-core 安全基线。项目目标是在用户提供 format 后保守裁切、不切
+真实照片内容；full 使用固定张数，未来 partial 同时支持显式与自动 count，而不是唯一测量
+照片边界。完整说明见 `README_中文.txt`。
 
 ## 1. 下载与安装
 
@@ -31,7 +32,8 @@ Windows: 双击 X5_Crop_win.bat
 ## 3. 选择格式
 
 支持 `135`、`135-dual`、`half`、`xpan`、`645`、`66` 与 `67`。Full 表示完整设计
-张数；partial count 仍只表示完整设计 slot。
+张数；partial count 仍只表示完整设计 slot。当前 V4.9 要求显式 partial count；auto count
+属于尚未实现的下一阶段 Grid/output 合同。
 
 ## 4. 当前结果
 

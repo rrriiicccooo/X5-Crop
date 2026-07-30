@@ -15,9 +15,11 @@ This is the formal capability boundary, not a fallback after auto-cropping fails
 
 X5 Crop aims for automatic crops that are safe enough not to cut real photo
 content; it is not a tool for uniquely measuring the true physical boundary. The
-user-supplied format and count are authoritative inputs. A future Grid/output
-flow may combine observed clues with format-model inference and conservatively
-retain extra pixels through millimetre protection.
+user-supplied format is always authoritative. Full uses its fixed count; a
+future partial Grid/output flow will accept either an explicit authoritative
+count or a bounded automatic count. It may combine observed clues with
+format-model inference and conservatively retain extra pixels through
+millimetre protection.
 
 `approved_auto` will mean that the protected output satisfies the safety
 contract, not that every separator, photo edge, or Grid phase was uniquely
@@ -77,9 +79,10 @@ If macOS blocks double-click launch, run:
 
 - Full and partial use the same complete scan-canvas/lane short-axis domain.
 - A partial count describes complete design slots, never a partial photograph.
-- The user-supplied format and count are authoritative inputs for future
-  automatic cropping; the current build records them as audit identity but does
-  not create frames.
+- Format is authoritative for future automatic cropping. An explicit partial
+  count is also authoritative; automatic count is bounded by the format and
+  matched-holder capacity. The current build still requires an explicit partial
+  count, records it as audit identity, and does not create frames.
 - `135-dual` is audited per lane and remains in review.
 
 ## Current Detection Facts

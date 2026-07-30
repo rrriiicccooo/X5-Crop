@@ -12,8 +12,9 @@ authority，所有输入都保持 `needs_review`，不导出单张 frame TIFF。
 ## 产品目标
 
 X5 Crop 的自动裁切目标是“足够安全且不切掉真实照片内容”，不是唯一测量照片边界。用户
-提供的 format 与 count 是输入前提；未来 Grid/output flow 可以结合已观测线索与格式模型
-推断位置，并用毫米 protection 保守向外多留像素。
+提供的 format 始终是输入前提；full 使用固定张数，未来 partial Grid/output flow 同时支持
+显式 count 与 bounded auto count，并可结合已观测线索与格式模型推断位置，用毫米
+protection 保守向外多留像素。
 
 `approved_auto` 将表示保护后的输出满足安全合同，不表示每条 separator、照片边或 Grid
 phase 都被唯一证明。只有具体且无法被 protection 吸收的错格、照片归属或 inward content
@@ -69,8 +70,9 @@ macOS 无法双击时，在该文件夹的 Terminal 中运行：
 
 - Full 与 partial 使用同一个完整 scan-canvas/lane 短轴 domain。
 - Partial count 只描述若干张完整设计 slot，不表示残缺照片。
-- 用户提供的 count 与格式是未来自动裁切的 authoritative input；当前版本只把它们写入
-  审计身份，尚不生成 frame。
+- Format 是未来自动裁切的 authoritative input；partial 的显式 count 同样具有 authority，
+  auto count 只在 format 与匹配片夹容量限定的范围内选择。当前版本仍要求显式 partial
+  count，只把输入写入审计身份，尚不生成 frame。
 - `135-dual` 分 lane 审计并固定保持 review。
 
 ## 当前检测事实
