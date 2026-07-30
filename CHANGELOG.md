@@ -11,6 +11,38 @@
 V4.9 是破坏性的 current-only 物理模型重构。旧 runtime/schema/compatibility 不是迁移
 目标。
 
+### 2026-07-30：bounded safe-crop Grid 实现计划冻结
+
+这是 docs-only 设计冻结；current review-only runtime、`source_core_grid_authority`
+schema 与输出行为均未改变。
+
+- 冻结 format/mode/count authority、lane-local ordinal，以及
+  `FrameGridSearchPrior`、`GridPlacementSeed`、separator/one-sided observation、
+  `FrameGridProposal`、`FrameSlot`、interaction、safe/protected envelope 的唯一职责。
+- 搜索改为固定结构上限：每个 lane/component 最多 6 个 placement seeds；每个
+  `count - 1` corridor 最多 2 个 image-observed 加 1 个 model-only candidate；每个 lane
+  最多 3 个非支配 proposal。Count 12 时每个 lane/component 最多 198 DP states、558
+  transitions。Separator-first 只做按 ordinal difference/pitch interval 的有界查询，不做
+  raw band 全配对。
+- Anchor `2+ / 1 / 0` 分别使用有限 fit、有限 ordinal assignment 与 model-only proposal；
+  expected position 只约束 corridor。没有 separator、齿孔不可见、blank 或 inferred
+  geometry 都不是独立 review 原因。
+- Partial 不使用固定 offsets；首尾 endpoint 独立竞争。Blank 保留 slot；
+  contact/overlap 的 bounded shared interval 并入相邻输出。只有整格/ownership、已知内容
+  丢失、错误邻片、authority 或 output geometry 风险才阻断。
+- 冻结 output-equivalence 与 outward union：count/order/content ownership/interaction
+  相同且 union 不进入错误邻片时，多个 geometry 可合并并自动批准。短轴默认可保留完整
+  authoritative lane；缺少短轴照片边不送审。
+- 冻结毫米 protection：表值均为每侧值，使用独立 scan-canvas scale interval 的 upper
+  endpoint 向上取整；先合并 safe envelope/shared interval，再应用固定 protection。只有
+  protection 可在 source/lane 边界饱和，原始 envelope 不得 clamp。
+- `CandidateGate` 只保存十一项安全事实；只有 `DecisionGate` 创建 final status 与冻结的
+  typed reasons。原子切换时唯一 report revision 将改为
+  `bounded_safe_crop_grid`，不保留旧 reader、alias 或双路径。
+- 实施顺序冻结为 contracts、八张 nominal 只读 calibration、135/full 与
+  120-66/partial 最小纵切、安全交互、原子 runtime/schema 切换，最后运行九张人工证据、
+  代表性 cohorts、111 invariant 与固定 24 张真实 TIFF 性能/保真认证。S098 只作 stress。
+
 ### 2026-07-30：历史机制回收审查并入新 Grid 计划
 
 这是 docs-only 设计计划更新，current review-only runtime、schema 与输出行为均未改变。
