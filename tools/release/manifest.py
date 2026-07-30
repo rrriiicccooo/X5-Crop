@@ -8,14 +8,16 @@ RELEASE_FILES: tuple[tuple[str, str | None], ...] = (
     ("X5_Crop.py", None),
     ("X5_Crop_Mac.command", "X5_Crop_Mac.command"),
     ("X5_Crop_win.bat", "X5_Crop_win.bat"),
+    ("LICENSE", "LICENSE"),
     ("README_中文.txt", "docs/user-guide.zh-CN.md"),
     ("README_English.txt", "docs/user-guide.en.md"),
     ("快速启动.txt", "docs/quick-start.zh-CN.md"),
     ("Quick_Start.txt", "docs/quick-start.en.md"),
-    ("install/X5_Crop_Mac_install.command", "install/X5_Crop_Mac_install.command"),
-    ("install/X5_Crop_win_install.bat", "install/X5_Crop_win_install.bat"),
-    ("install/X5_Crop_Mac_uninstall.command", "install/X5_Crop_Mac_uninstall.command"),
-    ("install/X5_Crop_win_uninstall.bat", "install/X5_Crop_win_uninstall.bat"),
+    (
+        "install/X5_Crop_Mac_install.command",
+        "tools/install/X5_Crop_Mac_install.command",
+    ),
+    ("install/X5_Crop_win_install.bat", "tools/install/X5_Crop_win_install.bat"),
 )
 
 RELEASE_PATHS = tuple(archive_path for archive_path, _ in RELEASE_FILES)

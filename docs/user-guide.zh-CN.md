@@ -237,15 +237,10 @@ source footprint 是否完整包含确认 polygon，允许更大或重叠。
 `measured-1/2/3` 四次运行。四次都实际写出并复读 frame TIFF，只以三次 measured 的中位数
 判断 `<= 5.0 秒/张`。
 
-## 卸载与许可
+## 移除与许可
 
-删除 X5 Crop 文件夹即可移除程序和该文件夹中的输出。卸载器只清理用户级 Python 依赖，
-不会删除 Python：
+删除 X5 Crop 文件夹即可移除程序和该文件夹中的输出。安装的 Python packages 可能被其它
+程序共用，X5 Crop 不提供批量卸载脚本。
 
-```text
-macOS:   install/X5_Crop_Mac_uninstall.command
-Windows: install/X5_Crop_win_uninstall.bat
-```
-
-许可证：MIT。完整文本见
-[GitHub LICENSE](https://github.com/rrriiicccooo/X5-Crop/blob/main/LICENSE)。
+许可证：MIT。发布包根目录包含 `LICENSE`；GitHub 上也可查看
+[完整文本](https://github.com/rrriiicccooo/X5-Crop/blob/main/LICENSE)。

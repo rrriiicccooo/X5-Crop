@@ -1,4 +1,5 @@
 @echo off
+rem Release installer template; packaged under install\.
 setlocal
 
 cd /d "%~dp0.."

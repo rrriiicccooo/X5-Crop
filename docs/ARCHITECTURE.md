@@ -1,7 +1,8 @@
 # X5 Crop V4.9 当前架构
 
-本文只描述当前运行流、数值合同、权限与源码分层。版本历史见 `CHANGELOG.md`，用户操作见
-中英文用户手册，跨会话检查点只属于 `PROJECT_MEMORY.md`。
+本文只描述当前运行流、数值合同、权限与源码分层。版本历史见
+[CHANGELOG.md](CHANGELOG.md)，用户操作见中英文用户手册，跨会话检查点只属于
+[PROJECT_MEMORY.md](PROJECT_MEMORY.md)。
 
 ## 1. 产品与安全合同
 

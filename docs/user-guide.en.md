@@ -267,15 +267,12 @@ output root containing `cold` plus `measured-1/2/3`. Every run writes and reads
 back frame TIFFs. Certification uses only the three measured runs and requires
 their median to be `<= 5.0 seconds/input`.
 
-## Uninstall And License
+## Remove And License
 
-Delete the X5 Crop folder to remove the program and its local outputs.
-Uninstallers remove user-level Python dependencies, not Python itself:
+Delete the X5 Crop folder to remove the program and its local outputs. Installed
+Python packages may be shared with other programs, so X5 Crop does not include
+a bulk dependency uninstaller.
 
-```text
-macOS:   install/X5_Crop_Mac_uninstall.command
-Windows: install/X5_Crop_win_uninstall.bat
-```
-
-License: MIT. See
-[GitHub LICENSE](https://github.com/rrriiicccooo/X5-Crop/blob/main/LICENSE).
+License: MIT. The release root includes `LICENSE`; the
+[full text](https://github.com/rrriiicccooo/X5-Crop/blob/main/LICENSE) is also
+available on GitHub.

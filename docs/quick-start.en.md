@@ -101,12 +101,8 @@ copies no review file.
 - Read, write, or read-back errors remain terminal failures; they are never
   converted to `needs_review`.
 
-## 6. Uninstall
+## 6. Remove
 
-Delete the X5 Crop folder to remove the program. To remove user-level
-dependencies:
-
-```text
-macOS:   install/X5_Crop_Mac_uninstall.command
-Windows: install/X5_Crop_win_uninstall.bat
-```
+Delete the X5 Crop folder to remove the program. Python packages may be shared
+with other programs, so the release does not include a bulk dependency
+uninstaller.

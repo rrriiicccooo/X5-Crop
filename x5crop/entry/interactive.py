@@ -86,12 +86,13 @@ def ask_partial_count(format_id: str) -> int | None:
 
 
 def interactive_options(diagnostics: bool = False) -> RuntimeOptions:
-    print(f"{SCRIPT_NAME} {VERSION} {'diagnostics ' if diagnostics else ''}launcher")
+    mode = "interactive diagnostics" if diagnostics else "launcher"
+    print(f"{SCRIPT_NAME} {VERSION} {mode}")
     print(f"Folder: {Path.cwd()}")
     print()
     if diagnostics:
-        print("This is a local development diagnostics launcher.")
-        print("It writes report + Debug Analysis without copying review files.")
+        print("This read-only mode writes report + Debug Analysis.")
+        print("It does not copy review files or write frame TIFFs.")
     else:
         print("This creates conservative bounded-safe frame TIFF crops.")
         print("Existing output files will not be overwritten.")

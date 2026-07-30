@@ -5,6 +5,9 @@
 [中文快速启动](docs/quick-start.zh-CN.md) ·
 [English Quick Start](docs/quick-start.en.md)
 
+维护文档：[当前架构](docs/ARCHITECTURE.md) ·
+[更新日志](docs/CHANGELOG.md)
+
 X5 Crop 用于保守裁切 Hasselblad / Imacon X5 片夹扫描 TIFF：在用户提供 format 后，
 full 使用固定张数，partial 同时支持显式与 bounded auto count。V4.9 当前开发版通过
 有界 Grid、向外安全包络和固定毫米 protection 自动导出通过安全合同的 frame TIFF；
@@ -29,4 +32,4 @@ Download `X5-Crop-vX.X.zip` from
 [GitHub Releases](https://github.com/rrriiicccooo/X5-Crop/releases). Do not use
 GitHub's generated Source code archive.
 
-License: MIT — [GitHub LICENSE](https://github.com/rrriiicccooo/X5-Crop/blob/main/LICENSE)
+License: MIT — [LICENSE](LICENSE)

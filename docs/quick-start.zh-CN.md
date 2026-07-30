@@ -91,11 +91,7 @@ Debug Analysis，但不写 frame TIFF，也不复制 review 文件。
   无损压缩行为。
 - I/O 或复读失败是独立 terminal failure，不会伪装成 `needs_review`。
 
-## 6. 卸载
+## 6. 移除
 
-删除 X5 Crop 文件夹即可移除程序。清理用户级依赖可运行：
-
-```text
-macOS:   install/X5_Crop_Mac_uninstall.command
-Windows: install/X5_Crop_win_uninstall.bat
-```
+删除 X5 Crop 文件夹即可移除程序。Python packages 可能被其它程序共用，因此发布包不提供
+批量依赖卸载脚本。

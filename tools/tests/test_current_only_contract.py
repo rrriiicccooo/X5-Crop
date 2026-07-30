@@ -6,6 +6,7 @@ from pathlib import Path
 import unittest
 from unittest import mock
 
+from tools.release.manifest import RELEASE_FILES, RELEASE_PATHS
 from tools.release.standalone import read_sources
 from x5crop.configuration.model import (
     FrameCountMode,
@@ -165,8 +166,8 @@ class CurrentOnlyContractTest(unittest.TestCase):
         package_list = "numpy tifffile imagecodecs Pillow"
         owners = (
             ".github/workflows/verify.yml",
-            "install/X5_Crop_Mac_install.command",
-            "install/X5_Crop_win_install.bat",
+            "tools/install/X5_Crop_Mac_install.command",
+            "tools/install/X5_Crop_win_install.bat",
         )
         active_text = "\n".join(read_sources().values()).lower()
         self.assertNotIn("scipy", active_text)
@@ -175,6 +176,52 @@ class CurrentOnlyContractTest(unittest.TestCase):
         for relative in owners:
             text = (ROOT / relative).read_text(encoding="utf-8")
             self.assertIn(package_list, text)
+
+    def test_repository_layout_and_release_manifest_are_current(self) -> None:
+        for relative in (
+            "ARCHITECTURE.md",
+            "CHANGELOG.md",
+            "PROJECT_MEMORY.md",
+            "install",
+            "X5_Crop_Mac_diagnostics.command",
+        ):
+            with self.subTest(absent=relative):
+                self.assertFalse((ROOT / relative).exists())
+        for relative in (
+            "LICENSE",
+            "docs/ARCHITECTURE.md",
+            "docs/CHANGELOG.md",
+            "docs/PROJECT_MEMORY.md",
+            "tools/install/X5_Crop_Mac_install.command",
+            "tools/install/X5_Crop_win_install.bat",
+        ):
+            with self.subTest(present=relative):
+                self.assertTrue((ROOT / relative).is_file())
+
+        release_sources = dict(RELEASE_FILES)
+        self.assertIn("LICENSE", RELEASE_PATHS)
+        self.assertEqual(
+            release_sources["install/X5_Crop_Mac_install.command"],
+            "tools/install/X5_Crop_Mac_install.command",
+        )
+        self.assertEqual(
+            release_sources["install/X5_Crop_win_install.bat"],
+            "tools/install/X5_Crop_win_install.bat",
+        )
+        self.assertFalse(
+            any("uninstall" in archive_path.lower() for archive_path in RELEASE_PATHS)
+        )
+
+        project_memory = (ROOT / "docs/PROJECT_MEMORY.md").read_text(
+            encoding="utf-8"
+        )
+        for obsolete in (
+            "source_core_grid_authority",
+            "frame_grid_authority_unavailable",
+            "NO_INDEPENDENT_PHASE_AUTHORITY",
+        ):
+            with self.subTest(obsolete_memory=obsolete):
+                self.assertNotIn(obsolete, project_memory)
 
     def test_launcher_is_thin_and_standalone_embeds_current_modules(self) -> None:
         launcher = (ROOT / "X5_Crop.py").read_text(encoding="utf-8")

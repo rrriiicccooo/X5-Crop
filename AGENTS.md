@@ -6,7 +6,7 @@
 ## 开始工作
 
 1. 编辑前阅读根 `README.md`。只有用户明确恢复、更新或请求跨会话交接时，才读取
-   `PROJECT_MEMORY.md`。
+   `docs/PROJECT_MEMORY.md`。
 2. 核对当前分支与工作树：
 
    ```bash
@@ -32,9 +32,9 @@ https://github.com/rrriiicccooo/X5-Crop
 | `docs/user-guide.en.md` | 英文完整用户手册 | English |
 | `docs/quick-start.zh-CN.md` | 中文发布版快速启动 | 中文 |
 | `docs/quick-start.en.md` | 英文发布版快速启动 | English |
-| `ARCHITECTURE.md` | 当前运行流、数值合同与源码分层 | 中文 |
-| `CHANGELOG.md` | 版本级行为、验证边界与回滚背景 | 中文 |
-| `PROJECT_MEMORY.md` | 按需读取的唯一跨会话检查点 | 中文 |
+| `docs/ARCHITECTURE.md` | 当前运行流、数值合同与源码分层 | 中文 |
+| `docs/CHANGELOG.md` | 版本级行为、验证边界与回滚背景 | 中文 |
+| `docs/PROJECT_MEMORY.md` | 按需读取的唯一跨会话检查点 | 中文 |
 | `AGENTS.md` | 长期协作政策 | 中文 |
 
 - 内部文档只写中文正文，保留必要的英文标识、类型名、命令与 schema 名。
@@ -42,11 +42,12 @@ https://github.com/rrriiicccooo/X5-Crop
 - 默认不读取英文公共文档；只有英文文档、发布或对应事实校验任务才读取。
 - 用户可见的设置、用法、启动器、输出或发布包变化，必须在同一变更中更新两种公共语言。
 - 不复制长篇说明；链接到唯一 owner。文档必须简洁、专业、当前且互不重叠。
-- 根 `ARCHITECTURE.md` 是唯一架构文档；`docs/` 只保存公共用户文档，不建立架构镜像。
+- 除根 `README.md`、`AGENTS.md` 与 `LICENSE` 外，实质性文档只放在 `docs/`。
+  `docs/ARCHITECTURE.md` 是唯一架构文档，不建立镜像。
 
 ## 交接与项目记忆
 
-- `PROJECT_MEMORY.md` 是唯一跨会话交接；不得创建 `SESSION_HANDOFF.md`、
+- `docs/PROJECT_MEMORY.md` 是唯一跨会话交接；不得创建 `SESSION_HANDOFF.md`、
   `NEXT_ACTIONS.md`、`DECISIONS.md` 或同类平行文件。
 - 仅在用户明确恢复、请求交接或要求更新项目记忆时读写。
 - 只保留当前目标、已验证检查点、验证边界、开放风险和精确下一步。架构与历史留在各自
@@ -66,7 +67,7 @@ https://github.com/rrriiicccooo/X5-Crop
 - 当前稳定 GitHub Release：`v4.2.8`。
 - 开发源码位于 `x5crop/`；Release 可嵌入为单文件 `X5_Crop.py`。
 - 除非用户明确恢复 app 或 native packaging，只处理 standalone X5 Crop workflow。
-- 当前任务和人工审阅状态只保存在 `PROJECT_MEMORY.md`。
+- 当前任务和人工审阅状态只保存在 `docs/PROJECT_MEMORY.md`。
 
 ## 产品宗旨与批准语义
 
@@ -111,8 +112,8 @@ https://github.com/rrriiicccooo/X5-Crop
   catalog 的 typed fit 拥有；count 只能排除装不下的 profile，不能缩短 validation
   domain。TIFF resolution 只作 I/O metadata，不得进入检测尺度、证据或决策。
 - 方向性需求以水平片条措辞为基准，同时实现旋转等价的垂直行为。
-- Runtime flow 或 source layering 变化更新 `ARCHITECTURE.md`；版本行为、打包、验证或
-  回滚变化更新 `CHANGELOG.md`。
+- Runtime flow 或 source layering 变化更新 `docs/ARCHITECTURE.md`；版本行为、打包、
+  验证或回滚变化更新 `docs/CHANGELOG.md`。
 
 ## 极致干净合同
 
@@ -132,8 +133,8 @@ https://github.com/rrriiicccooo/X5-Crop
 - 不保留 dead file、unreachable helper、pass-through wrapper、重复 model、隐藏 decision
   constant，或只搬运复杂度的 abstraction。
 - 只有消除真实重复或职责歧义时才增加 abstraction；名称必须表达物理事实或生命周期职责。
-- 代码、contract tests、`ARCHITECTURE.md`、current reports 与 Debug Analysis 必须描述
-  同一系统。
+- 代码、contract tests、`docs/ARCHITECTURE.md`、current reports 与 Debug Analysis
+  必须描述同一系统。
 - 每发现一类残留，先增加能失败的 contract，再删除整类残留并保留 contract。
 - 架构清理只有在 full verifier 通过，且同一冻结 checklist 连续两次只读审计无已知问题后
   才闭合。只有明确 contract violation、无法表达的物理事实或真正不兼容能力才能重新打开。
@@ -205,15 +206,9 @@ https://github.com/rrriiicccooo/X5-Crop
 ## Git 与本地文件
 
 - 保留用户和其它 session 的修改；没有明确许可不得 reset 或 restore。
-- `.gitignore`、`.github/`、`tools/` 与 `install/` 必须可见。
-- 除 `LICENSE` 外，当前 tracked tree 完整可见。`LICENSE` 由 GitHub 保存，在本地 sparse
-  checkout 中排除。历史源码只保存在 Git history 与 tags，不维护 `archive/`。
-- 预期本地 sparse checkout：
-
-  ```text
-  /*
-  !/LICENSE
-  ```
+- `.gitignore`、`.github/`、`tools/` 与 `tools/install/` 必须可见。
+- Sparse checkout 必须关闭；包括 `LICENSE` 在内的全部 tracked tree 都保存在本地。
+  历史源码只保存在 Git history 与 tags，不维护 `archive/`。
 
 - 用户明确要求干净交接时，在最终 Hook push 后再次删除 ignored cache、compiled bytecode、
   Finder metadata 与 generated output。
@@ -228,7 +223,6 @@ https://github.com/rrriiicccooo/X5-Crop
 - Builder 必须生成 standalone script，只打包 manifest entries，保持 launcher executable，
   并使用 Python `zipfile` 保存中文文件名的 UTF-8 metadata。
 - 发布包分别提供中文与英文用户手册、快速启动，不使用逐段中英混排文档。
-- 用户包不包含 modular source、tests、内部文档、diagnostics launcher、本地样片或 generated
-  output。
+- 用户包不包含 modular source、tests、内部文档、本地样片或 generated output。
 - macOS 只准备当前 Release folder：标记主 launcher 与 installer executable，并在可用时
   移除 quarantine attribute；不得建立永久 system-wide trust。

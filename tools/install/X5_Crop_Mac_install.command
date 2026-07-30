@@ -1,4 +1,5 @@
 #!/bin/bash
+# Release installer template; packaged under install/.
 
 cd "$(dirname "$0")/.." || exit 1
 
