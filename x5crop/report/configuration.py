@@ -14,6 +14,7 @@ def detection_configuration_read_model(
         "configuration_id": configuration.configuration_id,
         "format_id": spec.format_id,
         "strip_mode": configuration.strip_mode,
+        "resolved_frame_count": configuration.resolved_frame_count,
         "design_aperture_components_mm": typed_read_model(
             spec.aperture_components
         ),

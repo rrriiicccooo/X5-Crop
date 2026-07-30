@@ -78,6 +78,22 @@ macOS 无法双击时，在该文件夹的 Terminal 中运行：
 每个 TIFF 只建立一次 base gray 和 image statistics。已知 scan canvas 必须从像素长短比
 唯一匹配；无匹配或多个 profile 同时成立都保持 review。
 
+当前 scan-canvas catalog 使用下列长轴 × 短轴尺寸：
+
+| Profile | 物理尺寸 | 适用格式与最大张数 |
+|---|---:|---|
+| `135_standard` | `232 × 32.22 mm` | 135 ≤ 6；half ≤ 12；XPan ≤ 3 |
+| `135_narrow` | `232 × 25.4 mm` | 135 ≤ 6；half ≤ 12；XPan ≤ 3 |
+| `135_dual` | `232 × 63.44 mm` | 135-dual ≤ 12 |
+| `120_standard` | `226 × 60 mm` | 645 ≤ 4；66 ≤ 3；67 ≤ 3 |
+| `120_wide_224_5` | `224.5 × 63.44 mm` | 645 ≤ 4；66 ≤ 3；67 ≤ 3 |
+| `120_wide_223` | `223 × 63.44 mm` | 645 ≤ 4；66 ≤ 3；67 ≤ 3 |
+| `120_wide_188_5` | `188.5 × 63.44 mm` | 645 ≤ 4；66 ≤ 3；67 ≤ 2 |
+
+Format 与 resolved count（full 默认张数或显式 partial count）先排除物理上装不下的
+profile，再做长宽比匹配；不会选择“最近 profile”。135-dual 先按完整
+`232 × 63.44 mm` 画布建立 scale，再从中心分成两个 lane。
+
 Long/short px/mm 分别计算，互不扩宽。TIFF DPI/PPI 只作为输出 metadata 保存，不参与
 检测。
 
@@ -152,6 +168,9 @@ Current schema：
 schema_id       = detection_report
 schema_revision = source_core_grid_authority
 ```
+
+报告中的 typed configuration 会保存 `resolved_frame_count`，并列出经过该 count 容量过滤后
+参与匹配的 scan-canvas profiles。
 
 旧 `--bleed`、`--bleed-x`、`--bleed-y`、`--export-review` 与 `--dry-run` 已删除，
 传入时会被拒绝。格式级毫米 protection authority 只记录于报告；没有 frame geometry 时

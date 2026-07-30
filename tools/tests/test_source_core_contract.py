@@ -9,6 +9,7 @@ from x5crop.configuration.content import (
     ContentConfiguration,
     ContentEvidenceParameters,
 )
+from x5crop.configuration.registry import get_detection_configuration
 from x5crop.configuration.scan_canvas import ScanCanvasDetectionConfiguration
 from x5crop.detection.evidence.scan_canvas import (
     ScanCanvasOutcome,
@@ -29,7 +30,12 @@ from x5crop.domain import (
     ObservationId,
 )
 from x5crop.formats import format_spec
-from x5crop.formats.scan_canvas import ScanCanvasPhysicalSpec
+from x5crop.formats.scan_canvas import (
+    SCAN_CANVAS_PHYSICAL_SPECS,
+    ScanCanvasFormatFit,
+    ScanCanvasPhysicalSpec,
+    scan_canvas_specs_for_format,
+)
 
 
 def _content_provenance() -> MeasurementProvenance:
@@ -203,12 +209,125 @@ class PhysicalAuthorityContractTest(unittest.TestCase):
                     components,
                 )
 
+    def test_scan_canvas_catalog_preserves_dimensions_and_format_capacity(
+        self,
+    ) -> None:
+        expected = {
+            "135_standard": (
+                232.0,
+                32.22,
+                (("135", 6), ("half", 12), ("xpan", 3)),
+            ),
+            "135_narrow": (
+                232.0,
+                25.4,
+                (("135", 6), ("half", 12), ("xpan", 3)),
+            ),
+            "135_dual": (
+                232.0,
+                63.44,
+                (("135-dual", 12),),
+            ),
+            "120_standard": (
+                226.0,
+                60.0,
+                (("120-645", 4), ("120-66", 3), ("120-67", 3)),
+            ),
+            "120_wide_224_5": (
+                224.5,
+                63.44,
+                (("120-645", 4), ("120-66", 3), ("120-67", 3)),
+            ),
+            "120_wide_223": (
+                223.0,
+                63.44,
+                (("120-645", 4), ("120-66", 3), ("120-67", 3)),
+            ),
+            "120_wide_188_5": (
+                188.5,
+                63.44,
+                (("120-645", 4), ("120-66", 3), ("120-67", 2)),
+            ),
+        }
+        actual = {
+            spec.profile_id: (
+                spec.long_axis_mm,
+                spec.short_axis_mm,
+                tuple(
+                    (fit.format_id, fit.maximum_frame_count)
+                    for fit in spec.format_fits
+                ),
+            )
+            for spec in SCAN_CANVAS_PHYSICAL_SPECS
+        }
+        self.assertEqual(actual, expected)
+
+        self.assertIn(
+            "120_wide_188_5",
+            tuple(
+                item.profile_id
+                for item in scan_canvas_specs_for_format("120-645", 4)
+            ),
+        )
+        self.assertIn(
+            "120_wide_188_5",
+            tuple(
+                item.profile_id
+                for item in scan_canvas_specs_for_format("120-66", 3)
+            ),
+        )
+        self.assertIn(
+            "120_wide_188_5",
+            tuple(
+                item.profile_id
+                for item in scan_canvas_specs_for_format("120-67", 2)
+            ),
+        )
+        self.assertNotIn(
+            "120_wide_188_5",
+            tuple(
+                item.profile_id
+                for item in scan_canvas_specs_for_format("120-67", 3)
+            ),
+        )
+        self.assertNotIn(
+            "120_wide_188_5",
+            tuple(
+                item.profile_id
+                for item in get_detection_configuration(
+                    "120-67",
+                    "full",
+                ).scan_canvas.profiles
+            ),
+        )
+        partial_two = get_detection_configuration(
+            "120-67",
+            "partial",
+            2,
+        )
+        self.assertEqual(partial_two.resolved_frame_count, 2)
+        self.assertEqual(
+            partial_two.configuration_id,
+            "detection:120-67:partial:count:2",
+        )
+        self.assertIn(
+            "120_wide_188_5",
+            tuple(
+                item.profile_id
+                for item in get_detection_configuration(
+                    "120-67",
+                    "partial",
+                    2,
+                ).scan_canvas.profiles
+            ),
+        )
+
     def test_axis_scales_are_independent_point_intervals(self) -> None:
         profile = ScanCanvasPhysicalSpec(
             "only",
             short_axis_mm=10.0,
             long_axis_mm=50.0,
-            format_ids=("135",),
+            format_fits=(ScanCanvasFormatFit("135", 6),),
         )
         evidence = observe_scan_canvas(
             500,
@@ -239,13 +358,13 @@ class PhysicalAuthorityContractTest(unittest.TestCase):
                 "a",
                 short_axis_mm=10.0,
                 long_axis_mm=50.0,
-                format_ids=("135",),
+                format_fits=(ScanCanvasFormatFit("135", 6),),
             ),
             ScanCanvasPhysicalSpec(
                 "b",
                 short_axis_mm=20.0,
                 long_axis_mm=100.0,
-                format_ids=("135",),
+                format_fits=(ScanCanvasFormatFit("135", 6),),
             ),
         )
         evidence = observe_scan_canvas(

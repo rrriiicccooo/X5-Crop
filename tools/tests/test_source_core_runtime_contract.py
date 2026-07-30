@@ -28,15 +28,21 @@ from x5crop.runtime.outcome import CompletedInput
 from x5crop.runtime.workflow import process_one
 
 
-def _run_config(source: Path, output: Path, format_id: str = "135") -> RunConfig:
+def _run_config(
+    source: Path,
+    output: Path,
+    format_id: str = "135",
+    strip_mode: str = "full",
+    requested_count: int | None = None,
+) -> RunConfig:
     return RunConfig(
         input_path=source,
         output_dir=output,
         format_id=format_id,
         layout_auto=False,
         layout="horizontal",
-        strip_mode="full",
-        requested_count=None,
+        strip_mode=strip_mode,
+        requested_count=requested_count,
         page=0,
         review_dir=None,
         copy_review_files=False,
@@ -71,13 +77,25 @@ class SourceCoreRuntimeContractTest(unittest.TestCase):
         root: Path,
         pixels: np.ndarray,
         format_id: str,
+        strip_mode: str = "full",
+        requested_count: int | None = None,
     ) -> CompletedInput:
         source = root / f"{format_id}.tif"
         tifffile.imwrite(source, pixels, photometric="minisblack")
         outcome = process_one(
             source,
-            _run_config(source, root / "output", format_id),
-            DetectionConfigurationBundle.for_format_mode(format_id, "full"),
+            _run_config(
+                source,
+                root / "output",
+                format_id,
+                strip_mode,
+                requested_count,
+            ),
+            DetectionConfigurationBundle.for_format_mode(
+                format_id,
+                strip_mode,
+                requested_count,
+            ),
         )
         self.assertIsInstance(outcome, CompletedInput)
         assert isinstance(outcome, CompletedInput)
@@ -180,7 +198,7 @@ class SourceCoreRuntimeContractTest(unittest.TestCase):
 
     def test_dual_lane_uses_exact_center_domains_and_remains_review(self) -> None:
         rng = np.random.default_rng(17)
-        pixels = rng.integers(0, 256, size=(200, 720), dtype=np.uint8)
+        pixels = rng.integers(0, 256, size=(200, 732), dtype=np.uint8)
         with tempfile.TemporaryDirectory() as temporary:
             outcome = self._process_pixels(
                 Path(temporary),
@@ -193,12 +211,82 @@ class SourceCoreRuntimeContractTest(unittest.TestCase):
         self.assertEqual(
             [lane["domain"]["work_box"] for lane in lanes],
             [
-                {"left": 0, "top": 0, "right": 720, "bottom": 100},
-                {"left": 0, "top": 100, "right": 720, "bottom": 200},
+                {"left": 0, "top": 0, "right": 732, "bottom": 100},
+                {"left": 0, "top": 100, "right": 732, "bottom": 200},
             ],
+        )
+        self.assertEqual(
+            [
+                lane["scan_canvas"]["selected_profile"]["profile_id"]
+                for lane in lanes
+            ],
+            ["135_dual", "135_dual"],
+        )
+        self.assertEqual(
+            [lane["domain"]["authority_profile_id"] for lane in lanes],
+            ["135_dual", "135_dual"],
+        )
+        self.assertEqual(
+            [lane["scan_canvas"]["observed_short_axis_px"] for lane in lanes],
+            [200, 200],
+        )
+        self.assertEqual(
+            [
+                lane["axis_scale_intervals"]["short_axis_px_per_mm"][
+                    "minimum"
+                ]
+                for lane in lanes
+            ],
+            [200 / 63.44, 200 / 63.44],
         )
         self.assertEqual(record["decision"]["status"], "needs_review")
         self.assertEqual(record["output"]["output_files"], [])
+
+    def test_short_120_canvas_accepts_two_but_not_three_67_frames(self) -> None:
+        rng = np.random.default_rng(23)
+        pixels = rng.integers(0, 256, size=(200, 594), dtype=np.uint8)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            partial = self._process_pixels(
+                root,
+                pixels,
+                "120-67",
+                "partial",
+                2,
+            )
+            full = self._process_pixels(
+                root,
+                pixels,
+                "120-67",
+                "full",
+            )
+
+        partial_record = partial.result.record
+        self.assertEqual(
+            partial_record["configuration"]["resolved_frame_count"],
+            2,
+        )
+        self.assertEqual(
+            partial_record["source_core"]["lanes"][0]["scan_canvas"][
+                "selected_profile"
+            ]["profile_id"],
+            "120_wide_188_5",
+        )
+        self.assertEqual(
+            partial_record["decision"]["final_review_reasons"],
+            [FINAL_REASON_FRAME_GRID_AUTHORITY_UNAVAILABLE],
+        )
+
+        full_record = full.result.record
+        self.assertEqual(
+            full_record["configuration"]["resolved_frame_count"],
+            3,
+        )
+        self.assertEqual(full_record["source_core"]["lanes"], [])
+        self.assertIn(
+            FINAL_REASON_SCAN_CANVAS_AUTHORITY_UNAVAILABLE,
+            full_record["decision"]["final_review_reasons"],
+        )
 
 
 if __name__ == "__main__":

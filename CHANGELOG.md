@@ -11,6 +11,27 @@
 V4.9 是破坏性的 current-only 物理模型重构。旧 runtime/schema/compatibility 不是迁移
 目标。
 
+### 2026-07-30：Scan-canvas 物理 catalog 与容量更正
+
+- 将 `120_66_three_frame` 删除并改为 format-neutral 的
+  `120_wide_188_5`：`188.5 × 63.44 mm` 可用于 120-645 ≤ 4、120-66 ≤ 3，以及
+  120-67 ≤ 2。旧 profile id 不保留 alias。
+- 原 `120_wide` 明确改名为 `120_wide_224_5`，并新增相同适用格式与容量的
+  `120_wide_223` (`223 × 63.44 mm`)。
+- 新增 `135_dual` (`232 × 63.44 mm`)。Dual runtime 先匹配完整 canvas 并建立分轴 scale，
+  再做中心双 lane domain；不再把两个 lane 分别当成单条 135 scan canvas。
+- `ScanCanvasFormatFit` 成为片夹适用 format 与 `maximum_frame_count` 的唯一 owner。
+  Runtime configuration 用 authoritative format 与 resolved count 排除容量不足的
+  profile；`resolved_frame_count` 同时进入 typed configuration 与 configuration identity。
+  Count 不缩短 validation domain，也不产生 nearest-profile fallback。
+- 更新 source-core contracts、架构、项目记忆与中英文用户手册。Current Frame Grid 仍然
+  unavailable，因此本次不会启用 frame TIFF 输出或改变 DecisionGate-only final status。
+- 111 张真实 TIFF 的只读 current-schema audit 全部保持
+  `scan_canvas_state=supported`，没有新增 competing match；实际选择 68 个
+  `135_standard`、8 个 `135_narrow`、32 个 `120_wide_224_5` 与 3 个
+  `120_standard`。当前 corpus 没有真实选择 223、188.5 或 135-dual profile，后三者只声明
+  physical/contract coverage。
+
 ### 2026-07-30：验收标签与有限样片覆盖边界纠正
 
 这是 docs-only 计划修订；current detector、schema 与 review-only 输出行为均未改变。

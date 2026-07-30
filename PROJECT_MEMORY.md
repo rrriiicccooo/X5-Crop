@@ -9,9 +9,10 @@ TIFF、current report、Debug Analysis 与现场命令输出始终优先于本�
 ## 当前检查点
 
 - 分支：`main`。
-- Source-core 实现检查点：
-  `5f8b96eac9823a6b6c93f5fa208df2e0820a2f02`。本文件由后续 docs-only 提交更新；
-  恢复时以现场 `HEAD == origin/main` 为准，不在文档内硬编码自身提交 SHA。
+- Source-core 原子替换基线：
+  `5f8b96eac9823a6b6c93f5fa208df2e0820a2f02`。Current HEAD 另含后续
+  scan-canvas physical catalog/capacity 更正；恢复时以现场 `HEAD == origin/main` 为准，
+  不在文档内硬编码自身提交 SHA。
 - Tracked 工作区干净；ignored 内容只有 `Test/` 本地样片与证据。
 - 当前 runtime：`X5_Crop.py` V4.9 source-core 安全基线。
 - 当前用户 runtime 依赖：`numpy`、`tifffile`、`imagecodecs` 与 `Pillow`；SciPy 与
@@ -66,9 +67,11 @@ X5 Crop 的目标是在用户已经提供 format 与 count 后，自动生成**�
 ## 当前目标
 
 2026-07-30 已完成 `v4.2.8`、V3 archive、`X5_Split_v17/v18` 与 source-core 切换前
-V4.9 的只读历史审查，并冻结 bounded safe-crop Grid 的下一阶段设计。当前会话只更新
-文档，没有修改 detector；下一个任务按 `ARCHITECTURE.md` 第 12 节实现，不要求唯一独立的
-真实 Grid phase，也不按历史版本逐层恢复旧 detector。
+V4.9 的只读历史审查，并冻结 bounded safe-crop Grid 的下一阶段设计。Current update 已
+更正 scan-canvas catalog、format/count capacity filtering 与 135-dual full-canvas
+authority；没有实现 Grid proposal、改变 Gate 决策或启用 frame output。下一个任务仍按
+`ARCHITECTURE.md` 第 12 节实现，不要求唯一独立的真实 Grid phase，也不按历史版本逐层恢复
+旧 detector。
 
 冻结的目标数据流：
 
@@ -110,6 +113,11 @@ TIFF source pixels
 已经成立：
 
 - 设计 aperture 保持离散 format components，不取 hull。
+- Scan-canvas catalog 现有 7 个 canonical profiles。`120_wide_188_5`
+  (`188.5 × 63.44 mm`) 适用于 120-645 ≤ 4、120-66 ≤ 3、120-67 ≤ 2；
+  另有 `120_wide_223` (`223 × 63.44 mm`)。`135_dual` 使用完整
+  `232 × 63.44 mm` canvas authority 后再中心分 lane。详细表只由
+  `ARCHITECTURE.md` 第 3.2 节与源码 catalog 拥有。
 - Long/short scale 分轴传播，TIFF DPI 不参与检测。
 - Validation domain 只来自唯一 scan canvas/lane 与 source extent。
 - Positive content 由独立 intensity/texture fields、strict 4-connectivity 和 immutable
@@ -166,7 +174,12 @@ reason；被 Grid 阻断的下游只标记 `NOT_APPLICABLE`。
   `needs_review`，0 frame output；这是 current review-only runtime 的结果，不是下一版
   验收期望。S098 的 evidence role 是 `irregular_geometry_stress`，但未来仍必须
   `approved_auto`。
-- 111 张 invariant：111 completed、0 failure、0 frame output。
+- Scan-canvas catalog 更正后的 111 张只读 invariant：111 completed、0 failure、
+  111 `scan_canvas_state=supported`，final reason 仍只有
+  `frame_grid_authority_unavailable`。Selected profile 分布为 `135_standard` 68、
+  `135_narrow` 8、`120_wide_224_5` 32、`120_standard` 3；当前 corpus 尚未真实选择
+  `120_wide_223`、`120_wide_188_5` 或 `135_dual`，不得把 contract coverage 写成真实
+  样片覆盖。
 - NumPy RLE/union-find 在 600 组独立 oracle mask 与 111 张 current 样片上保持 strict
   4-connectivity/content geometry 一致。
 - 固定 24 张 detector-only、`--jobs 2`：
@@ -442,8 +455,11 @@ wc -l Test/manual_review/user_confirmed_golden_baseline.jsonl
 
 > 继续 X5 Crop。读取 `README.md`、`AGENTS.md`、`PROJECT_MEMORY.md` 与
 > `ARCHITECTURE.md`，核对 `main` 与 `origin/main` 一致、tracked 工作区干净，并确认
-> `5f8b96ea` 是 source-core 实现检查点。当前 runtime 仍是 review-only，但产品宗旨是
-> 在用户提供 format/count 后保守自动裁切、不切真实内容，而不是唯一证明照片边界。
+> `5f8b96ea` 是 source-core 原子替换基线、current HEAD 已包含 7-profile scan-canvas
+> catalog/capacity 更正。保持 `120_wide_223`、`120_wide_188_5`、`135_dual` 与
+> resolved-count filtering；不要恢复旧 `120_66_three_frame` / `120_wide` identity。
+> 当前 runtime 仍是 review-only，但产品宗旨是在用户提供 format/count 后保守自动裁切、
+> 不切真实内容，而不是唯一证明照片边界。
 > 历史机制审查与 bounded-safe-crop 设计均已冻结。直接按架构第 12 节实施
 > contracts、acceptance cohort、read-only calibration 与最小纵切；保持 `P_MAX=6`、
 > `K_MAX=3`、`G_MAX=3`、DecisionGate-only final decision、允许 protection 含邻片像素、

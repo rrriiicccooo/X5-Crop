@@ -89,7 +89,26 @@ Grid 合同；单独使用设计 aperture 不能确定位置，但可以约束�
 
 ### 3.2 Scan canvas 与分轴 scale
 
-照片格式与 scan canvas 是不同 owner。唯一匹配的 `ScanCanvasPhysicalSpec` 产生：
+照片格式与 scan canvas 是不同 owner。当前 catalog：
+
+| Profile | long × short | Format fit 与最大张数 |
+|---|---:|---|
+| `135_standard` | `232 × 32.22 mm` | 135 ≤ 6；half ≤ 12；XPan ≤ 3 |
+| `135_narrow` | `232 × 25.4 mm` | 135 ≤ 6；half ≤ 12；XPan ≤ 3 |
+| `135_dual` | `232 × 63.44 mm` | 135-dual ≤ 12 |
+| `120_standard` | `226 × 60 mm` | 120-645 ≤ 4；120-66 ≤ 3；120-67 ≤ 3 |
+| `120_wide_224_5` | `224.5 × 63.44 mm` | 120-645 ≤ 4；120-66 ≤ 3；120-67 ≤ 3 |
+| `120_wide_223` | `223 × 63.44 mm` | 120-645 ≤ 4；120-66 ≤ 3；120-67 ≤ 3 |
+| `120_wide_188_5` | `188.5 × 63.44 mm` | 120-645 ≤ 4；120-66 ≤ 3；120-67 ≤ 2 |
+
+`ScanCanvasFormatFit` 是片夹与 format 的物理适用关系，并保存该组合的
+`maximum_frame_count`。它不属于 `FormatSpec`，因为同一 format 可进入不同长度的片夹，
+同一片夹也可容纳不同 format。旧 `120_66_three_frame` 名称已删除；188.5 mm profile
+不能被命名为 66 专用。
+
+Runtime 先用 authoritative format 与 resolved count（full 默认张数或显式 partial count）
+排除装不下的 profile，再按 source 像素长短比寻找唯一匹配。唯一匹配的
+`ScanCanvasPhysicalSpec` 产生：
 
 ```text
 s_long  = observed_long_axis_px  / canvas_long_axis_mm
@@ -100,7 +119,9 @@ s_short = observed_short_axis_px / canvas_short_axis_mm
 不得扩宽另一个轴。TIFF resolution/DPI 只作为 I/O metadata 保留，不参与检测。
 
 无匹配或多个 profile 同时成立时，scan-canvas authority 不可用。系统不得选择最近
-profile。
+profile。Count 过滤只排除物理容量不足的片夹；不得从 count 推导较短的 source domain。
+`resolved_frame_count` 属于 typed runtime configuration，并进入 configuration identity；
+不得让不同 count 的 profile 集合共享同一配置身份。
 
 ### 3.3 Validation domain
 
@@ -114,7 +135,9 @@ work_box = 完整 scan canvas 或完整 lane 的半开 cell-edge Box
 交换 work axes，不重采样 source measurement。`full` 与 `partial` 使用同一个短轴 domain；
 partial count 仍只描述完整设计 slot。
 
-`135-dual` 使用确定的中心分区，每个 lane 独立建立 domain。当前 dual-lane 仍保持 review。
+`135-dual` 先以完整 `232 × 63.44 mm` canvas 建立两轴 scale，再使用确定的中心分区让每个
+lane 独立建立 domain；不得把两个 lane 分别误认成 `135_standard` 或 `135_narrow`。
+当前 dual-lane 因 Grid 尚未实现仍保持 review。
 
 ## 4. Immutable positive content
 

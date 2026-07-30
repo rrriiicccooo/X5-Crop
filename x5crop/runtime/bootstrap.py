@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ..formats import format_spec
 from ..geometry.layout import infer_layout
 from ..strip_modes import FULL, PARTIAL
 from ..configuration.bundle import DetectionConfigurationBundle
@@ -19,11 +20,7 @@ def runtime_invocation_from_options(options: RuntimeOptions) -> RuntimeInvocatio
         raise ValueError(f"No TIFF files found: {options.input_path}")
 
     height, width = read_tiff_page_shape(first_file, options.page)
-    configuration_bundle = DetectionConfigurationBundle.for_format_mode(
-        options.format_id,
-        options.strip_mode,
-    )
-    fmt = configuration_bundle.initial_configuration.physical_spec
+    fmt = format_spec(options.format_id)
     if options.requested_count is not None:
         if options.strip_mode == FULL:
             if options.requested_count != fmt.strip.default_count:
@@ -40,6 +37,11 @@ def runtime_invocation_from_options(options: RuntimeOptions) -> RuntimeInvocatio
                     f"--format {fmt.format_id} partial mode allows --count "
                     f"values: {allowed}"
                 )
+    configuration_bundle = DetectionConfigurationBundle.for_format_mode(
+        options.format_id,
+        options.strip_mode,
+        options.requested_count,
+    )
 
     layout_auto = options.layout == "auto"
     layout = infer_layout(width, height) if layout_auto else options.layout

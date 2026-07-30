@@ -98,10 +98,23 @@ def _single_lane(
 def _dual_lanes(
     gray_work: np.ndarray,
     layout: str,
+    configuration: DetectionConfiguration,
     lane_configuration: DetectionConfiguration | None,
 ) -> tuple[tuple[SourceLaneEvidence, ...], tuple[str, ...]]:
     if lane_configuration is None or gray_work.shape[0] % 2:
         return (), ("dual_lane_center_partition_unavailable",)
+    scan_canvas = observe_scan_canvas(
+        gray_work.shape[1],
+        gray_work.shape[0],
+        layout,
+        configuration.scan_canvas,
+    )
+    if (
+        scan_canvas.outcome != ScanCanvasOutcome.SUPPORTED
+        or scan_canvas.axis_scales is None
+        or scan_canvas.selected_profile is None
+    ):
+        return (), (f"scan_canvas_{scan_canvas.outcome.value}",)
     center = gray_work.shape[0] // 2
     lanes: list[SourceLaneEvidence] = []
     reasons: list[str] = []
@@ -110,21 +123,6 @@ def _dual_lanes(
     ):
         if bottom <= top:
             return (), ("dual_lane_empty_lane",)
-        scan_canvas = observe_scan_canvas(
-            gray_work.shape[1],
-            bottom - top,
-            layout,
-            lane_configuration.scan_canvas,
-        )
-        if (
-            scan_canvas.outcome != ScanCanvasOutcome.SUPPORTED
-            or scan_canvas.axis_scales is None
-            or scan_canvas.selected_profile is None
-        ):
-            reasons.append(
-                f"lane_{lane_index}_scan_canvas_{scan_canvas.outcome.value}"
-            )
-            continue
         domain = SourceStripValidationDomain(
             lane_id=f"lane:{lane_index}",
             work_box=Box(0, top, gray_work.shape[1], bottom),
@@ -178,6 +176,7 @@ def prepare_detection_workspace(
         lanes, incomplete_reasons = _dual_lanes(
             gray_work,
             layout,
+            configuration,
             lane_configuration,
         )
     else:

@@ -29,8 +29,13 @@ class DetectionConfigurationBundle:
         cls,
         format_id: str,
         strip_mode: str,
+        frame_count: int | None = None,
     ) -> "DetectionConfigurationBundle":
-        initial = get_detection_configuration(format_id, strip_mode)
+        initial = get_detection_configuration(
+            format_id,
+            strip_mode,
+            frame_count,
+        )
         configurations = [initial]
         if initial.physical_spec.layout.kind == "dual_lane":
             lane_format_id = initial.physical_spec.layout.lane_format_id

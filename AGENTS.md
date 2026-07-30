@@ -102,8 +102,9 @@ https://github.com/rrriiicccooo/X5-Crop
   Grid proposal、safe containment 与 transform assessment。纯 solver 单测可显式构造
   typed `DetectionWorkspace` fixture；production runtime 不得 bypass。
 - 照片尺寸只属于 `FramePhysicalSpec`；片夹扫描画布只属于
-  `ScanCanvasPhysicalSpec` catalog。TIFF resolution 只作 I/O metadata，不得进入检测
-  尺度、证据或决策。
+  `ScanCanvasPhysicalSpec` catalog。片夹与 format 的适用关系及最大容纳张数也由该
+  catalog 的 typed fit 拥有；count 只能排除装不下的 profile，不能缩短 validation
+  domain。TIFF resolution 只作 I/O metadata，不得进入检测尺度、证据或决策。
 - 方向性需求以水平片条措辞为基准，同时实现旋转等价的垂直行为。
 - Runtime flow 或 source layering 变化更新 `ARCHITECTURE.md`；版本行为、打包、验证或
   回滚变化更新 `CHANGELOG.md`。

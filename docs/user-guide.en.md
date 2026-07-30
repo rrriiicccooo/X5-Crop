@@ -88,6 +88,24 @@ Each TIFF produces one base gray and one image-statistics measurement. A known
 scan canvas must match uniquely from pixel aspect; no match or competing matches
 remain in review.
 
+The current scan-canvas catalog uses these long-axis × short-axis dimensions:
+
+| Profile | Physical size | Format fit and maximum count |
+|---|---:|---|
+| `135_standard` | `232 × 32.22 mm` | 135 ≤ 6; half ≤ 12; XPan ≤ 3 |
+| `135_narrow` | `232 × 25.4 mm` | 135 ≤ 6; half ≤ 12; XPan ≤ 3 |
+| `135_dual` | `232 × 63.44 mm` | 135-dual ≤ 12 |
+| `120_standard` | `226 × 60 mm` | 645 ≤ 4; 66 ≤ 3; 67 ≤ 3 |
+| `120_wide_224_5` | `224.5 × 63.44 mm` | 645 ≤ 4; 66 ≤ 3; 67 ≤ 3 |
+| `120_wide_223` | `223 × 63.44 mm` | 645 ≤ 4; 66 ≤ 3; 67 ≤ 3 |
+| `120_wide_188_5` | `188.5 × 63.44 mm` | 645 ≤ 4; 66 ≤ 3; 67 ≤ 2 |
+
+Format and the resolved count (the full default or an explicit partial count)
+first remove profiles that cannot physically hold the requested frames. Pixel
+aspect then selects a unique match; the detector never chooses the nearest
+profile. A 135-dual scan derives scale from the complete `232 × 63.44 mm`
+canvas before its center split into two lanes.
+
 Long/short px/mm scales are calculated independently. TIFF DPI/PPI is preserved
 I/O metadata and is never a detection input.
 
@@ -164,6 +182,9 @@ Current schema:
 schema_id       = detection_report
 schema_revision = source_core_grid_authority
 ```
+
+The report's typed configuration records `resolved_frame_count` and lists the
+scan-canvas profiles remaining after count-capacity filtering.
 
 The old `--bleed`, `--bleed-x`, `--bleed-y`, `--export-review`, and `--dry-run`
 options have been removed and are rejected. Format-level millimetre protection
