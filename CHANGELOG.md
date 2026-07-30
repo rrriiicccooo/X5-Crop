@@ -11,6 +11,29 @@
 V4.9 是破坏性的 current-only 物理模型重构。旧 runtime/schema/compatibility 不是迁移
 目标。
 
+### 2026-07-30：相邻图片 retention 与 Gate 边界纠正
+
+这是 docs-only 计划修订；current detector、schema 与 review-only 输出行为均未改变。
+
+- `ProtectedFrameEnvelope` 不要求 pixel-pure。Fixed protection 可以跨过 nominal divider、
+  带入相邻照片像素；contact/overlap 的 bounded shared interval 也可以同时进入两侧输出。
+- Primary ordinal/slot ownership 在 fixed protection 前判断。只有 whole-pitch/endpoint
+  alternative 使主照片归属无法有界时才是 CandidateGate 风险；最终 box 出现邻片像素不是
+  ownership 失败。
+- 删除计划中的 `wrong_neighbor_exclusion` 独立 check 与
+  `wrong_neighbor_inclusion_risk` reason；其真正需要阻断的整格归属风险由
+  `slot_ordinal_assignment` / `slot_ownership` 事实和 DecisionGate reasons 表达。
+- 每个 box 必须区分 `primary`、`shared_interaction`、`fixed_protection` 与
+  `authority_saturation` provenance。Output-equivalence 比较 primary ownership，不以
+  protection 后 boxes 相交或含邻片像素为失败。
+- CandidateGate 固定为十项事实，并冻结 `SUPPORTED_REQUIRED` /
+  `NOT_CONTRADICTED` requirement，避免把 inferred、无内容观测或可吸收 box 差异误送审。
+- Threshold tuning 前新增 validation-only acceptance-cohort 计划；source SHA 与 current
+  authority 明确绑定 must-approve/review/stress expectation，历史 `pass_` 路径名不能直接
+  充当标签，calibration 与 holdout 分开报告。
+- 同步 `AGENTS.md` 与中英文用户手册的产品语义，防止后续任务重新引入“输出必须排除邻片”
+  的严格目标。
+
 ### 2026-07-30：bounded safe-crop Grid 实现计划冻结
 
 这是 docs-only 设计冻结；current review-only runtime、`source_core_grid_authority`
@@ -28,15 +51,16 @@ schema 与输出行为均未改变。
   expected position 只约束 corridor。没有 separator、齿孔不可见、blank 或 inferred
   geometry 都不是独立 review 原因。
 - Partial 不使用固定 offsets；首尾 endpoint 独立竞争。Blank 保留 slot；
-  contact/overlap 的 bounded shared interval 并入相邻输出。只有整格/ownership、已知内容
-  丢失、错误邻片、authority 或 output geometry 风险才阻断。
-- 冻结 output-equivalence 与 outward union：count/order/content ownership/interaction
-  相同且 union 不进入错误邻片时，多个 geometry 可合并并自动批准。短轴默认可保留完整
-  authoritative lane；缺少短轴照片边不送审。
+  contact/overlap 的 bounded shared interval 并入相邻输出。只有整格/primary ownership、
+  已知内容丢失、authority 或 output geometry 风险才阻断。
+- 冻结 output-equivalence 与 outward union：count/order/primary ownership 相同、
+  interaction 能 bounded union 且未保护 union 不改变 primary slot 时，多个 geometry 可
+  合并并自动批准；appearance/blank 判断不必一致。Fixed protection 可以带入邻片像素；
+  短轴默认可保留完整 authoritative lane，缺少短轴照片边不送审。
 - 冻结毫米 protection：表值均为每侧值，使用独立 scan-canvas scale interval 的 upper
   endpoint 向上取整；先合并 safe envelope/shared interval，再应用固定 protection。只有
   protection 可在 source/lane 边界饱和，原始 envelope 不得 clamp。
-- `CandidateGate` 只保存十一项安全事实；只有 `DecisionGate` 创建 final status 与冻结的
+- `CandidateGate` 只保存十项安全事实；只有 `DecisionGate` 创建 final status 与冻结的
   typed reasons。原子切换时唯一 report revision 将改为
   `bounded_safe_crop_grid`，不保留旧 reader、alias 或双路径。
 - 实施顺序冻结为 contracts、八张 nominal 只读 calibration、135/full 与
@@ -77,8 +101,8 @@ schema 与输出行为均未改变。
 - `approved_auto` 表示 protection 后的输出满足安全合同，不表示所有边界均被观测或唯一
   证明。精确 geometry 不唯一但 slot ownership 与安全输出等价时可以自动批准。
 - `needs_review` 只用于 protection 无法吸收的实际风险：整格/ordinal 或照片归属歧义、
-  count 无法成立、已知内容仍会被切掉、候选会混入错误相邻照片，或越出 source/lane
-  authority。
+  count 无法成立、已知内容仍会被切掉、primary slot ownership 无法有界，或未保护
+  geometry 越出 source/lane authority。Protection 带入邻片像素不属于该风险。
 - Partial 可推断 slot placement；blank 保留 slot；contact/overlap 可让相邻输出框重叠并
   重复保留共享像素。
 - `CandidateGate` 仍只记录候选与安全事实；只有 `DecisionGate` 创建 final status 与

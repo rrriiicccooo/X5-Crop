@@ -20,9 +20,10 @@ X5 Crop 的产品目标是在用户已经提供 format 与 count 后，生成足
   `approved_auto`；
 - blank 保留设计 slot；partial 可以推断 slot placement；contact/overlap 可以让相邻输出
   框重叠并重复保留共享像素；
-- `approved_auto` 只声明最终输出满足有界安全合同，不声明每条边界被证明；
+- `approved_auto` 只声明最终输出满足有界安全合同，不声明每条边界被证明，也不声明输出
+  只含本 slot 的像素；固定 protection 可以跨过 nominal divider 并带入相邻照片像素；
 - `needs_review` 只用于会改变 ordinal/slot ownership、无法满足 count、仍可能切掉已知
-  内容、会混入错误相邻照片或未保护 geometry 越出 source/lane authority 的具体风险；
+  内容、主照片归属无法有界或未保护 geometry 越出 source/lane authority 的具体风险；
 - `CandidateGate` 只保存安全事实，只有 `DecisionGate` 创建 final status 与 final
   reasons。
 
@@ -202,6 +203,10 @@ typed reasons 的唯一 owner。
 
 Pixel bleed 接口与模型已删除。唯一 owner 是格式级毫米设计表：
 
+本计划中口语所称的 “bleed 保护”由 `shared_interaction` 的有界重复保留加固定毫米
+`OutputProtection` 共同实现；它不是恢复旧 `--bleed` 参数、pixel bleed model 或动态
+50 px 规则。
+
 | 格式 | long | short |
 |---|---:|---:|
 | half | `0.15 mm` | `0.25 mm` |
@@ -228,13 +233,17 @@ placement 变成安全输出。
 
 - 先在 physical work axes 中合并 `SafeCropEnvelope`、输出等价 proposal 与
   contact/overlap shared interval，再向四侧应用固定 protection；
+- protection 不以 nominal slot boundary 为 clamp：扩张带入相邻照片像素是获批的保守
+  retention，不改变 primary slot ownership，也不独立触发 review；
 - 保护后的半开 box 通过 affine outward mapping 转成 source ROI。不得先取最近整数、不得
   inward round，也不得完整旋转 RGB 后重新检测；
 - 不恢复动态 50 px、overlap multiplier、旧 pixel bleed 或用户 override；
 - 未保护的 `SafeCropEnvelope` 必须完整位于 source/lane authority。只有固定 protection
   超出 authority 时，才允许在 source/lane 边界饱和，并必须报告
   `source_saturated` / `lane_saturated`；纯 protection 饱和不自动送审；
-- 不得用饱和或 clamp 掩盖原始 envelope 越界、已知内容丢失、错误 lane 或错误邻片。
+- 每个最终 box 必须分别报告 `primary`、`shared_interaction`、`fixed_protection` 与
+  `authority_saturation` retention provenance；不得用饱和或 clamp 掩盖原始 envelope
+  越界、已知内容丢失、错误 lane 或整格 ownership 错位。
 
 ## 7. Report、Debug 与 comparator
 
@@ -427,9 +436,9 @@ receipt，不重测、不选择、不裁决。
 | `FrameGridProposal` | 保存 ordered boundaries、pitch/phase interval、slot assignment、observed/inferred provenance、residual 与 work receipt |
 | `FrameSlot` | 保存 lane-local ordinal、design component、左右 boundary role 与 occupancy/interaction facts |
 | `BoundaryInteractionObservation` | 保存 separated、contact/overlap 或 appearance-unresolved，以及有界 shared interval |
-| `FrameEnvelopeProposal` | 一个 Grid proposal 下、尚未合并的逐帧 outward containment |
-| `SafeCropEnvelope` | 对输出等价 proposal 合并后的逐帧安全包络，尚未应用固定 protection |
-| `ProtectedFrameEnvelope` | 应用毫米 protection、可选 affine outward mapping 与 authority 饱和后的最终候选 box |
+| `FrameEnvelopeProposal` | 一个 Grid proposal 下的逐帧 primary outward containment |
+| `SafeCropEnvelope` | 合并输出等价 proposal 与 bounded shared interaction 后的安全包络，尚未应用固定 protection |
+| `ProtectedFrameEnvelope` | 应用毫米 protection、可选 affine outward mapping 与 authority 饱和后的最终候选 box；允许含邻片像素 |
 | `GridSearchWorkStatistics` | 保存固定结构工作量、截断与 exact-cache 命中；不能作为可靠性证据 |
 
 `FrameGridSearchPrior` 属于显式 runtime configuration；observation 属于 evidence layer；
@@ -494,7 +503,9 @@ P_MAX = 6  # 每个 lane/component 的非重复 placement seeds
 最多两个 seed 可来自 separator-first anchor assignment。生成顺序固定为
 observed-anchor、content/outer、lane/source，只用于确定工作顺序，不表达可信度。若去重后
 仍有超过 6 个非支配 seed，不静默按 score 丢弃；记录 typed `search_incomplete`，并只在被
-省略 seed 可能改变 ownership 或最终安全 box 时形成 Gate 阻断事实。
+省略 seed 可能改变 count/ordinal/primary ownership，或使 content containment/source
+authority 无法由 bounded union 表达时形成 Gate 阻断事实。仅改变可被 shared/fixed
+protection 吸收的 final box 不阻断。
 
 Separator-first 在尚无 expected position 时也不得做 band 全配对。设 canonical raw band
 数为 `R`、internal ordinal difference 为 `d in 1..count-1`：按 source position 排序后，对
@@ -533,8 +544,9 @@ K_MAX = 3  # corridor 总上限
 
 同一物理 band、相同 source interval 与相同 boundary roles 的 candidates 先合并
 provenance。超过 `O_MAX` 的非等价、非支配观测不由最高分代替完整事实；记录
-`search_incomplete`。每个 corridor 始终保留一个 model-only interval，因此看不见齿孔、
-separator 缺失、空片或 count 为 1 都不是流程失败。
+`search_incomplete`；只有上述 output-relevant 条件成立时才让
+`grid_search_coverage` 进入 `CONTRADICTED`。每个 corridor 始终保留一个 model-only
+interval，因此看不见齿孔、separator 缺失、空片或 count 为 1 都不是流程失败。
 
 ### 12.6 Anchor 数量与 ordered DP
 
@@ -552,7 +564,8 @@ DP 状态只包含“当前 corridor + 当前 candidate”。Transition 只允�
 - source 位置严格递增；
 - pitch/phase 位于当前 component 的 prior interval；
 - boundary roles、lane、ordinal 与 count 一致；
-- 已知 content assignment 不交叉，且不形成已知错误邻片；
+- primary content assignment 与 local ordinal 一致；shared/protection retention 不作为
+  transition 冲突；
 - endpoint 与 internal boundaries 能形成正面积半开 slot。
 
 对 `C = effective_count`、`B = C - 1`，每个 lane/component 的结构上界为：
@@ -579,20 +592,23 @@ G_MAX = 3  # 非支配 FrameGridProposal
 ordinal-compatible observed support、更小 normalized pitch/phase residual、更少未解释的
 strong observation、更小但仍安全的 outward envelope，最后才按稳定 provenance id
 打破完全相等。Score 只负责排序。超过 3 个非等价、非支配 proposal 时记录
-`search_incomplete`；dual lane 分别选择，不建立 lane proposal 的笛卡尔积。
+`search_incomplete`，并使用同一 output-relevant 规则决定是否阻断；dual lane 分别选择，
+不建立 lane proposal 的笛卡尔积。
 
 ### 12.7 Slot、blank、contact/overlap 与安全包络
 
 每个 proposal 必须产生恰好 `effective_count` 个有序 `FrameSlot`。Slot appearance 只允许：
 
 ```text
-content_supported
-blank_supported
+content_observed
+no_content_observed
 appearance_unresolved
 ```
 
-Appearance 不改变 count。Blank 仍输出完整设计 slot；没有 content observation、照片内容
-很淡或 inferred Grid 都不自动送审。
+Appearance 不改变 count。`no_content_observed` 只表示当前 measurement 没有观察到内容，
+不证明物理 blank；该 slot 仍输出完整设计 frame。没有 content observation、照片内容很淡
+或 inferred Grid 都不自动送审。Measurement 完整但 component 数为 0 时，
+`source_content_measurement` 仍是 `SUPPORTED`，不是 `UNAVAILABLE`。
 
 逐帧 envelope 使用以下 outward 规则：
 
@@ -602,7 +618,7 @@ Appearance 不改变 count。Blank 仍输出完整设计 slot；没有 content o
 - contact/overlap：把 observation 的 bounded shared interval 完整并入两侧 frame；
 - one-sided edge：只约束已观测的一侧，另一侧仍由 learned gutter/prior interval 向外包络；
 - first/last slot：可 pin 到被选 placement 的 containment endpoint，不自动扩张到完整
-  source；已知 content 必须被包含，且不得跨入已知邻片 exclusive region；
+  source；已知 primary content 必须被包含，且不得发生 whole-pitch ownership 错位；
 - common frame width、`pitch - gutter`、edge weighted median 与 format aspect 只产生
   `FrameEnvelopeProposal` 或 residual，不能覆盖直接 observation。
 
@@ -615,17 +631,20 @@ lane short interval 都不是独立送审理由。
 两个 `FrameGridProposal` 只有同时满足以下条件才是 output-equivalent：
 
 1. lane、count 与 local ordinal 相同；design component 相同，或 component 差异在
-   protected output 中完全消失且不改变 ownership；
-2. 已知 content component 到 slot 或 shared slot set 的 ownership 相同；
-3. blank/interaction ownership 相同；
-4. 逐帧 outward union 不进入相邻 slot 的已知 exclusive-content region，也不越过
-   source/lane authority；
-5. 应用固定 protection 后仍能为每个 ordinal 产生同一个有界安全输出集合。
+   protected output 中完全消失且不改变 primary ownership；
+2. 已知 primary content component 到 slot 或 shared slot set 的 ownership 相同；
+3. appearance state 可以不同；interaction intervals 必须能作 bounded outward union，不
+   要求一方证明 blank；
+4. 未保护的逐帧 outward union 不进入另一 primary slot，除非该区域被明确标记为
+   `shared_interaction`，并且 union 不越过 source/lane authority；
+5. 应用固定 protection 后每个 ordinal 仍指向同一个 primary slot；最终 boxes 可以互相
+   重叠，也可以包含相邻照片像素，不要求 pixel-pure 或互斥。
 
 输出等价 proposal 按 ordinal 对 `FrameEnvelopeProposal` 作 outward union，形成唯一
 `SafeCropEnvelope`。Geometry 不唯一本身不送审。若 whole-pitch/endpoint alternative 改变
-照片归属，或 union 会吸入错误邻片且无法用 shared interval 解释，则保持 competing
-proposal，交给 CandidateGate 记录具体 ownership/wrong-neighbor 风险。
+primary 照片归属，且无法由一个保持 ordinal 的 bounded union 表达，则保持 competing
+proposal，交给 CandidateGate 记录具体 ownership 风险。仅由 `shared_interaction` 或
+`fixed_protection` 带入邻片像素不破坏 output-equivalence。
 
 ### 12.8 Gate 与 final reasons
 
@@ -638,31 +657,35 @@ proposal，交给 CandidateGate 记录具体 ownership/wrong-neighbor 风险。
 5. `slot_ordinal_assignment`
 6. `slot_ownership`
 7. `known_content_containment`
-8. `wrong_neighbor_exclusion`
-9. `source_lane_geometry`
-10. `output_protection`
-11. `output_transform`
+8. `source_lane_geometry`
+9. `output_protection`
+10. `output_transform`
 
 `DecisionGate` 是唯一 status/reason owner。下一 schema 的 review reason 词汇冻结为：
 
-| Candidate fact | 阻断时的 final reason |
-|---|---|
-| `scan_canvas_authority` | `scan_canvas_authority_unavailable` |
-| `source_content_measurement` | `source_content_measurement_unavailable` |
-| `grid_search_coverage` | `grid_search_incomplete_affecting_output` |
-| `frame_count` | `requested_count_unfulfilled` |
-| `slot_ordinal_assignment` | `slot_ordinal_ambiguous` |
-| `slot_ownership` | `slot_ownership_unbounded` |
-| `known_content_containment` | `known_content_not_contained` |
-| `wrong_neighbor_exclusion` | `wrong_neighbor_inclusion_risk` |
-| `source_lane_geometry` | `frame_geometry_outside_authority` |
-| `output_protection` | `output_protection_unavailable` |
-| `output_transform` | `output_transform_unavailable` |
+| Candidate fact | Requirement | 阻断时的 final reason |
+|---|---|---|
+| `scan_canvas_authority` | `SUPPORTED_REQUIRED` | `scan_canvas_authority_unavailable` |
+| `source_content_measurement` | `SUPPORTED_REQUIRED` | `source_content_measurement_unavailable` |
+| `grid_search_coverage` | `NOT_CONTRADICTED` | `grid_search_incomplete_affecting_output` |
+| `frame_count` | `SUPPORTED_REQUIRED` | `requested_count_unfulfilled` |
+| `slot_ordinal_assignment` | `NOT_CONTRADICTED` | `slot_ordinal_ambiguous` |
+| `slot_ownership` | `NOT_CONTRADICTED` | `slot_ownership_unbounded` |
+| `known_content_containment` | `NOT_CONTRADICTED` | `known_content_not_contained` |
+| `source_lane_geometry` | `SUPPORTED_REQUIRED` | `frame_geometry_outside_authority` |
+| `output_protection` | `SUPPORTED_REQUIRED` | `output_protection_unavailable` |
+| `output_transform` | `SUPPORTED_REQUIRED` | `output_transform_unavailable` |
 
 `approved_auto` 的充分条件是所有 `ProtectedFrameEnvelope` 数量/顺序正确，且上述事实均不
 阻断。下列事实不得单独产生 review reason：separator 缺失、齿孔不可见、model-only 或
 one-sided inference、blank、contact/overlap、未 deskew、多个输出等价 geometry、固定
-protection 的 source/lane 饱和、较低 score 或较大的安全 over-retention。
+protection 的 source/lane 饱和、较低 score、较大的安全 over-retention，或 final box 中
+出现相邻照片像素。
+
+Gate 在 fixed protection 之前判断 primary ordinal/ownership，在 protection 之后只判断
+box 数量、source/lane/transform 有效性与保护是否按合同应用；它不对 final pixel purity
+评分。只有 whole-pitch/primary assignment 仍存在具体 competing risk 时，才由
+`slot_ordinal_assignment` 或 `slot_ownership` 阻断。
 
 因上游阻断而无法执行的下游 check 必须标记 typed `NOT_APPLICABLE`；DecisionGate 只输出
 根因 reason，不为同一 scan-canvas、Grid 或 geometry 问题重复制造 protection/transform
@@ -680,8 +703,9 @@ schema_revision = bounded_safe_crop_grid
 同批删除 `source_core_grid_authority` reader/branch，不提供 alias。新 report 至少保存
 prior/calibration identity、seed、corridor candidates、observed/inferred roles、DP work、
 retained/rejected/conflicting proposals、output-equivalence、slots、interactions、raw/safe/
-protected envelopes、protection pixels/saturation、optional transform、两级 Gate、final
-decision 与 TIFF receipt。Debug overlay 使用同一 source geometry。
+protected envelopes、primary/shared/fixed-protection retention provenance、protection
+pixels/saturation、optional transform、两级 Gate、final decision 与 TIFF receipt。Debug
+overlay 使用同一 source geometry。
 
 Cache 仍只保存 exact、count/offset-independent measurements；不得缓存 seed、candidate、
 proposal、Gate、decision、final reason 或 output box。`GridSearchWorkStatistics` 至少记录
@@ -715,7 +739,26 @@ detector；只有阶段 5 的完整 tree 才改变 runtime 行为：
 必须先有能失败的 contracts，至少覆盖 count 1、anchor `0/1/2+`、seed/candidate/proposal
 上限、search-incomplete、horizontal/vertical、dual lane、两个 120 components、
 partial 任意位置、blank、contact/overlap、等价与不等价 union、每侧 protection、authority
-饱和、outward affine、两级 Gate 与 forbidden legacy tokens。
+饱和、protection 带入相邻照片仍批准、whole-pitch primary ownership 错位送审、outward
+affine、两级 Gate 与 forbidden legacy tokens。
+
+任何 threshold tuning 前还必须冻结 validation-only：
+
+```text
+schema = x5crop_safe_crop_acceptance_cohort_v1
+expectation = must_approve_safe | needs_review_with_reason | stress_only
+```
+
+每条记录绑定 source SHA、format/mode/count、expectation authority、primary ownership
+检查与允许的 neighbor-retention 语义。目录名中的 `pass_`、历史 PASS 或旧 report 不能自动
+成为 expectation；`must_approve_safe` 必须来自用户明确确认或独立的 current physical
+audit。该 cohort 只由 `tools/regression/` 消费，不进入 detector、prior、score 或 runtime
+selection。
+
+八张 nominal baseline 可作为 geometry/calibration oracle，但不能同时冒充独立 holdout；
+报告必须分开列出 calibration cohort 与从其余真实 TIFF 冻结的 holdout cohort。若
+`must_approve_safe` 得到 review，必须显示十项 Gate 中哪一项有具体阻断事实，不能用
+“观测不足”或 final box 含邻片像素解释。
 
 物理验收顺序：
 

@@ -22,7 +22,9 @@ retain extra pixels through millimetre protection.
 `approved_auto` will mean that the protected output satisfies the safety
 contract, not that every separator, photo edge, or Grid phase was uniquely
 proven. Only a concrete wrong-slot, ownership, or inward-content-loss risk that
-protection cannot absorb should become `needs_review`. V4.9 has not implemented
+protection cannot absorb should become `needs_review`. Adjacent protected
+outputs may overlap and may contain pixels from a neighboring photo; that does
+not by itself mean the primary slot ownership is wrong. V4.9 has not implemented
 that flow yet and therefore retains the review-only behavior described below.
 
 ## Install

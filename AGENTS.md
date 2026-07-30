@@ -78,11 +78,12 @@ https://github.com/rrriiicccooo/X5-Crop
   参与 proposal、assessment 和 selection。必须在 report/debug 中区分 observed 与
   inferred，但“属于推断”本身不是 `needs_review` 理由。
 - `approved_auto` 只表示最终保护后的输出满足有界安全合同；不表示每条照片边、separator
-  或 Grid phase 都被唯一证明。合理的向外多保留、相邻输出重叠和 bounded model
-  uncertainty 都可以接受。
+  或 Grid phase 都被唯一证明，也不保证每张输出只含本 slot 的像素。固定 protection 与
+  bounded contact/overlap 可以跨过 nominal divider、带入相邻照片像素并让相邻输出重叠。
 - `needs_review` 只用于具体且无法由 protection 吸收的输出风险，例如整格/ordinal 歧义、
-  请求 count 无法成立、已观测内容仍会被切掉、候选会混入错误相邻照片，或 geometry 越出
-  source/lane authority。不得只因 separator 缺失、照片为空、精确边界未观测或多个候选在
+  请求 count 无法成立、主照片的 slot ownership 无法有界、已观测内容仍会被切掉，或未保护
+  geometry 越出 source/lane authority。不得把 protection/shared interval 内出现邻片像素
+  当作 ownership 失败，也不得只因 separator 缺失、照片为空、精确边界未观测或多个候选在
   输出上等价而送审。
 - Partial 可以推断实际照片位于哪些 slot；blank 保留 slot；contact/overlap 优先允许输出框
   重叠以保全内容。只有 slot ownership 或安全包络无法有界时才送审。

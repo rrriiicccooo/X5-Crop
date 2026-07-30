@@ -50,10 +50,12 @@ X5 Crop 的目标是在用户已经提供 format 与 count 后，自动生成**�
   bounded proposal、assessment 和 selection。Report/Debug 必须区分 observed 与
   inferred，但模型推断本身不是送审理由。
 - `approved_auto` 表示最终保护后的输出满足有界安全合同；不表示 Grid phase、separator
-  或照片边被唯一证明。
+  或照片边被唯一证明，也不保证输出只含本 slot 的像素。Fixed protection 与 bounded
+  shared interval 可以带入相邻照片像素。
 - `needs_review` 只表示存在 protection 无法吸收的具体输出风险，例如整格/ordinal
-  歧义、count 无法成立、已知内容仍会被切掉、候选会混入错误相邻照片，或 geometry
-  在应用固定 protection 前就越出 source/lane authority。
+  歧义、count 无法成立、primary slot ownership 无法有界、已知内容仍会被切掉，或
+  geometry 在应用固定 protection 前就越出 source/lane authority。Protection/shared
+  interval 内出现邻片像素不是 ownership 失败。
 - Partial 可以推断真实照片位于哪些 slots；blank 保留 slot；contact/overlap 可以让相邻
   输出框重叠并重复保留共享像素。只有 slot ownership 或安全包络无法有界时才送审。
 - 多个精确 geometry 不唯一但输出等价时允许自动批准。回归验收关注 count、顺序、slot
@@ -252,7 +254,8 @@ receipt，不得随 cache 清理。它只否定特定表示或 measurement 合�
    width、`pitch - learned gutter` 和左右 edge weighted median。它们进入
    `FrameEnvelopeProposal` 与 residual assessment，不作为 width oracle。最终
    `SafeCropEnvelope` 对输出等价 hypotheses 作向外包络，再应用毫米 protection；首尾 slot
-   可向已选 strip containment endpoint pin，但不得越过 source/lane 或吸入错误邻片。
+   可向已选 strip containment endpoint pin，但不得越过 source/lane 或发生 whole-pitch
+   primary ownership 错位。Fixed protection 带入邻片像素是允许的。
 7. **Nearby 与 semantic measurements**：复用 narrow nearby search，以及 gap content、左右
    content、continuity、background、activity、width、geometry conflict 等 measurement。
    它们可以重排局部观测、保留 competing proposal 或形成 uncertainty；不得恢复 V3.5
@@ -260,7 +263,8 @@ receipt，不得随 cache 清理。它只否定特定表示或 measurement 合�
 8. **Blank/contact/overlap**：复用 overlap-like / continuous-content 测量，但改写为
    `BoundaryInteractionObservation`。Blank 保留完整 slot；contact/overlap 使相邻
    `SafeCropEnvelope` 向同一区域扩张并允许重复像素。旧“overlap 直接 REVIEW”规则不恢复；
-   只有保护后仍会切内容、混入错误邻片或 ownership 无界时，CandidateGate 才记录阻断事实。
+   只有保护后仍会切已知内容、primary ownership 无界或 geometry 越出 authority 时，
+   CandidateGate 才记录阻断事实。
 9. **Short-axis 与 Visual Deskew**：复用上下边缘 pair、两侧 line agreement、residual、
    base/enhanced angle proposal 与 source-coordinate uncertainty。它只在 Grid/envelope
    选择后产生 `VisualDeskewProposal`，不能证明 Grid，也不是自动批准前提；最终仍只做一次
@@ -317,29 +321,39 @@ receipt，不得随 cache 清理。它只否定特定表示或 measurement 合�
   image-observed candidates 加 1 个 model-only candidate；每个 lane 最多 3 个非支配
   `FrameGridProposal`。
 - 对 count 12，每个 lane/component 的 ordered DP 上限为 198 states、558 transitions。
-  超限只产生 typed `search_incomplete`；只有被省略 alternative 可能改变 ownership 或安全
-  box 时才阻断。
+  超限只产生 typed `search_incomplete`；只有被省略 alternative 可能改变
+  count/ordinal/primary ownership，或使 containment/authority 无法由 bounded union 表达时
+  才阻断。可由 shared/fixed protection 吸收的 box 差异不阻断。
 - Separator-first 不做 raw band 全配对；按 band、有限 ordinal difference 与 pitch interval
   作有界查询，再最多保留两个 seed。
 - Anchor `2+ / 1 / 0` 分别走有限 pitch/phase fit、有限 ordinal assignment、model-only
   proposal；没有 separator、齿孔不可见或 model inference 本身不送审。
 - Partial 不使用五个固定 offsets；leading/trailing endpoint 独立竞争。Blank 保留 slot；
   contact/overlap 的 bounded shared interval 同时并入相邻输出。
-- Output-equivalent 要求 count/order/content ownership/interaction 一致，且 union 不进入
-  已知错误邻片或越出 authority；等价 geometry outward union 后仍可自动批准。
+- Output-equivalent 要求 count/order/primary ownership 一致，interaction intervals 能作
+  bounded union；appearance/blank 判断可以不同。未保护 union 不越出 authority 或另一
+  primary slot；`shared_interaction` 与 `fixed_protection` 可以带入相邻照片像素。等价
+  geometry outward union 后仍可自动批准。
 - 毫米 protection 表值均是每侧值，按独立 scan-canvas scale upper endpoint 向上取整；先
   合并 safe envelope/shared interval，再应用 protection。只有固定 protection 可在
-  source/lane authority 饱和，原始 envelope 不得 clamp。
+  source/lane authority 饱和，原始 envelope 不得 clamp。Final box 按
+  `primary/shared_interaction/fixed_protection/authority_saturation` 报告 retention
+  provenance，不以 nominal divider 排除邻片像素。
 - 短轴默认保留完整 authoritative lane；只有能同时包含 format aperture、observation
   uncertainty 与全部已知 content 时才向内收窄。看不见短轴照片边不送审。
-- `CandidateGate` 只保存十一项有序安全事实；只有 `DecisionGate` 映射
+- `CandidateGate` 只保存十项有序安全事实；只有 `DecisionGate` 映射
   `approved_auto` / `needs_review` 与冻结的 typed reasons。Blank、inferred、
-  equivalent geometry、未 deskew、protection 饱和或较低 score 都不是独立 review reason。
+  equivalent geometry、未 deskew、protection 饱和、较低 score 或 final box 含邻片像素都
+  不是独立 review reason。
 - 原子切换时 report revision 变为 `bounded_safe_crop_grid`；同批删除
   `source_core_grid_authority` runtime reader/branch，不保留 alias 或双路径。
 - 初始 prior/threshold 数值是下一任务的只读 calibration data 或明确的同 film-family
   physical-rule data，不是待重新设计的权限问题。八张 nominal 用于校准，S098 只作
   stress；没有真实 fixture 的 XPan/120-645 不宣称准确性覆盖。
+- Threshold tuning 前建立 source-SHA-bound
+  `x5crop_safe_crop_acceptance_cohort_v1`，明确 `must_approve_safe` /
+  `needs_review_with_reason` / `stress_only`。历史 `pass_` 路径名或旧 PASS 不自动成为
+  expectation；calibration 与真实 holdout 分开报告。
 
 ## 文档与工作区
 
@@ -364,6 +378,8 @@ receipt，不得随 cache 清理。它只否定特定表示或 measurement 合�
 5. Detector-only 余量不能代替真实 frame TIFF 性能合同。
 6. Green tests、历史 PASS、hash 或 comparator 一致不能单独证明安全输出；Named TIFF
    必须检查真实内容 containment，但不要求精确贴合人工边界。
+7. Current tree 尚无 source-SHA-bound 的 must-approve/holdout expectation cohort；在它冻结
+   前不能用模糊“应该 PASS”调 Gate 或 threshold。
 
 ## 新任务的精确下一步
 
@@ -386,8 +402,9 @@ wc -l Test/manual_review/user_confirmed_golden_baseline.jsonl
 
 1. 按架构第 12.3–12.8 节建立 types、构造不变量、Gate vocabulary 与 synthetic contracts；
    current runtime 仍保持 review-only。
-2. 用八张 nominal 原 TIFF 生成 per-format/mode/component 的 read-only prior/measurement
-   audit，冻结 calibration receipt、candidate/work distributions；S098 不参与调参。
+2. 先冻结 validation-only acceptance cohort 与 calibration/holdout split，再用八张 nominal
+   原 TIFF 生成 per-format/mode/component 的 read-only prior/measurement audit，冻结
+   calibration receipt、candidate/work distributions；S098 不参与调参。
 3. 完成 seed、canonical separator/edge-pair、model-only corridor、ordered DP、slot、
    safe envelope、毫米 protection 与 identity output geometry 的最小纵切；先审计
    135/full 与 120-66/partial，不开放 export。
@@ -410,6 +427,7 @@ wc -l Test/manual_review/user_confirmed_golden_baseline.jsonl
 > `5f8b96ea` 是 source-core 实现检查点。当前 runtime 仍是 review-only，但产品宗旨是
 > 在用户提供 format/count 后保守自动裁切、不切真实内容，而不是唯一证明照片边界。
 > 历史机制审查与 bounded-safe-crop 设计均已冻结。直接按架构第 12 节实施
-> contracts、read-only calibration 与最小纵切；保持 `P_MAX=6`、`K_MAX=3`、
-> `G_MAX=3`、DecisionGate-only final decision、每侧毫米 protection 和原子 schema
-> cutover。不要另建平行计划，也不要原样恢复旧 runtime/schema。
+> contracts、acceptance cohort、read-only calibration 与最小纵切；保持 `P_MAX=6`、
+> `K_MAX=3`、`G_MAX=3`、DecisionGate-only final decision、允许 protection 含邻片像素、
+> 每侧毫米 protection 和原子 schema cutover。不要另建平行计划，也不要原样恢复旧
+> runtime/schema。

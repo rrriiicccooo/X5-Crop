@@ -17,8 +17,9 @@ X5 Crop 的自动裁切目标是“足够安全且不切掉真实照片内容”
 
 `approved_auto` 将表示保护后的输出满足安全合同，不表示每条 separator、照片边或 Grid
 phase 都被唯一证明。只有具体且无法被 protection 吸收的错格、照片归属或 inward content
-loss 风险才应进入 `needs_review`。当前 V4.9 尚未实现这套 flow，所以仍保持下述全量
-review 行为。
+loss 风险才应进入 `needs_review`。保护后的相邻输出可以重叠，也可以包含相邻照片像素；
+这不等于 primary slot ownership 错误。当前 V4.9 尚未实现这套 flow，所以仍保持下述
+全量 review 行为。
 
 ## 安装
 
