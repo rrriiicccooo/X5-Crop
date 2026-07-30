@@ -61,7 +61,9 @@ python3 X5_Crop.py . --format 135 --strip partial --count auto --report
 python3 X5_Crop.py . --format 120-66 --strip partial --layout vertical --report
 ```
 
-The default is `--jobs 2`. For all options:
+The default is `--jobs 2`. Normal runs may explicitly use `--jobs 3`, at the
+cost of higher peak memory pressure; diagnostics may use up to four workers.
+For all options:
 
 ```bash
 python3 X5_Crop.py --help

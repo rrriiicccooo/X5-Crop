@@ -12,6 +12,16 @@
 V4.9 是破坏性的 current-only 物理模型重构。旧 runtime、schema、reason、cache、
 compatibility 与历史 box parity 均不是迁移目标。
 
+### 2026-07-30：普通并发上限开放到 3
+
+- 将普通入口的默认值与上限拆分：默认保持 `--jobs 2`，用户可显式请求最多 3 个
+  worker；诊断上限保持 4。
+- 四 worker 不开放给普通运行。真实 TIFF 对照显示三 worker 在输入足够时有吞吐收益，
+  但单任务耗时和峰值内存压力也会上升；四 worker 对常见机器不是稳妥的常规上限。
+- 正式 24 张性能认证仍固定 `--jobs 2`，本次不改变 `<= 5.0 秒/张` 合同。
+- Current-only contract 固定默认 2、普通上限 3、诊断上限 4 及 runtime boundary 的
+  实际归约。
+
 ### 2026-07-30：仓库结构与本地工作区收敛
 
 - 关闭 sparse checkout，将 `LICENSE` 与其它受跟踪文件全部保存在本地。

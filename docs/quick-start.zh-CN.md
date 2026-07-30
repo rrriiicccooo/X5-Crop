@@ -55,7 +55,8 @@ python3 X5_Crop.py . --format 135 --strip partial --count auto --report
 python3 X5_Crop.py . --format 120-66 --strip partial --layout vertical --report
 ```
 
-默认使用 `--jobs 2`。查看全部参数：
+默认使用 `--jobs 2`。普通运行可显式使用 `--jobs 3`，但会增加峰值内存压力；诊断模式
+最多使用 4 个 worker。查看全部参数：
 
 ```bash
 python3 X5_Crop.py --help

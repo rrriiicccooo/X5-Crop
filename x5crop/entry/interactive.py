@@ -5,7 +5,7 @@ from pathlib import Path
 from ..app_info import SCRIPT_NAME, VERSION
 from ..formats import FORMATS
 from ..runtime.bootstrap import run_options
-from ..runtime.limits import DIAGNOSTICS_JOB_LIMIT, STANDARD_JOB_LIMIT
+from ..runtime.limits import DIAGNOSTICS_JOB_LIMIT, STANDARD_JOB_DEFAULT
 from ..runtime.options import RuntimeOptions
 
 
@@ -146,7 +146,7 @@ def interactive_options(diagnostics: bool = False) -> RuntimeOptions:
         overwrite=False,
         report=debug_analysis or diagnostics,
         debug_errors=False,
-        jobs=DIAGNOSTICS_JOB_LIMIT if diagnostics else STANDARD_JOB_LIMIT,
+        jobs=DIAGNOSTICS_JOB_LIMIT if diagnostics else STANDARD_JOB_DEFAULT,
     )
 
 

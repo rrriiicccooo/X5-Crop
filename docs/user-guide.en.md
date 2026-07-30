@@ -117,8 +117,11 @@ For a vertical strip:
 python3 X5_Crop.py . --format 120-66 --strip partial --layout vertical --report
 ```
 
-`--layout auto` is the default. The default is `--jobs 2`; normal runs use at
-most two workers and diagnostics at most four.
+`--layout auto` is the default. Parallelism defaults to `--jobs 2`; a normal run
+may explicitly request up to three workers, while diagnostics may use up to
+four. `--jobs 3` is intended for machines with sufficient memory and batches of
+at least three TIFFs. It increases peak memory pressure, so it is not the
+default. Formal performance certification remains fixed at `--jobs 2`.
 
 ```bash
 python3 X5_Crop.py --help

@@ -80,6 +80,16 @@ Full 的其它显式 count 被拒绝。`135-dual` 不支持 partial。没有独�
 `ScanCanvasEvidence` 独占 long/short axis-scale intervals。`SourceLaneEvidence` 可以只读
 携带这些 intervals，但不是 scale authority。TIFF resolution 不参与检测。
 
+### 3.3 运行并发
+
+普通入口默认 `STANDARD_JOB_DEFAULT = 2`，只在用户显式传入更高 `--jobs` 时使用
+`STANDARD_JOB_LIMIT = 3`。诊断模式单独保留 `DIAGNOSTICS_JOB_LIMIT = 4`。Runtime
+boundary 在建立 `RunConfig` 时执行上限归约；lower layer 只读取归约后的正整数，不根据
+硬件、文件名或 detection 结果自适应改变并发。
+
+并发单位是相互独立的输入 TIFF。三 worker 是内存充足机器处理至少三张输入时的 opt-in
+吞吐选项，不是新的默认值或性能通过条件。正式性能认证继续固定 `--jobs 2`。
+
 ## 4. 物理与 measurement owner
 
 | Concept | 唯一 owner | 禁止事项 |

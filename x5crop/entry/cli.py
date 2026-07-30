@@ -8,7 +8,7 @@ from pathlib import Path
 from ..app_info import REPORT_JSONL_NAME, SCRIPT_NAME, SUMMARY_CSV_NAME, VERSION
 from ..formats import FORMAT_CHOICES
 from ..runtime.bootstrap import run_options
-from ..runtime.limits import STANDARD_JOB_LIMIT
+from ..runtime.limits import STANDARD_JOB_DEFAULT
 from ..runtime.options import (
     COMPRESSION_CHOICES,
     LAYOUT_CHOICES,
@@ -73,7 +73,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--debug-analysis", action="store_true", help="Write one combined JPG with source, separator, Grid, Gate, and crop summaries.")
     parser.add_argument("--diagnostics", action="store_true", help="Read-only diagnostics mode; implies --report --debug-analysis --no-copy-review-files.")
-    parser.add_argument("--jobs", type=int, default=STANDARD_JOB_LIMIT, help="Parallel TIFF workers. Default 2. Normal runs cap at 2; diagnostics runs cap at 4.")
+    parser.add_argument(
+        "--jobs",
+        type=int,
+        default=STANDARD_JOB_DEFAULT,
+        help=(
+            "Parallel TIFF workers. Default 2. Normal runs cap at 3; "
+            "diagnostics runs cap at 4."
+        ),
+    )
     parser.add_argument("--debug-errors", action="store_true", help="Print tracebacks on errors.")
     parser.add_argument("--interactive", action="store_true", help="Prompt for format, mode, and Debug Analysis options.")
     parser.add_argument("--interactive-diagnostics", action="store_true", help="Prompt for diagnostics options and run read-only diagnostics.")

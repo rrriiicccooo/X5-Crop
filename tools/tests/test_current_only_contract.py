@@ -24,6 +24,12 @@ from x5crop.report.identity import (
     REPORT_SCHEMA_ID,
     REPORT_SCHEMA_REVISION,
 )
+from x5crop.runtime.bootstrap import runtime_invocation_from_options
+from x5crop.runtime.limits import (
+    DIAGNOSTICS_JOB_LIMIT,
+    STANDARD_JOB_DEFAULT,
+    STANDARD_JOB_LIMIT,
+)
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -108,6 +114,57 @@ class CurrentOnlyContractTest(unittest.TestCase):
         ):
             parser.parse_args(
                 ["input.tif", "--format", "135", "--auto-count"]
+            )
+
+    def test_standard_job_default_and_caps_are_distinct(self) -> None:
+        self.assertEqual(STANDARD_JOB_DEFAULT, 2)
+        self.assertEqual(STANDARD_JOB_LIMIT, 3)
+        self.assertEqual(DIAGNOSTICS_JOB_LIMIT, 4)
+
+        parser = build_parser()
+        default_options = options_from_args(
+            parser.parse_args(["input.tif", "--format", "135"])
+        )
+        normal_four_options = options_from_args(
+            parser.parse_args(
+                ["input.tif", "--format", "135", "--jobs", "4"]
+            )
+        )
+        diagnostics_options = options_from_args(
+            parser.parse_args(
+                [
+                    "input.tif",
+                    "--format",
+                    "135",
+                    "--jobs",
+                    "4",
+                    "--diagnostics",
+                ]
+            )
+        )
+        self.assertEqual(default_options.jobs, 2)
+
+        with (
+            mock.patch(
+                "x5crop.runtime.bootstrap.iter_input_files",
+                return_value=[Path("input.tif")],
+            ),
+            mock.patch(
+                "x5crop.runtime.bootstrap.read_tiff_page_shape",
+                return_value=(100, 200),
+            ),
+        ):
+            self.assertEqual(
+                runtime_invocation_from_options(default_options).config.jobs,
+                2,
+            )
+            self.assertEqual(
+                runtime_invocation_from_options(normal_four_options).config.jobs,
+                3,
+            )
+            self.assertEqual(
+                runtime_invocation_from_options(diagnostics_options).config.jobs,
+                4,
             )
 
     def test_strip_handling_has_one_current_contract(self) -> None:

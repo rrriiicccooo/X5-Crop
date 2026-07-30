@@ -105,7 +105,9 @@ python3 X5_Crop.py . --format 120-66 --strip partial --count auto --report
 python3 X5_Crop.py . --format 120-66 --strip partial --layout vertical --report
 ```
 
-`--layout auto` 是默认值。默认 `--jobs 2`；普通运行最多 2 个 worker，诊断最多 4 个。
+`--layout auto` 是默认值。并发默认 `--jobs 2`；普通运行可显式提高到最多 3 个 worker，
+诊断最多 4 个。`--jobs 3` 适合内存充足且一次处理至少三张 TIFF 的机器；它会提高峰值
+内存压力，因此不作为默认值。正式性能认证仍固定使用 `--jobs 2`。
 
 ```bash
 python3 X5_Crop.py --help
