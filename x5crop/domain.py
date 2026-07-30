@@ -53,6 +53,37 @@ class PositiveInterval:
         return cls(float(value), float(value))
 
 
+@dataclass(frozen=True, order=True)
+class FiniteInterval:
+    minimum: float
+    maximum: float
+
+    def __post_init__(self) -> None:
+        if (
+            not math.isfinite(self.minimum)
+            or not math.isfinite(self.maximum)
+            or self.maximum < self.minimum
+        ):
+            raise ValueError("finite interval bounds must be finite and ordered")
+
+    @classmethod
+    def exact(cls, value: float) -> "FiniteInterval":
+        return cls(float(value), float(value))
+
+    @property
+    def center(self) -> float:
+        return (self.minimum + self.maximum) / 2.0
+
+    @property
+    def width(self) -> float:
+        return self.maximum - self.minimum
+
+    def contains(self, value: float, *, epsilon: float = 0.0) -> bool:
+        if not math.isfinite(value) or epsilon < 0.0:
+            return False
+        return self.minimum - epsilon <= value <= self.maximum + epsilon
+
+
 class EvidenceState(str, Enum):
     SUPPORTED = "supported"
     CONTRADICTED = "contradicted"
@@ -65,6 +96,7 @@ class MeasurementIdentity(str, Enum):
     IMAGE_MEASUREMENT_STATISTICS = "image_measurement_statistics"
     SCAN_CANVAS_GEOMETRY = "scan_canvas_geometry"
     SOURCE_CONTENT = "source_content"
+    SEPARATOR_FIELD = "separator_field"
 
 
 class ObservationId(str):

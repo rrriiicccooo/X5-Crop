@@ -1,50 +1,44 @@
 # X5 Crop User Guide
 
-- Active development: **V4.9 source-core safety baseline**
+- Active development: **V4.9 bounded safe crop**
 - Stable release: **v4.2.8**
 
-The current V4.9 development build reads X5 holder-scan TIFFs, audits the scan
-canvas, independent axis scales, and positive source content, then emits review
-copies, reports, and Debug Analysis. It has no approved independent Frame Grid
-phase authority, so every input remains `needs_review` and no frame TIFF is
-exported.
-
-This is the formal capability boundary, not a fallback after auto-cropping fails.
+X5 Crop conservatively crops Hasselblad / Imacon X5 holder-scan TIFFs. You
+supply the film format; the program builds frames within holder capacity, a
+bounded Grid search, and outward safety envelopes, then writes individual TIFFs
+when the safety contract is satisfied.
 
 ## Product Goal
 
-X5 Crop aims for automatic crops that are safe enough not to cut real photo
-content; it is not a tool for uniquely measuring the true physical boundary. The
-user-supplied format is always authoritative. Full uses its fixed count; a
-future partial Grid/output flow will accept either an explicit authoritative
-count or a bounded automatic count. It may combine observed clues with
-format-model inference and conservatively retain extra pixels through
-millimetre protection.
+Success means not cutting real photo content, not uniquely measuring the true
+physical boundary:
 
-`approved_auto` will mean that the protected output satisfies the safety
-contract, not that every separator, photo edge, or Grid phase was uniquely
-proven. Only a concrete wrong-slot, ownership, or inward-content-loss risk that
-protection cannot absorb should become `needs_review`. Adjacent protected
-outputs may overlap and may contain pixels from a neighboring photo; that does
-not by itself mean the primary slot ownership is wrong. V4.9 has not implemented
-that flow yet and therefore retains the review-only behavior described below.
+- `approved_auto` means the final protected output satisfies the bounded safety
+  contract.
+- Outputs may be larger than the photo, overlap, or contain a small part of a
+  neighboring photo.
+- A missing separator, blank slot, inferred Grid, equivalent geometry, no
+  deskew, or protection saturated at an authority boundary does not by itself
+  require review.
+- `needs_review` is reserved for a concrete risk that cannot be absorbed, such
+  as competing counts, unresolved ordinal or primary-slot ownership, possible
+  inward loss of known content, or geometry outside source/lane authority.
+- Read, write, and read-back errors are terminal failures, not review results.
 
 ## Install
 
 Download `X5-Crop-vX.X.zip` from
 [GitHub Releases](https://github.com/rrriiicccooo/X5-Crop/releases). Do not use
-GitHub's generated Source code archive.
-
-Run the platform installer once:
+GitHub's generated Source code archive. Unzip it and run the installer once:
 
 ```text
 macOS:   install/X5_Crop_Mac_install.command
 Windows: install/X5_Crop_win_install.bat
 ```
 
-The installer checks `numpy`, `tifffile`, `imagecodecs`, and `Pillow`.
-On macOS, it prepares only the current Release folder and does not establish
-system-wide trust.
+The installer checks `numpy`, `tifffile`, `imagecodecs`, and `Pillow`. On macOS
+it prepares only the current Release folder and does not establish system-wide
+trust.
 
 Keep the entry script, launcher, and TIFF scans in the same folder:
 
@@ -59,39 +53,86 @@ macOS:   double-click X5_Crop_Mac.command
 Windows: double-click X5_Crop_win.bat
 ```
 
-If macOS blocks double-click launch, run:
+If macOS blocks double-click launch, run this in the folder:
 
 ```bash
 /bin/bash X5_Crop_Mac.command
 ```
 
-## Formats And Modes
+## Formats, Modes, And Count
 
-| Input | Format | Full design count |
-|---|---|---:|
-| Return / `135` | 135 | 6 |
-| `dual` / `135 dual` / `135-dual` | dual-lane 135 | 12 |
-| `half` | half-frame | 12 |
-| `xpan` | XPan | 3 |
-| `645` | 120-645 | 4 |
-| `66` | 120-66 | 3 |
-| `67` | 120-67 | 3 |
+| Input | Format | Full count | Partial |
+|---|---|---:|---|
+| Return / `135` | 135 | 6 | 1..6 or auto |
+| `dual` / `135 dual` / `135-dual` | dual-lane 135 | 12 | unsupported |
+| `half` | half-frame | 12 | 1..12 or auto |
+| `xpan` | XPan | 3 | 1..3 or auto |
+| `645` | 120-645 | 4 | 1..4 or auto |
+| `66` | 120-66 | 3 | 1..3 or auto |
+| `67` | 120-67 | 3 | 1..3 or auto |
 
-- Full and partial use the same complete scan-canvas/lane short-axis domain.
-- A partial count describes complete design slots, never a partial photograph.
-- Format is authoritative for future automatic cropping. An explicit partial
-  count is also authoritative; automatic count is bounded by the format and
-  matched-holder capacity. The current build still requires an explicit partial
-  count, records it as audit identity, and does not create frames.
-- `135-dual` is audited per lane and remains in review.
+Format always comes from the user; runtime never guesses it.
 
-## Current Detection Facts
+There is one count mapping:
 
-Each TIFF produces one base gray and one image-statistics measurement. A known
-scan canvas must match uniquely from pixel aspect; no match or competing matches
-remain in review.
+- Full normalizes to `fixed_full`. An explicit count is accepted only when it
+  equals the format default.
+- A partial integer is an authoritative `explicit` count.
+- Omitting partial CLI `--count`, passing `--count auto`, or pressing Return in
+  the interactive prompt selects `auto`.
+- There is no separate `--auto-count` option.
+- Auto searches only `1..default_count`, then removes counts that exceed the
+  uniquely matched holder capacity.
+- A filename annotation such as `X5_<count>` may be used by validation only. It
+  never enters detector, prior, score, Gate, or runtime selection.
 
-The current scan-canvas catalog uses these long-axis × short-axis dimensions:
+A partial count describes complete design slots, not a partial photograph.
+Blank slots remain in the sequence. `135-dual` first matches the complete canvas
+and then creates two canonical lanes; output order is top lane 1..6 followed by
+bottom lane 1..6.
+
+## Run
+
+Normal:
+
+```bash
+python3 X5_Crop.py . --format 135 --strip full --report
+```
+
+Partial explicit:
+
+```bash
+python3 X5_Crop.py . --format 135 --strip partial --count 3 --report
+```
+
+Partial auto:
+
+```bash
+python3 X5_Crop.py . --format 120-66 --strip partial --count auto --report
+```
+
+For a vertical strip:
+
+```bash
+python3 X5_Crop.py . --format 120-66 --strip partial --layout vertical --report
+```
+
+`--layout auto` is the default. The default is `--jobs 2`; normal runs use at
+most two workers and diagnostics at most four.
+
+```bash
+python3 X5_Crop.py --help
+```
+
+## Detection And Safety Envelopes
+
+Each TIFF produces one base-gray image and one image-statistics measurement.
+Scan-canvas candidates are filtered by format and capacity, then pixel aspect
+must identify one unique profile; the detector never chooses a nearest profile.
+`ScanCanvasEvidence` owns independent long/short px/mm intervals. TIFF DPI/PPI
+is output metadata only.
+
+Current holder catalog:
 
 | Profile | Physical size | Format fit and maximum count |
 |---|---:|---|
@@ -103,132 +144,138 @@ The current scan-canvas catalog uses these long-axis × short-axis dimensions:
 | `120_wide_223` | `223 × 63.44 mm` | 645 ≤ 4; 66 ≤ 3; 67 ≤ 3 |
 | `120_wide_188_5` | `188.5 × 63.44 mm` | 645 ≤ 4; 66 ≤ 3; 67 ≤ 2 |
 
-Format and the resolved count (the full default or an explicit partial count)
-first remove profiles that cannot physically hold the requested frames. Pixel
-aspect then selects a unique match; the detector never chooses the nearest
-profile. A 135-dual scan derives scale from the complete `232 × 63.44 mm`
-canvas before its center split into two lanes.
+Separator measurement and positive-content measurement are independent.
+Observed bands, edge pairs, learned one-sided observations, and model-only
+corridors may all participate in bounded proposals. A prior constrains search;
+it never becomes a physical observation.
 
-Long/short px/mm scales are calculated independently. TIFF DPI/PPI is preserved
-I/O metadata and is never a detection input.
+Every proposal creates exactly count lane-local slots. A bounded shared interval
+from contact or overlap is included in both adjacent safety envelopes. The full
+authoritative lane is retained on the short axis by default. Fixed millimetre
+protection is then rounded outward using the upper endpoint of each independent
+scale interval. Only this protection step may saturate at a source/lane edge.
 
-Positive content uses two independent fields:
+The current output transform is typed identity. No advanced fit or deskew is
+added without a named gap, and the absence of deskew does not cause review.
+Selected count, transform, and boxes cannot change after DecisionGate.
 
-```text
-intensity = abs(I - five_point_local_mean(I)) / 255
-texture   = (abs(dx) + abs(dy)) / 510
-positive  = intensity_supported AND texture_supported
-```
+## Gate, Status, And Reasons
 
-Components use strict 4-connectivity and immutable RLE. Content can describe
-source pixels; it cannot create frame phase, separators, photo edges, or deskew.
-
-The current Grid outcome is fixed:
+`CandidateGate` records exactly ten ordered candidate facts:
 
 ```text
-NO_INDEPENDENT_PHASE_AUTHORITY
+scan_canvas_authority
+source_content_measurement
+grid_search_coverage
+frame_count
+slot_ordinal_assignment
+slot_ownership
+known_content_containment
+source_lane_geometry
+output_protection
+output_transform
 ```
 
-Therefore:
+Only `DecisionGate` creates `approved_auto`, `needs_review`, and typed reasons.
+Common review reasons include:
 
-- status: `needs_review`
-- reason: `frame_grid_authority_unavailable`
-- containment: `NOT_APPLICABLE_FRAME_GRID_UNAVAILABLE`
-- visual deskew: `NOT_APPLICABLE_CORE_UNAVAILABLE`
-- frame outputs: empty
+- `scan_canvas_authority_unavailable`
+- `automatic_count_unresolved` or `requested_count_unfulfilled`
+- `grid_search_coverage_outcome_risk`
+- `slot_ordinal_assignment_unresolved`
+- `slot_ownership_unbounded`
+- `known_content_containment_unbounded`
+- `source_lane_geometry_invalid`
+- `output_protection_unavailable`
+- `output_transform_unavailable`
 
-If scan-canvas or content measurement is itself unavailable, the report adds its
-independent typed reason.
+## Output, Reports, And Diagnostics
 
-## Run And Output
-
-Normal command:
-
-```bash
-python3 X5_Crop.py . --format 135 --strip full --report
-```
-
-Diagnostics:
-
-```bash
-python3 X5_Crop.py . --format 135 --strip full --diagnostics
-```
-
-Full help:
-
-```bash
-python3 X5_Crop.py --help
-```
-
-The default is `--jobs 2`. The output directory may contain:
+An ordinary approved run may create:
 
 ```text
 x5_crop_output/
-  needs_review/
+  source_name_01.tif
+  source_name_02.tif
+  ...
   _debug/
   _debug_analysis/
+  needs_review/
   x5_crop_report.jsonl
   x5_crop_summary.csv
   x5_crop_run_manifest.jsonl
 ```
 
-- `needs_review/` contains source-TIFF copies by default;
-  `--no-copy-review-files` disables copying.
-- `--report` writes current-only JSONL/CSV.
-- `--debug-analysis` writes bounded domain and positive-content visuals.
-- `--diagnostics` enables report and Debug Analysis without review copying.
-- Source TIFFs are never modified.
+Optional outputs:
 
-Current schema:
+- `--report` writes current JSONL and CSV.
+- `--debug` writes a lightweight separator, Grid, and crop preview.
+- `--debug-analysis` writes a source, measurement, Grid, Gate, and output
+  summary.
+- `--diagnostics` is read-only. It enables report and Debug Analysis and
+  disables review copies. It preserves the same DecisionGate result and final
+  boxes but writes no frame TIFF.
+- `--no-copy-review-files` disables source copies for review cases.
+
+Current report:
 
 ```text
 schema_id       = detection_report
-schema_revision = source_core_grid_authority
+schema_revision = bounded_safe_crop_grid
 ```
 
-The report's typed configuration records `resolved_frame_count` and lists the
-scan-canvas profiles remaining after count-capacity filtering.
+The report stores the count request and candidate range, selected count,
+calibration receipt ID, observed/inferred provenance, per-count/lane/component
+work, dominance, slots and interactions, safe and protected envelopes, both
+Gates, transform, final boxes, and TIFF-fidelity receipt. A report is an audit
+artifact, not a detection cache.
 
-The old `--bleed`, `--bleed-x`, `--bleed-y`, `--export-review`, and `--dry-run`
-options have been removed and are rejected. Format-level millimetre protection
-authority is reported but cannot be applied without frame geometry and has no
-user override.
+## TIFF Fidelity And Errors
 
-## ROI/TIFF Foundation
+The source TIFF is never modified. Each approved ROI is sampled from the source
+once, then immediately written and read back. Validation checks:
 
-The current runtime does not export frames, but the inverse-affine ROI and TIFF
-writer remain independently verified:
+- dtype, axes, shape, and channel structure;
+- Photometric, BitsPerSample, SampleFormat, and planar configuration;
+- ICC profile/color space;
+- resolution and resolution unit;
+- description, datetime, software, and supported metadata tags;
+- pixel equality;
+- `same` preserves known lossless source compression such as NONE/LZW, while
+  `none` writes an uncompressed TIFF.
 
-- identity is an exact half-open slice;
-- affine ROI pixels equal the test reference;
-- source RGB is sampled once per ROI;
-- dtype, axes, ICC, resolution, metadata, and NONE/LZW compression are preserved;
-- out-of-authority geometry raises instead of clamping.
+A read, write, atomic-replace, or read-back error records an independent
+`FailedInput` and terminal stage. It never rewrites DecisionGate or creates a
+success receipt.
 
-These foundation contracts do not claim that automatic cropping is currently
-available.
+## Validation Boundaries
 
-## Performance Boundary
+Accuracy completion currently uses only nine source-SHA-bound samples with
+user-confirmed geometry, expanded into 14 fixed/explicit/auto scenarios.
+Containment checks only whether the inverse-transformed output source footprint
+fully contains each confirmed polygon; larger and overlapping outputs are
+allowed.
 
-The fixed 24-input detector-only diagnostic indicates future production headroom
-only when the `--jobs 2` median of three measured runs is strictly below
-`5.0 seconds/input`. It is not a formal output performance PASS.
+The 111-record manifest is a non-blocking coverage audit. Duplicate SHA groups
+are listed separately, and record count is never presented as independent
+real-sample count. `real_holdout = unavailable`; cells without real samples,
+including XPan and 120-645, report
+`real_sample_coverage = unavailable` without causing review.
 
-Certification with 24 real frame TIFF writes, read-back verification, and
-`<=5.0 seconds/input` can run only after a bounded Grid proposal and safe crop
-envelope restore automatic output. The current certification status must be
-`not_certified`.
+Formal performance uses a fixed 24-real-TIFF cohort, `--jobs 2`, and one empty
+output root containing `cold` plus `measured-1/2/3`. Every run writes and reads
+back frame TIFFs. Certification uses only the three measured runs and requires
+their median to be `<= 5.0 seconds/input`.
 
 ## Uninstall And License
 
-Delete the X5 Crop folder to remove the program and local output. Uninstallers
-remove user-level Python dependencies, not Python itself; those dependencies may
-be shared.
+Delete the X5 Crop folder to remove the program and its local outputs.
+Uninstallers remove user-level Python dependencies, not Python itself:
 
 ```text
 macOS:   install/X5_Crop_Mac_uninstall.command
 Windows: install/X5_Crop_win_uninstall.bat
 ```
 
-License: MIT. See the
+License: MIT. See
 [GitHub LICENSE](https://github.com/rrriiicccooo/X5-Crop/blob/main/LICENSE).

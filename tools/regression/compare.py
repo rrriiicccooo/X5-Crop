@@ -1,4 +1,4 @@
-"""Compare two current source-core report sets."""
+"""Compare two current bounded-safe-crop report sets."""
 
 from __future__ import annotations
 
@@ -12,7 +12,8 @@ from x5crop.report.validation import validate_current_report_record
 
 
 DEFAULT_FIELDS = (
-    "source_core",
+    "measurement",
+    "grid_selection",
     "candidate_gate",
     "decision",
     "output.finalization",
@@ -27,7 +28,8 @@ class ReportComparisonIdentity:
     format_id: str
     layout: str
     strip_mode: str
-    requested_count: int | None
+    count_mode: str
+    count_candidates: tuple[int, ...]
 
 
 @dataclass(frozen=True)
@@ -62,16 +64,16 @@ def report_key(row: dict[str, Any]) -> ReportComparisonIdentity:
     config = row["analysis_identity"]["runtime_configuration"]
     if int(source["page"]) != int(config["page"]):
         raise ValueError("report source and runtime page disagree")
+    request = config["count_request"]
     return ReportComparisonIdentity(
         source=str(row["source"]),
         page=int(source["page"]),
         format_id=str(config["format_id"]),
         layout=str(config["layout"]),
         strip_mode=str(config["strip_mode"]),
-        requested_count=(
-            None
-            if config["requested_count"] is None
-            else int(config["requested_count"])
+        count_mode=str(request["mode"]),
+        count_candidates=tuple(
+            int(value) for value in request["candidate_counts"]
         ),
     )
 

@@ -30,6 +30,15 @@ class RuntimeMetrics:
     content_runs: int | None
     content_components: int | None
     censored_content_components: int | None
+    exact_measurement_count: int | None
+    exact_cache_hit_count: int | None
+    separator_line_observations: int | None
+    placement_seeds: int | None
+    candidate_builds: int | None
+    dp_states: int | None
+    dp_transitions: int | None
+    retained_proposals: int | None
+    peak_temporary_bytes: int | None
 
     def __post_init__(self) -> None:
         values = (
@@ -39,6 +48,15 @@ class RuntimeMetrics:
             self.content_runs,
             self.content_components,
             self.censored_content_components,
+            self.exact_measurement_count,
+            self.exact_cache_hit_count,
+            self.separator_line_observations,
+            self.placement_seeds,
+            self.candidate_builds,
+            self.dp_states,
+            self.dp_transitions,
+            self.retained_proposals,
+            self.peak_temporary_bytes,
         )
         if all(value is None for value in values):
             return
@@ -58,13 +76,38 @@ class RuntimeMetrics:
             self.content_runs,
             self.content_components,
             self.censored_content_components,
+            self.exact_measurement_count,
+            self.exact_cache_hit_count,
+            self.separator_line_observations,
+            self.placement_seeds,
+            self.candidate_builds,
+            self.dp_states,
+            self.dp_transitions,
+            self.retained_proposals,
+            self.peak_temporary_bytes,
         )
         if any(value is None or value < 0 for value in counts):
             raise ValueError("runtime counters cannot be negative")
 
     @classmethod
     def unavailable(cls) -> "RuntimeMetrics":
-        return cls(None, None, None, None, None, None)
+        return cls(
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
 
     @property
     def available(self) -> bool:
@@ -78,6 +121,15 @@ class RuntimeMetrics:
             "content_runs": self.content_runs,
             "content_components": self.content_components,
             "censored_content_components": self.censored_content_components,
+            "exact_measurement_count": self.exact_measurement_count,
+            "exact_cache_hit_count": self.exact_cache_hit_count,
+            "separator_line_observations": self.separator_line_observations,
+            "placement_seeds": self.placement_seeds,
+            "candidate_builds": self.candidate_builds,
+            "dp_states": self.dp_states,
+            "dp_transitions": self.dp_transitions,
+            "retained_proposals": self.retained_proposals,
+            "peak_temporary_bytes": self.peak_temporary_bytes,
         }
 
 

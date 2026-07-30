@@ -8,7 +8,14 @@ from ...gate_checks import GateCheck, GateStage
 CANDIDATE_GATE_CHECK_CODES = (
     "scan_canvas_authority",
     "source_content_measurement",
-    "frame_grid_authority",
+    "grid_search_coverage",
+    "frame_count",
+    "slot_ordinal_assignment",
+    "slot_ownership",
+    "known_content_containment",
+    "source_lane_geometry",
+    "output_protection",
+    "output_transform",
 )
 
 

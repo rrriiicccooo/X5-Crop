@@ -7,7 +7,7 @@ from ..detection.final.model import FinalDetection
 from ..detection.workspace import DetectionWorkspace
 from ..run_status import RunTerminalOutcome
 from .canvas import DebugRenderCache, write_rgb_jpeg
-from .panels import make_source_core_preview_rgb
+from .panels import make_bounded_safe_crop_preview_rgb
 from .status import add_status_bar
 
 
@@ -19,8 +19,9 @@ def _render(
     terminal_outcome: RunTerminalOutcome,
 ):
     return add_status_bar(
-        make_source_core_preview_rgb(
+        make_bounded_safe_crop_preview_rgb(
             workspace,
+            detection,
             diagnostics.style,
             render_cache,
         ),

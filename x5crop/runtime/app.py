@@ -32,7 +32,7 @@ def print_run_header(invocation: RuntimeInvocation) -> None:
     mode_parts = [f"layout: {layout_label}", f"strip: {config.strip_mode}"]
     configuration = invocation.configuration_bundle.initial_configuration
     mode_parts.append(f"configuration: {configuration.configuration_id}")
-    if config.strip_mode == "partial" and config.requested_count is None:
+    if config.count_request.mode.value == "auto":
         mode_parts.append("count: auto")
     if config.debug_analysis:
         mode_parts.append("debug analysis")
@@ -207,5 +207,5 @@ def run_runtime(invocation: RuntimeInvocation) -> int:
             else:
                 failed += 1
 
-    print(f"\ndone: review={completed} failed={failed}")
+    print(f"\ndone: completed={completed} failed={failed}")
     return 0 if failed == 0 else 1

@@ -10,7 +10,6 @@ from ..domain import Box
 from ..geometry.affine import AffineCoordinateTransform
 from ..image.transforms import photometric_background_value, sample_affine_roi
 from ..io.model import ImageProfile
-from ..image.crop_pixels import validate_source_crop_pixels
 from ..io.tiff import write_validated_tiff
 
 
@@ -43,8 +42,6 @@ def write_crops(
                 background_value=background_value,
             )
         )
-        if transform.is_identity:
-            validate_source_crop_pixels(source_arr, profile.axes, box, cropped)
         tmp = out_path.with_name(f".{out_path.stem}.tmp{out_path.suffix}")
         if tmp.exists():
             tmp.unlink()

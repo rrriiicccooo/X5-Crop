@@ -4,20 +4,21 @@ import contextlib
 import io
 from pathlib import Path
 import unittest
+from unittest import mock
 
 from tools.release.standalone import read_sources
-from x5crop.detection.decision.model import (
-    DECISION_GATE_CHECK_CODES,
-    DECISION_GATE_REASON_BY_CODE,
-    DecisionGateAssessment,
+from x5crop.configuration.model import (
+    FrameCountMode,
+    FrameCountRequest,
 )
-from x5crop.detection.gate_checks import (
-    GateCheck,
-    GateRequirement,
-    GateStage,
+from x5crop.detection.candidate.assessment.candidate_gate import (
+    candidate_gate_assessment,
 )
+from x5crop.detection.decision.decision_gate import apply_decision_gate
 from x5crop.domain import EvidenceState
-from x5crop.entry.cli import build_parser
+from x5crop.entry.cli import build_parser, options_from_args
+from x5crop.entry.interactive import interactive_options
+from x5crop.formats import format_spec
 from x5crop.report.identity import (
     REPORT_SCHEMA_ID,
     REPORT_SCHEMA_REVISION,
@@ -46,116 +47,142 @@ class CurrentOnlyContractTest(unittest.TestCase):
                 else:
                     self.assertFalse(target.exists())
 
-    def test_active_runtime_has_no_legacy_detection_vocabulary(self) -> None:
+    def test_active_runtime_has_no_replaced_schema_or_placeholder_vocabulary(
+        self,
+    ) -> None:
         forbidden = (
-            "PhotoEdge",
-            "FrameBleed",
-            "AxisBleedParameters",
-            "TransformGeometryEvidence",
-            "approved_auto",
-            "shared_short_axis",
-            "rotated_gray",
-            "bleed_x",
-            "bleed_y",
-            "copy_for_review_if_needed",
+            "source_core_grid_authority",
+            "source_core_review",
+            "resolved_frame_count",
+            "allowed_partial_counts",
+            "complete_strip_can_be_underfilled",
+            "frame_grid_authority_unavailable",
+            "source_content_measurement_unavailable",
+            "no_independent_phase_authority",
+            "not_applicable_frame_grid_unavailable",
+            "not_applicable_core_unavailable",
+            "FrameGridEvidence",
+            "PhotoContainmentEvidence",
+            "VisualDeskewOutcome",
             "write_crops_if_allowed",
+            "copy_for_review_if_needed",
         )
-        sources = read_sources()
-        combined = "\n".join(sources.values())
+        active_paths = tuple((ROOT / "x5crop").rglob("*.py")) + tuple(
+            path
+            for path in (ROOT / "tools").rglob("*.py")
+            if "tests" not in path.relative_to(ROOT / "tools").parts
+        )
+        combined = "\n".join(
+            path.read_text(encoding="utf-8") for path in active_paths
+        )
         for token in forbidden:
             with self.subTest(token=token):
                 self.assertNotIn(token, combined)
 
-    def test_gitignore_has_no_obsolete_source_exceptions(self) -> None:
-        ignore = (ROOT / ".gitignore").read_text(encoding="utf-8")
-        self.assertNotIn("x5crop/detection/candidate/build", ignore)
+    def test_input_mapping_is_frozen_without_parallel_auto_switch(self) -> None:
+        partial = format_spec("135")
+        auto = FrameCountRequest.from_user_input(partial, "partial", None)
+        explicit = FrameCountRequest.from_user_input(partial, "partial", 3)
+        fixed = FrameCountRequest.from_user_input(partial, "full", 6)
+        self.assertEqual(auto.mode, FrameCountMode.AUTO)
+        self.assertEqual(auto.candidate_counts, (1, 2, 3, 4, 5, 6))
+        self.assertEqual(explicit.mode, FrameCountMode.EXPLICIT)
+        self.assertEqual(explicit.candidate_counts, (3,))
+        self.assertEqual(fixed.mode, FrameCountMode.FIXED_FULL)
+        self.assertEqual(fixed.candidate_counts, (6,))
+        parser = build_parser()
+        option_strings = {
+            value
+            for action in parser._actions
+            for value in action.option_strings
+        }
+        self.assertNotIn("--auto-count", option_strings)
+        parsed = parser.parse_args(
+            ["input.tif", "--format", "135", "--strip", "partial", "--count", "auto"]
+        )
+        self.assertIsNone(options_from_args(parsed).requested_count)
+        with (
+            contextlib.redirect_stderr(io.StringIO()),
+            self.assertRaises(SystemExit),
+        ):
+            parser.parse_args(
+                ["input.tif", "--format", "135", "--auto-count"]
+            )
 
-    def test_ci_and_installers_share_runtime_dependencies(self) -> None:
+    def test_strip_handling_has_one_current_contract(self) -> None:
+        for format_id in ("135", "half", "xpan", "120-645", "120-66", "120-67"):
+            strip = format_spec(format_id).strip
+            self.assertEqual(
+                strip.partial_count_range,
+                tuple(range(1, strip.default_count + 1)),
+            )
+        self.assertFalse(
+            format_spec("135-dual").strip.partial_mode_supported
+        )
+        self.assertEqual(
+            format_spec("135-dual").strip.partial_count_range,
+            (),
+        )
+
+    def test_interactive_dual_format_never_enters_partial_count_prompt(
+        self,
+    ) -> None:
+        with (
+            mock.patch("builtins.input", side_effect=("dual", "n")),
+            contextlib.redirect_stdout(io.StringIO()),
+        ):
+            options = interactive_options()
+        self.assertEqual(options.format_id, "135-dual")
+        self.assertEqual(options.strip_mode, "full")
+        self.assertIsNone(options.requested_count)
+
+    def test_schema_and_two_gate_status_authority_are_current(self) -> None:
+        self.assertEqual(REPORT_SCHEMA_ID, "detection_report")
+        self.assertEqual(
+            REPORT_SCHEMA_REVISION,
+            "bounded_safe_crop_grid",
+        )
+        candidate = candidate_gate_assessment(
+            scan_canvas_state=EvidenceState.SUPPORTED,
+            source_content_state=EvidenceState.UNAVAILABLE,
+            grid_search_coverage_state=EvidenceState.SUPPORTED,
+            frame_count_state=EvidenceState.SUPPORTED,
+            slot_ordinal_state=EvidenceState.SUPPORTED,
+            slot_ownership_state=EvidenceState.SUPPORTED,
+            known_content_containment_state=EvidenceState.UNAVAILABLE,
+            source_lane_geometry_state=EvidenceState.SUPPORTED,
+            output_protection_state=EvidenceState.SUPPORTED,
+            output_transform_state=EvidenceState.SUPPORTED,
+        )
+        self.assertTrue(
+            all(check.final_review_reason is None for check in candidate.checks)
+        )
+        decision = apply_decision_gate(candidate, FrameCountMode.AUTO)
+        self.assertEqual(decision.status, "approved_auto")
+        self.assertEqual(decision.final_review_reasons, ())
+
+    def test_runtime_dependency_surface_remains_minimal(self) -> None:
         package_list = "numpy tifffile imagecodecs Pillow"
         owners = (
             ".github/workflows/verify.yml",
             "install/X5_Crop_Mac_install.command",
             "install/X5_Crop_win_install.bat",
         )
-        for relative in owners:
-            with self.subTest(path=relative):
-                text = (ROOT / relative).read_text(encoding="utf-8")
-                self.assertIn(package_list, text)
-
-    def test_current_runtime_excludes_future_analysis_dependencies(self) -> None:
-        surfaces = (
-            "X5_Crop_Mac.command",
-            "X5_Crop_Mac_diagnostics.command",
-            "X5_Crop_win.bat",
-            "install/X5_Crop_Mac_install.command",
-            "install/X5_Crop_Mac_uninstall.command",
-            "install/X5_Crop_win_install.bat",
-            "install/X5_Crop_win_uninstall.bat",
-            ".github/workflows/verify.yml",
-            "docs/user-guide.zh-CN.md",
-            "docs/user-guide.en.md",
-            "docs/quick-start.zh-CN.md",
-            "docs/quick-start.en.md",
-        )
         active_text = "\n".join(read_sources().values()).lower()
         self.assertNotIn("scipy", active_text)
         self.assertNotIn("opencv", active_text)
         self.assertNotIn("cv2", active_text)
-        for relative in surfaces:
-            with self.subTest(path=relative):
-                text = (ROOT / relative).read_text(encoding="utf-8").lower()
-                self.assertNotIn("scipy", text)
-                self.assertNotIn("opencv", text)
-                self.assertNotIn("cv2", text)
+        for relative in owners:
+            text = (ROOT / relative).read_text(encoding="utf-8")
+            self.assertIn(package_list, text)
 
-    def test_old_pixel_bleed_and_dead_export_switches_are_rejected(self) -> None:
-        parser = build_parser()
-        option_strings = {
-            option
-            for action in parser._actions
-            for option in action.option_strings
-        }
-        for option in (
-            "--bleed",
-            "--bleed-x",
-            "--bleed-y",
-            "--export-review",
-            "--dry-run",
-        ):
-            self.assertNotIn(option, option_strings)
-        with (
-            contextlib.redirect_stderr(io.StringIO()),
-            self.assertRaises(SystemExit) as raised,
-        ):
-            parser.parse_args(["input.tif", "--format", "135", "--bleed", "1"])
-        self.assertEqual(raised.exception.code, 2)
-
-    def test_schema_has_one_current_revision(self) -> None:
-        self.assertEqual(REPORT_SCHEMA_ID, "detection_report")
-        self.assertEqual(
-            REPORT_SCHEMA_REVISION,
-            "source_core_grid_authority",
-        )
-
-    def test_decision_gate_cannot_express_auto_approval(self) -> None:
-        supported_checks = tuple(
-            GateCheck(
-                code=code,
-                stage=GateStage.DECISION,
-                state=EvidenceState.SUPPORTED,
-                requirement=GateRequirement.SUPPORTED_REQUIRED,
-                final_review_reason=DECISION_GATE_REASON_BY_CODE[code],
-            )
-            for code in DECISION_GATE_CHECK_CODES
-        )
-        with self.assertRaises(ValueError):
-            DecisionGateAssessment(supported_checks)
-
-    def test_launcher_remains_thin_and_release_embeds_modular_tree(self) -> None:
+    def test_launcher_is_thin_and_standalone_embeds_current_modules(self) -> None:
         launcher = (ROOT / "X5_Crop.py").read_text(encoding="utf-8")
         self.assertEqual(len(launcher.splitlines()), 13)
         self.assertIn("from x5crop.entry.cli import main", launcher)
-        self.assertIn("x5crop.detection.source_core", read_sources())
+        sources = read_sources()
+        self.assertIn("x5crop.detection.grid.search", sources)
+        self.assertIn("x5crop.detection.evidence.separator", sources)
 
 
 if __name__ == "__main__":

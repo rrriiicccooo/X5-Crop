@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
 from time import perf_counter
 import numpy as np
 
@@ -13,30 +12,11 @@ from ..domain import (
     MeasurementProvenance,
     ObservationId,
 )
-from ..formats import FormatSpec
 from ..image.evidence import (
     adaptive_activation_threshold,
     spatially_supported_activation_mask,
 )
-from .evidence.scan_canvas import (
-    CanvasAxisScaleIntervals,
-    ScanCanvasEvidence,
-    ScanCanvasOutcome,
-)
-
-
-class FrameGridOutcome(str, Enum):
-    NO_INDEPENDENT_PHASE_AUTHORITY = "no_independent_phase_authority"
-
-
-class PhotoContainmentOutcome(str, Enum):
-    NOT_APPLICABLE_FRAME_GRID_UNAVAILABLE = (
-        "not_applicable_frame_grid_unavailable"
-    )
-
-
-class VisualDeskewOutcome(str, Enum):
-    NOT_APPLICABLE_CORE_UNAVAILABLE = "not_applicable_core_unavailable"
+from .evidence.scan_canvas import ScanCanvasEvidence, ScanCanvasOutcome
 
 
 @dataclass(frozen=True)
@@ -189,143 +169,55 @@ class SourceContentObservation:
 
 
 @dataclass(frozen=True)
-class FrameGridEvidence:
-    outcome: FrameGridOutcome
-    authority: None = None
-    frame_slots: tuple[object, ...] = ()
-
-    def __post_init__(self) -> None:
-        if self.outcome != FrameGridOutcome.NO_INDEPENDENT_PHASE_AUTHORITY:
-            raise ValueError("current runtime has no other Grid outcome")
-        if self.authority is not None or self.frame_slots:
-            raise ValueError("unavailable Grid cannot carry authority or slots")
-
-    @property
-    def state(self) -> EvidenceState:
-        return EvidenceState.UNAVAILABLE
-
-
-@dataclass(frozen=True)
-class PhotoContainmentEvidence:
-    outcome: PhotoContainmentOutcome
-    frame_envelopes: tuple[object, ...] = ()
-
-    def __post_init__(self) -> None:
-        if (
-            self.outcome
-            != PhotoContainmentOutcome.NOT_APPLICABLE_FRAME_GRID_UNAVAILABLE
-            or self.frame_envelopes
-        ):
-            raise ValueError("current containment must be explicitly not applicable")
-
-    @property
-    def state(self) -> EvidenceState:
-        return EvidenceState.NOT_APPLICABLE
-
-
-@dataclass(frozen=True)
-class OutputProtectionAuthority:
-    format_id: str
-    long_axis_mm: float
-    short_axis_mm: float
-    applied: bool = False
-
-    def __post_init__(self) -> None:
-        if (
-            not self.format_id
-            or self.long_axis_mm <= 0.0
-            or self.short_axis_mm <= 0.0
-        ):
-            raise ValueError("output protection requires positive millimetre values")
-        if self.applied:
-            raise ValueError("protection cannot be applied without frame geometry")
-
-
-@dataclass(frozen=True)
 class SourceLaneEvidence:
     domain: SourceStripValidationDomain
     scan_canvas: ScanCanvasEvidence
-    scales: CanvasAxisScaleIntervals
     content: SourceContentObservation
 
     def __post_init__(self) -> None:
         if self.scan_canvas.outcome != ScanCanvasOutcome.SUPPORTED:
             raise ValueError("source lane requires unique scan-canvas authority")
-        if self.scan_canvas.axis_scales != self.scales:
-            raise ValueError("source lane scale owner must be scan-canvas evidence")
+        if self.scan_canvas.axis_scales is None:
+            raise ValueError("source lane requires scan-canvas scale intervals")
         if self.domain.lane_id != self.content.lane_id:
             raise ValueError("source lane content must share the lane identity")
+
+    @property
+    def axis_scale_intervals(self):
+        """Borrowed read-only scale intervals; ScanCanvasEvidence remains owner."""
+        return self.scan_canvas.axis_scales
 
 
 @dataclass(frozen=True)
 class SourceCoreEvidence:
     lanes: tuple[SourceLaneEvidence, ...]
-    scan_canvas_state: EvidenceState
-    content_state: EvidenceState
-    grid: FrameGridEvidence
-    containment: PhotoContainmentEvidence
-    protection_authority: OutputProtectionAuthority
-    visual_deskew_outcome: VisualDeskewOutcome
     incomplete_reasons: tuple[str, ...]
 
     def __post_init__(self) -> None:
         if len(set(lane.domain.lane_id for lane in self.lanes)) != len(self.lanes):
             raise ValueError("source-core lane identities must be unique")
-        if self.grid.state != EvidenceState.UNAVAILABLE:
-            raise ValueError("current source core cannot carry frame Grid authority")
-        if self.containment.state != EvidenceState.NOT_APPLICABLE:
-            raise ValueError("current containment must follow unavailable Grid")
-        if (
-            self.visual_deskew_outcome
-            != VisualDeskewOutcome.NOT_APPLICABLE_CORE_UNAVAILABLE
-        ):
-            raise ValueError("current visual deskew must be not applicable")
         if len(set(self.incomplete_reasons)) != len(self.incomplete_reasons):
             raise ValueError("source-core incomplete reasons must be unique")
-        lanes_supported = bool(self.lanes)
-        if (
-            self.scan_canvas_state == EvidenceState.SUPPORTED
-        ) != lanes_supported:
-            raise ValueError("scan-canvas state must match available lanes")
-        content_supported = lanes_supported and all(
-            lane.content.state == EvidenceState.SUPPORTED
-            for lane in self.lanes
+
+    @property
+    def scan_canvas_state(self) -> EvidenceState:
+        return (
+            EvidenceState.SUPPORTED
+            if self.lanes
+            else EvidenceState.UNAVAILABLE
         )
-        if (
-            self.content_state == EvidenceState.SUPPORTED
-        ) != content_supported:
-            raise ValueError("content state must match lane observations")
 
-
-_PROTECTION_MM = {
-    "half": (0.15, 0.25),
-    "135": (0.25, 0.25),
-    "135-dual": (0.25, 0.25),
-    "120-645": (0.30, 0.25),
-    "120-66": (0.40, 0.25),
-    "xpan": (0.45, 0.25),
-    "120-67": (0.50, 0.25),
-}
-
-
-def output_protection_authority(spec: FormatSpec) -> OutputProtectionAuthority:
-    long_mm, short_mm = _PROTECTION_MM[spec.format_id]
-    return OutputProtectionAuthority(spec.format_id, long_mm, short_mm)
-
-
-def unavailable_frame_grid() -> FrameGridEvidence:
-    return FrameGridEvidence(
-        outcome=FrameGridOutcome.NO_INDEPENDENT_PHASE_AUTHORITY,
-        authority=None,
-        frame_slots=(),
-    )
-
-
-def unavailable_photo_containment() -> PhotoContainmentEvidence:
-    return PhotoContainmentEvidence(
-        outcome=PhotoContainmentOutcome.NOT_APPLICABLE_FRAME_GRID_UNAVAILABLE,
-        frame_envelopes=(),
-    )
+    @property
+    def content_state(self) -> EvidenceState:
+        return (
+            EvidenceState.SUPPORTED
+            if self.lanes
+            and all(
+                lane.content.state == EvidenceState.SUPPORTED
+                for lane in self.lanes
+            )
+            else EvidenceState.UNAVAILABLE
+        )
 
 
 def _content_fields(gray_work: np.ndarray) -> tuple[np.ndarray, np.ndarray]:

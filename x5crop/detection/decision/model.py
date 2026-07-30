@@ -4,24 +4,50 @@ from dataclasses import dataclass
 
 from ..gate_checks import GateCheck, GateStage
 from .vocabulary import (
-    FINAL_REASON_FRAME_GRID_AUTHORITY_UNAVAILABLE,
+    FINAL_REASON_AUTOMATIC_COUNT_UNRESOLVED,
+    FINAL_REASON_GRID_SEARCH_COVERAGE_OUTCOME_RISK,
+    FINAL_REASON_KNOWN_CONTENT_CONTAINMENT_UNBOUNDED,
+    FINAL_REASON_OUTPUT_PROTECTION_UNAVAILABLE,
+    FINAL_REASON_OUTPUT_TRANSFORM_UNAVAILABLE,
+    FINAL_REASON_REQUESTED_COUNT_UNFULFILLED,
     FINAL_REASON_SCAN_CANVAS_AUTHORITY_UNAVAILABLE,
-    FINAL_REASON_SOURCE_CONTENT_MEASUREMENT_UNAVAILABLE,
+    FINAL_REASON_SLOT_ORDINAL_ASSIGNMENT_UNRESOLVED,
+    FINAL_REASON_SLOT_OWNERSHIP_UNBOUNDED,
+    FINAL_REASON_SOURCE_CONTENT_MEASUREMENT_CONTRADICTED,
+    FINAL_REASON_SOURCE_LANE_GEOMETRY_INVALID,
 )
 
 
 DECISION_GATE_CHECK_CODES = (
     "scan_canvas_authority",
     "source_content_measurement",
-    "frame_grid_authority",
+    "grid_search_coverage",
+    "frame_count",
+    "slot_ordinal_assignment",
+    "slot_ownership",
+    "known_content_containment",
+    "source_lane_geometry",
+    "output_protection",
+    "output_transform",
 )
 
 DECISION_GATE_REASON_BY_CODE = {
     "scan_canvas_authority": FINAL_REASON_SCAN_CANVAS_AUTHORITY_UNAVAILABLE,
     "source_content_measurement": (
-        FINAL_REASON_SOURCE_CONTENT_MEASUREMENT_UNAVAILABLE
+        FINAL_REASON_SOURCE_CONTENT_MEASUREMENT_CONTRADICTED
     ),
-    "frame_grid_authority": FINAL_REASON_FRAME_GRID_AUTHORITY_UNAVAILABLE,
+    "grid_search_coverage": FINAL_REASON_GRID_SEARCH_COVERAGE_OUTCOME_RISK,
+    "frame_count": FINAL_REASON_REQUESTED_COUNT_UNFULFILLED,
+    "slot_ordinal_assignment": (
+        FINAL_REASON_SLOT_ORDINAL_ASSIGNMENT_UNRESOLVED
+    ),
+    "slot_ownership": FINAL_REASON_SLOT_OWNERSHIP_UNBOUNDED,
+    "known_content_containment": (
+        FINAL_REASON_KNOWN_CONTENT_CONTAINMENT_UNBOUNDED
+    ),
+    "source_lane_geometry": FINAL_REASON_SOURCE_LANE_GEOMETRY_INVALID,
+    "output_protection": FINAL_REASON_OUTPUT_PROTECTION_UNAVAILABLE,
+    "output_transform": FINAL_REASON_OUTPUT_TRANSFORM_UNAVAILABLE,
 }
 
 
@@ -35,14 +61,19 @@ class DecisionGateAssessment:
         if any(check.stage != GateStage.DECISION for check in self.checks):
             raise ValueError("decision gate owns only decision checks")
         if any(
-            check.final_review_reason != DECISION_GATE_REASON_BY_CODE[check.code]
+            (
+                check.final_review_reason
+                not in {
+                    FINAL_REASON_REQUESTED_COUNT_UNFULFILLED,
+                    FINAL_REASON_AUTOMATIC_COUNT_UNRESOLVED,
+                }
+                if check.code == "frame_count"
+                else check.final_review_reason
+                != DECISION_GATE_REASON_BY_CODE[check.code]
+            )
             for check in self.checks
         ):
             raise ValueError("decision checks require canonical reasons")
-        if not self.blocking_checks:
-            raise ValueError(
-                "current source-core baseline requires a blocking decision check"
-            )
 
     @property
     def blocking_checks(self) -> tuple[GateCheck, ...]:
@@ -70,4 +101,4 @@ class DecisionGateAssessment:
 
     @property
     def status(self) -> str:
-        return "needs_review"
+        return "approved_auto" if self.passed else "needs_review"

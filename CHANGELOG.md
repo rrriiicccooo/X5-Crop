@@ -11,6 +11,42 @@
 V4.9 是破坏性的 current-only 物理模型重构。旧 runtime/schema/compatibility 不是迁移
 目标。
 
+### 2026-07-30：bounded safe-crop runtime 原子切换
+
+- Runtime 已从 review-only source measurement 原子切换为
+  `bounded_safe_crop_grid`。Full 使用 `fixed_full`；partial 整数使用 `explicit`，省略
+  count、交互回车或 `auto` 使用 bounded `auto`。没有 feature flag、旧 reader、fallback
+  或双 schema。
+- `ScanCanvasEvidence` 独占 scale；`source_core.py` 只保存 lane/domain/positive-content
+  facts；独立 separator owner 建立 long-axis field、typed bands、edge-pairs 与携带 learned
+  gutter 的 one-sided observations。Tracked calibration receipt 只把 confirmed geometry
+  用作 prior calibration，不把照片边写成 runtime observation。
+- 新 Grid flow 实现 placement、local corridors、ordered DP、逐 count dominance、lane
+  global selection、`FrameSlot`、shared interaction、outward safe envelope 与固定毫米
+  protection。结构上限为 `P_MAX=6`、`O_MAX=2`、`K_MAX=3`、`G_MAX=3`；count 12 的每个
+  lane/component 上限为 198 states/558 transitions，auto 1..12 为 1188/3168。
+- 跨 count 支配使用 two-sided slot balance 与 observed boundary balance；endpoint 和
+  raw internal-corridor support 只保留为诊断。存在安全 proposal 时，
+  geometry/ordinal/ownership/containment 已硬矛盾的 count 不再参与 selection；若全部
+  矛盾，仍交给 Gate 产生具体原因。这样不会因 count 天然增加、前导 blank 或局部
+  edge-pair 制造虚假 `needs_review`，也不会让已知不安全 count 制造虚假竞争；真正互不
+  支配的安全 count 仍由 DecisionGate 阻断。
+- 同 count/component 的 seed 不再由 scalar 直接缩成一个；先保留逐维非支配方案。同一
+  ordinal 的起点分歧小于一个完整 slot step 时 outward union，全 blank 也允许 union；
+  达到整 pitch 的 placement 竞争明确转为 `slot_ownership` 阻断。
+- CandidateGate 固定为十项安全事实；DecisionGate 独占 `approved_auto`、
+  `needs_review` 与 typed reasons。Blank、separator 缺失、inferred Grid、等价 geometry、
+  邻片 retention、未 deskew 与 protection saturation 不再被误设为 review。
+- Approved runtime 冻结 count/transform/boxes 后，每个 ROI 只采样原图一次；TIFF 写出后
+  复读验证 pixels、dtype、axes/channels、ICC、resolution、metadata 与 lossless
+  compression。读取、写出或复读错误保持独立 `FailedInput`。`--diagnostics` 保持只读，
+  报告同一 decision/final boxes 但不写 frame TIFF。
+- Report revision 更新为 `bounded_safe_crop_grid`；performance schema 更新为
+  `x5crop_production_performance_v3`。新增固定 S062 profiling、九张/14 场景黄金验收、
+  111 条非阻断 coverage audit，以及 current-only、Gate、Grid、envelope、TIFF 与 package
+  contracts。性能输入只按 manifest canonical path 解析并复核 SHA，不盲扫同 SHA 的
+  baseline symlink。稳定 GitHub Release 仍为 `v4.2.8`，本次不创建新 Release。
+
 ### 2026-07-30：Auto-count 支配与验收执行合同闭合
 
 这是 docs-only 计划闭合；current detector、CLI、report schema、性能 runner 与

@@ -8,10 +8,12 @@ from pathlib import Path
 import numpy as np
 
 from x5crop.domain import Box
+from x5crop.configuration.model import FrameCountRequest
+from x5crop.formats import format_spec
 from x5crop.export.crops import write_crops
 from x5crop.geometry.affine import AffineCoordinateTransform
 from x5crop.image.transforms import sample_affine_roi
-from x5crop.io.model import ImageProfile, TiffMetadata
+from x5crop.io.model import ImageProfile, TiffExtraTag, TiffMetadata
 from x5crop.io.tiff import read_tiff
 from x5crop.run_config import RunConfig
 
@@ -24,7 +26,11 @@ def _run_config(source: Path, output: Path, compression: str) -> RunConfig:
         layout_auto=False,
         layout="horizontal",
         strip_mode="full",
-        requested_count=None,
+        count_request=FrameCountRequest.from_user_input(
+            format_spec("135"),
+            "full",
+            None,
+        ),
         page=0,
         review_dir=None,
         copy_review_files=False,
@@ -111,7 +117,14 @@ class TiffFoundationContractTest(unittest.TestCase):
                 description="source-core metadata",
                 datetime="2026:07:29 12:00:00",
                 software="X5 Crop contract",
-                extra_tags=(),
+                extra_tags=(
+                    TiffExtraTag(
+                        code=269,
+                        dtype="s",
+                        count=0,
+                        value="source-document",
+                    ),
+                ),
             ),
         )
         box = Box(2, 1, 12, 9)
@@ -161,6 +174,14 @@ class TiffFoundationContractTest(unittest.TestCase):
                     self.assertEqual(
                         profile.metadata.software,
                         "X5 Crop contract",
+                    )
+                    self.assertEqual(
+                        profile.metadata.datetime,
+                        "2026:07:29 12:00:00",
+                    )
+                    self.assertEqual(
+                        profile.metadata.extra_tags,
+                        source_profile.metadata.extra_tags,
                     )
 
 

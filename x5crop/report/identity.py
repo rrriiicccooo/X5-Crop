@@ -7,13 +7,14 @@ from typing import Any
 
 
 REPORT_SCHEMA_ID = "detection_report"
-REPORT_SCHEMA_REVISION = "source_core_grid_authority"
+REPORT_SCHEMA_REVISION = "bounded_safe_crop_grid"
 
 
 def core_facts_sha256(record: dict[str, Any]) -> str:
-    source_core = deepcopy(record["source_core"])
-    for lane in source_core["lanes"]:
+    measurement = deepcopy(record["measurement"])
+    for lane in measurement["lanes"]:
         lane["content"]["statistics"].pop("deterministic_seconds", None)
+        lane["separator"]["statistics"].pop("deterministic_seconds", None)
     payload = {
         "schema_id": record["schema_id"],
         "schema_revision": record["schema_revision"],
@@ -21,7 +22,8 @@ def core_facts_sha256(record: dict[str, Any]) -> str:
         "source": record["source"],
         "input": record["input"],
         "configuration": record["configuration"],
-        "source_core": source_core,
+        "measurement": measurement,
+        "grid_selection": record["grid_selection"],
         "candidate_gate": record["candidate_gate"],
         "decision": record["decision"],
         "finalization": record["output"]["finalization"],

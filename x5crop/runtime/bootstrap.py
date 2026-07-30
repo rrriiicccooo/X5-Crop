@@ -4,6 +4,7 @@ from ..formats import format_spec
 from ..geometry.layout import infer_layout
 from ..strip_modes import FULL, PARTIAL
 from ..configuration.bundle import DetectionConfigurationBundle
+from ..configuration.model import FrameCountRequest
 from ..run_config import RunConfig
 from .app import print_run_header, run_runtime
 from .input_probe import iter_input_files
@@ -21,22 +22,11 @@ def runtime_invocation_from_options(options: RuntimeOptions) -> RuntimeInvocatio
 
     height, width = read_tiff_page_shape(first_file, options.page)
     fmt = format_spec(options.format_id)
-    if options.requested_count is not None:
-        if options.strip_mode == FULL:
-            if options.requested_count != fmt.strip.default_count:
-                raise ValueError(
-                    f"--format {fmt.format_id} full mode requires --count "
-                    f"{fmt.strip.default_count}"
-                )
-        elif options.strip_mode == PARTIAL:
-            if options.requested_count not in fmt.strip.allowed_partial_counts:
-                allowed = ", ".join(
-                    str(count) for count in fmt.strip.allowed_partial_counts
-                )
-                raise ValueError(
-                    f"--format {fmt.format_id} partial mode allows --count "
-                    f"values: {allowed}"
-                )
+    count_request = FrameCountRequest.from_user_input(
+        fmt,
+        options.strip_mode,
+        options.requested_count,
+    )
     configuration_bundle = DetectionConfigurationBundle.for_format_mode(
         options.format_id,
         options.strip_mode,
@@ -53,7 +43,7 @@ def runtime_invocation_from_options(options: RuntimeOptions) -> RuntimeInvocatio
         layout_auto=layout_auto,
         layout=layout,
         strip_mode=options.strip_mode,
-        requested_count=options.requested_count,
+        count_request=count_request,
         page=options.page,
         review_dir=options.review_dir,
         copy_review_files=options.copy_review_files,

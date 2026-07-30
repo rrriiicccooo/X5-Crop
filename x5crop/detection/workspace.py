@@ -11,18 +11,18 @@ from ..domain import Box, EvidenceState
 from ..geometry.layout import is_horizontal_layout, work_gray
 from ..image.gray import make_base_gray_u8
 from ..image.statistics import image_measurement_statistics
-from ..image.workspace import WorkspaceIdentity, workspace_identity_for_gray
+from ..image.workspace import WorkspaceIdentity
 from ..io.model import ImageProfile
 from .evidence.scan_canvas import ScanCanvasOutcome, observe_scan_canvas
+from .evidence.separator import (
+    LongAxisSeparatorMeasurementField,
+    observe_long_axis_separator_field,
+)
 from .source_core import (
     SourceCoreEvidence,
     SourceLaneEvidence,
     SourceStripValidationDomain,
-    VisualDeskewOutcome,
     observe_source_content,
-    output_protection_authority,
-    unavailable_frame_grid,
-    unavailable_photo_containment,
 )
 
 
@@ -31,6 +31,7 @@ class DetectionWorkspace:
     source_gray: np.ndarray
     measurement_cache: MeasurementCache
     source_core: SourceCoreEvidence
+    separator_fields: tuple[LongAxisSeparatorMeasurementField, ...]
     identity: WorkspaceIdentity = field(init=False)
 
     def __post_init__(self) -> None:
@@ -42,10 +43,16 @@ class DetectionWorkspace:
         )
         if not np.array_equal(self.measurement_cache.gray_work, canonical_work):
             raise ValueError("measurement cache must use canonical source gray")
+        if tuple(
+            item.lane_id for item in self.separator_fields
+        ) != tuple(
+            lane.domain.lane_id for lane in self.source_core.lanes
+        ):
+            raise ValueError("separator fields must follow source lane order")
         object.__setattr__(
             self,
             "identity",
-            workspace_identity_for_gray(self.source_gray),
+            self.measurement_cache.key.workspace_identity,
         )
 
 
@@ -80,14 +87,13 @@ def _single_lane(
     reasons = (
         ()
         if content.state == EvidenceState.SUPPORTED
-        else ("source_content_measurement_unavailable",)
+        else ("source_content_unavailable_diagnostic",)
     )
     return (
         (
             SourceLaneEvidence(
                 domain=domain,
                 scan_canvas=scan_canvas,
-                scales=scan_canvas.axis_scales,
                 content=content,
             ),
         ),
@@ -140,7 +146,6 @@ def _dual_lanes(
             SourceLaneEvidence(
                 domain=domain,
                 scan_canvas=scan_canvas,
-                scales=scan_canvas.axis_scales,
                 content=content,
             )
         )
@@ -170,6 +175,8 @@ def prepare_detection_workspace(
         source_gray,
         layout,
         statistics,
+        configuration.preprocess.base_gray,
+        configuration.preprocess.image_statistics,
     )
     gray_work = measurement_cache.gray_work
     if configuration.physical_spec.layout.kind == "dual_lane":
@@ -185,34 +192,23 @@ def prepare_detection_workspace(
             layout,
             configuration,
         )
-    scan_canvas_state = (
-        EvidenceState.SUPPORTED if lanes else EvidenceState.UNAVAILABLE
-    )
-    content_state = (
-        EvidenceState.SUPPORTED
-        if lanes
-        and all(
-            lane.content.state == EvidenceState.SUPPORTED
-            for lane in lanes
-        )
-        else EvidenceState.UNAVAILABLE
-    )
     source_core = SourceCoreEvidence(
         lanes=lanes,
-        scan_canvas_state=scan_canvas_state,
-        content_state=content_state,
-        grid=unavailable_frame_grid(),
-        containment=unavailable_photo_containment(),
-        protection_authority=output_protection_authority(
-            configuration.physical_spec
-        ),
-        visual_deskew_outcome=(
-            VisualDeskewOutcome.NOT_APPLICABLE_CORE_UNAVAILABLE
-        ),
         incomplete_reasons=incomplete_reasons,
+    )
+    separator_fields = tuple(
+        observe_long_axis_separator_field(
+            gray_work[
+                lane.domain.work_box.top : lane.domain.work_box.bottom,
+                lane.domain.work_box.left : lane.domain.work_box.right,
+            ],
+            lane.domain.lane_id,
+        )
+        for lane in lanes
     )
     return DetectionWorkspace(
         source_gray=source_gray,
         measurement_cache=measurement_cache,
         source_core=source_core,
+        separator_fields=separator_fields,
     )

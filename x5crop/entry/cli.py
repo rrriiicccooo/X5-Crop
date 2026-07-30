@@ -21,11 +21,22 @@ from .text_output import configure_entry_text_output
 CLI_USAGE_ERROR_EXIT_CODE = 2
 
 
+def parse_count_argument(value: str) -> int | None:
+    normalized = value.strip().lower()
+    if normalized == "auto":
+        return None
+    try:
+        return int(normalized)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(
+            "--count must be a positive integer or auto"
+        ) from exc
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
-            f"X5 Crop V{VERSION} source-core TIFF audit. "
-            "The current build emits review evidence, not frame TIFFs."
+            f"X5 Crop V{VERSION} bounded conservative TIFF safe crop."
         )
     )
     parser.add_argument("input", nargs="?", default=".", help="TIFF file or directory; default current directory.")
@@ -38,9 +49,18 @@ def build_parser() -> argparse.ArgumentParser:
         default="full",
         help="Holder occupancy: full when film fills the holder, partial when it does not.",
     )
-    parser.add_argument("-n", "--count", type=int, default=None, help="Record an allowed complete-slot count for partial-mode audit.")
+    parser.add_argument(
+        "-n",
+        "--count",
+        type=parse_count_argument,
+        default=None,
+        help=(
+            "Partial frame count (positive integer or auto); omitted means "
+            "auto. Full mode always uses the format default."
+        ),
+    )
     parser.add_argument("--page", type=int, default=0, help="TIFF page index; default 0.")
-    parser.add_argument("--compression", choices=COMPRESSION_CHOICES, default="same", help="TIFF foundation compression authority; the current review-only build writes no frame TIFF.")
+    parser.add_argument("--compression", choices=COMPRESSION_CHOICES, default="same", help="Output TIFF lossless compression: preserve source or write uncompressed.")
     parser.add_argument("--copy-review-files", dest="copy_review_files", action="store_true", default=True, help="Copy source TIFFs that require review to the review folder; default on.")
     parser.add_argument("--no-copy-review-files", dest="copy_review_files", action="store_false", help="Do not copy source TIFFs that require review.")
     parser.add_argument("--review-dir", default=None, help="Review folder; default output/needs_review.")
@@ -49,9 +69,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--debug",
         action="store_true",
-        help="Write a lightweight JPG preview with source-core evidence.",
+        help="Write a lightweight JPG preview with Grid and crop evidence.",
     )
-    parser.add_argument("--debug-analysis", action="store_true", help="Write one combined JPG with source-core domains and bounded content summaries.")
+    parser.add_argument("--debug-analysis", action="store_true", help="Write one combined JPG with source, separator, Grid, Gate, and crop summaries.")
     parser.add_argument("--diagnostics", action="store_true", help="Read-only diagnostics mode; implies --report --debug-analysis --no-copy-review-files.")
     parser.add_argument("--jobs", type=int, default=STANDARD_JOB_LIMIT, help="Parallel TIFF workers. Default 2. Normal runs cap at 2; diagnostics runs cap at 4.")
     parser.add_argument("--debug-errors", action="store_true", help="Print tracebacks on errors.")

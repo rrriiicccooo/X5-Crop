@@ -20,28 +20,16 @@ class FrameDesignApertureMm:
 @dataclass(frozen=True)
 class StripHandlingSpec:
     default_count: int
-    allowed_partial_counts: tuple[int, ...]
-    complete_strip_can_be_underfilled: bool = False
+    partial_mode_supported: bool
 
     def __post_init__(self) -> None:
         require_positive("default frame count", self.default_count)
-        if (
-            tuple(sorted(set(self.allowed_partial_counts)))
-            != self.allowed_partial_counts
-            or any(count <= 0 for count in self.allowed_partial_counts)
-        ):
-            raise ValueError(
-                "allowed partial counts must be positive, unique, and ordered"
-            )
-        if any(count > self.default_count for count in self.allowed_partial_counts):
-            raise ValueError("partial counts cannot exceed the full count")
-        if (
-            self.default_count in self.allowed_partial_counts
-        ) != self.complete_strip_can_be_underfilled:
-            raise ValueError(
-                "only complete-underfilled strips may expose the full count "
-                "in partial mode"
-            )
+
+    @property
+    def partial_count_range(self) -> tuple[int, ...]:
+        if not self.partial_mode_supported:
+            return ()
+        return tuple(range(1, self.default_count + 1))
 
 
 @dataclass(frozen=True)
@@ -87,25 +75,25 @@ FORMATS: dict[str, FormatSpec] = {
     "135": FormatSpec(
         "135",
         (FrameDesignApertureMm(36.0, 24.0),),
-        StripHandlingSpec(6, tuple(range(1, 6))),
+        StripHandlingSpec(6, True),
         ScanLayoutSpec(),
     ),
     "135-dual": FormatSpec(
         "135-dual",
         (FrameDesignApertureMm(36.0, 24.0),),
-        StripHandlingSpec(12, ()),
+        StripHandlingSpec(12, False),
         ScanLayoutSpec("dual_lane", 2, "135"),
     ),
     "half": FormatSpec(
         "half",
         (FrameDesignApertureMm(18.0, 24.0),),
-        StripHandlingSpec(12, tuple(range(1, 12))),
+        StripHandlingSpec(12, True),
         ScanLayoutSpec(),
     ),
     "xpan": FormatSpec(
         "xpan",
         (FrameDesignApertureMm(65.0, 24.0),),
-        StripHandlingSpec(3, (1, 2, 3), True),
+        StripHandlingSpec(3, True),
         ScanLayoutSpec(),
     ),
     "120-645": FormatSpec(
@@ -114,7 +102,7 @@ FORMATS: dict[str, FormatSpec] = {
             FrameDesignApertureMm(42.0, 54.0),
             FrameDesignApertureMm(42.0, 56.0),
         ),
-        StripHandlingSpec(4, (1, 2, 3)),
+        StripHandlingSpec(4, True),
         ScanLayoutSpec(),
     ),
     "120-66": FormatSpec(
@@ -123,7 +111,7 @@ FORMATS: dict[str, FormatSpec] = {
             FrameDesignApertureMm(54.0, 54.0),
             FrameDesignApertureMm(56.0, 56.0),
         ),
-        StripHandlingSpec(3, (1, 2, 3), True),
+        StripHandlingSpec(3, True),
         ScanLayoutSpec(),
     ),
     "120-67": FormatSpec(
@@ -132,7 +120,7 @@ FORMATS: dict[str, FormatSpec] = {
             FrameDesignApertureMm(70.0, 54.0),
             FrameDesignApertureMm(70.0, 56.0),
         ),
-        StripHandlingSpec(3, (1, 2)),
+        StripHandlingSpec(3, True),
         ScanLayoutSpec(),
     ),
 }

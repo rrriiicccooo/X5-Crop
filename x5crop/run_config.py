@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
+from .configuration.model import FrameCountRequest
 
 CompressionMode = Literal["none", "same"]
 
@@ -16,7 +17,7 @@ class RunConfig:
     layout_auto: bool
     layout: str
     strip_mode: str
-    requested_count: int | None
+    count_request: FrameCountRequest
     page: int
     review_dir: Path | None
     copy_review_files: bool

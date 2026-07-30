@@ -34,7 +34,9 @@ def append_summary_csv(path: Path, result: ReportResult) -> None:
         "format_id",
         "layout",
         "strip_mode",
-        "frame_grid_outcome",
+        "count_mode",
+        "selected_count",
+        "grid_selection",
         "final_review_reasons",
         "output_count",
     ]
@@ -54,9 +56,16 @@ def append_summary_csv(path: Path, result: ReportResult) -> None:
                     "runtime_configuration"
                 ]["layout"],
                 "strip_mode": record["configuration"]["strip_mode"],
-                "frame_grid_outcome": record["source_core"][
-                    "frame_grid"
-                ]["outcome"],
+                "count_mode": record["configuration"][
+                    "frame_count_request"
+                ]["mode"],
+                "selected_count": record["grid_selection"][
+                    "selected_count"
+                ],
+                "grid_selection": ";".join(
+                    lane["selection_reason"]
+                    for lane in record["grid_selection"]["lanes"]
+                ),
                 "final_review_reasons": ";".join(
                     decision["final_review_reasons"]
                 ),

@@ -13,6 +13,7 @@ from ..detection.final.finalize import finalize_detection
 from ..detection.pipeline import choose_detection
 from ..detection.workspace import DetectionWorkspace, prepare_detection_workspace
 from ..export.actions import prepare_review_artifact
+from ..export.crops import write_crops
 from ..geometry.layout import infer_layout
 from ..io.tiff import read_tiff, read_tiff_profile
 from ..output.surface import output_surface_for_input
@@ -35,6 +36,7 @@ def _metrics(
     started_at: float,
     detection_seconds: float,
     workspace: DetectionWorkspace | None,
+    detection=None,
 ) -> RuntimeMetrics:
     processing_seconds = perf_counter() - started_at
     if workspace is None:
@@ -42,6 +44,18 @@ def _metrics(
     statistics = tuple(
         lane.content.statistics
         for lane in workspace.source_core.lanes
+    )
+    separator_statistics = tuple(
+        item.statistics for item in workspace.separator_fields
+    )
+    grid_work = (
+        ()
+        if detection is None
+        else tuple(
+            item
+            for selection in detection.candidate.lane_selections
+            for item in selection.work_by_count_component
+        )
     )
     return RuntimeMetrics(
         processing_seconds=processing_seconds,
@@ -51,6 +65,40 @@ def _metrics(
         content_components=sum(item.component_count for item in statistics),
         censored_content_components=sum(
             item.censored_component_count for item in statistics
+        ),
+        exact_measurement_count=(
+            2
+            + len(statistics)
+            + sum(
+                item.exact_measurement_count
+                for item in separator_statistics
+            )
+        ),
+        exact_cache_hit_count=sum(
+            item.exact_cache_hit_count for item in separator_statistics
+        ),
+        separator_line_observations=sum(
+            item.line_observation_count for item in separator_statistics
+        ),
+        placement_seeds=sum(item.seed_count for item in grid_work),
+        candidate_builds=sum(item.candidate_builds for item in grid_work),
+        dp_states=sum(item.dp_states for item in grid_work),
+        dp_transitions=sum(item.dp_transitions for item in grid_work),
+        retained_proposals=sum(
+            item.retained_proposal_count for item in grid_work
+        ),
+        peak_temporary_bytes=max(
+            (
+                *(
+                    item.peak_temporary_bytes
+                    for item in statistics
+                ),
+                *(
+                    item.peak_temporary_bytes
+                    for item in separator_statistics
+                ),
+                0,
+            )
         ),
     )
 
@@ -104,30 +152,63 @@ def process_one(
             initial_configuration,
             lane_configuration,
         )
-        candidate = choose_detection(workspace.source_core)
+        candidate = choose_detection(
+            workspace,
+            initial_configuration,
+            lane_configuration,
+        )
         detection_seconds = perf_counter() - detection_started
 
         failure_stage = FailureStage.DECISION
-        decision = apply_decision_gate(candidate.gate)
+        decision = apply_decision_gate(
+            candidate.gate,
+            initial_configuration.count_request.mode,
+        )
 
         failure_stage = FailureStage.FINALIZATION
-        detection = finalize_detection(candidate, decision)
+        detection = finalize_detection(
+            candidate,
+            decision,
+            layout=config.layout,
+        )
         analysis_identity = make_analysis_identity(
             source_identity,
             config,
             configuration_bundle,
             workspace.identity,
+            detection.selected_count,
         )
 
         failure_stage = FailureStage.OUTPUT
-        review_copy = prepare_review_artifact(
-            input_file,
-            output_surface.root,
-            config,
-            detection,
-            warnings,
-        )
-        artifacts = replace(artifacts, review_copy=review_copy)
+        if detection.frame_export_eligible:
+            if config.diagnostics:
+                warnings.append(
+                    "diagnostics mode: safe frame export was not requested"
+                )
+            else:
+                output_surface.root.mkdir(parents=True, exist_ok=True)
+                frame_outputs = write_crops(
+                    input_file,
+                    arr,
+                    profile,
+                    detection.final_boxes,
+                    config,
+                    detection.transform_assessment.transform,
+                    output_surface.root,
+                )
+                artifacts = replace(
+                    artifacts,
+                    frame_outputs=tuple(frame_outputs),
+                )
+        else:
+            review_copy = prepare_review_artifact(
+                input_file,
+                output_surface.root,
+                config,
+                detection,
+                warnings,
+            )
+            artifacts = replace(artifacts, review_copy=review_copy)
 
         failure_stage = FailureStage.DEBUG
         debug_analysis = write_debug_outputs(
@@ -159,7 +240,12 @@ def process_one(
         return CompletedInput(
             result=result,
             artifacts=artifacts,
-            metrics=_metrics(started_at, detection_seconds, workspace),
+            metrics=_metrics(
+                started_at,
+                detection_seconds,
+                workspace,
+                detection,
+            ),
         )
     except Exception as exc:
         return FailedInput(
@@ -169,5 +255,10 @@ def process_one(
             error_message=str(exc),
             artifacts=artifacts,
             traceback_text=traceback.format_exc(),
-            metrics=_metrics(started_at, detection_seconds, workspace),
+            metrics=_metrics(
+                started_at,
+                detection_seconds,
+                workspace,
+                detection,
+            ),
         )

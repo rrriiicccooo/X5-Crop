@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from ..configuration.grid import frame_grid_search_prior
 from ..configuration.model import DetectionConfiguration
 from .read_models import typed_read_model
 
@@ -14,7 +15,9 @@ def detection_configuration_read_model(
         "configuration_id": configuration.configuration_id,
         "format_id": spec.format_id,
         "strip_mode": configuration.strip_mode,
-        "resolved_frame_count": configuration.resolved_frame_count,
+        "frame_count_request": typed_read_model(
+            configuration.count_request
+        ),
         "design_aperture_components_mm": typed_read_model(
             spec.aperture_components
         ),
@@ -24,10 +27,20 @@ def detection_configuration_read_model(
             "preprocess": typed_read_model(configuration.preprocess),
             "scan_canvas": typed_read_model(configuration.scan_canvas),
             "content": typed_read_model(configuration.content),
+            "frame_grid_search_priors": [
+                typed_read_model(
+                    frame_grid_search_prior(
+                        spec.format_id,
+                        configuration.strip_mode,
+                        component.long_axis_mm,
+                    )
+                )
+                for component in spec.aperture_components
+            ],
         },
         "execution": {
             "detector_kind": configuration.detector_kind,
-            "automatic_frame_export": False,
+            "automatic_frame_export": True,
         },
         "diagnostics": typed_read_model(configuration.diagnostics),
     }

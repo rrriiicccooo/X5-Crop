@@ -40,10 +40,10 @@ def runtime_configuration_identity(config: RunConfig) -> dict[str, Any]:
         "format_id": config.format_id,
         "layout": config.layout,
         "strip_mode": config.strip_mode,
-        "requested_count": (
-            None if config.requested_count is None else int(config.requested_count)
-        ),
+        "count_request": typed_read_model(config.count_request),
         "page": int(config.page),
+        "compression": config.compression,
+        "diagnostics": config.diagnostics,
     }
 
 
@@ -68,6 +68,7 @@ def make_analysis_identity(
     config: RunConfig,
     configuration_bundle: DetectionConfigurationBundle,
     workspace_identity: WorkspaceIdentity,
+    selected_count: int | None,
 ) -> dict[str, Any]:
     return {
         "script": SCRIPT_NAME,
@@ -79,4 +80,12 @@ def make_analysis_identity(
             detection_configuration_fingerprint(configuration_bundle)
         ),
         "workspace_identity": typed_read_model(workspace_identity),
+        "output_identity": {
+            "selected_count": selected_count,
+            "frame_sequence": (
+                []
+                if selected_count is None
+                else list(range(1, selected_count + 1))
+            ),
+        },
     }

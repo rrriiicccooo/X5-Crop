@@ -66,8 +66,8 @@ def ask_format() -> str:
 
 
 def ask_partial_count(format_id: str) -> int | None:
-    allowed_partial_counts = FORMATS[format_id].strip.allowed_partial_counts
-    allowed_text = " ".join(str(count) for count in allowed_partial_counts)
+    partial_count_range = FORMATS[format_id].strip.partial_count_range
+    allowed_text = " ".join(str(count) for count in partial_count_range)
     while True:
         print("partial count:")
         print("  return or auto = auto")
@@ -79,7 +79,7 @@ def ask_partial_count(format_id: str) -> int | None:
             count = int(answer)
         except ValueError:
             count = -1
-        if count in allowed_partial_counts:
+        if count in partial_count_range:
             return count
         print(f"unknown count: {answer}")
         print(f"use auto or one of: {allowed_text}")
@@ -93,13 +93,19 @@ def interactive_options(diagnostics: bool = False) -> RuntimeOptions:
         print("This is a local development diagnostics launcher.")
         print("It writes report + Debug Analysis without copying review files.")
     else:
-        print("This audits TIFF files in this folder for source-core review.")
-        print("The current build does not export cropped frame TIFFs.")
+        print("This creates conservative bounded-safe frame TIFF crops.")
         print("Existing output files will not be overwritten.")
     print()
 
     format_id = ask_format()
-    partial = ask_yes_no("partial mode? [y/n, return=no]: ", default=False)
+    partial_supported = FORMATS[format_id].strip.partial_mode_supported
+    partial = (
+        ask_yes_no("partial mode? [y/n, return=no]: ", default=False)
+        if partial_supported
+        else False
+    )
+    if not partial_supported:
+        print(f"{format_id} supports full mode only.")
     strip_mode = "partial" if partial else "full"
     requested_count = ask_partial_count(format_id) if partial else None
     debug_analysis = True if diagnostics else ask_yes_no("debug analysis? [y/n, return=no]: ", default=False)
@@ -112,7 +118,11 @@ def interactive_options(diagnostics: bool = False) -> RuntimeOptions:
         print("debug analysis: enabled")
     else:
         print("debug analysis: off")
-    print("frame TIFF export: unavailable without independent Grid authority")
+    print(
+        "frame TIFF export: disabled in read-only diagnostics"
+        if diagnostics
+        else "frame TIFF export: enabled after the bounded safety Gate"
+    )
     print(f"strip mode: {strip_mode}")
     if partial:
         print(f"count: {'auto' if requested_count is None else requested_count}")

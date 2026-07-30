@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from dataclasses import replace
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import numpy as np
 import tifffile
@@ -13,10 +15,12 @@ from tools.regression.golden_baseline import (
     compare_baseline_record_to_report,
 )
 from x5crop.configuration.bundle import DetectionConfigurationBundle
+from x5crop.configuration.registry import get_detection_configuration
+from x5crop.detection.candidate.assessment.model import (
+    CANDIDATE_GATE_CHECK_CODES,
+)
 from x5crop.detection.decision.vocabulary import (
-    FINAL_REASON_FRAME_GRID_AUTHORITY_UNAVAILABLE,
     FINAL_REASON_SCAN_CANVAS_AUTHORITY_UNAVAILABLE,
-    FINAL_REASON_SOURCE_CONTENT_MEASUREMENT_UNAVAILABLE,
 )
 from x5crop.report.identity import (
     REPORT_SCHEMA_ID,
@@ -24,7 +28,11 @@ from x5crop.report.identity import (
     core_facts_sha256,
 )
 from x5crop.run_config import RunConfig
-from x5crop.runtime.outcome import CompletedInput
+from x5crop.runtime.outcome import (
+    CompletedInput,
+    FailedInput,
+    FailureStage,
+)
 from x5crop.runtime.workflow import process_one
 
 
@@ -35,6 +43,11 @@ def _run_config(
     strip_mode: str = "full",
     requested_count: int | None = None,
 ) -> RunConfig:
+    configuration = get_detection_configuration(
+        format_id,
+        strip_mode,
+        requested_count,
+    )
     return RunConfig(
         input_path=source,
         output_dir=output,
@@ -42,7 +55,7 @@ def _run_config(
         layout_auto=False,
         layout="horizontal",
         strip_mode=strip_mode,
-        requested_count=requested_count,
+        count_request=configuration.count_request,
         page=0,
         review_dir=None,
         copy_review_files=False,
@@ -57,21 +70,17 @@ def _run_config(
     )
 
 
-class SourceCoreRuntimeContractTest(unittest.TestCase):
-    def _process(self, root: Path) -> CompletedInput:
-        source = root / "source.tif"
-        rng = np.random.default_rng(9)
-        pixels = rng.integers(0, 256, size=(100, 720), dtype=np.uint8)
-        tifffile.imwrite(source, pixels, photometric="minisblack")
-        outcome = process_one(
-            source,
-            _run_config(source, root / "output"),
-            DetectionConfigurationBundle.for_format_mode("135", "full"),
+def _full_135_pixels(height: int = 100, width: int = 720) -> np.ndarray:
+    rng = np.random.default_rng(9)
+    pixels = rng.integers(20, 230, size=(height, width), dtype=np.uint8)
+    for boundary in (9, 121, 127, 239, 245, 357, 363, 475, 481, 593, 599, 711):
+        pixels[:, max(0, boundary - 1) : min(width, boundary + 1)] = (
+            0 if boundary % 2 else 255
         )
-        self.assertIsInstance(outcome, CompletedInput)
-        assert isinstance(outcome, CompletedInput)
-        return outcome
+    return pixels
 
+
+class BoundedSafeCropRuntimeContractTest(unittest.TestCase):
     def _process_pixels(
         self,
         root: Path,
@@ -79,10 +88,16 @@ class SourceCoreRuntimeContractTest(unittest.TestCase):
         format_id: str,
         strip_mode: str = "full",
         requested_count: int | None = None,
-    ) -> CompletedInput:
+    ):
+        root.mkdir(parents=True, exist_ok=True)
         source = root / f"{format_id}.tif"
         tifffile.imwrite(source, pixels, photometric="minisblack")
-        outcome = process_one(
+        configuration_bundle = DetectionConfigurationBundle.for_format_mode(
+            format_id,
+            strip_mode,
+            requested_count,
+        )
+        return process_one(
             source,
             _run_config(
                 source,
@@ -91,112 +106,208 @@ class SourceCoreRuntimeContractTest(unittest.TestCase):
                 strip_mode,
                 requested_count,
             ),
-            DetectionConfigurationBundle.for_format_mode(
-                format_id,
-                strip_mode,
-                requested_count,
-            ),
+            configuration_bundle,
         )
-        self.assertIsInstance(outcome, CompletedInput)
-        assert isinstance(outcome, CompletedInput)
-        return outcome
 
-    def test_grid_unavailable_is_owned_by_decision_gate(self) -> None:
+    def test_full_runtime_approves_writes_and_reports_current_schema(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            outcome = self._process(Path(temporary))
-        record = outcome.result.record
-
-        self.assertEqual(record["schema_id"], REPORT_SCHEMA_ID)
-        self.assertEqual(record["schema_revision"], REPORT_SCHEMA_REVISION)
-        self.assertEqual(record["decision"]["status"], "needs_review")
-        self.assertEqual(
-            record["decision"]["final_review_reasons"],
-            [FINAL_REASON_FRAME_GRID_AUTHORITY_UNAVAILABLE],
-        )
-        self.assertTrue(
-            all(
-                check["final_review_reason"] is None
-                for check in record["candidate_gate"]["checks"]
+            outcome = self._process_pixels(
+                Path(temporary),
+                _full_135_pixels(),
+                "135",
             )
-        )
-        self.assertEqual(
-            record["source_core"]["frame_grid"]["outcome"],
-            "no_independent_phase_authority",
-        )
-        self.assertEqual(
-            record["source_core"]["photo_containment"]["outcome"],
-            "not_applicable_frame_grid_unavailable",
-        )
-        self.assertEqual(
-            record["source_core"]["visual_deskew_outcome"],
-            "not_applicable_core_unavailable",
-        )
-        self.assertFalse(record["output"]["finalization"]["frame_export_eligible"])
-        self.assertEqual(record["output"]["finalization"]["final_boxes"], [])
-        self.assertEqual(record["output"]["output_files"], [])
-        self.assertEqual(outcome.artifacts.frame_outputs, ())
-        content = record["source_core"]["lanes"][0]["content"]
-        self.assertLessEqual(len(content["component_examples"]), 64)
-        self.assertEqual(
-            content["component_examples_truncated"],
-            content["component_count"] > 64,
-        )
-        for component in content["component_examples"]:
-            self.assertNotIn("intensity_active_cells", component)
-            self.assertNotIn("texture_active_cells", component)
-            self.assertGreater(component["positive_cells"], 0)
+            self.assertIsInstance(outcome, CompletedInput)
+            assert isinstance(outcome, CompletedInput)
+            record = outcome.result.record
+            self.assertEqual(record["schema_id"], REPORT_SCHEMA_ID)
+            self.assertEqual(record["schema_revision"], REPORT_SCHEMA_REVISION)
+            self.assertEqual(record["decision"]["status"], "approved_auto")
+            self.assertEqual(record["grid_selection"]["selected_count"], 6)
+            self.assertEqual(len(outcome.artifacts.frame_outputs), 6)
+            self.assertEqual(
+                tuple(
+                    item["code"]
+                    for item in record["candidate_gate"]["checks"]
+                ),
+                CANDIDATE_GATE_CHECK_CODES,
+            )
+            self.assertTrue(
+                all(
+                    item["final_review_reason"] is None
+                    for item in record["candidate_gate"]["checks"]
+                )
+            )
+            self.assertTrue(
+                record["output"]["tiff_fidelity"][
+                    "write_readback_validated"
+                ]
+            )
+            self.assertEqual(
+                record["output"]["tiff_fidelity"][
+                    "source_sample_count_per_roi"
+                ],
+                1,
+            )
 
-    def test_core_hash_excludes_measurement_wall_time(self) -> None:
+    def test_core_hash_excludes_measurement_durations(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            outcome = self._process(Path(temporary))
+            outcome = self._process_pixels(
+                Path(temporary),
+                _full_135_pixels(),
+                "135",
+            )
+        assert isinstance(outcome, CompletedInput)
         mutated = deepcopy(outcome.result.record)
-        mutated["source_core"]["lanes"][0]["content"]["statistics"][
-            "deterministic_seconds"
-        ] += 1000.0
+        lane = mutated["measurement"]["lanes"][0]
+        lane["content"]["statistics"]["deterministic_seconds"] += 1000.0
+        lane["separator"]["statistics"]["deterministic_seconds"] += 1000.0
         self.assertEqual(
             outcome.result.record["core_facts_sha256"],
             core_facts_sha256(mutated),
         )
 
-    def test_comparator_is_post_detection_unavailable_only(self) -> None:
+    def test_comparator_checks_only_outward_source_containment(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            outcome = self._process(Path(temporary))
+            outcome = self._process_pixels(
+                Path(temporary),
+                _full_135_pixels(),
+                "135",
+            )
+        assert isinstance(outcome, CompletedInput)
         report = outcome.result.record
-        source_sha = report["analysis_identity"]["source"]["content_sha256"]
-        comparison = compare_baseline_record_to_report(
-            {
-                "baseline_schema": "x5crop_user_confirmed_golden_baseline_v1",
-                "status": "user_confirmed",
-                "sample_id": "synthetic",
-                "source_sha256": source_sha,
-            },
-            report,
-        )
+        boxes = report["output"]["finalization"]["final_boxes"]
+        baseline = {
+            "baseline_schema": "x5crop_user_confirmed_golden_baseline_v1",
+            "status": "user_confirmed",
+            "sample_id": "synthetic",
+            "source_sha256": report["analysis_identity"]["source"][
+                "content_sha256"
+            ],
+            "frames": [
+                {
+                    "confirmed_integer_boundary_polygon": [
+                        [box["left"] + 1, box["top"] + 1],
+                        [box["right"] - 1, box["top"] + 1],
+                        [box["right"] - 1, box["bottom"] - 1],
+                        [box["left"] + 1, box["bottom"] - 1],
+                    ]
+                }
+                for box in boxes
+            ],
+        }
+        comparison = compare_baseline_record_to_report(baseline, report)
         self.assertEqual(comparison["comparison_schema"], COMPARISON_SCHEMA)
-        self.assertEqual(
-            comparison["comparison_status"],
-            "production_geometry_unavailable",
-        )
-        self.assertEqual(comparison["edge_metrics"], [])
-        self.assertNotIn("resolved-safe", str(comparison))
+        self.assertEqual(comparison["comparison_status"], "compared")
+        self.assertTrue(comparison["all_confirmed_content_contained"])
+        self.assertNotIn("iou", str(comparison).lower())
 
-    def test_scan_canvas_failure_adds_independent_typed_reasons(self) -> None:
+    def test_scan_canvas_contradiction_is_review_not_terminal_failure(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             outcome = self._process_pixels(
                 Path(temporary),
                 np.arange(10000, dtype=np.uint8).reshape(100, 100),
                 "135",
             )
+        self.assertIsInstance(outcome, CompletedInput)
+        assert isinstance(outcome, CompletedInput)
+        record = outcome.result.record
+        self.assertEqual(record["decision"]["status"], "needs_review")
+        self.assertIn(
+            FINAL_REASON_SCAN_CANVAS_AUTHORITY_UNAVAILABLE,
+            record["decision"]["final_review_reasons"],
+        )
+        self.assertEqual(record["output"]["output_files"], [])
+
+    def test_output_failure_remains_terminal_failed_input(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            with mock.patch(
+                "x5crop.runtime.workflow.write_crops",
+                side_effect=OSError("synthetic write failure"),
+            ):
+                outcome = self._process_pixels(
+                    root,
+                    _full_135_pixels(),
+                    "135",
+                )
+        self.assertIsInstance(outcome, FailedInput)
+        assert isinstance(outcome, FailedInput)
+        self.assertEqual(outcome.failure_stage, FailureStage.OUTPUT)
+        self.assertEqual(outcome.artifacts.frame_outputs, ())
+        self.assertIn("synthetic write failure", outcome.error_message)
+
+    def test_diagnostics_preserves_decision_but_does_not_write_frames(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "diagnostics.tif"
+            tifffile.imwrite(source, _full_135_pixels())
+            bundle = DetectionConfigurationBundle.for_format_mode(
+                "135",
+                "full",
+            )
+            outcome = process_one(
+                source,
+                replace(
+                    _run_config(source, root / "output"),
+                    diagnostics=True,
+                ),
+                bundle,
+            )
+        self.assertIsInstance(outcome, CompletedInput)
+        assert isinstance(outcome, CompletedInput)
+        record = outcome.result.record
+        self.assertEqual(record["decision"]["status"], "approved_auto")
+        self.assertEqual(record["grid_selection"]["selected_count"], 6)
+        self.assertEqual(outcome.artifacts.frame_outputs, ())
+        finalization = record["output"]["finalization"]
+        self.assertTrue(finalization["frame_export_eligible"])
+        self.assertFalse(finalization["frame_export_requested"])
+        self.assertFalse(finalization["frame_export_performed"])
+        self.assertEqual(finalization["reason"], "diagnostics_read_only")
         self.assertEqual(
-            outcome.result.record["decision"]["final_review_reasons"],
-            [
-                FINAL_REASON_SCAN_CANVAS_AUTHORITY_UNAVAILABLE,
-                FINAL_REASON_SOURCE_CONTENT_MEASUREMENT_UNAVAILABLE,
-                FINAL_REASON_FRAME_GRID_AUTHORITY_UNAVAILABLE,
-            ],
+            record["output"]["tiff_fidelity"]["success_receipt"],
+            "not_requested_diagnostics",
         )
 
-    def test_dual_lane_uses_exact_center_domains_and_remains_review(self) -> None:
+    def test_input_read_failure_remains_terminal_failed_input(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            with mock.patch(
+                "x5crop.runtime.workflow.read_tiff",
+                side_effect=OSError("synthetic read failure"),
+            ):
+                outcome = self._process_pixels(
+                    root,
+                    _full_135_pixels(),
+                    "135",
+                )
+        self.assertIsInstance(outcome, FailedInput)
+        assert isinstance(outcome, FailedInput)
+        self.assertEqual(outcome.failure_stage, FailureStage.IMAGE_READ)
+        self.assertEqual(outcome.artifacts.frame_outputs, ())
+        self.assertIn("synthetic read failure", outcome.error_message)
+
+    def test_tiff_readback_failure_is_not_converted_to_review(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            with mock.patch(
+                "x5crop.io.tiff.validate_written_tiff",
+                side_effect=OSError("synthetic readback failure"),
+            ):
+                outcome = self._process_pixels(
+                    root,
+                    _full_135_pixels(),
+                    "135",
+                )
+        self.assertIsInstance(outcome, FailedInput)
+        assert isinstance(outcome, FailedInput)
+        self.assertEqual(outcome.failure_stage, FailureStage.OUTPUT)
+        self.assertEqual(outcome.artifacts.frame_outputs, ())
+        self.assertIn("synthetic readback failure", outcome.error_message)
+
+    def test_dual_lane_output_is_lane_then_lane_local_ordinal(self) -> None:
         rng = np.random.default_rng(17)
         pixels = rng.integers(0, 256, size=(200, 732), dtype=np.uint8)
         with tempfile.TemporaryDirectory() as temporary:
@@ -205,87 +316,66 @@ class SourceCoreRuntimeContractTest(unittest.TestCase):
                 pixels,
                 "135-dual",
             )
+        self.assertIsInstance(outcome, CompletedInput)
+        assert isinstance(outcome, CompletedInput)
         record = outcome.result.record
-        lanes = record["source_core"]["lanes"]
-        self.assertEqual(len(lanes), 2)
-        self.assertEqual(
-            [lane["domain"]["work_box"] for lane in lanes],
-            [
-                {"left": 0, "top": 0, "right": 732, "bottom": 100},
-                {"left": 0, "top": 100, "right": 732, "bottom": 200},
-            ],
-        )
-        self.assertEqual(
-            [
-                lane["scan_canvas"]["selected_profile"]["profile_id"]
-                for lane in lanes
-            ],
-            ["135_dual", "135_dual"],
-        )
-        self.assertEqual(
-            [lane["domain"]["authority_profile_id"] for lane in lanes],
-            ["135_dual", "135_dual"],
-        )
-        self.assertEqual(
-            [lane["scan_canvas"]["observed_short_axis_px"] for lane in lanes],
-            [200, 200],
-        )
-        self.assertEqual(
-            [
-                lane["axis_scale_intervals"]["short_axis_px_per_mm"][
-                    "minimum"
-                ]
-                for lane in lanes
-            ],
-            [200 / 63.44, 200 / 63.44],
-        )
-        self.assertEqual(record["decision"]["status"], "needs_review")
-        self.assertEqual(record["output"]["output_files"], [])
+        self.assertEqual(record["decision"]["status"], "approved_auto")
+        self.assertEqual(record["grid_selection"]["selected_count"], 12)
+        boxes = record["output"]["finalization"]["final_boxes"]
+        self.assertEqual(len(boxes), 12)
+        self.assertTrue(all(box["bottom"] <= 100 for box in boxes[:6]))
+        self.assertTrue(all(box["top"] >= 100 for box in boxes[6:]))
 
-    def test_short_120_canvas_accepts_two_but_not_three_67_frames(self) -> None:
+    def test_short_120_canvas_capacity_filters_count_after_match(self) -> None:
         rng = np.random.default_rng(23)
         pixels = rng.integers(0, 256, size=(200, 594), dtype=np.uint8)
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             partial = self._process_pixels(
-                root,
+                root / "partial",
                 pixels,
                 "120-67",
                 "partial",
                 2,
             )
             full = self._process_pixels(
-                root,
+                root / "full",
                 pixels,
                 "120-67",
                 "full",
             )
-
-        partial_record = partial.result.record
+        self.assertIsInstance(partial, CompletedInput)
+        self.assertIsInstance(full, CompletedInput)
+        assert isinstance(partial, CompletedInput)
+        assert isinstance(full, CompletedInput)
         self.assertEqual(
-            partial_record["configuration"]["resolved_frame_count"],
+            partial.result.record["decision"]["status"],
+            "approved_auto",
+        )
+        self.assertEqual(
+            partial.result.record["grid_selection"]["selected_count"],
             2,
         )
         self.assertEqual(
-            partial_record["source_core"]["lanes"][0]["scan_canvas"][
-                "selected_profile"
-            ]["profile_id"],
-            "120_wide_188_5",
-        )
-        self.assertEqual(
-            partial_record["decision"]["final_review_reasons"],
-            [FINAL_REASON_FRAME_GRID_AUTHORITY_UNAVAILABLE],
+            full.result.record["decision"]["status"],
+            "needs_review",
         )
 
-        full_record = full.result.record
+    def test_final_detection_rejects_post_decision_box_mutation(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            outcome = self._process_pixels(
+                Path(temporary),
+                _full_135_pixels(),
+                "135",
+            )
+        assert isinstance(outcome, CompletedInput)
+        # The record freezes this fact, and FinalDetection validates count/box
+        # cardinality at construction.
+        finalization = outcome.result.record["output"]["finalization"]
+        self.assertFalse(finalization["post_decision_mutation"])
         self.assertEqual(
-            full_record["configuration"]["resolved_frame_count"],
-            3,
-        )
-        self.assertEqual(full_record["source_core"]["lanes"], [])
-        self.assertIn(
-            FINAL_REASON_SCAN_CANVAS_AUTHORITY_UNAVAILABLE,
-            full_record["decision"]["final_review_reasons"],
+            len(finalization["final_boxes"]),
+            finalization["selected_count"],
         )
 
 

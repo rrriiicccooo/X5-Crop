@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ...configuration.model import FrameCountMode
 from ..candidate.assessment.model import CandidateGateAssessment
 from ..gate_checks import GateCheck, GateRequirement, GateStage
 from .model import DECISION_GATE_REASON_BY_CODE, DecisionGateAssessment
@@ -7,6 +8,7 @@ from .model import DECISION_GATE_REASON_BY_CODE, DecisionGateAssessment
 
 def apply_decision_gate(
     candidate_gate: CandidateGateAssessment,
+    count_mode: FrameCountMode,
 ) -> DecisionGateAssessment:
     return DecisionGateAssessment(
         checks=tuple(
@@ -14,8 +16,16 @@ def apply_decision_gate(
                 code=check.code,
                 stage=GateStage.DECISION,
                 state=check.state,
-                requirement=GateRequirement.SUPPORTED_REQUIRED,
-                final_review_reason=DECISION_GATE_REASON_BY_CODE[check.code],
+                requirement=check.requirement,
+                final_review_reason=(
+                    (
+                        "automatic_count_unresolved"
+                        if count_mode == FrameCountMode.AUTO
+                        else "requested_count_unfulfilled"
+                    )
+                    if check.code == "frame_count"
+                    else DECISION_GATE_REASON_BY_CODE[check.code]
+                ),
             )
             for check in candidate_gate.checks
         )
