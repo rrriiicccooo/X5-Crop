@@ -168,7 +168,7 @@ reason；被 Grid 阻断的下游只标记 `NOT_APPLICABLE`。
 
 ### Contracts、样片与性能
 
-- Pre-push full：29/29 tests、compileall、14/14 format/mode、shell syntax、diff hygiene
+- Pre-push full：31/31 tests、compileall、14/14 format/mode、shell syntax、diff hygiene
   和 version check 全部通过。
 - Named audit：S027、S035、S051、S055、S062、S091、S094、S109、S098 共 9/9 正常
   `needs_review`，0 frame output；这是 current review-only runtime 的结果，不是下一版
