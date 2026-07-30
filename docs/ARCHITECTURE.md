@@ -22,6 +22,43 @@ X5 Crop 在用户提供 format 后生成保守裁切，目标是不内切真实�
 当前系统是 current-only 原子实现。Runtime、tests、tools、report 与 Debug 只消费
 `bounded_safe_crop_grid`；没有 feature flag、双 schema、兼容 reader 或备用 detector。
 
+### 1.1 已批准的下一原子切换（尚未实现）
+
+用户已确认：partial `auto` 可以输出额外空白 TIFF，完全空片也可以输出全部空白 slot；
+安全优先级是“不漏掉真实照片”，不是识别唯一真实 count。当前
+`main@7478ca09` 仍运行 `1..default_count` 的跨 count dominance，因此本文后续章节在
+切换完成前仍如实描述 current runtime，不能把以下目标宣称为已上线行为。
+
+下一次原子切换的唯一目标合同是：
+
+- `fixed_full` 继续使用 format 默认 count；`explicit` 继续严格服从用户 count。
+- Partial `auto` 在唯一匹配 scan-canvas 后，使用该片夹对当前 format 的有效最大容量作为
+  唯一 `output_slot_count`。同一 format 进入较短片夹时，以 typed
+  `ScanCanvasFormatFit.maximum_frame_count` 为准，不盲用 format 默认值。
+- `output_slot_count` 只表示输出 holder slots，不表示真实照片张数。前导、尾随或中间
+  blank 均保留；真实照片可以位于容量 Grid 中任意物理允许的位置。
+- Auto 不再搜索多个 count，也不再建立跨 count
+  `FrameCountDominanceAssessment`、全局 count competition 或
+  `automatic_count_unresolved`。同一容量 count 内的 placement、corridor、ordered DP、
+  component/seed selection、slot ownership、safe envelope 与 protection 继续保留。
+- `CandidateGate` 与 `DecisionGate` 的权限不变。容量语义不能绕过 Grid、ownership、
+  containment、source/lane authority、protection 或 transform 的具体阻断事实。
+- Current schema 原子改用 `output_slot_count` 表达检测与输出身份；被替代的
+  `selected_count`、跨 count work/dominance 字段、reason、tests 与 reader 同批删除，
+  不保留 alias、shim 或双 schema。
+
+切换后的验收合同是：
+
+- fixed/explicit 的输出 slot 数必须精确等于权威 count。
+- auto 的输出 slot 数必须精确等于唯一匹配片夹的有效容量。
+- 黄金 partial auto 使用 source-coordinate、保持顺序的一对一包含匹配：每个用户确认
+  polygon 必须完整落入某个输出 footprint；确认照片 ordinal 不要求等于 holder slot
+  ordinal，额外输出允许为空白。
+- 51 条 partial filename count 只作 validation-only lower bound，永不进入 detector。
+  Approved auto 不得少于该 annotation；精确 count 命中率降为非目标诊断。
+- 正式性能继续按输入张数认证，但必须重新记录实际 frame TIFF 数、额外 slot 分布与
+  write/read-back 成本。搜索减少不能替代真实 I/O 性能复测。
+
 ## 2. 单向运行流
 
 ```text

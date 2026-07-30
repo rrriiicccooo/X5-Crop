@@ -12,6 +12,31 @@
 V4.9 是破坏性的 current-only 物理模型重构。旧 runtime、schema、reason、cache、
 compatibility 与历史 box parity 均不是迁移目标。
 
+### 2026-07-30：冻结 partial auto 的容量输出目标（尚未实现）
+
+- 用户确认额外空白输出与完全空片的空白输出均可接受；产品风险改为非对称：少输出可能
+  漏掉真实照片，容量范围内多输出只增加可接受的 blank slot。
+- 下一原子切换将把 partial `auto` 从“在有限 count 集合中推断真实张数”改为“输出唯一
+  匹配片夹的全部有效 slots”。`fixed_full` 与 authoritative `explicit` 不变；auto 的
+  canonical 身份改为 `output_slot_count`，不再声称是真实照片数。
+- `main@7478ca09` 的只读复核显示：14/14 黄金场景通过，111 条 coverage 中 110 条已批准；
+  问题不是 review 过多，而是 41 条 pass partial 中有 17 条在少于人工 count annotation
+  时仍得到批准。S067 作为非 baseline 诊断可直接复现 auto 输出 1 个中间 ROI，而
+  explicit 3 输出三张；这证明现有批准语义可能保守错方向。
+- 使用 current 单-count 路径请求这些样片的格式最大容量（与其匹配片夹容量相同）的只读
+  模拟覆盖全部 51 条 partial，51/51 均得到输出且没有低于 annotation。五张用户确认
+  geometry 的 partial 黄金样片全部完成
+  source-order containment；S109 的七张确认照片映射到十二个 holder slots 的第 6–12 位，
+  证明前导 blank 可以表达真实 partial placement。
+- 该策略不采用新的跨 count coverage 层。实现时删除跨 count dominance、count competition
+  与对应 schema/reason/contracts，只保留单一容量 count 内的 Grid、ownership、
+  containment、protection 和两级 Gate。
+- 固定 24 张性能 cohort 按容量输出时，静态 frame 数估计由 139 增至 168（增加 29，
+  约 21%）。同时 half auto 每个 lane/component 的搜索结构上限可从 1188/3168 降为
+  count 12 的 198/558 states/transitions；最终取舍必须以真实 TIFF 写出/复读性能为准。
+- 本条只冻结下一实现边界，不改变当前 runtime、公共用户手册或稳定 Release。原子切换、
+  current schema、验收和性能全部闭合后，才更新用户可见行为说明。
+
 ### 2026-07-30：普通并发上限开放到 3
 
 - 将普通入口的默认值与上限拆分：默认保持 `--jobs 2`，用户可显式请求最多 3 个

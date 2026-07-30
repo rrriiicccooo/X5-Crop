@@ -72,26 +72,32 @@ https://github.com/rrriiicccooo/X5-Crop
 ## 产品宗旨与批准语义
 
 - X5 Crop 的目标是在用户已经提供 format 后，自动生成**足够安全且不切掉真实照片内容**
-  的裁切；full count 固定，partial 同时支持 explicit 与 bounded auto count。项目不是
-  唯一还原或测量真实物理边界，也不追求手术刀式精度。
-- 用户提供的 format 始终是 runtime authority。显式 count 是 authority；auto count 只能在
-  format 与唯一匹配片夹容量限定的有限整数集合内选择，不得自动猜 format、读取 filename
-  count，或恢复旧版无界 count heuristic。
+  的裁切；full count 固定，partial 同时支持 authoritative `explicit` count 与保守
+  `auto`。项目不是唯一还原或测量真实物理边界，也不追求手术刀式精度。
+- 用户提供的 format 始终是 runtime authority。显式 count 是 authority；partial `auto`
+  不推断真实照片张数，而是在唯一匹配 scan-canvas 后使用该片夹对该 format 的有效最大
+  容量作为 `output_slot_count`。不得自动猜 format、读取 filename count，或恢复旧版无界
+  count heuristic。
 - Separator、content、outer、expected position、格式尺寸、score 与其它模型线索都可以
   参与 proposal、assessment 和 selection。必须在 report/debug 中区分 observed 与
   inferred，但“属于推断”本身不是 `needs_review` 理由。
 - `approved_auto` 只表示最终保护后的输出满足有界安全合同；不表示每条照片边、separator
-  或 Grid phase 都被唯一证明，也不保证每张输出只含本 slot 的像素。固定 protection 与
-  bounded contact/overlap 可以跨过 nominal divider、带入相邻照片像素并让相邻输出重叠。
-- `needs_review` 只用于具体且无法由 protection 吸收的输出风险，例如非支配
-  count/ordinal 竞争、请求 count 无法成立、主照片的 slot ownership 无法有界、已观测
-  内容仍会被切掉，或未保护 geometry 越出 source/lane authority。不得把
+  或 Grid phase 都被唯一证明，也不保证每张输出只含本 slot 的像素，或输出 slot 数等于
+  真实照片数。固定 protection 与 bounded contact/overlap 可以跨过 nominal divider、
+  带入相邻照片像素并让相邻输出重叠。
+- `needs_review` 只用于具体且无法由 protection 吸收的输出风险，例如请求的显式 count
+  无法成立、同一输出 slot count 下的 ordinal/placement 竞争无法有界、主照片的 slot
+  ownership 无法有界、已观测内容仍会被切掉，或未保护 geometry 越出 source/lane
+  authority。不得把
   protection/shared interval 内出现邻片像素当作 ownership 失败，也不得只因 separator
   缺失、照片为空、精确边界未观测或多个候选在输出上等价而送审。
-- Partial 可以推断实际照片位于哪些 slot；blank 保留 slot；contact/overlap 优先允许输出框
-  重叠以保全内容。只有 slot ownership 或安全包络无法有界时才送审。
-- 回归验收关注 format/count、顺序、slot ownership、真实内容 containment 与 TIFF 保真；
-  不要求复刻历史 box，也不把贴近人工边界本身当作质量目标。
+- Partial `auto` 保留片夹全部有效 slot；真实照片可以位于其中任意连续或物理允许的位置，
+  前后及中间 blank 均保留输出。额外空白 TIFF 可以接受；contact/overlap 优先允许输出框
+  重叠以保全内容。只有同一容量 Grid 的 slot ownership 或安全包络无法有界时才送审。
+- 回归验收关注 format、输入 count authority、输出 slot count、顺序、slot ownership、
+  真实内容 containment 与 TIFF 保真；不要求复刻历史 box，也不把贴近人工边界本身当作
+  质量目标。黄金 partial `auto` 必须把每个确认照片以 source 顺序完整包含在某个输出
+  slot 中，不要求确认照片 ordinal 与 holder slot ordinal 相同。
 - Accuracy completion 只使用 source-SHA-bound、用户确认 geometry 的黄金样片。未确认
   样片、filename `pass/unknown`、auto-count 观察率与 calibration 结果不能冒充真实
   accuracy holdout；它们只用于 calibration、coverage、性能与非阻断诊断。
@@ -188,6 +194,9 @@ https://github.com/rrriiicccooo/X5-Crop
   CandidateGate 有具体阻断事实时允许 `needs_review`，否则优先 `approved_auto`。该映射
   只进入 validation-only cohort，不能成为 detector 输入、runtime whitelist 或
   DecisionGate 之外的状态权限。
+- 51 条 partial 的 filename count 是用户提供的 validation-only count annotation，不能
+  进入 runtime。切换到 capacity-auto 后，approved 结果的 `output_slot_count` 必须等于
+  唯一匹配片夹的有效容量且不得小于该 annotation；精确真实 count 命中率不再是产品目标。
 - 现有真实样片可以校准 search prior 与 measurement，但样片覆盖不完整。经验分布不得变成
   “未见过即失败”的硬边界；coverage gap 只限制验证或发布声明，不得单独制造
   `needs_review`。XPan 与 120-645 暂无且短期不补真实 fixture，不得把补样片设为实现
