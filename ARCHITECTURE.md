@@ -476,11 +476,20 @@ endpoint_slack_mm
 calibration_receipt_id
 ```
 
-这些 interval 是 search authority，不是照片或 separator 的物理观测。初始值必须由八张
-nominal 原 TIFF 的只读 source-coordinate calibration，或明确记录的同 film-family 物理
-标准推导产生，并冻结在 typed configuration；不得直接复制旧 tuning，S098 不进入 nominal
-calibration。没有经过 named audit 的 format/component 不发明“最近格式”值；通用模型只能
-使用显式审阅过的 physical-rule prior，发布说明不得宣称已有准确性覆盖。
+这些 interval 是 search authority，不是照片或 separator 的物理观测。初始值可以由现有
+真实 TIFF 的只读 source-coordinate calibration，或明确记录的物理规则推导产生，并冻结在
+typed configuration；不得直接复制旧 tuning。每份 calibration receipt 必须同时列出
+format、mode、component、orientation、count、partial placement 与 interaction class 的
+实际覆盖，区分 empirical calibration、holdout 与 synthetic/physical-rule validation。
+
+现有样片只校准搜索中心、排序、典型 corridor 与 measurement 分布；样片 min/max 不得直接
+成为“未见过即失败”的硬 admissibility bound。硬物理边界仍由
+`FramePhysicalSpec`、`ScanCanvasPhysicalSpec`、source/lane authority 与 output protection
+合同提供。S098 保持 `irregular_geometry_stress`，不进入 nominal tolerance estimation，
+但这项角色不改变它必须自动批准的验收期望。没有真实样片的 format/component 不发明“最近
+格式”值；通用模型只能使用显式审阅过的 physical-rule prior 与 synthetic contracts。
+Coverage gap 只限制验证或发布声明，不能成为 CandidateGate 事实、format denylist 或
+单张输入的 `needs_review` reason。
 
 每个 lane/component 先生成下列同级 seed source，不设 fallback/retry 顺序：
 
@@ -720,9 +729,13 @@ detector；只有阶段 5 的完整 tree 才改变 runtime 行为：
 
 1. **Contracts**：新增上述 types、构造不变量、结构上限与 synthetic oracle；旧
    `FrameGridEvidence`/source-core downstream placeholders 在切换前不扩展成双语义。
-2. **Read-only calibration**：为每个现有 format/mode/component 生成 prior 与 separator
-   measurement audit；八张 nominal 用于校准，S098 只作 stress。冻结数值、receipt 与
-   candidate/work distributions 后才进入 runtime configuration。
+2. **Read-only calibration**：用现有真实样片为已覆盖的 format/mode/component 生成 prior
+   与 separator measurement audit；调参前冻结每张样片的 calibration/holdout/stress
+   角色与 coverage matrix。九张 confirmed baseline 提供 geometry oracle，其中 S098
+   只作 irregular-geometry stress、不进入 nominal tolerance estimation，但仍必须
+   `approved_auto`。无真实覆盖的 cell 使用明确 physical-rule prior 与 synthetic
+   contracts。冻结数值、receipt 与 candidate/work distributions 后才进入 runtime
+   configuration。
 3. **最小纵切**：实现 seed、一个 canonical separator/edge-pair measurement、
    model-only candidate、ordered DP、slot、safe envelope、毫米 protection 与 identity
    output geometry；先通过 135/full 与 120-66/partial 的 named audit，不开放 runtime
@@ -746,27 +759,60 @@ affine、两级 Gate 与 forbidden legacy tokens。
 
 ```text
 schema = x5crop_safe_crop_acceptance_cohort_v1
-expectation = must_approve_safe | needs_review_with_reason | stress_only
+expectation = must_approve_safe | auto_or_review
+evaluation_role = calibration | holdout | stress
 ```
 
-每条记录绑定 source SHA、format/mode/count、expectation authority、primary ownership
-检查与允许的 neighbor-retention 语义。目录名中的 `pass_`、历史 PASS 或旧 report 不能自动
-成为 expectation；`must_approve_safe` 必须来自用户明确确认或独立的 current physical
-audit。该 cohort 只由 `tools/regression/` 消费，不进入 detector、prior、score 或 runtime
-selection。
+每条记录绑定 source SHA、format/mode/count、expectation authority、evaluation role、
+primary ownership 检查与允许的 neighbor-retention 语义。2026-07-30 的用户明确确认把
+current source manifest 中 88 条 `pass_*` 全部冻结为 `must_approve_safe`，包括
+`S098 / Test/half/full/pass_X5_00002.tif`；23 条 `unknown_*` 冻结为
+`auto_or_review`。这是把用户确认 materialize 成 source-SHA-bound validation data，不是
+让路径名或历史 PASS 在 runtime 获得权限。Cohort 只由 `tools/regression/` 消费，不进入
+detector、prior、score、CandidateGate、DecisionGate 或 runtime selection。
 
-八张 nominal baseline 可作为 geometry/calibration oracle，但不能同时冒充独立 holdout；
-报告必须分开列出 calibration cohort 与从其余真实 TIFF 冻结的 holdout cohort。若
-`must_approve_safe` 得到 review，必须显示十项 Gate 中哪一项有具体阻断事实，不能用
-“观测不足”或 final box 含邻片像素解释。
+当前 manifest 的 source-level 盘点如下；它只说明现有 TIFF 数量，不证明 count、placement、
+separator visibility 或 interaction 已覆盖：
+
+| format/mode | `must_approve_safe` | `auto_or_review` |
+|---|---:|---:|
+| 135/full | 37 | 10 |
+| 135/partial | 5 | 9 |
+| 120-66/partial | 32 | 0 |
+| 120-67/full | 3 | 0 |
+| half/full | 7 | 3 |
+| half/partial | 4 | 1 |
+| 其它 format/mode cell | 0 | 0 |
+| **合计** | **88** | **23** |
+
+`expectation` 与 `evaluation_role` 正交：S098 是 `must_approve_safe + stress`，stress
+不是 review 豁免。`must_approve_safe` 只接受 DecisionGate 的 `approved_auto`；若得到
+`needs_review`，即使 reason typed 且具体，仍表示实现没有满足该样片的验收要求，Gate
+facts 只用于诊断。`auto_or_review` 优先在十项 Gate 都满足时自动批准；只有实际 Gate
+阻断事实成立时，`needs_review` 才是可接受结果。`unknown_*` 标签本身不制造 review。
+
+所有参与调参的样片必须先标记 `calibration`，不得同时冒充独立 `holdout`；报告分开列出
+calibration、holdout 与 stress 结果。现有样片可以校准数值，但不能证明未覆盖情形。调参
+前冻结 coverage matrix，至少列出 format/mode/component、方向、count、partial 起止位置、
+blank/contact/overlap 与可见 separator 情况；未覆盖 cell 使用物理规则与 synthetic
+contracts，且在验证声明中保持 `real_sample_coverage = unavailable`。
+
+XPan 与 120-645 当前没有真实 fixture，短期也不把补样片列为前置任务。它们继续使用
+`FramePhysicalSpec` 的明确 components、通用 bounded search 与 synthetic contracts；
+真实输入仍经过同一 CandidateGate/DecisionGate，不因格式缺样片而强制 review。发布前可
+声明 contract coverage，但在获得真实样片前不得宣称 real-TIFF accuracy、回归或性能覆盖，
+也不得用其它格式的最近值建立隐藏 fallback。
 
 物理验收顺序：
 
-1. 九张人工 baseline：八张 nominal 检查 count/order/ownership/content containment；
-   S098 只报告 stress，不反向校准；
-2. 代表性 `135/full`、`135/partial`、`120-66/partial`、`half/full`、
-   `half/partial`、`120-67/full` cohort 与 dual/vertical synthetic contract；
-3. 111 张 current-schema invariant；XPan/120-645 在有真实 fixture 前不声明准确性覆盖；
+1. 冻结 111 条 source-SHA-bound cohort 与 evaluation role，校验 88 条
+   `must_approve_safe`、23 条 `auto_or_review` 的数量和身份；
+2. 九张人工 baseline 检查 count/order/ownership/content containment；八张 nominal 可
+   校准，S098 只作 stress、不反向估计 nominal tolerance，但九张中的所有 `pass_*`
+   （包括 S098）都必须 `approved_auto`；
+3. 完整运行 111 张：88 张 `pass_*` 必须自动批准；23 张 `unknown_*` 自动批准优先，具体
+   Gate 阻断时 review 也通过验收。另运行 dual/vertical、XPan、120-645 与未覆盖
+   interaction 的 synthetic contracts，并单列 real-sample coverage gap；
 4. 固定 24 张、`--jobs 2`、cold 单列、三个新输出目录，真实 TIFF 写出并复读，
    `median(total wall / 24) <= 5.0 秒/张`；
 5. 人工检查 current report 与 Debug Analysis 中 observed/inferred、slot ownership、

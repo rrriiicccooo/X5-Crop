@@ -176,6 +176,15 @@ https://github.com/rrriiicccooo/X5-Crop
   find Test -type f \( -iname '*.tif' -o -iname '*.tiff' \) | sort
   ```
 
+- 当前 111 条 source manifest 的验收期望已由用户明确确认：绑定同一 source SHA 的
+  `pass_*` 共 88 条，必须得到 `approved_auto`，包括 S098；`unknown_*` 共 23 条，在
+  CandidateGate 有具体阻断事实时允许 `needs_review`，否则优先 `approved_auto`。该映射
+  只进入 validation-only cohort，不能成为 detector 输入、runtime whitelist 或
+  DecisionGate 之外的状态权限。
+- 现有真实样片可以校准 search prior 与 measurement，但样片覆盖不完整。经验分布不得变成
+  “未见过即失败”的硬边界；coverage gap 只限制验证或发布声明，不得单独制造
+  `needs_review`。XPan 与 120-645 暂无且短期不补真实 fixture，不得把补样片设为实现
+  blocker，也不得建立格式级 denylist。
 - 样片可用时覆盖代表性 `135/full`、`120-66/partial`、`half/full` 与 `120-67/full`。
   Unit tests 通过不证明 named-TIFF 安全裁切；完成声明前必须检查 current reports、Debug
   Analysis 与输出是否存在真实内容 inward loss。

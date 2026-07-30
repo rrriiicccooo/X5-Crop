@@ -11,6 +11,27 @@
 V4.9 是破坏性的 current-only 物理模型重构。旧 runtime/schema/compatibility 不是迁移
 目标。
 
+### 2026-07-30：验收标签与有限样片覆盖边界纠正
+
+这是 docs-only 计划修订；current detector、schema 与 review-only 输出行为均未改变。
+本条取代同日较早计划中“`pass_*` 不构成 expectation”及“stress 可作为独立 expectation”
+的表述。
+
+- 用户明确确认 current source manifest 中 88 条 `pass_*` 都是
+  `must_approve_safe`，S098 也不例外；23 条 `unknown_*` 是 `auto_or_review`，能满足
+  Gate 时优先自动批准，存在具体阻断事实时 review 也可接受。
+- Acceptance expectation 与 evaluation role 分离。S098 仍是
+  `irregular_geometry_stress`，不参与 nominal tolerance estimation，但 stress 不是 review
+  豁免；若 DecisionGate 返回 review，must-approve 验收仍失败。
+- 路径标签只用于把这次用户确认 materialize 成 source-SHA-bound validation cohort，不
+  进入 detector、prior、score、Gate、runtime whitelist 或 final decision。
+- 现有真实样片可以校准搜索中心、排序、典型 corridor 与 measurement 分布，但没有覆盖
+  所有 format/mode/count/placement/interaction。经验 min/max 不得成为“未见过即失败”的
+  硬边界；coverage gap 只限制验证和发布声明，不能单独制造 `needs_review`。
+- XPan 与 120-645 暂无且短期不补真实 fixture；补样片不再是实现 blocker。两者使用明确
+  physical-rule prior、通用 bounded flow 与 synthetic contracts，不建立 nearest-format
+  fallback 或格式 denylist；有真实样片前不宣称 real-TIFF accuracy、回归或性能覆盖。
+
 ### 2026-07-30：相邻图片 retention 与 Gate 边界纠正
 
 这是 docs-only 计划修订；current detector、schema 与 review-only 输出行为均未改变。

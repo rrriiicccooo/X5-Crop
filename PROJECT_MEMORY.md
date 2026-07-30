@@ -163,7 +163,9 @@ reason；被 Grid 阻断的下游只标记 `NOT_APPLICABLE`。
 - Pre-push full：29/29 tests、compileall、14/14 format/mode、shell syntax、diff hygiene
   和 version check 全部通过。
 - Named audit：S027、S035、S051、S055、S062、S091、S094、S109、S098 共 9/9 正常
-  `needs_review`，0 frame output。S098 只作 `irregular_geometry_stress`。
+  `needs_review`，0 frame output；这是 current review-only runtime 的结果，不是下一版
+  验收期望。S098 的 evidence role 是 `irregular_geometry_stress`，但未来仍必须
+  `approved_auto`。
 - 111 张 invariant：111 completed、0 failure、0 frame output。
 - NumPy RLE/union-find 在 600 组独立 oracle mask 与 111 张 current 样片上保持 strict
   4-connectivity/content geometry 一致。
@@ -188,7 +190,8 @@ reason；被 Grid 阻断的下游只标记 `NOT_APPLICABLE`。
 本地有 111 张未修改 source TIFF：47 张 135/full、14 张 135/partial、32 张
 120-66/partial、3 张 120-67/full、10 张 half/full、5 张 half/partial。九张黄金样片的
 source/marked/JPG/proposal/baseline hashes 完整保留；八张属于 nominal calibration，
-S098 属于 stress。
+S098 属于 stress。当前 source manifest 同时包含 88 张 `pass_*` 与 23 张 `unknown_*`；
+前者全部是下一版 `must_approve_safe`，后者是 `auto_or_review`。
 
 Baseline 只能在 detector/output receipt 冻结后用于 comparator，不参与检测、Grid、
 deskew 或输出选择。
@@ -347,13 +350,20 @@ receipt，不得随 cache 清理。它只否定特定表示或 measurement 合�
   不是独立 review reason。
 - 原子切换时 report revision 变为 `bounded_safe_crop_grid`；同批删除
   `source_core_grid_authority` runtime reader/branch，不保留 alias 或双路径。
-- 初始 prior/threshold 数值是下一任务的只读 calibration data 或明确的同 film-family
-  physical-rule data，不是待重新设计的权限问题。八张 nominal 用于校准，S098 只作
-  stress；没有真实 fixture 的 XPan/120-645 不宣称准确性覆盖。
+- 初始 prior/threshold 数值是下一任务的只读 calibration data 或明确的 physical-rule
+  data，不是待重新设计的权限问题。现有样片可以校准搜索中心、排序与典型 measurement，
+  但样片 min/max 不是硬 admissibility bound；覆盖缺口只限制验证声明。S098 只作
+  irregular-geometry stress、不估计 nominal tolerance，但仍必须自动批准。
 - Threshold tuning 前建立 source-SHA-bound
-  `x5crop_safe_crop_acceptance_cohort_v1`，明确 `must_approve_safe` /
-  `needs_review_with_reason` / `stress_only`。历史 `pass_` 路径名或旧 PASS 不自动成为
-  expectation；calibration 与真实 holdout 分开报告。
+  `x5crop_safe_crop_acceptance_cohort_v1`。2026-07-30 的用户确认已冻结：88 条
+  `pass_*` 是 `must_approve_safe`，包括 S098；23 条 `unknown_*` 是
+  `auto_or_review`。Expectation 与 `calibration | holdout | stress` role 正交；
+  calibration 与真实 holdout 分开报告。路径标签只用于 materialize validation cohort，
+  不进入 detector、Gate 或 runtime。
+- XPan 与 120-645 暂无且短期不补真实 fixture。这不是实现 blocker、format denylist 或
+  单张输入的 review reason；它们使用明确 physical-rule prior、通用 bounded flow 与
+  synthetic contracts。获得真实样片前只声明 contract coverage，不声明 real-TIFF
+  accuracy、回归或性能覆盖。
 
 ## 文档与工作区
 
@@ -374,12 +384,15 @@ receipt，不得随 cache 清理。它只否定特定表示或 measurement 合�
 3. Current positive-content 是已知内容的保守 measurement，不保证观察全部真实内容；实现
    必须依靠物理 prior、outward envelope 与 protection，而不是把 content absence 当 blank
    真值。
-4. XPan 与 120-645 缺少真实 fixture，不能声明准确性覆盖。
+4. XPan 与 120-645 缺少真实 fixture；短期接受这项 coverage gap，不等待补样片。实现必须
+   用 physical-rule prior 与 synthetic contracts 覆盖结构，同时不宣称 real-TIFF
+   accuracy、回归或性能已验证。
 5. Detector-only 余量不能代替真实 frame TIFF 性能合同。
 6. Green tests、历史 PASS、hash 或 comparator 一致不能单独证明安全输出；Named TIFF
    必须检查真实内容 containment，但不要求精确贴合人工边界。
-7. Current tree 尚无 source-SHA-bound 的 must-approve/holdout expectation cohort；在它冻结
-   前不能用模糊“应该 PASS”调 Gate 或 threshold。
+7. Acceptance authority 已明确，但 current tree 尚未 materialize source-SHA-bound cohort
+   与 calibration/holdout/stress role。下一任务必须先生成并核对 88/23 映射；不得让
+   文件名进入 runtime，也不得用 calibration 结果冒充独立 holdout。
 
 ## 新任务的精确下一步
 
@@ -400,22 +413,27 @@ wc -l Test/manual_review/user_confirmed_golden_baseline.jsonl
 
 实施顺序：
 
-1. 按架构第 12.3–12.8 节建立 types、构造不变量、Gate vocabulary 与 synthetic contracts；
+1. 先从 current source manifest materialize validation-only acceptance cohort：逐条绑定
+   source SHA，核对 88 条 `must_approve_safe` 与 23 条 `auto_or_review`，并在任何 tuning
+   前冻结 calibration/holdout/stress role。S098 标为 `must_approve_safe + stress`。
+2. 按架构第 12.3–12.8 节建立 types、构造不变量、Gate vocabulary 与 synthetic contracts；
    current runtime 仍保持 review-only。
-2. 先冻结 validation-only acceptance cohort 与 calibration/holdout split，再用八张 nominal
-   原 TIFF 生成 per-format/mode/component 的 read-only prior/measurement audit，冻结
-   calibration receipt、candidate/work distributions；S098 不参与调参。
-3. 完成 seed、canonical separator/edge-pair、model-only corridor、ordered DP、slot、
+3. 用现有真实样片生成 per-format/mode/component 的 read-only prior/measurement audit；
+   冻结 coverage matrix、calibration receipt、candidate/work distributions。经验值只调
+   搜索中心、排序与典型 corridor，硬边界来自物理合同；S098 不估计 nominal tolerance。
+   XPan/120-645 不等待真实 fixture，使用明确 physical-rule prior 与 synthetic contracts。
+4. 完成 seed、canonical separator/edge-pair、model-only corridor、ordered DP、slot、
    safe envelope、毫米 protection 与 identity output geometry 的最小纵切；先审计
    135/full 与 120-66/partial，不开放 export。
-4. 加入 partial endpoints、blank、contact/overlap、output-equivalence 与 learned
+5. 加入 partial endpoints、blank、contact/overlap、output-equivalence 与 learned
    one-sided gutter。Wide/nearby/local-drift/advanced frame fit/deskew 只在 named gap
    证明需要时逐项加入。
-5. 一次原子替换 runtime、两级 Gate、finalization、report/Debug/comparator 与旧
+6. 一次原子替换 runtime、两级 Gate、finalization、report/Debug/comparator 与旧
    placeholders；同批更新中英文公共文档，不建立 feature flag、fallback、compatibility 或
    格式白名单。
-6. 运行九张人工证据、代表性 cohorts、111 invariant 与固定 24 张真实 TIFF 写出/复读，
-   检查 `<=5.0 秒/张`正式性能合同及 TIFF 保真。
+7. 完整运行 111 张：88 条 `pass_*` 必须 `approved_auto`，23 条 `unknown_*` 可自动批准或
+   因具体 Gate 风险 review；再运行未覆盖情形的 synthetic contracts 与固定 24 张真实
+   TIFF 写出/复读，检查 `<=5.0 秒/张`正式性能合同及 TIFF 保真。
 
 任一阶段都不得让 lower layer 创建 final status/reason，也不得在物理输出尚未检查时声明
 自动裁切或正式性能完成。
@@ -429,5 +447,7 @@ wc -l Test/manual_review/user_confirmed_golden_baseline.jsonl
 > 历史机制审查与 bounded-safe-crop 设计均已冻结。直接按架构第 12 节实施
 > contracts、acceptance cohort、read-only calibration 与最小纵切；保持 `P_MAX=6`、
 > `K_MAX=3`、`G_MAX=3`、DecisionGate-only final decision、允许 protection 含邻片像素、
-> 每侧毫米 protection 和原子 schema cutover。不要另建平行计划，也不要原样恢复旧
-> runtime/schema。
+> 每侧毫米 protection 和原子 schema cutover。Acceptance 已冻结为 88 条 `pass_*`
+> 必须自动批准（含 S098）、23 条 `unknown_*` 可自动批准或因具体 Gate 风险 review；
+> 样片覆盖缺口只限制声明。XPan/120-645 不等待真实 fixture，使用 physical-rule prior
+> 与 synthetic contracts。不要另建平行计划，也不要原样恢复旧 runtime/schema。
