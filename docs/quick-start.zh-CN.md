@@ -41,9 +41,9 @@ macOS 无法双击时，在该文件夹的 Terminal 中运行：
 
 - `full`：张数固定为格式默认值；若显式输入 count，只接受同一个默认值。
 - `partial`：输入整数表示 authoritative explicit count；直接回车、输入 `auto`，或命令行
-  省略 `--count`，都表示 bounded auto count。
-- Auto 只在该格式的 `1..default_count` 与唯一匹配片夹容量内选择，不猜格式，也不读取
-  文件名中的张数。
+  省略 `--count`，都表示容量 auto。
+- Auto 输出唯一匹配片夹对当前 format 的全部有效 slots，不猜真实照片张数，也不读取
+  文件名中的张数。前导、尾随或中间 blank slot 都会保留。
 - `135-dual` 当前只支持 full，按上 lane 后下 lane、各 lane 从左到右输出 12 张。
 
 命令行示例：
@@ -77,8 +77,9 @@ x5_crop_output/
   x5_crop_run_manifest.jsonl
 ```
 
-`needs_review` 只表示存在具体且无法吸收的 count、ordinal、slot ownership、已知内容
-containment、source/lane authority 或 output geometry 风险。默认把原 TIFF 复制到
+`needs_review` 只表示存在具体且无法吸收的 ordinal、slot ownership、omission coverage、
+已知内容 containment、source/lane authority 或 output geometry 风险。容量已解析但无法
+精确形成全部 slots 时也会阻断。默认把原 TIFF 复制到
 `needs_review/`；`--no-copy-review-files` 可关闭。
 
 `--diagnostics` 是只读诊断模式：保留同一检测与 DecisionGate 结果，写 report 和

@@ -7,7 +7,7 @@ from typing import Any
 
 
 REPORT_SCHEMA_ID = "detection_report"
-REPORT_SCHEMA_REVISION = "bounded_safe_crop_grid"
+REPORT_SCHEMA_REVISION = "bounded_safe_crop_capacity_grid"
 
 
 def core_facts_sha256(record: dict[str, Any]) -> str:

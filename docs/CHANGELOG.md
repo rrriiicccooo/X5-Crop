@@ -12,30 +12,38 @@
 V4.9 是破坏性的 current-only 物理模型重构。旧 runtime、schema、reason、cache、
 compatibility 与历史 box parity 均不是迁移目标。
 
-### 2026-07-30：冻结 partial auto 的容量输出目标（尚未实现）
+### 2026-07-30：partial auto 容量 slots 原子切换
 
-- 用户确认额外空白输出与完全空片的空白输出均可接受；产品风险改为非对称：少输出可能
-  漏掉真实照片，容量范围内多输出只增加可接受的 blank slot。
-- 下一原子切换将把 partial `auto` 从“在有限 count 集合中推断真实张数”改为“输出唯一
-  匹配片夹的全部有效 slots”。`fixed_full` 与 authoritative `explicit` 不变；auto 的
-  canonical 身份改为 `output_slot_count`，不再声称是真实照片数。
-- `main@7478ca09` 的只读复核显示：14/14 黄金场景通过，111 条 coverage 中 110 条已批准；
-  问题不是 review 过多，而是 41 条 pass partial 中有 17 条在少于人工 count annotation
-  时仍得到批准。S067 作为非 baseline 诊断可直接复现 auto 输出 1 个中间 ROI，而
-  explicit 3 输出三张；这证明现有批准语义可能保守错方向。
-- 使用 current 单-count 路径请求这些样片的格式最大容量（与其匹配片夹容量相同）的只读
-  模拟覆盖全部 51 条 partial，51/51 均得到输出且没有低于 annotation。五张用户确认
-  geometry 的 partial 黄金样片全部完成
-  source-order containment；S109 的七张确认照片映射到十二个 holder slots 的第 6–12 位，
-  证明前导 blank 可以表达真实 partial placement。
-- 该策略不采用新的跨 count coverage 层。实现时删除跨 count dominance、count competition
-  与对应 schema/reason/contracts，只保留单一容量 count 内的 Grid、ownership、
-  containment、protection 和两级 Gate。
-- 固定 24 张性能 cohort 按容量输出时，静态 frame 数估计由 139 增至 168（增加 29，
-  约 21%）。同时 half auto 每个 lane/component 的搜索结构上限可从 1188/3168 降为
-  count 12 的 198/558 states/transitions；最终取舍必须以真实 TIFF 写出/复读性能为准。
-- 本条只冻结下一实现边界，不改变当前 runtime、公共用户手册或稳定 Release。原子切换、
-  current schema、验收和性能全部闭合后，才更新用户可见行为说明。
+- Partial `auto` 现在只使用唯一匹配 `ScanCanvasEvidence` 中对应
+  `ScanCanvasFormatFit.maximum_frame_count`，输出该片夹对当前 format 的全部有效 slots。
+  `fixed_full` 与 authoritative `explicit` 保持精确；auto 不再推断或声明真实照片张数。
+- 新增唯一 `ResolvedOutputSlots(lane_output_slot_counts)`。总 slot 数只由 canonical lane
+  counts 求和；candidate、final detection、report、manifest 与输出文件共同引用或派生
+  同一 resolution。`135-dual` 固定为 `(6, 6)`，按 lane 0 后 lane 1 输出。
+- 每个 lane 只搜索一个 resolved slot count。Score、residual 与 tie-break 只负责构建顺序
+  和诊断展示；只有 output-equivalent proposals 可以 outward union。两个非等价
+  placement、ordinal 或 ownership classes 不会被排序选出赢家。
+- `GridOmissionSummary` 对 seed、corridor 和 DP frontier 的每个截断保存确定性 scope、
+  omitted alternative 与 absorbing class identities。只有全部 omitted outcomes 已证明
+  等价并进入 outward union 才不阻断；否则 `grid_search_coverage` 阻止输出。
+- `CandidateGate` 的第四项改为 `output_slot_count`。容量已解析但无法形成全部 slots 时，
+  fixed/explicit 使用 `requested_count_unfulfilled`，auto 使用
+  `capacity_output_slot_count_unfulfilled`。只有 DecisionGate 创建 final status/reasons。
+- Grid algorithm 更新为 `bounded_ordered_capacity_grid_v5`；calibration receipt 更新为
+  `x5crop_grid_calibration_receipt_v2`，保留原数值 prior 与
+  `user_confirmed_geometry` provenance。Current schemas 更新为 report
+  `bounded_safe_crop_capacity_grid`、run manifest `x5crop_run_manifest_v2`、fixed profile
+  `x5crop_fixed_sample_profile_v2` 与 performance `x5crop_production_performance_v4`。
+- 真实验收通过 14/14 黄金场景；111/111 blocking audit 通过，其中 88/88 `pass_*` 与
+  41/41 pass partial 全部 `approved_auto` 并精确输出匹配片夹容量。23 条 `unknown_*`
+  中 22 条批准，S111 因具体 output-slot/protection Gate 阻断进入 review。
+- 固定 S062 profiling 输出 profile `120_wide_224_5`、lane counts `(3,)`；detection
+  `2.581 秒`，所有 36 个 omitted alternatives 均被等价 class 吸收。
+- 正式 24 张、`--jobs 2` 四轮性能每轮写出并复读 168 个 TIFF；九个 partial 输入比
+  filename annotation 多 25 个 slots。三轮 measured 中位数为 `2.499 秒/输入`，通过
+  `<= 5.0 秒/张` 合同。
+- 本次不新增 GitHub Release。`real_holdout = unavailable`；XPan、120-645 等无真实样片
+  cell 继续只由 physical-rule synthetic contracts 覆盖。
 
 ### 2026-07-30：普通并发上限开放到 3
 

@@ -54,7 +54,7 @@ def _metrics(
         else tuple(
             item
             for selection in detection.candidate.lane_selections
-            for item in selection.work_by_count_component
+            for item in selection.work_by_component
         )
     )
     return RuntimeMetrics(
@@ -176,7 +176,15 @@ def process_one(
             config,
             configuration_bundle,
             workspace.identity,
-            detection.selected_count,
+            (
+                None
+                if not detection.source_core.lanes
+                else detection.source_core.lanes[
+                    0
+                ].scan_canvas.selected_profile.profile_id
+            ),
+            detection.resolved_output_slots,
+            detection.output_slot_identities,
         )
 
         failure_stage = FailureStage.OUTPUT

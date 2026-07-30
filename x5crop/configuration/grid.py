@@ -7,7 +7,7 @@ import json
 from ..domain import FiniteInterval
 
 
-GRID_ALGORITHM_REVISION = "bounded_ordered_grid_v4"
+GRID_ALGORITHM_REVISION = "bounded_ordered_capacity_grid_v5"
 GRID_CONFIGURATION_REVISION = "safe_crop_prior_v1"
 
 
@@ -39,24 +39,53 @@ class CalibrationCell:
 
 
 @dataclass(frozen=True)
+class GridSearchContractReceipt:
+    slot_count_policy: str
+    placement_seed_limit_per_lane_component: int
+    observed_candidate_limit_per_corridor: int
+    total_candidate_limit_per_corridor: int
+    proposal_resolution: str
+    omission_resolution: str
+
+    def __post_init__(self) -> None:
+        if (
+            self.slot_count_policy != "single_resolved_output_slot_count"
+            or self.placement_seed_limit_per_lane_component != 6
+            or self.observed_candidate_limit_per_corridor != 2
+            or self.total_candidate_limit_per_corridor != 3
+            or self.proposal_resolution
+            != "output_equivalence_outward_union_only"
+            or self.omission_resolution
+            != "proven_equivalent_and_union_absorbed_only"
+        ):
+            raise ValueError("Grid search contract receipt is not canonical")
+
+
+@dataclass(frozen=True)
 class CalibrationReceipt:
     schema: str
     algorithm_revision: str
     configuration_revision: str
     provenance: str
     cells: tuple[CalibrationCell, ...]
-    candidate_work_distributions: tuple[tuple[str, str], ...]
+    nominal_sample_count: int
+    stress_sample_id: str
+    coverage_measurement_record_count: int
+    search_contract: GridSearchContractReceipt
 
     def __post_init__(self) -> None:
-        if self.schema != "x5crop_grid_calibration_receipt_v1":
+        if self.schema != "x5crop_grid_calibration_receipt_v2":
             raise ValueError("unsupported calibration receipt schema")
         if self.provenance != "user_confirmed_geometry":
             raise ValueError("calibration geometry provenance must remain explicit")
         if len({cell.source_sha256 for cell in self.cells}) != len(self.cells):
             raise ValueError("calibration receipt source SHA values must be unique")
-        keys = tuple(key for key, _value in self.candidate_work_distributions)
-        if len(set(keys)) != len(keys):
-            raise ValueError("calibration distribution keys must be unique")
+        if (
+            self.nominal_sample_count != len(self.cells)
+            or self.stress_sample_id != "S098"
+            or self.coverage_measurement_record_count != 102
+        ):
+            raise ValueError("calibration coverage receipt is inconsistent")
 
     @property
     def source_sha256_set(self) -> tuple[str, ...]:
@@ -76,7 +105,7 @@ class CalibrationReceipt:
 # The confirmed geometry calibrated only prior centres and conservative search
 # intervals. It is deliberately not represented as runtime separator evidence.
 GRID_CALIBRATION_RECEIPT = CalibrationReceipt(
-    schema="x5crop_grid_calibration_receipt_v1",
+    schema="x5crop_grid_calibration_receipt_v2",
     algorithm_revision=GRID_ALGORITHM_REVISION,
     configuration_revision=GRID_CONFIGURATION_REVISION,
     provenance="user_confirmed_geometry",
@@ -170,22 +199,16 @@ GRID_CALIBRATION_RECEIPT = CalibrationReceipt(
             "contact_and_separated",
         ),
     ),
-    candidate_work_distributions=(
-        ("calibration_nominal_sample_count", "8"),
-        ("stress_sample", "S098"),
-        ("coverage_measurement_record_count", "102"),
-        ("placement_seed_limit", "6 per lane/component/count"),
-        ("observed_corridor_limit", "2 per internal corridor"),
-        ("corridor_candidate_limit", "3 including model-only"),
-        ("lane_global_proposal_limit", "3 across count/component"),
-        (
-            "count_dominance",
-            "two-sided slot balance then support; observed boundary balance; hard contradictions excluded when safe alternatives exist",
-        ),
-        (
-            "same_count_seed_selection",
-            "typed non-dominance; output-equivalent outward union",
-        ),
+    nominal_sample_count=8,
+    stress_sample_id="S098",
+    coverage_measurement_record_count=102,
+    search_contract=GridSearchContractReceipt(
+        slot_count_policy="single_resolved_output_slot_count",
+        placement_seed_limit_per_lane_component=6,
+        observed_candidate_limit_per_corridor=2,
+        total_candidate_limit_per_corridor=3,
+        proposal_resolution="output_equivalence_outward_union_only",
+        omission_resolution="proven_equivalent_and_union_absorbed_only",
     ),
 )
 

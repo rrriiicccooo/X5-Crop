@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 from ..gate_checks import GateCheck, GateStage
 from .vocabulary import (
-    FINAL_REASON_AUTOMATIC_COUNT_UNRESOLVED,
+    FINAL_REASON_CAPACITY_OUTPUT_SLOT_COUNT_UNFULFILLED,
     FINAL_REASON_GRID_SEARCH_COVERAGE_OUTCOME_RISK,
     FINAL_REASON_KNOWN_CONTENT_CONTAINMENT_UNBOUNDED,
     FINAL_REASON_OUTPUT_PROTECTION_UNAVAILABLE,
@@ -22,7 +22,7 @@ DECISION_GATE_CHECK_CODES = (
     "scan_canvas_authority",
     "source_content_measurement",
     "grid_search_coverage",
-    "frame_count",
+    "output_slot_count",
     "slot_ordinal_assignment",
     "slot_ownership",
     "known_content_containment",
@@ -37,7 +37,7 @@ DECISION_GATE_REASON_BY_CODE = {
         FINAL_REASON_SOURCE_CONTENT_MEASUREMENT_CONTRADICTED
     ),
     "grid_search_coverage": FINAL_REASON_GRID_SEARCH_COVERAGE_OUTCOME_RISK,
-    "frame_count": FINAL_REASON_REQUESTED_COUNT_UNFULFILLED,
+    "output_slot_count": FINAL_REASON_REQUESTED_COUNT_UNFULFILLED,
     "slot_ordinal_assignment": (
         FINAL_REASON_SLOT_ORDINAL_ASSIGNMENT_UNRESOLVED
     ),
@@ -65,9 +65,9 @@ class DecisionGateAssessment:
                 check.final_review_reason
                 not in {
                     FINAL_REASON_REQUESTED_COUNT_UNFULFILLED,
-                    FINAL_REASON_AUTOMATIC_COUNT_UNRESOLVED,
+                    FINAL_REASON_CAPACITY_OUTPUT_SLOT_COUNT_UNFULFILLED,
                 }
-                if check.code == "frame_count"
+                if check.code == "output_slot_count"
                 else check.final_review_reason
                 != DECISION_GATE_REASON_BY_CODE[check.code]
             )

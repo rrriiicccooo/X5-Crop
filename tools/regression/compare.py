@@ -28,8 +28,8 @@ class ReportComparisonIdentity:
     format_id: str
     layout: str
     strip_mode: str
-    count_mode: str
-    count_candidates: tuple[int, ...]
+    output_slot_policy: str
+    authoritative_count: int | None
 
 
 @dataclass(frozen=True)
@@ -64,16 +64,18 @@ def report_key(row: dict[str, Any]) -> ReportComparisonIdentity:
     config = row["analysis_identity"]["runtime_configuration"]
     if int(source["page"]) != int(config["page"]):
         raise ValueError("report source and runtime page disagree")
-    request = config["count_request"]
+    policy = config["output_slot_policy"]
     return ReportComparisonIdentity(
         source=str(row["source"]),
         page=int(source["page"]),
         format_id=str(config["format_id"]),
         layout=str(config["layout"]),
         strip_mode=str(config["strip_mode"]),
-        count_mode=str(request["mode"]),
-        count_candidates=tuple(
-            int(value) for value in request["candidate_counts"]
+        output_slot_policy=str(policy["policy"]),
+        authoritative_count=(
+            None
+            if policy.get("authoritative_count") is None
+            else int(policy["authoritative_count"])
         ),
     )
 

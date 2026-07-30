@@ -7,6 +7,7 @@ from dataclasses import dataclass
 import hashlib
 import json
 from pathlib import Path
+import re
 import statistics
 import subprocess
 import sys
@@ -15,15 +16,21 @@ import time
 from typing import Any, Sequence
 
 from x5crop.app_info import RUN_MANIFEST_JSONL_NAME, TIFF_SUFFIXES
-from x5crop.formats import FORMAT_CHOICES
+from x5crop.configuration.registry import get_detection_configuration
+from x5crop.detection.evidence.scan_canvas import (
+    ScanCanvasOutcome,
+    observe_scan_canvas,
+)
+from x5crop.formats import FORMAT_CHOICES, format_spec
 from x5crop.geometry.layout import infer_layout
 from x5crop.io.tiff import read_tiff_page_shape, read_tiff_profile
+from x5crop.runtime.manifest import RUN_MANIFEST_SCHEMA
 from x5crop.strip_modes import STRIP_MODES
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_COHORT = Path(__file__).with_name("cohorts") / "production_performance.jsonl"
-PERFORMANCE_RESULT_SCHEMA = "x5crop_production_performance_v3"
+PERFORMANCE_RESULT_SCHEMA = "x5crop_production_performance_v4"
 COHORT_FIELDS = (
     "sample_id",
     "source_sha256",
@@ -35,6 +42,9 @@ MEASURED_RUN_COUNT = 3
 PRODUCTION_JOBS = 2
 SECONDS_PER_INPUT_LIMIT = 5.0
 FIXED_INPUT_COUNT = 24
+CURRENT_OUTPUT_TIFF_RECEIPT = 168
+CURRENT_PARTIAL_EXTRA_SLOT_RECEIPT = 25
+COUNT_ANNOTATION = re.compile(r"_X5_(\d+)_")
 FORMAT_DIRECTORY_TO_ID = {
     "66": "120-66",
     "67": "120-67",
@@ -88,6 +98,20 @@ class ResolvedPerformanceSource:
     cohort: PerformanceCohortEntry
     path: Path
     layout: str
+    selected_scan_canvas_profile_id: str
+    lane_output_slot_counts: tuple[int, ...]
+    slot_identities: tuple[dict[str, int | str], ...]
+    validation_annotation: int
+
+    @property
+    def output_slot_count(self) -> int:
+        return sum(self.lane_output_slot_counts)
+
+    @property
+    def partial_extra_slot_count(self) -> int:
+        if self.cohort.strip_mode != "partial":
+            return 0
+        return self.output_slot_count - self.validation_annotation
 
 
 @dataclass(frozen=True, order=True)
@@ -113,6 +137,7 @@ class PerformanceTiming:
     completed_inputs: int
     approved_inputs_with_outputs: int
     frame_output_count: int
+    expected_frame_output_count: int
 
     @property
     def seconds_per_input(self) -> float:
@@ -126,6 +151,7 @@ class PerformanceTiming:
             "completed_inputs": self.completed_inputs,
             "approved_inputs_with_outputs": self.approved_inputs_with_outputs,
             "frame_output_count": self.frame_output_count,
+            "expected_frame_output_count": self.expected_frame_output_count,
             "seconds_per_input": self.seconds_per_input,
         }
 
@@ -136,6 +162,8 @@ class ProductionPerformanceResult:
     measured: tuple[PerformanceTiming, ...]
     output_root: Path
     groups: tuple[PerformanceRunGroup, ...]
+    expected_frame_output_count: int
+    partial_extra_slot_count: int
 
     def __post_init__(self) -> None:
         if len(self.measured) != MEASURED_RUN_COUNT:
@@ -152,6 +180,18 @@ class ProductionPerformanceResult:
             )
         if not self.groups:
             raise ValueError("production performance requires resolved run groups")
+        if self.expected_frame_output_count != CURRENT_OUTPUT_TIFF_RECEIPT:
+            raise ValueError(
+                "current performance cohort/catalog receipt changed: "
+                f"expected {CURRENT_OUTPUT_TIFF_RECEIPT} outputs, resolved "
+                f"{self.expected_frame_output_count}"
+            )
+        if self.partial_extra_slot_count != CURRENT_PARTIAL_EXTRA_SLOT_RECEIPT:
+            raise ValueError(
+                "current partial annotation receipt changed: "
+                f"expected +{CURRENT_PARTIAL_EXTRA_SLOT_RECEIPT}, resolved "
+                f"+{self.partial_extra_slot_count}"
+            )
 
     @property
     def median_seconds_per_input(self) -> float:
@@ -166,7 +206,9 @@ class ProductionPerformanceResult:
             and all(
                 timing.completed_inputs == FIXED_INPUT_COUNT
                 and timing.approved_inputs_with_outputs == FIXED_INPUT_COUNT
-                and timing.frame_output_count >= FIXED_INPUT_COUNT
+                and timing.frame_output_count
+                == timing.expected_frame_output_count
+                == self.expected_frame_output_count
                 for timing in (self.cold, *self.measured)
             )
         )
@@ -191,6 +233,14 @@ class ProductionPerformanceResult:
             "count_modes": {
                 "full": "fixed_full",
                 "partial": "auto",
+            },
+            "expected_frame_output_count": self.expected_frame_output_count,
+            "partial_extra_slot_count": self.partial_extra_slot_count,
+            "current_receipt": {
+                "frame_output_count": CURRENT_OUTPUT_TIFF_RECEIPT,
+                "partial_extra_slot_count": (
+                    CURRENT_PARTIAL_EXTRA_SLOT_RECEIPT
+                ),
             },
             "groups": [
                 {
@@ -316,6 +366,103 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _validation_annotation(
+    entry: PerformanceCohortEntry,
+    identity: LocalSampleIdentity,
+) -> int:
+    if entry.strip_mode == "full":
+        return format_spec(entry.format_id).strip.default_count
+    match = COUNT_ANNOTATION.search(Path(identity.source_relative_path).name)
+    if match is None:
+        raise ValueError(
+            f"{entry.sample_id} has no validation-only partial count annotation"
+        )
+    annotation = int(match.group(1))
+    if annotation not in format_spec(entry.format_id).strip.partial_count_range:
+        raise ValueError(
+            f"{entry.sample_id} has an invalid validation-only count annotation"
+        )
+    return annotation
+
+
+def _expected_output_identity(
+    entry: PerformanceCohortEntry,
+    identity: LocalSampleIdentity,
+    width: int,
+    height: int,
+    layout: str,
+) -> tuple[str, tuple[int, ...], tuple[dict[str, int | str], ...], int]:
+    configuration = get_detection_configuration(
+        entry.format_id,
+        entry.strip_mode,
+        None,
+    )
+    long_axis_px = max(width, height)
+    short_axis_px = min(width, height)
+    canvas = observe_scan_canvas(
+        long_axis_px,
+        short_axis_px,
+        layout,
+        configuration.scan_canvas,
+    )
+    if (
+        canvas.outcome != ScanCanvasOutcome.SUPPORTED
+        or canvas.selected_profile is None
+    ):
+        raise ValueError(
+            f"{entry.sample_id} scan-canvas profile is not uniquely resolved"
+        )
+    if entry.strip_mode == "full":
+        total = configuration.count_request.authoritative_count
+        if total is None:
+            raise ValueError(
+                f"{entry.sample_id} fixed-full request has no authority"
+            )
+    else:
+        fits = tuple(
+            fit
+            for fit in canvas.selected_profile.format_fits
+            if fit.format_id == entry.format_id
+        )
+        if len(fits) != 1:
+            raise ValueError(
+                f"{entry.sample_id} selected profile has no unique format fit"
+            )
+        total = fits[0].maximum_frame_count
+    lane_total = format_spec(entry.format_id).layout.lane_count
+    if total <= 0 or total % lane_total:
+        raise ValueError(
+            f"{entry.sample_id} output capacity does not divide canonical lanes"
+        )
+    lane_counts = tuple(total // lane_total for _index in range(lane_total))
+    slot_identities = tuple(
+        {
+            "global_output_ordinal": global_ordinal,
+            "lane_id": f"lane:{lane_index}",
+            "lane_ordinal": lane_ordinal,
+        }
+        for global_ordinal, (lane_index, lane_ordinal) in enumerate(
+            (
+                (lane_index, lane_ordinal)
+                for lane_index, lane_count in enumerate(lane_counts)
+                for lane_ordinal in range(1, lane_count + 1)
+            ),
+            start=1,
+        )
+    )
+    annotation = _validation_annotation(entry, identity)
+    if total < annotation:
+        raise ValueError(
+            f"{entry.sample_id} resolved capacity is below its validation annotation"
+        )
+    return (
+        canvas.selected_profile.profile_id,
+        lane_counts,
+        slot_identities,
+        annotation,
+    )
+
+
 def resolve_performance_sources(
     cohort: Sequence[PerformanceCohortEntry],
     catalog: dict[str, LocalSampleIdentity],
@@ -351,11 +498,28 @@ def resolve_performance_sources(
                 f"not {entry.compression}"
             )
         height, width = read_tiff_page_shape(path, 0)
+        layout = infer_layout(width, height)
+        (
+            selected_profile_id,
+            lane_counts,
+            slot_identities,
+            validation_annotation,
+        ) = _expected_output_identity(
+            entry,
+            identity,
+            width,
+            height,
+            layout,
+        )
         resolved.append(
             ResolvedPerformanceSource(
                 cohort=entry,
                 path=path,
-                layout=infer_layout(width, height),
+                layout=layout,
+                selected_scan_canvas_profile_id=selected_profile_id,
+                lane_output_slot_counts=lane_counts,
+                slot_identities=slot_identities,
+                validation_annotation=validation_annotation,
             )
         )
     return tuple(resolved)
@@ -463,15 +627,40 @@ def _validate_group_outputs(
                 f"{source.cohort.sample_id} did not complete during performance run"
             )
         completed += 1
+        if row.get("schema") != RUN_MANIFEST_SCHEMA:
+            raise RuntimeError(
+                f"{source.cohort.sample_id} has a non-current run manifest"
+            )
+        output_identity = row.get("output_identity")
+        expected_identity = {
+            "selected_scan_canvas_profile_id": (
+                source.selected_scan_canvas_profile_id
+            ),
+            "resolved_output_slots": {
+                "lane_output_slot_counts": list(
+                    source.lane_output_slot_counts
+                ),
+            },
+            "output_slot_count": source.output_slot_count,
+            "slot_identities": list(source.slot_identities),
+        }
+        if output_identity != expected_identity:
+            raise RuntimeError(
+                f"{source.cohort.sample_id} output identity disagrees with "
+                "the scan-canvas catalog receipt"
+            )
         artifacts = row.get("artifacts")
         if not isinstance(artifacts, dict):
             raise RuntimeError(
                 f"{source.cohort.sample_id} has no runtime artifacts record"
             )
         frame_outputs = artifacts.get("frame_outputs")
-        if not isinstance(frame_outputs, list) or not frame_outputs:
+        if (
+            not isinstance(frame_outputs, list)
+            or len(frame_outputs) != source.output_slot_count
+        ):
             raise RuntimeError(
-                f"{source.cohort.sample_id} did not produce frame TIFFs"
+                f"{source.cohort.sample_id} did not produce its exact capacity TIFFs"
             )
         approved_with_outputs += 1
         for value in frame_outputs:
@@ -527,6 +716,11 @@ def _run_once(
         approved_inputs_with_outputs += group_approved
         frame_output_count += group_outputs
     input_count = sum(len(members) for _group, _directory, members in staged_groups)
+    expected_frame_output_count = sum(
+        source.output_slot_count
+        for _group, _directory, members in staged_groups
+        for source in members
+    )
     return PerformanceTiming(
         label=label,
         wall_seconds=wall_seconds,
@@ -534,6 +728,7 @@ def _run_once(
         completed_inputs=completed_inputs,
         approved_inputs_with_outputs=approved_inputs_with_outputs,
         frame_output_count=frame_output_count,
+        expected_frame_output_count=expected_frame_output_count,
     )
 
 
@@ -547,6 +742,24 @@ def run_production_performance(
         )
     if output_root.exists() and any(output_root.iterdir()):
         raise ValueError(f"performance output root must be empty: {output_root}")
+    expected_frame_output_count = sum(
+        source.output_slot_count for source in sources
+    )
+    partial_extra_slot_count = sum(
+        source.partial_extra_slot_count for source in sources
+    )
+    if expected_frame_output_count != CURRENT_OUTPUT_TIFF_RECEIPT:
+        raise ValueError(
+            "current performance cohort/catalog receipt changed: "
+            f"expected {CURRENT_OUTPUT_TIFF_RECEIPT} outputs, resolved "
+            f"{expected_frame_output_count}"
+        )
+    if partial_extra_slot_count != CURRENT_PARTIAL_EXTRA_SLOT_RECEIPT:
+        raise ValueError(
+            "current partial annotation receipt changed: "
+            f"expected +{CURRENT_PARTIAL_EXTRA_SLOT_RECEIPT}, resolved "
+            f"+{partial_extra_slot_count}"
+        )
     output_root.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(
         prefix="x5crop-performance-inputs-",
@@ -564,6 +777,8 @@ def run_production_performance(
         measured,
         output_root,
         groups,
+        expected_frame_output_count,
+        partial_extra_slot_count,
     )
     (output_root / "performance_result.json").write_text(
         json.dumps(result.as_record(), ensure_ascii=False, indent=2) + "\n",

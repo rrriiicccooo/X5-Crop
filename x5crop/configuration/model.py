@@ -20,29 +20,17 @@ class FrameCountMode(str, Enum):
 @dataclass(frozen=True)
 class FrameCountRequest:
     mode: FrameCountMode
-    requested_count: int | None
-    candidate_counts: tuple[int, ...]
+    authoritative_count: int | None
 
     def __post_init__(self) -> None:
         if not isinstance(self.mode, FrameCountMode):
             raise TypeError("frame-count request requires a typed mode")
-        if (
-            not self.candidate_counts
-            or tuple(sorted(set(self.candidate_counts))) != self.candidate_counts
-            or any(count <= 0 for count in self.candidate_counts)
-        ):
-            raise ValueError(
-                "frame-count candidates must be positive, unique, and ordered"
-            )
         if self.mode == FrameCountMode.AUTO:
-            if self.requested_count is not None:
+            if self.authoritative_count is not None:
                 raise ValueError("automatic count cannot carry an explicit value")
-        elif (
-            self.requested_count is None
-            or self.candidate_counts != (self.requested_count,)
-        ):
+        elif self.authoritative_count is None or self.authoritative_count <= 0:
             raise ValueError(
-                "fixed and explicit count requests require one matching candidate"
+                "fixed and explicit count requests require one positive authority"
             )
 
     @classmethod
@@ -62,23 +50,22 @@ class FrameCountRequest:
                     f"--count {physical_spec.strip.default_count}"
                 )
             count = physical_spec.strip.default_count
-            return cls(FrameCountMode.FIXED_FULL, count, (count,))
+            return cls(FrameCountMode.FIXED_FULL, count)
         if strip_mode != PARTIAL:
             raise ValueError(f"unsupported strip mode: {strip_mode}")
         if not physical_spec.strip.partial_mode_supported:
             raise ValueError(
                 f"--format {physical_spec.format_id} does not support partial mode"
             )
-        candidates = physical_spec.strip.partial_count_range
         if requested_count is None:
-            return cls(FrameCountMode.AUTO, None, candidates)
-        if requested_count not in candidates:
+            return cls(FrameCountMode.AUTO, None)
+        if requested_count not in physical_spec.strip.partial_count_range:
             allowed = f"1..{physical_spec.strip.default_count}"
             raise ValueError(
                 f"--format {physical_spec.format_id} partial mode allows "
                 f"--count values: {allowed}"
             )
-        return cls(FrameCountMode.EXPLICIT, requested_count, (requested_count,))
+        return cls(FrameCountMode.EXPLICIT, requested_count)
 
 
 @dataclass(frozen=True)
@@ -103,11 +90,12 @@ class DetectionConfiguration:
             raise ValueError(
                 "partial detection configuration cannot use fixed-full mode"
             )
-        if any(
-            count > self.physical_spec.strip.default_count
-            for count in self.count_request.candidate_counts
+        if (
+            self.count_request.authoritative_count is not None
+            and self.count_request.authoritative_count
+            > self.physical_spec.strip.default_count
         ):
-            raise ValueError("frame-count candidates exceed the format maximum")
+            raise ValueError("authoritative output-slot count exceeds the format maximum")
         if not self.scan_canvas.profiles:
             raise ValueError(
                 "detection configuration requires scan-canvas profiles"
@@ -115,16 +103,18 @@ class DetectionConfiguration:
 
     @property
     def detector_kind(self) -> str:
-        return "bounded_safe_crop_grid"
+        return "bounded_safe_crop_capacity_grid"
 
     @property
     def configuration_id(self) -> str:
-        count_identity = (
-            self.count_request.mode.value
-            + ":"
-            + ",".join(str(value) for value in self.count_request.candidate_counts)
+        count_identity = {
+            FrameCountMode.FIXED_FULL: "format_default",
+            FrameCountMode.AUTO: "scan_canvas_capacity",
+        }.get(
+            self.count_request.mode,
+            f"user_explicit:{self.count_request.authoritative_count}",
         )
         return (
             f"detection:{self.physical_spec.format_id}:{self.strip_mode}:"
-            f"count:{count_identity}"
+            f"slot_policy:{count_identity}"
         )

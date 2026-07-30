@@ -4,7 +4,6 @@ from ..app_info import VERSION
 from ..configuration.grid import CALIBRATION_RECEIPT_ID
 from ..detection.final.model import FinalDetection
 from ..detection.grid.model import (
-    G_MAX,
     K_MAX,
     O_MAX,
     P_MAX,
@@ -67,33 +66,26 @@ def _lane_measurement_read_model(
 def _selection_read_model(selection: object) -> dict[str, object]:
     return {
         "lane_id": selection.lane_id,
-        "count_candidates": list(selection.count_candidates),
-        "proposals_by_count": typed_read_model(selection.proposals_by_count),
-        "dominance_assessments": typed_read_model(
-            selection.dominance_assessments
-        ),
-        "retained_global_proposals": typed_read_model(
-            selection.retained_global_proposals
+        "proposal_classes": typed_read_model(
+            selection.proposal_classes
         ),
         "selected_proposal_id": (
             None
             if selection.selected_proposal is None
             else selection.selected_proposal.proposal_id
         ),
-        "selected_count": (
-            None
-            if selection.selected_proposal is None
-            else selection.selected_proposal.count
-        ),
         "grid_search_coverage_state": (
             selection.grid_search_coverage_state.value
         ),
-        "frame_count_state": selection.frame_count_state.value,
+        "slot_ordinal_state": selection.ordinal_state.value,
+        "slot_ownership_state": selection.ownership_state.value,
         "selection_reason": selection.selection_reason,
-        "global_truncated": selection.global_truncated,
         "omitted_outcome_risk": selection.omitted_outcome_risk,
-        "work_by_count_component": typed_read_model(
-            selection.work_by_count_component
+        "omission_summaries": typed_read_model(
+            selection.omission_summaries
+        ),
+        "work_by_component": typed_read_model(
+            selection.work_by_component
         ),
         "separator_work_by_component": typed_read_model(
             selection.separator_work_by_component
@@ -105,7 +97,7 @@ def _work_totals(detection: FinalDetection) -> dict[str, object]:
     work = tuple(
         item
         for selection in detection.candidate.lane_selections
-        for item in selection.work_by_count_component
+        for item in selection.work_by_component
     )
     lane_components = {
         (item.lane_id, item.component_id) for item in work
@@ -117,17 +109,14 @@ def _work_totals(detection: FinalDetection) -> dict[str, object]:
     )
     return {
         "limits": {
-            "P_MAX_per_lane_component_count": P_MAX,
+            "P_MAX_per_lane_component": P_MAX,
             "O_MAX_per_internal_corridor_observed": O_MAX,
             "K_MAX_per_internal_corridor_total": K_MAX,
-            "G_MAX_per_lane_after_all_count_components": G_MAX,
             "count_12_state_upper_per_lane_component": 198,
             "count_12_transition_upper_per_lane_component": 558,
-            "auto_1_12_state_upper_per_lane_component": 1188,
-            "auto_1_12_transition_upper_per_lane_component": 3168,
         },
         "lane_component_count": len(lane_components),
-        "count_component_evaluations": len(work),
+        "lane_component_evaluations": len(work),
         "seed_count": sum(item.seed_count for item in work),
         "candidate_builds": sum(item.candidate_builds for item in work),
         "observed_candidate_count": sum(
@@ -162,10 +151,24 @@ def _work_totals(detection: FinalDetection) -> dict[str, object]:
         "budget_exhausted": any(item.budget_exhausted for item in work),
         "omitted_outcome_risk": any(
             item.omitted_outcome_risk for item in work
-        )
-        or any(
-            selection.omitted_outcome_risk
-            for selection in detection.candidate.lane_selections
+        ),
+        "omission_scope_count": sum(
+            len(item.omission_summaries) for item in work
+        ),
+        "omitted_alternative_count": sum(
+            summary.omitted_count
+            for item in work
+            for summary in item.omission_summaries
+        ),
+        "absorbed_omitted_alternative_count": sum(
+            summary.absorbed_count
+            for item in work
+            for summary in item.omission_summaries
+        ),
+        "unresolved_omitted_outcome_count": sum(
+            summary.unresolved_outcome_count
+            for item in work
+            for summary in item.omission_summaries
         ),
     }
 
@@ -187,6 +190,13 @@ def report_record_for_final_detection(
         analysis_identity["runtime_configuration"]["diagnostics"]
     )
     export_performed = bool(output_files)
+    selected_profile_id = (
+        None
+        if not core.lanes
+        else core.lanes[0].scan_canvas.selected_profile.profile_id
+    )
+    resolved_slots = detection.resolved_output_slots
+    output_slot_count = detection.output_slot_count
     record = {
         "schema_id": REPORT_SCHEMA_ID,
         "schema_revision": REPORT_SCHEMA_REVISION,
@@ -214,11 +224,16 @@ def report_record_for_final_detection(
             "calibration_receipt_id": CALIBRATION_RECEIPT_ID,
             "prior_authority": "search_only",
             "confirmed_geometry_runtime_observation": False,
+            "selected_scan_canvas_profile_id": selected_profile_id,
+            "resolved_output_slots": typed_read_model(resolved_slots),
+            "output_slot_count": output_slot_count,
+            "slot_identities": typed_read_model(
+                detection.output_slot_identities
+            ),
             "lanes": [
                 _selection_read_model(selection)
                 for selection in detection.candidate.lane_selections
             ],
-            "selected_count": detection.selected_count,
             "work_totals": _work_totals(detection),
         },
         "candidate_gate": gate_read_model(detection.candidate.gate),
@@ -242,7 +257,11 @@ def report_record_for_final_detection(
                     if detection.frame_export_eligible and diagnostics
                     else detection.frame_export_reason
                 ),
-                "selected_count": detection.selected_count,
+                "resolved_output_slots": typed_read_model(resolved_slots),
+                "output_slot_count": output_slot_count,
+                "slot_identities": typed_read_model(
+                    detection.output_slot_identities
+                ),
                 "transform_assessment": typed_read_model(
                     detection.transform_assessment
                 ),

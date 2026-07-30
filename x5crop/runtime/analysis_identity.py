@@ -7,6 +7,11 @@ from typing import Any
 
 from ..app_info import SCRIPT_NAME, VERSION
 from ..configuration.bundle import DetectionConfigurationBundle
+from ..configuration.model import FrameCountMode
+from ..detection.grid.model import (
+    OutputSlotIdentity,
+    ResolvedOutputSlots,
+)
 from ..image.workspace import WorkspaceIdentity
 from ..io.model import ImageProfile
 from ..report.read_models import typed_read_model
@@ -36,11 +41,24 @@ def source_analysis_identity(
 
 
 def runtime_configuration_identity(config: RunConfig) -> dict[str, Any]:
+    request = config.count_request
+    count_policy = (
+        {"policy": "scan_canvas_capacity"}
+        if request.mode == FrameCountMode.AUTO
+        else {
+            "policy": (
+                "format_default"
+                if request.mode == FrameCountMode.FIXED_FULL
+                else "user_explicit"
+            ),
+            "authoritative_count": request.authoritative_count,
+        }
+    )
     return {
         "format_id": config.format_id,
         "layout": config.layout,
         "strip_mode": config.strip_mode,
-        "count_request": typed_read_model(config.count_request),
+        "output_slot_policy": count_policy,
         "page": int(config.page),
         "compression": config.compression,
         "diagnostics": config.diagnostics,
@@ -68,7 +86,9 @@ def make_analysis_identity(
     config: RunConfig,
     configuration_bundle: DetectionConfigurationBundle,
     workspace_identity: WorkspaceIdentity,
-    selected_count: int | None,
+    selected_profile_id: str | None,
+    resolved_output_slots: ResolvedOutputSlots | None,
+    output_slot_identities: tuple[OutputSlotIdentity, ...],
 ) -> dict[str, Any]:
     return {
         "script": SCRIPT_NAME,
@@ -81,11 +101,15 @@ def make_analysis_identity(
         ),
         "workspace_identity": typed_read_model(workspace_identity),
         "output_identity": {
-            "selected_count": selected_count,
-            "frame_sequence": (
-                []
-                if selected_count is None
-                else list(range(1, selected_count + 1))
+            "selected_scan_canvas_profile_id": selected_profile_id,
+            "resolved_output_slots": typed_read_model(
+                resolved_output_slots
             ),
+            "output_slot_count": (
+                None
+                if resolved_output_slots is None
+                else resolved_output_slots.output_slot_count
+            ),
+            "slot_identities": typed_read_model(output_slot_identities),
         },
     }

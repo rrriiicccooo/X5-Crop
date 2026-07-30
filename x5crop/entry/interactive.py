@@ -69,9 +69,9 @@ def ask_partial_count(format_id: str) -> int | None:
     partial_count_range = FORMATS[format_id].strip.partial_count_range
     allowed_text = " ".join(str(count) for count in partial_count_range)
     while True:
-        print("partial count:")
-        print("  return or auto = auto")
-        print(f"  allowed: {allowed_text}")
+        print("partial output slots:")
+        print("  return or auto = matched-holder capacity")
+        print(f"  explicit slots: {allowed_text}")
         answer = normalized_input(input("count: "))
         if answer in {"", "auto"}:
             return None

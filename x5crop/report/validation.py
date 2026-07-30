@@ -61,20 +61,40 @@ def validate_current_report_record(record: dict[str, Any]) -> None:
 
     output = record["output"]
     finalization = output["finalization"]
-    selected_count = finalization["selected_count"]
+    resolved = finalization["resolved_output_slots"]
+    output_slot_count = finalization["output_slot_count"]
+    slot_identities = finalization["slot_identities"]
     final_boxes = finalization["final_boxes"]
     protected = finalization["protected_envelopes"]
     output_files = output["output_files"]
     diagnostics = bool(
         record["analysis_identity"]["runtime_configuration"]["diagnostics"]
     )
+    if resolved is None:
+        if output_slot_count is not None or slot_identities:
+            raise ValueError(
+                "unresolved output slots cannot claim count or identities"
+            )
+    else:
+        lane_counts = resolved.get("lane_output_slot_counts")
+        if (
+            not isinstance(lane_counts, list)
+            or not lane_counts
+            or any(
+                not isinstance(value, int) or value <= 0
+                for value in lane_counts
+            )
+            or output_slot_count != sum(lane_counts)
+            or len(slot_identities) != output_slot_count
+        ):
+            raise ValueError("resolved output slot identity is inconsistent")
     if status == "approved_auto":
         if (
             not finalization["frame_export_eligible"]
-            or not isinstance(selected_count, int)
-            or selected_count <= 0
-            or len(final_boxes) != selected_count
-            or len(protected) != selected_count
+            or not isinstance(output_slot_count, int)
+            or output_slot_count <= 0
+            or len(final_boxes) != output_slot_count
+            or len(protected) != output_slot_count
         ):
             raise ValueError(
                 "approved output must retain one final box per selected slot"
@@ -94,7 +114,7 @@ def validate_current_report_record(record: dict[str, Any]) -> None:
         elif (
             not finalization["frame_export_requested"]
             or not finalization["frame_export_performed"]
-            or len(output_files) != selected_count
+            or len(output_files) != output_slot_count
             or output["tiff_fidelity"]["success_receipt"] != "validated"
             or not output["tiff_fidelity"]["write_readback_validated"]
         ):
@@ -113,10 +133,55 @@ def validate_current_report_record(record: dict[str, Any]) -> None:
     if finalization["post_decision_mutation"]:
         raise ValueError("post-DecisionGate output mutation is forbidden")
     if (
-        record["grid_selection"]["selected_count"] != selected_count
-        or record["analysis_identity"]["output_identity"]["selected_count"]
-        != selected_count
+        record["grid_selection"]["resolved_output_slots"] != resolved
+        or record["grid_selection"]["output_slot_count"]
+        != output_slot_count
+        or record["grid_selection"]["slot_identities"] != slot_identities
+        or record["analysis_identity"]["output_identity"][
+            "resolved_output_slots"
+        ]
+        != resolved
+        or record["analysis_identity"]["output_identity"][
+            "output_slot_count"
+        ]
+        != output_slot_count
+        or record["analysis_identity"]["output_identity"][
+            "slot_identities"
+        ]
+        != slot_identities
     ):
-        raise ValueError("selected count identities disagree")
+        raise ValueError("output slot identities disagree")
+    if (
+        record["grid_selection"]["selected_scan_canvas_profile_id"]
+        != record["analysis_identity"]["output_identity"][
+            "selected_scan_canvas_profile_id"
+        ]
+    ):
+        raise ValueError("selected scan-canvas profile identities disagree")
+    if status == "approved_auto":
+        lane_counts = resolved["lane_output_slot_counts"]
+        lanes = record["grid_selection"]["lanes"]
+        if len(lanes) != len(lane_counts):
+            raise ValueError("approved lane count identity is incomplete")
+        for lane_record, lane_count in zip(
+            lanes,
+            lane_counts,
+            strict=True,
+        ):
+            selected_id = lane_record["selected_proposal_id"]
+            classes = lane_record["proposal_classes"]
+            selected = tuple(
+                item["merged_proposal"]
+                for item in classes
+                if item["merged_proposal"]["proposal_id"] == selected_id
+            )
+            if (
+                len(selected) != 1
+                or len(selected[0]["slots"]) != lane_count
+                or len(selected[0]["safe_envelopes"]) != lane_count
+            ):
+                raise ValueError(
+                    "approved lane lacks one exact selected slot class"
+                )
     if record["core_facts_sha256"] != core_facts_sha256(record):
         raise ValueError("core facts hash does not match the record")

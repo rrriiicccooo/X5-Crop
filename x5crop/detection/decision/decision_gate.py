@@ -19,11 +19,11 @@ def apply_decision_gate(
                 requirement=check.requirement,
                 final_review_reason=(
                     (
-                        "automatic_count_unresolved"
+                        "capacity_output_slot_count_unfulfilled"
                         if count_mode == FrameCountMode.AUTO
                         else "requested_count_unfulfilled"
                     )
-                    if check.code == "frame_count"
+                    if check.code == "output_slot_count"
                     else DECISION_GATE_REASON_BY_CODE[check.code]
                 ),
             )

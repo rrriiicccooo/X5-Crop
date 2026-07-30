@@ -86,6 +86,7 @@ def _failure_manifest(failure: FailedInput) -> RunManifestRecord:
         error_code=failure.error_code,
         error_message=failure.error_message,
         report_written=False,
+        output_identity=None,
         artifacts=failure.artifacts,
         metrics=failure.metrics,
     )
@@ -132,6 +133,9 @@ def _handle_input_outcome(
             error_code=None,
             error_message=None,
             report_written=report_written,
+            output_identity=result.record["analysis_identity"][
+                "output_identity"
+            ],
             artifacts=outcome.artifacts,
             metrics=outcome.metrics,
         ),

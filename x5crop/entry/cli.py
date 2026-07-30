@@ -55,8 +55,8 @@ def build_parser() -> argparse.ArgumentParser:
         type=parse_count_argument,
         default=None,
         help=(
-            "Partial frame count (positive integer or auto); omitted means "
-            "auto. Full mode always uses the format default."
+            "Partial output slots: a positive integer is explicit; auto or "
+            "omission uses matched-holder capacity. Full uses the format default."
         ),
     )
     parser.add_argument("--page", type=int, default=0, help="TIFF page index; default 0.")

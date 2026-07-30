@@ -10,7 +10,7 @@ from typing import Any, Sequence
 from x5crop.report.validation import validate_current_report_record
 
 
-COMPARISON_SCHEMA = "x5crop_safe_containment_comparison_v1"
+COMPARISON_SCHEMA = "x5crop_safe_containment_comparison_v2"
 CONFIRMED_BASELINE_SCHEMA = "x5crop_user_confirmed_golden_baseline_v1"
 
 
@@ -70,25 +70,35 @@ def compare_baseline_record_to_report(
     ):
         raise ValueError("baseline and report source SHA-256 disagree")
     finalization = report["output"]["finalization"]
+    output_identity = report["analysis_identity"]["output_identity"]
     if report["decision"]["status"] != "approved_auto":
         return {
             "comparison_schema": COMPARISON_SCHEMA,
             "sample_id": str(baseline["sample_id"]),
             "comparison_status": "not_applicable_needs_review",
             "core_facts_sha256": report["core_facts_sha256"],
-            "selected_count": finalization["selected_count"],
+            "selected_scan_canvas_profile_id": output_identity[
+                "selected_scan_canvas_profile_id"
+            ],
+            "resolved_output_slots": output_identity[
+                "resolved_output_slots"
+            ],
+            "output_slot_count": output_identity["output_slot_count"],
+            "slot_identities": output_identity["slot_identities"],
             "source_footprints": [],
-            "frame_containment": [],
+            "containment_matrix": [],
+            "matched_slots": [],
             "all_confirmed_content_contained": False,
         }
     boxes = finalization["final_boxes"]
     frames = baseline["frames"]
-    if len(boxes) != len(frames):
-        raise ValueError("final box count disagrees with confirmed frame count")
+    slot_identities = finalization["slot_identities"]
+    if len(boxes) != len(slot_identities):
+        raise ValueError("final boxes and slot identities disagree")
     matrix = finalization["transform_assessment"]["transform"]["matrix"]
     footprints = []
-    containment = []
-    for box, frame in zip(boxes, frames, strict=True):
+    containment_matrix = []
+    for box in boxes:
         footprint = tuple(
             _inverse_map(matrix, x, y)
             for x, y in (
@@ -98,24 +108,62 @@ def compare_baseline_record_to_report(
                 (float(box["left"]), float(box["bottom"])),
             )
         )
-        contained = all(
-            _contains(
-                footprint,
-                (float(point[0]), float(point[1])),
-            )
-            for point in frame["confirmed_integer_boundary_polygon"]
-        )
         footprints.append([list(point) for point in footprint])
-        containment.append(bool(contained))
+    for frame in frames:
+        polygon = frame["confirmed_integer_boundary_polygon"]
+        containment_matrix.append(
+            [
+                all(
+                    _contains(
+                        tuple(
+                            (float(point[0]), float(point[1]))
+                            for point in footprint
+                        ),
+                        (float(point[0]), float(point[1])),
+                    )
+                    for point in polygon
+                )
+                for footprint in footprints
+            ]
+        )
+    matched_indexes: list[int] = []
+    following_index = 0
+    for row in containment_matrix:
+        match = next(
+            (
+                index
+                for index in range(following_index, len(row))
+                if row[index]
+            ),
+            None,
+        )
+        if match is None:
+            matched_indexes = []
+            break
+        matched_indexes.append(match)
+        following_index = match + 1
+    matched_slots = [
+        slot_identities[index] for index in matched_indexes
+    ]
     return {
         "comparison_schema": COMPARISON_SCHEMA,
         "sample_id": str(baseline["sample_id"]),
         "comparison_status": "compared",
         "core_facts_sha256": report["core_facts_sha256"],
-        "selected_count": finalization["selected_count"],
+        "selected_scan_canvas_profile_id": output_identity[
+            "selected_scan_canvas_profile_id"
+        ],
+        "resolved_output_slots": output_identity[
+            "resolved_output_slots"
+        ],
+        "output_slot_count": output_identity["output_slot_count"],
+        "slot_identities": slot_identities,
         "source_footprints": footprints,
-        "frame_containment": containment,
-        "all_confirmed_content_contained": all(containment),
+        "containment_matrix": containment_matrix,
+        "matched_slots": matched_slots,
+        "all_confirmed_content_contained": (
+            len(matched_slots) == len(frames)
+        ),
     }
 
 

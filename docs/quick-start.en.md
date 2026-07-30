@@ -45,10 +45,10 @@ Supported inputs are `135`, `135-dual`, `half`, `xpan`, `645`, `66`, and `67`.
 - `full`: count is fixed to the format default. An explicit count is accepted
   only when it equals that default.
 - `partial`: an integer is an authoritative explicit count. Pressing Return,
-  entering `auto`, or omitting CLI `--count` selects bounded automatic count.
-- Auto searches only `1..default_count`, further limited by the uniquely
-  matched holder capacity. It never guesses format or reads count from a
-  filename.
+  entering `auto`, or omitting CLI `--count` selects capacity auto.
+- Auto writes every valid slot for the current format in the uniquely matched
+  holder. It never guesses the true photo count or reads count from a filename.
+  Leading, trailing, and internal blank slots remain in the output sequence.
 - `135-dual` currently supports full only. Its 12 outputs use top lane then
   bottom lane, with left-to-right local order in each lane.
 
@@ -85,9 +85,10 @@ x5_crop_output/
   x5_crop_run_manifest.jsonl
 ```
 
-`needs_review` is reserved for a concrete, unabsorbed count, ordinal, slot
-ownership, known-content containment, source/lane authority, or output-geometry
-risk. By default, the source TIFF is copied to `needs_review/`; use
+`needs_review` is reserved for a concrete, unabsorbed ordinal, slot ownership,
+omission-coverage, known-content-containment, source/lane-authority, or
+output-geometry risk. A resolved capacity that cannot form every required slot
+also blocks output. By default, the source TIFF is copied to `needs_review/`; use
 `--no-copy-review-files` to disable that copy.
 
 `--diagnostics` is read-only: it preserves the same detection and DecisionGate

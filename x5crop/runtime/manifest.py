@@ -12,6 +12,9 @@ from ..run_status import RunTerminalOutcome
 from .outcome import FailureStage, RuntimeArtifacts, RuntimeMetrics
 
 
+RUN_MANIFEST_SCHEMA = "x5crop_run_manifest_v2"
+
+
 @dataclass(frozen=True)
 class RunManifestRecord:
     source: str
@@ -20,6 +23,7 @@ class RunManifestRecord:
     error_code: str | None
     error_message: str | None
     report_written: bool
+    output_identity: dict[str, Any] | None
     artifacts: RuntimeArtifacts
     metrics: RuntimeMetrics
 
@@ -34,12 +38,19 @@ class RunManifestRecord:
                 raise ValueError("Completed manifest record cannot contain failure detail")
             if not self.metrics.available:
                 raise ValueError("Completed manifest record requires runtime metrics")
+            if self.output_identity is None:
+                raise ValueError(
+                    "Completed manifest record requires output identity"
+                )
             return
         if any(value is None for value in failure_values):
             raise ValueError("Runtime-error manifest record requires complete failure detail")
+        if self.output_identity is not None:
+            raise ValueError("Runtime-error manifest cannot claim output identity")
 
     def as_record(self) -> dict[str, Any]:
         return {
+            "schema": RUN_MANIFEST_SCHEMA,
             "source": self.source,
             "terminal_outcome": self.terminal_outcome.value,
             "failure_stage": (
@@ -48,6 +59,7 @@ class RunManifestRecord:
             "error_code": self.error_code,
             "error_message": self.error_message,
             "report_written": self.report_written,
+            "output_identity": self.output_identity,
             "artifacts": self.artifacts.as_record(),
             "metrics": self.metrics.as_record(),
         }

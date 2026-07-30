@@ -73,6 +73,20 @@ class CurrentOnlyContractTest(unittest.TestCase):
             "VisualDeskewOutcome",
             "write_crops_if_allowed",
             "copy_for_review_if_needed",
+            "candidate_counts",
+            "selected_count",
+            "FrameCountDominanceAssessment",
+            "DominanceRelation",
+            "G_MAX",
+            "automatic_count_unresolved",
+            "bounded_safe_crop_grid",
+            "bounded_ordered_grid_v4",
+            "x5crop_run_manifest_v1",
+            "x5crop_production_performance_v3",
+            "x5crop_fixed_sample_profile_v1",
+            "work_by_count_component",
+            "lane_global_proposal_limit",
+            "count_dominance",
         )
         active_paths = tuple((ROOT / "x5crop").rglob("*.py")) + tuple(
             path
@@ -92,11 +106,11 @@ class CurrentOnlyContractTest(unittest.TestCase):
         explicit = FrameCountRequest.from_user_input(partial, "partial", 3)
         fixed = FrameCountRequest.from_user_input(partial, "full", 6)
         self.assertEqual(auto.mode, FrameCountMode.AUTO)
-        self.assertEqual(auto.candidate_counts, (1, 2, 3, 4, 5, 6))
+        self.assertIsNone(auto.authoritative_count)
         self.assertEqual(explicit.mode, FrameCountMode.EXPLICIT)
-        self.assertEqual(explicit.candidate_counts, (3,))
+        self.assertEqual(explicit.authoritative_count, 3)
         self.assertEqual(fixed.mode, FrameCountMode.FIXED_FULL)
-        self.assertEqual(fixed.candidate_counts, (6,))
+        self.assertEqual(fixed.authoritative_count, 6)
         parser = build_parser()
         option_strings = {
             value
@@ -198,13 +212,13 @@ class CurrentOnlyContractTest(unittest.TestCase):
         self.assertEqual(REPORT_SCHEMA_ID, "detection_report")
         self.assertEqual(
             REPORT_SCHEMA_REVISION,
-            "bounded_safe_crop_grid",
+            "bounded_safe_crop_capacity_grid",
         )
         candidate = candidate_gate_assessment(
             scan_canvas_state=EvidenceState.SUPPORTED,
             source_content_state=EvidenceState.UNAVAILABLE,
             grid_search_coverage_state=EvidenceState.SUPPORTED,
-            frame_count_state=EvidenceState.SUPPORTED,
+            output_slot_count_state=EvidenceState.SUPPORTED,
             slot_ordinal_state=EvidenceState.SUPPORTED,
             slot_ownership_state=EvidenceState.SUPPORTED,
             known_content_containment_state=EvidenceState.UNAVAILABLE,

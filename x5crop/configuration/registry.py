@@ -28,7 +28,7 @@ def get_detection_configuration(
     canvas_count = (
         None
         if count_request.mode.value == "auto"
-        else count_request.candidate_counts[0]
+        else count_request.authoritative_count
     )
     return DetectionConfiguration(
         physical_spec=spec,

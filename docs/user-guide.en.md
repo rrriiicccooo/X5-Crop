@@ -21,8 +21,9 @@ physical boundary:
   deskew, or protection saturated at an authority boundary does not by itself
   require review.
 - `needs_review` is reserved for a concrete risk that cannot be absorbed, such
-  as competing counts, unresolved ordinal or primary-slot ownership, possible
-  inward loss of known content, or geometry outside source/lane authority.
+  as unresolved ordinal or primary-slot ownership, unproven omission coverage,
+  possible inward loss of known content, or geometry outside source/lane
+  authority.
 - Read, write, and read-back errors are terminal failures, not review results.
 
 ## Install
@@ -81,15 +82,17 @@ There is one count mapping:
 - Omitting partial CLI `--count`, passing `--count auto`, or pressing Return in
   the interactive prompt selects `auto`.
 - There is no separate `--auto-count` option.
-- Auto searches only `1..default_count`, then removes counts that exceed the
-  uniquely matched holder capacity.
+- Auto uniquely matches the scan canvas, then writes every valid slot for the
+  current format in that holder. It does not infer or claim the true photo
+  count.
 - A filename annotation such as `X5_<count>` may be used by validation only. It
   never enters detector, prior, score, Gate, or runtime selection.
 
-A partial count describes complete design slots, not a partial photograph.
-Blank slots remain in the sequence. `135-dual` first matches the complete canvas
-and then creates two canonical lanes; output order is top lane 1..6 followed by
-bottom lane 1..6.
+Partial slot count describes holder capacity or an explicit user request, not
+the number of visible photos. Leading, trailing, and internal blank slots remain
+in the sequence. `135-dual` first matches the complete canvas and then creates
+two canonical lanes; output order is `lane:0/1..6` followed by
+`lane:1/1..6`. Each output records both global and lane-local identity.
 
 ## Run
 
@@ -152,15 +155,26 @@ Observed bands, edge pairs, learned one-sided observations, and model-only
 corridors may all participate in bounded proposals. A prior constrains search;
 it never becomes a physical observation.
 
-Every proposal creates exactly count lane-local slots. A bounded shared interval
-from contact or overlap is included in both adjacent safety envelopes. The full
-authoritative lane is retained on the short axis by default. Fixed millimetre
-protection is then rounded outward using the upper endpoint of each independent
-scale interval. Only this protection step may saturate at a source/lane edge.
+Each lane searches exactly one resolved slot count. Scores and tie-breaks only
+control build order and diagnostic display. Only output-equivalent proposals
+may be merged by ordinal outward union; two non-equivalent placement, ordinal,
+or ownership classes are never ranked into a winner.
+
+Every `P_MAX/O_MAX/K_MAX` truncation produces typed omission summaries. A
+truncation is non-blocking only when every omitted alternative is proven to
+belong to a retained equivalence class and has been absorbed into its outward
+union. Otherwise `grid_search_coverage` blocks output.
+
+Every proposal creates exactly the resolved number of lane-local slots. A
+bounded shared interval from contact or overlap is included in both adjacent
+safety envelopes. The full authoritative lane is retained on the short axis by
+default. Fixed millimetre protection is then rounded outward using the upper
+endpoint of each independent scale interval. Only this protection step may
+saturate at a source/lane edge.
 
 The current output transform is typed identity. No advanced fit or deskew is
 added without a named gap, and the absence of deskew does not cause review.
-Selected count, transform, and boxes cannot change after DecisionGate.
+Selected profile, slots, transform, and boxes cannot change after DecisionGate.
 
 ## Gate, Status, And Reasons
 
@@ -170,7 +184,7 @@ Selected count, transform, and boxes cannot change after DecisionGate.
 scan_canvas_authority
 source_content_measurement
 grid_search_coverage
-frame_count
+output_slot_count
 slot_ordinal_assignment
 slot_ownership
 known_content_containment
@@ -183,7 +197,8 @@ Only `DecisionGate` creates `approved_auto`, `needs_review`, and typed reasons.
 Common review reasons include:
 
 - `scan_canvas_authority_unavailable`
-- `automatic_count_unresolved` or `requested_count_unfulfilled`
+- `requested_count_unfulfilled` for fixed/explicit input
+- `capacity_output_slot_count_unfulfilled` for auto
 - `grid_search_coverage_outcome_risk`
 - `slot_ordinal_assignment_unresolved`
 - `slot_ownership_unbounded`
@@ -224,14 +239,16 @@ Current report:
 
 ```text
 schema_id       = detection_report
-schema_revision = bounded_safe_crop_grid
+schema_revision = bounded_safe_crop_capacity_grid
 ```
 
-The report stores the count request and candidate range, selected count,
-calibration receipt ID, observed/inferred provenance, per-count/lane/component
-work, dominance, slots and interactions, safe and protected envelopes, both
-Gates, transform, final boxes, and TIFF-fidelity receipt. A report is an audit
-artifact, not a detection cache.
+The report stores count policy, calibration receipt ID, selected profile,
+canonical lane counts, global and lane-local slot identities, observed/inferred
+provenance, equivalence classes, omission summaries, per-lane/component work,
+slots and interactions, safe and protected envelopes, both Gates, transform,
+final boxes, and the TIFF-fidelity receipt. Total slot count is derived from
+lane counts and cross-checked. A report is an audit artifact, not a detection
+cache.
 
 ## TIFF Fidelity And Errors
 
@@ -259,16 +276,25 @@ Containment checks only whether the inverse-transformed output source footprint
 fully contains each confirmed polygon; larger and overlapping outputs are
 allowed.
 
-The 111-record manifest is a non-blocking coverage audit. Duplicate SHA groups
-are listed separately, and record count is never presented as independent
-real-sample count. `real_holdout = unavailable`; cells without real samples,
-including XPan and 120-645, report
-`real_sample_coverage = unavailable` without causing review.
+The 111-record manifest is a completion gate: all 88 `pass_*` records must be
+`approved_auto`, all 41 pass-partial records must output the matched-holder
+capacity, and the 23 `unknown_*` records may be reviewed only with a concrete
+CandidateGate blocker. Duplicate SHA groups are listed separately; the 111
+records currently represent 107 independent source SHAs and are not described
+as 111 independent real samples. `real_holdout = unavailable`; cells without
+real samples, including XPan and 120-645, report
+`real_sample_coverage = unavailable` without causing runtime review.
 
 Formal performance uses a fixed 24-real-TIFF cohort, `--jobs 2`, and one empty
 output root containing `cold` plus `measured-1/2/3`. Every run writes and reads
 back frame TIFFs. Certification uses only the three measured runs and requires
 their median to be `<= 5.0 seconds/input`.
+
+Current capacity-cutover receipt: all 14 golden scenarios passed; the 111-record
+audit passed with 88/88 `pass_*` and 41/41 pass-partial approvals; each fixed
+24-input performance run wrote 168 TIFFs, the nine partial inputs added 25 slots
+over filename annotations, and the three measured runs had a median of
+`2.499 seconds/input`.
 
 ## Remove And License
 

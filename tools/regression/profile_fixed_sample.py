@@ -25,8 +25,7 @@ FIXED_SOURCE_SHA256 = (
 FIXED_FORMAT_ID = "120-66"
 FIXED_STRIP_MODE = "partial"
 FIXED_COUNT_MODE = "auto"
-FIXED_EXPECTED_COUNT = 3
-PROFILE_RECEIPT_SCHEMA = "x5crop_fixed_sample_profile_v1"
+PROFILE_RECEIPT_SCHEMA = "x5crop_fixed_sample_profile_v2"
 DEFAULT_MANIFEST = PROJECT_ROOT / "Test/manual_review/manifest.jsonl"
 
 
@@ -140,11 +139,19 @@ def run_fixed_profile(
     if not isinstance(outcome, CompletedInput):
         raise TypeError("unknown fixed-sample runtime outcome")
     record = outcome.result.record
-    selected_count = record["grid_selection"]["selected_count"]
+    output_identity = record["analysis_identity"]["output_identity"]
+    resolved = output_identity["resolved_output_slots"]
+    lane_counts = (
+        ()
+        if resolved is None
+        else tuple(resolved["lane_output_slot_counts"])
+    )
+    output_slot_count = output_identity["output_slot_count"]
     if (
         record["decision"]["status"] != "approved_auto"
-        or selected_count != FIXED_EXPECTED_COUNT
-        or len(outcome.artifacts.frame_outputs) != FIXED_EXPECTED_COUNT
+        or lane_counts != (3,)
+        or output_slot_count != 3
+        or len(outcome.artifacts.frame_outputs) != output_slot_count
     ):
         raise RuntimeError("fixed profiling sample did not meet its frozen contract")
     receipt = {
@@ -154,11 +161,20 @@ def run_fixed_profile(
         "format_id": FIXED_FORMAT_ID,
         "strip_mode": FIXED_STRIP_MODE,
         "count_mode": FIXED_COUNT_MODE,
-        "expected_count": FIXED_EXPECTED_COUNT,
-        "selected_count": selected_count,
+        "selected_scan_canvas_profile_id": output_identity[
+            "selected_scan_canvas_profile_id"
+        ],
+        "lane_output_slot_counts": list(lane_counts),
+        "output_slot_count": output_slot_count,
+        "slot_identities": output_identity["slot_identities"],
         "wall_seconds": wall_seconds,
         "runtime_metrics": outcome.metrics.as_record(),
         "work_totals": record["grid_selection"]["work_totals"],
+        "omission_summaries": [
+            summary
+            for lane in record["grid_selection"]["lanes"]
+            for summary in lane["omission_summaries"]
+        ],
         "decision_status": record["decision"]["status"],
         "state_transition_counts": {
             "states": record["grid_selection"]["work_totals"]["dp_states"],
@@ -187,7 +203,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     print(
         f"{FIXED_SAMPLE_ID}: {receipt['wall_seconds']:.3f}s, "
-        f"selected_count={receipt['selected_count']}"
+        f"output_slot_count={receipt['output_slot_count']}"
     )
     print(f"artifacts: {args.output_root.expanduser().resolve()}")
     return 0

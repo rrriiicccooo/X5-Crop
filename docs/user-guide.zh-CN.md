@@ -15,8 +15,9 @@ TIFF。
 - 输出可以比照片更大，相邻输出可以重叠，也可以带入少量邻片像素。
 - Separator 缺失、blank、inferred Grid、等价 geometry、未 deskew 或 protection 在
   authority 边界饱和，都不会单独导致 review。
-- `needs_review` 只用于无法吸收的具体风险，例如 count 竞争、ordinal 或 primary slot
-  ownership 无法有界、已知内容可能被内切，或 geometry 越出 source/lane authority。
+- `needs_review` 只用于无法吸收的具体风险，例如 ordinal 或 primary slot ownership
+  无法有界、omission coverage 未证明、已知内容可能被内切，或 geometry 越出
+  source/lane authority。
 - 读取、写出或复读失败属于 terminal failure，不是 `needs_review`。
 
 ## 安装
@@ -71,13 +72,15 @@ Count 入口规则只有一套：
 - Partial 输入整数时为 authoritative `explicit`。
 - Partial 在命令行省略 `--count`、输入 `--count auto`，或交互时直接回车，均为 `auto`。
 - 没有独立 `--auto-count` 参数。
-- Auto 只搜索 `1..default_count`，再由唯一匹配片夹的容量排除装不下的 count。
+- Auto 先唯一匹配 scan canvas，再输出该片夹对当前 format 的全部有效 slots。它不推断
+  或声明真实照片张数。
 - 文件名中的 `X5_<count>` 只可用于 validation，不会进入 detector、prior、score、
   Gate 或 runtime selection。
 
-Partial count 表示完整设计 slot 的数量，不表示残缺照片。Blank 仍保留对应 slot。
-`135-dual` 先匹配完整画布，再分为两个 canonical lane；输出顺序为上 lane 1..6、下 lane
-1..6。
+Partial slot 数表示片夹容量或用户 explicit request，不表示可见照片张数。前导、尾随与
+中间 blank 均保留。`135-dual` 先匹配完整画布，再分为两个 canonical lane；输出顺序为
+`lane:0/1..6`、再 `lane:1/1..6`。每个输出同时记录 global ordinal 与 lane-local
+identity。
 
 ## 运行
 
@@ -135,12 +138,21 @@ Separator measurement 与 positive-content measurement 相互独立。Observed b
 edge-pair、one-sided observation 和 model-only corridor 都可以参与 bounded proposal；
 prior 只约束搜索，不能冒充物理观测。
 
-每个 proposal 产生恰好 count 个 lane-local slot。Contact/overlap 的 shared interval 会
-同时并入相邻安全包络；短轴默认保留完整 authoritative lane。随后按独立 scale 的 upper
-endpoint 向上换算固定毫米 protection。只有这一步可以在 source/lane 边界饱和。
+每个 lane 只搜索已经解析的一个 slot count。Score 与 tie-break 只决定构建顺序和诊断
+展示；只有 output-equivalent proposals 可以按 ordinal outward union。若剩余两个非等价
+placement、ordinal 或 ownership classes，系统不会排序选赢家。
+
+`P_MAX/O_MAX/K_MAX` 截断均生成 typed omission summaries。只有所有 omitted alternatives
+已证明属于 retained equivalence class 并进入 outward union 时，截断才不阻断；无法证明
+时 `grid_search_coverage` 会阻止输出。
+
+每个 proposal 产生恰好 resolved count 个 lane-local slot。Contact/overlap 的 shared
+interval 会同时并入相邻安全包络；短轴默认保留完整 authoritative lane。随后按独立
+scale 的 upper endpoint 向上换算固定毫米 protection。只有这一步可以在 source/lane
+边界饱和。
 
 当前输出使用 typed identity transform。没有 named gap 时不增加 deskew，也不会因此
-review。DecisionGate 后不再改变 selected count、transform 或 boxes。
+review。DecisionGate 后不再改变 selected profile、slots、transform 或 boxes。
 
 ## Gate、状态与原因
 
@@ -150,7 +162,7 @@ review。DecisionGate 后不再改变 selected count、transform 或 boxes。
 scan_canvas_authority
 source_content_measurement
 grid_search_coverage
-frame_count
+output_slot_count
 slot_ordinal_assignment
 slot_ownership
 known_content_containment
@@ -163,7 +175,8 @@ output_transform
 原因包括：
 
 - `scan_canvas_authority_unavailable`
-- `automatic_count_unresolved` 或 `requested_count_unfulfilled`
+- `requested_count_unfulfilled`（fixed/explicit）
+- `capacity_output_slot_count_unfulfilled`（auto）
 - `grid_search_coverage_outcome_risk`
 - `slot_ordinal_assignment_unresolved`
 - `slot_ownership_unbounded`
@@ -202,13 +215,14 @@ Current report：
 
 ```text
 schema_id       = detection_report
-schema_revision = bounded_safe_crop_grid
+schema_revision = bounded_safe_crop_capacity_grid
 ```
 
-Report 保存 count request/candidate range、selected count、calibration receipt ID、
-observed/inferred provenance、逐 count/lane/component 工作量、dominance、slot/interaction、
+Report 保存 count policy、calibration receipt ID、selected profile、canonical lane
+counts、global/lane-local slot identities、observed/inferred provenance、equivalence
+classes、omission summaries、逐 lane/component 工作量、slot/interaction、
 safe/protected envelopes、两级 Gate、transform、final boxes 与 TIFF fidelity receipt。
-Report 是审计产物，不是 detection cache。
+总 slot 数只从 lane counts 派生并校验。Report 是审计产物，不是 detection cache。
 
 ## TIFF 保真与错误
 
@@ -231,13 +245,19 @@ Report 是审计产物，不是 detection cache。
 展开为 14 个 fixed/explicit/auto 场景。Containment 只检查 inverse-transform 后的输出
 source footprint 是否完整包含确认 polygon，允许更大或重叠。
 
-111 条 manifest 只用于非阻断 coverage audit；重复 SHA 单列，record 数不等于独立真实
-样片数。当前 `real_holdout = unavailable`；XPan、120-645 等无真实样片的 coverage cell
-标记 `real_sample_coverage = unavailable`，但不因此制造 review。
+111 条 manifest 是当前完成门槛：88 条 `pass_*` 必须全部 `approved_auto`，其中 41 条
+pass partial 必须精确输出匹配片夹容量；23 条 `unknown_*` 只有存在具体 CandidateGate
+阻断时才允许 review。重复 SHA 单列，111 records 当前对应 107 个独立 source SHA，不能
+冒充 111 张独立真实样片。`real_holdout = unavailable`；XPan、120-645 等无真实样片的
+coverage cell 标记 `real_sample_coverage = unavailable`，但不因此制造 runtime review。
 
 正式性能合同使用固定 24 张真实 TIFF、`--jobs 2`、一个空 output root 下的 `cold` 与
 `measured-1/2/3` 四次运行。四次都实际写出并复读 frame TIFF，只以三次 measured 的中位数
 判断 `<= 5.0 秒/张`。
+
+当前容量切换 receipt：14/14 黄金场景通过；111/111 audit 通过，88/88 `pass_*` 和
+41/41 pass partial 均批准；固定 24 张每轮写出 168 个 TIFF，九个 partial 输入比 filename
+annotation 多 25 个 slots，三轮 measured 中位数为 `2.499 秒/输入`。
 
 ## 移除与许可
 

@@ -24,7 +24,7 @@ def make_bounded_safe_crop_preview_rgb(
 ) -> np.ndarray:
     rgb, scale = cached_preview_gray(
         render_cache,
-        "bounded_safe_crop_grid",
+        "bounded_safe_crop_capacity_grid",
         workspace.measurement_cache.gray_work,
         style.preview_max_side,
     )

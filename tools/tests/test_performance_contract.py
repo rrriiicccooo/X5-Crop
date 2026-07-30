@@ -9,6 +9,8 @@ import numpy as np
 import tifffile
 
 from tools.regression.performance import (
+    CURRENT_OUTPUT_TIFF_RECEIPT,
+    CURRENT_PARTIAL_EXTRA_SLOT_RECEIPT,
     MEASURED_RUN_COUNT,
     PERFORMANCE_RESULT_SCHEMA,
     LocalSampleIdentity,
@@ -33,6 +35,7 @@ def _timing(
         completed_inputs=24,
         approved_inputs_with_outputs=24 if outputs else 0,
         frame_output_count=outputs,
+        expected_frame_output_count=CURRENT_OUTPUT_TIFF_RECEIPT,
     )
 
 
@@ -58,13 +61,17 @@ class PerformanceCertificationContractTest(unittest.TestCase):
                 PerformanceRunGroup("135", "full", "horizontal"),
                 PerformanceRunGroup("120-66", "partial", "vertical"),
             ),
+            expected_frame_output_count=CURRENT_OUTPUT_TIFF_RECEIPT,
+            partial_extra_slot_count=CURRENT_PARTIAL_EXTRA_SLOT_RECEIPT,
         )
 
-    def test_v3_requires_real_outputs_and_allows_exact_limit(self) -> None:
+    def test_v4_requires_exact_capacity_outputs_and_allows_exact_limit(
+        self,
+    ) -> None:
         no_outputs = self._result(4.0, 0)
         self.assertFalse(no_outputs.passed)
         self.assertEqual(no_outputs.certification_status, "failed")
-        exact = self._result(5.0, 24)
+        exact = self._result(5.0, CURRENT_OUTPUT_TIFF_RECEIPT)
         self.assertTrue(exact.passed)
         self.assertEqual(exact.certification_status, "certified")
         record = exact.as_record()
@@ -76,6 +83,15 @@ class PerformanceCertificationContractTest(unittest.TestCase):
         self.assertEqual(
             record["count_modes"],
             {"full": "fixed_full", "partial": "auto"},
+        )
+        self.assertEqual(
+            record["current_receipt"],
+            {
+                "frame_output_count": CURRENT_OUTPUT_TIFF_RECEIPT,
+                "partial_extra_slot_count": (
+                    CURRENT_PARTIAL_EXTRA_SLOT_RECEIPT
+                ),
+            },
         )
         self.assertEqual(
             {group["count_mode"] for group in record["groups"]},
@@ -105,11 +121,12 @@ class PerformanceCertificationContractTest(unittest.TestCase):
     def test_wrong_input_count_cannot_be_certified(self) -> None:
         with self.assertRaises(ValueError):
             ProductionPerformanceResult(
-                cold=PerformanceTiming("cold", 1.0, 1, 1, 1, 1),
+                cold=PerformanceTiming("cold", 1.0, 1, 1, 1, 1, 1),
                 measured=tuple(
                     PerformanceTiming(
                         f"measured-{index}",
                         1.0,
+                        1,
                         1,
                         1,
                         1,
@@ -121,6 +138,8 @@ class PerformanceCertificationContractTest(unittest.TestCase):
                 groups=(
                     PerformanceRunGroup("135", "full", "horizontal"),
                 ),
+                expected_frame_output_count=CURRENT_OUTPUT_TIFF_RECEIPT,
+                partial_extra_slot_count=CURRENT_PARTIAL_EXTRA_SLOT_RECEIPT,
             )
 
     def test_source_resolution_uses_canonical_catalog_path_not_sha_scan(
@@ -132,7 +151,7 @@ class PerformanceCertificationContractTest(unittest.TestCase):
             source.parent.mkdir(parents=True)
             tifffile.imwrite(
                 source,
-                np.zeros((8, 16), dtype=np.uint8),
+                np.zeros((100, 720), dtype=np.uint8),
                 compression=None,
             )
             duplicate = source_root / "confirmed-baseline.tif"

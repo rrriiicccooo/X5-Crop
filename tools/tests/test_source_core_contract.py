@@ -214,12 +214,13 @@ class PhysicalAuthorityContractTest(unittest.TestCase):
         auto = get_detection_configuration("120-67", "partial", None)
         explicit = get_detection_configuration("120-67", "partial", 2)
         self.assertEqual(auto.count_request.mode, FrameCountMode.AUTO)
-        self.assertEqual(auto.count_request.candidate_counts, (1, 2, 3))
+        self.assertIsNone(auto.count_request.authoritative_count)
         self.assertIn(
             "120_wide_188_5",
             tuple(item.profile_id for item in auto.scan_canvas.profiles),
         )
         self.assertEqual(explicit.count_request.mode, FrameCountMode.EXPLICIT)
+        self.assertEqual(explicit.count_request.authoritative_count, 2)
         self.assertIn(
             "120_wide_188_5",
             tuple(item.profile_id for item in explicit.scan_canvas.profiles),
@@ -257,6 +258,26 @@ class PriorAndWorkContractTest(unittest.TestCase):
         receipt = GRID_CALIBRATION_RECEIPT
         self.assertEqual(receipt.calibration_receipt_id, CALIBRATION_RECEIPT_ID)
         self.assertEqual(receipt.provenance, "user_confirmed_geometry")
+        self.assertEqual(
+            receipt.schema,
+            "x5crop_grid_calibration_receipt_v2",
+        )
+        self.assertEqual(
+            receipt.algorithm_revision,
+            "bounded_ordered_capacity_grid_v5",
+        )
+        self.assertEqual(
+            receipt.search_contract.slot_count_policy,
+            "single_resolved_output_slot_count",
+        )
+        self.assertEqual(
+            receipt.search_contract.proposal_resolution,
+            "output_equivalence_outward_union_only",
+        )
+        self.assertEqual(
+            receipt.search_contract.omission_resolution,
+            "proven_equivalent_and_union_absorbed_only",
+        )
         self.assertEqual(len(receipt.cells), 8)
         self.assertNotIn("S098", tuple(cell.sample_id for cell in receipt.cells))
         self.assertEqual(len(receipt.source_sha256_set), 8)
@@ -278,17 +299,6 @@ class PriorAndWorkContractTest(unittest.TestCase):
         self.assertEqual(FrameGridWorkStatistics.transition_limit(1), 0)
         self.assertEqual(FrameGridWorkStatistics.state_limit(12), 198)
         self.assertEqual(FrameGridWorkStatistics.transition_limit(12), 558)
-        self.assertEqual(
-            sum(FrameGridWorkStatistics.state_limit(count) for count in range(1, 13)),
-            1188,
-        )
-        self.assertEqual(
-            sum(
-                FrameGridWorkStatistics.transition_limit(count)
-                for count in range(1, 13)
-            ),
-            3168,
-        )
 
 
 if __name__ == "__main__":

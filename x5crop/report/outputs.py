@@ -35,7 +35,9 @@ def append_summary_csv(path: Path, result: ReportResult) -> None:
         "layout",
         "strip_mode",
         "count_mode",
-        "selected_count",
+        "selected_scan_canvas_profile_id",
+        "lane_output_slot_counts",
+        "output_slot_count",
         "grid_selection",
         "final_review_reasons",
         "output_count",
@@ -57,10 +59,26 @@ def append_summary_csv(path: Path, result: ReportResult) -> None:
                 ]["layout"],
                 "strip_mode": record["configuration"]["strip_mode"],
                 "count_mode": record["configuration"][
-                    "frame_count_request"
+                    "output_slot_request"
                 ]["mode"],
-                "selected_count": record["grid_selection"][
-                    "selected_count"
+                "selected_scan_canvas_profile_id": record[
+                    "grid_selection"
+                ]["selected_scan_canvas_profile_id"],
+                "lane_output_slot_counts": ";".join(
+                    str(value)
+                    for value in (
+                        []
+                        if record["grid_selection"][
+                            "resolved_output_slots"
+                        ]
+                        is None
+                        else record["grid_selection"][
+                            "resolved_output_slots"
+                        ]["lane_output_slot_counts"]
+                    )
+                ),
+                "output_slot_count": record["grid_selection"][
+                    "output_slot_count"
                 ],
                 "grid_selection": ";".join(
                     lane["selection_reason"]

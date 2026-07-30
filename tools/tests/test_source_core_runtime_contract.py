@@ -122,7 +122,21 @@ class BoundedSafeCropRuntimeContractTest(unittest.TestCase):
             self.assertEqual(record["schema_id"], REPORT_SCHEMA_ID)
             self.assertEqual(record["schema_revision"], REPORT_SCHEMA_REVISION)
             self.assertEqual(record["decision"]["status"], "approved_auto")
-            self.assertEqual(record["grid_selection"]["selected_count"], 6)
+            self.assertEqual(record["grid_selection"]["output_slot_count"], 6)
+            self.assertEqual(
+                record["grid_selection"]["resolved_output_slots"],
+                {"lane_output_slot_counts": [6]},
+            )
+            self.assertEqual(
+                record["grid_selection"][
+                    "selected_scan_canvas_profile_id"
+                ],
+                "135_standard",
+            )
+            self.assertEqual(
+                len(record["grid_selection"]["slot_identities"]),
+                6,
+            )
             self.assertEqual(len(outcome.artifacts.frame_outputs), 6)
             self.assertEqual(
                 tuple(
@@ -259,7 +273,7 @@ class BoundedSafeCropRuntimeContractTest(unittest.TestCase):
         assert isinstance(outcome, CompletedInput)
         record = outcome.result.record
         self.assertEqual(record["decision"]["status"], "approved_auto")
-        self.assertEqual(record["grid_selection"]["selected_count"], 6)
+        self.assertEqual(record["grid_selection"]["output_slot_count"], 6)
         self.assertEqual(outcome.artifacts.frame_outputs, ())
         finalization = record["output"]["finalization"]
         self.assertTrue(finalization["frame_export_eligible"])
@@ -320,7 +334,29 @@ class BoundedSafeCropRuntimeContractTest(unittest.TestCase):
         assert isinstance(outcome, CompletedInput)
         record = outcome.result.record
         self.assertEqual(record["decision"]["status"], "approved_auto")
-        self.assertEqual(record["grid_selection"]["selected_count"], 12)
+        self.assertEqual(record["grid_selection"]["output_slot_count"], 12)
+        self.assertEqual(
+            record["grid_selection"]["resolved_output_slots"],
+            {"lane_output_slot_counts": [6, 6]},
+        )
+        self.assertEqual(
+            record["grid_selection"]["slot_identities"],
+            [
+                {
+                    "global_output_ordinal": global_ordinal,
+                    "lane_id": f"lane:{lane_index}",
+                    "lane_ordinal": lane_ordinal,
+                }
+                for global_ordinal, (lane_index, lane_ordinal) in enumerate(
+                    (
+                        (lane_index, lane_ordinal)
+                        for lane_index in range(2)
+                        for lane_ordinal in range(1, 7)
+                    ),
+                    start=1,
+                )
+            ],
+        )
         boxes = record["output"]["finalization"]["final_boxes"]
         self.assertEqual(len(boxes), 12)
         self.assertTrue(all(box["bottom"] <= 100 for box in boxes[:6]))
@@ -336,7 +372,6 @@ class BoundedSafeCropRuntimeContractTest(unittest.TestCase):
                 pixels,
                 "120-67",
                 "partial",
-                2,
             )
             full = self._process_pixels(
                 root / "full",
@@ -353,8 +388,14 @@ class BoundedSafeCropRuntimeContractTest(unittest.TestCase):
             "approved_auto",
         )
         self.assertEqual(
-            partial.result.record["grid_selection"]["selected_count"],
+            partial.result.record["grid_selection"]["output_slot_count"],
             2,
+        )
+        self.assertEqual(
+            partial.result.record["grid_selection"][
+                "selected_scan_canvas_profile_id"
+            ],
+            "120_wide_188_5",
         )
         self.assertEqual(
             full.result.record["decision"]["status"],
@@ -375,7 +416,11 @@ class BoundedSafeCropRuntimeContractTest(unittest.TestCase):
         self.assertFalse(finalization["post_decision_mutation"])
         self.assertEqual(
             len(finalization["final_boxes"]),
-            finalization["selected_count"],
+            finalization["output_slot_count"],
+        )
+        self.assertEqual(
+            len(finalization["slot_identities"]),
+            finalization["output_slot_count"],
         )
 
 

@@ -9,7 +9,7 @@ def candidate_gate_assessment(
     scan_canvas_state,
     source_content_state,
     grid_search_coverage_state,
-    frame_count_state,
+    output_slot_count_state,
     slot_ordinal_state,
     slot_ownership_state,
     known_content_containment_state,
@@ -38,10 +38,10 @@ def candidate_gate_assessment(
                 requirement=GateRequirement.NOT_CONTRADICTED,
             ),
             GateCheck(
-                code="frame_count",
+                code="output_slot_count",
                 stage=GateStage.CANDIDATE,
-                state=frame_count_state,
-                requirement=GateRequirement.SUPPORTED_REQUIRED,
+                state=output_slot_count_state,
+                requirement=GateRequirement.NOT_CONTRADICTED,
             ),
             GateCheck(
                 code="slot_ordinal_assignment",
@@ -71,7 +71,7 @@ def candidate_gate_assessment(
                 code="output_protection",
                 stage=GateStage.CANDIDATE,
                 state=output_protection_state,
-                requirement=GateRequirement.SUPPORTED_REQUIRED,
+                requirement=GateRequirement.NOT_CONTRADICTED,
             ),
             GateCheck(
                 code="output_transform",

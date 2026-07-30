@@ -9,7 +9,7 @@ CANDIDATE_GATE_CHECK_CODES = (
     "scan_canvas_authority",
     "source_content_measurement",
     "grid_search_coverage",
-    "frame_count",
+    "output_slot_count",
     "slot_ordinal_assignment",
     "slot_ownership",
     "known_content_containment",

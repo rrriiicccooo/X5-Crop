@@ -20,6 +20,7 @@ from x5crop.detection.final.finalize import finalize_detection
 from x5crop.detection.pipeline import choose_detection
 from x5crop.detection.workspace import prepare_detection_workspace
 from x5crop.formats import FORMAT_CHOICES, format_spec
+from x5crop.formats.scan_canvas import SCAN_CANVAS_PHYSICAL_SPECS
 from x5crop.geometry.layout import infer_layout
 from x5crop.io.tiff import read_tiff
 from x5crop.report.validation import validate_current_report_record
@@ -36,10 +37,10 @@ DEFAULT_BASELINE = (
 RESULTS_NAME = "safe_crop_acceptance_results.jsonl"
 SUMMARY_NAME = "safe_crop_acceptance_summary.json"
 COVERAGE_AUDIT_NAME = "safe_crop_coverage_audit.json"
-RESULT_SCHEMA = "x5crop_safe_crop_acceptance_result_v1"
-SUMMARY_SCHEMA = "x5crop_safe_crop_acceptance_summary_v1"
-COVERAGE_SCHEMA = "x5crop_safe_crop_coverage_audit_v1"
-COHORT_SCHEMA = "x5crop_safe_crop_acceptance_cohort_v1"
+RESULT_SCHEMA = "x5crop_safe_crop_acceptance_result_v2"
+SUMMARY_SCHEMA = "x5crop_safe_crop_acceptance_summary_v2"
+COVERAGE_SCHEMA = "x5crop_safe_crop_coverage_audit_v2"
+COHORT_SCHEMA = "x5crop_safe_crop_acceptance_cohort_v2"
 MANIFEST_SCHEMA = "x5crop_manual_review_manifest_v2"
 BASELINE_SCHEMA = "x5crop_user_confirmed_golden_baseline_v1"
 EXPECTED_GOLDEN_SAMPLE_COUNT = 9
@@ -54,12 +55,16 @@ RESULT_FIELDS = (
     "format_id",
     "strip_mode",
     "count_mode",
-    "expected_count",
-    "selected_count",
+    "confirmed_photo_count",
+    "selected_scan_canvas_profile_id",
+    "lane_output_slot_counts",
+    "output_slot_count",
+    "slot_identities",
     "decision_status",
     "final_review_reasons",
     "candidate_gate_blocking_checks",
-    "containment_by_frame",
+    "matched_slot_identities",
+    "containment_by_confirmed_photo",
     "containment_passed",
     "tiff_output_count",
     "expectation",
@@ -79,6 +84,7 @@ SUMMARY_FIELDS = (
     "manifest_record_count_is_not_independent_sample_count",
     "coverage_audit",
     "coverage_audit_failed_record_count",
+    "coverage_audit_passed",
     "passed",
 )
 
@@ -94,7 +100,7 @@ class AcceptanceScenario:
     source_sha256: str
     format_id: str
     strip_mode: str
-    expected_count: int
+    confirmed_photo_count: int
     count_mode: str
     expectation: str
     baseline: dict[str, Any]
@@ -312,7 +318,7 @@ def validate_acceptance_result_record(record: dict[str, Any]) -> None:
         not in {"approved_auto", "needs_review", "terminal_failure"}
         or not isinstance(record["passed"], bool)
     ):
-        raise ValueError("acceptance result does not use the frozen v1 schema")
+        raise ValueError("acceptance result does not use the frozen v2 schema")
 
 
 def validate_acceptance_summary_record(record: dict[str, Any]) -> None:
@@ -322,7 +328,7 @@ def validate_acceptance_summary_record(record: dict[str, Any]) -> None:
         or record["real_holdout"] != "unavailable"
         or not isinstance(record["passed"], bool)
     ):
-        raise ValueError("acceptance summary does not use the frozen v1 schema")
+        raise ValueError("acceptance summary does not use the frozen v2 schema")
 
 
 def acceptance_preflight(
@@ -367,6 +373,30 @@ def acceptance_preflight(
         )
 
     manifest = _validated_manifest(manifest_rows)
+    pass_rows = tuple(
+        row
+        for row in manifest_rows
+        if Path(str(row["source_relative_path"])).name.startswith("pass_")
+    )
+    unknown_rows = tuple(
+        row
+        for row in manifest_rows
+        if Path(str(row["source_relative_path"])).name.startswith(
+            "unknown_"
+        )
+    )
+    pass_partial_rows = tuple(
+        row for row in pass_rows if row["strip_mode"] == "partial"
+    )
+    if (
+        len(pass_rows) != 88
+        or len(unknown_rows) != 23
+        or len(pass_partial_rows) != 41
+        or len(pass_rows) + len(unknown_rows) != len(manifest_rows)
+    ):
+        raise AcceptancePreflightError(
+            "validation-only pass/unknown cohort contract changed"
+        )
     baseline_by_sha = _validated_baseline_by_sha(baseline_rows)
     sha_groups: dict[str, list[str]] = defaultdict(list)
     for row in manifest_rows:
@@ -409,11 +439,11 @@ def acceptance_preflight(
             raise AcceptancePreflightError(
                 f"confirmed geometry SHA oracle is missing for {sample_id}"
             )
-        expected_count = int(row["expected_count"])
+        confirmed_photo_count = int(row["confirmed_photo_count"])
         if (
-            int(baseline["frame_count"]) != expected_count
-            or expected_count <= 0
-            or expected_count
+            int(baseline["frame_count"]) != confirmed_photo_count
+            or confirmed_photo_count <= 0
+            or confirmed_photo_count
             > format_spec(actual_identity[2]).strip.default_count
         ):
             raise AcceptancePreflightError(
@@ -442,7 +472,7 @@ def acceptance_preflight(
                     source_sha256=actual_identity[1],
                     format_id=actual_identity[2],
                     strip_mode=actual_identity[3],
-                    expected_count=expected_count,
+                    confirmed_photo_count=confirmed_photo_count,
                     count_mode=count_mode,
                     expectation=str(row["expectation"]),
                     baseline=baseline,
@@ -511,18 +541,59 @@ def _point_in_convex_polygon(
     )
 
 
+def _expected_lane_output_slot_counts(
+    *,
+    format_id: str,
+    count_mode: str,
+    confirmed_photo_count: int,
+    selected_profile_id: str,
+    lane_count: int,
+) -> tuple[int, ...]:
+    profiles = tuple(
+        profile
+        for profile in SCAN_CANVAS_PHYSICAL_SPECS
+        if profile.profile_id == selected_profile_id
+    )
+    if len(profiles) != 1:
+        raise RuntimeError(
+            f"selected scan-canvas profile is not canonical: "
+            f"{selected_profile_id}"
+        )
+    capacity = next(
+        (
+            fit.maximum_frame_count
+            for fit in profiles[0].format_fits
+            if fit.format_id == format_id
+        ),
+        None,
+    )
+    if capacity is None:
+        raise RuntimeError(
+            f"profile {selected_profile_id} does not fit {format_id}"
+        )
+    total = capacity if count_mode == "auto" else confirmed_photo_count
+    if lane_count <= 0 or total % lane_count:
+        raise RuntimeError("output slot count cannot map to canonical lanes")
+    return tuple(total // lane_count for _index in range(lane_count))
+
+
 def _containment_results(
     report: dict[str, Any],
     baseline: dict[str, Any],
-) -> tuple[bool, tuple[bool, ...]]:
+) -> tuple[
+    bool,
+    tuple[bool, ...],
+    tuple[dict[str, Any], ...],
+]:
     finalization = report["output"]["finalization"]
     boxes = finalization["final_boxes"]
+    slot_identities = finalization["slot_identities"]
     frames = baseline["frames"]
-    if len(boxes) != len(frames):
-        return False, ()
+    if len(boxes) != len(slot_identities):
+        return False, (), ()
     matrix = finalization["transform_assessment"]["transform"]["matrix"]
-    frame_results: list[bool] = []
-    for box, frame in zip(boxes, frames, strict=True):
+    footprints = []
+    for box in boxes:
         output_polygon = (
             (float(box["left"]), float(box["top"])),
             (float(box["right"]), float(box["top"])),
@@ -532,7 +603,9 @@ def _containment_results(
         source_footprint = tuple(
             _inverse_map(matrix, x, y) for x, y in output_polygon
         )
-        frame_results.append(
+        footprints.append(source_footprint)
+    containment_matrix = tuple(
+        tuple(
             all(
                 _point_in_convex_polygon(
                     (float(point[0]), float(point[1])),
@@ -542,8 +615,31 @@ def _containment_results(
                     "confirmed_integer_boundary_polygon"
                 ]
             )
+            for source_footprint in footprints
         )
-    return all(frame_results), tuple(frame_results)
+        for frame in frames
+    )
+    matched_indexes: list[int] = []
+    following_index = 0
+    for row in containment_matrix:
+        match = next(
+            (
+                index
+                for index in range(following_index, len(row))
+                if row[index]
+            ),
+            None,
+        )
+        if match is None:
+            matched_indexes = []
+            break
+        matched_indexes.append(match)
+        following_index = match + 1
+    matched = tuple(slot_identities[index] for index in matched_indexes)
+    contained = tuple(True for _index in matched_indexes)
+    if len(contained) != len(frames):
+        contained = tuple(False for _frame in frames)
+    return len(matched) == len(frames), contained, matched
 
 
 def _run_scenario(
@@ -585,7 +681,9 @@ def _run_scenario(
             "--no-copy-review-files",
         ]
         if scenario.count_mode == "explicit":
-            command.extend(("--count", str(scenario.expected_count)))
+            command.extend(
+                ("--count", str(scenario.confirmed_photo_count))
+            )
         completed = subprocess.run(
             command,
             cwd=PROJECT_ROOT,
@@ -604,12 +702,16 @@ def _run_scenario(
             "format_id": scenario.format_id,
             "strip_mode": scenario.strip_mode,
             "count_mode": scenario.count_mode,
-            "expected_count": scenario.expected_count,
-            "selected_count": None,
+            "confirmed_photo_count": scenario.confirmed_photo_count,
+            "selected_scan_canvas_profile_id": None,
+            "lane_output_slot_counts": [],
+            "output_slot_count": None,
+            "slot_identities": [],
             "decision_status": "terminal_failure",
             "final_review_reasons": [],
             "candidate_gate_blocking_checks": [],
-            "containment_by_frame": [],
+            "matched_slot_identities": [],
+            "containment_by_confirmed_photo": [],
             "containment_passed": False,
             "tiff_output_count": 0,
             "expectation": scenario.expectation,
@@ -622,11 +724,43 @@ def _run_scenario(
     report = _load_single_report(report_path)
     decision = report["decision"]
     status = str(decision["status"])
-    selected_count = report["grid_selection"]["selected_count"]
-    containment_passed, containment_by_frame = (
+    output_identity = report["analysis_identity"]["output_identity"]
+    selected_profile_id = output_identity[
+        "selected_scan_canvas_profile_id"
+    ]
+    resolved = output_identity["resolved_output_slots"]
+    lane_counts = (
+        ()
+        if resolved is None
+        else tuple(resolved["lane_output_slot_counts"])
+    )
+    output_slot_count = output_identity["output_slot_count"]
+    slot_identities = tuple(output_identity["slot_identities"])
+    (
+        containment_passed,
+        containment_by_confirmed_photo,
+        matched_slot_identities,
+    ) = (
         _containment_results(report, scenario.baseline)
         if status == "approved_auto"
-        else (False, ())
+        else (False, (), ())
+    )
+    expected_lane_counts = (
+        ()
+        if selected_profile_id is None
+        else _expected_lane_output_slot_counts(
+            format_id=scenario.format_id,
+            count_mode=scenario.count_mode,
+            confirmed_photo_count=scenario.confirmed_photo_count,
+            selected_profile_id=selected_profile_id,
+            lane_count=max(1, len(lane_counts)),
+        )
+    )
+    exact_output_identity = (
+        bool(lane_counts)
+        and lane_counts == expected_lane_counts
+        and output_slot_count == sum(expected_lane_counts)
+        and len(slot_identities) == output_slot_count
     )
     gate_blocking = tuple(
         item["code"]
@@ -636,13 +770,13 @@ def _run_scenario(
     if scenario.expectation == "must_approve_safe":
         passed = (
             status == "approved_auto"
-            and selected_count == scenario.expected_count
+            and exact_output_identity
             and containment_passed
         )
     elif scenario.expectation == "auto_or_review":
         passed = (
             status == "approved_auto"
-            and selected_count == scenario.expected_count
+            and exact_output_identity
             and containment_passed
         ) or (
             status == "needs_review"
@@ -659,14 +793,20 @@ def _run_scenario(
         "format_id": scenario.format_id,
         "strip_mode": scenario.strip_mode,
         "count_mode": scenario.count_mode,
-        "expected_count": scenario.expected_count,
-        "selected_count": selected_count,
+        "confirmed_photo_count": scenario.confirmed_photo_count,
+        "selected_scan_canvas_profile_id": selected_profile_id,
+        "lane_output_slot_counts": list(lane_counts),
+        "output_slot_count": output_slot_count,
+        "slot_identities": list(slot_identities),
         "decision_status": status,
         "final_review_reasons": list(
             decision["final_review_reasons"]
         ),
         "candidate_gate_blocking_checks": list(gate_blocking),
-        "containment_by_frame": list(containment_by_frame),
+        "matched_slot_identities": list(matched_slot_identities),
+        "containment_by_confirmed_photo": list(
+            containment_by_confirmed_photo
+        ),
         "containment_passed": containment_passed,
         "tiff_output_count": len(report["output"]["output_files"]),
         "expectation": scenario.expectation,
@@ -675,7 +815,7 @@ def _run_scenario(
     }
 
 
-def _expected_count_annotation(row: dict[str, Any]) -> int | None:
+def _validation_count_annotation(row: dict[str, Any]) -> int | None:
     if row["strip_mode"] != "partial":
         return format_spec(_format_id_from_manifest(row)).strip.default_count
     match = COUNT_ANNOTATION.search(Path(row["source_relative_path"]).name)
@@ -708,7 +848,27 @@ def _audit_manifest_record(row: dict[str, Any]) -> dict[str, Any]:
         configuration.count_request.mode,
     )
     final = finalize_detection(candidate, decision, layout=layout)
-    expected_count = _expected_count_annotation(row)
+    validation_annotation = _validation_count_annotation(row)
+    selected_profile_id = (
+        None
+        if not final.source_core.lanes
+        else final.source_core.lanes[
+            0
+        ].scan_canvas.selected_profile.profile_id
+    )
+    resolved = final.resolved_output_slots
+    lane_counts = (
+        ()
+        if resolved is None
+        else resolved.lane_output_slot_counts
+    )
+    resolved_capacity = (
+        None if resolved is None else resolved.output_slot_count
+    )
+    approved_output_count = len(final.final_boxes)
+    blocking_checks = tuple(
+        check.code for check in candidate.gate.blocking_checks
+    )
     return {
         "sample_id": str(row["sample_id"]),
         "source_sha256": str(row["source_sha256"]),
@@ -719,14 +879,23 @@ def _audit_manifest_record(row: dict[str, Any]) -> dict[str, Any]:
             if Path(row["source_relative_path"]).name.startswith("pass_")
             else "unknown"
         ),
-        "expected_count_annotation": expected_count,
-        "selected_count": final.selected_count,
+        "validation_count_annotation": validation_annotation,
+        "selected_scan_canvas_profile_id": selected_profile_id,
+        "lane_output_slot_counts": list(lane_counts),
+        "resolved_output_slot_count": resolved_capacity,
+        "approved_output_slot_count": approved_output_count,
         "decision_status": decision.status,
         "final_review_reasons": list(decision.final_review_reasons),
-        "count_match": (
+        "candidate_gate_blocking_checks": list(blocking_checks),
+        "capacity_exact": (
+            resolved_capacity is not None
+            and approved_output_count == resolved_capacity
+        ),
+        "annotation_lower_bound_satisfied": (
             None
-            if expected_count is None
-            else final.selected_count == expected_count
+            if validation_annotation is None
+            else resolved_capacity is not None
+            and resolved_capacity >= validation_annotation
         ),
         "filename_annotation_runtime_input": False,
     }
@@ -756,11 +925,16 @@ def run_coverage_audit(
         for item in partial
         if item["validation_filename_cohort"] == "pass"
     )
-    confusion: Counter[str] = Counter()
+    extra_slots: Counter[str] = Counter()
     for item in partial:
-        expected = item["expected_count_annotation"]
-        selected = item["selected_count"]
-        confusion[f"{expected}->{selected}"] += 1
+        annotation = item["validation_count_annotation"]
+        capacity = item["resolved_output_slot_count"]
+        difference = (
+            None
+            if annotation is None or capacity is None
+            else capacity - annotation
+        )
+        extra_slots[str(difference)] += 1
     covered_cells = {
         (item["format_id"], item["strip_mode"]) for item in records
     }
@@ -783,7 +957,7 @@ def run_coverage_audit(
     ]
     return {
         "schema": COVERAGE_SCHEMA,
-        "blocking": False,
+        "blocking": True,
         "real_holdout": "unavailable",
         "manifest_record_count": len(manifest_rows),
         "independent_source_sha_count": len(
@@ -797,20 +971,52 @@ def run_coverage_audit(
         "failed_record_count": len(failures),
         "failures": failures,
         "partial_record_count": len(partial),
-        "partial_count_confusion_matrix": dict(sorted(confusion.items())),
+        "partial_extra_slot_distribution": dict(
+            sorted(extra_slots.items())
+        ),
         "pass_partial_record_count": len(pass_partial),
         "pass_partial_quality": {
             "approved_auto_count": sum(
                 item["decision_status"] == "approved_auto"
                 for item in pass_partial
             ),
-            "count_match_count": sum(
-                item["count_match"] is True for item in pass_partial
+            "capacity_exact_count": sum(
+                item["capacity_exact"] is True for item in pass_partial
             ),
             "record_count_is_not_independent_sample_count": True,
         },
         "coverage_cells": coverage_cells,
         "records": records,
+        "passed": (
+            not failures
+            and len(records) == EXPECTED_MANIFEST_RECORD_COUNT
+            and all(
+                (
+                    item["decision_status"] == "approved_auto"
+                    and item["capacity_exact"]
+                    and (
+                        item["strip_mode"] != "partial"
+                        or item["annotation_lower_bound_satisfied"] is True
+                    )
+                )
+                if item["validation_filename_cohort"] == "pass"
+                else (
+                    (
+                        item["decision_status"] == "approved_auto"
+                        and item["capacity_exact"]
+                    )
+                    or (
+                        item["decision_status"] == "needs_review"
+                        and bool(
+                            item["candidate_gate_blocking_checks"]
+                        )
+                        and bool(item["final_review_reasons"])
+                        and item["approved_output_slot_count"] == 0
+                    )
+                )
+                for item in records
+            )
+        ),
     }
 
 
@@ -859,7 +1065,10 @@ def run_acceptance(
     )
     if audit is not None:
         _write_json(output_root / COVERAGE_AUDIT_NAME, audit)
-    passed = all(bool(item["passed"]) for item in results)
+    golden_passed = all(bool(item["passed"]) for item in results)
+    passed = golden_passed and (
+        audit is None or bool(audit["passed"])
+    )
     summary = {
         "summary_schema": SUMMARY_SCHEMA,
         "completion_scope": "user_confirmed_golden_only",
@@ -885,12 +1094,15 @@ def run_acceptance(
         ],
         "manifest_record_count_is_not_independent_sample_count": True,
         "coverage_audit": (
-            "completed_non_blocking"
+            "completed_blocking"
             if audit is not None
             else "not_requested"
         ),
         "coverage_audit_failed_record_count": (
             None if audit is None else audit["failed_record_count"]
+        ),
+        "coverage_audit_passed": (
+            None if audit is None else bool(audit["passed"])
         ),
         "passed": passed,
     }
@@ -910,7 +1122,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--audit-111",
         action="store_true",
-        help="Also run the non-blocking canonical 111-record coverage audit.",
+        help="Also run the canonical blocking 111-record acceptance audit.",
     )
     return parser
 
