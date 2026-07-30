@@ -11,6 +11,27 @@
 V4.9 是破坏性的 current-only 物理模型重构。旧 runtime/schema/compatibility 不是迁移
 目标。
 
+### 2026-07-30：历史机制回收审查并入新 Grid 计划
+
+这是 docs-only 设计计划更新，current review-only runtime、schema 与输出行为均未改变。
+
+- 只读审查 `v4.2.8`、V3 archive、`X5_Split_v17/v18` 与 source-core 切换前 V4.9。
+- 将 expected-position corridors、separator band / edge-pair、learned one-sided edge、
+  anchor-derived robust Grid、floating / separator-first placement、format geometry、
+  edge-evidence frame fit、blank/contact/overlap、nearby/semantic measurements、
+  short-axis/deskew proposal，以及 V4.9 ordered slot / boundary-role / uncertainty / work
+  statistics 合同加入新的安全 Grid 计划。
+- 回收项必须按 current typed owners 重写。Observed 与 inferred 保持分离；最终输出通过
+  `SafeCropEnvelope` 与毫米 protection 吸收有界差异，只有 `DecisionGate` 创建
+  `approved_auto` / `needs_review`。
+- 明确不恢复自动 format/count、旧 partial offsets、无 corridor 的全轴组合、dense
+  graph/sequence solver、fallback/retry、历史 confidence/gate、post-Decision geometry
+  polish、pixel bleed、旧 schema/compatibility 或样片规则。
+- V3.4.2 local-grid 与 V3.5 semantic hard-gap 的历史 action 已有回归失败，只保留
+  proposal/diagnostic measurement 参考；旧 overlap/lucky-risk 也不直接决定 review。
+- 下一步先锁定各 format/count 的 placement/candidate/proposal/work 上限、ordered-DP
+  assignment、slot ownership 与 safe-envelope equivalence，再获得用户批准后实现最小纵切。
+
 ### 2026-07-29：产品目标与自动批准合同纠偏
 
 这是设计合同变更，尚未改变 current review-only runtime。
