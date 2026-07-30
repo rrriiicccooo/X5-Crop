@@ -7,7 +7,7 @@ import traceback
 
 from .analysis_identity import make_analysis_identity, source_analysis_identity
 from ..configuration.bundle import DetectionConfigurationBundle
-from ..debug.outputs import write_debug_outputs
+from ..debug.writer import write_debug_analysis
 from ..detection.decision.decision_gate import apply_decision_gate
 from ..detection.final.finalize import finalize_detection
 from ..detection.pipeline import choose_detection
@@ -16,7 +16,7 @@ from ..export.actions import prepare_review_artifact
 from ..export.crops import write_crops
 from ..geometry.layout import infer_layout
 from ..io.tiff import read_tiff, read_tiff_profile
-from ..output.surface import output_surface_for_input
+from ..output.surface import display_generated_path, output_surface_for_input
 from ..report.configuration import detection_configuration_read_model
 from ..report.result_builder import result_from_detection
 from ..run_config import RunConfig
@@ -219,17 +219,23 @@ def process_one(
             artifacts = replace(artifacts, review_copy=review_copy)
 
         failure_stage = FailureStage.DEBUG
-        debug_analysis = write_debug_outputs(
-            workspace,
-            detection,
-            output_surface.root,
-            input_file.stem,
-            config,
-            warnings,
-            initial_configuration.diagnostics,
-            RunTerminalOutcome.COMPLETED,
-        )
-        artifacts = replace(artifacts, debug_analysis=debug_analysis)
+        if config.debug_analysis:
+            debug_analysis = write_debug_analysis(
+                workspace,
+                detection,
+                output_surface.root,
+                input_file.stem,
+                initial_configuration.diagnostics,
+                RunTerminalOutcome.COMPLETED,
+            )
+            warnings.append(
+                "debug analysis: "
+                + display_generated_path(debug_analysis, config)
+            )
+            artifacts = replace(
+                artifacts,
+                debug_analysis=debug_analysis,
+            )
 
         failure_stage = FailureStage.REPORT_VALIDATION
         result = result_from_detection(

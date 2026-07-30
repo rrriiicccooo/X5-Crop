@@ -216,7 +216,6 @@ x5_crop_output/
   source_name_01.tif
   source_name_02.tif
   ...
-  _debug/
   _debug_analysis/
   needs_review/
   x5_crop_report.jsonl
@@ -227,9 +226,12 @@ x5_crop_output/
 Optional outputs:
 
 - `--report` writes current JSONL and CSV.
-- `--debug` writes a lightweight separator, Grid, and crop preview.
-- `--debug-analysis` writes a source, measurement, Grid, Gate, and output
-  summary.
+- `--debug-analysis` writes one three-panel JPG under `_debug_analysis/`.
+  `Original gray context` leaves canonical `gray_work` untinted; `Frame
+  outputs` marks final protected boxes as F1…Fn with distinct translucent
+  colors, while review cases show only provisional envelopes marked `NOT
+  EXPORTABLE`; `Separator evidence` shows every raw observation and highlights
+  the selected edge-pair, one-sided, or model-only Grid evidence.
 - `--diagnostics` is read-only. It enables report and Debug Analysis and
   disables review copies. It preserves the same DecisionGate result and final
   boxes but writes no frame TIFF.

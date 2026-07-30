@@ -48,7 +48,6 @@ def runtime_invocation_from_options(options: RuntimeOptions) -> RuntimeInvocatio
         review_dir=options.review_dir,
         copy_review_files=options.copy_review_files,
         compression=options.compression,
-        debug=options.debug,
         debug_analysis=options.debug_analysis,
         diagnostics=options.diagnostics,
         overwrite=options.overwrite,

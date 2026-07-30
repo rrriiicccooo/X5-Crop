@@ -24,7 +24,6 @@ class RuntimeOptions:
     review_dir: Optional[Path]
     copy_review_files: bool
     compression: CompressionMode
-    debug: bool
     debug_analysis: bool
     diagnostics: bool
     overwrite: bool

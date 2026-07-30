@@ -140,7 +140,6 @@ def interactive_options(diagnostics: bool = False) -> RuntimeOptions:
         review_dir=None,
         copy_review_files=False if diagnostics else True,
         compression="same",
-        debug=False,
         debug_analysis=debug_analysis,
         diagnostics=diagnostics,
         overwrite=False,

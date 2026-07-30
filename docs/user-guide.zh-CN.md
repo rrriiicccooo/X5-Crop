@@ -194,7 +194,6 @@ x5_crop_output/
   原文件名_01.tif
   原文件名_02.tif
   ...
-  _debug/
   _debug_analysis/
   needs_review/
   x5_crop_report.jsonl
@@ -205,8 +204,11 @@ x5_crop_output/
 只有启用相应选项时才写 Debug 或 report：
 
 - `--report`：写 current JSONL/CSV。
-- `--debug`：写带 separator、Grid 与 crop 的轻量预览。
-- `--debug-analysis`：写 source、measurement、Grid、Gate 与输出摘要。
+- `--debug-analysis`：在 `_debug_analysis/` 写一个三联 JPG。`Original gray context`
+  保持 canonical `gray_work` 未染色；`Frame outputs` 用 F1…Fn 不同颜色半透明标出最终
+  protected boxes，review 只显示带 `NOT EXPORTABLE` 的 provisional envelopes；
+  `Separator evidence` 显示全部 raw observations，并突出 selected edge-pair、
+  one-sided 或 model-only Grid。
 - `--diagnostics`：只读诊断；隐含 report、Debug Analysis 与不复制 review 文件。它保留
   同一 DecisionGate 结果和 final boxes，但不写 frame TIFF。
 - `--no-copy-review-files`：不复制需要 review 的原 TIFF。

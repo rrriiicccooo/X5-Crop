@@ -22,7 +22,6 @@ class RunConfig:
     review_dir: Path | None
     copy_review_files: bool
     compression: CompressionMode
-    debug: bool
     debug_analysis: bool
     diagnostics: bool
     overwrite: bool

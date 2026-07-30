@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import io
+from dataclasses import fields
 from pathlib import Path
 import unittest
 from unittest import mock
@@ -24,12 +25,14 @@ from x5crop.report.identity import (
     REPORT_SCHEMA_ID,
     REPORT_SCHEMA_REVISION,
 )
+from x5crop.run_config import RunConfig
 from x5crop.runtime.bootstrap import runtime_invocation_from_options
 from x5crop.runtime.limits import (
     DIAGNOSTICS_JOB_LIMIT,
     STANDARD_JOB_DEFAULT,
     STANDARD_JOB_LIMIT,
 )
+from x5crop.runtime.options import RuntimeOptions
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -129,6 +132,40 @@ class CurrentOnlyContractTest(unittest.TestCase):
             parser.parse_args(
                 ["input.tif", "--format", "135", "--auto-count"]
             )
+
+    def test_only_current_debug_analysis_cli_and_runtime_surface_remain(
+        self,
+    ) -> None:
+        parser = build_parser()
+        option_strings = {
+            value
+            for action in parser._actions
+            for value in action.option_strings
+        }
+        self.assertNotIn("--debug", option_strings)
+        self.assertIn("--debug-analysis", option_strings)
+        self.assertIn("--debug-errors", option_strings)
+        for runtime_type in (RuntimeOptions, RunConfig):
+            with self.subTest(runtime_type=runtime_type.__name__):
+                self.assertNotIn(
+                    "debug",
+                    {field.name for field in fields(runtime_type)},
+                )
+        with (
+            contextlib.redirect_stderr(io.StringIO()),
+            self.assertRaises(SystemExit),
+        ):
+            parser.parse_args(
+                ["input.tif", "--format", "135", "--debug"]
+            )
+        diagnostics = options_from_args(
+            parser.parse_args(
+                ["input.tif", "--format", "135", "--diagnostics"]
+            )
+        )
+        self.assertTrue(diagnostics.report)
+        self.assertTrue(diagnostics.debug_analysis)
+        self.assertFalse(diagnostics.copy_review_files)
 
     def test_standard_job_default_and_caps_are_distinct(self) -> None:
         self.assertEqual(STANDARD_JOB_DEFAULT, 2)

@@ -111,7 +111,6 @@ def run_fixed_profile(
             review_dir=None,
             copy_review_files=False,
             compression="same",
-            debug=False,
             debug_analysis=False,
             diagnostics=False,
             overwrite=False,

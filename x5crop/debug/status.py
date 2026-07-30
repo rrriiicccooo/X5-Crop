@@ -31,7 +31,7 @@ def debug_status_parts(
     )
     detail = f"status: {detection.decision.status}"
     color = (
-        style.content_color
+        style.approved_color
         if detection.decision.status == "approved_auto"
         else style.review_color
     )

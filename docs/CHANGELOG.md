@@ -12,6 +12,29 @@
 V4.9 是破坏性的 current-only 物理模型重构。旧 runtime、schema、reason、cache、
 compatibility 与历史 box parity 均不是迁移目标。
 
+### 2026-07-30：移除 `--debug` 并恢复 Debug Analysis 三联图
+
+- 删除轻量 `--debug` CLI、`RuntimeOptions`/`RunConfig` 字段、bootstrap 传递、
+  `_debug/` 写出路径和两种 debug 输出分发 wrapper；不保留 alias、deprecated flag 或
+  compatibility branch。`--debug-analysis`、`--diagnostics` 与 `--debug-errors` 保持。
+- Debug Analysis 重新固定为 `Original gray context`、`Frame outputs`、
+  `Separator evidence` 三联图和一个总状态栏。它只使用 canonical `gray_work`，不增加
+  局部放大、第四面板或 Gate 矩阵。
+- Approved 只绘制 final protected boxes；F1–F12 按 global ordinal 使用固定唯一颜色、
+  0.26 半透明填充和 2 px 同色边框。Review 不伪造 final output，只把已有 selected
+  proposal 画为低透明度虚线 provisional envelopes，并标记 `NOT EXPORTABLE`。
+- Separator 面板保留全部 raw observations；selected edge-pair、one-sided 和 model-only
+  Grid 分别使用红色实线、橙色实线和 cyan 虚线，取消 256 条展示截断。横向 work view
+  纵向堆叠，portrait view 横向排列，间距 12 px、标题栏 34 px、JPEG quality 92。
+- Current-only contracts 覆盖 CLI/runtime surface、普通与 diagnostics 写出、三面板布局、
+  final/provisional 边界、F1–F12 跨 lane 映射、overlap、portrait 与超过 256 条 raw
+  separator 时的 selected observation 可见性。Detection、report schema、DecisionGate、
+  final boxes、TIFF output、版本号与 release manifest 均未改变；本次不构建发布包。
+- 冻结变更前后 5 组真实 current report 后，`grid_selection`、`candidate_gate`、
+  `decision` 与 `output.finalization` 对照均为零差异；人工检查 `135/full`、
+  `135/partial`、`half/full`、`120-66/partial auto`、`120-67/full` 三联图，未见原图
+  染色、frame ordinal 混乱、selected separator 遮蔽或真实内容 inward loss。
+
 ### 2026-07-30：partial auto 容量 slots 原子切换
 
 - Partial `auto` 现在只使用唯一匹配 `ScanCanvasEvidence` 中对应

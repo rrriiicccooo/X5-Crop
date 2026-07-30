@@ -410,8 +410,22 @@ safe/protected envelopes、两级 Gate、finalization、TIFF receipt 与 output 
 数只从 lane counts 派生并交叉校验。Measurement wall time 不进入
 `core_facts_sha256`。
 
-Debug preview 只显示已选 separator、Grid、protected boxes、status 与 reasons，不重新运行
-detector。
+CLI 不再提供轻量 `--debug`，新运行不会创建 `_debug/`。`--debug-analysis` 是唯一 JPG
+诊断 surface；writer 在一次写出内独占 render cache，只消费 canonical `gray_work` 与
+current detection，不重新运行 detector。它固定生成一个总状态栏和三个面板：
+
+1. `Original gray context`：未染色灰度上下文；
+2. `Frame outputs`：approved 按 global ordinal 用 F1…Fn 不同颜色、0.26 半透明填充和
+   2 px 边框显示 final protected boxes；review 不暴露 final boxes，只在存在 selected
+   proposal 时用较低透明度虚线显示 provisional safe envelopes，并标记
+   `NOT EXPORTABLE`；
+3. `Separator evidence`：全部 raw separator observations 低透明度显示，selected
+   edge-pair、one-sided、model-only Grid 分别以红色实线、橙色实线和 cyan 虚线覆盖。
+
+固定 12 色表覆盖当前最大容量，`135-dual` 也按 global ordinal 使用 F1–F12，不按 lane
+重复。横向 work view 纵向堆叠，portrait view 横向排列；panel 间距 12 px、标题栏
+34 px、JPEG quality 92。`--diagnostics` 继续隐含 report、Debug Analysis 与不复制
+review 文件。
 
 ## 11. 验收与性能边界
 

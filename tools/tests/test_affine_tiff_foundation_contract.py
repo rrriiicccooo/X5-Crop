@@ -35,7 +35,6 @@ def _run_config(source: Path, output: Path, compression: str) -> RunConfig:
         review_dir=None,
         copy_review_files=False,
         compression=compression,
-        debug=False,
         debug_analysis=False,
         diagnostics=False,
         overwrite=False,

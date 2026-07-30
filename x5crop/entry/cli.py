@@ -67,11 +67,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--overwrite", action="store_true", help="Overwrite existing outputs.")
     parser.add_argument("--report", action="store_true", help=f"Write {REPORT_JSONL_NAME} and {SUMMARY_CSV_NAME}.")
     parser.add_argument(
-        "--debug",
+        "--debug-analysis",
         action="store_true",
-        help="Write a lightweight JPG preview with Grid and crop evidence.",
+        help=(
+            "Write one three-panel JPG with original gray context, frame "
+            "outputs, and separator evidence."
+        ),
     )
-    parser.add_argument("--debug-analysis", action="store_true", help="Write one combined JPG with source, separator, Grid, Gate, and crop summaries.")
     parser.add_argument("--diagnostics", action="store_true", help="Read-only diagnostics mode; implies --report --debug-analysis --no-copy-review-files.")
     parser.add_argument(
         "--jobs",
@@ -109,7 +111,6 @@ def options_from_args(args: argparse.Namespace) -> RuntimeOptions:
         review_dir=Path(args.review_dir).expanduser().resolve() if args.review_dir else None,
         copy_review_files=False if diagnostics else bool(args.copy_review_files),
         compression=str(args.compression),
-        debug=bool(args.debug),
         debug_analysis=bool(args.debug_analysis or diagnostics),
         diagnostics=diagnostics,
         overwrite=bool(args.overwrite),
