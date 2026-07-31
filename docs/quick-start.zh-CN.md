@@ -64,8 +64,8 @@ python3 X5_Crop.py --help
 
 ## 4. 结果与输出
 
-`approved_auto` 表示 protection 后的输出满足有界安全合同；它不表示每条照片边或
-separator 都被唯一证明。通过时会生成：
+`approved_auto` 表示照片四边测量或 named inference、插值 allowance 与 protection
+共同形成的输出满足安全合同；它不表示不可见物理边被唯一证明。通过时会生成：
 
 ```text
 x5_crop_output/
@@ -77,9 +77,9 @@ x5_crop_output/
   x5_crop_run_manifest.jsonl
 ```
 
-`needs_review` 只表示存在具体且无法吸收的 ordinal、slot ownership、omission coverage、
-已知内容 containment、source/lane authority 或 output geometry 风险。容量已解析但无法
-精确形成全部 slots 时也会阻断。默认把原 TIFF 复制到
+`needs_review` 只表示存在具体且无法吸收的 ordinal、slot ownership、已知内容
+containment、source/lane geometry 或 output transform 风险。容量已解析但无法安全形成
+全部 slots 时也会阻断，且不会写出正式 TIFF。默认把原 TIFF 复制到
 `needs_review/`；`--no-copy-review-files` 可关闭。
 
 `--diagnostics` 是只读诊断模式：保留同一检测与 DecisionGate 结果，写 report 和

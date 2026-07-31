@@ -1,20 +1,15 @@
 from __future__ import annotations
 
 from hashlib import sha256
-from copy import deepcopy
 import json
 from typing import Any
 
 
 REPORT_SCHEMA_ID = "detection_report"
-REPORT_SCHEMA_REVISION = "bounded_safe_crop_capacity_grid"
+REPORT_SCHEMA_REVISION = "source_coordinate_photo_geometry_v1"
 
 
 def core_facts_sha256(record: dict[str, Any]) -> str:
-    measurement = deepcopy(record["measurement"])
-    for lane in measurement["lanes"]:
-        lane["content"]["statistics"].pop("deterministic_seconds", None)
-        lane["separator"]["statistics"].pop("deterministic_seconds", None)
     payload = {
         "schema_id": record["schema_id"],
         "schema_revision": record["schema_revision"],
@@ -22,8 +17,8 @@ def core_facts_sha256(record: dict[str, Any]) -> str:
         "source": record["source"],
         "input": record["input"],
         "configuration": record["configuration"],
-        "measurement": measurement,
-        "grid_selection": record["grid_selection"],
+        "measurement": record["measurement"],
+        "photo_geometry": record["photo_geometry"],
         "candidate_gate": record["candidate_gate"],
         "decision": record["decision"],
         "finalization": record["output"]["finalization"],

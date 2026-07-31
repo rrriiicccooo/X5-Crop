@@ -186,6 +186,19 @@ def observe_scan_canvas(
             provenance=provenance,
         )
     profile = matches[0].profile
+    physical_tolerance = configuration.physical_extent_tolerance_ratio
+
+    def _scale_interval(
+        observed_px: int,
+        nominal_mm: float,
+    ) -> PositiveInterval:
+        return PositiveInterval(
+            float(observed_px)
+            / (nominal_mm * (1.0 + physical_tolerance)),
+            float(observed_px)
+            / (nominal_mm * (1.0 - physical_tolerance)),
+        )
+
     return ScanCanvasEvidence(
         outcome=ScanCanvasOutcome.SUPPORTED,
         observed_long_axis_px=work_width_px,
@@ -194,11 +207,13 @@ def observe_scan_canvas(
         selected_profile=profile,
         axis_scales=CanvasAxisScaleIntervals(
             component_id=profile.profile_id,
-            long_axis_px_per_mm=PositiveInterval.exact(
-                float(work_width_px) / profile.long_axis_mm
+            long_axis_px_per_mm=_scale_interval(
+                work_width_px,
+                profile.long_axis_mm,
             ),
-            short_axis_px_per_mm=PositiveInterval.exact(
-                float(work_height_px) / profile.short_axis_mm
+            short_axis_px_per_mm=_scale_interval(
+                work_height_px,
+                profile.short_axis_mm,
             ),
             source_long_axis="x" if is_horizontal_layout(layout) else "y",
         ),

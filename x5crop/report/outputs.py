@@ -38,7 +38,8 @@ def append_summary_csv(path: Path, result: ReportResult) -> None:
         "selected_scan_canvas_profile_id",
         "lane_output_slot_counts",
         "output_slot_count",
-        "grid_selection",
+        "selected_aperture_labels",
+        "photo_geometry_unresolved_codes",
         "final_review_reasons",
         "output_count",
     ]
@@ -62,27 +63,31 @@ def append_summary_csv(path: Path, result: ReportResult) -> None:
                     "output_slot_request"
                 ]["mode"],
                 "selected_scan_canvas_profile_id": record[
-                    "grid_selection"
+                    "photo_geometry"
                 ]["selected_scan_canvas_profile_id"],
                 "lane_output_slot_counts": ";".join(
                     str(value)
                     for value in (
                         []
-                        if record["grid_selection"][
+                        if record["photo_geometry"][
                             "resolved_output_slots"
                         ]
                         is None
-                        else record["grid_selection"][
+                        else record["photo_geometry"][
                             "resolved_output_slots"
                         ]["lane_output_slot_counts"]
                     )
                 ),
-                "output_slot_count": record["grid_selection"][
+                "output_slot_count": record["photo_geometry"][
                     "output_slot_count"
                 ],
-                "grid_selection": ";".join(
-                    lane["selection_reason"]
-                    for lane in record["grid_selection"]["lanes"]
+                "selected_aperture_labels": ";".join(
+                    str(lane["selection"]["selected_label"])
+                    for lane in record["photo_geometry"]["lanes"]
+                    if lane["selection"]["selected_label"] is not None
+                ),
+                "photo_geometry_unresolved_codes": ";".join(
+                    record["photo_geometry"]["unresolved_codes"]
                 ),
                 "final_review_reasons": ";".join(
                     decision["final_review_reasons"]

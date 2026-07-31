@@ -2,8 +2,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..configuration.grid import frame_grid_search_prior
 from ..configuration.model import DetectionConfiguration
+from ..configuration.photo_geometry import (
+    frame_sequence_physical_constraints,
+)
+from ..detection.photo_geometry.model import (
+    PHOTO_BOUNDARY_MEASUREMENT_SPEC,
+)
 from .read_models import typed_read_model
 
 
@@ -21,22 +26,24 @@ def detection_configuration_read_model(
         "design_aperture_components_mm": typed_read_model(
             spec.aperture_components
         ),
+        "aperture_tolerance_mm": typed_read_model(
+            spec.aperture_tolerance
+        ),
         "strip_handling": typed_read_model(spec.strip),
         "scan_layout": typed_read_model(spec.layout),
         "measurement": {
             "preprocess": typed_read_model(configuration.preprocess),
             "scan_canvas": typed_read_model(configuration.scan_canvas),
             "content": typed_read_model(configuration.content),
-            "frame_grid_search_priors": [
-                typed_read_model(
-                    frame_grid_search_prior(
-                        spec.format_id,
-                        configuration.strip_mode,
-                        component.long_axis_mm,
-                    )
+            "photo_boundary_measurement_spec": typed_read_model(
+                PHOTO_BOUNDARY_MEASUREMENT_SPEC
+            ),
+            "frame_sequence_physical_constraints": typed_read_model(
+                frame_sequence_physical_constraints(
+                    spec.format_id,
+                    spec.aperture_components,
                 )
-                for component in spec.aperture_components
-            ],
+            ),
         },
         "execution": {
             "detector_kind": configuration.detector_kind,

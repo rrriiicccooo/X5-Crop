@@ -189,14 +189,19 @@ https://github.com/rrriiicccooo/X5-Crop
   find Test -type f \( -iname '*.tif' -o -iname '*.tiff' \) | sort
   ```
 
-- 当前 111 条 source manifest 的验收期望已由用户明确确认：绑定同一 source SHA 的
-  `pass_*` 共 88 条，必须得到 `approved_auto`，包括 S098；`unknown_*` 共 23 条，在
-  CandidateGate 有具体阻断事实时允许 `needs_review`，否则优先 `approved_auto`。该映射
-  只进入 validation-only cohort，不能成为 detector 输入、runtime whitelist 或
-  DecisionGate 之外的状态权限。
-- 51 条 partial 的 filename count 是用户提供的 validation-only count annotation，不能
-  进入 runtime。切换到 capacity-auto 后，approved 结果的 `output_slot_count` 必须等于
-  唯一匹配片夹的有效容量且不得小于该 annotation；精确真实 count 命中率不再是产品目标。
+- 验证角色只有 `gold_accuracy_blocking` 与 `diagnostic_unreviewed`。Accuracy blocker
+  只有 `tools/regression/cohorts/gold_accuracy.jsonl` 中九张 source-SHA-bound、用户确认
+  geometry 的黄金样片，展开为 14 个 fixed/explicit/auto 场景。八张 nominal 可用于参数
+  冻结并必须通过；S098 必须通过安全验收，但不参与 nominal threshold 或 aperture
+  tolerance 校准。S098 失败只能修通用算法并重跑全部黄金，不得增加样片专用规则。
+- `diagnostic_unreviewed.jsonl` 的 111 条记录不产生 accuracy expectation 或 verdict。
+  Filename `pass/unknown` 与 filename count 不得进入 detector、runtime whitelist、状态
+  映射或 verifier expectation。111-source 只阻断 crash、hang、静默漏项、非法
+  report/manifest/schema、消费未完成 query、无界 query/DP/memory、正式 TIFF 损坏和
+  source/lane authority 逃逸；单输入临时内存上界为
+  `10 × source_pixels + 32 MiB`。识别 status、reason、geometry 与 count 只作诊断。
+- 非黄金记录只有经过 source SHA 绑定的人工审核和用户明确确认，才能提升为
+  `gold_accuracy_blocking`；不得根据当前算法输出自动晋升。
 - 现有真实样片可以校准 search prior 与 measurement，但样片覆盖不完整。经验分布不得变成
   “未见过即失败”的硬边界；coverage gap 只限制验证或发布声明，不得单独制造
   `needs_review`。XPan 与 120-645 暂无且短期不补真实 fixture，不得把补样片设为实现

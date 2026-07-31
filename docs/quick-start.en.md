@@ -71,9 +71,10 @@ python3 X5_Crop.py --help
 
 ## 4. Result And Output
 
-`approved_auto` means the protected output satisfies the bounded safety
-contract. It does not claim that every photo edge or separator was uniquely
-proven. An approved run writes:
+`approved_auto` means photo-edge measurements or named inference, interpolation
+allowance, and protection form an output that satisfies the safety contract. It
+does not claim that an invisible physical edge was uniquely proven. An
+approved run writes:
 
 ```text
 x5_crop_output/
@@ -86,9 +87,10 @@ x5_crop_output/
 ```
 
 `needs_review` is reserved for a concrete, unabsorbed ordinal, slot ownership,
-omission-coverage, known-content-containment, source/lane-authority, or
-output-geometry risk. A resolved capacity that cannot form every required slot
-also blocks output. By default, the source TIFF is copied to `needs_review/`; use
+known-content-containment, source/lane-geometry, or output-transform risk. A
+resolved capacity that cannot safely form every required slot also blocks
+output and writes no official TIFF. By default, the source TIFF is copied to
+`needs_review/`; use
 `--no-copy-review-files` to disable that copy.
 
 `--diagnostics` is read-only: it preserves the same detection and DecisionGate

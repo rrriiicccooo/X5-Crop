@@ -14,6 +14,7 @@ class ContentEvidenceParameters:
     minimum_evidence_range: float = 1e-6
     minimum_active_pixels: int = 16
     maximum_percentile_samples: int = 1_000_000
+    maximum_streaming_block_pixels: int = 1_048_576
 
     def __post_init__(self) -> None:
         require_percentile(
@@ -25,6 +26,10 @@ class ContentEvidenceParameters:
         require_positive(
             "content percentile sample budget",
             self.maximum_percentile_samples,
+        )
+        require_positive(
+            "content streaming block pixel budget",
+            self.maximum_streaming_block_pixels,
         )
 
 

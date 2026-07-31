@@ -10,21 +10,26 @@
 
 X5 Crop 用于保守裁切 Hasselblad / Imacon X5 片夹扫描 TIFF：在用户提供 format 后，
 full 使用格式默认 slots，partial explicit 严格服从用户 count，partial auto 则输出唯一
-匹配片夹对该 format 的全部有效 slots。V4.9 当前开发版通过单容量有界 Grid、可审计
-omission proof、向外安全包络和固定毫米 protection 自动导出通过安全合同的 frame TIFF；
-只有具体且无法吸收的 ordinal、ownership、containment、coverage 或 authority 风险才进入
-`needs_review`。系统优先不切掉真实照片内容，允许 blank slot、相邻输出重叠和适量向外
-多保留，不要求唯一还原真实边界或猜测真实照片张数。当前稳定发布仍为 **v4.2.8**。
+匹配片夹对该 format 的全部有效 slots。V4.9 当前开发版直接在原图坐标测量照片四边，
+用 format/count 物理约束重建有序照片 polygon，从 observed top/bottom 产生 deskew，再从
+原 TIFF 一次 inverse-affine sampling。测量或推断不确定度、1 px 插值 allowance 与固定
+毫米 protection 共同形成可重算的安全包络。只有具体且无法吸收的 ordinal、ownership、
+containment、geometry 或 transform 风险才进入 `needs_review`。Blank slot 与相邻输出
+重叠均可接受；系统不猜真实照片张数。当前稳定发布仍为 **v4.2.8**。
 
 X5 Crop conservatively crops TIFF scans from Hasselblad / Imacon X5 holders.
 Given a user-supplied format, full mode uses its default slots, partial explicit
 obeys the user count, and partial auto writes every valid slot in the uniquely
 matched holder. The current V4.9 development build uses a single-capacity
-bounded Grid, auditable omission proofs, outward safe envelopes, and fixed
-millimetre protection. Only a concrete, unabsorbed ordinal, ownership,
-containment, coverage, or authority risk becomes `needs_review`. Blank slots
-are retained, adjacent outputs may overlap, and runtime does not claim to infer
-the true photo count. The stable release remains **v4.2.8**.
+Grid only for slot order and capacity, measures the four photo edges in source
+coordinates, reconstructs ordered photo polygons under format/count physical
+constraints, derives deskew from observed top/bottom lines, and samples each ROI
+once from the original TIFF. Measurement or inference uncertainty, a one-pixel
+interpolation allowance, and fixed millimetre protection form a recalculable
+safe envelope. Only a concrete, unabsorbed ordinal, ownership, containment,
+geometry, or transform risk becomes `needs_review`. Blank slots and overlapping
+outputs are allowed; runtime does not infer the true photo count. The stable
+release remains **v4.2.8**.
 
 请从 [GitHub Releases](https://github.com/rrriiicccooo/X5-Crop/releases) 下载
 `X5-Crop-vX.X.zip`，不要下载 GitHub 自动生成的 Source code。

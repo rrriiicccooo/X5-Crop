@@ -14,10 +14,10 @@ from ..image.statistics import image_measurement_statistics
 from ..image.workspace import WorkspaceIdentity
 from ..io.model import ImageProfile
 from .evidence.scan_canvas import ScanCanvasOutcome, observe_scan_canvas
-from .evidence.separator import (
-    LongAxisSeparatorMeasurementField,
-    observe_long_axis_separator_field,
+from .photo_geometry.measurement import (
+    make_photo_boundary_measurement_field,
 )
+from .photo_geometry.model import PhotoBoundaryMeasurementField
 from .source_core import (
     SourceCoreEvidence,
     SourceLaneEvidence,
@@ -31,7 +31,7 @@ class DetectionWorkspace:
     source_gray: np.ndarray
     measurement_cache: MeasurementCache
     source_core: SourceCoreEvidence
-    separator_fields: tuple[LongAxisSeparatorMeasurementField, ...]
+    boundary_measurement_field: PhotoBoundaryMeasurementField
     identity: WorkspaceIdentity = field(init=False)
 
     def __post_init__(self) -> None:
@@ -43,12 +43,14 @@ class DetectionWorkspace:
         )
         if not np.array_equal(self.measurement_cache.gray_work, canonical_work):
             raise ValueError("measurement cache must use canonical source gray")
-        if tuple(
-            item.lane_id for item in self.separator_fields
-        ) != tuple(
-            lane.domain.lane_id for lane in self.source_core.lanes
-        ):
-            raise ValueError("separator fields must follow source lane order")
+        if self.boundary_measurement_field.source_gray is not self.source_gray:
+            raise ValueError(
+                "photo-boundary field must own the canonical source gray"
+            )
+        if self.boundary_measurement_field.layout != self.measurement_cache.layout:
+            raise ValueError(
+                "photo-boundary field must use the canonical work layout"
+            )
         object.__setattr__(
             self,
             "identity",
@@ -196,19 +198,13 @@ def prepare_detection_workspace(
         lanes=lanes,
         incomplete_reasons=incomplete_reasons,
     )
-    separator_fields = tuple(
-        observe_long_axis_separator_field(
-            gray_work[
-                lane.domain.work_box.top : lane.domain.work_box.bottom,
-                lane.domain.work_box.left : lane.domain.work_box.right,
-            ],
-            lane.domain.lane_id,
-        )
-        for lane in lanes
+    boundary_measurement_field = make_photo_boundary_measurement_field(
+        source_gray,
+        layout,
     )
     return DetectionWorkspace(
         source_gray=source_gray,
         measurement_cache=measurement_cache,
         source_core=source_core,
-        separator_fields=separator_fields,
+        boundary_measurement_field=boundary_measurement_field,
     )

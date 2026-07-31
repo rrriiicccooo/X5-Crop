@@ -45,16 +45,22 @@ def _metrics(
         lane.content.statistics
         for lane in workspace.source_core.lanes
     )
-    separator_statistics = tuple(
-        item.statistics for item in workspace.separator_fields
+    work = (
+        ()
+        if detection is None
+        else tuple(
+            lane.solution.work
+            for lane in detection.candidate.geometry.lane_reconstructions
+            if lane.solution is not None
+        )
     )
-    grid_work = (
+    query_sets = (
         ()
         if detection is None
         else tuple(
             item
-            for selection in detection.candidate.lane_selections
-            for item in selection.work_by_component
+            for lane in detection.candidate.geometry.lane_reconstructions
+            for item in lane.measurement_sets
         )
     )
     return RuntimeMetrics(
@@ -66,26 +72,31 @@ def _metrics(
         censored_content_components=sum(
             item.censored_component_count for item in statistics
         ),
-        exact_measurement_count=(
-            2
-            + len(statistics)
-            + sum(
-                item.exact_measurement_count
-                for item in separator_statistics
-            )
+        measurement_query_count=len(query_sets),
+        raw_transition_count=sum(
+            item.raw_transition_count for item in work
         ),
-        exact_cache_hit_count=sum(
-            item.exact_cache_hit_count for item in separator_statistics
+        line_family_count=sum(item.line_family_count for item in work),
+        physical_geometry_count=sum(
+            item.physical_geometry_count for item in work
         ),
-        separator_line_observations=sum(
-            item.line_observation_count for item in separator_statistics
+        pre_join_state_count=sum(
+            item.pre_join_state_count for item in work
         ),
-        placement_seeds=sum(item.seed_count for item in grid_work),
-        candidate_builds=sum(item.candidate_builds for item in grid_work),
-        dp_states=sum(item.dp_states for item in grid_work),
-        dp_transitions=sum(item.dp_transitions for item in grid_work),
-        retained_proposals=sum(
-            item.retained_proposal_count for item in grid_work
+        post_join_state_count=sum(
+            item.post_join_state_count for item in work
+        ),
+        deduplicated_state_count=sum(
+            item.deduplicated_state_count for item in work
+        ),
+        sequence_phase_class_count=sum(
+            item.sequence_phase_class_count for item in work
+        ),
+        dp_states=sum(item.dp_state_count for item in work),
+        dp_transitions=sum(item.dp_transition_count for item in work),
+        pixel_query_count=sum(item.pixel_query_count for item in work),
+        shared_measurement_reuse_count=sum(
+            item.shared_measurement_reuse_count for item in work
         ),
         peak_temporary_bytes=max(
             (
@@ -94,8 +105,8 @@ def _metrics(
                     for item in statistics
                 ),
                 *(
-                    item.peak_temporary_bytes
-                    for item in separator_statistics
+                    item.peak_temporary_memory_bytes
+                    for item in work
                 ),
                 0,
             )

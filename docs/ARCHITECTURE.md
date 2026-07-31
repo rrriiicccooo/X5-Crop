@@ -1,319 +1,279 @@
 # X5 Crop V4.9 当前架构
 
-本文只描述当前运行流、数值合同、权限与源码分层。版本历史见
-[CHANGELOG.md](CHANGELOG.md)，用户操作见中英文用户手册，跨会话检查点只属于
-[PROJECT_MEMORY.md](PROJECT_MEMORY.md)。
+本文是当前运行流、数值合同和源码分层的唯一 owner。历史与版本级变化见
+[CHANGELOG.md](CHANGELOG.md)。
 
-## 1. 产品与安全合同
+## 1. 产品边界
 
-X5 Crop 在用户提供 format 后生成保守裁切，目标是不内切真实照片内容，而不是唯一恢复
-真实物理边界或复制历史 boxes。
+V4.9 在用户提供 format 后，从原 TIFF 重建每张照片的 source-coordinate 四边，形成安全
+输出：
 
-- Format 始终是 runtime authority。
-- Full 使用格式默认 slots；partial 的 explicit count 是 authority。
-- Partial auto 输出唯一匹配片夹对该 format 的全部有效 slots。它不推断或声明真实照片
-  张数。
-- `approved_auto` 只表示 protection 后的输出满足有界安全合同。
-- 输出允许向外多保留、相邻框重叠、保留 blank slot 或带入相邻照片像素。
-- `needs_review` 只用于具体且无法吸收的 ordinal、primary ownership、containment、
-  source/lane authority、omission coverage 或 output geometry 风险。
-- Separator 缺失、blank、inferred Grid、等价 geometry、未 deskew 和 protection 饱和
-  都不能单独制造 review。
-- I/O 失败是独立 terminal failure，不能转成 review。
+- full 使用格式固定张数；
+- partial explicit 严格使用用户 count；
+- partial auto 使用唯一匹配片夹对该 format 的容量，并保留 blank slots；
+- 目标是零真实内容 inward loss，同时使额外面积可由边界不确定度、插值 allowance 和固定
+  protection 重算；
+- 无法由 protection 吸收的 placement、ordinal、ownership、containment、lane authority
+  或 transform 风险进入 `needs_review`。
 
-当前系统是 current-only 原子实现。Runtime、tests、tools、report 与 Debug 只消费
-`bounded_safe_crop_capacity_grid`；没有 feature flag、双 schema、兼容 reader、fallback、
-alias 或 shim。
+系统不猜 format，不从文件名读取 runtime count，也不要求复刻 V4.2.8 的裁切框。
 
-## 2. 单向运行流
+## 2. 单向权限流
 
 ```text
-RuntimeOptions
-  -> FrameCountRequest
-  -> DetectionConfigurationBundle
-  -> TIFF profile + source pixels
-  -> base gray + exact MeasurementCache
-  -> ScanCanvasEvidence
-  -> ResolvedOutputSlots
-  -> canonical lane domains
-  -> SourceContentObservation
-  -> LongAxisSeparatorMeasurementField
-  -> separator bands / edge-pairs / learned one-sided observations
-  -> one slot-count bounded placement + local corridors + ordered DP
-  -> output-equivalence classes + omission proof
-  -> FrameGridProposal
-  -> FrameSlot + SafeCropEnvelope
-  -> fixed millimetre protection
-  -> CandidateGate
-  -> DecisionGate
-  -> FinalDetection
-  -> one inverse-affine source sample per ROI
-  -> TIFF write + read-back validation
-  -> report / Debug / run manifest
+runtime format/count
+→ source TIFF decode/base gray
+→ ScanCanvas/lane/scale authority
+→ registered search proposals
+→ complete pixel measurement
+→ physical constraint propagation
+→ complete FrameGeometryState
+→ lane-local ordered DP
+→ CandidateGate
+→ DecisionGate
+→ source geometry + output transform
+→ inverse-affine ROI sampling
+→ TIFF write/readback
+→ report/debug
 ```
 
-权限只沿这条链路向下游移动。Report 和 Debug 只能读取已经完成的事实，不能重测、重选或
-重判。DecisionGate 后不得改变 profile、slots、transform 或 boxes。
+三类输入不得混淆：
 
-## 3. 输入、容量与 identity
-
-### 3.1 `FrameCountRequest`
-
-`x5crop/configuration/model.py` 是 count request 的唯一 owner：
-
-| 用户入口 | Typed mode | `authoritative_count` |
-|---|---|---:|
-| Full 省略 count | `fixed_full` | format 默认值 |
-| Full 显式默认 count | `fixed_full` | format 默认值 |
-| Partial 整数 | `explicit` | 用户整数 |
-| Partial 省略、回车或 `auto` | `auto` | `None` |
-
-Full 的其它显式 count 被拒绝。`135-dual` 不支持 partial。没有独立
-`--auto-count`；lower layer 只接收 typed request。
-
-`StripHandlingSpec` 只拥有 `default_count` 与 `partial_mode_supported`。Partial explicit
-范围为 `1..default_count`。
-
-### 3.2 `ScanCanvasEvidence` 与 `ResolvedOutputSlots`
-
-`ScanCanvasPhysicalSpec.format_fits` 是 format 适用关系与最大容量的唯一 owner：
-
-- Fixed/explicit 先按权威 count 排除容量不足的 profile，再唯一匹配 canvas。
-- Auto 先按 format 与实际画布唯一匹配 profile，再读取该 fit 的
-  `maximum_frame_count`。
-- 不选择最近 profile，也不建立第二份容量表。
-
-`ScanCanvasEvidence` 独占匹配状态、selected profile 和 long/short axis-scale intervals。
-`SourceLaneEvidence` 可以只读携带 scale intervals，但不是 scale authority。TIFF
-resolution 不参与检测。
-
-解析结果只有：
-
-```python
-ResolvedOutputSlots(
-    lane_output_slot_counts=(...),  # canonical lane 顺序
-)
-```
-
-`output_slot_count` 只由 lane counts 求和。Candidate 与 `FinalDetection` 引用同一个
-resolution；report 现场派生并校验总数，不保存另一份权威整数。
-
-`135-dual` 固定 lane counts `(6, 6)`。输出顺序为 `lane:0/1..6`，再
-`lane:1/1..6`；每个输出同时保存 global output ordinal、lane ID 与 lane-local ordinal。
-
-### 3.3 Configuration identity
-
-`DetectionConfiguration.detector_kind` 固定为：
-
-```text
-bounded_safe_crop_capacity_grid
-```
-
-Configuration identity 只保存输入 policy：
-
-- full：`format_default`
-- partial explicit：`user_explicit` 与权威整数
-- partial auto：`scan_canvas_capacity`
-
-Resolved profile、lane counts 与 slot identities 只进入 analysis/output identity。
-
-### 3.4 运行并发
-
-普通入口默认 `STANDARD_JOB_DEFAULT = 2`，用户可显式使用
-`STANDARD_JOB_LIMIT = 3`。诊断模式单独保留 `DIAGNOSTICS_JOB_LIMIT = 4`。Runtime
-boundary 在建立 `RunConfig` 时归约；lower layer 不根据硬件、文件名或检测结果改变并发。
-
-三 worker 是内存充足机器处理至少三张输入时的 opt-in 吞吐选项。正式性能认证固定使用
-`--jobs 2`。
-
-## 4. 物理与 measurement owner
-
-| Concept | 唯一 owner | 禁止事项 |
+| 类别 | 可以做什么 | 不可以做什么 |
 |---|---|---|
-| 照片设计尺寸 | `FrameDesignApertureMm` | 片夹或 runtime 不复制 |
-| 片夹尺寸、适用 format、容量 | `ScanCanvasPhysicalSpec` | Grid 不发明容量 |
-| profile、px/mm scale | `ScanCanvasEvidence` | lane/source-core 不重新计算 |
-| lane/domain/positive content | `source_core.py` | 不创建 separator 或 Grid |
-| separator field/band/edge-pair/one-sided | `detection/evidence/separator.py` | 不依赖 positive-content components |
-| prior | `configuration/grid.py` | 不冒充 observation |
-| Grid/slot/envelope selection | `detection/grid/` | 不创建 final status |
-| protection | `detection/protection.py` | 不修改未保护 proposal |
-| transform assessment | `detection/output_geometry.py` | 不在 DecisionGate 后改变 |
-| final status/reasons | `DecisionGate` | CandidateGate 不保存 final reason |
+| Pixel observation | 产生 transition、line、support、residual、angle 与 measurement uncertainty | 消费 expected position 作为边界 |
+| Physical constraint | 用 format、count、scale、aperture tolerance、lane 与邻接筛选或推断 | 冒充 observed edge |
+| Search proposal | 由 Grid、outer、corridor 决定查询域与顺序 | 进入 measurement uncertainty 或最终边界 |
 
-### 4.1 Positive content
+`CandidateGate` 只记录候选事实；只有 `DecisionGate` 创建 final status 和 final reasons。
 
-Source content 使用独立 intensity 与 texture field、严格 4-connectivity 和不可变 RLE：
+## 3. Format、count 与片夹 authority
+
+`FramePhysicalSpec` 独占设计 aperture；`FrameApertureToleranceMm` 固定为长短轴各
+`0.5 mm`。对 ScanCanvas 提供的轴向 scale interval：
 
 ```text
-intensity = abs(I - five_point_local_mean(I)) / 255
-texture   = (abs(dx) + abs(dy)) / 510
-positive  = intensity_supported AND texture_supported
+W_px = [(long_mm - 0.5) × long_scale_min,
+        (long_mm + 0.5) × long_scale_max]
+
+H_px = [(short_mm - 0.5) × short_scale_min,
+        (short_mm + 0.5) × short_scale_max]
 ```
 
-它只提供 source-coordinate containment/placement facts。Positive activity 不是照片边、
-separator 或 Grid 观测；无法可靠识别 primary content 时，对应 containment 可以保持
-`UNAVAILABLE`，而不是制造 review。
+`dimension_search_allowance_mm=1.0` 只扩大查询域，不进入 inference uncertainty。
+120 的 `54/56 mm` aperture label 是 lane 级选择，不允许逐帧混用。
 
-### 4.2 Separator evidence
+`ResolvedOutputSlots` 是输出数量的唯一 owner：
 
-每个 lane 只从 base-gray 建立一次 vectorized long-axis adjacent-difference field。字段和
-line observations 都携带 `MeasurementIdentity.SEPARATOR_FIELD` provenance，且不读取
-content components。
+- `fixed_full` 与 `explicit` 给出权威 N，不跨 count 搜索；
+- `auto` 从唯一 `ScanCanvasFormatFit` 得到 lane capacity；
+- `135-dual` 使用 `(6, 6)`，全局顺序为 lane 0 后 lane 1；
+- auto capacity 不表示真实照片数。
 
-在每个 design component 的 gutter interval 内：
+## 4. Source workspace 与 content
 
-- 每条 line 通过有序二分区间查询 compatible successor；
-- 每条 line 最多保留 2 个 successor；
-- transition pair 形成 typed `SeparatorBandObservation`；
-- band 保存 leading/trailing transition、band/width/center interval、support 与
-  appearance；
-- 至少两个 retained bands 才能形成 outward hull 的 learned gutter；
-- one-sided observation 必须携带该 learned gutter，另一侧才可在 local corridor 内推断；
-- report 记录 raw lines、query、compatible pairs、retained bands 与截断量。
+`DetectionWorkspace` 只建立一份 canonical `source_gray`。`ScanCanvasEvidence` 决定 profile、
+lane、long/short px/mm interval 与容量；TIFF resolution 只属于 I/O metadata。
 
-任何 separator observation 仍需绑定 local corridor 与 ordinal 才能参与 proposal。它不
-单独证明 Grid。
+`SourceContentObservation` 只帮助 ownership、containment 和候选选择，不创建照片边。为
+避免整幅多通道 float field，content 对完整 source domain 做确定性分块测量：每块最多
+`1,048,576` pixels，只长期保留 full-coverage boolean support 与最终 source-coordinate
+components/row runs。阈值 sampling 与未分块算法使用相同的全局 flattened indices，不降低
+空间分辨率。Report 记录 source pixels、streaming blocks、run/component 数量、canonical
+row-run digest、component derivation、耗时和峰值临时内存；不展开全量 raw
+component/run records。
 
-## 5. Calibration 与 prior
+## 5. 照片边界 measurement
 
-Tracked calibration receipt 使用
-`x5crop_grid_calibration_receipt_v2`，固定记录：
+### 5.1 Canonical 类型
 
-- source SHA 集合；
-- algorithm/config revision；
-- format、mode、aperture component、orientation、slot count；
-- partial placement 与 interaction class；
-- candidate/work distribution；
-- single resolved slot count、equivalence-only union 与 omission-proof 合同；
-- canonical `calibration_receipt_id`。
+`x5crop/detection/photo_geometry/` 独占：
 
-当前 identity：
+- `PhotoBoundaryMeasurementField`：canonical source gray 与精确局部测量能力；
+- `PhotoBoundaryMeasurementQuery`：source band/corridor、方向与 lattice；
+- `PhotoBoundaryMeasurementSet`：完整 transitions 与 coverage receipt；
+- `PhotoBoundaryMeasurementSpec`：唯一测量参数；
+- `PhotoEdgeSearchCorridor`、`SequenceAnchorDiscoveryDomain`：search proposal；
+- `FrameSequenceGeometryConstraintSet`、`FrameGeometryState`、
+  `FrameSequenceGeometrySolution`：物理约束与完整状态；
+- `FramePhotoGeometry`：非空照片的唯一 source geometry；
+- `GridInferredBlankOutputGeometry`：capacity blank 的独立输出 geometry；
+- `SafeCropEnvelope`：照片 geometry 的唯一未保护/保护输出派生。
+
+### 5.2 冻结参数
 
 ```text
-GRID_ALGORITHM_REVISION   = bounded_ordered_capacity_grid_v5
-GRID_CONFIGURATION_REVISION = safe_crop_prior_v1
-CALIBRATION_RECEIPT_ID    = sha256:f6edbfd78d1711b361113abc952b37884bf594dd367ba22cd64f316e42f94738
+lattice spacing       clamp(expected_support/12, 2.0 mm, 4.0 mm)
+local window          0.25 mm
+transition gap        0.05 mm
+transition width max  1.0 mm
+gradient_z minimum    3.0
+tone/texture z        max(tone_z, texture_z) >= 3.0
+search angle max      4°
+family connection     tan(4°) × lattice_step + 0.10 mm
+missing lattice       at most one step
+line fit              weighted Huber IRLS, exactly four rounds
+Huber threshold       max(0.05 mm, 2.5 × MAD)
+inlier threshold      max(0.10 mm, 3 × MAD)
+angle uncertainty     2 × endpoint coordinate uncertainty / support span
+minimum support       max(4 traces, 60% queried traces)
+continuous support    at least 50% of coarse span
+geometry equivalence  normal difference <= max(0.05 mm, 1 source pixel)
+                      and intersecting angle intervals
 ```
 
-八张 nominal 样片只校准 prior 中心与典型搜索区间；S098 只作 stress；其余真实记录只提供
-measurement/coverage 分布。Confirmed `Photo start/end` 不进入 runtime
-separator/photo-edge observation，也不能证明 Grid。Receipt provenance 保留
-`user_confirmed_geometry`。
+Measurement 按最多 `1,048,576` source-pixel work units streaming。所有 query 在执行前登记；
+任一 query 未完整完成时为 `UNAVAILABLE`，部分 transitions 不得被消费。
 
-Runtime 只读取 tracked typed prior 与 receipt ID，不读取 `Test/`、baseline 或现场
-calibration 输出。XPan 与 120-645 使用明确 `physical_rule` prior 和 synthetic contracts，
-不借用最近格式。
+## 6. Top/bottom
 
-`FrameGridSearchPrior` 是 search authority，只保存 pitch、gutter、full margins、
-uncertainty、equality interval 与 provenance。经验范围不能升级为“未见过即失败”的硬
-边界。
-
-## 6. 单容量 Bounded Grid
-
-### 6.1 Placement、corridors 与 ordered DP
-
-每个 lane 只搜索 `ResolvedOutputSlots` 指定的一个 slot count。Placement seeds 来自
-full-leading、full-trailing、centered model 或 positive-content placement；它们只表达
-有限 hypothesis，不是 separator observation。
-
-应用上限前，精确 descriptors 先按 equality/equivalence 归约。固定上限为：
+`PhotoEdgeSearchCorridor` 由 ScanCanvas scale、`H_px`、名义中心、`1.0 mm` center offset、
+`1.0 mm` search deviation 与 `4°` 倾角建立。完整 halo 为：
 
 ```text
-P_MAX = 6  # 每个 lane/component 的 placement seeds
-O_MAX = 2  # 每个 internal corridor 的 observed classes
-K_MAX = 3  # 每个 corridor/DP frontier 的总 classes，含 model-only
+ceil((0.25 + 1.0 + 0.05) mm × short_scale_max) + 1 source pixel
 ```
 
-Count 1 没有 internal corridor，对应 interaction 固定为 `NOT_APPLICABLE`。
+每个 lane 的 top/bottom 原始测量只执行一次。每帧只消费 format/count/anchor domain
+预先声明的粗 long-axis support span，禁止先用已选中的 `S_i/E_i` 定义查询。
 
-DP transition 要求位置严格递增、shared interval 小于一个 pitch，并能形成正面积半开
-slot。对 count 12，每个 lane/component 最多 198 states、558 transitions。Report
-保存逐 lane/component 工作量，并乘实际 lane/component 数汇总。
+Top/bottom 成对验证：
 
-### 6.2 Output-equivalence selection
+- 高度落入 `H_px`；
+- angle intervals 相容；
+- support/coverage 完整；
+- known content 位于两边之间；
+- 不是 scanner/holder border pair。
 
-Score、residual 与 tie-break 只决定构建顺序和诊断展示，不能选择最终赢家。只有同时满足
-以下条件的 proposals 才属于同一 output-equivalence class：
+一侧 observed 时可用 observed rotation、typed height interval 与 scale 推断另一侧；
+inferred edge 不能反向支持 rotation、scale 或 observed edge。两侧均不可见时不创建照片边。
+Rotation slope 可跨帧共享，intercept、support、residual 和 uncertainty 始终逐帧拥有。
 
-- lane、slot count、canonical ordinal 与 known-content assignment 一致；
-- 浮点差先按冻结 equality interval 归约；
-- slot phase 差不形成整 pitch ordinal 偏移；
-- 按 ordinal outward union 后仍单调、合法且位于 source/lane authority。
+## 7. Long-axis sequence 与锚点
 
-同一 class 合并 seed、corridor path 与 aperture-component members，并按 ordinal outward
-union。全 blank 仍执行相同 geometry、authority 与 union 检查。
+每个 internal corridor 只测量一次，同时服务 `E_i` 和 `S_(i+1)`，并显式区分
+`edge_pair`、`one_sided`、`contact`、`overlap`。
 
-只有最终恰好一个 class 且 omission coverage 成立时才产生 selected proposal。若存在两个
-或更多非等价 classes，whole-pitch/ordinal 分歧阻断 `slot_ordinal_assignment`，
-known-content/primary owner 分歧阻断 `slot_ownership`；不得由 scalar 排序选出赢家。
+```text
+E_i - S_i             ∈ W_px
+S_(i+1) - E_i         ∈ observed adjacency 或 typed gutter interval
+```
 
-### 6.3 Hard rejection
+系统不要求先找到第一张。`SequenceAnchorDiscoveryDomain` 对权威 N/容量计算：
 
-Hard rejection 只允许来自：
+```text
+T_min = N × W_px.min + Σ typed_gutter_min
+τ_min = lane_start
+τ_max = lane_end - T_min
+AnchorDomain(q) = [τ_min, τ_max] + relative_interval(q)
+```
 
-1. slot count 与 request 或 scan-canvas 容量冲突；
-2. 非单调、非正面积或其它非法 geometry；
-3. fixed protection 前的 geometry 越出 source/lane authority；
-4. 已知 primary content 无法有界完成 ordinal assignment 或 containment。
+查询域另加 `0.5 × lane_short_extent × tan(4°)` 与完整 halo。平移区间被切成 core 无缝的
+half-open tiles；名义宽度是 `6.0 mm × long_scale`。Grid/outer 只改变 tile 执行顺序，
+不能缩小覆盖，也不能根据早期 score 跳过或追加 query。
 
-缺少 separator、blank、model-only、较低 score、较大的有界 outward retention 与
-protection 饱和都不是 hard rejection。
+任意 observed start、end、internal adjacency 或 trailing edge都可以锚定 translation，并
+向前或向后传播。无绝对 observed anchor 时：
 
-### 6.4 Omission proof
+- `PhotoSequenceTranslationAssessment=unresolved`；
+- 不创建 `FramePhotoGeometry`；
+- 不使用 expected Grid、outer bbox 或 placement union 假装照片位置已识别。
 
-`GridOmissionSummary` 对 placement-seed、observed-corridor 和 DP-frontier scope 保存：
+`PhotoSequenceExtentProposal` 只保存 Grid/content/outer 给出的查询顺序或 domain proposal。
+只有在 proposal 内重新执行完整二维 transition 和 line fitting，才能升级为 observed edge。
 
-- 确定性 `scope_id`；
-- lane/component、适用的 `seed_id` 与 corridor ordinal；
-- discovered、retained、omitted 数；
-- 每个 omitted alternative 的稳定 ID；
-- absorbing equivalence-class ID；无法吸收时为 `None`；
-- absorbed 与 unresolved outcome 数。
+## 8. 完整状态、限额与 DP
 
-IDs 只由 canonical identities、assignment signature 与排序后的 member IDs 构造，不受
-score 或遍历顺序影响。只有每个 omitted alternative 都已证明属于 retained class，并已
-进入 outward union，截断才不阻断。
+固定流水线：
 
-任一 omitted alternative 非等价、无法分类，或预算耗尽导致证明未完成时：
+```text
+raw measurement
+→ local line family
+→ physical dedup
+→ local dominance
+→ interval propagation
+→ indexed compatibility join
+→ complete FrameGeometryState dedup/dominance
+→ lane-local ordered DP
+```
 
-- `grid_search_coverage = CONTRADICTED`
-- 不产生 selected proposal 或自动输出
+`FrameGeometryState` 已经组合 `S/E`、top/bottom、source polygon、rotation class、
+sequence aperture label、ownership、interaction 与逐边 provenance/uncertainty。
 
-`omitted_outcome_risk` 只能从 summaries 派生。`search_incomplete` 只作诊断，不是默认
-风险结论，也不是可靠性证据。
+- local observed non-dominated geometry class 超过 2 个：截断前 unresolved；
+- 完整组合后 observed non-dominated state 超过 2 个：截断前 unresolved；
+- 两个 protection 后仍不等价、且互不支配的完整 sequence states 也必须保留为明确竞争，
+  不能在 report 中保留竞争状态却自动批准；
+- DP 的 `K≤3` 指最多两个完整 observed states 加一个 model-only/blank state；
+- partial auto 固定容量 slots，不枚举 `2^N` occupancy；
+- lane chain 为 `O(N × K²)`。
 
-## 7. Slot、interaction 与 envelope
+Receipt 保存 raw transitions、line families、physical geometries、join 前后数量、dedup 后
+数量、sequence phase classes、DP states/transitions、pixel queries、measurement reuse 与
+peak temporary memory。
 
-每个 proposal 产生恰好 resolved count 个有序 lane-local `FrameSlot`。Blank 不删除 slot；
-appearance unavailable 不改变容量。
+## 9. 照片、blank 与 translation assessment
 
-每个 internal corridor 保存：
+`PhotoSequenceTranslationAssessment` 描述实际照片位置：
 
-- `separated`
-- `contact`
-- `overlap`
-- count 1 或端点处的 `not_applicable`
+```text
+observed_anchor
+sequence_inferred
+unresolved
+not_applicable_no_photo_geometry
+```
 
-浮点位置先经过 equality interval 归约。Observed/model interval 形成 bounded shared
-interval，完整并入相邻两侧安全包络，因此相邻输出允许重叠。
+`GridSlotTranslationAssessment` 描述容量 Grid：
 
-`SafeCropEnvelope` 是 fixed protection 之前的 outward geometry：
+```text
+observed_grid_anchor
+scan_canvas_profile_bounded
+model_bounded_output_equivalent
+unresolved
+```
 
-- 首尾 endpoint 独立；
-- 同一 equivalence class 的 alternatives 按 ordinal outward union；
-- 短轴使用完整 authoritative lane；
-- 未保护 geometry 越界直接失败，不 clamp。
+没有照片锚点时不创建照片 geometry。若没有 assigned known content，且所有 Grid placements
+对每个 ordinal 产生相同的 protected、clipped、half-open source footprint，允许生成
+`GridInferredBlankOutputGeometry`；否则按 ordinal、ownership 或 containment 风险进入
+Gate。Blank provenance 固定为 `grid_inferred_blank`，不冒充 observed photo。
 
-固定 protection 的毫米值按 format 冻结。Long/short axis 分别使用
-`ScanCanvasEvidence` 对应 scale interval 的 upper endpoint 向上取整。只有 protection
-可以在 source/lane authority 饱和；饱和 side 进入 `ProtectedCropEnvelope` receipt。
+## 10. 安全包络与 Deskew
 
-## 8. Gate 与 finalization
+照片输出从 `FramePhotoGeometry` 单向派生：
 
-### 8.1 CandidateGate
+1. measurement uncertainty 或 inference uncertainty；
+2. `1 source pixel` bilinear interpolation allowance；
+3. format 固定毫米 protection；
+4. source/lane clipping。
 
-CandidateGate 只建立十项有序事实：
+Writer 只接受 `SafeCropEnvelope | GridInferredBlankOutputGeometry`。
+
+Rotation 只使用 selected observed top/bottom photo lines；这些沿照片长轴的观测拥有
+shared strip deskew authority。Start/end 仍是 observed polygon boundary，但个别 aperture
+切口可以不完全正交，不能建立或放宽 shared rotation。所有参与 rotation class 的 observed
+angle intervals 精确交集是唯一可行域：
+
+- 交集包含零：`identity`；
+- 非零交集存在且绝对值不超过 `2°`：`observed_rotation`；
+- 无共同交集：transform `UNAVAILABLE`。
+
+Blank-only 输出可使用 authority 为 `grid_blank_no_photo_geometry` 的 identity；它不能用于
+照片输出。
+
+旋转固定 source center，使用整数像素中心：
+
+```text
+Wout = ceil(rotated_max_x - rotated_min_x + 2 × guard)
+Hout = ceil(rotated_max_y - rotated_min_y + 2 × guard)
+source center → ((Wout - 1)/2, (Hout - 1)/2)
+```
+
+Source half-open boxes 始终 outward rounding，并检查完整 bilinear footprint。最终对每个
+ROI 从原 TIFF 做一次 inverse-affine sampling，不生成整张旋转 RGB 中间图。
+
+## 11. Gate 与输出
+
+CandidateGate 的 current checks：
 
 ```text
 scan_canvas_authority
@@ -328,170 +288,85 @@ output_protection
 output_transform
 ```
 
-`output_slot_count` 状态固定为：
+底层 query 缺失先保持 `UNAVAILABLE`。只有它可能改变安全输出时，才映射到具体 Gate；
+`grid_search_coverage` 只表示 Grid placement proposal 覆盖不完整。Inferred、blank、
+separator 缺失、query 失败或多个 output-equivalent candidates 本身不是 final reason。
 
-- scan canvas 尚未解析：`NOT_APPLICABLE`，只由 `scan_canvas_authority` 阻断；
-- resolution 已建立且每个 lane 精确形成所需 slots：`SUPPORTED`；
-- 容量已解析但任一 lane 无法精确形成 slots：`CONTRADICTED`。
+`approved_auto` 才允许正式 TIFF。`needs_review` 的正式 TIFF 数必须为零；Debug Analysis
+中的候选标为 `NOT EXPORTABLE`，也没有 provisional product export 路径。
 
-CandidateGate 不保存 final reason。
+## 12. Report、Debug Analysis 与 TIFF
 
-### 8.2 DecisionGate
-
-DecisionGate 是 final status 与 reason 的唯一 owner：
-
-- 全部 requirements 满足：`approved_auto`
-- 存在 blocking fact：`needs_review`
-
-`output_slot_count` 阻断按输入模式生成：
-
-- fixed/explicit：`requested_count_unfulfilled`
-- auto：`capacity_output_slot_count_unfulfilled`
-
-其它 reason 与 Gate code 一一绑定。Approved 必须满足：
+Current report：
 
 ```text
-slots == safe envelopes == protected envelopes == final boxes
-      == output TIFFs == derived output_slot_count
+schema_id       = detection_report
+schema_revision = source_coordinate_photo_geometry_v1
 ```
 
-Review 的 output TIFF 数固定为零。Finalization 只冻结已有 profile、slots、transform、
-protected envelopes 与 source boxes。
+Report 保存 source authority、measurement coverage、search proposals、observed/inferred
+provenance、完整 states、competition、translation assessments、两级 Gate、safe/protected
+geometry、transform、final boxes 与 TIFF receipt。Raw transitions 与 source-content
+components/row runs 只记录完整 coverage、数量、canonical row-run SHA-256 digest 与
+component derivation，不在 current JSON 中逐条展开；selected observations 和完整候选
+states 仍保留。Report 不是 cache。
 
-当前 transform 为 typed identity。Advanced fit 或 deskew 只有未来出现 named gap 时才可
-加入；缺少 deskew 不阻断。
+Debug Analysis 固定展示：
 
-## 9. TIFF output 与失败状态
+1. source context；
+2. raw measurement 与 line families；
+3. selected source geometry / unresolved candidates；
+4. protected output footprint。
 
-普通 approved 输入对每个 ROI：
+Review audit sampling只允许验证工具写入忽略的
+`build/v49-photo-geometry/golden-review-audit/`，不得进入产品 output、run manifest 或
+`tiff_output_count`。
 
-1. 从原 source array 做一次 inverse-affine sampling；
-2. 写临时 TIFF；
-3. 复读临时 TIFF；
-4. 验证像素与 profile；
-5. 原子替换为最终文件。
+Approved ROI 写出后复读并检查 pixels、dtype、axes/channels、photometric、bit depth、
+ICC、resolution、metadata 与 NONE/LZW 无损压缩。I/O 失败是独立 terminal failure。
 
-验证覆盖 dtype、axes、shape、channels、Photometric、BitsPerSample、SampleFormat、
-planar configuration、ICC、resolution、resolution unit、description、datetime、software、
-支持的 extra tags 与 lossless compression。`same` 保持源 NONE/LZW 等已知无损行为；
-`none` 写无压缩。
+## 13. 验证边界
 
-任一读取、写出、复读或替换错误返回 `FailedInput` 与独立 failure stage。它不进入
-DecisionGate，不修改既有 decision，也不生成成功 receipt。
+Accuracy blocker 只有 tracked `tools/regression/cohorts/gold_accuracy.jsonl`：
 
-`--diagnostics` 是只读 output action：仍完成相同 detection、Gate 与 final boxes，report
-记录 `diagnostics_read_only`，但不写 frame TIFF 或 review copy。
+- nominal：S027、S035、S051、S055、S062、S091、S094、S109；
+- stress-excluded calibration：S098；
+- 九张共 14 个场景。
 
-## 10. Cache、report 与 Debug
+12 个 `must_approve_safe` 场景必须批准并正式写出/复读 TIFF。S055 两个 review 场景必须
+存在黄金安全 state 和 protection 后仍不等价的物理竞争 state，且正式 TIFF 数为零。
 
-`MeasurementCacheKey` 只包含：
+`diagnostic_unreviewed.jsonl` 的 111 records 不产生 accuracy verdict。它们只阻断 crash、
+hang、非法 schema、未完成 query 被消费、无界 query/DP/memory、TIFF 损坏和 authority
+逃逸。单输入 peak temporary memory 的冻结上界为
+`10 × source_pixels + 32 MiB`；这是随输入面积线性增长的工程上界，不是固定尺寸样片
+白名单。文件名 `pass/unknown` 与 filename count 不进入 runtime 或 validation
+expectation。
 
-- workspace gray identity；
-- work layout；
-- base-gray parameters；
-- image-statistics parameters。
+正式性能使用固定 24 TIFF、`--jobs 2` 与 status-independent 168-task I/O workload。
+V4.2.8 基线固定 tag `v4.2.8` / commit
+`8d14c55d8af5c944a0b78b51df4c4c428e606f07`。硬门槛为 V4.9 median
+`<=5.0 秒/输入`，且 paired total wall 在 MAD 噪声之外快于基线。
 
-Cache value 只保存不可变 work gray 与 exact image statistics。Slot count、offset、seed、
-candidate、proposal、Gate、decision、reason 和 output box 都不得进入 cache。
+## 14. 源码 owner
 
-Current schemas：
-
-```text
-detection report       = bounded_safe_crop_capacity_grid
-run manifest           = x5crop_run_manifest_v2
-fixed sample profile   = x5crop_fixed_sample_profile_v2
-production performance = x5crop_production_performance_v4
-```
-
-Report 保存 typed configuration policy、calibration receipt、measurement provenance、
-selected profile、canonical lane counts、slot identities、equivalence classes、omission
-summaries、逐 lane/component 工作量、separator query work、slots/interactions、
-safe/protected envelopes、两级 Gate、finalization、TIFF receipt 与 output identity。总 slot
-数只从 lane counts 派生并交叉校验。Measurement wall time 不进入
-`core_facts_sha256`。
-
-CLI 不再提供轻量 `--debug`，新运行不会创建 `_debug/`。`--debug-analysis` 是唯一 JPG
-诊断 surface；writer 在一次写出内独占 render cache，只消费 canonical `gray_work` 与
-current detection，不重新运行 detector。它固定生成一个总状态栏和三个面板：
-
-1. `Original gray context`：未染色灰度上下文；
-2. `Frame outputs`：approved 按 global ordinal 用 F1…Fn 不同颜色、0.26 半透明填充和
-   2 px 边框显示 final protected boxes；review 不暴露 final boxes，只在存在 selected
-   proposal 时用较低透明度虚线显示 provisional safe envelopes，并标记
-   `NOT EXPORTABLE`；
-3. `Separator evidence`：全部 raw separator observations 低透明度显示，selected
-   edge-pair、one-sided、model-only Grid 分别以红色实线、橙色实线和 cyan 虚线覆盖。
-
-固定 12 色表覆盖当前最大容量，`135-dual` 也按 global ordinal 使用 F1–F12，不按 lane
-重复。横向 work view 纵向堆叠，portrait view 横向排列；panel 间距 12 px、标题栏
-34 px、JPEG quality 92。`--diagnostics` 继续隐含 report、Debug Analysis 与不复制
-review 文件。
-
-## 11. 验收与性能边界
-
-### 11.1 黄金 accuracy gate
-
-唯一真实 accuracy gate 是九张 source-SHA-bound、用户确认 geometry 的黄金样片，展开为
-14 个 fixed/explicit/auto 场景。12 个 `must_approve_safe` 必须批准；S055 两个场景只有在
-具体 Gate 阻断时才允许 review。
-
-Golden comparator 使用 source-coordinate、严格递增的一对一 containment：
-
-- 每个 confirmed polygon 必须完整落入一个不可复用的 output footprint；
-- slot identity 必须递增；
-- 允许额外 blank slots；
-- 多个合法匹配记录字典序最早结果；
-- 同时比较 profile、canonical lane counts、global/lane-local identities 与 transform。
-
-不比较 IoU、历史 box parity 或贴边误差。
-
-### 11.2 111 条 blocking coverage audit
-
-Audit 只消费 manifest 的 canonical current records，不盲扫 `Test/`。Filename annotation
-只属于 validation，永不进入 runtime。完成门槛为：
-
-- 88 条 `pass_*` 全部 `approved_auto`，包括 S098；
-- 41 条 pass partial 全部批准，并精确输出匹配片夹容量；
-- 23 条 `unknown_*` 只有存在具体 CandidateGate 阻断时才允许 review；
-- 重复 source SHA 分组报告，record 数不冒充独立样片数。
-
-`real_holdout = unavailable`。XPan、120-645 与其它缺少真实样片的 cell 保存
-`real_sample_coverage = unavailable`；覆盖缺口只限制验证声明，不制造 runtime review。
-
-### 11.3 正式性能
-
-正式性能使用固定 24 张、`--jobs 2`、一个新空 root：
-
-```text
-cold/
-measured-1/
-measured-2/
-measured-3/
-```
-
-Full 使用 `fixed_full`，partial 使用 `auto`。Runner 从冻结 cohort、实际 TIFF、
-scan-canvas catalog 与 validation annotations 动态计算 profile、lane counts 和 totals，
-不维护第二份容量表。四次都写出并复读全部 frame TIFF；当前 receipt 必须为每次 168 个
-输出 TIFF，九个 partial 输入相对 annotation 多 25 个 slots。认证只取三次 measured
-的中位数，合同为 `<= 5.0 秒/张`。
-
-## 12. 源码职责
-
-| 路径 | 当前职责 |
+| 路径 | 职责 |
 |---|---|
-| `x5crop/configuration/` | count request、prior、scan-canvas 与 runtime configuration |
-| `x5crop/formats/` | design aperture、strip contract、scan-canvas catalog |
-| `x5crop/detection/source_core.py` | lane/domain/positive-content facts |
-| `x5crop/detection/evidence/` | scan-canvas 与 separator observations |
-| `x5crop/detection/grid/` | placement、corridor、DP、equivalence、omission、slot/envelope |
-| `x5crop/detection/protection.py` | fixed millimetre protection |
+| `x5crop/configuration/` | format-independent runtime configuration 与 typed physical inputs |
+| `x5crop/formats/` | format aperture、count 和 protection |
+| `x5crop/detection/evidence/scan_canvas.py` | 片夹、lane、scale、capacity observation |
+| `x5crop/detection/source_core.py` | bounded content ownership measurement |
+| `x5crop/detection/photo_geometry/` | 照片边界、序列、状态、DP 与 source geometry |
+| `x5crop/detection/output_geometry.py` | observed transform assessment |
+| `x5crop/geometry/affine.py` | affine 数值合同 |
 | `x5crop/detection/candidate/` | CandidateGate facts |
-| `x5crop/detection/decision/` | final status 与 reasons |
-| `x5crop/detection/final/` | immutable finalization |
-| `x5crop/export/`、`x5crop/io/` | one-sample ROI 与 TIFF write/read-back |
-| `x5crop/report/`、`x5crop/debug/` | current audit surfaces |
-| `tools/regression/` | comparator、黄金验收、coverage、profiling、性能 |
-| `tools/verify` | tracked contracts 的唯一验证入口 |
+| `x5crop/detection/decision/` | final status/reasons |
+| `x5crop/detection/final/` | resolved geometry finalization |
+| `x5crop/export/`、`x5crop/io/` | 一次 sampling、TIFF 写出与复读 |
+| `x5crop/report/`、`x5crop/debug/` | current report 与 Debug Analysis |
+| `tools/regression/` | gold、diagnostic、profile 与 paired performance |
+| `tools/verify` | 唯一验证入口 |
 
-修改 runtime flow 或 source layering 时更新本文；版本行为、验证、打包或回滚背景更新
-`CHANGELOG.md`。
+旧 nearest-line Grid、separator field、固定 uncertainty、跨候选 outward union 和
+identity-only detector 已删除；current tree 不保留 fallback、双 detector 或 compatibility
+shim。

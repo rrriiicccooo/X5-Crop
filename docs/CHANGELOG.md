@@ -12,6 +12,50 @@
 V4.9 是破坏性的 current-only 物理模型重构。旧 runtime、schema、reason、cache、
 compatibility 与历史 box parity 均不是迁移目标。
 
+### 2026-07-31：source-coordinate 照片几何重建
+
+- 原子替换旧 `bounded Grid` detector：Grid 现在只拥有 capacity、phase、ordinal、blank
+  与 interaction；`FramePhotoGeometry` 独占非空照片的 source-coordinate
+  top/bottom/start/end、polygon、逐边 provenance 与 uncertainty。
+- 新增 streaming `PhotoBoundaryMeasurementField/Query/Set`、完整 coverage receipt、
+  `PhotoEdgeSearchCorridor` 与 `SequenceAnchorDiscoveryDomain`。所有 query 预登记，Grid、
+  content 与 outer 只改变查询域或执行顺序，不能成为照片边或 measurement uncertainty。
+- Format aperture 使用 typed `±0.5 mm` tolerance；full/explicit 固定 N，partial auto
+  固定片夹容量。长轴序列可以由任意 observed internal/trailing anchor 向前或向后求解，
+  不再依赖 outer 找到第一张。无绝对照片 anchor 时不创建照片 geometry。
+- Top/bottom 使用完整窄 corridor/halo、二维 transitions、line families 与成对尺寸/角度/
+  content/scanner-border 验证；允许 observed opposite edge 加 rotation/scale/aperture
+  interval 的 named inference，但两侧不可见时不从理论 corridor 造边。
+- 候选在组合成完整 `FrameGeometryState` 后去重和 dominance；超过两个 observed
+  non-dominated states 时在截断前 unresolved。Lane-local DP 保持 `K≤3` 与
+  `O(N×K²)`；auto 不枚举 occupancy。
+- Empty capacity slot 改用独立 `GridInferredBlankOutputGeometry`。照片 translation 与
+  Grid slot translation 分开；只有所有 placement 的 protected/clipped half-open
+  footprint 等价时，blank-only 输出才能批准。
+- Deskew authority 只来自 selected observed top/bottom lines 的共同 angle interval；
+  identity 必须由零角度证据支持，非零 rotation 直接从原 TIFF 做一次 inverse-affine ROI
+  sampling。删除 identity-only、整图旋转中间图、固定 uncertainty、nearest-line 与跨候选
+  outward union。
+- Current report revision 更新为 `source_coordinate_photo_geometry_v1`；Debug Analysis
+  固定 source、pixel measurement、selected source geometry 与 protected output 四层。
+  Raw transitions 与 content components/row runs 只保存 coverage、数量、canonical
+  row-run digest 与 component derivation，不再逐条膨胀 report。Review 没有正式 TIFF
+  或 provisional export 路径。
+- 黄金 authority 等值迁移到 tracked
+  `tools/regression/cohorts/gold_accuracy.jsonl`；旧 ignored baseline 只保留为人工确认
+  来源证据，不再被 verifier 消费。九张黄金、14 场景是唯一 accuracy blocker；S098
+  必须安全通过但不参与 nominal calibration。
+- 111-source 改为 `diagnostic_unreviewed`：filename `pass/unknown` 与 filename count
+  不再产生 expectation，只阻断 crash、schema/TIFF/authority 和有界资源等工程合同；
+  单输入临时内存按 `10 × source pixels + 32 MiB` 的线性上界验收。
+- 性能改为 status-independent paired total wall：固定 V4.2.8 commit
+  `8d14c55d8af5c944a0b78b51df4c4c428e606f07`、24 个 source、168 个冻结 I/O tasks、
+  `--jobs 2`，要求 V4.9 median `<=5.0 秒/输入` 且在 MAD 噪声之外更快。
+- Source content ownership 改为完整 source domain 的确定性 streaming 测量；不降低空间
+  分辨率，也不再同时保存整幅多套 float field。
+- 本节整体取代下方 2026-07-30 的 Grid schema、111 blocking expectation 与旧 performance
+  方法；下方条目仅保留演进和回滚背景。
+
 ### 2026-07-30：移除 `--debug` 并恢复 Debug Analysis 三联图
 
 - 删除轻量 `--debug` CLI、`RuntimeOptions`/`RunConfig` 字段、bootstrap 传递、

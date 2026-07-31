@@ -29,7 +29,7 @@ def configuration_consistency_issues() -> tuple[str, ...]:
                 issues.append(f"{format_id}/{strip_mode}: physical spec mismatch")
             if (
                 configuration.detector_kind
-                != "bounded_safe_crop_capacity_grid"
+                != "source_coordinate_photo_geometry"
             ):
                 issues.append(f"{format_id}/{strip_mode}: detector mismatch")
     return tuple(issues)

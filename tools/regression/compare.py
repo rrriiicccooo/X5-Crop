@@ -1,4 +1,4 @@
-"""Compare two current bounded-safe-crop report sets."""
+"""Compare two current source-coordinate photo-geometry report sets."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from x5crop.report.validation import validate_current_report_record
 
 DEFAULT_FIELDS = (
     "measurement",
-    "grid_selection",
+    "photo_geometry",
     "candidate_gate",
     "decision",
     "output.finalization",

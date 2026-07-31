@@ -4,9 +4,9 @@
 - Stable release: **v4.2.8**
 
 X5 Crop conservatively crops Hasselblad / Imacon X5 holder-scan TIFFs. You
-supply the film format; the program builds frames within holder capacity, a
-bounded Grid search, and outward safety envelopes, then writes individual TIFFs
-when the safety contract is satisfied.
+supply the film format; the program uses holder scale and count constraints to
+measure four photo edges in source coordinates, reconstruct polygons, and write
+individual TIFFs when the safety contract is satisfied.
 
 ## Product Goal
 
@@ -17,13 +17,12 @@ physical boundary:
   contract.
 - Outputs may be larger than the photo, overlap, or contain a small part of a
   neighboring photo.
-- A missing separator, blank slot, inferred Grid, equivalent geometry, no
-  deskew, or protection saturated at an authority boundary does not by itself
-  require review.
+- A blank slot, named inference, missing visible separator, or multiple
+  protection-equivalent geometries does not by itself require review.
 - `needs_review` is reserved for a concrete risk that cannot be absorbed, such
-  as unresolved ordinal or primary-slot ownership, unproven omission coverage,
-  possible inward loss of known content, or geometry outside source/lane
-  authority.
+  as unresolved ordinal or primary-slot ownership, possible inward loss of
+  known content, geometry outside source/lane authority, or no common observed
+  rotation interval.
 - Read, write, and read-back errors are terminal failures, not review results.
 
 ## Install
@@ -151,30 +150,41 @@ Current holder catalog:
 | `120_wide_188_5` | `188.5 × 63.44 mm` | 645 ≤ 4; 66 ≤ 3; 67 ≤ 2 |
 
 Separator measurement and positive-content measurement are independent.
-Observed bands, edge pairs, learned one-sided observations, and model-only
-corridors may all participate in bounded proposals. A prior constrains search;
-it never becomes a physical observation.
+Pixel observations, physical constraints, and search proposals have distinct
+authority:
 
-Each lane searches exactly one resolved slot count. Scores and tie-breaks only
-control build order and diagnostic display. Only output-equivalent proposals
-may be merged by ordinal outward union; two non-equivalent placement, ordinal,
-or ownership classes are never ranked into a winner.
+- two-dimensional pixel measurement creates transitions, fitted lines,
+  support, residuals, angles, and measurement uncertainty;
+- format, count, scale, the typed `±0.5 mm` aperture tolerance, lane, and
+  adjacency only filter or infer geometry;
+- Grid, outer, and corridors only bound query domains and order; they never
+  become photo edges.
 
-Every `P_MAX/O_MAX/K_MAX` truncation produces typed omission summaries. A
-truncation is non-blocking only when every omitted alternative is proven to
-belong to a retained equivalence class and has been absorbed into its outward
-union. Otherwise `grid_search_coverage` blocks output.
+Top/bottom are measured in narrow ScanCanvas/format corridors with complete
+halos; each frame retains its own intercept, support, and uncertainty.
+Start/end discovery uses seamless tiles covering the entire allowed
+translation interval. Any internal or trailing observed edge may anchor the
+sequence in either direction, so outer does not have to find the first photo.
+Content only assists ownership and containment.
 
-Every proposal creates exactly the resolved number of lane-local slots. A
-bounded shared interval from contact or overlap is included in both adjacent
-safety envelopes. The full authoritative lane is retained on the short axis by
-default. Fixed millimetre protection is then rounded outward using the upper
-endpoint of each independent scale interval. Only this protection step may
-saturate at a source/lane edge.
+Each non-empty photo becomes a source-coordinate polygon. Candidates are
+physically joined into complete `FrameGeometryState` objects before deduplication
+and dominance. More than two observed non-dominated states becomes unresolved
+before truncation. Ordered DP retains at most two observed states plus one
+model-only/blank state per frame and never enumerates auto occupancy.
 
-The current output transform is typed identity. No advanced fit or deskew is
-added without a named gap, and the absence of deskew does not cause review.
-Selected profile, slots, transform, and boxes cannot change after DecisionGate.
+A photo safety envelope adds, in order:
+
+1. measurement or inference uncertainty;
+2. a one-source-pixel interpolation allowance;
+3. fixed millimetre protection;
+4. source/lane clipping.
+
+Partial-auto empty slots use separate `grid_inferred_blank` geometry and never
+pretend to be photo observations. Deskew comes only from the common angle
+interval of selected observed top/bottom lines: identity requires shared
+zero-angle evidence; otherwise an observed rotation up to `2°` is used. Each
+approved ROI is sampled once from the original TIFF through inverse affine.
 
 ## Gate, Status, And Reasons
 
@@ -226,12 +236,10 @@ x5_crop_output/
 Optional outputs:
 
 - `--report` writes current JSONL and CSV.
-- `--debug-analysis` writes one three-panel JPG under `_debug_analysis/`.
-  `Original gray context` leaves canonical `gray_work` untinted; `Frame
-  outputs` marks final protected boxes as F1…Fn with distinct translucent
-  colors, while review cases show only provisional envelopes marked `NOT
-  EXPORTABLE`; `Separator evidence` shows every raw observation and highlights
-  the selected edge-pair, one-sided, or model-only Grid evidence.
+- `--debug-analysis` writes a four-layer JPG under `_debug_analysis/`: source
+  and lane authority; pixel measurements and selected observed lines; selected
+  source photo geometry; and protected product output. Review candidates are
+  audit-only and explicitly marked `NOT EXPORTABLE`.
 - `--diagnostics` is read-only. It enables report and Debug Analysis and
   disables review copies. It preserves the same DecisionGate result and final
   boxes but writes no frame TIFF.
@@ -241,16 +249,18 @@ Current report:
 
 ```text
 schema_id       = detection_report
-schema_revision = bounded_safe_crop_capacity_grid
+schema_revision = source_coordinate_photo_geometry_v1
 ```
 
-The report stores count policy, calibration receipt ID, selected profile,
-canonical lane counts, global and lane-local slot identities, observed/inferred
-provenance, equivalence classes, omission summaries, per-lane/component work,
-slots and interactions, safe and protected envelopes, both Gates, transform,
-final boxes, and the TIFF-fidelity receipt. Total slot count is derived from
-lane counts and cross-checked. A report is an audit artifact, not a detection
-cache.
+The report stores count policy, selected profile, measurement coverage, search
+proposals, global and lane-local slot identities, observed/inferred provenance,
+complete states and competition evidence, both translation assessments,
+query/DP/memory receipts, safe/protected envelopes, both Gates, transform,
+final boxes, and TIFF-fidelity receipts. Full raw transitions and content
+components/row runs are represented by complete coverage, counts, and
+a canonical row-run digest plus component derivation rather than expanded
+record lists; selected observations and complete candidate states remain
+auditable. It is an audit artifact, not a cache.
 
 ## TIFF Fidelity And Errors
 
@@ -273,30 +283,32 @@ success receipt.
 ## Validation Boundaries
 
 Accuracy completion currently uses only nine source-SHA-bound samples with
-user-confirmed geometry, expanded into 14 fixed/explicit/auto scenarios.
-Containment checks only whether the inverse-transformed output source footprint
-fully contains each confirmed polygon; larger and overlapping outputs are
-allowed.
+user-confirmed geometry, expanded into 14 fixed/explicit/auto scenarios. Eight
+nominal samples may freeze parameters and must pass final acceptance. S098 must
+pass safety acceptance but is excluded from nominal calibration. Approved
+scenarios require complete confirmed-polygon containment, zero inward loss,
+recalculable extra area, and official TIFF readback. S055 review scenarios must
+retain both a gold-safe state and a physically feasible, protection-distinct
+competitor while producing zero official TIFFs.
 
-The 111-record manifest is a completion gate: all 88 `pass_*` records must be
-`approved_auto`, all 41 pass-partial records must output the matched-holder
-capacity, and the 23 `unknown_*` records may be reviewed only with a concrete
-CandidateGate blocker. Duplicate SHA groups are listed separately; the 111
-records currently represent 107 independent source SHAs and are not described
-as 111 independent real samples. `real_holdout = unavailable`; cells without
-real samples, including XPan and 120-645, report
-`real_sample_coverage = unavailable` without causing runtime review.
+The 111-source cohort is `diagnostic_unreviewed` and produces no accuracy
+verdict. Filename `pass/unknown` labels and filename counts create no
+expectation. Every record must terminate, but only crashes, hangs, invalid
+schemas, consumption of incomplete queries, unbounded query/DP/memory work,
+damaged official TIFFs, or source/lane authority escape block engineering
+acceptance.
+The per-input temporary-memory bound is linear:
+`10 * source_pixels + 32 MiB`.
 
-Formal performance uses a fixed 24-real-TIFF cohort, `--jobs 2`, and one empty
-output root containing `cold` plus `measured-1/2/3`. Every run writes and reads
-back frame TIFFs. Certification uses only the three measured runs and requires
-their median to be `<= 5.0 seconds/input`.
+Formal performance uses 24 fixed real TIFFs, `--jobs 2`, and 168
+status-independent I/O tasks. Each version completes native detection/decision,
+then runs the same frozen sampling/write/readback workload; review candidates
+are never exported. V4.9's three paired total-wall groups must have a median
+`<=5.0 seconds/input` and beat the frozen V4.2.8 commit beyond the MAD noise
+floor.
 
-Current capacity-cutover receipt: all 14 golden scenarios passed; the 111-record
-audit passed with 88/88 `pass_*` and 41/41 pass-partial approvals; each fixed
-24-input performance run wrote 168 TIFFs, the nine partial inputs added 25 slots
-over filename annotations, and the three measured runs had a median of
-`2.499 seconds/input`.
+`real_holdout = unavailable`. Uncovered XPan and 120-645 cells have only
+physical-rule and synthetic-contract coverage and do not cause runtime review.
 
 ## Remove And License
 

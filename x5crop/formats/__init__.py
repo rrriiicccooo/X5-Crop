@@ -17,6 +17,29 @@ class FrameDesignApertureMm:
         require_positive("frame design short axis", self.short_axis_mm)
 
 
+@dataclass(frozen=True, order=True)
+class FrameApertureToleranceMm:
+    """Typed physical tolerance used by feasibility and edge inference.
+
+    This is deliberately separate from the wider search allowance.  A search
+    corridor can say where pixels are inspected; it cannot enlarge a missing
+    edge's physical uncertainty.
+    """
+
+    long_axis_tolerance_mm: float = 0.5
+    short_axis_tolerance_mm: float = 0.5
+
+    def __post_init__(self) -> None:
+        require_positive(
+            "frame aperture long-axis tolerance",
+            self.long_axis_tolerance_mm,
+        )
+        require_positive(
+            "frame aperture short-axis tolerance",
+            self.short_axis_tolerance_mm,
+        )
+
+
 @dataclass(frozen=True)
 class StripHandlingSpec:
     default_count: int
@@ -56,6 +79,9 @@ class FormatSpec:
     aperture_components: tuple[FrameDesignApertureMm, ...]
     strip: StripHandlingSpec
     layout: ScanLayoutSpec
+    aperture_tolerance: FrameApertureToleranceMm = (
+        FrameApertureToleranceMm()
+    )
 
     def __post_init__(self) -> None:
         if not self.format_id:
@@ -69,6 +95,11 @@ class FormatSpec:
             and self.strip.default_count % self.layout.lane_count
         ):
             raise ValueError("dual-lane frame count must divide evenly across lanes")
+        if not isinstance(
+            self.aperture_tolerance,
+            FrameApertureToleranceMm,
+        ):
+            raise TypeError("format aperture tolerance must be typed")
 
 
 FORMATS: dict[str, FormatSpec] = {

@@ -35,6 +35,7 @@ run_full() {
     python3 -m unittest discover -s tools/tests
     python3 -m compileall -q X5_Crop.py x5crop tools
     python3 -m x5crop.configuration.consistency
+    python3 -m tools.regression.benchmark_workload --validate
     for script in \
         X5_Crop_Mac.command \
         tools/install/X5_Crop_Mac_install.command

@@ -1,870 +1,552 @@
-"""Run the fixed production TIFF throughput cohort."""
+"""Run the fixed status-independent V4.2.8/V4.9 paired benchmark."""
 
 from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass
 import hashlib
+import importlib.metadata
 import json
 from pathlib import Path
-import re
+import platform
 import statistics
 import subprocess
 import sys
-import tempfile
 import time
 from typing import Any, Sequence
 
-from x5crop.app_info import RUN_MANIFEST_JSONL_NAME, TIFF_SUFFIXES
-from x5crop.configuration.registry import get_detection_configuration
-from x5crop.detection.evidence.scan_canvas import (
-    ScanCanvasOutcome,
-    observe_scan_canvas,
-)
-from x5crop.formats import FORMAT_CHOICES, format_spec
 from x5crop.geometry.layout import infer_layout
-from x5crop.io.tiff import read_tiff_page_shape, read_tiff_profile
-from x5crop.runtime.manifest import RUN_MANIFEST_SCHEMA
-from x5crop.strip_modes import STRIP_MODES
+from x5crop.io.tiff import read_tiff_page_shape
 
-
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_COHORT = Path(__file__).with_name("cohorts") / "production_performance.jsonl"
-PERFORMANCE_RESULT_SCHEMA = "x5crop_production_performance_v4"
-COHORT_FIELDS = (
-    "sample_id",
-    "source_sha256",
-    "format_id",
-    "strip_mode",
-    "compression",
+from .benchmark_adapter import ADAPTER_RESULT_SCHEMA
+from .benchmark_workload import (
+    BENCHMARK_WORKLOAD_PATH,
+    FIXED_SOURCE_COUNT,
+    FIXED_WORKLOAD_COUNT,
+    PERFORMANCE_COHORT_PATH,
+    PROJECT_ROOT,
+    file_sha256,
+    load_performance_sources,
+    load_workload_records,
 )
-MEASURED_RUN_COUNT = 3
+
+
+PERFORMANCE_RESULT_SCHEMA = "x5crop_paired_performance_v1"
+BASELINE_TAG = "v4.2.8"
+BASELINE_COMMIT = "8d14c55d8af5c944a0b78b51df4c4c428e606f07"
 PRODUCTION_JOBS = 2
 SECONDS_PER_INPUT_LIMIT = 5.0
-FIXED_INPUT_COUNT = 24
-CURRENT_OUTPUT_TIFF_RECEIPT = 168
-CURRENT_PARTIAL_EXTRA_SLOT_RECEIPT = 25
-COUNT_ANNOTATION = re.compile(r"_X5_(\d+)_")
-FORMAT_DIRECTORY_TO_ID = {
-    "66": "120-66",
-    "67": "120-67",
-}
+PAIRED_ORDERS = (
+    ("v428", "v49"),
+    ("v49", "v428"),
+    ("v428", "v49"),
+)
+ADAPTER_PATH = Path(__file__).with_name("benchmark_adapter.py")
+CONTROLLER_PATH = Path(__file__)
 
 
 @dataclass(frozen=True)
-class PerformanceCohortEntry:
-    sample_id: str
-    source_sha256: str
-    format_id: str
-    strip_mode: str
-    compression: str
-
-    def __post_init__(self) -> None:
-        if not self.sample_id:
-            raise ValueError("performance sample_id must not be empty")
-        digest = self.source_sha256.lower()
-        if len(digest) != 64 or any(character not in "0123456789abcdef" for character in digest):
-            raise ValueError(
-                f"performance source_sha256 is invalid for {self.sample_id}"
-            )
-        if self.format_id not in FORMAT_CHOICES:
-            raise ValueError(
-                f"performance format_id is invalid for {self.sample_id}: "
-                f"{self.format_id}"
-            )
-        if self.strip_mode not in STRIP_MODES:
-            raise ValueError(
-                f"performance strip_mode is invalid for {self.sample_id}: "
-                f"{self.strip_mode}"
-            )
-        if not self.compression or self.compression != self.compression.upper():
-            raise ValueError(
-                f"performance compression must be an uppercase TIFF name for "
-                f"{self.sample_id}"
-            )
-
-
-@dataclass(frozen=True)
-class LocalSampleIdentity:
-    sample_id: str
-    source_sha256: str
-    format_id: str
-    strip_mode: str
-    source_relative_path: str
-
-
-@dataclass(frozen=True)
-class ResolvedPerformanceSource:
-    cohort: PerformanceCohortEntry
-    path: Path
-    layout: str
-    selected_scan_canvas_profile_id: str
-    lane_output_slot_counts: tuple[int, ...]
-    slot_identities: tuple[dict[str, int | str], ...]
-    validation_annotation: int
-
-    @property
-    def output_slot_count(self) -> int:
-        return sum(self.lane_output_slot_counts)
-
-    @property
-    def partial_extra_slot_count(self) -> int:
-        if self.cohort.strip_mode != "partial":
-            return 0
-        return self.output_slot_count - self.validation_annotation
-
-
-@dataclass(frozen=True, order=True)
-class PerformanceRunGroup:
-    format_id: str
-    strip_mode: str
-    layout: str
-
-    @property
-    def count_mode(self) -> str:
-        return "fixed_full" if self.strip_mode == "full" else "auto"
-
-    @property
-    def directory_name(self) -> str:
-        return f"{self.format_id}_{self.strip_mode}_{self.layout}"
-
-
-@dataclass(frozen=True)
-class PerformanceTiming:
+class VersionRunTiming:
     label: str
+    version_kind: str
     wall_seconds: float
-    input_count: int
-    completed_inputs: int
-    approved_inputs_with_outputs: int
-    frame_output_count: int
-    expected_frame_output_count: int
+    adapter_result: dict[str, Any]
 
     @property
     def seconds_per_input(self) -> float:
-        return self.wall_seconds / self.input_count
+        return self.wall_seconds / FIXED_SOURCE_COUNT
 
     def as_record(self) -> dict[str, Any]:
+        sources = self.adapter_result["sources"]
         return {
             "label": self.label,
+            "version_kind": self.version_kind,
             "wall_seconds": self.wall_seconds,
-            "input_count": self.input_count,
-            "completed_inputs": self.completed_inputs,
-            "approved_inputs_with_outputs": self.approved_inputs_with_outputs,
-            "frame_output_count": self.frame_output_count,
-            "expected_frame_output_count": self.expected_frame_output_count,
             "seconds_per_input": self.seconds_per_input,
+            "source_count": self.adapter_result["source_count"],
+            "workload_task_count": self.adapter_result[
+                "workload_task_count"
+            ],
+            "source_decode_count": self.adapter_result[
+                "source_decode_count"
+            ],
+            "official_product_tiff_count": self.adapter_result[
+                "official_product_tiff_count"
+            ],
+            "diagnostic_breakdown": {
+                "summed_detection_decision_seconds": sum(
+                    item["detection_decision_seconds"]
+                    for item in sources
+                ),
+                "summed_benchmark_io_seconds": sum(
+                    item["benchmark_io_seconds"] for item in sources
+                ),
+                "sampled_output_pixels": sum(
+                    item["sampled_output_pixels"] for item in sources
+                ),
+                "benchmark_output_bytes": sum(
+                    item["benchmark_output_bytes"] for item in sources
+                ),
+                "approved_auto_count": sum(
+                    item["decision_status"] == "approved_auto"
+                    for item in sources
+                ),
+                "needs_review_count": sum(
+                    item["decision_status"] == "needs_review"
+                    for item in sources
+                ),
+            },
         }
 
 
 @dataclass(frozen=True)
-class ProductionPerformanceResult:
-    cold: PerformanceTiming
-    measured: tuple[PerformanceTiming, ...]
-    output_root: Path
-    groups: tuple[PerformanceRunGroup, ...]
-    expected_frame_output_count: int
-    partial_extra_slot_count: int
-
-    def __post_init__(self) -> None:
-        if len(self.measured) != MEASURED_RUN_COUNT:
-            raise ValueError(
-                f"production performance requires {MEASURED_RUN_COUNT} measured runs"
-            )
-        input_counts = {self.cold.input_count}
-        input_counts.update(timing.input_count for timing in self.measured)
-        if len(input_counts) != 1:
-            raise ValueError("performance runs must use one fixed input count")
-        if input_counts != {FIXED_INPUT_COUNT}:
-            raise ValueError(
-                f"production performance requires exactly {FIXED_INPUT_COUNT} inputs"
-            )
-        if not self.groups:
-            raise ValueError("production performance requires resolved run groups")
-        if self.expected_frame_output_count != CURRENT_OUTPUT_TIFF_RECEIPT:
-            raise ValueError(
-                "current performance cohort/catalog receipt changed: "
-                f"expected {CURRENT_OUTPUT_TIFF_RECEIPT} outputs, resolved "
-                f"{self.expected_frame_output_count}"
-            )
-        if self.partial_extra_slot_count != CURRENT_PARTIAL_EXTRA_SLOT_RECEIPT:
-            raise ValueError(
-                "current partial annotation receipt changed: "
-                f"expected +{CURRENT_PARTIAL_EXTRA_SLOT_RECEIPT}, resolved "
-                f"+{self.partial_extra_slot_count}"
-            )
+class PairedRunGroup:
+    group_ordinal: int
+    order: tuple[str, str]
+    v428: VersionRunTiming
+    v49: VersionRunTiming
 
     @property
-    def median_seconds_per_input(self) -> float:
-        return statistics.median(
-            timing.seconds_per_input for timing in self.measured
+    def relative_difference(self) -> float:
+        return (
+            self.v49.wall_seconds - self.v428.wall_seconds
+        ) / self.v428.wall_seconds
+
+    def as_record(self) -> dict[str, Any]:
+        return {
+            "group_ordinal": self.group_ordinal,
+            "order": list(self.order),
+            "v428": self.v428.as_record(),
+            "v49": self.v49.as_record(),
+            "relative_difference": self.relative_difference,
+        }
+
+
+def _mad(values: Sequence[float]) -> float:
+    median = statistics.median(values)
+    return statistics.median(abs(value - median) for value in values)
+
+
+@dataclass(frozen=True)
+class PairedPerformanceResult:
+    output_root: Path
+    baseline_commit: str
+    v49_commit: str
+    workload_sha256: str
+    controller_sha256: str
+    adapter_sha256: str
+    source_manifest_sha256: str
+    source_sha256s: tuple[str, ...]
+    warmups: tuple[VersionRunTiming, VersionRunTiming]
+    groups: tuple[PairedRunGroup, ...]
+    environment: dict[str, Any]
+
+    def __post_init__(self) -> None:
+        if (
+            self.baseline_commit != BASELINE_COMMIT
+            or len(self.source_sha256s) != FIXED_SOURCE_COUNT
+            or len(self.groups) != len(PAIRED_ORDERS)
+            or tuple(group.order for group in self.groups)
+            != PAIRED_ORDERS
+        ):
+            raise ValueError("paired performance identity is invalid")
+        for run in (
+            *self.warmups,
+            *(
+                timing
+                for group in self.groups
+                for timing in (group.v428, group.v49)
+            ),
+        ):
+            adapter = run.adapter_result
+            if (
+                adapter.get("adapter_result_schema")
+                != ADAPTER_RESULT_SCHEMA
+                or adapter.get("source_count") != FIXED_SOURCE_COUNT
+                or adapter.get("workload_task_count")
+                != FIXED_WORKLOAD_COUNT
+                or adapter.get("source_decode_count")
+                != FIXED_SOURCE_COUNT
+                or adapter.get("official_product_tiff_count") != 0
+                or adapter.get("completed") is not True
+            ):
+                raise ValueError("paired adapter run is incomplete")
+
+    @property
+    def v49_times(self) -> tuple[float, ...]:
+        return tuple(group.v49.wall_seconds for group in self.groups)
+
+    @property
+    def v428_times(self) -> tuple[float, ...]:
+        return tuple(group.v428.wall_seconds for group in self.groups)
+
+    @property
+    def median_v49_seconds_per_input(self) -> float:
+        return statistics.median(self.v49_times) / FIXED_SOURCE_COUNT
+
+    @property
+    def relative_differences(self) -> tuple[float, ...]:
+        return tuple(
+            group.relative_difference for group in self.groups
+        )
+
+    @property
+    def noise_floor(self) -> float:
+        v49_median = statistics.median(self.v49_times)
+        v428_median = statistics.median(self.v428_times)
+        return max(
+            0.01,
+            _mad(self.v49_times) / v49_median,
+            _mad(self.v428_times) / v428_median,
+        )
+
+    @property
+    def absolute_passed(self) -> bool:
+        return (
+            self.median_v49_seconds_per_input
+            <= SECONDS_PER_INPUT_LIMIT
+        )
+
+    @property
+    def relative_passed(self) -> bool:
+        return (
+            statistics.median(self.relative_differences)
+            < -self.noise_floor
         )
 
     @property
     def passed(self) -> bool:
-        return (
-            self.median_seconds_per_input <= SECONDS_PER_INPUT_LIMIT
-            and all(
-                timing.completed_inputs == FIXED_INPUT_COUNT
-                and timing.approved_inputs_with_outputs == FIXED_INPUT_COUNT
-                and timing.frame_output_count
-                == timing.expected_frame_output_count
-                == self.expected_frame_output_count
-                for timing in (self.cold, *self.measured)
-            )
-        )
-
-    @property
-    def certification_status(self) -> str:
-        return "certified" if self.passed else "failed"
+        return self.absolute_passed and self.relative_passed
 
     def as_record(self) -> dict[str, Any]:
         return {
-            "schema": PERFORMANCE_RESULT_SCHEMA,
+            "performance_schema": PERFORMANCE_RESULT_SCHEMA,
+            "baseline": {
+                "tag": BASELINE_TAG,
+                "commit": self.baseline_commit,
+            },
+            "v49_commit": self.v49_commit,
             "jobs": PRODUCTION_JOBS,
+            "source_count": FIXED_SOURCE_COUNT,
+            "workload_task_count": FIXED_WORKLOAD_COUNT,
             "compression": "same",
-            "mode": "real_tiff_write_and_readback",
-            "input_count": FIXED_INPUT_COUNT,
-            "run_topology": [
-                "cold",
-                "measured-1",
-                "measured-2",
-                "measured-3",
-            ],
-            "count_modes": {
-                "full": "fixed_full",
-                "partial": "auto",
+            "count_mapping": {
+                "v49_full": "native_fixed_full",
+                "v49_partial": "--count auto",
+                "v428_full": "native_fixed_full",
+                "v428_partial": "no --count argument",
             },
-            "expected_frame_output_count": self.expected_frame_output_count,
-            "partial_extra_slot_count": self.partial_extra_slot_count,
-            "current_receipt": {
-                "frame_output_count": CURRENT_OUTPUT_TIFF_RECEIPT,
-                "partial_extra_slot_count": (
-                    CURRENT_PARTIAL_EXTRA_SLOT_RECEIPT
-                ),
+            "product_export_policy": (
+                "native_detection_decision_then_benchmark_only_io"
+            ),
+            "status_filtering": False,
+            "identity": {
+                "workload_manifest_sha256": self.workload_sha256,
+                "controller_sha256": self.controller_sha256,
+                "adapter_sha256": self.adapter_sha256,
+                "source_manifest_sha256": self.source_manifest_sha256,
+                "source_sha256s": list(self.source_sha256s),
             },
-            "groups": [
-                {
-                    "format_id": group.format_id,
-                    "strip_mode": group.strip_mode,
-                    "layout": group.layout,
-                    "count_mode": group.count_mode,
-                }
-                for group in self.groups
+            "environment": self.environment,
+            "warmups": [item.as_record() for item in self.warmups],
+            "paired_groups": [
+                group.as_record() for group in self.groups
             ],
+            "v49_median_seconds_per_input": (
+                self.median_v49_seconds_per_input
+            ),
             "seconds_per_input_limit": SECONDS_PER_INPUT_LIMIT,
-            "cold": self.cold.as_record(),
-            "measured": [timing.as_record() for timing in self.measured],
-            "median_seconds_per_input": self.median_seconds_per_input,
-            "certification_status": self.certification_status,
+            "relative_differences": list(
+                self.relative_differences
+            ),
+            "relative_difference_median": statistics.median(
+                self.relative_differences
+            ),
+            "noise_floor": self.noise_floor,
+            "relative_requirement": "median(d_j) < -noise_floor",
+            "absolute_passed": self.absolute_passed,
+            "relative_passed": self.relative_passed,
             "passed": self.passed,
         }
 
 
-def _load_jsonl(path: Path) -> list[dict[str, Any]]:
-    rows: list[dict[str, Any]] = []
-    with path.open("r", encoding="utf-8") as stream:
-        for line_number, line in enumerate(stream, start=1):
-            stripped = line.strip()
-            if not stripped:
-                continue
-            value = json.loads(stripped)
-            if not isinstance(value, dict):
-                raise ValueError(f"{path}:{line_number} must be a JSON object")
-            rows.append(value)
-    return rows
-
-
-def load_performance_cohort(path: Path) -> tuple[PerformanceCohortEntry, ...]:
-    entries: list[PerformanceCohortEntry] = []
-    for line_number, row in enumerate(_load_jsonl(path), start=1):
-        if tuple(row) != COHORT_FIELDS:
-            raise ValueError(
-                f"{path}:{line_number} must contain exactly "
-                f"{', '.join(COHORT_FIELDS)} in canonical order"
-            )
-        entries.append(
-            PerformanceCohortEntry(
-                sample_id=str(row["sample_id"]),
-                source_sha256=str(row["source_sha256"]).lower(),
-                format_id=str(row["format_id"]),
-                strip_mode=str(row["strip_mode"]),
-                compression=str(row["compression"]),
-            )
-        )
-    if not entries:
-        raise ValueError("performance cohort must not be empty")
-    sample_ids = tuple(entry.sample_id for entry in entries)
-    digests = tuple(entry.source_sha256 for entry in entries)
-    if len(sample_ids) != len(set(sample_ids)):
-        raise ValueError("performance cohort sample_id values must be unique")
-    if len(digests) != len(set(digests)):
-        raise ValueError("performance cohort source_sha256 values must be unique")
-    return tuple(entries)
-
-
-def load_local_sample_catalog(path: Path) -> dict[str, LocalSampleIdentity]:
-    catalog: dict[str, LocalSampleIdentity] = {}
-    for line_number, row in enumerate(_load_jsonl(path), start=1):
-        required = {
-            "sample_id",
-            "source_sha256",
-            "format_directory",
-            "strip_mode",
-            "source_relative_path",
-        }
-        if not required.issubset(row):
-            missing = ", ".join(sorted(required - set(row)))
-            raise ValueError(f"{path}:{line_number} is missing {missing}")
-        format_directory = str(row["format_directory"])
-        identity = LocalSampleIdentity(
-            sample_id=str(row["sample_id"]),
-            source_sha256=str(row["source_sha256"]).lower(),
-            format_id=FORMAT_DIRECTORY_TO_ID.get(format_directory, format_directory),
-            strip_mode=str(row["strip_mode"]),
-            source_relative_path=str(row["source_relative_path"]),
-        )
-        if identity.sample_id in catalog:
-            raise ValueError(
-                f"local sample catalog repeats sample_id {identity.sample_id}"
-            )
-        catalog[identity.sample_id] = identity
-    return catalog
-
-
-def validate_cohort_identities(
-    cohort: Sequence[PerformanceCohortEntry],
-    catalog: dict[str, LocalSampleIdentity],
-) -> None:
-    for entry in cohort:
-        identity = catalog.get(entry.sample_id)
-        if identity is None:
-            raise ValueError(
-                f"local sample catalog has no identity for {entry.sample_id}"
-            )
-        expected = (
-            entry.source_sha256,
-            entry.format_id,
-            entry.strip_mode,
-        )
-        actual = (
-            identity.source_sha256,
-            identity.format_id,
-            identity.strip_mode,
-        )
-        if actual != expected:
-            raise ValueError(
-                f"local sample identity disagrees with tracked cohort for "
-                f"{entry.sample_id}"
-            )
-
-
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def _validation_annotation(
-    entry: PerformanceCohortEntry,
-    identity: LocalSampleIdentity,
-) -> int:
-    if entry.strip_mode == "full":
-        return format_spec(entry.format_id).strip.default_count
-    match = COUNT_ANNOTATION.search(Path(identity.source_relative_path).name)
-    if match is None:
-        raise ValueError(
-            f"{entry.sample_id} has no validation-only partial count annotation"
-        )
-    annotation = int(match.group(1))
-    if annotation not in format_spec(entry.format_id).strip.partial_count_range:
-        raise ValueError(
-            f"{entry.sample_id} has an invalid validation-only count annotation"
-        )
-    return annotation
-
-
-def _expected_output_identity(
-    entry: PerformanceCohortEntry,
-    identity: LocalSampleIdentity,
-    width: int,
-    height: int,
-    layout: str,
-) -> tuple[str, tuple[int, ...], tuple[dict[str, int | str], ...], int]:
-    configuration = get_detection_configuration(
-        entry.format_id,
-        entry.strip_mode,
-        None,
+def _git(*arguments: str) -> str:
+    completed = subprocess.run(
+        ("git", *arguments),
+        cwd=PROJECT_ROOT,
+        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
     )
-    long_axis_px = max(width, height)
-    short_axis_px = min(width, height)
-    canvas = observe_scan_canvas(
-        long_axis_px,
-        short_axis_px,
-        layout,
-        configuration.scan_canvas,
-    )
-    if (
-        canvas.outcome != ScanCanvasOutcome.SUPPORTED
-        or canvas.selected_profile is None
-    ):
-        raise ValueError(
-            f"{entry.sample_id} scan-canvas profile is not uniquely resolved"
+    if completed.returncode != 0:
+        raise RuntimeError(
+            f"git {' '.join(arguments)} failed: {completed.stderr.strip()}"
         )
-    if entry.strip_mode == "full":
-        total = configuration.count_request.authoritative_count
-        if total is None:
-            raise ValueError(
-                f"{entry.sample_id} fixed-full request has no authority"
-            )
-    else:
-        fits = tuple(
-            fit
-            for fit in canvas.selected_profile.format_fits
-            if fit.format_id == entry.format_id
-        )
-        if len(fits) != 1:
-            raise ValueError(
-                f"{entry.sample_id} selected profile has no unique format fit"
-            )
-        total = fits[0].maximum_frame_count
-    lane_total = format_spec(entry.format_id).layout.lane_count
-    if total <= 0 or total % lane_total:
-        raise ValueError(
-            f"{entry.sample_id} output capacity does not divide canonical lanes"
-        )
-    lane_counts = tuple(total // lane_total for _index in range(lane_total))
-    slot_identities = tuple(
-        {
-            "global_output_ordinal": global_ordinal,
-            "lane_id": f"lane:{lane_index}",
-            "lane_ordinal": lane_ordinal,
-        }
-        for global_ordinal, (lane_index, lane_ordinal) in enumerate(
-            (
-                (lane_index, lane_ordinal)
-                for lane_index, lane_count in enumerate(lane_counts)
-                for lane_ordinal in range(1, lane_count + 1)
-            ),
-            start=1,
-        )
-    )
-    annotation = _validation_annotation(entry, identity)
-    if total < annotation:
-        raise ValueError(
-            f"{entry.sample_id} resolved capacity is below its validation annotation"
-        )
-    return (
-        canvas.selected_profile.profile_id,
-        lane_counts,
-        slot_identities,
-        annotation,
-    )
+    return completed.stdout.strip()
 
 
-def resolve_performance_sources(
-    cohort: Sequence[PerformanceCohortEntry],
-    catalog: dict[str, LocalSampleIdentity],
-    source_root: Path,
-) -> tuple[ResolvedPerformanceSource, ...]:
-    resolved: list[ResolvedPerformanceSource] = []
-    for entry in cohort:
-        identity = catalog[entry.sample_id]
-        relative = Path(identity.source_relative_path)
-        if relative.is_absolute() or ".." in relative.parts:
-            raise ValueError(
-                f"{entry.sample_id} catalog source path is not canonical"
-            )
-        path = (
-            source_root.joinpath(*relative.parts[1:])
-            if relative.parts and relative.parts[0] == source_root.name
-            else source_root / relative
-        )
-        if (
-            not path.is_file()
-            or path.suffix.lower() not in TIFF_SUFFIXES
-            or _sha256(path) != entry.source_sha256
-        ):
-            raise ValueError(
-                f"{entry.sample_id} canonical catalog source is missing or "
-                "does not match its SHA"
-            )
-        path = path.resolve()
-        profile, _warnings = read_tiff_profile(path, 0)
-        if profile.compression.upper() != entry.compression:
-            raise ValueError(
-                f"{entry.sample_id} compression is {profile.compression}, "
-                f"not {entry.compression}"
-            )
-        height, width = read_tiff_page_shape(path, 0)
-        layout = infer_layout(width, height)
+def _prepare_baseline_worktree(path: Path) -> None:
+    tag_commit = _git("rev-parse", f"{BASELINE_TAG}^{{commit}}")
+    if tag_commit != BASELINE_COMMIT:
+        raise RuntimeError("V4.2.8 tag no longer resolves to the frozen commit")
+    if path.exists():
+        actual = subprocess.run(
+            ("git", "rev-parse", "HEAD"),
+            cwd=path,
+            check=True,
+            stdout=subprocess.PIPE,
+            text=True,
+        ).stdout.strip()
+        if actual != BASELINE_COMMIT:
+            raise RuntimeError("existing V4.2.8 worktree has the wrong commit")
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    completed = subprocess.run(
         (
-            selected_profile_id,
-            lane_counts,
-            slot_identities,
-            validation_annotation,
-        ) = _expected_output_identity(
-            entry,
-            identity,
-            width,
-            height,
-            layout,
+            "git",
+            "worktree",
+            "add",
+            "--detach",
+            str(path),
+            BASELINE_COMMIT,
+        ),
+        cwd=PROJECT_ROOT,
+        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    if completed.returncode != 0:
+        raise RuntimeError(
+            f"cannot create V4.2.8 worktree: {completed.stdout.strip()}"
         )
-        resolved.append(
-            ResolvedPerformanceSource(
-                cohort=entry,
-                path=path,
-                layout=layout,
-                selected_scan_canvas_profile_id=selected_profile_id,
-                lane_output_slot_counts=lane_counts,
-                slot_identities=slot_identities,
-                validation_annotation=validation_annotation,
-            )
-        )
-    return tuple(resolved)
 
 
-def group_performance_sources(
-    sources: Sequence[ResolvedPerformanceSource],
-) -> tuple[tuple[PerformanceRunGroup, tuple[ResolvedPerformanceSource, ...]], ...]:
-    grouped: dict[PerformanceRunGroup, list[ResolvedPerformanceSource]] = {}
+def _source_manifest(output_root: Path) -> tuple[Path, str, tuple[str, ...]]:
+    sources = load_performance_sources()
+    tasks = load_workload_records()
+    tasks_by_sample: dict[str, list[dict[str, Any]]] = {}
+    for task in tasks:
+        tasks_by_sample.setdefault(str(task["sample_id"]), []).append(task)
+    rows = []
+    source_sha256s = []
     for source in sources:
-        key = PerformanceRunGroup(
-            source.cohort.format_id,
-            source.cohort.strip_mode,
-            source.layout,
+        height, width = read_tiff_page_shape(source.source_path, 0)
+        rows.append(
+            {
+                "sample_id": source.sample_id,
+                "source_path": str(source.source_path.resolve()),
+                "source_sha256": source.source_sha256,
+                "format_id": source.format_id,
+                "strip_mode": source.strip_mode,
+                "layout": infer_layout(width, height),
+                "tasks": tasks_by_sample[source.sample_id],
+            }
         )
-        grouped.setdefault(key, []).append(source)
-    return tuple(
-        (
-            key,
-            tuple(sorted(grouped[key], key=lambda item: item.cohort.sample_id)),
-        )
-        for key in sorted(grouped)
+        source_sha256s.append(source.source_sha256)
+    payload = {
+        "manifest_schema": "x5crop_benchmark_source_manifest_v1",
+        "sources": rows,
+    }
+    encoded = (
+        json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+        + "\n"
+    )
+    path = output_root / "controller" / "source_manifest.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(encoded, encoding="utf-8")
+    return (
+        path,
+        hashlib.sha256(encoded.encode("utf-8")).hexdigest(),
+        tuple(source_sha256s),
     )
 
 
-def _stage_inputs(
-    sources: Sequence[ResolvedPerformanceSource],
-    staging_root: Path,
-) -> tuple[tuple[PerformanceRunGroup, Path, tuple[ResolvedPerformanceSource, ...]], ...]:
-    staged: list[
-        tuple[PerformanceRunGroup, Path, tuple[ResolvedPerformanceSource, ...]]
-    ] = []
-    for group, members in group_performance_sources(sources):
-        input_directory = staging_root / group.directory_name
-        input_directory.mkdir(parents=True)
-        for source in members:
-            suffix = source.path.suffix.lower()
-            (input_directory / f"{source.cohort.sample_id}{suffix}").symlink_to(
-                source.path
-            )
-        staged.append((group, input_directory, members))
-    return tuple(staged)
+def _environment_record() -> dict[str, Any]:
+    dependencies = {}
+    for name in ("numpy", "tifffile", "imagecodecs", "Pillow"):
+        try:
+            dependencies[name] = importlib.metadata.version(name)
+        except importlib.metadata.PackageNotFoundError:
+            dependencies[name] = "unavailable"
+    return {
+        "python_executable": sys.executable,
+        "python_version": sys.version,
+        "platform": platform.platform(),
+        "dependencies": dependencies,
+    }
 
 
-def build_group_command(
-    group: PerformanceRunGroup,
-    input_directory: Path,
-    output_directory: Path,
-) -> tuple[str, ...]:
-    return (
+def _run_version(
+    *,
+    label: str,
+    version_kind: str,
+    project_root: Path,
+    source_manifest: Path,
+    run_root: Path,
+) -> VersionRunTiming:
+    output_root = run_root / version_kind
+    if output_root.exists():
+        raise ValueError(f"benchmark run root is not fresh: {output_root}")
+    command = (
         sys.executable,
-        str(PROJECT_ROOT / "X5_Crop.py"),
-        str(input_directory),
-        "--output",
-        str(output_directory),
-        "--format",
-        group.format_id,
-        "--strip",
-        group.strip_mode,
-        "--layout",
-        group.layout,
-        "--compression",
-        "same",
+        str(ADAPTER_PATH),
+        "--project-root",
+        str(project_root),
+        "--version-kind",
+        version_kind,
+        "--source-manifest",
+        str(source_manifest),
+        "--output-root",
+        str(output_root),
         "--jobs",
         str(PRODUCTION_JOBS),
-        "--no-copy-review-files",
     )
-
-
-def _read_run_manifest(path: Path) -> tuple[dict[str, Any], ...]:
-    rows = tuple(_load_jsonl(path))
-    if not rows:
-        raise RuntimeError(f"performance run manifest is empty: {path}")
-    return rows
-
-
-def _validate_group_outputs(
-    output_directory: Path,
-    members: Sequence[ResolvedPerformanceSource],
-) -> tuple[int, int, int]:
-    manifest_path = output_directory / RUN_MANIFEST_JSONL_NAME
-    rows = _read_run_manifest(manifest_path)
-    if len(rows) != len(members):
-        raise RuntimeError(
-            f"{manifest_path} contains {len(rows)} records for {len(members)} inputs"
-        )
-    expected_by_name = {
-        f"{source.cohort.sample_id}{source.path.suffix.lower()}": source
-        for source in members
-    }
-    completed = 0
-    approved_with_outputs = 0
-    frame_output_count = 0
-    seen: set[str] = set()
-    for row in rows:
-        source_name = Path(str(row.get("source", ""))).name
-        source = expected_by_name.get(source_name)
-        if source is None or source_name in seen:
-            raise RuntimeError(
-                f"{manifest_path} contains an unexpected source: {source_name}"
-            )
-        seen.add(source_name)
-        if row.get("terminal_outcome") != "completed":
-            raise RuntimeError(
-                f"{source.cohort.sample_id} did not complete during performance run"
-            )
-        completed += 1
-        if row.get("schema") != RUN_MANIFEST_SCHEMA:
-            raise RuntimeError(
-                f"{source.cohort.sample_id} has a non-current run manifest"
-            )
-        output_identity = row.get("output_identity")
-        expected_identity = {
-            "selected_scan_canvas_profile_id": (
-                source.selected_scan_canvas_profile_id
-            ),
-            "resolved_output_slots": {
-                "lane_output_slot_counts": list(
-                    source.lane_output_slot_counts
-                ),
-            },
-            "output_slot_count": source.output_slot_count,
-            "slot_identities": list(source.slot_identities),
-        }
-        if output_identity != expected_identity:
-            raise RuntimeError(
-                f"{source.cohort.sample_id} output identity disagrees with "
-                "the scan-canvas catalog receipt"
-            )
-        artifacts = row.get("artifacts")
-        if not isinstance(artifacts, dict):
-            raise RuntimeError(
-                f"{source.cohort.sample_id} has no runtime artifacts record"
-            )
-        frame_outputs = artifacts.get("frame_outputs")
-        if (
-            not isinstance(frame_outputs, list)
-            or len(frame_outputs) != source.output_slot_count
-        ):
-            raise RuntimeError(
-                f"{source.cohort.sample_id} did not produce its exact capacity TIFFs"
-            )
-        approved_with_outputs += 1
-        for value in frame_outputs:
-            output_path = Path(str(value))
-            if not output_path.is_file():
-                raise RuntimeError(f"written TIFF is missing: {output_path}")
-            profile, _warnings = read_tiff_profile(output_path, 0)
-            if profile.compression.upper() != source.cohort.compression:
-                raise RuntimeError(
-                    f"{source.cohort.sample_id} output compression changed from "
-                    f"{source.cohort.compression} to {profile.compression}"
-                )
-            frame_output_count += 1
-    if seen != set(expected_by_name):
-        raise RuntimeError(f"{manifest_path} omitted one or more cohort inputs")
-    return completed, approved_with_outputs, frame_output_count
-
-
-def _run_once(
-    label: str,
-    staged_groups: Sequence[
-        tuple[PerformanceRunGroup, Path, tuple[ResolvedPerformanceSource, ...]]
-    ],
-    output_root: Path,
-) -> PerformanceTiming:
-    run_output = output_root / label
-    run_output.mkdir(parents=True, exist_ok=False)
     started = time.perf_counter()
-    for group, input_directory, members in staged_groups:
-        group_output = run_output / group.directory_name
-        command = build_group_command(group, input_directory, group_output)
-        completed = subprocess.run(command, cwd=PROJECT_ROOT, check=False)
-        if completed.returncode != 0:
-            raise RuntimeError(
-                f"performance group failed with exit code {completed.returncode}: "
-                f"{group.directory_name}"
-            )
+    completed = subprocess.run(
+        command,
+        cwd=PROJECT_ROOT,
+        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
     wall_seconds = time.perf_counter() - started
-
-    completed_inputs = 0
-    approved_inputs_with_outputs = 0
-    frame_output_count = 0
-    for group, _input_directory, members in staged_groups:
-        (
-            group_completed,
-            group_approved,
-            group_outputs,
-        ) = _validate_group_outputs(
-            run_output / group.directory_name,
-            members,
+    if completed.returncode != 0:
+        raise RuntimeError(
+            f"{label} failed with exit {completed.returncode}: "
+            f"{completed.stdout[-4000:]}"
         )
-        completed_inputs += group_completed
-        approved_inputs_with_outputs += group_approved
-        frame_output_count += group_outputs
-    input_count = sum(len(members) for _group, _directory, members in staged_groups)
-    expected_frame_output_count = sum(
-        source.output_slot_count
-        for _group, _directory, members in staged_groups
-        for source in members
-    )
-    return PerformanceTiming(
+    result_path = output_root / "adapter_result.json"
+    if not result_path.is_file():
+        raise RuntimeError(f"{label} produced no adapter result")
+    adapter_result = json.loads(result_path.read_text(encoding="utf-8"))
+    return VersionRunTiming(
         label=label,
+        version_kind=version_kind,
         wall_seconds=wall_seconds,
-        input_count=input_count,
-        completed_inputs=completed_inputs,
-        approved_inputs_with_outputs=approved_inputs_with_outputs,
-        frame_output_count=frame_output_count,
-        expected_frame_output_count=expected_frame_output_count,
+        adapter_result=adapter_result,
     )
 
 
-def run_production_performance(
-    sources: Sequence[ResolvedPerformanceSource],
-    output_root: Path,
-) -> ProductionPerformanceResult:
-    if len(sources) != FIXED_INPUT_COUNT:
-        raise ValueError(
-            f"performance cohort must resolve exactly {FIXED_INPUT_COUNT} sources"
-        )
+def run_paired_performance(output_root: Path) -> PairedPerformanceResult:
     if output_root.exists() and any(output_root.iterdir()):
-        raise ValueError(f"performance output root must be empty: {output_root}")
-    expected_frame_output_count = sum(
-        source.output_slot_count for source in sources
-    )
-    partial_extra_slot_count = sum(
-        source.partial_extra_slot_count for source in sources
-    )
-    if expected_frame_output_count != CURRENT_OUTPUT_TIFF_RECEIPT:
+        raise ValueError(f"benchmark root must be empty: {output_root}")
+    if _git("status", "--porcelain"):
         raise ValueError(
-            "current performance cohort/catalog receipt changed: "
-            f"expected {CURRENT_OUTPUT_TIFF_RECEIPT} outputs, resolved "
-            f"{expected_frame_output_count}"
-        )
-    if partial_extra_slot_count != CURRENT_PARTIAL_EXTRA_SLOT_RECEIPT:
-        raise ValueError(
-            "current partial annotation receipt changed: "
-            f"expected +{CURRENT_PARTIAL_EXTRA_SLOT_RECEIPT}, resolved "
-            f"+{partial_extra_slot_count}"
+            "formal paired performance requires a clean committed V4.9 tree"
         )
     output_root.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(
-        prefix="x5crop-performance-inputs-",
-        dir="/private/tmp",
-    ) as staging_directory:
-        staged_groups = _stage_inputs(sources, Path(staging_directory))
-        cold = _run_once("cold", staged_groups, output_root)
-        measured = tuple(
-            _run_once(f"measured-{index}", staged_groups, output_root)
-            for index in range(1, MEASURED_RUN_COUNT + 1)
-        )
-        groups = tuple(group for group, _path, _members in staged_groups)
-    result = ProductionPerformanceResult(
-        cold,
-        measured,
-        output_root,
-        groups,
-        expected_frame_output_count,
-        partial_extra_slot_count,
+    baseline_worktree = output_root / "v428-worktree"
+    _prepare_baseline_worktree(baseline_worktree)
+    source_manifest, source_manifest_sha, source_shas = (
+        _source_manifest(output_root)
     )
-    (output_root / "performance_result.json").write_text(
-        json.dumps(result.as_record(), ensure_ascii=False, indent=2) + "\n",
+    v49_commit = _git("rev-parse", "HEAD")
+    runs_root = output_root / "runs"
+    warmup_v428 = _run_version(
+        label="warmup-v428",
+        version_kind="v428",
+        project_root=baseline_worktree,
+        source_manifest=source_manifest,
+        run_root=runs_root / "warmup-v428",
+    )
+    warmup_v49 = _run_version(
+        label="warmup-v49",
+        version_kind="v49",
+        project_root=PROJECT_ROOT,
+        source_manifest=source_manifest,
+        run_root=runs_root / "warmup-v49",
+    )
+    groups: list[PairedRunGroup] = []
+    for group_ordinal, order in enumerate(PAIRED_ORDERS, 1):
+        timings: dict[str, VersionRunTiming] = {}
+        for sequence_ordinal, version_kind in enumerate(order, 1):
+            timings[version_kind] = _run_version(
+                label=(
+                    f"group-{group_ordinal}-"
+                    f"{sequence_ordinal}-{version_kind}"
+                ),
+                version_kind=version_kind,
+                project_root=(
+                    baseline_worktree
+                    if version_kind == "v428"
+                    else PROJECT_ROOT
+                ),
+                source_manifest=source_manifest,
+                run_root=(
+                    runs_root
+                    / f"group-{group_ordinal}"
+                    / f"{sequence_ordinal}-{version_kind}"
+                ),
+            )
+        groups.append(
+            PairedRunGroup(
+                group_ordinal=group_ordinal,
+                order=order,
+                v428=timings["v428"],
+                v49=timings["v49"],
+            )
+        )
+    result = PairedPerformanceResult(
+        output_root=output_root,
+        baseline_commit=BASELINE_COMMIT,
+        v49_commit=v49_commit,
+        workload_sha256=file_sha256(BENCHMARK_WORKLOAD_PATH),
+        controller_sha256=file_sha256(CONTROLLER_PATH),
+        adapter_sha256=file_sha256(ADAPTER_PATH),
+        source_manifest_sha256=source_manifest_sha,
+        source_sha256s=source_shas,
+        warmups=(warmup_v428, warmup_v49),
+        groups=tuple(groups),
+        environment=_environment_record(),
+    )
+    (output_root / "paired_performance_result.json").write_text(
+        json.dumps(
+            result.as_record(),
+            ensure_ascii=False,
+            indent=2,
+        )
+        + "\n",
         encoding="utf-8",
     )
     return result
 
 
-def _print_result(result: ProductionPerformanceResult) -> None:
-    print(
-        f"cold: {result.cold.wall_seconds:.3f}s "
-        f"({result.cold.seconds_per_input:.3f}s/input)"
-    )
-    for timing in result.measured:
-        print(
-            f"{timing.label}: {timing.wall_seconds:.3f}s "
-            f"({timing.seconds_per_input:.3f}s/input)"
-        )
-    outcome = "PASS" if result.passed else "FAIL"
-    print(
-        f"median: {result.median_seconds_per_input:.3f}s/input "
-        f"(limit {SECONDS_PER_INPUT_LIMIT:.1f}s/input) {outcome}"
-    )
-    print(f"certification: {result.certification_status}")
-    print(f"artifacts: {result.output_root}")
-
-
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Run the fixed X5 Crop production performance cohort."
-    )
-    parser.add_argument(
-        "--source-root",
-        type=Path,
-        required=True,
-        help="Local root containing original TIFF samples.",
-    )
-    parser.add_argument(
-        "--catalog",
-        type=Path,
-        default=None,
-        help="Local sample identity catalog; default SOURCE_ROOT/manual_review/manifest.jsonl.",
-    )
-    parser.add_argument(
-        "--cohort",
-        type=Path,
-        default=DEFAULT_COHORT,
-        help="Tracked performance cohort definition.",
+        description="Run the frozen status-independent paired benchmark"
     )
     parser.add_argument(
         "--output-root",
         type=Path,
-        default=None,
-        help="Fresh benchmark output root; default a new directory under /private/tmp.",
+        default=(
+            PROJECT_ROOT
+            / "build"
+            / "v49-photo-geometry"
+            / "benchmark"
+        ),
     )
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    source_root = args.source_root.expanduser().resolve()
-    catalog_path = (
-        args.catalog.expanduser().resolve()
-        if args.catalog is not None
-        else source_root / "manual_review" / "manifest.jsonl"
+    result = run_paired_performance(args.output_root.resolve())
+    record = result.as_record()
+    print(
+        f"V4.9 median: "
+        f"{record['v49_median_seconds_per_input']:.3f}s/input "
+        f"(limit {SECONDS_PER_INPUT_LIMIT:.1f})"
     )
-    cohort = load_performance_cohort(args.cohort.expanduser().resolve())
-    catalog = load_local_sample_catalog(catalog_path)
-    validate_cohort_identities(cohort, catalog)
-    sources = resolve_performance_sources(
-        cohort,
-        catalog,
-        source_root,
+    print(
+        f"paired median difference: "
+        f"{record['relative_difference_median']:.3%}; "
+        f"noise floor {record['noise_floor']:.3%}"
     )
-    output_root = (
-        args.output_root.expanduser().resolve()
-        if args.output_root is not None
-        else Path(
-            tempfile.mkdtemp(
-                prefix="x5crop-production-performance-",
-                dir="/private/tmp",
-            )
-        )
-    )
-    result = run_production_performance(sources, output_root)
-    _print_result(result)
+    print("performance: PASS" if result.passed else "performance: FAIL")
+    print(f"artifacts: {result.output_root}")
     return 0 if result.passed else 1
 
 

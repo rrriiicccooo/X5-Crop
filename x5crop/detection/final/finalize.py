@@ -1,33 +1,31 @@
 from __future__ import annotations
 
 from ..decision.model import DecisionGateAssessment
-from ..output_geometry import source_boxes_from_work_envelopes
-from ..pipeline import BoundedSafeCropCandidate
+from ..pipeline import PhotoGeometryCandidate
 from .model import FinalDetection
 
 
 def finalize_detection(
-    candidate: BoundedSafeCropCandidate,
+    candidate: PhotoGeometryCandidate,
     decision: DecisionGateAssessment,
     *,
     layout: str,
 ) -> FinalDetection:
+    del layout  # Source-coordinate authority is already explicit in geometry.
     approved = decision.status == "approved_auto"
-    protected = (
-        tuple(
-            envelope
-            for lane_envelopes in candidate.protected_envelopes_by_lane
-            for envelope in lane_envelopes
-        )
+    geometries = candidate.resolved_output_geometries if approved else ()
+    source_boxes = (
+        tuple(item.source_sampling_box for item in geometries)
         if approved
         else ()
     )
-    boxes = (
-        source_boxes_from_work_envelopes(
-            protected,
-            layout=layout,
+    transform = candidate.transform_assessment.transform
+    final_boxes = (
+        tuple(
+            transform.map_half_open_box_outward(box)
+            for box in source_boxes
         )
-        if approved
+        if approved and transform is not None
         else ()
     )
     return FinalDetection(
@@ -36,7 +34,8 @@ def finalize_detection(
         source_core=candidate.source_core,
         resolved_output_slots=candidate.resolved_output_slots,
         output_slot_identities=candidate.output_slot_identities,
-        protected_envelopes=protected,
         transform_assessment=candidate.transform_assessment,
-        final_boxes=boxes,
+        resolved_output_geometries=geometries,
+        source_sampling_boxes=source_boxes,
+        final_boxes=final_boxes,
     )

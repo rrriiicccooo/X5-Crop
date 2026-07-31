@@ -1,4 +1,4 @@
-"""Profile the frozen real-TIFF bounded Grid sample."""
+"""Profile the frozen real-TIFF source-coordinate geometry sample."""
 
 from __future__ import annotations
 
@@ -16,6 +16,8 @@ from x5crop.runtime.options import RuntimeOptions
 from x5crop.runtime.outcome import CompletedInput, FailedInput
 from x5crop.runtime.workflow import process_one
 
+from .benchmark_workload import load_performance_sources
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 FIXED_SAMPLE_ID = "S062"
@@ -25,8 +27,7 @@ FIXED_SOURCE_SHA256 = (
 FIXED_FORMAT_ID = "120-66"
 FIXED_STRIP_MODE = "partial"
 FIXED_COUNT_MODE = "auto"
-PROFILE_RECEIPT_SCHEMA = "x5crop_fixed_sample_profile_v2"
-DEFAULT_MANIFEST = PROJECT_ROOT / "Test/manual_review/manifest.jsonl"
+PROFILE_RECEIPT_SCHEMA = "x5crop_fixed_sample_profile_v3"
 
 
 def _sha256(path: Path) -> str:
@@ -37,26 +38,22 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _fixed_source(manifest_path: Path) -> Path:
-    rows = tuple(
-        json.loads(line)
-        for line in manifest_path.read_text(encoding="utf-8").splitlines()
-        if line.strip()
-    )
+def _fixed_source() -> Path:
     matches = tuple(
-        row for row in rows if row.get("sample_id") == FIXED_SAMPLE_ID
+        source
+        for source in load_performance_sources()
+        if source.sample_id == FIXED_SAMPLE_ID
     )
     if len(matches) != 1:
-        raise ValueError("fixed profiling sample is not unique in the manifest")
-    row = matches[0]
+        raise ValueError("fixed profiling sample is not unique in the cohort")
+    identity = matches[0]
     if (
-        str(row.get("source_sha256", "")).lower()
-        != FIXED_SOURCE_SHA256
-        or str(row.get("strip_mode")) != FIXED_STRIP_MODE
-        or str(row.get("format_directory")) != "66"
+        identity.source_sha256 != FIXED_SOURCE_SHA256
+        or identity.strip_mode != FIXED_STRIP_MODE
+        or identity.format_id != FIXED_FORMAT_ID
     ):
         raise ValueError("fixed profiling identity changed")
-    source = PROJECT_ROOT / str(row["source_relative_path"])
+    source = identity.source_path
     if not source.is_file() or _sha256(source) != FIXED_SOURCE_SHA256:
         raise ValueError("fixed profiling source SHA cannot be resolved")
     return source
@@ -92,13 +89,12 @@ def _hotspots(profile: cProfile.Profile) -> list[dict[str, Any]]:
 
 
 def run_fixed_profile(
-    manifest_path: Path,
     output_root: Path,
 ) -> dict[str, Any]:
     if output_root.exists() and any(output_root.iterdir()):
         raise ValueError(f"profile output root must be empty: {output_root}")
     output_root.mkdir(parents=True, exist_ok=True)
-    source = _fixed_source(manifest_path)
+    source = _fixed_source()
     invocation = runtime_invocation_from_options(
         RuntimeOptions(
             input_path=source,
@@ -153,6 +149,16 @@ def run_fixed_profile(
         or len(outcome.artifacts.frame_outputs) != output_slot_count
     ):
         raise RuntimeError("fixed profiling sample did not meet its frozen contract")
+    work_rows = tuple(
+        lane["selection"]["solution"]["work"]
+        for lane in record["photo_geometry"]["lanes"]
+        if lane["selection"]["solution"] is not None
+    )
+    work_fields = tuple(work_rows[0]) if work_rows else ()
+    work_totals = {
+        field: sum(int(row[field]) for row in work_rows)
+        for field in work_fields
+    }
     receipt = {
         "schema": PROFILE_RECEIPT_SCHEMA,
         "sample_id": FIXED_SAMPLE_ID,
@@ -168,18 +174,21 @@ def run_fixed_profile(
         "slot_identities": output_identity["slot_identities"],
         "wall_seconds": wall_seconds,
         "runtime_metrics": outcome.metrics.as_record(),
-        "work_totals": record["grid_selection"]["work_totals"],
-        "omission_summaries": [
-            summary
-            for lane in record["grid_selection"]["lanes"]
-            for summary in lane["omission_summaries"]
+        "work_totals": work_totals,
+        "selected_aperture_labels": [
+            lane["selection"]["selected_label"]
+            for lane in record["photo_geometry"]["lanes"]
+        ],
+        "geometry_unresolved_codes": record["photo_geometry"][
+            "unresolved_codes"
         ],
         "decision_status": record["decision"]["status"],
         "state_transition_counts": {
-            "states": record["grid_selection"]["work_totals"]["dp_states"],
-            "transitions": record["grid_selection"]["work_totals"][
-                "dp_transitions"
-            ],
+            "states": work_totals.get("dp_state_count", 0),
+            "transitions": work_totals.get(
+                "dp_transition_count",
+                0,
+            ),
         },
         "call_stack_hotspots": _hotspots(profiler),
         "sample_identity_frozen_before_measurement": True,
@@ -193,11 +202,9 @@ def run_fixed_profile(
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
     parser.add_argument("--output-root", type=Path, required=True)
     args = parser.parse_args(argv)
     receipt = run_fixed_profile(
-        args.manifest.expanduser().resolve(),
         args.output_root.expanduser().resolve(),
     )
     print(

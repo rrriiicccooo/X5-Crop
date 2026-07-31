@@ -3,8 +3,8 @@
 - 当前开发版本：**V4.9 bounded safe crop**
 - 当前稳定发布：**v4.2.8**
 
-X5 Crop 用于保守裁切 Hasselblad / Imacon X5 片夹扫描 TIFF。用户先提供 format；系统在
-片夹物理容量、有限 Grid 搜索和向外安全包络内确定 frame，并在安全合同成立时写出单张
+X5 Crop 用于保守裁切 Hasselblad / Imacon X5 片夹扫描 TIFF。用户先提供 format；系统用
+片夹尺度和 count 约束在原图坐标测量照片四边、重建 polygon，并在安全合同成立时写出单张
 TIFF。
 
 ## 产品目标
@@ -13,11 +13,11 @@ TIFF。
 
 - `approved_auto` 表示最终 protection 后的输出满足有界安全合同。
 - 输出可以比照片更大，相邻输出可以重叠，也可以带入少量邻片像素。
-- Separator 缺失、blank、inferred Grid、等价 geometry、未 deskew 或 protection 在
-  authority 边界饱和，都不会单独导致 review。
+- Blank、named inference、缺少可见 separator 或多个 protection 后等价的 geometry，
+  都不会单独导致 review。
 - `needs_review` 只用于无法吸收的具体风险，例如 ordinal 或 primary slot ownership
-  无法有界、omission coverage 未证明、已知内容可能被内切，或 geometry 越出
-  source/lane authority。
+  无法有界、已知内容可能被内切、geometry 越出 source/lane authority，或 observed
+  rotation 没有共同可行区间。
 - 读取、写出或复读失败属于 terminal failure，不是 `needs_review`。
 
 ## 安装
@@ -134,25 +134,34 @@ python3 X5_Crop.py --help
 | `120_wide_223` | `223 × 63.44 mm` | 645 ≤ 4；66 ≤ 3；67 ≤ 3 |
 | `120_wide_188_5` | `188.5 × 63.44 mm` | 645 ≤ 4；66 ≤ 3；67 ≤ 2 |
 
-Separator measurement 与 positive-content measurement 相互独立。Observed band、
-edge-pair、one-sided observation 和 model-only corridor 都可以参与 bounded proposal；
-prior 只约束搜索，不能冒充物理观测。
+Pixel observation、physical constraint 与 search proposal 是三层不同权限：
 
-每个 lane 只搜索已经解析的一个 slot count。Score 与 tie-break 只决定构建顺序和诊断
-展示；只有 output-equivalent proposals 可以按 ordinal outward union。若剩余两个非等价
-placement、ordinal 或 ownership classes，系统不会排序选赢家。
+- 二维 pixel measurement 产生 transition、line、support、residual、angle 与 measurement
+  uncertainty；
+- format、count、scale、`±0.5 mm` aperture tolerance、lane 与邻接只筛选或推断；
+- Grid、outer 与 corridor 只限定查询域和顺序，不能成为照片边。
 
-`P_MAX/O_MAX/K_MAX` 截断均生成 typed omission summaries。只有所有 omitted alternatives
-已证明属于 retained equivalence class 并进入 outward union 时，截断才不阻断；无法证明
-时 `grid_search_coverage` 会阻止输出。
+Top/bottom 在 ScanCanvas 与 format 给出的窄 corridor/完整 halo 中测量，每帧独立拥有
+intercept、support 与 uncertainty。Start/end 通过覆盖全部允许平移的无缝 query tiles
+寻找；系统可以从任意内部边或 trailing edge 向前/向后重建序列，不要求 outer 先找到第一
+张。Content 只帮助 ownership 和 containment，不创建边。
 
-每个 proposal 产生恰好 resolved count 个 lane-local slot。Contact/overlap 的 shared
-interval 会同时并入相邻安全包络；短轴默认保留完整 authoritative lane。随后按独立
-scale 的 upper endpoint 向上换算固定毫米 protection。只有这一步可以在 source/lane
-边界饱和。
+每张非空照片形成 source-coordinate polygon。候选先完成物理兼容连接，再组成完整
+`FrameGeometryState`、去重和 dominance；超过两个 observed non-dominated states 时在
+截断前 unresolved。Ordered DP 每帧最多保留两个 observed states 和一个 model-only/blank
+state，不枚举 auto occupancy。
 
-当前输出使用 typed identity transform。没有 named gap 时不增加 deskew，也不会因此
-review。DecisionGate 后不再改变 selected profile、slots、transform 或 boxes。
+照片安全包络按以下顺序生成：
+
+1. measurement uncertainty 或 inference uncertainty；
+2. 1 source-pixel interpolation allowance；
+3. 固定毫米 protection；
+4. source/lane clipping。
+
+Partial auto 的空 slot 使用独立 `grid_inferred_blank` geometry，不冒充照片 observation。
+Deskew 只由 selected observed top/bottom lines 的共同 angle interval产生；零角度有共同
+证据时使用 identity，否则在 `2°` 内使用 observed rotation。每个 approved ROI 最终从原
+TIFF 做一次 inverse-affine sampling。
 
 ## Gate、状态与原因
 
@@ -204,11 +213,9 @@ x5_crop_output/
 只有启用相应选项时才写 Debug 或 report：
 
 - `--report`：写 current JSONL/CSV。
-- `--debug-analysis`：在 `_debug_analysis/` 写一个三联 JPG。`Original gray context`
-  保持 canonical `gray_work` 未染色；`Frame outputs` 用 F1…Fn 不同颜色半透明标出最终
-  protected boxes，review 只显示带 `NOT EXPORTABLE` 的 provisional envelopes；
-  `Separator evidence` 显示全部 raw observations，并突出 selected edge-pair、
-  one-sided 或 model-only Grid。
+- `--debug-analysis`：在 `_debug_analysis/` 写四层 JPG，依次展示 source/lane authority、
+  pixel measurement 与 selected observed lines、selected source photo geometry，以及
+  protected product output。Review 候选只作 audit，并明确标记 `NOT EXPORTABLE`。
 - `--diagnostics`：只读诊断；隐含 report、Debug Analysis 与不复制 review 文件。它保留
   同一 DecisionGate 结果和 final boxes，但不写 frame TIFF。
 - `--no-copy-review-files`：不复制需要 review 的原 TIFF。
@@ -217,14 +224,16 @@ Current report：
 
 ```text
 schema_id       = detection_report
-schema_revision = bounded_safe_crop_capacity_grid
+schema_revision = source_coordinate_photo_geometry_v1
 ```
 
-Report 保存 count policy、calibration receipt ID、selected profile、canonical lane
-counts、global/lane-local slot identities、observed/inferred provenance、equivalence
-classes、omission summaries、逐 lane/component 工作量、slot/interaction、
-safe/protected envelopes、两级 Gate、transform、final boxes 与 TIFF fidelity receipt。
-总 slot 数只从 lane counts 派生并校验。Report 是审计产物，不是 detection cache。
+Report 保存 count policy、selected profile、measurement coverage、search proposals、
+global/lane-local slot identities、observed/inferred provenance、完整 states 与竞争证据、
+两种 translation assessment、query/DP/memory receipt、safe/protected envelopes、两级
+Gate、transform、final boxes 与 TIFF fidelity receipt。全量 raw transitions 和 content
+components/row runs 不逐项展开，只保存 coverage、数量、canonical row-run digest 与
+component derivation；selected observations 和完整候选 states 仍可审计。Report 是审计
+产物，不是 cache。
 
 ## TIFF 保真与错误
 
@@ -244,22 +253,25 @@ safe/protected envelopes、两级 Gate、transform、final boxes 与 TIFF fideli
 ## 验证声明边界
 
 当前 accuracy completion 只由九张 source-SHA-bound、用户确认 geometry 的黄金样片支撑，
-展开为 14 个 fixed/explicit/auto 场景。Containment 只检查 inverse-transform 后的输出
-source footprint 是否完整包含确认 polygon，允许更大或重叠。
+展开为 14 个 fixed/explicit/auto 场景。八张 nominal 用于参数冻结并参与最终验收；S098
+必须通过安全验收，但不参与 nominal calibration。Approved 场景检查 source footprint
+完整包含 confirmed polygon、零 inward loss、可重算 extra area 和正式 TIFF 复读。S055
+review 场景必须保存黄金安全 state 与 protection 后仍不等价的竞争 state，且正式 TIFF
+数为零。
 
-111 条 manifest 是当前完成门槛：88 条 `pass_*` 必须全部 `approved_auto`，其中 41 条
-pass partial 必须精确输出匹配片夹容量；23 条 `unknown_*` 只有存在具体 CandidateGate
-阻断时才允许 review。重复 SHA 单列，111 records 当前对应 107 个独立 source SHA，不能
-冒充 111 张独立真实样片。`real_holdout = unavailable`；XPan、120-645 等无真实样片的
-coverage cell 标记 `real_sample_coverage = unavailable`，但不因此制造 runtime review。
+111-source cohort 是 `diagnostic_unreviewed`，不产生 accuracy verdict。Filename
+`pass/unknown` 与 filename count 不产生 expectation。全部记录必须 terminal，但只由
+crash、hang、非法 schema、消费未完成 query、无界 query/DP/memory、正式 TIFF 损坏或
+source/lane authority 逃逸阻断工程验收。
+单输入临时内存按 `10 × source pixels + 32 MiB` 的线性上界验收。
 
-正式性能合同使用固定 24 张真实 TIFF、`--jobs 2`、一个空 output root 下的 `cold` 与
-`measured-1/2/3` 四次运行。四次都实际写出并复读 frame TIFF，只以三次 measured 的中位数
-判断 `<= 5.0 秒/张`。
+正式性能固定 24 张真实 TIFF、`--jobs 2` 和 168 个 status-independent I/O tasks。每版先
+完成真实 detection/decision，再做同一冻结 sampling/write/readback workload；不得导出
+review candidate。V4.9 三组 paired total-wall 的中位数必须 `<=5.0 秒/输入`，并在 MAD
+噪声之外快于固定 V4.2.8 commit。
 
-当前容量切换 receipt：14/14 黄金场景通过；111/111 audit 通过，88/88 `pass_*` 和
-41/41 pass partial 均批准；固定 24 张每轮写出 168 个 TIFF，九个 partial 输入比 filename
-annotation 多 25 个 slots，三轮 measured 中位数为 `2.499 秒/输入`。
+`real_holdout = unavailable`。未覆盖的 XPan、120-645 只具有 physical-rule 与 synthetic
+contract coverage，不据此制造 runtime review。
 
 ## 移除与许可
 

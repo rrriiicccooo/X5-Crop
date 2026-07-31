@@ -8,7 +8,7 @@ from typing import Any
 from ..app_info import SCRIPT_NAME, VERSION
 from ..configuration.bundle import DetectionConfigurationBundle
 from ..configuration.model import FrameCountMode
-from ..detection.grid.model import (
+from ..detection.photo_geometry.model import (
     OutputSlotIdentity,
     ResolvedOutputSlots,
 )

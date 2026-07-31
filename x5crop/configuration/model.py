@@ -103,7 +103,7 @@ class DetectionConfiguration:
 
     @property
     def detector_kind(self) -> str:
-        return "bounded_safe_crop_capacity_grid"
+        return "source_coordinate_photo_geometry"
 
     @property
     def configuration_id(self) -> str:

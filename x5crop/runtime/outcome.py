@@ -30,34 +30,22 @@ class RuntimeMetrics:
     content_runs: int | None
     content_components: int | None
     censored_content_components: int | None
-    exact_measurement_count: int | None
-    exact_cache_hit_count: int | None
-    separator_line_observations: int | None
-    placement_seeds: int | None
-    candidate_builds: int | None
+    measurement_query_count: int | None
+    raw_transition_count: int | None
+    line_family_count: int | None
+    physical_geometry_count: int | None
+    pre_join_state_count: int | None
+    post_join_state_count: int | None
+    deduplicated_state_count: int | None
+    sequence_phase_class_count: int | None
     dp_states: int | None
     dp_transitions: int | None
-    retained_proposals: int | None
+    pixel_query_count: int | None
+    shared_measurement_reuse_count: int | None
     peak_temporary_bytes: int | None
 
     def __post_init__(self) -> None:
-        values = (
-            self.processing_seconds,
-            self.detection_seconds,
-            self.domain_pixels,
-            self.content_runs,
-            self.content_components,
-            self.censored_content_components,
-            self.exact_measurement_count,
-            self.exact_cache_hit_count,
-            self.separator_line_observations,
-            self.placement_seeds,
-            self.candidate_builds,
-            self.dp_states,
-            self.dp_transitions,
-            self.retained_proposals,
-            self.peak_temporary_bytes,
-        )
+        values = tuple(self.__dict__.values())
         if all(value is None for value in values):
             return
         if any(value is None for value in values):
@@ -71,66 +59,20 @@ class RuntimeMetrics:
             raise ValueError("runtime durations must be finite")
         if self.detection_seconds > self.processing_seconds:
             raise ValueError("detection cannot exceed total processing time")
-        counts = (
-            self.domain_pixels,
-            self.content_runs,
-            self.content_components,
-            self.censored_content_components,
-            self.exact_measurement_count,
-            self.exact_cache_hit_count,
-            self.separator_line_observations,
-            self.placement_seeds,
-            self.candidate_builds,
-            self.dp_states,
-            self.dp_transitions,
-            self.retained_proposals,
-            self.peak_temporary_bytes,
-        )
+        counts = values[2:]
         if any(value is None or value < 0 for value in counts):
             raise ValueError("runtime counters cannot be negative")
 
     @classmethod
     def unavailable(cls) -> "RuntimeMetrics":
-        return cls(
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-        )
+        return cls(*(None for _ in range(19)))
 
     @property
     def available(self) -> bool:
         return self.processing_seconds is not None
 
     def as_record(self) -> dict[str, Any]:
-        return {
-            "processing_seconds": self.processing_seconds,
-            "detection_seconds": self.detection_seconds,
-            "domain_pixels": self.domain_pixels,
-            "content_runs": self.content_runs,
-            "content_components": self.content_components,
-            "censored_content_components": self.censored_content_components,
-            "exact_measurement_count": self.exact_measurement_count,
-            "exact_cache_hit_count": self.exact_cache_hit_count,
-            "separator_line_observations": self.separator_line_observations,
-            "placement_seeds": self.placement_seeds,
-            "candidate_builds": self.candidate_builds,
-            "dp_states": self.dp_states,
-            "dp_transitions": self.dp_transitions,
-            "retained_proposals": self.retained_proposals,
-            "peak_temporary_bytes": self.peak_temporary_bytes,
-        }
+        return dict(self.__dict__)
 
 
 @dataclass(frozen=True)

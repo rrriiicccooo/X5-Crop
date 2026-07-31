@@ -48,6 +48,10 @@ class CurrentOnlyContractTest(unittest.TestCase):
             "x5crop/detection/output_preparation.py",
             "x5crop/output/frame_bleed.py",
             "x5crop/image/separator_profile.py",
+            "x5crop/configuration/grid.py",
+            "x5crop/detection/grid",
+            "x5crop/detection/evidence/separator.py",
+            "x5crop/detection/protection.py",
         )
         for relative in forbidden_paths:
             with self.subTest(path=relative):
@@ -249,7 +253,7 @@ class CurrentOnlyContractTest(unittest.TestCase):
         self.assertEqual(REPORT_SCHEMA_ID, "detection_report")
         self.assertEqual(
             REPORT_SCHEMA_REVISION,
-            "bounded_safe_crop_capacity_grid",
+            "source_coordinate_photo_geometry_v1",
         )
         candidate = candidate_gate_assessment(
             scan_canvas_state=EvidenceState.SUPPORTED,
@@ -336,8 +340,8 @@ class CurrentOnlyContractTest(unittest.TestCase):
         self.assertEqual(len(launcher.splitlines()), 13)
         self.assertIn("from x5crop.entry.cli import main", launcher)
         sources = read_sources()
-        self.assertIn("x5crop.detection.grid.search", sources)
-        self.assertIn("x5crop.detection.evidence.separator", sources)
+        self.assertIn("x5crop.detection.photo_geometry.detector", sources)
+        self.assertIn("x5crop.detection.photo_geometry.measurement", sources)
 
 
 if __name__ == "__main__":

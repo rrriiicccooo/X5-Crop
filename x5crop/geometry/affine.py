@@ -51,11 +51,19 @@ class AffineCoordinateTransform:
         width: int,
         height: int,
         angle_degrees: float,
+        *,
+        guard_px: float = 1.0,
     ) -> "AffineCoordinateTransform":
         if width <= 0 or height <= 0:
             raise ValueError("expanded rotation requires a positive source extent")
-        if not math.isfinite(angle_degrees):
-            raise ValueError("expanded rotation angle must be finite")
+        if (
+            not math.isfinite(angle_degrees)
+            or not math.isfinite(guard_px)
+            or guard_px < 1.0
+        ):
+            raise ValueError(
+                "expanded rotation angle/guard must be finite and safe"
+            )
         angle = math.radians(angle_degrees)
         cos_a = math.cos(angle)
         sin_a = math.sin(angle)
@@ -78,8 +86,12 @@ class AffineCoordinateTransform:
         maximum_x = max(point[0] for point in rotated)
         minimum_y = min(point[1] for point in rotated)
         maximum_y = max(point[1] for point in rotated)
-        output_width = int(math.ceil(maximum_x - minimum_x + 1.0))
-        output_height = int(math.ceil(maximum_y - minimum_y + 1.0))
+        output_width = int(
+            math.ceil(maximum_x - minimum_x + 2.0 * guard_px)
+        )
+        output_height = int(
+            math.ceil(maximum_y - minimum_y + 2.0 * guard_px)
+        )
         output_cx = (output_width - 1) / 2.0
         output_cy = (output_height - 1) / 2.0
         return cls(
@@ -125,6 +137,19 @@ class AffineCoordinateTransform:
             self.matrix[1][0] * x
             + self.matrix[1][1] * y
             + self.matrix[1][2],
+        )
+
+    def inverse_map_point(self, x: float, y: float) -> tuple[float, float]:
+        if not math.isfinite(x) or not math.isfinite(y):
+            raise ValueError("inverse-mapped image coordinate must be finite")
+        inverse = self.inverse_matrix
+        return (
+            inverse[0][0] * x
+            + inverse[0][1] * y
+            + inverse[0][2],
+            inverse[1][0] * x
+            + inverse[1][1] * y
+            + inverse[1][2],
         )
 
     @property

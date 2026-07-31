@@ -12,10 +12,6 @@ from ..domain import (
     MeasurementProvenance,
     ObservationId,
 )
-from ..image.evidence import (
-    adaptive_activation_threshold,
-    spatially_supported_activation_mask,
-)
 from .evidence.scan_canvas import ScanCanvasEvidence, ScanCanvasOutcome
 
 
@@ -94,6 +90,7 @@ class ContentRowRunTable:
 @dataclass(frozen=True)
 class SourceContentMeasurementStatistics:
     domain_pixels: int
+    streaming_block_count: int
     intensity_active_cells: int
     texture_active_cells: int
     positive_cells: int
@@ -107,6 +104,7 @@ class SourceContentMeasurementStatistics:
     def __post_init__(self) -> None:
         counts = (
             self.domain_pixels,
+            self.streaming_block_count,
             self.intensity_active_cells,
             self.texture_active_cells,
             self.positive_cells,
@@ -268,6 +266,174 @@ def _empty_run_table() -> ContentRowRunTable:
     return ContentRowRunTable(*arrays)
 
 
+def _content_field_blocks(
+    gray: np.ndarray,
+    maximum_block_pixels: int,
+):
+    if gray.ndim != 2 or min(gray.shape) <= 0 or maximum_block_pixels <= 0:
+        raise ValueError("content field streaming requires a bounded gray image")
+    block_rows = max(1, maximum_block_pixels // gray.shape[1])
+    for start in range(0, gray.shape[0], block_rows):
+        stop = min(gray.shape[0], start + block_rows)
+        halo_start = max(0, start - 1)
+        halo_stop = min(gray.shape[0], stop + 1)
+        intensity, texture = _content_fields(
+            gray[halo_start:halo_stop]
+        )
+        local_start = start - halo_start
+        local_stop = local_start + stop - start
+        yield (
+            start,
+            stop,
+            intensity[local_start:local_stop],
+            texture[local_start:local_stop],
+        )
+
+
+def _streaming_content_thresholds(
+    gray: np.ndarray,
+    *,
+    percentile: float,
+    minimum_range: float,
+    maximum_percentile_samples: int,
+    maximum_block_pixels: int,
+) -> tuple[float | None, float | None, float, float, int]:
+    sample_step = max(
+        1,
+        int(
+            np.ceil(
+                gray.size / float(maximum_percentile_samples)
+            )
+        ),
+    )
+    intensity_samples: list[np.ndarray] = []
+    texture_samples: list[np.ndarray] = []
+    intensity_minimum = float("inf")
+    intensity_maximum = float("-inf")
+    texture_minimum = float("inf")
+    texture_maximum = float("-inf")
+    peak_bytes = 0
+    block_count = 0
+    width = gray.shape[1]
+    for start, stop, intensity, texture in _content_field_blocks(
+        gray,
+        maximum_block_pixels,
+    ):
+        block_count += 1
+        intensity_minimum = min(
+            intensity_minimum,
+            float(intensity.min()),
+        )
+        intensity_maximum = max(
+            intensity_maximum,
+            float(intensity.max()),
+        )
+        texture_minimum = min(
+            texture_minimum,
+            float(texture.min()),
+        )
+        texture_maximum = max(
+            texture_maximum,
+            float(texture.max()),
+        )
+        global_start = start * width
+        first_global = (
+            (global_start + sample_step - 1) // sample_step
+        ) * sample_step
+        local_start = first_global - global_start
+        intensity_samples.append(
+            intensity.reshape(-1)[local_start::sample_step].copy()
+        )
+        texture_samples.append(
+            texture.reshape(-1)[local_start::sample_step].copy()
+        )
+        peak_bytes = max(
+            peak_bytes,
+            intensity.nbytes + texture.nbytes,
+        )
+    intensity_sample = np.concatenate(intensity_samples)
+    texture_sample = np.concatenate(texture_samples)
+    peak_bytes = max(
+        peak_bytes,
+        intensity_sample.nbytes + texture_sample.nbytes,
+    )
+    intensity_threshold = (
+        None
+        if intensity_maximum - intensity_minimum <= minimum_range
+        else float(np.percentile(intensity_sample, percentile))
+    )
+    texture_threshold = (
+        None
+        if texture_maximum - texture_minimum <= minimum_range
+        else float(np.percentile(texture_sample, percentile))
+    )
+    return (
+        intensity_threshold,
+        texture_threshold,
+        intensity_minimum,
+        texture_minimum,
+        peak_bytes,
+    )
+
+
+def _streaming_content_activation_masks(
+    gray: np.ndarray,
+    *,
+    intensity_threshold: float,
+    texture_threshold: float,
+    intensity_minimum: float,
+    texture_minimum: float,
+    minimum_active_pixels: int,
+    maximum_block_pixels: int,
+) -> tuple[np.ndarray, np.ndarray, int, int]:
+    intensity_mask = np.empty(gray.shape, dtype=np.bool_)
+    texture_mask = np.empty(gray.shape, dtype=np.bool_)
+    peak_block_bytes = 0
+    for start, stop, intensity, texture in _content_field_blocks(
+        gray,
+        maximum_block_pixels,
+    ):
+        intensity_mask[start:stop] = (
+            intensity > intensity_threshold
+            if intensity_threshold <= intensity_minimum
+            else intensity >= intensity_threshold
+        )
+        texture_mask[start:stop] = (
+            texture > texture_threshold
+            if texture_threshold <= texture_minimum
+            else texture >= texture_threshold
+        )
+        peak_block_bytes = max(
+            peak_block_bytes,
+            intensity.nbytes + texture.nbytes,
+        )
+
+    axis_support = int(np.ceil(np.sqrt(minimum_active_pixels)))
+    for mask in (intensity_mask, texture_mask):
+        if int(np.count_nonzero(mask)) < minimum_active_pixels:
+            mask.fill(False)
+            continue
+        supported_rows = np.count_nonzero(mask, axis=1) >= axis_support
+        supported_columns = (
+            np.count_nonzero(mask, axis=0) >= axis_support
+        )
+        mask &= supported_rows[:, None]
+        mask &= supported_columns[None, :]
+        if int(np.count_nonzero(mask)) < minimum_active_pixels:
+            mask.fill(False)
+    return (
+        intensity_mask,
+        texture_mask,
+        peak_block_bytes,
+        int(
+            np.ceil(
+                gray.shape[0]
+                / max(1, maximum_block_pixels // gray.shape[1])
+            )
+        ),
+    )
+
+
 def _four_connected_run_components(
     positive_mask: np.ndarray,
 ) -> tuple[
@@ -279,21 +445,66 @@ def _four_connected_run_components(
     int,
 ]:
     """Label strict 4-connected row runs with a vectorized overlap graph."""
-    starts_mask = positive_mask.copy()
-    starts_mask[:, 1:] &= ~positive_mask[:, :-1]
-    ends_mask = positive_mask.copy()
-    ends_mask[:, :-1] &= ~positive_mask[:, 1:]
-    start_rows, start_columns = np.nonzero(starts_mask)
-    end_rows, end_columns = np.nonzero(ends_mask)
-    if (
-        start_rows.size != end_rows.size
-        or not np.array_equal(start_rows, end_rows)
-    ):
-        raise RuntimeError("content RLE extraction lost row identity")
-
-    run_rows = start_rows.astype(np.int32, copy=False)
-    run_lefts = start_columns.astype(np.int32, copy=False)
-    run_rights = (end_columns + 1).astype(np.int32, copy=False)
+    maximum_block_pixels = 1_048_576
+    block_rows = max(
+        1,
+        maximum_block_pixels // positive_mask.shape[1],
+    )
+    row_chunks: list[np.ndarray] = []
+    left_chunks: list[np.ndarray] = []
+    right_chunks: list[np.ndarray] = []
+    extraction_peak_bytes = 0
+    for start in range(0, positive_mask.shape[0], block_rows):
+        stop = min(positive_mask.shape[0], start + block_rows)
+        block = positive_mask[start:stop]
+        starts = block.copy()
+        starts[:, 1:] &= ~block[:, :-1]
+        ends = block.copy()
+        ends[:, :-1] &= ~block[:, 1:]
+        start_rows, start_columns = np.nonzero(starts)
+        end_rows, end_columns = np.nonzero(ends)
+        if (
+            start_rows.size != end_rows.size
+            or not np.array_equal(start_rows, end_rows)
+        ):
+            raise RuntimeError("content RLE extraction lost row identity")
+        row_chunks.append(
+            (start_rows + start).astype(np.int32, copy=False)
+        )
+        left_chunks.append(start_columns.astype(np.int32, copy=False))
+        right_chunks.append(
+            (end_columns + 1).astype(np.int32, copy=False)
+        )
+        extraction_peak_bytes = max(
+            extraction_peak_bytes,
+            sum(
+                item.nbytes
+                for item in (
+                    starts,
+                    ends,
+                    start_rows,
+                    start_columns,
+                    end_rows,
+                    end_columns,
+                )
+            ),
+        )
+    if row_chunks:
+        extraction_chunk_bytes = sum(
+            item.nbytes
+            for item in (*row_chunks, *left_chunks, *right_chunks)
+        )
+        run_rows = np.concatenate(row_chunks)
+        run_lefts = np.concatenate(left_chunks)
+        run_rights = np.concatenate(right_chunks)
+    else:
+        extraction_chunk_bytes = 0
+        run_rows = np.empty(0, dtype=np.int32)
+        run_lefts = np.empty(0, dtype=np.int32)
+        run_rights = np.empty(0, dtype=np.int32)
+    row_chunks.clear()
+    left_chunks.clear()
+    right_chunks.clear()
     run_count = int(run_rows.size)
     if run_count == 0:
         empty = np.empty(0, dtype=np.int32)
@@ -303,17 +514,7 @@ def _four_connected_run_components(
             empty.copy(),
             empty.copy(),
             np.empty(0, dtype=np.int64),
-            sum(
-                item.nbytes
-                for item in (
-                    starts_mask,
-                    ends_mask,
-                    start_rows,
-                    start_columns,
-                    end_rows,
-                    end_columns,
-                )
-            ),
+            extraction_peak_bytes,
         )
 
     row_counts = np.bincount(
@@ -421,12 +622,9 @@ def _four_connected_run_components(
     work_bytes = sum(
         item.nbytes
         for item in (
-            starts_mask,
-            ends_mask,
-            start_rows,
-            start_columns,
-            end_rows,
-            end_columns,
+            run_rows,
+            run_lefts,
+            run_rights,
             parents,
             row_counts,
             row_offsets,
@@ -437,7 +635,10 @@ def _four_connected_run_components(
             run_lengths,
             component_cells,
         )
-    ) + edge_chunk_bytes
+    ) + max(
+        extraction_peak_bytes + extraction_chunk_bytes,
+        edge_chunk_bytes,
+    )
     return (
         run_rows,
         run_lefts,
@@ -634,23 +835,37 @@ def observe_source_content(
         description="immutable source-coordinate positive content components",
     )
     view = gray_work[box.top : box.bottom, box.left : box.right]
-    intensity_field, texture_field = _content_fields(view)
     parameters = configuration.evidence
-    intensity_threshold = adaptive_activation_threshold(
-        intensity_field,
-        parameters.activation_percentile,
-        parameters.minimum_evidence_range,
-        parameters.maximum_percentile_samples,
-    )
-    texture_threshold = adaptive_activation_threshold(
-        texture_field,
-        parameters.activation_percentile,
-        parameters.minimum_evidence_range,
-        parameters.maximum_percentile_samples,
+    (
+        intensity_threshold,
+        texture_threshold,
+        intensity_minimum,
+        texture_minimum,
+        threshold_peak_bytes,
+    ) = _streaming_content_thresholds(
+        view,
+        percentile=parameters.activation_percentile,
+        minimum_range=parameters.minimum_evidence_range,
+        maximum_percentile_samples=(
+            parameters.maximum_percentile_samples
+        ),
+        maximum_block_pixels=(
+            parameters.maximum_streaming_block_pixels
+        ),
     )
     if intensity_threshold is None or texture_threshold is None:
         statistics = SourceContentMeasurementStatistics(
             domain_pixels=int(view.size),
+            streaming_block_count=int(
+                np.ceil(
+                    view.shape[0]
+                    / max(
+                        1,
+                        parameters.maximum_streaming_block_pixels
+                        // view.shape[1],
+                    )
+                )
+            ),
             intensity_active_cells=0,
             texture_active_cells=0,
             positive_cells=0,
@@ -659,9 +874,7 @@ def observe_source_content(
             component_count=0,
             censored_component_count=0,
             deterministic_seconds=perf_counter() - started,
-            peak_temporary_bytes=(
-                intensity_field.nbytes + texture_field.nbytes
-            ),
+            peak_temporary_bytes=threshold_peak_bytes,
         )
         return SourceContentObservation(
             lane_id=domain.lane_id,
@@ -674,31 +887,33 @@ def observe_source_content(
             provenance=provenance,
         )
 
-    intensity_mask = spatially_supported_activation_mask(
-        intensity_field,
-        intensity_threshold,
-        parameters.minimum_active_pixels,
-    )
-    texture_mask = spatially_supported_activation_mask(
-        texture_field,
-        texture_threshold,
-        parameters.minimum_active_pixels,
+    (
+        intensity_mask,
+        texture_mask,
+        activation_block_peak_bytes,
+        streaming_block_count,
+    ) = _streaming_content_activation_masks(
+        view,
+        intensity_threshold=intensity_threshold,
+        texture_threshold=texture_threshold,
+        intensity_minimum=intensity_minimum,
+        texture_minimum=texture_minimum,
+        minimum_active_pixels=parameters.minimum_active_pixels,
+        maximum_block_pixels=(
+            parameters.maximum_streaming_block_pixels
+        ),
     )
     positive_mask = intensity_mask & texture_mask
     intensity_active_cells = int(np.count_nonzero(intensity_mask))
     texture_active_cells = int(np.count_nonzero(texture_mask))
     positive_cells = int(np.count_nonzero(positive_mask))
     field_stage_peak = (
-        intensity_field.nbytes
-        + texture_field.nbytes
-        + intensity_mask.nbytes
+        intensity_mask.nbytes
         + texture_mask.nbytes
         + positive_mask.nbytes
-        + min(128, max(0, view.shape[0] - 1))
-        * view.shape[1]
-        * np.dtype(np.float32).itemsize
+        + activation_block_peak_bytes
     )
-    del intensity_field, texture_field, intensity_mask, texture_mask
+    del intensity_mask, texture_mask
     (
         components,
         run_table,
@@ -711,11 +926,13 @@ def observe_source_content(
         provenance,
     )
     peak_bytes = max(
+        threshold_peak_bytes,
         field_stage_peak,
         positive_mask.nbytes + component_stage_bytes,
     )
     statistics = SourceContentMeasurementStatistics(
         domain_pixels=int(view.size),
+        streaming_block_count=streaming_block_count * 2,
         intensity_active_cells=intensity_active_cells,
         texture_active_cells=texture_active_cells,
         positive_cells=positive_cells,

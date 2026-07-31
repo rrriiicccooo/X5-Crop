@@ -4,25 +4,33 @@ from dataclasses import dataclass
 
 from ...domain import Box
 from ..decision.model import DecisionGateAssessment
-from ..grid.model import (
+from ..output_geometry import OutputTransformAssessment
+from ..photo_geometry.model import (
     OutputSlotIdentity,
-    ProtectedCropEnvelope,
+    ResolvedOutputGeometry,
     ResolvedOutputSlots,
 )
-from ..output_geometry import OutputTransformAssessment
-from ..pipeline import BoundedSafeCropCandidate
+from ..pipeline import PhotoGeometryCandidate
 from ..source_core import SourceCoreEvidence
 
 
 @dataclass(frozen=True)
 class FinalDetection:
-    candidate: BoundedSafeCropCandidate
+    """Decision-gated output authority.
+
+    Candidate geometry remains available for audit on review outcomes, but only
+    an approved decision may expose output geometry or sampling boxes to the
+    product writer.
+    """
+
+    candidate: PhotoGeometryCandidate
     decision: DecisionGateAssessment
     source_core: SourceCoreEvidence
     resolved_output_slots: ResolvedOutputSlots | None
     output_slot_identities: tuple[OutputSlotIdentity, ...]
-    protected_envelopes: tuple[ProtectedCropEnvelope, ...]
     transform_assessment: OutputTransformAssessment
+    resolved_output_geometries: tuple[ResolvedOutputGeometry, ...]
+    source_sampling_boxes: tuple[Box, ...]
     final_boxes: tuple[Box, ...]
 
     def __post_init__(self) -> None:
@@ -34,31 +42,38 @@ class FinalDetection:
             raise ValueError(
                 "finalization cannot replace resolved output slots"
             )
-        if self.output_slot_identities != (
-            self.candidate.output_slot_identities
-        ):
+        if self.output_slot_identities != self.candidate.output_slot_identities:
             raise ValueError("finalization cannot replace slot identities")
         approved = self.decision.status == "approved_auto"
         if approved:
+            expected = (
+                None
+                if self.resolved_output_slots is None
+                else self.resolved_output_slots.output_slot_count
+            )
             if (
-                self.resolved_output_slots is None
-                or len(self.output_slot_identities)
-                != self.resolved_output_slots.output_slot_count
-                or len(self.final_boxes)
-                != self.resolved_output_slots.output_slot_count
-                or len(self.protected_envelopes)
-                != self.resolved_output_slots.output_slot_count
+                expected is None
+                or self.transform_assessment.transform is None
+                or len(self.output_slot_identities) != expected
+                or len(self.resolved_output_geometries) != expected
+                or len(self.source_sampling_boxes) != expected
+                or len(self.final_boxes) != expected
+                or any(not box.valid() for box in self.source_sampling_boxes)
                 or any(not box.valid() for box in self.final_boxes)
             ):
                 raise ValueError(
-                    "approved finalization requires one protected box per frame"
+                    "approved finalization requires one resolved geometry "
+                    "and affine sampling box per output slot"
                 )
         elif (
             self.decision.status != "needs_review"
+            or self.resolved_output_geometries
+            or self.source_sampling_boxes
             or self.final_boxes
-            or self.protected_envelopes
         ):
-            raise ValueError("review finalization cannot expose frame outputs")
+            raise ValueError(
+                "review finalization cannot expose official output geometry"
+            )
 
     @property
     def frame_export_eligible(self) -> bool:
@@ -66,11 +81,7 @@ class FinalDetection:
 
     @property
     def frame_export_reason(self) -> str | None:
-        return (
-            None
-            if self.frame_export_eligible
-            else "decision_gate_needs_review"
-        )
+        return None if self.frame_export_eligible else "decision_gate_needs_review"
 
     @property
     def output_slot_count(self) -> int | None:

@@ -77,7 +77,7 @@ def candidate_gate_assessment(
                 code="output_transform",
                 stage=GateStage.CANDIDATE,
                 state=output_transform_state,
-                requirement=GateRequirement.NOT_CONTRADICTED,
+                requirement=GateRequirement.SUPPORTED_REQUIRED,
             ),
         )
     )
