@@ -1204,7 +1204,19 @@ def _typed_interval_constrained_path(
     for role in roles:
         next_by_last_identity: dict[
             str,
-            _TypedObservedChainState,
+            tuple[
+                tuple[
+                    int,
+                    int,
+                    float,
+                    float,
+                    float,
+                    float,
+                    float,
+                    tuple[tuple[int, str], ...],
+                ],
+                _TypedObservedChainState,
+            ],
         ] = {}
 
         def retain(candidate: _TypedObservedChainState) -> None:
@@ -1215,13 +1227,16 @@ def _typed_interval_constrained_path(
                     candidate.path[-1].observation.observation_id
                 )
             )
+            candidate_rank = _typed_chain_rank(candidate)
             existing = next_by_last_identity.get(identity)
             if (
                 existing is None
-                or _typed_chain_rank(candidate)
-                > _typed_chain_rank(existing)
+                or candidate_rank > existing[0]
             ):
-                next_by_last_identity[identity] = candidate
+                next_by_last_identity[identity] = (
+                    candidate_rank,
+                    candidate,
+                )
 
         for state in states:
             retain(state)
@@ -1353,7 +1368,10 @@ def _typed_interval_constrained_path(
                         ),
                     )
                 )
-        states = tuple(next_by_last_identity.values())
+        states = tuple(
+            state
+            for _rank, state in next_by_last_identity.values()
+        )
     observed = tuple(
         sorted(
             (state for state in states if state.path),
