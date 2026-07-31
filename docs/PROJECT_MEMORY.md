@@ -1,158 +1,117 @@
 # 项目记忆
 
-更新：2026-07-30
+更新：2026-08-01
 
-这是 X5 Crop 唯一跨会话检查点。它只保存当前状态、已验证 receipt、验证边界、开放风险和
-下一步；当前源码、Git、原 TIFF、current report、Debug Analysis 与现场命令输出始终
+这是 X5 Crop 唯一跨会话检查点。它只保存当前目标、已验证检查点、验证边界、开放风险和
+精确下一步；当前源码、Git、原 TIFF、current report、Debug Analysis 与现场命令输出始终
 优先。运行合同见 [ARCHITECTURE.md](ARCHITECTURE.md)，版本历史见
 [CHANGELOG.md](CHANGELOG.md)。
 
 ## 当前状态
 
-- 当前开发版为 V4.9；稳定公开 Release 仍为 `v4.2.8`，本次没有创建新 Release。
-- Partial auto 容量 slots 已完成原子切换：
-  - full 使用 format 默认 slots；
-  - partial explicit 严格服从用户权威 count；
-  - partial auto 输出唯一匹配片夹对当前 format 的全部有效 slots，不推断或声明真实照片
-    张数。
-- Current runtime identity 为 `bounded_safe_crop_capacity_grid`。没有 feature flag、
-  fallback、兼容 reader、双 schema、alias、shim 或第二套 detector。
-- `ResolvedOutputSlots(lane_output_slot_counts)` 是唯一解析结果。总 slot 数只从 canonical
-  lane counts 求和；candidate、final detection、report、manifest 与输出共同引用或派生
-  该结果。
-- `135-dual` 固定为 `(6, 6)`，按 `lane:0/1..6`、再 `lane:1/1..6` 输出；每张保存 global
-  与 lane-local ordinal。
-- 每个 lane 只搜索一个 resolved slot count。Score/tie-break 只决定构建顺序和诊断；
-  output-equivalent proposals 才能 outward union，非等价 placement/ordinal/ownership
-  classes 不会被静默排序选出赢家。
-- 每个 P/O/K 截断都有 typed `GridOmissionSummary`。只有 omitted alternatives 全部被证明
-  等价并进入 retained class 的 outward union 才不阻断；否则
-  `grid_search_coverage = CONTRADICTED`。
-- `CandidateGate` 只记录十项候选事实；第四项为 `output_slot_count`。只有
-  `DecisionGate` 创建 `approved_auto`、`needs_review` 与 typed reasons。
-- Approved 后 profile、slots、transform 与 boxes 不变；slots、safe/protected envelopes、
-  final boxes、TIFF 数均等于派生总数。Review 的 TIFF 数为零。
-- 每个 approved ROI 只从原图采样一次，写出后复读验证 TIFF pixels、dtype、
-  axes/channels、ICC、resolution、metadata 与 NONE/LZW 无损压缩。I/O 错误保持独立
-  `FailedInput` / terminal failure。
+- 当前开发版为 V4.9；稳定公开 Release 仍为 `v4.2.8`，尚未创建 V4.9 Release。
+- 功能检查点为 `f3990e9e`：完整 source-coordinate 照片几何实现已经进入 `main`；本地与
+  远端只保留 `main`，旧修复线和 V4.9 功能分支均已删除且没有遗失独有提交。
+- Runtime 是单一 `source_coordinate_photo_geometry` detector。没有旧 Grid detector、
+  fallback、双 schema、compatibility shim、旧 import alias 或 review export 旁路。
+- 用户提供的 format 是 authority。Full 使用固定张数；partial explicit 严格服从用户
+  count；partial auto 输出唯一匹配片夹对该 format 的容量 slots，不推断真实照片张数。
+- ScanCanvas 决定片夹、lane、scale 与 capacity；Grid 只拥有 phase、ordinal、blank 与
+  interaction。Grid、outer、content bbox 和 corridor 都只是 search proposal，不是照片边。
+- Pixel observation 产生 transition、line、support、residual、angle 与 measurement
+  uncertainty；format/count/scale/aperture/lane/adjacency 只作 physical constraint 或 named
+  inference。Observed 与 inferred provenance 始终分开。
+- `FramePhotoGeometry` 是非空照片 source-coordinate 四边与 polygon 的唯一 owner；空容量
+  slot 使用 `GridInferredBlankOutputGeometry`。安全输出依次加入 measurement 或 inference
+  uncertainty、1 source-pixel interpolation allowance、固定毫米 protection 与 authority
+  clipping，不使用跨候选 outward union。
+- Deskew 只来自 selected observed top/bottom lines 的共同 angle interval。最终 ROI 从原
+  TIFF 做一次 inverse-affine sampling，不生成整张旋转 RGB 中间图。
+- `CandidateGate` 只记录候选事实；只有 `DecisionGate` 创建 `approved_auto`、
+  `needs_review` 与 typed reasons。Review 不产生正式 TIFF 或 provisional product output。
 
 ## Current identities
 
 ```text
-detector kind            = bounded_safe_crop_capacity_grid
-Grid algorithm           = bounded_ordered_capacity_grid_v5
-Grid numeric prior       = safe_crop_prior_v1
-calibration receipt      = x5crop_grid_calibration_receipt_v2
-calibration receipt ID   = sha256:f6edbfd78d1711b361113abc952b37884bf594dd367ba22cd64f316e42f94738
-report revision          = bounded_safe_crop_capacity_grid
+detector kind             = source_coordinate_photo_geometry
+measurement receipt      = sha256:a2ad192bcef54c407524108d396f2fae946949d647986e726e3de8117893ab2e
+report revision          = source_coordinate_photo_geometry_v1
 run manifest             = x5crop_run_manifest_v2
-acceptance result        = x5crop_safe_crop_acceptance_result_v2
-acceptance summary       = x5crop_safe_crop_acceptance_summary_v2
-coverage audit           = x5crop_safe_crop_coverage_audit_v2
-fixed sample profile     = x5crop_fixed_sample_profile_v2
-production performance  = x5crop_production_performance_v4
+gold cohort              = x5crop_gold_accuracy_cohort_v1
+gold result              = x5crop_gold_accuracy_result_v3
+gold summary             = x5crop_gold_accuracy_summary_v3
+diagnostic cohort        = x5crop_diagnostic_unreviewed_cohort_v1
+diagnostic record        = x5crop_diagnostic_record_v1
+diagnostic summary       = x5crop_diagnostic_summary_v1
+fixed sample profile     = x5crop_fixed_sample_profile_v3
+benchmark adapter        = x5crop_benchmark_adapter_result_v1
+paired performance       = x5crop_paired_performance_v1
+benchmark workload SHA   = 8ebbb0a8213d72fa2f8573c4546babb999b55a87044f25f7379b953508554817
 ```
 
-数值 prior 未改变。Confirmed geometry 只校准 prior 中心/区间并验证 containment，
-provenance 保持 `user_confirmed_geometry`；它不成为 separator/photo-edge runtime
-observation，也不证明 Grid。
+黄金 geometry 的唯一 tracked owner 是
+`tools/regression/cohorts/gold_accuracy.jsonl`。忽略目录中的旧人工 baseline 只保留为来源
+证据，不再被 verifier 或 runtime 消费。
 
-## 2026-07-30 验证 receipt
+## 已验证检查点
 
-### Tracked 与 focused contracts
+### Current tree 与 contracts
 
-- `python3 -m unittest discover -s tools/tests -p 'test_*.py'`：53/53 通过。
-- Contracts 覆盖 input mapping、全部 catalog capacity、120-67 短片夹 2 slots、单容量
-  Grid、score reversal、等价 union、非等价 class 阻断、P/O/K omission proof、count 1、
-  blank、vertical、dual lane、120 双 component、contact/overlap、protection saturation、
-  Gate reasons、TIFF terminal failure、current schemas 与 standalone source。
-- `x5crop.configuration.consistency`：13 个 format/mode pairs 通过。
+- `python3 -m unittest discover -s tools/tests -p 'test_*.py'`：59/59 通过。
+- `python3 -m compileall -q X5_Crop.py x5crop tools`：通过。
+- `python3 -m x5crop.configuration.consistency`：13 个 format/mode pairs 通过。
+- `python3 -m tools.regression.benchmark_workload --validate`：168 个 tracked tasks 通过，
+  workload SHA 如上。
+- Pre-push full verification 在 `main` 提交 `f3990e9e` 上通过，并成功推送到
+  `origin/main`。同一冻结 checklist 的两轮只读审计均通过。
+- Fresh V4.9 package 构建验证通过：10 个 manifest entries、standalone 版本 `4.9`、中文
+  UTF-8 路径及 launcher/installer executable bits 正确。该包是验证产物，验证后已删除，
+  没有创建 GitHub Release。
 
-### 黄金 accuracy 与真实 coverage
+### 黄金 accuracy 与 111-source 诊断
 
-- 九张 source-SHA-bound、用户确认 geometry 的黄金样片展开为 14 个场景：14/14 通过，
-  14 个均为 `approved_auto`；12 个 `must_approve_safe` 全部批准，S055 explicit/auto 也
-  均安全批准。
-- Partial auto 容量：
-  - S051、S055：6；
-  - S062、S091：3；
-  - S109：12。
-- Golden comparator 使用 source-coordinate、严格递增的一对一 containment；所有 confirmed
-  polygons 均被不可复用、顺序递增的 output footprints 完整包含。允许额外 blank slots。
-- 111/111 blocking audit 通过：
-  - 88/88 `pass_*` 全部 `approved_auto`，包括 S098；
-  - 41/41 pass partial 全部批准，并精确输出匹配片夹容量；
-  - 23 条 `unknown_*` 中 22 条批准，S111 因具体
-    `output_slot_count` / `output_protection` Gate 阻断而 review；
-  - 111 records 对应 107 个独立 source SHA，重复 SHA 已单列；
-  - partial extra-slot distribution：
-    `0:36, 1:3, 2:2, 3:2, 4:1, 5:4, 7:2, 10:1`。
-- 九张黄金 Debug Analysis 与 S067 已人工检查，未见明显 inward loss、lane/ordinal 错位
-  或异常跨片。该视觉检查只作 current output 审计，不建立或修改 baseline。
+- 九张 source-SHA-bound、用户确认 geometry 的黄金样片展开为 14 个场景：14/14 通过。
+- 12 个 `must_approve_safe` 场景均为 `approved_auto`，正式写出并复读 TIFF；S098 安全
+  通过，但不参与 nominal calibration。
+- S055 explicit/auto 两个场景均为 `needs_review`：存在命中黄金的安全 state 和 protection
+  后仍不等价的物理竞争 state，正式 TIFF 数为 0。
+- 111-source `diagnostic_unreviewed` 得到 111/111 terminal records，工程合同失败 0；现场
+  状态为 74 approved、37 review，但 `recognition_accuracy_verdict = not_assessed`。Filename
+  `pass/unknown` 与 filename count 没有被消费为 expectation。
 
-### 固定 profiling
+### 正式 paired performance
 
-- Sample：S062。
-- Source SHA：
-  `ed1e0aba8b78a8619ffe0cc14b855fdd87ebcc92f4c8c137da3fef8f7192a7f6`。
-- Identity：`120-66/partial/auto`，profile `120_wide_224_5`，lane counts `(3,)`。
-- Wall `2.804 秒`；detection `2.581 秒`。
-- Measurement `4`，exact-cache hits `0`，candidate builds `2`，seeds `2`，
-  states/transitions `4/8`，retained proposals `2`。
-- 36 个 omitted alternatives 全部被等价 class 吸收，unresolved `0`；
-  `search_incomplete=true` 仅为诊断，`omitted_outcome_risk=false`。
-- Peak temporary memory `348,469,137 bytes`；hotspot 为 source-content components。
-
-### 正式性能与 standalone
-
-- 一个空 root 下完成 `cold`、`measured-1/2/3`，四次均 `--jobs 2`、固定 24 个真实输入，
-  并实际写出、复读每个 TIFF。
-- 每轮均为 24/24 completed、168 个 TIFF；九个 partial 输入相对 filename annotation
-  多 25 个 slots。
-- Cold `2.507 秒/输入`；measured 分别为 `2.494`、`2.502`、`2.499 秒/输入`；中位数
-  `2.499 秒/输入`，通过 `<= 5.0 秒/张` 合同。
-- 现场 managed sandbox 不允许 process worker，runtime 使用既有 thread fallback；上述
-  receipt 仍覆盖 `--jobs 2` 的真实 TIFF 写出/复读，但正式公开 Release 前可在普通 macOS
-  process-worker 环境再留一份对照。
-- 使用唯一 builder `python3 -m tools.release.build --version 4.9` 构建
-  `X5-Crop-v4.9.zip`。包包含 10 个 manifest entries、中文 UTF-8 文件名、可执行 launcher
-  与 installer。
-- 从最终 ZIP 解包的 standalone 对 S062 auto 实跑通过：profile
-  `120_wide_224_5`、lane counts `(3,)`、3 个 TIFF，current report 与 TIFF read-back
-  receipt 正常。
-
-## 不可偏移的产品合同
-
-- 成功标准是不内切真实照片内容，不是唯一恢复物理边界或复刻历史 boxes。
-- Auto 的输出 slot 数是片夹容量，不是真实照片 count。额外 blank TIFF、完全空片的空白
-  slots、向外多保留、相邻框重叠、inferred Grid、protection saturation 与 bounded shared
-  pixels 均可接受。
-- `needs_review` 只用于 protection 无法吸收的 ordinal/placement、primary ownership、
-  omission coverage、containment、source/lane authority 或 output geometry 风险。
-- Separator 缺失、等价 geometry、未 deskew 或邻片像素本身不能制造 review。
-- Format、scan-canvas、scale、source content、separator、Grid、protection、Gate、
-  finalization、output 与 report 各有唯一 owner，权限只向下游流动。
-- Filename count/`pass`/`unknown` 只属于 validation cohort，永不进入 detector、prior、
-  score、Gate 或 runtime selection。
+- 固定基线为 tag `v4.2.8` / commit
+  `8d14c55d8af5c944a0b78b51df4c4c428e606f07`；V4.9 receipt 对应功能提交
+  `7ab4daef95489e9ba2fbd321347270c8a084bd48`。
+- 固定 24 个 source、168 个 status-independent I/O tasks、`--jobs 2`，三组顺序为
+  `4.2.8→4.9`、`4.9→4.2.8`、`4.2.8→4.9`。
+- V4.9 measured median 为 `4.942535770833274 秒/输入`，通过 `<=5.0` 硬门槛；paired
+  total wall 的 median relative difference 为 `-32.280782%`，通过 `1%` noise floor。
+  这里表示耗时降低约 32.28%，不是吞吐率只增加 32.28%。
+- `f3990e9e` 只改 regression/test owner 名称、删除无消费者 helper、同步 CLI 文案与文档，
+  没有改变实际 detector 路径。因此上述 receipt 可说明当前 detector 性能；若要把正式
+  Release receipt 绑定到最终 HEAD SHA，仍应在发布前重跑 paired benchmark。
 
 ## 验证边界与开放风险
 
-- `real_holdout = unavailable`。当前 accuracy completion 只由九张黄金样片支撑。
-- XPan、120-645、135-dual 及部分 format/mode/placement/interaction 缺少真实样片；
-  coverage cell 保持 `real_sample_coverage = unavailable`。XPan 与 120-645 只有
-  physical-rule synthetic coverage。
-- `Test/` 是 ignored 的本地验收样片库；保留原 TIFF、111-source manifest、九张黄金
-  source/marked/review/baseline 证据及必要 symlink。它不属于源码、Release 或 verifier
-  的目录布局合同。
-- Acceptance、audit、profiling、performance 与 package 检查是运行产物，不在 tracked
-  tree 冒充永久真值。任何 detector、Gate、schema 或 package-source 变化都会使对应
-  receipt 失效。
-- 正常交付依赖 pre-commit staged hygiene 与 pre-push 唯一 full validation；Git 现场状态
-  是最终交付 authority。
+- Accuracy blocker 只有九张黄金、14 个场景。八张 nominal 可以冻结参数并参与验收；S098
+  只作 stress-excluded calibration，但仍必须安全通过。
+- 111-source 只证明程序、schema、TIFF、authority 与有界 query/DP/memory 工程合同；没有
+  形成人工确认 accuracy 结论，也没有 must-pass status expectation。
+- `real_holdout = unavailable`。未覆盖的 XPan、120-645 仅具有 physical-rule 与 synthetic
+  contract coverage；不得把这一覆盖缺口变成 runtime denylist 或 review reason。
+- `Test/` 是 ignored 的本地 authority 资料库，保留原 TIFF、九张黄金来源证据和
+  111-source identity。它不进入源码、Release 或 verifier 的目录布局合同。
+- Gold、diagnostic、performance、package 和 Debug Analysis receipts 都是可再生运行产物；
+  当前 `build/`、benchmark worktrees、Python cache 与 Finder metadata 已清理。任何
+  detector、Gate、schema、cohort owner 或 package-source 变化都会使对应 receipt 失效。
 
-## 下一步
+## 精确下一步
 
-- 没有已知实现 blocker。V4.9 若准备公开 Release，应先在 release-target macOS 上复测
-  process-worker 性能、复核包内安装流程，再由用户明确授权创建 GitHub Release。
-- 若未来出现 named physical gap，只补该 gap 所需的 measurement、contract 或真实样片；
-  不恢复被替代的 detector/schema、样片 whitelist 或 proof-only approve 标准。
+- 当前没有已知实现 blocker，不应恢复旧 detector、schema、compatibility 或样片专用规则。
+- 若准备发布 V4.9：在最终 Release commit 上重跑 fixed paired performance，构建 fresh ZIP，
+  在 release-target macOS 复核安装与 launcher，然后由用户明确授权创建 GitHub Release。
+- 若未来出现 named physical gap，只增加该 gap 所需的 pixel measurement、physical
+  constraint、Gate contract 或 source-SHA-bound 人工真值；修复后重跑全部黄金与相关工程
+  cohort，不以 area clamp、filename whitelist 或历史 box parity 替代根因修复。
