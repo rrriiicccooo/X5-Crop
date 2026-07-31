@@ -29,11 +29,13 @@ output directly usable, not uniquely measuring the true physical boundary:
   rotation interval.
 - Read, write, and read-back errors are terminal failures, not review results.
 
-The current V4.9 development tree can account for every outward-area source,
-but it does not yet have an independent hard direct-use budget for nonblank
-outputs. Its per-edge metric and value must be frozen from a user-confirmed
-usability standard. This remains a V4.9 release blocker until implemented and
-validated on the gold scenarios.
+The user has frozen the nonblank direct-use budget at 5% of the selected
+aperture long axis for each sequence-axis start/end edge and 3% of its short
+axis for each cross-axis top/bottom edge. Every format uses the same ratios.
+The current V4.9 tree can account for every outward-area source, but it does
+not yet enforce this per-edge hard gate, and the confirmed orthogonal start/end
+model is also not implemented. Both remain release blockers until validated on
+the gold scenarios.
 
 ## Install
 
@@ -177,6 +179,16 @@ translation interval. Any internal or trailing observed edge may anchor the
 sequence in either direction, so outer does not have to find the first photo.
 Content only assists ownership and containment.
 
+The V4.9 release contract is now stricter: the common top/bottom direction is
+the only deskew authority, and each start/end or separator side must be
+perpendicular to it, with no independent tilt. If a real photo side appears
+slanted, start uses the minimum outermost sequence-axis projection and end uses
+the maximum, producing an orthogonal envelope that retains the content;
+neighboring outputs may overlap. Slanted lines in the human gold polygons test
+containment and do not require the detector to reproduce their slopes. The
+current tree still fits start/end independently within `±4°`, so this is a
+pending release contract rather than current behavior.
+
 Each non-empty photo becomes a source-coordinate polygon. Candidates are
 physically joined into complete `FrameGeometryState` objects before deduplication
 and dominance. More than two observed non-dominated states becomes unresolved
@@ -190,9 +202,13 @@ A photo safety envelope adds, in order:
 3. fixed millimetre protection;
 4. source/lane clipping.
 
-For a nonblank photo, the resulting expansion on every edge must also satisfy
-the direct-use budget. Exceeding it must produce `needs_review` and no official
-TIFF. The budget is not a total-area clamp and does not apply to blank slots.
+For a nonblank photo, the resulting expansion must stay within 5% of the
+selected aperture long axis on each sequence-axis start/end edge and 3% of its
+short axis on each cross-axis top/bottom edge. Each edge is an independent hard
+limit; unused margin on another edge or total area cannot offset it. Actual
+expansion is measured after source/lane clipping, while containment and
+authority must still pass independently. Exceeding the budget must produce
+`needs_review` and no official TIFF. Blank slots are exempt.
 
 Partial-auto empty slots use separate `grid_inferred_blank` geometry and never
 pretend to be photo observations. Deskew comes only from the common angle
@@ -302,8 +318,9 @@ nominal samples may freeze parameters and must pass final acceptance. S098 must
 pass safety acceptance but is excluded from nominal calibration. Approved
 scenarios require complete confirmed-polygon containment, zero inward loss,
 recalculable extra area, and official TIFF readback. Before V4.9 release
-closure, nonblank outputs must also pass a per-edge direct-use budget while
-blank outputs remain exempt. S055 review scenarios must
+closure, nonblank outputs must also pass the 5%-sequence/3%-cross per-edge
+direct-use budget, and the orthogonal outermost projection must fully contain
+each human-slanted gold polygon. Blank outputs remain exempt. S055 review scenarios must
 retain both a gold-safe state and a physically feasible, protection-distinct
 competitor while producing zero official TIFFs.
 

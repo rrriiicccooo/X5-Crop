@@ -7,7 +7,7 @@
 - 当前开发版本：**V4.9**
 - 当前稳定发布：**v4.2.8**
 
-## 2026-08-01：冻结非空自动输出的直接可用性原则
+## 2026-08-01：冻结 direct-use 数值与正交 start/end 物理模型
 
 - 产品人工成本顺序明确为：切掉真实内容最严重；过宽非空输出需要逐张人工重裁，次之；
   多余 blank TIFF 可直接删除，成本最低。
@@ -16,8 +16,26 @@
   外扩冒充自动完成。
 - 这不恢复历史 box parity 或总面积 clamp。新预算必须按非空照片的每条边计算，由用户确认
   的可用性标准冻结；blank slot 豁免。
-- 当前 runtime 仍只能重算 uncertainty/interpolation/protection 来源，`output_protection` 尚无独立
-  direct-use budget 硬门槛。这是本次文档同步后明确的 V4.9 发布 blocker，不是已完成行为。
+- 用户通过 source-SHA-bound 黄金 geometry 的临时 JPG 校准包分别审阅片条轴与横片条轴
+  `0/1/3/5/7%` 每边外扩；该包覆盖 9 张黄金 TIFF、47 个确认照片框和 470 个轴向对照格。
+  最终人工确认通用预算为片条轴每边 5%、横片条轴每边 3%。各 format 只按自身 selected
+  aperture 换算毫米；`135-dual` 共用 `135`，120 的 54/56 mm aperture 共用比例，XPan 与
+  120-645 也直接使用通用比例。忽略目录中的校准包在确认后已删除。
+- 校准中的 `0%` 是完整包含人工斜线 polygon 的最小正交外包络。四边分别是硬上限；
+  source/lane clipping 后按实际外扩计费，但 containment 与 authority 仍必须单独通过。
+  v4.2.8 与当前 V4.9 输出均未参与阈值推导。
+- v4.2.8 的历史 output bleed 是像素配置而非物理比例：默认片条轴 20 px、横片条轴 10 px，
+  overlap/continuous-content risk 时片条轴至少 50 px，且用户可以 override。因此它不能回答
+  跨 format 的统一观感预算，也不作为 V4.9 验收 authority。
+- 同时冻结 start/end 物理模型：top/bottom 共同方向独占 deskew authority；start/end 与
+  separator 两侧必须垂直于 top/bottom，只保留片条轴位置与 uncertainty。若原始侧边确实
+  倾斜，则 start 取照片内容最外的最小投影、end 取最大投影，以正交外包络保全内容；相邻
+  输出可以重叠。
+- 黄金样片中的人工斜线继续作为 containment 真值，不要求 runtime 复刻斜率。严重设备老化
+  或故障造成的真实非正交侧边不作为独立斜线拟合能力；最外投影无法有界时才因具体
+  containment/geometry 风险 review。
+- 当前 runtime 仍允许 start/end 在 `±4°` 内独立拟合，也尚未实现 direct-use 的逐边硬门槛。
+  本节只记录已确认的 V4.9 release contract；两项仍是发布 blocker，不是已完成行为。
 
 ## V4.9 当前开发线
 

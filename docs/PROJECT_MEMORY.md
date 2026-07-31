@@ -28,8 +28,16 @@
 - 新冻结的产品人工成本顺序是：切掉真实内容最严重；过宽非空输出需要逐张人工重裁，
   次之；多余 blank TIFF 可直接删除，成本最低。`approved_auto` 的 V4.9 发布语义必须同时
   包含“零 inward loss”与“非空输出可直接使用”。
-- 额外面积可重算不等于输出可用。非空照片需要独立的按边 direct-use budget；blank geometry
-  明确豁免。不得用总面积 clamp、历史 box parity 或候选 union 代替该合同。
+- 额外面积可重算不等于输出可用。用户已冻结跨 format 通用的逐边 direct-use budget：
+  片条轴 start/end 各为 selected aperture 长轴的 5%，横片条轴 top/bottom 各为短轴的 3%；
+  blank geometry 豁免。四边不能互相抵扣，不得用总面积 clamp、历史 box parity 或候选
+  union 代替。
+- `135-dual` 共用 `135` 比例；120 的 54/56 mm aperture 共用比例并按各自尺寸换算；XPan
+  与 120-645 即使没有黄金真实样片也使用通用比例，不建立 denylist。v4.2.8 的 20/10 px
+  默认 bleed 与 overlap-risk 50 px 只是历史像素配置，不是新预算 authority。
+- 用户已确认 separator/start/end 不应有独立倾角。Top/bottom 的共同方向独占 deskew；
+  start/end 必须与其垂直。原始斜边按照片内容最外投影形成正交外包络，黄金人工斜线只作
+  containment authority，不要求 runtime 复刻斜率。
 - Deskew 只来自 selected observed top/bottom lines 的共同 angle interval。最终 ROI 从原
   TIFF 做一次 inverse-affine sampling，不生成整张旋转 RGB 中间图。
 - `CandidateGate` 只记录候选事实；只有 `DecisionGate` 创建 `approved_auto`、
@@ -84,6 +92,14 @@ benchmark workload SHA   = 8ebbb0a8213d72fa2f8573c4546babb999b55a87044f25f7379b9
   状态为 74 approved、37 review，但 `recognition_accuracy_verdict = not_assessed`。Filename
   `pass/unknown` 与 filename count 没有被消费为 expectation。
 
+### Direct-use 人工冻结
+
+- 临时校准包对 9 张 source-SHA-bound 黄金 TIFF、47 个确认照片框分别生成片条轴与横片条轴
+  `0/1/3/5/7%` 对照，共 470 格；源 SHA、全部 21 张 JPG 与比例换算在交付前通过检查。
+- 用户于 2026-08-01 明确选择片条轴每边 5%、横片条轴每边 3%，并取消组合复核需求；
+  `build/direct-use-calibration-universal-v1/` 随后按用户要求删除。该人工决定而非临时 JPG
+  是预算 authority。
+
 ### 正式 paired performance
 
 - 固定基线为 tag `v4.2.8` / commit
@@ -103,9 +119,13 @@ benchmark workload SHA   = 8ebbb0a8213d72fa2f8573c4546babb999b55a87044f25f7379b9
 - 当前 runtime 只完成了 uncertainty/interpolation/protection 的来源重算、固定保护与
   source/lane clipping。`output_protection` 仍只检查 resolved geometry 是否完整，没有独立
   阻止“内容安全但宽到需要人工重裁”的非空输出。这是新确认的 V4.9 发布 blocker。
-- Direct-use budget 的 metric 与数值尚未冻结。它应在 source coordinates 中按边计算，使用
-  物理单位或明确 scale 映射，并由用户基于“是否需要二次裁切”的可用性标准确认。实现者不得
-  从当前算法输出或某个单独样片自行反推。
+- Direct-use budget 的数值已经冻结，但 canonical typed spec、最小正交基准、source-coordinate
+  逐边 metric、CandidateGate 事实和黄金 comparator 验收尚未实现。Source/lane clipping 后可按
+  实际外扩计费，但 containment 与 authority 必须独立成立。
+- 当前 `PhotoBoundaryMeasurementSpec.maximum_search_angle_degrees=4°` 同时允许 start/end
+  独立斜线，`test_nonorthogonal_start_end_does_not_widen_shared_deskew` 也保存这一旧合同。
+  这与已确认的正交物理模型冲突，并增加无物理收益的 line-family/DP 竞争和纹理误配机会；
+  风险方向已确认，但误检率尚未量化。
 - Accuracy blocker 只有九张黄金、14 个场景。八张 nominal 可以冻结参数并参与验收；S098
   只作 stress-excluded calibration，但仍必须安全通过。
 - 111-source 只证明程序、schema、TIFF、authority 与有界 query/DP/memory 工程合同；没有
@@ -120,12 +140,17 @@ benchmark workload SHA   = 8ebbb0a8213d72fa2f8573c4546babb999b55a87044f25f7379b9
 
 ## 精确下一步
 
-- 先由用户确认非空 direct-use budget 的按边 metric 与数值。随后在现有 CandidateGate 中记录受影响的
-  `output_protection` 或 `source_lane_geometry` 事实；超出预算时由 DecisionGate 进入 review、正式
-  TIFF 数为零，不增加第三 Gate。
-- 黄金 comparator 必须对 12 个 approved 场景的非空输出新增 direct-use budget 验收，blank
-  明确豁免。修复后重跑全部黄金、111-source 工程诊断、paired performance、package 与 pre-push
-  full verification。
+- 先为正交 start/end 合同增加 fail-first contracts：当前允许独立斜率的测试必须改为只接受
+  top/bottom 决定的正交方向；强倾斜内部纹理不得生成额外 separator class；真实斜边必须按
+  start 最小投影/end 最大投影保全黄金 polygon。随后删除 start/end 的独立 angle state，保持
+  raw observation、位置 uncertainty、相邻 overlap 与旋转等价的垂直行为。
+- 再建立唯一 typed direct-use spec：片条轴 5%、横片条轴 3%，用 selected
+  `FrameDesignApertureMm` 和 source axis scale 计算四边实际外扩。预算结果由现有
+  `output_protection` 记录，超出任一边时由 DecisionGate review 且正式 TIFF 数为零；不增加
+  第三个 Gate。
+- 黄金 comparator 必须对 12 个 approved 场景的每个非空输出新增逐边 budget 与正交最外投影
+  containment 验收，blank 明确豁免。修复后重跑全部黄金、111-source 工程诊断、paired
+  performance、package 与 pre-push full verification。
 - 上述合同闭合前不应发布 V4.9，也不应恢复旧 detector、schema、compatibility、样片专用规则
   或大面积 clamp。
 - 若未来出现 named physical gap，只增加该 gap 所需的 pixel measurement、physical

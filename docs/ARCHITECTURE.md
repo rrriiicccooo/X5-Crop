@@ -13,7 +13,8 @@ V4.9 在用户提供 format 后，从原 TIFF 重建每张照片的 source-coord
 - partial auto 使用唯一匹配片夹对该 format 的容量，并保留 blank slots；
 - 目标是零真实内容 inward loss，同时使额外面积可由边界不确定度、插值 allowance 和固定
   protection 重算；
-- 非空照片的保护后输出还必须在 direct-use budget 内，使用户无需人工二次裁切；
+- 非空照片的保护后输出还必须通过通用、逐边的 direct-use budget：片条轴 start/end
+  各为 selected aperture 长轴的 5%，横片条轴 top/bottom 各为短轴的 3%；
 - 人工成本优先级为：零 inward loss > 避免过宽非空输出 > 减少可直接删除的 blank TIFF；
 - 无法由 protection 吸收的 placement、ordinal、ownership、containment、lane authority
   或 transform 风险进入 `needs_review`。
@@ -111,7 +112,7 @@ transition gap        0.05 mm
 transition width max  1.0 mm
 gradient_z minimum    3.0
 tone/texture z        max(tone_z, texture_z) >= 3.0
-search angle max      4°
+current line search angle max  4°
 family connection     tan(4°) × lattice_step + 0.10 mm
 missing lattice       at most one step
 line fit              weighted Huber IRLS, exactly four rounds
@@ -184,6 +185,30 @@ half-open tiles；名义宽度是 `6.0 mm × long_scale`。Grid/outer 只改变 
 `PhotoSequenceExtentProposal` 只保存 Grid/content/outer 给出的查询顺序或 domain proposal。
 只有在 proposal 内重新执行完整二维 transition 和 line fitting，才能升级为 observed edge。
 
+### 7.1 已冻结的正交 start/end 合同（尚未实现）
+
+物理模型只允许 top/bottom 的共同方向建立片条 deskew。确定该共同方向后，每张照片的
+start/end 以及 internal separator 的两侧都必须与 top/bottom 垂直；它们只拥有片条轴位置、
+support、provenance 与位置 uncertainty，不再拥有独立倾角自由度。方向性合同对旋转等价的
+垂直片条同样成立。
+
+- 原始 pixel transitions 可以呈现倾斜、缺口或局部纹理，但最终照片侧边必须投影到上述
+  正交坐标系；start 取照片内容一侧最外的最小片条轴投影，end 取最大的投影，确保不向内
+  切掉斜边内容。
+- internal gap 两侧分别为前一张的 end 与后一张的 start；两张输出可以因此重叠，不能为了
+  保持一个共享 separator 中线而牺牲 containment。
+- 极少数由扫描设备严重老化或故障造成的真实非正交侧边，不属于需要精确重建斜线的常规
+  产品能力。只要最外投影仍可由 source/lane authority 有界，就按正交外包络输出；否则进入
+  具体的 containment 或 geometry review。
+- 用户确认的黄金 polygon 仍保留人工可辨认的斜边，并继续作为 source-SHA-bound containment
+  authority；它不要求 runtime 复刻斜率，也不为 start/end 的独立倾角提供校准权限。
+
+该简化减少了没有物理收益的 line-family 与 DP 竞争面，也降低内部照片纹理被拟合成倾斜
+separator 的机会；这是物理模型给出的风险判断，尚未形成量化误检率结论。当前源码仍由同一
+`maximum_search_angle_degrees=4°` 允许 start/end 独立拟合斜线，
+`test_nonorthogonal_start_end_does_not_widen_shared_deskew` 也固定了旧行为。因此本节是已确认的
+V4.9 release contract 与待实现差异，不是当前 runtime 声明。
+
 ## 8. 完整状态、限额与 DP
 
 固定流水线：
@@ -252,25 +277,51 @@ Writer 只接受 `SafeCropEnvelope | GridInferredBlankOutputGeometry`。
 
 ### 10.1 非空输出可用性合同
 
-“可重算”只能证明额外面积有来源，不能证明输出仍可直接使用。对每个非空照片，运行流还需在
-source coordinates 中按边计算 measurement/inference uncertainty、插值 allowance 与固定
-protection 带来的外扩，并与用户确认的 direct-use budget 比较。
+“可重算”只能证明额外面积有来源，不能证明输出仍可直接使用。用户已将 direct-use budget
+冻结为跨 format 通用的两个每边比例：
+
+```text
+片条轴 start/end 每边上限 = selected FrameDesignApertureMm.long_axis_mm  × 5%
+横片条轴 top/bottom 每边上限 = selected FrameDesignApertureMm.short_axis_mm × 3%
+```
+
+每个 format 只用自身 selected aperture 把同一比例换算为毫米；`135-dual` 共用 `135`，120
+的 54/56 mm aperture 共用比例但分别换算，XPan 与 120-645 即使暂无黄金真实样片也使用同一
+比例，不建立 format denylist。
+
+| Format aperture | 片条轴每边 5% | 横片条轴每边 3% |
+|---|---:|---:|
+| 135 / 135-dual `36 × 24 mm` | `1.80 mm` | `0.72 mm` |
+| half `18 × 24 mm` | `0.90 mm` | `0.72 mm` |
+| XPan `65 × 24 mm` | `3.25 mm` | `0.72 mm` |
+| 120-645 `42 × 54/56 mm` | `2.10 mm` | `1.62/1.68 mm` |
+| 120-66 `54 × 54` / `56 × 56 mm` | `2.70/2.80 mm` | `1.62/1.68 mm` |
+| 120-67 `70 × 54/56 mm` | `3.50 mm` | `1.62/1.68 mm` |
+
+预算基准是 deskew 坐标中完整包含 selected photo polygon 的最小正交外包络。运行流必须在
+source coordinates 中按对应轴 scale 计算从该基准到 final protected footprint 的实际
+measurement/inference uncertainty、插值 allowance 与固定 protection 总外扩：
 
 - 预算内：可继续参与 `approved_auto` 安全证明；
 - 超出预算：是无法由 protection 吸收的具体输出可用性风险，必须经 CandidateGate 进入
   `needs_review`，且不得写出正式 TIFF；
 - `GridInferredBlankOutputGeometry` 不参与该预算，因为 blank 可被用户低成本删除；
-- 预算必须按边、以物理单位或显式 scale 映射表达，不能用总面积 clamp、历史 V4.2.8 box
-  或候选 union 替代。
+- 四条边分别是硬上限，不能用另一边的剩余额度或总面积抵扣；source/lane clipping 后按实际
+  外扩计费，但 containment 与 authority 必须单独成立，不能靠 clipping 把不安全输出伪装成
+  预算内；
+- V4.2.8 只有像素级 output bleed：默认片条轴 20 px、横片条轴 10 px，遇 overlap/continuous-
+  content risk 时片条轴至少 50 px，且允许 CLI override。它不是固定物理比例，也不参与本预算
+  的推导或验收。
 
 当前代码只完成了额外面积的来源重算、固定 protection 和 source/lane clipping；
-`output_protection` 还只检查 resolved geometry 是否完整，尚未实现独立的非空 direct-use budget
-硬门槛。该项是 V4.9 发布前的已知未闭合合同，不得用现有黄金零 inward loss 成绩代替。
+`output_protection` 还只检查 resolved geometry 是否完整，尚未拥有上述基准、逐边 metric 与
+硬门槛。数值已经冻结，但实现和黄金 comparator 验收仍是 V4.9 发布前的未闭合合同；不得用
+现有黄金零 inward loss 成绩代替。
 
 Rotation 只使用 selected observed top/bottom photo lines；这些沿照片长轴的观测拥有
-shared strip deskew authority。Start/end 仍是 observed polygon boundary，但个别 aperture
-切口可以不完全正交，不能建立或放宽 shared rotation。所有参与 rotation class 的 observed
-angle intervals 精确交集是唯一可行域：
+shared strip deskew authority。当前 runtime 的 start/end 仍可以是独立倾斜的 observed polygon
+boundary，但不能建立或放宽 shared rotation；V4.9 release 前必须按 7.1 节删除这一独立倾角。
+所有参与 rotation class 的 top/bottom observed angle intervals 精确交集是唯一可行域：
 
 - 交集包含零：`identity`；
 - 非零交集存在且绝对值不超过 `2°`：`observed_rotation`；
@@ -313,8 +364,9 @@ separator 缺失、query 失败或多个 output-equivalent candidates 本身不�
 
 `approved_auto` 才允许正式 TIFF。`needs_review` 的正式 TIFF 数必须为零；Debug Analysis
 中的候选标为 `NOT EXPORTABLE`，也没有 provisional product export 路径。
-非空 direct-use budget 实现后应映射到现有 `output_protection` 或 `source_lane_geometry` 事实，
-仍由 `DecisionGate` 独占 final status/reason；不增加第三个 Gate。
+非空 direct-use budget 实现后由现有 `output_protection` 记录逐边验收；clipping、containment
+与 authority 仍由各自现有事实负责。最终状态和 reason 继续由 `DecisionGate` 独占，不增加
+第三个 Gate。
 
 ## 12. Report、Debug Analysis 与 TIFF
 
@@ -357,7 +409,9 @@ Accuracy blocker 只有 tracked `tools/regression/cohorts/gold_accuracy.jsonl`�
 12 个 `must_approve_safe` 场景必须批准并正式写出/复读 TIFF。S055 两个 review 场景必须
 存在黄金安全 state 和 protection 后仍不等价的物理竞争 state，且正式 TIFF 数为零。
 在 V4.9 发布闭合前，12 个 approved 场景的每个非空输出还必须新增按边 direct-use budget
-验收；blank 输出明确豁免。预算的 metric 与数值尚待用户确认，实现者不得临场自行决定。
+验收；blank 输出明确豁免。数值固定为片条轴每边 5%、横片条轴每边 3%，并按 selected
+aperture 换算。黄金 comparator 还必须证明斜线 baseline 被正交最外投影完整包含，而不是要求
+复刻人工斜率；这些验收尚未实现。
 
 `diagnostic_unreviewed.jsonl` 的 111 records 不产生 accuracy verdict。它们只阻断 crash、
 hang、非法 schema、未完成 query 被消费、无界 query/DP/memory、TIFF 损坏和 authority

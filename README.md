@@ -17,7 +17,9 @@ full 使用格式默认 slots，partial explicit 严格服从用户 count，part
 containment、geometry 或 transform 风险才进入 `needs_review`。Blank slot 与相邻输出
 重叠均可接受；系统不猜真实照片张数。V4.9 发布合同还要求非空照片的保护后输出
 足够紧凑、无需人工二次裁切；多余 blank 可直接删除，但过宽照片不得冒充自动完成。
-该 direct-use budget 尚未实现为独立硬门槛，因此 V4.9 仍是开发版。当前稳定发布仍为 **v4.2.8**。
+该 direct-use budget 已由用户冻结为片条轴每边 5%、横片条轴每边 3%，各 format 按自身
+aperture 换算；独立硬门槛与正交 start/end 模型尚未实现，因此 V4.9 仍是开发版。当前
+稳定发布仍为 **v4.2.8**。
 
 X5 Crop conservatively crops TIFF scans from Hasselblad / Imacon X5 holders.
 Given a user-supplied format, full mode uses its default slots, partial explicit
@@ -34,7 +36,9 @@ outputs are allowed; runtime does not infer the true photo count. The V4.9
 release contract also requires every nonblank protected crop to be tight enough
 for direct use without manual recropping. Extra blank files are cheap to delete;
 an oversized photo crop must not be presented as completed automation. That
-direct-use budget is not yet implemented as an independent hard gate, so V4.9
+direct-use budget is now user-frozen at 5% per sequence-axis edge and 3% per
+cross-axis edge, converted through each format's own aperture. Its independent
+hard gate and the orthogonal start/end model are not yet implemented, so V4.9
 remains a development build. The stable release remains **v4.2.8**.
 
 请从 [GitHub Releases](https://github.com/rrriiicccooo/X5-Crop/releases) 下载

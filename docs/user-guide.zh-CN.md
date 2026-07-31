@@ -21,8 +21,10 @@ TIFF。
   rotation 没有共同可行区间。
 - 读取、写出或复读失败属于 terminal failure，不是 `needs_review`。
 
-当前 V4.9 开发树已能重算外扩来源，但还没有独立的非空 direct-use budget 硬门槛。
-该门槛的按边 metric 和数值需由用户确认后冻结；在实现并通过黄金验收前，这是 V4.9 发布 blocker。
+用户已将非空 direct-use budget 冻结为片条轴 start/end 每边为 selected aperture 长轴的
+5%，横片条轴 top/bottom 每边为短轴的 3%，各 format 使用同一比例。当前 V4.9 开发树已能
+重算外扩来源，但还没有实现该逐边硬门槛；已确认的正交 start/end 模型也尚未落地。在两项
+完成并通过黄金验收前，它们仍是 V4.9 发布 blocker。
 
 ## 安装
 
@@ -150,6 +152,12 @@ intercept、support 与 uncertainty。Start/end 通过覆盖全部允许平移�
 寻找；系统可以从任意内部边或 trailing edge 向前/向后重建序列，不要求 outer 先找到第一
 张。Content 只帮助 ownership 和 containment，不创建边。
 
+V4.9 release 合同已进一步冻结：top/bottom 的共同方向独占 deskew，start/end 与 separator
+两侧必须与其垂直，不保留独立倾角。若原始照片侧边确实倾斜，start 使用照片内容最外的最小
+片条轴投影，end 使用最大投影，以正交外包络保全内容；相邻输出可以重叠。黄金样片中的人工
+斜线只验证 containment，不要求 detector 复刻斜率。当前开发树仍允许 start/end 在 `±4°`
+内独立拟合，因此这是待实现合同，不是当前行为。
+
 每张非空照片形成 source-coordinate polygon。候选先完成物理兼容连接，再组成完整
 `FrameGeometryState`、去重和 dominance；超过两个 observed non-dominated states 时在
 截断前 unresolved。Ordered DP 每帧最多保留两个 observed states 和一个 model-only/blank
@@ -162,8 +170,11 @@ state，不枚举 auto occupancy。
 3. 固定毫米 protection；
 4. source/lane clipping。
 
-对非空照片，上述每条边的最终外扩还必须通过 direct-use budget；超出预算时应进入
-`needs_review` 且不写正式 TIFF。该预算不使用总面积 clamp，也不对 blank slot 生效。
+对非空照片，上述每条边的最终外扩还必须通过 direct-use budget：片条轴 start/end 各不
+超过 selected aperture 长轴的 5%，横片条轴 top/bottom 各不超过短轴的 3%。四边分别是
+硬上限，不能以总面积或另一边剩余额度抵扣；source/lane clipping 后按实际外扩计算，但
+containment 与 authority 仍必须单独通过。超出预算时应进入 `needs_review` 且不写正式
+TIFF；blank slot 豁免。
 
 Partial auto 的空 slot 使用独立 `grid_inferred_blank` geometry，不冒充照片 observation。
 Deskew 只由 selected observed top/bottom lines 的共同 angle interval产生；零角度有共同
@@ -263,7 +274,8 @@ component derivation；selected observations 和完整候选 states 仍可审计
 展开为 14 个 fixed/explicit/auto 场景。八张 nominal 用于参数冻结并参与最终验收；S098
 必须通过安全验收，但不参与 nominal calibration。Approved 场景检查 source footprint
 完整包含 confirmed polygon、零 inward loss、可重算 extra area 和正式 TIFF 复读。V4.9 发布闭合前还必须
-为非空输出增加按边 direct-use budget 验收，blank 豁免。S055
+为非空输出增加片条轴每边 5%、横片条轴每边 3% 的 direct-use budget 验收，并证明正交
+最外投影完整包含人工斜线 polygon；blank 豁免。S055
 review 场景必须保存黄金安全 state 与 protection 后仍不等价的竞争 state，且正式 TIFF
 数为零。
 

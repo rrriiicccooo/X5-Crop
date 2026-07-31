@@ -76,9 +76,12 @@ python3 X5_Crop.py --help
 `approved_auto` means photo-edge measurements or named inference, interpolation
 allowance, and protection form an output that satisfies the safety contract. It
 must also mean direct usability for every nonblank photo before V4.9 release; it
-does not claim that an invisible physical edge was uniquely proven. The current
-development tree does not yet implement an independent hard nonblank direct-use
-budget, which remains a release blocker. An approved run writes:
+does not claim that an invisible physical edge was uniquely proven. The user
+has frozen the budget at 5% of the selected aperture long axis on each
+sequence-axis start/end edge and 3% of its short axis on each cross-axis
+top/bottom edge, shared across formats. The current tree does not yet implement
+that independent hard gate, which remains a release blocker. An approved run
+writes:
 
 ```text
 x5_crop_output/

@@ -67,7 +67,9 @@ python3 X5_Crop.py --help
 
 `approved_auto` 表示照片四边测量或 named inference、插值 allowance 与 protection
 共同形成的输出满足安全合同；V4.9 发布时还必须满足非空照片可直接使用。它不表示不可见
-物理边被唯一证明。当前开发树尚未实现独立的非空 direct-use budget 硬门槛，这是发布前待闭合项。
+物理边被唯一证明。用户已将预算冻结为片条轴 start/end 每边 5%、横片条轴 top/bottom
+每边 3%，各 format 按自身 aperture 换算；当前开发树尚未实现这一独立硬门槛，这是发布前
+待闭合项。
 通过时会生成：
 
 ```text
