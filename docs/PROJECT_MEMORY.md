@@ -25,6 +25,11 @@
   slot 使用 `GridInferredBlankOutputGeometry`。安全输出依次加入 measurement 或 inference
   uncertainty、1 source-pixel interpolation allowance、固定毫米 protection 与 authority
   clipping，不使用跨候选 outward union。
+- 新冻结的产品人工成本顺序是：切掉真实内容最严重；过宽非空输出需要逐张人工重裁，
+  次之；多余 blank TIFF 可直接删除，成本最低。`approved_auto` 的 V4.9 发布语义必须同时
+  包含“零 inward loss”与“非空输出可直接使用”。
+- 额外面积可重算不等于输出可用。非空照片需要独立的按边 direct-use budget；blank geometry
+  明确豁免。不得用总面积 clamp、历史 box parity 或候选 union 代替该合同。
 - Deskew 只来自 selected observed top/bottom lines 的共同 angle interval。最终 ROI 从原
   TIFF 做一次 inverse-affine sampling，不生成整张旋转 RGB 中间图。
 - `CandidateGate` 只记录候选事实；只有 `DecisionGate` 创建 `approved_auto`、
@@ -95,6 +100,12 @@ benchmark workload SHA   = 8ebbb0a8213d72fa2f8573c4546babb999b55a87044f25f7379b9
 
 ## 验证边界与开放风险
 
+- 当前 runtime 只完成了 uncertainty/interpolation/protection 的来源重算、固定保护与
+  source/lane clipping。`output_protection` 仍只检查 resolved geometry 是否完整，没有独立
+  阻止“内容安全但宽到需要人工重裁”的非空输出。这是新确认的 V4.9 发布 blocker。
+- Direct-use budget 的 metric 与数值尚未冻结。它应在 source coordinates 中按边计算，使用
+  物理单位或明确 scale 映射，并由用户基于“是否需要二次裁切”的可用性标准确认。实现者不得
+  从当前算法输出或某个单独样片自行反推。
 - Accuracy blocker 只有九张黄金、14 个场景。八张 nominal 可以冻结参数并参与验收；S098
   只作 stress-excluded calibration，但仍必须安全通过。
 - 111-source 只证明程序、schema、TIFF、authority 与有界 query/DP/memory 工程合同；没有
@@ -109,9 +120,14 @@ benchmark workload SHA   = 8ebbb0a8213d72fa2f8573c4546babb999b55a87044f25f7379b9
 
 ## 精确下一步
 
-- 当前没有已知实现 blocker，不应恢复旧 detector、schema、compatibility 或样片专用规则。
-- 若准备发布 V4.9：在最终 Release commit 上重跑 fixed paired performance，构建 fresh ZIP，
-  在 release-target macOS 复核安装与 launcher，然后由用户明确授权创建 GitHub Release。
+- 先由用户确认非空 direct-use budget 的按边 metric 与数值。随后在现有 CandidateGate 中记录受影响的
+  `output_protection` 或 `source_lane_geometry` 事实；超出预算时由 DecisionGate 进入 review、正式
+  TIFF 数为零，不增加第三 Gate。
+- 黄金 comparator 必须对 12 个 approved 场景的非空输出新增 direct-use budget 验收，blank
+  明确豁免。修复后重跑全部黄金、111-source 工程诊断、paired performance、package 与 pre-push
+  full verification。
+- 上述合同闭合前不应发布 V4.9，也不应恢复旧 detector、schema、compatibility、样片专用规则
+  或大面积 clamp。
 - 若未来出现 named physical gap，只增加该 gap 所需的 pixel measurement、physical
   constraint、Gate contract 或 source-SHA-bound 人工真值；修复后重跑全部黄金与相关工程
   cohort，不以 area clamp、filename whitelist 或历史 box parity 替代根因修复。

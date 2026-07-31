@@ -9,16 +9,20 @@ TIFF。
 
 ## 产品目标
 
-完成标准是“不切掉真实照片内容”，不是唯一测量真实物理边界：
+完成标准是“不切掉真实照片内容，且非空输出可以直接使用”，不是唯一测量真实物理边界：
 
-- `approved_auto` 表示最终 protection 后的输出满足有界安全合同。
-- 输出可以比照片更大，相邻输出可以重叠，也可以带入少量邻片像素。
+- `approved_auto` 的 V4.9 发布语义同时要求零 inward loss 和非空照片不需要人工二次裁切。
+- 输出可以比照片稍大，相邻输出可以重叠，也可以带入少量邻片像素；但不得宽到让用户逐张重裁。
+- 多余 blank TIFF 可以低成本删除，因此允许；过宽非空 TIFF 是未完成的裁切工作，不得冒充自动成功。
 - Blank、named inference、缺少可见 separator 或多个 protection 后等价的 geometry，
   都不会单独导致 review。
 - `needs_review` 只用于无法吸收的具体风险，例如 ordinal 或 primary slot ownership
   无法有界、已知内容可能被内切、geometry 越出 source/lane authority，或 observed
   rotation 没有共同可行区间。
 - 读取、写出或复读失败属于 terminal failure，不是 `needs_review`。
+
+当前 V4.9 开发树已能重算外扩来源，但还没有独立的非空 direct-use budget 硬门槛。
+该门槛的按边 metric 和数值需由用户确认后冻结；在实现并通过黄金验收前，这是 V4.9 发布 blocker。
 
 ## 安装
 
@@ -158,6 +162,9 @@ state，不枚举 auto occupancy。
 3. 固定毫米 protection；
 4. source/lane clipping。
 
+对非空照片，上述每条边的最终外扩还必须通过 direct-use budget；超出预算时应进入
+`needs_review` 且不写正式 TIFF。该预算不使用总面积 clamp，也不对 blank slot 生效。
+
 Partial auto 的空 slot 使用独立 `grid_inferred_blank` geometry，不冒充照片 observation。
 Deskew 只由 selected observed top/bottom lines 的共同 angle interval产生；零角度有共同
 证据时使用 identity，否则在 `2°` 内使用 observed rotation。每个 approved ROI 最终从原
@@ -255,7 +262,8 @@ component derivation；selected observations 和完整候选 states 仍可审计
 当前 accuracy completion 只由九张 source-SHA-bound、用户确认 geometry 的黄金样片支撑，
 展开为 14 个 fixed/explicit/auto 场景。八张 nominal 用于参数冻结并参与最终验收；S098
 必须通过安全验收，但不参与 nominal calibration。Approved 场景检查 source footprint
-完整包含 confirmed polygon、零 inward loss、可重算 extra area 和正式 TIFF 复读。S055
+完整包含 confirmed polygon、零 inward loss、可重算 extra area 和正式 TIFF 复读。V4.9 发布闭合前还必须
+为非空输出增加按边 direct-use budget 验收，blank 豁免。S055
 review 场景必须保存黄金安全 state 与 protection 后仍不等价的竞争 state，且正式 TIFF
 数为零。
 

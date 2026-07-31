@@ -15,7 +15,9 @@ full 使用格式默认 slots，partial explicit 严格服从用户 count，part
 原 TIFF 一次 inverse-affine sampling。测量或推断不确定度、1 px 插值 allowance 与固定
 毫米 protection 共同形成可重算的安全包络。只有具体且无法吸收的 ordinal、ownership、
 containment、geometry 或 transform 风险才进入 `needs_review`。Blank slot 与相邻输出
-重叠均可接受；系统不猜真实照片张数。当前稳定发布仍为 **v4.2.8**。
+重叠均可接受；系统不猜真实照片张数。V4.9 发布合同还要求非空照片的保护后输出
+足够紧凑、无需人工二次裁切；多余 blank 可直接删除，但过宽照片不得冒充自动完成。
+该 direct-use budget 尚未实现为独立硬门槛，因此 V4.9 仍是开发版。当前稳定发布仍为 **v4.2.8**。
 
 X5 Crop conservatively crops TIFF scans from Hasselblad / Imacon X5 holders.
 Given a user-supplied format, full mode uses its default slots, partial explicit
@@ -28,8 +30,12 @@ once from the original TIFF. Measurement or inference uncertainty, a one-pixel
 interpolation allowance, and fixed millimetre protection form a recalculable
 safe envelope. Only a concrete, unabsorbed ordinal, ownership, containment,
 geometry, or transform risk becomes `needs_review`. Blank slots and overlapping
-outputs are allowed; runtime does not infer the true photo count. The stable
-release remains **v4.2.8**.
+outputs are allowed; runtime does not infer the true photo count. The V4.9
+release contract also requires every nonblank protected crop to be tight enough
+for direct use without manual recropping. Extra blank files are cheap to delete;
+an oversized photo crop must not be presented as completed automation. That
+direct-use budget is not yet implemented as an independent hard gate, so V4.9
+remains a development build. The stable release remains **v4.2.8**.
 
 请从 [GitHub Releases](https://github.com/rrriiicccooo/X5-Crop/releases) 下载
 `X5-Crop-vX.X.zip`，不要下载 GitHub 自动生成的 Source code。

@@ -2,8 +2,10 @@
 
 This page covers the current V4.9 development build. After you choose the film
 format, X5 Crop makes conservative automatic crops that prioritize retaining
-all real photo content. Outputs may keep extra pixels, overlap, or include a
-small part of a neighboring photo; tight boundary replication is not the goal.
+all real photo content. Outputs may keep a small, evidence-backed margin,
+overlap, or include a small part of a neighboring photo, but a nonblank crop
+must not be so wide that it needs manual recropping. Extra blank files are cheap
+to delete; oversized photo crops are not completed automation.
 The current stable release remains **v4.2.8**.
 
 ## 1. Download And Install
@@ -73,8 +75,10 @@ python3 X5_Crop.py --help
 
 `approved_auto` means photo-edge measurements or named inference, interpolation
 allowance, and protection form an output that satisfies the safety contract. It
-does not claim that an invisible physical edge was uniquely proven. An
-approved run writes:
+must also mean direct usability for every nonblank photo before V4.9 release; it
+does not claim that an invisible physical edge was uniquely proven. The current
+development tree does not yet implement an independent hard nonblank direct-use
+budget, which remains a release blocker. An approved run writes:
 
 ```text
 x5_crop_output/

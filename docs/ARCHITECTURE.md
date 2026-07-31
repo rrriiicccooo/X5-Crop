@@ -13,6 +13,8 @@ V4.9 在用户提供 format 后，从原 TIFF 重建每张照片的 source-coord
 - partial auto 使用唯一匹配片夹对该 format 的容量，并保留 blank slots；
 - 目标是零真实内容 inward loss，同时使额外面积可由边界不确定度、插值 allowance 和固定
   protection 重算；
+- 非空照片的保护后输出还必须在 direct-use budget 内，使用户无需人工二次裁切；
+- 人工成本优先级为：零 inward loss > 避免过宽非空输出 > 减少可直接删除的 blank TIFF；
 - 无法由 protection 吸收的 placement、ordinal、ownership、containment、lane authority
   或 transform 风险进入 `needs_review`。
 
@@ -248,6 +250,23 @@ Gate。Blank provenance 固定为 `grid_inferred_blank`，不冒充 observed pho
 
 Writer 只接受 `SafeCropEnvelope | GridInferredBlankOutputGeometry`。
 
+### 10.1 非空输出可用性合同
+
+“可重算”只能证明额外面积有来源，不能证明输出仍可直接使用。对每个非空照片，运行流还需在
+source coordinates 中按边计算 measurement/inference uncertainty、插值 allowance 与固定
+protection 带来的外扩，并与用户确认的 direct-use budget 比较。
+
+- 预算内：可继续参与 `approved_auto` 安全证明；
+- 超出预算：是无法由 protection 吸收的具体输出可用性风险，必须经 CandidateGate 进入
+  `needs_review`，且不得写出正式 TIFF；
+- `GridInferredBlankOutputGeometry` 不参与该预算，因为 blank 可被用户低成本删除；
+- 预算必须按边、以物理单位或显式 scale 映射表达，不能用总面积 clamp、历史 V4.2.8 box
+  或候选 union 替代。
+
+当前代码只完成了额外面积的来源重算、固定 protection 和 source/lane clipping；
+`output_protection` 还只检查 resolved geometry 是否完整，尚未实现独立的非空 direct-use budget
+硬门槛。该项是 V4.9 发布前的已知未闭合合同，不得用现有黄金零 inward loss 成绩代替。
+
 Rotation 只使用 selected observed top/bottom photo lines；这些沿照片长轴的观测拥有
 shared strip deskew authority。Start/end 仍是 observed polygon boundary，但个别 aperture
 切口可以不完全正交，不能建立或放宽 shared rotation。所有参与 rotation class 的 observed
@@ -294,6 +313,8 @@ separator 缺失、query 失败或多个 output-equivalent candidates 本身不�
 
 `approved_auto` 才允许正式 TIFF。`needs_review` 的正式 TIFF 数必须为零；Debug Analysis
 中的候选标为 `NOT EXPORTABLE`，也没有 provisional product export 路径。
+非空 direct-use budget 实现后应映射到现有 `output_protection` 或 `source_lane_geometry` 事实，
+仍由 `DecisionGate` 独占 final status/reason；不增加第三个 Gate。
 
 ## 12. Report、Debug Analysis 与 TIFF
 
@@ -335,6 +356,8 @@ Accuracy blocker 只有 tracked `tools/regression/cohorts/gold_accuracy.jsonl`�
 
 12 个 `must_approve_safe` 场景必须批准并正式写出/复读 TIFF。S055 两个 review 场景必须
 存在黄金安全 state 和 protection 后仍不等价的物理竞争 state，且正式 TIFF 数为零。
+在 V4.9 发布闭合前，12 个 approved 场景的每个非空输出还必须新增按边 direct-use budget
+验收；blank 输出明确豁免。预算的 metric 与数值尚待用户确认，实现者不得临场自行决定。
 
 `diagnostic_unreviewed.jsonl` 的 111 records 不产生 accuracy verdict。它们只阻断 crash、
 hang、非法 schema、未完成 query 被消费、无界 query/DP/memory、TIFF 损坏和 authority

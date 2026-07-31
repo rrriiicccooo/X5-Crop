@@ -7,6 +7,18 @@
 - 当前开发版本：**V4.9**
 - 当前稳定发布：**v4.2.8**
 
+## 2026-08-01：冻结非空自动输出的直接可用性原则
+
+- 产品人工成本顺序明确为：切掉真实内容最严重；过宽非空输出需要逐张人工重裁，次之；
+  多余 blank TIFF 可直接删除，成本最低。
+- `approved_auto` 的 V4.9 发布语义因此从“零 inward loss 且额外面积可重算”扩展为
+  “内容安全且非空输出可直接使用”。无法在有界保护内形成可用裁切时必须 review，不得用大面积
+  外扩冒充自动完成。
+- 这不恢复历史 box parity 或总面积 clamp。新预算必须按非空照片的每条边计算，由用户确认
+  的可用性标准冻结；blank slot 豁免。
+- 当前 runtime 仍只能重算 uncertainty/interpolation/protection 来源，`output_protection` 尚无独立
+  direct-use budget 硬门槛。这是本次文档同步后明确的 V4.9 发布 blocker，不是已完成行为。
+
 ## V4.9 当前开发线
 
 V4.9 是破坏性的 current-only 物理模型重构。旧 runtime、schema、reason、cache、

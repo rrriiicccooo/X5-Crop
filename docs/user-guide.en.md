@@ -10,13 +10,17 @@ individual TIFFs when the safety contract is satisfied.
 
 ## Product Goal
 
-Success means not cutting real photo content, not uniquely measuring the true
-physical boundary:
+Success means retaining all real photo content while making each nonblank
+output directly usable, not uniquely measuring the true physical boundary:
 
-- `approved_auto` means the final protected output satisfies the bounded safety
-  contract.
-- Outputs may be larger than the photo, overlap, or contain a small part of a
-  neighboring photo.
+- For the V4.9 release, `approved_auto` must mean both zero inward loss and no
+  need to manually recrop a nonblank photo.
+- Outputs may be slightly larger than the photo, overlap, or contain a small
+  part of a neighboring photo, but they must not be so wide that the user has
+  to recrop them.
+- An extra blank TIFF is acceptable because it is cheap to delete. An oversized
+  nonblank TIFF is unfinished crop work and must not be presented as successful
+  automation.
 - A blank slot, named inference, missing visible separator, or multiple
   protection-equivalent geometries does not by itself require review.
 - `needs_review` is reserved for a concrete risk that cannot be absorbed, such
@@ -24,6 +28,12 @@ physical boundary:
   known content, geometry outside source/lane authority, or no common observed
   rotation interval.
 - Read, write, and read-back errors are terminal failures, not review results.
+
+The current V4.9 development tree can account for every outward-area source,
+but it does not yet have an independent hard direct-use budget for nonblank
+outputs. Its per-edge metric and value must be frozen from a user-confirmed
+usability standard. This remains a V4.9 release blocker until implemented and
+validated on the gold scenarios.
 
 ## Install
 
@@ -180,6 +190,10 @@ A photo safety envelope adds, in order:
 3. fixed millimetre protection;
 4. source/lane clipping.
 
+For a nonblank photo, the resulting expansion on every edge must also satisfy
+the direct-use budget. Exceeding it must produce `needs_review` and no official
+TIFF. The budget is not a total-area clamp and does not apply to blank slots.
+
 Partial-auto empty slots use separate `grid_inferred_blank` geometry and never
 pretend to be photo observations. Deskew comes only from the common angle
 interval of selected observed top/bottom lines: identity requires shared
@@ -287,7 +301,9 @@ user-confirmed geometry, expanded into 14 fixed/explicit/auto scenarios. Eight
 nominal samples may freeze parameters and must pass final acceptance. S098 must
 pass safety acceptance but is excluded from nominal calibration. Approved
 scenarios require complete confirmed-polygon containment, zero inward loss,
-recalculable extra area, and official TIFF readback. S055 review scenarios must
+recalculable extra area, and official TIFF readback. Before V4.9 release
+closure, nonblank outputs must also pass a per-edge direct-use budget while
+blank outputs remain exempt. S055 review scenarios must
 retain both a gold-safe state and a physically feasible, protection-distinct
 competitor while producing zero official TIFFs.
 

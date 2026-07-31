@@ -81,22 +81,27 @@ https://github.com/rrriiicccooo/X5-Crop
 - Separator、content、outer、expected position、格式尺寸、score 与其它模型线索都可以
   参与 proposal、assessment 和 selection。必须在 report/debug 中区分 observed 与
   inferred，但“属于推断”本身不是 `needs_review` 理由。
-- `approved_auto` 只表示最终保护后的输出满足有界安全合同；不表示每条照片边、separator
-  或 Grid phase 都被唯一证明，也不保证每张输出只含本 slot 的像素，或输出 slot 数等于
-  真实照片数。固定 protection 与 bounded contact/overlap 可以跨过 nominal divider、
-  带入相邻照片像素并让相邻输出重叠。
+- 产品人工成本顺序固定为：切掉真实内容最严重；非空照片输出过宽、需要逐张重新裁切
+  次之；多输出一张可直接删除的 blank TIFF 成本最低。不得为了减少 blank，把每张真实
+  照片变成需要人工二次裁切的半成品。
+- `approved_auto` 同时表示最终保护后输出内容安全，且非空照片的外扩保持在已冻结的
+  direct-use budget 内，用户无需再次裁切。它不表示每条照片边、separator 或 Grid phase 都被
+  唯一证明，也不保证每张输出只含本 slot 的像素。固定 protection 与 bounded
+  contact/overlap 可以带入少量邻片像素并让相邻输出重叠，但不得大到使非空输出失去
+  直接使用价值。
 - `needs_review` 只用于具体且无法由 protection 吸收的输出风险，例如请求的显式 count
   无法成立、同一输出 slot count 下的 ordinal/placement 竞争无法有界、主照片的 slot
   ownership 无法有界、已观测内容仍会被切掉，或未保护 geometry 越出 source/lane
-  authority。不得把
+  authority，以及非空照片只能通过超出 direct-use budget 的外扩才能保全。不得把
   protection/shared interval 内出现邻片像素当作 ownership 失败，也不得只因 separator
   缺失、照片为空、精确边界未观测或多个候选在输出上等价而送审。
 - Partial `auto` 保留片夹全部有效 slot；真实照片可以位于其中任意连续或物理允许的位置，
   前后及中间 blank 均保留输出。额外空白 TIFF 可以接受；contact/overlap 优先允许输出框
   重叠以保全内容。只有同一容量 Grid 的 slot ownership 或安全包络无法有界时才送审。
 - 回归验收关注 format、输入 count authority、输出 slot count、顺序、slot ownership、
-  真实内容 containment 与 TIFF 保真；不要求复刻历史 box，也不把贴近人工边界本身当作
-  质量目标。黄金 partial `auto` 必须把每个确认照片以 source 顺序完整包含在某个输出
+  真实内容 containment、非空输出的 direct-use budget 与 TIFF 保真；不要求复刻历史 box，
+  也不把贴近人工边界本身当作质量目标。黄金 partial `auto` 必须把每个确认照片以
+  source 顺序完整包含在某个输出
   slot 中，不要求确认照片 ordinal 与 holder slot ordinal 相同。
 - Accuracy completion 只使用 source-SHA-bound、用户确认 geometry 的黄金样片。未确认
   样片、filename `pass/unknown`、auto-count 观察率与 calibration 结果不能冒充真实
@@ -113,6 +118,9 @@ https://github.com/rrriiicccooo/X5-Crop
 - Named-TIFF 与端到端回归必须运行完整 detection flow，包括 scan-canvas matching、
   Grid proposal、safe containment 与 transform assessment。纯 solver 单测可显式构造
   typed `DetectionWorkspace` fixture；production runtime 不得 bypass。
+- Direct-use budget 必须在 source coordinates 中按非空照片、按边计算，并使用物理单位或明确
+  scale 映射。它必须由用户确认的可用性标准冻结，不得从 V4.2.8 历史 box、当前算法分布、
+  总面积 clamp 或某个单独样片反推。Blank slot 不参与该预算验收。
 - 照片尺寸只属于 `FramePhysicalSpec`；片夹扫描画布只属于
   `ScanCanvasPhysicalSpec` catalog。片夹与 format 的适用关系及最大容纳张数也由该
   catalog 的 typed fit 拥有；count 只能排除装不下的 profile，不能缩短 validation
@@ -208,7 +216,8 @@ https://github.com/rrriiicccooo/X5-Crop
   blocker，也不得建立格式级 denylist。
 - 样片可用时覆盖代表性 `135/full`、`120-66/partial`、`half/full` 与 `120-67/full`。
   Unit tests 通过不证明 named-TIFF 安全裁切；完成声明前必须检查 current reports、Debug
-  Analysis 与输出是否存在真实内容 inward loss。
+  Analysis 与输出是否存在真实内容 inward loss，以及非空 approved 输出是否宽到需要人工
+  二次裁切。
 
 ## 完成与同步
 
