@@ -70,8 +70,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--debug-analysis",
         action="store_true",
         help=(
-            "Write one three-panel JPG with original gray context, frame "
-            "outputs, and separator evidence."
+            "Write one four-layer JPG with source authority, pixel "
+            "measurements, selected source geometry, and protected output."
         ),
     )
     parser.add_argument("--diagnostics", action="store_true", help="Read-only diagnostics mode; implies --report --debug-analysis --no-copy-review-files.")

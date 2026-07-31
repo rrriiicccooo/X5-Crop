@@ -12,6 +12,23 @@
 V4.9 是破坏性的 current-only 物理模型重构。旧 runtime、schema、reason、cache、
 compatibility 与历史 box parity 均不是迁移目标。
 
+### 2026-08-01：主线收敛与 current-only 审计
+
+- `main` 快进到完整 source-coordinate 照片几何实现；已合并的旧修复线没有独有提交，
+  不引入历史实现、merge shim 或兼容层。
+- 回归工具收敛为 `gold_comparator.py` 与 `gold_accuracy.py` 两个当前 owner；删除旧
+  `golden_baseline.py`、`safe_crop_acceptance.py` 模块名，不保留 import alias。
+- 七组 tracked tests 逐项审计后全部保留：它们分别覆盖 affine/TIFF、照片 geometry、
+  current-only、Debug Analysis、performance、source core 与完整 runtime。过时的
+  `test_bounded_grid_contract.py` 名称改为 `test_photo_geometry_contract.py`，并增加旧路径
+  不得恢复的 contract。
+- 删除没有任何 runtime、tool 或 test 消费者、却会被 standalone builder 嵌入的
+  `image/crop_pixels.py` 与 `image/evidence.py`；当前像素采样和 content measurement
+  分别只由 affine/export 与 source core owner 实现。
+- CLI、架构和公共手册统一为四层 Debug Analysis。下方三联图条目只保留 V4.9 重建前的
+  历史与回滚背景，不再描述 current runtime。
+- 本次不改变版本号或稳定 Release；当前开发版本仍为 V4.9，稳定发布仍为 v4.2.8。
+
 ### 2026-07-31：source-coordinate 照片几何重建
 
 - 原子替换旧 `bounded Grid` detector：Grid 现在只拥有 capacity、phase、ordinal、blank

@@ -14,7 +14,7 @@ from typing import Any, Sequence
 from x5crop.io.tiff import read_tiff
 from x5crop.report.validation import validate_current_report_record
 
-from .golden_baseline import (
+from .gold_comparator import (
     compare_gold_record_to_report,
     load_gold_records,
 )

@@ -9,11 +9,11 @@ import unittest
 
 import numpy as np
 
-from tools.regression.golden_baseline import (
+from tools.regression.gold_comparator import (
     GOLD_ACCURACY_PATH,
     load_gold_records,
 )
-from tools.regression.safe_crop_acceptance import (
+from tools.regression.gold_accuracy import (
     AcceptancePreflightError,
     RESULT_SCHEMA,
     SUMMARY_SCHEMA,

@@ -52,6 +52,8 @@ class CurrentOnlyContractTest(unittest.TestCase):
             "x5crop/detection/grid",
             "x5crop/detection/evidence/separator.py",
             "x5crop/detection/protection.py",
+            "x5crop/image/crop_pixels.py",
+            "x5crop/image/evidence.py",
         )
         for relative in forbidden_paths:
             with self.subTest(path=relative):
@@ -141,6 +143,7 @@ class CurrentOnlyContractTest(unittest.TestCase):
         self,
     ) -> None:
         parser = build_parser()
+        help_text = parser.format_help()
         option_strings = {
             value
             for action in parser._actions
@@ -149,6 +152,8 @@ class CurrentOnlyContractTest(unittest.TestCase):
         self.assertNotIn("--debug", option_strings)
         self.assertIn("--debug-analysis", option_strings)
         self.assertIn("--debug-errors", option_strings)
+        self.assertIn("four-layer JPG", help_text)
+        self.assertNotIn("three-panel JPG", help_text)
         for runtime_type in (RuntimeOptions, RunConfig):
             with self.subTest(runtime_type=runtime_type.__name__):
                 self.assertNotIn(
@@ -296,6 +301,9 @@ class CurrentOnlyContractTest(unittest.TestCase):
             "PROJECT_MEMORY.md",
             "install",
             "X5_Crop_Mac_diagnostics.command",
+            "tools/regression/golden_baseline.py",
+            "tools/regression/safe_crop_acceptance.py",
+            "tools/tests/test_bounded_grid_contract.py",
         ):
             with self.subTest(absent=relative):
                 self.assertFalse((ROOT / relative).exists())
@@ -306,6 +314,9 @@ class CurrentOnlyContractTest(unittest.TestCase):
             "docs/PROJECT_MEMORY.md",
             "tools/install/X5_Crop_Mac_install.command",
             "tools/install/X5_Crop_win_install.bat",
+            "tools/regression/gold_comparator.py",
+            "tools/regression/gold_accuracy.py",
+            "tools/tests/test_photo_geometry_contract.py",
         ):
             with self.subTest(present=relative):
                 self.assertTrue((ROOT / relative).is_file())

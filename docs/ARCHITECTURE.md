@@ -364,7 +364,10 @@ V4.2.8 基线固定 tag `v4.2.8` / commit
 | `x5crop/detection/final/` | resolved geometry finalization |
 | `x5crop/export/`、`x5crop/io/` | 一次 sampling、TIFF 写出与复读 |
 | `x5crop/report/`、`x5crop/debug/` | current report 与 Debug Analysis |
-| `tools/regression/` | gold、diagnostic、profile 与 paired performance |
+| `tools/regression/gold_comparator.py` | tracked gold geometry comparator |
+| `tools/regression/gold_accuracy.py` | 九张、14 场景 blocking gold runner |
+| `tools/regression/diagnostic_cohort.py` | 111-source 非阻断诊断 runner |
+| `tools/regression/performance.py` | status-independent paired performance |
 | `tools/verify` | 唯一验证入口 |
 
 旧 nearest-line Grid、separator field、固定 uncertainty、跨候选 outward union 和
