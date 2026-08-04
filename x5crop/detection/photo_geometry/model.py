@@ -19,7 +19,7 @@ from ...domain import (
     PositiveInterval,
     WorkspaceExtent,
 )
-from ...formats import FrameDesignApertureMm
+from ...geometry.convex import ConvexPolygon, convex_hull, signed_area
 
 
 class BoundaryAxis(str, Enum):
@@ -37,25 +37,34 @@ class BoundaryRole(str, Enum):
     LONG_BOUNDARY = "long_boundary"
 
 
-class BoundarySource(str, Enum):
-    OBSERVED = "observed"
+class PositionSource(str, Enum):
+    OBSERVED_TRANSITION = "observed_transition"
     INFERRED_OPPOSITE_EDGE = "inferred_opposite_edge"
     INFERRED_SEQUENCE = "inferred_sequence"
+
+
+class DirectionAuthority(str, Enum):
+    SHARED_TOP_BOTTOM_DIRECTION = "shared_top_bottom_direction"
+    ORTHOGONAL_TO_SHARED_DIRECTION = "orthogonal_to_shared_direction"
+
+
+class AuthoritySide(str, Enum):
+    LEFT = "left"
+    TOP = "top"
+    RIGHT = "right"
+    BOTTOM = "bottom"
+
+
+class ClippedRequirement(str, Enum):
+    FULL_INTERVAL = "full_interval"
+    MINIMUM_GUARD = "minimum_guard"
+    VISIBLE_INTERPOLATION_GUARD = "visible_interpolation_guard"
 
 
 class QueryPurpose(str, Enum):
     TOP_CORRIDOR = "top_corridor"
     BOTTOM_CORRIDOR = "bottom_corridor"
     SEQUENCE_ANCHOR_TILE = "sequence_anchor_tile"
-    OUTER_PROPOSAL_REMEASUREMENT = "outer_proposal_remeasurement"
-
-
-class AdjacencyKind(str, Enum):
-    EDGE_PAIR = "edge_pair"
-    ONE_SIDED = "one_sided"
-    CONTACT = "contact"
-    OVERLAP = "overlap"
-    MODEL_ONLY = "model_only"
 
 
 @dataclass(frozen=True)
@@ -70,7 +79,7 @@ class PhotoBoundaryMeasurementSpec:
     maximum_transition_interval_mm: float = 1.0
     gradient_z_minimum: float = 3.0
     tone_or_texture_z_minimum: float = 3.0
-    maximum_search_angle_degrees: float = 4.0
+    top_bottom_search_angle_degrees: float = 4.0
     line_connection_allowance_mm: float = 0.10
     maximum_missing_lattice_steps: int = 1
     huber_irls_rounds: int = 4
@@ -87,23 +96,13 @@ class PhotoBoundaryMeasurementSpec:
     dimension_search_allowance_mm: float = 1.0
     center_offset_allowance_mm: float = 1.0
     anchor_tile_width_mm: float = 6.0
+    transition_coordinate_sampling_uncertainty_px: float = 0.5
     interpolation_allowance_source_px: float = 1.0
     background_texture_ratio_minimum: float = 2.0
     background_tone_to_texture_minimum: float = 6.0
     directional_background_support_minimum: float = 0.25
     directional_role_preference_minimum: float = 0.60
     directional_sequence_support_minimum: float = 0.90
-    nominal_calibration_sample_ids: tuple[str, ...] = (
-        "S027",
-        "S035",
-        "S051",
-        "S055",
-        "S062",
-        "S091",
-        "S094",
-        "S109",
-    )
-    stress_excluded_sample_id: str = "S098"
 
     def __post_init__(self) -> None:
         positive = (
@@ -115,7 +114,7 @@ class PhotoBoundaryMeasurementSpec:
             self.maximum_transition_interval_mm,
             self.gradient_z_minimum,
             self.tone_or_texture_z_minimum,
-            self.maximum_search_angle_degrees,
+            self.top_bottom_search_angle_degrees,
             self.line_connection_allowance_mm,
             self.huber_minimum_threshold_mm,
             self.huber_mad_multiplier,
@@ -128,6 +127,7 @@ class PhotoBoundaryMeasurementSpec:
             self.dimension_search_allowance_mm,
             self.center_offset_allowance_mm,
             self.anchor_tile_width_mm,
+            self.transition_coordinate_sampling_uncertainty_px,
             self.interpolation_allowance_source_px,
             self.background_texture_ratio_minimum,
             self.background_tone_to_texture_minimum,
@@ -153,16 +153,9 @@ class PhotoBoundaryMeasurementSpec:
             and 0.0 < self.directional_sequence_support_minimum <= 1.0
         ):
             raise ValueError("measurement support fractions are invalid")
-        if len(set(self.nominal_calibration_sample_ids)) != 8:
-            raise ValueError("nominal calibration receipt must name eight samples")
-        if (
-            self.stress_excluded_sample_id
-            in self.nominal_calibration_sample_ids
-        ):
-            raise ValueError("stress sample cannot calibrate nominal thresholds")
 
     @property
-    def calibration_receipt_id(self) -> str:
+    def contract_id(self) -> str:
         payload = json.dumps(
             asdict(self),
             ensure_ascii=False,
@@ -238,6 +231,7 @@ class PhotoBoundaryMeasurementQuery:
     boundary_axis: BoundaryAxis
     trace_positions_px: tuple[int, ...]
     search_intervals_px: tuple[FiniteInterval, ...]
+    transition_ownership_intervals_px: tuple[FiniteInterval, ...]
     expected_support_px: float
     boundary_axis_scale_px_per_mm: PositiveInterval
     trace_axis_scale_px_per_mm: PositiveInterval
@@ -253,6 +247,8 @@ class PhotoBoundaryMeasurementQuery:
             or not isinstance(self.boundary_axis, BoundaryAxis)
             or not self.trace_positions_px
             or len(self.trace_positions_px) != len(self.search_intervals_px)
+            or len(self.trace_positions_px)
+            != len(self.transition_ownership_intervals_px)
             or tuple(sorted(set(self.trace_positions_px)))
             != self.trace_positions_px
             or not math.isfinite(self.expected_support_px)
@@ -265,6 +261,18 @@ class PhotoBoundaryMeasurementQuery:
             self.search_proposal_ids
         ):
             raise ValueError("search proposal identities must be unique")
+        if any(
+            ownership.minimum < search.minimum
+            or ownership.maximum > search.maximum
+            for search, ownership in zip(
+                self.search_intervals_px,
+                self.transition_ownership_intervals_px,
+                strict=True,
+            )
+        ):
+            raise ValueError(
+                "transition ownership must remain inside query coverage"
+            )
 
 
 @dataclass(frozen=True)
@@ -321,7 +329,6 @@ class PhotoBoundaryCoverageReceipt:
     pixel_query_count: int
     streaming_block_count: int
     peak_temporary_bytes: int
-    shared_measurement_reuse_count: int
     complete: bool
 
     def __post_init__(self) -> None:
@@ -333,7 +340,6 @@ class PhotoBoundaryCoverageReceipt:
             self.pixel_query_count,
             self.streaming_block_count,
             self.peak_temporary_bytes,
-            self.shared_measurement_reuse_count,
         )
         if not self.query_id or any(value < 0 for value in counts):
             raise ValueError("measurement coverage receipt is invalid")
@@ -429,12 +435,10 @@ class SequenceAnchorTile:
 class SequenceAnchorDiscoveryDomain:
     domain_id: str
     lane_id: str
-    translation_interval_px: FiniteInterval
     long_axis_extent_px: int
     authoritative_sequence_length: int
     tiles: tuple[SequenceAnchorTile, ...]
-    grid_execution_order: tuple[str, ...]
-    outer_execution_order: tuple[str, ...]
+    query_execution_order: tuple[str, ...]
 
     def __post_init__(self) -> None:
         if (
@@ -448,10 +452,8 @@ class SequenceAnchorDiscoveryDomain:
         tile_ids = tuple(item.tile_id for item in self.tiles)
         if len(set(tile_ids)) != len(tile_ids):
             raise ValueError("sequence anchor tiles must be unique")
-        if set(self.grid_execution_order) != set(tile_ids):
-            raise ValueError("Grid order must cover every anchor tile")
-        if set(self.outer_execution_order) != set(tile_ids):
-            raise ValueError("outer order must cover every anchor tile")
+        if set(self.query_execution_order) != set(tile_ids):
+            raise ValueError("query order must cover every anchor tile")
         ordered = sorted(self.tiles, key=lambda item: item.core_px.minimum)
         if ordered[0].core_px.minimum > 0.0:
             raise ValueError("anchor tiles must begin at lane authority")
@@ -464,30 +466,6 @@ class SequenceAnchorDiscoveryDomain:
                 abs_tol=1.0e-9,
             ):
                 raise ValueError("anchor tile cores must be seamless")
-
-
-@dataclass(frozen=True)
-class PhotoSequenceExtentProposal:
-    proposal_id: str
-    lane_id: str
-    source: str
-    long_axis_interval_px: FiniteInterval
-    query_domain_only: bool = True
-
-    def __post_init__(self) -> None:
-        if (
-            not self.proposal_id
-            or not self.lane_id
-            or self.source
-            not in {
-                "outer_background",
-                "outer_content",
-                "outer_separator_first",
-                "grid_search_order",
-            }
-            or not self.query_domain_only
-        ):
-            raise ValueError("photo-sequence extent proposal is invalid")
 
 
 @dataclass(frozen=True)
@@ -511,25 +489,6 @@ class SourceCoordinateLine:
             abs_tol=1.0e-8,
         ):
             raise ValueError("source-coordinate line normal must be unit length")
-        long_vector = (
-            (1.0, 0.0)
-            if self.source_axis_long == BoundaryAxis.X
-            else (0.0, 1.0)
-        )
-        short_vector = (
-            (0.0, 1.0)
-            if self.source_axis_long == BoundaryAxis.X
-            else (1.0, 0.0)
-        )
-        if max(
-            abs(self.normal_x * long_vector[0] + self.normal_y * long_vector[1]),
-            abs(
-                self.normal_x * short_vector[0]
-                + self.normal_y * short_vector[1]
-            ),
-        ) < math.cos(math.radians(4.0)) - 1.0e-8:
-            raise ValueError("source line exceeds the four-degree authority")
-
     def intersection(
         self,
         other: "SourceCoordinateLine",
@@ -606,345 +565,171 @@ class PhotoBoundaryObservation:
 
 
 @dataclass(frozen=True)
+class SideTransitionRegion:
+    """Direction-free start/end position proposal from tracked transitions."""
+
+    region_id: str
+    proposal_position_interval_px: FiniteInterval
+    transition_ids: tuple[ObservationId, ...]
+    trace_support_count: int
+    queried_trace_count: int
+    continuous_support_fraction: float
+    fit_residual_px: float
+    mean_gradient_z: float
+    mean_tone_or_texture_z: float
+    background_side_support_fraction: float
+    left_background_preference_fraction: float
+    right_background_preference_fraction: float
+    ambiguous: bool = False
+
+    def __post_init__(self) -> None:
+        if (
+            not self.region_id
+            or not self.transition_ids
+            or len(set(self.transition_ids)) != len(self.transition_ids)
+            or len(self.transition_ids) != self.trace_support_count
+            or self.trace_support_count <= 0
+            or self.queried_trace_count < self.trace_support_count
+            or not 0.0 <= self.continuous_support_fraction <= 1.0
+            or not math.isfinite(self.fit_residual_px)
+            or self.fit_residual_px < 0.0
+            or not math.isfinite(self.mean_gradient_z)
+            or self.mean_gradient_z < 0.0
+            or not math.isfinite(self.mean_tone_or_texture_z)
+            or self.mean_tone_or_texture_z < 0.0
+            or not 0.0 <= self.background_side_support_fraction <= 1.0
+            or not 0.0
+            <= self.left_background_preference_fraction
+            <= 1.0
+            or not 0.0
+            <= self.right_background_preference_fraction
+            <= 1.0
+        ):
+            raise ValueError("side transition region is invalid")
+
+    @property
+    def measurement_uncertainty_px(self) -> float:
+        return self.proposal_position_interval_px.width / 2.0
+
+
+MAXIMUM_OUTPUT_ROTATION_DEGREES = 2.0
+
+
+@dataclass(frozen=True)
+class SharedStripDirection:
+    """The sole canonical direction plus all retained angle uncertainty."""
+
+    direction_id: str
+    selected_observation_ids: tuple[ObservationId, ...]
+    full_angle_interval_degrees: FiniteInterval
+    canonical_angle_degrees: float
+
+    def __post_init__(self) -> None:
+        if (
+            not self.direction_id
+            or not self.selected_observation_ids
+            or len(set(self.selected_observation_ids))
+            != len(self.selected_observation_ids)
+            or not self.full_angle_interval_degrees.contains(
+                self.canonical_angle_degrees,
+                epsilon=1.0e-12,
+            )
+            or abs(self.canonical_angle_degrees)
+            > MAXIMUM_OUTPUT_ROTATION_DEGREES
+        ):
+            raise ValueError("shared strip direction is invalid")
+
+
+@dataclass(frozen=True)
 class FrameBoundaryGeometry:
     role: BoundaryRole
     line: SourceCoordinateLine
-    offset_interval_px: FiniteInterval
-    source: BoundarySource
-    observation_ids: tuple[ObservationId, ...]
-    named_inference: str | None
+    reference_trace_px: float
+    canonical_position_px: float
+    full_position_interval_px: FiniteInterval
+    full_direction_interval_degrees: FiniteInterval
+    position_source: PositionSource
+    position_observation_ids: tuple[ObservationId, ...]
+    named_position_inference: str | None
+    direction_authority: DirectionAuthority
+    direction_reference_id: str
 
     def __post_init__(self) -> None:
-        if not self.offset_interval_px.contains(
-            self.line.offset_px,
+        if not self.full_position_interval_px.contains(
+            self.canonical_position_px,
             epsilon=1.0e-8,
         ):
-            raise ValueError("frame boundary interval must contain its line")
-        observed = self.source == BoundarySource.OBSERVED
+            raise ValueError(
+                "frame boundary interval must contain its canonical position"
+            )
+        if not math.isfinite(self.reference_trace_px):
+            raise ValueError("frame boundary reference trace must be finite")
+        observed = self.position_source == PositionSource.OBSERVED_TRANSITION
         if observed:
-            if not self.observation_ids or self.named_inference is not None:
+            if (
+                not self.position_observation_ids
+                or self.named_position_inference is not None
+            ):
                 raise ValueError("observed boundary requires pixel provenance")
         elif (
-            not self.observation_ids
-            or not self.named_inference
+            not self.position_observation_ids
+            or not self.named_position_inference
         ):
             raise ValueError("inferred boundary requires named observed inputs")
+        if not self.direction_reference_id:
+            raise ValueError("frame boundary requires direction provenance")
+        if self.role in {BoundaryRole.START, BoundaryRole.END}:
+            if (
+                self.direction_authority
+                != DirectionAuthority.ORTHOGONAL_TO_SHARED_DIRECTION
+            ):
+                raise ValueError("start/end must be orthogonal to shared direction")
+        elif (
+            self.direction_authority
+            != DirectionAuthority.SHARED_TOP_BOTTOM_DIRECTION
+        ):
+            raise ValueError("top/bottom must use shared canonical direction")
 
     @property
     def outward_uncertainty_px(self) -> float:
         return max(
-            self.line.offset_px - self.offset_interval_px.minimum,
-            self.offset_interval_px.maximum - self.line.offset_px,
-        )
-
-
-def _polygon_area(points: tuple[tuple[float, float], ...]) -> float:
-    return 0.5 * sum(
-        left[0] * right[1] - right[0] * left[1]
-        for left, right in zip(
-            points,
-            points[1:] + points[:1],
-            strict=True,
-        )
-    )
-
-
-@dataclass(frozen=True)
-class FramePhotoGeometry:
-    geometry_id: str
-    lane_id: str
-    lane_ordinal: int
-    top: FrameBoundaryGeometry
-    bottom: FrameBoundaryGeometry
-    start: FrameBoundaryGeometry
-    end: FrameBoundaryGeometry
-    source_polygon: tuple[tuple[float, float], ...]
-    content_component_ids: tuple[str, ...]
-    ownership: str
-
-    def __post_init__(self) -> None:
-        edges = (self.top, self.bottom, self.start, self.end)
-        if (
-            not self.geometry_id
-            or not self.lane_id
-            or self.lane_ordinal <= 0
-            or tuple(item.role for item in edges)
-            != (
-                BoundaryRole.TOP,
-                BoundaryRole.BOTTOM,
-                BoundaryRole.START,
-                BoundaryRole.END,
-            )
-            or len(self.source_polygon) != 4
-            or any(
-                not math.isfinite(value)
-                for point in self.source_polygon
-                for value in point
-            )
-            or abs(_polygon_area(self.source_polygon)) <= 1.0e-6
-            or len(set(self.content_component_ids))
-            != len(self.content_component_ids)
-            or self.ownership
-            not in {"assigned_content", "observed_empty", "unassigned"}
-        ):
-            raise ValueError("frame photo geometry is invalid")
-
-    @property
-    def observed_edge_count(self) -> int:
-        return sum(
-            edge.source == BoundarySource.OBSERVED
-            for edge in (self.top, self.bottom, self.start, self.end)
+            self.canonical_position_px
+            - self.full_position_interval_px.minimum,
+            self.full_position_interval_px.maximum
+            - self.canonical_position_px,
         )
 
 
 @dataclass(frozen=True)
-class FrameAdjacencyConstraint:
-    previous_lane_ordinal: int
-    next_lane_ordinal: int
-    kind: AdjacencyKind
-    previous_end_interval_px: FiniteInterval
-    next_start_interval_px: FiniteInterval
-    observation_ids: tuple[ObservationId, ...]
+class FootprintSaturationFact:
+    authority_side: AuthoritySide
+    clipped_requirements: tuple[ClippedRequirement, ...]
 
     def __post_init__(self) -> None:
         if (
-            self.previous_lane_ordinal <= 0
-            or self.next_lane_ordinal
-            != self.previous_lane_ordinal + 1
-            or not isinstance(self.kind, AdjacencyKind)
+            not self.clipped_requirements
+            or len(set(self.clipped_requirements))
+            != len(self.clipped_requirements)
         ):
-            raise ValueError("frame adjacency constraint is invalid")
-        if (
-            self.kind == AdjacencyKind.MODEL_ONLY
-        ) != (not self.observation_ids):
-            raise ValueError("only model-only adjacency can omit observations")
+            raise ValueError("saturation fact requires unique clipped facts")
 
 
-@dataclass(frozen=True)
-class FrameSequenceGeometryConstraintSet:
-    constraint_set_id: str
-    lane_id: str
-    output_slot_count: int
-    authoritative_photo_count: int | None
-    aperture: FrameDesignApertureMm
-    aperture_label: str
-    width_interval_px: PositiveInterval
-    height_interval_px: PositiveInterval
-    typed_gutter_interval_px: FiniteInterval
-    long_boundary_observations: tuple[PhotoBoundaryObservation, ...]
-    top_observations_by_ordinal: tuple[
-        tuple[PhotoBoundaryObservation, ...], ...
-    ]
-    bottom_observations_by_ordinal: tuple[
-        tuple[PhotoBoundaryObservation, ...], ...
-    ]
-    adjacency_constraints: tuple[FrameAdjacencyConstraint, ...]
-
-    def __post_init__(self) -> None:
-        if (
-            not self.constraint_set_id
-            or not self.lane_id
-            or self.output_slot_count <= 0
-            or (
-                self.authoritative_photo_count is not None
-                and (
-                    self.authoritative_photo_count <= 0
-                    or self.authoritative_photo_count
-                    != self.output_slot_count
-                )
-            )
-            or not self.aperture_label
-            or len(self.top_observations_by_ordinal)
-            != self.output_slot_count
-            or len(self.bottom_observations_by_ordinal)
-            != self.output_slot_count
-        ):
-            raise ValueError("frame sequence constraint set is incomplete")
-
-
-@dataclass(frozen=True)
-class FrameGeometryState:
-    state_id: str
-    lane_id: str
-    lane_ordinal: int
-    photo_geometry: FramePhotoGeometry | None
-    aperture_label: str
-    rotation_class_id: str
-    ownership: str
-    interaction_before: AdjacencyKind | None
-    interaction_after: AdjacencyKind | None
-    model_only: bool
-    physical_residual_px: float
-    measurement_uncertainty_px: float
-
-    def __post_init__(self) -> None:
-        if (
-            not self.state_id
-            or not self.lane_id
-            or self.lane_ordinal <= 0
-            or not self.aperture_label
-            or not self.rotation_class_id
-            or not math.isfinite(self.physical_residual_px)
-            or self.physical_residual_px < 0.0
-            or not math.isfinite(self.measurement_uncertainty_px)
-            or self.measurement_uncertainty_px < 0.0
-            or self.model_only != (self.photo_geometry is None)
-        ):
-            raise ValueError("complete frame geometry state is invalid")
-        if (
-            self.photo_geometry is not None
-            and (
-                self.photo_geometry.lane_id != self.lane_id
-                or self.photo_geometry.lane_ordinal != self.lane_ordinal
-            )
-        ):
-            raise ValueError("frame state geometry identity disagrees")
-
-
-class PhotoSequenceTranslationOutcome(str, Enum):
-    OBSERVED_ANCHOR = "observed_anchor"
-    SEQUENCE_INFERRED = "sequence_inferred"
-    UNRESOLVED = "unresolved"
-    NOT_APPLICABLE_NO_PHOTO_GEOMETRY = (
-        "not_applicable_no_photo_geometry"
-    )
-
-
-@dataclass(frozen=True)
-class PhotoSequenceTranslationAssessment:
-    outcome: PhotoSequenceTranslationOutcome
-    interval_px: FiniteInterval | None
-    observation_ids: tuple[ObservationId, ...]
-    competing_class_ids: tuple[str, ...]
-
-    def __post_init__(self) -> None:
-        resolved = self.outcome in {
-            PhotoSequenceTranslationOutcome.OBSERVED_ANCHOR,
-            PhotoSequenceTranslationOutcome.SEQUENCE_INFERRED,
-        }
-        if resolved != (self.interval_px is not None):
-            raise ValueError("photo translation resolution is inconsistent")
-        if (
-            self.outcome
-            == PhotoSequenceTranslationOutcome.OBSERVED_ANCHOR
-            and not self.observation_ids
-        ):
-            raise ValueError("observed translation requires a pixel anchor")
-        if (
-            self.outcome
-            == PhotoSequenceTranslationOutcome.UNRESOLVED
-            and not self.competing_class_ids
-        ):
-            raise ValueError("unresolved translation requires competing classes")
-
-
-class GridSlotTranslationOutcome(str, Enum):
-    OBSERVED_GRID_ANCHOR = "observed_grid_anchor"
-    SCAN_CANVAS_PROFILE_BOUNDED = "scan_canvas_profile_bounded"
-    MODEL_BOUNDED_OUTPUT_EQUIVALENT = "model_bounded_output_equivalent"
-    UNRESOLVED = "unresolved"
-
-
-@dataclass(frozen=True)
-class GridSlotTranslationAssessment:
-    outcome: GridSlotTranslationOutcome
-    interval_px: FiniteInterval | None
-    protected_footprint_equivalence_class_id: str | None
-    competing_class_ids: tuple[str, ...]
-
-    def __post_init__(self) -> None:
-        resolved = self.outcome != GridSlotTranslationOutcome.UNRESOLVED
-        if resolved != (self.interval_px is not None):
-            raise ValueError("Grid slot translation resolution is inconsistent")
-        if (
-            self.outcome
-            == GridSlotTranslationOutcome.MODEL_BOUNDED_OUTPUT_EQUIVALENT
-            and not self.protected_footprint_equivalence_class_id
-        ):
-            raise ValueError("model-bounded Grid requires output equivalence")
-        if (
-            self.outcome == GridSlotTranslationOutcome.UNRESOLVED
-            and not self.competing_class_ids
-        ):
-            raise ValueError("unresolved Grid placement needs competing classes")
-
-
-class FirstPhotoStartOutcome(str, Enum):
-    OBSERVED_LEADING = "observed_leading"
-    SEQUENCE_INFERRED = "sequence_inferred"
-    UNRESOLVED = "unresolved"
-    NOT_APPLICABLE = "not_applicable"
-
-
-@dataclass(frozen=True)
-class FirstPhotoStartAssessment:
-    outcome: FirstPhotoStartOutcome
-    lane_ordinal: int | None
-    interval_px: FiniteInterval | None
-    observation_ids: tuple[ObservationId, ...]
-
-    def __post_init__(self) -> None:
-        applicable = self.outcome != FirstPhotoStartOutcome.NOT_APPLICABLE
-        if applicable != (
-            self.lane_ordinal is not None and self.interval_px is not None
-        ):
-            raise ValueError("first-photo start assessment is inconsistent")
-
-
-@dataclass(frozen=True)
-class SequenceWorkReceipt:
-    raw_transition_count: int
-    line_family_count: int
-    physical_geometry_count: int
-    pre_join_state_count: int
-    post_join_state_count: int
-    deduplicated_state_count: int
-    sequence_phase_class_count: int
-    dp_state_count: int
-    dp_transition_count: int
-    pixel_query_count: int
-    shared_measurement_reuse_count: int
-    peak_temporary_memory_bytes: int
-
-    def __post_init__(self) -> None:
-        if any(value < 0 for value in asdict(self).values()):
-            raise ValueError("sequence work receipt cannot be negative")
-
-
-@dataclass(frozen=True)
-class FrameSequenceGeometrySolution:
-    solution_id: str
-    lane_id: str
-    aperture_label: str
-    selected_states: tuple[FrameGeometryState, ...]
-    undominated_states_by_ordinal: tuple[
-        tuple[FrameGeometryState, ...], ...
-    ]
-    photo_translation: PhotoSequenceTranslationAssessment
-    grid_translation: GridSlotTranslationAssessment
-    first_photo_start: FirstPhotoStartAssessment
-    work: SequenceWorkReceipt
-    unresolved_codes: tuple[str, ...]
-
-    def __post_init__(self) -> None:
-        if (
-            not self.solution_id
-            or not self.lane_id
-            or not self.aperture_label
-            or len(self.selected_states)
-            != len(self.undominated_states_by_ordinal)
-            or len(set(self.unresolved_codes)) != len(self.unresolved_codes)
-        ):
-            raise ValueError("frame sequence solution is invalid")
-        if tuple(
-            state.lane_ordinal for state in self.selected_states
-        ) != tuple(range(1, len(self.selected_states) + 1)):
-            raise ValueError("selected frame states must be ordered")
-        if any(
-            len(states) > 3
-            for states in self.undominated_states_by_ordinal
-        ):
-            raise ValueError("DP K exceeds two observed plus one model state")
+def _validate_continuous_footprint(
+    footprint: ConvexPolygon,
+    name: str,
+) -> None:
+    if (
+        len(footprint) < 3
+        or any(
+            not math.isfinite(value)
+            for point in footprint
+            for value in point
+        )
+        or signed_area(footprint) <= 1.0e-9
+    ):
+        raise ValueError(f"{name} must be a finite non-degenerate CCW polygon")
+    if convex_hull(footprint) != footprint:
+        raise ValueError(f"{name} must be an ordered convex hull")
 
 
 @dataclass(frozen=True)
@@ -952,148 +737,121 @@ class SafeCropEnvelope:
     geometry_id: str
     lane_id: str
     lane_ordinal: int
-    source_safe_box: Box
-    source_protected_box: Box
-    interpolation_allowance_source_px: float
-    long_axis_protection_mm: float
-    short_axis_protection_mm: float
-    saturated_sides: tuple[str, ...]
-    provenance: str = "photo_geometry_uncertainty_protection"
+    placement_source_footprint: ConvexPolygon
+    required_source_footprint: ConvexPolygon
+    constrained_source_footprint: ConvexPolygon
+    saturation_facts: tuple[FootprintSaturationFact, ...]
+    sampling_authority_box: Box
+    authority_profile_id: str
+    mapped_output_box: Box | None = None
+    provenance: str = "continuous_format_placement_safety_footprint"
 
     def __post_init__(self) -> None:
         if (
             not self.geometry_id
             or not self.lane_id
             or self.lane_ordinal <= 0
-            or not self.source_safe_box.valid()
-            or not self.source_protected_box.valid()
-            or self.interpolation_allowance_source_px != 1.0
-            or self.long_axis_protection_mm <= 0.0
-            or self.short_axis_protection_mm <= 0.0
+            or not self.sampling_authority_box.valid()
+            or not self.authority_profile_id
+            or (
+                self.mapped_output_box is not None
+                and not self.mapped_output_box.valid()
+            )
             or self.provenance
-            != "photo_geometry_uncertainty_protection"
+            != "continuous_format_placement_safety_footprint"
         ):
             raise ValueError("safe crop envelope is invalid")
-        if (
-            self.source_protected_box.left > self.source_safe_box.left
-            or self.source_protected_box.top > self.source_safe_box.top
-            or self.source_protected_box.right < self.source_safe_box.right
-            or self.source_protected_box.bottom < self.source_safe_box.bottom
+        _validate_continuous_footprint(
+            self.placement_source_footprint,
+            "placement source footprint",
+        )
+        _validate_continuous_footprint(
+            self.required_source_footprint,
+            "required source footprint",
+        )
+        _validate_continuous_footprint(
+            self.constrained_source_footprint,
+            "constrained source footprint",
+        )
+        if len({fact.authority_side for fact in self.saturation_facts}) != len(
+            self.saturation_facts
         ):
-            raise ValueError("fixed protection cannot shrink source geometry")
-        if any(
-            side not in {"left", "top", "right", "bottom"}
-            for side in self.saturated_sides
-        ):
-            raise ValueError("safe envelope saturation side is invalid")
+            raise ValueError("saturation facts require one fact per authority side")
 
-    @property
-    def source_sampling_box(self) -> Box:
-        return self.source_protected_box
+
+ResolvedOutputGeometry: TypeAlias = SafeCropEnvelope
 
 
 @dataclass(frozen=True)
-class GridInferredBlankOutputGeometry:
-    geometry_id: str
-    lane_id: str
-    lane_ordinal: int
-    source_safe_box: Box
-    source_protected_box: Box
-    grid_translation: GridSlotTranslationAssessment
-    saturated_sides: tuple[str, ...]
-    provenance: str = "grid_inferred_blank"
+class DirectUseBudgetEdgeAssessment:
+    role: BoundaryRole
+    expansion_px: float
+    expansion_mm: float
+    limit_mm: float
+    within_limit: bool
+    worst_placement_solution_id: str
 
     def __post_init__(self) -> None:
+        if (
+            self.role
+            not in {
+                BoundaryRole.START,
+                BoundaryRole.END,
+                BoundaryRole.TOP,
+                BoundaryRole.BOTTOM,
+            }
+            or any(
+                not math.isfinite(value) or value < 0.0
+                for value in (
+                    self.expansion_px,
+                    self.expansion_mm,
+                    self.limit_mm,
+                )
+            )
+            or self.within_limit
+            != (self.expansion_mm <= self.limit_mm)
+            or not self.worst_placement_solution_id
+        ):
+            raise ValueError("direct-use edge assessment is invalid")
+
+
+@dataclass(frozen=True)
+class DirectUseBudgetAssessment:
+    geometry_id: str
+    placement_solution_ids: tuple[str, ...]
+    edge_assessments: tuple[DirectUseBudgetEdgeAssessment, ...]
+    state: EvidenceState
+    named_gap: str | None
+
+    def __post_init__(self) -> None:
+        available = self.state != EvidenceState.UNAVAILABLE
         if (
             not self.geometry_id
-            or not self.lane_id
-            or self.lane_ordinal <= 0
-            or not self.source_safe_box.valid()
-            or not self.source_protected_box.valid()
-            or self.grid_translation.outcome
-            == GridSlotTranslationOutcome.UNRESOLVED
-            or self.provenance != "grid_inferred_blank"
-        ):
-            raise ValueError("Grid-inferred blank output geometry is invalid")
-        if (
-            self.source_protected_box.left > self.source_safe_box.left
-            or self.source_protected_box.top > self.source_safe_box.top
-            or self.source_protected_box.right < self.source_safe_box.right
-            or self.source_protected_box.bottom < self.source_safe_box.bottom
-        ):
-            raise ValueError("blank protection cannot shrink its slot")
-
-    @property
-    def source_sampling_box(self) -> Box:
-        return self.source_protected_box
-
-
-ResolvedOutputGeometry: TypeAlias = (
-    SafeCropEnvelope | GridInferredBlankOutputGeometry
-)
-
-
-@dataclass(frozen=True)
-class UndominatedFrameSequenceCandidate:
-    """One complete, physically joined photo-sequence geometry class.
-
-    These candidates remain audit-only until DecisionGate approves one unique
-    safe result.  In partial-auto mode the tuple describes only the observed
-    photo sequence; capacity-only blank outputs remain owned by Grid geometry.
-    """
-
-    candidate_id: str
-    lane_id: str
-    aperture_label: str
-    hypothesis_id: str
-    photo_states: tuple[FrameGeometryState, ...]
-    output_geometries: tuple[SafeCropEnvelope, ...]
-    output_equivalence_class_id: str
-    selection_rank: tuple[float, ...]
-
-    def __post_init__(self) -> None:
-        if (
-            not self.candidate_id
-            or not self.lane_id
-            or not self.aperture_label
-            or not self.hypothesis_id
-            or not self.photo_states
-            or len(self.photo_states) != len(self.output_geometries)
-            or not self.output_equivalence_class_id
-            or any(state.model_only for state in self.photo_states)
-            or any(
-                state.lane_id != self.lane_id
-                for state in self.photo_states
-            )
-            or tuple(
-                state.lane_ordinal for state in self.photo_states
-            )
-            != tuple(
-                sorted(
-                    state.lane_ordinal
-                    for state in self.photo_states
+            or available != bool(self.placement_solution_ids)
+            or len(set(self.placement_solution_ids))
+            != len(self.placement_solution_ids)
+            or available != bool(self.edge_assessments)
+            or (
+                available
+                and tuple(item.role for item in self.edge_assessments)
+                != (
+                    BoundaryRole.START,
+                    BoundaryRole.END,
+                    BoundaryRole.TOP,
+                    BoundaryRole.BOTTOM,
                 )
             )
-            or len(
-                {
-                    state.lane_ordinal
-                    for state in self.photo_states
-                }
+            or (
+                self.state == EvidenceState.SUPPORTED
+                and not all(item.within_limit for item in self.edge_assessments)
             )
-            != len(self.photo_states)
-            or any(
-                geometry.lane_id != self.lane_id
-                or geometry.lane_ordinal != state.lane_ordinal
-                for state, geometry in zip(
-                    self.photo_states,
-                    self.output_geometries,
-                    strict=True,
-                )
+            or (
+                self.state == EvidenceState.CONTRADICTED
+                and all(item.within_limit for item in self.edge_assessments)
             )
+            or (available == (self.named_gap is not None))
         ):
-            raise ValueError(
-                "undominated frame sequence candidate is invalid"
-            )
+            raise ValueError("direct-use budget assessment is invalid")
 
 
 @dataclass(frozen=True)

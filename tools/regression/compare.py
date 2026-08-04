@@ -1,4 +1,4 @@
-"""Compare two current source-coordinate photo-geometry report sets."""
+"""Compare two current source-coordinate format-placement report sets."""
 
 from __future__ import annotations
 

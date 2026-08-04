@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 import tempfile
 import unittest
 from pathlib import Path
@@ -31,6 +32,18 @@ from tools.regression.performance import (
     VersionRunTiming,
     build_parser,
 )
+from tools.regression.performance_compare import (
+    BASELINE_PAIRED_RELATIVE_PATH,
+    BASELINE_PAIRED_SHA256,
+    BASELINE_S062_RELATIVE_PATH,
+    BASELINE_S062_SHA256,
+    CANDIDATE_PAIRED_RELATIVE_PATH,
+    CANDIDATE_S062_RELATIVE_PATH,
+    OLD_V49_COMMIT,
+    PerformanceReceipt,
+    performance_compare,
+)
+from tools.regression.profile_fixed_sample import PROFILE_RECEIPT_SCHEMA
 
 
 def _adapter_result(version_kind: str) -> dict:
@@ -115,7 +128,194 @@ def _result(
     )
 
 
+def _s062_receipts(
+    candidate_commit: str,
+) -> tuple[PerformanceReceipt, PerformanceReceipt]:
+    identity = {
+        "sample_id": "S062",
+        "source_sha256": "e" * 64,
+        "format_id": "120-66",
+        "strip_mode": "partial",
+        "count_mode": "auto",
+        "selected_scan_canvas_profile_id": "120_wide_224_5",
+        "lane_output_slot_counts": [3],
+        "output_slot_count": 3,
+        "slot_identities": [
+            {
+                "global_output_ordinal": index,
+                "lane_id": "lane:0",
+                "lane_ordinal": index,
+            }
+            for index in range(1, 4)
+        ],
+        "selected_aperture_labels": ["56x56mm"],
+    }
+    baseline_metrics = {
+        "measurement_query_count": 39,
+        "pixel_query_count": 8_906_190,
+        "physical_geometry_count": 3,
+        "dp_states": 3,
+        "dp_transitions": 2,
+        "shared_measurement_reuse_count": 39,
+        "domain_pixels": 27_687_503,
+        "peak_temporary_bytes": 254_840_313,
+    }
+    candidate_metrics = {
+        "measurement_query_count": 39,
+        "pixel_query_count": 8_906_190,
+        "basic_profile_coordinate_count": 1_000,
+        "basic_profile_run_count": 20,
+        "phase_vote_count": 60,
+        "template_group_count": 3,
+        "template_role_lookup_count": 18,
+        "template_role_match_count": 20,
+        "local_relation_evaluation_count": 6,
+        "enhanced_query_count": 0,
+        "materialized_frame_geometry_count": 3,
+        "shared_measurement_reuse_count": 39,
+        "domain_pixels": 27_687_503,
+        "peak_temporary_bytes": 254_840_313,
+    }
+    baseline = {
+        "schema": "x5crop_fixed_sample_profile_v3",
+        **identity,
+        "runtime_metrics": baseline_metrics,
+        "decision_status": "approved_auto",
+        "geometry_unresolved_codes": [],
+    }
+    candidate = {
+        **{
+            key: value
+            for key, value in baseline.items()
+            if key != "geometry_unresolved_codes"
+        },
+        "schema": PROFILE_RECEIPT_SCHEMA,
+        "v49_commit": candidate_commit,
+        "runtime_metrics": candidate_metrics,
+        "structural_limits": {
+            "template_role_lookup_count": 18,
+            "template_role_match_count": 60,
+            "local_relation_evaluation_count": 6,
+            "enhanced_query_count": 60,
+        },
+    }
+    return (
+        PerformanceReceipt(baseline, BASELINE_S062_SHA256),
+        PerformanceReceipt(candidate, "6" * 64),
+    )
+
+
+def _comparison_inputs(candidate_commit: str):
+    baseline_record = _result(
+        (144.0, 144.0, 144.0),
+        (120.0, 120.0, 120.0),
+    ).as_record()
+    baseline_record["v49_commit"] = OLD_V49_COMMIT
+    candidate_record = deepcopy(baseline_record)
+    candidate_record["v49_commit"] = candidate_commit
+    baseline_s062, candidate_s062 = _s062_receipts(candidate_commit)
+    return (
+        PerformanceReceipt(baseline_record, BASELINE_PAIRED_SHA256),
+        PerformanceReceipt(candidate_record, "7" * 64),
+        baseline_s062,
+        candidate_s062,
+        candidate_commit,
+    )
+
+
 class PairedPerformanceContractTest(unittest.TestCase):
+    def test_fixed_performance_comparator_closes_timing_and_s062(self) -> None:
+        inputs = list(_comparison_inputs("9" * 40))
+        candidate = deepcopy(inputs[3].record)
+        candidate["selected_aperture_labels"] = ["54x54mm"]
+        inputs[3] = PerformanceReceipt(candidate, "8" * 64)
+        comparison = performance_compare(*inputs)
+        self.assertTrue(comparison["passed"])
+        self.assertEqual(comparison["regression"], 0.0)
+        self.assertEqual(comparison["allowed_regression"], 0.01)
+
+    def test_new_noise_cannot_expand_allowed_regression(self) -> None:
+        inputs = list(_comparison_inputs("9" * 40))
+        candidate = deepcopy(inputs[1].record)
+        for group, wall in zip(
+            candidate["paired_groups"],
+            (90.0, 120.0, 150.0),
+            strict=True,
+        ):
+            group["v49"]["wall_seconds"] = wall
+        inputs[1] = PerformanceReceipt(candidate, "8" * 64)
+        comparison = performance_compare(*inputs)
+        self.assertFalse(comparison["checks"]["new_noise_floor_valid"])
+        self.assertEqual(comparison["allowed_regression"], 0.01)
+
+    def test_s062_comparable_work_growth_or_reuse_loss_blocks(self) -> None:
+        inputs = list(_comparison_inputs("9" * 40))
+        candidate = deepcopy(inputs[3].record)
+        candidate["runtime_metrics"]["measurement_query_count"] += 1
+        candidate["runtime_metrics"]["shared_measurement_reuse_count"] -= 1
+        inputs[3] = PerformanceReceipt(candidate, "8" * 64)
+        comparison = performance_compare(*inputs)
+        self.assertFalse(comparison["passed"])
+        self.assertFalse(
+            comparison["checks"][
+                "s062_measurement_query_count_not_increased"
+            ]
+        )
+        self.assertFalse(
+            comparison["checks"]["s062_measurement_reuse_not_reduced"]
+        )
+
+    def test_s062_template_work_uses_current_structural_units(self) -> None:
+        inputs = list(_comparison_inputs("9" * 40))
+        candidate = deepcopy(inputs[3].record)
+        candidate["runtime_metrics"]["template_role_match_count"] = 61
+        inputs[3] = PerformanceReceipt(candidate, "8" * 64)
+        comparison = performance_compare(*inputs)
+        self.assertFalse(comparison["passed"])
+        self.assertFalse(
+            comparison["checks"][
+                "s062_template_work_structurally_bounded"
+            ]
+        )
+        self.assertNotIn(
+            "s062_dp_states_not_increased",
+            comparison["checks"],
+        )
+
+    def test_s062_enhanced_work_cannot_exceed_preregistered_votes(self) -> None:
+        inputs = list(_comparison_inputs("9" * 40))
+        candidate = deepcopy(inputs[3].record)
+        candidate["runtime_metrics"]["enhanced_query_count"] = 61
+        inputs[3] = PerformanceReceipt(candidate, "8" * 64)
+        comparison = performance_compare(*inputs)
+        self.assertFalse(comparison["passed"])
+        self.assertFalse(
+            comparison["checks"][
+                "s062_template_work_structurally_bounded"
+            ]
+        )
+
+    def test_performance_paths_are_explicit_and_unique(self) -> None:
+        self.assertEqual(
+            tuple(
+                map(
+                    str,
+                    (
+                        BASELINE_PAIRED_RELATIVE_PATH,
+                        BASELINE_S062_RELATIVE_PATH,
+                        CANDIDATE_PAIRED_RELATIVE_PATH,
+                        CANDIDATE_S062_RELATIVE_PATH,
+                    ),
+                )
+            ),
+            (
+                "build/v49-orthogonal-budget/baseline/paired/paired_performance_result.json",
+                "build/v49-orthogonal-budget/baseline/s062/fixed_sample_profile.json",
+                "build/v49-orthogonal-budget/current/paired/paired_performance_result.json",
+                "build/v49-orthogonal-budget/current/s062/fixed_sample_profile.json",
+            ),
+        )
+
     def test_diagnostic_memory_bound_scales_with_source_extent(self) -> None:
         source_pixels = 115_000_000
         self.assertEqual(

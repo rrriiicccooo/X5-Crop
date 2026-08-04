@@ -90,34 +90,14 @@ def _source_geometry_within_authority(
     height: int,
 ) -> bool:
     for lane in report["photo_geometry"]["lanes"]:
-        for geometry in lane["selection"][
-            "candidate_output_geometries"
-        ]:
-            box = geometry["source_protected_box"]
-            if not (
-                0.0 <= float(box["left"]) < float(box["right"]) <= width
-                and 0.0
-                <= float(box["top"])
-                < float(box["bottom"])
-                <= height
+        for geometry in lane["placement"]["safe_crop_envelopes"]:
+            footprint = geometry["constrained_source_footprint"]
+            if not footprint or not all(
+                0.0 <= float(point[0]) <= width - 1
+                and 0.0 <= float(point[1]) <= height - 1
+                for point in footprint
             ):
                 return False
-        for candidate in lane["selection"][
-            "undominated_candidate_set"
-        ]:
-            for geometry in candidate["output_geometries"]:
-                box = geometry["source_protected_box"]
-                if not (
-                    0.0
-                    <= float(box["left"])
-                    < float(box["right"])
-                    <= width
-                    and 0.0
-                    <= float(box["top"])
-                    < float(box["bottom"])
-                    <= height
-                ):
-                    return False
     return True
 
 
@@ -127,12 +107,45 @@ def _bounded_work(
     *,
     source_pixels: int,
 ) -> bool:
-    output_slot_count = report["photo_geometry"]["output_slot_count"]
-    lane_count = max(1, len(report["photo_geometry"]["lanes"]))
-    maximum_slots = (
-        1
-        if not isinstance(output_slot_count, int)
-        else output_slot_count
+    geometry = report["photo_geometry"]
+    resolved = geometry["resolved_output_slots"]
+    lane_counts = (
+        tuple(0 for _ in geometry["lanes"])
+        if resolved is None
+        else tuple(resolved["lane_output_slot_counts"])
+    )
+    work_rows = tuple(lane["work"] for lane in geometry["lanes"])
+    current_work_fields = (
+        "measurement_query_count",
+        "pixel_query_count",
+        "basic_profile_coordinate_count",
+        "basic_profile_run_count",
+        "phase_vote_count",
+        "template_group_count",
+        "template_role_lookup_count",
+        "template_role_match_count",
+        "local_relation_evaluation_count",
+        "enhanced_query_count",
+        "materialized_frame_geometry_count",
+        "shared_measurement_reuse_count",
+        "domain_pixels",
+        "peak_temporary_bytes",
+    )
+    aggregate_identity = all(
+        int(metrics[field]) == sum(int(row[field]) for row in work_rows)
+        for field in current_work_fields
+        if field not in {"domain_pixels", "peak_temporary_bytes"}
+    )
+    structural_bounds = all(
+        int(row["template_role_lookup_count"])
+        <= int(row["template_group_count"]) * count * 2
+        and int(row["template_role_match_count"])
+        <= int(row["phase_vote_count"])
+        and int(row["local_relation_evaluation_count"])
+        <= int(row["template_group_count"]) * max(0, count - 1)
+        and int(row["enhanced_query_count"])
+        <= int(row["phase_vote_count"])
+        for row, count in zip(work_rows, lane_counts, strict=True)
     )
     return (
         all(
@@ -141,9 +154,8 @@ def _bounded_work(
             and float(metrics[key]) >= 0.0
             for key in metrics
         )
-        and metrics["dp_states"] <= maximum_slots * 3
-        and metrics["dp_transitions"]
-        <= max(0, maximum_slots - lane_count) * 9
+        and aggregate_identity
+        and structural_bounds
         and metrics["pixel_query_count"] <= source_pixels * 128
         and metrics["peak_temporary_bytes"]
         <= _peak_temporary_limit_bytes(source_pixels)
@@ -276,7 +288,7 @@ def run_diagnostic_source(source: DiagnosticSource) -> dict[str, Any]:
         )
         engineering_checks = {
             "source_lane_authority_bounded": geometry_authorized,
-            "query_dp_memory_bounded": work_bounded,
+            "query_template_memory_bounded": work_bounded,
             "diagnostics_no_official_tiff": no_official_diagnostic_output,
             "peak_temporary_limit_bytes": (
                 _peak_temporary_limit_bytes(source_pixels)
@@ -314,11 +326,20 @@ def run_diagnostic_source(source: DiagnosticSource) -> dict[str, Any]:
         "output_slot_count": geometry["output_slot_count"],
         "slot_identities": geometry["slot_identities"],
         "geometry_outcome": {
-            "lane_selected_labels": [
-                lane["selection"]["selected_label"]
+            "lane_canonical_components": [
+                next(
+                    (
+                        item["component"]["component_id"]
+                        for item in lane["placement"][
+                            "retained_placements"
+                        ]
+                        if item["placement_id"]
+                        == lane["placement"]["canonical_placement_id"]
+                    ),
+                    None,
+                )
                 for lane in geometry["lanes"]
             ],
-            "unresolved_codes": geometry["unresolved_codes"],
         },
         "transform_outcome": report["output"]["finalization"][
             "transform_assessment"
@@ -386,10 +407,10 @@ def run_diagnostic_cohort(
                 ]
                 for record in records
             ),
-            "query_dp_memory": sum(
+            "query_template_memory": sum(
                 record["engineering_checks"] is not None
                 and not record["engineering_checks"][
-                    "query_dp_memory_bounded"
+                    "query_template_memory_bounded"
                 ]
                 for record in records
             ),

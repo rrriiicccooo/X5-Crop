@@ -6,7 +6,7 @@ from typing import Any
 
 
 REPORT_SCHEMA_ID = "detection_report"
-REPORT_SCHEMA_REVISION = "source_coordinate_photo_geometry_v1"
+REPORT_SCHEMA_REVISION = "source_coordinate_format_placement_v2"
 
 
 def core_facts_sha256(record: dict[str, Any]) -> str:

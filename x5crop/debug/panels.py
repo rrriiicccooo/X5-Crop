@@ -11,7 +11,8 @@ from ..configuration.diagnostics import (
 )
 from ..detection.final.model import FinalDetection
 from ..detection.photo_geometry.corridors import source_lane_box
-from ..detection.photo_geometry.model import BoundaryAxis, FramePhotoGeometry
+from ..detection.photo_geometry.model import BoundaryAxis, SafeCropEnvelope
+from ..detection.photo_geometry.template_model import FrameFormatPlacement
 from ..detection.workspace import DetectionWorkspace
 from ..domain import Box
 from ..run_status import RunTerminalOutcome
@@ -21,19 +22,17 @@ from .canvas import (
     DebugRenderCache,
     add_panel_label,
     cached_preview_gray,
-    draw_preview_dashed_rect,
     draw_preview_label,
     draw_preview_rect,
-    fill_preview_rect,
 )
 from .status import add_status_bar
 
 
 DEBUG_ANALYSIS_PANEL_LABELS = (
     "Source-coordinate gray and lane authority",
-    "Pixel measurement and selected observed lines",
-    "Selected source photo geometry",
-    "Protected product output geometry",
+    "Raw boundary evidence and shared direction",
+    "Canonical format placement and retained union",
+    "Continuous safe output geometry and budget",
 )
 
 
@@ -140,7 +139,7 @@ def _draw_polygon(
     color: tuple[int, int, int],
     width: int,
 ) -> None:
-    if len(polygon) != 4:
+    if len(polygon) < 3:
         return
     image = Image.fromarray(rgb, mode="RGB")
     points = tuple((x * scale, y * scale) for x, y in polygon)
@@ -150,6 +149,24 @@ def _draw_polygon(
         width=max(1, width),
     )
     np.copyto(rgb, np.asarray(image))
+
+
+def _fill_polygon(
+    rgb: np.ndarray,
+    polygon: tuple[tuple[float, float], ...],
+    scale: float,
+    color: tuple[int, int, int],
+    alpha: float,
+) -> None:
+    if len(polygon) < 3:
+        return
+    base = Image.fromarray(rgb, mode="RGB").convert("RGBA")
+    overlay = Image.new("RGBA", base.size, (0, 0, 0, 0))
+    ImageDraw.Draw(overlay).polygon(
+        tuple((x * scale, y * scale) for x, y in polygon),
+        fill=(*color, int(round(255.0 * alpha))),
+    )
+    np.copyto(rgb, np.asarray(Image.alpha_composite(base, overlay).convert("RGB")))
 
 
 def _source_panel(
@@ -180,7 +197,7 @@ def _measurement_panel(
 ) -> np.ndarray:
     rgb, scale = _preview(workspace, style, render_cache)
     for lane in detection.candidate.geometry.lane_reconstructions:
-        for observation in lane.selected_observations:
+        for observation in lane.raw_top_bottom_observations:
             _draw_source_line(
                 rgb,
                 observation,
@@ -209,20 +226,17 @@ def _measurement_panel(
 
 def _geometry_by_identity(
     detection: FinalDetection,
-) -> tuple[tuple[int, FramePhotoGeometry], ...]:
+) -> tuple[tuple[int, FrameFormatPlacement], ...]:
     global_ordinals = {
         (item.lane_id, item.lane_ordinal): item.global_output_ordinal
         for item in detection.output_slot_identities
     }
-    values: list[tuple[int, FramePhotoGeometry]] = []
+    values: list[tuple[int, FrameFormatPlacement]] = []
     for lane in detection.candidate.geometry.lane_reconstructions:
-        solution = lane.solution
-        if solution is None:
+        placement = lane.canonical_placement
+        if placement is None:
             continue
-        for state in solution.selected_states:
-            geometry = state.photo_geometry
-            if geometry is None:
-                continue
+        for geometry in placement.canonical.frames:
             ordinal = global_ordinals.get(
                 (geometry.lane_id, geometry.lane_ordinal)
             )
@@ -243,16 +257,16 @@ def _selected_geometry_panel(
         color = _frame_color(global_ordinal)
         _draw_polygon(
             rgb,
-            geometry.source_polygon,
+            geometry.canonical_source_polygon,
             scale,
             color,
             style.frame_line_width,
         )
         bounds = Box(
-            math.floor(min(point[0] for point in geometry.source_polygon)),
-            math.floor(min(point[1] for point in geometry.source_polygon)),
-            math.ceil(max(point[0] for point in geometry.source_polygon)),
-            math.ceil(max(point[1] for point in geometry.source_polygon)),
+            math.floor(min(point[0] for point in geometry.canonical_source_polygon)),
+            math.floor(min(point[1] for point in geometry.canonical_source_polygon)),
+            math.ceil(max(point[0] for point in geometry.canonical_source_polygon)),
+            math.ceil(max(point[1] for point in geometry.canonical_source_polygon)),
         )
         draw_preview_label(
             rgb,
@@ -269,6 +283,12 @@ def _selected_geometry_panel(
     return _labeled(rgb, label, style)
 
 
+def _safe_crop_envelopes(
+    detection: FinalDetection,
+) -> tuple[SafeCropEnvelope, ...]:
+    return detection.candidate.geometry.safe_crop_envelopes
+
+
 def _protected_output_panel(
     workspace: DetectionWorkspace,
     detection: FinalDetection,
@@ -276,37 +296,78 @@ def _protected_output_panel(
     render_cache: DebugRenderCache,
 ) -> np.ndarray:
     rgb, scale = _preview(workspace, style, render_cache)
-    if detection.frame_export_eligible:
-        for identity, geometry in zip(
-            detection.output_slot_identities,
-            detection.resolved_output_geometries,
-            strict=True,
-        ):
+    geometries = _safe_crop_envelopes(detection)
+    if geometries:
+        identities = {
+            (item.lane_id, item.lane_ordinal): item
+            for item in detection.output_slot_identities
+        }
+        for geometry in geometries:
+            identity = identities[(geometry.lane_id, geometry.lane_ordinal)]
             color = _frame_color(identity.global_output_ordinal)
-            fill_preview_rect(
+            _fill_polygon(
                 rgb,
-                geometry.source_protected_box,
+                geometry.placement_source_footprint,
                 scale,
                 color,
                 style.frame_fill_alpha,
             )
-            draw_preview_rect(
+            _fill_polygon(
                 rgb,
-                geometry.source_protected_box,
+                geometry.constrained_source_footprint,
+                scale,
+                color,
+                style.frame_fill_alpha,
+            )
+            _draw_polygon(
+                rgb,
+                geometry.required_source_footprint,
+                scale,
+                style.raw_separator_color,
+                style.frame_line_width,
+            )
+            _draw_polygon(
+                rgb,
+                geometry.constrained_source_footprint,
                 scale,
                 color,
                 style.frame_line_width,
             )
+            left = math.floor(
+                min(point[0] for point in geometry.constrained_source_footprint)
+            )
+            top = math.floor(
+                min(point[1] for point in geometry.constrained_source_footprint)
+            )
+            right = math.ceil(
+                max(point[0] for point in geometry.constrained_source_footprint)
+            ) + 1
+            bottom = math.ceil(
+                max(point[1] for point in geometry.constrained_source_footprint)
+            ) + 1
             draw_preview_label(
                 rgb,
-                geometry.source_protected_box,
+                Box(left, top, right, bottom),
                 scale,
                 f"F{identity.global_output_ordinal}",
                 color,
                 inset=style.frame_label_inset,
                 stroke_width=style.frame_label_stroke_width,
             )
-        label = DEBUG_ANALYSIS_PANEL_LABELS[3]
+        exceeded = sum(
+            assessment.state.value == "contradicted"
+            for assessment in detection.candidate.geometry.direct_use_budget_assessments
+        )
+        saturation_count = sum(
+            len(geometry.saturation_facts) for geometry in geometries
+        )
+        label = (
+            f"{DEBUG_ANALYSIS_PANEL_LABELS[3]} | "
+            f"budget_exceeded={exceeded} "
+            f"authority_saturation={saturation_count}"
+        )
+        if not detection.frame_export_eligible:
+            label += " | NOT EXPORTABLE"
     else:
         # Candidate envelopes may be inspected in the selected-geometry panel;
         # a review decision intentionally has no official output box here.

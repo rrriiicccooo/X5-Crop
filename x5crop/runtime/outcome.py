@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from enum import Enum
 import math
 from pathlib import Path
@@ -27,20 +27,17 @@ class RuntimeMetrics:
     processing_seconds: float | None
     detection_seconds: float | None
     domain_pixels: int | None
-    content_runs: int | None
-    content_components: int | None
-    censored_content_components: int | None
     measurement_query_count: int | None
-    raw_transition_count: int | None
-    line_family_count: int | None
-    physical_geometry_count: int | None
-    pre_join_state_count: int | None
-    post_join_state_count: int | None
-    deduplicated_state_count: int | None
-    sequence_phase_class_count: int | None
-    dp_states: int | None
-    dp_transitions: int | None
     pixel_query_count: int | None
+    basic_profile_coordinate_count: int | None
+    basic_profile_run_count: int | None
+    phase_vote_count: int | None
+    template_group_count: int | None
+    template_role_lookup_count: int | None
+    template_role_match_count: int | None
+    local_relation_evaluation_count: int | None
+    enhanced_query_count: int | None
+    materialized_frame_geometry_count: int | None
     shared_measurement_reuse_count: int | None
     peak_temporary_bytes: int | None
 
@@ -65,7 +62,7 @@ class RuntimeMetrics:
 
     @classmethod
     def unavailable(cls) -> "RuntimeMetrics":
-        return cls(*(None for _ in range(19)))
+        return cls(*(None for _ in fields(cls)))
 
     @property
     def available(self) -> bool:

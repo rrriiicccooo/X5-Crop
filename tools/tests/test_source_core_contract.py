@@ -7,13 +7,6 @@ import unittest
 import numpy as np
 
 from x5crop.configuration.model import FrameCountMode
-from x5crop.configuration.content import (
-    ContentConfiguration,
-    ContentEvidenceParameters,
-)
-from x5crop.configuration.photo_geometry import (
-    frame_sequence_physical_constraints,
-)
 from x5crop.configuration.registry import get_detection_configuration
 from x5crop.configuration.scan_canvas import ScanCanvasDetectionConfiguration
 from x5crop.detection.evidence.scan_canvas import (
@@ -31,137 +24,17 @@ from x5crop.detection.photo_geometry.model import (
 from x5crop.detection.workspace import prepare_detection_workspace
 from x5crop.detection.source_core import (
     SourceLaneEvidence,
-    SourceStripValidationDomain,
-    _compact_components,
-    _content_fields,
-    observe_source_content,
 )
 from x5crop.domain import (
-    Box,
-    MeasurementIdentity,
-    MeasurementProvenance,
-    ObservationId,
     PositiveInterval,
 )
-from x5crop.formats import format_spec
+from x5crop.formats import FRAME_DIMENSION_TOLERANCE_SPEC, format_spec
 from x5crop.formats.scan_canvas import (
     SCAN_CANVAS_PHYSICAL_SPECS,
-    ScanCanvasFormatFit,
     ScanCanvasPhysicalSpec,
     scan_canvas_specs_for_format,
 )
 from x5crop.io.model import ImageProfile, TiffMetadata
-
-
-def _content_provenance() -> MeasurementProvenance:
-    return MeasurementProvenance(
-        root_measurement=MeasurementIdentity.SOURCE_CONTENT,
-        observation_id=ObservationId("test:content"),
-        dependencies=(MeasurementIdentity.BASE_GRAY,),
-        description="test content",
-    )
-
-
-class SourceMeasurementContractTest(unittest.TestCase):
-    def test_content_fields_use_edge_replicated_local_statistics(self) -> None:
-        gray = np.asarray(
-            ((5, 10, 20, 25), (7, 14, 21, 28), (9, 18, 27, 36)),
-            dtype=np.uint8,
-        )
-        intensity, texture = _content_fields(gray)
-        data = gray.astype(np.float32)
-        padded = np.pad(data, 1, mode="edge")
-        mean = (
-            padded[1:-1, 1:-1]
-            + padded[:-2, 1:-1]
-            + padded[2:, 1:-1]
-            + padded[1:-1, :-2]
-            + padded[1:-1, 2:]
-        ) / np.float32(5.0)
-        expected_intensity = np.abs(data - mean) / np.float32(255.0)
-        dx = np.zeros_like(data)
-        dy = np.zeros_like(data)
-        dx[:, 1:] = np.abs(data[:, 1:] - data[:, :-1])
-        dy[1:, :] = np.abs(data[1:, :] - data[:-1, :])
-        np.testing.assert_allclose(
-            intensity,
-            expected_intensity,
-            rtol=0,
-            atol=1e-7,
-        )
-        np.testing.assert_allclose(
-            texture,
-            (dx + dy) / np.float32(510.0),
-            rtol=0,
-            atol=1e-7,
-        )
-
-    def test_content_components_remain_four_connected_and_immutable(
-        self,
-    ) -> None:
-        domain = SourceStripValidationDomain(
-            lane_id="lane:0",
-            work_box=Box(10, 20, 18, 28),
-            source_axis_long="x",
-            authority_profile_id="test_canvas",
-        )
-        mask = np.zeros((8, 8), dtype=bool)
-        mask[1:3, 1:3] = True
-        mask[3:5, 3:5] = True
-        components, table, raw_count, peak_bytes = _compact_components(
-            mask,
-            domain,
-            minimum_active_pixels=4,
-            provenance=_content_provenance(),
-        )
-        self.assertEqual(raw_count, 2)
-        self.assertEqual(len(components), 2)
-        self.assertEqual(
-            tuple(component.footprint for component in components),
-            (Box(11, 21, 13, 23), Box(13, 23, 15, 25)),
-        )
-        self.assertGreater(peak_bytes, 0)
-        for array in (
-            table.rows,
-            table.lefts,
-            table.rights,
-            table.component_indices,
-        ):
-            self.assertFalse(array.flags.writeable)
-
-    def test_content_analysis_is_streamed_with_complete_source_coverage(
-        self,
-    ) -> None:
-        rows, columns = np.indices((100, 100))
-        gray = ((rows * 37 + columns * 19) % 256).astype(np.uint8)
-        domain = SourceStripValidationDomain(
-            lane_id="lane:0",
-            work_box=Box(0, 0, 100, 100),
-            source_axis_long="x",
-            authority_profile_id="test_canvas",
-        )
-        observation = observe_source_content(
-            gray,
-            domain,
-            ContentConfiguration(
-                ContentEvidenceParameters(
-                    minimum_active_pixels=1,
-                    maximum_streaming_block_pixels=1_000,
-                )
-            ),
-        )
-        self.assertEqual(observation.statistics.domain_pixels, 10_000)
-        self.assertEqual(observation.statistics.streaming_block_count, 20)
-        self.assertLess(
-            observation.statistics.peak_temporary_bytes,
-            gray.nbytes * 12,
-        )
-        table = observation.row_run_table
-        if table.run_count:
-            self.assertGreaterEqual(int(table.rows.min()), 0)
-            self.assertLess(int(table.rows.max()), 100)
-            self.assertGreaterEqual(int(table.lefts.min()), 0)
-            self.assertLessEqual(int(table.rights.max()), 100)
 
 
 class PhysicalAuthorityContractTest(unittest.TestCase):
@@ -179,66 +52,46 @@ class PhysicalAuthorityContractTest(unittest.TestCase):
             spec = format_spec(format_id)
             self.assertEqual(
                 tuple(
-                    (item.long_axis_mm, item.short_axis_mm)
-                    for item in spec.aperture_components
+                    (item.frame_width_mm, item.frame_height_mm)
+                    for item in spec.frame_components
                 ),
                 values[:-2],
             )
             self.assertEqual(spec.strip.default_count, values[-2])
             self.assertEqual(spec.strip.partial_mode_supported, values[-1])
-            self.assertEqual(
-                spec.aperture_tolerance.long_axis_tolerance_mm,
-                0.5,
-            )
-            self.assertEqual(
-                spec.aperture_tolerance.short_axis_tolerance_mm,
-                0.5,
-            )
+            self.assertFalse(hasattr(spec, "aperture_tolerance"))
+        self.assertEqual(
+            FRAME_DIMENSION_TOLERANCE_SPEC.frame_width_tolerance_ratio,
+            0.0125,
+        )
+        self.assertEqual(
+            FRAME_DIMENSION_TOLERANCE_SPEC.frame_height_tolerance_ratio,
+            0.0040,
+        )
 
     def test_aperture_pixel_interval_propagates_scale_and_tolerance(
         self,
     ) -> None:
         spec = format_spec("135")
-        aperture = spec.aperture_components[0]
+        aperture = spec.frame_components[0]
         intervals = frame_physical_pixel_intervals(
             aperture,
-            spec.aperture_tolerance,
             PositiveInterval(10.0, 11.0),
             PositiveInterval(9.0, 10.0),
         )
-        self.assertEqual(intervals.long_axis_px.minimum, 355.0)
-        self.assertEqual(intervals.long_axis_px.maximum, 401.5)
-        self.assertEqual(intervals.short_axis_px.minimum, 211.5)
-        self.assertEqual(intervals.short_axis_px.maximum, 245.0)
+        self.assertAlmostEqual(intervals.frame_width_px.minimum, 355.5)
+        self.assertAlmostEqual(intervals.frame_width_px.maximum, 400.95)
+        self.assertAlmostEqual(intervals.frame_height_px.minimum, 215.136)
+        self.assertAlmostEqual(intervals.frame_height_px.maximum, 240.96)
         self.assertNotEqual(
             PHOTO_BOUNDARY_MEASUREMENT_SPEC.dimension_search_allowance_mm,
-            spec.aperture_tolerance.long_axis_tolerance_mm,
+            aperture.frame_width_mm
+            * FRAME_DIMENSION_TOLERANCE_SPEC.frame_width_tolerance_ratio,
         )
         self.assertEqual(
             PHOTO_BOUNDARY_MEASUREMENT_SPEC
             .angle_endpoint_uncertainty_multiplier,
             2.0,
-        )
-
-    def test_120_aperture_label_is_sequence_level(self) -> None:
-        constraints = frame_sequence_physical_constraints(
-            "120-66",
-            format_spec("120-66").aperture_components,
-        )
-        self.assertEqual(
-            tuple(item.aperture_label for item in constraints),
-            ("54x54mm", "56x56mm"),
-        )
-        self.assertEqual(
-            tuple(item.gutter_mm for item in constraints),
-            (
-                constraints[0].gutter_mm,
-                constraints[1].gutter_mm,
-            ),
-        )
-        self.assertNotEqual(
-            constraints[0].gutter_mm,
-            constraints[1].gutter_mm,
         )
 
     def test_scan_canvas_is_the_only_scale_owner_with_typed_interval(
@@ -248,31 +101,39 @@ class PhysicalAuthorityContractTest(unittest.TestCase):
             "only",
             short_axis_mm=10.0,
             long_axis_mm=50.0,
-            format_fits=(ScanCanvasFormatFit("135", 6),),
         )
+        scan_configuration = ScanCanvasDetectionConfiguration((profile,))
         evidence = observe_scan_canvas(
             500,
             100,
             "horizontal",
-            ScanCanvasDetectionConfiguration((profile,)),
+            scan_configuration,
         )
         self.assertEqual(evidence.outcome, ScanCanvasOutcome.SUPPORTED)
         assert evidence.axis_scales is not None
         self.assertTrue(
             math.isclose(
-                evidence.axis_scales.long_axis_px_per_mm.minimum,
-                500.0 / 50.5,
+                evidence.axis_scales.width_axis_px_per_mm.minimum,
+                500.0
+                / (
+                    50.0
+                    * (1.0 + scan_configuration.physical_extent_tolerance_ratio)
+                ),
             )
         )
         self.assertTrue(
             math.isclose(
-                evidence.axis_scales.long_axis_px_per_mm.maximum,
-                500.0 / 49.5,
+                evidence.axis_scales.width_axis_px_per_mm.maximum,
+                500.0
+                / (
+                    50.0
+                    * (1.0 - scan_configuration.physical_extent_tolerance_ratio)
+                ),
             )
         )
         self.assertEqual(
             tuple(item.name for item in fields(SourceLaneEvidence)),
-            ("domain", "scan_canvas", "content"),
+            ("domain", "scan_canvas"),
         )
 
     def test_scan_canvas_catalog_preserves_capacity_authority(self) -> None:
@@ -328,12 +189,11 @@ class PhysicalAuthorityContractTest(unittest.TestCase):
         lane = workspace.source_core.lanes[0]
         scan = lane.scan_canvas
         assert scan.axis_scales is not None
-        aperture = configuration.physical_spec.aperture_components[0]
+        aperture = configuration.physical_spec.frame_components[0]
         physical = frame_physical_pixel_intervals(
             aperture,
-            configuration.physical_spec.aperture_tolerance,
-            scan.axis_scales.long_axis_px_per_mm,
-            scan.axis_scales.short_axis_px_per_mm,
+            scan.axis_scales.width_axis_px_per_mm,
+            scan.axis_scales.height_axis_px_per_mm,
         )
         top, bottom = build_top_bottom_search_corridors(
             lane,

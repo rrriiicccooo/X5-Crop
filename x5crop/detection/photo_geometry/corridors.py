@@ -6,8 +6,8 @@ import math
 
 from ...domain import Box, FiniteInterval, PositiveInterval
 from ...formats import (
-    FrameApertureToleranceMm,
-    FrameDesignApertureMm,
+    FRAME_DIMENSION_TOLERANCE_SPEC,
+    FramePhysicalSpec,
 )
 from ..source_core import SourceLaneEvidence
 from .model import (
@@ -25,42 +25,67 @@ from .model import (
 
 @dataclass(frozen=True)
 class FramePhysicalPixelIntervals:
-    aperture: FrameDesignApertureMm
-    long_axis_px: PositiveInterval
-    short_axis_px: PositiveInterval
+    component: FramePhysicalSpec
+    frame_width_px: PositiveInterval
+    frame_height_px: PositiveInterval
 
 
 def frame_physical_pixel_intervals(
-    aperture: FrameDesignApertureMm,
-    tolerance: FrameApertureToleranceMm,
-    long_axis_scale_px_per_mm: PositiveInterval,
-    short_axis_scale_px_per_mm: PositiveInterval,
+    component: FramePhysicalSpec,
+    width_axis_scale_px_per_mm: PositiveInterval,
+    height_axis_scale_px_per_mm: PositiveInterval,
 ) -> FramePhysicalPixelIntervals:
+    tolerance = FRAME_DIMENSION_TOLERANCE_SPEC
     return FramePhysicalPixelIntervals(
-        aperture=aperture,
-        long_axis_px=PositiveInterval(
-            (
-                aperture.long_axis_mm
-                - tolerance.long_axis_tolerance_mm
-            )
-            * long_axis_scale_px_per_mm.minimum,
-            (
-                aperture.long_axis_mm
-                + tolerance.long_axis_tolerance_mm
-            )
-            * long_axis_scale_px_per_mm.maximum,
+        component=component,
+        frame_width_px=PositiveInterval(
+            component.frame_width_mm
+            * (1.0 - tolerance.frame_width_tolerance_ratio)
+            * width_axis_scale_px_per_mm.minimum,
+            component.frame_width_mm
+            * (1.0 + tolerance.frame_width_tolerance_ratio)
+            * width_axis_scale_px_per_mm.maximum,
         ),
-        short_axis_px=PositiveInterval(
-            (
-                aperture.short_axis_mm
-                - tolerance.short_axis_tolerance_mm
-            )
-            * short_axis_scale_px_per_mm.minimum,
-            (
-                aperture.short_axis_mm
-                + tolerance.short_axis_tolerance_mm
-            )
-            * short_axis_scale_px_per_mm.maximum,
+        frame_height_px=PositiveInterval(
+            component.frame_height_mm
+            * (1.0 - tolerance.frame_height_tolerance_ratio)
+            * height_axis_scale_px_per_mm.minimum,
+            component.frame_height_mm
+            * (1.0 + tolerance.frame_height_tolerance_ratio)
+            * height_axis_scale_px_per_mm.maximum,
+        ),
+    )
+
+
+def combined_frame_measurement_intervals(
+    values: tuple[FramePhysicalPixelIntervals, ...],
+) -> FramePhysicalPixelIntervals:
+    """Union component dimensions for query coverage only.
+
+    The returned component is the largest real format component and remains a
+    measurement label; the numeric intervals are the complete union.  It never
+    enters placement compatibility or scale inference.
+    """
+
+    if not values:
+        raise ValueError("measurement coverage requires frame components")
+    reference = max(
+        values,
+        key=lambda item: (
+            item.component.frame_width_mm,
+            item.component.frame_height_mm,
+            item.component.component_id,
+        ),
+    ).component
+    return FramePhysicalPixelIntervals(
+        component=reference,
+        frame_width_px=PositiveInterval(
+            min(item.frame_width_px.minimum for item in values),
+            max(item.frame_width_px.maximum for item in values),
+        ),
+        frame_height_px=PositiveInterval(
+            min(item.frame_height_px.minimum for item in values),
+            max(item.frame_height_px.maximum for item in values),
         ),
     )
 
@@ -143,15 +168,15 @@ def build_top_bottom_search_corridors(
 ) -> tuple[PhotoEdgeSearchCorridor, PhotoEdgeSearchCorridor]:
     """Build computation-only short-axis corridors with complete halos."""
 
-    scales = lane.axis_scale_intervals
+    scales = lane.scan_canvas.axis_scales
     long_axis, short_axis = _source_axes(layout)
     lane_box = source_lane_box(lane, layout)
     long_min, long_max = _axis_bounds(lane_box, long_axis)
     short_min, short_max = _axis_bounds(lane_box, short_axis)
-    long_scale = scales.long_axis_px_per_mm
-    short_scale = scales.short_axis_px_per_mm
+    long_scale = scales.width_axis_px_per_mm
+    short_scale = scales.height_axis_px_per_mm
     spacing_mm = spec.lattice_spacing_mm(
-        aperture_pixels.aperture.long_axis_mm
+        aperture_pixels.component.frame_width_mm
     )
     trace_positions = _lattice_positions(
         long_min,
@@ -185,18 +210,18 @@ def build_top_bottom_search_corridors(
     bottom_measurement: list[FiniteInterval] = []
     for trace in trace_positions:
         rotation_radius = abs(float(trace) - u0) * math.tan(
-            math.radians(spec.maximum_search_angle_degrees)
+            math.radians(spec.top_bottom_search_angle_degrees)
         )
         top = _clip_interval(
             FiniteInterval(
                 center
                 - center_allowance
-                - aperture_pixels.short_axis_px.maximum / 2.0
+                - aperture_pixels.frame_height_px.maximum / 2.0
                 - search_deviation
                 - rotation_radius,
                 center
                 + center_allowance
-                - aperture_pixels.short_axis_px.minimum / 2.0
+                - aperture_pixels.frame_height_px.minimum / 2.0
                 + search_deviation
                 + rotation_radius,
             ),
@@ -207,12 +232,12 @@ def build_top_bottom_search_corridors(
             FiniteInterval(
                 center
                 - center_allowance
-                + aperture_pixels.short_axis_px.minimum / 2.0
+                + aperture_pixels.frame_height_px.minimum / 2.0
                 - search_deviation
                 - rotation_radius,
                 center
                 + center_allowance
-                + aperture_pixels.short_axis_px.maximum / 2.0
+                + aperture_pixels.frame_height_px.maximum / 2.0
                 + search_deviation
                 + rotation_radius,
             ),
@@ -243,7 +268,7 @@ def build_top_bottom_search_corridors(
             corridor_id=_stable_id(
                 "photo-edge-corridor",
                 lane.domain.lane_id,
-                aperture_pixels.aperture,
+                aperture_pixels.component,
                 BoundaryRole.TOP.value,
             ),
             lane_id=lane.domain.lane_id,
@@ -258,7 +283,7 @@ def build_top_bottom_search_corridors(
             corridor_id=_stable_id(
                 "photo-edge-corridor",
                 lane.domain.lane_id,
-                aperture_pixels.aperture,
+                aperture_pixels.component,
                 BoundaryRole.BOTTOM.value,
             ),
             lane_id=lane.domain.lane_id,
@@ -307,9 +332,6 @@ def build_sequence_anchor_discovery_domain(
     layout: str,
     authoritative_sequence_length: int,
     aperture_pixels: FramePhysicalPixelIntervals,
-    typed_gutter_interval_px: FiniteInterval,
-    grid_nominal_translation_px: float | None = None,
-    outer_proposal_centers_px: tuple[float, ...] = (),
     spec: PhotoBoundaryMeasurementSpec = PHOTO_BOUNDARY_MEASUREMENT_SPEC,
 ) -> SequenceAnchorDiscoveryDomain:
     if authoritative_sequence_length <= 0:
@@ -320,30 +342,20 @@ def build_sequence_anchor_discovery_domain(
     short_min, short_max = _axis_bounds(lane_box, short_axis)
     if long_min != 0:
         raise ValueError("current lane authority must begin at source long zero")
-    minimum_span = (
-        authoritative_sequence_length
-        * aperture_pixels.long_axis_px.minimum
-        + (authoritative_sequence_length - 1)
-        * typed_gutter_interval_px.minimum
-    )
-    translation_maximum = max(
-        float(long_min),
-        float(long_max) - minimum_span,
-    )
-    scales = lane.axis_scale_intervals
+    scales = lane.scan_canvas.axis_scales
     measurement_halo = (
         int(
             math.ceil(
                 0.5
                 * (short_max - short_min)
                 * math.tan(
-                    math.radians(spec.maximum_search_angle_degrees)
+                    math.radians(spec.top_bottom_search_angle_degrees)
                 )
                 + (
                     spec.local_window_mm
                     + spec.transition_gap_mm
                 )
-                * scales.long_axis_px_per_mm.maximum
+                * scales.width_axis_px_per_mm.maximum
             )
         )
         + 1
@@ -352,63 +364,22 @@ def build_sequence_anchor_discovery_domain(
         lane.domain.lane_id,
         long_max - long_min,
         spec.anchor_tile_width_mm
-        * scales.long_axis_px_per_mm.maximum,
+        * scales.width_axis_px_per_mm.maximum,
         measurement_halo,
     )
-    tile_centers = {
-        tile.tile_id: tile.core_px.center for tile in tiles
-    }
-    nominal = (
-        translation_maximum / 2.0
-        if grid_nominal_translation_px is None
-        else grid_nominal_translation_px
-    )
-    grid_order = tuple(
-        tile.tile_id
-        for tile in sorted(
-            tiles,
-            key=lambda item: (
-                abs(tile_centers[item.tile_id] - nominal),
-                item.tile_id,
-            ),
-        )
-    )
-    proposal_centers = (
-        outer_proposal_centers_px
-        if outer_proposal_centers_px
-        else (nominal,)
-    )
-    outer_order = tuple(
-        tile.tile_id
-        for tile in sorted(
-            tiles,
-            key=lambda item: (
-                min(
-                    abs(tile_centers[item.tile_id] - center)
-                    for center in proposal_centers
-                ),
-                item.tile_id,
-            ),
-        )
-    )
+    query_order = tuple(tile.tile_id for tile in tiles)
     return SequenceAnchorDiscoveryDomain(
         domain_id=_stable_id(
             "sequence-anchor-domain",
             lane.domain.lane_id,
             authoritative_sequence_length,
-            f"{translation_maximum:.6f}",
-            aperture_pixels.aperture,
+            aperture_pixels.component,
         ),
         lane_id=lane.domain.lane_id,
-        translation_interval_px=FiniteInterval(
-            float(long_min),
-            translation_maximum,
-        ),
         long_axis_extent_px=long_max - long_min,
         authoritative_sequence_length=authoritative_sequence_length,
         tiles=tiles,
-        grid_execution_order=grid_order,
-        outer_execution_order=outer_order,
+        query_execution_order=query_order,
     )
 
 
@@ -422,23 +393,23 @@ def _coarse_short_trace_positions(
     lane_box = source_lane_box(lane, layout)
     _long_axis, short_axis = _source_axes(layout)
     short_min, short_max = _axis_bounds(lane_box, short_axis)
-    scales = lane.axis_scale_intervals
+    scales = lane.scan_canvas.axis_scales
     center = (short_min + short_max - 1) / 2.0
     half_height = min(
         (short_max - short_min - 2) / 2.0,
-        aperture_pixels.short_axis_px.minimum / 2.0
+        aperture_pixels.frame_height_px.minimum / 2.0
         - spec.local_window_mm
-        * scales.short_axis_px_per_mm.maximum,
+        * scales.height_axis_px_per_mm.maximum,
     )
     inner_min = max(short_min, int(math.ceil(center - half_height)))
     inner_max = min(short_max, int(math.floor(center + half_height)) + 1)
     spacing_mm = spec.lattice_spacing_mm(
-        aperture_pixels.aperture.short_axis_mm
+        aperture_pixels.component.frame_height_mm
     )
     return _lattice_positions(
         inner_min,
         inner_max,
-        spacing_mm * scales.short_axis_px_per_mm.maximum,
+        spacing_mm * scales.height_axis_px_per_mm.maximum,
     )
 
 
@@ -455,7 +426,7 @@ def registered_lane_measurement_queries(
 ) -> tuple[PhotoBoundaryMeasurementQuery, ...]:
     """Pre-register complete top/bottom and seamless anchor coverage."""
 
-    scales = lane.axis_scale_intervals
+    scales = lane.scan_canvas.axis_scales
     source_long_axis, source_short_axis = _source_axes(layout)
     queries: list[PhotoBoundaryMeasurementQuery] = []
     for corridor, purpose in (
@@ -471,12 +442,15 @@ def registered_lane_measurement_queries(
                 boundary_axis=source_short_axis,
                 trace_positions_px=corridor.trace_positions_px,
                 search_intervals_px=corridor.measurement_intervals_px,
-                expected_support_px=aperture_pixels.long_axis_px.maximum,
+                transition_ownership_intervals_px=(
+                    corridor.measurement_intervals_px
+                ),
+                expected_support_px=aperture_pixels.frame_width_px.maximum,
                 boundary_axis_scale_px_per_mm=(
-                    scales.short_axis_px_per_mm
+                    scales.height_axis_px_per_mm
                 ),
                 trace_axis_scale_px_per_mm=(
-                    scales.long_axis_px_per_mm
+                    scales.width_axis_px_per_mm
                 ),
                 measurement_halo_px=corridor.measurement_halo_px,
                 search_proposal_ids=(corridor.corridor_id,),
@@ -489,8 +463,8 @@ def registered_lane_measurement_queries(
         spec=spec,
     )
     tiles_by_id = {tile.tile_id: tile for tile in anchor_domain.tiles}
-    # Ordering changes latency only.  Every tile remains pre-registered.
-    for tile_id in anchor_domain.grid_execution_order:
+    # Every tile is pre-registered before template placement begins.
+    for tile_id in anchor_domain.query_execution_order:
         tile = tiles_by_id[tile_id]
         source_long_extent = (
             source_lane_box(lane, layout).right
@@ -504,6 +478,13 @@ def registered_lane_measurement_queries(
                 tile.measurement_px.maximum,
             ),
         )
+        owned_interval = FiniteInterval(
+            tile.core_px.minimum,
+            min(
+                float(source_long_extent - 1),
+                max(tile.core_px.minimum, tile.core_px.maximum - 1.0),
+            ),
+        )
         queries.append(
             PhotoBoundaryMeasurementQuery(
                 query_id=f"query:{anchor_domain.domain_id}:{tile.tile_id}",
@@ -515,12 +496,15 @@ def registered_lane_measurement_queries(
                 search_intervals_px=tuple(
                     measured_interval for _trace in short_traces
                 ),
-                expected_support_px=aperture_pixels.short_axis_px.maximum,
+                transition_ownership_intervals_px=tuple(
+                    owned_interval for _trace in short_traces
+                ),
+                expected_support_px=aperture_pixels.frame_height_px.maximum,
                 boundary_axis_scale_px_per_mm=(
-                    scales.long_axis_px_per_mm
+                    scales.width_axis_px_per_mm
                 ),
                 trace_axis_scale_px_per_mm=(
-                    scales.short_axis_px_per_mm
+                    scales.height_axis_px_per_mm
                 ),
                 measurement_halo_px=int(
                     max(

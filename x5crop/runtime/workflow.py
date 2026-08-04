@@ -41,17 +41,12 @@ def _metrics(
     processing_seconds = perf_counter() - started_at
     if workspace is None:
         return RuntimeMetrics.unavailable()
-    statistics = tuple(
-        lane.content.statistics
-        for lane in workspace.source_core.lanes
-    )
     work = (
         ()
         if detection is None
         else tuple(
-            lane.solution.work
+            lane.work
             for lane in detection.candidate.geometry.lane_reconstructions
-            if lane.solution is not None
         )
     )
     query_sets = (
@@ -66,35 +61,33 @@ def _metrics(
     return RuntimeMetrics(
         processing_seconds=processing_seconds,
         detection_seconds=detection_seconds,
-        domain_pixels=sum(item.domain_pixels for item in statistics),
-        content_runs=sum(item.run_count for item in statistics),
-        content_components=sum(item.component_count for item in statistics),
-        censored_content_components=sum(
-            item.censored_component_count for item in statistics
+        domain_pixels=sum(
+            lane.domain.work_box.width * lane.domain.work_box.height
+            for lane in workspace.source_core.lanes
         ),
         measurement_query_count=len(query_sets),
-        raw_transition_count=sum(
-            item.raw_transition_count for item in work
-        ),
-        line_family_count=sum(item.line_family_count for item in work),
-        physical_geometry_count=sum(
-            item.physical_geometry_count for item in work
-        ),
-        pre_join_state_count=sum(
-            item.pre_join_state_count for item in work
-        ),
-        post_join_state_count=sum(
-            item.post_join_state_count for item in work
-        ),
-        deduplicated_state_count=sum(
-            item.deduplicated_state_count for item in work
-        ),
-        sequence_phase_class_count=sum(
-            item.sequence_phase_class_count for item in work
-        ),
-        dp_states=sum(item.dp_state_count for item in work),
-        dp_transitions=sum(item.dp_transition_count for item in work),
         pixel_query_count=sum(item.pixel_query_count for item in work),
+        basic_profile_coordinate_count=sum(
+            item.basic_profile_coordinate_count for item in work
+        ),
+        basic_profile_run_count=sum(
+            item.basic_profile_run_count for item in work
+        ),
+        phase_vote_count=sum(item.phase_vote_count for item in work),
+        template_group_count=sum(item.template_group_count for item in work),
+        template_role_lookup_count=sum(
+            item.template_role_lookup_count for item in work
+        ),
+        template_role_match_count=sum(
+            item.template_role_match_count for item in work
+        ),
+        local_relation_evaluation_count=sum(
+            item.local_relation_evaluation_count for item in work
+        ),
+        enhanced_query_count=sum(item.enhanced_query_count for item in work),
+        materialized_frame_geometry_count=sum(
+            item.materialized_frame_geometry_count for item in work
+        ),
         shared_measurement_reuse_count=sum(
             item.shared_measurement_reuse_count for item in work
         ),
@@ -102,10 +95,6 @@ def _metrics(
             (
                 *(
                     item.peak_temporary_bytes
-                    for item in statistics
-                ),
-                *(
-                    item.peak_temporary_memory_bytes
                     for item in work
                 ),
                 0,
@@ -211,6 +200,7 @@ def process_one(
                     arr,
                     profile,
                     detection.final_boxes,
+                    detection.sampling_authority_boxes,
                     config,
                     detection.transform_assessment.transform,
                     output_surface.root,

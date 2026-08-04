@@ -46,6 +46,16 @@ run_full() {
     python3 X5_Crop.py --version
 }
 
+compare_fixed_performance() {
+    candidate_commit=$(git rev-parse HEAD)
+    python3 -m tools.regression.performance_compare \
+        --baseline-paired build/v49-orthogonal-budget/baseline/paired/paired_performance_result.json \
+        --candidate-paired build/v49-orthogonal-budget/current/paired/paired_performance_result.json \
+        --baseline-s062 build/v49-orthogonal-budget/baseline/s062/fixed_sample_profile.json \
+        --candidate-s062 build/v49-orthogonal-budget/current/s062/fixed_sample_profile.json \
+        --expected-candidate-commit "$candidate_commit"
+}
+
 case "${1:-}" in
     staged)
         check_staged
@@ -58,6 +68,7 @@ case "${1:-}" in
             printf >&2 'Refusing push from a dirty worktree. Commit intentional changes first.\n'
             exit 1
         }
+        compare_fixed_performance
         run_full
         ;;
     *)

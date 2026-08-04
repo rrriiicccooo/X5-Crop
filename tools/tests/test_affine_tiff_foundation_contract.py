@@ -17,17 +17,29 @@ from x5crop.domain import (
 )
 from x5crop.configuration.model import FrameCountRequest
 from x5crop.detection.output_geometry import (
-    observed_output_transform_assessment,
+    output_transform_assessment,
+    resolve_shared_strip_direction,
 )
 from x5crop.detection.photo_geometry.model import (
+    AuthoritySide,
     BoundaryAxis,
     BoundaryRole,
+    ClippedRequirement,
+    FootprintSaturationFact,
     PhotoBoundaryObservation,
+    SafeCropEnvelope,
     SourceCoordinateLine,
 )
+from x5crop.detection.photo_geometry.output import output_sampling_identity
 from x5crop.formats import format_spec
 from x5crop.export.crops import write_crops
 from x5crop.geometry.affine import AffineCoordinateTransform
+from x5crop.geometry.convex import (
+    axis_aligned_minkowski_guard,
+    clip_convex_polygon_to_box,
+    convex_hull,
+    mapped_half_open_box,
+)
 from x5crop.image.transforms import sample_affine_roi
 from x5crop.io.model import ImageProfile, TiffExtraTag, TiffMetadata
 from x5crop.io.tiff import read_tiff
@@ -97,7 +109,109 @@ def _angle_observation(
     )
 
 
+def _transform_assessment(
+    observations: tuple[PhotoBoundaryObservation, ...],
+):
+    return output_transform_assessment(
+        resolve_shared_strip_direction(observations),
+        layout="horizontal",
+        source_width=100,
+        source_height=40,
+    )
+
+
 class AffineFoundationContractTest(unittest.TestCase):
+    def test_continuous_footprint_primitives_are_single_path_and_ccw(
+        self,
+    ) -> None:
+        hull = convex_hull(
+            (
+                (5.0, 4.0),
+                (1.0, 1.0),
+                (5.0, 1.0),
+                (1.0, 4.0),
+                (3.0, 1.0),
+                (1.0, 1.0),
+            )
+        )
+        self.assertEqual(
+            hull,
+            ((1.0, 1.0), (5.0, 1.0), (5.0, 4.0), (1.0, 4.0)),
+        )
+        guarded = axis_aligned_minkowski_guard(hull, 1.0)
+        self.assertEqual(
+            guarded,
+            ((0.0, 0.0), (6.0, 0.0), (6.0, 5.0), (0.0, 5.0)),
+        )
+        clipped = clip_convex_polygon_to_box(guarded, Box(1, 1, 6, 5))
+        self.assertEqual(
+            clipped,
+            ((1.0, 1.0), (5.0, 1.0), (5.0, 4.0), (1.0, 4.0)),
+        )
+
+    def test_pixel_center_rounding_does_not_add_left_or_top_pixel(
+        self,
+    ) -> None:
+        polygon = (
+            (100.0, 20.0),
+            (110.0, 20.0),
+            (110.0, 30.0),
+            (100.0, 30.0),
+        )
+        self.assertEqual(
+            mapped_half_open_box(polygon, lambda x, y: (x, y)),
+            Box(100, 20, 111, 31),
+        )
+
+    def test_continuous_polygon_maps_without_source_aabb_widening(self) -> None:
+        transform = AffineCoordinateTransform.expanded_rotation(40, 30, 7.0)
+        footprint = (
+            (8.0, 15.0),
+            (20.0, 7.0),
+            (32.0, 15.0),
+            (20.0, 23.0),
+        )
+        direct = mapped_half_open_box(footprint, transform.map_point)
+        legacy = mapped_half_open_box(
+            ((8.0, 7.0), (32.0, 7.0), (32.0, 23.0), (8.0, 23.0)),
+            transform.map_point,
+        )
+        self.assertLess(direct.width * direct.height, legacy.width * legacy.height)
+
+    def test_saturation_audit_does_not_change_sampling_equivalence(self) -> None:
+        footprint = (
+            (2.0, 2.0),
+            (8.0, 2.0),
+            (8.0, 6.0),
+            (2.0, 6.0),
+        )
+        base = SafeCropEnvelope(
+            geometry_id="geometry:test",
+            lane_id="lane:0",
+            lane_ordinal=1,
+            placement_source_footprint=footprint,
+            required_source_footprint=footprint,
+            constrained_source_footprint=footprint,
+            saturation_facts=(),
+            sampling_authority_box=Box(0, 0, 20, 10),
+            authority_profile_id="profile:test",
+            mapped_output_box=Box(2, 2, 9, 7),
+        )
+        saturated = replace(
+            base,
+            saturation_facts=(
+                FootprintSaturationFact(
+                    AuthoritySide.LEFT,
+                    (ClippedRequirement.VISIBLE_INTERPOLATION_GUARD,),
+                ),
+            ),
+        )
+        transform = AffineCoordinateTransform.identity(20, 10)
+        self.assertEqual(
+            output_sampling_identity(base, transform),
+            output_sampling_identity(saturated, transform),
+        )
+
     def test_expanded_rotation_has_frozen_extent_and_center_contract(self) -> None:
         width = 17
         height = 11
@@ -173,6 +287,7 @@ class AffineFoundationContractTest(unittest.TestCase):
             AffineCoordinateTransform.identity(15, 12),
             box,
             background_value=0,
+            sampling_authority_box=Box(0, 0, 15, 12),
         )
         self.assertTrue(np.array_equal(sampled, array[2:9, 3:11]))
 
@@ -191,6 +306,7 @@ class AffineFoundationContractTest(unittest.TestCase):
             transform,
             full_box,
             background_value=65535,
+            sampling_authority_box=Box(0, 0, 13, 9),
         )
         roi = Box(2, 1, transform.output_extent.width - 2, 7)
         direct = sample_affine_roi(
@@ -199,6 +315,7 @@ class AffineFoundationContractTest(unittest.TestCase):
             transform,
             roi,
             background_value=65535,
+            sampling_authority_box=Box(0, 0, 13, 9),
         )
         self.assertTrue(
             np.array_equal(
@@ -206,34 +323,6 @@ class AffineFoundationContractTest(unittest.TestCase):
                 full[roi.top : roi.bottom, roi.left : roi.right],
             )
         )
-
-    def test_half_open_mapping_never_clamps(self) -> None:
-        identity = AffineCoordinateTransform.identity(20, 10)
-        box = Box(2, 3, 8, 9)
-        self.assertIs(identity.map_half_open_box_outward(box), box)
-        with self.assertRaises(ValueError):
-            identity.map_half_open_box_outward(Box(-1, 0, 3, 3))
-
-    def test_half_open_rotation_mapping_contains_complete_footprint(self) -> None:
-        transform = AffineCoordinateTransform.expanded_rotation(31, 17, 1.8)
-        source_box = Box(2, 1, 29, 16)
-        mapped = transform.map_half_open_box_outward(source_box)
-        for point in (
-            (source_box.left, source_box.top),
-            (source_box.right, source_box.top),
-            (source_box.left, source_box.bottom),
-            (source_box.right, source_box.bottom),
-        ):
-            with self.subTest(point=point):
-                x, y = transform.map_point(float(point[0]), float(point[1]))
-                self.assertLessEqual(mapped.left, x)
-                self.assertLessEqual(mapped.top, y)
-                self.assertGreaterEqual(mapped.right, x)
-                self.assertGreaterEqual(mapped.bottom, y)
-        self.assertGreaterEqual(mapped.left, 0)
-        self.assertGreaterEqual(mapped.top, 0)
-        self.assertLessEqual(mapped.right, transform.output_extent.width)
-        self.assertLessEqual(mapped.bottom, transform.output_extent.height)
 
     def test_expanded_canvas_preserves_bilinear_support_at_source_corners(
         self,
@@ -251,6 +340,7 @@ class AffineFoundationContractTest(unittest.TestCase):
                 transform.output_extent.height,
             ),
             background_value=0,
+            sampling_authority_box=Box(0, 0, 21, 13),
         )
         for source_corner in (
             (0.0, 0.0),
@@ -266,17 +356,40 @@ class AffineFoundationContractTest(unittest.TestCase):
                 y1 = min(full.shape[0], math.ceil(mapped_y) + 2)
                 self.assertTrue(np.any(full[y0:y1, x0:x1] > 0))
 
+    def test_bilinear_taps_outside_lane_use_background_without_edge_clip(
+        self,
+    ) -> None:
+        source = np.zeros((4, 8), dtype=np.uint8)
+        source[:, :4] = 20
+        source[:, 4:] = 240
+        transform = AffineCoordinateTransform(
+            matrix=(
+                (1.0, 0.0, 0.5),
+                (0.0, 1.0, 0.0),
+                (0.0, 0.0, 1.0),
+            ),
+            source_extent=AffineCoordinateTransform.identity(8, 4).source_extent,
+            output_extent=AffineCoordinateTransform.identity(8, 4).output_extent,
+        )
+        sampled = sample_affine_roi(
+            source,
+            "YX",
+            transform,
+            Box(3, 1, 5, 3),
+            background_value=100,
+            sampling_authority_box=Box(0, 0, 4, 4),
+        )
+        self.assertEqual(int(sampled[0, 1]), 60)
+        self.assertNotIn(240, sampled)
+
     def test_identity_requires_zero_in_every_observed_angle_interval(
         self,
     ) -> None:
-        assessment = observed_output_transform_assessment(
+        assessment = _transform_assessment(
             (
                 _angle_observation("line:a", -0.2, 0.1),
                 _angle_observation("line:b", -0.1, 0.3),
             ),
-            layout="horizontal",
-            source_width=100,
-            source_height=40,
         )
         self.assertEqual(assessment.outcome, "identity")
         self.assertEqual(
@@ -285,14 +398,11 @@ class AffineFoundationContractTest(unittest.TestCase):
         )
 
     def test_disjoint_observed_angles_make_transform_unavailable(self) -> None:
-        assessment = observed_output_transform_assessment(
+        assessment = _transform_assessment(
             (
                 _angle_observation("line:a", -0.2, 0.1),
                 _angle_observation("line:b", 0.2, 0.4),
             ),
-            layout="horizontal",
-            source_width=100,
-            source_height=40,
         )
         self.assertEqual(assessment.outcome, "unavailable")
         self.assertEqual(
@@ -301,7 +411,7 @@ class AffineFoundationContractTest(unittest.TestCase):
         )
 
     def test_nonzero_common_observed_angle_drives_rotation(self) -> None:
-        assessment = observed_output_transform_assessment(
+        assessment = _transform_assessment(
             (
                 _angle_observation("line:a", 0.8, 1.2),
                 _angle_observation(
@@ -311,11 +421,8 @@ class AffineFoundationContractTest(unittest.TestCase):
                     role=BoundaryRole.BOTTOM,
                 ),
             ),
-            layout="horizontal",
-            source_width=100,
-            source_height=40,
         )
-        self.assertEqual(assessment.outcome, "observed_rotation")
+        self.assertEqual(assessment.outcome, "shared_rotation")
         self.assertEqual(
             assessment.observed_angle_interval_degrees,
             FiniteInterval(0.9, 1.1),
@@ -323,10 +430,27 @@ class AffineFoundationContractTest(unittest.TestCase):
         assert assessment.applied_source_rotation_degrees is not None
         self.assertLess(assessment.applied_source_rotation_degrees, 0.0)
 
+    def test_vertical_strip_uses_rotation_opposite_canonical_angle(self) -> None:
+        direction = resolve_shared_strip_direction(
+            (
+                _angle_observation("line:vertical", -1.1, -0.9),
+            )
+        )
+        assessment = output_transform_assessment(
+            direction,
+            layout="vertical",
+            source_width=100,
+            source_height=200,
+        )
+
+        self.assertEqual(assessment.outcome, "shared_rotation")
+        assert assessment.applied_source_rotation_degrees is not None
+        self.assertGreater(assessment.applied_source_rotation_degrees, 0.0)
+
     def test_nonorthogonal_start_end_does_not_widen_shared_deskew(
         self,
     ) -> None:
-        assessment = observed_output_transform_assessment(
+        assessment = _transform_assessment(
             (
                 _angle_observation("line:top", -0.1, 0.2),
                 _angle_observation(
@@ -336,9 +460,6 @@ class AffineFoundationContractTest(unittest.TestCase):
                     role=BoundaryRole.END,
                 ),
             ),
-            layout="horizontal",
-            source_width=100,
-            source_height=40,
         )
         self.assertEqual(assessment.outcome, "identity")
         self.assertEqual(
@@ -400,6 +521,7 @@ class TiffFoundationContractTest(unittest.TestCase):
                             compression=source_compression,
                         ),
                         (box,),
+                        (Box(0, 0, 14, 10),),
                         _run_config(source, output, compression),
                         AffineCoordinateTransform.identity(14, 10),
                         output,

@@ -1,9 +1,6 @@
 # X5 Crop 快速启动
 
-本页适用于 V4.9 当前开发版。X5 Crop 在用户指定胶片格式后执行保守自动裁切：优先完整
-保留真实照片内容，允许有依据的少量外留、相邻框重叠或带入少量邻片像素，但非空输出不得
-宽到需要人工重裁。多余 blank 可直接删除；过宽照片不算自动完成。
-当前稳定发布仍为 **v4.2.8**。
+当前稳定发布为 **v4.2.8**。仓库中的 V4.9 仍在开发和验证。
 
 ## 1. 下载与安装
 
@@ -15,9 +12,11 @@ macOS:   install/X5_Crop_Mac_install.command
 Windows: install/X5_Crop_win_install.bat
 ```
 
-安装器准备 `numpy`、`tifffile`、`imagecodecs` 与 `Pillow`。
+安装器会准备 `numpy`、`tifffile`、`imagecodecs` 和 `Pillow`。
 
 ## 2. 放入 TIFF 并启动
+
+把 TIFF 与启动文件放在同一文件夹：
 
 ```text
 X5_Crop.py
@@ -25,10 +24,8 @@ X5_Crop_Mac.command 或 X5_Crop_win.bat
 *.tif / *.tiff
 ```
 
-```text
-macOS:   双击 X5_Crop_Mac.command
-Windows: 双击 X5_Crop_win.bat
-```
+- macOS：双击 `X5_Crop_Mac.command`
+- Windows：双击 `X5_Crop_win.bat`
 
 macOS 无法双击时，在该文件夹的 Terminal 中运行：
 
@@ -36,69 +33,52 @@ macOS 无法双击时，在该文件夹的 Terminal 中运行：
 /bin/bash X5_Crop_Mac.command
 ```
 
-## 3. 选择格式、模式和张数
+## 3. 选择格式、模式与张数
 
-支持 `135`、`135-dual`、`half`、`xpan`、`645`、`66` 与 `67`。
+支持 `135`、`135-dual`、`half`、`xpan`、`120-645`、`120-66` 和 `120-67`。
 
-- `full`：张数固定为格式默认值；若显式输入 count，只接受同一个默认值。
-- `partial`：输入整数表示 authoritative explicit count；直接回车、输入 `auto`，或命令行
-  省略 `--count`，都表示容量 auto。
-- Auto 输出唯一匹配片夹对当前 format 的全部有效 slots，不猜真实照片张数，也不读取
-  文件名中的张数。前导、尾随或中间 blank slot 都会保留。
-- `135-dual` 当前只支持 full，按上 lane 后下 lane、各 lane 从左到右输出 12 张。
+- `full`：使用该格式的固定片夹张数。
+- `partial` + 整数：严格使用你输入的输出 slot 数。
+- `partial` + `auto`：输出匹配片夹对该格式的全部有效 slots，不猜真实照片张数。
+- `135-dual` 只支持 `full`。
 
 命令行示例：
 
 ```bash
 python3 X5_Crop.py . --format 135 --strip full --report
 python3 X5_Crop.py . --format 135 --strip partial --count 3 --report
-python3 X5_Crop.py . --format 135 --strip partial --count auto --report
+python3 X5_Crop.py . --format 120-66 --strip partial --count auto --report
 python3 X5_Crop.py . --format 120-66 --strip partial --layout vertical --report
 ```
 
-默认使用 `--jobs 2`。普通运行可显式使用 `--jobs 3`，但会增加峰值内存压力；诊断模式
-最多使用 4 个 worker。查看全部参数：
+默认使用 `--layout auto` 和 `--jobs 2`。查看全部参数：
 
 ```bash
 python3 X5_Crop.py --help
 ```
 
-## 4. 结果与输出
+## 4. 查看结果
 
-`approved_auto` 表示照片四边测量或 named inference、插值 allowance 与 protection
-共同形成的输出满足安全合同；V4.9 发布时还必须满足非空照片可直接使用。它不表示不可见
-物理边被唯一证明。用户已将预算冻结为片条轴 start/end 每边 5%、横片条轴 top/bottom
-每边 3%，各 format 按自身 aperture 换算；当前开发树尚未实现这一独立硬门槛，这是发布前
-待闭合项。
-通过时会生成：
+- `approved_auto`：写出正式照片 TIFF。
+- `needs_review`：不写正式照片 TIFF；默认把原 TIFF 复制到 `needs_review/`。
+- `--no-copy-review-files`：关闭 review 原图复制。
+- `--diagnostics`：只写 report 与 Debug Analysis，不写照片 TIFF，也不复制 review 文件。
+
+默认输出目录为 `x5_crop_output/`。启用 `--report` 时还会写：
 
 ```text
-x5_crop_output/
-  原文件名_01.tif
-  原文件名_02.tif
-  ...
-  x5_crop_report.jsonl
-  x5_crop_summary.csv
-  x5_crop_run_manifest.jsonl
+x5_crop_report.jsonl
+x5_crop_summary.csv
+x5_crop_run_manifest.jsonl
 ```
-
-`needs_review` 只表示存在具体且无法吸收的 ordinal、slot ownership、已知内容
-containment、source/lane geometry 或 output transform 风险。容量已解析但无法安全形成
-全部 slots 时也会阻断，且不会写出正式 TIFF。默认把原 TIFF 复制到
-`needs_review/`；`--no-copy-review-files` 可关闭。
-
-`--diagnostics` 是只读诊断模式：保留同一检测与 DecisionGate 结果，写 report 和
-Debug Analysis，但不写 frame TIFF，也不复制 review 文件。
 
 ## 5. TIFF 安全
 
-- 原始 TIFF 永不修改。
-- 每个输出 ROI 只从原图采样一次，随后写出并复读验证。
-- 保持 dtype、axes、通道、ICC/色彩空间、resolution、metadata，以及 NONE/LZW
-  无损压缩行为。
-- I/O 或复读失败是独立 terminal failure，不会伪装成 `needs_review`。
+原始 TIFF 永不修改。程序从原图采样每个已批准输出，并在写出后复读检查像素、位深、通道、
+ICC、resolution、metadata 和已支持的无损压缩。读取、写出或复读失败属于错误，不会伪装成
+`needs_review`。
 
 ## 6. 移除
 
-删除 X5 Crop 文件夹即可移除程序。Python packages 可能被其它程序共用，因此发布包不提供
-批量依赖卸载脚本。
+删除 X5 Crop 文件夹即可。Python packages 可能被其它程序共用，因此发布包不提供批量依赖
+卸载脚本。

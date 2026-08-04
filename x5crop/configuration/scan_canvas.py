@@ -13,7 +13,7 @@ class ScanCanvasDetectionConfiguration:
     # Holder catalogue dimensions are nominal mould/scan extents, not a
     # calibration ruler.  This interval is the scale authority used by
     # physical feasibility and missing-edge inference.
-    physical_extent_tolerance_ratio: float = 0.01
+    physical_extent_tolerance_ratio: float = 0.035
 
     def __post_init__(self) -> None:
         profile_ids = tuple(profile.profile_id for profile in self.profiles)

@@ -16,6 +16,7 @@ def typed_read_model(value: Any) -> Any:
         return {
             field.name: typed_read_model(getattr(value, field.name))
             for field in fields(value)
+            if not field.name.startswith("_")
         }
     if isinstance(value, dict):
         return {
@@ -32,7 +33,7 @@ def gate_check_read_model(check: GateCheck) -> dict[str, Any]:
         "code": check.code,
         "stage": check.stage.value,
         "state": check.state.value,
-        "requirement": check.requirement.value,
+        "gap": None if check.gap is None else check.gap.value,
         "final_review_reason": check.final_review_reason,
         "blocks": bool(check.blocks),
     }

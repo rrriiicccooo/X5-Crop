@@ -95,7 +95,6 @@ class MeasurementIdentity(str, Enum):
     BASE_GRAY = "base_gray"
     IMAGE_MEASUREMENT_STATISTICS = "image_measurement_statistics"
     SCAN_CANVAS_GEOMETRY = "scan_canvas_geometry"
-    SOURCE_CONTENT = "source_content"
     PHOTO_BOUNDARY = "photo_boundary"
 
 

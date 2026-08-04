@@ -8,6 +8,7 @@ import hashlib
 import json
 from pathlib import Path
 import pstats
+import subprocess
 import time
 from typing import Any, Sequence
 
@@ -27,7 +28,43 @@ FIXED_SOURCE_SHA256 = (
 FIXED_FORMAT_ID = "120-66"
 FIXED_STRIP_MODE = "partial"
 FIXED_COUNT_MODE = "auto"
-PROFILE_RECEIPT_SCHEMA = "x5crop_fixed_sample_profile_v3"
+PROFILE_RECEIPT_SCHEMA = "x5crop_fixed_sample_profile_v5"
+
+_CURRENT_RUNTIME_METRICS = (
+    "measurement_query_count",
+    "pixel_query_count",
+    "basic_profile_coordinate_count",
+    "basic_profile_run_count",
+    "phase_vote_count",
+    "template_group_count",
+    "template_role_lookup_count",
+    "template_role_match_count",
+    "local_relation_evaluation_count",
+    "enhanced_query_count",
+    "materialized_frame_geometry_count",
+    "shared_measurement_reuse_count",
+    "domain_pixels",
+    "peak_temporary_bytes",
+)
+
+
+def _clean_head() -> str:
+    status = subprocess.run(
+        ("git", "status", "--porcelain"),
+        cwd=PROJECT_ROOT,
+        check=True,
+        stdout=subprocess.PIPE,
+        text=True,
+    ).stdout.strip()
+    if status:
+        raise ValueError("formal S062 profile requires a clean committed tree")
+    return subprocess.run(
+        ("git", "rev-parse", "HEAD"),
+        cwd=PROJECT_ROOT,
+        check=True,
+        stdout=subprocess.PIPE,
+        text=True,
+    ).stdout.strip()
 
 
 def _sha256(path: Path) -> str:
@@ -93,6 +130,7 @@ def run_fixed_profile(
 ) -> dict[str, Any]:
     if output_root.exists() and any(output_root.iterdir()):
         raise ValueError(f"profile output root must be empty: {output_root}")
+    v49_commit = _clean_head()
     output_root.mkdir(parents=True, exist_ok=True)
     source = _fixed_source()
     invocation = runtime_invocation_from_options(
@@ -108,7 +146,7 @@ def run_fixed_profile(
             copy_review_files=False,
             compression="same",
             debug_analysis=False,
-            diagnostics=False,
+            diagnostics=True,
             overwrite=False,
             report=True,
             debug_errors=True,
@@ -143,24 +181,45 @@ def run_fixed_profile(
     )
     output_slot_count = output_identity["output_slot_count"]
     if (
-        record["decision"]["status"] != "approved_auto"
-        or lane_counts != (3,)
+        lane_counts != (3,)
         or output_slot_count != 3
-        or len(outcome.artifacts.frame_outputs) != output_slot_count
+        or outcome.artifacts.frame_outputs
     ):
-        raise RuntimeError("fixed profiling sample did not meet its frozen contract")
+        raise RuntimeError("fixed profiling workload identity changed")
     work_rows = tuple(
-        lane["selection"]["solution"]["work"]
+        lane["work"]
         for lane in record["photo_geometry"]["lanes"]
-        if lane["selection"]["solution"] is not None
     )
-    work_fields = tuple(work_rows[0]) if work_rows else ()
-    work_totals = {
-        field: sum(int(row[field]) for row in work_rows)
-        for field in work_fields
+    metrics = outcome.metrics.as_record()
+    current_metrics = {
+        field: int(metrics[field])
+        for field in _CURRENT_RUNTIME_METRICS
     }
+    role_lookup_limit = sum(
+        int(row["template_group_count"]) * count * 2
+        for row, count in zip(work_rows, lane_counts, strict=True)
+    )
+    local_relation_limit = sum(
+        int(row["template_group_count"]) * max(0, count - 1)
+        for row, count in zip(work_rows, lane_counts, strict=True)
+    )
+    selected_aperture_labels: list[str] = []
+    for lane in record["photo_geometry"]["lanes"]:
+        placement = lane["placement"]
+        canonical_id = placement["canonical_placement_id"]
+        if canonical_id is None:
+            selected_aperture_labels.append("")
+            continue
+        selected_aperture_labels.append(
+            next(
+                item["component"]["component_id"]
+                for item in placement["retained_placements"]
+                if item["placement_id"] == canonical_id
+            )
+        )
     receipt = {
         "schema": PROFILE_RECEIPT_SCHEMA,
+        "v49_commit": v49_commit,
         "sample_id": FIXED_SAMPLE_ID,
         "source_sha256": FIXED_SOURCE_SHA256,
         "format_id": FIXED_FORMAT_ID,
@@ -173,23 +232,17 @@ def run_fixed_profile(
         "output_slot_count": output_slot_count,
         "slot_identities": output_identity["slot_identities"],
         "wall_seconds": wall_seconds,
-        "runtime_metrics": outcome.metrics.as_record(),
-        "work_totals": work_totals,
-        "selected_aperture_labels": [
-            lane["selection"]["selected_label"]
-            for lane in record["photo_geometry"]["lanes"]
-        ],
-        "geometry_unresolved_codes": record["photo_geometry"][
-            "unresolved_codes"
-        ],
-        "decision_status": record["decision"]["status"],
-        "state_transition_counts": {
-            "states": work_totals.get("dp_state_count", 0),
-            "transitions": work_totals.get(
-                "dp_transition_count",
-                0,
-            ),
+        "runtime_metrics": current_metrics,
+        "structural_limits": {
+            "template_role_lookup_count": role_lookup_limit,
+            "template_role_match_count": current_metrics[
+                "phase_vote_count"
+            ],
+            "local_relation_evaluation_count": local_relation_limit,
+            "enhanced_query_count": current_metrics["phase_vote_count"],
         },
+        "selected_aperture_labels": selected_aperture_labels,
+        "decision_status": record["decision"]["status"],
         "call_stack_hotspots": _hotspots(profiler),
         "sample_identity_frozen_before_measurement": True,
     }

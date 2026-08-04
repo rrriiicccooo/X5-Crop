@@ -13,21 +13,19 @@ def finalize_detection(
 ) -> FinalDetection:
     del layout  # Source-coordinate authority is already explicit in geometry.
     approved = decision.status == "approved_auto"
-    geometries = candidate.resolved_output_geometries if approved else ()
-    source_boxes = (
-        tuple(item.source_sampling_box for item in geometries)
+    geometries = candidate.safe_crop_envelopes if approved else ()
+    authority_boxes = (
+        tuple(item.sampling_authority_box for item in geometries)
         if approved
         else ()
     )
-    transform = candidate.transform_assessment.transform
     final_boxes = (
-        tuple(
-            transform.map_half_open_box_outward(box)
-            for box in source_boxes
-        )
-        if approved and transform is not None
+        tuple(item.mapped_output_box for item in geometries)
+        if approved
         else ()
     )
+    if approved and any(box is None for box in final_boxes):
+        raise ValueError("approved geometry requires its mapped output box")
     return FinalDetection(
         candidate=candidate,
         decision=decision,
@@ -36,6 +34,6 @@ def finalize_detection(
         output_slot_identities=candidate.output_slot_identities,
         transform_assessment=candidate.transform_assessment,
         resolved_output_geometries=geometries,
-        source_sampling_boxes=source_boxes,
+        sampling_authority_boxes=authority_boxes,
         final_boxes=final_boxes,
     )

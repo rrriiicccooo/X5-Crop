@@ -4,7 +4,6 @@ from collections import defaultdict
 from dataclasses import dataclass
 from hashlib import sha256
 import math
-from time import perf_counter
 
 import numpy as np
 
@@ -14,6 +13,7 @@ from ...domain import (
     MeasurementIdentity,
     MeasurementProvenance,
     ObservationId,
+    PositiveInterval,
 )
 from .model import (
     BoundaryAxis,
@@ -26,6 +26,7 @@ from .model import (
     PhotoBoundaryMeasurementSpec,
     PhotoBoundaryObservation,
     PhotoBoundaryTransition,
+    SideTransitionRegion,
     SourceCoordinateLine,
 )
 
@@ -70,8 +71,6 @@ def _window_means(
     left = (prefix[left_stop] - prefix[left_start]) / float(window)
     right = (prefix[right_stop] - prefix[right_start]) / float(window)
     return left, right
-
-
 def _trace_measurements(
     values_u8: np.ndarray,
     interval: FiniteInterval,
@@ -243,7 +242,13 @@ def _transition_groups(
             float(coordinates[int(eligible[-1])]) + 0.5,
         )
         polarity_value = float(signed_gradient[peak_index])
-        polarity = 1 if polarity_value > 0.0 else -1 if polarity_value < 0.0 else 0
+        polarity = (
+            1
+            if polarity_value > 0.0
+            else -1
+            if polarity_value < 0.0
+            else 0
+        )
         records.append(
             (
                 FiniteInterval(minimum, maximum),
@@ -301,10 +306,11 @@ def _measure_query(
                 * scale
             )
         )
-        for trace_ordinal, (trace, interval) in enumerate(
+        for trace_ordinal, (trace, interval, ownership) in enumerate(
             zip(
                 query.trace_positions_px,
                 query.search_intervals_px,
+                query.transition_ownership_intervals_px,
                 strict=True,
             )
         ):
@@ -368,6 +374,11 @@ def _measure_query(
                 scale,
                 spec,
             ):
+                if not ownership.contains(
+                    float(coordinates[peak_index]),
+                    epsilon=1.0e-12,
+                ):
+                    continue
                 transition_id = _stable_observation_id(
                     "photo-transition",
                     query.query_id,
@@ -420,7 +431,6 @@ def _measure_query(
                 )
             ),
             peak_temporary_bytes=peak_temporary,
-            shared_measurement_reuse_count=0,
             complete=False,
         )
         return PhotoBoundaryMeasurementSet(
@@ -446,7 +456,6 @@ def _measure_query(
             ),
         ),
         peak_temporary_bytes=peak_temporary,
-        shared_measurement_reuse_count=0,
         complete=True,
     )
     return PhotoBoundaryMeasurementSet(
@@ -482,93 +491,344 @@ class _Point:
     weight: float
 
 
-class _DisjointSet:
-    def __init__(self, size: int) -> None:
-        self.parent = list(range(size))
-        self.rank = [0] * size
-
-    def find(self, value: int) -> int:
-        while self.parent[value] != value:
-            self.parent[value] = self.parent[self.parent[value]]
-            value = self.parent[value]
-        return value
-
-    def union(self, left: int, right: int) -> None:
-        left_root = self.find(left)
-        right_root = self.find(right)
-        if left_root == right_root:
-            return
-        if self.rank[left_root] < self.rank[right_root]:
-            left_root, right_root = right_root, left_root
-        self.parent[right_root] = left_root
-        if self.rank[left_root] == self.rank[right_root]:
-            self.rank[left_root] += 1
+@dataclass
+class _SideTrack:
+    points: list[_Point]
+    last_trace_index: int
 
 
-def _line_components(
-    points: tuple[_Point, ...],
-    trace_step_px: float,
-    boundary_scale_px_per_mm: float,
-    spec: PhotoBoundaryMeasurementSpec,
-) -> tuple[tuple[_Point, ...], ...]:
-    if not points:
+def _unique_nearest(
+    distances: list[tuple[float, int]],
+    tie_tolerance_px: float,
+) -> int | None:
+    if not distances:
+        return None
+    ordered = sorted(distances)
+    if (
+        len(ordered) > 1
+        and ordered[1][0] - ordered[0][0] <= tie_tolerance_px
+    ):
+        return None
+    return ordered[0][1]
+
+
+def provisional_cross_projection_interval(
+    coordinate_interval_px: FiniteInterval,
+    *,
+    trace_coordinate_px: float,
+    reference_trace_px: float,
+    maximum_angle_degrees: float,
+    numeric_uncertainty_px: float,
+) -> FiniteInterval:
+    """Project one per-trace run before the shared direction is known."""
+
+    if (
+        not math.isfinite(trace_coordinate_px)
+        or not math.isfinite(reference_trace_px)
+        or not math.isfinite(maximum_angle_degrees)
+        or not 0.0 <= maximum_angle_degrees < 90.0
+        or not math.isfinite(numeric_uncertainty_px)
+        or numeric_uncertainty_px < 0.0
+    ):
+        raise ValueError("provisional cross projection is invalid")
+    allowance = (
+        abs(trace_coordinate_px - reference_trace_px)
+        * math.tan(math.radians(maximum_angle_degrees))
+        + numeric_uncertainty_px
+    )
+    return FiniteInterval(
+        coordinate_interval_px.minimum - allowance,
+        coordinate_interval_px.maximum + allowance,
+    )
+
+
+def _maximum_coverage_intervals(
+    intervals: tuple[FiniteInterval, ...],
+) -> tuple[int, tuple[FiniteInterval, ...], tuple[frozenset[int], ...]]:
+    if not intervals:
+        return 0, (), ()
+    endpoints = sorted(
+        {
+            value
+            for interval in intervals
+            for value in (interval.minimum, interval.maximum)
+        }
+    )
+    probes = [*endpoints]
+    probes.extend(
+        (left + right) / 2.0
+        for left, right in zip(endpoints, endpoints[1:])
+        if right > left
+    )
+    subsets = {
+        frozenset(
+            index
+            for index, interval in enumerate(intervals)
+            if interval.contains(probe, epsilon=1.0e-12)
+        )
+        for probe in probes
+    }
+    maximum = max(map(len, subsets), default=0)
+    best_subsets = tuple(
+        sorted(
+            (subset for subset in subsets if len(subset) == maximum),
+            key=lambda subset: tuple(sorted(subset)),
+        )
+    )
+    intersections = tuple(
+        FiniteInterval(
+            max(intervals[index].minimum for index in subset),
+            min(intervals[index].maximum for index in subset),
+        )
+        for subset in best_subsets
+        if subset
+    )
+    unique = tuple(
+        FiniteInterval(minimum, maximum_value)
+        for minimum, maximum_value in sorted(
+            {
+                (interval.minimum, interval.maximum)
+                for interval in intersections
+            }
+        )
+    )
+    return maximum, unique, best_subsets
+
+
+def robust_scalar_location(
+    values: tuple[float, ...],
+    weights: tuple[float, ...],
+    scale: PositiveInterval,
+    spec: PhotoBoundaryMeasurementSpec = PHOTO_BOUNDARY_MEASUREMENT_SPEC,
+) -> float:
+    """Fit one scalar location with the canonical four-round Huber contract."""
+
+    if not values or len(values) != len(weights):
+        raise ValueError("robust scalar evidence is invalid")
+    array = np.asarray(values, dtype=np.float64)
+    weight_array = np.asarray(weights, dtype=np.float64)
+    if (
+        not np.all(np.isfinite(array))
+        or not np.all(np.isfinite(weight_array))
+        or np.any(weight_array <= 0.0)
+    ):
+        raise ValueError("robust scalar evidence must be finite and positive")
+    location = float(np.average(array, weights=weight_array))
+    for _ in range(spec.huber_irls_rounds):
+        residuals = array - location
+        center = float(np.median(residuals))
+        mad = float(np.median(np.abs(residuals - center)))
+        threshold = max(
+            spec.huber_minimum_threshold_mm * scale.maximum,
+            spec.huber_mad_multiplier * mad,
+        )
+        robust = np.ones_like(residuals)
+        mask = np.abs(residuals) > threshold
+        robust[mask] = threshold / np.abs(residuals[mask])
+        location = float(
+            np.average(array, weights=weight_array * robust)
+        )
+    return location
+
+
+def track_side_transition_regions(
+    measurement_sets: tuple[PhotoBoundaryMeasurementSet, ...],
+    *,
+    reference_trace_px: float,
+    boundary_axis_scale_px_per_mm: PositiveInterval,
+    support_interval_px: FiniteInterval | None = None,
+    spec: PhotoBoundaryMeasurementSpec = PHOTO_BOUNDARY_MEASUREMENT_SPEC,
+) -> tuple[SideTransitionRegion, ...]:
+    """Track direction-free side proposals without merging parallel edges."""
+
+    if any(
+        item.state != EvidenceState.SUPPORTED or not item.coverage.complete
+        for item in measurement_sets
+    ):
         return ()
-    by_trace: dict[float, list[int]] = defaultdict(list)
-    for index, point in enumerate(points):
-        by_trace[point.trace].append(index)
-    traces = sorted(by_trace)
-    sets = _DisjointSet(len(points))
-    maximum_trace_gap = (
-        trace_step_px
+    transition_by_id = {
+        str(transition.transition_id): transition
+        for item in measurement_sets
+        for transition in item.transitions
+    }
+    transitions = tuple(
+        sorted(
+            (
+                transition
+                for transition in transition_by_id.values()
+                if support_interval_px is None
+                or support_interval_px.contains(
+                    float(transition.trace_coordinate_px),
+                    epsilon=0.5,
+                )
+            ),
+            key=lambda item: (
+                item.trace_coordinate_px,
+                item.coordinate_px,
+                str(item.transition_id),
+            ),
+        )
+    )
+    queried_traces = tuple(
+        sorted(
+            {
+                trace
+                for item in measurement_sets
+                for trace in item.query.trace_positions_px
+                if support_interval_px is None
+                or support_interval_px.contains(float(trace), epsilon=0.5)
+            }
+        )
+    )
+    if not transitions or not queried_traces:
+        return ()
+    trace_to_index = {
+        trace: index for index, trace in enumerate(queried_traces)
+    }
+    by_trace: dict[int, list[_Point]] = defaultdict(list)
+    for transition in transitions:
+        by_trace[transition.trace_coordinate_px].append(
+            _Point(
+                transition=transition,
+                trace=float(transition.trace_coordinate_px),
+                coordinate=transition.coordinate_px,
+                weight=max(
+                    1.0,
+                    transition.gradient_z
+                    + max(transition.tone_z, transition.texture_z),
+                ),
+            )
+        )
+    tie_tolerance = max(
+        1.0,
+        spec.geometry_equivalence_mm
+        * boundary_axis_scale_px_per_mm.maximum,
+    )
+    connection_px = max(
+        1.0,
+        spec.line_connection_allowance_mm
+        * boundary_axis_scale_px_per_mm.maximum,
+    )
+    maximum_slope = math.tan(
+        math.radians(spec.top_bottom_search_angle_degrees)
+    )
+    active: list[_SideTrack] = []
+    completed: list[_SideTrack] = []
+    for trace in queried_traces:
+        trace_index = trace_to_index[trace]
+        current = sorted(
+            by_trace.get(trace, ()),
+            key=lambda point: (
+                point.coordinate,
+                str(point.transition.transition_id),
+            ),
+        )
+        eligible: list[_SideTrack] = []
+        for track in active:
+            if (
+                trace_index - track.last_trace_index
+                <= spec.maximum_missing_lattice_steps + 1
+            ):
+                eligible.append(track)
+            else:
+                completed.append(track)
+        active = eligible
+        connected_points: set[int] = set()
+        gaps = tuple(
+            sorted(
+                {
+                    trace_index - track.last_trace_index
+                    for track in active
+                }
+            )
+        )
+        # A contiguous track owns the first reciprocal-nearest opportunity.
+        # A track using the single permitted missing step may only consume a
+        # transition left unmatched by the contiguous class.  This prevents
+        # one ambiguous fork from leaving an older ghost track that blocks
+        # the same physical edge on every later trace.
+        for gap in gaps:
+            track_indices = tuple(
+                index
+                for index, track in enumerate(active)
+                if trace_index - track.last_trace_index == gap
+            )
+            proposed_by_point: dict[int, list[tuple[float, int]]] = (
+                defaultdict(list)
+            )
+            nearest_by_track: dict[int, int | None] = {}
+            for track_index in track_indices:
+                track = active[track_index]
+                last = track.points[-1]
+                allowance = (
+                    abs(float(trace) - last.trace) * maximum_slope
+                    + connection_px
+                )
+                distances = [
+                    (abs(point.coordinate - last.coordinate), point_index)
+                    for point_index, point in enumerate(current)
+                    if point_index not in connected_points
+                    and abs(point.coordinate - last.coordinate)
+                    <= allowance + 1.0e-12
+                ]
+                nearest = _unique_nearest(distances, tie_tolerance)
+                nearest_by_track[track_index] = nearest
+                if nearest is not None:
+                    distance = abs(
+                        current[nearest].coordinate - last.coordinate
+                    )
+                    proposed_by_point[nearest].append(
+                        (distance, track_index)
+                    )
+            nearest_track_by_point = {
+                point_index: _unique_nearest(proposals, tie_tolerance)
+                for point_index, proposals in proposed_by_point.items()
+            }
+            for track_index in track_indices:
+                point_index = nearest_by_track[track_index]
+                if (
+                    point_index is not None
+                    and nearest_track_by_point.get(point_index)
+                    == track_index
+                ):
+                    active[track_index].points.append(current[point_index])
+                    active[track_index].last_trace_index = trace_index
+                    connected_points.add(point_index)
+        for point_index, point in enumerate(current):
+            if point_index not in connected_points:
+                active.append(_SideTrack([point], trace_index))
+        still_active: list[_SideTrack] = []
+        for track in active:
+            if (
+                trace_index - track.last_trace_index
+                <= spec.maximum_missing_lattice_steps
+            ):
+                still_active.append(track)
+            else:
+                completed.append(track)
+        active = still_active
+    completed.extend(active)
+
+    strong_minimum_support = max(
+        spec.minimum_trace_count,
+        int(math.ceil(spec.minimum_trace_fraction * len(queried_traces))),
+    )
+    minimum_support = spec.minimum_trace_count
+    support_span = max(1.0, float(queried_traces[-1] - queried_traces[0]))
+    maximum_connected_gap = (
+        (
+            float(np.median(np.diff(np.asarray(queried_traces))))
+            if len(queried_traces) > 1
+            else 1.0
+        )
         * (spec.maximum_missing_lattice_steps + 1)
         + 1.0
     )
-    for left_index, left_trace in enumerate(traces):
-        for right_trace in traces[left_index + 1 :]:
-            delta_trace = right_trace - left_trace
-            if delta_trace > maximum_trace_gap:
-                break
-            coordinate_allowance = (
-                abs(delta_trace)
-                * math.tan(
-                    math.radians(spec.maximum_search_angle_degrees)
-                )
-                + spec.line_connection_allowance_mm
-                * boundary_scale_px_per_mm
-            )
-            right_points = sorted(
-                by_trace[right_trace],
-                key=lambda index: points[index].coordinate,
-            )
-            right_coordinates = np.asarray(
-                [points[index].coordinate for index in right_points],
-                dtype=np.float64,
-            )
-            for left_point_index in by_trace[left_trace]:
-                center = points[left_point_index].coordinate
-                start = int(
-                    np.searchsorted(
-                        right_coordinates,
-                        center - coordinate_allowance,
-                        side="left",
-                    )
-                )
-                stop = int(
-                    np.searchsorted(
-                        right_coordinates,
-                        center + coordinate_allowance,
-                        side="right",
-                    )
-                )
-                for position in range(start, stop):
-                    sets.union(left_point_index, right_points[position])
-    grouped: dict[int, list[_Point]] = defaultdict(list)
-    for index, point in enumerate(points):
-        grouped[sets.find(index)].append(point)
-    return tuple(
-        tuple(
+    regions: dict[tuple[str, ...], SideTransitionRegion] = {}
+    for track in completed:
+        points = tuple(
             sorted(
-                group,
+                track.points,
                 key=lambda item: (
                     item.trace,
                     item.coordinate,
@@ -576,174 +836,181 @@ def _line_components(
                 ),
             )
         )
-        for group in grouped.values()
-    )
-
-
-def _hough_line_families(
-    points: tuple[_Point, ...],
-    *,
-    support_span_px: float,
-    trace_step_px: float,
-    boundary_scale_px_per_mm: float,
-    minimum_support: int,
-    spec: PhotoBoundaryMeasurementSpec,
-) -> tuple[tuple[_Point, ...], ...]:
-    """Enumerate supported near-axis line families without graph percolation.
-
-    A dense connected-component graph can accidentally join several parallel
-    photo/internal edges through short texture fragments.  This deterministic
-    bounded-angle accumulator keeps each candidate tied to one line equation.
-    It enumerates every supported bin and performs no score/top-N truncation.
-    """
-
-    if not points:
-        return ()
-    maximum_slope = math.tan(
-        math.radians(spec.maximum_search_angle_degrees)
-    )
-    connection_px = max(
-        1.0,
-        spec.line_connection_allowance_mm
-        * boundary_scale_px_per_mm,
-    )
-    slope_step = max(
-        1.0e-5,
-        connection_px / max(1.0, support_span_px),
-    )
-    slope_count = int(
-        math.ceil(2.0 * maximum_slope / slope_step)
-    ) + 1
-    slopes = np.linspace(
-        -maximum_slope,
-        maximum_slope,
-        slope_count,
-        dtype=np.float64,
-    )
-    traces = np.asarray([point.trace for point in points], dtype=np.float64)
-    coordinates = np.asarray(
-        [point.coordinate for point in points],
-        dtype=np.float64,
-    )
-    family_by_geometry_bin: dict[
-        tuple[int, int],
-        tuple[
-            tuple[int, float, tuple[str, ...]],
-            tuple[_Point, ...],
-        ],
-    ] = {}
-    bin_width = 2.0 * connection_px
-    geometry_equivalence_px = max(
-        1.0,
-        spec.geometry_equivalence_mm * boundary_scale_px_per_mm,
-    )
-    slope_equivalence = geometry_equivalence_px / max(
-        1.0,
-        support_span_px,
-    )
-    support_center = float(np.median(traces))
-    for slope in slopes:
-        intercepts = coordinates - slope * traces
-        for shift in (0.0, 0.5):
-            bin_indices = np.floor(
-                intercepts / bin_width + shift
-            ).astype(np.int64)
-            grouped: dict[int, list[int]] = defaultdict(list)
-            for point_index, bin_index in enumerate(bin_indices):
-                grouped[int(bin_index)].append(point_index)
-            for indices in grouped.values():
-                trace_groups: dict[float, list[int]] = defaultdict(list)
-                for point_index in indices:
-                    trace_groups[points[point_index].trace].append(point_index)
-                if len(trace_groups) < minimum_support:
-                    continue
-                center = float(np.median(intercepts[indices]))
-                selected = tuple(
-                    points[
-                        min(
-                            point_indices,
-                            key=lambda index: (
-                                abs(float(intercepts[index]) - center),
-                                -points[index].weight,
-                                str(points[index].transition.transition_id),
-                            ),
-                        )
-                    ]
-                    for _trace, point_indices in sorted(trace_groups.items())
-                )
-                selected_traces = tuple(point.trace for point in selected)
-                if len(selected_traces) < minimum_support:
-                    continue
-                if (
-                    sum(
-                        point.transition.gradient_z
-                        for point in selected
-                    )
-                    / len(selected)
-                    < spec.gradient_z_minimum
-                    or sum(
+        traces = tuple(point.trace for point in points)
+        if len(set(traces)) < minimum_support:
+            continue
+        longest_span = 0.0
+        run_start = traces[0]
+        previous = traces[0]
+        for trace in traces[1:]:
+            if trace - previous > maximum_connected_gap:
+                longest_span = max(longest_span, previous - run_start)
+                run_start = trace
+            previous = trace
+        longest_span = max(longest_span, previous - run_start)
+        continuous_fraction = min(1.0, longest_span / support_span)
+        if (
+            continuous_fraction < spec.minimum_continuous_support_fraction
+            or sum(point.transition.gradient_z for point in points)
+            / len(points)
+            < spec.gradient_z_minimum
+            or sum(
+                max(point.transition.tone_z, point.transition.texture_z)
+                for point in points
+            )
+            / len(points)
+            < spec.tone_or_texture_z_minimum
+        ):
+            continue
+        projected = tuple(
+            provisional_cross_projection_interval(
+                point.transition.coordinate_interval_px,
+                trace_coordinate_px=point.trace,
+                reference_trace_px=reference_trace_px,
+                maximum_angle_degrees=spec.top_bottom_search_angle_degrees,
+                numeric_uncertainty_px=connection_px,
+            )
+            for point in points
+        )
+        coverage, intersections, subsets = _maximum_coverage_intervals(
+            projected
+        )
+        if coverage < minimum_support or not intersections:
+            continue
+        ambiguous = any(
+            right.minimum - left.maximum > tie_tolerance
+            for left, right in zip(intersections, intersections[1:])
+        )
+        proposal = FiniteInterval(
+            intersections[0].minimum,
+            intersections[-1].maximum,
+        )
+        selected_subset = next(
+            subset
+            for subset in subsets
+            if len(subset) == coverage
+            and max(projected[index].minimum for index in subset)
+            == intersections[0].minimum
+            and min(projected[index].maximum for index in subset)
+            == intersections[0].maximum
+        )
+        selected = tuple(points[index] for index in sorted(selected_subset))
+        transition_ids = tuple(
+            sorted(
+                (point.transition.transition_id for point in selected),
+                key=str,
+            )
+        )
+        signature = tuple(map(str, transition_ids))
+        centers = np.asarray(
+            [point.coordinate for point in selected], dtype=np.float64
+        )
+        residual = float(
+            np.median(np.abs(centers - np.median(centers)))
+        )
+        background_side_support_fraction = (
+            sum(
+                (
+                    (
                         max(
-                            point.transition.tone_z,
-                            point.transition.texture_z,
+                            point.transition.left_texture_mean,
+                            point.transition.right_texture_mean,
                         )
-                        for point in selected
+                        + 1.0
                     )
-                    / len(selected)
-                    < spec.tone_or_texture_z_minimum
-                ):
-                    continue
-                longest_span = 0.0
-                run_start = selected_traces[0]
-                previous = selected_traces[0]
-                maximum_connected_gap = (
-                    trace_step_px
-                    * (spec.maximum_missing_lattice_steps + 1)
-                    + 1.0
-                )
-                for trace in selected_traces[1:]:
-                    if trace - previous > maximum_connected_gap:
-                        longest_span = max(
-                            longest_span,
-                            previous - run_start,
+                    / (
+                        min(
+                            point.transition.left_texture_mean,
+                            point.transition.right_texture_mean,
                         )
-                        run_start = trace
-                    previous = trace
-                longest_span = max(
-                    longest_span,
-                    previous - run_start,
-                )
-                if (
-                    longest_span / max(1.0, support_span_px)
-                    < spec.minimum_continuous_support_fraction
-                ):
-                    continue
-                signature = tuple(
-                    sorted(
-                        (
-                            str(point.transition.transition_id)
-                            for point in selected
-                        )
+                        + 1.0
                     )
+                    >= spec.background_texture_ratio_minimum
                 )
-                center_coordinate = center + float(slope) * support_center
-                geometry_key = (
-                    int(round(center_coordinate / geometry_equivalence_px)),
-                    int(round(float(slope) / slope_equivalence)),
-                )
-                quality = (
-                    len(selected),
-                    sum(point.weight for point in selected),
-                    tuple(reversed(signature)),
-                )
-                existing = family_by_geometry_bin.get(geometry_key)
-                if existing is None or quality > existing[0]:
-                    family_by_geometry_bin[geometry_key] = (
-                        quality,
-                        selected,
+                or (
+                    abs(
+                        point.transition.right_tone_mean
+                        - point.transition.left_tone_mean
                     )
+                    / (
+                        1.0
+                        + point.transition.left_texture_mean
+                        + point.transition.right_texture_mean
+                    )
+                    >= spec.background_tone_to_texture_minimum
+                )
+                for point in selected
+            )
+            / len(selected)
+        )
+        left_background_preference_fraction = (
+            sum(
+                point.transition.left_texture_mean
+                <= point.transition.right_texture_mean
+                for point in selected
+            )
+            / len(selected)
+        )
+        right_background_preference_fraction = (
+            sum(
+                point.transition.right_texture_mean
+                <= point.transition.left_texture_mean
+                for point in selected
+            )
+            / len(selected)
+        )
+        if (
+            len(selected) < strong_minimum_support
+            and (
+                background_side_support_fraction
+                < spec.directional_background_support_minimum
+                or max(
+                    left_background_preference_fraction,
+                    right_background_preference_fraction,
+                )
+                < spec.directional_sequence_support_minimum
+            )
+        ):
+            continue
+        region_id = _stable_observation_id(
+            "side-region", *(str(item) for item in transition_ids)
+        )
+        regions[signature] = SideTransitionRegion(
+            region_id=str(region_id),
+            proposal_position_interval_px=proposal,
+            transition_ids=transition_ids,
+            trace_support_count=len(selected),
+            queried_trace_count=len(queried_traces),
+            continuous_support_fraction=continuous_fraction,
+            fit_residual_px=residual,
+            mean_gradient_z=sum(
+                point.transition.gradient_z for point in selected
+            )
+            / len(selected),
+            mean_tone_or_texture_z=sum(
+                max(point.transition.tone_z, point.transition.texture_z)
+                for point in selected
+            )
+            / len(selected),
+            background_side_support_fraction=(
+                background_side_support_fraction
+            ),
+            left_background_preference_fraction=(
+                left_background_preference_fraction
+            ),
+            right_background_preference_fraction=(
+                right_background_preference_fraction
+            ),
+            ambiguous=ambiguous,
+        )
     return tuple(
-        family_by_geometry_bin[key][1]
-        for key in sorted(family_by_geometry_bin)
+        sorted(
+            regions.values(),
+            key=lambda item: (
+                item.proposal_position_interval_px.center,
+                item.region_id,
+            ),
+        )
     )
 
 
@@ -864,62 +1131,50 @@ def _source_line(
 
 
 def _canonical_rotation_degrees(
-    role: BoundaryRole,
+    source_axis_long: BoundaryAxis,
     slope: float,
 ) -> float:
-    return math.degrees(
-        math.atan(slope)
-        if role in {BoundaryRole.TOP, BoundaryRole.BOTTOM}
-        else -math.atan(slope)
-    )
+    """Return the rotation-equivalent strip angle in source coordinates."""
+
+    angle = math.degrees(math.atan(slope))
+    return angle if source_axis_long == BoundaryAxis.X else -angle
 
 
-def fit_boundary_line_families(
-    measurement_sets: tuple[PhotoBoundaryMeasurementSet, ...],
+def fit_template_bound_boundary_observation(
+    measurement_set: PhotoBoundaryMeasurementSet,
     *,
+    transition_ids: tuple[ObservationId, ...],
     role: BoundaryRole,
     source_axis_long: BoundaryAxis,
-    support_interval_px: FiniteInterval,
     boundary_axis_scale_px_per_mm: PositiveInterval,
-    trace_axis_scale_px_per_mm: PositiveInterval,
     spec: PhotoBoundaryMeasurementSpec = PHOTO_BOUNDARY_MEASUREMENT_SPEC,
-) -> tuple[PhotoBoundaryObservation, ...]:
-    """Fit every fully measured physical line family in one support span."""
+) -> PhotoBoundaryObservation | None:
+    """Fit one robust line from transitions already bound to one template role.
 
-    supported_sets = tuple(
-        item
-        for item in measurement_sets
-        if item.state == EvidenceState.SUPPORTED
-    )
-    if len(supported_sets) != len(measurement_sets):
-        return ()
+    This is deliberately not a line-family search.  The template producer
+    binds one tracked run first; this function then estimates the sole raw
+    line supported by that run.  Adding an unrelated transition therefore
+    cannot create another slope candidate or move this observation.
+    """
+
+    if role not in {BoundaryRole.TOP, BoundaryRole.BOTTOM}:
+        raise ValueError("template-bound line requires top or bottom role")
+    if (
+        measurement_set.state != EvidenceState.SUPPORTED
+        or not measurement_set.coverage.complete
+        or not transition_ids
+        or len(set(transition_ids)) != len(transition_ids)
+    ):
+        return None
+    requested = {str(identity) for identity in transition_ids}
     transitions = tuple(
         transition
-        for item in supported_sets
-        for transition in item.transitions
-        if support_interval_px.contains(
-            float(transition.trace_coordinate_px),
-            epsilon=0.5,
-        )
+        for transition in measurement_set.transitions
+        if str(transition.transition_id) in requested
     )
-    queried_traces = tuple(
-        sorted(
-            {
-                trace
-                for item in supported_sets
-                for trace in item.query.trace_positions_px
-                if support_interval_px.contains(float(trace), epsilon=0.5)
-            }
-        )
-    )
-    if not queried_traces:
-        return ()
-    boundary_axis = supported_sets[0].query.boundary_axis
-    if any(
-        item.query.boundary_axis != boundary_axis
-        for item in supported_sets
-    ):
-        raise ValueError("one line fit cannot mix source boundary axes")
+    if {str(item.transition_id) for item in transitions} != requested:
+        return None
+    queried_traces = measurement_set.query.trace_positions_px
     points = tuple(
         _Point(
             transition=transition,
@@ -933,390 +1188,186 @@ def fit_boundary_line_families(
         )
         for transition in transitions
     )
-    trace_differences = np.diff(np.asarray(queried_traces, dtype=np.float64))
-    trace_step = (
-        float(np.median(trace_differences))
-        if trace_differences.size
-        else spec.lattice_minimum_mm
-        * trace_axis_scale_px_per_mm.maximum
-    )
     minimum_support = max(
         spec.minimum_trace_count,
-        int(math.ceil(spec.minimum_trace_fraction * len(queried_traces))),
+        math.ceil(spec.minimum_trace_fraction * len(queried_traces)),
     )
-    observations: list[PhotoBoundaryObservation] = []
-    for family in _hough_line_families(
-        points,
-        support_span_px=support_interval_px.width,
-        trace_step_px=trace_step,
-        boundary_scale_px_per_mm=(
-            boundary_axis_scale_px_per_mm.maximum
-        ),
-        minimum_support=minimum_support,
-        spec=spec,
+    if len({point.trace for point in points}) < minimum_support:
+        return None
+    if (
+        float(np.mean([point.transition.gradient_z for point in points]))
+        < spec.gradient_z_minimum
+        or float(
+            np.mean(
+                [
+                    max(
+                        point.transition.tone_z,
+                        point.transition.texture_z,
+                    )
+                    for point in points
+                ]
+            )
+        )
+        < spec.tone_or_texture_z_minimum
     ):
-        unique_trace_count = len(set(point.trace for point in family))
-        if unique_trace_count < minimum_support:
-            continue
-        # The two frozen evidence requirements are line-family facts.  Check
-        # them before the four-round robust fit so weak texture ridges do not
-        # consume an IRLS solve merely because either channel produced a
-        # local transition proposal.  The same requirements are checked again
-        # on fitted inliers below; this is dominance by missing evidence, not
-        # a score/top-N truncation.
-        if (
-            float(
-                np.mean(
-                    [
-                        point.transition.gradient_z
-                        for point in family
-                    ]
-                )
-            )
-            < spec.gradient_z_minimum
-            or float(
-                np.mean(
-                    [
-                        max(
-                            point.transition.tone_z,
-                            point.transition.texture_z,
-                        )
-                        for point in family
-                    ]
-                )
-            )
-            < spec.tone_or_texture_z_minimum
-        ):
-            continue
-        preliminary_traces = tuple(
-            sorted(point.trace for point in family)
-        )
-        preliminary_maximum_gap = (
-            trace_step
-            * (spec.maximum_missing_lattice_steps + 1)
-            + 1.0
-        )
-        preliminary_longest_span = 0.0
-        run_start = preliminary_traces[0]
-        previous = preliminary_traces[0]
-        for trace in preliminary_traces[1:]:
-            if trace - previous > preliminary_maximum_gap:
-                preliminary_longest_span = max(
-                    preliminary_longest_span,
-                    previous - run_start,
-                )
-                run_start = trace
-            previous = trace
-        preliminary_longest_span = max(
-            preliminary_longest_span,
-            previous - run_start,
-        )
-        if (
-            preliminary_longest_span
-            / max(1.0, support_interval_px.width)
-            < spec.minimum_continuous_support_fraction
-        ):
-            continue
-        slope, intercept, residuals, selected = _weighted_line_fit(
-            family,
-            boundary_axis_scale_px_per_mm.maximum,
-            spec,
-        )
-        angle = _canonical_rotation_degrees(role, slope)
-        if abs(angle) > spec.maximum_search_angle_degrees + 1.0e-9:
-            continue
-        traces = tuple(sorted(point.trace for point in selected))
-        support_span = max(traces) - min(traces) if len(traces) > 1 else 0.0
-        coarse_span = max(1.0, support_interval_px.width)
-        maximum_connected_gap = (
-            trace_step
-            * (spec.maximum_missing_lattice_steps + 1)
-            + 1.0
-        )
-        run_starts = [traces[0]]
-        run_stops: list[float] = []
-        for left, right in zip(traces, traces[1:]):
-            if right - left > maximum_connected_gap:
-                run_stops.append(left)
-                run_starts.append(right)
-        run_stops.append(traces[-1])
-        longest_continuous_span = max(
-            stop - start
-            for start, stop in zip(
-                run_starts,
-                run_stops,
-                strict=True,
-            )
-        )
-        continuous_fraction = min(
-            1.0,
-            longest_continuous_span / coarse_span,
-        )
-        if continuous_fraction < spec.minimum_continuous_support_fraction:
-            continue
-        residual_center = float(np.median(residuals))
-        mad = float(np.median(np.abs(residuals - residual_center)))
-        inlier_threshold = max(
-            spec.inlier_minimum_threshold_mm
-            * boundary_axis_scale_px_per_mm.maximum,
-            spec.inlier_mad_multiplier * mad,
-        )
-        inliers = np.abs(residuals - residual_center) <= inlier_threshold
-        if int(np.count_nonzero(inliers)) < minimum_support:
-            continue
-        selected_inliers = tuple(
-            point
-            for point, keep in zip(selected, inliers, strict=True)
-            if bool(keep)
-        )
-        if (
-            float(
-                np.mean(
-                    [
-                        point.transition.gradient_z
-                        for point in selected_inliers
-                    ]
-                )
-            )
-            < spec.gradient_z_minimum
-            or float(
-                np.mean(
-                    [
-                        max(
-                            point.transition.tone_z,
-                            point.transition.texture_z,
-                        )
-                        for point in selected_inliers
-                    ]
-                )
-            )
-            < spec.tone_or_texture_z_minimum
-        ):
-            continue
-        transition_half_width = max(
-            point.transition.coordinate_interval_px.width / 2.0
-            for point in selected
-        )
-        numeric_sampling_error = 0.5
-        coordinate_uncertainty = (
-            transition_half_width
-            + inlier_threshold
-            + numeric_sampling_error
-        )
-        line = _source_line(
-            boundary_axis,
-            source_axis_long,
-            slope,
-            intercept,
-            FiniteInterval(min(traces), max(traces)),
-        )
-        normalized_uncertainty = coordinate_uncertainty / math.hypot(
-            1.0,
-            slope,
-        )
-        angle_uncertainty = math.degrees(
-            math.atan2(
-                spec.angle_endpoint_uncertainty_multiplier
-                * coordinate_uncertainty,
-                max(1.0, support_span),
-            )
-        )
-        transition_ids = tuple(
-            sorted(
-                (
-                    point.transition.transition_id
-                    for point in selected
-                ),
-                key=str,
-            )
-        )
-        observation_id = _stable_observation_id(
-            "photo-line",
-            role.value,
-            *(str(item) for item in transition_ids),
-        )
-        observations.append(
-            # A background/separator side is a pixel observation, not an
-            # edge-authority shortcut.  It may rank otherwise compatible
-            # lines, while contact/overlap lines remain valid with zero
-            # background support.
-            PhotoBoundaryObservation(
-                observation_id=observation_id,
-                role=role,
-                line=line,
-                offset_interval_px=FiniteInterval(
-                    line.offset_px - normalized_uncertainty,
-                    line.offset_px + normalized_uncertainty,
-                ),
-                fit_residual_px=float(
-                    np.median(np.abs(residuals))
-                ),
-                angle_interval_degrees=FiniteInterval(
-                    angle - angle_uncertainty,
-                    angle + angle_uncertainty,
-                ),
-                trace_support_count=len(selected),
-                queried_trace_count=len(queried_traces),
-                continuous_support_fraction=continuous_fraction,
-                transition_ids=transition_ids,
-                provenance=MeasurementProvenance(
-                    root_measurement=MeasurementIdentity.PHOTO_BOUNDARY,
-                    observation_id=observation_id,
-                    dependencies=(MeasurementIdentity.BASE_GRAY,),
-                    description=(
-                        "deterministic weighted-Huber source-coordinate "
-                        "photo-boundary line family"
-                    ),
-                ),
-                background_side_support_fraction=(
-                    sum(
-                        (
-                            (
-                                max(
-                                    point.transition.left_texture_mean,
-                                    point.transition.right_texture_mean,
-                                )
-                                + 1.0
-                            )
-                            / (
-                                min(
-                                    point.transition.left_texture_mean,
-                                    point.transition.right_texture_mean,
-                                )
-                                + 1.0
-                            )
-                            >= spec.background_texture_ratio_minimum
-                        )
-                        or (
-                            abs(
-                                point.transition.right_tone_mean
-                                - point.transition.left_tone_mean
-                            )
-                            / (
-                                1.0
-                                + point.transition.left_texture_mean
-                                + point.transition.right_texture_mean
-                            )
-                            >= spec.background_tone_to_texture_minimum
-                        )
-                        for point in selected_inliers
-                    )
-                    / len(selected_inliers)
-                ),
-                left_background_preference_fraction=(
-                    sum(
-                        point.transition.left_texture_mean
-                        <= point.transition.right_texture_mean
-                        for point in selected_inliers
-                    )
-                    / len(selected_inliers)
-                ),
-                right_background_preference_fraction=(
-                    sum(
-                        point.transition.right_texture_mean
-                        <= point.transition.left_texture_mean
-                        for point in selected_inliers
-                    )
-                    / len(selected_inliers)
-                ),
-            )
-        )
-    return deduplicate_boundary_observations(
-        tuple(observations),
-        boundary_axis_scale_px_per_mm,
+        return None
+    slope, intercept, residuals, selected = _weighted_line_fit(
+        points,
+        boundary_axis_scale_px_per_mm.maximum,
         spec,
     )
-
-
-def _intervals_overlap(
-    left: FiniteInterval,
-    right: FiniteInterval,
-) -> bool:
-    return (
-        left.minimum <= right.maximum
-        and right.minimum <= left.maximum
+    angle = _canonical_rotation_degrees(source_axis_long, slope)
+    if abs(angle) > spec.top_bottom_search_angle_degrees + 1.0e-9:
+        return None
+    traces = tuple(sorted(point.trace for point in selected))
+    trace_steps = np.diff(
+        np.asarray(queried_traces, dtype=np.float64)
     )
-
-
-def boundary_observations_equivalent(
-    left: PhotoBoundaryObservation,
-    right: PhotoBoundaryObservation,
-    boundary_axis_scale_px_per_mm: PositiveInterval,
-    spec: PhotoBoundaryMeasurementSpec = PHOTO_BOUNDARY_MEASUREMENT_SPEC,
-) -> bool:
-    tolerance = max(
-        1.0,
-        spec.geometry_equivalence_mm
+    trace_step = (
+        float(np.median(trace_steps)) if trace_steps.size else 1.0
+    )
+    maximum_gap = (
+        trace_step * (spec.maximum_missing_lattice_steps + 1) + 1.0
+    )
+    longest = 0.0
+    run_start = traces[0]
+    previous = traces[0]
+    for trace in traces[1:]:
+        if trace - previous > maximum_gap:
+            longest = max(longest, previous - run_start)
+            run_start = trace
+        previous = trace
+    longest = max(longest, previous - run_start)
+    queried_span = max(1.0, float(queried_traces[-1] - queried_traces[0]))
+    continuity = min(1.0, longest / queried_span)
+    if continuity < spec.minimum_continuous_support_fraction:
+        return None
+    residual_center = float(np.median(residuals))
+    residual_mad = float(
+        np.median(np.abs(residuals - residual_center))
+    )
+    inlier_threshold = max(
+        spec.inlier_minimum_threshold_mm
         * boundary_axis_scale_px_per_mm.maximum,
+        spec.inlier_mad_multiplier * residual_mad,
     )
-    return (
-        left.role == right.role
-        and abs(left.line.offset_px - right.line.offset_px) <= tolerance
-        and _intervals_overlap(
-            left.angle_interval_degrees,
-            right.angle_interval_degrees,
+    inlier_mask = np.abs(residuals - residual_center) <= inlier_threshold
+    if int(np.count_nonzero(inlier_mask)) < minimum_support:
+        return None
+    inliers = tuple(
+        point
+        for point, keep in zip(selected, inlier_mask, strict=True)
+        if bool(keep)
+    )
+    inlier_residuals = residuals[inlier_mask]
+    location_uncertainty = (
+        float(
+            np.median(
+                np.abs(inlier_residuals - np.median(inlier_residuals))
+            )
+        )
+        / math.sqrt(len(inliers))
+        + spec.transition_coordinate_sampling_uncertainty_px
+    )
+    support = FiniteInterval(min(traces), max(traces))
+    line = _source_line(
+        measurement_set.query.boundary_axis,
+        source_axis_long,
+        slope,
+        intercept,
+        support,
+    )
+    normalized_uncertainty = location_uncertainty / math.hypot(1.0, slope)
+    angle_uncertainty = math.degrees(
+        math.atan2(
+            spec.angle_endpoint_uncertainty_multiplier
+            * location_uncertainty,
+            max(1.0, support.width),
         )
     )
-
-
-def deduplicate_boundary_observations(
-    observations: tuple[PhotoBoundaryObservation, ...],
-    boundary_axis_scale_px_per_mm: PositiveInterval,
-    spec: PhotoBoundaryMeasurementSpec = PHOTO_BOUNDARY_MEASUREMENT_SPEC,
-) -> tuple[PhotoBoundaryObservation, ...]:
-    """Physical dedup precedes every candidate-count decision."""
-
-    tolerance = max(
-        1.0,
-        spec.geometry_equivalence_mm
-        * boundary_axis_scale_px_per_mm.maximum,
+    selected_ids = tuple(
+        sorted((point.transition.transition_id for point in selected), key=str)
     )
-    retained: list[PhotoBoundaryObservation] = []
-    for observation in sorted(
-        observations,
-        key=lambda item: (
-            item.line.offset_px,
-            item.fit_residual_px,
-            str(item.observation_id),
+    observation_id = _stable_observation_id(
+        "template-bound-line",
+        role.value,
+        *(str(identity) for identity in selected_ids),
+    )
+    return PhotoBoundaryObservation(
+        observation_id=observation_id,
+        role=role,
+        line=line,
+        offset_interval_px=FiniteInterval(
+            line.offset_px - normalized_uncertainty,
+            line.offset_px + normalized_uncertainty,
         ),
-    ):
-        equivalent_index = None
-        for index in range(len(retained) - 1, -1, -1):
-            existing = retained[index]
-            if (
-                observation.line.offset_px
-                - existing.line.offset_px
-                > 2.0 * tolerance
-            ):
-                break
-            if boundary_observations_equivalent(
-                existing,
-                observation,
-                boundary_axis_scale_px_per_mm,
-                spec,
-            ):
-                equivalent_index = index
-                break
-        if equivalent_index is None:
-            retained.append(observation)
-            continue
-        existing = retained[equivalent_index]
-        preferred = min(
-            (existing, observation),
-            key=lambda item: (
-                -item.trace_support_count,
-                item.measurement_uncertainty_px,
-                item.fit_residual_px,
-                str(item.observation_id),
+        fit_residual_px=float(np.median(np.abs(residuals))),
+        angle_interval_degrees=FiniteInterval(
+            angle - angle_uncertainty,
+            angle + angle_uncertainty,
+        ),
+        trace_support_count=len(selected),
+        queried_trace_count=len(queried_traces),
+        continuous_support_fraction=continuity,
+        transition_ids=selected_ids,
+        provenance=MeasurementProvenance(
+            root_measurement=MeasurementIdentity.PHOTO_BOUNDARY,
+            observation_id=observation_id,
+            dependencies=(MeasurementIdentity.BASE_GRAY,),
+            description=(
+                "single robust line from transitions bound to one fixed "
+                "format template role"
             ),
-        )
-        retained[equivalent_index] = preferred
-    return tuple(
-        sorted(
-            retained,
-            key=lambda item: (
-                item.line.offset_px,
-                str(item.observation_id),
-            ),
-        )
+        ),
+        background_side_support_fraction=(
+            sum(
+                (
+                    (
+                        max(
+                            point.transition.left_texture_mean,
+                            point.transition.right_texture_mean,
+                        )
+                        + 1.0
+                    )
+                    / (
+                        min(
+                            point.transition.left_texture_mean,
+                            point.transition.right_texture_mean,
+                        )
+                        + 1.0
+                    )
+                    >= spec.background_texture_ratio_minimum
+                )
+                or (
+                    abs(
+                        point.transition.right_tone_mean
+                        - point.transition.left_tone_mean
+                    )
+                    / (
+                        1.0
+                        + point.transition.left_texture_mean
+                        + point.transition.right_texture_mean
+                    )
+                    >= spec.background_tone_to_texture_minimum
+                )
+                for point in inliers
+            )
+            / len(inliers)
+        ),
+        left_background_preference_fraction=(
+            sum(
+                point.transition.left_texture_mean
+                <= point.transition.right_texture_mean
+                for point in inliers
+            )
+            / len(inliers)
+        ),
+        right_background_preference_fraction=(
+            sum(
+                point.transition.right_texture_mean
+                <= point.transition.left_texture_mean
+                for point in inliers
+            )
+            / len(inliers)
+        ),
     )

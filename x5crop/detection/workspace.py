@@ -7,7 +7,7 @@ import numpy as np
 from ..cache import MeasurementCache
 from ..cache.analysis import make_measurement_cache
 from ..configuration.model import DetectionConfiguration
-from ..domain import Box, EvidenceState
+from ..domain import Box
 from ..geometry.layout import is_horizontal_layout, work_gray
 from ..image.gray import make_base_gray_u8
 from ..image.statistics import image_measurement_statistics
@@ -22,7 +22,6 @@ from .source_core import (
     SourceCoreEvidence,
     SourceLaneEvidence,
     SourceStripValidationDomain,
-    observe_source_content,
 )
 
 
@@ -81,25 +80,14 @@ def _single_lane(
         source_axis_long="x" if is_horizontal_layout(layout) else "y",
         authority_profile_id=scan_canvas.selected_profile.profile_id,
     )
-    content = observe_source_content(
-        gray_work,
-        domain,
-        configuration.content,
-    )
-    reasons = (
-        ()
-        if content.state == EvidenceState.SUPPORTED
-        else ("source_content_unavailable_diagnostic",)
-    )
     return (
         (
             SourceLaneEvidence(
                 domain=domain,
                 scan_canvas=scan_canvas,
-                content=content,
             ),
         ),
-        reasons,
+        (),
     )
 
 
@@ -125,7 +113,6 @@ def _dual_lanes(
         return (), (f"scan_canvas_{scan_canvas.outcome.value}",)
     center = gray_work.shape[0] // 2
     lanes: list[SourceLaneEvidence] = []
-    reasons: list[str] = []
     for lane_index, (top, bottom) in enumerate(
         ((0, center), (center, gray_work.shape[0]))
     ):
@@ -137,23 +124,15 @@ def _dual_lanes(
             source_axis_long="x" if is_horizontal_layout(layout) else "y",
             authority_profile_id=scan_canvas.selected_profile.profile_id,
         )
-        content = observe_source_content(
-            gray_work,
-            domain,
-            lane_configuration.content,
-        )
-        if content.state != EvidenceState.SUPPORTED:
-            reasons.append(f"lane_{lane_index}_source_content_unavailable")
         lanes.append(
             SourceLaneEvidence(
                 domain=domain,
                 scan_canvas=scan_canvas,
-                content=content,
             )
         )
     if len(lanes) != 2:
-        return (), tuple(dict.fromkeys(reasons))
-    return tuple(lanes), tuple(dict.fromkeys(reasons))
+        return (), ("dual_lane_partition_unavailable",)
+    return tuple(lanes), ()
 
 
 def prepare_detection_workspace(

@@ -143,16 +143,14 @@ def _output_slot_count(
         raise ValueError(
             f"{source.sample_id} has no unique benchmark scan canvas"
         )
-    fits = tuple(
-        item
-        for item in canvas.selected_profile.format_fits
-        if item.format_id == source.format_id
+    capacity = configuration.physical_spec.maximum_frame_count(
+        canvas.selected_profile.profile_id
     )
-    if len(fits) != 1:
+    if capacity is None:
         raise ValueError(
             f"{source.sample_id} has no unique benchmark capacity"
         )
-    return fits[0].maximum_frame_count
+    return capacity
 
 
 def _task_box(

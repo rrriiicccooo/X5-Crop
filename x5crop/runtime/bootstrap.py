@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from ..formats import format_spec
 from ..geometry.layout import infer_layout
-from ..strip_modes import FULL, PARTIAL
 from ..configuration.bundle import DetectionConfigurationBundle
 from ..configuration.model import FrameCountRequest
 from ..run_config import RunConfig

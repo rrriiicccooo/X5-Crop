@@ -26,15 +26,20 @@ class ScanCanvasOutcome(str, Enum):
 @dataclass(frozen=True)
 class CanvasAxisScaleIntervals:
     component_id: str
-    long_axis_px_per_mm: PositiveInterval
-    short_axis_px_per_mm: PositiveInterval
-    source_long_axis: str
+    width_axis_px_per_mm: PositiveInterval
+    height_axis_px_per_mm: PositiveInterval
+    source_width_axis: str
+    source_height_axis: str
 
     def __post_init__(self) -> None:
         if not self.component_id:
             raise ValueError("canvas scale component requires an identity")
-        if self.source_long_axis not in {"x", "y"}:
-            raise ValueError("source long axis must be x or y")
+        if (
+            self.source_width_axis not in {"x", "y"}
+            or self.source_height_axis not in {"x", "y"}
+            or self.source_width_axis == self.source_height_axis
+        ):
+            raise ValueError("photo width/height axes must map to distinct source axes")
 
 
 @dataclass(frozen=True)
@@ -207,15 +212,16 @@ def observe_scan_canvas(
         selected_profile=profile,
         axis_scales=CanvasAxisScaleIntervals(
             component_id=profile.profile_id,
-            long_axis_px_per_mm=_scale_interval(
+            width_axis_px_per_mm=_scale_interval(
                 work_width_px,
                 profile.long_axis_mm,
             ),
-            short_axis_px_per_mm=_scale_interval(
+            height_axis_px_per_mm=_scale_interval(
                 work_height_px,
                 profile.short_axis_mm,
             ),
-            source_long_axis="x" if is_horizontal_layout(layout) else "y",
+            source_width_axis="x" if is_horizontal_layout(layout) else "y",
+            source_height_axis="y" if is_horizontal_layout(layout) else "x",
         ),
         provenance=provenance,
     )

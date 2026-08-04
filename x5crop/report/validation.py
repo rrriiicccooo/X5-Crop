@@ -10,8 +10,6 @@ from .identity import (
     core_facts_sha256,
 )
 
-_SHA256_HEX_LENGTH = 64
-
 
 CURRENT_REPORT_SECTIONS = (
     "schema_id",
@@ -29,69 +27,7 @@ CURRENT_REPORT_SECTIONS = (
     "core_facts_sha256",
 )
 
-
-def _validate_gate(record: dict[str, Any], stage: str) -> None:
-    checks = record.get("checks")
-    if (
-        not isinstance(checks, list)
-        or tuple(item.get("code") for item in checks)
-        != CANDIDATE_GATE_CHECK_CODES
-        or any(item.get("stage") != stage for item in checks)
-    ):
-        raise ValueError(f"{stage} Gate is incomplete or out of order")
-
-
-def _validate_measurement(record: dict[str, Any]) -> None:
-    field = record["measurement"]["field"]
-    if (
-        field.get("owner") != "PhotoBoundaryMeasurementField"
-        or not field.get("streaming_transition_records_only")
-    ):
-        raise ValueError("measurement field owner is not current")
-    for lane in record["measurement"]["source_lanes"]:
-        content = lane["content"]
-        statistics = content["statistics"]
-        if (
-            "components" in content
-            or content.get("authority")
-            != "ownership_and_containment_only"
-            or content.get("component_count")
-            != statistics.get("component_count")
-            or content.get("row_run_count")
-            != statistics.get("run_count")
-            or content.get("component_geometry_derivation")
-            != "canonical_from_row_runs_lane_domain_and_content_config"
-            or content.get("row_run_digest_algorithm")
-            != "sha256_content_row_runs_int32le_v1"
-            or not _is_sha256(content.get("row_run_digest"))
-        ):
-            raise ValueError("source content summary is inconsistent")
-    for measurement_set in record["measurement"]["queries"]:
-        coverage = measurement_set["coverage"]
-        complete = bool(coverage["complete"])
-        state = measurement_set["state"]
-        transition_count = measurement_set["transition_count"]
-        if complete != (
-            coverage["registered_trace_count"]
-            == coverage["completed_trace_count"]
-            and coverage["registered_coordinate_count"]
-            == coverage["completed_coordinate_count"]
-        ):
-            raise ValueError("query coverage receipt is inconsistent")
-        if state == "supported":
-            if not complete:
-                raise ValueError("supported query lacks complete coverage")
-        elif transition_count:
-            raise ValueError("incomplete query exposed partial transitions")
-        if (
-            "transitions" in measurement_set
-            or not isinstance(transition_count, int)
-            or transition_count < 0
-            or measurement_set.get("transition_digest_algorithm")
-            != "sha256_transition_jsonl_v1"
-            or not _is_sha256(measurement_set.get("transition_digest"))
-        ):
-            raise ValueError("transition summary is inconsistent")
+_SHA256_HEX_LENGTH = 64
 
 
 def _is_sha256(value: object) -> bool:
@@ -102,82 +38,106 @@ def _is_sha256(value: object) -> bool:
     )
 
 
-def validate_current_report_record(record: dict[str, Any]) -> None:
-    if tuple(record) != CURRENT_REPORT_SECTIONS:
-        raise ValueError("current report sections are incomplete or out of order")
+def _validate_gate(record: dict[str, Any], stage: str) -> None:
+    checks = record.get("checks")
+    check_keys = {
+        "code",
+        "stage",
+        "state",
+        "gap",
+        "final_review_reason",
+        "blocks",
+    }
     if (
-        record["schema_id"] != REPORT_SCHEMA_ID
-        or record["schema_revision"] != REPORT_SCHEMA_REVISION
-        or record["configuration"]["execution"]["detector_kind"]
-        != "source_coordinate_photo_geometry"
+        not isinstance(checks, list)
+        or tuple(item.get("code") for item in checks)
+        != CANDIDATE_GATE_CHECK_CODES
+        or any(item.get("stage") != stage for item in checks)
+        or any(set(item) != check_keys for item in checks)
     ):
-        raise ValueError("report does not use the current-only schema")
-    _validate_measurement(record)
-    partition = record["photo_geometry"]["authority_partition"]
-    if partition != {
-        "pixel_observation": (
-            "transition_line_support_residual_angle_uncertainty"
-        ),
-        "physical_constraint": (
-            "format_count_scale_aperture_tolerance_lane_adjacency"
-        ),
-        "search_proposal": "grid_outer_corridor_query_domain_only",
-    }:
-        raise ValueError("photo geometry authority partition is invalid")
+        raise ValueError(f"{stage} Gate is incomplete or out of order")
+    for item in checks:
+        supported = item.get("state") == "supported"
+        if (
+            supported != (item.get("gap") is None)
+            or bool(item.get("blocks")) != (not supported)
+            or (
+                stage == "candidate"
+                and item.get("final_review_reason") is not None
+            )
+            or (
+                stage == "decision"
+                and supported
+                != (item.get("final_review_reason") is None)
+            )
+        ):
+            raise ValueError(f"{stage} Gate typed gap is inconsistent")
 
-    _validate_gate(record["candidate_gate"], "candidate")
-    decision = record["decision"]
-    _validate_gate(decision["gate"], "decision")
-    status = decision.get("status")
-    if status not in {"approved_auto", "needs_review"}:
-        raise ValueError("decision status is not current")
-    reasons = tuple(decision.get("final_review_reasons", ()))
-    if any(reason not in FINAL_REVIEW_REASONS for reason in reasons):
-        raise ValueError("decision reasons are not current typed reasons")
-    if (status == "approved_auto") != (not reasons):
-        raise ValueError("approved/review status and final reasons disagree")
 
+def _validate_measurement(record: dict[str, Any]) -> None:
+    field = record["measurement"]["field"]
+    if (
+        field.get("owner") != "PhotoBoundaryMeasurementField"
+        or not field.get("streaming_transition_records_only")
+    ):
+        raise ValueError("measurement field owner is not current")
+    for measurement_set in record["measurement"]["queries"]:
+        coverage = measurement_set["coverage"]
+        complete = bool(coverage["complete"])
+        if complete != (
+            coverage["registered_trace_count"]
+            == coverage["completed_trace_count"]
+            and coverage["registered_coordinate_count"]
+            == coverage["completed_coordinate_count"]
+        ):
+            raise ValueError("query coverage receipt is inconsistent")
+        if measurement_set["state"] == "supported":
+            if not complete:
+                raise ValueError("supported query lacks complete coverage")
+        elif measurement_set["transition_count"]:
+            raise ValueError("incomplete query exposed transitions")
+        if (
+            measurement_set.get("transition_digest_algorithm")
+            != "sha256_transition_jsonl_v1"
+            or not _is_sha256(measurement_set.get("transition_digest"))
+        ):
+            raise ValueError("transition digest is inconsistent")
+
+
+def _validate_finalization(record: dict[str, Any]) -> None:
+    status = record["decision"]["status"]
     finalization = record["output"]["finalization"]
     resolved = finalization["resolved_output_slots"]
-    output_slot_count = finalization["output_slot_count"]
-    slot_identities = finalization["slot_identities"]
+    count = finalization["output_slot_count"]
+    identities = finalization["slot_identities"]
     geometries = finalization["resolved_output_geometries"]
-    source_boxes = finalization["source_sampling_boxes"]
-    final_boxes = finalization["final_boxes"]
+    authorities = finalization["sampling_authority_boxes"]
+    boxes = finalization["final_boxes"]
     output_files = record["output"]["output_files"]
+    fidelity = record["output"]["tiff_fidelity"]
     diagnostics = bool(
         record["analysis_identity"]["runtime_configuration"]["diagnostics"]
     )
+    if fidelity.get("source_sample_count_per_roi") != 1:
+        raise ValueError("TIFF output must use one source sample per ROI")
     if resolved is None:
-        if output_slot_count is not None or slot_identities:
-            raise ValueError(
-                "unresolved output slots cannot claim count or identities"
-            )
-    else:
-        lane_counts = resolved.get("lane_output_slot_counts")
-        if (
-            not isinstance(lane_counts, list)
-            or not lane_counts
-            or any(
-                not isinstance(value, int) or value <= 0
-                for value in lane_counts
-            )
-            or output_slot_count != sum(lane_counts)
-            or len(slot_identities) != output_slot_count
-        ):
-            raise ValueError("resolved output slot identity is inconsistent")
+        if count is not None or identities:
+            raise ValueError("unresolved slots cannot claim identities")
+    elif (
+        count != sum(resolved["lane_output_slot_counts"])
+        or len(identities) != count
+    ):
+        raise ValueError("resolved output-slot identity is inconsistent")
     if status == "approved_auto":
         if (
             not finalization["frame_export_eligible"]
-            or not isinstance(output_slot_count, int)
-            or output_slot_count <= 0
-            or len(geometries) != output_slot_count
-            or len(source_boxes) != output_slot_count
-            or len(final_boxes) != output_slot_count
+            or not isinstance(count, int)
+            or count <= 0
+            or len(geometries) != count
+            or len(authorities) != count
+            or len(boxes) != count
         ):
-            raise ValueError(
-                "approved output requires one resolved geometry per slot"
-            )
+            raise ValueError("approved output lacks complete geometry")
         if diagnostics:
             if (
                 finalization["frame_export_requested"]
@@ -185,141 +145,124 @@ def validate_current_report_record(record: dict[str, Any]) -> None:
                 or finalization["official_tiff_expected"]
                 or finalization["official_tiff_count"] != 0
                 or output_files
-                or record["output"]["tiff_fidelity"]["success_receipt"]
+                or fidelity["write_readback_validated"]
+                or fidelity["success_receipt"]
                 != "not_requested_diagnostics"
             ):
-                raise ValueError("diagnostics cannot claim official TIFF output")
+                raise ValueError("diagnostics cannot write official TIFFs")
         elif (
             not finalization["frame_export_requested"]
             or not finalization["frame_export_performed"]
             or not finalization["official_tiff_expected"]
-            or finalization["official_tiff_count"] != output_slot_count
-            or len(output_files) != output_slot_count
-            or record["output"]["tiff_fidelity"]["success_receipt"]
-            != "validated"
-            or not record["output"]["tiff_fidelity"][
-                "write_readback_validated"
-            ]
+            or finalization["official_tiff_count"] != count
+            or len(output_files) != count
+            or not fidelity["write_readback_validated"]
+            or fidelity["success_receipt"] != "validated"
         ):
-            raise ValueError(
-                "approved output must contain validated TIFFs for all slots"
-            )
+            raise ValueError("approved output lacks validated TIFFs")
     elif (
-        finalization["frame_export_eligible"]
+        status != "needs_review"
+        or finalization["frame_export_eligible"]
         or finalization["frame_export_performed"]
         or finalization["official_tiff_expected"]
         or finalization["official_tiff_count"] != 0
         or geometries
-        or source_boxes
-        or final_boxes
+        or authorities
+        or boxes
         or output_files
-        or record["output"]["tiff_fidelity"]["success_receipt"]
-        != "not_created"
+        or fidelity["write_readback_validated"]
+        or fidelity["success_receipt"] != "not_created"
     ):
-        raise ValueError("review output cannot expose official output geometry")
+        raise ValueError("review output exposed official geometry")
     if finalization["post_decision_mutation"]:
-        raise ValueError("post-DecisionGate output mutation is forbidden")
+        raise ValueError("post-DecisionGate mutation is forbidden")
 
-    geometry = record["photo_geometry"]
-    for lane in geometry["lanes"]:
-        search = lane["search_proposals"]
-        if (
-            search["authority"]
-            != "query_domain_and_execution_order_only"
-            or any(
-                proposal.get("query_domain_only") is not True
-                for proposal in search["sequence_extent_proposals"]
-            )
-        ):
-            raise ValueError("search proposal gained geometry authority")
-        selection = lane["selection"]
-        solution = selection["solution"]
-        if solution is not None:
-            state_rows = solution["undominated_states_by_ordinal"]
-            if any(len(states) > 3 for states in state_rows):
-                raise ValueError("complete FrameGeometryState K exceeds three")
-        candidates = selection["undominated_candidate_set"]
-        competition = selection["competition_assessment"]
-        candidate_ids = [
-            candidate["candidate_id"] for candidate in candidates
-        ]
-        if (
-            competition["candidate_ids"] != candidate_ids
-            or len(set(candidate_ids)) != len(candidate_ids)
-            or competition["non_equivalent_competition"]
-            != (len(candidates) > 1)
-            or any(
-                pair["left_candidate_id"] not in candidate_ids
-                or pair["right_candidate_id"] not in candidate_ids
-                or pair["left_candidate_id"]
-                == pair["right_candidate_id"]
-                for pair in competition[
-                    "pairwise_output_differences"
-                ]
-            )
-        ):
-            raise ValueError(
-                "sequence competition receipt is inconsistent"
-            )
-        exceeds_two = any(
-            "complete_sequence_state_count_exceeds_two" in code
-            for code in selection["unresolved_codes"]
-        )
-        if exceeds_two != (len(candidates) > 2):
-            raise ValueError(
-                "complete sequence candidate limit receipt is inconsistent"
-            )
-        if status == "approved_auto" and len(candidates) > 1:
-            raise ValueError(
-                "approved output retained non-equivalent sequence candidates"
-            )
-    transform = finalization["transform_assessment"]
-    transform_authority = transform.get("authority")
-    blank_outputs = bool(geometries) and all(
-        item.get("provenance") == "grid_inferred_blank"
-        for item in geometries
-    )
-    if transform_authority == "grid_blank_no_photo_geometry":
-        if (
-            transform.get("outcome") != "identity"
-            or not blank_outputs
-            or any(
-                state.get("photo_geometry") is not None
-                for lane in geometry["lanes"]
-                for state in (
-                    []
-                    if lane["selection"]["solution"] is None
-                    else lane["selection"]["solution"]["selected_states"]
-                )
-            )
-        ):
-            raise ValueError("blank Grid identity transform is not isolated")
-    elif status == "approved_auto" and transform_authority != (
-        "observed_photo_lines"
+
+def validate_current_report_record(record: dict[str, Any]) -> None:
+    if tuple(record) != CURRENT_REPORT_SECTIONS:
+        raise ValueError("current report sections are incomplete or out of order")
+    if (
+        record["schema_id"] != REPORT_SCHEMA_ID
+        or record["schema_revision"] != REPORT_SCHEMA_REVISION
+        or record["configuration"]["execution"]["detector_kind"]
+        != "source_coordinate_format_placement"
     ):
-        raise ValueError("photo output lacks observed transform authority")
-    for item in geometries:
-        provenance = item.get("provenance")
-        if provenance == "grid_inferred_blank":
-            if item["grid_translation"]["outcome"] == "unresolved":
-                raise ValueError("blank output has unresolved Grid translation")
-        elif (
-            provenance != "photo_geometry_uncertainty_protection"
-            or item.get("interpolation_allowance_source_px") != 1.0
-            or float(item.get("long_axis_protection_mm", 0.0)) <= 0.0
-            or float(item.get("short_axis_protection_mm", 0.0)) <= 0.0
+        raise ValueError("report does not use the current-only schema")
+    _validate_measurement(record)
+    expected_partition = {
+        "pixel_observation": (
+            "direction_free_side_regions_and_raw_top_bottom_lines"
+        ),
+        "format_physical": (
+            "frame_dimensions_tolerance_gap_component_count_fit"
+        ),
+        "canonical": "representative_only_no_safety_pruning",
+        "safety": "union_of_retained_complete_format_placements",
+        "search": "measurement_coverage_only",
+    }
+    geometry = record["photo_geometry"]
+    if geometry["authority_partition"] != expected_partition:
+        raise ValueError("format-placement authority partition is invalid")
+    for lane in geometry["lanes"]:
+        if lane["search"]["authority"] != "measurement_coverage_only":
+            raise ValueError("search proposal gained placement authority")
+        placement = lane["placement"]
+        if (
+            placement["authority"]
+            != "template_group_pixel_evidence"
+            or placement["safety_union_rule"]
+            != "all_retained_complete_placements"
         ):
-            raise ValueError("photo envelope cannot be exactly recalculated")
+            raise ValueError("placement safety authority is invalid")
+        retained = placement["retained_placements"]
+        canonical_id = placement["canonical_placement_id"]
+        if bool(retained) != (canonical_id is not None) or (
+            retained
+            and canonical_id
+            not in {item["placement_id"] for item in retained}
+        ):
+            raise ValueError("canonical placement is outside the retained set")
+        outputs = placement["safe_crop_envelopes"]
+        budgets = placement["direct_use_budget_assessments"]
+        if {item["geometry_id"] for item in outputs} != {
+            item["geometry_id"] for item in budgets
+        }:
+            raise ValueError("budget does not cover every retained output")
+        for item in outputs:
+            if (
+                item.get("provenance")
+                != "continuous_format_placement_safety_footprint"
+                or item.get("mapped_output_box") is None
+                or len(item.get("placement_source_footprint", ())) < 3
+                or len(item.get("required_source_footprint", ())) < 3
+                or len(item.get("constrained_source_footprint", ())) < 3
+            ):
+                raise ValueError("continuous placement output is incomplete")
+    _validate_gate(record["candidate_gate"], "candidate")
+    decision = record["decision"]
+    _validate_gate(decision["gate"], "decision")
+    status = decision.get("status")
+    reasons = tuple(decision.get("final_review_reasons", ()))
+    if (
+        status not in {"approved_auto", "needs_review"}
+        or any(reason not in FINAL_REVIEW_REASONS for reason in reasons)
+        or (status == "approved_auto") != (not reasons)
+    ):
+        raise ValueError("DecisionGate status/reasons are inconsistent")
+    _validate_finalization(record)
+    finalization = record["output"]["finalization"]
     output_identity = record["analysis_identity"]["output_identity"]
     if (
-        geometry["resolved_output_slots"] != resolved
-        or geometry["output_slot_count"] != output_slot_count
-        or geometry["slot_identities"] != slot_identities
-        or output_identity["resolved_output_slots"] != resolved
-        or output_identity["output_slot_count"] != output_slot_count
-        or output_identity["slot_identities"] != slot_identities
-        or geometry["selected_scan_canvas_profile_id"]
-        != output_identity["selected_scan_canvas_profile_id"]
+        geometry["resolved_output_slots"]
+        != finalization["resolved_output_slots"]
+        or geometry["output_slot_count"] != finalization["output_slot_count"]
+        or geometry["slot_identities"] != finalization["slot_identities"]
+        or output_identity["resolved_output_slots"]
+        != finalization["resolved_output_slots"]
+        or output_identity["output_slot_count"]
+        != finalization["output_slot_count"]
+        or output_identity["slot_identities"]
+        != finalization["slot_identities"]
     ):
         raise ValueError("output identities disagree")
     if record["core_facts_sha256"] != core_facts_sha256(record):

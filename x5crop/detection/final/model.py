@@ -30,7 +30,7 @@ class FinalDetection:
     output_slot_identities: tuple[OutputSlotIdentity, ...]
     transform_assessment: OutputTransformAssessment
     resolved_output_geometries: tuple[ResolvedOutputGeometry, ...]
-    source_sampling_boxes: tuple[Box, ...]
+    sampling_authority_boxes: tuple[Box, ...]
     final_boxes: tuple[Box, ...]
 
     def __post_init__(self) -> None:
@@ -56,9 +56,9 @@ class FinalDetection:
                 or self.transform_assessment.transform is None
                 or len(self.output_slot_identities) != expected
                 or len(self.resolved_output_geometries) != expected
-                or len(self.source_sampling_boxes) != expected
+                or len(self.sampling_authority_boxes) != expected
                 or len(self.final_boxes) != expected
-                or any(not box.valid() for box in self.source_sampling_boxes)
+                or any(not box.valid() for box in self.sampling_authority_boxes)
                 or any(not box.valid() for box in self.final_boxes)
             ):
                 raise ValueError(
@@ -68,7 +68,7 @@ class FinalDetection:
         elif (
             self.decision.status != "needs_review"
             or self.resolved_output_geometries
-            or self.source_sampling_boxes
+            or self.sampling_authority_boxes
             or self.final_boxes
         ):
             raise ValueError(

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import replace
 from pathlib import Path
 import tempfile
@@ -21,6 +22,7 @@ from x5crop.report.identity import (
     REPORT_SCHEMA_ID,
     REPORT_SCHEMA_REVISION,
 )
+from x5crop.report.validation import validate_current_report_record
 from x5crop.run_config import RunConfig
 from x5crop.runtime.outcome import (
     CompletedInput,
@@ -92,7 +94,7 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
             bundle,
         )
 
-    def test_blank_capacity_runtime_approves_writes_and_reports_current_schema(
+    def test_zero_anchor_capacity_is_review_in_current_schema(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -105,7 +107,7 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
         record = outcome.result.record
         self.assertEqual(record["schema_id"], REPORT_SCHEMA_ID)
         self.assertEqual(record["schema_revision"], REPORT_SCHEMA_REVISION)
-        self.assertEqual(record["decision"]["status"], "approved_auto")
+        self.assertEqual(record["decision"]["status"], "needs_review")
         self.assertEqual(record["photo_geometry"]["output_slot_count"], 6)
         self.assertEqual(
             record["photo_geometry"]["resolved_output_slots"],
@@ -119,7 +121,7 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
             len(record["photo_geometry"]["slot_identities"]),
             6,
         )
-        self.assertEqual(len(outcome.artifacts.frame_outputs), 6)
+        self.assertEqual(outcome.artifacts.frame_outputs, ())
         self.assertEqual(
             tuple(
                 item["code"]
@@ -134,17 +136,11 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
             )
         )
         finalization = record["output"]["finalization"]
-        self.assertTrue(finalization["frame_export_performed"])
-        self.assertEqual(finalization["official_tiff_count"], 6)
-        self.assertTrue(
-            all(
-                geometry["provenance"] == "grid_inferred_blank"
-                for geometry in finalization[
-                    "resolved_output_geometries"
-                ]
-            )
-        )
-        self.assertTrue(
+        self.assertFalse(finalization["frame_export_eligible"])
+        self.assertFalse(finalization["frame_export_performed"])
+        self.assertEqual(finalization["official_tiff_count"], 0)
+        self.assertEqual(finalization["resolved_output_geometries"], [])
+        self.assertFalse(
             record["output"]["tiff_fidelity"][
                 "write_readback_validated"
             ]
@@ -178,6 +174,19 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
             0,
         )
 
+    def test_current_report_rejects_a_false_tiff_readback_receipt(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            outcome = self._process_pixels(
+                Path(temporary),
+                np.zeros((100, 720), dtype=np.uint8),
+            )
+        self.assertIsInstance(outcome, CompletedInput)
+        assert isinstance(outcome, CompletedInput)
+        record = deepcopy(outcome.result.record)
+        record["output"]["tiff_fidelity"]["success_receipt"] = "validated"
+        with self.assertRaises(ValueError):
+            validate_current_report_record(record)
+
     def test_diagnostics_preserves_decision_but_writes_no_frames(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -198,17 +207,17 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
         self.assertIsInstance(outcome, CompletedInput)
         assert isinstance(outcome, CompletedInput)
         record = outcome.result.record
-        self.assertEqual(record["decision"]["status"], "approved_auto")
+        self.assertEqual(record["decision"]["status"], "needs_review")
         self.assertEqual(record["photo_geometry"]["output_slot_count"], 6)
         self.assertEqual(outcome.artifacts.frame_outputs, ())
         finalization = record["output"]["finalization"]
-        self.assertTrue(finalization["frame_export_eligible"])
+        self.assertFalse(finalization["frame_export_eligible"])
         self.assertFalse(finalization["frame_export_requested"])
         self.assertFalse(finalization["frame_export_performed"])
-        self.assertEqual(finalization["reason"], "diagnostics_read_only")
+        self.assertEqual(finalization["reason"], "decision_gate_needs_review")
         self.assertEqual(
             record["output"]["tiff_fidelity"]["success_receipt"],
-            "not_requested_diagnostics",
+            "not_created",
         )
 
     def test_scan_canvas_contradiction_is_review_not_terminal_failure(
@@ -228,31 +237,6 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
             record["decision"]["final_review_reasons"],
         )
         self.assertEqual(record["output"]["output_files"], [])
-
-    def test_output_and_readback_failures_remain_terminal(self) -> None:
-        for target, message in (
-            ("x5crop.runtime.workflow.write_crops", "write failure"),
-            (
-                "x5crop.io.tiff.validate_written_tiff",
-                "readback failure",
-            ),
-        ):
-            with self.subTest(target=target):
-                with tempfile.TemporaryDirectory() as temporary:
-                    root = Path(temporary)
-                    with mock.patch(
-                        target,
-                        side_effect=OSError(message),
-                    ):
-                        outcome = self._process_pixels(
-                            root,
-                            np.zeros((100, 720), dtype=np.uint8),
-                        )
-                self.assertIsInstance(outcome, FailedInput)
-                assert isinstance(outcome, FailedInput)
-                self.assertEqual(outcome.failure_stage, FailureStage.OUTPUT)
-                self.assertEqual(outcome.artifacts.frame_outputs, ())
-                self.assertIn(message, outcome.error_message)
 
     def test_input_read_failure_remains_terminal(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

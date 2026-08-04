@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from ..formats import FORMAT_CHOICES, format_spec
 from ..strip_modes import STRIP_MODES
-from .content import ContentConfiguration
 from .diagnostics import DiagnosticsConfiguration
 from .model import DetectionConfiguration, FrameCountRequest
 from .preprocess import PreprocessConfiguration
@@ -38,6 +37,5 @@ def get_detection_configuration(
         scan_canvas=ScanCanvasDetectionConfiguration(
             scan_canvas_specs_for_format(format_id, canvas_count)
         ),
-        content=ContentConfiguration(),
         diagnostics=DiagnosticsConfiguration(),
     )

@@ -38,8 +38,9 @@ def append_summary_csv(path: Path, result: ReportResult) -> None:
         "selected_scan_canvas_profile_id",
         "lane_output_slot_counts",
         "output_slot_count",
-        "selected_aperture_labels",
-        "photo_geometry_unresolved_codes",
+        "canonical_components",
+        "retained_placement_count",
+        "candidate_gate_gaps",
         "final_review_reasons",
         "output_count",
     ]
@@ -81,13 +82,27 @@ def append_summary_csv(path: Path, result: ReportResult) -> None:
                 "output_slot_count": record["photo_geometry"][
                     "output_slot_count"
                 ],
-                "selected_aperture_labels": ";".join(
-                    str(lane["selection"]["selected_label"])
+                "canonical_components": ";".join(
+                    str(
+                        next(
+                            item["component"]["component_id"]
+                            for item in lane["placement"]["retained_placements"]
+                            if item["placement_id"]
+                            == lane["placement"]["canonical_placement_id"]
+                        )
+                    )
                     for lane in record["photo_geometry"]["lanes"]
-                    if lane["selection"]["selected_label"] is not None
+                    if lane["placement"]["canonical_placement_id"]
+                    is not None
                 ),
-                "photo_geometry_unresolved_codes": ";".join(
-                    record["photo_geometry"]["unresolved_codes"]
+                "retained_placement_count": sum(
+                    len(lane["placement"]["retained_placements"])
+                    for lane in record["photo_geometry"]["lanes"]
+                ),
+                "candidate_gate_gaps": ";".join(
+                    check["gap"]
+                    for check in record["candidate_gate"]["checks"]
+                    if check["gap"] is not None
                 ),
                 "final_review_reasons": ";".join(
                     decision["final_review_reasons"]

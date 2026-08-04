@@ -17,6 +17,10 @@ from x5crop.detection.candidate.assessment.candidate_gate import (
     candidate_gate_assessment,
 )
 from x5crop.detection.decision.decision_gate import apply_decision_gate
+from x5crop.detection.candidate.assessment.model import (
+    CANDIDATE_GATE_CHECK_CODES,
+)
+from x5crop.detection.gate_checks import TypedAssessment
 from x5crop.domain import EvidenceState
 from x5crop.entry.cli import build_parser, options_from_args
 from x5crop.entry.interactive import interactive_options
@@ -25,6 +29,7 @@ from x5crop.report.identity import (
     REPORT_SCHEMA_ID,
     REPORT_SCHEMA_REVISION,
 )
+from x5crop.report.read_models import gate_check_read_model
 from x5crop.run_config import RunConfig
 from x5crop.runtime.bootstrap import runtime_invocation_from_options
 from x5crop.runtime.limits import (
@@ -49,6 +54,7 @@ class CurrentOnlyContractTest(unittest.TestCase):
             "x5crop/output/frame_bleed.py",
             "x5crop/image/separator_profile.py",
             "x5crop/configuration/grid.py",
+            "x5crop/configuration/content.py",
             "x5crop/detection/grid",
             "x5crop/detection/evidence/separator.py",
             "x5crop/detection/protection.py",
@@ -96,6 +102,18 @@ class CurrentOnlyContractTest(unittest.TestCase):
             "work_by_count_component",
             "lane_global_proposal_limit",
             "count_dominance",
+            "SourceContentComponent",
+            "ContentRowRunTable",
+            "ContentConfiguration",
+            "query_dp_memory",
+            "unresolved_codes",
+            "slot_ownership",
+            "output_protection",
+            "allow_grid_blank_identity",
+            "grid_blank_no_photo_geometry",
+            "format_physical_templates",
+            "dp_states",
+            "dp_transitions",
         )
         active_paths = tuple((ROOT / "x5crop").rglob("*.py")) + tuple(
             path
@@ -258,22 +276,27 @@ class CurrentOnlyContractTest(unittest.TestCase):
         self.assertEqual(REPORT_SCHEMA_ID, "detection_report")
         self.assertEqual(
             REPORT_SCHEMA_REVISION,
-            "source_coordinate_photo_geometry_v1",
+            "source_coordinate_format_placement_v2",
         )
         candidate = candidate_gate_assessment(
-            scan_canvas_state=EvidenceState.SUPPORTED,
-            source_content_state=EvidenceState.UNAVAILABLE,
-            grid_search_coverage_state=EvidenceState.SUPPORTED,
-            output_slot_count_state=EvidenceState.SUPPORTED,
-            slot_ordinal_state=EvidenceState.SUPPORTED,
-            slot_ownership_state=EvidenceState.SUPPORTED,
-            known_content_containment_state=EvidenceState.UNAVAILABLE,
-            source_lane_geometry_state=EvidenceState.SUPPORTED,
-            output_protection_state=EvidenceState.SUPPORTED,
-            output_transform_state=EvidenceState.SUPPORTED,
+            {
+                code: TypedAssessment(EvidenceState.SUPPORTED, None)
+                for code in CANDIDATE_GATE_CHECK_CODES
+            }
         )
         self.assertTrue(
             all(check.final_review_reason is None for check in candidate.checks)
+        )
+        self.assertEqual(
+            tuple(gate_check_read_model(candidate.checks[0])),
+            (
+                "code",
+                "stage",
+                "state",
+                "gap",
+                "final_review_reason",
+                "blocks",
+            ),
         )
         decision = apply_decision_gate(candidate, FrameCountMode.AUTO)
         self.assertEqual(decision.status, "approved_auto")
@@ -303,6 +326,8 @@ class CurrentOnlyContractTest(unittest.TestCase):
             "X5_Crop_Mac_diagnostics.command",
             "tools/regression/golden_baseline.py",
             "tools/regression/safe_crop_acceptance.py",
+            "tools/regression/gold_comparator.py",
+            "tools/regression/gold_accuracy.py",
             "tools/tests/test_bounded_grid_contract.py",
         ):
             with self.subTest(absent=relative):
@@ -314,8 +339,6 @@ class CurrentOnlyContractTest(unittest.TestCase):
             "docs/PROJECT_MEMORY.md",
             "tools/install/X5_Crop_Mac_install.command",
             "tools/install/X5_Crop_win_install.bat",
-            "tools/regression/gold_comparator.py",
-            "tools/regression/gold_accuracy.py",
             "tools/tests/test_photo_geometry_contract.py",
         ):
             with self.subTest(present=relative):
@@ -346,13 +369,69 @@ class CurrentOnlyContractTest(unittest.TestCase):
             with self.subTest(obsolete_memory=obsolete):
                 self.assertNotIn(obsolete, project_memory)
 
+    def test_public_docs_expose_user_behavior_not_internal_architecture(
+        self,
+    ) -> None:
+        public_docs = (
+            ROOT / "README.md",
+            ROOT / "docs/quick-start.zh-CN.md",
+            ROOT / "docs/quick-start.en.md",
+            ROOT / "docs/user-guide.zh-CN.md",
+            ROOT / "docs/user-guide.en.md",
+        )
+        forbidden = (
+            "CandidateGate",
+            "DecisionGate",
+            "schema_revision",
+            "SourceFrameGeometry",
+            "NominalPitch",
+            "template_group_count",
+            "gold_accuracy",
+            "S062",
+            "0fdb90dc",
+            "dirty tree",
+            "dirty 开发树",
+        )
+        for path in public_docs:
+            text = path.read_text(encoding="utf-8")
+            for token in forbidden:
+                with self.subTest(path=path.name, token=token):
+                    self.assertNotIn(token, text)
+
+        architecture = (ROOT / "docs/ARCHITECTURE.md").read_text(
+            encoding="utf-8"
+        )
+        for retired in (
+            "FrameGeometryState",
+            "GridInferredBlankOutputGeometry",
+            "lane-local ordered DP",
+            "source_coordinate_photo_geometry",
+        ):
+            with self.subTest(retired_architecture=retired):
+                self.assertNotIn(retired, architecture)
+
     def test_launcher_is_thin_and_standalone_embeds_current_modules(self) -> None:
         launcher = (ROOT / "X5_Crop.py").read_text(encoding="utf-8")
         self.assertEqual(len(launcher.splitlines()), 13)
         self.assertIn("from x5crop.entry.cli import main", launcher)
         sources = read_sources()
-        self.assertIn("x5crop.detection.photo_geometry.detector", sources)
-        self.assertIn("x5crop.detection.photo_geometry.measurement", sources)
+        for module in (
+            "x5crop.detection.photo_geometry.detector",
+            "x5crop.detection.photo_geometry.measurement",
+            "x5crop.detection.photo_geometry.source_geometry",
+            "x5crop.detection.photo_geometry.template_profiles",
+            "x5crop.detection.photo_geometry.template_model",
+            "x5crop.detection.photo_geometry.template_first",
+        ):
+            with self.subTest(embedded=module):
+                self.assertIn(module, sources)
+        for module in (
+            "x5crop.detection.photo_geometry.geometry_build",
+            "x5crop.detection.photo_geometry.selection",
+            "x5crop.detection.photo_geometry.sequence",
+        ):
+            with self.subTest(retired=module):
+                self.assertNotIn(module, sources)
 
 
 if __name__ == "__main__":

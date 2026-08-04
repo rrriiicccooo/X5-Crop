@@ -78,9 +78,9 @@ https://github.com/rrriiicccooo/X5-Crop
   不推断真实照片张数，而是在唯一匹配 scan-canvas 后使用该片夹对该 format 的有效最大
   容量作为 `output_slot_count`。不得自动猜 format、读取 filename count，或恢复旧版无界
   count heuristic。
-- Separator、content、outer、expected position、格式尺寸、score 与其它模型线索都可以
-  参与 proposal、assessment 和 selection。必须在 report/debug 中区分 observed 与
-  inferred，但“属于推断”本身不是 `needs_review` 理由。
+- Separator、outer、expected position、格式尺寸与其它模型线索可以参与 proposal、
+  assessment 和 canonical selection。必须在 report/debug 中区分 observed 与 inferred；
+  score 无权删除会改变安全 union 或 physical legal-window intersection 的摆放。
 - 产品人工成本顺序固定为：切掉真实内容最严重；非空照片输出过宽、需要逐张重新裁切
   次之；多输出一张可直接删除的 blank TIFF 成本最低。不得为了减少 blank，把每张真实
   照片变成需要人工二次裁切的半成品。
@@ -89,23 +89,32 @@ https://github.com/rrriiicccooo/X5-Crop
   唯一证明，也不保证每张输出只含本 slot 的像素。固定 protection 与 bounded
   contact/overlap 可以带入少量邻片像素并让相邻输出重叠，但不得大到使非空输出失去
   直接使用价值。
+- 自动批准的安全 authority 是所有仍符合正式像素 evidence、固定 format template、
+  source-wide joint geometry、count/order、NominalPitch/local advance、共同 direction 与
+  source/lane authority 的完整 retained placements。最终输出必须包含每个 retained full
+  footprint，并位于每个 retained physical interpretation 的 MaximumLegalWindow 内。
+  Canonical 只用于代表 geometry、deskew、minimum guard、排序与报告，不独占安全真相。
+- Runtime 对 template-group pixel evidence 作经过黄金验证的检测假设，不声称覆盖完全漏检的
+  纯物理位置。只有空间充分分离的独立 roles 或完整 opposite-edge pair 才能取得整组 phase
+  authority；相邻 separator 两侧只能证明 local advance。
 - `needs_review` 只用于具体且无法由 protection 吸收的输出风险，例如请求的显式 count
-  无法成立、同一输出 slot count 下的 ordinal/placement 竞争无法有界、主照片的 slot
-  ownership 无法有界、已观测内容仍会被切掉，或未保护 geometry 越出 source/lane
-  authority，以及非空照片只能通过超出 direct-use budget 的外扩才能保全。不得把
-  protection/shared interval 内出现邻片像素当作 ownership 失败，也不得只因 separator
-  缺失、照片为空、精确边界未观测或多个候选在输出上等价而送审。
-- Partial `auto` 保留片夹全部有效 slot；真实照片可以位于其中任意连续或物理允许的位置，
-  前后及中间 blank 均保留输出。额外空白 TIFF 可以接受；contact/overlap 优先允许输出框
-  重叠以保全内容。只有同一容量 Grid 的 slot ownership 或安全包络无法有界时才送审。
-- 回归验收关注 format、输入 count authority、输出 slot count、顺序、slot ownership、
-  真实内容 containment、非空输出的 direct-use budget 与 TIFF 保真；不要求复刻历史 box，
-  也不把贴近人工边界本身当作质量目标。黄金 partial `auto` 必须把每个确认照片以
-  source 顺序完整包含在某个输出
-  slot 中，不要求确认照片 ordinal 与 holder slot ordinal 相同。
+  无法成立、完整 placement 不足、direction 或 source geometry 不唯一、ordinal 无法成立、
+  retained placement 越出 authority、安全包络无法 containment、任一边超过 direct-use
+  budget，或 transform 无法建立。不得只因 separator 缺失、画面为空或多个摆放在采样上
+  等价而送审。
+- Partial `auto` 保留片夹全部有效 slots；前后及中间 blank 均可输出。当前没有 authoritative
+  blank producer，因此所有 capacity slots 都按可能含照片处理并接受同一 5%/3% 检查。
+  Contact/overlap 优先允许输出框重叠以保全内容。
+- 回归验收关注 format、count authority、slot count、顺序、retained placement survival、
+  真实内容 containment、逐边 direct-use budget 与 TIFF 保真；不要求复刻历史 box，也不把
+  canonical 贴近人工边界本身当作批准条件。
 - Accuracy completion 只使用 source-SHA-bound、用户确认 geometry 的黄金样片。未确认
   样片、filename `pass/unknown`、auto-count 观察率与 calibration 结果不能冒充真实
   accuracy holdout；它们只用于 calibration、coverage、性能与非阻断诊断。
+- Runtime 应继续识别真实照片边，因为它可以收窄 retained placement intervals、提高安全
+  批准率、减少外扩并改善 deskew；但“真实边已被唯一识别”不是 Gate。黄金真实边只用于
+  离线评价 observation、placement survival、containment、逐边预算与 deskew，不得反馈为
+  样片规则、whitelist 或 runtime 边界。
 
 ## 长期实现规则
 
@@ -116,11 +125,13 @@ https://github.com/rrriiicccooo/X5-Crop
 - 结构闭合后才用真实样片校准 detection。不得为单个文件普遍放宽规则；必须复查已知
   正常格式，尤其是 `135`。
 - Named-TIFF 与端到端回归必须运行完整 detection flow，包括 scan-canvas matching、
-  Grid proposal、safe containment 与 transform assessment。纯 solver 单测可显式构造
+  registered measurement、template grouping、safe containment 与 transform assessment。纯
+  solver 单测可显式构造
   typed `DetectionWorkspace` fixture；production runtime 不得 bypass。
-- Direct-use budget 必须在 source coordinates 中按非空照片、按边计算，并使用物理单位或明确
+- Direct-use budget 必须在 source coordinates 中按输出 slot、按边计算，并使用物理单位或明确
   scale 映射。它必须由用户确认的可用性标准冻结，不得从 V4.2.8 历史 box、当前算法分布、
-  总面积 clamp 或某个单独样片反推。Blank slot 不参与该预算验收。
+  总面积 clamp 或某个单独样片反推。只有未来存在 authoritative blank producer 时，blank
+  才能获得豁免；当前 capacity slot 不因视觉空白绕过预算。
 - 照片尺寸只属于 `FramePhysicalSpec`；片夹扫描画布只属于
   `ScanCanvasPhysicalSpec` catalog。片夹与 format 的适用关系及最大容纳张数也由该
   catalog 的 typed fit 拥有；count 只能排除装不下的 profile，不能缩短 validation
@@ -156,13 +167,20 @@ https://github.com/rrriiicccooo/X5-Crop
 ## 检测与性能
 
 - Search hint、blank appearance、重复宽度与 expected position 不是物理真值，但可以作为
-  bounded proposal/selection 输入。精确边界可以保持 inferred/unresolved；只要最终
-  safe crop envelope 已有界，便不阻止自动批准。
+  bounded query/canonical input。它们不能建立首个 placement anchor、source direction 或
+  source geometry authority。
+- Search corridor 始终只是 query proposal；不得把 query object、片夹边或胶片边提升为
+  observed photo edge，也不为它们增加专门 fallback。
+- Producer 必须 template-first：先由 format/count 和基础 profiles 形成完整 template groups，
+  再让绑定像素证据确认或收紧。禁止恢复 local-line 排名、通用 DP、width×height 笛卡尔积、
+  top-K、逐帧尺寸或 selected-placement 临时 query。
+- 同一 source 的 width/height factor 与 axis scale必须作为联合状态传播。NominalPitch 与 budget
+  直接消费联合状态；不得拆区间后自由组合。
 - Early-stop 只来自 resolved output-safety assessment，而不是精确边界证明。预算耗尽表示
   safety assessment unavailable，不能成为 reliability evidence；candidate 与 final
   decision 权限分离。
-- 优化前固定一个真实样片，记录 wall/detection time、candidate builds、重复 measurement
-  与真实 call-stack hotspot。
+- 优化前固定一个真实样片，记录 wall/detection time、profiles、template groups、geometry
+  materialization、measurement reuse 与真实 call-stack hotspot。
 - 只缓存带 typed key 的精确 count/offset-independent measurement；不缓存 candidate、
   Gate、decision、final reason 或近似 geometry。
 - 每轮优化后复测同一样片，再运行 contracts、代表性 format/mode、current-schema
@@ -189,8 +207,8 @@ https://github.com/rrriiicccooo/X5-Crop
   python3 -m tools.regression.compare <baseline> <candidate>
   ```
 
-- 至少检查 transform outcome/source、mapped shared short axes、lane divider mapping、
-  status/reasons、selected rank、geometry resolution、crop envelopes 与 final boxes。
+- 至少检查 transform outcome/source、lane divider mapping、status/reasons、joint source
+  geometry、retained placements、canonical、crop envelopes、budget 与 final boxes。
 - `Test/` fixture 未受跟踪，其目录布局不是源码合同。验证时动态发现 TIFF：
 
   ```bash
@@ -205,7 +223,7 @@ https://github.com/rrriiicccooo/X5-Crop
 - `diagnostic_unreviewed.jsonl` 的 111 条记录不产生 accuracy expectation 或 verdict。
   Filename `pass/unknown` 与 filename count 不得进入 detector、runtime whitelist、状态
   映射或 verifier expectation。111-source 只阻断 crash、hang、静默漏项、非法
-  report/manifest/schema、消费未完成 query、无界 query/DP/memory、正式 TIFF 损坏和
+  report/manifest/schema、消费未完成 query、无界 query/template/memory、正式 TIFF 损坏和
   source/lane authority 逃逸；单输入临时内存上界为
   `10 × source_pixels + 32 MiB`。识别 status、reason、geometry 与 count 只作诊断。
 - 非黄金记录只有经过 source SHA 绑定的人工审核和用户明确确认，才能提升为

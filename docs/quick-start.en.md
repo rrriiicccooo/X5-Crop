@@ -1,18 +1,13 @@
 # X5 Crop Quick Start
 
-This page covers the current V4.9 development build. After you choose the film
-format, X5 Crop makes conservative automatic crops that prioritize retaining
-all real photo content. Outputs may keep a small, evidence-backed margin,
-overlap, or include a small part of a neighboring photo, but a nonblank crop
-must not be so wide that it needs manual recropping. Extra blank files are cheap
-to delete; oversized photo crops are not completed automation.
-The current stable release remains **v4.2.8**.
+The current stable release is **v4.2.8**. V4.9 in this repository is still
+under development and validation.
 
 ## 1. Download And Install
 
 Download `X5-Crop-vX.X.zip` from
 [GitHub Releases](https://github.com/rrriiicccooo/X5-Crop/releases). Do not use
-GitHub's generated Source code archive. Unzip it and run the installer once:
+GitHub's generated Source code archive. Unzip it and run once:
 
 ```text
 macOS:   install/X5_Crop_Mac_install.command
@@ -23,16 +18,16 @@ The installer prepares `numpy`, `tifffile`, `imagecodecs`, and `Pillow`.
 
 ## 2. Add TIFFs And Launch
 
+Keep the TIFFs and launch files in one folder:
+
 ```text
 X5_Crop.py
 X5_Crop_Mac.command or X5_Crop_win.bat
 *.tif / *.tiff
 ```
 
-```text
-macOS:   double-click X5_Crop_Mac.command
-Windows: double-click X5_Crop_win.bat
-```
+- macOS: double-click `X5_Crop_Mac.command`
+- Windows: double-click `X5_Crop_win.bat`
 
 If macOS blocks double-click launch, run this in that folder:
 
@@ -42,79 +37,56 @@ If macOS blocks double-click launch, run this in that folder:
 
 ## 3. Choose Format, Mode, And Count
 
-Supported inputs are `135`, `135-dual`, `half`, `xpan`, `645`, `66`, and `67`.
+Supported formats are `135`, `135-dual`, `half`, `xpan`, `120-645`,
+`120-66`, and `120-67`.
 
-- `full`: count is fixed to the format default. An explicit count is accepted
-  only when it equals that default.
-- `partial`: an integer is an authoritative explicit count. Pressing Return,
-  entering `auto`, or omitting CLI `--count` selects capacity auto.
-- Auto writes every valid slot for the current format in the uniquely matched
-  holder. It never guesses the true photo count or reads count from a filename.
-  Leading, trailing, and internal blank slots remain in the output sequence.
-- `135-dual` currently supports full only. Its 12 outputs use top lane then
-  bottom lane, with left-to-right local order in each lane.
+- `full`: use the format's fixed holder count.
+- `partial` with an integer: strictly use that output-slot count.
+- `partial` with `auto`: write every valid slot for the matched holder and
+  format; it does not guess the true photo count.
+- `135-dual` supports `full` only.
 
 Examples:
 
 ```bash
 python3 X5_Crop.py . --format 135 --strip full --report
 python3 X5_Crop.py . --format 135 --strip partial --count 3 --report
-python3 X5_Crop.py . --format 135 --strip partial --count auto --report
+python3 X5_Crop.py . --format 120-66 --strip partial --count auto --report
 python3 X5_Crop.py . --format 120-66 --strip partial --layout vertical --report
 ```
 
-The default is `--jobs 2`. Normal runs may explicitly use `--jobs 3`, at the
-cost of higher peak memory pressure; diagnostics may use up to four workers.
-For all options:
+Defaults are `--layout auto` and `--jobs 2`. For every option:
 
 ```bash
 python3 X5_Crop.py --help
 ```
 
-## 4. Result And Output
+## 4. Read The Result
 
-`approved_auto` means photo-edge measurements or named inference, interpolation
-allowance, and protection form an output that satisfies the safety contract. It
-must also mean direct usability for every nonblank photo before V4.9 release; it
-does not claim that an invisible physical edge was uniquely proven. The user
-has frozen the budget at 5% of the selected aperture long axis on each
-sequence-axis start/end edge and 3% of its short axis on each cross-axis
-top/bottom edge, shared across formats. The current tree does not yet implement
-that independent hard gate, which remains a release blocker. An approved run
-writes:
+- `approved_auto`: official photo TIFFs are written.
+- `needs_review`: no official photo TIFF is written; the source is copied to
+  `needs_review/` by default.
+- `--no-copy-review-files`: disable the review copy.
+- `--diagnostics`: write the report and Debug Analysis only; no photo TIFF or
+  review copy is created.
+
+The default output folder is `x5_crop_output/`. With `--report`, it also
+contains:
 
 ```text
-x5_crop_output/
-  source_name_01.tif
-  source_name_02.tif
-  ...
-  x5_crop_report.jsonl
-  x5_crop_summary.csv
-  x5_crop_run_manifest.jsonl
+x5_crop_report.jsonl
+x5_crop_summary.csv
+x5_crop_run_manifest.jsonl
 ```
-
-`needs_review` is reserved for a concrete, unabsorbed ordinal, slot ownership,
-known-content-containment, source/lane-geometry, or output-transform risk. A
-resolved capacity that cannot safely form every required slot also blocks
-output and writes no official TIFF. By default, the source TIFF is copied to
-`needs_review/`; use
-`--no-copy-review-files` to disable that copy.
-
-`--diagnostics` is read-only: it preserves the same detection and DecisionGate
-result and writes the report plus Debug Analysis, but writes no frame TIFF and
-copies no review file.
 
 ## 5. TIFF Safety
 
-- The source TIFF is never modified.
-- Each output ROI is sampled from the source once, then written and read back.
-- dtype, axes, channels, ICC/color space, resolution, metadata, and NONE/LZW
-  lossless-compression behavior are preserved.
-- Read, write, or read-back errors remain terminal failures; they are never
-  converted to `needs_review`.
+The source TIFF is never modified. Every approved output is sampled from the
+source and read back after writing to check pixels, bit depth, channels, ICC,
+resolution, metadata, and supported lossless compression. Read, write, or
+read-back failures remain errors; they are never disguised as `needs_review`.
 
 ## 6. Remove
 
-Delete the X5 Crop folder to remove the program. Python packages may be shared
-with other programs, so the release does not include a bulk dependency
-uninstaller.
+Delete the X5 Crop folder. Python packages may be shared with other programs,
+so the release does not include a bulk dependency uninstaller.

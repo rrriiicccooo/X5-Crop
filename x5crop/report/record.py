@@ -5,9 +5,7 @@ import json
 
 from ..app_info import VERSION
 from ..detection.final.model import FinalDetection
-from ..detection.photo_geometry.model import (
-    PHOTO_BOUNDARY_MEASUREMENT_SPEC,
-)
+from ..detection.photo_geometry.model import PHOTO_BOUNDARY_MEASUREMENT_SPEC
 from ..detection.workspace import DetectionWorkspace
 from .identity import (
     REPORT_SCHEMA_ID,
@@ -43,26 +41,6 @@ def _transition_digest(measurement_set: object) -> str:
     return digest.hexdigest()
 
 
-def _content_row_run_digest(content: object) -> str:
-    digest = sha256()
-    digest.update(b"x5crop-content-row-runs-int32le-v1\n")
-    table = content.row_run_table
-    for name, array in (
-        ("rows", table.rows),
-        ("lefts", table.lefts),
-        ("rights", table.rights),
-        ("component_indices", table.component_indices),
-    ):
-        canonical = array.astype("<i4", copy=False)
-        digest.update(name.encode("ascii"))
-        digest.update(b"\0")
-        digest.update(str(canonical.size).encode("ascii"))
-        digest.update(b"\0")
-        digest.update(memoryview(canonical).cast("B"))
-        digest.update(b"\n")
-    return digest.hexdigest()
-
-
 def _measurement_set_read_model(measurement_set: object) -> dict[str, object]:
     return {
         "query": typed_read_model(measurement_set.query),
@@ -75,194 +53,57 @@ def _measurement_set_read_model(measurement_set: object) -> dict[str, object]:
 
 
 def _source_lane_read_model(lane: object) -> dict[str, object]:
-    content = lane.content
     return {
         "domain": typed_read_model(lane.domain),
         "scan_canvas": typed_read_model(lane.scan_canvas),
-        "axis_scale_intervals": typed_read_model(lane.axis_scale_intervals),
+        "axis_scale_intervals": typed_read_model(lane.scan_canvas.axis_scales),
         "axis_scale_authority": "ScanCanvasEvidence",
-        "content": {
-            "state": content.state.value,
-            "intensity_threshold": content.intensity_threshold,
-            "texture_threshold": content.texture_threshold,
-            "statistics": typed_read_model(content.statistics),
-            "component_count": len(content.components),
-            "row_run_count": content.row_run_table.run_count,
-            "row_run_digest": _content_row_run_digest(content),
-            "row_run_digest_algorithm": (
-                "sha256_content_row_runs_int32le_v1"
-            ),
-            "component_geometry_derivation": (
-                "canonical_from_row_runs_lane_domain_and_content_config"
-            ),
-            "authority": "ownership_and_containment_only",
-        },
     }
 
 
-def _sequence_competition_read_model(lane: object) -> dict[str, object]:
-    candidates = lane.undominated_sequence_candidates
-    pairwise_differences: list[dict[str, object]] = []
-    for left_index, left in enumerate(candidates):
-        for right in candidates[left_index + 1 :]:
-            left_boxes = tuple(
-                item.source_protected_box
-                for item in left.output_geometries
-            )
-            right_boxes = tuple(
-                item.source_protected_box
-                for item in right.output_geometries
-            )
-            first_different_ordinal = None
-            maximum_source_edge_difference_px = 0.0
-            for ordinal, (left_box, right_box) in enumerate(
-                zip(left_boxes, right_boxes),
-                1,
-            ):
-                edge_difference = max(
-                    abs(left_value - right_value)
-                    for left_value, right_value in zip(
-                        (
-                            left_box.left,
-                            left_box.top,
-                            left_box.right,
-                            left_box.bottom,
-                        ),
-                        (
-                            right_box.left,
-                            right_box.top,
-                            right_box.right,
-                            right_box.bottom,
-                        ),
-                        strict=True,
-                    )
-                )
-                maximum_source_edge_difference_px = max(
-                    maximum_source_edge_difference_px,
-                    edge_difference,
-                )
-                if (
-                    first_different_ordinal is None
-                    and edge_difference > 1.0
-                ):
-                    first_different_ordinal = ordinal
-            if len(left_boxes) != len(right_boxes):
-                first_different_ordinal = min(
-                    len(left_boxes),
-                    len(right_boxes),
-                ) + 1
-            pairwise_differences.append(
-                {
-                    "left_candidate_id": left.candidate_id,
-                    "right_candidate_id": right.candidate_id,
-                    "left_output_count": len(left_boxes),
-                    "right_output_count": len(right_boxes),
-                    "first_non_equivalent_ordinal": (
-                        first_different_ordinal
-                    ),
-                    "maximum_source_edge_difference_px": (
-                        maximum_source_edge_difference_px
-                    ),
-                }
-            )
-    gate_codes: list[str] = []
-    if any("known_content" in code for code in lane.unresolved_codes):
-        gate_codes.append("known_content_containment")
-    if any(
-        token in code
-        for code in lane.unresolved_codes
-        for token in (
-            "sequence",
-            "ordinal",
-            "complete_sequence_state_count",
-        )
-    ):
-        gate_codes.append("slot_ordinal_assignment")
-    return {
-        "candidate_ids": [
-            item.candidate_id for item in candidates
-        ],
-        "output_equivalence_class_ids": [
-            item.output_equivalence_class_id
-            for item in candidates
-        ],
-        "non_equivalent_competition": len(candidates) > 1,
-        "candidate_gate_codes": list(dict.fromkeys(gate_codes)),
-        "pairwise_output_differences": pairwise_differences,
-    }
-
-
-def _lane_geometry_read_model(lane: object) -> dict[str, object]:
+def _lane_placement_read_model(lane: object) -> dict[str, object]:
     return {
         "lane_id": lane.lane_id,
-        "search_proposals": {
-            "authority": "query_domain_and_execution_order_only",
+        "search": {
+            "authority": "measurement_coverage_only",
             "anchor_domain": typed_read_model(lane.anchor_domain),
-            "sequence_extent_proposals": typed_read_model(
-                lane.extent_proposals
+            "sequence_profile": typed_read_model(lane.sequence_profile),
+            "provisional_cross_profile": typed_read_model(
+                lane.cross_profile
             ),
-            "label_proposals": [
-                {
-                    "aperture_label": item.constraint.aperture_label,
-                    "expected_grid_translation_px": (
-                        item.expected_grid_translation_px
-                    ),
-                    "outer_observed_assignments": (
-                        typed_read_model(item.outer_observed_assignments)
-                    ),
-                }
-                for item in lane.label_reconstructions
-            ],
         },
-        "physical_constraints": {
-            "authority": "feasibility_inference_and_sequence_only",
-            "labels": [
-                {
-                    "constraint": typed_read_model(item.constraint),
-                    "aperture_pixels": typed_read_model(item.aperture_pixels),
-                    "gutter_px": typed_read_model(item.gutter_px),
-                }
-                for item in lane.label_reconstructions
-            ],
-            "selected_constraint_set": typed_read_model(lane.constraint_set),
+        "observations": {
+            "side_transition_regions": typed_read_model(
+                lane.side_transition_regions
+            ),
+            "raw_top_bottom_lines": typed_read_model(
+                lane.raw_top_bottom_observations
+            ),
+            "provisional_height_templates": typed_read_model(
+                lane.provisional_height_templates
+            ),
+            "raw_lines_are_canonical_direction": False,
         },
-        "pixel_observations": {
-            "authority": "photo_boundary_measurement",
-            "selected_observations": typed_read_model(
-                lane.selected_observations
+        "direction_classes": typed_read_model(lane.direction_classes),
+        "placement": {
+            "authority": "template_group_pixel_evidence",
+            "retained_placements": typed_read_model(
+                lane.retained_placements
             ),
-            "raw_long_observation_count_by_label": [
-                len(item.raw_long_observations)
-                for item in lane.label_reconstructions
-            ],
-            "physical_long_observation_count_by_label": [
-                len(item.physical_long_observations)
-                for item in lane.label_reconstructions
-            ],
+            "canonical_placement_id": (
+                None
+                if lane.canonical_placement is None
+                else lane.canonical_placement.placement_id
+            ),
+            "safety_union_rule": "all_retained_complete_placements",
+            "safe_crop_envelopes": typed_read_model(
+                lane.safe_crop_envelopes
+            ),
+            "direct_use_budget_assessments": typed_read_model(
+                lane.direct_use_budget_assessments
+            ),
         },
-        "selection": {
-            "selected_label": lane.selected_label,
-            "sequence_choice_ranking": typed_read_model(
-                lane.sequence_choice_ranking
-            ),
-            "selected_long_hypothesis": typed_read_model(
-                lane.selected_long_hypothesis
-            ),
-            "solution": typed_read_model(lane.solution),
-            "undominated_candidate_set": typed_read_model(
-                lane.undominated_sequence_candidates
-            ),
-            "undominated_states_by_ordinal": typed_read_model(
-                lane.all_undominated_states_by_ordinal
-            ),
-            "competition_assessment": (
-                _sequence_competition_read_model(lane)
-            ),
-            "candidate_output_geometries": typed_read_model(
-                lane.resolved_output_geometries
-            ),
-            "unresolved_codes": list(lane.unresolved_codes),
-        },
+        "work": typed_read_model(lane.work),
     }
 
 
@@ -312,8 +153,7 @@ def report_record_for_final_detection(
                 "streaming_transition_records_only": True,
             },
             "source_lanes": [
-                _source_lane_read_model(lane)
-                for lane in core.lanes
+                _source_lane_read_model(lane) for lane in core.lanes
             ],
             "queries": [
                 _measurement_set_read_model(measurement_set)
@@ -321,24 +161,22 @@ def report_record_for_final_detection(
                 for measurement_set in lane.measurement_sets
             ],
             "scan_canvas_state": core.scan_canvas_state.value,
-            "source_content_state": core.content_state.value,
             "incomplete_reasons": list(core.incomplete_reasons),
         },
         "photo_geometry": {
             "authority_partition": {
                 "pixel_observation": (
-                    "transition_line_support_residual_angle_uncertainty"
+                    "direction_free_side_regions_and_raw_top_bottom_lines"
                 ),
-                "physical_constraint": (
-                    "format_count_scale_aperture_tolerance_lane_adjacency"
+                "format_physical": (
+                    "frame_dimensions_tolerance_gap_component_count_fit"
                 ),
-                "search_proposal": "grid_outer_corridor_query_domain_only",
+                "canonical": "representative_only_no_safety_pruning",
+                "safety": "union_of_retained_complete_format_placements",
+                "search": "measurement_coverage_only",
             },
-            "measurement_spec": typed_read_model(
-                PHOTO_BOUNDARY_MEASUREMENT_SPEC
-            ),
-            "measurement_calibration_receipt_id": (
-                PHOTO_BOUNDARY_MEASUREMENT_SPEC.calibration_receipt_id
+            "measurement_contract_id": (
+                PHOTO_BOUNDARY_MEASUREMENT_SPEC.contract_id
             ),
             "selected_scan_canvas_profile_id": selected_profile_id,
             "resolved_output_slots": typed_read_model(
@@ -349,10 +187,9 @@ def report_record_for_final_detection(
                 detection.output_slot_identities
             ),
             "lanes": [
-                _lane_geometry_read_model(lane)
+                _lane_placement_read_model(lane)
                 for lane in candidate_geometry.lane_reconstructions
             ],
-            "unresolved_codes": list(candidate_geometry.unresolved_codes),
         },
         "candidate_gate": gate_read_model(detection.candidate.gate),
         "decision": {
@@ -392,8 +229,8 @@ def report_record_for_final_detection(
                 "resolved_output_geometries": typed_read_model(
                     detection.resolved_output_geometries
                 ),
-                "source_sampling_boxes": typed_read_model(
-                    detection.source_sampling_boxes
+                "sampling_authority_boxes": typed_read_model(
+                    detection.sampling_authority_boxes
                 ),
                 "final_boxes": typed_read_model(detection.final_boxes),
                 "post_decision_mutation": False,
