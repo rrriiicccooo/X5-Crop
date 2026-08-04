@@ -8,21 +8,20 @@
 
 ## 当前目标
 
-把 V4.9 原子切换为 template-first、current-only 架构：吸收 v4.2.8 的一维 profile、理论节距
+V4.9 已原子切换为 template-first、current-only 架构：吸收 v4.2.8 的一维 profile、理论节距
 附近 indexed search、basic 优先和 enhanced 按需，同时保留 V4.9 的物理尺寸、正交边界、
 完整竞争、安全包络、逐边 5%/3%、两个 Gate、lane-safe TIFF 和严格性能合同。
 
-本阶段不读取黄金 accuracy geometry，也不追求真实样片批准率。终点是普通源码 commit：
-`V4.9 current-architecture baseline`，不是 release-ready，不创建 tag、GitHub Release 或公开
-ZIP。下一阶段才在干净架构上重建黄金验证并改进真实识别。
+`V4.9 current-architecture baseline` 已闭合并推送，但不是 release-ready；未创建 tag、GitHub
+Release 或公开 ZIP。下一阶段在该干净架构上重建黄金验证并改进真实识别。
 
 ## 工作树检查点
 
 - 分支：`main`
-- 当前 HEAD：`0fdb90dc40155cb5cfe2a97bee121453ef27f40a`
-- HEAD 只是不改造前的性能基线，不是 checkout 或恢复目标。
-- 工作树包含大范围未提交替换；禁止 reset、restore 或历史 checkout，必须保留用户和其它
-  session 的修改。
+- 本文件所在的 `main` commit 是 current-architecture baseline；精确 SHA 以现场 Git 为准。
+- `0fdb90dc40155cb5cfe2a97bee121453ef27f40a` 只是不改造前的性能基线，不是 checkout 或
+  恢复目标。
+- Tracked tree 已完成 current-only 替换；后续工作不得恢复旧兼容路径。
 - `tools/regression/cohorts/gold_accuracy.jsonl` 的现有修改必须保留；本阶段不读取它。
 
 当前 producer 已不再是旧 local-line → rank/DP → placement。现有 current path 为 profiles →
@@ -52,7 +51,7 @@ active gold runner/comparator 已删除，不保留 compatibility。
 
 ## 当前验证
 
-最后一次非黄金 `tools/verify full` 在本 dirty implementation 上通过：
+最后一次非黄金 `tools/verify full` 在 current-architecture baseline commit 上通过：
 
 ```text
 81 current contracts
@@ -65,9 +64,9 @@ compileall and X5_Crop.py --version
 query/template/memory 与 diagnostic official-TIFF failure 均为零；accuracy verdict 明确为
 `not_assessed`。当前 111 个 scenario 均为 `needs_review`，不作为本阶段识别状态门槛。
 
-S062 最近一次 dirty-tree diagnostic 形成完整三-slot geometry，并因逐边 budget 主动 review；
-query、reuse、template work 与临时内存满足当前结构合同。它不是 accuracy 结论，也不是正式
-性能 receipt。
+S062 形成完整三-slot geometry，并因逐边 budget 主动 review；query、reuse、template work
+与临时内存满足当前结构合同。固定 S062 与 24-source/168-task paired receipts 均绑定 current
+commit，唯一 comparator 与 pre-push full verifier 已通过，性能要求没有放松。
 
 代表性 horizontal/vertical Debug、中文 TIFF 路径、current report、standalone ZIP manifest、
 UTF-8 文件名、CRC 复读与 standalone `--version` 已通过 dry-run。TIFF pixel/profile、lane-safe
@@ -83,12 +82,13 @@ baseline S062 SHA-256
 c7779b754fc1189aec3100e94e11472fc420579f4dc52ee53ebdfec7304f0cd3
 ```
 
-Formal candidate receipts 必须由最终 clean commit 生成；任何 tracked 修改都会使它们失效。
+Formal candidate receipts 必须由 clean commit 生成；任何 tracked 修改都会使它们失效并要求
+重跑。
 
 ## 验证边界与风险
 
-- 目前只证明 synthetic/current contracts 与非黄金工程行为；尚未完成两轮 cleanup、最终
-  commit 后 paired/S062 comparator、pre-push 与 push 后 ZIP 复读。
+- 当前已证明 synthetic/current contracts、111-source 非黄金工程行为、两轮 cleanup、固定
+  performance comparator、pre-push 与 push 后 ZIP 复读。
 - 尚未读取黄金 accuracy cohort，因此不能声明继承了 v4.2.8 的真实识别准确率，不能声明
   release-ready。
 - `template_first.py` 仍是最大的 producer orchestration 文件。只在发现真实重复 owner 或死
@@ -98,10 +98,8 @@ Formal candidate receipts 必须由最终 clean commit 生成；任何 tracked �
 
 ## 精确下一步
 
-1. 冻结当前 diff并重跑 final non-gold verifier与111-source engineering diagnostic。
-2. 对同一冻结 diff连续执行两轮 correctness、性能结构、测试必要性、文档职责和
-   `ponytail-review`，要求零 finding。
-3. 创建普通源码 commit；在该 HEAD 生成固定路径 paired/S062 receipts并通过 comparator。
-4. Tree 不再变化；pre-push通过后推送，从已推送 commit本地构建并复读 ZIP，不发布。
-5. 下一阶段重建 current-only 黄金 comparator，验证真实 detection、containment、5%/3%、
-   批准率与 deskew，再决定 release-ready 改进。
+1. 重建 current-only 黄金 comparator，不恢复已删除 runner、schema 或 compatibility reader。
+2. 使用 source-SHA-bound 用户确认 geometry验证真实 detection、placement survival、
+   containment、5%/3%、批准率与 deskew。
+3. 只修通用 detection；若需样片规则、阈值放宽、丢弃有效竞争或性能退步，停止请求决定。
+4. 黄金阶段完成后重新执行完整性能与发布验证，再决定 release-ready。
