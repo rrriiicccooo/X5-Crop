@@ -195,9 +195,11 @@ https://github.com/rrriiicccooo/X5-Crop
 `tools/verify` 是唯一可执行验证入口；Hook 与 CI 只能薄调用，不能复制命令。
 
 - `.githooks/pre-commit` 通过 `tools/verify staged` 负责 staged hygiene。
-- `.githooks/pre-push` 通过 `tools/verify pre-push` 负责最终 full validation。
-- 正常 commit-and-push 流程中，同一棵 tree、同一 scope 只验证一次。不要在 `git push`
-  前手工重复 `tools/verify full`；成功的 pre-push Hook 是唯一最终完整验证。
+- `.githooks/pre-push` 把实际 refs 交给 `tools/verify pre-push`：纯 Markdown push 只检查文档
+  diff；其它非 runtime 变化运行 full contracts；`x5crop/`、`X5_Crop.py`、依赖或固定性能输入
+  变化才增加 performance receipts 比较。
+- 正常 commit-and-push 流程中，同一棵 tree、同一 scope 只验证一次。不要在 `git push` 前手工
+  重复验证；成功的 pre-push Hook 是唯一最终验证。
 - 只有不准备 push，或需要 full 输出排障时才手工运行：
 
   ```bash

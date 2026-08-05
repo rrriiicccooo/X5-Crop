@@ -31,6 +31,8 @@ TIFF 排在最后，且不得损害任何更高优先级目标。
   不增加样片规则、whitelist 或放宽安全预算。
 - 当前所有 capacity slots 都按可能含照片处理。Authoritative blank producer 只作为核心 V5
   闭合后的独立低优先级能力；不确定时继续输出。
+- 验证按 pushed paths 分级：纯 Markdown 只检查文档 diff；工具、测试、Hook 与发布配置运行
+  full contracts；runtime、依赖或固定性能输入变化才要求 performance receipts。
 
 ## 已验证检查点
 

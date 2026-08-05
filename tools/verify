@@ -31,6 +31,15 @@ check_diff_hygiene() {
     fi
 }
 
+check_pushed_documentation() {
+    refs=$1
+    while IFS=' ' read -r local_ref local_sha remote_ref remote_sha; do
+        [ -n "$local_ref" ] || continue
+        git diff --check "$remote_sha" "$local_sha"
+    done <"$refs"
+    check_diff_hygiene
+}
+
 run_full() {
     python3 -m unittest discover -s tools/tests
     python3 -m compileall -q X5_Crop.py x5crop tools
@@ -68,8 +77,26 @@ case "${1:-}" in
             printf >&2 'Refusing push from a dirty worktree. Commit intentional changes first.\n'
             exit 1
         }
-        compare_fixed_performance
-        run_full
+        scope=runtime
+        if [ -n "${2:-}" ] && [ -f "$2" ]; then
+            scope=$(python3 -m tools.verification_scope --refs "$2")
+        fi
+        case "$scope" in
+            documentation)
+                check_pushed_documentation "$2"
+                ;;
+            full)
+                run_full
+                ;;
+            runtime)
+                compare_fixed_performance
+                run_full
+                ;;
+            *)
+                printf >&2 'Unknown verification scope: %s\n' "$scope"
+                exit 2
+                ;;
+        esac
         ;;
     *)
         printf >&2 'usage: %s staged|full|pre-push\n' "$0"

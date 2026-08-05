@@ -11,6 +11,9 @@ geometry、retained placements、安全包络、逐边 5%/3%、两个 Gate 与 l
 
 本节只记录版本方向。V5 尚无 runtime、schema、accuracy、性能或发布完成声明。
 
+验证按 pushed paths 分级：纯 Markdown 只检查文档 diff，非 runtime 代码运行 full contracts，
+只有 runtime、依赖或固定性能输入变化才要求 performance receipts。
+
 ## V4.9（架构实验，不发布）
 
 V4.9 完成了破坏性的 current-only 架构实验，不再追求黄金样片全部通过或 release-ready。
