@@ -1,10 +1,11 @@
 # X5 Crop 用户手册
 
 - 当前稳定发布：**v4.2.8**
-- 仓库开发版本：**V4.9**，尚未完成发布验证
+- 仓库状态：V4.9 为架构实验；V5 是下一生产目标，尚未发布
 
 X5 Crop 用于把 Hasselblad / Imacon X5 片夹扫描 TIFF 保守地拆成单张照片。你负责提供胶片
 格式、片条模式和必要的张数；程序负责检测、deskew、安全裁切、TIFF 写出与复读验证。
+本手册随仓库开发；正式使用请以 GitHub Release 包内文档为准。
 
 ## 产品行为
 
@@ -151,9 +152,8 @@ x5_crop_output/
 
 ## 当前验证边界
 
-V4.9 当前源码正在建立新的 fixed-format template-first 架构。它在完成正式性能、真实照片
-准确率和发布包验证前，不应被视为稳定发布。请使用 GitHub Releases 中标记的稳定版本处理
-重要原片，并保留原 TIFF。
+V4.9 只作为 fixed-format template-first 架构实验保留。V5 尚未完成实现、真实照片准确率与
+发布验证。请使用 GitHub Releases 中标记的稳定版本处理重要原片，并保留原 TIFF。
 
 ## 移除与许可
 

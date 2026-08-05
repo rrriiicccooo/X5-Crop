@@ -7,13 +7,14 @@
 
 X5 Crop 用于保守裁切 Hasselblad / Imacon X5 片夹扫描 TIFF。用户提供胶片格式和片条模式；
 程序在能够完整保留照片内容、控制多余边缘并安全写回 TIFF 时输出单张照片，否则明确标记为
-`needs_review`。当前稳定发布为 **v4.2.8**；仓库中的 V4.9 仍在开发和验证。
+`needs_review`。当前稳定发布为 **v4.2.8**。V4.9 已完成架构实验使命；V5 是下一生产目标，
+尚未发布。
 
 X5 Crop conservatively crops Hasselblad / Imacon X5 holder-scan TIFFs. You
 provide the film format and strip mode. It writes individual photos only when
 their content, margins, and TIFF output are safe; otherwise it reports
-`needs_review`. The current stable release is **v4.2.8**. V4.9 in this
-repository is still under development and validation.
+`needs_review`. The current stable release is **v4.2.8**. V4.9 remains an
+architecture experiment; V5 is the next production target and is not released.
 
 请从 [GitHub Releases](https://github.com/rrriiicccooo/X5-Crop/releases) 下载
 `X5-Crop-vX.X.zip`，不要下载 GitHub 自动生成的 Source code。

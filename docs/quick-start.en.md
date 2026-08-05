@@ -1,7 +1,6 @@
 # X5 Crop Quick Start
 
-The current stable release is **v4.2.8**. V4.9 in this repository is still
-under development and validation.
+The current stable release is **v4.2.8**.
 
 ## 1. Download And Install
 
@@ -14,8 +13,6 @@ macOS:   install/X5_Crop_Mac_install.command
 Windows: install/X5_Crop_win_install.bat
 ```
 
-The installer prepares `numpy`, `tifffile`, `imagecodecs`, and `Pillow`.
-
 ## 2. Add TIFFs And Launch
 
 Keep the TIFFs and launch files in one folder:
@@ -26,9 +23,7 @@ X5_Crop_Mac.command or X5_Crop_win.bat
 *.tif / *.tiff
 ```
 
-- macOS: double-click `X5_Crop_Mac.command`
-- Windows: double-click `X5_Crop_win.bat`
-
+Double-click `X5_Crop_Mac.command` on macOS or `X5_Crop_win.bat` on Windows.
 If macOS blocks double-click launch, run this in that folder:
 
 ```bash
@@ -42,11 +37,9 @@ Supported formats are `135`, `135-dual`, `half`, `xpan`, `120-645`,
 
 - `full`: use the format's fixed holder count.
 - `partial` with an integer: strictly use that output-slot count.
-- `partial` with `auto`: write every valid slot for the matched holder and
-  format; it does not guess the true photo count.
+- `partial` with `auto`: write every valid slot for the matched holder without
+  guessing the true photo count.
 - `135-dual` supports `full` only.
-
-Examples:
 
 ```bash
 python3 X5_Crop.py . --format 135 --strip full --report
@@ -63,30 +56,11 @@ python3 X5_Crop.py --help
 
 ## 4. Read The Result
 
-- `approved_auto`: official photo TIFFs are written.
+- `approved_auto`: official photo TIFFs are written to `x5_crop_output/`.
 - `needs_review`: no official photo TIFF is written; the source is copied to
   `needs_review/` by default.
-- `--no-copy-review-files`: disable the review copy.
-- `--diagnostics`: write the report and Debug Analysis only; no photo TIFF or
-  review copy is created.
+- `--diagnostics`: write the report and Debug Analysis only; no photo TIFF is
+  written.
 
-The default output folder is `x5_crop_output/`. With `--report`, it also
-contains:
-
-```text
-x5_crop_report.jsonl
-x5_crop_summary.csv
-x5_crop_run_manifest.jsonl
-```
-
-## 5. TIFF Safety
-
-The source TIFF is never modified. Every approved output is sampled from the
-source and read back after writing to check pixels, bit depth, channels, ICC,
-resolution, metadata, and supported lossless compression. Read, write, or
-read-back failures remain errors; they are never disguised as `needs_review`.
-
-## 6. Remove
-
-Delete the X5 Crop folder. Python packages may be shared with other programs,
-so the release does not include a bulk dependency uninstaller.
+The source TIFF is never modified. See the [User Guide](user-guide.en.md) for
+complete settings, output, diagnostics, and TIFF-fidelity details.

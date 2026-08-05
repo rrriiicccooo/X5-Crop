@@ -63,7 +63,8 @@ https://github.com/rrriiicccooo/X5-Crop
 
 ## 当前范围
 
-- 当前入口：`X5_Crop.py` V4.9。
+- 当前源码检查点是 `X5_Crop.py` V4.9 template-first 架构实验，不再作为发布目标。
+- 下一生产版本是 V5，以 current-only 方式替换 V4.9，不恢复旧兼容路径。
 - 当前稳定 GitHub Release：`v4.2.8`。
 - 开发源码位于 `x5crop/`；Release 可嵌入为单文件 `X5_Crop.py`。
 - 除非用户明确恢复 app 或 native packaging，只处理 standalone X5 Crop workflow。
@@ -120,10 +121,13 @@ https://github.com/rrriiicccooo/X5-Crop
 
 - 除非用户明确改变要求，保持 TIFF 位深、通道结构、ICC/色彩空间、resolution、
   metadata 与已知无损压缩行为。
+- V5 可使用 `NumPy`、`opencv-python-headless`、`SciPy`、`tifffile`、`imagecodecs` 与
+  `Pillow`。`tifffile + imagecodecs` 独占原 TIFF I/O，OpenCV 只提供有界像素测量，SciPy
+  只提供数值原语，Pillow 只服务 Debug Analysis；库不得取得物理解释、Gate 或输出政策权限。
 - 结构清理不需要保持历史 PASS/REVIEW、geometry、confidence、reason、schema、debug
   或 cache parity；优先当前安全输出合同。
-- 结构闭合后才用真实样片校准 detection。不得为单个文件普遍放宽规则；必须复查已知
-  正常格式，尤其是 `135`。
+- V5 从首个可运行的端到端 vertical slice 起使用黄金样片检查 detection、边界、批准与 deskew；
+  不得为单个文件放宽规则，且必须复查已知正常格式，尤其是 `135`。
 - Named-TIFF 与端到端回归必须运行完整 detection flow，包括 scan-canvas matching、
   registered measurement、template grouping、safe containment 与 transform assessment。纯
   solver 单测可显式构造
@@ -246,6 +250,7 @@ https://github.com/rrriiicccooo/X5-Crop
 
 ## Git 与本地文件
 
+- V5 直接在 `main` 开发；除非用户以后明确改变决定，不创建或切换到 V5 分支。
 - 保留用户和其它 session 的修改；没有明确许可不得 reset 或 restore。
 - `.gitignore`、`.github/`、`tools/` 与 `tools/install/` 必须可见。
 - Sparse checkout 必须关闭；包括 `LICENSE` 在内的全部 tracked tree 都保存在本地。

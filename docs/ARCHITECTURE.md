@@ -1,8 +1,8 @@
-# X5 Crop V4.9 当前架构
+# X5 Crop V4.9 实验架构
 
-本文只描述当前运行流、数值合同和源码 owner。版本变化见
-[CHANGELOG.md](CHANGELOG.md)，当前实施检查点见
-[PROJECT_MEMORY.md](PROJECT_MEMORY.md)。
+本文只描述仓库当前 V4.9 实验代码的运行流、数值合同和源码 owner。V4.9 不再是发布目标；
+V5 开始改变 runtime 后，本文件随实现原子更新。版本变化见 [CHANGELOG.md](CHANGELOG.md)，
+当前目标与下一步见 [PROJECT_MEMORY.md](PROJECT_MEMORY.md)。
 
 ## 1. 产品合同
 
@@ -325,14 +325,14 @@ local_relation_evaluation_count
   ≤ template_group_count × (slot_count - 1)
 ```
 
-内存为一维 profiles、有限 runs/votes/groups 与 geometry，禁止新 image-sized field、row index、
-Hough slope family、通用 DP 或新依赖。单输入临时内存上限保持：
+本 V4.9 实验的内存为一维 profiles、有限 runs/votes/groups 与 geometry，不增加 image-sized
+field、row index、Hough slope family、通用 DP 或新依赖。单输入临时内存上限保持：
 
 ```text
 10 × source_pixels + 32 MiB
 ```
 
-正式性能固定 24 sources、168 tasks、`--jobs 2`、24 decodes 与相同 I/O。V4.9 必须满足
+实验性能固定 24 sources、168 tasks、`--jobs 2`、24 decodes 与相同 I/O。V4.9 checkpoint 满足
 `≤5.0 秒/输入`，并在配对 MAD noise 之外快于冻结 v4.2.8；新 noise 不能扩大允许回退。
 
 ## 10. 源码 owner

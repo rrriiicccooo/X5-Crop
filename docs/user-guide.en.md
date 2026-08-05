@@ -1,12 +1,15 @@
 # X5 Crop User Guide
 
 - Current stable release: **v4.2.8**
-- Repository development version: **V4.9**, not yet release-validated
+- Repository status: V4.9 is an architecture experiment; V5 is the next
+  production target and is not released
 
 X5 Crop conservatively separates Hasselblad / Imacon X5 holder-scan TIFFs into
 individual photos. You provide the film format, strip mode, and any required
 count. The program handles detection, deskew, safe cropping, TIFF writing, and
 read-back validation.
+This guide follows repository development. For production use, follow the
+documentation included in the GitHub Release package.
 
 ## Product Behavior
 
@@ -171,10 +174,10 @@ and never create a success result.
 
 ## Current Validation Boundary
 
-V4.9 source is establishing a new fixed-format template-first architecture.
-Until formal performance, real-photo accuracy, and package validation are
-complete, it is not a stable release. Use the version marked stable in GitHub
-Releases for important originals, and always retain the source TIFFs.
+V4.9 is retained only as a fixed-format template-first architecture experiment.
+V5 has not completed implementation, real-photo accuracy validation, or release
+validation. Use the version marked stable in GitHub Releases for important
+originals, and always retain the source TIFFs.
 
 ## Remove And License
 
