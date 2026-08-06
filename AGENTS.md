@@ -68,6 +68,10 @@ https://github.com/rrriiicccooo/X5-Crop
 - 当前稳定 GitHub Release：`v4.2.8`。
 - 开发源码位于 `x5crop/`；Release 可嵌入为单文件 `X5_Crop.py`。
 - 除非用户明确恢复 app 或 native packaging，只处理 standalone X5 Crop workflow。
+- V5 的目标输入是用户提供受支持 format、mode 与必要 count 的 Hasselblad / Imacon X5
+  片夹扫描。每个 lane 是顺序明确的一条片条；支持水平、垂直、TIFF Orientation、相邻照片
+  接触和局部重叠，不处理两段胶片物理压叠。当前真实验证域以单页 16-bit RGB contiguous
+  TIFF 为主；其它 TIFF 结构只有建立明确 I/O 与复读合同后才能进入生产域，不能静默猜测。
 - 当前任务和人工审阅状态只保存在 `docs/PROJECT_MEMORY.md`。
 
 ## 产品宗旨与批准语义
@@ -106,6 +110,12 @@ https://github.com/rrriiicccooo/X5-Crop
 - Partial `auto` 保留片夹全部有效 slots；前后及中间 blank 均可输出。当前没有 authoritative
   blank producer，因此所有 capacity slots 都按可能含照片处理并接受同一 5%/3% 检查。
   Contact/overlap 优先允许输出框重叠以保全内容。
+- Decision 以整个 source 为原子：任一 slot 存在无法吸收的风险时，整张 source
+  `needs_review` 且不写任何正式照片 TIFF。V5 不建立 partial output、slot salvage、混合状态或
+  对应兼容路径。
+- V5 只处理同一有序片条内相邻照片的接触或局部重叠。Ordinal 不变，start/end 继续是不同
+  物理边界，local advance 可以缩短，相邻输出可以重复采样同一 source pixels；不建立二维
+  layer、遮挡恢复或多胶片 ownership graph。
 - 回归验收关注 format、count authority、slot count、顺序、retained placement survival、
   真实内容 containment、逐边 direct-use budget 与 TIFF 保真；不要求复刻历史 box，也不把
   canonical 贴近人工边界本身当作批准条件。
@@ -121,9 +131,15 @@ https://github.com/rrriiicccooo/X5-Crop
 
 - 除非用户明确改变要求，保持 TIFF 位深、通道结构、ICC/色彩空间、resolution、
   metadata 与已知无损压缩行为。
+- TIFF Orientation 是 decode boundary authority。V5 必须保存 raw raster 到 canonical visual
+  coordinates 的可逆映射，在 canonical coordinates 中完成检测、ordinal 与输出，并把正式
+  输出像素烘焙为正确视觉方向后写 `Orientation=1`；report 保留原 tag 与完整映射。
 - V5 可使用 `NumPy`、`opencv-python-headless`、`SciPy`、`tifffile`、`imagecodecs` 与
   `Pillow`。`tifffile + imagecodecs` 独占原 TIFF I/O，OpenCV 只提供有界像素测量，SciPy
   只提供数值原语，Pillow 只服务 Debug Analysis；库不得取得物理解释、Gate 或输出政策权限。
+- V5 依赖安装到用户级 Python site，使 standalone script 可放在任意文件夹运行；不创建私有
+  `.venv`。生产依赖与 Python 支持范围必须按 Release 冻结，安装器不得无约束升级；runtime
+  report 必须记录实际版本与必要的数值 build/thread identity。
 - 结构清理不需要保持历史 PASS/REVIEW、geometry、confidence、reason、schema、debug
   或 cache parity；优先当前安全输出合同。
 - V5 从首个可运行的端到端 vertical slice 起使用黄金样片检查 detection、边界、批准与 deskew；
@@ -140,6 +156,11 @@ https://github.com/rrriiicccooo/X5-Crop
   `ScanCanvasPhysicalSpec` catalog。片夹与 format 的适用关系及最大容纳张数也由该
   catalog 的 typed fit 拥有；count 只能排除装不下的 profile，不能缩短 validation
   domain。TIFF resolution 只作 I/O metadata，不得进入检测尺度、证据或决策。
+- Deskew 只负责把照片的共同 top/bottom 长边校正为水平。每个 lane 使用一个共享方向并执行
+  一次 inverse-affine sampling；不要求短边垂直，也不做 projective 或非线性矫正。S098 的
+  非规则短边只进入 containment 压力验收，不得污染 normal deskew tolerance。
+- V5 不实现 blank TIFF suppression，也不预建 blank producer、occupancy Gate、输出省略
+  schema 或隐藏阈值。它是未来版本独立重新定义的优化方向。
 - 方向性需求以水平片条措辞为基准，同时实现旋转等价的垂直行为。
 - Runtime flow 或 source layering 变化更新 `docs/ARCHITECTURE.md`；版本行为、打包、
   验证或回滚变化更新 `docs/CHANGELOG.md`。
@@ -187,6 +208,13 @@ https://github.com/rrriiicccooo/X5-Crop
   materialization、measurement reuse 与真实 call-stack hotspot。
 - 只缓存带 typed key 的精确 count/offset-independent measurement；不缓存 candidate、
   Gate、decision、final reason 或近似 geometry。
+- 多尺度像素证据只在预登记的 corridors、traces 或分块 ROI 中计算并复用缓冲区；禁止同时
+  长期保存多份全分辨率梯度、方差、候选 evidence 或完整 float64 sampling coordinate fields。
+- X5 Crop 是唯一并发 owner。默认由 `--jobs` 调度 source；OpenCV、BLAS、OpenMP 与 SciPy
+  内部线程固定为 1，只有 macOS、Windows 各自的冻结基准证明更快且内存仍有界时才可改变。
+- V5 性能 Gate 使用真实端到端路径：启动/import、一次 decode、检测、决策、全分辨率
+  sampling、压缩、写出与复读；同时记录 detection-only、I/O、p50、p95、最慢样片和峰值临时
+  内存。标准化小块 I/O 只作底层诊断，不能代表用户整体等待时间。
 - 每轮优化后复测同一样片，再运行 contracts、代表性 format/mode、current-schema
   validation，并人工检查 Debug Analysis。输出差异是校准证据，不是历史 parity gate。
 
@@ -221,11 +249,12 @@ https://github.com/rrriiicccooo/X5-Crop
   find Test -type f \( -iname '*.tif' -o -iname '*.tiff' \) | sort
   ```
 
-- 验证角色只有 `gold_accuracy_blocking` 与 `diagnostic_unreviewed`。Accuracy blocker
-  只有 `tools/regression/cohorts/gold_accuracy.jsonl` 中九张 source-SHA-bound、用户确认
-  geometry 的黄金样片，展开为 14 个 fixed/explicit/auto 场景。八张 nominal 可用于参数
-  冻结并必须通过；S098 必须通过安全验收，但不参与 nominal threshold 或 aperture
-  tolerance 校准。S098 失败只能修通用算法并重跑全部黄金，不得增加样片专用规则。
+- 验证角色只有 `gold_accuracy_blocking` 与 `diagnostic_unreviewed`。V5 accuracy blocker 使用
+  九张 source-SHA-bound、用户确认 geometry 的现有黄金起步；S055、S098 为 challenge，其余
+  七张为 nominal。Nominal 必须安全自动批准；challenge 以安全批准为目标，但
+  `needs_review` 可接受，任何不安全批准都失败。全部黄金都可用于开发和回归，不建立独立
+  holdout role，也不得把结果表述为未知总体上的独立泛化率。S098 不参与 normal threshold
+  或 aperture tolerance 校准；任一样片失败只能修通用算法并重跑全部黄金，不得增加样片规则。
 - `diagnostic_unreviewed.jsonl` 的 111 条记录不产生 accuracy expectation 或 verdict。
   Filename `pass/unknown` 与 filename count 不得进入 detector、runtime whitelist、状态
   映射或 verifier expectation。111-source 只阻断 crash、hang、静默漏项、非法
@@ -234,10 +263,13 @@ https://github.com/rrriiicccooo/X5-Crop
   `10 × source_pixels + 32 MiB`。识别 status、reason、geometry 与 count 只作诊断。
 - 非黄金记录只有经过 source SHA 绑定的人工审核和用户明确确认，才能提升为
   `gold_accuracy_blocking`；不得根据当前算法输出自动晋升。
+- 弱边、接触/重叠、空槽、Orientation 等困难样片可在 source SHA 绑定、人工确认后加入
+  challenge；不得建立真实 `must_review` 样片类别。Runtime `needs_review` 是证据不足时的
+  安全结果，不是任何目标图片的永久归类。
 - 现有真实样片可以校准 search prior 与 measurement，但样片覆盖不完整。经验分布不得变成
   “未见过即失败”的硬边界；coverage gap 只限制验证或发布声明，不得单独制造
-  `needs_review`。XPan 与 120-645 暂无且短期不补真实 fixture，不得把补样片设为实现
-  blocker，也不得建立格式级 denylist。
+  `needs_review`。135-dual 不增加真实 fixture；XPan 与 120-645 样片以后按同一黄金流程加入。
+  三者均不得成为 V5 实现 blocker，也不得建立格式级 denylist。
 - 样片可用时覆盖代表性 `135/full`、`120-66/partial`、`half/full` 与 `120-67/full`。
   Unit tests 通过不证明 named-TIFF 安全裁切；完成声明前必须检查 current reports、Debug
   Analysis 与输出是否存在真实内容 inward loss，以及非空 approved 输出是否宽到需要人工
@@ -272,5 +304,10 @@ https://github.com/rrriiicccooo/X5-Crop
   并使用 Python `zipfile` 保存中文文件名的 UTF-8 metadata。
 - 发布包分别提供中文与英文用户手册、快速启动，不使用逐段中英混排文档。
 - 用户包不包含 modular source、tests、内部文档、本地样片或 generated output。
+- macOS 与 Windows 都是正式平台。核心 Python、gold comparator 与代表性 TIFF I/O 在两个
+  平台使用同一合同；Release Candidate 分别验证依赖安装、数值版本、启动器、中文路径、
+  TIFF 复读与性能下限，不能以源码相同代替平台验证。
+- 两个平台的安装器都把冻结依赖安装到用户级 Python site，启动器使用满足版本合同的全局
+  Python，使 `X5_Crop.py` 可在任意文件夹独立运行；不得创建 Release-local `.venv`。
 - macOS 只准备当前 Release folder：标记主 launcher 与 installer executable，并在可用时
   移除 quarantine attribute；不得建立永久 system-wide trust。

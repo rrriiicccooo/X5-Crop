@@ -9,6 +9,20 @@ V5 是下一条 current-only 生产实现。它继承 V4.9 已验证的 template
 geometry、retained placements、安全包络、逐边 5%/3%、两个 Gate 与 lane-safe TIFF 合同；
 像素测量和数值层可改用 OpenCV、SciPy 等成熟依赖。
 
+V5 的目标输入是 format、mode 与必要 count 已知的 X5 片夹扫描。每个 lane 保持明确顺序，
+支持水平、垂直、TIFF Orientation，以及相邻照片接触或局部重叠；不处理两段胶片物理压叠。
+Decision 继续以整个 source 为原子，不输出部分成功 slots。Deskew 只校正共同 top/bottom 长边，
+不做 projective 或非线性变形。Blank TIFF suppression 不属于 V5 完成目标。
+
+生产依赖将冻结版本并安装到用户级 Python site，使 standalone script 可放在任意文件夹；
+macOS 与 Windows 使用同一核心合同并分别验证安装、启动、TIFF I/O 与性能。V5 性能以完整用户
+路径计时，多尺度 evidence 只在预登记的有界区域内计算，X5 Crop 独占 source 并发。
+
+V5 使用全部用户确认黄金进行开发与回归，不建立独立 holdout。S055、S098 为 challenge，
+其余为 nominal；challenge 可以安全 review，但不安全批准始终失败。弱边、接触/重叠、空槽与
+Orientation 样片可在人工确认后继续加入。135-dual 不增加真实样片，XPan 与 120-645 样片以后
+补充，均不阻断通用实现。
+
 本节只记录版本方向。V5 尚无 runtime、schema、accuracy、性能或发布完成声明。
 
 验证按 pushed paths 分级：纯 Markdown 只检查文档 diff，非 runtime 代码运行 full contracts，
