@@ -20,6 +20,7 @@ _RUNTIME_EXACT_PATHS = frozenset(
         "pyproject.toml",
         "requirements.txt",
         "requirements.lock",
+        "tools/install/requirements.txt",
         "uv.lock",
         "poetry.lock",
         "tools/regression/benchmark_adapter.py",

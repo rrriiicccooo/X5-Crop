@@ -302,20 +302,34 @@ class CurrentOnlyContractTest(unittest.TestCase):
         self.assertEqual(decision.status, "approved_auto")
         self.assertEqual(decision.final_review_reasons, ())
 
-    def test_runtime_dependency_surface_remains_minimal(self) -> None:
-        package_list = "numpy tifffile imagecodecs Pillow"
-        owners = (
-            ".github/workflows/verify.yml",
+    def test_runtime_dependency_surface_is_pinned_and_shared(self) -> None:
+        expected_requirements = (
+            "numpy==2.5.1",
+            "scipy==1.18.0",
+            "opencv-python-headless==5.0.0.93",
+            "tifffile==2026.7.31",
+            "imagecodecs==2026.6.26",
+            "Pillow==12.3.0",
+        )
+        requirements_path = ROOT / "tools/install/requirements.txt"
+        self.assertEqual(
+            tuple(requirements_path.read_text(encoding="utf-8").splitlines()),
+            expected_requirements,
+        )
+        workflow = (ROOT / ".github/workflows/verify.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("tools/install/requirements.txt", workflow)
+        for relative in (
             "tools/install/X5_Crop_Mac_install.command",
             "tools/install/X5_Crop_win_install.bat",
-        )
-        active_text = "\n".join(read_sources().values()).lower()
-        self.assertNotIn("scipy", active_text)
-        self.assertNotIn("opencv", active_text)
-        self.assertNotIn("cv2", active_text)
-        for relative in owners:
-            text = (ROOT / relative).read_text(encoding="utf-8")
-            self.assertIn(package_list, text)
+        ):
+            with self.subTest(installer=relative):
+                text = (ROOT / relative).read_text(encoding="utf-8")
+                self.assertIn("dependency_manager.py", text)
+                self.assertNotIn("pip install --user -U", text)
+        self.assertIn("import cv2", (ROOT / "X5_Crop_Mac.command").read_text())
+        self.assertIn("import cv2", (ROOT / "X5_Crop_win.bat").read_text())
 
     def test_repository_layout_and_release_manifest_are_current(self) -> None:
         for relative in (
@@ -339,6 +353,10 @@ class CurrentOnlyContractTest(unittest.TestCase):
             "docs/PROJECT_MEMORY.md",
             "tools/install/X5_Crop_Mac_install.command",
             "tools/install/X5_Crop_win_install.bat",
+            "tools/install/X5_Crop_Mac_uninstall.command",
+            "tools/install/X5_Crop_win_uninstall.bat",
+            "tools/install/dependency_manager.py",
+            "tools/install/requirements.txt",
             "tools/tests/test_photo_geometry_contract.py",
         ):
             with self.subTest(present=relative):
@@ -354,8 +372,21 @@ class CurrentOnlyContractTest(unittest.TestCase):
             release_sources["install/X5_Crop_win_install.bat"],
             "tools/install/X5_Crop_win_install.bat",
         )
-        self.assertFalse(
-            any("uninstall" in archive_path.lower() for archive_path in RELEASE_PATHS)
+        self.assertEqual(
+            release_sources["install/X5_Crop_Mac_uninstall.command"],
+            "tools/install/X5_Crop_Mac_uninstall.command",
+        )
+        self.assertEqual(
+            release_sources["install/X5_Crop_win_uninstall.bat"],
+            "tools/install/X5_Crop_win_uninstall.bat",
+        )
+        self.assertEqual(
+            release_sources["install/dependency_manager.py"],
+            "tools/install/dependency_manager.py",
+        )
+        self.assertEqual(
+            release_sources["install/requirements.txt"],
+            "tools/install/requirements.txt",
         )
 
         project_memory = (ROOT / "docs/PROJECT_MEMORY.md").read_text(

@@ -47,7 +47,8 @@ run_full() {
     python3 -m tools.regression.benchmark_workload --validate
     for script in \
         X5_Crop_Mac.command \
-        tools/install/X5_Crop_Mac_install.command
+        tools/install/X5_Crop_Mac_install.command \
+        tools/install/X5_Crop_Mac_uninstall.command
     do
         [ ! -f "$script" ] || bash -n "$script"
     done

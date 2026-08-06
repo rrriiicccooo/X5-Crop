@@ -12,6 +12,9 @@ macOS:   install/X5_Crop_Mac_install.command
 Windows: install/X5_Crop_win_install.bat
 ```
 
+支持 macOS 14 及以上的 Apple Silicon 与 Intel Mac，以及 64 位 Windows；依赖安装到
+Python 3.12-3.14 的当前用户 site。
+
 ## 2. 放入 TIFF 并启动
 
 把 TIFF 与启动文件放在同一文件夹：
@@ -59,3 +62,6 @@ python3 X5_Crop.py --help
 
 原始 TIFF 永不修改。完整设置、输出、诊断与 TIFF 保真说明见
 [用户手册](user-guide.zh-CN.md)。
+
+移除前先运行 `install/` 中对应平台的 `X5_Crop_*_uninstall`；它只清理 X5 Crop 独占且仍
+安全可删的依赖。

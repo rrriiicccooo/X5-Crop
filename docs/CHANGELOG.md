@@ -14,9 +14,13 @@ V5 的目标输入是 format、mode 与必要 count 已知的 X5 片夹扫描。
 Decision 继续以整个 source 为原子，不输出部分成功 slots。Deskew 只校正共同 top/bottom 长边，
 不做 projective 或非线性变形。Blank TIFF suppression 不属于 V5 完成目标。
 
-生产依赖将冻结版本并安装到用户级 Python site，使 standalone script 可放在任意文件夹；
-macOS 与 Windows 使用同一核心合同并分别验证安装、启动、TIFF I/O 与性能。V5 性能以完整用户
-路径计时，多尺度 evidence 只在预登记的有界区域内计算，X5 Crop 独占 source 并发。
+生产依赖已固定为 `NumPy`、`SciPy`、`opencv-python-headless`、`tifffile`、`imagecodecs`
+和 `Pillow` 的明确版本，并安装到 Python 3.12-3.14 的用户级 site。安装器支持 macOS 14+
+的 Apple Silicon 与 Intel Mac，以及 64 位 Windows；依赖收据使卸载器只清理 X5 Crop
+引入且仍未被其它 package 使用的依赖。macOS 与 Windows 使用同一核心合同并分别验证安装、
+启动、TIFF I/O 与性能。V5 性能以完整用户路径计时，多尺度 evidence 只在预登记的有界区域
+内计算，X5 Crop 独占 source 并发。固定依赖改变性能身份后，V4.9 性能 baseline 已在同一 pins
+与同一 source manifest 下重建，比较器继续以 receipt SHA 阻止跨环境比较。
 
 V5 使用全部用户确认黄金进行开发与回归，不建立独立 holdout。S055、S098 为 challenge，
 其余为 nominal；challenge 可以安全 review，但不安全批准始终失败。弱边、接触/重叠、空槽与

@@ -42,9 +42,15 @@ macOS:   install/X5_Crop_Mac_install.command
 Windows: install/X5_Crop_win_install.bat
 ```
 
-The installer checks `numpy`, `tifffile`, `imagecodecs`, and `Pillow`. On
-macOS, it prepares only the current Release folder and does not establish
-system-wide trust.
+Supported platforms are macOS 14 or later on Apple Silicon and Intel Macs, and
+64-bit Windows. The installer uses Python 3.12, 3.13, or 3.14 and installs
+pinned `NumPy`, `SciPy`, `opencv-python-headless`, `tifffile`, `imagecodecs`,
+and `Pillow` into the current user's Python site. It creates no virtual
+environment and does not modify system-level Python. On macOS, it prepares only
+the current Release folder and establishes no permanent system-wide trust. If
+the same interpreter already contains another OpenCV distribution that owns
+the `cv2` namespace, setup stops before changing any package to avoid file
+collisions.
 
 Keep the entry script, launcher, and TIFFs in one folder:
 
@@ -181,9 +187,18 @@ originals, and always retain the source TIFFs.
 
 ## Remove And License
 
-Delete the X5 Crop folder to remove the program and local outputs. Installed
-Python packages may be shared with other programs, so there is no bulk
-dependency uninstaller.
+To clean up dependencies, run this before deleting the Release folder:
+
+```text
+macOS:   install/X5_Crop_Mac_uninstall.command
+Windows: install/X5_Crop_win_uninstall.bat
+```
+
+Setup leaves a dependency receipt owned by that Release folder. The
+uninstaller removes only packages that were absent before setup, remain at the
+installed version, and are not used by another installed Python package.
+Pre-existing, subsequently changed, or shared packages are preserved. Then
+delete the X5 Crop folder to remove the program and local outputs.
 
 License: MIT. The release root includes `LICENSE`; the
 [full text](https://github.com/rrriiicccooo/X5-Crop/blob/main/LICENSE) is also

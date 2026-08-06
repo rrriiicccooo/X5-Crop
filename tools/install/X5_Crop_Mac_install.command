@@ -22,78 +22,90 @@ finish() {
     exit "$EXITCODE"
 }
 
+is_supported_python() {
+    "$1" -c "import struct, sys; raise SystemExit(not ((3, 12) <= sys.version_info[:2] < (3, 15) and struct.calcsize('P') == 8))" >/dev/null 2>&1
+}
+
+find_supported_python() {
+    for CANDIDATE in /opt/homebrew/bin/python3 /usr/local/bin/python3 "$(command -v python3 2>/dev/null)" "$(command -v python 2>/dev/null)"; do
+        [ -n "$CANDIDATE" ] || continue
+        if is_supported_python "$CANDIDATE"; then
+            PYTHON_BASE="$CANDIDATE"
+            return 0
+        fi
+    done
+    return 1
+}
+
 echo "X5 Crop first-time setup for macOS"
 echo "Folder: $(pwd)"
 echo
 
+MACOS_MAJOR="$(sw_vers -productVersion 2>/dev/null | cut -d. -f1)"
+if [ -z "$MACOS_MAJOR" ] || [ "$MACOS_MAJOR" -lt 14 ] 2>/dev/null; then
+    echo "X5 Crop requires macOS 14 or later. No dependency was installed."
+    finish 1
+fi
+
+for REQUIRED_FILE in install/requirements.txt install/dependency_manager.py; do
+    if [ ! -f "$REQUIRED_FILE" ]; then
+        echo "Missing setup file: $REQUIRED_FILE"
+        finish 1
+    fi
+done
+
 echo "Preparing launchers for macOS..."
 chmod +x "X5_Crop_Mac.command" >/dev/null 2>&1 || true
 chmod +x "install/X5_Crop_Mac_install.command" >/dev/null 2>&1 || true
+chmod +x "install/X5_Crop_Mac_uninstall.command" >/dev/null 2>&1 || true
 if command -v xattr >/dev/null 2>&1; then
     xattr -dr com.apple.quarantine . >/dev/null 2>&1 || true
 fi
 echo "Launcher permissions prepared."
 echo
 
-if command -v python3 >/dev/null 2>&1; then
-    PYTHON_BASE="python3"
-elif command -v python >/dev/null 2>&1; then
-    PYTHON_BASE="python"
-else
-    echo "Python 3 was not found."
+PYTHON_BASE=""
+if ! find_supported_python; then
+    echo "Python 3.12-3.14 was not found."
     if command -v brew >/dev/null 2>&1; then
-        read -r -p "Homebrew is available. Install Python with Homebrew now? [y/N] " ANSWER
+        read -r -p "Homebrew is available. Install a supported Python now? [y/N] " ANSWER
         case "$ANSWER" in
             y|Y|yes|YES)
                 brew install python || finish 1
-                PYTHON_BASE="python3"
+                find_supported_python || finish 1
                 ;;
             *)
-                echo "Open https://www.python.org/downloads/macos/ and install Python 3, then run this setup again."
+                echo "Install Python 3.12-3.14 from https://www.python.org/downloads/macos/ and run setup again."
                 open "https://www.python.org/downloads/macos/" >/dev/null 2>&1 || true
                 finish 1
                 ;;
         esac
     else
-        echo "Open https://www.python.org/downloads/macos/ and install Python 3, then run this setup again."
+        echo "Install Python 3.12-3.14 from https://www.python.org/downloads/macos/ and run setup again."
         open "https://www.python.org/downloads/macos/" >/dev/null 2>&1 || true
         finish 1
     fi
 fi
 
 echo "Python:"
-$PYTHON_BASE --version
+"$PYTHON_BASE" --version
 echo
 
-echo
-echo "Installing dependencies for this user..."
-$PYTHON_BASE -m ensurepip --upgrade >/dev/null 2>&1 || true
-if ! $PYTHON_BASE -m pip install --user -U numpy tifffile imagecodecs Pillow; then
+echo "Installing pinned dependencies for this user..."
+"$PYTHON_BASE" -m ensurepip --upgrade >/dev/null 2>&1 || true
+if ! "$PYTHON_BASE" "install/dependency_manager.py" install; then
     echo
     echo "Standard user install failed."
-    echo "On newer macOS/Homebrew Python this can be caused by externally-managed Python protection."
+    echo "Newer macOS/Homebrew Python may require the externally-managed override."
     read -r -p "Retry with --break-system-packages --user? [y/N] " ANSWER
     case "$ANSWER" in
         y|Y|yes|YES)
-            $PYTHON_BASE -m pip install --user --break-system-packages -U numpy tifffile imagecodecs Pillow || finish 1
+            "$PYTHON_BASE" "install/dependency_manager.py" install --break-system-packages || finish 1
             ;;
         *)
             finish 1
             ;;
     esac
-fi
-
-echo
-echo "Verifying dependencies..."
-if ! $PYTHON_BASE - <<'PY'
-import numpy
-import tifffile
-import imagecodecs
-from PIL import Image
-print("Dependencies OK")
-PY
-then
-    finish 1
 fi
 
 echo

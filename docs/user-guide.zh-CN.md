@@ -32,8 +32,12 @@ macOS:   install/X5_Crop_Mac_install.command
 Windows: install/X5_Crop_win_install.bat
 ```
 
-安装器检查 `numpy`、`tifffile`、`imagecodecs` 和 `Pillow`。macOS 安装器只准备当前
-Release 文件夹，不建立系统级信任。
+支持 macOS 14 及以上的 Apple Silicon 与 Intel Mac，以及 64 位 Windows。安装器使用
+Python 3.12、3.13 或 3.14，把固定版本的 `NumPy`、`SciPy`、
+`opencv-python-headless`、`tifffile`、`imagecodecs` 和 `Pillow` 安装到当前用户的 Python
+site；不创建虚拟环境，也不污染系统级 Python。macOS 安装器只准备当前 Release 文件夹，
+不建立永久系统级信任。同一解释器若已有会占用 `cv2` 命名空间的其它 OpenCV distribution，
+安装器会在改动任何 package 前安全停止，避免互相覆盖。
 
 将入口、启动器和 TIFF 放在同一文件夹：
 
@@ -157,8 +161,16 @@ V4.9 只作为 fixed-format template-first 架构实验保留。V5 尚未完成�
 
 ## 移除与许可
 
-删除 X5 Crop 文件夹即可移除程序和本地输出。安装的 Python packages 可能被其它程序共用，
-因此不提供批量卸载脚本。
+若要清理依赖，先运行：
+
+```text
+macOS:   install/X5_Crop_Mac_uninstall.command
+Windows: install/X5_Crop_win_uninstall.bat
+```
+
+安装器会留下本 Release 文件夹专属的依赖收据。卸载器只删除安装前不存在、安装后未被改变，
+并且当前没有被其它 Python package 使用的依赖；安装前已有、后来升级或已被共享的 package
+一律保留。最后删除 X5 Crop 文件夹即可移除程序和本地输出。应先运行卸载器，再删除文件夹。
 
 许可证：MIT。发布包根目录包含 `LICENSE`；GitHub 也提供
 [完整文本](https://github.com/rrriiicccooo/X5-Crop/blob/main/LICENSE)。

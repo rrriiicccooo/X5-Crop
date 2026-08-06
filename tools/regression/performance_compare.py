@@ -37,10 +37,10 @@ CANDIDATE_S062_RELATIVE_PATH = Path(
     "build/v49-orthogonal-budget/current/s062/fixed_sample_profile.json"
 )
 BASELINE_PAIRED_SHA256 = (
-    "097b6c46a12b7f5340a884b0389a2c2a053164b92051636f873eb392fc7e8026"
+    "3030014bdc81c0c81a5639d431eb3f7e4a2864ce604ebe4806152086ef4ecbe8"
 )
 BASELINE_S062_SHA256 = (
-    "c7779b754fc1189aec3100e94e11472fc420579f4dc52ee53ebdfec7304f0cd3"
+    "85707a0516d6373a7c277b6af78bd87f7c64c0eb1cf058da775602b831cd0824"
 )
 BASELINE_S062_SCHEMA = "x5crop_fixed_sample_profile_v3"
 COMPARISON_SCHEMA = "x5crop_performance_comparison_v2"

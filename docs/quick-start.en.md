@@ -13,6 +13,10 @@ macOS:   install/X5_Crop_Mac_install.command
 Windows: install/X5_Crop_win_install.bat
 ```
 
+Supported platforms are macOS 14 or later on Apple Silicon and Intel Macs, and
+64-bit Windows. Dependencies are installed into the current user site for
+Python 3.12-3.14.
+
 ## 2. Add TIFFs And Launch
 
 Keep the TIFFs and launch files in one folder:
@@ -64,3 +68,7 @@ python3 X5_Crop.py --help
 
 The source TIFF is never modified. See the [User Guide](user-guide.en.md) for
 complete settings, output, diagnostics, and TIFF-fidelity details.
+
+Before removal, run the platform-specific `X5_Crop_*_uninstall` in `install/`.
+It cleans up only dependencies that remain exclusive to X5 Crop and are safe
+to remove.

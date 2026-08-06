@@ -35,6 +35,7 @@ class VerificationScopeContractTest(unittest.TestCase):
             "tools/regression/performance.py",
             "tools/regression/profile_fixed_sample.py",
             "tools/regression/cohorts/production_performance.jsonl",
+            "tools/install/requirements.txt",
             "pyproject.toml",
         ):
             with self.subTest(path=path):
