@@ -69,6 +69,7 @@ def write_run_manifest(
     jobs: int,
     filesystem: FilesystemIdentity,
     best_effort_consent: str,
+    disk_reservation: dict[str, int],
     terminals: tuple[SourceTerminalRecord, ...],
 ) -> Path:
     if not any(
@@ -85,6 +86,7 @@ def write_run_manifest(
             "jobs": jobs,
             "filesystem": filesystem.as_record(),
             "best_effort_consent": best_effort_consent,
+            "disk_reservation": dict(disk_reservation),
             "runtime_environment": runtime_environment_identity(),
         },
         terminal_records=tuple(
