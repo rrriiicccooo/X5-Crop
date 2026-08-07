@@ -136,7 +136,10 @@ cross_profile     # top/bottom
 
 Profiles 复用相同 pixel measurements，不增加 decode、第二次全图扫描或 image-sized evidence
 field。Cross profile 保留固定分段的逐 trace runs；未知方向时不会先把整条 lane 平均成一条
-线。
+线。方向建立后，同一批 registered transitions 可按方向投影到两个错开半格的固定物理 bin；
+每个 trace 在每个 bin 最多保留一个确定 transition，所有满足 support/continuity 的 bins 全部
+保留。该 multi-trace aggregate 回收了 v4.2.8 多段 profile 的有效能力，但不恢复候选评分、
+top-K 或全图 evidence cache。
 
 `SideTransitionRegion` 不拥有 slope。它保存 reciprocal-nearest tracking 得到的 transition
 IDs、proposal interval、support、continuity、residual 与方向性 evidence；start/end 最终严格
@@ -191,10 +194,13 @@ raw coordinate interval
 ```
 
 该 interval 只生成 proposal，不能用 0.40% tolerance 提前删除摆放或进入安全输出。
-Template 绑定 transitions 后，每个 top/bottom role最多拟合一条 raw line；angle intervals 的
-交集只用于 canonical 方向估计，完整安全角度保存两侧 interval 的 hull。只有 hull 不超过冻结
-上限时才形成 `SharedStripDirection`，然后重新投影已有 observations、收紧 source height state
-并 materialize。不得生成第二批 placements。
+Template 绑定 transitions 后，每个 top/bottom role 最多拟合一条 raw line。Robust fit 产生
+canonical center 与较窄的 fit angle interval；transition coordinate interval、peak width、
+residual 与采样误差进入独立的 full angle interval。Fit interval 只判断多个 observed roles 是否
+能共享一个代表方向，完整安全角度保存全部 full intervals 的 hull。只有 fit hull 不超过冻结上限
+时才形成 `SharedStripDirection`，然后重新投影已有 observations、收紧 source height state 并
+materialize。水平与垂直 lane 使用同一 source-coordinate rotation 符号合同，旋转等价输入不得
+因 axis 交换而翻转 slope。
 
 每个 lane 只需一个合格的 top 或 bottom 像素锚点即可建立完整 height placement；缺失的
 opposite edge 只能由同一个联合 source-height state 推导。只有同时观测到合格的 top/bottom
@@ -203,6 +209,13 @@ pair 时，才允许用其 separation 收紧 source-wide 真实高度。
 Sampling-equivalent direction classes可以合并，但必须保存完整 angle safety hull。存在多个
 非等价 transform class 时，`shared_strip_direction=nonunique`，下游 geometry 和 budget
 unavailable，正式输出为零。
+
+Sequence template 完整 materialize 后，可以在其 full sequence support 内重新组织已经执行的
+top/bottom transitions，形成 staged height templates。该步骤复用注册 query 的 transition IDs，
+不读取新像素、不扩大 validation domain，也不创建新的 phase 或 count authority。完整 opposite
+polarity edge pair 可收紧 joint height；普通 fit 只选 canonical center，full intervals 继续进入
+retained safety。这样保留后期版本 photo-edge ridge 与片段内长边拟合的有效部分，同时仍只有一条
+template-first production path。
 
 ### 4.5 EnhancedEvidence
 
@@ -373,7 +386,9 @@ local_relation_evaluation_count
 
 V5 的内存为一维 profiles、有限 runs/votes/groups、typed geometry 与有界像素 buffers；不增加
 多份全分辨率梯度、完整 float64 sampling coordinate field、Hough slope family、通用 DP、top-K
-或无界 candidate materialization。单输入临时内存上限为：
+或无界 candidate materialization。Direction-bound aggregate 对每条 registered transition 只作
+固定次数的 bin 投影，时间与额外 records 均为 `O(Q)`；staged rebind 只消费同一 `Q`，不生成
+宽高笛卡尔积。单输入临时内存上限为：
 
 ```text
 10 × source_pixels + 32 MiB

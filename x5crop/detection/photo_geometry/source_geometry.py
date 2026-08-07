@@ -433,13 +433,16 @@ class JointAxisGeometry:
         )
         return FiniteInterval(min(values), max(values))
 
-    def design_budget_px(self, ratio_per_side: float) -> FiniteInterval:
+    def retained_extent_budget_px(
+        self,
+        ratio_per_side: float,
+    ) -> FiniteInterval:
         if not math.isfinite(ratio_per_side) or ratio_per_side <= 0.0:
             raise ValueError("direct-use ratio must be positive")
-        scale = self.feasible_scale_interval()
+        extent = self.extent_projection_px()
         return FiniteInterval(
-            self.design_extent_mm * ratio_per_side * scale.minimum,
-            self.design_extent_mm * ratio_per_side * scale.maximum,
+            ratio_per_side * extent.minimum,
+            ratio_per_side * extent.maximum,
         )
 
     def worst_case_mm(self, distance_px: float) -> float:

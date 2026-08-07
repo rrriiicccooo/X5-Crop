@@ -2,9 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ...formats import FramePhysicalSpec
-
-
 @dataclass(frozen=True)
 class MinimumGuardSpec:
     sequence_axis_mm_per_side: float
@@ -44,15 +41,5 @@ class DirectUseBudgetSpec:
             or self.cross_axis_ratio_per_side != 0.03
         ):
             raise ValueError("direct-use budget ratios are frozen at 5%/3%")
-
-    def limits_mm(
-        self,
-        aperture: FramePhysicalSpec,
-    ) -> tuple[float, float]:
-        return (
-            aperture.frame_width_mm * self.sequence_axis_ratio_per_side,
-            aperture.frame_height_mm * self.cross_axis_ratio_per_side,
-        )
-
 
 DIRECT_USE_BUDGET_SPEC = DirectUseBudgetSpec()

@@ -1178,8 +1178,9 @@ def _canonical_rotation_degrees(
 ) -> float:
     """Return the rotation-equivalent strip angle in source coordinates."""
 
-    angle = math.degrees(math.atan(slope))
-    return angle if source_axis_long == BoundaryAxis.X else -angle
+    if source_axis_long not in {BoundaryAxis.X, BoundaryAxis.Y}:
+        raise ValueError("source long axis is invalid")
+    return math.degrees(math.atan(slope))
 
 
 def continuous_trace_support_fraction(
@@ -1218,6 +1219,7 @@ def fit_template_bound_boundary_observation(
     source_axis_long: BoundaryAxis,
     boundary_axis_scale_px_per_mm: PositiveInterval,
     minimum_trace_fraction: float | None = None,
+    support_interval_px: FiniteInterval | None = None,
     spec: PhotoBoundaryMeasurementSpec = PHOTO_BOUNDARY_MEASUREMENT_SPEC,
 ) -> PhotoBoundaryObservation | None:
     """Fit one robust line from transitions already bound to one template role.
@@ -1238,14 +1240,23 @@ def fit_template_bound_boundary_observation(
     ):
         return None
     requested = {str(identity) for identity in transition_ids}
+    queried_traces = tuple(
+        trace
+        for trace in measurement_set.query.trace_positions_px
+        if support_interval_px is None
+        or support_interval_px.contains(float(trace), epsilon=0.5)
+    )
+    queried_set = set(queried_traces)
     transitions = tuple(
         transition
         for transition in measurement_set.transitions
         if str(transition.transition_id) in requested
+        and transition.trace_coordinate_px in queried_set
     )
     if {str(item.transition_id) for item in transitions} != requested:
         return None
-    queried_traces = measurement_set.query.trace_positions_px
+    if not queried_traces:
+        return None
     points = tuple(
         _Point(
             transition=transition,
@@ -1335,12 +1346,28 @@ def fit_template_bound_boundary_observation(
         support,
     )
     normalized_uncertainty = location_uncertainty / math.hypot(1.0, slope)
-    angle_uncertainty = math.degrees(
+    transition_width_uncertainty = float(
+        np.median(
+            [
+                point.transition.coordinate_interval_px.width / 2.0
+                for point in inliers
+            ]
+        )
+    )
+    fit_angle_uncertainty = math.degrees(
+        math.atan2(
+            spec.angle_endpoint_uncertainty_multiplier
+            * location_uncertainty,
+            max(1.0, support.width),
+        )
+    )
+    full_angle_uncertainty = math.degrees(
         math.atan2(
             spec.angle_endpoint_uncertainty_multiplier
             * (
                 location_uncertainty
                 + float(np.median(np.abs(inlier_residuals)))
+                + transition_width_uncertainty
             ),
             max(1.0, support.width),
         )
@@ -1363,8 +1390,8 @@ def fit_template_bound_boundary_observation(
         ),
         fit_residual_px=float(np.median(np.abs(inlier_residuals))),
         angle_interval_degrees=FiniteInterval(
-            angle - angle_uncertainty,
-            angle + angle_uncertainty,
+            angle - full_angle_uncertainty,
+            angle + full_angle_uncertainty,
         ),
         trace_support_count=len(inliers),
         queried_trace_count=len(queried_traces),
@@ -1429,5 +1456,9 @@ def fit_template_bound_boundary_observation(
                 for point in inliers
             )
             / len(inliers)
+        ),
+        fit_angle_interval_degrees=FiniteInterval(
+            angle - fit_angle_uncertainty,
+            angle + fit_angle_uncertainty,
         ),
     )

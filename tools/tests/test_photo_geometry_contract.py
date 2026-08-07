@@ -12,6 +12,11 @@ from x5crop.detection.photo_geometry.measurement import (
     measure_registered_queries,
     track_side_transition_regions,
 )
+from x5crop.detection.photo_geometry.boundary_geometry import (
+    canonical_boundary_line,
+    canonical_source_cross_axis_slope,
+    canonical_source_sequence_axis_slope,
+)
 from x5crop.detection.photo_geometry.template_first import (
     reference_role_transition_ids,
 )
@@ -81,6 +86,8 @@ def _candidate(pixels: np.ndarray):
 
 def _side_measurement_set(
     coordinates_by_trace: tuple[tuple[float, ...], ...],
+    *,
+    transition_half_width_px: float = 0.25,
 ) -> PhotoBoundaryMeasurementSet:
     traces = tuple(index * 10 for index in range(len(coordinates_by_trace)))
     query = PhotoBoundaryMeasurementQuery(
@@ -114,8 +121,8 @@ def _side_measurement_set(
                     trace_ordinal=trace_ordinal,
                     trace_coordinate_px=trace,
                     coordinate_interval_px=FiniteInterval(
-                        coordinate - 0.25,
-                        coordinate + 0.25,
+                        coordinate - transition_half_width_px,
+                        coordinate + transition_half_width_px,
                     ),
                     gradient_z=5.0,
                     tone_z=5.0,
@@ -157,6 +164,69 @@ def _side_measurement_set(
 
 
 class PhotoBoundaryMeasurementContractTest(unittest.TestCase):
+    def test_canonical_direction_keeps_rotation_equivalent_slope_sign(self) -> None:
+        direction = SharedStripDirection(
+            direction_id="direction:slope-sign",
+            selected_observation_ids=(ObservationId("observation:slope-sign"),),
+            full_angle_interval_degrees=FiniteInterval(-0.3, -0.2),
+            canonical_angle_degrees=-0.25,
+        )
+        expected = np.tan(np.deg2rad(-0.25))
+
+        for long_axis, cross_axis in (
+            (BoundaryAxis.X, BoundaryAxis.Y),
+            (BoundaryAxis.Y, BoundaryAxis.X),
+        ):
+            with self.subTest(long_axis=long_axis):
+                self.assertAlmostEqual(
+                    canonical_source_cross_axis_slope(direction, cross_axis),
+                    expected,
+                )
+                self.assertAlmostEqual(
+                    canonical_source_sequence_axis_slope(direction, long_axis),
+                    -expected,
+                )
+                cross_line = canonical_boundary_line(
+                    direction,
+                    boundary_axis=cross_axis,
+                    source_axis_long=long_axis,
+                    trace_coordinate_px=100.0,
+                    position_px=20.0,
+                    support_projection_px=FiniteInterval(0.0, 200.0),
+                )
+                coordinate = (
+                    (cross_line.offset_px - cross_line.normal_x * 150.0)
+                    / cross_line.normal_y
+                    if cross_axis == BoundaryAxis.Y
+                    else (
+                        cross_line.offset_px - cross_line.normal_y * 150.0
+                    )
+                    / cross_line.normal_x
+                )
+                self.assertAlmostEqual(
+                    coordinate - 20.0,
+                    expected * 50.0,
+                )
+
+    def test_vertical_strip_preserves_source_slope_sign(self) -> None:
+        measurement_set = _side_measurement_set(
+            tuple((10.0 - index * 0.1,) for index in range(7))
+        )
+
+        observation = fit_template_bound_boundary_observation(
+            measurement_set,
+            transition_ids=tuple(
+                item.transition_id for item in measurement_set.transitions
+            ),
+            role=BoundaryRole.TOP,
+            source_axis_long=BoundaryAxis.Y,
+            boundary_axis_scale_px_per_mm=PositiveInterval(10.0, 10.0),
+        )
+
+        self.assertIsNotNone(observation)
+        assert observation is not None
+        self.assertLess(observation.angle_interval_degrees.center, 0.0)
+
     def test_template_bound_observation_propagates_only_robust_inliers(
         self,
     ) -> None:
@@ -188,6 +258,47 @@ class PhotoBoundaryMeasurementContractTest(unittest.TestCase):
         self.assertNotIn(
             ObservationId("transition:3:0"),
             observation.transition_ids,
+        )
+
+    def test_transition_width_expands_only_full_angle_safety(self) -> None:
+        coordinates = tuple((10.0 + index * 0.1,) for index in range(7))
+        narrow = fit_template_bound_boundary_observation(
+            _side_measurement_set(
+                coordinates,
+                transition_half_width_px=0.25,
+            ),
+            transition_ids=tuple(
+                ObservationId(f"transition:{index}:0")
+                for index in range(7)
+            ),
+            role=BoundaryRole.TOP,
+            source_axis_long=BoundaryAxis.X,
+            boundary_axis_scale_px_per_mm=PositiveInterval(10.0, 10.0),
+        )
+        wide = fit_template_bound_boundary_observation(
+            _side_measurement_set(
+                coordinates,
+                transition_half_width_px=4.0,
+            ),
+            transition_ids=tuple(
+                ObservationId(f"transition:{index}:0")
+                for index in range(7)
+            ),
+            role=BoundaryRole.TOP,
+            source_axis_long=BoundaryAxis.X,
+            boundary_axis_scale_px_per_mm=PositiveInterval(10.0, 10.0),
+        )
+
+        self.assertIsNotNone(narrow)
+        self.assertIsNotNone(wide)
+        assert narrow is not None and wide is not None
+        self.assertEqual(
+            narrow.fit_angle_interval_degrees,
+            wide.fit_angle_interval_degrees,
+        )
+        self.assertGreater(
+            wide.angle_interval_degrees.width,
+            narrow.angle_interval_degrees.width,
         )
 
     def test_reference_role_binding_omits_equivalent_nearest_transitions(

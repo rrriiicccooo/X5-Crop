@@ -366,7 +366,7 @@ class AffineFoundationContractTest(unittest.TestCase):
         self.assertEqual(assessment.outcome, "identity")
         self.assertEqual(
             assessment.observed_angle_interval_degrees,
-            FiniteInterval(-0.1, 0.1),
+            FiniteInterval(-0.2, 0.3),
         )
 
     def test_disjoint_observed_angles_make_transform_unavailable(self) -> None:
@@ -397,7 +397,7 @@ class AffineFoundationContractTest(unittest.TestCase):
         self.assertEqual(assessment.outcome, "shared_rotation")
         self.assertEqual(
             assessment.observed_angle_interval_degrees,
-            FiniteInterval(0.9, 1.1),
+            FiniteInterval(0.8, 1.2),
         )
         assert assessment.applied_source_rotation_degrees is not None
         self.assertLess(assessment.applied_source_rotation_degrees, 0.0)

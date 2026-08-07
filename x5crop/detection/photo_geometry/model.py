@@ -544,8 +544,17 @@ class PhotoBoundaryObservation:
     background_side_support_fraction: float = 0.0
     left_background_preference_fraction: float = 0.0
     right_background_preference_fraction: float = 0.0
+    fit_angle_interval_degrees: FiniteInterval | None = None
 
     def __post_init__(self) -> None:
+        if self.fit_angle_interval_degrees is None:
+            object.__setattr__(
+                self,
+                "fit_angle_interval_degrees",
+                self.angle_interval_degrees,
+            )
+        fit_angle = self.fit_angle_interval_degrees
+        assert fit_angle is not None
         if (
             not self.offset_interval_px.contains(
                 self.line.offset_px,
@@ -566,6 +575,14 @@ class PhotoBoundaryObservation:
             or not self.transition_ids
             or self.provenance.root_measurement
             != MeasurementIdentity.PHOTO_BOUNDARY
+            or not self.angle_interval_degrees.contains(
+                fit_angle.minimum,
+                epsilon=1.0e-9,
+            )
+            or not self.angle_interval_degrees.contains(
+                fit_angle.maximum,
+                epsilon=1.0e-9,
+            )
         ):
             raise ValueError("photo-boundary observation is invalid")
         if len(set(self.transition_ids)) != len(self.transition_ids):

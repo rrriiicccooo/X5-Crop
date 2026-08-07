@@ -26,13 +26,13 @@ def canonical_boundary_line(
         normal_x, normal_y = (
             (math.cos(angle), math.sin(angle))
             if source_axis_long == BoundaryAxis.X
-            else (-math.sin(angle), math.cos(angle))
+            else (math.sin(angle), math.cos(angle))
         )
     else:
         normal_x, normal_y = (
             (-math.sin(angle), math.cos(angle))
             if source_axis_long == BoundaryAxis.X
-            else (math.cos(angle), math.sin(angle))
+            else (math.cos(angle), -math.sin(angle))
         )
     offset = (
         normal_x * position_px + normal_y * trace_coordinate_px
@@ -52,28 +52,27 @@ def canonical_source_cross_axis_slope(
     direction: SharedStripDirection,
     cross_axis: BoundaryAxis,
 ) -> float:
+    del cross_axis
     tangent = math.tan(math.radians(direction.canonical_angle_degrees))
-    return tangent if cross_axis == BoundaryAxis.Y else -tangent
+    return tangent
 
 
 def canonical_source_sequence_axis_slope(
     direction: SharedStripDirection,
     sequence_axis: BoundaryAxis,
 ) -> float:
+    del sequence_axis
     tangent = math.tan(math.radians(direction.canonical_angle_degrees))
-    return -tangent if sequence_axis == BoundaryAxis.X else tangent
+    return -tangent
 
 
 def source_cross_axis_slope_interval(
     direction: SharedStripDirection,
     cross_axis: BoundaryAxis,
 ) -> FiniteInterval:
+    del cross_axis
     values = tuple(
-        (
-            math.tan(math.radians(angle))
-            if cross_axis == BoundaryAxis.Y
-            else -math.tan(math.radians(angle))
-        )
+        math.tan(math.radians(angle))
         for angle in (
             direction.full_angle_interval_degrees.minimum,
             direction.full_angle_interval_degrees.maximum,
@@ -86,12 +85,9 @@ def source_sequence_axis_slope_interval(
     direction: SharedStripDirection,
     sequence_axis: BoundaryAxis,
 ) -> FiniteInterval:
+    del sequence_axis
     values = tuple(
-        (
-            -math.tan(math.radians(angle))
-            if sequence_axis == BoundaryAxis.X
-            else math.tan(math.radians(angle))
-        )
+        -math.tan(math.radians(angle))
         for angle in (
             direction.full_angle_interval_degrees.minimum,
             direction.full_angle_interval_degrees.maximum,

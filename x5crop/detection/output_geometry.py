@@ -27,7 +27,7 @@ def observed_strip_angle_estimate_degrees(
     if not observations:
         raise ValueError("strip-angle estimate requires observations")
     weighted_sum = sum(
-        item.angle_interval_degrees.center
+        item.fit_angle_interval_degrees.center
         * max(1.0, float(item.trace_support_count))
         / (1.0 + item.fit_residual_px)
         for item in observations
@@ -141,12 +141,13 @@ def resolve_shared_strip_direction(
             state=EvidenceState.UNAVAILABLE,
             named_gap="observed_long_edge_rotation_unavailable",
         )
-    common_minimum = max(
-        item.angle_interval_degrees.minimum for item in unique
+    fit_intervals = tuple(
+        item.fit_angle_interval_degrees for item in unique
     )
-    common_maximum = min(
-        item.angle_interval_degrees.maximum for item in unique
-    )
+    if any(item is None for item in fit_intervals):
+        raise ValueError("direction observation lacks fit angle interval")
+    common_minimum = max(item.minimum for item in fit_intervals if item)
+    common_maximum = min(item.maximum for item in fit_intervals if item)
     if common_minimum > common_maximum:
         return SharedStripDirectionResolution(
             direction=None,
@@ -154,6 +155,10 @@ def resolve_shared_strip_direction(
             named_gap="shared_observed_rotation_interval_unavailable",
         )
     common = FiniteInterval(common_minimum, common_maximum)
+    full = FiniteInterval(
+        min(item.angle_interval_degrees.minimum for item in unique),
+        max(item.angle_interval_degrees.maximum for item in unique),
+    )
     estimate = observed_strip_angle_estimate_degrees(unique)
     canonical_angle = (
         0.0
@@ -187,7 +192,7 @@ def resolve_shared_strip_direction(
                 + sha256(direction_payload).hexdigest()[:24]
             ),
             selected_observation_ids=observation_ids,
-            full_angle_interval_degrees=common,
+            full_angle_interval_degrees=full,
             canonical_angle_degrees=canonical_angle,
         ),
         state=EvidenceState.SUPPORTED,

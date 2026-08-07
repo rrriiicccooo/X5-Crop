@@ -28,6 +28,8 @@ from x5crop.detection.photo_geometry.measurement import (
     provisional_cross_projection_interval,
 )
 from x5crop.detection.photo_geometry.template_first import (
+    _cross_pair_seed_qualified,
+    _template_bound_opposite_run,
     _retain_component_placements,
     build_template_sequence_seeds,
     local_advance_delta_from_observed_gap,
@@ -64,7 +66,200 @@ from x5crop.detection.photo_geometry.source_geometry import (
 )
 
 
+def _measurement_set_for_cross_edge(
+    coordinate: float,
+    *,
+    polarity: int,
+):
+    transitions = tuple(
+        SimpleNamespace(
+            transition_id=ObservationId(f"cross:{coordinate}:{trace}"),
+            trace_coordinate_px=trace,
+            coordinate_px=coordinate,
+            coordinate_interval_px=FiniteInterval(
+                coordinate - 0.25,
+                coordinate + 0.25,
+            ),
+            polarity=polarity,
+            gradient_z=5.0,
+            tone_z=5.0,
+            texture_z=5.0,
+        )
+        for trace in (10, 20, 30, 40)
+    )
+    return SimpleNamespace(
+        query=SimpleNamespace(trace_positions_px=(10, 20, 30, 40)),
+        transitions=transitions,
+    )
+
+
+def _profile_run_for_measurement(
+    measurement,
+    *,
+    role: BoundaryRole,
+) -> ProfileRun:
+    return ProfileRun(
+        run_id=f"{role.value}-run",
+        coordinate_interval_px=FiniteInterval(
+            measurement.transitions[0].coordinate_px - 0.25,
+            measurement.transitions[0].coordinate_px + 0.25,
+        ),
+        transition_ids=tuple(
+            item.transition_id for item in measurement.transitions
+        ),
+        trace_coordinates_px=measurement.query.trace_positions_px,
+        role_hint=role,
+        qualified_anchor_roles=(role,),
+        support_fraction=1.0,
+        continuous_support_fraction=1.0,
+        fit_residual_px=0.0,
+        evidence_strength=10.0,
+        pair_qualified=True,
+    )
+
+
+def _cross_observation(
+    transition_ids: tuple[ObservationId, ...],
+    *,
+    role: BoundaryRole,
+    coordinate: float,
+) -> PhotoBoundaryObservation:
+    identity = ObservationId(f"{role.value}-observation")
+    return PhotoBoundaryObservation(
+        observation_id=identity,
+        role=role,
+        line=SourceCoordinateLine(
+            normal_x=0.0,
+            normal_y=1.0,
+            offset_px=coordinate,
+            support_projection_px=FiniteInterval(10.0, 40.0),
+            source_axis_long=BoundaryAxis.X,
+        ),
+        offset_interval_px=FiniteInterval(
+            coordinate - 0.25,
+            coordinate + 0.25,
+        ),
+        fit_residual_px=0.0,
+        angle_interval_degrees=FiniteInterval(-0.05, 0.05),
+        trace_support_count=4,
+        queried_trace_count=4,
+        continuous_support_fraction=1.0,
+        transition_ids=transition_ids,
+        provenance=MeasurementProvenance(
+            root_measurement=MeasurementIdentity.PHOTO_BOUNDARY,
+            observation_id=identity,
+            dependencies=(MeasurementIdentity.BASE_GRAY,),
+            description="synthetic cross edge",
+        ),
+    )
+
+
+def _template_lane_for_cross_pair(
+    top_measurement,
+    bottom_measurement,
+    top_run: ProfileRun,
+) -> TemplateLaneInput:
+    return TemplateLaneInput(
+        lane_id="lane:0",
+        output_slot_count=3,
+        measurement_slot_count=3,
+        width_axis=BoundaryAxis.X,
+        height_axis=BoundaryAxis.Y,
+        width_authority_px=FiniteInterval(0.0, 1199.0),
+        height_authority_px=FiniteInterval(0.0, 319.0),
+        width_scale_px_per_mm=PositiveInterval(10.0, 10.0),
+        height_scale_px_per_mm=PositiveInterval(10.0, 10.0),
+        sequence_profile=BasicAxisProfile("sequence", 1200, (), ()),
+        cross_profile=BasicAxisProfile(
+            "cross",
+            320,
+            top_measurement.query.trace_positions_px,
+            (top_run,),
+        ),
+        sequence_measurement_sets=(),
+        top_measurement_set=top_measurement,
+        bottom_measurement_set=bottom_measurement,
+        transition_by_id={
+            str(item.transition_id): item
+            for item in (
+                *top_measurement.transitions,
+                *bottom_measurement.transitions,
+            )
+        },
+    )
+
+
 class TemplateFirstArchitectureContractTest(unittest.TestCase):
+    def test_cross_pair_seed_does_not_claim_single_edge_authority(self) -> None:
+        run = ProfileRun(
+            run_id="pair-seed",
+            coordinate_interval_px=FiniteInterval(39.0, 41.0),
+            transition_ids=tuple(
+                ObservationId(f"pair:{index}") for index in range(4)
+            ),
+            trace_coordinates_px=(10, 20, 30, 40),
+            role_hint=BoundaryRole.TOP,
+            qualified_anchor_roles=(),
+            support_fraction=0.75,
+            continuous_support_fraction=0.75,
+            fit_residual_px=1.0,
+            evidence_strength=10.0,
+            pair_qualified=False,
+        )
+
+        self.assertTrue(_cross_pair_seed_qualified(run))
+        self.assertFalse(run.anchor_qualified_for(BoundaryRole.TOP))
+
+    def test_opposite_cross_edge_requires_opposite_transition_polarity(
+        self,
+    ) -> None:
+        top_measurement = _measurement_set_for_cross_edge(40.0, polarity=-1)
+        bottom_measurement = _measurement_set_for_cross_edge(
+            280.0,
+            polarity=1,
+        )
+        top_run = _profile_run_for_measurement(
+            top_measurement,
+            role=BoundaryRole.TOP,
+        )
+        top_observation = _cross_observation(
+            top_run.transition_ids,
+            role=BoundaryRole.TOP,
+            coordinate=40.0,
+        )
+        lane = _template_lane_for_cross_pair(
+            top_measurement,
+            bottom_measurement,
+            top_run,
+        )
+        geometry = SourceFrameGeometry.create(
+            FramePhysicalSpec(
+                "test",
+                36.0,
+                24.0,
+                1.5,
+                FiniteInterval(-0.5, 2.5),
+            ),
+            width_scale_px_per_mm=PositiveInterval(10.0, 10.0),
+            height_scale_px_per_mm=PositiveInterval(10.0, 10.0),
+        )
+
+        opposite = _template_bound_opposite_run(
+            lane,
+            geometry,
+            top_run,
+            top_observation,
+        )
+
+        self.assertIsNotNone(opposite)
+        assert opposite is not None
+        self.assertEqual(
+            opposite.transition_ids,
+            tuple(
+                item.transition_id for item in bottom_measurement.transitions
+            ),
+        )
+
     def test_complete_pairs_exclude_compatible_singleton_phase(self) -> None:
         geometry = mock.Mock()
         authorized = tuple(
@@ -94,6 +289,45 @@ class TemplateFirstArchitectureContractTest(unittest.TestCase):
         retained = _retain_component_placements((*authorized, singleton))
 
         self.assertEqual(retained, authorized)
+
+    def test_strict_transition_superset_excludes_shifted_same_count_phase(
+        self,
+    ) -> None:
+        geometry = mock.Mock()
+        geometry.intersect_source_state.return_value = geometry
+        component = SimpleNamespace(component_id="36x24mm")
+
+        def placement(name: str, identities: tuple[str, ...]):
+            return SimpleNamespace(
+                placement_id=name,
+                output_slot_count=3,
+                component=component,
+                canonical_sequence=SimpleNamespace(
+                    exclusion_authorized=True,
+                    safety_support_transition_ids=(
+                        tuple(ObservationId(value) for value in identities),
+                        (),
+                        (),
+                        (),
+                        (),
+                        (),
+                    ),
+                    observed_role_count=2,
+                    observed_opposite_pair_count=1,
+                    local_advance_relations=(),
+                ),
+                source_frame_geometry=geometry,
+            )
+
+        complete = placement("complete", ("a", "b", "c"))
+        shifted = placement("shifted", ("a", "b"))
+        unrelated = placement("unrelated", ("x", "y"))
+
+        retained = _retain_component_placements(
+            (complete, shifted, unrelated)
+        )
+
+        self.assertEqual(retained, (complete, unrelated))
 
     def test_basic_lane_does_not_consume_registered_role_enhancement(
         self,
@@ -567,8 +801,11 @@ class TemplateFirstArchitectureContractTest(unittest.TestCase):
         )
         self.assertEqual(pitch.pitch_interval_px, expected)
         self.assertEqual(
-            state.design_budget_px(0.05),
-            FiniteInterval(36.0 * 0.05 * 99.0, 36.0 * 0.05 * 101.0),
+            state.retained_extent_budget_px(0.05),
+            FiniteInterval(
+                state.extent_projection_px().minimum * 0.05,
+                state.extent_projection_px().maximum * 0.05,
+            ),
         )
 
     def test_local_advance_observation_must_intersect_format_gap_authority(

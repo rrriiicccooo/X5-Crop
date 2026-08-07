@@ -431,18 +431,25 @@ def direct_use_budget_assessment(
             )
             for boundary in boundaries
         }
-        width_limit, height_limit = DIRECT_USE_BUDGET_SPEC.limits_mm(
-            placement.component
-        )
         width_budget_px = (
-            placement.source_frame_geometry.width_state.design_budget_px(
+            placement.source_frame_geometry.width_state.retained_extent_budget_px(
                 DIRECT_USE_BUDGET_SPEC.sequence_axis_ratio_per_side
             ).minimum
         )
         height_budget_px = (
-            placement.source_frame_geometry.height_state.design_budget_px(
+            placement.source_frame_geometry.height_state.retained_extent_budget_px(
                 DIRECT_USE_BUDGET_SPEC.cross_axis_ratio_per_side
             ).minimum
+        )
+        width_limit = (
+            placement.source_frame_geometry.width_state.worst_case_mm(
+                width_budget_px
+            )
+        )
+        height_limit = (
+            placement.source_frame_geometry.height_state.worst_case_mm(
+                height_budget_px
+            )
         )
         for width in placement.sequence_placements:
             start_position = width.fit_positions_px[index * 2]

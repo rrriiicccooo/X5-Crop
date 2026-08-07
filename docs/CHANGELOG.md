@@ -16,6 +16,13 @@ standalone 只消费 current schema；不存在 V4.9 fallback、shim、feature f
 - Registered transition 保存坐标区间、宽度、prominence、polarity、local noise、support、trace
   与 provenance；template-first producer 建立联合 scale、完整 placements、canonical 代表和
   retained safety union，不使用通用 DP、top-K 或候选笛卡尔积。
+- 回收历史版本中仍符合 V5 authority 与性能合同的像素能力：多 trace/多分段 profile 聚合、
+  opposite-polarity edge pair、片段内 registered transition 重绑定、photo-edge ridge 与 joint
+  local-advance/scale refinement。聚合只在线性数量的 registered records 上运行，不恢复旧版
+  confidence PASS、best-score、format threshold 堆、全图 content cache 或第二条 runtime。
+- Robust center 与 safety uncertainty 已分离：fit angle 只服务共同方向的代表解，transition
+  interval/width、fit residual 与数值误差进入 full angle hull；水平和垂直 lane 使用同一旋转符号
+  合同。
 - `CandidateGate` 只冻结 typed assessment，`DecisionGate` 独占 final status 与 reasons；任一
   slot 无法满足 containment、legal window 或逐边 5%/3% direct-use budget 时，整个 source
   `needs_review`。
@@ -38,8 +45,9 @@ standalone 只消费 current schema；不存在 V4.9 fallback、shim、feature f
 使用九张 source-SHA-bound 黄金的十四项正式 CLI 任务；`diagnostic` 以正式 CLI 运行 111 sources；
 `performance` 在外部 SHA 核对后测量 24-source 完整用户路径并绑定 commit、依赖和 workload。
 
-当前完成边界：合成 full contracts、S027 与 S035 vertical slice 已建立；九张黄金十四项中仍有
-九个 nominal 任务尚未达到冻结自动批准标准。111-source 工程诊断已达到 111/111，但
+当前完成边界：合成 full contracts 已通过 121 项（1 项平台条件跳过）；九张黄金十四项中，
+S027、S035、S091 explicit/auto 与 S094 已正式通过，S055 和 S098 保持安全送审，仍有六个
+nominal 任务未达到冻结标准。111-source 工程诊断已达到 111/111，但
 24-source 当前 commit 性能 receipt，以及 Windows x64、Apple Silicon、Intel macOS 的真实
 TIFF、中文路径、文件占用、恢复与性能 receipt 尚未完成。因此 V5 不是 release-ready，也不能
 宣布三平台正式支持。

@@ -24,6 +24,7 @@ from .measurement import (
     continuous_trace_support_fraction,
     fit_template_bound_boundary_observation,
     robust_scalar_location,
+    track_side_transition_regions,
 )
 from .model import (
     BoundaryAxis,
@@ -69,6 +70,7 @@ from .template_profiles import (
     TemplatePhaseGroup,
     TemplateRole,
     build_phase_groups,
+    cross_profile_from_regions,
     group_support_exclusion_authorized,
     ordered_template_roles,
 )
@@ -123,6 +125,21 @@ def _common(values: tuple[FiniteInterval, ...]) -> FiniteInterval | None:
     minimum = max(value.minimum for value in values)
     maximum = min(value.maximum for value in values)
     return None if maximum < minimum else FiniteInterval(minimum, maximum)
+
+
+def _conditional_fit_and_full(
+    fit_values: tuple[FiniteInterval, ...],
+    full_values: tuple[FiniteInterval, ...],
+) -> tuple[FiniteInterval, FiniteInterval] | None:
+    """Keep the robust center as preference inside the full safety domain."""
+
+    full = _common(full_values)
+    if full is None:
+        return None
+    fit = _common(fit_values)
+    if fit is not None:
+        fit = _intersection(fit, full)
+    return (full if fit is None else fit), full
 
 
 def direction_class_key(direction: SharedStripDirection) -> tuple[object, ...]:
@@ -190,6 +207,13 @@ def _template_bound_direction_classes(
 ) -> tuple[SharedStripDirection, ...]:
     directions: list[SharedStripDirection] = []
     for template in templates:
+        fit_intervals = tuple(
+            item.fit_angle_interval_degrees
+            for item in template.raw_observations
+            if item.fit_angle_interval_degrees is not None
+        )
+        if len(fit_intervals) != len(template.raw_observations):
+            raise ValueError("template direction lacks fit intervals")
         resolution = resolve_shared_strip_direction(template.raw_observations)
         if resolution.direction is not None:
             hull = _hull(
@@ -198,9 +222,8 @@ def _template_bound_direction_classes(
                     for item in template.raw_observations
                 )
             )
-            if (
-                hull.width
-                > PHOTO_BOUNDARY_MEASUREMENT_SPEC.maximum_shared_direction_hull_degrees
+            if _hull(fit_intervals).width > (
+                PHOTO_BOUNDARY_MEASUREMENT_SPEC.maximum_shared_direction_hull_degrees
             ):
                 continue
             directions.append(
@@ -221,25 +244,25 @@ def _template_bound_direction_classes(
                 )
             )
             continue
-        intervals = tuple(
+        full_intervals = tuple(
             item.angle_interval_degrees
             for item in template.raw_observations
         )
-        if len(intervals) < 2:
+        if len(fit_intervals) < 2:
             continue
-        hull = FiniteInterval(
-            min(item.minimum for item in intervals),
-            max(item.maximum for item in intervals),
-        )
-        if (
-            hull.width
-            > PHOTO_BOUNDARY_MEASUREMENT_SPEC.maximum_shared_direction_hull_degrees
+        fit_hull = _hull(fit_intervals)
+        if fit_hull.width > (
+            PHOTO_BOUNDARY_MEASUREMENT_SPEC.maximum_shared_direction_hull_degrees
         ):
             continue
+        hull = _hull(full_intervals)
         canonical = observed_strip_angle_estimate_degrees(
             template.raw_observations
         )
-        canonical = min(hull.maximum, max(hull.minimum, canonical))
+        canonical = min(
+            fit_hull.maximum,
+            max(fit_hull.minimum, canonical),
+        )
         identities = tuple(
             sorted(
                 (
@@ -450,6 +473,7 @@ def _reference_role_run(
     measurement_set: PhotoBoundaryMeasurementSet,
     target_coordinate_px: float,
     equivalence_px: float,
+    support_interval_px: FiniteInterval | None = None,
 ) -> tuple[ProfileRun, PhotoBoundaryObservation] | None:
     transition_ids = reference_role_transition_ids(
         measurement_set,
@@ -465,6 +489,7 @@ def _reference_role_run(
         minimum_trace_fraction=(
             PHOTO_BOUNDARY_MEASUREMENT_SPEC.minimum_cross_fit_trace_fraction
         ),
+        support_interval_px=support_interval_px,
     )
     if observation is None:
         return None
@@ -488,7 +513,12 @@ def _reference_role_run(
     traces = tuple(
         sorted({transition.trace_coordinate_px for transition in selected})
     )
-    queried = measurement_set.query.trace_positions_px
+    queried = tuple(
+        trace
+        for trace in measurement_set.query.trace_positions_px
+        if support_interval_px is None
+        or support_interval_px.contains(float(trace), epsilon=0.5)
+    )
     return (
         ProfileRun(
             run_id=_stable_id(
@@ -527,6 +557,7 @@ def _inlier_profile_run(
     run: ProfileRun,
     observation: PhotoBoundaryObservation,
     measurement_set: PhotoBoundaryMeasurementSet,
+    support_interval_px: FiniteInterval | None = None,
 ) -> ProfileRun:
     selected = tuple(
         transition
@@ -535,6 +566,12 @@ def _inlier_profile_run(
     )
     traces = tuple(
         sorted({transition.trace_coordinate_px for transition in selected})
+    )
+    queried = tuple(
+        trace
+        for trace in measurement_set.query.trace_positions_px
+        if support_interval_px is None
+        or support_interval_px.contains(float(trace), epsilon=0.5)
     )
     return ProfileRun(
         run_id=_stable_id(
@@ -552,8 +589,7 @@ def _inlier_profile_run(
         role_hint=run.role_hint,
         qualified_anchor_roles=run.qualified_anchor_roles,
         support_fraction=(
-            observation.trace_support_count
-            / observation.queried_trace_count
+            observation.trace_support_count / len(queried)
         ),
         continuous_support_fraction=(
             observation.continuous_support_fraction
@@ -573,6 +609,8 @@ def _reference_pair_height_template(
     lane: TemplateLaneInput,
     geometry: SourceFrameGeometry,
     broad_height: FiniteInterval,
+    *,
+    support_interval_px: FiniteInterval | None = None,
 ) -> ProvisionalHeightTemplate | None:
     height = geometry.height_state.extent_projection_px()
     center = lane.height_authority_px.center
@@ -586,6 +624,7 @@ def _reference_pair_height_template(
         measurement_set=lane.top_measurement_set,
         target_coordinate_px=center - height.center / 2.0,
         equivalence_px=equivalence_px,
+        support_interval_px=support_interval_px,
     )
     bottom = _reference_role_run(
         lane,
@@ -593,8 +632,28 @@ def _reference_pair_height_template(
         measurement_set=lane.bottom_measurement_set,
         target_coordinate_px=center + height.center / 2.0,
         equivalence_px=equivalence_px,
+        support_interval_px=support_interval_px,
     )
     if top is None or bottom is None:
+        return None
+    polarities = tuple(
+        (
+            1
+            if sum(value > 0 for value in values)
+            > sum(value < 0 for value in values)
+            else -1
+        )
+        for run in (top[0], bottom[0])
+        for values in (
+            tuple(
+                lane.transition_by_id[str(identity)].polarity
+                for identity in run.transition_ids
+                if lane.transition_by_id[str(identity)].polarity != 0
+            ),
+        )
+        if values
+    )
+    if len(polarities) != 2 or polarities[0] != -polarities[1]:
         return None
     origin = _intersection(
         top[0].coordinate_interval_px,
@@ -629,6 +688,7 @@ def _template_bound_opposite_run(
     geometry: SourceFrameGeometry,
     top_run: ProfileRun,
     top_observation: PhotoBoundaryObservation,
+    support_interval_px: FiniteInterval | None = None,
 ) -> ProfileRun | None:
     """Bind bottom transitions through the top edge and height template.
 
@@ -661,7 +721,15 @@ def _template_bound_opposite_run(
         else -1
     )
     for transition in lane.bottom_measurement_set.transitions:
-        if transition.polarity != top_polarity:
+        if (
+            support_interval_px is not None
+            and not support_interval_px.contains(
+                float(transition.trace_coordinate_px),
+                epsilon=0.5,
+            )
+        ):
+            continue
+        if transition.polarity != -top_polarity:
             continue
         top_coordinate = _line_boundary_coordinate(
             top_observation,
@@ -701,7 +769,12 @@ def _template_bound_opposite_run(
             continue
         selected.append(ordered[0])
 
-    queried = lane.bottom_measurement_set.query.trace_positions_px
+    queried = tuple(
+        trace
+        for trace in lane.bottom_measurement_set.query.trace_positions_px
+        if support_interval_px is None
+        or support_interval_px.contains(float(trace), epsilon=0.5)
+    )
     minimum = max(
         PHOTO_BOUNDARY_MEASUREMENT_SPEC.minimum_trace_count,
         math.ceil(
@@ -770,9 +843,23 @@ def _template_bound_opposite_run(
     )
 
 
+def _cross_pair_seed_qualified(run: ProfileRun) -> bool:
+    """Admit a measured edge only as one half of a complete physical pair."""
+
+    spec = PHOTO_BOUNDARY_MEASUREMENT_SPEC
+    return (
+        run.role_hint in {BoundaryRole.TOP, BoundaryRole.BOTTOM}
+        and run.support_fraction >= spec.minimum_cross_trace_fraction
+        and run.continuous_support_fraction
+        >= spec.minimum_continuous_support_fraction
+    )
+
+
 def provisional_height_templates(
     lane: TemplateLaneInput,
     geometry: SourceFrameGeometry,
+    *,
+    support_interval_px: FiniteInterval | None = None,
 ) -> tuple[ProvisionalHeightTemplate, ...]:
     allowance_mm = PHOTO_BOUNDARY_MEASUREMENT_SPEC.dimension_search_allowance_mm
     scale = geometry.height_state.scale_authority
@@ -796,6 +883,7 @@ def provisional_height_templates(
                 or not (
                     run.pair_qualified
                     or run.anchor_qualified_for(role)
+                    or _cross_pair_seed_qualified(run)
                 )
             ):
                 continue
@@ -812,6 +900,7 @@ def provisional_height_templates(
                     minimum_trace_fraction=(
                         PHOTO_BOUNDARY_MEASUREMENT_SPEC.minimum_cross_fit_trace_fraction
                     ),
+                    support_interval_px=support_interval_px,
                 )
             observation = fit_cache[key]
             if observation is None:
@@ -821,6 +910,7 @@ def provisional_height_templates(
                 run,
                 observation,
                 measurement_set,
+                support_interval_px,
             )
             origin = (
                 run.coordinate_interval_px
@@ -836,6 +926,7 @@ def provisional_height_templates(
             geometry,
             top_run,
             top_observation,
+            support_interval_px,
         )
         if bottom_run is None:
             continue
@@ -848,6 +939,7 @@ def provisional_height_templates(
             minimum_trace_fraction=(
                 PHOTO_BOUNDARY_MEASUREMENT_SPEC.minimum_cross_fit_trace_fraction
             ),
+            support_interval_px=support_interval_px,
         )
         if bottom_observation is None:
             continue
@@ -860,6 +952,7 @@ def provisional_height_templates(
             bottom_run,
             bottom_observation,
             lane.bottom_measurement_set,
+            support_interval_px,
         )
         fitted[BoundaryRole.BOTTOM].append(
             (
@@ -930,6 +1023,7 @@ def provisional_height_templates(
             lane,
             geometry,
             broad_height,
+            support_interval_px=support_interval_px,
         )
         if reference_pair is not None:
             templates.append(reference_pair)
@@ -1056,7 +1150,14 @@ def shared_source_direction_classes(
             ),
         )
         if (
-            hull.width
+            max(
+                direction.canonical_angle_degrees
+                for direction in directions
+            )
+            - min(
+                direction.canonical_angle_degrees
+                for direction in directions
+            )
             > PHOTO_BOUNDARY_MEASUREMENT_SPEC.maximum_shared_direction_hull_degrees
         ):
             return tuple(sorted(directions, key=direction_class_key))
@@ -2210,8 +2311,8 @@ def _refine_source_geometry(
             boundary_scale_px_per_mm=lane.height_scale_px_per_mm,
         )
         observed_height = _subtract(
-            bottom.fit_position_interval_px,
-            top.fit_position_interval_px,
+            bottom.full_position_interval_px,
+            top.full_position_interval_px,
         )
         if (
             _intersection(
@@ -3083,52 +3184,23 @@ def _materialize_cross_placement(
         for role, run in observed_runs.items()
     }
     extent = geometry.height_state.extent_projection_px()
-    phase_fit = _common(
+    phase = _conditional_fit_and_full(
         tuple(
             projection.fit_position_interval_px
             if role == BoundaryRole.TOP
             else _subtract(projection.fit_position_interval_px, extent)
             for role, projection in lane_projections.items()
-        )
-    )
-    phase_full = _common(
+        ),
         tuple(
             projection.full_position_interval_px
             if role == BoundaryRole.TOP
             else _subtract(projection.full_position_interval_px, extent)
             for role, projection in lane_projections.items()
-        )
+        ),
     )
-    if phase_fit is None or phase_full is None:
+    if phase is None:
         raise ValueError("template-bound height roles disagree on source height")
-    phase_full = _hull((phase_full, phase_fit))
-    scale, normalized, _factor = geometry.height_state.canonical_state()
-    del scale
-    canonical_extent = geometry.height_state.design_extent_mm * normalized
-    canonical_extent_interval = FiniteInterval.exact(canonical_extent)
-    canonical_phase_interval = _common(
-        tuple(
-            projection.fit_position_interval_px
-            if role == BoundaryRole.TOP
-            else _subtract(
-                projection.fit_position_interval_px,
-                canonical_extent_interval,
-            )
-            for role, projection in lane_projections.items()
-        )
-    )
-    if canonical_phase_interval is None:
-        raise ValueError("canonical source height is outside observed roles")
-    canonical_phase_preference = sum(
-        projection.canonical_position_px
-        - (canonical_extent if role == BoundaryRole.BOTTOM else 0.0)
-        for role, projection in lane_projections.items()
-    ) / len(lane_projections)
-    canonical_phase = (
-        canonical_phase_preference
-        if canonical_phase_interval.contains(canonical_phase_preference)
-        else canonical_phase_interval.center
-    )
+    phase_fit, phase_full = phase
     canonical_slope = canonical_source_cross_axis_slope(
         direction,
         lane.height_axis,
@@ -3137,14 +3209,15 @@ def _materialize_cross_placement(
         direction,
         lane.height_axis,
     )
-    top_canonical: list[float] = []
-    bottom_canonical: list[float] = []
-    top_fit: list[FiniteInterval] = []
-    bottom_fit: list[FiniteInterval] = []
-    top_full: list[FiniteInterval] = []
-    bottom_full: list[FiniteInterval] = []
     if len(frame_reference_traces_px) != len(frame_reference_intervals_px):
         raise ValueError("cross placement frame references are incomplete")
+    frame_states: list[
+        tuple[
+            dict[BoundaryRole, FiniteInterval],
+            dict[BoundaryRole, FiniteInterval],
+            float,
+        ]
+    ] = []
     for reference, reference_interval in zip(
         frame_reference_traces_px,
         frame_reference_intervals_px,
@@ -3192,34 +3265,115 @@ def _materialize_cross_placement(
                     reference_interval.maximum,
                 )
             )
-            fit = _intersection(
-                frame_fit[role],
-                direct_values[0].fit_position_interval_px,
-            )
-            full = _intersection(
-                frame_full[role],
-                _hull(
-                    tuple(
-                        item.full_position_interval_px
-                        for item in direct_values
-                    )
+            conditioned = _conditional_fit_and_full(
+                (
+                    frame_fit[role],
+                    direct_values[0].fit_position_interval_px,
+                ),
+                (
+                    frame_full[role],
+                    _hull(
+                        tuple(
+                            item.full_position_interval_px
+                            for item in direct_values
+                        )
+                    ),
                 ),
             )
-            if fit is None or full is None:
+            if conditioned is None:
                 raise ValueError("exact height projection contradicts template")
-            frame_fit[role] = fit
-            frame_full[role] = full
-        frame_phase_interval = _common(
+            frame_fit[role], frame_full[role] = conditioned
+        frame_states.append((frame_fit, frame_full, canonical_shift))
+
+    extent_constraints = tuple(
+        intersection
+        for _frame_fit, frame_full, _canonical_shift in frame_states
+        if (
+            intersection := _intersection(
+                extent,
+                _subtract(
+                    frame_full[BoundaryRole.BOTTOM],
+                    frame_full[BoundaryRole.TOP],
+                ),
+            )
+        )
+        is not None
+    )
+    if len(extent_constraints) != len(frame_states):
+        raise ValueError("frame height is outside joint source geometry")
+    shared_extent = _common(extent_constraints)
+    if shared_extent is None:
+        raise ValueError("frame heights have no shared physical extent")
+    _scale, normalized, _factor = geometry.height_state.canonical_state()
+    canonical_extent_preference = (
+        geometry.height_state.design_extent_mm * normalized
+    )
+    canonical_extent = (
+        canonical_extent_preference
+        if shared_extent.contains(canonical_extent_preference)
+        else shared_extent.center
+    )
+    canonical_extent_interval = FiniteInterval.exact(canonical_extent)
+    canonical_phase_condition = _conditional_fit_and_full(
+        tuple(
+            projection.fit_position_interval_px
+            if role == BoundaryRole.TOP
+            else _subtract(
+                projection.fit_position_interval_px,
+                canonical_extent_interval,
+            )
+            for role, projection in lane_projections.items()
+        ),
+        tuple(
+            projection.full_position_interval_px
+            if role == BoundaryRole.TOP
+            else _subtract(
+                projection.full_position_interval_px,
+                canonical_extent_interval,
+            )
+            for role, projection in lane_projections.items()
+        ),
+    )
+    if canonical_phase_condition is None:
+        raise ValueError("canonical source height is outside observed roles")
+    canonical_phase_interval = canonical_phase_condition[0]
+    canonical_phase_preference = sum(
+        projection.canonical_position_px
+        - (canonical_extent if role == BoundaryRole.BOTTOM else 0.0)
+        for role, projection in lane_projections.items()
+    ) / len(lane_projections)
+    canonical_phase = (
+        canonical_phase_preference
+        if canonical_phase_interval.contains(canonical_phase_preference)
+        else canonical_phase_interval.center
+    )
+
+    top_canonical: list[float] = []
+    bottom_canonical: list[float] = []
+    top_fit: list[FiniteInterval] = []
+    bottom_fit: list[FiniteInterval] = []
+    top_full: list[FiniteInterval] = []
+    bottom_full: list[FiniteInterval] = []
+    for frame_fit, frame_full, canonical_shift in frame_states:
+        frame_phase = _conditional_fit_and_full(
             (
                 frame_fit[BoundaryRole.TOP],
                 _subtract(
                     frame_fit[BoundaryRole.BOTTOM],
                     canonical_extent_interval,
                 ),
-            )
+            ),
+            (
+                frame_full[BoundaryRole.TOP],
+                _subtract(
+                    frame_full[BoundaryRole.BOTTOM],
+                    canonical_extent_interval,
+                ),
+            ),
         )
-        if frame_phase_interval is None:
+        if frame_phase is None:
             raise ValueError("canonical source height is infeasible at frame")
+        frame_phase_interval = frame_phase[0]
         predicted_phase = canonical_phase + canonical_shift
         frame_phase = (
             predicted_phase
@@ -3230,17 +3384,33 @@ def _materialize_cross_placement(
         canonical_bottom = frame_phase + canonical_extent
         if canonical_top >= canonical_bottom:
             raise ValueError("canonical height placement is unordered")
+        conditional_top_fit = (
+            frame_fit[BoundaryRole.TOP]
+            if frame_fit[BoundaryRole.TOP].contains(
+                canonical_top,
+                epsilon=1.0e-8,
+            )
+            else FiniteInterval.exact(canonical_top)
+        )
+        conditional_bottom_fit = (
+            frame_fit[BoundaryRole.BOTTOM]
+            if frame_fit[BoundaryRole.BOTTOM].contains(
+                canonical_bottom,
+                epsilon=1.0e-8,
+            )
+            else FiniteInterval.exact(canonical_bottom)
+        )
         top_canonical.append(canonical_top)
         bottom_canonical.append(canonical_bottom)
-        top_fit.append(frame_fit[BoundaryRole.TOP])
-        bottom_fit.append(frame_fit[BoundaryRole.BOTTOM])
+        top_fit.append(conditional_top_fit)
+        bottom_fit.append(conditional_bottom_fit)
         top_full.append(
-            _hull((frame_fit[BoundaryRole.TOP], frame_full[BoundaryRole.TOP]))
+            _hull((conditional_top_fit, frame_full[BoundaryRole.TOP]))
         )
         bottom_full.append(
             _hull(
                 (
-                    frame_fit[BoundaryRole.BOTTOM],
+                    conditional_bottom_fit,
                     frame_full[BoundaryRole.BOTTOM],
                 )
             )
@@ -3646,6 +3816,279 @@ def _compatible_height_templates(
     )
 
 
+def _direction_bound_cross_profile_runs(
+    lane: TemplateLaneInput,
+    direction: SharedStripDirection,
+    sequence_support_px: FiniteInterval,
+) -> tuple[ProfileRun, ...]:
+    """Aggregate registered transitions like a bounded multi-trace profile.
+
+    V4.2.8's useful separator producer combined many scan lines before it
+    localized an edge.  V5 keeps the stronger authority model: pixels have
+    already been queried, the shared direction is template-bound, and every
+    aggregate run still consists solely of auditable transition identities.
+    Two half-bin lattices prevent a real line from disappearing on one bin
+    boundary; all structurally supported bins survive, so this is not top-K
+    selection or a candidate score competition.
+    """
+
+    spec = PHOTO_BOUNDARY_MEASUREMENT_SPEC
+    reference = lane.width_authority_px.center
+    slope = canonical_source_cross_axis_slope(
+        direction,
+        lane.height_axis,
+    )
+    bin_width = max(
+        1.0,
+        spec.local_window_mm * lane.height_scale_px_per_mm.maximum,
+    )
+    values: list[ProfileRun] = []
+    for role, measurement_set in (
+        (BoundaryRole.TOP, lane.top_measurement_set),
+        (BoundaryRole.BOTTOM, lane.bottom_measurement_set),
+    ):
+        queried = tuple(
+            trace
+            for trace in measurement_set.query.trace_positions_px
+            if sequence_support_px.contains(float(trace), epsilon=0.5)
+        )
+        if not queried:
+            continue
+        queried_set = set(queried)
+        minimum_support = max(
+            spec.minimum_trace_count,
+            math.ceil(spec.minimum_cross_fit_trace_fraction * len(queried)),
+        )
+        projected = tuple(
+            (
+                transition,
+                transition.coordinate_px
+                + slope * (reference - transition.trace_coordinate_px),
+            )
+            for transition in measurement_set.transitions
+            if transition.trace_coordinate_px in queried_set
+            and transition.polarity != 0
+        )
+        for polarity in (-1, 1):
+            polarity_values = tuple(
+                item for item in projected if item[0].polarity == polarity
+            )
+            for offset in (0.0, bin_width / 2.0):
+                buckets: dict[int, dict[int, list[tuple[PhotoBoundaryTransition, float]]]] = {}
+                for transition, coordinate in polarity_values:
+                    bucket = math.floor((coordinate - offset) / bin_width)
+                    buckets.setdefault(bucket, {}).setdefault(
+                        transition.trace_coordinate_px,
+                        [],
+                    ).append((transition, coordinate))
+                for bucket, by_trace in buckets.items():
+                    center = offset + (bucket + 0.5) * bin_width
+                    selected: list[tuple[PhotoBoundaryTransition, float]] = []
+                    ambiguous = False
+                    for trace in queried:
+                        candidates = by_trace.get(trace, ())
+                        if not candidates:
+                            continue
+                        ordered = sorted(
+                            candidates,
+                            key=lambda item: (
+                                abs(item[1] - center),
+                                str(item[0].transition_id),
+                            ),
+                        )
+                        if (
+                            len(ordered) > 1
+                            and math.isclose(
+                                abs(ordered[0][1] - center),
+                                abs(ordered[1][1] - center),
+                                abs_tol=1.0e-9,
+                            )
+                        ):
+                            ambiguous = True
+                            continue
+                        selected.append(ordered[0])
+                    traces = tuple(
+                        sorted(item[0].trace_coordinate_px for item in selected)
+                    )
+                    continuity = continuous_trace_support_fraction(
+                        queried,
+                        traces,
+                    )
+                    if (
+                        len(traces) < minimum_support
+                        or continuity < spec.minimum_continuous_support_fraction
+                        or not selected
+                    ):
+                        continue
+                    transitions = tuple(item[0] for item in selected)
+                    mean_gradient = sum(
+                        item.gradient_z for item in transitions
+                    ) / len(transitions)
+                    mean_tone_or_texture = sum(
+                        max(item.tone_z, item.texture_z)
+                        for item in transitions
+                    ) / len(transitions)
+                    if (
+                        mean_gradient < spec.gradient_z_minimum
+                        or mean_tone_or_texture
+                        < spec.tone_or_texture_z_minimum
+                    ):
+                        continue
+                    coordinates = tuple(item[1] for item in selected)
+                    coordinate_center = float(np.median(coordinates))
+                    residual = float(
+                        np.median(
+                            np.abs(
+                                np.asarray(coordinates, dtype=np.float64)
+                                - coordinate_center
+                            )
+                        )
+                    )
+                    half_width = max(
+                        item.coordinate_interval_px.width / 2.0
+                        for item in transitions
+                    )
+                    identities = tuple(
+                        sorted(
+                            (item.transition_id for item in transitions),
+                            key=str,
+                        )
+                    )
+                    values.append(
+                        ProfileRun(
+                            run_id=_stable_id(
+                                "direction-bound-cross-profile-run",
+                                role.value,
+                                polarity,
+                                *(str(identity) for identity in identities),
+                            ),
+                            coordinate_interval_px=FiniteInterval(
+                                coordinate_center - residual - half_width,
+                                coordinate_center + residual + half_width,
+                            ),
+                            transition_ids=identities,
+                            trace_coordinates_px=traces,
+                            role_hint=role,
+                            qualified_anchor_roles=(),
+                            support_fraction=len(traces) / len(queried),
+                            continuous_support_fraction=continuity,
+                            fit_residual_px=residual,
+                            evidence_strength=(
+                                mean_gradient + mean_tone_or_texture
+                            ),
+                            pair_qualified=not ambiguous,
+                        )
+                    )
+    unique = {
+        (
+            item.role_hint,
+            tuple(map(str, item.transition_ids)),
+        ): item
+        for item in values
+    }
+    return tuple(
+        sorted(
+            unique.values(),
+            key=lambda item: (
+                item.coordinate_interval_px.center,
+                item.run_id,
+            ),
+        )
+    )
+
+
+def _staged_height_templates(
+    lane: TemplateLaneInput,
+    geometry: SourceFrameGeometry,
+    direction: SharedStripDirection,
+    sequence_support_px: FiniteInterval,
+) -> tuple[ProvisionalHeightTemplate, ...]:
+    """Rebind registered cross evidence inside one complete sequence span.
+
+    The source-wide top/bottom lattice establishes possible shared directions.
+    A partial strip, however, must not lose its actual photo edge merely because
+    the rest of the scan canvas contains no frames.  This stage performs no new
+    pixel query: it groups the already registered transition records again with
+    support restricted to the full uncertain span of this sequence template.
+    """
+
+    top_regions = track_side_transition_regions(
+        (lane.top_measurement_set,),
+        reference_trace_px=lane.width_authority_px.center,
+        boundary_axis_scale_px_per_mm=lane.height_scale_px_per_mm,
+        support_interval_px=sequence_support_px,
+    )
+    bottom_regions = track_side_transition_regions(
+        (lane.bottom_measurement_set,),
+        reference_trace_px=lane.width_authority_px.center,
+        boundary_axis_scale_px_per_mm=lane.height_scale_px_per_mm,
+        support_interval_px=sequence_support_px,
+    )
+    tracked_profile = cross_profile_from_regions(
+        top_regions,
+        bottom_regions,
+        coordinate_count=(
+            int(math.floor(lane.height_authority_px.maximum))
+            - int(math.ceil(lane.height_authority_px.minimum))
+            + 1
+        ),
+        transition_by_id=lane.transition_by_id,
+    )
+    aggregate_runs = _direction_bound_cross_profile_runs(
+        lane,
+        direction,
+        sequence_support_px,
+    )
+    scoped_lane = replace(
+        lane,
+        cross_profile=BasicAxisProfile(
+            "cross",
+            tracked_profile.coordinate_count,
+            tuple(
+                sorted(
+                    {
+                        *tracked_profile.trace_coordinates_px,
+                        *(
+                            trace
+                            for run in aggregate_runs
+                            for trace in run.trace_coordinates_px
+                        ),
+                    }
+                )
+            ),
+            tuple(
+                sorted(
+                    {
+                        run.run_id: run
+                        for run in (*tracked_profile.runs, *aggregate_runs)
+                    }.values(),
+                    key=lambda item: (
+                        item.coordinate_interval_px.center,
+                        item.run_id,
+                    ),
+                )
+            ),
+        ),
+    )
+
+    return tuple(
+        template
+        for template in provisional_height_templates(
+            scoped_lane,
+            geometry,
+            support_interval_px=sequence_support_px,
+        )
+        if all(
+            _intersection(
+                observation.angle_interval_degrees,
+                direction.full_angle_interval_degrees,
+            )
+            is not None
+            for observation in template.raw_observations
+        )
+    )
+
+
 def _materialize_component_seed(
     lane_proposal: TemplateLaneProposal,
     component_proposal: ComponentTemplateProposal,
@@ -3676,6 +4119,31 @@ def _materialize_component_seed(
                 compatible_heights,
                 sequence_seeds=(seed,),
             )
+            observed_relations = _local_advance_relations(
+                component_proposal,
+                geometry,
+                _materialized_vote_evidence(
+                    lane,
+                    seed.local_advance_votes,
+                    direction,
+                ),
+            )
+            joint_relations = _merge_local_advance_relations(
+                seed.local_advance_relations,
+                observed_relations,
+            )
+            if joint_relations != seed.local_advance_relations:
+                seed = replace(
+                    seed,
+                    local_advance_relations=joint_relations,
+                )
+                geometry = _refine_source_geometry(
+                    lane,
+                    component_proposal,
+                    direction,
+                    compatible_heights,
+                    sequence_seeds=(seed,),
+                )
         except ValueError:
             return None
     else:
@@ -3692,6 +4160,43 @@ def _materialize_component_seed(
         )
     except ValueError:
         return None
+    if not _sequence_within_authority(sequence, lane.width_authority_px):
+        return None
+    sequence_support_px = FiniteInterval(
+        min(item.minimum for item in sequence.full_positions_px),
+        max(item.maximum for item in sequence.full_positions_px),
+    )
+    staged_heights = _staged_height_templates(
+        lane,
+        geometry,
+        direction,
+        sequence_support_px,
+    )
+    if staged_heights:
+        compatible_heights = tuple(
+            {
+                item.template_id: item
+                for item in (*compatible_heights, *staged_heights)
+            }.values()
+        )
+        if source_geometry is None:
+            try:
+                geometry = _refine_source_geometry(
+                    lane,
+                    component_proposal,
+                    direction,
+                    compatible_heights,
+                    sequence_seeds=(seed,),
+                )
+                sequence = _materialize_sequence_placement(
+                    lane,
+                    component_proposal,
+                    seed,
+                    direction,
+                    geometry,
+                )
+            except ValueError:
+                return None
     if not _sequence_within_authority(sequence, lane.width_authority_px):
         return None
     frame_references = tuple(
@@ -3804,7 +4309,9 @@ def _retain_component_placements(
         if item.canonical_sequence.exclusion_authorized
     )
     if not authorized:
-        return placements
+        evidence_retained = placements
+    else:
+        evidence_retained = None
 
     def shares_source_geometry(
         authority: FormatPlacement,
@@ -3818,23 +4325,68 @@ def _retain_component_placements(
             return False
         return True
 
-    return tuple(
-        item
-        for item in placements
-        if item in authorized
-        or not (
-            any(
-                shares_source_geometry(authority, item)
+    def safety_support(
+        item: FormatPlacement,
+    ) -> frozenset[str]:
+        values = item.canonical_sequence.safety_support_transition_ids
+        if not isinstance(values, tuple):
+            return frozenset()
+        return frozenset(
+            str(identity)
+            for role_values in values
+            for identity in role_values
+        )
+
+    def strictly_evidence_dominates(
+        authority: FormatPlacement,
+        item: FormatPlacement,
+    ) -> bool:
+        """Exclude only a same-count interpretation with weaker evidence.
+
+        A strict transition superset is not a score: every pixel fact used by
+        the weaker placement is preserved by the authority, which additionally
+        explains at least one registered fact under the same physical source
+        geometry.  Explicit count/order therefore forbids retaining the weaker
+        placement as another shifted subset of the same strip.
+        """
+
+        if (
+            authority is item
+            or not authority.canonical_sequence.exclusion_authorized
+            or authority.output_slot_count != item.output_slot_count
+            or authority.component.component_id != item.component.component_id
+            or not shares_source_geometry(authority, item)
+        ):
+            return False
+        authority_support = safety_support(authority)
+        item_support = safety_support(item)
+        return bool(item_support) and item_support < authority_support
+
+    if evidence_retained is None:
+        evidence_retained = tuple(
+            item
+            for item in placements
+            if not any(
+                strictly_evidence_dominates(authority, item)
                 for authority in authorized
             )
-            and item.canonical_sequence.observed_role_count == 1
-            and item.canonical_sequence.observed_opposite_pair_count == 0
-            and not any(
-                relation.kind != LocalAdvanceKind.NOMINAL
-                for relation in item.canonical_sequence.local_advance_relations
+            and (
+                item in authorized
+                or not (
+                    any(
+                        shares_source_geometry(authority, item)
+                        for authority in authorized
+                    )
+                    and item.canonical_sequence.observed_role_count == 1
+                    and item.canonical_sequence.observed_opposite_pair_count == 0
+                    and not any(
+                        relation.kind != LocalAdvanceKind.NOMINAL
+                        for relation in item.canonical_sequence.local_advance_relations
+                    )
+                )
             )
         )
-    )
+    return evidence_retained
 
 
 def _materialize_component_placements(
@@ -3862,7 +4414,7 @@ def _materialize_component_placements(
         is not None
     )
     return _retain_component_placements(
-        tuple(sorted(values, key=lambda item: item.placement_id))
+        tuple(sorted(values, key=lambda item: item.placement_id)),
     )
 
 
