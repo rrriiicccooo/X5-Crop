@@ -33,7 +33,6 @@ from x5crop.report.read_models import gate_check_read_model
 from x5crop.run_config import RunConfig
 from x5crop.runtime.bootstrap import runtime_invocation_from_options
 from x5crop.runtime.limits import (
-    DIAGNOSTICS_JOB_LIMIT,
     STANDARD_JOB_DEFAULT,
     STANDARD_JOB_LIMIT,
 )
@@ -169,7 +168,10 @@ class CurrentOnlyContractTest(unittest.TestCase):
         }
         self.assertNotIn("--debug", option_strings)
         self.assertIn("--debug-analysis", option_strings)
-        self.assertIn("--debug-errors", option_strings)
+        self.assertNotIn("--debug-errors", option_strings)
+        self.assertNotIn("--diagnostics", option_strings)
+        self.assertNotIn("--overwrite", option_strings)
+        self.assertIn("--allow-best-effort-output", option_strings)
         self.assertIn("four-layer JPG", help_text)
         self.assertNotIn("three-panel JPG", help_text)
         for runtime_type in (RuntimeOptions, RunConfig):
@@ -185,19 +187,16 @@ class CurrentOnlyContractTest(unittest.TestCase):
             parser.parse_args(
                 ["input.tif", "--format", "135", "--debug"]
             )
-        diagnostics = options_from_args(
-            parser.parse_args(
-                ["input.tif", "--format", "135", "--diagnostics"]
-            )
-        )
-        self.assertTrue(diagnostics.report)
-        self.assertTrue(diagnostics.debug_analysis)
-        self.assertFalse(diagnostics.copy_review_files)
+        for removed in ("--diagnostics", "--overwrite", "--debug-errors"):
+            with (
+                contextlib.redirect_stderr(io.StringIO()),
+                self.assertRaises(SystemExit),
+            ):
+                parser.parse_args(["input.tif", "--format", "135", removed])
 
     def test_standard_job_default_and_caps_are_distinct(self) -> None:
         self.assertEqual(STANDARD_JOB_DEFAULT, 2)
         self.assertEqual(STANDARD_JOB_LIMIT, 3)
-        self.assertEqual(DIAGNOSTICS_JOB_LIMIT, 4)
 
         parser = build_parser()
         default_options = options_from_args(
@@ -208,28 +207,12 @@ class CurrentOnlyContractTest(unittest.TestCase):
                 ["input.tif", "--format", "135", "--jobs", "4"]
             )
         )
-        diagnostics_options = options_from_args(
-            parser.parse_args(
-                [
-                    "input.tif",
-                    "--format",
-                    "135",
-                    "--jobs",
-                    "4",
-                    "--diagnostics",
-                ]
-            )
-        )
         self.assertEqual(default_options.jobs, 2)
 
         with (
             mock.patch(
                 "x5crop.runtime.bootstrap.iter_input_files",
                 return_value=[Path("input.tif")],
-            ),
-            mock.patch(
-                "x5crop.runtime.bootstrap.read_tiff_page_shape",
-                return_value=(100, 200),
             ),
         ):
             self.assertEqual(
@@ -239,10 +222,6 @@ class CurrentOnlyContractTest(unittest.TestCase):
             self.assertEqual(
                 runtime_invocation_from_options(normal_four_options).config.jobs,
                 3,
-            )
-            self.assertEqual(
-                runtime_invocation_from_options(diagnostics_options).config.jobs,
-                4,
             )
 
     def test_strip_handling_has_one_current_contract(self) -> None:
@@ -273,10 +252,10 @@ class CurrentOnlyContractTest(unittest.TestCase):
         self.assertIsNone(options.requested_count)
 
     def test_schema_and_two_gate_status_authority_are_current(self) -> None:
-        self.assertEqual(REPORT_SCHEMA_ID, "detection_report")
+        self.assertEqual(REPORT_SCHEMA_ID, "x5crop_detection_report_v5")
         self.assertEqual(
             REPORT_SCHEMA_REVISION,
-            "source_coordinate_format_placement_v2",
+            "x5crop_v5_current_1",
         )
         candidate = candidate_gate_assessment(
             {

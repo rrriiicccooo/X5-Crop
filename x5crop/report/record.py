@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-from hashlib import sha256
-import json
-
 from ..app_info import VERSION
 from ..detection.final.model import FinalDetection
 from ..detection.photo_geometry.model import PHOTO_BOUNDARY_MEASUREMENT_SPEC
@@ -15,40 +12,13 @@ from .identity import (
 from .read_models import gate_read_model, typed_read_model
 
 
-def _transition_digest(measurement_set: object) -> str:
-    digest = sha256()
-    digest.update(b"x5crop-transition-jsonl-v1\n")
-    for item in measurement_set.transitions:
-        payload = (
-            str(item.transition_id),
-            item.trace_ordinal,
-            item.trace_coordinate_px,
-            item.coordinate_interval_px.minimum,
-            item.coordinate_interval_px.maximum,
-            item.gradient_z,
-            item.tone_z,
-            item.texture_z,
-            item.polarity,
-        )
-        digest.update(
-            json.dumps(
-                payload,
-                ensure_ascii=False,
-                separators=(",", ":"),
-            ).encode("utf-8")
-        )
-        digest.update(b"\n")
-    return digest.hexdigest()
-
-
 def _measurement_set_read_model(measurement_set: object) -> dict[str, object]:
     return {
         "query": typed_read_model(measurement_set.query),
         "state": measurement_set.state.value,
         "coverage": typed_read_model(measurement_set.coverage),
         "transition_count": len(measurement_set.transitions),
-        "transition_digest": _transition_digest(measurement_set),
-        "transition_digest_algorithm": "sha256_transition_jsonl_v1",
+        "transitions": typed_read_model(measurement_set.transitions),
     }
 
 
@@ -117,13 +87,10 @@ def report_record_for_final_detection(
     review_copy: str | None,
     warnings: list[str],
     configuration: dict,
-    analysis_identity: dict,
+    runtime_identity: dict,
 ) -> dict:
     core = detection.source_core
     candidate_geometry = detection.candidate.geometry
-    diagnostics = bool(
-        analysis_identity["runtime_configuration"]["diagnostics"]
-    )
     export_performed = bool(output_files)
     selected_profile_id = (
         None
@@ -205,17 +172,11 @@ def report_record_for_final_detection(
         "output": {
             "finalization": {
                 "frame_export_eligible": detection.frame_export_eligible,
-                "frame_export_requested": not diagnostics,
+                "frame_export_requested": True,
                 "frame_export_performed": export_performed,
-                "official_tiff_expected": (
-                    detection.frame_export_eligible and not diagnostics
-                ),
+                "official_tiff_expected": detection.frame_export_eligible,
                 "official_tiff_count": len(output_files),
-                "reason": (
-                    "diagnostics_read_only"
-                    if detection.frame_export_eligible and diagnostics
-                    else detection.frame_export_reason
-                ),
+                "reason": detection.frame_export_reason,
                 "resolved_output_slots": typed_read_model(
                     detection.resolved_output_slots
                 ),
@@ -245,13 +206,12 @@ def report_record_for_final_detection(
                     "icc_color_space",
                     "resolution",
                     "metadata",
-                    "lossless_compression_none_or_lzw",
+                    "frozen_lossless_compression",
+                    "orientation_baked_to_1",
                 ],
                 "success_receipt": (
                     "validated"
                     if export_performed
-                    else "not_requested_diagnostics"
-                    if detection.frame_export_eligible and diagnostics
                     else "not_created"
                 ),
             },
@@ -259,6 +219,6 @@ def report_record_for_final_detection(
             "review_copy": review_copy,
             "warnings": list(warnings),
         },
-        "analysis_identity": dict(analysis_identity),
+        "runtime_identity": dict(runtime_identity),
     }
     return bind_core_facts(record)

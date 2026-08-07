@@ -23,20 +23,9 @@ CURRENT_REPORT_SECTIONS = (
     "candidate_gate",
     "decision",
     "output",
-    "analysis_identity",
+    "runtime_identity",
     "core_facts_sha256",
 )
-
-_SHA256_HEX_LENGTH = 64
-
-
-def _is_sha256(value: object) -> bool:
-    return (
-        isinstance(value, str)
-        and len(value) == _SHA256_HEX_LENGTH
-        and all(character in "0123456789abcdef" for character in value)
-    )
-
 
 def _validate_gate(record: dict[str, Any], stage: str) -> None:
     checks = record.get("checks")
@@ -96,12 +85,18 @@ def _validate_measurement(record: dict[str, Any]) -> None:
                 raise ValueError("supported query lacks complete coverage")
         elif measurement_set["transition_count"]:
             raise ValueError("incomplete query exposed transitions")
+        transitions = measurement_set.get("transitions")
         if (
-            measurement_set.get("transition_digest_algorithm")
-            != "sha256_transition_jsonl_v1"
-            or not _is_sha256(measurement_set.get("transition_digest"))
+            not isinstance(transitions, list)
+            or len(transitions) != measurement_set["transition_count"]
+            or any(
+                not isinstance(item.get("coordinate_interval_px"), dict)
+                or item.get("polarity") not in {-1, 0, 1}
+                or not isinstance(item.get("provenance"), dict)
+                for item in transitions
+            )
         ):
-            raise ValueError("transition digest is inconsistent")
+            raise ValueError("transition safety facts are incomplete")
 
 
 def _validate_finalization(record: dict[str, Any]) -> None:
@@ -115,9 +110,6 @@ def _validate_finalization(record: dict[str, Any]) -> None:
     boxes = finalization["final_boxes"]
     output_files = record["output"]["output_files"]
     fidelity = record["output"]["tiff_fidelity"]
-    diagnostics = bool(
-        record["analysis_identity"]["runtime_configuration"]["diagnostics"]
-    )
     if fidelity.get("source_sample_count_per_roi") != 1:
         raise ValueError("TIFF output must use one source sample per ROI")
     if resolved is None:
@@ -138,19 +130,7 @@ def _validate_finalization(record: dict[str, Any]) -> None:
             or len(boxes) != count
         ):
             raise ValueError("approved output lacks complete geometry")
-        if diagnostics:
-            if (
-                finalization["frame_export_requested"]
-                or finalization["frame_export_performed"]
-                or finalization["official_tiff_expected"]
-                or finalization["official_tiff_count"] != 0
-                or output_files
-                or fidelity["write_readback_validated"]
-                or fidelity["success_receipt"]
-                != "not_requested_diagnostics"
-            ):
-                raise ValueError("diagnostics cannot write official TIFFs")
-        elif (
+        if (
             not finalization["frame_export_requested"]
             or not finalization["frame_export_performed"]
             or not finalization["official_tiff_expected"]
@@ -163,6 +143,7 @@ def _validate_finalization(record: dict[str, Any]) -> None:
     elif (
         status != "needs_review"
         or finalization["frame_export_eligible"]
+        or not finalization["frame_export_requested"]
         or finalization["frame_export_performed"]
         or finalization["official_tiff_expected"]
         or finalization["official_tiff_count"] != 0
@@ -185,7 +166,7 @@ def validate_current_report_record(record: dict[str, Any]) -> None:
         record["schema_id"] != REPORT_SCHEMA_ID
         or record["schema_revision"] != REPORT_SCHEMA_REVISION
         or record["configuration"]["execution"]["detector_kind"]
-        != "source_coordinate_format_placement"
+        != "v5_template_first_format_placement"
     ):
         raise ValueError("report does not use the current-only schema")
     _validate_measurement(record)
@@ -251,7 +232,17 @@ def validate_current_report_record(record: dict[str, Any]) -> None:
         raise ValueError("DecisionGate status/reasons are inconsistent")
     _validate_finalization(record)
     finalization = record["output"]["finalization"]
-    output_identity = record["analysis_identity"]["output_identity"]
+    runtime_identity = record["runtime_identity"]
+    source_identity = runtime_identity.get("source", {})
+    if (
+        "content_sha256" in source_identity
+        or "implementation_fingerprint" in runtime_identity
+        or not isinstance(source_identity.get("input_ordinal"), int)
+        or source_identity.get("input_ordinal", 0) <= 0
+        or not isinstance(source_identity.get("orientation"), dict)
+    ):
+        raise ValueError("runtime identity is not lightweight V5")
+    output_identity = runtime_identity["output_identity"]
     if (
         geometry["resolved_output_slots"]
         != finalization["resolved_output_slots"]

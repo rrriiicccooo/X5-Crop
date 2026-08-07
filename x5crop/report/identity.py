@@ -5,8 +5,8 @@ import json
 from typing import Any
 
 
-REPORT_SCHEMA_ID = "detection_report"
-REPORT_SCHEMA_REVISION = "source_coordinate_format_placement_v2"
+REPORT_SCHEMA_ID = "x5crop_detection_report_v5"
+REPORT_SCHEMA_REVISION = "x5crop_v5_current_1"
 
 
 def core_facts_sha256(record: dict[str, Any]) -> str:
@@ -22,7 +22,7 @@ def core_facts_sha256(record: dict[str, Any]) -> str:
         "candidate_gate": record["candidate_gate"],
         "decision": record["decision"],
         "finalization": record["output"]["finalization"],
-        "analysis_identity": record["analysis_identity"],
+        "runtime_identity": record["runtime_identity"],
     }
     encoded = json.dumps(
         payload,

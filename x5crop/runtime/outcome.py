@@ -4,6 +4,7 @@ from dataclasses import dataclass, fields
 from enum import Enum
 import math
 from pathlib import Path
+import traceback
 from typing import Any
 
 from ..report.model import ReportResult
@@ -106,6 +107,24 @@ class FailedInput:
     artifacts: RuntimeArtifacts
     traceback_text: str | None
     metrics: RuntimeMetrics
+
+    @classmethod
+    def from_exception(
+        cls,
+        source: Path,
+        exc: Exception,
+        *,
+        stage: FailureStage = FailureStage.WORKER,
+    ) -> "FailedInput":
+        return cls(
+            source=source,
+            failure_stage=stage,
+            error_code=type(exc).__name__,
+            error_message=str(exc),
+            artifacts=RuntimeArtifacts.empty(),
+            traceback_text=traceback.format_exc(),
+            metrics=RuntimeMetrics.unavailable(),
+        )
 
 
 InputProcessingOutcome = CompletedInput | FailedInput

@@ -101,7 +101,7 @@ class DetectionConfiguration:
 
     @property
     def detector_kind(self) -> str:
-        return "source_coordinate_format_placement"
+        return "v5_template_first_format_placement"
 
     @property
     def configuration_id(self) -> str:

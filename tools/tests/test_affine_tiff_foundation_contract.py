@@ -15,7 +15,6 @@ from x5crop.domain import (
     MeasurementProvenance,
     ObservationId,
 )
-from x5crop.configuration.model import FrameCountRequest
 from x5crop.detection.output_geometry import (
     output_transform_assessment,
     resolve_shared_strip_direction,
@@ -31,7 +30,6 @@ from x5crop.detection.photo_geometry.model import (
     SourceCoordinateLine,
 )
 from x5crop.detection.photo_geometry.output import output_sampling_identity
-from x5crop.formats import format_spec
 from x5crop.export.crops import write_crops
 from x5crop.geometry.affine import AffineCoordinateTransform
 from x5crop.geometry.convex import (
@@ -42,34 +40,8 @@ from x5crop.geometry.convex import (
 )
 from x5crop.image.transforms import sample_affine_roi
 from x5crop.io.model import ImageProfile, TiffExtraTag, TiffMetadata
+from x5crop.io.orientation import orientation_mapping
 from x5crop.io.tiff import read_tiff
-from x5crop.run_config import RunConfig
-
-
-def _run_config(source: Path, output: Path, compression: str) -> RunConfig:
-    return RunConfig(
-        input_path=source,
-        output_dir=output,
-        format_id="135",
-        layout_auto=False,
-        layout="horizontal",
-        strip_mode="full",
-        count_request=FrameCountRequest.from_user_input(
-            format_spec("135"),
-            "full",
-            None,
-        ),
-        page=0,
-        review_dir=None,
-        copy_review_files=False,
-        compression=compression,
-        debug_analysis=False,
-        diagnostics=False,
-        overwrite=False,
-        report=False,
-        debug_errors=False,
-        jobs=2,
-    )
 
 
 def _angle_observation(
@@ -497,24 +469,25 @@ class TiffFoundationContractTest(unittest.TestCase):
                     ),
                 ),
             ),
+            orientation=orientation_mapping(
+                1,
+                array.shape[1],
+                array.shape[0],
+            ),
         )
         box = Box(2, 1, 12, 9)
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            source = root / "source.tif"
-            cases = (
-                ("none", "NONE", "NONE"),
-                ("same", "LZW", "LZW"),
-            )
-            for compression, source_compression, expected_compression in cases:
+            cases = (("LZW", "LZW"), ("NONE", "NONE"))
+            for source_compression, expected_compression in cases:
                 with self.subTest(
-                    compression=compression,
                     source_compression=source_compression,
                 ):
-                    output = root / compression
+                    output = root / source_compression
                     output.mkdir()
                     written = write_crops(
-                        source,
+                        "source",
+                        1,
                         array,
                         replace(
                             source_profile,
@@ -522,12 +495,11 @@ class TiffFoundationContractTest(unittest.TestCase):
                         ),
                         (box,),
                         (Box(0, 0, 14, 10),),
-                        _run_config(source, output, compression),
                         AffineCoordinateTransform.identity(14, 10),
                         output,
                     )
                     self.assertEqual(len(written), 1)
-                    actual, profile, warnings = read_tiff(Path(written[0]), 0)
+                    actual, profile, warnings = read_tiff(Path(written[0]))
                     self.assertEqual(warnings, [])
                     self.assertTrue(np.array_equal(actual, array[1:9, 2:12]))
                     self.assertEqual(profile.dtype, "uint16")

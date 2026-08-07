@@ -29,7 +29,7 @@ def configuration_consistency_issues() -> tuple[str, ...]:
                 issues.append(f"{format_id}/{strip_mode}: physical spec mismatch")
             if (
                 configuration.detector_kind
-                != "source_coordinate_format_placement"
+                != "v5_template_first_format_placement"
             ):
                 issues.append(f"{format_id}/{strip_mode}: detector mismatch")
     return tuple(issues)

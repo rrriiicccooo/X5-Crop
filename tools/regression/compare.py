@@ -24,7 +24,7 @@ DEFAULT_FIELDS = (
 @dataclass(frozen=True, order=True)
 class ReportComparisonIdentity:
     source: str
-    page: int
+    input_ordinal: int
     format_id: str
     layout: str
     strip_mode: str
@@ -60,14 +60,12 @@ def load_jsonl_report(path: Path) -> list[dict[str, Any]]:
 
 def report_key(row: dict[str, Any]) -> ReportComparisonIdentity:
     validate_current_report_record(row)
-    source = row["analysis_identity"]["source"]
-    config = row["analysis_identity"]["runtime_configuration"]
-    if int(source["page"]) != int(config["page"]):
-        raise ValueError("report source and runtime page disagree")
+    source = row["runtime_identity"]["source"]
+    config = row["runtime_identity"]["runtime_configuration"]
     policy = config["output_slot_policy"]
     return ReportComparisonIdentity(
         source=str(row["source"]),
-        page=int(source["page"]),
+        input_ordinal=int(source["input_ordinal"]),
         format_id=str(config["format_id"]),
         layout=str(config["layout"]),
         strip_mode=str(config["strip_mode"]),

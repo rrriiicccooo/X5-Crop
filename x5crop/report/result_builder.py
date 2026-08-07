@@ -21,7 +21,7 @@ def result_from_detection(
     warnings: list[str],
     *,
     configuration_detail: dict[str, Any],
-    analysis_identity: dict[str, Any],
+    runtime_identity: dict[str, Any],
 ) -> ReportResult:
     return ReportResult(
         record=report_record_for_final_detection(
@@ -33,6 +33,6 @@ def result_from_detection(
             review_copy=review_copy,
             warnings=warnings,
             configuration=configuration_detail,
-            analysis_identity=analysis_identity,
+            runtime_identity=runtime_identity,
         )
     )

@@ -145,7 +145,7 @@ class TemplateFirstArchitectureContractTest(unittest.TestCase):
         self.assertEqual(templates[0].observed_runs, (run,))
         self.assertEqual(templates[0].raw_observations, (observation,))
 
-    def test_cross_anchor_requires_the_same_trace_fraction_contract(self) -> None:
+    def test_cross_anchor_uses_its_typed_trace_fraction_contract(self) -> None:
         transition_ids = tuple(
             ObservationId(f"cross:{index}") for index in range(5)
         )
@@ -172,7 +172,10 @@ class TemplateFirstArchitectureContractTest(unittest.TestCase):
                 for index, identity in enumerate(transition_ids)
             },
         )
-        self.assertEqual(profile.runs[0].qualified_anchor_roles, ())
+        self.assertEqual(
+            profile.runs[0].qualified_anchor_roles,
+            (BoundaryRole.TOP,),
+        )
 
     def test_source_geometry_consumes_the_single_tolerance_owner(self) -> None:
         component = FramePhysicalSpec(

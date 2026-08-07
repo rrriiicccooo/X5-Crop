@@ -30,10 +30,8 @@ class VerificationScopeContractTest(unittest.TestCase):
         for path in (
             "X5_Crop.py",
             "x5crop/detection/pipeline.py",
-            "tools/regression/benchmark_adapter.py",
-            "tools/regression/benchmark_workload.py",
             "tools/regression/performance.py",
-            "tools/regression/profile_fixed_sample.py",
+            "tools/regression/performance_identity.py",
             "tools/regression/cohorts/production_performance.jsonl",
             "tools/install/requirements.txt",
             "pyproject.toml",

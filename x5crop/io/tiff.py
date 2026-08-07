@@ -7,6 +7,7 @@ import numpy as np
 import tifffile
 
 from .model import ImageProfile, TiffExtraTag, TiffMetadata
+from .orientation import canonicalize_orientation, orientation_mapping
 from ..utils import (
     enum_name,
     infer_axes,
@@ -23,6 +24,7 @@ TIFF_RESOLUTION_ABSOLUTE_TOLERANCE = 1e-6
 TIFF_IMAGE_DESCRIPTION_TAG = 270
 TIFF_SOFTWARE_TAG = 305
 TIFF_DATETIME_TAG = 306
+TIFF_ORIENTATION_TAG = 274
 TRANSFERABLE_EXTRA_TAG_TYPES = {
     269: "s",  # DocumentName
     271: "s",  # Make
@@ -103,10 +105,30 @@ def profile_from_page(page: Any, shape: tuple[int, ...], dtype: np.dtype, axes: 
     yres = page.tags.get("YResolution")
     unit = page.tags.get("ResolutionUnit")
     icc = page.tags.get(TIFF_ICC_PROFILE_TAG)
+    orientation_tag = page.tags.get(TIFF_ORIENTATION_TAG)
+    orientation_value = (
+        1
+        if orientation_tag is None
+        else int(normalize_tag_value(orientation_tag.value))
+    )
+    if axes != "YXS" or len(shape) != 3:
+        raise ValueError(
+            "V5 requires one 16-bit RGB contiguous TIFF page with YXS axes"
+        )
+    mapping = orientation_mapping(
+        orientation_value,
+        raw_width=int(shape[1]),
+        raw_height=int(shape[0]),
+    )
+    canonical_shape = (
+        mapping.canonical_height,
+        mapping.canonical_width,
+        int(shape[2]),
+    )
     x_resolution = rational_to_float(xres.value) if xres else None
     y_resolution = rational_to_float(yres.value) if yres else None
     profile = ImageProfile(
-        shape=tuple(int(x) for x in shape),
+        shape=canonical_shape,
         dtype=str(np.dtype(dtype)),
         axes=axes,
         photometric=photometric,
@@ -129,6 +151,7 @@ def profile_from_page(page: Any, shape: tuple[int, ...], dtype: np.dtype, axes: 
         ),
         icc_profile=(bytes(icc.value) if icc is not None else None),
         metadata=tiff_metadata_from_page(page),
+        orientation=mapping,
     )
     expected_bits = expected_bits_for_dtype(profile.dtype, int(profile.samples_per_pixel or 1))
     if profile.bits_per_sample is not None and normalize_tag_value(profile.bits_per_sample) != normalize_tag_value(expected_bits):
@@ -137,56 +160,63 @@ def profile_from_page(page: Any, shape: tuple[int, ...], dtype: np.dtype, axes: 
             f"BitsPerSample={profile.bits_per_sample}, dtype={profile.dtype}. "
             "Refusing to continue to protect output bit depth."
         )
+    if (
+        profile.dtype != "uint16"
+        or profile.photometric.upper() != "RGB"
+        or profile.samples_per_pixel != 3
+        or profile.planar_config != "CONTIG"
+        or profile.compression.upper() not in LOSSLESS_COMPRESSIONS
+    ):
+        raise ValueError(
+            "V5 requires uint16 RGB, three samples, CONTIG planar layout, "
+            "and a frozen lossless compression"
+        )
     return profile
 
 
-def read_tiff_profile(path: Path, page_index: int) -> tuple[ImageProfile, list[str]]:
-    warnings: list[str] = []
+def read_tiff_profile(path: Path) -> tuple[ImageProfile, list[str]]:
     with tifffile.TiffFile(path) as tif:
         if not tif.pages:
             raise ValueError("TIFF has no pages")
-        if page_index < 0 or page_index >= len(tif.pages):
-            raise ValueError(f"--page {page_index} is out of range; TIFF has {len(tif.pages)} pages")
-        if len(tif.pages) > 1 and page_index == 0:
-            warnings.append(f"TIFF has {len(tif.pages)} pages; processing page 0")
-        page = tif.pages[page_index]
+        if len(tif.pages) != 1:
+            raise ValueError("V5 requires a single-page TIFF")
+        page = tif.pages[0]
         shape = tuple(int(x) for x in page.shape)
         axes = str(getattr(page, "axes", "") or "")
         if axes not in {"YX", "YXS", "SYX"}:
             axes = infer_axes_from_shape(shape)
         profile = profile_from_page(page, shape, np.dtype(page.dtype), axes)
-    return profile, warnings
+    return profile, []
 
 
-def read_tiff_page_shape(path: Path, page_index: int) -> tuple[int, int]:
-    if page_index < 0:
-        raise ValueError("--page must be 0 or greater")
-    with tifffile.TiffFile(path) as tif:
-        if not tif.pages:
-            raise ValueError(f"TIFF has no pages: {path}")
-        if page_index >= len(tif.pages):
-            raise ValueError(
-                f"--page {page_index} is out of range; "
-                f"TIFF has {len(tif.pages)} pages"
-            )
-        shape = tuple(int(value) for value in tif.pages[page_index].shape)
-    return spatial_shape_from_shape(shape)
+def read_tiff_page_shape(path: Path) -> tuple[int, int]:
+    profile, _warnings = read_tiff_profile(path)
+    return spatial_shape_from_shape(profile.shape)
 
 
-def read_tiff(path: Path, page_index: int) -> tuple[np.ndarray, ImageProfile, list[str]]:
-    warnings: list[str] = []
+def read_tiff(path: Path) -> tuple[np.ndarray, ImageProfile, list[str]]:
     with tifffile.TiffFile(path) as tif:
         if not tif.pages:
             raise ValueError("TIFF has no pages")
-        if page_index < 0 or page_index >= len(tif.pages):
-            raise ValueError(f"--page {page_index} is out of range; TIFF has {len(tif.pages)} pages")
-        if len(tif.pages) > 1 and page_index == 0:
-            warnings.append(f"TIFF has {len(tif.pages)} pages; processing page 0")
-        page = tif.pages[page_index]
-        arr = page.asarray()
-        axes = infer_axes(arr)
-        profile = profile_from_page(page, tuple(int(x) for x in arr.shape), arr.dtype, axes)
-    return arr, profile, warnings
+        if len(tif.pages) != 1:
+            raise ValueError("V5 requires a single-page TIFF")
+        page = tif.pages[0]
+        raw = page.asarray()
+        axes = infer_axes(raw)
+        profile = profile_from_page(
+            page,
+            tuple(int(x) for x in raw.shape),
+            raw.dtype,
+            axes,
+        )
+        arr, mapping = canonicalize_orientation(
+            raw,
+            axes,
+            profile.orientation.original_tag,
+        )
+        if mapping != profile.orientation or tuple(arr.shape) != profile.shape:
+            raise ValueError("TIFF orientation profile and canonical raster disagree")
+    return arr, profile, []
 
 
 def compression_for_write(
@@ -213,7 +243,6 @@ def compression_for_write(
 
 def tiff_write_kwargs(
     profile: ImageProfile,
-    compression_mode: str,
 ) -> dict[str, Any]:
     kwargs: dict[str, Any] = {"metadata": None}
     photometric = profile.photometric.lower()
@@ -223,7 +252,7 @@ def tiff_write_kwargs(
         planar = profile.planar_config.lower()
         if planar in {"contig", "separate"}:
             kwargs["planarconfig"] = planar
-    compression = compression_for_write(profile, compression_mode)
+    compression = compression_for_write(profile, "same")
     if compression is not None:
         kwargs["compression"] = compression
     if profile.resolution and profile.resolution[0] and profile.resolution[1]:
@@ -240,11 +269,13 @@ def tiff_write_kwargs(
     kwargs["software"] = (
         metadata.software if metadata.software is not None else False
     )
-    if metadata.extra_tags:
-        kwargs["extratags"] = tuple(
+    kwargs["extratags"] = (
+        (TIFF_ORIENTATION_TAG, "H", 1, 1, False),
+        *tuple(
             (tag.code, tag.dtype, tag.count, tag.value, False)
             for tag in metadata.extra_tags
-        )
+        ),
+    )
     return kwargs
 
 
@@ -302,7 +333,6 @@ def validate_written_tiff(
     out_path: Path,
     expected_array: np.ndarray,
     source_profile: ImageProfile,
-    compression_mode: str,
 ) -> None:
     problems: list[str] = []
     with tifffile.TiffFile(out_path) as tif:
@@ -322,6 +352,7 @@ def validate_written_tiff(
         planar = page.tags.get("PlanarConfiguration")
         icc = page.tags.get(TIFF_ICC_PROFILE_TAG)
         metadata = tiff_metadata_from_page(page)
+        orientation = page.tags.get(TIFF_ORIENTATION_TAG)
 
         if arr.dtype != expected_array.dtype:
             problems.append(f"dtype changed: {expected_array.dtype} -> {arr.dtype}")
@@ -333,7 +364,7 @@ def validate_written_tiff(
             problems.append(f"axes changed: {source_profile.axes} -> {axes}")
         if photometric.upper() != source_profile.photometric.upper():
             problems.append(f"Photometric changed: {source_profile.photometric} -> {photometric}")
-        if compression_mode == "same" and compression.upper() != source_profile.compression.upper():
+        if compression.upper() != source_profile.compression.upper():
             problems.append(f"Compression changed: {source_profile.compression} -> {compression}")
         if source_profile.sample_format is not None:
             actual_sample_format = normalize_tag_value(sample_format.value if sample_format else getattr(page, "sampleformat", None))
@@ -376,6 +407,17 @@ def validate_written_tiff(
             problems.append(
                 f"TIFF metadata changed: {source_profile.metadata} -> {metadata}"
             )
+        actual_orientation = 1 if orientation is None else int(orientation.value)
+        if actual_orientation != 1:
+            problems.append(f"Orientation must be baked to 1, got {actual_orientation}")
+        if (
+            arr.dtype != np.dtype("uint16")
+            or axes != "YXS"
+            or photometric.upper() != "RGB"
+            or actual_samples != 3
+            or actual_planar != "CONTIG"
+        ):
+            problems.append("output left the frozen uint16 RGB CONTIG TIFF domain")
 
     if problems:
         raise RuntimeError("Output TIFF validation failed for " + str(out_path) + ":\n  - " + "\n  - ".join(problems))
@@ -385,11 +427,10 @@ def write_validated_tiff(
     path: Path,
     pixels: np.ndarray,
     source_profile: ImageProfile,
-    compression_mode: str,
 ) -> None:
     tifffile.imwrite(
         path,
         pixels,
-        **tiff_write_kwargs(source_profile, compression_mode),
+        **tiff_write_kwargs(source_profile),
     )
-    validate_written_tiff(path, pixels, source_profile, compression_mode)
+    validate_written_tiff(path, pixels, source_profile)

@@ -23,12 +23,8 @@ _RUNTIME_EXACT_PATHS = frozenset(
         "tools/install/requirements.txt",
         "uv.lock",
         "poetry.lock",
-        "tools/regression/benchmark_adapter.py",
-        "tools/regression/benchmark_workload.py",
         "tools/regression/performance.py",
-        "tools/regression/performance_compare.py",
-        "tools/regression/profile_fixed_sample.py",
-        "tools/regression/cohorts/benchmark_io_workload.jsonl",
+        "tools/regression/performance_identity.py",
         "tools/regression/cohorts/production_performance.jsonl",
     }
 )

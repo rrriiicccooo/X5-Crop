@@ -1,42 +1,40 @@
 from __future__ import annotations
 
-from hashlib import file_digest, sha256
-import json
+from functools import lru_cache
+import importlib
+import importlib.metadata
 from pathlib import Path
+import platform
+import sys
 from typing import Any
 
 from ..app_info import SCRIPT_NAME, VERSION
-from ..configuration.bundle import DetectionConfigurationBundle
 from ..configuration.model import FrameCountMode
-from ..detection.photo_geometry.model import (
-    OutputSlotIdentity,
-    ResolvedOutputSlots,
-)
+from ..detection.photo_geometry.model import OutputSlotIdentity, ResolvedOutputSlots
 from ..image.workspace import WorkspaceIdentity
 from ..io.model import ImageProfile
 from ..report.read_models import typed_read_model
 from ..run_config import RunConfig
-from .implementation import active_implementation_fingerprint
+from .invocation import PlannedSource
+from .threading import thread_identity
 
 
-def source_analysis_identity(
-    input_file: Path,
+def source_runtime_identity(
+    source: PlannedSource,
     profile: ImageProfile,
-    page_index: int,
 ) -> dict[str, Any]:
-    stat = input_file.stat()
-    with input_file.open("rb") as stream:
-        content_sha256 = file_digest(stream, "sha256").hexdigest()
+    info = source.path.stat()
     return {
-        "name": input_file.name,
-        "size": int(stat.st_size),
-        "mtime_ns": int(stat.st_mtime_ns),
-        "content_sha256": content_sha256,
-        "page": int(page_index),
+        "input_ordinal": source.input_ordinal,
+        "name": source.path.name,
+        "portable_stem": source.portable_stem,
+        "size": int(info.st_size),
+        "mtime_ns": int(info.st_mtime_ns),
         "shape": list(profile.shape),
         "dtype": profile.dtype,
         "axes": profile.axes,
         "photometric": profile.photometric,
+        "orientation": profile.orientation.as_record(),
     }
 
 
@@ -59,32 +57,42 @@ def runtime_configuration_identity(config: RunConfig) -> dict[str, Any]:
         "layout": config.layout,
         "strip_mode": config.strip_mode,
         "output_slot_policy": count_policy,
-        "page": int(config.page),
-        "compression": config.compression,
-        "diagnostics": config.diagnostics,
+        "debug_analysis": config.debug_analysis,
     }
 
 
-def detection_configuration_fingerprint(
-    configuration_bundle: DetectionConfigurationBundle,
-) -> str:
-    analysis_configurations = []
-    for configuration in configuration_bundle.resolved_configurations:
-        analysis_configuration = typed_read_model(configuration)
-        del analysis_configuration["diagnostics"]
-        analysis_configurations.append(analysis_configuration)
-    payload = json.dumps(
-        analysis_configurations,
-        sort_keys=True,
-        separators=(",", ":"),
-    ).encode("utf-8")
-    return sha256(payload).hexdigest()
+@lru_cache(maxsize=1)
+def runtime_environment_identity() -> dict[str, Any]:
+    dependencies: dict[str, str] = {}
+    for distribution, module_name in (
+        ("numpy", "numpy"),
+        ("scipy", "scipy"),
+        ("opencv-python-headless", "cv2"),
+        ("tifffile", "tifffile"),
+        ("imagecodecs", "imagecodecs"),
+        ("Pillow", None),
+    ):
+        try:
+            version = importlib.metadata.version(distribution)
+        except importlib.metadata.PackageNotFoundError:
+            if module_name is None:
+                version = "unavailable"
+            else:
+                module = importlib.import_module(module_name)
+                version = str(getattr(module, "__version__", "unavailable"))
+        dependencies[distribution] = version
+    return {
+        "python_version": platform.python_version(),
+        "python_implementation": platform.python_implementation(),
+        "platform": platform.platform(),
+        "dependencies": dependencies,
+        "threads": thread_identity(),
+    }
 
 
-def make_analysis_identity(
+def make_runtime_identity(
     source_identity: dict[str, Any],
     config: RunConfig,
-    configuration_bundle: DetectionConfigurationBundle,
     workspace_identity: WorkspaceIdentity,
     selected_profile_id: str | None,
     resolved_output_slots: ResolvedOutputSlots | None,
@@ -93,18 +101,13 @@ def make_analysis_identity(
     return {
         "script": SCRIPT_NAME,
         "script_version": VERSION,
-        "implementation_fingerprint": active_implementation_fingerprint(),
         "source": dict(source_identity),
         "runtime_configuration": runtime_configuration_identity(config),
-        "detection_configuration_fingerprint": (
-            detection_configuration_fingerprint(configuration_bundle)
-        ),
+        "runtime_environment": runtime_environment_identity(),
         "workspace_identity": typed_read_model(workspace_identity),
         "output_identity": {
             "selected_scan_canvas_profile_id": selected_profile_id,
-            "resolved_output_slots": typed_read_model(
-                resolved_output_slots
-            ),
+            "resolved_output_slots": typed_read_model(resolved_output_slots),
             "output_slot_count": (
                 None
                 if resolved_output_slots is None

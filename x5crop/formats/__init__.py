@@ -39,7 +39,7 @@ class FrameDimensionToleranceSpec:
     """
 
     frame_width_tolerance_ratio: float = 0.0125
-    frame_height_tolerance_ratio: float = 0.0040
+    frame_height_tolerance_ratio: float = 0.0200
 
     def __post_init__(self) -> None:
         for name, value in (

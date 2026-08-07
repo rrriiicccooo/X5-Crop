@@ -11,14 +11,15 @@ class OutputSurface:
     root: Path
 
 
-def output_directory_for(input_file: Path, config: RunConfig) -> Path:
+def output_directory_for(config: RunConfig) -> Path:
     if config.output_dir is not None:
         return config.output_dir
-    return input_file.parent / "x5_crop_output"
+    base = config.input_path if config.input_path.is_dir() else config.input_path.parent
+    return base / "x5_crop_output"
 
 
-def output_surface_for_input(input_file: Path, config: RunConfig) -> OutputSurface:
-    return OutputSurface(root=output_directory_for(input_file, config))
+def output_surface_for_run(config: RunConfig) -> OutputSurface:
+    return OutputSurface(root=output_directory_for(config))
 
 
 def display_generated_path(path: Path | str, config: RunConfig) -> str:

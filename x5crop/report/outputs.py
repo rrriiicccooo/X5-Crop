@@ -6,8 +6,6 @@ from pathlib import Path
 
 from ..app_info import REPORT_JSONL_NAME, SUMMARY_CSV_NAME
 from .model import ReportResult
-from ..output.surface import output_directory_for
-from ..run_config import RunConfig
 
 
 def append_report_jsonl(path: Path, result: ReportResult) -> None:
@@ -56,7 +54,7 @@ def append_summary_csv(path: Path, result: ReportResult) -> None:
                 "configuration_id": record["configuration"]["configuration_id"],
                 "status": decision["status"],
                 "format_id": record["configuration"]["format_id"],
-                "layout": record["analysis_identity"][
+                "layout": record["runtime_identity"][
                     "runtime_configuration"
                 ]["layout"],
                 "strip_mode": record["configuration"]["strip_mode"],
@@ -112,10 +110,6 @@ def append_summary_csv(path: Path, result: ReportResult) -> None:
         )
 
 
-def write_report_outputs_for_result(result: ReportResult, config: RunConfig) -> bool:
-    if not config.report:
-        return False
-    output_dir = output_directory_for(Path(result.record["source"]), config)
+def write_report_outputs_for_result(result: ReportResult, output_dir: Path) -> None:
     append_summary_csv(output_dir / SUMMARY_CSV_NAME, result)
     append_report_jsonl(output_dir / REPORT_JSONL_NAME, result)
-    return True

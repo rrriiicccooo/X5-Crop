@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from .orientation import OrientationMapping
+
 
 TiffTagScalar = int | float | str
 TiffTagValue = TiffTagScalar | tuple[TiffTagScalar, ...]
@@ -48,3 +50,4 @@ class ImageProfile:
     resolution_unit: int | str | None
     icc_profile: bytes | None
     metadata: TiffMetadata
+    orientation: OrientationMapping

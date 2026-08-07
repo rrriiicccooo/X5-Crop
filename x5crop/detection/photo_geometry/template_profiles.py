@@ -52,6 +52,7 @@ class ProfileRun:
     continuous_support_fraction: float
     fit_residual_px: float
     evidence_strength: float
+    pair_qualified: bool = False
 
     def __post_init__(self) -> None:
         if (
@@ -194,6 +195,7 @@ def sequence_profile_from_regions(
     coordinate_count: int,
     transition_by_id: dict[str, PhotoBoundaryTransition],
 ) -> BasicAxisProfile:
+    spec = PHOTO_BOUNDARY_MEASUREMENT_SPEC
     runs = tuple(
         sorted(
             (
@@ -228,6 +230,24 @@ def sequence_profile_from_regions(
                         region.mean_gradient_z
                         + region.mean_tone_or_texture_z
                     ),
+                    pair_qualified=(
+                        not region.ambiguous
+                        and region.trace_support_count
+                        >= max(
+                            spec.minimum_trace_count,
+                            math.ceil(
+                                spec.minimum_trace_fraction
+                                * region.queried_trace_count
+                            ),
+                        )
+                        and region.continuous_support_fraction
+                        >= spec.minimum_continuous_support_fraction
+                        and region.mean_gradient_z >= spec.gradient_z_minimum
+                        and region.mean_tone_or_texture_z
+                        >= spec.tone_or_texture_z_minimum
+                        and region.background_side_support_fraction
+                        >= spec.directional_background_support_minimum
+                    ),
                 )
                 for region in regions
             ),
@@ -248,6 +268,7 @@ def cross_profile_from_regions(
     transition_by_id: dict[str, PhotoBoundaryTransition],
 ) -> BasicAxisProfile:
     values: list[ProfileRun] = []
+    spec = PHOTO_BOUNDARY_MEASUREMENT_SPEC
     for role, regions in (
         (BoundaryRole.TOP, top_regions),
         (BoundaryRole.BOTTOM, bottom_regions),
@@ -276,18 +297,26 @@ def cross_profile_from_regions(
                             not region.ambiguous
                             and region.trace_support_count
                             >= max(
-                                PHOTO_BOUNDARY_MEASUREMENT_SPEC.minimum_trace_count,
+                                spec.minimum_trace_count,
                                 math.ceil(
-                                    PHOTO_BOUNDARY_MEASUREMENT_SPEC.minimum_trace_fraction
+                                    spec.minimum_cross_trace_fraction
                                     * region.queried_trace_count
                                 ),
                             )
                             and region.continuous_support_fraction
-                            >= PHOTO_BOUNDARY_MEASUREMENT_SPEC.minimum_continuous_support_fraction
+                            >= spec.minimum_continuous_support_fraction
                             and region.mean_gradient_z
-                            >= PHOTO_BOUNDARY_MEASUREMENT_SPEC.gradient_z_minimum
+                            >= spec.gradient_z_minimum
                             and region.mean_tone_or_texture_z
-                            >= PHOTO_BOUNDARY_MEASUREMENT_SPEC.tone_or_texture_z_minimum
+                            >= spec.tone_or_texture_z_minimum
+                            and region.background_side_support_fraction
+                            >= spec.directional_background_support_minimum
+                            and (
+                                region.left_background_preference_fraction
+                                if role == BoundaryRole.TOP
+                                else region.right_background_preference_fraction
+                            )
+                            >= spec.directional_sequence_support_minimum
                         )
                         else ()
                     ),
@@ -301,6 +330,30 @@ def cross_profile_from_regions(
                     evidence_strength=(
                         region.mean_gradient_z
                         + region.mean_tone_or_texture_z
+                    ),
+                    pair_qualified=(
+                        not region.ambiguous
+                        and region.trace_support_count
+                        >= max(
+                            spec.minimum_trace_count,
+                            math.ceil(
+                                spec.minimum_cross_trace_fraction
+                                * region.queried_trace_count
+                            ),
+                        )
+                        and region.continuous_support_fraction
+                        >= spec.minimum_continuous_support_fraction
+                        and region.mean_gradient_z >= spec.gradient_z_minimum
+                        and region.mean_tone_or_texture_z
+                        >= spec.tone_or_texture_z_minimum
+                        and region.background_side_support_fraction
+                        >= spec.directional_background_support_minimum
+                        and (
+                            region.left_background_preference_fraction
+                            if role == BoundaryRole.TOP
+                            else region.right_background_preference_fraction
+                        )
+                        >= spec.directional_role_preference_minimum
                     ),
                 )
             )

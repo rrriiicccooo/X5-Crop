@@ -172,6 +172,39 @@ def portable_frame_name(
     )
 
 
+def portable_source_stems(source_names: tuple[str, ...]) -> tuple[PortableOutputName, ...]:
+    """Plan every source stem together so conflicts fail before TIFF decode."""
+
+    initial = tuple(
+        portable_component(
+            Path(name).stem,
+            input_ordinal=ordinal,
+        )
+        for ordinal, name in enumerate(source_names, 1)
+    )
+    counts: dict[str, int] = {}
+    for item in initial:
+        counts[item.collision_key] = counts.get(item.collision_key, 0) + 1
+    planned: list[PortableOutputName] = []
+    for ordinal, (source_name, item) in enumerate(
+        zip(source_names, initial, strict=True),
+        1,
+    ):
+        if counts[item.collision_key] == 1:
+            planned.append(item)
+            continue
+        marker = f"~{ordinal:04d}-{short_name_digest(Path(source_name).stem)}"
+        planned.append(
+            portable_component(
+                item.value,
+                input_ordinal=ordinal,
+                suffix=marker,
+            )
+        )
+    reject_collisions(planned)
+    return tuple(planned)
+
+
 def transaction_token_for_target(target: Path) -> str:
     leaf = validate_explicit_output_leaf(target.name).value
     if utf16_units(leaf) <= MAX_TRANSACTION_TOKEN_UTF16_UNITS:

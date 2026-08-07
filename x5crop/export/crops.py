@@ -5,21 +5,21 @@ from pathlib import Path
 
 import numpy as np
 
-from ..run_config import RunConfig
 from ..domain import Box
 from ..geometry.affine import AffineCoordinateTransform
 from ..image.transforms import photometric_background_value, sample_affine_roi
 from ..io.model import ImageProfile
 from ..io.tiff import write_validated_tiff
+from ..output.naming import portable_component
 
 
 def write_crops(
-    input_file: Path,
+    portable_stem: str,
+    input_ordinal: int,
     source_arr: np.ndarray,
     profile: ImageProfile,
     frames: tuple[Box, ...],
     sampling_authority_boxes: tuple[Box, ...],
-    config: RunConfig,
     transform: AffineCoordinateTransform,
     output_dir: Path,
 ) -> list[str]:
@@ -36,9 +36,14 @@ def write_crops(
     ):
         if not box.valid():
             raise RuntimeError(f"Invalid crop box for frame {i}: {box}")
-        out_path = output_dir / f"{input_file.stem}_{i:02d}.tif"
-        if out_path.exists() and not config.overwrite:
-            raise RuntimeError(f"Output exists: {out_path}; use --overwrite")
+        name = portable_component(
+            portable_stem,
+            input_ordinal=input_ordinal,
+            suffix=f"_{i:02d}.tif",
+        ).value
+        out_path = output_dir / name
+        if out_path.exists():
+            raise RuntimeError(f"Output name was not fresh: {out_path}")
         cropped = np.ascontiguousarray(
             sample_affine_roi(
                 source_arr,
@@ -53,7 +58,7 @@ def write_crops(
         if tmp.exists():
             tmp.unlink()
         try:
-            write_validated_tiff(tmp, cropped, profile, config.compression)
+            write_validated_tiff(tmp, cropped, profile)
             os.replace(tmp, out_path)
         except Exception:
             if tmp.exists():

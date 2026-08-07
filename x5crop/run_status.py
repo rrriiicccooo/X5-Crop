@@ -4,5 +4,6 @@ from enum import Enum
 
 
 class RunTerminalOutcome(str, Enum):
-    COMPLETED = "completed"
+    APPROVED_AUTO = "approved_auto"
+    NEEDS_REVIEW = "needs_review"
     RUNTIME_ERROR = "runtime_error"

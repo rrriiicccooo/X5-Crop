@@ -183,6 +183,9 @@ def _transition_groups(
         float,
         float,
         float,
+        float,
+        float,
+        float,
         int,
         int,
     ], ...
@@ -217,18 +220,48 @@ def _transition_groups(
             float,
             float,
             float,
+            float,
+            float,
+            float,
             int,
             int,
         ]
     ] = []
     combined = gradient_z + np.maximum(tone_z, texture_z)
+    localization = gradient_z + 0.25 * np.maximum(tone_z, texture_z)
     for group in groups:
         if group.size == 0:
             continue
-        peak_index = int(group[int(np.argmax(combined[group]))])
+        peak_index = int(group[int(np.argmax(localization[group]))])
         peak_coordinate = float(coordinates[peak_index])
-        eligible = group[
-            np.abs(coordinates[group] - peak_coordinate)
+        outside = np.ones(localization.size, dtype=bool)
+        outside[group] = False
+        local_noise = float(
+            np.median(localization[outside])
+            if np.any(outside)
+            else np.min(localization[group])
+        )
+        prominence = max(
+            0.0,
+            float(localization[peak_index]) - local_noise,
+        )
+        half_height = local_noise + 0.5 * prominence
+        peak_position = int(np.flatnonzero(group == peak_index)[0])
+        left_position = peak_position
+        right_position = peak_position
+        while (
+            left_position > 0
+            and localization[int(group[left_position - 1])] >= half_height
+        ):
+            left_position -= 1
+        while (
+            right_position + 1 < group.size
+            and localization[int(group[right_position + 1])] >= half_height
+        ):
+            right_position += 1
+        peak_members = group[left_position : right_position + 1]
+        eligible = peak_members[
+            np.abs(coordinates[peak_members] - peak_coordinate)
             <= maximum_width / 2.0
         ]
         if eligible.size == 0:
@@ -259,6 +292,9 @@ def _transition_groups(
                 float(right_tone[peak_index]),
                 float(left_texture[peak_index]),
                 float(right_texture[peak_index]),
+                float(maximum - minimum),
+                prominence,
+                local_noise,
                 polarity,
                 peak_index,
             )
@@ -359,6 +395,9 @@ def _measure_query(
                 right_tone_value,
                 left_texture_value,
                 right_texture_value,
+                peak_width_px,
+                prominence,
+                local_noise,
                 polarity,
                 peak_index,
             ) in _transition_groups(
@@ -401,6 +440,9 @@ def _measure_query(
                         left_texture_mean=left_texture_value,
                         right_texture_mean=right_texture_value,
                         polarity=polarity,
+                        peak_width_px=peak_width_px,
+                        prominence=prominence,
+                        local_noise=local_noise,
                         provenance=MeasurementProvenance(
                             root_measurement=MeasurementIdentity.PHOTO_BOUNDARY,
                             observation_id=transition_id,
@@ -1147,6 +1189,7 @@ def fit_template_bound_boundary_observation(
     role: BoundaryRole,
     source_axis_long: BoundaryAxis,
     boundary_axis_scale_px_per_mm: PositiveInterval,
+    minimum_trace_fraction: float | None = None,
     spec: PhotoBoundaryMeasurementSpec = PHOTO_BOUNDARY_MEASUREMENT_SPEC,
 ) -> PhotoBoundaryObservation | None:
     """Fit one robust line from transitions already bound to one template role.
@@ -1188,9 +1231,16 @@ def fit_template_bound_boundary_observation(
         )
         for transition in transitions
     )
+    support_fraction = (
+        spec.minimum_trace_fraction
+        if minimum_trace_fraction is None
+        else minimum_trace_fraction
+    )
+    if not 0.0 < support_fraction <= 1.0:
+        raise ValueError("template-bound support fraction is invalid")
     minimum_support = max(
         spec.minimum_trace_count,
-        math.ceil(spec.minimum_trace_fraction * len(queried_traces)),
+        math.ceil(support_fraction * len(queried_traces)),
     )
     if len({point.trace for point in points}) < minimum_support:
         return None

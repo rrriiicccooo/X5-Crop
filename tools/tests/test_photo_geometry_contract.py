@@ -37,6 +37,7 @@ from x5crop.domain import (
     PositiveInterval,
 )
 from x5crop.io.model import ImageProfile, TiffMetadata
+from x5crop.io.orientation import orientation_mapping
 
 
 def _profile(shape: tuple[int, int]) -> ImageProfile:
@@ -54,6 +55,7 @@ def _profile(shape: tuple[int, int]) -> ImageProfile:
         resolution_unit=None,
         icc_profile=None,
         metadata=TiffMetadata(None, None, None, ()),
+        orientation=orientation_mapping(1, shape[1], shape[0]),
     )
 
 
@@ -119,6 +121,9 @@ def _side_measurement_set(
                     left_texture_mean=1.0,
                     right_texture_mean=5.0,
                     polarity=1,
+                    peak_width_px=1.0,
+                    prominence=5.0,
+                    local_noise=0.0,
                     provenance=MeasurementProvenance(
                         root_measurement=MeasurementIdentity.PHOTO_BOUNDARY,
                         observation_id=identity,

@@ -73,6 +73,7 @@ class TemplateSequenceSeed:
     phase_group_ids: tuple[str, ...]
     base_phase_interval_px: FiniteInterval
     votes: tuple[PhaseVote, ...]
+    local_advance_votes: tuple[PhaseVote, ...]
     local_advance_relations: tuple[LocalAdvanceRelation, ...]
     exclusion_authorized: bool
 
@@ -82,6 +83,15 @@ class TemplateSequenceSeed:
             or not self.phase_group_ids
             or not self.votes
             or len({item.vote_id for item in self.votes}) != len(self.votes)
+            or len(
+                {item.vote_id for item in self.local_advance_votes}
+            )
+            != len(self.local_advance_votes)
+            or not {
+                item.vote_id for item in self.votes
+            }.issubset(
+                item.vote_id for item in self.local_advance_votes
+            )
             or tuple(
                 item.relation_ordinal for item in self.local_advance_relations
             )
@@ -355,6 +365,8 @@ class SequencePlacement:
     canonical_positions_px: tuple[float, ...]
     fit_positions_px: tuple[FiniteInterval, ...]
     full_positions_px: tuple[FiniteInterval, ...]
+    sequence_edge_direction_intervals_degrees: tuple[FiniteInterval, ...]
+    safety_support_transition_ids: tuple[tuple[ObservationId, ...], ...]
     observations: tuple[BoundRoleEvidence, ...]
     exclusion_authorized: bool
 
@@ -369,6 +381,15 @@ class SequencePlacement:
             or len(self.canonical_positions_px) != role_count
             or len(self.fit_positions_px) != role_count
             or len(self.full_positions_px) != role_count
+            or len(
+                self.sequence_edge_direction_intervals_degrees
+            )
+            != role_count
+            or len(self.safety_support_transition_ids) != role_count
+            or any(
+                len(set(values)) != len(values)
+                for values in self.safety_support_transition_ids
+            )
             or len(self.local_advance_relations) != max(0, role_count // 2 - 1)
             or any(
                 not fit.contains(canonical, epsilon=1.0e-8)
@@ -611,6 +632,7 @@ class FormatPlacement:
     source_frame_geometry: SourceFrameGeometry
     sequence_placements: tuple[SequencePlacement, ...]
     cross_placements: tuple[CrossPlacement, ...]
+    canonical_cross_placement: CrossPlacement
     canonical: CanonicalFormatPlacement
 
     def __post_init__(self) -> None:
@@ -620,6 +642,10 @@ class FormatPlacement:
             or self.output_slot_count <= 0
             or not self.sequence_placements
             or not self.cross_placements
+            or self.canonical_cross_placement.source_geometry_id
+            != self.source_frame_geometry.geometry_id
+            or self.canonical.cross_placement_id
+            != self.canonical_cross_placement.placement_id
             or len(self.canonical.frames) != self.output_slot_count
             or self.source_frame_geometry.component != self.component
             or any(
@@ -643,8 +669,4 @@ class FormatPlacement:
 
     @property
     def canonical_cross(self) -> CrossPlacement:
-        return next(
-            item
-            for item in self.cross_placements
-            if item.placement_id == self.canonical.cross_placement_id
-        )
+        return self.canonical_cross_placement

@@ -74,6 +74,30 @@ def _intersect_horizontal(
     return (left[0] + factor * delta_scale, value)
 
 
+def _intersect_affine_boundary(
+    left: tuple[float, float],
+    right: tuple[float, float],
+    *,
+    q_coefficient: float,
+    scale_coefficient: float,
+    value: float,
+) -> tuple[float, float]:
+    def projection(point: tuple[float, float]) -> float:
+        scale, normalized = point
+        return scale_coefficient * scale + q_coefficient * normalized
+
+    left_value = projection(left)
+    right_value = projection(right)
+    denominator = right_value - left_value
+    if abs(denominator) <= 1.0e-15:
+        return left
+    factor = (value - left_value) / denominator
+    return (
+        left[0] + factor * (right[0] - left[0]),
+        left[1] + factor * (right[1] - left[1]),
+    )
+
+
 @dataclass(frozen=True)
 class JointAxisGeometry:
     """Correlated positive `(scale, normalized extent)` source state."""
@@ -217,6 +241,76 @@ class JointAxisGeometry:
         )
         if combined is None:
             raise ValueError("observed extent contradicts source geometry")
+        clipped = self.intersect_affine_observation(
+            extent_interval_px,
+            q_coefficient=self.design_extent_mm,
+            scale_coefficient=0.0,
+            observation_ids=observation_ids,
+        )
+        return JointAxisGeometry(
+            axis_name=self.axis_name,
+            design_extent_mm=self.design_extent_mm,
+            scale_authority=self.scale_authority,
+            factor_authority=self.factor_authority,
+            observed_normalized_extent=combined,
+            observation_ids=clipped.observation_ids,
+            vertices=clipped.vertices,
+        )
+
+    def intersect_affine_observation(
+        self,
+        observed_interval_px: FiniteInterval,
+        *,
+        q_coefficient: float,
+        scale_coefficient: float,
+        observation_ids: tuple[ObservationId, ...],
+    ) -> "JointAxisGeometry":
+        """Intersect one exact typed observation with the joint state.
+
+        The expression is ``q_coefficient * normalized_extent +
+        scale_coefficient * scale``.  Keeping the clipped polygon preserves
+        scale/extent correlation instead of freely recombining projections.
+        """
+
+        if (
+            not observation_ids
+            or not all(
+                math.isfinite(value)
+                for value in (q_coefficient, scale_coefficient)
+            )
+            or (q_coefficient == 0.0 and scale_coefficient == 0.0)
+        ):
+            raise ValueError("joint affine observation is invalid")
+
+        def projected(point: tuple[float, float]) -> float:
+            scale, normalized = point
+            return (
+                scale_coefficient * scale
+                + q_coefficient * normalized
+            )
+
+        polygon = self.vertices
+        for value, keep_above in (
+            (observed_interval_px.minimum, True),
+            (observed_interval_px.maximum, False),
+        ):
+            polygon = _clip_joint_polygon(
+                polygon,
+                inside=(
+                    (lambda point, bound=value: projected(point) >= bound - 1.0e-12)
+                    if keep_above
+                    else (lambda point, bound=value: projected(point) <= bound + 1.0e-12)
+                ),
+                intersect=lambda left, right, bound=value: _intersect_affine_boundary(
+                    left,
+                    right,
+                    q_coefficient=q_coefficient,
+                    scale_coefficient=scale_coefficient,
+                    value=bound,
+                ),
+            )
+        if not polygon:
+            raise ValueError("joint affine observation is infeasible")
         identities = tuple(
             ObservationId(value)
             for value in sorted(
@@ -226,13 +320,14 @@ class JointAxisGeometry:
                 }
             )
         )
-        return self._from_constraints(
+        return JointAxisGeometry(
             axis_name=self.axis_name,
             design_extent_mm=self.design_extent_mm,
             scale_authority=self.scale_authority,
             factor_authority=self.factor_authority,
-            observed_normalized_extent=combined,
+            observed_normalized_extent=self.observed_normalized_extent,
             observation_ids=identities,
+            vertices=tuple(polygon),
         )
 
     def intersect_state(self, other: "JointAxisGeometry") -> "JointAxisGeometry":
@@ -311,24 +406,14 @@ class JointAxisGeometry:
         )
 
     def canonical_state(self) -> tuple[float, float, float]:
-        scale_projection = self.feasible_scale_interval()
-        scale = (scale_projection.minimum + scale_projection.maximum) / 2.0
-        lower = self.factor_authority.minimum * scale
-        upper = self.factor_authority.maximum * scale
-        if self.observed_normalized_extent is not None:
-            lower = max(lower, self.observed_normalized_extent.minimum)
-            upper = min(upper, self.observed_normalized_extent.maximum)
-        if upper < lower:
-            scale, normalized = min(
-                self.vertices,
-                key=lambda point: (
-                    abs(point[0] - scale),
-                    point[0],
-                    point[1],
-                ),
-            )
-        else:
-            normalized = (lower + upper) / 2.0
+        # Every clipping operation preserves a convex polygon.  Its vertex
+        # centroid is therefore a feasible correlated state; independently
+        # taking projection midpoints would recreate a forbidden free
+        # scale/extent combination.
+        scale = sum(point[0] for point in self.vertices) / len(self.vertices)
+        normalized = (
+            sum(point[1] for point in self.vertices) / len(self.vertices)
+        )
         return scale, normalized, normalized / scale
 
     def project_affine(

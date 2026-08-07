@@ -1,77 +1,94 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-import json
 from pathlib import Path
 from typing import Any
 
-from ..app_info import RUN_MANIFEST_JSONL_NAME
-from ..output.surface import output_directory_for
-from ..run_config import RunConfig
+from ..output.filesystem import FilesystemIdentity
+from ..output.ownership import write_owned_output_manifest
 from ..run_status import RunTerminalOutcome
-from .outcome import FailureStage, RuntimeArtifacts, RuntimeMetrics
-
-
-RUN_MANIFEST_SCHEMA = "x5crop_run_manifest_v2"
+from .identity import runtime_environment_identity
+from .outcome import FailureStage, RuntimeArtifacts
 
 
 @dataclass(frozen=True)
-class RunManifestRecord:
-    source: str
-    terminal_outcome: RunTerminalOutcome
+class SourceTerminalRecord:
+    input_ordinal: int
+    source_name: str
+    portable_stem: str
+    size: int | None
+    mtime_ns: int | None
+    terminal_status: RunTerminalOutcome
     failure_stage: FailureStage | None
     error_code: str | None
     error_message: str | None
-    report_written: bool
-    output_identity: dict[str, Any] | None
     artifacts: RuntimeArtifacts
-    metrics: RuntimeMetrics
 
     def __post_init__(self) -> None:
-        failure_values = (
-            self.failure_stage,
-            self.error_code,
-            self.error_message,
-        )
-        if self.terminal_outcome == RunTerminalOutcome.COMPLETED:
-            if any(value is not None for value in failure_values):
-                raise ValueError("Completed manifest record cannot contain failure detail")
-            if not self.metrics.available:
-                raise ValueError("Completed manifest record requires runtime metrics")
-            if self.output_identity is None:
-                raise ValueError(
-                    "Completed manifest record requires output identity"
-                )
-            return
-        if any(value is None for value in failure_values):
-            raise ValueError("Runtime-error manifest record requires complete failure detail")
-        if self.output_identity is not None:
-            raise ValueError("Runtime-error manifest cannot claim output identity")
+        if self.input_ordinal <= 0 or not self.source_name or not self.portable_stem:
+            raise ValueError("source terminal identity is incomplete")
+        failures = (self.failure_stage, self.error_code, self.error_message)
+        if self.terminal_status == RunTerminalOutcome.RUNTIME_ERROR:
+            if any(value is None for value in failures):
+                raise ValueError("runtime_error requires complete failure detail")
+        elif any(value is not None for value in failures):
+            raise ValueError("valid source terminal cannot contain failure detail")
 
-    def as_record(self) -> dict[str, Any]:
+    def as_record(self, output_root: Path) -> dict[str, Any]:
+        def relative(value: str | None) -> str | None:
+            if value is None:
+                return None
+            return Path(value).relative_to(output_root).as_posix()
+
         return {
-            "schema": RUN_MANIFEST_SCHEMA,
-            "source": self.source,
-            "terminal_outcome": self.terminal_outcome.value,
+            "input_ordinal": self.input_ordinal,
+            "source_name": self.source_name,
+            "portable_stem": self.portable_stem,
+            "size": self.size,
+            "mtime_ns": self.mtime_ns,
+            "terminal_status": self.terminal_status.value,
             "failure_stage": (
                 None if self.failure_stage is None else self.failure_stage.value
             ),
             "error_code": self.error_code,
             "error_message": self.error_message,
-            "report_written": self.report_written,
-            "output_identity": self.output_identity,
-            "artifacts": self.artifacts.as_record(),
-            "metrics": self.metrics.as_record(),
+            "artifacts": {
+                "frame_outputs": [relative(path) for path in self.artifacts.frame_outputs],
+                "review_copy": relative(self.artifacts.review_copy),
+                "debug_analysis": relative(self.artifacts.debug_analysis),
+            },
         }
 
 
-def append_run_manifest(
-    input_file: Path,
-    config: RunConfig,
-    record: RunManifestRecord,
+def write_run_manifest(
+    output_root: Path,
+    *,
+    run_id: str,
+    started_at_utc: str,
+    finished_at_utc: str,
+    jobs: int,
+    filesystem: FilesystemIdentity,
+    best_effort_consent: str,
+    terminals: tuple[SourceTerminalRecord, ...],
 ) -> Path:
-    path = output_directory_for(input_file, config) / RUN_MANIFEST_JSONL_NAME
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as stream:
-        stream.write(json.dumps(record.as_record(), ensure_ascii=False) + "\n")
-    return path
+    if not any(
+        item.terminal_status != RunTerminalOutcome.RUNTIME_ERROR
+        for item in terminals
+    ):
+        raise ValueError("at least one valid source terminal is required to publish")
+    return write_owned_output_manifest(
+        output_root,
+        run_id=run_id,
+        run_record={
+            "started_at_utc": started_at_utc,
+            "finished_at_utc": finished_at_utc,
+            "jobs": jobs,
+            "filesystem": filesystem.as_record(),
+            "best_effort_consent": best_effort_consent,
+            "runtime_environment": runtime_environment_identity(),
+        },
+        terminal_records=tuple(
+            item.as_record(output_root)
+            for item in sorted(terminals, key=lambda value: value.input_ordinal)
+        ),
+    )

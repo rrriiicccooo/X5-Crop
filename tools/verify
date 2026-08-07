@@ -44,7 +44,6 @@ run_full() {
     python3 -m unittest discover -s tools/tests
     python3 -m compileall -q X5_Crop.py x5crop tools
     python3 -m x5crop.configuration.consistency
-    python3 -m tools.regression.benchmark_workload --validate
     for script in \
         X5_Crop_Mac.command \
         tools/install/X5_Crop_Mac_install.command \
@@ -56,14 +55,11 @@ run_full() {
     python3 X5_Crop.py --version
 }
 
-compare_fixed_performance() {
+check_performance_receipt() {
     candidate_commit=$(git rev-parse HEAD)
-    python3 -m tools.regression.performance_compare \
-        --baseline-paired build/v49-orthogonal-budget/baseline/paired/paired_performance_result.json \
-        --candidate-paired build/v49-orthogonal-budget/current/paired/paired_performance_result.json \
-        --baseline-s062 build/v49-orthogonal-budget/baseline/s062/fixed_sample_profile.json \
-        --candidate-s062 build/v49-orthogonal-budget/current/s062/fixed_sample_profile.json \
-        --expected-candidate-commit "$candidate_commit"
+    python3 -m tools.regression.performance \
+        --check-receipt build/v5-performance/performance_receipt.json \
+        --expected-commit "$candidate_commit"
 }
 
 case "${1:-}" in
@@ -74,13 +70,13 @@ case "${1:-}" in
         run_full
         ;;
     accuracy)
-        python3 -m tools.regression.accuracy --identity-only
+        python3 -m tools.regression.accuracy
         ;;
     diagnostic)
         python3 -m tools.regression.diagnostic_cohort --identity-only
         ;;
     performance)
-        python3 -m tools.regression.performance_identity
+        python3 -m tools.regression.performance
         ;;
     pre-push)
         [ -z "$(git status --porcelain)" ] || {
@@ -99,7 +95,7 @@ case "${1:-}" in
                 run_full
                 ;;
             runtime)
-                compare_fixed_performance
+                check_performance_receipt
                 run_full
                 ;;
             *)

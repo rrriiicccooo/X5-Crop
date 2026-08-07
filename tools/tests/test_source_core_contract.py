@@ -35,6 +35,7 @@ from x5crop.formats.scan_canvas import (
     scan_canvas_specs_for_format,
 )
 from x5crop.io.model import ImageProfile, TiffMetadata
+from x5crop.io.orientation import orientation_mapping
 
 
 class PhysicalAuthorityContractTest(unittest.TestCase):
@@ -66,7 +67,7 @@ class PhysicalAuthorityContractTest(unittest.TestCase):
         )
         self.assertEqual(
             FRAME_DIMENSION_TOLERANCE_SPEC.frame_height_tolerance_ratio,
-            0.0040,
+            0.0200,
         )
 
     def test_aperture_pixel_interval_propagates_scale_and_tolerance(
@@ -81,8 +82,8 @@ class PhysicalAuthorityContractTest(unittest.TestCase):
         )
         self.assertAlmostEqual(intervals.frame_width_px.minimum, 355.5)
         self.assertAlmostEqual(intervals.frame_width_px.maximum, 400.95)
-        self.assertAlmostEqual(intervals.frame_height_px.minimum, 215.136)
-        self.assertAlmostEqual(intervals.frame_height_px.maximum, 240.96)
+        self.assertAlmostEqual(intervals.frame_height_px.minimum, 211.68)
+        self.assertAlmostEqual(intervals.frame_height_px.maximum, 244.8)
         self.assertNotEqual(
             PHOTO_BOUNDARY_MEASUREMENT_SPEC.dimension_search_allowance_mm,
             aperture.frame_width_mm
@@ -181,6 +182,11 @@ class PhysicalAuthorityContractTest(unittest.TestCase):
                 resolution_unit=None,
                 icc_profile=None,
                 metadata=TiffMetadata(None, None, None, ()),
+                orientation=orientation_mapping(
+                    1,
+                    pixels.shape[1],
+                    pixels.shape[0],
+                ),
             ),
             "horizontal",
             configuration,

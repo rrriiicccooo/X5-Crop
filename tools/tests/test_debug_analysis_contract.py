@@ -27,10 +27,10 @@ from x5crop.run_status import RunTerminalOutcome
 
 
 def _full_135_pixels(height: int = 100, width: int = 720) -> np.ndarray:
-    pixels = np.zeros((height, width), dtype=np.uint8)
+    pixels = np.zeros((height, width, 3), dtype=np.uint16)
     for ordinal in range(6):
         start = 9 + ordinal * 117
-        pixels[14:86, start : start + 112] = 180
+        pixels[14:86, start : start + 112, :] = 46_000
     return pixels
 
 
@@ -42,9 +42,10 @@ def _fixture(
     tifffile.imwrite(
         source,
         _full_135_pixels(),
-        photometric="minisblack",
+        photometric="rgb",
+        planarconfig="contig",
     )
-    array, profile, _warnings = read_tiff(source, 0)
+    array, profile, _warnings = read_tiff(source)
     bundle = DetectionConfigurationBundle.for_format_mode(
         "135",
         "partial",
@@ -97,7 +98,7 @@ class DebugAnalysisContractTest(unittest.TestCase):
                     detection,
                     configuration.diagnostics,
                     DebugRenderCache(),
-                    RunTerminalOutcome.COMPLETED,
+                    RunTerminalOutcome.NEEDS_REVIEW,
                 )
         self.assertEqual(status.call_count, 1)
         self.assertEqual(panel.ndim, 3)

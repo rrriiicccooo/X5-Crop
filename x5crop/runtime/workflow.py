@@ -5,9 +5,8 @@ from pathlib import Path
 from time import perf_counter
 import traceback
 
-from .analysis_identity import make_analysis_identity, source_analysis_identity
+from .identity import make_runtime_identity, source_runtime_identity
 from ..configuration.bundle import DetectionConfigurationBundle
-from ..debug.writer import write_debug_analysis
 from ..detection.decision.decision_gate import apply_decision_gate
 from ..detection.final.finalize import finalize_detection
 from ..detection.pipeline import choose_detection
@@ -16,7 +15,6 @@ from ..export.actions import prepare_review_artifact
 from ..export.crops import write_crops
 from ..geometry.layout import infer_layout
 from ..io.tiff import read_tiff, read_tiff_profile
-from ..output.surface import display_generated_path, output_surface_for_input
 from ..report.configuration import detection_configuration_read_model
 from ..report.result_builder import result_from_detection
 from ..run_config import RunConfig
@@ -30,6 +28,7 @@ from .outcome import (
     RuntimeArtifacts,
     RuntimeMetrics,
 )
+from .invocation import PlannedSource
 
 
 def _metrics(
@@ -104,20 +103,21 @@ def _metrics(
 
 
 def process_one(
-    input_file: Path,
+    source: PlannedSource,
     config: RunConfig,
     configuration_bundle: DetectionConfigurationBundle,
+    output_root: Path,
 ) -> InputProcessingOutcome:
+    input_file = source.path
     started_at = perf_counter()
     detection_seconds = 0.0
     failure_stage = FailureStage.INPUT_PROFILE
-    output_surface = output_surface_for_input(input_file, config)
     artifacts = RuntimeArtifacts.empty()
     warnings: list[str] = []
     workspace: DetectionWorkspace | None = None
     detection = None
     try:
-        profile, profile_warnings = read_tiff_profile(input_file, config.page)
+        profile, profile_warnings = read_tiff_profile(input_file)
         warnings.extend(profile_warnings)
         height, width = spatial_shape_from_shape(profile.shape)
         layout = infer_layout(width, height) if config.layout_auto else config.layout
@@ -125,15 +125,11 @@ def process_one(
         initial_configuration = configuration_bundle.initial_configuration
 
         failure_stage = FailureStage.IMAGE_READ
-        arr, profile, page_warnings = read_tiff(input_file, config.page)
+        arr, profile, page_warnings = read_tiff(input_file)
         for warning in page_warnings:
             if warning not in warnings:
                 warnings.append(warning)
-        source_identity = source_analysis_identity(
-            input_file,
-            profile,
-            config.page,
-        )
+        source_identity = source_runtime_identity(source, profile)
 
         failure_stage = FailureStage.DETECTION
         detection_started = perf_counter()
@@ -171,10 +167,9 @@ def process_one(
             decision,
             layout=config.layout,
         )
-        analysis_identity = make_analysis_identity(
+        runtime_identity = make_runtime_identity(
             source_identity,
             config,
-            configuration_bundle,
             workspace.identity,
             (
                 None
@@ -189,31 +184,27 @@ def process_one(
 
         failure_stage = FailureStage.OUTPUT
         if detection.frame_export_eligible:
-            if config.diagnostics:
-                warnings.append(
-                    "diagnostics mode: safe frame export was not requested"
-                )
-            else:
-                output_surface.root.mkdir(parents=True, exist_ok=True)
-                frame_outputs = write_crops(
-                    input_file,
-                    arr,
-                    profile,
-                    detection.final_boxes,
-                    detection.sampling_authority_boxes,
-                    config,
-                    detection.transform_assessment.transform,
-                    output_surface.root,
-                )
-                artifacts = replace(
-                    artifacts,
-                    frame_outputs=tuple(frame_outputs),
-                )
+            output_root.mkdir(parents=True, exist_ok=True)
+            frame_outputs = write_crops(
+                source.portable_stem,
+                source.input_ordinal,
+                arr,
+                profile,
+                detection.final_boxes,
+                detection.sampling_authority_boxes,
+                detection.transform_assessment.transform,
+                output_root,
+            )
+            artifacts = replace(
+                artifacts,
+                frame_outputs=tuple(frame_outputs),
+            )
         else:
             review_copy = prepare_review_artifact(
                 input_file,
-                output_surface.root,
-                config,
+                source.portable_stem,
+                source.input_ordinal,
+                output_root,
                 detection,
                 warnings,
             )
@@ -221,17 +212,20 @@ def process_one(
 
         failure_stage = FailureStage.DEBUG
         if config.debug_analysis:
+            from ..debug.writer import write_debug_analysis
+
             debug_analysis = write_debug_analysis(
                 workspace,
                 detection,
-                output_surface.root,
-                input_file.stem,
+                output_root,
+                source.portable_stem,
+                source.input_ordinal,
                 initial_configuration.diagnostics,
-                RunTerminalOutcome.COMPLETED,
+                RunTerminalOutcome(detection.decision.status),
             )
             warnings.append(
                 "debug analysis: "
-                + display_generated_path(debug_analysis, config)
+                + Path(debug_analysis).relative_to(output_root).as_posix()
             )
             artifacts = replace(
                 artifacts,
@@ -244,13 +238,22 @@ def process_one(
             detection,
             profile,
             workspace,
-            list(artifacts.frame_outputs),
-            artifacts.review_copy,
+            [
+                Path(path).relative_to(output_root).as_posix()
+                for path in artifacts.frame_outputs
+            ],
+            (
+                None
+                if artifacts.review_copy is None
+                else Path(artifacts.review_copy)
+                .relative_to(output_root)
+                .as_posix()
+            ),
             warnings,
             configuration_detail=detection_configuration_read_model(
                 initial_configuration
             ),
-            analysis_identity=analysis_identity,
+            runtime_identity=runtime_identity,
         )
         return CompletedInput(
             result=result,

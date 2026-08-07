@@ -5,7 +5,7 @@ from pathlib import Path
 from ..app_info import SCRIPT_NAME, VERSION
 from ..formats import FORMATS
 from ..runtime.bootstrap import run_options
-from ..runtime.limits import DIAGNOSTICS_JOB_LIMIT, STANDARD_JOB_DEFAULT
+from ..runtime.limits import STANDARD_JOB_DEFAULT
 from ..runtime.options import RuntimeOptions
 
 
@@ -85,17 +85,12 @@ def ask_partial_count(format_id: str) -> int | None:
         print(f"use auto or one of: {allowed_text}")
 
 
-def interactive_options(diagnostics: bool = False) -> RuntimeOptions:
-    mode = "interactive diagnostics" if diagnostics else "launcher"
-    print(f"{SCRIPT_NAME} {VERSION} {mode}")
+def interactive_options() -> RuntimeOptions:
+    print(f"{SCRIPT_NAME} {VERSION} launcher")
     print(f"Folder: {Path.cwd()}")
     print()
-    if diagnostics:
-        print("This read-only mode writes report + Debug Analysis.")
-        print("It does not copy review files or write frame TIFFs.")
-    else:
-        print("This creates conservative bounded-safe frame TIFF crops.")
-        print("Existing output files will not be overwritten.")
+    print("This creates conservative bounded-safe frame TIFF crops.")
+    print("A complete new output replaces the prior X5 Crop-owned output.")
     print()
 
     format_id = ask_format()
@@ -109,20 +104,15 @@ def interactive_options(diagnostics: bool = False) -> RuntimeOptions:
         print(f"{format_id} supports full mode only.")
     strip_mode = "partial" if partial else "full"
     requested_count = ask_partial_count(format_id) if partial else None
-    debug_analysis = True if diagnostics else ask_yes_no("debug analysis? [y/n, return=no]: ", default=False)
+    debug_analysis = ask_yes_no("debug analysis? [y/n, return=no]: ", default=False)
 
     print()
-    if diagnostics:
-        print("diagnostics: enabled")
-        print("debug analysis: enabled")
-    elif debug_analysis:
+    if debug_analysis:
         print("debug analysis: enabled")
     else:
         print("debug analysis: off")
     print(
-        "frame TIFF export: disabled in read-only diagnostics"
-        if diagnostics
-        else "frame TIFF export: enabled after the bounded safety Gate"
+        "frame TIFF export: enabled after the bounded safety Gate"
     )
     print(f"strip mode: {strip_mode}")
     if partial:
@@ -136,18 +126,11 @@ def interactive_options(diagnostics: bool = False) -> RuntimeOptions:
         layout="auto",
         strip_mode=strip_mode,
         requested_count=requested_count,
-        page=0,
-        review_dir=None,
-        copy_review_files=False if diagnostics else True,
-        compression="same",
         debug_analysis=debug_analysis,
-        diagnostics=diagnostics,
-        overwrite=False,
-        report=debug_analysis or diagnostics,
-        debug_errors=False,
-        jobs=DIAGNOSTICS_JOB_LIMIT if diagnostics else STANDARD_JOB_DEFAULT,
+        allow_best_effort_output=False,
+        jobs=STANDARD_JOB_DEFAULT,
     )
 
 
-def run_interactive(diagnostics: bool = False) -> int:
-    return run_options(interactive_options(diagnostics=diagnostics))
+def run_interactive() -> int:
+    return run_options(interactive_options())

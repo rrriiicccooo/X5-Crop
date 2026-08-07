@@ -45,7 +45,7 @@ class PositionSource(str, Enum):
 
 class DirectionAuthority(str, Enum):
     SHARED_TOP_BOTTOM_DIRECTION = "shared_top_bottom_direction"
-    ORTHOGONAL_TO_SHARED_DIRECTION = "orthogonal_to_shared_direction"
+    BOUNDED_SEQUENCE_EDGE_DIRECTION = "bounded_sequence_edge_direction"
 
 
 class AuthoritySide(str, Enum):
@@ -69,7 +69,7 @@ class QueryPurpose(str, Enum):
 
 @dataclass(frozen=True)
 class PhotoBoundaryMeasurementSpec:
-    """The one tracked V4.9 measurement and fitting contract."""
+    """The current V5 registered transition and robust-fit contract."""
 
     lattice_support_divisor: float = 12.0
     lattice_minimum_mm: float = 2.0
@@ -80,6 +80,7 @@ class PhotoBoundaryMeasurementSpec:
     gradient_z_minimum: float = 3.0
     tone_or_texture_z_minimum: float = 3.0
     top_bottom_search_angle_degrees: float = 4.0
+    maximum_shared_direction_hull_degrees: float = 0.25
     line_connection_allowance_mm: float = 0.10
     maximum_missing_lattice_steps: int = 1
     huber_irls_rounds: int = 4
@@ -90,6 +91,8 @@ class PhotoBoundaryMeasurementSpec:
     angle_endpoint_uncertainty_multiplier: float = 2.0
     minimum_trace_count: int = 4
     minimum_trace_fraction: float = 0.60
+    minimum_cross_trace_fraction: float = 0.50
+    minimum_cross_fit_trace_fraction: float = 0.40
     minimum_continuous_support_fraction: float = 0.50
     geometry_equivalence_mm: float = 0.05
     maximum_streaming_block_pixels: int = 1_048_576
@@ -115,6 +118,7 @@ class PhotoBoundaryMeasurementSpec:
             self.gradient_z_minimum,
             self.tone_or_texture_z_minimum,
             self.top_bottom_search_angle_degrees,
+            self.maximum_shared_direction_hull_degrees,
             self.line_connection_allowance_mm,
             self.huber_minimum_threshold_mm,
             self.huber_mad_multiplier,
@@ -122,6 +126,8 @@ class PhotoBoundaryMeasurementSpec:
             self.inlier_mad_multiplier,
             self.angle_endpoint_uncertainty_multiplier,
             self.minimum_trace_fraction,
+            self.minimum_cross_trace_fraction,
+            self.minimum_cross_fit_trace_fraction,
             self.minimum_continuous_support_fraction,
             self.geometry_equivalence_mm,
             self.dimension_search_allowance_mm,
@@ -148,6 +154,8 @@ class PhotoBoundaryMeasurementSpec:
             raise ValueError("photo-boundary discrete limits are not canonical")
         if not (
             0.0 < self.minimum_trace_fraction <= 1.0
+            and 0.0 < self.minimum_cross_trace_fraction <= 1.0
+            and 0.0 < self.minimum_cross_fit_trace_fraction <= 1.0
             and 0.0 < self.minimum_continuous_support_fraction <= 1.0
             and 0.0 < self.directional_role_preference_minimum <= 1.0
             and 0.0 < self.directional_sequence_support_minimum <= 1.0
@@ -290,6 +298,9 @@ class PhotoBoundaryTransition:
     left_texture_mean: float
     right_texture_mean: float
     polarity: int
+    peak_width_px: float
+    prominence: float
+    local_noise: float
     provenance: MeasurementProvenance
 
     def __post_init__(self) -> None:
@@ -307,8 +318,12 @@ class PhotoBoundaryTransition:
                     self.right_tone_mean,
                     self.left_texture_mean,
                     self.right_texture_mean,
+                    self.peak_width_px,
+                    self.prominence,
+                    self.local_noise,
                 )
             )
+            or self.peak_width_px <= 0.0
             or self.provenance.root_measurement
             != MeasurementIdentity.PHOTO_BOUNDARY
         ):
@@ -681,9 +696,11 @@ class FrameBoundaryGeometry:
         if self.role in {BoundaryRole.START, BoundaryRole.END}:
             if (
                 self.direction_authority
-                != DirectionAuthority.ORTHOGONAL_TO_SHARED_DIRECTION
+                != DirectionAuthority.BOUNDED_SEQUENCE_EDGE_DIRECTION
             ):
-                raise ValueError("start/end must be orthogonal to shared direction")
+                raise ValueError(
+                    "start/end require bounded sequence-edge direction"
+                )
         elif (
             self.direction_authority
             != DirectionAuthority.SHARED_TOP_BOTTOM_DIRECTION

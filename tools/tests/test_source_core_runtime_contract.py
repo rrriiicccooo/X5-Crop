@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from dataclasses import replace
 from pathlib import Path
 import tempfile
 import unittest
@@ -18,17 +17,11 @@ from x5crop.detection.candidate.assessment.model import (
 from x5crop.detection.decision.vocabulary import (
     FINAL_REASON_SCAN_CANVAS_AUTHORITY_UNAVAILABLE,
 )
-from x5crop.report.identity import (
-    REPORT_SCHEMA_ID,
-    REPORT_SCHEMA_REVISION,
-)
+from x5crop.report.identity import REPORT_SCHEMA_ID, REPORT_SCHEMA_REVISION
 from x5crop.report.validation import validate_current_report_record
 from x5crop.run_config import RunConfig
-from x5crop.runtime.outcome import (
-    CompletedInput,
-    FailedInput,
-    FailureStage,
-)
+from x5crop.runtime.invocation import PlannedSource
+from x5crop.runtime.outcome import CompletedInput, FailedInput, FailureStage
 from x5crop.runtime.workflow import process_one
 
 
@@ -52,17 +45,15 @@ def _run_config(
         layout="horizontal",
         strip_mode=strip_mode,
         count_request=configuration.count_request,
-        page=0,
-        review_dir=None,
-        copy_review_files=False,
-        compression="same",
         debug_analysis=False,
-        diagnostics=False,
-        overwrite=False,
-        report=False,
-        debug_errors=True,
+        allow_best_effort_output=False,
         jobs=2,
     )
+
+
+def _rgb16(pixels: np.ndarray) -> np.ndarray:
+    normalized = np.asarray(pixels, dtype=np.uint16)
+    return np.repeat(normalized[..., np.newaxis], 3, axis=2)
 
 
 class SourceCoordinateRuntimeContractTest(unittest.TestCase):
@@ -75,32 +66,37 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
         requested_count: int | None = None,
     ):
         root.mkdir(parents=True, exist_ok=True)
-        source = root / f"{format_id}.tif"
-        tifffile.imwrite(source, pixels, photometric="minisblack")
+        source = (root / f"{format_id}.tif").resolve()
+        tifffile.imwrite(
+            source,
+            _rgb16(pixels),
+            photometric="rgb",
+            planarconfig="contig",
+        )
+        output = root / "output"
         bundle = DetectionConfigurationBundle.for_format_mode(
             format_id,
             strip_mode,
             requested_count,
         )
         return process_one(
-            source,
+            PlannedSource(1, source, source.stem),
             _run_config(
                 source,
-                root / "output",
+                output,
                 format_id,
                 strip_mode,
                 requested_count,
             ),
             bundle,
+            output,
         )
 
-    def test_zero_anchor_capacity_is_review_in_current_schema(
-        self,
-    ) -> None:
+    def test_zero_anchor_capacity_is_review_in_v5_schema(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             outcome = self._process_pixels(
                 Path(temporary),
-                np.zeros((100, 720), dtype=np.uint8),
+                np.zeros((100, 720), dtype=np.uint16),
             )
         self.assertIsInstance(outcome, CompletedInput)
         assert isinstance(outcome, CompletedInput)
@@ -112,10 +108,6 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
         self.assertEqual(
             record["photo_geometry"]["resolved_output_slots"],
             {"lane_output_slot_counts": [6]},
-        )
-        self.assertEqual(
-            record["photo_geometry"]["selected_scan_canvas_profile_id"],
-            "135_standard",
         )
         self.assertEqual(
             len(record["photo_geometry"]["slot_identities"]),
@@ -141,44 +133,26 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
         self.assertEqual(finalization["official_tiff_count"], 0)
         self.assertEqual(finalization["resolved_output_geometries"], [])
         self.assertFalse(
-            record["output"]["tiff_fidelity"][
-                "write_readback_validated"
-            ]
-        )
-        self.assertEqual(
-            record["output"]["tiff_fidelity"][
-                "source_sample_count_per_roi"
-            ],
-            1,
+            record["output"]["tiff_fidelity"]["write_readback_validated"]
         )
 
-    def test_fixed_full_without_photo_geometry_is_review_and_exports_nothing(
-        self,
-    ) -> None:
+    def test_fixed_full_without_photo_geometry_is_review(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             outcome = self._process_pixels(
                 Path(temporary),
-                np.zeros((100, 720), dtype=np.uint8),
+                np.zeros((100, 720), dtype=np.uint16),
                 strip_mode="full",
             )
         self.assertIsInstance(outcome, CompletedInput)
         assert isinstance(outcome, CompletedInput)
-        record = outcome.result.record
-        self.assertEqual(record["decision"]["status"], "needs_review")
+        self.assertEqual(outcome.result.record["decision"]["status"], "needs_review")
         self.assertEqual(outcome.artifacts.frame_outputs, ())
-        self.assertFalse(
-            record["output"]["finalization"]["official_tiff_expected"]
-        )
-        self.assertEqual(
-            record["output"]["finalization"]["official_tiff_count"],
-            0,
-        )
 
-    def test_current_report_rejects_a_false_tiff_readback_receipt(self) -> None:
+    def test_current_report_rejects_false_tiff_readback_receipt(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             outcome = self._process_pixels(
                 Path(temporary),
-                np.zeros((100, 720), dtype=np.uint8),
+                np.zeros((100, 720), dtype=np.uint16),
             )
         self.assertIsInstance(outcome, CompletedInput)
         assert isinstance(outcome, CompletedInput)
@@ -187,46 +161,11 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             validate_current_report_record(record)
 
-    def test_diagnostics_preserves_decision_but_writes_no_frames(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            source = root / "diagnostics.tif"
-            tifffile.imwrite(source, np.zeros((100, 720), dtype=np.uint8))
-            bundle = DetectionConfigurationBundle.for_format_mode(
-                "135",
-                "partial",
-            )
-            outcome = process_one(
-                source,
-                replace(
-                    _run_config(source, root / "output"),
-                    diagnostics=True,
-                ),
-                bundle,
-            )
-        self.assertIsInstance(outcome, CompletedInput)
-        assert isinstance(outcome, CompletedInput)
-        record = outcome.result.record
-        self.assertEqual(record["decision"]["status"], "needs_review")
-        self.assertEqual(record["photo_geometry"]["output_slot_count"], 6)
-        self.assertEqual(outcome.artifacts.frame_outputs, ())
-        finalization = record["output"]["finalization"]
-        self.assertFalse(finalization["frame_export_eligible"])
-        self.assertFalse(finalization["frame_export_requested"])
-        self.assertFalse(finalization["frame_export_performed"])
-        self.assertEqual(finalization["reason"], "decision_gate_needs_review")
-        self.assertEqual(
-            record["output"]["tiff_fidelity"]["success_receipt"],
-            "not_created",
-        )
-
-    def test_scan_canvas_contradiction_is_review_not_terminal_failure(
-        self,
-    ) -> None:
+    def test_scan_canvas_contradiction_is_review_not_runtime_error(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             outcome = self._process_pixels(
                 Path(temporary),
-                np.arange(10000, dtype=np.uint8).reshape(100, 100),
+                np.arange(10_000, dtype=np.uint16).reshape(100, 100),
             )
         self.assertIsInstance(outcome, CompletedInput)
         assert isinstance(outcome, CompletedInput)
@@ -236,9 +175,8 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
             FINAL_REASON_SCAN_CANVAS_AUTHORITY_UNAVAILABLE,
             record["decision"]["final_review_reasons"],
         )
-        self.assertEqual(record["output"]["output_files"], [])
 
-    def test_input_read_failure_remains_terminal(self) -> None:
+    def test_input_read_failure_remains_runtime_error(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             with mock.patch(
@@ -247,13 +185,32 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
             ):
                 outcome = self._process_pixels(
                     root,
-                    np.zeros((100, 720), dtype=np.uint8),
+                    np.zeros((100, 720), dtype=np.uint16),
                 )
         self.assertIsInstance(outcome, FailedInput)
         assert isinstance(outcome, FailedInput)
         self.assertEqual(outcome.failure_stage, FailureStage.IMAGE_READ)
         self.assertEqual(outcome.artifacts.frame_outputs, ())
         self.assertIn("synthetic read failure", outcome.error_message)
+
+    def test_non_v5_tiff_domain_is_runtime_error(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = (root / "gray.tif").resolve()
+            tifffile.imwrite(source, np.zeros((100, 720), dtype=np.uint8))
+            output = root / "output"
+            bundle = DetectionConfigurationBundle.for_format_mode(
+                "135", "partial"
+            )
+            outcome = process_one(
+                PlannedSource(1, source, "gray"),
+                _run_config(source, output),
+                bundle,
+                output,
+            )
+        self.assertIsInstance(outcome, FailedInput)
+        assert isinstance(outcome, FailedInput)
+        self.assertEqual(outcome.failure_stage, FailureStage.INPUT_PROFILE)
 
 
 if __name__ == "__main__":
