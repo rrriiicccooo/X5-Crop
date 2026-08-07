@@ -446,9 +446,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Run the non-blocking 111-source diagnostic cohort"
     )
-    parser.add_argument("--output-root", type=Path, required=True)
+    parser.add_argument("--output-root", type=Path)
     parser.add_argument("--jobs", type=int, default=2)
+    parser.add_argument("--identity-only", action="store_true")
     args = parser.parse_args(argv)
+    if args.identity_only:
+        sources = load_diagnostic_sources()
+        print(f"diagnostic source identities: {len(sources)}/{EXPECTED_RECORD_COUNT}")
+        return 0
+    if args.output_root is None:
+        parser.error("--output-root is required unless --identity-only is used")
     passed, summary = run_diagnostic_cohort(
         args.output_root.expanduser().resolve(),
         jobs=args.jobs,

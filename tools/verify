@@ -73,6 +73,15 @@ case "${1:-}" in
     full)
         run_full
         ;;
+    accuracy)
+        python3 -m tools.regression.accuracy --identity-only
+        ;;
+    diagnostic)
+        python3 -m tools.regression.diagnostic_cohort --identity-only
+        ;;
+    performance)
+        python3 -m tools.regression.performance_identity
+        ;;
     pre-push)
         [ -z "$(git status --porcelain)" ] || {
             printf >&2 'Refusing push from a dirty worktree. Commit intentional changes first.\n'
@@ -100,7 +109,7 @@ case "${1:-}" in
         esac
         ;;
     *)
-        printf >&2 'usage: %s staged|full|pre-push\n' "$0"
+        printf >&2 'usage: %s staged|full|accuracy|diagnostic|performance|pre-push\n' "$0"
         exit 2
         ;;
 esac
