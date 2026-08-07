@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 from pathlib import Path
+import tempfile
 import unittest
+from unittest import mock
 
 from tools.install.dependency_manager import (
     CONFLICTING_OPENCV_DISTRIBUTIONS,
     build_uninstall_plan,
     fresh_installed_versions,
+    install_dependencies,
     load_pins,
 )
 
@@ -51,6 +54,33 @@ class DependencyInstallerContractTest(unittest.TestCase):
                 ("pillow", "12.3.0"),
             ),
         )
+
+    def test_installer_stops_before_pip_when_pinned_package_would_change(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            receipt = Path(temporary) / "receipt.json"
+            with (
+                mock.patch(
+                    "tools.install.dependency_manager.installed_opencv_conflicts",
+                    return_value={},
+                ),
+                mock.patch(
+                    "tools.install.dependency_manager.installed_versions",
+                    return_value={"numpy": "2.4.0"},
+                ),
+                mock.patch(
+                    "tools.install.dependency_manager.subprocess.run"
+                ) as run,
+                self.assertRaisesRegex(RuntimeError, "No package was changed"),
+            ):
+                install_dependencies(
+                    ROOT / "tools/install/requirements.txt",
+                    receipt,
+                    break_system_packages=False,
+                )
+            run.assert_not_called()
+            self.assertFalse(receipt.exists())
 
     def test_uninstaller_never_removes_preexisting_or_changed_packages(self) -> None:
         receipt = (

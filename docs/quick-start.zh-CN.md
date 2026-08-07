@@ -2,6 +2,8 @@
 
 当前稳定发布为 **v4.2.8**。
 
+以下安装说明对应下一生产发布；正式使用请以所下载 Release 包内的说明为准。
+
 ## 1. 下载与安装
 
 从 [GitHub Releases](https://github.com/rrriiicccooo/X5-Crop/releases) 下载
@@ -13,7 +15,7 @@ Windows: install/X5_Crop_win_install.bat
 ```
 
 支持 macOS 14 及以上的 Apple Silicon 与 Intel Mac，以及 64 位 Windows；依赖安装到
-Python 3.12-3.14 的当前用户 site。
+Python 3.12-3.14 的当前用户 site。若任一冻结依赖已有其它版本，安装器会在改动前停止。
 
 ## 2. 放入 TIFF 并启动
 

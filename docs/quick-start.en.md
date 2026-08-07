@@ -2,6 +2,9 @@
 
 The current stable release is **v4.2.8**.
 
+The install steps below target the next production release. For production use,
+follow the instructions included in the Release package you downloaded.
+
 ## 1. Download And Install
 
 Download `X5-Crop-vX.X.zip` from
@@ -15,7 +18,8 @@ Windows: install/X5_Crop_win_install.bat
 
 Supported platforms are macOS 14 or later on Apple Silicon and Intel Macs, and
 64-bit Windows. Dependencies are installed into the current user site for
-Python 3.12-3.14.
+Python 3.12-3.14. Setup stops before making changes if any pinned dependency is
+already present at another version.
 
 ## 2. Add TIFFs And Launch
 

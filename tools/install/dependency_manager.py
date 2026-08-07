@@ -288,6 +288,22 @@ def install_dependencies(
         )
 
     before = installed_versions(selected)
+    version_conflicts = [
+        (pin.distribution, before[pin.canonical_name], pin.version)
+        for pin in pins
+        if pin.canonical_name in before
+        and before[pin.canonical_name] != pin.version
+    ]
+    if version_conflicts:
+        details = ", ".join(
+            f"{distribution} {installed} (X5 Crop requires {required})"
+            for distribution, installed, required in version_conflicts
+        )
+        raise RuntimeError(
+            "Pinned X5 Crop dependencies already exist at different versions "
+            f"({details}). No package was changed. Use another supported Python "
+            "interpreter or resolve those versions explicitly before running setup."
+        )
     preexisting = _original_preexisting_versions(pins, before, previous)
     command = [
         sys.executable,

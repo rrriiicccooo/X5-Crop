@@ -139,7 +139,11 @@ https://github.com/rrriiicccooo/X5-Crop
   只提供数值原语，Pillow 只服务 Debug Analysis；库不得取得物理解释、Gate 或输出政策权限。
 - V5 依赖安装到用户级 Python site，使 standalone script 可放在任意文件夹运行；不创建私有
   `.venv`。生产依赖与 Python 支持范围必须按 Release 冻结，安装器不得无约束升级；runtime
-  report 必须记录实际版本与必要的数值 build/thread identity。
+  report 必须记录实际版本与必要的数值 build/thread identity。目标解释器中任一冻结依赖已经
+  存在但版本不同时，安装器必须在改动 package 前安全停止，不得静默升级、降级或覆盖。
+- V5 首版不引入通用视觉大模型、训练模型、ONNX Runtime 或 PyTorch runtime。未来 learned
+  boundary evidence 只能作为像素 evidence，并继续经过同一物理求解器、安全 Gate 与黄金验证；
+  它属于后续版本的独立决策。
 - 结构清理不需要保持历史 PASS/REVIEW、geometry、confidence、reason、schema、debug
   或 cache parity；优先当前安全输出合同。
 - V5 从首个可运行的端到端 vertical slice 起使用黄金样片检查 detection、边界、批准与 deskew；

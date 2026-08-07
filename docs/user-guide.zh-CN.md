@@ -5,7 +5,7 @@
 
 X5 Crop 用于把 Hasselblad / Imacon X5 片夹扫描 TIFF 保守地拆成单张照片。你负责提供胶片
 格式、片条模式和必要的张数；程序负责检测、deskew、安全裁切、TIFF 写出与复读验证。
-本手册随仓库开发；正式使用请以 GitHub Release 包内文档为准。
+本手册随仓库开发，其中安装说明对应下一生产发布；正式使用请以 GitHub Release 包内文档为准。
 
 ## 产品行为
 
@@ -36,8 +36,8 @@ Windows: install/X5_Crop_win_install.bat
 Python 3.12、3.13 或 3.14，把固定版本的 `NumPy`、`SciPy`、
 `opencv-python-headless`、`tifffile`、`imagecodecs` 和 `Pillow` 安装到当前用户的 Python
 site；不创建虚拟环境，也不污染系统级 Python。macOS 安装器只准备当前 Release 文件夹，
-不建立永久系统级信任。同一解释器若已有会占用 `cv2` 命名空间的其它 OpenCV distribution，
-安装器会在改动任何 package 前安全停止，避免互相覆盖。
+不建立永久系统级信任。同一解释器若已有任一冻结依赖的其它版本，或已有会占用 `cv2`
+命名空间的其它 OpenCV distribution，安装器会在改动任何 package 前安全停止。
 
 将入口、启动器和 TIFF 放在同一文件夹：
 
@@ -169,8 +169,9 @@ Windows: install/X5_Crop_win_uninstall.bat
 ```
 
 安装器会留下本 Release 文件夹专属的依赖收据。卸载器只删除安装前不存在、安装后未被改变，
-并且当前没有被其它 Python package 使用的依赖；安装前已有、后来升级或已被共享的 package
-一律保留。最后删除 X5 Crop 文件夹即可移除程序和本地输出。应先运行卸载器，再删除文件夹。
+并且当前没有被其它 Python package 使用的依赖；安装前已有相同版本、后来升级或已被共享的
+package 一律保留。最后删除 X5 Crop 文件夹即可移除程序和本地输出。应先运行卸载器，再删除
+文件夹。
 
 许可证：MIT。发布包根目录包含 `LICENSE`；GitHub 也提供
 [完整文本](https://github.com/rrriiicccooo/X5-Crop/blob/main/LICENSE)。

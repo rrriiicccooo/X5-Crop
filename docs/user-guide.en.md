@@ -8,8 +8,9 @@ X5 Crop conservatively separates Hasselblad / Imacon X5 holder-scan TIFFs into
 individual photos. You provide the film format, strip mode, and any required
 count. The program handles detection, deskew, safe cropping, TIFF writing, and
 read-back validation.
-This guide follows repository development. For production use, follow the
-documentation included in the GitHub Release package.
+This guide follows repository development, and its install instructions target
+the next production release. For production use, follow the documentation
+included in the GitHub Release package.
 
 ## Product Behavior
 
@@ -48,9 +49,9 @@ pinned `NumPy`, `SciPy`, `opencv-python-headless`, `tifffile`, `imagecodecs`,
 and `Pillow` into the current user's Python site. It creates no virtual
 environment and does not modify system-level Python. On macOS, it prepares only
 the current Release folder and establishes no permanent system-wide trust. If
-the same interpreter already contains another OpenCV distribution that owns
-the `cv2` namespace, setup stops before changing any package to avoid file
-collisions.
+the same interpreter already contains a different version of any pinned
+dependency, or another OpenCV distribution that owns the `cv2` namespace,
+setup stops before changing any package.
 
 Keep the entry script, launcher, and TIFFs in one folder:
 
@@ -197,8 +198,9 @@ Windows: install/X5_Crop_win_uninstall.bat
 Setup leaves a dependency receipt owned by that Release folder. The
 uninstaller removes only packages that were absent before setup, remain at the
 installed version, and are not used by another installed Python package.
-Pre-existing, subsequently changed, or shared packages are preserved. Then
-delete the X5 Crop folder to remove the program and local outputs.
+Packages already present at the same version, subsequently changed packages,
+and shared packages are preserved. Then delete the X5 Crop folder to remove the
+program and local outputs.
 
 License: MIT. The release root includes `LICENSE`; the
 [full text](https://github.com/rrriiicccooo/X5-Crop/blob/main/LICENSE) is also

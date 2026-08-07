@@ -22,6 +22,9 @@ Decision 继续以整个 source 为原子，不输出部分成功 slots。Deskew
 内计算，X5 Crop 独占 source 并发。固定依赖改变性能身份后，V4.9 性能 baseline 已在同一 pins
 与同一 source manifest 下重建，比较器继续以 receipt SHA 阻止跨环境比较。
 
+若目标 Python 已有任一冻结依赖的其它版本，安装器会在改动 package 前停止，不静默升级或
+降级用户环境。V5 首版依赖集合不含通用视觉模型、训练模型、ONNX Runtime 或 PyTorch runtime。
+
 V5 使用全部用户确认黄金进行开发与回归，不建立独立 holdout。S055、S098 为 challenge，
 其余为 nominal；challenge 可以安全 review，但不安全批准始终失败。弱边、接触/重叠、空槽与
 Orientation 样片可在人工确认后继续加入。135-dual 不增加真实样片，XPan 与 120-645 样片以后
