@@ -1182,6 +1182,34 @@ def _canonical_rotation_degrees(
     return angle if source_axis_long == BoundaryAxis.X else -angle
 
 
+def continuous_trace_support_fraction(
+    queried_traces: tuple[int, ...],
+    supporting_traces: tuple[int | float, ...],
+) -> float:
+    """Return the longest allowed-gap support run over the queried span."""
+
+    if not queried_traces or not supporting_traces:
+        return 0.0
+    queried = tuple(sorted(queried_traces))
+    supporting = tuple(sorted(set(supporting_traces)))
+    steps = np.diff(np.asarray(queried, dtype=np.float64))
+    step = float(np.median(steps)) if steps.size else 1.0
+    maximum_gap = step * (
+        PHOTO_BOUNDARY_MEASUREMENT_SPEC.maximum_missing_lattice_steps + 1
+    ) + 1.0
+    longest = 0.0
+    run_start = supporting[0]
+    previous = supporting[0]
+    for trace in supporting[1:]:
+        if trace - previous > maximum_gap:
+            longest = max(longest, previous - run_start)
+            run_start = trace
+        previous = trace
+    longest = max(longest, previous - run_start)
+    queried_span = max(1.0, float(queried[-1] - queried[0]))
+    return min(1.0, longest / queried_span)
+
+
 def fit_template_bound_boundary_observation(
     measurement_set: PhotoBoundaryMeasurementSet,
     *,
@@ -1269,29 +1297,6 @@ def fit_template_bound_boundary_observation(
     angle = _canonical_rotation_degrees(source_axis_long, slope)
     if abs(angle) > spec.top_bottom_search_angle_degrees + 1.0e-9:
         return None
-    traces = tuple(sorted(point.trace for point in selected))
-    trace_steps = np.diff(
-        np.asarray(queried_traces, dtype=np.float64)
-    )
-    trace_step = (
-        float(np.median(trace_steps)) if trace_steps.size else 1.0
-    )
-    maximum_gap = (
-        trace_step * (spec.maximum_missing_lattice_steps + 1) + 1.0
-    )
-    longest = 0.0
-    run_start = traces[0]
-    previous = traces[0]
-    for trace in traces[1:]:
-        if trace - previous > maximum_gap:
-            longest = max(longest, previous - run_start)
-            run_start = trace
-        previous = trace
-    longest = max(longest, previous - run_start)
-    queried_span = max(1.0, float(queried_traces[-1] - queried_traces[0]))
-    continuity = min(1.0, longest / queried_span)
-    if continuity < spec.minimum_continuous_support_fraction:
-        return None
     residual_center = float(np.median(residuals))
     residual_mad = float(
         np.median(np.abs(residuals - residual_center))
@@ -1310,6 +1315,8 @@ def fit_template_bound_boundary_observation(
         if bool(keep)
     )
     inlier_residuals = residuals[inlier_mask]
+    traces = tuple(sorted(point.trace for point in inliers))
+    continuity = continuous_trace_support_fraction(queried_traces, traces)
     location_uncertainty = (
         float(
             np.median(
@@ -1331,12 +1338,15 @@ def fit_template_bound_boundary_observation(
     angle_uncertainty = math.degrees(
         math.atan2(
             spec.angle_endpoint_uncertainty_multiplier
-            * location_uncertainty,
+            * (
+                location_uncertainty
+                + float(np.median(np.abs(inlier_residuals)))
+            ),
             max(1.0, support.width),
         )
     )
     selected_ids = tuple(
-        sorted((point.transition.transition_id for point in selected), key=str)
+        sorted((point.transition.transition_id for point in inliers), key=str)
     )
     observation_id = _stable_observation_id(
         "template-bound-line",
@@ -1351,12 +1361,12 @@ def fit_template_bound_boundary_observation(
             line.offset_px - normalized_uncertainty,
             line.offset_px + normalized_uncertainty,
         ),
-        fit_residual_px=float(np.median(np.abs(residuals))),
+        fit_residual_px=float(np.median(np.abs(inlier_residuals))),
         angle_interval_degrees=FiniteInterval(
             angle - angle_uncertainty,
             angle + angle_uncertainty,
         ),
-        trace_support_count=len(selected),
+        trace_support_count=len(inliers),
         queried_trace_count=len(queried_traces),
         continuous_support_fraction=continuity,
         transition_ids=selected_ids,

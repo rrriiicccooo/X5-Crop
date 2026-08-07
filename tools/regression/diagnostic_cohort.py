@@ -146,6 +146,7 @@ def _bounded_work(
         <= int(row["template_group_count"]) * max(0, count - 1)
         and int(row["enhanced_query_count"])
         <= int(row["phase_vote_count"])
+        + int(row["template_group_count"]) * count * 2
         for row, count in zip(work_rows, lane_counts, strict=True)
     )
     return (
@@ -301,10 +302,13 @@ def run_diagnostic_source(source: DiagnosticSource) -> dict[str, Any]:
             width = int(source.identity["raw_width_px"])
             height = int(source.identity["raw_height_px"])
             source_pixels = width * height
+            canonical_extent = report["measurement"]["field"][
+                "source_extent"
+            ]
             geometry_authorized = _source_geometry_within_authority(
                 report,
-                width=width,
-                height=height,
+                width=int(canonical_extent["width"]),
+                height=int(canonical_extent["height"]),
             )
             work_bounded = _bounded_work(
                 report,

@@ -304,6 +304,7 @@ def _prepare_lane(
         height_scale_px_per_mm=scales.height_axis_px_per_mm,
         sequence_profile=sequence_profile,
         cross_profile=cross_profile,
+        sequence_measurement_sets=measurement_sets[2:],
         top_measurement_set=measurement_sets[0],
         bottom_measurement_set=measurement_sets[1],
         transition_by_id=transition_by_id,
@@ -384,18 +385,21 @@ def _work_receipt(
     placements: tuple[FormatPlacement, ...],
     *,
     enhanced_query_count: int = 0,
+    proposal: TemplateLaneProposal | None = None,
 ) -> TemplateWorkReceipt:
+    active_proposal = prepared.proposal if proposal is None else proposal
+    active_sequence_profile = active_proposal.lane.sequence_profile
     grouping = tuple(
         component.grouping_work
-        for component in prepared.proposal.components
+        for component in active_proposal.components
     )
     group_count = sum(
         len(component.phase_groups)
-        for component in prepared.proposal.components
+        for component in active_proposal.components
     )
     profile_query_ids = {
         prepared.transition_by_id[str(identity)].query_id
-        for profile in (prepared.sequence_profile, prepared.cross_profile)
+        for profile in (active_sequence_profile, prepared.cross_profile)
         for run in profile.runs
         for identity in run.transition_ids
     }
@@ -408,16 +412,16 @@ def _work_receipt(
             item.coverage.pixel_query_count for item in prepared.measurement_sets
         ),
         basic_profile_coordinate_count=(
-            prepared.sequence_profile.coordinate_count
+            active_sequence_profile.coordinate_count
             + prepared.cross_profile.coordinate_count
         ),
         basic_profile_run_count=(
-            len(prepared.sequence_profile.runs)
+            len(active_sequence_profile.runs)
             + len(prepared.cross_profile.runs)
         ),
         phase_vote_count=sum(
             len(component.phase_votes)
-            for component in prepared.proposal.components
+            for component in active_proposal.components
         ),
         template_group_count=group_count,
         template_role_lookup_count=sum(
@@ -445,13 +449,14 @@ def _work_receipt(
             default=0,
         ),
     )
-    if prepared.proposal.components:
+    if active_proposal.components:
         receipt.validate_bounds(
             ordered_role_count=prepared.output_slot_count * 2,
             slot_count=prepared.output_slot_count,
             registered_enhanced_query_count=sum(
                 len(component.enhanced_phase_queries)
-                for component in prepared.proposal.components
+                + len(component.registered_sequence_role_queries)
+                for component in active_proposal.components
             ),
         )
     return receipt
@@ -568,15 +573,6 @@ def reconstruct_photo_geometry(
         )
 
     direction = source_directions[0]
-    materialization = materialize_source_placements(
-        tuple(item.proposal for item in prepared),
-        direction,
-    )
-    placements_by_lane = materialization.placements_by_lane
-    complete = (
-        len(placements_by_lane) == len(prepared)
-        and all(placements_by_lane)
-    )
     direction_resolution = SharedStripDirectionResolution(
         direction=direction,
         state=EvidenceState.SUPPORTED,
@@ -588,14 +584,24 @@ def reconstruct_photo_geometry(
         source_width=field.source_extent.width,
         source_height=field.source_extent.height,
     )
+    materialization = materialize_source_placements(
+        tuple(item.proposal for item in prepared),
+        direction,
+    )
+    placements_by_lane = materialization.placements_by_lane
+    complete = (
+        len(placements_by_lane) == len(prepared)
+        and all(placements_by_lane)
+    )
     reconstructions: list[LaneFormatPlacementReconstruction] = []
     all_budgets: list[DirectUseBudgetAssessment] = []
     lane_authority_valid = True
     containment_valid = True
-    for prepared_lane, placements, enhanced_query_count in zip(
+    for prepared_lane, placements, enhanced_query_count, refined_proposal in zip(
         prepared,
         placements_by_lane if complete else tuple(() for _item in prepared),
         materialization.enhanced_query_counts_by_lane,
+        materialization.lane_proposals,
         strict=True,
     ):
         canonical = (
@@ -639,14 +645,14 @@ def reconstruct_photo_geometry(
                 anchor_domain=prepared_lane.anchor_domain,
                 measurement_sets=prepared_lane.measurement_sets,
                 side_transition_regions=prepared_lane.side_regions,
-                sequence_profile=prepared_lane.sequence_profile,
+                sequence_profile=refined_proposal.lane.sequence_profile,
                 cross_profile=prepared_lane.cross_profile,
                 raw_top_bottom_observations=(
-                    prepared_lane.proposal.raw_top_bottom_observations
+                    refined_proposal.raw_top_bottom_observations
                 ),
                 provisional_height_templates=tuple(
                     template
-                    for component in prepared_lane.proposal.components
+                    for component in refined_proposal.components
                     for template in component.height_templates
                 ),
                 direction_classes=source_directions,
@@ -658,6 +664,7 @@ def reconstruct_photo_geometry(
                     prepared_lane,
                     placements,
                     enhanced_query_count=enhanced_query_count,
+                    proposal=refined_proposal,
                 ),
             )
         )

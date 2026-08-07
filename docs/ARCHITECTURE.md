@@ -176,9 +176,9 @@ phase interval = observed run interval - template role relative position
 一个通过联合尺寸合同的完整 start/end opposite-edge pair
 ```
 
-相邻 separator 两侧只能证明 local advance，不能单独取得全局 phase 排除权。唯一完整组可
-排除只有一个独立 role、无 opposite pair、无 confirmed delta 的孤立冲突；2-vs-2 等同强度
-冲突全部保留。
+相邻 separator 两侧只能证明 local advance，不能单独取得全局 phase 排除权。一个或多个完整
+opposite-edge pair 可排除与其 source geometry 相容、只有一个独立 role、无 opposite pair、无
+confirmed delta 的孤立冲突；多个完整 pair 自身全部保留，2-vs-2 等同强度冲突也全部保留。
 
 ### 4.4 Provisional cross 与 direction
 
@@ -191,9 +191,10 @@ raw coordinate interval
 ```
 
 该 interval 只生成 proposal，不能用 0.40% tolerance 提前删除摆放或进入安全输出。
-Template 绑定 transitions 后，每个 top/bottom role最多拟合一条 raw line；同组 angle intervals
-精确相交形成 `SharedStripDirection`，然后才重新投影已有 observations、收紧 source height
-state 并 materialize。不得生成第二批 placements。
+Template 绑定 transitions 后，每个 top/bottom role最多拟合一条 raw line；angle intervals 的
+交集只用于 canonical 方向估计，完整安全角度保存两侧 interval 的 hull。只有 hull 不超过冻结
+上限时才形成 `SharedStripDirection`，然后重新投影已有 observations、收紧 source height state
+并 materialize。不得生成第二批 placements。
 
 每个 lane 只需一个合格的 top 或 bottom 像素锚点即可建立完整 height placement；缺失的
 opposite edge 只能由同一个联合 source-height state 推导。只有同时观测到合格的 top/bottom
@@ -205,10 +206,12 @@ unavailable，正式输出为零。
 
 ### 4.5 EnhancedEvidence
 
-Basic 已闭合时 enhanced work 必须为零。Enhanced 只由已登记的 typed structural gap触发，
-复用相同 decode、measurement cache、role band 与 coordinate index；每个 query ID 最多执行
-一次。它只能确认、反驳或收紧已有完整模板，不能创建 basic 不存在的新 phase、direction、
-geometry authority 或更宽 query coverage。
+Basic 已产生 placements 且每条 sequence placement 都具有正式 exclusion authority 时，该 lane
+不执行 registered role enhancement。无 placement 或只有未闭合 singleton phase 的 lane 才存在
+typed structural gap；enhanced work 复用相同 decode、measurement cache、role band 与按 trace
+排序的 coordinate index，每个 query ID 最多执行一次。完整 opposite-edge pair 可确认或收紧
+已存在的 template seed；单个 role 不能取得排除权限。Enhanced 不能创建 basic 不存在的新
+direction、source geometry authority 或更宽 query coverage。
 
 ## 5. Retention 与 canonical
 

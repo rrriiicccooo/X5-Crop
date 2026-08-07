@@ -38,10 +38,11 @@ standalone 只消费 current schema；不存在 V4.9 fallback、shim、feature f
 使用九张 source-SHA-bound 黄金的十四项正式 CLI 任务；`diagnostic` 以正式 CLI 运行 111 sources；
 `performance` 在外部 SHA 核对后测量 24-source 完整用户路径并绑定 commit、依赖和 workload。
 
-当前完成边界：合成 full contracts 与 S027 vertical slice 已建立；九张黄金中其余 nominal 尚未
-达到冻结自动批准标准，111-source 全运行、24-source 当前 commit 性能 receipt，以及 Windows
-x64、Apple Silicon、Intel macOS 的真实 TIFF、中文路径、文件占用、恢复与性能 receipt 尚未
-完成。因此 V5 不是 release-ready，也不能宣布三平台正式支持。
+当前完成边界：合成 full contracts、S027 与 S035 vertical slice 已建立；九张黄金十四项中仍有
+九个 nominal 任务尚未达到冻结自动批准标准。111-source 工程诊断已达到 111/111，但
+24-source 当前 commit 性能 receipt，以及 Windows x64、Apple Silicon、Intel macOS 的真实
+TIFF、中文路径、文件占用、恢复与性能 receipt 尚未完成。因此 V5 不是 release-ready，也不能
+宣布三平台正式支持。
 
 ## V4.9（架构实验，不发布）
 

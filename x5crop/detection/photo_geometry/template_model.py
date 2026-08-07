@@ -139,6 +139,20 @@ class EnhancedPhaseQuery:
 
 
 @dataclass(frozen=True)
+class RegisteredSequenceRoleQuery:
+    """One template role registered before direction-aware evidence binding."""
+
+    query_id: str
+    seed_id: str
+    role: TemplateRole
+    target_interval_px: FiniteInterval
+
+    def __post_init__(self) -> None:
+        if not self.query_id or not self.seed_id:
+            raise ValueError("registered sequence role query requires identities")
+
+
+@dataclass(frozen=True)
 class TemplateWorkReceipt:
     measurement_query_count: int
     pixel_query_count: int
@@ -241,6 +255,7 @@ class TemplateLaneInput:
     height_scale_px_per_mm: PositiveInterval
     sequence_profile: BasicAxisProfile
     cross_profile: BasicAxisProfile
+    sequence_measurement_sets: tuple[PhotoBoundaryMeasurementSet, ...]
     top_measurement_set: PhotoBoundaryMeasurementSet
     bottom_measurement_set: PhotoBoundaryMeasurementSet
     transition_by_id: dict[str, PhotoBoundaryTransition]
@@ -253,6 +268,10 @@ class TemplateLaneInput:
             or self.width_axis == self.height_axis
             or self.sequence_profile.axis_name != "sequence"
             or self.cross_profile.axis_name != "cross"
+            or any(
+                item.query.boundary_axis != self.width_axis
+                for item in self.sequence_measurement_sets
+            )
         ):
             raise ValueError("template lane input is invalid")
 
@@ -265,6 +284,7 @@ class ComponentTemplateProposal:
     phase_votes: tuple[PhaseVote, ...]
     phase_groups: tuple[TemplatePhaseGroup, ...]
     enhanced_phase_queries: tuple[EnhancedPhaseQuery, ...]
+    registered_sequence_role_queries: tuple[RegisteredSequenceRoleQuery, ...]
     height_templates: tuple[ProvisionalHeightTemplate, ...]
     grouping_work: PhaseGroupingWork
 
@@ -276,6 +296,13 @@ class ComponentTemplateProposal:
             or not self.phase_groups
             or len({item.query_id for item in self.enhanced_phase_queries})
             != len(self.enhanced_phase_queries)
+            or len(
+                {
+                    item.query_id
+                    for item in self.registered_sequence_role_queries
+                }
+            )
+            != len(self.registered_sequence_role_queries)
             or not {
                 item.vote_id for item in self.enhanced_phase_queries
             }.issubset({item.vote_id for item in self.phase_votes})
@@ -303,11 +330,13 @@ class TemplateLaneProposal:
 class SourcePlacementMaterialization:
     placements_by_lane: tuple[tuple[FormatPlacement, ...], ...]
     enhanced_query_counts_by_lane: tuple[int, ...]
+    lane_proposals: tuple[TemplateLaneProposal, ...]
 
     def __post_init__(self) -> None:
         if (
             len(self.placements_by_lane)
             != len(self.enhanced_query_counts_by_lane)
+            or len(self.placements_by_lane) != len(self.lane_proposals)
             or any(value < 0 for value in self.enhanced_query_counts_by_lane)
         ):
             raise ValueError("source placement materialization is invalid")

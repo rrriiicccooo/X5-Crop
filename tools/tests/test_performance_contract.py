@@ -17,6 +17,8 @@ from tools.regression.performance_identity import (
 from tools.regression.diagnostic_cohort import (
     MAXIMUM_PEAK_TEMPORARY_BYTES_PER_SOURCE_PIXEL,
     MAXIMUM_PEAK_TEMPORARY_FIXED_ALLOWANCE_BYTES,
+    WORK_FIELDS,
+    _bounded_work,
     _peak_temporary_limit_bytes,
 )
 
@@ -110,6 +112,29 @@ class V5PerformanceContractTest(unittest.TestCase):
             MAXIMUM_PEAK_TEMPORARY_FIXED_ALLOWANCE_BYTES,
             32 * 1024 * 1024,
         )
+
+    def test_diagnostic_enhanced_work_is_bounded_by_groups_times_roles(
+        self,
+    ) -> None:
+        work = {field: 0 for field in WORK_FIELDS}
+        work.update(
+            phase_vote_count=5,
+            template_group_count=4,
+            enhanced_query_count=29,
+            domain_pixels=100,
+        )
+        report = {
+            "photo_geometry": {
+                "resolved_output_slots": {
+                    "lane_output_slot_counts": [3],
+                },
+                "lanes": [{"work": work}],
+            }
+        }
+
+        self.assertTrue(_bounded_work(report, source_pixels=100))
+        work["enhanced_query_count"] = 30
+        self.assertFalse(_bounded_work(report, source_pixels=100))
 
 
 if __name__ == "__main__":

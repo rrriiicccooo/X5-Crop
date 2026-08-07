@@ -21,6 +21,7 @@ from .boundary_geometry import (
     source_sequence_axis_slope_interval,
 )
 from .measurement import (
+    continuous_trace_support_fraction,
     fit_template_bound_boundary_observation,
     robust_scalar_location,
 )
@@ -30,6 +31,7 @@ from .model import (
     DirectionAuthority,
     FrameBoundaryGeometry,
     PHOTO_BOUNDARY_MEASUREMENT_SPEC,
+    PhotoBoundaryMeasurementSet,
     PhotoBoundaryObservation,
     PhotoBoundaryTransition,
     PositionSource,
@@ -53,6 +55,7 @@ from .template_model import (
     LocalAdvanceKind,
     LocalAdvanceRelation,
     ProvisionalHeightTemplate,
+    RegisteredSequenceRoleQuery,
     SequencePlacement,
     SourcePlacementMaterialization,
     TemplateLaneInput,
@@ -60,6 +63,7 @@ from .template_model import (
     TemplateSequenceSeed,
 )
 from .template_profiles import (
+    BasicAxisProfile,
     PhaseVote,
     ProfileRun,
     TemplatePhaseGroup,
@@ -188,7 +192,34 @@ def _template_bound_direction_classes(
     for template in templates:
         resolution = resolve_shared_strip_direction(template.raw_observations)
         if resolution.direction is not None:
-            directions.append(resolution.direction)
+            hull = _hull(
+                tuple(
+                    item.angle_interval_degrees
+                    for item in template.raw_observations
+                )
+            )
+            if (
+                hull.width
+                > PHOTO_BOUNDARY_MEASUREMENT_SPEC.maximum_shared_direction_hull_degrees
+            ):
+                continue
+            directions.append(
+                SharedStripDirection(
+                    direction_id=_stable_id(
+                        "template-direction-safety-hull",
+                        resolution.direction.direction_id,
+                        hull.minimum,
+                        hull.maximum,
+                    ),
+                    selected_observation_ids=(
+                        resolution.direction.selected_observation_ids
+                    ),
+                    full_angle_interval_degrees=hull,
+                    canonical_angle_degrees=(
+                        resolution.direction.canonical_angle_degrees
+                    ),
+                )
+            )
             continue
         intervals = tuple(
             item.angle_interval_degrees
@@ -342,6 +373,257 @@ def _line_boundary_coordinate(
     ) / line.normal_x
 
 
+def reference_role_transition_ids(
+    measurement_set: PhotoBoundaryMeasurementSet,
+    *,
+    target_coordinate_px: float,
+    equivalence_px: float,
+) -> tuple[ObservationId, ...]:
+    """Bind one unambiguous measured transition per registered trace.
+
+    The physical template reference proposes where to look inside the already
+    completed query.  It does not create evidence: a trace is omitted whenever
+    its two nearest transitions are indistinguishable at the frozen geometry
+    equivalence scale.
+    """
+
+    if not math.isfinite(target_coordinate_px) or equivalence_px <= 0.0:
+        raise ValueError("reference transition proposal is invalid")
+    by_trace: dict[int, list[PhotoBoundaryTransition]] = {}
+    for transition in measurement_set.transitions:
+        by_trace.setdefault(transition.trace_coordinate_px, []).append(
+            transition
+        )
+    selected: list[ObservationId] = []
+    for trace in measurement_set.query.trace_positions_px:
+        ordered = sorted(
+            by_trace.get(trace, ()),
+            key=lambda item: (
+                abs(item.coordinate_px - target_coordinate_px),
+                str(item.transition_id),
+            ),
+        )
+        if not ordered:
+            continue
+        if (
+            len(ordered) > 1
+            and abs(
+                abs(ordered[1].coordinate_px - target_coordinate_px)
+                - abs(ordered[0].coordinate_px - target_coordinate_px)
+            )
+            <= equivalence_px
+        ):
+            continue
+        selected.append(ordered[0].transition_id)
+    return tuple(selected)
+
+
+def _observation_coordinate_interval(
+    observation: PhotoBoundaryObservation,
+    *,
+    boundary_axis: BoundaryAxis,
+    trace_coordinate_px: float,
+) -> FiniteInterval:
+    line = observation.line
+    if boundary_axis == BoundaryAxis.Y:
+        normal = line.normal_y
+        other = line.normal_x
+    else:
+        normal = line.normal_x
+        other = line.normal_y
+    if abs(normal) <= 1.0e-12:
+        raise ValueError("cross-boundary line cannot project coordinate")
+    values = tuple(
+        (offset - other * trace_coordinate_px) / normal
+        for offset in (
+            observation.offset_interval_px.minimum,
+            observation.offset_interval_px.maximum,
+        )
+    )
+    return FiniteInterval(min(values), max(values))
+
+
+def _reference_role_run(
+    lane: TemplateLaneInput,
+    *,
+    role: BoundaryRole,
+    measurement_set: PhotoBoundaryMeasurementSet,
+    target_coordinate_px: float,
+    equivalence_px: float,
+) -> tuple[ProfileRun, PhotoBoundaryObservation] | None:
+    transition_ids = reference_role_transition_ids(
+        measurement_set,
+        target_coordinate_px=target_coordinate_px,
+        equivalence_px=equivalence_px,
+    )
+    observation = fit_template_bound_boundary_observation(
+        measurement_set,
+        transition_ids=transition_ids,
+        role=role,
+        source_axis_long=lane.width_axis,
+        boundary_axis_scale_px_per_mm=lane.height_scale_px_per_mm,
+        minimum_trace_fraction=(
+            PHOTO_BOUNDARY_MEASUREMENT_SPEC.minimum_cross_fit_trace_fraction
+        ),
+    )
+    if observation is None:
+        return None
+    spec = PHOTO_BOUNDARY_MEASUREMENT_SPEC
+    role_preference = (
+        observation.left_background_preference_fraction
+        if role == BoundaryRole.TOP
+        else observation.right_background_preference_fraction
+    )
+    if (
+        observation.background_side_support_fraction
+        < spec.directional_background_support_minimum
+        or role_preference < spec.directional_role_preference_minimum
+    ):
+        return None
+    selected = tuple(
+        transition
+        for transition in measurement_set.transitions
+        if transition.transition_id in set(observation.transition_ids)
+    )
+    traces = tuple(
+        sorted({transition.trace_coordinate_px for transition in selected})
+    )
+    queried = measurement_set.query.trace_positions_px
+    return (
+        ProfileRun(
+            run_id=_stable_id(
+                "reference-role-run",
+                role.value,
+                *(str(identity) for identity in observation.transition_ids),
+            ),
+            coordinate_interval_px=_observation_coordinate_interval(
+                observation,
+                boundary_axis=lane.height_axis,
+                trace_coordinate_px=lane.width_authority_px.center,
+            ),
+            transition_ids=observation.transition_ids,
+            trace_coordinates_px=traces,
+            role_hint=role,
+            qualified_anchor_roles=(),
+            support_fraction=len(traces) / len(queried),
+            continuous_support_fraction=(
+                observation.continuous_support_fraction
+            ),
+            fit_residual_px=observation.fit_residual_px,
+            evidence_strength=sum(
+                transition.gradient_z
+                + max(transition.tone_z, transition.texture_z)
+                for transition in selected
+            )
+            / len(selected),
+            pair_qualified=True,
+        ),
+        observation,
+    )
+
+
+def _inlier_profile_run(
+    lane: TemplateLaneInput,
+    run: ProfileRun,
+    observation: PhotoBoundaryObservation,
+    measurement_set: PhotoBoundaryMeasurementSet,
+) -> ProfileRun:
+    selected = tuple(
+        transition
+        for transition in measurement_set.transitions
+        if transition.transition_id in set(observation.transition_ids)
+    )
+    traces = tuple(
+        sorted({transition.trace_coordinate_px for transition in selected})
+    )
+    return ProfileRun(
+        run_id=_stable_id(
+            "inlier-profile-run",
+            run.run_id,
+            observation.observation_id,
+        ),
+        coordinate_interval_px=_observation_coordinate_interval(
+            observation,
+            boundary_axis=lane.height_axis,
+            trace_coordinate_px=lane.width_authority_px.center,
+        ),
+        transition_ids=observation.transition_ids,
+        trace_coordinates_px=traces,
+        role_hint=run.role_hint,
+        qualified_anchor_roles=run.qualified_anchor_roles,
+        support_fraction=(
+            observation.trace_support_count
+            / observation.queried_trace_count
+        ),
+        continuous_support_fraction=(
+            observation.continuous_support_fraction
+        ),
+        fit_residual_px=observation.fit_residual_px,
+        evidence_strength=sum(
+            transition.gradient_z
+            + max(transition.tone_z, transition.texture_z)
+            for transition in selected
+        )
+        / len(selected),
+        pair_qualified=run.pair_qualified,
+    )
+
+
+def _reference_pair_height_template(
+    lane: TemplateLaneInput,
+    geometry: SourceFrameGeometry,
+    broad_height: FiniteInterval,
+) -> ProvisionalHeightTemplate | None:
+    height = geometry.height_state.extent_projection_px()
+    center = lane.height_authority_px.center
+    equivalence_px = (
+        PHOTO_BOUNDARY_MEASUREMENT_SPEC.geometry_equivalence_mm
+        * lane.height_scale_px_per_mm.maximum
+    )
+    top = _reference_role_run(
+        lane,
+        role=BoundaryRole.TOP,
+        measurement_set=lane.top_measurement_set,
+        target_coordinate_px=center - height.center / 2.0,
+        equivalence_px=equivalence_px,
+    )
+    bottom = _reference_role_run(
+        lane,
+        role=BoundaryRole.BOTTOM,
+        measurement_set=lane.bottom_measurement_set,
+        target_coordinate_px=center + height.center / 2.0,
+        equivalence_px=equivalence_px,
+    )
+    if top is None or bottom is None:
+        return None
+    origin = _intersection(
+        top[0].coordinate_interval_px,
+        _subtract(bottom[0].coordinate_interval_px, broad_height),
+    )
+    if origin is None:
+        return None
+    angle_hull = _hull(
+        (top[1].angle_interval_degrees, bottom[1].angle_interval_degrees)
+    )
+    if (
+        angle_hull.width
+        > PHOTO_BOUNDARY_MEASUREMENT_SPEC.maximum_shared_direction_hull_degrees
+    ):
+        return None
+    return ProvisionalHeightTemplate(
+        template_id=_stable_id(
+            "reference-pair-height-template",
+            geometry.component.component_id,
+            top[0].run_id,
+            bottom[0].run_id,
+        ),
+        component_id=geometry.component.component_id,
+        origin_interval_px=origin,
+        observed_runs=(top[0], bottom[0]),
+        raw_observations=(top[1], bottom[1]),
+    )
+
+
 def _template_bound_opposite_run(
     lane: TemplateLaneInput,
     geometry: SourceFrameGeometry,
@@ -458,24 +740,7 @@ def _template_bound_opposite_run(
         center + 3.0 * mad + half_width,
     )
     traces = tuple(sorted(item.trace_coordinate_px for item in selected))
-    steps = np.diff(np.asarray(queried, dtype=np.float64))
-    step = float(np.median(steps)) if steps.size else 1.0
-    maximum_gap = step * (
-        PHOTO_BOUNDARY_MEASUREMENT_SPEC.maximum_missing_lattice_steps + 1
-    ) + 1.0
-    longest = 0.0
-    run_start = traces[0]
-    previous = traces[0]
-    for trace in traces[1:]:
-        if trace - previous > maximum_gap:
-            longest = max(longest, previous - run_start)
-            run_start = trace
-        previous = trace
-    longest = max(longest, previous - run_start)
-    continuity = min(
-        1.0,
-        longest / max(1.0, float(queried[-1] - queried[0])),
-    )
+    continuity = continuous_trace_support_fraction(queried, traces)
     return ProfileRun(
         run_id=_stable_id(
             "template-bound-opposite-run",
@@ -551,6 +816,12 @@ def provisional_height_templates(
             observation = fit_cache[key]
             if observation is None:
                 continue
+            run = _inlier_profile_run(
+                lane,
+                run,
+                observation,
+                measurement_set,
+            )
             origin = (
                 run.coordinate_interval_px
                 if role == BoundaryRole.TOP
@@ -584,6 +855,12 @@ def provisional_height_templates(
             PHOTO_BOUNDARY_MEASUREMENT_SPEC.directional_background_support_minimum
         ):
             continue
+        bottom_run = _inlier_profile_run(
+            lane,
+            bottom_run,
+            bottom_observation,
+            lane.bottom_measurement_set,
+        )
         fitted[BoundaryRole.BOTTOM].append(
             (
                 bottom_run,
@@ -648,6 +925,14 @@ def provisional_height_templates(
                     raw_observations=(observation,),
                 )
             )
+    if not templates:
+        reference_pair = _reference_pair_height_template(
+            lane,
+            geometry,
+            broad_height,
+        )
+        if reference_pair is not None:
+            templates.append(reference_pair)
     unique = {item.template_id: item for item in templates}
     return tuple(unique[key] for key in sorted(unique))
 
@@ -686,28 +971,28 @@ def build_lane_template_proposal(
         )
         heights = provisional_height_templates(lane, geometry)
         all_height_templates.extend(heights)
-        component_proposals.append(
-            ComponentTemplateProposal(
-                component=component,
-                initial_source_geometry=geometry,
-                roles=roles,
-                phase_votes=votes,
-                phase_groups=groups,
-                enhanced_phase_queries=tuple(
-                    EnhancedPhaseQuery(
-                        query_id=_stable_id(
-                            "enhanced-phase-query",
-                            component.component_id,
-                            vote_id,
-                        ),
-                        vote_id=vote_id,
-                    )
-                    for vote_id in ambiguous_vote_ids
-                ),
-                height_templates=heights,
-                grouping_work=work,
-            )
+        component_proposal = ComponentTemplateProposal(
+            component=component,
+            initial_source_geometry=geometry,
+            roles=roles,
+            phase_votes=votes,
+            phase_groups=groups,
+            enhanced_phase_queries=tuple(
+                EnhancedPhaseQuery(
+                    query_id=_stable_id(
+                        "enhanced-phase-query",
+                        component.component_id,
+                        vote_id,
+                    ),
+                    vote_id=vote_id,
+                )
+                for vote_id in ambiguous_vote_ids
+            ),
+            registered_sequence_role_queries=(),
+            height_templates=heights,
+            grouping_work=work,
         )
+        component_proposals.append(component_proposal)
     observations = tuple(
         {
             str(observation.observation_id): observation
@@ -737,6 +1022,11 @@ def shared_source_direction_classes(
         return ()
     if any(not lane.direction_classes for lane in lane_proposals):
         return ()
+    if (
+        len(lane_proposals) == 1
+        and len(lane_proposals[0].direction_classes) == 1
+    ):
+        return lane_proposals[0].direction_classes
     selected_ids = {
         str(identity)
         for lane in lane_proposals
@@ -911,6 +1201,480 @@ def _background_preference(run: ProfileRun, role: BoundaryRole) -> float:
     # Directional role preference already belongs to anchor qualification.
     # Canonical ranking uses only the format-neutral strength retained here.
     return min(1.0, run.evidence_strength / 12.0)
+
+
+def _registered_sequence_transition_index(
+    lane: TemplateLaneInput,
+    direction: SharedStripDirection,
+) -> dict[int, tuple[tuple[float, PhotoBoundaryTransition], ...]]:
+    sequence_query_ids = {
+        item.query.query_id for item in lane.sequence_measurement_sets
+    }
+    canonical_slope = canonical_source_sequence_axis_slope(
+        direction,
+        lane.width_axis,
+    )
+    reference = lane.height_authority_px.center
+    values: dict[int, list[tuple[float, PhotoBoundaryTransition]]] = {}
+    for transition in lane.transition_by_id.values():
+        if transition.query_id not in sequence_query_ids:
+            continue
+        projected = transition.coordinate_px + canonical_slope * (
+            reference - float(transition.trace_coordinate_px)
+        )
+        values.setdefault(transition.trace_coordinate_px, []).append(
+            (projected, transition)
+        )
+    return {
+        trace: tuple(
+            sorted(items, key=lambda item: (item[0], str(item[1].transition_id)))
+        )
+        for trace, items in values.items()
+    }
+
+
+def _register_sequence_role_queries(
+    proposal: TemplateLaneProposal,
+) -> TemplateLaneProposal:
+    components: list[ComponentTemplateProposal] = []
+    search_allowance_px = (
+        PHOTO_BOUNDARY_MEASUREMENT_SPEC.center_offset_allowance_mm
+        * proposal.lane.width_scale_px_per_mm.maximum
+    )
+    for component in proposal.components:
+        queries = tuple(
+            RegisteredSequenceRoleQuery(
+                query_id=_stable_id(
+                    "registered-sequence-role-query",
+                    seed.seed_id,
+                    role.role_index,
+                ),
+                seed_id=seed.seed_id,
+                role=role,
+                target_interval_px=_add(
+                    _add(
+                        _add(
+                            seed.base_phase_interval_px,
+                            _role_relative_projection(
+                                role,
+                                component.component,
+                                component.initial_source_geometry.width_state,
+                            ),
+                        ),
+                        local_advance_prefix(
+                            seed.local_advance_relations,
+                            lane_ordinal=role.lane_ordinal,
+                        )[0],
+                    ),
+                    FiniteInterval(
+                        -search_allowance_px,
+                        search_allowance_px,
+                    ),
+                ),
+            )
+            for seed in build_template_sequence_seeds(component)
+            for role in component.roles
+        )
+        components.append(
+            replace(
+                component,
+                registered_sequence_role_queries=queries,
+            )
+        )
+    return replace(proposal, components=tuple(components))
+
+
+def _registered_sequence_role_run(
+    lane: TemplateLaneInput,
+    query: RegisteredSequenceRoleQuery,
+    direction: SharedStripDirection,
+    transition_index: dict[
+        int,
+        tuple[tuple[float, PhotoBoundaryTransition], ...],
+    ],
+) -> ProfileRun | None:
+    """Bind an existing registered transition field to one template role."""
+
+    slope_interval = source_sequence_axis_slope_interval(
+        direction,
+        lane.width_axis,
+    )
+    reference = lane.height_authority_px.center
+    by_trace: dict[int, list[tuple[float, PhotoBoundaryTransition]]] = {}
+    for trace, indexed in transition_index.items():
+        coordinates = tuple(item[0] for item in indexed)
+        start = bisect_left(coordinates, query.target_interval_px.minimum)
+        stop = bisect_right(coordinates, query.target_interval_px.maximum)
+        if start < stop:
+            by_trace[trace] = list(indexed[start:stop])
+    equivalence = (
+        PHOTO_BOUNDARY_MEASUREMENT_SPEC.geometry_equivalence_mm
+        * lane.width_scale_px_per_mm.maximum
+    )
+    target = query.target_interval_px.center
+    selected: list[tuple[float, PhotoBoundaryTransition]] = []
+    for trace in sorted(by_trace):
+        ordered = sorted(
+            by_trace[trace],
+            key=lambda item: (abs(item[0] - target), str(item[1].transition_id)),
+        )
+        if (
+            len(ordered) > 1
+            and abs(
+                abs(ordered[1][0] - target)
+                - abs(ordered[0][0] - target)
+            )
+            <= equivalence
+        ):
+            continue
+        selected.append(ordered[0])
+    if not selected:
+        return None
+    centers = sorted(item[0] for item in selected)
+    center = centers[len(centers) // 2]
+    connection = (
+        PHOTO_BOUNDARY_MEASUREMENT_SPEC.line_connection_allowance_mm
+        * lane.width_scale_px_per_mm.maximum
+    )
+    selected = tuple(
+        item for item in selected if abs(item[0] - center) <= connection
+    )
+    queried_traces = tuple(
+        sorted(
+            {
+                trace
+                for item in lane.sequence_measurement_sets
+                for trace in item.query.trace_positions_px
+            }
+        )
+    )
+    minimum = max(
+        PHOTO_BOUNDARY_MEASUREMENT_SPEC.minimum_trace_count,
+        math.ceil(
+            PHOTO_BOUNDARY_MEASUREMENT_SPEC.minimum_cross_fit_trace_fraction
+            * len(queried_traces)
+        ),
+    )
+    if len(selected) < minimum:
+        return None
+    traces = tuple(sorted(item[1].trace_coordinate_px for item in selected))
+    continuity = continuous_trace_support_fraction(queried_traces, traces)
+    mean_gradient = sum(item[1].gradient_z for item in selected) / len(selected)
+    mean_tone_or_texture = sum(
+        max(item[1].tone_z, item[1].texture_z) for item in selected
+    ) / len(selected)
+    if (
+        mean_gradient < PHOTO_BOUNDARY_MEASUREMENT_SPEC.gradient_z_minimum
+        or mean_tone_or_texture
+        < PHOTO_BOUNDARY_MEASUREMENT_SPEC.tone_or_texture_z_minimum
+    ):
+        return None
+    projected_interval_values = tuple(
+        coordinate
+        + slope * (reference - float(transition.trace_coordinate_px))
+        for _projected, transition in selected
+        for coordinate in (
+            transition.coordinate_interval_px.minimum,
+            transition.coordinate_interval_px.maximum,
+        )
+        for slope in (slope_interval.minimum, slope_interval.maximum)
+    )
+    selected_centers = tuple(item[0] for item in selected)
+    median = sorted(selected_centers)[len(selected_centers) // 2]
+    residual = sorted(abs(value - median) for value in selected_centers)[
+        len(selected_centers) // 2
+    ]
+    identities = tuple(
+        sorted((item[1].transition_id for item in selected), key=str)
+    )
+    return ProfileRun(
+        run_id=_stable_id(
+            "registered-sequence-role-run",
+            query.query_id,
+            *(str(identity) for identity in identities),
+        ),
+        coordinate_interval_px=FiniteInterval(
+            min(projected_interval_values),
+            max(projected_interval_values),
+        ),
+        transition_ids=identities,
+        trace_coordinates_px=traces,
+        role_hint=None,
+        qualified_anchor_roles=(query.role.role,),
+        support_fraction=len(traces) / len(queried_traces),
+        continuous_support_fraction=continuity,
+        fit_residual_px=residual,
+        evidence_strength=mean_gradient + mean_tone_or_texture,
+        pair_qualified=True,
+    )
+
+
+def _bind_registered_sequence_roles(
+    proposal: TemplateLaneProposal,
+    direction: SharedStripDirection,
+) -> tuple[TemplateLaneProposal, dict[str, ProfileRun], int]:
+    queries = tuple(
+        query
+        for component in proposal.components
+        for query in component.registered_sequence_role_queries
+    )
+    if not queries:
+        return proposal, {}, 0
+    registry = EnhancedQueryRegistry(tuple(query.query_id for query in queries))
+    transition_index = _registered_sequence_transition_index(
+        proposal.lane,
+        direction,
+    )
+    runs: dict[str, ProfileRun] = {}
+    for query in queries:
+        if not registry.consume(query.query_id):
+            raise ValueError("registered sequence role query executed twice")
+        run = _registered_sequence_role_run(
+            proposal.lane,
+            query,
+            direction,
+            transition_index,
+        )
+        if run is not None:
+            runs[query.query_id] = run
+    merged = {
+        run.run_id: run
+        for run in (
+            *proposal.lane.sequence_profile.runs,
+            *runs.values(),
+        )
+    }
+    profile = BasicAxisProfile(
+        "sequence",
+        proposal.lane.sequence_profile.coordinate_count,
+        tuple(
+            sorted(
+                {
+                    trace
+                    for run in merged.values()
+                    for trace in run.trace_coordinates_px
+                }
+            )
+        ),
+        tuple(
+            sorted(
+                merged.values(),
+                key=lambda item: (
+                    item.coordinate_interval_px.center,
+                    item.run_id,
+                ),
+            )
+        ),
+    )
+    return (
+        replace(proposal, lane=replace(proposal.lane, sequence_profile=profile)),
+        runs,
+        registry.consumed_count,
+    )
+
+
+def _registered_pair_seeds(
+    lane: TemplateLaneInput,
+    component: ComponentTemplateProposal,
+    seed: TemplateSequenceSeed,
+    direction: SharedStripDirection,
+    registered_runs: dict[str, ProfileRun],
+) -> tuple[TemplateSequenceSeed, ...]:
+    query_by_role = {
+        query.role.role_index: query
+        for query in component.registered_sequence_role_queries
+        if query.seed_id == seed.seed_id and query.query_id in registered_runs
+    }
+    values: list[TemplateSequenceSeed] = []
+    for ordinal in range(1, len(component.roles) // 2 + 1):
+        roles = (
+            component.roles[(ordinal - 1) * 2],
+            component.roles[(ordinal - 1) * 2 + 1],
+        )
+        queries = tuple(query_by_role.get(role.role_index) for role in roles)
+        if any(query is None for query in queries):
+            continue
+        runs = tuple(registered_runs[query.query_id] for query in queries)
+        projections = tuple(
+            _project_profile_run(
+                run,
+                transitions=lane.transition_by_id,
+                direction=direction,
+                boundary_axis=lane.width_axis,
+                source_width_axis=lane.width_axis,
+                reference_trace_px=lane.height_authority_px.center,
+                boundary_scale_px_per_mm=lane.width_scale_px_per_mm,
+            )
+            for run in runs
+        )
+        observed_width = _subtract(
+            projections[1].fit_position_interval_px,
+            projections[0].fit_position_interval_px,
+        )
+        if (
+            _intersection(
+                observed_width,
+                component.initial_source_geometry.width_state.extent_projection_px(),
+            )
+            is None
+        ):
+            continue
+        votes: list[PhaseVote] = []
+        phase_intervals: list[FiniteInterval] = [seed.base_phase_interval_px]
+        for role, run in zip(roles, runs, strict=True):
+            prefix, _canonical_prefix = local_advance_prefix(
+                seed.local_advance_relations,
+                lane_ordinal=role.lane_ordinal,
+            )
+            phase = _subtract(
+                _subtract(
+                    run.coordinate_interval_px,
+                    _role_relative_projection(
+                        role,
+                        component.component,
+                        component.initial_source_geometry.width_state,
+                    ),
+                ),
+                prefix,
+            )
+            phase_intervals.append(phase)
+            votes.append(
+                PhaseVote(
+                    vote_id=_stable_id(
+                        "registered-sequence-role-vote",
+                        seed.seed_id,
+                        role.role_index,
+                        run.run_id,
+                    ),
+                    run_id=run.run_id,
+                    role=role,
+                    phase_interval_px=phase,
+                    transition_ids=run.transition_ids,
+                    template_coordinate_px=_role_canonical_relative(
+                        role,
+                        component.component,
+                        component.initial_source_geometry.width_state,
+                    ),
+                )
+            )
+        phase = _common(tuple(phase_intervals))
+        if phase is None:
+            continue
+        relation_candidates: list[LocalAdvanceRelation] = []
+        original_evidence = _materialized_vote_evidence(
+            lane,
+            seed.votes,
+            direction,
+        )
+        for observation in original_evidence:
+            if (
+                observation.role.role != BoundaryRole.START
+                or abs(observation.role.lane_ordinal - ordinal) != 1
+            ):
+                continue
+            if observation.role.lane_ordinal < ordinal:
+                advance = _subtract(
+                    projections[0].fit_position_interval_px,
+                    observation.fit_position_interval_px,
+                )
+                relation_ordinal = observation.role.lane_ordinal
+            else:
+                advance = _subtract(
+                    observation.fit_position_interval_px,
+                    projections[0].fit_position_interval_px,
+                )
+                relation_ordinal = ordinal
+            observed_gap = _subtract(advance, observed_width)
+            delta = local_advance_delta_from_observed_gap(
+                observed_gap,
+                component.initial_source_geometry,
+            )
+            if delta is None:
+                continue
+            relation_candidates.append(
+                LocalAdvanceRelation(
+                    relation_ordinal=relation_ordinal,
+                    kind=(
+                        LocalAdvanceKind.NOMINAL
+                        if delta == FiniteInterval.exact(0.0)
+                        else LocalAdvanceKind.WIDE
+                        if delta.center > 0.0
+                        else LocalAdvanceKind.NARROW
+                    ),
+                    delta_interval_px=delta,
+                    canonical_delta_px=delta.center,
+                    observation_ids=tuple(
+                        ObservationId(value)
+                        for value in sorted(
+                            {
+                                *(
+                                    str(identity)
+                                    for identity in observation.transition_ids
+                                ),
+                                *(
+                                    str(identity)
+                                    for run in runs
+                                    for identity in run.transition_ids
+                                ),
+                            }
+                        )
+                    ),
+                )
+            )
+        relations = list(seed.local_advance_relations)
+        for relation in relation_candidates:
+            index = relation.relation_ordinal - 1
+            relations[index] = _merge_local_advance_relations(
+                (relations[index],),
+                (relation,),
+            )[0]
+        combined = {
+            vote.vote_id: vote for vote in (*seed.votes, *votes)
+        }
+        local = {
+            vote.vote_id: vote
+            for vote in (*seed.local_advance_votes, *votes)
+        }
+        values.append(
+            replace(
+                seed,
+                seed_id=_stable_id(
+                    "registered-pair-seed",
+                    seed.seed_id,
+                    ordinal,
+                    *(vote.vote_id for vote in votes),
+                ),
+                base_phase_interval_px=phase,
+                votes=tuple(combined[key] for key in sorted(combined)),
+                local_advance_votes=tuple(
+                    local[key] for key in sorted(local)
+                ),
+                local_advance_relations=tuple(relations),
+                exclusion_authorized=True,
+            )
+        )
+    return tuple(values) if values else (seed,)
+
+
+def _component_materialization_seeds(
+    proposal: TemplateLaneProposal,
+    component: ComponentTemplateProposal,
+    direction: SharedStripDirection,
+    registered_runs: dict[str, ProfileRun],
+) -> tuple[TemplateSequenceSeed, ...]:
+    values = tuple(
+        enhanced
+        for seed in build_template_sequence_seeds(component)
+        for enhanced in _registered_pair_seeds(
+            proposal.lane,
+            component,
+            seed,
+            direction,
+            registered_runs,
+        )
+    )
+    unique = {item.seed_id: item for item in values}
+    return tuple(unique[key] for key in sorted(unique))
 
 
 def _ambiguous_singleton_group(
@@ -3039,11 +3803,13 @@ def _retain_component_placements(
         for item in placements
         if item.canonical_sequence.exclusion_authorized
     )
-    if len(authorized) != 1:
+    if not authorized:
         return placements
-    authority = authorized[0]
 
-    def shares_source_geometry(item: FormatPlacement) -> bool:
+    def shares_source_geometry(
+        authority: FormatPlacement,
+        item: FormatPlacement,
+    ) -> bool:
         try:
             authority.source_frame_geometry.intersect_source_state(
                 item.source_frame_geometry
@@ -3055,9 +3821,12 @@ def _retain_component_placements(
     return tuple(
         item
         for item in placements
-        if item is authority
+        if item in authorized
         or not (
-            shares_source_geometry(item)
+            any(
+                shares_source_geometry(authority, item)
+                for authority in authorized
+            )
             and item.canonical_sequence.observed_role_count == 1
             and item.canonical_sequence.observed_opposite_pair_count == 0
             and not any(
@@ -3072,10 +3841,16 @@ def _materialize_component_placements(
     proposal: TemplateLaneProposal,
     component: ComponentTemplateProposal,
     direction: SharedStripDirection,
+    registered_runs: dict[str, ProfileRun],
 ) -> tuple[FormatPlacement, ...]:
     values = tuple(
         placement
-        for seed in build_template_sequence_seeds(component)
+        for seed in _component_materialization_seeds(
+            proposal,
+            component,
+            direction,
+            registered_runs,
+        )
         if (
             placement := _materialize_component_seed(
                 proposal,
@@ -3094,6 +3869,7 @@ def _materialize_component_placements(
 def materialize_lane_placements(
     proposal: TemplateLaneProposal,
     direction: SharedStripDirection,
+    registered_runs: dict[str, ProfileRun],
 ) -> tuple[FormatPlacement, ...]:
     values = tuple(
         placement
@@ -3102,9 +3878,23 @@ def materialize_lane_placements(
             proposal,
             component,
             direction,
+            registered_runs,
         )
     )
     return tuple(sorted(values, key=lambda item: item.placement_id))
+
+
+def _basic_lane_structurally_closed(
+    placements: tuple[FormatPlacement, ...],
+) -> bool:
+    return bool(placements) and all(
+        placement.sequence_placements
+        and all(
+            sequence.exclusion_authorized
+            for sequence in placement.sequence_placements
+        )
+        for placement in placements
+    )
 
 
 def materialize_source_placements(
@@ -3114,9 +3904,9 @@ def materialize_source_placements(
     """Materialize every lane from one source-wide component geometry."""
 
     if not lane_proposals:
-        return SourcePlacementMaterialization((), ())
-    refined_lanes: list[TemplateLaneProposal] = []
-    enhanced_counts: list[int] = []
+        return SourcePlacementMaterialization((), (), ())
+    phase_lanes: list[TemplateLaneProposal] = []
+    phase_counts: list[int] = []
     for lane in lane_proposals:
         components: list[ComponentTemplateProposal] = []
         count = 0
@@ -3128,17 +3918,73 @@ def materialize_source_placements(
             )
             components.append(refined)
             count += consumed
-        refined_lanes.append(replace(lane, components=tuple(components)))
-        enhanced_counts.append(count)
-    refined_lane_proposals = tuple(refined_lanes)
-    independent = tuple(
-        materialize_lane_placements(lane, direction)
-        for lane in refined_lane_proposals
+        phase_lanes.append(replace(lane, components=tuple(components)))
+        phase_counts.append(count)
+    phase_lane_proposals = tuple(phase_lanes)
+    basic_independent = tuple(
+        materialize_lane_placements(lane, direction, {})
+        for lane in phase_lane_proposals
     )
+    basic_closed = tuple(
+        _basic_lane_structurally_closed(placements)
+        for placements in basic_independent
+    )
+    if all(basic_closed):
+        refined_lane_proposals = phase_lane_proposals
+        enhanced_counts = phase_counts
+        registered_runs_by_lane = [
+            {} for _lane in refined_lane_proposals
+        ]
+        independent = basic_independent
+    else:
+        bound = tuple(
+            (
+                (lane, {}, 0)
+                if closed
+                else _bind_registered_sequence_roles(
+                    _register_sequence_role_queries(lane),
+                    direction,
+                )
+            )
+            for lane, closed in zip(
+                phase_lane_proposals,
+                basic_closed,
+                strict=True,
+            )
+        )
+        refined_lane_proposals = tuple(item[0] for item in bound)
+        registered_runs_by_lane = [item[1] for item in bound]
+        enhanced_counts = [
+            phase_count + item[2]
+            for phase_count, item in zip(
+                phase_counts,
+                bound,
+                strict=True,
+            )
+        ]
+        independent = tuple(
+            (
+                basic
+                if closed
+                else materialize_lane_placements(
+                    lane,
+                    direction,
+                    registered_runs,
+                )
+            )
+            for lane, registered_runs, basic, closed in zip(
+                refined_lane_proposals,
+                registered_runs_by_lane,
+                basic_independent,
+                basic_closed,
+                strict=True,
+            )
+        )
     if len(refined_lane_proposals) == 1:
         return SourcePlacementMaterialization(
             independent,
             tuple(enhanced_counts),
+            refined_lane_proposals,
         )
     if len(refined_lane_proposals) != 2:
         raise ValueError("template-first source supports at most two lanes")
@@ -3172,7 +4018,12 @@ def materialize_source_placements(
                 ]
                 seed = next(
                     item
-                    for item in build_template_sequence_seeds(component)
+                    for item in _component_materialization_seeds(
+                        refined_lane_proposals[lane_index],
+                        component,
+                        direction,
+                        registered_runs_by_lane[lane_index],
+                    )
                     if item.seed_id == seed_id
                 )
                 value = _materialize_component_seed(
@@ -3200,4 +4051,5 @@ def materialize_source_placements(
             for values in retained
         ),
         enhanced_query_counts_by_lane=tuple(enhanced_counts),
+        lane_proposals=refined_lane_proposals,
     )

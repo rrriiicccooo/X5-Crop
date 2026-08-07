@@ -8,8 +8,12 @@ import numpy as np
 from x5crop.configuration.model import FrameCountMode
 from x5crop.configuration.registry import get_detection_configuration
 from x5crop.detection.photo_geometry.measurement import (
+    fit_template_bound_boundary_observation,
     measure_registered_queries,
     track_side_transition_regions,
+)
+from x5crop.detection.photo_geometry.template_first import (
+    reference_role_transition_ids,
 )
 from x5crop.detection.photo_geometry.model import (
     BoundaryAxis,
@@ -153,6 +157,71 @@ def _side_measurement_set(
 
 
 class PhotoBoundaryMeasurementContractTest(unittest.TestCase):
+    def test_template_bound_observation_propagates_only_robust_inliers(
+        self,
+    ) -> None:
+        measurement_set = _side_measurement_set(
+            (
+                (10.0,),
+                (10.0,),
+                (10.0,),
+                (40.0,),
+                (10.0,),
+                (10.0,),
+                (10.0,),
+            )
+        )
+
+        observation = fit_template_bound_boundary_observation(
+            measurement_set,
+            transition_ids=tuple(
+                item.transition_id for item in measurement_set.transitions
+            ),
+            role=BoundaryRole.TOP,
+            source_axis_long=BoundaryAxis.Y,
+            boundary_axis_scale_px_per_mm=PositiveInterval(10.0, 10.0),
+        )
+
+        self.assertIsNotNone(observation)
+        assert observation is not None
+        self.assertEqual(observation.trace_support_count, 6)
+        self.assertNotIn(
+            ObservationId("transition:3:0"),
+            observation.transition_ids,
+        )
+
+    def test_reference_role_binding_omits_equivalent_nearest_transitions(
+        self,
+    ) -> None:
+        measurement_set = _side_measurement_set(
+            (
+                (10.0, 30.0),
+                (10.0, 12.0),
+                (9.0, 25.0),
+                (11.0, 28.0),
+                (10.5, 40.0),
+            )
+        )
+
+        identities = reference_role_transition_ids(
+            measurement_set,
+            target_coordinate_px=11.0,
+            equivalence_px=0.1,
+        )
+
+        self.assertEqual(len(identities), 4)
+        self.assertNotIn(ObservationId("transition:1:0"), identities)
+        self.assertNotIn(ObservationId("transition:1:1"), identities)
+        self.assertEqual(
+            {str(identity) for identity in identities},
+            {
+                "transition:0:0",
+                "transition:2:0",
+                "transition:3:0",
+                "transition:4:0",
+            },
+        )
+
     def test_measurement_spec_contains_only_production_values(self) -> None:
         spec = PHOTO_BOUNDARY_MEASUREMENT_SPEC
         self.assertEqual(spec.lattice_spacing_mm(12.0), 2.0)

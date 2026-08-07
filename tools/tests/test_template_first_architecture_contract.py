@@ -28,11 +28,14 @@ from x5crop.detection.photo_geometry.measurement import (
     provisional_cross_projection_interval,
 )
 from x5crop.detection.photo_geometry.template_first import (
+    _retain_component_placements,
     build_template_sequence_seeds,
     local_advance_delta_from_observed_gap,
     local_advance_prefix,
+    materialize_source_placements,
     merge_sampling_equivalent_direction_classes,
     provisional_height_templates,
+    shared_source_direction_classes,
 )
 from x5crop.detection.photo_geometry.template_model import (
     ComponentTemplateProposal,
@@ -62,6 +65,84 @@ from x5crop.detection.photo_geometry.source_geometry import (
 
 
 class TemplateFirstArchitectureContractTest(unittest.TestCase):
+    def test_complete_pairs_exclude_compatible_singleton_phase(self) -> None:
+        geometry = mock.Mock()
+        authorized = tuple(
+            mock.Mock(
+                canonical_sequence=SimpleNamespace(
+                    exclusion_authorized=True,
+                    observed_role_count=2,
+                    observed_opposite_pair_count=1,
+                    local_advance_relations=(),
+                ),
+                source_frame_geometry=geometry,
+            )
+            for _index in range(2)
+        )
+        singleton = mock.Mock(
+            canonical_sequence=SimpleNamespace(
+                exclusion_authorized=False,
+                observed_role_count=1,
+                observed_opposite_pair_count=0,
+                local_advance_relations=(
+                    SimpleNamespace(kind=LocalAdvanceKind.NOMINAL),
+                ),
+            ),
+            source_frame_geometry=geometry,
+        )
+
+        retained = _retain_component_placements((*authorized, singleton))
+
+        self.assertEqual(retained, authorized)
+
+    def test_basic_lane_does_not_consume_registered_role_enhancement(
+        self,
+    ) -> None:
+        component = mock.sentinel.component
+        lane = mock.Mock(components=(component,))
+        placement = mock.Mock(
+            sequence_placements=(mock.Mock(exclusion_authorized=True),)
+        )
+        direction = mock.sentinel.direction
+
+        with mock.patch(
+            "x5crop.detection.photo_geometry.template_first.replace",
+            return_value=lane,
+        ), mock.patch(
+            "x5crop.detection.photo_geometry.template_first."
+            "_refine_component_phase_groups",
+            return_value=(component, 0),
+        ), mock.patch(
+            "x5crop.detection.photo_geometry.template_first."
+            "materialize_lane_placements",
+            return_value=(placement,),
+        ), mock.patch(
+            "x5crop.detection.photo_geometry.template_first."
+            "_bind_registered_sequence_roles",
+        ) as bind_registered:
+            materialization = materialize_source_placements(
+                (lane,),
+                direction,
+            )
+
+        bind_registered.assert_not_called()
+        self.assertEqual(materialization.placements_by_lane, ((placement,),))
+        self.assertEqual(materialization.enhanced_query_counts_by_lane, (0,))
+
+    def test_single_lane_source_consumes_one_lane_direction_owner(self) -> None:
+        direction = SharedStripDirection(
+            direction_id="lane-direction",
+            selected_observation_ids=(
+                ObservationId("top"),
+                ObservationId("bottom"),
+            ),
+            full_angle_interval_degrees=FiniteInterval(0.05, 0.12),
+            canonical_angle_degrees=0.08,
+        )
+        lane = mock.Mock(direction_classes=(direction,))
+
+        self.assertEqual(shared_source_direction_classes((lane,)), (direction,))
+
     def test_one_reliable_cross_role_builds_complete_height_proposal(self) -> None:
         transition_ids = tuple(
             ObservationId(f"top:{index}") for index in range(4)
@@ -95,6 +176,7 @@ class TemplateFirstArchitectureContractTest(unittest.TestCase):
                 (10, 20, 30, 40),
                 (run,),
             ),
+            sequence_measurement_sets=(),
             top_measurement_set=mock.sentinel.top_measurement,
             bottom_measurement_set=mock.sentinel.bottom_measurement,
             transition_by_id={},
@@ -139,6 +221,10 @@ class TemplateFirstArchitectureContractTest(unittest.TestCase):
             "x5crop.detection.photo_geometry.template_first."
             "fit_template_bound_boundary_observation",
             return_value=observation,
+        ), mock.patch(
+            "x5crop.detection.photo_geometry.template_first."
+            "_inlier_profile_run",
+            return_value=run,
         ):
             templates = provisional_height_templates(lane, geometry)
         self.assertEqual(len(templates), 1)
@@ -262,6 +348,7 @@ class TemplateFirstArchitectureContractTest(unittest.TestCase):
             phase_votes=tuple((*upstream_votes, *downstream_votes)),
             phase_groups=groups,
             enhanced_phase_queries=(),
+            registered_sequence_role_queries=(),
             height_templates=(),
             grouping_work=PhaseGroupingWork(0, 0),
         )
