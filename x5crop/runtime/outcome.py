@@ -107,6 +107,7 @@ class FailedInput:
     artifacts: RuntimeArtifacts
     traceback_text: str | None
     metrics: RuntimeMetrics
+    error_errno: int | None = None
 
     @classmethod
     def from_exception(
@@ -124,6 +125,7 @@ class FailedInput:
             artifacts=RuntimeArtifacts.empty(),
             traceback_text=traceback.format_exc(),
             metrics=RuntimeMetrics.unavailable(),
+            error_errno=(exc.errno if isinstance(exc, OSError) else None),
         )
 
 

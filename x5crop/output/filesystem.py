@@ -5,6 +5,7 @@ from enum import Enum
 import os
 from pathlib import Path
 import platform
+import re
 import subprocess
 import uuid
 
@@ -41,26 +42,50 @@ _NETWORK_FILESYSTEMS = frozenset(
 )
 
 
-def _filesystem_kind_posix(path: Path) -> str:
-    commands = (
-        ("/usr/bin/stat", "-f", "%T", str(path)),
-        ("stat", "-f", "-c", "%T", str(path)),
-    )
-    for command in commands:
-        try:
-            completed = subprocess.run(
-                command,
-                check=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.DEVNULL,
-                text=True,
-            )
-        except (OSError, subprocess.CalledProcessError):
+def _filesystem_kind_darwin(path: Path) -> str:
+    try:
+        completed = subprocess.run(
+            ("/sbin/mount",),
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return "unknown"
+    resolved = path.resolve()
+    matches: list[tuple[int, str]] = []
+    for line in completed.stdout.splitlines():
+        match = re.search(r" on (.+) \(([^,()]+)(?:,|\))", line)
+        if match is None:
             continue
-        value = completed.stdout.strip().lower()
-        if value:
-            return value
-    return "unknown"
+        mount_text = (
+            match.group(1)
+            .replace("\\040", " ")
+            .replace("\\011", "\t")
+            .replace("\\134", "\\")
+        )
+        mount_point = Path(mount_text)
+        try:
+            resolved.relative_to(mount_point)
+        except ValueError:
+            continue
+        matches.append((len(mount_point.parts), match.group(2).strip().lower()))
+    return max(matches, default=(0, "unknown"))[1]
+
+
+def _filesystem_kind_posix(path: Path) -> str:
+    try:
+        completed = subprocess.run(
+            ("stat", "-f", "-c", "%T", str(path)),
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return "unknown"
+    return completed.stdout.strip().lower() or "unknown"
 
 
 def _filesystem_kind_windows(path: Path) -> str:
@@ -91,6 +116,8 @@ def identify_filesystem(parent: Path) -> FilesystemIdentity:
     kind = (
         _filesystem_kind_windows(resolved)
         if os.name == "nt"
+        else _filesystem_kind_darwin(resolved)
+        if system == "darwin"
         else _filesystem_kind_posix(resolved)
     )
     normalized_path = "/" + resolved.as_posix().casefold().strip("/") + "/"

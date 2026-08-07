@@ -129,6 +129,7 @@ def interactive_options() -> RuntimeOptions:
         debug_analysis=debug_analysis,
         allow_best_effort_output=False,
         jobs=STANDARD_JOB_DEFAULT,
+        interactive=True,
     )
 
 

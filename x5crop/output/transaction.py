@@ -26,6 +26,7 @@ class RecoveryRequiredError(OutputTransactionError):
 
 
 class TransactionState(str, Enum):
+    BUILDING = "building"
     PREPARED = "prepared"
     OLD_MOVED = "old_moved"
     NEW_PUBLISHED = "new_published"
@@ -40,10 +41,11 @@ class TransactionPaths:
 
     @classmethod
     def for_target(cls, target: Path) -> "TransactionPaths":
-        resolved = target.resolve(strict=False)
-        if not resolved.parent.is_dir():
+        resolved_parent = target.parent.resolve(strict=False)
+        resolved = resolved_parent / target.name
+        if not resolved_parent.is_dir():
             raise OutputTransactionError(
-                f"Output parent does not exist: {resolved.parent}"
+                f"Output parent does not exist: {resolved_parent}"
             )
         validate_portable_path(resolved)
         token = transaction_token_for_target(resolved)
@@ -205,10 +207,47 @@ class OutputTransaction:
     def create_staging(self, run_id: str) -> tuple[str, Path]:
         if not run_id:
             raise OutputTransactionError("staging requires a run id")
+        if self.paths.journal.exists():
+            raise RecoveryRequiredError(
+                f"Output transaction journal already exists: {self.paths.journal}"
+            )
         transaction_id = uuid.uuid4().hex
         staging = self.paths.staging(transaction_id)
+        previous = self.paths.previous(transaction_id)
         staging.mkdir()
+        try:
+            _write_journal(
+                self.paths.journal,
+                TransactionJournal(
+                    transaction_id=transaction_id,
+                    run_id=run_id,
+                    target=str(self.paths.target),
+                    staging=str(staging),
+                    previous=str(previous),
+                    state=TransactionState.BUILDING,
+                ),
+            )
+        except Exception:
+            staging.rmdir()
+            raise
         return transaction_id, staging
+
+    def discard_staging(self, transaction_id: str, staging: Path, run_id: str) -> None:
+        expected_staging = self.paths.staging(transaction_id)
+        if staging.resolve(strict=False) != expected_staging:
+            raise OutputTransactionError("staging path does not match transaction id")
+        journal = _read_journal(self.paths.journal)
+        if (
+            journal.transaction_id != transaction_id
+            or journal.run_id != run_id
+            or journal.state != TransactionState.BUILDING
+        ):
+            raise RecoveryRequiredError(
+                "Only an identified building transaction can be discarded"
+            )
+        if staging.exists():
+            safe_remove_tree(staging)
+        self.paths.journal.unlink()
 
     def publish(self, transaction_id: str, staging: Path, run_id: str) -> None:
         expected_staging = self.paths.staging(transaction_id)
@@ -218,6 +257,15 @@ class OutputTransaction:
         owned_new = read_owned_output(staging)
         if owned_new.run_id != run_id:
             raise OutputTransactionError("staging manifest belongs to another run")
+        building = _read_journal(self.paths.journal)
+        if (
+            building.transaction_id != transaction_id
+            or building.run_id != run_id
+            or building.state != TransactionState.BUILDING
+        ):
+            raise RecoveryRequiredError(
+                "Output staging journal does not identify the building run"
+            )
         if self.paths.target.exists():
             read_owned_output(self.paths.target)
         if previous.exists():
@@ -292,10 +340,28 @@ class OutputTransaction:
         target_exists = self.paths.target.exists()
         staging_exists = staging.exists()
         previous_exists = previous.exists()
+        if journal.state == TransactionState.BUILDING:
+            if previous_exists:
+                raise RecoveryRequiredError(
+                    "Building transaction unexpectedly contains a previous output"
+                )
+            if target_exists:
+                read_owned_output(self.paths.target)
+            if staging_exists:
+                safe_remove_tree(staging)
+            self.paths.journal.unlink()
+            return
         if journal.state == TransactionState.PREPARED:
             if target_exists and staging_exists and not previous_exists:
                 read_owned_output(self.paths.target)
                 read_owned_output(staging)
+                safe_remove_tree(staging)
+                self.paths.journal.unlink()
+                return
+            if not target_exists and staging_exists and previous_exists:
+                read_owned_output(previous)
+                read_owned_output(staging)
+                _rename(previous, self.paths.target)
                 safe_remove_tree(staging)
                 self.paths.journal.unlink()
                 return
@@ -312,6 +378,16 @@ class OutputTransaction:
                 _rename(previous, self.paths.target)
                 read_owned_output(staging)
                 safe_remove_tree(staging)
+                self.paths.journal.unlink()
+                return
+            if target_exists and not staging_exists and previous_exists:
+                owned = read_owned_output(self.paths.target)
+                if owned.run_id != journal.run_id:
+                    raise RecoveryRequiredError(
+                        "Published target identity is ambiguous"
+                    )
+                read_owned_output(previous)
+                safe_remove_tree(previous)
                 self.paths.journal.unlink()
                 return
         elif journal.state == TransactionState.NEW_PUBLISHED:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import numpy as np
+from scipy.ndimage import map_coordinates
 
 from ..domain import Box
 from ..geometry.affine import AffineCoordinateTransform
@@ -124,55 +125,38 @@ def sample_affine_roi(
             + inverse[1][1] * expanded_y
             + inverse[1][2]
         )
-        x0 = np.floor(source_x).astype(np.int64)
-        y0 = np.floor(source_y).astype(np.int64)
-        x1 = x0 + 1
-        y1 = y0 + 1
-        weight_x = source_x - x0
-        weight_y = source_y - y0
-        sample_shape = source_x.shape + tuple(arr.shape[2:])
-
-        def tap(x: np.ndarray, y: np.ndarray) -> np.ndarray:
-            valid = (
-                (x >= sampling_authority_box.left)
-                & (x < sampling_authority_box.right)
-                & (y >= sampling_authority_box.top)
-                & (y < sampling_authority_box.bottom)
-                & (x >= 0)
-                & (x < source_width)
-                & (y >= 0)
-                & (y < source_height)
-            )
-            values = np.full(
-                sample_shape,
-                background_value,
-                dtype=np.float64,
-            )
-            if valid.any():
-                values[valid] = arr[y[valid], x[valid]]
-            return values
-
-        weights = (
-            (1.0 - weight_x) * (1.0 - weight_y),
-            weight_x * (1.0 - weight_y),
-            (1.0 - weight_x) * weight_y,
-            weight_x * weight_y,
-        )
-        taps = (
-            tap(x0, y0),
-            tap(x1, y0),
-            tap(x0, y1),
-            tap(x1, y1),
+        authority = arr[
+            sampling_authority_box.top : sampling_authority_box.bottom,
+            sampling_authority_box.left : sampling_authority_box.right,
+        ]
+        coordinates = np.asarray(
+            (
+                source_y - sampling_authority_box.top,
+                source_x - sampling_authority_box.left,
+            ),
+            dtype=np.float64,
         )
         if arr.ndim == 2:
-            value = sum(
-                sample * weight
-                for sample, weight in zip(taps, weights, strict=True)
+            value = map_coordinates(
+                authority,
+                coordinates,
+                order=1,
+                mode="grid-constant",
+                cval=float(background_value),
+                prefilter=False,
+                output=np.float64,
             )
         else:
-            value = sum(
-                sample * weight[..., None]
-                for sample, weight in zip(taps, weights, strict=True)
-            )
+            value = np.empty(source_x.shape + (arr.shape[2],), dtype=np.float64)
+            for channel in range(arr.shape[2]):
+                value[..., channel] = map_coordinates(
+                    authority[..., channel],
+                    coordinates,
+                    order=1,
+                    mode="grid-constant",
+                    cval=float(background_value),
+                    prefilter=False,
+                    output=np.float64,
+                )
         output[output_row:row_end] = _cast_interpolated(value, arr.dtype)
     return output

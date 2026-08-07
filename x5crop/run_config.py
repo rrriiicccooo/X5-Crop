@@ -17,3 +17,4 @@ class RunConfig:
     debug_analysis: bool
     allow_best_effort_output: bool
     jobs: int
+    interactive: bool = False

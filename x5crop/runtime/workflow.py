@@ -279,4 +279,5 @@ def process_one(
                 workspace,
                 detection,
             ),
+            error_errno=(exc.errno if isinstance(exc, OSError) else None),
         )

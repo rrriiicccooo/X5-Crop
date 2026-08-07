@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from ..app_info import RUN_MANIFEST_JSONL_NAME
-from .safe_tree import InventoryEntry, inventory_tree
+from .safe_tree import InventoryEntry, assert_safe_root, inventory_tree
 
 
 V5_RUN_MANIFEST_SCHEMA = "x5crop_run_manifest_v5"
@@ -90,6 +90,7 @@ def write_owned_output_manifest(
 
 
 def read_owned_output(root: Path) -> OwnedOutput:
+    assert_safe_root(root)
     manifest = root / RUN_MANIFEST_JSONL_NAME
     try:
         lines = manifest.read_text(encoding="utf-8").splitlines()

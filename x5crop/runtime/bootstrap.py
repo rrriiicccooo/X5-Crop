@@ -42,6 +42,7 @@ def runtime_invocation_from_options(options: RuntimeOptions) -> RuntimeInvocatio
         debug_analysis=options.debug_analysis,
         allow_best_effort_output=options.allow_best_effort_output,
         jobs=max(1, min(STANDARD_JOB_LIMIT, int(options.jobs))),
+        interactive=options.interactive,
     )
     return RuntimeInvocation(
         config=config,

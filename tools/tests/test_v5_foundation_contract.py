@@ -22,6 +22,7 @@ from x5crop.output.naming import (
     utf16_units,
     validate_explicit_output_leaf,
 )
+from x5crop.output.filesystem import OutputSupportLevel, identify_filesystem
 from x5crop.output.ownership import (
     OutputOwnershipError,
     read_owned_output,
@@ -42,6 +43,7 @@ from x5crop.output.transaction import (
     TransactionState,
     _write_journal,
 )
+from x5crop.runtime.disk_budget import DiskSpaceBudgetError, RunWideDiskBudget
 
 
 def _make_owned_output(root: Path, run_id: str, source_name: str = "source.tif") -> None:
@@ -140,6 +142,14 @@ class PortableOutputNameContractTests(unittest.TestCase):
 
 
 class SafeTreeAndTransactionContractTests(unittest.TestCase):
+    def test_darwin_local_temporary_directory_is_identified_as_apfs(self) -> None:
+        if __import__("platform").system().lower() != "darwin":
+            self.skipTest("Darwin filesystem identity contract")
+        with tempfile.TemporaryDirectory() as directory:
+            identity = identify_filesystem(Path(directory))
+        self.assertEqual(identity.filesystem_kind, "apfs")
+        self.assertEqual(identity.support_level, OutputSupportLevel.VERIFIED_LOCAL)
+
     def test_inventory_excludes_manifest_and_directory_timestamps(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory) / "owned"
@@ -191,6 +201,23 @@ class SafeTreeAndTransactionContractTests(unittest.TestCase):
             self.assertFalse(tuple(Path(directory).glob(".x5_crop_output.old-*")))
             self.assertFalse(tuple(Path(directory).glob(".x5_crop_output.new-*")))
 
+    def test_building_process_crash_discards_only_identified_staging(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "x5_crop_output"
+            _make_owned_output(target, "old-run")
+            transaction = OutputTransaction(target)
+            transaction.__enter__()
+            _transaction_id, staging = transaction.create_staging("new-run")
+            (staging / "partial.tif").write_bytes(b"partial")
+            transaction.__exit__(None, None, None)
+
+            with OutputTransaction(target):
+                pass
+
+            self.assertEqual(read_owned_output(target).run_id, "old-run")
+            self.assertFalse(staging.exists())
+            self.assertFalse(TransactionPaths.for_target(target).journal.exists())
+
     def test_unknown_user_file_stops_replacement_and_preserves_old_data(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             target = Path(directory) / "x5_crop_output"
@@ -228,6 +255,57 @@ class SafeTreeAndTransactionContractTests(unittest.TestCase):
                 pass
             self.assertEqual(read_owned_output(target).run_id, "old-run")
             self.assertFalse(staging.exists())
+            self.assertFalse(paths.journal.exists())
+
+    def test_recovery_covers_old_rename_before_journal_state_update(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "x5_crop_output"
+            paths = TransactionPaths.for_target(target)
+            transaction_id = "c" * 32
+            staging = paths.staging(transaction_id)
+            previous = paths.previous(transaction_id)
+            _make_owned_output(staging, "new-run")
+            _make_owned_output(previous, "old-run")
+            _write_journal(
+                paths.journal,
+                TransactionJournal(
+                    transaction_id=transaction_id,
+                    run_id="new-run",
+                    target=str(paths.target),
+                    staging=str(staging),
+                    previous=str(previous),
+                    state=TransactionState.PREPARED,
+                ),
+            )
+            with OutputTransaction(target):
+                pass
+            self.assertEqual(read_owned_output(target).run_id, "old-run")
+            self.assertFalse(staging.exists())
+            self.assertFalse(previous.exists())
+
+    def test_recovery_covers_new_rename_before_journal_state_update(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "x5_crop_output"
+            paths = TransactionPaths.for_target(target)
+            transaction_id = "d" * 32
+            previous = paths.previous(transaction_id)
+            _make_owned_output(target, "new-run")
+            _make_owned_output(previous, "old-run")
+            _write_journal(
+                paths.journal,
+                TransactionJournal(
+                    transaction_id=transaction_id,
+                    run_id="new-run",
+                    target=str(paths.target),
+                    staging=str(paths.staging(transaction_id)),
+                    previous=str(previous),
+                    state=TransactionState.OLD_MOVED,
+                ),
+            )
+            with OutputTransaction(target):
+                pass
+            self.assertEqual(read_owned_output(target).run_id, "new-run")
+            self.assertFalse(previous.exists())
             self.assertFalse(paths.journal.exists())
 
     def test_ambiguous_state_preserves_every_candidate(self) -> None:
@@ -276,6 +354,22 @@ class SafeTreeAndTransactionContractTests(unittest.TestCase):
                         manifest_name="manifest.jsonl",
                         role_for_file=lambda path: "test",
                     )
+
+
+class RunWideDiskBudgetContractTests(unittest.TestCase):
+    def test_scheduler_reserves_once_and_serializes_worker_claims(self) -> None:
+        budget = RunWideDiskBudget(available_bytes=1000, required_bytes=800)
+        budget.claim(300)
+        budget.claim(500)
+        self.assertEqual(budget.remaining_bytes, 0)
+        with self.assertRaises(DiskSpaceBudgetError):
+            budget.claim(1)
+        budget.release(400)
+        self.assertEqual(budget.remaining_bytes, 400)
+
+    def test_run_reservation_fails_before_workers_start(self) -> None:
+        with self.assertRaises(DiskSpaceBudgetError):
+            RunWideDiskBudget(available_bytes=799, required_bytes=800)
 
 
 if __name__ == "__main__":
