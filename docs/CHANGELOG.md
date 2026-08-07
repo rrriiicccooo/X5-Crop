@@ -3,37 +3,45 @@
 本文件只记录版本级行为、验证边界与必要回滚背景。当前源码结构见
 [ARCHITECTURE.md](ARCHITECTURE.md)。
 
-## V5（下一生产目标，尚未实现）
+## V5（当前开发版本，尚未发布）
 
-V5 是下一条 current-only 生产实现。它继承 V4.9 已验证的 template-first、联合 source
-geometry、retained placements、安全包络、逐边 5%/3%、两个 Gate 与 lane-safe TIFF 合同；
-像素测量和数值层可改用 OpenCV、SciPy 等成熟依赖。
+V5 已原子替换仓库中的 V4.9 active runtime。源码、CLI、report、manifest、tests、tools 与
+standalone 只消费 current schema；不存在 V4.9 fallback、shim、feature flag 或旧 schema reader。
+当前公开稳定版本仍为 v4.2.8，本节不构成 V5 发布声明。
 
-V5 的目标输入是 format、mode 与必要 count 已知的 X5 片夹扫描。每个 lane 保持明确顺序，
-支持水平、垂直、TIFF Orientation，以及相邻照片接触或局部重叠；不处理两段胶片物理压叠。
-Decision 继续以整个 source 为原子，不输出部分成功 slots。Deskew 只校正共同 top/bottom 长边，
-不做 projective 或非线性变形。Blank TIFF suppression 不属于 V5 完成目标。
+已实现的版本行为：
 
-生产依赖已固定为 `NumPy`、`SciPy`、`opencv-python-headless`、`tifffile`、`imagecodecs`
-和 `Pillow` 的明确版本，并安装到 Python 3.12-3.14 的用户级 site。安装器支持 macOS 14+
-的 Apple Silicon 与 Intel Mac，以及 64 位 Windows；依赖收据使卸载器只清理 X5 Crop
-引入且仍未被其它 package 使用的依赖。macOS 与 Windows 使用同一核心合同并分别验证安装、
-启动、TIFF I/O 与性能。V5 性能以完整用户路径计时，多尺度 evidence 只在预登记的有界区域
-内计算，X5 Crop 独占 source 并发。固定依赖改变性能身份后，V4.9 性能 baseline 已在同一 pins
-与同一 source manifest 下重建，比较器继续以 receipt SHA 阻止跨环境比较。
+- 严格单页 16-bit RGB contiguous TIFF 输入域；`tifffile + imagecodecs` 独占正式 I/O，
+  Orientation 1–8 在 decode boundary 转为 canonical coordinates，输出固定为 Orientation=1。
+- Registered transition 保存坐标区间、宽度、prominence、polarity、local noise、support、trace
+  与 provenance；template-first producer 建立联合 scale、完整 placements、canonical 代表和
+  retained safety union，不使用通用 DP、top-K 或候选笛卡尔积。
+- `CandidateGate` 只冻结 typed assessment，`DecisionGate` 独占 final status 与 reasons；任一
+  slot 无法满足 containment、legal window 或逐边 5%/3% direct-use budget 时，整个 source
+  `needs_review`。
+- 每个 lane 共享 top/bottom 长边方向，只执行一次分块 SciPy inverse-affine sampling；每张正式
+  TIFF 在关闭写句柄后复读验证像素、结构、ICC、resolution、metadata、压缩和 Orientation。
+- 正式照片直接写入 `x5_crop_output/` 根部。新结果在同父目录完整构建后，通过 target-specific
+  lock、journal 和两次 rename 发布；只有 current owner marker 与完整 inventory 可确认的旧结果
+  才会删除。进程崩溃可恢复，断电歧义保留全部数据。
+- 单个 source 的 detection、sampling、编码或复读失败只生成 `runtime_error` terminal，其他有效
+  source 仍可发布；全部失败不发布。invocation scheduler 在 sampling 前统一检查新结果、旧结果、
+  报告、debug、事务开销与 32 MiB guard 的空间。
+- 普通运行不计算 source-content SHA，不加载 cohort、comparator、profiling、receipt、Git 或故障
+  注入。Pillow 只在显式启用 Debug Analysis 时延迟导入。开发工具先在计时外核对 source SHA，
+  再以子进程调用完全相同的正式 CLI。
+- 正式 CLI 删除 `--overwrite`、`--diagnostics` 和旧 debug flags；未验证文件系统的非交互运行必须
+  显式使用 `--allow-best-effort-output`，但该选择不能绕过锁、路径、rename 或空间硬失败。
 
-若目标 Python 已有任一冻结依赖的其它版本，安装器会在改动 package 前停止，不静默升级或
-降级用户环境。V5 首版依赖集合不含通用视觉模型、训练模型、ONNX Runtime 或 PyTorch runtime。
+验证拓扑已统一为 `tools/verify staged|full|accuracy|diagnostic|performance|pre-push`。`full`
+只运行 CI 可获得的 contracts、合成 TIFF、schema、配置、standalone 与事务检查；`accuracy`
+使用九张 source-SHA-bound 黄金的十四项正式 CLI 任务；`diagnostic` 以正式 CLI 运行 111 sources；
+`performance` 在外部 SHA 核对后测量 24-source 完整用户路径并绑定 commit、依赖和 workload。
 
-V5 使用全部用户确认黄金进行开发与回归，不建立独立 holdout。S055、S098 为 challenge，
-其余为 nominal；challenge 可以安全 review，但不安全批准始终失败。弱边、接触/重叠、空槽与
-Orientation 样片可在人工确认后继续加入。135-dual 不增加真实样片，XPan 与 120-645 样片以后
-补充，均不阻断通用实现。
-
-本节只记录版本方向。V5 尚无 runtime、schema、accuracy、性能或发布完成声明。
-
-验证按 pushed paths 分级：纯 Markdown 只检查文档 diff，非 runtime 代码运行 full contracts，
-只有 runtime、依赖或固定性能输入变化才要求 performance receipts。
+当前完成边界：合成 full contracts 与 S027 vertical slice 已建立；九张黄金中其余 nominal 尚未
+达到冻结自动批准标准，111-source 全运行、24-source 当前 commit 性能 receipt，以及 Windows
+x64、Apple Silicon、Intel macOS 的真实 TIFF、中文路径、文件占用、恢复与性能 receipt 尚未
+完成。因此 V5 不是 release-ready，也不能宣布三平台正式支持。
 
 ## V4.9（架构实验，不发布）
 

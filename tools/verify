@@ -73,7 +73,7 @@ case "${1:-}" in
         python3 -m tools.regression.accuracy
         ;;
     diagnostic)
-        python3 -m tools.regression.diagnostic_cohort --identity-only
+        python3 -m tools.regression.diagnostic_cohort
         ;;
     performance)
         python3 -m tools.regression.performance

@@ -1,78 +1,71 @@
 # X5 Crop Quick Start
 
-The current stable release is **v4.2.8**.
+The latest public stable release is v4.2.8. V5 in this repository has not been
+released. Download `X5-Crop-vX.X.zip` from GitHub Releases, not GitHub's
+generated Source code archive.
 
-The install steps below target the next production release. For production use,
-follow the instructions included in the Release package you downloaded.
+## 1. Install
 
-## 1. Download And Install
+Extract the release archive and run the platform installer:
 
-Download `X5-Crop-vX.X.zip` from
-[GitHub Releases](https://github.com/rrriiicccooo/X5-Crop/releases). Do not use
-GitHub's generated Source code archive. Unzip it and run once:
+- macOS: `install/X5_Crop_Mac_install.command`
+- Windows: `install/X5_Crop_win_install.bat`
 
-```text
-macOS:   install/X5_Crop_Mac_install.command
-Windows: install/X5_Crop_win_install.bat
-```
-
-Supported platforms are macOS 14 or later on Apple Silicon and Intel Macs, and
-64-bit Windows. Dependencies are installed into the current user site for
-Python 3.12-3.14. Setup stops before making changes if any pinned dependency is
-already present at another version.
+The installer uses the user package site of Python 3.12–3.14 and does not make
+a private virtual environment. It stops before changing anything if the target
+Python already has a frozen dependency at another version.
 
 ## 2. Add TIFFs And Launch
 
-Keep the TIFFs and launch files in one folder:
+Put supported X5 scan TIFFs beside the launcher:
 
-```text
-X5_Crop.py
-X5_Crop_Mac.command or X5_Crop_win.bat
-*.tif / *.tiff
-```
+- macOS: double-click `X5_Crop_Mac.command`
+- Windows: double-click `X5_Crop_win.bat`
 
-Double-click `X5_Crop_Mac.command` on macOS or `X5_Crop_win.bat` on Windows.
-If macOS blocks double-click launch, run this in that folder:
+Or use the command line:
 
 ```bash
-/bin/bash X5_Crop_Mac.command
+python3 X5_Crop.py /path/to/scans --format 135 --strip full
 ```
+
+V5 accepts single-page, unsigned 16-bit, three-channel RGB TIFFs with contiguous
+planar layout and a supported lossless compression. Other structures fail
+safely instead of being guessed.
 
 ## 3. Choose Format, Mode, And Count
 
-Supported formats are `135`, `135-dual`, `half`, `xpan`, `120-645`,
-`120-66`, and `120-67`.
+- `full` uses the fixed holder count for the format.
+- `partial --count N` treats `N` as the authoritative output count.
+- `partial --count auto` conservatively emits every valid holder slot for the
+  format, so blank TIFFs may remain.
+- `--layout auto` selects horizontal or vertical from the scan; either may be
+  specified explicitly.
+- `--debug-analysis` explicitly creates a diagnostic JPG; it is off by default.
 
-- `full`: use the format's fixed holder count.
-- `partial` with an integer: strictly use that output-slot count.
-- `partial` with `auto`: write every valid slot for the matched holder without
-  guessing the true photo count.
-- `135-dual` supports `full` only.
-
-```bash
-python3 X5_Crop.py . --format 135 --strip full --report
-python3 X5_Crop.py . --format 135 --strip partial --count 3 --report
-python3 X5_Crop.py . --format 120-66 --strip partial --count auto --report
-python3 X5_Crop.py . --format 120-66 --strip partial --layout vertical --report
-```
-
-Defaults are `--layout auto` and `--jobs 2`. For every option:
-
-```bash
-python3 X5_Crop.py --help
-```
+The program does not infer format or count from filenames and does not suppress
+blank slots.
 
 ## 4. Read The Result
 
-- `approved_auto`: official photo TIFFs are written to `x5_crop_output/`.
-- `needs_review`: no official photo TIFF is written; the source is copied to
-  `needs_review/` by default.
-- `--diagnostics`: write the report and Debug Analysis only; no photo TIFF is
-  written.
+Photos are written directly in the output root:
 
-The source TIFF is never modified. See the [User Guide](user-guide.en.md) for
-complete settings, output, diagnostics, and TIFF-fidelity details.
+```text
+x5_crop_output/
+  source_name_01.tif
+  source_name_02.tif
+  needs_review/
+  _debug_analysis/
+  x5_crop_report.jsonl
+  x5_crop_summary.csv
+  x5_crop_run_manifest.jsonl
+```
 
-Before removal, run the platform-specific `X5_Crop_*_uninstall` in `install/`.
-It cleans up only dependencies that remain exclusive to X5 Crop and are safe
-to remove.
+`needs_review/` and `_debug_analysis/` are created only when needed. A successful
+run replaces the previous complete output only after ownership is verified. If
+unknown files are present, X5 Crop stops and never deletes them.
+
+On an unverified filesystem, an interactive launch asks for consent. A
+non-interactive command must explicitly include `--allow-best-effort-output`.
+This option cannot bypass hard lock, path, disk-space, or rename failures.
+
+See the [English User Guide](user-guide.en.md) for full details.

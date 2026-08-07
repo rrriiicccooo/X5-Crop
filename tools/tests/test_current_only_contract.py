@@ -126,6 +126,25 @@ class CurrentOnlyContractTest(unittest.TestCase):
             with self.subTest(token=token):
                 self.assertNotIn(token, combined)
 
+    def test_diagnostic_verifier_wraps_the_production_cli(self) -> None:
+        diagnostic = (
+            ROOT / "tools/regression/diagnostic_cohort.py"
+        ).read_text(encoding="utf-8")
+        verifier = (ROOT / "tools/verify").read_text(encoding="utf-8")
+        self.assertIn('str(PROJECT_ROOT / "X5_Crop.py")', diagnostic)
+        self.assertIn("subprocess.run(", diagnostic)
+        self.assertNotIn("runtime_invocation_from_options", diagnostic)
+        self.assertNotIn("process_one", diagnostic)
+        self.assertNotIn("diagnostics=True", diagnostic)
+        self.assertIn(
+            "python3 -m tools.regression.diagnostic_cohort\n",
+            verifier,
+        )
+        self.assertNotIn(
+            "diagnostic_cohort --identity-only",
+            verifier,
+        )
+
     def test_input_mapping_is_frozen_without_parallel_auto_switch(self) -> None:
         partial = format_spec("135")
         auto = FrameCountRequest.from_user_input(partial, "partial", None)

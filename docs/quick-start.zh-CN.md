@@ -1,69 +1,63 @@
 # X5 Crop 快速启动
 
-当前稳定发布为 **v4.2.8**。
+当前公开稳定版是 v4.2.8；本仓库中的 V5 尚未发布。发布包请从 GitHub Releases 下载
+`X5-Crop-vX.X.zip`，不要使用自动生成的 Source code 压缩包。
 
-以下安装说明对应下一生产发布；正式使用请以所下载 Release 包内的说明为准。
+## 1. 安装
 
-## 1. 下载与安装
+解压发布包后运行对应安装器：
 
-从 [GitHub Releases](https://github.com/rrriiicccooo/X5-Crop/releases) 下载
-`X5-Crop-vX.X.zip`，不要下载 GitHub 自动生成的 Source code。解压后运行一次：
+- macOS：`install/X5_Crop_Mac_install.command`
+- Windows：`install/X5_Crop_win_install.bat`
 
-```text
-macOS:   install/X5_Crop_Mac_install.command
-Windows: install/X5_Crop_win_install.bat
-```
-
-支持 macOS 14 及以上的 Apple Silicon 与 Intel Mac，以及 64 位 Windows；依赖安装到
-Python 3.12-3.14 的当前用户 site。若任一冻结依赖已有其它版本，安装器会在改动前停止。
+安装器使用 Python 3.12–3.14 的用户级 package，不建立私有虚拟环境。若目标 Python 已有版本
+不同的冻结依赖，安装器会在改动前停止。
 
 ## 2. 放入 TIFF 并启动
 
-把 TIFF 与启动文件放在同一文件夹：
+把受支持的 X5 扫描 TIFF 与启动器放在同一文件夹：
 
-```text
-X5_Crop.py
-X5_Crop_Mac.command 或 X5_Crop_win.bat
-*.tif / *.tiff
-```
+- macOS：双击 `X5_Crop_Mac.command`
+- Windows：双击 `X5_Crop_win.bat`
 
-macOS 双击 `X5_Crop_Mac.command`，Windows 双击 `X5_Crop_win.bat`。macOS 无法双击时，
-在该文件夹的 Terminal 中运行：
+也可以从命令行运行：
 
 ```bash
-/bin/bash X5_Crop_Mac.command
+python3 X5_Crop.py /path/to/scans --format 135 --strip full
 ```
+
+V5 输入必须是单页、16-bit unsigned、RGB、三通道、contiguous planar 且使用受支持无损压缩的
+TIFF。其它结构会安全失败，不会猜测。
 
 ## 3. 选择格式、模式与张数
 
-支持 `135`、`135-dual`、`half`、`xpan`、`120-645`、`120-66` 和 `120-67`。
+- `full`：使用该格式的固定片夹张数。
+- `partial --count N`：`N` 是用户明确给出的输出张数。
+- `partial --count auto`：保守输出匹配片夹对该格式的全部有效 slots，可能包含空白 TIFF。
+- `--layout auto`：按扫描方向选择水平或垂直；也可明确指定。
+- `--debug-analysis`：显式生成诊断 JPG；默认关闭。
 
-- `full`：使用格式的固定片夹张数。
-- `partial` + 整数：严格使用输入的 output slot 数。
-- `partial` + `auto`：输出匹配片夹的全部有效 slots，不猜真实照片张数。
-- `135-dual` 只支持 `full`。
-
-```bash
-python3 X5_Crop.py . --format 135 --strip full --report
-python3 X5_Crop.py . --format 135 --strip partial --count 3 --report
-python3 X5_Crop.py . --format 120-66 --strip partial --count auto --report
-python3 X5_Crop.py . --format 120-66 --strip partial --layout vertical --report
-```
-
-默认使用 `--layout auto` 和 `--jobs 2`。查看全部参数：
-
-```bash
-python3 X5_Crop.py --help
-```
+程序不从文件名猜 format 或 count，也不自动删除空白 slot。
 
 ## 4. 查看结果
 
-- `approved_auto`：在 `x5_crop_output/` 写出正式照片 TIFF。
-- `needs_review`：不写正式照片 TIFF；默认把原 TIFF 复制到 `needs_review/`。
-- `--diagnostics`：只写 report 与 Debug Analysis，不写照片 TIFF。
+成功运行后，照片直接位于 `x5_crop_output/` 根部：
 
-原始 TIFF 永不修改。完整设置、输出、诊断与 TIFF 保真说明见
-[用户手册](user-guide.zh-CN.md)。
+```text
+x5_crop_output/
+  原文件名_01.tif
+  原文件名_02.tif
+  needs_review/
+  _debug_analysis/
+  x5_crop_report.jsonl
+  x5_crop_summary.csv
+  x5_crop_run_manifest.jsonl
+```
 
-移除前先运行 `install/` 中对应平台的 `X5_Crop_*_uninstall`；它只清理 X5 Crop 独占且仍
-安全可删的依赖。
+`needs_review/` 和 `_debug_analysis/` 只在有内容时建立。每次成功运行会用完整新结果替换上一套
+可确认由 X5 Crop V5 创建的结果；旧目录含未知文件时程序停止，绝不擅自删除。
+
+在未验证文件系统上，交互启动会询问是否继续；非交互命令行必须明确加入
+`--allow-best-effort-output`。该选项不能绕过锁、路径、磁盘空间或 rename 的硬失败。
+
+完整说明见 [中文用户手册](user-guide.zh-CN.md)。

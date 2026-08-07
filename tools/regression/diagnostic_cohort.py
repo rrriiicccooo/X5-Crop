@@ -9,13 +9,13 @@ import hashlib
 import json
 import math
 from pathlib import Path
+import subprocess
+import sys
+from tempfile import TemporaryDirectory
 from typing import Any, Sequence
 
+from x5crop.output.ownership import read_owned_output
 from x5crop.report.validation import validate_current_report_record
-from x5crop.runtime.bootstrap import runtime_invocation_from_options
-from x5crop.runtime.options import RuntimeOptions
-from x5crop.runtime.outcome import CompletedInput, FailedInput
-from x5crop.runtime.workflow import process_one
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -24,11 +24,28 @@ DIAGNOSTIC_COHORT_PATH = (
     / "diagnostic_unreviewed.jsonl"
 )
 COHORT_SCHEMA = "x5crop_diagnostic_unreviewed_cohort_v1"
-RECORD_SCHEMA = "x5crop_diagnostic_record_v1"
-SUMMARY_SCHEMA = "x5crop_diagnostic_summary_v1"
+RECORD_SCHEMA = "x5crop_diagnostic_record_v2"
+SUMMARY_SCHEMA = "x5crop_diagnostic_summary_v2"
 EXPECTED_RECORD_COUNT = 111
 MAXIMUM_PEAK_TEMPORARY_BYTES_PER_SOURCE_PIXEL = 10
 MAXIMUM_PEAK_TEMPORARY_FIXED_ALLOWANCE_BYTES = 32 * 1024 * 1024
+DIAGNOSTIC_SOURCE_TIMEOUT_SECONDS = 600
+WORK_FIELDS = (
+    "measurement_query_count",
+    "pixel_query_count",
+    "basic_profile_coordinate_count",
+    "basic_profile_run_count",
+    "phase_vote_count",
+    "template_group_count",
+    "template_role_lookup_count",
+    "template_role_match_count",
+    "local_relation_evaluation_count",
+    "enhanced_query_count",
+    "materialized_frame_geometry_count",
+    "shared_measurement_reuse_count",
+    "domain_pixels",
+    "peak_temporary_bytes",
+)
 
 
 @dataclass(frozen=True)
@@ -103,7 +120,6 @@ def _source_geometry_within_authority(
 
 def _bounded_work(
     report: dict[str, Any],
-    metrics: dict[str, Any],
     *,
     source_pixels: int,
 ) -> bool:
@@ -115,25 +131,10 @@ def _bounded_work(
         else tuple(resolved["lane_output_slot_counts"])
     )
     work_rows = tuple(lane["work"] for lane in geometry["lanes"])
-    current_work_fields = (
-        "measurement_query_count",
-        "pixel_query_count",
-        "basic_profile_coordinate_count",
-        "basic_profile_run_count",
-        "phase_vote_count",
-        "template_group_count",
-        "template_role_lookup_count",
-        "template_role_match_count",
-        "local_relation_evaluation_count",
-        "enhanced_query_count",
-        "materialized_frame_geometry_count",
-        "shared_measurement_reuse_count",
-        "domain_pixels",
-        "peak_temporary_bytes",
-    )
+    metrics = _aggregate_work(work_rows)
     aggregate_identity = all(
         int(metrics[field]) == sum(int(row[field]) for row in work_rows)
-        for field in current_work_fields
+        for field in WORK_FIELDS
         if field not in {"domain_pixels", "peak_temporary_bytes"}
     )
     structural_bounds = all(
@@ -162,6 +163,19 @@ def _bounded_work(
     )
 
 
+def _aggregate_work(
+    work_rows: Sequence[dict[str, Any]],
+) -> dict[str, int]:
+    return {
+        field: (
+            max((int(row[field]) for row in work_rows), default=0)
+            if field == "peak_temporary_bytes"
+            else sum(int(row[field]) for row in work_rows)
+        )
+        for field in WORK_FIELDS
+    }
+
+
 def _peak_temporary_limit_bytes(source_pixels: int) -> int:
     if source_pixels <= 0:
         raise ValueError("source memory bound requires positive pixels")
@@ -172,25 +186,23 @@ def _peak_temporary_limit_bytes(source_pixels: int) -> int:
     )
 
 
-def _runtime_options(source: DiagnosticSource) -> RuntimeOptions:
-    return RuntimeOptions(
-        input_path=source.source_path,
-        output_dir=None,
-        format_id=str(source.identity["format_id"]),
-        layout="auto",
-        strip_mode=str(source.identity["strip_mode"]),
-        requested_count=None,
-        page=0,
-        review_dir=None,
-        copy_review_files=False,
-        compression="same",
-        debug_analysis=False,
-        diagnostics=True,
-        overwrite=False,
-        report=False,
-        debug_errors=True,
-        jobs=1,
-    )
+def _production_command(source: DiagnosticSource, output: Path) -> list[str]:
+    command = [
+        sys.executable,
+        str(PROJECT_ROOT / "X5_Crop.py"),
+        str(source.source_path),
+        "--output",
+        str(output),
+        "--format",
+        str(source.identity["format_id"]),
+        "--strip",
+        str(source.identity["strip_mode"]),
+        "--jobs",
+        "1",
+    ]
+    if source.identity["strip_mode"] == "partial":
+        command.extend(("--count", "auto"))
+    return command
 
 
 def _failure_record(
@@ -230,81 +242,114 @@ def _failure_record(
 
 
 def run_diagnostic_source(source: DiagnosticSource) -> dict[str, Any]:
-    try:
-        invocation = runtime_invocation_from_options(
-            _runtime_options(source)
-        )
-        outcome = process_one(
-            source.source_path,
-            invocation.config,
-            invocation.configuration_bundle,
-        )
-    except Exception as exc:
-        return _failure_record(
-            source,
-            error_code=type(exc).__name__,
-            error_message=str(exc),
-            failure_stage="diagnostic_controller",
-            metrics=None,
-        )
-    if isinstance(outcome, FailedInput):
-        return _failure_record(
-            source,
-            error_code=outcome.error_code,
-            error_message=outcome.error_message,
-            failure_stage=outcome.failure_stage.value,
-            metrics=outcome.metrics.as_record(),
-        )
-    assert isinstance(outcome, CompletedInput)
-    report = outcome.result.record
-    try:
-        validate_current_report_record(report)
-        metrics = outcome.metrics.as_record()
-        width = int(source.identity["raw_width_px"])
-        height = int(source.identity["raw_height_px"])
-        source_pixels = width * height
-        geometry_authorized = _source_geometry_within_authority(
-            report,
-            width=width,
-            height=height,
-        )
-        work_bounded = _bounded_work(
-            report,
-            metrics,
-            source_pixels=source_pixels,
-        )
-        no_official_diagnostic_output = (
-            not outcome.artifacts.frame_outputs
-            and not report["output"]["output_files"]
-            and report["output"]["finalization"][
-                "official_tiff_count"
-            ]
-            == 0
-        )
-        engineering_passed = (
-            geometry_authorized
-            and work_bounded
-            and no_official_diagnostic_output
-        )
-        engineering_checks = {
-            "source_lane_authority_bounded": geometry_authorized,
-            "query_template_memory_bounded": work_bounded,
-            "diagnostics_no_official_tiff": no_official_diagnostic_output,
-            "peak_temporary_limit_bytes": (
-                _peak_temporary_limit_bytes(source_pixels)
-            ),
-            "peak_temporary_bound": (
-                "10_bytes_per_source_pixel_plus_32_mib_per_input"
-            ),
-        }
-    except Exception as exc:
-        return _failure_record(
-            source,
-            error_code=type(exc).__name__,
-            error_message=str(exc),
-            failure_stage="diagnostic_validation",
-            metrics=outcome.metrics.as_record(),
-        )
+    before = source.source_path.stat()
+    with TemporaryDirectory(
+        prefix=f"x5crop-diagnostic-{source.identity['sample_id']}-"
+    ) as temporary:
+        output = Path(temporary) / "x5_crop_output"
+        try:
+            completed = subprocess.run(
+                _production_command(source, output),
+                cwd=PROJECT_ROOT,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                check=False,
+                timeout=DIAGNOSTIC_SOURCE_TIMEOUT_SECONDS,
+            )
+        except subprocess.TimeoutExpired as exc:
+            return _failure_record(
+                source,
+                error_code="TimeoutExpired",
+                error_message=str(exc),
+                failure_stage="production_cli",
+                metrics=None,
+            )
+        if completed.returncode != 0:
+            return _failure_record(
+                source,
+                error_code="ProductionCliFailed",
+                error_message=completed.stdout[-4000:],
+                failure_stage="production_cli",
+                metrics=None,
+            )
+        try:
+            owned = read_owned_output(output)
+            report_path = output / "x5_crop_report.jsonl"
+            reports = tuple(
+                json.loads(line)
+                for line in report_path.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            )
+            if len(reports) != 1 or len(owned.terminal_records) != 1:
+                raise ValueError(
+                    "production output requires one report and one terminal"
+                )
+            report = reports[0]
+            validate_current_report_record(report)
+            after = source.source_path.stat()
+            source_identity = report["runtime_identity"]["source"]
+            if (
+                before.st_size != after.st_size
+                or before.st_mtime_ns != after.st_mtime_ns
+                or source_identity["input_ordinal"] != 1
+                or source_identity["name"] != source.source_path.name
+                or source_identity["size"] != before.st_size
+                or source_identity["mtime_ns"] != before.st_mtime_ns
+            ):
+                raise ValueError("source stat identity changed across production run")
+            width = int(source.identity["raw_width_px"])
+            height = int(source.identity["raw_height_px"])
+            source_pixels = width * height
+            geometry_authorized = _source_geometry_within_authority(
+                report,
+                width=width,
+                height=height,
+            )
+            work_bounded = _bounded_work(
+                report,
+                source_pixels=source_pixels,
+            )
+            output_files = tuple(report["output"]["output_files"])
+            review_copy = report["output"]["review_copy"]
+            status = report["decision"]["status"]
+            output_contract = (
+                owned.terminal_records[0]["terminal_status"] == status
+                and all((output / relative).is_file() for relative in output_files)
+                and (review_copy is None or (output / review_copy).is_file())
+                and (
+                    (status == "approved_auto" and bool(output_files))
+                    or (status == "needs_review" and not output_files)
+                )
+            )
+            metrics = _aggregate_work(
+                tuple(
+                    lane["work"]
+                    for lane in report["photo_geometry"]["lanes"]
+                )
+            )
+            engineering_passed = (
+                geometry_authorized and work_bounded and output_contract
+            )
+            engineering_checks = {
+                "source_lane_authority_bounded": geometry_authorized,
+                "query_template_memory_bounded": work_bounded,
+                "production_output_contract": output_contract,
+                "peak_temporary_limit_bytes": (
+                    _peak_temporary_limit_bytes(source_pixels)
+                ),
+                "peak_temporary_bound": (
+                    "10_bytes_per_source_pixel_plus_32_mib_per_input"
+                ),
+            }
+        except Exception as exc:
+            return _failure_record(
+                source,
+                error_code=type(exc).__name__,
+                error_message=str(exc),
+                failure_stage="diagnostic_validation",
+                metrics=None,
+            )
     decision = report["decision"]
     geometry = report["photo_geometry"]
     return {
@@ -414,10 +459,10 @@ def run_diagnostic_cohort(
                 ]
                 for record in records
             ),
-            "diagnostic_official_tiff": sum(
+            "production_output_contract": sum(
                 record["engineering_checks"] is not None
                 and not record["engineering_checks"][
-                    "diagnostics_no_official_tiff"
+                    "production_output_contract"
                 ]
                 for record in records
             ),
@@ -455,11 +500,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"diagnostic source identities: {len(sources)}/{EXPECTED_RECORD_COUNT}")
         return 0
     if args.output_root is None:
-        parser.error("--output-root is required unless --identity-only is used")
-    passed, summary = run_diagnostic_cohort(
-        args.output_root.expanduser().resolve(),
-        jobs=args.jobs,
-    )
+        with TemporaryDirectory(prefix="x5crop-diagnostic-results-") as temporary:
+            passed, summary = run_diagnostic_cohort(
+                Path(temporary),
+                jobs=args.jobs,
+            )
+    else:
+        passed, summary = run_diagnostic_cohort(
+            args.output_root.expanduser().resolve(),
+            jobs=args.jobs,
+        )
     print(
         f"diagnostic terminal records: "
         f"{summary['terminal_record_count']}/"
@@ -468,6 +518,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(
         "recognition accuracy verdict: "
         f"{summary['recognition_accuracy_verdict']}"
+    )
+    print(
+        "engineering contracts: "
+        f"{'passed' if summary['engineering_contract_passed'] else 'failed'}; "
+        f"failures={summary['engineering_contract_failure_count']}"
     )
     return 0 if passed else 1
 

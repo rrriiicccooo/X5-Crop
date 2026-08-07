@@ -1,8 +1,9 @@
-# X5 Crop V4.9 实验架构
+# X5 Crop V5 当前架构
 
-本文只描述仓库当前 V4.9 实验代码的运行流、数值合同和源码 owner。V4.9 不再是发布目标；
-V5 开始改变 runtime 后，本文件随实现原子更新。版本变化见 [CHANGELOG.md](CHANGELOG.md)，
-当前目标与下一步见 [PROJECT_MEMORY.md](PROJECT_MEMORY.md)。
+本文只描述仓库唯一 active V5 runtime 的运行流、数值合同和源码 owner。V4.9 仅存在于 Git
+history 与更新日志；当前源码没有旧 schema reader、fallback、shim、feature flag 或并行
+producer。版本变化见 [CHANGELOG.md](CHANGELOG.md)，按需交接见
+[PROJECT_MEMORY.md](PROJECT_MEMORY.md)。
 
 ## 1. 产品合同
 
@@ -47,8 +48,9 @@ format / count / ScanCanvas / lane authority
 → canonical representative
 → SafeCropEnvelope + direct-use assessment
 → CandidateGate → DecisionGate → Finalization
-→ lane-safe inverse-affine Writer
-→ report / Debug Analysis
+→ one chunked lane-safe inverse-affine sampling
+→ validated TIFF / report / optional Debug Analysis
+→ run manifest → journaled flat-output publication
 ```
 
 权限只沿这条路径前进。不存在旧 sequence DP、short-candidate 笛卡尔积、best-score
@@ -58,13 +60,16 @@ placement、blank geometry、旧 schema reader、feature flag 或并行 producer
 
 ### 3.1 唯一物理 owner
 
-`FormatSpec` 同时拥有：
+`FramePhysicalSpec` 只拥有：
 
 - `frame_width_mm` / `frame_height_mm`；
 - aperture component；
-- nominal gap 与允许的 local gap interval；
-- full count、partial 范围；
-- 适用 ScanCanvas profile 与容量。
+- nominal gap 与允许的 local gap interval。
+
+`ScanCanvasPhysicalSpec` catalog 单独拥有扫描画布、format fit 与有效最大容量；
+`FrameCountRequest` 单独拥有 full、partial explicit 与 partial auto 的 count authority。Runtime
+configuration 只在入口解析，然后以 typed input 传入下层。照片尺寸、扫描画布、count 与配置
+不得合并为一个 registry owner。
 
 格式尺寸 tolerance 只有一个全局 owner：
 
@@ -250,6 +255,12 @@ Full uncertainty 与 minimum guard只取较外侧者，绝不相加。Authority 
 placement 或 canonical；只允许裁掉 guard 并记录 saturation。Footprint 不先变成 source AABB，
 避免 deskew 时二次膨胀。
 
+Safety 不是“中心点加固定 padding”。每条 transition 的测量 interval、transition width、
+fit residual、aperture tolerance、联合 axis scale、数值误差、共享角度 interval 与一次 visible
+interpolation allowance 分项保留并向外传播。Robust fit 只选择 canonical 中心；普通协方差不
+取得 safety authority。每个 retained placement 的 `full_safety_footprint` 独立消费这些事实，
+最终 envelope 取完整 union。
+
 Minimum guard：
 
 | Format | start/end 每边 | top/bottom 每边 |
@@ -289,25 +300,57 @@ tuple，并将 typed gap 与 count mode机械映射为 final reason。不存在�
 `needs_review` 时 Finalization 不暴露正式 boxes，Writer 不写照片 TIFF。Approved Writer
 消费 mapped box、transform 与 lane sampling authority；bilinear 四个 taps逐个检查 authority，
 越出 lane 的 tap 使用 photometric background，不能 clip 后采入另一 lane。每个正式 TIFF 只
-从原 TIFF 执行一次 inverse-affine sampling。
+从原 TIFF 执行一次分块 SciPy inverse-affine sampling。
 
-## 8. Report、Debug 与 schema
+TIFF 输入只接受单页 `uint16 RGB YXS CONTIG` 与冻结无损压缩。`tifffile + imagecodecs` 独占
+decode、encode 与 readback；OpenCV 只提供有界像素测量，SciPy 只提供数值和 sampling。
+Orientation 1–8 在 decode boundary 建立 raw↔canonical 可逆映射；正式输出烘焙为正确视觉
+方向并写 Orientation=1。每张 TIFF 关闭写句柄后复读验证 dtype、shape、axes、pixels、
+photometric、channels、planar、ICC、resolution/unit、受支持 metadata 与压缩。
+
+## 8. Report、manifest 与 Debug
 
 Current-only schema：
 
 ```text
-report      = source_coordinate_format_placement_v2
-S062 profile = x5crop_fixed_sample_profile_v5
+report schema id       = x5crop_detection_report_v5
+report schema revision = x5crop_v5_current_1
+run manifest           = x5crop_run_manifest_v5
+output owner            = x5_crop_v5
 ```
 
 Report 保存 raw observations、profiles、phase groups、direction classes、joint source geometry、
 local advances、retained placements、canonical、safe envelope、budget、两级 Gate、transform 与
-最终 I/O facts。它是审计产物，不是 detection cache。
+最终 I/O facts。Transition 至少包含 coordinate interval、peak width、prominence、polarity、
+local noise、trace/support 与 provenance。Report 是审计产物，不是 detection cache；不得保存
+profiler、候选海洋或开发调用轨迹。
+
+Manifest 只保存 `run_id`、输入 ordinal、便携名称、size、mtime、terminal、依赖/线程、文件系统
+等级、best-effort 同意方式、disk reservation 与发布 inventory。它不保存 source-content SHA、
+Git、cohort 或 performance receipt；inventory 不包含 manifest 自身。普通文件使用相对路径、
+role、type、size、mtime，目录只使用相对路径与 type。
 
 Debug Analysis 只读取 runtime/report facts，保持四层布局：source authority、pixel evidence、
-canonical placement、protected output。它不重新计算 detection、geometry 或 budget。
+canonical placement、protected output。它不重新计算 detection、geometry 或 budget；Pillow 只在
+用户显式启用 Debug Analysis 后延迟导入。
 
-## 9. 工作量与性能
+## 9. 生产路径与开发验证
+
+默认生产路径只执行 TIFF/Orientation 校验、一次 decode、registered detection、物理求解、
+不确定性传播、Gate、一次正式 sampling、TIFF 写出复读、轻量 report/manifest 与安全发布。
+它不计算 source-content SHA，不检查 Git/cohort/receipt，不运行 comparator、profiler、tracemalloc、
+故障注入或 Debug Analysis。
+
+`tools/verify` 是唯一验证入口。`accuracy`、`diagnostic` 和 `performance` 在生产程序外部先计算
+source SHA 并冻结 source stat，再通过子进程调用同一 `X5_Crop.py`。工具只观察正式 report、
+manifest 与 outputs；没有 detector bypass、样片参数、验证专用 producer 或较宽 Gate。性能
+计时从正式 CLI 启动开始，包含 import、decode、detection、decision、sampling、encode、
+readback 与 publication；SHA、cohort、profiling 和 Debug Analysis 位于计时外。
+
+生产依赖为 NumPy、SciPy、opencv-python-headless、tifffile、imagecodecs 与 Pillow；测试、
+comparator、fixture、profiling 和故障注入不进入用户包，开发依赖单独拥有。
+
+## 10. 工作量与性能
 
 Producer 的结构上界：
 
@@ -325,21 +368,46 @@ local_relation_evaluation_count
   ≤ template_group_count × (slot_count - 1)
 ```
 
-本 V4.9 实验的内存为一维 profiles、有限 runs/votes/groups 与 geometry，不增加 image-sized
-field、row index、Hough slope family、通用 DP 或新依赖。单输入临时内存上限保持：
+V5 的内存为一维 profiles、有限 runs/votes/groups、typed geometry 与有界像素 buffers；不增加
+多份全分辨率梯度、完整 float64 sampling coordinate field、Hough slope family、通用 DP、top-K
+或无界 candidate materialization。单输入临时内存上限为：
 
 ```text
 10 × source_pixels + 32 MiB
 ```
 
-实验性能固定 24 sources、168 tasks、`--jobs 2`、24 decodes 与相同 I/O。V4.9 checkpoint 满足
-`≤5.0 秒/输入`，并在配对 MAD noise 之外快于冻结 v4.2.8；新 noise 不能扩大允许回退。
+X5 Crop 是唯一并发 owner：`--jobs` 调度 sources，OpenCV、BLAS、OpenMP 与 SciPy 内部线程固定
+为 1。性能 receipt 固定 24 sources，并绑定 Git commit、cohort SHA、source SHAs、依赖与线程
+身份；当前 commit 未生成有效 receipt 时不得作性能完成声明。
 
-## 10. 源码 owner
+## 11. 平面输出事务
+
+正式照片直接位于 target 根部。若 target 为 `MyCrops`，同父目录旁路为
+`.MyCrops.lock`、`.MyCrops.transaction.json`、`.MyCrops.new-<uuid>` 与
+`.MyCrops.old-<uuid>`。Token 由 target leaf 派生；不同 target 不共享锁。
+
+流程固定为：获取锁并恢复明确状态；创建 staging；处理全部 sources；复读 TIFF；写 report、
+summary 和不含自身的 manifest inventory；至少一个 source 非 `runtime_error` 后写 journal；旧
+target rename 为 old；new rename 为 target；验证新 ownership；删除 old 与 journal。单 source
+失败不取消其它有效结果，全部失败不发布。
+
+旧 target 只有 current owner、manifest 与完整 inventory 一致时才能替换。遍历使用 lstat
+语义并拒绝 symlink、Windows junction 和 reparse point；删除 bottom-up 且永不跟随链接。
+进程异常与强制结束支持自动恢复；突然断电后状态明确时恢复，状态歧义时保留 target、new、
+old 和 journal，绝不自动删除。
+
+`FilesystemPolicy` 区分 `verified_local` 与 `best_effort_unverified`。未验证文件系统的交互运行
+必须明确确认，非交互运行必须显式传入 `--allow-best-effort-output`；同文件系统、锁、rename、
+路径安全和磁盘空间仍是不可绕过的硬失败。Scheduler 在 sampling 前对整个 invocation 检查新
+结果、报告、可选 debug、事务开销与 32 MiB guard，旧结果在发布前继续占用空间。
+
+## 12. 源码 owner
 
 | 路径 | 唯一职责 |
 |---|---|
-| `x5crop/formats/` | format 尺寸、tolerance、gap、count 与 ScanCanvas fit |
+| `x5crop/formats/` | format 物理尺寸、tolerance 与 gap |
+| `x5crop/configuration/` | count request、ScanCanvas catalog、format fit 与 runtime detection configuration |
+| `x5crop/io/` | 严格 TIFF、Orientation mapping、metadata policy 与 readback |
 | `x5crop/detection/source_core.py` | source/lane authority |
 | `photo_geometry/measurement.py` | transitions、SideTransitionRegion 与 raw boundary fit |
 | `photo_geometry/template_profiles.py` | profiles、roles、phase votes 与 indexed grouping |
@@ -353,6 +421,9 @@ field、row index、Hough slope family、通用 DP 或新依赖。单输入临�
 | `x5crop/detection/final/` | approved geometry exposure |
 | `x5crop/export/` | lane-safe TIFF sampling、write 与 readback |
 | `x5crop/report/` | current report read model 与 validation |
+| `x5crop/runtime/` | invocation、source terminal、run-wide budget 与轻量 manifest |
+| `x5crop/output/` | portable name、safe tree、filesystem policy、lock、journal 与 publication |
 | `x5crop/debug/` | current facts 的只读可视化 |
 | `tools/verify` | 唯一 tracked verifier 入口 |
+| `tools/regression/` | 生产程序外部的 SHA-bound accuracy、diagnostic 与 performance |
 | `tools/release/` | standalone 与 ZIP manifest |

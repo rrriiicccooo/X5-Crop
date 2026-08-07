@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -109,6 +110,28 @@ class PortableOutputNameContractTests(unittest.TestCase):
         ):
             with self.subTest(value=value):
                 self.assertTrue(is_windows_reserved_name(value))
+
+    def test_python_313_windows_reserved_rules_cross_check_frozen_table(
+        self,
+    ) -> None:
+        if os.name != "nt" or not hasattr(os.path, "isreserved"):
+            self.skipTest("requires Windows Python 3.13+")
+        for value in (
+            "CON",
+            "NUL.txt",
+            "CONIN$",
+            "CONOUT$.tif",
+            "COM1.jpg",
+            "COM¹.jpg",
+            "LPT9",
+            "LPT³.dat",
+            "bad<name.tif",
+            "trailing. ",
+        ):
+            with self.subTest(value=value):
+                self.assertTrue(os.path.isreserved(value))
+                with self.assertRaises(PortableNameError):
+                    validate_explicit_output_leaf(value)
 
     def test_generated_names_are_portable_and_bounded(self) -> None:
         name = portable_frame_name(

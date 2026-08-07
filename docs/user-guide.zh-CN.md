@@ -1,130 +1,113 @@
 # X5 Crop 用户手册
 
-- 当前稳定发布：**v4.2.8**
-- 仓库状态：V4.9 为架构实验；V5 是下一生产目标，尚未发布
-
-X5 Crop 用于把 Hasselblad / Imacon X5 片夹扫描 TIFF 保守地拆成单张照片。你负责提供胶片
-格式、片条模式和必要的张数；程序负责检测、deskew、安全裁切、TIFF 写出与复读验证。
-本手册随仓库开发，其中安装说明对应下一生产发布；正式使用请以 GitHub Release 包内文档为准。
+- 当前公开稳定版本：v4.2.8
+- 仓库当前源码：V5 current-only，尚未公开发布
+- 输入定位：用户已经知道 format、片条模式及必要 count 的 Hasselblad / Imacon X5 片夹扫描
 
 ## 产品行为
 
-X5 Crop 的首要目标是不切掉真实照片内容，其次是避免输出宽到需要人工重裁。
+X5 Crop 的目标是自动产生足够安全且不切掉真实照片内容的 TIFF。用户提供胶片格式；程序使用
+扫描像素、固定物理尺寸、片夹画布、张数与顺序共同判断。只有内容保护、多余边缘限制、变换和
+TIFF 写出均成立时才输出正式照片，否则整张 source 进入 `needs_review`，不做部分 slot 挽救。
 
-- 程序把像素边缘与已知格式尺寸组合成少量完整照片摆放方案，不根据一条最高分边线盲目
-  裁切。
-- 多个同样成立的摆放会共同决定安全裁切。若无法在允许外扩内同时容纳，结果为
-  `needs_review`。
-- `start/end` 每边最大允许外扩为照片设计宽度的 5%；`top/bottom` 每边为设计高度的 3%。
-  四边分别是硬上限，刚好达到上限仍可通过。
-- 输出可以带少量边缘或邻片像素，相邻输出也可以重叠；完整保留照片内容优先。
-- Partial auto 保留匹配片夹的全部有效 slots，因此可能写出可直接删除的 blank TIFF。程序
-  不从文件名或画面外观猜真实照片张数。
-- `approved_auto` 只表示最终输出满足当前安全合同，不表示程序唯一还原了真实物理边缘。
+程序不承诺恢复唯一的真实照片边界，也不从文件名猜 format 或 count。`partial --count auto`
+使用匹配片夹对该格式的有效最大容量；没有 blank suppression，因此空白 slot 也可能输出。
+相邻照片接触或局部重叠时，相邻输出可以重复包含少量 source pixels，以保护真实内容。
 
 ## 安装
 
 从 [GitHub Releases](https://github.com/rrriiicccooo/X5-Crop/releases) 下载
-`X5-Crop-vX.X.zip`，不要下载 GitHub 自动生成的 Source code。解压后运行一次：
+`X5-Crop-vX.X.zip`。不要使用 GitHub 自动生成的 Source code 压缩包。
+
+发布包支持 Python 3.12–3.14，并固定以下依赖：
 
 ```text
-macOS:   install/X5_Crop_Mac_install.command
-Windows: install/X5_Crop_win_install.bat
+numpy==2.5.1
+scipy==1.18.0
+opencv-python-headless==5.0.0.93
+tifffile==2026.7.31
+imagecodecs==2026.6.26
+Pillow==12.3.0
 ```
 
-支持 macOS 14 及以上的 Apple Silicon 与 Intel Mac，以及 64 位 Windows。安装器使用
-Python 3.12、3.13 或 3.14，把固定版本的 `NumPy`、`SciPy`、
-`opencv-python-headless`、`tifffile`、`imagecodecs` 和 `Pillow` 安装到当前用户的 Python
-site；不创建虚拟环境，也不污染系统级 Python。macOS 安装器只准备当前 Release 文件夹，
-不建立永久系统级信任。同一解释器若已有任一冻结依赖的其它版本，或已有会占用 `cv2`
-命名空间的其它 OpenCV distribution，安装器会在改动任何 package 前安全停止。
+运行平台安装器：
 
-将入口、启动器和 TIFF 放在同一文件夹：
+- macOS：`install/X5_Crop_Mac_install.command`
+- Windows：`install/X5_Crop_win_install.bat`
 
-```text
-X5_Crop.py
-X5_Crop_Mac.command 或 X5_Crop_win.bat
-*.tif / *.tiff
-```
+安装器把依赖安装到目标 Python 的用户级 site，不建立私有 `.venv`。如果任一冻结依赖已经以
+其它版本存在，安装器会在改动 package 前停止，不会静默升级、降级或覆盖。
 
-macOS 双击 `X5_Crop_Mac.command`，Windows 双击 `X5_Crop_win.bat`。macOS 无法双击时，
-在该文件夹的 Terminal 中运行：
+## 输入合同
 
-```bash
-/bin/bash X5_Crop_Mac.command
-```
+V5 正式输入域为：
 
-## 格式、模式与 count
+- 单页 TIFF；
+- unsigned 16-bit；
+- RGB、三通道、contiguous planar configuration；
+- `NONE`、`LZW`、`DEFLATE` / `ADOBE_DEFLATE` 或 `ZSTD` 无损压缩；
+- TIFF Orientation 1–8。
 
-| 输入 | 格式 | Full 张数 | Partial |
-|---|---|---:|---|
-| Return / `135` | 135 | 6 | 1..6 或 auto |
-| `dual` / `135-dual` | 135 双 lane | 12 | 不支持 |
-| `half` | 半格 | 12 | 1..12 或 auto |
-| `xpan` | XPan | 3 | 1..3 或 auto |
-| `645` / `120-645` | 120-645 | 4 | 1..4 或 auto |
-| `66` / `120-66` | 120-66 | 3 | 1..3 或 auto |
-| `67` / `120-67` | 120-67 | 3 | 1..3 或 auto |
-
-Format 始终由用户提供，runtime 不自动猜格式。
-
-- Full 使用格式默认张数。
-- Partial 整数是权威 explicit count。
-- Partial 省略 `--count`、输入 `--count auto` 或在交互模式直接回车，均使用片夹容量。
-- Auto 先匹配片夹，再输出该片夹对当前格式的全部有效 slots；它不推断可见照片张数。
-- `135-dual` 的输出顺序为第一个 lane 的 1..6，再到第二个 lane 的 1..6。
+不满足冻结域的文件会记录为 `runtime_error`，不会静默转换或猜测。Orientation 在读取边界转换
+为正确视觉方向；检测、排序与裁切都在该方向工作，输出像素写为 `Orientation=1`。
 
 ## 运行
 
-普通 full：
+图形化启动：
+
+- macOS：将 TIFF 放到启动器目录，双击 `X5_Crop_Mac.command`。
+- Windows：将 TIFF 放到启动器目录，双击 `X5_Crop_win.bat`。
+
+命令行示例：
 
 ```bash
-python3 X5_Crop.py . --format 135 --strip full --report
+python3 X5_Crop.py /path/to/scans \
+  --format 120-66 \
+  --strip partial \
+  --count auto \
+  --jobs 2
 ```
 
-Partial explicit 与 auto：
+正式参数：
 
-```bash
-python3 X5_Crop.py . --format 135 --strip partial --count 3 --report
-python3 X5_Crop.py . --format 120-66 --strip partial --count auto --report
-```
+- `input`：一个 TIFF 或包含 TIFF 的目录；省略时为当前目录。
+- `--output PATH`：输出目录；默认是输入旁的 `x5_crop_output`。
+- `--format`：`135`、`135-dual`、`half`、`xpan`、`120-645`、`120-66`、`120-67`。
+- `--layout`：`auto`、`horizontal` 或 `vertical`。
+- `--strip`：`full` 或 `partial`。
+- `--count N|auto`：partial 的明确张数或片夹容量；full 使用格式固定张数。
+- `--jobs N`：source 并发数；默认 2，上限 3。数值库内部线程固定为 1。
+- `--debug-analysis`：显式生成四层诊断 JPG；默认关闭。
+- `--allow-best-effort-output`：明确接受未验证文件系统的较弱发布语义。
+- `--interactive`：交互选择格式、模式、张数和 Debug Analysis。
 
-显式指定垂直片条：
+没有 `--overwrite`。一次成功运行总是以完整新结果替换上一套可确认归属的 V5 输出。
 
-```bash
-python3 X5_Crop.py . --format 120-66 --strip partial --layout vertical --report
-```
+## 状态与退出码
 
-`--layout auto` 为默认值。并发默认 `--jobs 2`；普通运行最多 3，诊断最多 4。完整参数见：
+每个输入只有一个终态：
 
-```bash
-python3 X5_Crop.py --help
-```
+- `approved_auto`：写出完整正式照片 TIFF。
+- `needs_review`：不写正式照片，将原扫描件复制到 `needs_review/`。
+- `runtime_error`：该输入失败，不写它的照片；其它输入继续处理。
 
-## 状态与人工检查
+退出码：
 
-每个输入只有三类结果：
+- `0`：成功发布，且没有 `runtime_error`。
+- `1`：成功发布但含 `runtime_error`，或全部输入失败且未发布。
+- `2`：命令行、输入集合或运行前检查失败。
+- `3`：输出事务状态歧义、发布或恢复失败。
 
-- `approved_auto`：安全检查通过，写出正式照片 TIFF。
-- `needs_review`：存在明确风险，不写正式照片 TIFF；report 会记录原因。
-- terminal error：读取、检测执行、写出或复读失败。它不是 review。
+如果全部输入均为 `runtime_error`，程序不发布空结果，上一套输出保持不动。
 
-常见 review 情况包括：片夹或请求张数无法成立、完整格式摆放不足、deskew 方向不唯一、同一
-source 的照片尺寸与尺度无法一致、输出超出 lane、无法包含所有保留摆放、任一边超过 5%/3%，
-或 transform 无法安全建立。
+## 输出与安全替换
 
-默认会把需要 review 的原 TIFF 复制到 `needs_review/`。使用
-`--no-copy-review-files` 可以关闭。
-
-## 输出与诊断
-
-默认输出目录为：
+默认结构：
 
 ```text
 x5_crop_output/
   原文件名_01.tif
   原文件名_02.tif
-  ...
   needs_review/
   _debug_analysis/
   x5_crop_report.jsonl
@@ -132,46 +115,53 @@ x5_crop_output/
   x5_crop_run_manifest.jsonl
 ```
 
-只有启用相应选项时才会生成附加文件：
+照片直接位于根部，不建立 `run-*` 或 source 子目录。`needs_review/` 和 `_debug_analysis/` 仅在
+有内容时出现。
 
-- `--report`：写 JSONL 详细记录和 CSV 摘要。
-- `--debug-analysis`：写四层诊断 JPG，展示片夹权限、像素证据、照片摆放与最终安全输出。
-- `--diagnostics`：只读诊断；自动启用 report 和 Debug Analysis，不写照片 TIFF，也不复制
-  review 文件。
-- `--overwrite`：允许覆盖已存在的输出。
-- `--compression same`：尽量保持已支持的源无损压缩；`none` 写无压缩 TIFF。
+新运行先在输出目录旁建立完整内部事务目录。全部输入处理结束、正式 TIFF 复读通过、报告和
+manifest 完整后，程序用两次同父目录 rename 发布新结果，再删除旧结果。程序异常或强制结束
+后会在状态明确时恢复；突然断电造成状态歧义时保留 target、new、old 和 journal，要求人工
+确认，绝不自动删除。
 
-## TIFF 保真
+只有固定 owner marker、current manifest 和完整 inventory 全部匹配的旧目录才能自动替换。
+额外文件、缺失文件、链接、junction、reparse point、旧 schema 或人工目录都会使程序停止。
 
-原 TIFF 永不修改。每个批准输出只从原图执行一次 inverse-affine sampling；lane 外的插值
-像素使用背景，不会采入另一个 lane。写出后立即复读并检查：
+## 文件系统与磁盘空间
 
-- dtype、位深、axes、shape、通道与 planar configuration；
-- photometric、ICC/色彩空间；
-- resolution 与 resolution unit；
-- description、datetime、software 和受支持 metadata；
-- 像素与无损压缩行为。
+已验证本地文件系统可直接运行。SMB、NAS、云盘同步目录、未验证 exFAT 或无法确认语义的文件
+系统属于 best effort：
 
-任何读取、写出、原子替换或复读失败都会留下独立错误，不会生成成功结果。
+- 交互运行显示风险和目标路径，默认拒绝；
+- 非交互 CLI 必须明确加入 `--allow-best-effort-output`。
+
+该选择不能绕过锁、同文件系统、rename、路径安全或磁盘空间硬失败。运行前会为完整新结果、
+报告、可选 Debug Analysis、事务开销和 32 MiB guard 做 invocation-wide 预算；旧结果在发布
+成功前继续占用空间。
+
+## TIFF 保真与隐私
+
+正式 TIFF 仅由 `tifffile + imagecodecs` 读写。每张输出关闭写句柄后都会重新打开，并检查
+16-bit RGB、三通道、contiguous planar、形状、像素、ICC、resolution、resolution unit、受支持
+metadata、无损压缩与 `Orientation=1`。
+
+普通运行不读取原 TIFF 来计算内容 SHA，不检查 Git、黄金样片或性能 receipt，也不启用
+profiler 或故障注入。它只记录 `run_id`、输入序号、便携文件名、size、mtime、依赖/线程和输出
+事务所需的轻量身份。Pillow 只在用户明确启用 Debug Analysis 后延迟导入。
 
 ## 当前验证边界
 
-V4.9 只作为 fixed-format template-first 架构实验保留。V5 尚未完成实现、真实照片准确率与
-发布验证。请使用 GitHub Releases 中标记的稳定版本处理重要原片，并保留原 TIFF。
+V5 已是仓库唯一运行时，并已建立合成 contracts、严格 TIFF/Orientation、正式 schema、
+standalone 构建和可恢复平面输出事务。V5 仍未完成全部真实黄金准确率、24-source 性能和
+Windows x64、Apple Silicon、Intel macOS 三个平台的正式 receipt，因此不能据此宣布 V5 已
+release-ready 或所有平台已经正式支持。当前用户应继续使用公开稳定版 v4.2.8。
 
 ## 移除与许可
 
-若要清理依赖，先运行：
+卸载依赖：
 
-```text
-macOS:   install/X5_Crop_Mac_uninstall.command
-Windows: install/X5_Crop_win_uninstall.bat
-```
+- macOS：`install/X5_Crop_Mac_uninstall.command`
+- Windows：`install/X5_Crop_win_uninstall.bat`
 
-安装器会留下本 Release 文件夹专属的依赖收据。卸载器只删除安装前不存在、安装后未被改变，
-并且当前没有被其它 Python package 使用的依赖；安装前已有相同版本、后来升级或已被共享的
-package 一律保留。最后删除 X5 Crop 文件夹即可移除程序和本地输出。应先运行卸载器，再删除
-文件夹。
+卸载器只删除由 X5 Crop 引入、版本未变化且不再被其它 package 需要的依赖。
 
-许可证：MIT。发布包根目录包含 `LICENSE`；GitHub 也提供
-[完整文本](https://github.com/rrriiicccooo/X5-Crop/blob/main/LICENSE)。
+License: MIT — [LICENSE](../LICENSE)

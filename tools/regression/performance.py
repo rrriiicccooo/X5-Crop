@@ -17,6 +17,8 @@ from typing import Any, Sequence
 from x5crop.report.validation import validate_current_report_record
 from x5crop.runtime.identity import runtime_environment_identity
 
+from tools.install.dependency_manager import load_pins
+
 from .performance_identity import (
     FIXED_SOURCE_COUNT,
     PROJECT_ROOT,
@@ -30,6 +32,48 @@ DEFAULT_RECEIPT_PATH = (
     PROJECT_ROOT / "build" / "v5-performance" / "performance_receipt.json"
 )
 SECONDS_PER_INPUT_LIMIT = 5.0
+FROZEN_REQUIREMENTS_PATH = PROJECT_ROOT / "tools/install/requirements.txt"
+
+
+def frozen_dependency_versions() -> dict[str, str]:
+    return {
+        pin.distribution: pin.version
+        for pin in load_pins(FROZEN_REQUIREMENTS_PATH)
+    }
+
+
+def performance_environment_is_frozen(environment: object) -> bool:
+    if not isinstance(environment, dict):
+        return False
+    dependencies = environment.get("dependencies")
+    threads = environment.get("threads")
+    python_version = str(environment.get("python_version", ""))
+    try:
+        major, minor, *_rest = (int(part) for part in python_version.split("."))
+    except ValueError:
+        return False
+    if not isinstance(threads, dict):
+        return False
+    thread_environment = threads.get("environment")
+    return (
+        (major, minor) in {(3, 12), (3, 13), (3, 14)}
+        and dependencies == frozen_dependency_versions()
+        and threads.get("x5crop_source_workers") == "--jobs"
+        and threads.get("opencv_threads") == 1
+        and isinstance(thread_environment, dict)
+        and thread_environment
+        and all(value == "1" for value in thread_environment.values())
+    )
+
+
+def require_frozen_performance_environment(
+    environment: dict[str, Any],
+) -> None:
+    if not performance_environment_is_frozen(environment):
+        raise ValueError(
+            "performance receipt requires the frozen Python, dependency, "
+            "and single-thread environment"
+        )
 
 
 @dataclass(frozen=True)
@@ -131,6 +175,8 @@ def _run_source(source) -> SourceTiming:
 
 def build_receipt() -> dict[str, Any]:
     commit = _clean_commit()
+    environment = runtime_environment_identity()
+    require_frozen_performance_environment(environment)
     # Full TIFF SHA validation deliberately completes before product timing.
     sources = load_performance_sources(verify_source_files=True)
     timings: list[SourceTiming] = []
@@ -152,7 +198,7 @@ def build_receipt() -> dict[str, Any]:
         ),
         "sha_validation_in_timing": False,
         "debug_analysis_in_timing": False,
-        "environment": runtime_environment_identity(),
+        "environment": environment,
         "summary": {
             "mean_seconds_per_input": mean,
             "p50_seconds": statistics.median(wall),
@@ -180,6 +226,7 @@ def validate_receipt(
         != [item.source_sha256 for item in sources]
         or record.get("sha_validation_in_timing") is not False
         or record.get("debug_analysis_in_timing") is not False
+        or not performance_environment_is_frozen(record.get("environment"))
         or len(record.get("sources", ())) != FIXED_SOURCE_COUNT
         or summary.get("seconds_per_input_limit")
         != SECONDS_PER_INPUT_LIMIT
