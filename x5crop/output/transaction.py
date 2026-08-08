@@ -298,7 +298,7 @@ class OutputTransaction:
             published = read_owned_output(self.paths.target)
             if published.run_id != run_id:
                 raise OutputTransactionError("published target identity changed")
-        except Exception:
+        except Exception as publish_error:
             if old_moved and not self.paths.target.exists() and previous.exists():
                 try:
                     _rename(previous, self.paths.target)
@@ -306,11 +306,18 @@ class OutputTransaction:
                     raise RecoveryRequiredError(
                         "Output publish and rollback both failed; preserving all data"
                     ) from rollback_error
-            raise
-        if previous.exists():
-            read_owned_output(previous)
-            safe_remove_tree(previous)
-        self.paths.journal.unlink()
+            raise RecoveryRequiredError(
+                "Output publication failed; preserving transaction data"
+            ) from publish_error
+        try:
+            if previous.exists():
+                read_owned_output(previous)
+                safe_remove_tree(previous)
+            self.paths.journal.unlink()
+        except Exception as cleanup_error:
+            raise RecoveryRequiredError(
+                "Published output cleanup failed; preserving transaction data"
+            ) from cleanup_error
 
     def recover(self) -> None:
         parent = self.paths.target.parent

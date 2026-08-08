@@ -3,6 +3,7 @@ from __future__ import annotations
 import concurrent.futures
 from datetime import datetime, timezone
 import errno
+from enum import Enum
 import os
 from pathlib import Path
 import sys
@@ -35,6 +36,26 @@ from .disk_budget import (
 from .manifest import SourceTerminalRecord, write_run_manifest
 from .outcome import CompletedInput, FailedInput, InputProcessingOutcome, RuntimeArtifacts
 from .workflow import process_one
+
+
+class PublicationDisposition(str, Enum):
+    PUBLISH = "publish"
+    KEEP_PRIOR_OUTPUT = "keep_prior_output"
+
+
+def publication_disposition(
+    sources: tuple[PlannedSource, ...],
+    outcomes: tuple[tuple[PlannedSource, InputProcessingOutcome], ...],
+) -> PublicationDisposition:
+    expected = tuple(source.input_ordinal for source in sources)
+    actual = tuple(source.input_ordinal for source, _outcome in outcomes)
+    if actual != expected or len(set(actual)) != len(actual):
+        raise ValueError("Every source must produce exactly one ordered terminal outcome")
+    return (
+        PublicationDisposition.PUBLISH
+        if any(not isinstance(outcome, FailedInput) for _source, outcome in outcomes)
+        else PublicationDisposition.KEEP_PRIOR_OUTPUT
+    )
 
 
 def _utc_now() -> str:
@@ -258,8 +279,10 @@ def run_runtime(invocation: RuntimeInvocation) -> int:
                 estimate.total_bytes,
             )
             transaction_id, staging = transaction.create_staging(run_id)
+            publication_started = False
             try:
                 outcomes = _process_all(invocation, staging)
+                disposition = publication_disposition(invocation.sources, outcomes)
                 _cleanup_source_workspaces(staging)
                 if any(
                     isinstance(outcome, FailedInput)
@@ -286,7 +309,7 @@ def run_runtime(invocation: RuntimeInvocation) -> int:
 
                 valid_count = len(completed_results)
                 failed_count = len(outcomes) - valid_count
-                if not valid_count:
+                if disposition == PublicationDisposition.KEEP_PRIOR_OUTPUT:
                     _discard_building_transaction(
                         transaction,
                         transaction_id,
@@ -306,11 +329,16 @@ def run_runtime(invocation: RuntimeInvocation) -> int:
                     disk_reservation=_budget.as_record(),
                     terminals=tuple(terminals),
                 )
+                publication_started = True
                 transaction.publish(transaction_id, staging, run_id)
                 print(f"\ndone: completed={valid_count} failed={failed_count}")
                 return 0 if failed_count == 0 else 1
             except Exception:
-                if staging.exists() and transaction.paths.journal.exists():
+                if (
+                    not publication_started
+                    and staging.exists()
+                    and transaction.paths.journal.exists()
+                ):
                     _discard_building_transaction(
                         transaction,
                         transaction_id,
