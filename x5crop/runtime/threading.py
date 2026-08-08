@@ -19,6 +19,8 @@ def configure_numeric_threads() -> None:
         import cv2
 
         cv2.setNumThreads(1)
+        if cv2.getNumThreads() != 1:
+            cv2.setNumThreads(0)
     except ImportError:
         pass
 

@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import os
+import sys
 import unittest
+from unittest import mock
 
 from tools.regression.performance import (
     PERFORMANCE_RECEIPT_SCHEMA,
@@ -20,6 +23,10 @@ from tools.regression.diagnostic_cohort import (
     WORK_FIELDS,
     _bounded_work,
     _peak_temporary_limit_bytes,
+)
+from x5crop.runtime.threading import (
+    THREAD_ENVIRONMENT_KEYS,
+    configure_numeric_threads,
 )
 
 
@@ -100,6 +107,22 @@ class V5PerformanceContractTest(unittest.TestCase):
         environment = self._environment()
         environment["threads"]["opencv_threads"] = 2
         self.assertFalse(performance_environment_is_frozen(environment))
+
+    def test_opencv_thread_configuration_disables_unsupported_backend(self) -> None:
+        cv2 = mock.Mock()
+        cv2.getNumThreads.return_value = 12
+        with (
+            mock.patch.dict(os.environ, {}, clear=True),
+            mock.patch.dict(sys.modules, {"cv2": cv2}),
+        ):
+            configure_numeric_threads()
+            self.assertTrue(
+                all(os.environ[key] == "1" for key in THREAD_ENVIRONMENT_KEYS)
+            )
+        self.assertEqual(
+            cv2.setNumThreads.call_args_list,
+            [mock.call(1), mock.call(0)],
+        )
 
     def test_diagnostic_memory_bound_is_ten_pixels_plus_guard(self) -> None:
         source_pixels = 115_000_000

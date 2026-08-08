@@ -40,6 +40,8 @@ standalone 只消费 current schema；不存在 V4.9 fallback、shim、feature f
 - 依赖安装器会在 pip 前识别“`cv2` 已可导入但缺少受支持 OpenCV distribution metadata”的
   外部 provider，并保持 package 与 receipt 均不变地停止；不会在 Homebrew OpenCV 上叠加
   `opencv-python-headless`，也不会把模块版本冒充冻结 wheel 身份。
+- OpenCV 内部线程先请求 1；若当前并发 backend 忽略该值，则改用 0 明确关闭内部并发，使
+  Homebrew 与冻结 wheel 都保持实际单线程，source 级并发仍只由 `--jobs` 拥有。
 - 正式 CLI 删除 `--overwrite`、`--diagnostics` 和旧 debug flags；未验证文件系统的非交互运行必须
   显式使用 `--allow-best-effort-output`，但该选择不能绕过锁、路径、rename 或空间硬失败。
 
@@ -48,7 +50,7 @@ standalone 只消费 current schema；不存在 V4.9 fallback、shim、feature f
 使用九张 source-SHA-bound 黄金的十四项正式 CLI 任务；`diagnostic` 以正式 CLI 运行 111 sources；
 `performance` 在外部 SHA 核对后测量 24-source 完整用户路径并绑定 commit、依赖和 workload。
 
-当前完成边界：合成 full contracts 已通过 122 项（1 项平台条件跳过）；九张黄金十四项中，
+当前完成边界：合成 full contracts 已通过 123 项（1 项平台条件跳过）；九张黄金十四项中，
 S027、S035、S091 explicit/auto 与 S094 已正式通过，S055 和 S098 保持安全送审，仍有六个
 nominal 任务未达到冻结标准。111-source 工程诊断已达到 111/111，但
 24-source 当前 commit 性能 receipt，以及 Windows x64、Apple Silicon、Intel macOS 的真实
