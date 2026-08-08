@@ -4,6 +4,7 @@ from pathlib import Path
 import tempfile
 import unittest
 from unittest import mock
+import os
 
 from x5crop.output.ownership import read_owned_output, write_owned_output_manifest
 from x5crop.output.transaction import (
@@ -136,6 +137,54 @@ class RuntimeTerminalContractTests(unittest.TestCase):
                         transaction.publish(transaction_id, staging, "new-run")
             self.assertEqual(read_owned_output(target).run_id, "old-run")
             self.assertTrue(staging.exists())
+            self.assertTrue(paths.journal.exists())
+
+    def test_publish_and_rollback_failure_preserve_every_candidate(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "x5_crop_output"
+            _owned(target, "old-run")
+            paths = TransactionPaths.for_target(target)
+            with OutputTransaction(target) as transaction:
+                transaction_id, staging = transaction.create_staging("new-run")
+                previous = paths.previous(transaction_id)
+                _owned(staging, "new-run")
+                calls = 0
+
+                def fail_after_old_move(source: Path, destination: Path) -> None:
+                    nonlocal calls
+                    calls += 1
+                    if calls == 1:
+                        os.rename(source, destination)
+                        return
+                    raise PermissionError("locked")
+
+                with mock.patch(
+                    "x5crop.output.transaction._rename",
+                    side_effect=fail_after_old_move,
+                ):
+                    with self.assertRaises(RecoveryRequiredError):
+                        transaction.publish(transaction_id, staging, "new-run")
+            self.assertFalse(target.exists())
+            self.assertTrue(staging.exists())
+            self.assertTrue(previous.exists())
+            self.assertTrue(paths.journal.exists())
+
+    def test_corrupt_journal_and_multiple_candidates_are_never_deleted(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "x5_crop_output"
+            paths = TransactionPaths.for_target(target)
+            first = paths.staging("1" * 32)
+            second = paths.staging("2" * 32)
+            _owned(target, "old-run")
+            _owned(first, "new-one")
+            _owned(second, "new-two")
+            paths.journal.write_text("{not-json\n", encoding="utf-8")
+            with self.assertRaises(RecoveryRequiredError):
+                with OutputTransaction(target):
+                    pass
+            self.assertTrue(target.exists())
+            self.assertTrue(first.exists())
+            self.assertTrue(second.exists())
             self.assertTrue(paths.journal.exists())
 
 
