@@ -25,14 +25,20 @@ from .performance_identity import (
     cohort_sha256,
     load_performance_sources,
 )
+from .performance_hardware import build_hardware_identity
+from .performance_profile import STAGE_NAMES, ProfiledSource, profile_source
 
 
-PERFORMANCE_RECEIPT_SCHEMA = "x5crop_performance_receipt_v5"
+PERFORMANCE_RECEIPT_SCHEMA = "x5crop_performance_receipt_v5_1"
 DEFAULT_RECEIPT_PATH = (
     PROJECT_ROOT / "build" / "v5-performance" / "performance_receipt.json"
 )
 SECONDS_PER_INPUT_LIMIT = 5.0
 FROZEN_CONTRACT_PATH = PROJECT_ROOT / "tools/install/dependencies.toml"
+PRODUCTION_TIMING_BOUNDARY = (
+    "production_cli_startup_decode_detection_decision_sampling_"
+    "compression_write_readback_publish"
+)
 
 
 def frozen_dependency_identity() -> dict[str, dict[str, str]]:
@@ -204,12 +210,50 @@ def _run_source(source) -> SourceTiming:
         )
 
 
+def _named_summary(values: Sequence[float], names: Sequence[str]) -> dict[str, object]:
+    maximum = max(values)
+    index = values.index(maximum)
+    return {
+        "mean": statistics.fmean(values),
+        "maximum": maximum,
+        "maximum_source": names[index],
+    }
+
+
+def _profiling_summary(profiles: Sequence[ProfiledSource]) -> dict[str, object]:
+    sample_ids = [item.sample_id for item in profiles]
+    wall = [item.wall_seconds for item in profiles]
+    rss = [float(item.process_peak_rss_bytes) for item in profiles]
+    temporary = [float(item.runtime_peak_temporary_bytes) for item in profiles]
+    stages = {
+        name: _named_summary(
+            [item.stages[name] for item in profiles],
+            sample_ids,
+        )
+        for name in STAGE_NAMES
+    }
+    stages["io_total"] = _named_summary(
+        [item.io_total_seconds for item in profiles],
+        sample_ids,
+    )
+    return {
+        "wall_p50_seconds": statistics.median(wall),
+        "wall_p95_seconds": _percentile(wall, 0.95),
+        "slowest_source": sample_ids[wall.index(max(wall))],
+        "slowest_seconds": max(wall),
+        "process_peak_rss_bytes": _named_summary(rss, sample_ids),
+        "runtime_peak_temporary_bytes": _named_summary(temporary, sample_ids),
+        "stages": stages,
+    }
+
+
 def build_receipt() -> dict[str, Any]:
     commit = _clean_commit()
     environment = runtime_environment_identity()
     require_frozen_performance_environment(environment)
     # Full TIFF SHA validation deliberately completes before product timing.
     sources = load_performance_sources(verify_source_files=True)
+    hardware = build_hardware_identity(sources[0].source_path.parent)
     timings: list[SourceTiming] = []
     for source in sources:
         timing = _run_source(source)
@@ -217,28 +261,44 @@ def build_receipt() -> dict[str, Any]:
         print(f"{source.sample_id}: {timing.wall_seconds:.3f}s {timing.status}")
     wall = tuple(item.wall_seconds for item in timings)
     mean = statistics.fmean(wall)
+    profiles: list[ProfiledSource] = []
+    for source in sources:
+        profile = profile_source(source)
+        profiles.append(profile)
+        print(
+            f"{source.sample_id}: profile={profile.wall_seconds:.3f}s "
+            f"rss={profile.process_peak_rss_bytes}"
+        )
     return {
         "receipt_schema": PERFORMANCE_RECEIPT_SCHEMA,
         "git_commit": commit,
         "cohort_sha256": cohort_sha256(),
         "source_count": len(sources),
         "source_sha256s": [item.source_sha256 for item in sources],
-        "timing_boundary": (
-            "production_cli_startup_decode_detection_decision_sampling_"
-            "compression_write_readback_publish"
-        ),
-        "sha_validation_in_timing": False,
-        "debug_analysis_in_timing": False,
         "environment": environment,
-        "summary": {
-            "mean_seconds_per_input": mean,
-            "p50_seconds": statistics.median(wall),
-            "p95_seconds": _percentile(wall, 0.95),
-            "slowest_seconds": max(wall),
-            "seconds_per_input_limit": SECONDS_PER_INPUT_LIMIT,
-            "passed": mean <= SECONDS_PER_INPUT_LIMIT,
+        "hardware": hardware,
+        "production_gate": {
+            "timing_boundary": PRODUCTION_TIMING_BOUNDARY,
+            "sha_validation_in_timing": False,
+            "debug_analysis_in_timing": False,
+            "summary": {
+                "mean_seconds_per_input": mean,
+                "p50_seconds": statistics.median(wall),
+                "p95_seconds": _percentile(wall, 0.95),
+                "slowest_source": timings[wall.index(max(wall))].sample_id,
+                "slowest_seconds": max(wall),
+                "seconds_per_input_limit": SECONDS_PER_INPUT_LIMIT,
+                "passed": mean <= SECONDS_PER_INPUT_LIMIT,
+            },
+            "sources": [item.as_record() for item in timings],
         },
-        "sources": [item.as_record() for item in timings],
+        "profiling": {
+            "method": "external_cprofile_subprocess_and_rss_polling",
+            "participates_in_speed_gate": False,
+            "stage_names": list(STAGE_NAMES),
+            "summary": _profiling_summary(profiles),
+            "sources": [item.as_record() for item in profiles],
+        },
     }
 
 
@@ -248,17 +308,50 @@ def validate_receipt(
     expected_commit: str | None = None,
 ) -> None:
     sources = load_performance_sources(verify_source_files=False)
-    summary = record.get("summary", {})
+    expected_sample_ids = [item.sample_id for item in sources]
+    production = record.get("production_gate", {})
+    profiling = record.get("profiling", {})
+    summary = production.get("summary", {}) if isinstance(production, dict) else {}
+    production_sources = (
+        production.get("sources", ()) if isinstance(production, dict) else ()
+    )
+    profiling_sources = (
+        profiling.get("sources", ()) if isinstance(profiling, dict) else ()
+    )
+    hardware = record.get("hardware")
     if (
         record.get("receipt_schema") != PERFORMANCE_RECEIPT_SCHEMA
         or record.get("source_count") != FIXED_SOURCE_COUNT
         or record.get("cohort_sha256") != cohort_sha256()
         or record.get("source_sha256s")
         != [item.source_sha256 for item in sources]
-        or record.get("sha_validation_in_timing") is not False
-        or record.get("debug_analysis_in_timing") is not False
         or not performance_environment_is_frozen(record.get("environment"))
-        or len(record.get("sources", ())) != FIXED_SOURCE_COUNT
+        or not isinstance(hardware, dict)
+        or set(hardware)
+        != {
+            "machine_name",
+            "cpu_model",
+            "physical_core_count",
+            "logical_core_count",
+            "total_memory_bytes",
+            "input_volume",
+            "output_volume",
+            "power",
+            "windows_defender",
+        }
+        or not str(hardware.get("machine_name", ""))
+        or not str(hardware.get("cpu_model", ""))
+        or not isinstance(hardware.get("physical_core_count"), int)
+        or int(hardware.get("physical_core_count", 0)) <= 0
+        or not isinstance(hardware.get("logical_core_count"), int)
+        or int(hardware.get("logical_core_count", 0)) <= 0
+        or int(hardware.get("total_memory_bytes", 0)) <= 0
+        or production.get("timing_boundary") != PRODUCTION_TIMING_BOUNDARY
+        or production.get("sha_validation_in_timing") is not False
+        or production.get("debug_analysis_in_timing") is not False
+        or len(production_sources) != FIXED_SOURCE_COUNT
+        or [item.get("sample_id") for item in production_sources]
+        != expected_sample_ids
         or summary.get("seconds_per_input_limit")
         != SECONDS_PER_INPUT_LIMIT
         or summary.get("passed") is not True
@@ -268,6 +361,24 @@ def validate_receipt(
             expected_commit is not None
             and record.get("git_commit") != expected_commit
         )
+        or profiling.get("method")
+        != "external_cprofile_subprocess_and_rss_polling"
+        or profiling.get("participates_in_speed_gate") is not False
+        or profiling.get("stage_names") != list(STAGE_NAMES)
+        or len(profiling_sources) != FIXED_SOURCE_COUNT
+        or [item.get("sample_id") for item in profiling_sources]
+        != expected_sample_ids
+        or any(
+            set(item.get("stages", ())) != set(STAGE_NAMES)
+            or any(float(value) < 0.0 for value in item.get("stages", {}).values())
+            or float(item.get("io_total_seconds", -1.0)) < 0.0
+            or int(item.get("process_peak_rss_bytes", 0)) <= 0
+            or int(item.get("runtime_peak_temporary_bytes", -1)) < 0
+            for item in profiling_sources
+        )
+        or not isinstance(profiling.get("summary"), dict)
+        or set(profiling.get("summary", {}).get("stages", ()))
+        != {*STAGE_NAMES, "io_total"}
     ):
         raise ValueError("performance receipt identity or Gate is invalid")
 

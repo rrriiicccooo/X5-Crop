@@ -9,11 +9,14 @@ from unittest import mock
 
 from tools.regression.performance import (
     PERFORMANCE_RECEIPT_SCHEMA,
+    PRODUCTION_TIMING_BOUNDARY,
     SECONDS_PER_INPUT_LIMIT,
     frozen_dependency_identity,
     performance_environment_is_frozen,
     validate_receipt,
 )
+from tools.regression.performance_profile import STAGE_NAMES
+from tools.regression.performance_hardware import build_hardware_identity
 from tools.regression.performance_identity import (
     FIXED_SOURCE_COUNT,
     cohort_sha256,
@@ -83,36 +86,92 @@ class V5PerformanceContractTest(unittest.TestCase):
             "cohort_sha256": cohort_sha256(),
             "source_count": 24,
             "source_sha256s": [item.source_sha256 for item in sources],
-            "timing_boundary": (
-                "production_cli_startup_decode_detection_decision_sampling_"
-                "compression_write_readback_publish"
-            ),
-            "sha_validation_in_timing": False,
-            "debug_analysis_in_timing": False,
             "environment": self._environment(),
-            "summary": {
-                "mean_seconds_per_input": 4.9,
-                "p50_seconds": 4.8,
-                "p95_seconds": 5.2,
-                "slowest_seconds": 5.4,
-                "seconds_per_input_limit": SECONDS_PER_INPUT_LIMIT,
-                "passed": True,
+            "hardware": {
+                "machine_name": "named-machine",
+                "cpu_model": "test-cpu",
+                "physical_core_count": 4,
+                "logical_core_count": 8,
+                "total_memory_bytes": 16 * 1024**3,
+                "input_volume": {"filesystem": {"filesystem_kind": "apfs"}},
+                "output_volume": {"filesystem": {"filesystem_kind": "apfs"}},
+                "power": {"source": "AC"},
+                "windows_defender": {"applicable": False},
             },
-            "sources": [
-                {
-                    "sample_id": item.sample_id,
-                    "wall_seconds": 4.9,
-                    "status": "needs_review",
-                    "output_tiff_count": 0,
-                    "output_bytes": 0,
-                }
-                for item in sources
-            ],
+            "production_gate": {
+                "timing_boundary": PRODUCTION_TIMING_BOUNDARY,
+                "sha_validation_in_timing": False,
+                "debug_analysis_in_timing": False,
+                "summary": {
+                    "mean_seconds_per_input": 4.9,
+                    "p50_seconds": 4.8,
+                    "p95_seconds": 5.2,
+                    "slowest_source": sources[-1].sample_id,
+                    "slowest_seconds": 5.4,
+                    "seconds_per_input_limit": SECONDS_PER_INPUT_LIMIT,
+                    "passed": True,
+                },
+                "sources": [
+                    {
+                        "sample_id": item.sample_id,
+                        "wall_seconds": 4.9,
+                        "status": "needs_review",
+                        "output_tiff_count": 0,
+                        "output_bytes": 0,
+                    }
+                    for item in sources
+                ],
+            },
+            "profiling": {
+                "method": "external_cprofile_subprocess_and_rss_polling",
+                "participates_in_speed_gate": False,
+                "stage_names": list(STAGE_NAMES),
+                "summary": {
+                    "wall_p50_seconds": 5.0,
+                    "wall_p95_seconds": 5.5,
+                    "slowest_source": sources[-1].sample_id,
+                    "slowest_seconds": 5.5,
+                    "process_peak_rss_bytes": {},
+                    "runtime_peak_temporary_bytes": {},
+                    "stages": {
+                        name: {} for name in (*STAGE_NAMES, "io_total")
+                    },
+                },
+                "sources": [
+                    {
+                        "sample_id": item.sample_id,
+                        "wall_seconds": 5.0,
+                        "stages": {name: 0.1 for name in STAGE_NAMES},
+                        "io_total_seconds": 0.4,
+                        "process_peak_rss_bytes": 1024,
+                        "runtime_peak_temporary_bytes": 512,
+                    }
+                    for item in sources
+                ],
+            },
         }
         validate_receipt(receipt, expected_commit=commit)
-        receipt["sha_validation_in_timing"] = True
+        receipt["production_gate"]["sha_validation_in_timing"] = True
         with self.assertRaises(ValueError):
             validate_receipt(receipt, expected_commit=commit)
+
+    def test_profiling_is_external_and_cannot_participate_in_speed_gate(self) -> None:
+        runtime_source = "\n".join(
+            path.read_text(encoding="utf-8")
+            for path in (Path(__file__).resolve().parents[2] / "x5crop").rglob("*.py")
+        )
+        self.assertNotIn("cProfile", runtime_source)
+        self.assertNotIn("tracemalloc", runtime_source)
+
+    def test_hardware_identity_is_named_without_sensitive_device_identifiers(self) -> None:
+        identity = build_hardware_identity(Path(__file__).resolve().parents[2])
+        self.assertTrue(identity["cpu_model"])
+        self.assertGreater(identity["logical_core_count"], 0)
+        self.assertGreater(identity["total_memory_bytes"], 0)
+        serialized = str(identity).casefold()
+        self.assertNotIn("serial number", serialized)
+        self.assertNotIn("hardware uuid", serialized)
+        self.assertNotIn("provisioning udid", serialized)
 
     def test_performance_environment_rejects_dependency_or_thread_drift(
         self,
