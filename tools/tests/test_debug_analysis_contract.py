@@ -18,8 +18,13 @@ from x5crop.debug.canvas import FRAME_FILL_COLORS, DebugRenderCache
 from x5crop.debug.panels import (
     DEBUG_ANALYSIS_PANEL_LABELS,
     _cross_axis_panel,
+    _clip_segment_to_box,
+    _draw_hatched_polygon,
+    _keep_evidence_inside_media,
     _long_axis_panel,
+    _Projection,
     _protected_output_panel,
+    _viewport,
     make_debug_analysis_panel,
     stack_debug_panels,
 )
@@ -146,6 +151,67 @@ class DebugAnalysisContractTest(unittest.TestCase):
                 )
             ),
         )
+
+    def test_budget_hatching_preserves_the_photo_interior(self) -> None:
+        source = Image.new("RGB", (160, 160), (90, 90, 90))
+        polygon = (
+            (20.0, 20.0),
+            (140.0, 20.0),
+            (140.0, 140.0),
+            (20.0, 140.0),
+        )
+        rendered = _draw_hatched_polygon(
+            source,
+            polygon,
+            DebugStyleParameters().review_color,
+            DebugStyleParameters().budget_hatch_border_width,
+        )
+        pixels = np.asarray(rendered)
+        self.assertTrue(np.any(pixels[17:28] != 90))
+        self.assertFalse(np.any(pixels[55:105, 55:105] != 90))
+
+    def test_debug_evidence_is_clipped_to_its_media_viewport(self) -> None:
+        self.assertEqual(
+            _clip_segment_to_box(
+                (-10.0, 50.0),
+                (110.0, 50.0),
+                (10, 20, 90, 80),
+            ),
+            ((10.0, 50.0), (90.0, 50.0)),
+        )
+        base = Image.new("RGB", (100, 100), (20, 20, 20))
+        evidence = Image.new("RGB", (100, 100), (200, 40, 40))
+        clipped = np.asarray(
+            _keep_evidence_inside_media(base, evidence, (20, 30, 80, 70))
+        )
+        self.assertTrue(np.all(clipped[:30] == 20))
+        self.assertTrue(np.all(clipped[30:70, 20:80] == (200, 40, 40)))
+        self.assertTrue(np.all(clipped[70:] == 20))
+
+    def test_square_frame_strip_uses_contain_viewport_without_cross_axis_crop(
+        self,
+    ) -> None:
+        projection = _Projection(
+            source_width=2_797,
+            source_height=9_899,
+            rotate_clockwise=True,
+        )
+        source_corners = (
+            (0.0, 0.0),
+            (2_797.0, 0.0),
+            (2_797.0, 9_899.0),
+            (0.0, 9_899.0),
+        )
+        viewport = _viewport(
+            projection,
+            source_corners,
+            (27, 81, 1_602, 249),
+            padding_fraction=0.018,
+        )
+        self.assertEqual(viewport.source_box, (0, 0, 9_899, 2_797))
+        displayed = tuple(viewport.point(point) for point in source_corners)
+        self.assertGreaterEqual(min(point[1] for point in displayed), 81)
+        self.assertLessEqual(max(point[1] for point in displayed), 249)
 
     def test_cross_axis_panel_separates_detected_and_selected_edges(
         self,

@@ -144,8 +144,6 @@ def _display_points(
 def _source_box_for_points(
     projection: _Projection,
     points: tuple[tuple[float, float], ...],
-    target_width: int,
-    target_height: int,
     *,
     padding_fraction: float,
 ) -> tuple[int, int, int, int]:
@@ -169,29 +167,6 @@ def _source_box_for_points(
     top = max(0.0, top)
     right = min(float(display_width), right)
     bottom = min(float(display_height), bottom)
-    target_aspect = float(target_width) / float(target_height)
-    center_x = (left + right) / 2.0
-    center_y = (top + bottom) / 2.0
-    span_x = max(1.0, right - left)
-    span_y = max(1.0, bottom - top)
-    if span_x / span_y < target_aspect:
-        desired_x = span_y * target_aspect
-        if desired_x <= display_width:
-            span_x = desired_x
-        else:
-            span_x = float(display_width)
-            span_y = span_x / target_aspect
-    else:
-        desired_y = span_x / target_aspect
-        if desired_y <= display_height:
-            span_y = desired_y
-        else:
-            span_y = float(display_height)
-            span_x = span_y * target_aspect
-    left = min(max(0.0, center_x - span_x / 2.0), display_width - span_x)
-    top = min(max(0.0, center_y - span_y / 2.0), display_height - span_y)
-    right = left + span_x
-    bottom = top + span_y
     int_left = max(0, int(math.floor(left)))
     int_top = max(0, int(math.floor(top)))
     int_right = min(display_width, int(math.ceil(right)))
@@ -212,11 +187,28 @@ def _viewport(
     source_box = _source_box_for_points(
         projection,
         points,
-        target_right - target_left,
-        target_bottom - target_top,
         padding_fraction=padding_fraction,
     )
-    return _Viewport(projection, source_box, target_box)
+    source_left, source_top, source_right, source_bottom = source_box
+    source_aspect = (source_right - source_left) / (source_bottom - source_top)
+    available_width = target_right - target_left
+    available_height = target_bottom - target_top
+    target_aspect = available_width / available_height
+    if source_aspect >= target_aspect:
+        fitted_width = available_width
+        fitted_height = max(1, int(round(fitted_width / source_aspect)))
+    else:
+        fitted_height = available_height
+        fitted_width = max(1, int(round(fitted_height * source_aspect)))
+    fitted_left = target_left + (available_width - fitted_width) // 2
+    fitted_top = target_top + (available_height - fitted_height) // 2
+    fitted_target_box = (
+        fitted_left,
+        fitted_top,
+        fitted_left + fitted_width,
+        fitted_top + fitted_height,
+    )
+    return _Viewport(projection, source_box, fitted_target_box)
 
 
 def _paste_source(
@@ -270,6 +262,42 @@ def _draw_dashed_polyline(
                 width=width,
             )
             cursor += period
+
+
+def _clip_segment_to_box(
+    start: tuple[float, float],
+    end: tuple[float, float],
+    box: tuple[int, int, int, int],
+) -> tuple[tuple[float, float], tuple[float, float]] | None:
+    left, top, right, bottom = (float(value) for value in box)
+    x0, y0 = start
+    dx = end[0] - x0
+    dy = end[1] - y0
+    lower = 0.0
+    upper = 1.0
+    for direction, distance in (
+        (-dx, x0 - left),
+        (dx, right - x0),
+        (-dy, y0 - top),
+        (dy, bottom - y0),
+    ):
+        if abs(direction) <= 1.0e-12:
+            if distance < 0.0:
+                return None
+            continue
+        ratio = distance / direction
+        if direction < 0.0:
+            if ratio > upper:
+                return None
+            lower = max(lower, ratio)
+        else:
+            if ratio < lower:
+                return None
+            upper = min(upper, ratio)
+    return (
+        (x0 + lower * dx, y0 + lower * dy),
+        (x0 + upper * dx, y0 + upper * dy),
+    )
 
 
 def _fill_polygon(
@@ -436,6 +464,7 @@ def _draw_selected_start_end(
 ) -> None:
     font = _font(style.annotation_font_size)
     viewport_top = viewport.target_box[1]
+    labels: list[tuple[float, int, str]] = []
     for index, (_ordinal, geometry) in enumerate(geometries):
         roles = (
             ((BoundaryRole.END,) if index < len(geometries) - 1 else ())
@@ -443,7 +472,15 @@ def _draw_selected_start_end(
         )
         for role in roles:
             source_points = _boundary_points(geometry, role)
-            points = tuple(viewport.point(point) for point in source_points)
+            projected = tuple(viewport.point(point) for point in source_points)
+            clipped = _clip_segment_to_box(
+                projected[0],
+                projected[1],
+                viewport.target_box,
+            )
+            if clipped is None:
+                continue
+            points = clipped
             upper, lower = sorted(points, key=lambda point: point[1])
             dy = lower[1] - upper[1]
             dx = lower[0] - upper[0]
@@ -464,12 +501,28 @@ def _draw_selected_start_end(
             )
             target_left, _top, target_right, _bottom = viewport.target_box
             text_x = min(max(target_left, text_x), target_right - text_width)
-            draw.text(
-                (text_x, max(style.panel_title_height + 3, line_top[1] - 17)),
-                text,
-                fill=style.selected_boundary_color,
-                font=font,
-            )
+            labels.append((text_x, text_width, text))
+    occupied_right = [float("-inf"), float("-inf")]
+    label_rows = (
+        style.panel_title_height + 3,
+        style.panel_title_height + 3 + style.boundary_label_row_gap,
+    )
+    for text_x, text_width, text in sorted(labels, key=lambda item: item[0]):
+        row = next(
+            (
+                index
+                for index, right in enumerate(occupied_right)
+                if text_x >= right + style.boundary_label_horizontal_gap
+            ),
+            min(range(len(occupied_right)), key=occupied_right.__getitem__),
+        )
+        draw.text(
+            (text_x, label_rows[row]),
+            text,
+            fill=style.selected_boundary_color,
+            font=font,
+        )
+        occupied_right[row] = max(occupied_right[row], text_x + text_width)
 
 
 def _draw_detected_top_bottom(
@@ -484,10 +537,17 @@ def _draw_detected_top_bottom(
             source_points = _source_line_points(observation)
             if not source_points:
                 continue
-            points = tuple(viewport.point(point) for point in source_points)
+            projected = tuple(viewport.point(point) for point in source_points)
+            clipped = _clip_segment_to_box(
+                projected[0],
+                projected[1],
+                viewport.target_box,
+            )
+            if clipped is None:
+                continue
             _draw_dashed_polyline(
                 draw,
-                points,
+                clipped,
                 style.detected_edge_color,
                 2,
                 style.line_dash_length,
@@ -510,8 +570,16 @@ def _draw_selected_top_bottom(
             source_points = _source_line_points(boundary)
             if not source_points:
                 continue
+            projected = tuple(viewport.point(point) for point in source_points)
+            clipped = _clip_segment_to_box(
+                projected[0],
+                projected[1],
+                viewport.target_box,
+            )
+            if clipped is None:
+                continue
             draw.line(
-                tuple(viewport.point(point) for point in source_points),
+                clipped,
                 fill=style.selected_edge_color,
                 width=style.evidence_line_width,
             )
@@ -553,7 +621,7 @@ def _cross_axis_panel(
     selected = _draw_selected_top_bottom(draw, geometries, viewport, style)
     top_y = style.panel_title_height + 6
     bottom_y = style.cross_axis_panel_height - 27
-    left = style.panel_media_inset_x
+    left = viewport.target_box[0]
     if BoundaryRole.TOP in detected:
         _draw_label_chip(
             draw,
@@ -615,9 +683,17 @@ def _draw_detected_start_end(
                 if layout == "horizontal"
                 else ((lane_box.left, coordinate), (lane_box.right, coordinate))
             )
+            projected = tuple(viewport.point(point) for point in source_points)
+            clipped = _clip_segment_to_box(
+                projected[0],
+                projected[1],
+                viewport.target_box,
+            )
+            if clipped is None:
+                continue
             _draw_dashed_polyline(
                 draw,
-                tuple(viewport.point(point) for point in source_points),
+                clipped,
                 style.detected_transition_color,
                 style.raw_transition_line_width,
                 style.line_dash_length,
@@ -709,9 +785,15 @@ def _draw_hatched_polygon(
     panel: Image.Image,
     polygon: tuple[tuple[float, float], ...],
     color: tuple[int, int, int],
+    border_width: int,
 ) -> Image.Image:
     mask = Image.new("L", panel.size, 0)
-    ImageDraw.Draw(mask).polygon(polygon, fill=255)
+    ImageDraw.Draw(mask).line(
+        polygon + (polygon[0],),
+        fill=255,
+        width=border_width,
+        joint="curve",
+    )
     hatch = Image.new("RGBA", panel.size, (0, 0, 0, 0))
     draw = ImageDraw.Draw(hatch)
     left = int(math.floor(min(point[0] for point in polygon)))
@@ -722,6 +804,16 @@ def _draw_hatched_polygon(
         draw.line((offset, bottom, offset + (bottom - top), top), fill=(*color, 210), width=2)
     hatch.putalpha(Image.composite(hatch.getchannel("A"), Image.new("L", panel.size, 0), mask))
     return Image.alpha_composite(panel.convert("RGBA"), hatch).convert("RGB")
+
+
+def _keep_evidence_inside_media(
+    base: Image.Image,
+    evidence: Image.Image,
+    target_box: tuple[int, int, int, int],
+) -> Image.Image:
+    clipped = base.copy()
+    clipped.paste(evidence.crop(target_box), target_box[:2])
+    return clipped
 
 
 def _protected_output_panel(
@@ -744,7 +836,7 @@ def _protected_output_panel(
         style,
     )
     source, projection = _source_image(workspace, render_cache)
-    target_box = (
+    available_target_box = (
         style.panel_media_inset_x,
         style.output_media_top,
         panel_width - style.panel_media_inset_x,
@@ -753,10 +845,12 @@ def _protected_output_panel(
     viewport = _viewport(
         projection,
         _presentation_points(detection),
-        target_box,
+        available_target_box,
         padding_fraction=0.018,
     )
+    target_box = viewport.target_box
     _paste_source(panel, source, viewport)
+    media_base = panel.copy()
     identities = {
         (item.lane_id, item.lane_ordinal): item
         for item in detection.output_slot_identities
@@ -768,6 +862,7 @@ def _protected_output_panel(
     overlay = Image.new("RGBA", panel.size, (0, 0, 0, 0))
     overlay_draw = ImageDraw.Draw(overlay)
     envelopes = _safe_crop_envelopes(detection)
+    budget_labels: list[tuple[int, str]] = []
     for envelope in envelopes:
         identity = identities[(envelope.lane_id, envelope.lane_ordinal)]
         color = _frame_color(identity.global_output_ordinal)
@@ -807,17 +902,26 @@ def _protected_output_panel(
         )
         budget = budgets.get(envelope.geometry_id)
         if budget is not None and budget.state.value == "contradicted":
-            panel = _draw_hatched_polygon(panel, constrained, style.review_color)
+            panel = _draw_hatched_polygon(
+                panel,
+                constrained,
+                style.review_color,
+                style.budget_hatch_border_width,
+            )
             draw = ImageDraw.Draw(panel)
-            label = "BUDGET VIOLATION"
-            font = _font(style.annotation_font_size)
-            width = _text_width(draw, label, font)
-            x = max(target_box[0], min(target_box[2] - width, constrained[0][0]))
-            draw.text(
-                (x, target_box[1] - 35),
-                label,
-                fill=style.review_color,
-                font=font,
+            failed_roles = "/".join(
+                edge.role.value.upper()
+                for edge in budget.edge_assessments
+                if not edge.within_limit
+            )
+            budget_labels.append(
+                (
+                    max(
+                        target_box[0],
+                        int(math.floor(min(point[0] for point in constrained))),
+                    ),
+                    f"F{identity.global_output_ordinal} · BUDGET {failed_roles}",
+                )
             )
         left = max(
             target_box[0] + 4,
@@ -834,6 +938,21 @@ def _protected_output_panel(
             color,
             style,
         )
+    panel = _keep_evidence_inside_media(media_base, panel, target_box)
+    draw = ImageDraw.Draw(panel)
+    budget_font = _font(style.annotation_font_size)
+    previous_right = target_box[0]
+    for proposed_x, label in sorted(budget_labels):
+        label_width = _text_width(draw, label, budget_font)
+        x = max(previous_right + style.boundary_label_horizontal_gap, proposed_x)
+        x = min(x, target_box[2] - label_width)
+        draw.text(
+            (x, target_box[1] - 23),
+            label,
+            fill=style.review_color,
+            font=budget_font,
+        )
+        previous_right = x + label_width
     footer_font = _font(style.annotation_font_size)
     if envelopes:
         footer = (

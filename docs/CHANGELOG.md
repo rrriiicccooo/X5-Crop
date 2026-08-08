@@ -54,7 +54,8 @@ standalone 只消费 current schema；不存在 V4.9 fallback、shim、feature f
   final output、budget 与 source-atomic decision。Deskew/identity 与 Orientation 只在右上状态头
   显示一次；原始输入文件名在左上状态头显示一次。它不重新计算任何检测事实，也不在 current
   report 未保存 polygon 时伪造
-  `MaximumLegalWindow`。
+  `MaximumLegalWindow`。图像 evidence 裁切在 media viewport 内；密集 START/END 标签自动错行，
+  budget violation 只在候选框边缘使用斜线，避免遮盖照片与安全包络。
 
 验证拓扑已统一为
 `tools/verify staged|full|accuracy|diagnostic|performance|non-detection|audit|platform|platform-check|platform-package|pre-push`。

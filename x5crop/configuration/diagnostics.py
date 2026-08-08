@@ -48,6 +48,9 @@ class DebugStyleParameters:
     evidence_line_width: int = 3
     raw_transition_line_width: int = 1
     annotation_extension: int = 22
+    boundary_label_row_gap: int = 15
+    boundary_label_horizontal_gap: int = 5
+    budget_hatch_border_width: int = 8
     line_dash_length: int = 7
     line_dash_gap: int = 5
     title_font_size: int = 18
@@ -97,6 +100,9 @@ class DebugStyleParameters:
             self.evidence_line_width,
             self.raw_transition_line_width,
             self.annotation_extension,
+            self.boundary_label_row_gap,
+            self.boundary_label_horizontal_gap,
+            self.budget_hatch_border_width,
             self.line_dash_length,
             self.line_dash_gap,
             self.title_font_size,

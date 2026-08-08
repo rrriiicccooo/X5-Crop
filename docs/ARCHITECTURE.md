@@ -356,7 +356,9 @@ JPEG 编码；竖向片条只旋转展示坐标，不改变 source facts。实�
 只在右上状态头出现，原始输入文件名只在左上状态头出现，三联内部不重复。文件名直接来自
 runtime 的输入路径 basename，不从输出名或 report 反推。当前 report 没有可绘制的
 `MaximumLegalWindow` polygon，
-因此不伪造绿色窗口。Pillow 只在用户显式启用 Debug Analysis 后延迟导入。
+因此不伪造绿色窗口。所有图像 evidence 都裁切在各联的 media viewport 内；START/END 只向图片
+上缘外延伸并在近邻时错行避让。Budget violation 使用框边斜线而非整面遮罩，避免覆盖照片、安全
+包络与逐帧颜色。Pillow 只在用户显式启用 Debug Analysis 后延迟导入。
 
 ## 9. 生产路径与开发验证
 
