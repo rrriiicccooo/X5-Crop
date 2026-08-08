@@ -87,8 +87,7 @@ Command-line example:
 python3 X5_Crop.py /path/to/scans \
   --format 120-66 \
   --strip partial \
-  --count auto \
-  --jobs 2
+  --count auto
 ```
 
 Production options:
@@ -100,8 +99,10 @@ Production options:
 - `--strip`: `full` or `partial`.
 - `--count N|auto`: authoritative partial count or matched-holder capacity;
   full mode uses the fixed format count.
-- `--jobs N`: source concurrency; default 2, maximum 3. Numerical library
-  threads remain fixed at 1.
+- `--jobs N`: source concurrency; default 1, maximum 3. The default limits peak
+  memory on ordinary computers; when memory is plentiful and processing a batch
+  of source TIFFs, you may explicitly use `--jobs 2`. Numerical library threads
+  remain fixed at 1.
 - `--debug-analysis`: explicitly write a three-panel diagnostic JPG on a fixed
   `1653 × 952` dark audit grid. It preserves source authority, pixel evidence,
   canonical placement, protected output, the actual deskew angle, and Orientation.

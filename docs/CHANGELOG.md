@@ -45,7 +45,8 @@ standalone 只消费 current schema；不存在 V4.9 fallback、shim、feature f
   因此 `Pillow`/`pillow` 等价拼写只表示同一个 owner，真正不同的 OpenCV distributions 仍会在
   写入前停止。
 - OpenCV 内部线程先请求 1；若当前并发 backend 忽略该值，则改用 0 明确关闭内部并发，使
-  不同 OpenCV provider 都保持实际单线程，source 级并发仍只由 `--jobs` 拥有。
+  不同 OpenCV provider 都保持实际单线程，source 级并发仍只由 `--jobs` 拥有。正式运行默认
+  `--jobs 1` 以约束一般电脑的峰值内存；`--jobs 2/3` 保留为内存充足时的显式批量选择。
 - 正式 CLI 删除 `--overwrite`、`--diagnostics` 和旧 debug flags；未验证文件系统的非交互运行必须
   显式使用 `--allow-best-effort-output`，但该选择不能绕过锁、路径、rename 或空间硬失败。
 - Debug Analysis 改为三联图但保留四层 V5 facts：source authority 与 pixel evidence 合并展示，

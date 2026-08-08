@@ -218,19 +218,24 @@ class CurrentOnlyContractTest(unittest.TestCase):
                 parser.parse_args(["input.tif", "--format", "135", removed])
 
     def test_standard_job_default_and_caps_are_distinct(self) -> None:
-        self.assertEqual(STANDARD_JOB_DEFAULT, 2)
+        self.assertEqual(STANDARD_JOB_DEFAULT, 1)
         self.assertEqual(STANDARD_JOB_LIMIT, 3)
 
         parser = build_parser()
         default_options = options_from_args(
             parser.parse_args(["input.tif", "--format", "135"])
         )
+        explicit_two_options = options_from_args(
+            parser.parse_args(
+                ["input.tif", "--format", "135", "--jobs", "2"]
+            )
+        )
         normal_four_options = options_from_args(
             parser.parse_args(
                 ["input.tif", "--format", "135", "--jobs", "4"]
             )
         )
-        self.assertEqual(default_options.jobs, 2)
+        self.assertEqual(default_options.jobs, 1)
 
         with (
             mock.patch(
@@ -240,6 +245,10 @@ class CurrentOnlyContractTest(unittest.TestCase):
         ):
             self.assertEqual(
                 runtime_invocation_from_options(default_options).config.jobs,
+                1,
+            )
+            self.assertEqual(
+                runtime_invocation_from_options(explicit_two_options).config.jobs,
                 2,
             )
             self.assertEqual(

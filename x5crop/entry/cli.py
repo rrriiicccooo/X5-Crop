@@ -77,7 +77,7 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=STANDARD_JOB_DEFAULT,
         help=(
-            "Parallel TIFF workers. Default 2; capped at 3."
+            "Parallel TIFF workers. Default 1; capped at 3."
         ),
     )
     parser.add_argument("--interactive", action="store_true", help="Prompt for format, mode, and Debug Analysis options.")

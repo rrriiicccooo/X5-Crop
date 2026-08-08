@@ -430,9 +430,10 @@ V5 的内存为一维 profiles、有限 runs/votes/groups、typed geometry 与�
 10 × source_pixels + 32 MiB
 ```
 
-X5 Crop 是唯一并发 owner：`--jobs` 调度 sources，OpenCV、BLAS、OpenMP 与 SciPy 内部线程固定
-为 1。性能 receipt 固定 24 sources，并绑定 Git commit、cohort SHA、source SHAs、依赖与线程
-身份；当前 commit 未生成有效 receipt 时不得作性能完成声明。
+X5 Crop 是唯一并发 owner：`--jobs` 调度 sources，生产默认值为 1、上限为 3；内存充足的批量
+任务可显式选择 2 或 3。OpenCV、BLAS、OpenMP 与 SciPy 内部线程固定为 1。性能 receipt 固定
+24 sources，并绑定 Git commit、cohort SHA、source SHAs、依赖与线程身份；当前 commit 未生成
+有效 receipt 时不得作性能完成声明。
 
 性能验证分两遍。第一遍只计时完全相同的 production CLI，记录逐 source wall、输出数量与大小，
 且只有 mean wall 不超过 5 秒参与正式 Gate。第二遍由开发子进程在既有 runtime stage boundary
