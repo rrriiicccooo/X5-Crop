@@ -53,9 +53,10 @@ standalone 只消费 current schema；不存在 V4.9 fallback、shim、feature f
 当前完成边界：合成 full contracts 已通过 123 项（1 项平台条件跳过）；九张黄金十四项中，
 S027、S035、S091 explicit/auto 与 S094 已正式通过，S055 和 S098 保持安全送审，仍有六个
 nominal 任务未达到冻结标准。111-source 工程诊断已达到 111/111，但
-24-source 当前 commit 性能 receipt，以及 Windows x64、Apple Silicon、Intel macOS 的真实
-TIFF、中文路径、文件占用、恢复与性能 receipt 尚未完成。因此 V5 不是 release-ready，也不能
-宣布三平台正式支持。
+Apple Silicon 的 24-source performance receipt 已绑定 runtime commit `4ca03877` 并通过：
+平均 4.574 秒/输入，p50 4.575 秒，p95 7.080 秒，最慢 9.700 秒。Windows x64、Intel macOS
+性能，以及三平台完整依赖安装、真实 TIFF、中文路径、文件占用与恢复验证仍未完成。因此 V5
+不是 release-ready，也不能宣布三平台正式支持。
 
 ## V4.9（架构实验，不发布）
 
