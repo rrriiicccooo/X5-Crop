@@ -25,15 +25,16 @@ Download `X5-Crop-vX.X.zip` from
 [GitHub Releases](https://github.com/rrriiicccooo/X5-Crop/releases). Do not use
 GitHub's generated Source code archive.
 
-The release package supports Python 3.12–3.14 and freezes these dependencies:
+The release package supports Python 3.12–3.14 and freezes these importable
+module versions:
 
 ```text
-numpy==2.5.1
-scipy==1.18.0
-opencv-python-headless==5.0.0.93
-tifffile==2026.7.31
-imagecodecs==2026.6.26
-Pillow==12.3.0
+numpy       2.5.1
+scipy       1.18.0
+cv2         5.0.0
+tifffile    2026.7.31
+imagecodecs 2026.6.26
+PIL         12.3.0
 ```
 
 Run the platform installer:
@@ -41,15 +42,22 @@ Run the platform installer:
 - macOS: `install/X5_Crop_Mac_install.command`
 - Windows: `install/X5_Crop_win_install.bat`
 
-Dependencies are installed in the target Python's user package site. No private
-`.venv` is created. If a frozen dependency already exists at another version,
-the installer stops before upgrading, downgrading, or overwriting it. If the
-target Python can already import `cv2` but has no supported OpenCV distribution
-metadata, as with a Homebrew-provided build, setup also stops before changing
-anything instead of layering `opencv-python-headless` over that provider. Such
-a self-managed environment may run the program directly when its other
-dependencies are satisfied, but it does not satisfy the frozen setup or formal
-performance-receipt environment.
+Setup first selects a supported global Python, then checks each importable
+module, version, and origin. A usable version is reused unchanged whether it
+came from Homebrew, pip, or another provider. Only missing modules receive the
+smallest frozen binary-wheel install in that Python's user package site. When
+an existing version is wrong, setup uses the confirmed Homebrew or pip owner to
+update it. An unknown owner causes a safe stop before any second package can
+hide the original environment.
+
+Homebrew is not required and is never installed merely to obtain OpenCV. If
+`cv2` is missing, the user-site fallback is
+`opencv-python-headless==5.0.0.93`; an already usable Homebrew, pip, or other
+OpenCV provider remains untouched. No private `.venv` is created, so the same
+Python can run standalone `X5_Crop.py` from any folder. Uninstall removes only
+user packages that the receipt proves X5 Crop introduced and that no other
+package still uses; it never rolls back pre-existing packages or Homebrew
+updates.
 
 ## Input Contract
 

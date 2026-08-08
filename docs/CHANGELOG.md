@@ -37,11 +37,12 @@ standalone 只消费 current schema；不存在 V4.9 fallback、shim、feature f
 - 普通运行不计算 source-content SHA，不加载 cohort、comparator、profiling、receipt、Git 或故障
   注入。Pillow 只在显式启用 Debug Analysis 时延迟导入。开发工具先在计时外核对 source SHA，
   再以子进程调用完全相同的正式 CLI。
-- 依赖安装器会在 pip 前识别“`cv2` 已可导入但缺少受支持 OpenCV distribution metadata”的
-  外部 provider，并保持 package 与 receipt 均不变地停止；不会在 Homebrew OpenCV 上叠加
-  `opencv-python-headless`，也不会把模块版本冒充冻结 wheel 身份。
+- 依赖合同改为 provider-neutral 的模块能力合同。安装器逐项检查 fresh import、模块版本与真实
+  ownership：可用项零改动复用，缺失项才安装 user-site binary wheel，版本不符项沿已确认的
+  pip distribution 或 Homebrew formula 更新；未知 provider 在写入前停止。Homebrew 从来不是
+  macOS 前置条件，OpenCV 也不再由 distribution metadata 是否存在决定“已安装/未安装”。
 - OpenCV 内部线程先请求 1；若当前并发 backend 忽略该值，则改用 0 明确关闭内部并发，使
-  Homebrew 与冻结 wheel 都保持实际单线程，source 级并发仍只由 `--jobs` 拥有。
+  不同 OpenCV provider 都保持实际单线程，source 级并发仍只由 `--jobs` 拥有。
 - 正式 CLI 删除 `--overwrite`、`--diagnostics` 和旧 debug flags；未验证文件系统的非交互运行必须
   显式使用 `--allow-best-effort-output`，但该选择不能绕过锁、路径、rename 或空间硬失败。
 
@@ -50,13 +51,13 @@ standalone 只消费 current schema；不存在 V4.9 fallback、shim、feature f
 使用九张 source-SHA-bound 黄金的十四项正式 CLI 任务；`diagnostic` 以正式 CLI 运行 111 sources；
 `performance` 在外部 SHA 核对后测量 24-source 完整用户路径并绑定 commit、依赖和 workload。
 
-当前完成边界：合成 full contracts 已通过 123 项（1 项平台条件跳过）；九张黄金十四项中，
+当前完成边界：合成 full contracts 已通过 126 项（1 项平台条件跳过）；九张黄金十四项中，
 S027、S035、S091 explicit/auto 与 S094 已正式通过，S055 和 S098 保持安全送审，仍有六个
 nominal 任务未达到冻结标准。111-source 工程诊断已达到 111/111，但
-Apple Silicon 的 24-source performance receipt 已绑定 runtime commit `4ca03877` 并通过：
-平均 4.574 秒/输入，p50 4.575 秒，p95 7.080 秒，最慢 9.700 秒。Windows x64、Intel macOS
-性能，以及三平台完整依赖安装、真实 TIFF、中文路径、文件占用与恢复验证仍未完成。因此 V5
-不是 release-ready，也不能宣布三平台正式支持。
+原先绑定 `4ca03877` 的 Apple Silicon receipt 使用临时 PyPI OpenCV overlay，其依赖身份已由
+current-only provider-neutral 合同替代，不能继续作为当前 tree 的性能凭据。Windows x64、Intel
+macOS 性能，以及三平台完整依赖安装、真实 TIFF、中文路径、文件占用与恢复验证仍未完成。
+因此 V5 不是 release-ready，也不能宣布三平台正式支持。
 
 ## V4.9（架构实验，不发布）
 

@@ -19,15 +19,15 @@ TIFF 写出均成立时才输出正式照片，否则整张 source 进入 `needs
 从 [GitHub Releases](https://github.com/rrriiicccooo/X5-Crop/releases) 下载
 `X5-Crop-vX.X.zip`。不要使用 GitHub 自动生成的 Source code 压缩包。
 
-发布包支持 Python 3.12–3.14，并固定以下依赖：
+发布包支持 Python 3.12–3.14，并固定以下可导入模块版本：
 
 ```text
-numpy==2.5.1
-scipy==1.18.0
-opencv-python-headless==5.0.0.93
-tifffile==2026.7.31
-imagecodecs==2026.6.26
-Pillow==12.3.0
+numpy       2.5.1
+scipy       1.18.0
+cv2         5.0.0
+tifffile    2026.7.31
+imagecodecs 2026.6.26
+PIL         12.3.0
 ```
 
 运行平台安装器：
@@ -35,11 +35,16 @@ Pillow==12.3.0
 - macOS：`install/X5_Crop_Mac_install.command`
 - Windows：`install/X5_Crop_win_install.bat`
 
-安装器把依赖安装到目标 Python 的用户级 site，不建立私有 `.venv`。如果任一冻结依赖已经以
-其它版本存在，安装器会在改动 package 前停止，不会静默升级、降级或覆盖。如果目标 Python
-已经能导入 `cv2`，但没有受支持的 OpenCV distribution metadata（例如由 Homebrew 提供），
-安装器同样会在改动前停止，不会在现有 `cv2` 上叠加 `opencv-python-headless`。这类自行管理的
-环境在其它依赖均满足时可以直接运行程序，但不满足冻结依赖安装或正式 performance receipt。
+安装器先选择一份受支持的全局 Python，再逐项检查实际可导入模块、版本和来源。版本已经满足时
+直接复用，不因模块来自 Homebrew、pip 或其它来源而重复安装。缺失模块才使用该 Python 的用户级
+pip 安装最小的冻结 binary wheel；已有版本不符时，能够确认 Homebrew 或 pip ownership 才沿用
+原 package manager 更新。来源无法安全确认时会在改动前停止，不用第二份包遮盖未知环境。
+
+Homebrew 不是前置条件，安装器不会为了 OpenCV 强制安装 Homebrew。缺少 `cv2` 时，默认用户级
+fallback 是 `opencv-python-headless==5.0.0.93`；已经可用的 Homebrew `opencv`、pip OpenCV 或
+其它 provider 都保持原样。用户级 site 不建立私有 `.venv`，因此同一 Python 可在任意文件夹
+运行独立的 `X5_Crop.py`。卸载器只删除收据确认由 X5 Crop 新增且未被其它包使用的用户级包，
+不会回滚已有包或 Homebrew 更新。
 
 ## 输入合同
 

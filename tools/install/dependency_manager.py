@@ -1,48 +1,72 @@
-"""Install and conservatively remove X5 Crop's pinned user dependencies."""
+"""Install and conservatively remove X5 Crop's user dependencies."""
 
 from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass
 import hashlib
-from importlib import metadata, util
+from importlib import metadata
 import json
 import os
 from pathlib import Path
-import platform
 import re
+import shutil
 import site
 import struct
 import subprocess
 import sys
+import tomllib
 from typing import Mapping, Sequence
 
 
-RECEIPT_SCHEMA = "x5crop_user_dependencies_v1"
+CONTRACT_SCHEMA = "x5crop_dependencies_v2"
+RECEIPT_SCHEMA = "x5crop_user_dependencies_v2"
 SUPPORTED_PYTHON_MIN = (3, 12)
 SUPPORTED_PYTHON_MAX_EXCLUSIVE = (3, 15)
-REQUIREMENT_PATTERN = re.compile(
-    r"^([A-Za-z0-9][A-Za-z0-9._-]*)==([^\s;]+)$"
-)
 REQUIREMENT_NAME_PATTERN = re.compile(
     r"^\s*([A-Za-z0-9][A-Za-z0-9._-]*)"
-)
-IMPORT_CHECK = (
-    "import cv2, imagecodecs, numpy, scipy, tifffile; "
-    "from PIL import Image; print('Dependencies OK')"
-)
-CONFLICTING_OPENCV_DISTRIBUTIONS = (
-    "opencv-contrib-python",
-    "opencv-contrib-python-headless",
-    "opencv-python",
-    "opencv-python-rolling",
 )
 
 
 @dataclass(frozen=True)
-class PackagePin:
+class DependencyPin:
+    name: str
+    module: str
+    module_version: str
+    pip_distribution: str
+    pip_version: str
+    homebrew_formula: str | None
+
+
+@dataclass(frozen=True)
+class DependencyContract:
+    dependencies: tuple[DependencyPin, ...]
+
+    def by_name(self) -> dict[str, DependencyPin]:
+        return {pin.name: pin for pin in self.dependencies}
+
+
+@dataclass(frozen=True)
+class DependencyState:
+    name: str
+    module: str
+    available: bool
+    module_version: str | None
+    module_origin: str | None
+    provider: str
+    package: str | None
+    package_version: str | None
+    build_information_sha256: str | None
+    import_error: str | None = None
+
+    def satisfies(self, pin: DependencyPin) -> bool:
+        return self.available and self.module_version == pin.module_version
+
+
+@dataclass(frozen=True)
+class PipInstall:
+    name: str
     distribution: str
-    canonical_name: str
     version: str
 
 
@@ -56,34 +80,73 @@ def canonical_distribution_name(name: str) -> str:
     return re.sub(r"[-_.]+", "-", name).lower()
 
 
-def load_pins(path: Path) -> tuple[PackagePin, ...]:
-    pins: list[PackagePin] = []
-    seen: set[str] = set()
-    for line_number, raw_line in enumerate(
-        path.read_text(encoding="utf-8").splitlines(), start=1
-    ):
-        line = raw_line.strip()
-        if not line or line.startswith("#"):
-            continue
-        match = REQUIREMENT_PATTERN.fullmatch(line)
-        if match is None:
-            raise ValueError(
-                f"{path}:{line_number}: every dependency must use an exact == pin"
-            )
-        distribution, version = match.groups()
-        canonical_name = canonical_distribution_name(distribution)
-        if canonical_name in seen:
-            raise ValueError(f"{path}:{line_number}: duplicate dependency {distribution}")
-        seen.add(canonical_name)
-        pins.append(PackagePin(distribution, canonical_name, version))
-    if not pins:
+def _contract_string(
+    record: Mapping[str, object], key: str, context: str
+) -> str:
+    value = record.get(key)
+    if not isinstance(value, str) or not value or value.strip() != value:
+        raise ValueError(f"{context}: {key} must be one non-empty string")
+    return value
+
+
+def load_dependency_contract(path: Path) -> DependencyContract:
+    try:
+        payload = tomllib.loads(path.read_text(encoding="utf-8"))
+    except tomllib.TOMLDecodeError as exc:
+        raise ValueError(f"Invalid dependency contract: {path}: {exc}") from exc
+    if set(payload) != {"schema", "dependencies"}:
+        raise ValueError(f"{path}: dependency contract fields are not current")
+    if payload.get("schema") != CONTRACT_SCHEMA:
+        raise ValueError(f"Unsupported dependency contract: {path}")
+    raw_dependencies = payload.get("dependencies")
+    if not isinstance(raw_dependencies, list) or not raw_dependencies:
         raise ValueError(f"{path}: no dependencies found")
-    return tuple(pins)
+
+    required_fields = {
+        "name",
+        "module",
+        "module_version",
+        "pip_distribution",
+        "pip_version",
+    }
+    allowed_fields = required_fields | {"homebrew_formula"}
+    dependencies: list[DependencyPin] = []
+    names: set[str] = set()
+    modules: set[str] = set()
+    for index, raw_record in enumerate(raw_dependencies, start=1):
+        context = f"{path}: dependencies[{index}]"
+        if (
+            not isinstance(raw_record, dict)
+            or not required_fields.issubset(raw_record)
+            or not set(raw_record).issubset(allowed_fields)
+        ):
+            raise ValueError(f"{context}: dependency fields are not current")
+        formula = raw_record.get("homebrew_formula")
+        if formula is not None and (
+            not isinstance(formula, str)
+            or not formula
+            or formula.strip() != formula
+        ):
+            raise ValueError(f"{context}: homebrew_formula is invalid")
+        pin = DependencyPin(
+            name=_contract_string(raw_record, "name", context),
+            module=_contract_string(raw_record, "module", context),
+            module_version=_contract_string(raw_record, "module_version", context),
+            pip_distribution=_contract_string(
+                raw_record, "pip_distribution", context
+            ),
+            pip_version=_contract_string(raw_record, "pip_version", context),
+            homebrew_formula=formula,
+        )
+        if pin.name in names or pin.module in modules:
+            raise ValueError(f"{context}: duplicate dependency identity")
+        names.add(pin.name)
+        modules.add(pin.module)
+        dependencies.append(pin)
+    return DependencyContract(tuple(dependencies))
 
 
-def installed_versions(
-    selected: Mapping[str, str],
-) -> dict[str, str]:
+def installed_versions(selected: Mapping[str, str]) -> dict[str, str]:
     versions: dict[str, str] = {}
     for canonical_name, distribution in selected.items():
         try:
@@ -134,21 +197,342 @@ def installed_dependency_users() -> dict[str, set[str]]:
     return users
 
 
-def installed_opencv_conflicts() -> dict[str, str]:
-    conflicts: dict[str, str] = {}
-    for distribution in CONFLICTING_OPENCV_DISTRIBUTIONS:
-        try:
-            conflicts[distribution] = metadata.version(distribution)
-        except metadata.PackageNotFoundError:
-            pass
-    return conflicts
+def _fresh_module_records(
+    contract: DependencyContract,
+) -> dict[str, dict[str, object]]:
+    specifications = [
+        {
+            "name": pin.name,
+            "module": pin.module,
+            "pip_distribution": pin.pip_distribution,
+        }
+        for pin in contract.dependencies
+    ]
+    script = (
+        "from importlib import import_module, metadata\n"
+        "import hashlib\n"
+        "import json\n"
+        "from pathlib import Path\n"
+        "import sys\n"
+        "specifications = json.loads(sys.argv[1])\n"
+        "owners = metadata.packages_distributions()\n"
+        "records = {}\n"
+        "for spec in specifications:\n"
+        "    name = spec['name']\n"
+        "    module_name = spec['module']\n"
+        "    top_level = module_name.split('.', 1)[0]\n"
+        "    candidates = set(owners.get(top_level, ()))\n"
+        "    candidates.add(spec['pip_distribution'])\n"
+        "    distributions = {}\n"
+        "    for candidate in candidates:\n"
+        "        try:\n"
+        "            package = metadata.distribution(candidate)\n"
+        "        except metadata.PackageNotFoundError:\n"
+        "            continue\n"
+        "        distributions[candidate] = {\n"
+        "            'version': package.version,\n"
+        "            'root': str(Path(package.locate_file('')).resolve()),\n"
+        "        }\n"
+        "    try:\n"
+        "        module = import_module(module_name)\n"
+        "    except Exception as error:\n"
+        "        records[name] = {\n"
+        "            'available': False,\n"
+        "            'module_version': None,\n"
+        "            'module_origin': None,\n"
+        "            'build_information_sha256': None,\n"
+        "            'import_error': f'{type(error).__name__}: {error}',\n"
+        "            'distributions': distributions,\n"
+        "        }\n"
+        "        continue\n"
+        "    origin = getattr(module, '__file__', None)\n"
+        "    build = None\n"
+        "    if module_name == 'cv2':\n"
+        "        build = hashlib.sha256(\n"
+        "            module.getBuildInformation().encode('utf-8')\n"
+        "        ).hexdigest()\n"
+        "    records[name] = {\n"
+        "        'available': True,\n"
+        "        'module_version': str(getattr(module, '__version__', 'unavailable')),\n"
+        "        'module_origin': None if origin is None else str(Path(origin).resolve()),\n"
+        "        'build_information_sha256': build,\n"
+        "        'import_error': None,\n"
+        "        'distributions': distributions,\n"
+        "    }\n"
+        "print(json.dumps(records))\n"
+    )
+    completed = subprocess.run(
+        [sys.executable, "-c", script, json.dumps(specifications)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if completed.returncode:
+        detail = completed.stderr.strip() or "dependency inspection failed"
+        raise RuntimeError(f"Dependency inspection failed: {detail}")
+    payload = json.loads(completed.stdout)
+    if not isinstance(payload, dict):
+        raise RuntimeError("Dependency inspection returned an invalid record")
+    return {
+        str(name): dict(record)
+        for name, record in payload.items()
+        if isinstance(record, dict)
+    }
 
 
-def visible_cv2_origin() -> str | None:
-    spec = util.find_spec("cv2")
-    if spec is None:
+def _homebrew_executable() -> str | None:
+    candidates = (
+        shutil.which("brew"),
+        "/opt/homebrew/bin/brew",
+        "/usr/local/bin/brew",
+    )
+    for candidate in dict.fromkeys(candidates):
+        if candidate and Path(candidate).is_file():
+            return candidate
+    return None
+
+
+def _run_capture(command: Sequence[str]) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        list(command),
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+
+def _homebrew_package_for_origin(
+    pin: DependencyPin,
+    module_origin: str | None,
+) -> tuple[str, str] | None:
+    if pin.homebrew_formula is None or module_origin is None:
         return None
-    return str(spec.origin or "origin unavailable")
+    brew = _homebrew_executable()
+    if brew is None:
+        return None
+    cellar_result = _run_capture((brew, "--cellar", pin.homebrew_formula))
+    versions_result = _run_capture(
+        (brew, "list", "--versions", "--formula", pin.homebrew_formula)
+    )
+    if cellar_result.returncode or versions_result.returncode:
+        return None
+    cellar = Path(cellar_result.stdout.strip()).resolve()
+    origin = Path(module_origin).resolve()
+    try:
+        origin.relative_to(cellar)
+    except ValueError:
+        return None
+    fields = versions_result.stdout.split()
+    if fields[:1] != [pin.homebrew_formula] or len(fields) != 2:
+        return None
+    return pin.homebrew_formula, fields[1]
+
+
+def _pip_package_for_record(
+    pin: DependencyPin,
+    record: Mapping[str, object],
+) -> tuple[str, str] | None:
+    raw_distributions = record.get("distributions")
+    if not isinstance(raw_distributions, dict) or not raw_distributions:
+        return None
+    origin_value = record.get("module_origin")
+    origin = None if origin_value is None else Path(str(origin_value)).resolve()
+    preferred = canonical_distribution_name(pin.pip_distribution)
+    ordered = sorted(
+        raw_distributions,
+        key=lambda name: canonical_distribution_name(str(name)) != preferred,
+    )
+    matches: list[tuple[str, str]] = []
+    for raw_name in ordered:
+        detail = raw_distributions.get(raw_name)
+        if not isinstance(detail, dict) or "version" not in detail:
+            continue
+        if origin is not None and detail.get("root") is not None:
+            root = Path(str(detail["root"])).resolve()
+            try:
+                origin.relative_to(root)
+            except ValueError:
+                continue
+        matches.append((str(raw_name), str(detail["version"])))
+    unique = tuple(dict.fromkeys(matches))
+    if len(unique) > 1:
+        owners = ", ".join(name for name, _version in unique)
+        raise RuntimeError(
+            f"{pin.module} has ambiguous pip ownership ({owners}); "
+            "no dependency was changed"
+        )
+    return None if not unique else unique[0]
+
+
+def inspect_dependency_states(
+    contract: DependencyContract,
+) -> tuple[DependencyState, ...]:
+    records = _fresh_module_records(contract)
+    states: list[DependencyState] = []
+    for pin in contract.dependencies:
+        record = records.get(pin.name)
+        if record is None:
+            raise RuntimeError(f"Dependency inspection omitted {pin.name}")
+        available = bool(record.get("available"))
+        origin = (
+            None
+            if record.get("module_origin") is None
+            else str(record["module_origin"])
+        )
+        homebrew = _homebrew_package_for_origin(pin, origin)
+        pip_package = _pip_package_for_record(pin, record)
+        if homebrew is not None:
+            provider = "homebrew"
+            package, package_version = homebrew
+        elif pip_package is not None:
+            provider = "pip"
+            package, package_version = pip_package
+        elif available:
+            provider = "external"
+            package = pin.module
+            package_version = (
+                None
+                if record.get("module_version") is None
+                else str(record["module_version"])
+            )
+        else:
+            provider = "missing"
+            package = None
+            package_version = None
+        states.append(
+            DependencyState(
+                name=pin.name,
+                module=pin.module,
+                available=available,
+                module_version=(
+                    None
+                    if record.get("module_version") is None
+                    else str(record["module_version"])
+                ),
+                module_origin=origin,
+                provider=provider,
+                package=package,
+                package_version=package_version,
+                build_information_sha256=(
+                    None
+                    if record.get("build_information_sha256") is None
+                    else str(record["build_information_sha256"])
+                ),
+                import_error=(
+                    None
+                    if record.get("import_error") is None
+                    else str(record["import_error"])
+                ),
+            )
+        )
+    return tuple(states)
+
+
+def _homebrew_can_supply(pin: DependencyPin) -> bool:
+    if pin.homebrew_formula is None:
+        return False
+    brew = _homebrew_executable()
+    if brew is None:
+        return False
+    completed = _run_capture((brew, "info", "--json=v2", pin.homebrew_formula))
+    if completed.returncode:
+        return False
+    try:
+        payload = json.loads(completed.stdout)
+        stable = str(payload["formulae"][0]["versions"]["stable"])
+    except (KeyError, IndexError, TypeError, json.JSONDecodeError):
+        return False
+    return stable.split("_", 1)[0] == pin.module_version
+
+
+def _update_homebrew_formula(formula: str) -> None:
+    brew = _homebrew_executable()
+    if brew is None:
+        raise RuntimeError("Homebrew provider disappeared before update")
+    completed = subprocess.run([brew, "upgrade", formula], check=False)
+    if completed.returncode:
+        raise RuntimeError(f"Homebrew failed to update {formula}")
+
+
+def _pip_command(
+    actions: Sequence[PipInstall],
+    *,
+    break_system_packages: bool,
+    dry_run: bool,
+) -> list[str]:
+    command = [
+        sys.executable,
+        "-m",
+        "pip",
+        "install",
+        "--user",
+        "--upgrade",
+        "--disable-pip-version-check",
+        "--no-cache-dir",
+        "--only-binary=:all:",
+        "--no-deps",
+    ]
+    if dry_run:
+        command.append("--dry-run")
+    if break_system_packages:
+        command.append("--break-system-packages")
+    command.extend(
+        f"{action.distribution}=={action.version}" for action in actions
+    )
+    return command
+
+
+def _preflight_pip(
+    actions: Sequence[PipInstall],
+    *,
+    break_system_packages: bool,
+) -> int:
+    return subprocess.run(
+        _pip_command(
+            actions,
+            break_system_packages=break_system_packages,
+            dry_run=True,
+        ),
+        check=False,
+    ).returncode
+
+
+def _ensure_pip_available() -> int:
+    available = subprocess.run(
+        [sys.executable, "-m", "pip", "--version"],
+        check=False,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    if available.returncode == 0:
+        return 0
+    bootstrapped = subprocess.run(
+        [sys.executable, "-m", "ensurepip", "--user"],
+        check=False,
+    )
+    if bootstrapped.returncode:
+        return bootstrapped.returncode
+    return subprocess.run(
+        [sys.executable, "-m", "pip", "--version"],
+        check=False,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    ).returncode
+
+
+def _install_with_pip(
+    actions: Sequence[PipInstall],
+    *,
+    break_system_packages: bool,
+) -> int:
+    return subprocess.run(
+        _pip_command(
+            actions,
+            break_system_packages=break_system_packages,
+            dry_run=False,
+        ),
+        check=False,
+    ).returncode
 
 
 def build_uninstall_plan(
@@ -202,13 +586,13 @@ def _receipt_path(explicit: str | None) -> Path:
     return Path(__file__).resolve().with_name(".x5_crop_dependency_receipt.json")
 
 
-def _requirements_path(explicit: str | None) -> Path:
+def _contract_path(explicit: str | None) -> Path:
     if explicit:
         return Path(explicit).expanduser().resolve()
-    return Path(__file__).resolve().with_name("requirements.txt")
+    return Path(__file__).resolve().with_name("dependencies.toml")
 
 
-def _requirements_sha256(path: Path) -> str:
+def _contract_sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
@@ -245,35 +629,61 @@ def _require_supported_python() -> None:
         raise RuntimeError("X5 Crop requires a 64-bit Python interpreter.")
 
 
-def _original_preexisting_versions(
-    pins: Sequence[PackagePin],
-    current: Mapping[str, str],
-    previous: Mapping[str, object] | None,
-) -> dict[str, str | None]:
-    previous_packages = {
-        str(item["canonical_name"]): item
-        for item in (previous or {}).get("packages", [])
-        if isinstance(item, dict) and "canonical_name" in item
-    }
+def _state_record(
+    pin: DependencyPin,
+    state: DependencyState,
+    action: str,
+) -> dict[str, object]:
     return {
-        pin.canonical_name: (
-            previous_packages[pin.canonical_name].get("preexisting_version")
-            if pin.canonical_name in previous_packages
-            else current.get(pin.canonical_name)
-        )
-        for pin in pins
+        "name": pin.name,
+        "module": pin.module,
+        "required_module_version": pin.module_version,
+        "action": action,
+        "available": state.available,
+        "module_version": state.module_version,
+        "module_origin": state.module_origin,
+        "provider": state.provider,
+        "package": state.package,
+        "package_version": state.package_version,
+        "build_information_sha256": state.build_information_sha256,
+        "import_error": state.import_error,
     }
+
+
+def check_dependencies(
+    contract_path: Path,
+    *,
+    quiet: bool,
+) -> int:
+    _require_supported_python()
+    contract = load_dependency_contract(contract_path)
+    states = inspect_dependency_states(contract)
+    by_name = {state.name: state for state in states}
+    mismatches = tuple(
+        (pin, by_name[pin.name])
+        for pin in contract.dependencies
+        if not by_name[pin.name].satisfies(pin)
+    )
+    if not quiet:
+        for pin in contract.dependencies:
+            state = by_name[pin.name]
+            status = "ready" if state.satisfies(pin) else "needs action"
+            found = state.module_version or "not importable"
+            print(
+                f"{pin.name}: {status}; required {pin.module_version}; "
+                f"found {found}; provider {state.provider}"
+            )
+    return 1 if mismatches else 0
 
 
 def install_dependencies(
-    requirements_path: Path,
+    contract_path: Path,
     receipt_path: Path,
     *,
     break_system_packages: bool,
 ) -> int:
     _require_supported_python()
-    pins = load_pins(requirements_path)
-    selected = {pin.canonical_name: pin.distribution for pin in pins}
+    contract = load_dependency_contract(contract_path)
     previous = _load_receipt(receipt_path)
     if previous is not None and not _same_executable(
         str(previous.get("python_executable", "")), sys.executable
@@ -282,110 +692,144 @@ def install_dependencies(
             "This Release folder already has a dependency receipt for another "
             "Python interpreter. Run its uninstaller before reinstalling."
         )
-
-    conflicts = installed_opencv_conflicts()
-    if conflicts:
-        details = ", ".join(
-            f"{name} {version}" for name, version in sorted(conflicts.items())
-        )
+    contract_sha256 = _contract_sha256(contract_path)
+    if previous is not None and previous.get("contract_sha256") != contract_sha256:
         raise RuntimeError(
-            "A conflicting OpenCV distribution is already installed "
-            f"({details}). No package was changed. Remove that conflict or use "
-            "a separate supported Python interpreter before running setup again."
+            "This Release folder has a receipt for another dependency contract. "
+            "Run its uninstaller before reinstalling."
         )
 
-    before = installed_versions(selected)
-    version_conflicts = [
-        (pin.distribution, before[pin.canonical_name], pin.version)
-        for pin in pins
-        if pin.canonical_name in before
-        and before[pin.canonical_name] != pin.version
-    ]
-    if version_conflicts:
-        details = ", ".join(
-            f"{distribution} {installed} (X5 Crop requires {required})"
-            for distribution, installed, required in version_conflicts
-        )
-        raise RuntimeError(
-            "Pinned X5 Crop dependencies already exist at different versions "
-            f"({details}). No package was changed. Use another supported Python "
-            "interpreter or resolve those versions explicitly before running setup."
-        )
-    if "opencv-python-headless" not in before:
-        cv2_origin = visible_cv2_origin()
-        if cv2_origin is not None:
-            raise RuntimeError(
-                "A cv2 module is already visible at "
-                f"{cv2_origin}, but its supported OpenCV distribution metadata "
-                "is unavailable. No package was changed. X5 Crop will not install "
-                "opencv-python-headless over an existing cv2 provider. Keep that "
-                "provider for a self-managed environment or use another supported "
-                "Python interpreter for X5 Crop setup."
+    before_states = inspect_dependency_states(contract)
+    before_by_name = {state.name: state for state in before_states}
+    actions = {pin.name: "reused" for pin in contract.dependencies}
+    homebrew_actions: list[tuple[DependencyPin, str]] = []
+    pip_actions: list[PipInstall] = []
+    for pin in contract.dependencies:
+        state = before_by_name[pin.name]
+        if state.satisfies(pin):
+            continue
+        if state.provider == "homebrew":
+            if not _homebrew_can_supply(pin):
+                raise RuntimeError(
+                    f"Homebrew cannot supply required {pin.name} "
+                    f"{pin.module_version}; no dependency was changed"
+                )
+            if state.package is None:
+                raise RuntimeError(f"Homebrew ownership is incomplete for {pin.name}")
+            actions[pin.name] = "homebrew_updated"
+            homebrew_actions.append((pin, state.package))
+        elif state.provider == "pip":
+            distribution = state.package or pin.pip_distribution
+            actions[pin.name] = "pip_updated"
+            pip_actions.append(
+                PipInstall(pin.name, distribution, pin.pip_version)
             )
-    preexisting = _original_preexisting_versions(pins, before, previous)
-    command = [
-        sys.executable,
-        "-m",
-        "pip",
-        "install",
-        "--user",
-        "--disable-pip-version-check",
-        "--no-cache-dir",
-        "--only-binary=:all:",
-        "--no-deps",
-        "--requirement",
-        str(requirements_path),
-    ]
-    if break_system_packages:
-        command.insert(-2, "--break-system-packages")
-    completed = subprocess.run(command, check=False)
-    after = fresh_installed_versions(selected)
-    package_records = [
+        elif state.provider == "missing":
+            actions[pin.name] = "pip_installed"
+            pip_actions.append(
+                PipInstall(pin.name, pin.pip_distribution, pin.pip_version)
+            )
+        else:
+            raise RuntimeError(
+                f"{pin.name} {state.module_version} comes from an unknown provider "
+                f"at {state.module_origin}; no dependency was changed"
+            )
+
+    previous_packages = {
+        str(item["canonical_name"]): item
+        for item in (previous or {}).get("packages", [])
+        if isinstance(item, dict) and "canonical_name" in item
+    }
+    tracked_distributions = {
+        canonical_distribution_name(action.distribution): action.distribution
+        for action in pip_actions
+    }
+    tracked_distributions.update(
         {
-            "distribution": pin.distribution,
-            "canonical_name": pin.canonical_name,
-            "required_version": pin.version,
-            "preexisting_version": preexisting[pin.canonical_name],
-            "installed_version": after.get(pin.canonical_name),
+            name: str(item["distribution"])
+            for name, item in previous_packages.items()
+            if "distribution" in item
         }
-        for pin in pins
+    )
+    preexisting_versions = (
+        installed_versions(tracked_distributions) if tracked_distributions else {}
+    )
+
+    if pip_actions:
+        pip_bootstrap_result = _ensure_pip_available()
+        if pip_bootstrap_result:
+            return pip_bootstrap_result
+        preflight_result = _preflight_pip(
+            pip_actions,
+            break_system_packages=break_system_packages,
+        )
+        if preflight_result:
+            return preflight_result
+    for _pin, formula in homebrew_actions:
+        _update_homebrew_formula(formula)
+    pip_result = 0
+    if pip_actions:
+        pip_result = _install_with_pip(
+            pip_actions,
+            break_system_packages=break_system_packages,
+        )
+
+    final_states = inspect_dependency_states(contract)
+    final_by_name = {state.name: state for state in final_states}
+    final_versions = (
+        fresh_installed_versions(tracked_distributions)
+        if tracked_distributions
+        else {}
+    )
+    package_records: list[dict[str, object]] = []
+    for canonical_name, distribution in tracked_distributions.items():
+        previous_package = previous_packages.get(canonical_name)
+        preexisting_version = (
+            previous_package.get("preexisting_version")
+            if previous_package is not None
+            else preexisting_versions.get(canonical_name)
+        )
+        package_records.append(
+            {
+                "distribution": distribution,
+                "canonical_name": canonical_name,
+                "preexisting_version": preexisting_version,
+                "installed_version": final_versions.get(canonical_name),
+            }
+        )
+
+    mismatches = [
+        f"{pin.name}: expected {pin.module_version}, found "
+        f"{final_by_name[pin.name].module_version or 'not importable'}"
+        for pin in contract.dependencies
+        if not final_by_name[pin.name].satisfies(pin)
     ]
+    status = "verified"
+    if pip_result:
+        status = "pip_failed"
+    elif mismatches:
+        status = "verification_failed"
     receipt: dict[str, object] = {
         "schema": RECEIPT_SCHEMA,
-        "status": "pip_failed" if completed.returncode else "installed_unverified",
+        "status": status,
         "python_executable": sys.executable,
         "python_version": ".".join(map(str, sys.version_info[:3])),
-        "platform_system": platform.system(),
-        "platform_release": platform.release(),
-        "platform_machine": platform.machine(),
         "user_site": site.getusersitepackages(),
-        "requirements_sha256": _requirements_sha256(requirements_path),
+        "contract_sha256": contract_sha256,
+        "dependencies": [
+            _state_record(pin, final_by_name[pin.name], actions[pin.name])
+            for pin in contract.dependencies
+        ],
         "packages": package_records,
     }
     _write_json_atomic(receipt_path, receipt)
-    if completed.returncode:
-        return completed.returncode
-
-    mismatches = [
-        f"{pin.distribution}: expected {pin.version}, found "
-        f"{after.get(pin.canonical_name, 'not installed')}"
-        for pin in pins
-        if after.get(pin.canonical_name) != pin.version
-    ]
+    if pip_result:
+        return pip_result
     if mismatches:
-        print("Dependency version verification failed:", file=sys.stderr)
+        print("Dependency verification failed:", file=sys.stderr)
         for mismatch in mismatches:
             print(f"  - {mismatch}", file=sys.stderr)
         return 1
-
-    verified = subprocess.run(
-        [sys.executable, "-c", IMPORT_CHECK], check=False
-    )
-    if verified.returncode:
-        print("Dependency import verification failed.", file=sys.stderr)
-        return verified.returncode
-    receipt["status"] = "verified"
-    _write_json_atomic(receipt_path, receipt)
     print(f"Dependency receipt: {receipt_path}")
     return 0
 
@@ -431,7 +875,7 @@ def uninstall_dependencies(receipt_path: Path, *, no_relaunch: bool) -> int:
     for distribution, reason in sorted(plan.preserved.items()):
         print(f"Preserved {distribution}: {reason}.")
     if plan.removable:
-        print("Removing packages installed only for X5 Crop:")
+        print("Removing user packages installed only for X5 Crop:")
         for distribution in plan.removable:
             print(f"  - {distribution}")
         completed = subprocess.run(
@@ -445,7 +889,7 @@ def uninstall_dependencies(receipt_path: Path, *, no_relaunch: bool) -> int:
             )
             return completed.returncode
     else:
-        print("No X5 Crop-owned package is safe to remove.")
+        print("No X5 Crop-owned user package is safe to remove.")
 
     receipt_path.unlink(missing_ok=True)
     print("Dependency receipt removed. Delete the X5 Crop folder to remove the program.")
@@ -455,8 +899,11 @@ def uninstall_dependencies(receipt_path: Path, *, no_relaunch: bool) -> int:
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
+    check_parser = subparsers.add_parser("check")
+    check_parser.add_argument("--contract")
+    check_parser.add_argument("--quiet", action="store_true")
     install_parser = subparsers.add_parser("install")
-    install_parser.add_argument("--requirements")
+    install_parser.add_argument("--contract")
     install_parser.add_argument("--receipt")
     install_parser.add_argument("--break-system-packages", action="store_true")
     uninstall_parser = subparsers.add_parser("uninstall")
@@ -468,16 +915,27 @@ def _build_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
     try:
+        if args.command == "check":
+            return check_dependencies(
+                _contract_path(args.contract),
+                quiet=args.quiet,
+            )
         if args.command == "install":
             return install_dependencies(
-                _requirements_path(args.requirements),
+                _contract_path(args.contract),
                 _receipt_path(args.receipt),
                 break_system_packages=args.break_system_packages,
             )
         return uninstall_dependencies(
             _receipt_path(args.receipt), no_relaunch=args.no_relaunch
         )
-    except (OSError, ValueError, RuntimeError, json.JSONDecodeError) as error:
+    except (
+        OSError,
+        ValueError,
+        RuntimeError,
+        json.JSONDecodeError,
+        subprocess.SubprocessError,
+    ) as error:
         print(f"Dependency operation stopped safely: {error}", file=sys.stderr)
         return 1
 

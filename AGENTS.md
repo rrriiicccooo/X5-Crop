@@ -134,13 +134,14 @@ https://github.com/rrriiicccooo/X5-Crop
 - TIFF Orientation 是 decode boundary authority。V5 必须保存 raw raster 到 canonical visual
   coordinates 的可逆映射，在 canonical coordinates 中完成检测、ordinal 与输出，并把正式
   输出像素烘焙为正确视觉方向后写 `Orientation=1`；report 保留原 tag 与完整映射。
-- V5 可使用 `NumPy`、`opencv-python-headless`、`SciPy`、`tifffile`、`imagecodecs` 与
+- V5 可使用 `NumPy`、OpenCV `cv2`、`SciPy`、`tifffile`、`imagecodecs` 与
   `Pillow`。`tifffile + imagecodecs` 独占原 TIFF I/O，OpenCV 只提供有界像素测量，SciPy
   只提供数值原语，Pillow 只服务 Debug Analysis；库不得取得物理解释、Gate 或输出政策权限。
-- V5 依赖安装到用户级 Python site，使 standalone script 可放在任意文件夹运行；不创建私有
-  `.venv`。生产依赖与 Python 支持范围必须按 Release 冻结，安装器不得无约束升级；runtime
-  report 必须记录实际版本与必要的数值 build/thread identity。目标解释器中任一冻结依赖已经
-  存在但版本不同时，安装器必须在改动 package 前安全停止，不得静默升级、降级或覆盖。
+- V5 安装器先检查所有受支持全局 Python 与实际可导入模块；满足冻结模块能力的现有依赖不论
+  provider 都直接复用。缺失项才以最小 binary wheel 安装到所选 Python 的用户级 site；已有
+  版本不符时，只能沿可确认的原 pip distribution 或 Homebrew formula 更新，未知 ownership
+  必须在写入前停止，不得用第二份包遮盖。不创建私有 `.venv`，不得无约束升级；runtime report
+  记录实际 provider、package、origin、版本与必要的数值 build/thread identity。
 - V5 首版不引入通用视觉大模型、训练模型、ONNX Runtime 或 PyTorch runtime。未来 learned
   boundary evidence 只能作为像素 evidence，并继续经过同一物理求解器、安全 Gate 与黄金验证；
   它属于后续版本的独立决策。
@@ -311,7 +312,9 @@ https://github.com/rrriiicccooo/X5-Crop
 - macOS 与 Windows 都是正式平台。核心 Python、gold comparator 与代表性 TIFF I/O 在两个
   平台使用同一合同；Release Candidate 分别验证依赖安装、数值版本、启动器、中文路径、
   TIFF 复读与性能下限，不能以源码相同代替平台验证。
-- 两个平台的安装器都把冻结依赖安装到用户级 Python site，启动器使用满足版本合同的全局
-  Python，使 `X5_Crop.py` 可在任意文件夹独立运行；不得创建 Release-local `.venv`。
+- 两个平台的安装器都优先复用已经满足模块能力合同的全局 Python；只有缺失项及明确属于 pip
+  的版本更新进入该 Python 的用户级 site。启动器选择满足版本合同的同一全局 Python，使
+  `X5_Crop.py` 可在任意文件夹独立运行；不得创建 Release-local `.venv`，也不得把 Homebrew
+  或其它 package manager 设为运行前置条件。
 - macOS 只准备当前 Release folder：标记主 launcher 与 installer executable，并在可用时
   移除 quarantine attribute；不得建立永久 system-wide trust。

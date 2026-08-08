@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 from functools import lru_cache
-import importlib
-import importlib.metadata
 from pathlib import Path
 import platform
 import sys
@@ -16,6 +14,7 @@ from ..io.model import ImageProfile
 from ..report.read_models import typed_read_model
 from ..run_config import RunConfig
 from .invocation import PlannedSource
+from .dependency_identity import runtime_dependency_identity
 from .threading import thread_identity
 
 
@@ -63,29 +62,12 @@ def runtime_configuration_identity(config: RunConfig) -> dict[str, Any]:
 
 @lru_cache(maxsize=1)
 def runtime_environment_identity() -> dict[str, Any]:
-    dependencies: dict[str, str] = {}
-    for distribution, module_name in (
-        ("numpy", "numpy"),
-        ("scipy", "scipy"),
-        ("opencv-python-headless", "cv2"),
-        ("tifffile", "tifffile"),
-        ("imagecodecs", "imagecodecs"),
-        ("Pillow", None),
-    ):
-        try:
-            version = importlib.metadata.version(distribution)
-        except importlib.metadata.PackageNotFoundError:
-            if module_name is None:
-                version = "unavailable"
-            else:
-                module = importlib.import_module(module_name)
-                version = str(getattr(module, "__version__", "unavailable"))
-        dependencies[distribution] = version
     return {
         "python_version": platform.python_version(),
         "python_implementation": platform.python_implementation(),
+        "platform_system": platform.system(),
         "platform": platform.platform(),
-        "dependencies": dependencies,
+        "dependencies": runtime_dependency_identity(),
         "threads": thread_identity(),
     }
 

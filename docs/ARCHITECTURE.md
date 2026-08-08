@@ -363,11 +363,18 @@ manifest 与 outputs；没有 detector bypass、样片参数、验证专用 prod
 计时从正式 CLI 启动开始，包含 import、decode、detection、decision、sampling、encode、
 readback 与 publication；SHA、cohort、profiling 和 Debug Analysis 位于计时外。
 
-生产依赖为 NumPy、SciPy、opencv-python-headless、tifffile、imagecodecs 与 Pillow；测试、
-comparator、fixture、profiling 和故障注入不进入用户包，开发依赖单独拥有。
-依赖安装器在调用 pip 前同时检查已知 OpenCV distribution 冲突与可见 `cv2` namespace；若
-`cv2` 可见但缺少受支持 distribution metadata，则保持环境不变并停止，不把 Homebrew 或其它
-外部 provider 的模块版本冒充冻结的 `opencv-python-headless` wheel。
+生产模块为 NumPy、SciPy、cv2、tifffile、imagecodecs 与 PIL；测试、comparator、fixture、
+profiling 和故障注入不进入用户包，开发依赖单独拥有。`tools/install/dependencies.toml` 只冻结
+模块能力、模块版本、缺失时的用户级 pip fallback，以及可识别的 Homebrew formula；它不把
+平台绑定到 package manager。
+
+依赖安装器先用目标 Python 的 fresh interpreter 检查 import、模块版本、真实 origin、distribution
+和 Homebrew Cellar ownership。满足能力合同的模块一律 `reused`；缺失模块才安装最小 user-site
+binary wheel；已存在但版本不符时，确认属于 pip 就更新原 distribution，确认属于 Homebrew 且
+当前 formula 可提供所需版本才执行 formula update。未知 ownership 在任何写入前失败，禁止用
+第二份包遮盖。收据分别记录每项 `reused`、`pip_installed`、`pip_updated` 或
+`homebrew_updated`，runtime/report 记录逻辑模块、实际 provider、package、origin、版本和 OpenCV
+build fingerprint，不再把缺失 distribution metadata 当作模块缺失。
 
 ## 10. 工作量与性能
 

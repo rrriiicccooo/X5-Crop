@@ -11,6 +11,18 @@ if not exist "%SCRIPT%" (
     pause
     exit /b 1
 )
+if not exist "install\dependency_manager.py" (
+    echo Required runtime check is missing: install\dependency_manager.py
+    echo.
+    pause
+    exit /b 1
+)
+if not exist "install\dependencies.toml" (
+    echo Required runtime check is missing: install\dependencies.toml
+    echo.
+    pause
+    exit /b 1
+)
 
 set "PYTHON="
 set "CHECKED_PYTHON="
@@ -64,7 +76,7 @@ exit /b %EXITCODE%
 set "CANDIDATE=%*"
 if not defined CANDIDATE exit /b 1
 set "CHECKED_PYTHON=%CHECKED_PYTHON% %CANDIDATE%;"
-%CANDIDATE% -c "import cv2, imagecodecs, numpy, scipy, tifffile; from PIL import Image" >nul 2>nul
+%CANDIDATE% "install\dependency_manager.py" check --contract "install\dependencies.toml" --quiet >nul 2>nul
 if not "%errorlevel%"=="0" exit /b 1
 set "PYTHON=%CANDIDATE%"
 exit /b 0

@@ -11,11 +11,13 @@ Extract the release archive and run the platform installer:
 - macOS: `install/X5_Crop_Mac_install.command`
 - Windows: `install/X5_Crop_win_install.bat`
 
-The installer uses the user package site of Python 3.12–3.14 and does not make
-a private virtual environment. It stops before changing anything if the target
-Python already has a frozen dependency at another version, or if `cv2` is
-already importable without supported distribution metadata. It never layers a
-second OpenCV installation over that provider.
+Setup first finds Python 3.12–3.14, then reuses every dependency whose module
+version already satisfies the contract, regardless of whether it came from
+Homebrew, pip, or another provider. Missing items alone are installed in that
+Python's user package site. A wrong version is updated only through a confirmed
+existing package manager; unknown ownership stops safely instead of layering a
+second package. Homebrew is not required or installed just for OpenCV. No
+private environment is created, so `X5_Crop.py` can run from any folder.
 
 ## 2. Add TIFFs And Launch
 

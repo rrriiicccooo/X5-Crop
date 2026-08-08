@@ -7,6 +7,7 @@ from ..output.naming import portable_source_stems
 from ..run_config import RunConfig
 from .app import run_runtime
 from .input_probe import iter_input_files
+from .identity import runtime_environment_identity
 from .invocation import PlannedSource, RuntimeInvocation
 from .limits import STANDARD_JOB_LIMIT
 from .options import RuntimeOptions
@@ -59,4 +60,5 @@ def runtime_invocation_from_options(options: RuntimeOptions) -> RuntimeInvocatio
 
 def run_options(options: RuntimeOptions) -> int:
     invocation = runtime_invocation_from_options(options)
+    runtime_environment_identity()
     return run_runtime(invocation)

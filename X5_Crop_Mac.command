@@ -27,9 +27,14 @@ if [ ! -f "$SCRIPT" ]; then
     echo "Put this launcher in the same folder as X5_Crop.py and your TIFF scans."
     finish 1
 fi
+for REQUIRED_FILE in install/dependency_manager.py install/dependencies.toml; do
+    if [ ! -f "$REQUIRED_FILE" ]; then
+        echo "Required runtime check is missing: $REQUIRED_FILE"
+        finish 1
+    fi
+done
 
 find_python() {
-    REQUIRED_IMPORTS="import cv2, imagecodecs, numpy, scipy, tifffile; from PIL import Image"
     CHECKED=""
 
     try_python() {
@@ -44,7 +49,8 @@ $CANDIDATE
         esac
         CHECKED="${CHECKED}
 $CANDIDATE"
-        "$CANDIDATE" -c "$REQUIRED_IMPORTS" >/dev/null 2>&1 || return 1
+        "$CANDIDATE" "install/dependency_manager.py" check \
+            --contract "install/dependencies.toml" --quiet >/dev/null 2>&1 || return 1
         PYTHON="$CANDIDATE"
         return 0
     }

@@ -23,7 +23,8 @@ jobs:
           python-version: "3.13"
       - name: Install runtime dependencies
         run: >-
-          python -m pip install --only-binary=:all: --no-deps
-          --requirement tools/install/requirements.txt
+          python tools/install/dependency_manager.py install
+          --contract tools/install/dependencies.toml
+          --receipt "${RUNNER_TEMP}/x5crop-dependencies.json"
       - name: Run repository verifier
         run: tools/verify full

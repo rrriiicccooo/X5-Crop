@@ -17,7 +17,7 @@ from typing import Any, Sequence
 from x5crop.report.validation import validate_current_report_record
 from x5crop.runtime.identity import runtime_environment_identity
 
-from tools.install.dependency_manager import load_pins
+from tools.install.dependency_manager import load_dependency_contract
 
 from .performance_identity import (
     FIXED_SOURCE_COUNT,
@@ -32,14 +32,44 @@ DEFAULT_RECEIPT_PATH = (
     PROJECT_ROOT / "build" / "v5-performance" / "performance_receipt.json"
 )
 SECONDS_PER_INPUT_LIMIT = 5.0
-FROZEN_REQUIREMENTS_PATH = PROJECT_ROOT / "tools/install/requirements.txt"
+FROZEN_CONTRACT_PATH = PROJECT_ROOT / "tools/install/dependencies.toml"
 
 
-def frozen_dependency_versions() -> dict[str, str]:
+def frozen_dependency_identity() -> dict[str, dict[str, str]]:
+    contract = load_dependency_contract(FROZEN_CONTRACT_PATH)
     return {
-        pin.distribution: pin.version
-        for pin in load_pins(FROZEN_REQUIREMENTS_PATH)
+        pin.name: {
+            "module": pin.module,
+            "module_version": pin.module_version,
+        }
+        for pin in contract.dependencies
     }
+
+
+def _dependencies_are_frozen(dependencies: object) -> bool:
+    expected = frozen_dependency_identity()
+    if not isinstance(dependencies, dict) or set(dependencies) != set(expected):
+        return False
+    for name, required in expected.items():
+        actual = dependencies.get(name)
+        if not isinstance(actual, dict):
+            return False
+        if (
+            actual.get("module") != required["module"]
+            or actual.get("module_version") != required["module_version"]
+            or actual.get("provider") not in {"homebrew", "pip", "external"}
+            or not str(actual.get("package", ""))
+            or not str(actual.get("package_version", ""))
+            or not str(actual.get("module_origin", ""))
+        ):
+            return False
+        build = actual.get("build_information_sha256")
+        if name == "opencv":
+            if not isinstance(build, str) or len(build) != 64:
+                return False
+        elif build is not None:
+            return False
+    return True
 
 
 def performance_environment_is_frozen(environment: object) -> bool:
@@ -57,7 +87,8 @@ def performance_environment_is_frozen(environment: object) -> bool:
     thread_environment = threads.get("environment")
     return (
         (major, minor) in {(3, 12), (3, 13), (3, 14)}
-        and dependencies == frozen_dependency_versions()
+        and environment.get("platform_system") in {"Darwin", "Windows", "Linux"}
+        and _dependencies_are_frozen(dependencies)
         and threads.get("x5crop_source_workers") == "--jobs"
         and threads.get("opencv_threads") == 1
         and isinstance(thread_environment, dict)

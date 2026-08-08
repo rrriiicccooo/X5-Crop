@@ -27,7 +27,7 @@ RELEASE_FILES: tuple[tuple[str, str | None], ...] = (
         "tools/install/X5_Crop_win_uninstall.bat",
     ),
     ("install/dependency_manager.py", "tools/install/dependency_manager.py"),
-    ("install/requirements.txt", "tools/install/requirements.txt"),
+    ("install/dependencies.toml", "tools/install/dependencies.toml"),
 )
 
 RELEASE_PATHS = tuple(archive_path for archive_path, _ in RELEASE_FILES)

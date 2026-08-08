@@ -1,0 +1,47 @@
+schema = "x5crop_dependencies_v2"
+
+[[dependencies]]
+name = "numpy"
+module = "numpy"
+module_version = "2.5.1"
+pip_distribution = "numpy"
+pip_version = "2.5.1"
+homebrew_formula = "numpy"
+
+[[dependencies]]
+name = "scipy"
+module = "scipy"
+module_version = "1.18.0"
+pip_distribution = "scipy"
+pip_version = "1.18.0"
+homebrew_formula = "scipy"
+
+[[dependencies]]
+name = "opencv"
+module = "cv2"
+module_version = "5.0.0"
+pip_distribution = "opencv-python-headless"
+pip_version = "5.0.0.93"
+homebrew_formula = "opencv"
+
+[[dependencies]]
+name = "tifffile"
+module = "tifffile"
+module_version = "2026.7.31"
+pip_distribution = "tifffile"
+pip_version = "2026.7.31"
+
+[[dependencies]]
+name = "imagecodecs"
+module = "imagecodecs"
+module_version = "2026.6.26"
+pip_distribution = "imagecodecs"
+pip_version = "2026.6.26"
+
+[[dependencies]]
+name = "pillow"
+module = "PIL"
+module_version = "12.3.0"
+pip_distribution = "Pillow"
+pip_version = "12.3.0"
+homebrew_formula = "pillow"

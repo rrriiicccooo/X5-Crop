@@ -301,23 +301,14 @@ class CurrentOnlyContractTest(unittest.TestCase):
         self.assertEqual(decision.final_review_reasons, ())
 
     def test_runtime_dependency_surface_is_pinned_and_shared(self) -> None:
-        expected_requirements = (
-            "numpy==2.5.1",
-            "scipy==1.18.0",
-            "opencv-python-headless==5.0.0.93",
-            "tifffile==2026.7.31",
-            "imagecodecs==2026.6.26",
-            "Pillow==12.3.0",
-        )
-        requirements_path = ROOT / "tools/install/requirements.txt"
-        self.assertEqual(
-            tuple(requirements_path.read_text(encoding="utf-8").splitlines()),
-            expected_requirements,
-        )
+        contract_path = ROOT / "tools/install/dependencies.toml"
+        self.assertTrue(contract_path.is_file())
+        self.assertFalse((ROOT / "tools/install/requirements.txt").exists())
         workflow = (ROOT / ".github/workflows/verify.yml").read_text(
             encoding="utf-8"
         )
-        self.assertIn("tools/install/requirements.txt", workflow)
+        self.assertIn("tools/install/dependency_manager.py", workflow)
+        self.assertIn("tools/install/dependencies.toml", workflow)
         for relative in (
             "tools/install/X5_Crop_Mac_install.command",
             "tools/install/X5_Crop_win_install.bat",
@@ -325,9 +316,15 @@ class CurrentOnlyContractTest(unittest.TestCase):
             with self.subTest(installer=relative):
                 text = (ROOT / relative).read_text(encoding="utf-8")
                 self.assertIn("dependency_manager.py", text)
+                self.assertIn(" check", text)
                 self.assertNotIn("pip install --user -U", text)
-        self.assertIn("import cv2", (ROOT / "X5_Crop_Mac.command").read_text())
-        self.assertIn("import cv2", (ROOT / "X5_Crop_win.bat").read_text())
+                self.assertNotIn("ensurepip --upgrade", text)
+        for relative in ("X5_Crop_Mac.command", "X5_Crop_win.bat"):
+            launcher = (ROOT / relative).read_text()
+            self.assertIn("dependency_manager.py", launcher)
+            self.assertIn("dependencies.toml", launcher)
+            self.assertIn(" check", launcher)
+            self.assertNotIn("REQUIRED_IMPORTS", launcher)
 
     def test_repository_layout_and_release_manifest_are_current(self) -> None:
         for relative in (
@@ -354,7 +351,7 @@ class CurrentOnlyContractTest(unittest.TestCase):
             "tools/install/X5_Crop_Mac_uninstall.command",
             "tools/install/X5_Crop_win_uninstall.bat",
             "tools/install/dependency_manager.py",
-            "tools/install/requirements.txt",
+            "tools/install/dependencies.toml",
             "tools/tests/test_photo_geometry_contract.py",
         ):
             with self.subTest(present=relative):
@@ -383,8 +380,8 @@ class CurrentOnlyContractTest(unittest.TestCase):
             "tools/install/dependency_manager.py",
         )
         self.assertEqual(
-            release_sources["install/requirements.txt"],
-            "tools/install/requirements.txt",
+            release_sources["install/dependencies.toml"],
+            "tools/install/dependencies.toml",
         )
 
         project_memory = (ROOT / "docs/PROJECT_MEMORY.md").read_text(

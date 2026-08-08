@@ -27,13 +27,32 @@ is_supported_python() {
 }
 
 find_supported_python() {
+    PYTHON_FALLBACK=""
+    CHECKED_PYTHONS=""
     for CANDIDATE in /opt/homebrew/bin/python3 /usr/local/bin/python3 "$(command -v python3 2>/dev/null)" "$(command -v python 2>/dev/null)"; do
         [ -n "$CANDIDATE" ] || continue
+        case "
+$CHECKED_PYTHONS
+" in
+            *"
+$CANDIDATE
+"*) continue ;;
+        esac
+        CHECKED_PYTHONS="${CHECKED_PYTHONS}
+$CANDIDATE"
         if is_supported_python "$CANDIDATE"; then
-            PYTHON_BASE="$CANDIDATE"
-            return 0
+            [ -n "$PYTHON_FALLBACK" ] || PYTHON_FALLBACK="$CANDIDATE"
+            if "$CANDIDATE" "install/dependency_manager.py" check \
+                --contract "install/dependencies.toml" --quiet >/dev/null 2>&1; then
+                PYTHON_BASE="$CANDIDATE"
+                return 0
+            fi
         fi
     done
+    if [ -n "$PYTHON_FALLBACK" ]; then
+        PYTHON_BASE="$PYTHON_FALLBACK"
+        return 0
+    fi
     return 1
 }
 
@@ -47,7 +66,7 @@ if [ -z "$MACOS_MAJOR" ] || [ "$MACOS_MAJOR" -lt 14 ] 2>/dev/null; then
     finish 1
 fi
 
-for REQUIRED_FILE in install/requirements.txt install/dependency_manager.py; do
+for REQUIRED_FILE in install/dependencies.toml install/dependency_manager.py; do
     if [ ! -f "$REQUIRED_FILE" ]; then
         echo "Missing setup file: $REQUIRED_FILE"
         finish 1
@@ -91,8 +110,7 @@ echo "Python:"
 "$PYTHON_BASE" --version
 echo
 
-echo "Installing pinned dependencies for this user..."
-"$PYTHON_BASE" -m ensurepip --upgrade >/dev/null 2>&1 || true
+echo "Checking existing dependencies and installing only what is needed..."
 if ! "$PYTHON_BASE" "install/dependency_manager.py" install; then
     echo
     echo "Standard user install failed."

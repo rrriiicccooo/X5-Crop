@@ -8,7 +8,7 @@ from unittest import mock
 from tools.regression.performance import (
     PERFORMANCE_RECEIPT_SCHEMA,
     SECONDS_PER_INPUT_LIMIT,
-    frozen_dependency_versions,
+    frozen_dependency_identity,
     performance_environment_is_frozen,
     validate_receipt,
 )
@@ -33,11 +33,25 @@ from x5crop.runtime.threading import (
 class V5PerformanceContractTest(unittest.TestCase):
     @staticmethod
     def _environment() -> dict[str, object]:
+        dependencies = {
+            name: {
+                **required,
+                "module_origin": f"/provider/{name}/__init__.py",
+                "provider": "external",
+                "package": name,
+                "package_version": required["module_version"],
+                "build_information_sha256": (
+                    "1" * 64 if name == "opencv" else None
+                ),
+            }
+            for name, required in frozen_dependency_identity().items()
+        }
         return {
             "python_version": "3.14.6",
             "python_implementation": "CPython",
             "platform": "test",
-            "dependencies": frozen_dependency_versions(),
+            "platform_system": "Darwin",
+            "dependencies": dependencies,
             "threads": {
                 "x5crop_source_workers": "--jobs",
                 "opencv_threads": 1,
@@ -102,7 +116,7 @@ class V5PerformanceContractTest(unittest.TestCase):
     ) -> None:
         environment = self._environment()
         self.assertTrue(performance_environment_is_frozen(environment))
-        environment["dependencies"]["Pillow"] = "12.2.0"
+        environment["dependencies"]["pillow"]["module_version"] = "12.2.0"
         self.assertFalse(performance_environment_is_frozen(environment))
         environment = self._environment()
         environment["threads"]["opencv_threads"] = 2
