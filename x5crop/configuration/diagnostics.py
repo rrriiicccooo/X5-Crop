@@ -3,11 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from ..image.constants import UINT8_MAX_VALUE
-from ..utils import (
-    RGB_CHANNEL_COUNT,
-    require_positive,
-    require_unit_interval,
-)
+from ..utils import RGB_CHANNEL_COUNT, require_positive, require_unit_interval
 
 
 JPEG_QUALITY_MAX = 100
@@ -17,107 +13,138 @@ JPEG_QUALITY_MAX = 100
 class DebugLegendEntry:
     label: str
     color: tuple[int, int, int]
-    dashed: bool
+    sample: str
+
+    def __post_init__(self) -> None:
+        if self.sample not in {"solid", "dashed", "box", "hatched"}:
+            raise ValueError("debug legend sample is not canonical")
 
 
 @dataclass(frozen=True)
 class DebugStyleParameters:
-    preview_max_side: int = 1800
-    frame_fill_alpha: float = 0.22
+    """The fixed V5 Debug Analysis presentation grid and visual tokens."""
+
+    canvas_width: int = 1653
+    canvas_height: int = 952
+    status_bar_height: int = 70
+    outer_margin: int = 12
+    panel_gap: int = 10
+    source_panel_height: int = 280
+    retained_panel_height: int = 258
+    output_panel_height: int = 273
+    legend_bar_height: int = 51
+    panel_title_height: int = 40
+    panel_media_inset_x: int = 27
+    source_media_top: int = 81
+    source_media_height: int = 168
+    retained_media_top: int = 76
+    retained_media_height: int = 145
+    output_media_top: int = 81
+    output_media_height: int = 148
+    retained_tile_gap: int = 24
+    frame_fill_alpha: float = 0.20
+    safe_fill_alpha: float = 0.25
     frame_line_width: int = 2
     retained_line_width: int = 1
-    frame_label_inset: int = 4
-    frame_label_stroke_width: int = 2
-    frame_label_font_size: int = 14
+    evidence_line_width: int = 3
     raw_transition_line_width: int = 1
-    observed_edge_line_width: int = 2
-    lane_authority_color: tuple[int, int, int] = (145, 155, 165)
-    raw_transition_color: tuple[int, int, int] = (205, 205, 205)
-    observed_edge_color: tuple[int, int, int] = (255, 78, 66)
-    canonical_boundary_color: tuple[int, int, int] = (255, 170, 0)
-    inferred_direction_color: tuple[int, int, int] = (0, 220, 255)
-    retained_color: tuple[int, int, int] = (225, 225, 225)
-    panel_spacing: int = 12
-    panel_background: int = 32
-    dark_background: int = 18
-    label_height: int = 36
-    label_origin: tuple[int, int] = (12, 10)
-    panel_label_font_size: int = 14
-    text_color: tuple[int, int, int] = (245, 245, 245)
-    jpeg_quality: int = 92
-    line_dash_length: int = 8
+    annotation_extension: int = 22
+    line_dash_length: int = 7
     line_dash_gap: int = 5
-    legend_bar_height: int = 32
-    legend_sample_width: int = 32
-    legend_text_gap: int = 8
+    title_font_size: int = 18
+    header_status_font_size: int = 18
+    header_detail_font_size: int = 15
+    annotation_font_size: int = 12
+    frame_label_font_size: int = 13
     legend_font_size: int = 12
-    approved_color: tuple[int, int, int] = (40, 180, 90)
-    review_color: tuple[int, int, int] = (230, 80, 70)
+    jpeg_quality: int = 94
     reason_display_limit: int = 3
-    text_fallback_size: tuple[int, int] = (8, 12)
-    status_bar_height: int = 64
-    status_outline_width: int = 2
-    status_text_stroke_width: int = 2
-    status_label_font_size: int = 18
-    status_detail_font_size: int = 13
-    status_origin: tuple[int, int] = (12, 10)
-    detail_gap: int = 14
-    detail_baseline: int = 12
+    canvas_background: tuple[int, int, int] = (6, 10, 13)
+    panel_background: tuple[int, int, int] = (9, 13, 17)
+    panel_border_color: tuple[int, int, int] = (46, 56, 64)
+    divider_color: tuple[int, int, int] = (39, 48, 56)
+    text_color: tuple[int, int, int] = (240, 243, 246)
+    secondary_text_color: tuple[int, int, int] = (201, 207, 214)
+    lane_authority_color: tuple[int, int, int] = (145, 155, 165)
+    raw_transition_color: tuple[int, int, int] = (205, 211, 216)
+    observed_edge_color: tuple[int, int, int] = (255, 78, 66)
+    canonical_boundary_color: tuple[int, int, int] = (255, 171, 37)
+    inferred_direction_color: tuple[int, int, int] = (45, 220, 229)
+    retained_color: tuple[int, int, int] = (230, 234, 238)
+    safe_output_color: tuple[int, int, int] = (180, 188, 196)
+    budget_limit_color: tuple[int, int, int] = (96, 205, 107)
+    approved_color: tuple[int, int, int] = (50, 183, 105)
+    review_color: tuple[int, int, int] = (230, 73, 61)
 
     def __post_init__(self) -> None:
-        for name, value in (
-            ("debug preview size", self.preview_max_side),
-            ("debug frame line width", self.frame_line_width),
-            ("debug retained line width", self.retained_line_width),
-            ("debug frame label inset", self.frame_label_inset),
-            (
-                "debug frame label stroke width",
-                self.frame_label_stroke_width,
-            ),
-            ("debug frame label font size", self.frame_label_font_size),
-            (
-                "debug raw transition line width",
-                self.raw_transition_line_width,
-            ),
-            (
-                "debug observed edge line width",
-                self.observed_edge_line_width,
-            ),
-            ("debug panel spacing", self.panel_spacing),
-            ("debug label height", self.label_height),
-            ("debug panel label font size", self.panel_label_font_size),
-            ("debug JPEG quality", self.jpeg_quality),
-            ("debug line dash length", self.line_dash_length),
-            ("debug line dash gap", self.line_dash_gap),
-            ("debug legend bar height", self.legend_bar_height),
-            ("debug legend sample width", self.legend_sample_width),
-            ("debug legend text gap", self.legend_text_gap),
-            ("debug legend font size", self.legend_font_size),
-            ("debug reason display limit", self.reason_display_limit),
-            ("debug status bar height", self.status_bar_height),
-            ("debug status outline width", self.status_outline_width),
-            (
-                "debug status text stroke width",
-                self.status_text_stroke_width,
-            ),
-            ("debug status label font size", self.status_label_font_size),
-            ("debug status detail font size", self.status_detail_font_size),
-        ):
-            require_positive(name, value)
-        for name, value in (
-            ("debug frame fill alpha", self.frame_fill_alpha),
-        ):
-            require_unit_interval(name, value)
+        positive_values = (
+            self.canvas_width,
+            self.canvas_height,
+            self.status_bar_height,
+            self.outer_margin,
+            self.panel_gap,
+            self.source_panel_height,
+            self.retained_panel_height,
+            self.output_panel_height,
+            self.legend_bar_height,
+            self.panel_title_height,
+            self.panel_media_inset_x,
+            self.source_media_top,
+            self.source_media_height,
+            self.retained_media_top,
+            self.retained_media_height,
+            self.output_media_top,
+            self.output_media_height,
+            self.retained_tile_gap,
+            self.frame_line_width,
+            self.retained_line_width,
+            self.evidence_line_width,
+            self.raw_transition_line_width,
+            self.annotation_extension,
+            self.line_dash_length,
+            self.line_dash_gap,
+            self.title_font_size,
+            self.header_status_font_size,
+            self.header_detail_font_size,
+            self.annotation_font_size,
+            self.frame_label_font_size,
+            self.legend_font_size,
+            self.jpeg_quality,
+            self.reason_display_limit,
+        )
+        for value in positive_values:
+            require_positive("debug fixed-grid value", value)
+        require_unit_interval("debug frame fill alpha", self.frame_fill_alpha)
+        require_unit_interval("debug safe fill alpha", self.safe_fill_alpha)
+        body_height = (
+            self.source_panel_height
+            + self.panel_gap
+            + self.retained_panel_height
+            + self.panel_gap
+            + self.output_panel_height
+            + self.legend_bar_height
+        )
+        if self.status_bar_height + body_height != self.canvas_height:
+            raise ValueError("debug fixed grid does not fill the canvas")
+        if self.canvas_width <= self.outer_margin * 2:
+            raise ValueError("debug canvas cannot contain the panel grid")
         if self.jpeg_quality > JPEG_QUALITY_MAX:
             raise ValueError("debug JPEG quality exceeds the standard maximum")
         colors = (
+            self.canvas_background,
+            self.panel_background,
+            self.panel_border_color,
+            self.divider_color,
+            self.text_color,
+            self.secondary_text_color,
             self.lane_authority_color,
             self.raw_transition_color,
             self.observed_edge_color,
             self.canonical_boundary_color,
             self.inferred_direction_color,
             self.retained_color,
-            self.text_color,
+            self.safe_output_color,
+            self.budget_limit_color,
             self.approved_color,
             self.review_color,
         )
@@ -127,11 +154,6 @@ class DebugStyleParameters:
             for color in colors
         ):
             raise ValueError("debug colors must be RGB byte triples")
-        if any(
-            value < 0 or value > UINT8_MAX_VALUE
-            for value in (self.panel_background, self.dark_background)
-        ):
-            raise ValueError("debug backgrounds must be byte values")
 
 
 @dataclass(frozen=True)
@@ -142,34 +164,13 @@ class DiagnosticsConfiguration:
     def legend_entries(self) -> tuple[DebugLegendEntry, ...]:
         style = self.style
         return (
-            DebugLegendEntry(
-                "Lane authority",
-                style.lane_authority_color,
-                True,
-            ),
-            DebugLegendEntry(
-                "Raw transition",
-                style.raw_transition_color,
-                True,
-            ),
-            DebugLegendEntry(
-                "Observed photo edge",
-                style.observed_edge_color,
-                False,
-            ),
-            DebugLegendEntry(
-                "Canonical START / END",
-                style.canonical_boundary_color,
-                False,
-            ),
-            DebugLegendEntry(
-                "Shared direction",
-                style.inferred_direction_color,
-                False,
-            ),
-            DebugLegendEntry(
-                "Retained placement",
-                style.retained_color,
-                True,
-            ),
+            DebugLegendEntry("LANE AUTHORITY", style.lane_authority_color, "dashed"),
+            DebugLegendEntry("OBSERVED PHOTO EDGE", style.observed_edge_color, "solid"),
+            DebugLegendEntry("RAW TRANSITION", style.raw_transition_color, "dashed"),
+            DebugLegendEntry("SHARED / INFERRED", style.inferred_direction_color, "dashed"),
+            DebugLegendEntry("CANONICAL", style.canonical_boundary_color, "box"),
+            DebugLegendEntry("RETAINED", style.retained_color, "box"),
+            DebugLegendEntry("SAFE OUTPUT", style.safe_output_color, "box"),
+            DebugLegendEntry("BUDGET LIMIT", style.budget_limit_color, "dashed"),
+            DebugLegendEntry("BUDGET VIOLATION", style.review_color, "hatched"),
         )

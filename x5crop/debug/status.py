@@ -12,70 +12,70 @@ from ..run_status import RunTerminalOutcome
 from ..utils import RGB_CHANNEL_COUNT
 
 
+def _font(size: int) -> ImageFont.ImageFont:
+    return ImageFont.load_default(size=size)
+
+
+def _text_width(
+    draw: ImageDraw.ImageDraw,
+    text: str,
+    font: ImageFont.ImageFont,
+) -> int:
+    box = draw.textbbox((0, 0), text, font=font)
+    return box[2] - box[0]
+
+
 def debug_status_parts(
     detection: FinalDetection,
     style: DebugStyleParameters,
     terminal_outcome: RunTerminalOutcome,
 ) -> tuple[str, str, tuple[int, int, int]]:
     if terminal_outcome == RunTerminalOutcome.RUNTIME_ERROR:
-        return (
-            "RUNTIME ERROR",
-            (
-                "terminal_outcome: runtime_error"
-                f" | decision_status: {detection.decision.status}"
-            ),
-            style.review_color,
-        )
-    status = (
-        "APPROVED"
-        if detection.decision.status == "approved_auto"
-        else "REVIEW"
-    )
-    detail = f"status: {detection.decision.status}"
-    color = (
-        style.approved_color
-        if detection.decision.status == "approved_auto"
-        else style.review_color
-    )
+        return "RUNTIME ERROR", "runtime_error · NOT EXPORTABLE", style.review_color
+    if detection.decision.status == "approved_auto":
+        return "APPROVED", "approved_auto · EXPORT ELIGIBLE", style.approved_color
     reasons = detection.decision.final_review_reasons
-    if reasons:
-        detail += " | " + ", ".join(reasons[: style.reason_display_limit])
-    if not detection.frame_export_eligible:
-        detail += " | NOT EXPORTABLE"
-    return status, detail, color
-
-
-def draw_large_status(
-    draw: ImageDraw.ImageDraw,
-    xy: tuple[int, int],
-    text: str,
-    color: tuple[int, int, int],
-    fallback_size: tuple[int, int],
-    stroke_width: int,
-    font_size: int,
-) -> tuple[int, int]:
-    x, y = xy
-    draw.text(
-        (x, y),
-        text,
-        fill=color,
-        font=ImageFont.load_default(size=font_size),
-        stroke_width=stroke_width,
-        stroke_fill=color,
+    reason = (
+        " · ".join(reasons[: style.reason_display_limit])
+        if reasons
+        else detection.decision.status
     )
-    try:
-        bbox = draw.textbbox(
-            (x, y),
-            text,
-            font=ImageFont.load_default(size=font_size),
-            stroke_width=stroke_width,
+    return "REVIEW", f"{reason} · NOT EXPORTABLE", style.review_color
+
+
+def _count_authority(configuration: DetectionConfiguration) -> str:
+    request = configuration.count_request
+    if request.authoritative_count is None:
+        return request.mode.value
+    return f"{request.mode.value}:{request.authoritative_count}"
+
+
+def _transform_lines(
+    detection: FinalDetection,
+    profile: ImageProfile,
+) -> tuple[str, str]:
+    transform = detection.transform_assessment
+    interval = transform.observed_angle_interval_degrees
+    if interval is None:
+        first = "V5 · DIRECTION UNAVAILABLE"
+        second = (
+            f"ORIENTATION {profile.orientation.original_tag}>CANONICAL>1"
         )
-        width = bbox[2] - bbox[0]
-        height = bbox[3] - bbox[1]
-    except Exception:
-        width = len(text) * fallback_size[0]
-        height = fallback_size[1]
-    return width, height
+    else:
+        action = (
+            "TRANSFORM IDENTITY"
+            if transform.outcome == "identity"
+            else "DESKEW APPLIED"
+        )
+        first = (
+            f"V5 · {action} "
+            f"{transform.applied_source_rotation_degrees:+.3f}°"
+        )
+        second = (
+            f"observed {interval.minimum:+.3f}°…{interval.maximum:+.3f}° · "
+            f"ORIENTATION {profile.orientation.original_tag}>CANONICAL>1"
+        )
+    return first, second
 
 
 def add_status_bar(
@@ -86,143 +86,81 @@ def add_status_bar(
     style: DebugStyleParameters,
     terminal_outcome: RunTerminalOutcome,
 ) -> np.ndarray:
-    status, detail, color = debug_status_parts(
+    if rgb.shape[1] != style.canvas_width:
+        raise ValueError("Debug Analysis status width is not canonical")
+    height, width = rgb.shape[:2]
+    panel = np.full(
+        (height + style.status_bar_height, width, RGB_CHANNEL_COUNT),
+        style.canvas_background,
+        dtype=np.uint8,
+    )
+    panel[style.status_bar_height :] = rgb
+    image = Image.fromarray(panel, mode="RGB")
+    draw = ImageDraw.Draw(image)
+    status, detail, status_color = debug_status_parts(
         detection,
         style,
         terminal_outcome,
     )
-    bar_h = style.status_bar_height
-    h, w = rgb.shape[:2]
-    panel = np.full(
-        (h + bar_h, w, RGB_CHANNEL_COUNT),
-        style.dark_background,
-        dtype=np.uint8,
+    chip = (16, 12, 154, 52)
+    draw.rounded_rectangle(
+        chip,
+        radius=6,
+        fill=status_color,
+        outline=tuple(min(255, channel + 34) for channel in status_color),
+        width=1,
     )
-    panel[bar_h:, :, :] = rgb
-    image = Image.fromarray(panel, mode="RGB")
-    draw = ImageDraw.Draw(image)
-    draw.rectangle(
-        (0, 0, w - 1, bar_h - 1),
-        outline=color,
-        width=style.status_outline_width,
-    )
-    status_w, _ = draw_large_status(
-        draw,
-        style.status_origin,
+    status_font = _font(style.header_status_font_size)
+    status_width = _text_width(draw, status, status_font)
+    draw.text(
+        ((chip[0] + chip[2] - status_width) // 2, 22),
         status,
-        color,
-        style.text_fallback_size,
-        style.status_text_stroke_width,
-        style.status_label_font_size,
+        fill=(255, 255, 255),
+        font=status_font,
     )
-    count_request = configuration.count_request
-    count_authority = (
-        count_request.mode.value
-        if count_request.authoritative_count is None
-        else (
-            f"{count_request.mode.value}:"
-            f"{count_request.authoritative_count}"
-        )
-    )
+    detail_font = _font(style.header_detail_font_size)
+    draw.text((178, 18), detail, fill=style.text_color, font=detail_font)
     context = (
-        f"{SCRIPT_NAME} {VERSION} · "
-        f"{configuration.physical_spec.format_id}/"
-        f"{configuration.strip_mode} · count={count_authority} · "
-        f"slots={detection.output_slot_count or 0} · "
-        f"ORIENTATION {profile.orientation.original_tag}>CANONICAL>1"
+        f"{configuration.physical_spec.format_id}/{configuration.strip_mode} · "
+        f"count={_count_authority(configuration)} · "
+        f"slots={detection.output_slot_count or 0}"
     )
     draw.text(
-        (
-            style.status_origin[0] + status_w + style.detail_gap,
-            style.detail_baseline,
-        ),
+        (178, 39),
         context,
-        fill=style.text_color,
-        font=ImageFont.load_default(size=style.status_detail_font_size),
+        fill=style.secondary_text_color,
+        font=detail_font,
     )
-    decision_y = style.detail_baseline + 27
+    runtime_chip = (1490, 16, width - 16, 50)
+    draw.rounded_rectangle(
+        runtime_chip,
+        radius=4,
+        outline=style.panel_border_color,
+        width=1,
+    )
+    runtime_text = f"{SCRIPT_NAME} {VERSION}"
+    runtime_font = _font(style.annotation_font_size)
+    runtime_width = _text_width(draw, runtime_text, runtime_font)
     draw.text(
         (
-            style.status_origin[0] + status_w + style.detail_gap,
-            decision_y,
+            (runtime_chip[0] + runtime_chip[2] - runtime_width) // 2,
+            26,
         ),
-        detail,
-        fill=style.text_color,
-        font=ImageFont.load_default(size=style.status_detail_font_size),
+        runtime_text,
+        fill=style.secondary_text_color,
+        font=runtime_font,
     )
-    transform = detection.transform_assessment
-    interval = transform.observed_angle_interval_degrees
-    if interval is None:
-        transform_text = "DIRECTION UNAVAILABLE"
-    elif transform.outcome == "identity":
-        transform_text = (
-            "TRANSFORM IDENTITY +0.000° · "
-            f"DIRECTION [{interval.minimum:+.3f}°, "
-            f"{interval.maximum:+.3f}°]"
+    first, second = _transform_lines(detection, profile)
+    transform_right = runtime_chip[0] - 16
+    for text, y, color in (
+        (first, 16, style.text_color),
+        (second, 38, style.secondary_text_color),
+    ):
+        text_width = _text_width(draw, text, detail_font)
+        draw.text(
+            (transform_right - text_width, y),
+            text,
+            fill=color,
+            font=detail_font,
         )
-    else:
-        transform_text = (
-            f"DESKEW APPLIED {transform.applied_source_rotation_degrees:+.3f}° · "
-            f"DIRECTION [{interval.minimum:+.3f}°, "
-            f"{interval.maximum:+.3f}°]"
-        )
-    try:
-        transform_box = draw.textbbox(
-            (0, 0),
-            transform_text,
-            font=ImageFont.load_default(size=style.status_detail_font_size),
-        )
-        transform_width = transform_box[2] - transform_box[0]
-    except Exception:
-        transform_width = len(transform_text) * style.text_fallback_size[0]
-    transform_x = max(8, w - transform_width - 12)
-    draw.rectangle(
-        (
-            transform_x - 4,
-            style.detail_baseline - 2,
-            w - 8,
-            style.detail_baseline + style.status_detail_font_size + 4,
-        ),
-        fill=style.dark_background,
-    )
-    draw.text(
-        (transform_x, style.detail_baseline),
-        transform_text,
-        fill=style.inferred_direction_color,
-        font=ImageFont.load_default(size=style.status_detail_font_size),
-        stroke_width=1,
-        stroke_fill=style.dark_background,
-    )
-    atomic_text = (
-        f"SOURCE ATOMIC · {detection.output_slot_count} TIFF ELIGIBLE"
-        if detection.frame_export_eligible
-        else "SOURCE ATOMIC · 0 OFFICIAL TIFF"
-    )
-    try:
-        atomic_box = draw.textbbox(
-            (0, 0),
-            atomic_text,
-            font=ImageFont.load_default(size=style.status_detail_font_size),
-        )
-        atomic_width = atomic_box[2] - atomic_box[0]
-    except Exception:
-        atomic_width = len(atomic_text) * style.text_fallback_size[0]
-    atomic_x = max(8, w - atomic_width - 12)
-    draw.rectangle(
-        (
-            atomic_x - 4,
-            decision_y - 2,
-            w - 8,
-            decision_y + style.status_detail_font_size + 4,
-        ),
-        fill=style.dark_background,
-    )
-    draw.text(
-        (atomic_x, decision_y),
-        atomic_text,
-        fill=color,
-        font=ImageFont.load_default(size=style.status_detail_font_size),
-        stroke_width=1,
-        stroke_fill=style.dark_background,
-    )
     return np.asarray(image)

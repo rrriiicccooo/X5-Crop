@@ -85,8 +85,9 @@ python3 X5_Crop.py /path/to/scans \
 - `--strip`：`full` 或 `partial`。
 - `--count N|auto`：partial 的明确张数或片夹容量；full 使用格式固定张数。
 - `--jobs N`：source 并发数；默认 2，上限 3。数值库内部线程固定为 1。
-- `--debug-analysis`：显式生成三联诊断 JPG；四层 V5 facts 分别为 source authority、pixel
-  evidence、canonical placement 与 protected output，默认关闭。
+- `--debug-analysis`：显式生成固定 `1653 × 952` 深色网格的三联诊断 JPG；四层 V5 facts 分别为
+  source authority、pixel evidence、canonical placement 与 protected output，状态头保留实际
+  deskew 角度与 Orientation，默认关闭。
 - `--allow-best-effort-output`：明确接受未验证文件系统的较弱发布语义。
 - `--interactive`：交互选择格式、模式、张数和 Debug Analysis。
 

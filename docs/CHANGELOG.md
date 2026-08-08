@@ -50,7 +50,9 @@ standalone 只消费 current schema；不存在 V4.9 fallback、shim、feature f
   显式使用 `--allow-best-effort-output`，但该选择不能绕过锁、路径、rename 或空间硬失败。
 - Debug Analysis 改为三联图但保留四层 V5 facts：source authority 与 pixel evidence 合并展示，
   retained complete placements 与 canonical 代表分层绘制，protected output 同时显示逐边 budget、
-  source-atomic decision、Orientation 与实际 deskew/identity transform；不重新计算任何检测事实。
+  source-atomic decision、Orientation 与实际 deskew/identity transform；使用固定 `1653 × 952`
+  深色审计网格、越过照片上缘的 START/END、提亮但仍次要的 RAW transition 和共享图例。它不重新
+  计算任何检测事实，也不在 current report 未保存 polygon 时伪造 `MaximumLegalWindow`。
 
 验证拓扑已统一为
 `tools/verify staged|full|accuracy|diagnostic|performance|non-detection|audit|platform|platform-check|platform-package|pre-push`。

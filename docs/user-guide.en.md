@@ -102,9 +102,10 @@ Production options:
   full mode uses the fixed format count.
 - `--jobs N`: source concurrency; default 2, maximum 3. Numerical library
   threads remain fixed at 1.
-- `--debug-analysis`: explicitly write a three-panel diagnostic JPG preserving
-  the four V5 fact layers: source authority, pixel evidence, canonical placement,
-  and protected output. It is off by default.
+- `--debug-analysis`: explicitly write a three-panel diagnostic JPG on a fixed
+  `1653 × 952` dark audit grid. It preserves source authority, pixel evidence,
+  canonical placement, protected output, the actual deskew angle, and Orientation.
+  It is off by default.
 - `--allow-best-effort-output`: explicitly accept weaker publication semantics
   on an unverified filesystem.
 - `--interactive`: prompt for format, mode, count, and Debug Analysis.

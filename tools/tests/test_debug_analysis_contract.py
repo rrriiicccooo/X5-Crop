@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest import mock
 
@@ -18,6 +19,7 @@ from x5crop.debug.panels import (
     make_debug_analysis_panel,
     stack_debug_panels,
 )
+from x5crop.debug.status import _transform_lines
 from x5crop.detection.decision.decision_gate import apply_decision_gate
 from x5crop.detection.final.finalize import finalize_detection
 from x5crop.detection.pipeline import choose_detection
@@ -76,9 +78,9 @@ class DebugAnalysisContractTest(unittest.TestCase):
         self.assertEqual(
             DEBUG_ANALYSIS_PANEL_LABELS,
             (
-                "01 · SOURCE AUTHORITY & PIXEL EVIDENCE",
+                "01 · SOURCE & OBSERVED EVIDENCE",
                 "02 · RETAINED PLACEMENTS & CANONICAL",
-                "03 · PROTECTED OUTPUT & DECISION",
+                "03 · SAFE OUTPUT & DIRECT-USE BUDGET",
             ),
         )
         with tempfile.TemporaryDirectory() as temporary:
@@ -102,9 +104,11 @@ class DebugAnalysisContractTest(unittest.TestCase):
                     RunTerminalOutcome.NEEDS_REVIEW,
                 )
         self.assertEqual(status.call_count, 1)
-        self.assertEqual(panel.ndim, 3)
-        self.assertEqual(panel.shape[2], 3)
-        self.assertGreater(panel.shape[0], workspace.source_gray.shape[0] * 3)
+        style = configuration.diagnostics.style
+        self.assertEqual(
+            panel.shape,
+            (style.canvas_height, style.canvas_width, 3),
+        )
 
     def test_output_panel_reads_saved_placement_and_constrained_footprints(
         self,
@@ -171,9 +175,12 @@ class DebugAnalysisContractTest(unittest.TestCase):
                     "x5crop.debug.panels._fill_polygon"
                 ) as fill,
                 mock.patch(
-                    "x5crop.debug.panels._labeled",
-                    side_effect=lambda rgb, label, _style: rgb,
-                ) as labeled,
+                    "x5crop.debug.panels._panel_base",
+                    wraps=__import__(
+                        "x5crop.debug.panels",
+                        fromlist=["_panel_base"],
+                    )._panel_base,
+                ) as output_base,
             ):
                 _protected_output_panel(
                     workspace,
@@ -182,9 +189,12 @@ class DebugAnalysisContractTest(unittest.TestCase):
                     DebugRenderCache(),
                 )
             with mock.patch(
-                "x5crop.debug.panels._labeled",
-                side_effect=lambda rgb, label, _style: rgb,
-            ) as selected_labeled:
+                "x5crop.debug.panels._panel_base",
+                wraps=__import__(
+                    "x5crop.debug.panels",
+                    fromlist=["_panel_base"],
+                )._panel_base,
+            ) as selected_base:
                 _selected_geometry_panel(
                     workspace,
                     detection,
@@ -195,34 +205,64 @@ class DebugAnalysisContractTest(unittest.TestCase):
         self.assertFalse(detection.frame_export_eligible)
         self.assertEqual(detection.resolved_output_geometries, ())
         self.assertGreater(fill.call_count, 0)
-        self.assertIn("0 OFFICIAL TIFF", labeled.call_args.args[1])
-        self.assertIn(
+        self.assertEqual(
+            output_base.call_args.args[3],
             "CANDIDATE AUDIT · NOT EXPORTABLE",
-            selected_labeled.call_args.args[1],
+        )
+        self.assertIn(
+            "CANONICAL · REPRESENTATIVE ONLY",
+            selected_base.call_args.args[3],
         )
 
     def test_fixed_palette_and_panel_stacking_are_bounded(self) -> None:
         self.assertEqual(len(FRAME_FILL_COLORS), 12)
         self.assertEqual(len(set(FRAME_FILL_COLORS)), 12)
         style = DebugStyleParameters()
-        panels = tuple(np.zeros((4, 5, 3), dtype=np.uint8) for _ in range(3))
-        vertical = stack_debug_panels(
-            panels,
-            horizontal=False,
-            style=style,
+        width = style.canvas_width - style.outer_margin * 2
+        panels = tuple(
+            np.zeros((height, width, 3), dtype=np.uint8)
+            for height in (
+                style.source_panel_height,
+                style.retained_panel_height,
+                style.output_panel_height,
+            )
         )
-        horizontal = stack_debug_panels(
-            panels,
-            horizontal=True,
-            style=style,
-        )
+        body = stack_debug_panels(panels, style=style)
         self.assertEqual(
-            vertical.shape[:2],
-            (12 + style.panel_spacing * 2, 5),
+            body.shape,
+            (
+                style.canvas_height
+                - style.status_bar_height
+                - style.legend_bar_height,
+                style.canvas_width,
+                3,
+            ),
         )
-        self.assertEqual(
-            horizontal.shape[:2],
-            (4, 15 + style.panel_spacing * 2),
+
+    def test_header_keeps_actual_deskew_angle_and_orientation(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            _configuration, profile, _workspace, detection = _fixture(
+                Path(temporary)
+            )
+        assessment = SimpleNamespace(
+            outcome="shared_rotation",
+            applied_source_rotation_degrees=-0.153,
+            observed_angle_interval_degrees=(
+                detection.transform_assessment.observed_angle_interval_degrees
+            ),
+        )
+        applied = SimpleNamespace(transform_assessment=assessment)
+        first, second = _transform_lines(applied, profile)
+        self.assertEqual(first, "V5 · DESKEW APPLIED -0.153°")
+        self.assertIn("observed -0.166°…+0.166°", second)
+        self.assertIn("ORIENTATION 1>CANONICAL>1", second)
+
+    def test_raw_transition_is_visible_but_secondary(self) -> None:
+        style = DebugStyleParameters()
+        self.assertGreater(sum(style.raw_transition_color), 600)
+        self.assertLess(
+            sum(style.raw_transition_color),
+            sum(style.retained_color),
         )
 
 
