@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 from pathlib import Path
 import tempfile
 from types import SimpleNamespace
@@ -9,13 +10,15 @@ from unittest import mock
 import numpy as np
 import tifffile
 
+import x5crop.debug.panels as debug_panels
 from x5crop.configuration.bundle import DetectionConfigurationBundle
 from x5crop.configuration.diagnostics import DebugStyleParameters
 from x5crop.debug.canvas import FRAME_FILL_COLORS, DebugRenderCache
 from x5crop.debug.panels import (
     DEBUG_ANALYSIS_PANEL_LABELS,
+    _cross_axis_panel,
+    _long_axis_panel,
     _protected_output_panel,
-    _selected_geometry_panel,
     make_debug_analysis_panel,
     stack_debug_panels,
 )
@@ -78,9 +81,9 @@ class DebugAnalysisContractTest(unittest.TestCase):
         self.assertEqual(
             DEBUG_ANALYSIS_PANEL_LABELS,
             (
-                "01 · SOURCE & OBSERVED EVIDENCE",
-                "02 · RETAINED PLACEMENTS & CANONICAL",
-                "03 · SAFE OUTPUT & DIRECT-USE BUDGET",
+                "01 · CROSS-AXIS TOP / BOTTOM",
+                "02 · LONG-AXIS START / END",
+                "03 · FINAL SAFE OUTPUT",
             ),
         )
         with tempfile.TemporaryDirectory() as temporary:
@@ -141,27 +144,52 @@ class DebugAnalysisContractTest(unittest.TestCase):
             ),
         )
 
-    def test_retained_panel_draws_every_complete_retained_state(self) -> None:
+    def test_cross_axis_panel_separates_detected_and_selected_edges(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             configuration, _profile, workspace, detection = _fixture(
                 Path(temporary)
             )
-            expected_frame_count = sum(
-                len(placement.canonical.frames)
-                for lane in detection.candidate.geometry.lane_reconstructions
-                for placement in lane.retained_placements
-            )
-            with mock.patch(
-                "x5crop.debug.panels._draw_dashed_polyline"
-            ) as retained_line:
-                _selected_geometry_panel(
+            with (
+                mock.patch(
+                    "x5crop.debug.panels._draw_detected_top_bottom",
+                    wraps=debug_panels._draw_detected_top_bottom,
+                ) as detected,
+                mock.patch(
+                    "x5crop.debug.panels._draw_selected_top_bottom",
+                    wraps=debug_panels._draw_selected_top_bottom,
+                ) as selected,
+            ):
+                _cross_axis_panel(
                     workspace,
                     detection,
                     configuration.diagnostics.style,
                     DebugRenderCache(),
                 )
-        self.assertGreater(expected_frame_count, 0)
-        self.assertEqual(retained_line.call_count, expected_frame_count)
+        self.assertEqual(detected.call_count, 1)
+        self.assertEqual(selected.call_count, 1)
+
+    def test_long_axis_panel_draws_every_detected_transition(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            configuration, _profile, workspace, detection = _fixture(
+                Path(temporary)
+            )
+            expected_transition_count = sum(
+                len(lane.side_transition_regions)
+                for lane in detection.candidate.geometry.lane_reconstructions
+            )
+            with mock.patch(
+                "x5crop.debug.panels._draw_dashed_polyline"
+            ) as detected_line:
+                _long_axis_panel(
+                    workspace,
+                    detection,
+                    configuration.diagnostics.style,
+                    DebugRenderCache(),
+                )
+        self.assertGreater(expected_transition_count, 0)
+        self.assertEqual(detected_line.call_count, expected_transition_count)
 
     def test_review_keeps_candidate_audit_without_official_output_geometry(
         self,
@@ -194,8 +222,8 @@ class DebugAnalysisContractTest(unittest.TestCase):
                     "x5crop.debug.panels",
                     fromlist=["_panel_base"],
                 )._panel_base,
-            ) as selected_base:
-                _selected_geometry_panel(
+            ) as long_axis_base:
+                _long_axis_panel(
                     workspace,
                     detection,
                     configuration.diagnostics.style,
@@ -210,8 +238,8 @@ class DebugAnalysisContractTest(unittest.TestCase):
             "CANDIDATE AUDIT · NOT EXPORTABLE",
         )
         self.assertIn(
-            "CANONICAL · REPRESENTATIVE ONLY",
-            selected_base.call_args.args[3],
+            "DETECTED TRANSITION / SELECTED BOUNDARY",
+            long_axis_base.call_args.args[3],
         )
 
     def test_fixed_palette_and_panel_stacking_are_bounded(self) -> None:
@@ -222,8 +250,8 @@ class DebugAnalysisContractTest(unittest.TestCase):
         panels = tuple(
             np.zeros((height, width, 3), dtype=np.uint8)
             for height in (
-                style.source_panel_height,
-                style.retained_panel_height,
+                style.cross_axis_panel_height,
+                style.long_axis_panel_height,
                 style.output_panel_height,
             )
         )
@@ -257,12 +285,36 @@ class DebugAnalysisContractTest(unittest.TestCase):
         self.assertIn("observed -0.166°…+0.166°", second)
         self.assertIn("ORIENTATION 1>CANONICAL>1", second)
 
-    def test_raw_transition_is_visible_but_secondary(self) -> None:
+    def test_deskew_data_is_owned_only_by_the_status_header(self) -> None:
+        self.assertNotIn(
+            "transform_assessment",
+            inspect.getsource(debug_panels),
+        )
+
+    def test_detected_transition_is_visible_but_secondary(self) -> None:
         style = DebugStyleParameters()
-        self.assertGreater(sum(style.raw_transition_color), 600)
+        self.assertGreater(sum(style.detected_transition_color), 600)
         self.assertLess(
-            sum(style.raw_transition_color),
-            sum(style.retained_color),
+            sum(style.detected_transition_color),
+            sum(style.safety_envelope_color),
+        )
+
+    def test_legend_matches_the_three_row_fact_ownership(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            configuration, _profile, _workspace, _detection = _fixture(
+                Path(temporary)
+            )
+        self.assertEqual(
+            tuple(entry.label for entry in configuration.diagnostics.legend_entries),
+            (
+                "DETECTED TOP/BOTTOM",
+                "SELECTED TOP/BOTTOM",
+                "DETECTED START/END",
+                "SELECTED START/END",
+                "SAFETY ENVELOPE",
+                "FINAL OUTPUT",
+                "BUDGET VIOLATION",
+            ),
         )
 
 

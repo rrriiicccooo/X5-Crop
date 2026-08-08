@@ -59,9 +59,9 @@ def build_parser() -> argparse.ArgumentParser:
         "--debug-analysis",
         action="store_true",
         help=(
-            "Write one three-panel JPG preserving four V5 fact layers: "
-            "source authority, pixel evidence, canonical placement, and "
-            "protected output."
+            "Write one three-panel JPG comparing detected and selected "
+            "TOP/BOTTOM, detected and selected START/END, and final safe "
+            "output envelopes."
         ),
     )
     parser.add_argument(

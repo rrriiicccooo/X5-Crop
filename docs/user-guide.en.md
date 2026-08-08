@@ -104,9 +104,10 @@ Production options:
   of source TIFFs, you may explicitly use `--jobs 2`. Numerical library threads
   remain fixed at 1.
 - `--debug-analysis`: explicitly write a three-panel diagnostic JPG on a fixed
-  `1653 × 952` dark audit grid. It preserves source authority, pixel evidence,
-  canonical placement, protected output, the actual deskew angle, and Orientation.
-  It is off by default.
+  `1653 × 952` dark audit grid. Row one compares detected and selected TOP/BOTTOM,
+  row two compares detected and selected START/END, and row three shows safety
+  envelopes with translucent per-frame final output. The actual deskew angle and
+  Orientation appear only in the upper-right status header. It is off by default.
 - `--allow-best-effort-output`: explicitly accept weaker publication semantics
   on an unverified filesystem.
 - `--interactive`: prompt for format, mode, count, and Debug Analysis.

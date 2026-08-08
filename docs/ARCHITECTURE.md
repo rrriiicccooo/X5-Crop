@@ -346,15 +346,15 @@ Manifest 只保存 `run_id`、输入 ordinal、便携名称、size、mtime、ter
 Git、cohort 或 performance receipt；inventory 不包含 manifest 自身。普通文件使用相对路径、
 role、type、size、mtime，目录只使用相对路径与 type。
 
-Debug Analysis 只读取 runtime/report facts，将四层事实组织为三联图：第一联合并
-source authority 与 pixel evidence，第二联显示全部 retained complete placements 和 canonical
-代表，第三联显示 protected output、budget 与 source-atomic decision。它不重新计算 detection、
-geometry 或 budget。渲染使用固定 `1653 × 952` 审计网格、一个共享 source preview cache、每联
-一个 RGBA overlay 和一次最终 JPEG 编码；竖向片条只旋转展示坐标，不改变 source facts。RAW
-transition 提亮但仍低于 observed edge，START/END 从真实 canonical 边界越过照片上缘进入标注区，
-状态头始终保留实际 deskew/identity 角度与 Orientation 映射。当前 report 没有可绘制的
-`MaximumLegalWindow` polygon，因此图例只陈述冻结的 5%/3% budget limit，不伪造绿色窗口。
-Pillow 只在用户显式启用 Debug Analysis 后延迟导入。
+Debug Analysis 只读取 runtime/report facts，并按坐标职责组织为三联图：第一联只对比
+`raw_top_bottom_observations` 检测值与 canonical top/bottom 选定值；第二联只对比
+`side_transition_regions` 检测值与 canonical START/END 选定值；第三联只显示
+`SafeCropEnvelope` 的 placement、required、constrained footprints、逐帧彩色半透明最终输出、budget
+violation 与 source-atomic decision。它不重新计算 detection、geometry 或 budget。渲染使用固定
+`1653 × 952` 审计网格、一个共享 source preview cache、第三联一个 RGBA overlay 和一次最终
+JPEG 编码；竖向片条只旋转展示坐标，不改变 source facts。实际 deskew/identity 角度与 Orientation 映射
+只在右上状态头出现，三联内部不重复。当前 report 没有可绘制的 `MaximumLegalWindow` polygon，
+因此不伪造绿色窗口。Pillow 只在用户显式启用 Debug Analysis 后延迟导入。
 
 ## 9. 生产路径与开发验证
 

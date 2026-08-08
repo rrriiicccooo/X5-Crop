@@ -49,11 +49,11 @@ standalone 只消费 current schema；不存在 V4.9 fallback、shim、feature f
   `--jobs 1` 以约束一般电脑的峰值内存；`--jobs 2/3` 保留为内存充足时的显式批量选择。
 - 正式 CLI 删除 `--overwrite`、`--diagnostics` 和旧 debug flags；未验证文件系统的非交互运行必须
   显式使用 `--allow-best-effort-output`，但该选择不能绕过锁、路径、rename 或空间硬失败。
-- Debug Analysis 改为三联图但保留四层 V5 facts：source authority 与 pixel evidence 合并展示，
-  retained complete placements 与 canonical 代表分层绘制，protected output 同时显示逐边 budget、
-  source-atomic decision、Orientation 与实际 deskew/identity transform；使用固定 `1653 × 952`
-  深色审计网格、越过照片上缘的 START/END、提亮但仍次要的 RAW transition 和共享图例。它不重新
-  计算任何检测事实，也不在 current report 未保存 polygon 时伪造 `MaximumLegalWindow`。
+- Debug Analysis 使用固定 `1653 × 952` 三联深色审计网格：第一联专属 detected/selected
+  TOP/BOTTOM，第二联专属 detected/selected START/END，第三联专属 `SafeCropEnvelope`、彩色半透明
+  final output、budget 与 source-atomic decision。Deskew/identity 与 Orientation 只在右上状态头
+  显示一次。它不重新计算任何检测事实，也不在 current report 未保存 polygon 时伪造
+  `MaximumLegalWindow`。
 
 验证拓扑已统一为
 `tools/verify staged|full|accuracy|diagnostic|performance|non-detection|audit|platform|platform-check|platform-package|pre-push`。

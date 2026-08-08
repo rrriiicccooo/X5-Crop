@@ -29,19 +29,18 @@ class DebugStyleParameters:
     status_bar_height: int = 70
     outer_margin: int = 12
     panel_gap: int = 10
-    source_panel_height: int = 280
-    retained_panel_height: int = 258
+    cross_axis_panel_height: int = 280
+    long_axis_panel_height: int = 258
     output_panel_height: int = 273
     legend_bar_height: int = 51
     panel_title_height: int = 40
     panel_media_inset_x: int = 27
-    source_media_top: int = 81
-    source_media_height: int = 168
-    retained_media_top: int = 76
-    retained_media_height: int = 145
+    cross_axis_media_top: int = 81
+    cross_axis_media_height: int = 168
+    long_axis_media_top: int = 76
+    long_axis_media_height: int = 145
     output_media_top: int = 81
     output_media_height: int = 148
-    retained_tile_gap: int = 24
     frame_fill_alpha: float = 0.20
     safe_fill_alpha: float = 0.25
     frame_line_width: int = 2
@@ -65,14 +64,12 @@ class DebugStyleParameters:
     divider_color: tuple[int, int, int] = (39, 48, 56)
     text_color: tuple[int, int, int] = (240, 243, 246)
     secondary_text_color: tuple[int, int, int] = (201, 207, 214)
-    lane_authority_color: tuple[int, int, int] = (145, 155, 165)
-    raw_transition_color: tuple[int, int, int] = (205, 211, 216)
-    observed_edge_color: tuple[int, int, int] = (255, 78, 66)
-    canonical_boundary_color: tuple[int, int, int] = (255, 171, 37)
-    inferred_direction_color: tuple[int, int, int] = (45, 220, 229)
-    retained_color: tuple[int, int, int] = (230, 234, 238)
-    safe_output_color: tuple[int, int, int] = (180, 188, 196)
-    budget_limit_color: tuple[int, int, int] = (96, 205, 107)
+    detected_edge_color: tuple[int, int, int] = (45, 220, 229)
+    selected_edge_color: tuple[int, int, int] = (255, 78, 66)
+    detected_transition_color: tuple[int, int, int] = (205, 211, 216)
+    selected_boundary_color: tuple[int, int, int] = (255, 171, 37)
+    safety_envelope_color: tuple[int, int, int] = (230, 234, 238)
+    safe_output_color: tuple[int, int, int] = (30, 144, 255)
     approved_color: tuple[int, int, int] = (50, 183, 105)
     review_color: tuple[int, int, int] = (230, 73, 61)
 
@@ -83,19 +80,18 @@ class DebugStyleParameters:
             self.status_bar_height,
             self.outer_margin,
             self.panel_gap,
-            self.source_panel_height,
-            self.retained_panel_height,
+            self.cross_axis_panel_height,
+            self.long_axis_panel_height,
             self.output_panel_height,
             self.legend_bar_height,
             self.panel_title_height,
             self.panel_media_inset_x,
-            self.source_media_top,
-            self.source_media_height,
-            self.retained_media_top,
-            self.retained_media_height,
+            self.cross_axis_media_top,
+            self.cross_axis_media_height,
+            self.long_axis_media_top,
+            self.long_axis_media_height,
             self.output_media_top,
             self.output_media_height,
-            self.retained_tile_gap,
             self.frame_line_width,
             self.retained_line_width,
             self.evidence_line_width,
@@ -117,9 +113,9 @@ class DebugStyleParameters:
         require_unit_interval("debug frame fill alpha", self.frame_fill_alpha)
         require_unit_interval("debug safe fill alpha", self.safe_fill_alpha)
         body_height = (
-            self.source_panel_height
+            self.cross_axis_panel_height
             + self.panel_gap
-            + self.retained_panel_height
+            + self.long_axis_panel_height
             + self.panel_gap
             + self.output_panel_height
             + self.legend_bar_height
@@ -137,14 +133,12 @@ class DebugStyleParameters:
             self.divider_color,
             self.text_color,
             self.secondary_text_color,
-            self.lane_authority_color,
-            self.raw_transition_color,
-            self.observed_edge_color,
-            self.canonical_boundary_color,
-            self.inferred_direction_color,
-            self.retained_color,
+            self.detected_edge_color,
+            self.selected_edge_color,
+            self.detected_transition_color,
+            self.selected_boundary_color,
+            self.safety_envelope_color,
             self.safe_output_color,
-            self.budget_limit_color,
             self.approved_color,
             self.review_color,
         )
@@ -164,13 +158,11 @@ class DiagnosticsConfiguration:
     def legend_entries(self) -> tuple[DebugLegendEntry, ...]:
         style = self.style
         return (
-            DebugLegendEntry("LANE AUTHORITY", style.lane_authority_color, "dashed"),
-            DebugLegendEntry("OBSERVED PHOTO EDGE", style.observed_edge_color, "solid"),
-            DebugLegendEntry("RAW TRANSITION", style.raw_transition_color, "dashed"),
-            DebugLegendEntry("SHARED / INFERRED", style.inferred_direction_color, "dashed"),
-            DebugLegendEntry("CANONICAL", style.canonical_boundary_color, "box"),
-            DebugLegendEntry("RETAINED", style.retained_color, "box"),
-            DebugLegendEntry("SAFE OUTPUT", style.safe_output_color, "box"),
-            DebugLegendEntry("BUDGET LIMIT", style.budget_limit_color, "dashed"),
+            DebugLegendEntry("DETECTED TOP/BOTTOM", style.detected_edge_color, "dashed"),
+            DebugLegendEntry("SELECTED TOP/BOTTOM", style.selected_edge_color, "solid"),
+            DebugLegendEntry("DETECTED START/END", style.detected_transition_color, "dashed"),
+            DebugLegendEntry("SELECTED START/END", style.selected_boundary_color, "solid"),
+            DebugLegendEntry("SAFETY ENVELOPE", style.safety_envelope_color, "box"),
+            DebugLegendEntry("FINAL OUTPUT", style.safe_output_color, "box"),
             DebugLegendEntry("BUDGET VIOLATION", style.review_color, "hatched"),
         )

@@ -21,7 +21,6 @@ from ..detection.photo_geometry.model import (
 )
 from ..detection.photo_geometry.template_model import FrameFormatPlacement
 from ..detection.workspace import DetectionWorkspace
-from ..domain import Box
 from ..io.model import ImageProfile
 from ..run_status import RunTerminalOutcome
 from ..utils import RGB_CHANNEL_COUNT
@@ -30,9 +29,9 @@ from .status import add_status_bar
 
 
 DEBUG_ANALYSIS_PANEL_LABELS = (
-    "01 · SOURCE & OBSERVED EVIDENCE",
-    "02 · RETAINED PLACEMENTS & CANONICAL",
-    "03 · SAFE OUTPUT & DIRECT-USE BUDGET",
+    "01 · CROSS-AXIS TOP / BOTTOM",
+    "02 · LONG-AXIS START / END",
+    "03 · FINAL SAFE OUTPUT",
 )
 
 
@@ -149,7 +148,6 @@ def _source_box_for_points(
     target_height: int,
     *,
     padding_fraction: float,
-    crop_to_aspect: bool,
 ) -> tuple[int, int, int, int]:
     display_width = projection.display_width
     display_height = projection.display_height
@@ -176,11 +174,7 @@ def _source_box_for_points(
     center_y = (top + bottom) / 2.0
     span_x = max(1.0, right - left)
     span_y = max(1.0, bottom - top)
-    if crop_to_aspect and span_x / span_y < target_aspect:
-        span_y = span_x / target_aspect
-    elif crop_to_aspect:
-        span_x = span_y * target_aspect
-    elif span_x / span_y < target_aspect:
+    if span_x / span_y < target_aspect:
         desired_x = span_y * target_aspect
         if desired_x <= display_width:
             span_x = desired_x
@@ -213,7 +207,6 @@ def _viewport(
     target_box: tuple[int, int, int, int],
     *,
     padding_fraction: float,
-    crop_to_aspect: bool = False,
 ) -> _Viewport:
     target_left, target_top, target_right, target_bottom = target_box
     source_box = _source_box_for_points(
@@ -222,7 +215,6 @@ def _viewport(
         target_right - target_left,
         target_bottom - target_top,
         padding_fraction=padding_fraction,
-        crop_to_aspect=crop_to_aspect,
     )
     return _Viewport(projection, source_box, target_box)
 
@@ -291,15 +283,6 @@ def _fill_polygon(
     if len(polygon) >= 3:
         target = viewport.polygon(polygon) if viewport is not None else polygon
         draw.polygon(target, fill=(*color, int(round(255.0 * alpha))))
-
-
-def _box_polygon(box: Box) -> tuple[tuple[float, float], ...]:
-    return (
-        (float(box.left), float(box.top)),
-        (float(box.right), float(box.top)),
-        (float(box.right), float(box.bottom)),
-        (float(box.left), float(box.bottom)),
-    )
 
 
 def _source_line_points(observation: object) -> tuple[tuple[float, float], ...]:
@@ -408,12 +391,26 @@ def _draw_label_chip(
     text: str,
     color: tuple[int, int, int],
     style: DebugStyleParameters,
+    *,
+    filled: bool = True,
 ) -> None:
     font = _font(style.frame_label_font_size)
     x, y = xy
     width = _text_width(draw, text, font) + 10
-    draw.rounded_rectangle((x, y, x + width, y + 22), radius=3, fill=color)
-    draw.text((x + 5, y + 3), text, fill=(255, 255, 255), font=font)
+    bounds = (x, y, x + width, y + 22)
+    if filled:
+        draw.rounded_rectangle(bounds, radius=3, fill=color)
+        text_color = (255, 255, 255)
+    else:
+        draw.rounded_rectangle(
+            bounds,
+            radius=3,
+            fill=style.panel_background,
+            outline=color,
+            width=1,
+        )
+        text_color = color
+    draw.text((x + 5, y + 3), text, fill=text_color, font=font)
 
 
 def _boundary_points(
@@ -431,7 +428,7 @@ def _boundary_points(
     return closest[0], closest[1]
 
 
-def _draw_start_end_annotations(
+def _draw_selected_start_end(
     draw: ImageDraw.ImageDraw,
     geometries: tuple[tuple[int, FrameFormatPlacement], ...],
     viewport: _Viewport,
@@ -441,8 +438,8 @@ def _draw_start_end_annotations(
     viewport_top = viewport.target_box[1]
     for index, (_ordinal, geometry) in enumerate(geometries):
         roles = (
-            ((BoundaryRole.END,) if index < len(geometries) - 2 else ())
-            + ((BoundaryRole.START,) if 0 < index < len(geometries) - 1 else ())
+            ((BoundaryRole.END,) if index < len(geometries) - 1 else ())
+            + ((BoundaryRole.START,) if index > 0 else ())
         )
         for role in roles:
             source_points = _boundary_points(geometry, role)
@@ -455,7 +452,7 @@ def _draw_start_end_annotations(
             line_top = (upper[0] - extension_x, upper[1] - extension_y)
             draw.line(
                 (line_top, lower),
-                fill=style.canonical_boundary_color,
+                fill=style.selected_boundary_color,
                 width=2,
             )
             text = role.value.upper()
@@ -470,101 +467,78 @@ def _draw_start_end_annotations(
             draw.text(
                 (text_x, max(style.panel_title_height + 3, line_top[1] - 17)),
                 text,
-                fill=style.canonical_boundary_color,
+                fill=style.selected_boundary_color,
                 font=font,
             )
 
 
-def _draw_shared_direction(
-    draw: ImageDraw.ImageDraw,
-    detection: FinalDetection,
-    geometries: tuple[tuple[int, FrameFormatPlacement], ...],
-    viewport: _Viewport,
-    style: DebugStyleParameters,
-) -> None:
-    interval = detection.transform_assessment.observed_angle_interval_degrees
-    if interval is None:
-        return
-    if geometries:
-        anchor_points = _boundary_points(geometries[-1][1], BoundaryRole.START)
-        x = min(viewport.point(point)[0] for point in anchor_points)
-    else:
-        left, _top, right, _bottom = viewport.target_box
-        x = left + (right - left) * 0.84
-    top = viewport.target_box[1] - 18
-    bottom = viewport.target_box[3]
-    _draw_dashed_polyline(
-        draw,
-        ((x, top), (x, bottom)),
-        style.inferred_direction_color,
-        2,
-        style.line_dash_length,
-        style.line_dash_gap,
-        closed=False,
-    )
-    label = "SHARED · INFERRED"
-    font = _font(style.annotation_font_size)
-    width = _text_width(draw, label, font)
-    draw.text(
-        (min(viewport.target_box[2] - width, x - width / 2), top - 17),
-        label,
-        fill=style.inferred_direction_color,
-        font=font,
-    )
-
-
-def _draw_observed_edges(
+def _draw_detected_top_bottom(
     draw: ImageDraw.ImageDraw,
     detection: FinalDetection,
     viewport: _Viewport,
     style: DebugStyleParameters,
-) -> None:
-    labeled: set[BoundaryRole] = set()
+) -> set[BoundaryRole]:
+    roles: set[BoundaryRole] = set()
     for lane in detection.candidate.geometry.lane_reconstructions:
         for observation in lane.raw_top_bottom_observations:
             source_points = _source_line_points(observation)
             if not source_points:
                 continue
             points = tuple(viewport.point(point) for point in source_points)
-            draw.line(points, fill=style.observed_edge_color, width=style.evidence_line_width)
-            if observation.role in {BoundaryRole.TOP, BoundaryRole.BOTTOM} and observation.role not in labeled:
-                y = int(round(sum(point[1] for point in points) / len(points))) - 10
-                _draw_label_chip(
-                    draw,
-                    (max(5, viewport.target_box[0] - 10), y),
-                    observation.role.value.upper(),
-                    style.observed_edge_color,
-                    style,
-                )
-                labeled.add(observation.role)
+            _draw_dashed_polyline(
+                draw,
+                points,
+                style.detected_edge_color,
+                2,
+                style.line_dash_length,
+                style.line_dash_gap,
+                closed=False,
+            )
+            roles.add(observation.role)
+    return roles
 
 
-def _source_evidence_panel(
+def _draw_selected_top_bottom(
+    draw: ImageDraw.ImageDraw,
+    geometries: tuple[tuple[int, FrameFormatPlacement], ...],
+    viewport: _Viewport,
+    style: DebugStyleParameters,
+) -> set[BoundaryRole]:
+    roles: set[BoundaryRole] = set()
+    for _ordinal, geometry in geometries:
+        for boundary in (geometry.top, geometry.bottom):
+            source_points = _source_line_points(boundary)
+            if not source_points:
+                continue
+            draw.line(
+                tuple(viewport.point(point) for point in source_points),
+                fill=style.selected_edge_color,
+                width=style.evidence_line_width,
+            )
+            roles.add(boundary.role)
+    return roles
+
+
+def _cross_axis_panel(
     workspace: DetectionWorkspace,
     detection: FinalDetection,
     style: DebugStyleParameters,
     render_cache: DebugRenderCache,
 ) -> np.ndarray:
     panel_width = style.canvas_width - 2 * style.outer_margin
-    lane_title = (
-        "SOURCE PRESENT · LANE AUTHORITY INVALID"
-        if "source_lane_authority_invalid"
-        in detection.decision.final_review_reasons
-        else "SOURCE / LANE AUTHORITY · SUPPORTED"
-    )
     panel, draw = _panel_base(
         panel_width,
-        style.source_panel_height,
+        style.cross_axis_panel_height,
         DEBUG_ANALYSIS_PANEL_LABELS[0],
-        lane_title,
+        "DETECTED EVIDENCE / SELECTED EDGE",
         style,
     )
     source, projection = _source_image(workspace, render_cache)
     target_box = (
         style.panel_media_inset_x,
-        style.source_media_top,
+        style.cross_axis_media_top,
         panel_width - style.panel_media_inset_x,
-        style.source_media_top + style.source_media_height,
+        style.cross_axis_media_top + style.cross_axis_media_height,
     )
     viewport = _viewport(
         projection,
@@ -574,19 +548,61 @@ def _source_evidence_panel(
     )
     _paste_source(panel, source, viewport)
     draw = ImageDraw.Draw(panel)
-    layout = workspace.boundary_measurement_field.layout
-    for lane in workspace.source_core.lanes:
-        polygon = viewport.polygon(_box_polygon(source_lane_box(lane, layout)))
-        _draw_dashed_polyline(
+    geometries = _geometry_by_identity(detection)
+    detected = _draw_detected_top_bottom(draw, detection, viewport, style)
+    selected = _draw_selected_top_bottom(draw, geometries, viewport, style)
+    top_y = style.panel_title_height + 6
+    bottom_y = style.cross_axis_panel_height - 27
+    left = style.panel_media_inset_x
+    if BoundaryRole.TOP in detected:
+        _draw_label_chip(
             draw,
-            polygon,
-            style.lane_authority_color,
-            1,
-            style.line_dash_length,
-            style.line_dash_gap,
-            closed=True,
+            (left, top_y),
+            "DETECTED TOP",
+            style.detected_edge_color,
+            style,
+            filled=False,
         )
-    source_lanes = {lane.domain.lane_id: lane for lane in workspace.source_core.lanes}
+    if BoundaryRole.TOP in selected:
+        _draw_label_chip(
+            draw,
+            (left + 118, top_y),
+            "SELECTED TOP",
+            style.selected_edge_color,
+            style,
+        )
+    if BoundaryRole.BOTTOM in selected:
+        _draw_label_chip(
+            draw,
+            (left, bottom_y),
+            "SELECTED BOTTOM",
+            style.selected_edge_color,
+            style,
+        )
+    if BoundaryRole.BOTTOM in detected:
+        _draw_label_chip(
+            draw,
+            (left + 138, bottom_y),
+            "DETECTED BOTTOM",
+            style.detected_edge_color,
+            style,
+            filled=False,
+        )
+    return np.asarray(panel)
+
+
+def _draw_detected_start_end(
+    draw: ImageDraw.ImageDraw,
+    workspace: DetectionWorkspace,
+    detection: FinalDetection,
+    viewport: _Viewport,
+    style: DebugStyleParameters,
+) -> bool:
+    layout = workspace.boundary_measurement_field.layout
+    source_lanes = {
+        lane.domain.lane_id: lane for lane in workspace.source_core.lanes
+    }
+    found = False
     for lane in detection.candidate.geometry.lane_reconstructions:
         source_lane = source_lanes.get(lane.lane_id)
         if source_lane is None:
@@ -602,82 +618,54 @@ def _source_evidence_panel(
             _draw_dashed_polyline(
                 draw,
                 tuple(viewport.point(point) for point in source_points),
-                style.raw_transition_color,
+                style.detected_transition_color,
                 style.raw_transition_line_width,
                 style.line_dash_length,
                 style.line_dash_gap,
                 closed=False,
             )
-    _draw_observed_edges(draw, detection, viewport, style)
-    geometries = _geometry_by_identity(detection)
-    _draw_start_end_annotations(draw, geometries, viewport, style)
-    _draw_shared_direction(draw, detection, geometries, viewport, style)
-    return np.asarray(panel)
+            found = True
+    return found
 
 
-def _retained_by_identity(
-    detection: FinalDetection,
-) -> dict[tuple[str, int], tuple[FrameFormatPlacement, ...]]:
-    values: dict[tuple[str, int], list[FrameFormatPlacement]] = {}
-    for lane in detection.candidate.geometry.lane_reconstructions:
-        for placement in lane.retained_placements:
-            for geometry in placement.canonical.frames:
-                values.setdefault((geometry.lane_id, geometry.lane_ordinal), []).append(geometry)
-    return {key: tuple(items) for key, items in values.items()}
-
-
-def _draw_bracket(
-    draw: ImageDraw.ImageDraw,
-    left: int,
-    right: int,
-    y: int,
-    text: str,
-    above: bool,
-    style: DebugStyleParameters,
-) -> None:
-    font = _font(style.header_detail_font_size)
-    text_width = _text_width(draw, text, font)
-    center = (left + right) // 2
-    gap = 10
-    draw.line((left, y, center - text_width // 2 - gap, y), fill=style.retained_color, width=1)
-    draw.line((center + text_width // 2 + gap, y, right, y), fill=style.retained_color, width=1)
-    tick = 10 if above else -10
-    draw.line((left, y, left, y + tick), fill=style.retained_color, width=1)
-    draw.line((right, y, right, y + tick), fill=style.retained_color, width=1)
-    text_y = y - 17 if above else y - 8
-    draw.text((center - text_width // 2, text_y), text, fill=style.text_color, font=font)
-
-
-def _selected_geometry_panel(
+def _long_axis_panel(
     workspace: DetectionWorkspace,
     detection: FinalDetection,
     style: DebugStyleParameters,
     render_cache: DebugRenderCache,
 ) -> np.ndarray:
     panel_width = style.canvas_width - 2 * style.outer_margin
-    panel, draw = _panel_base(
+    panel, _draw = _panel_base(
         panel_width,
-        style.retained_panel_height,
+        style.long_axis_panel_height,
         DEBUG_ANALYSIS_PANEL_LABELS[1],
-        "CANONICAL · REPRESENTATIVE ONLY",
+        "DETECTED TRANSITION / SELECTED BOUNDARY",
         style,
     )
     source, projection = _source_image(workspace, render_cache)
     geometries = _geometry_by_identity(detection)
     media_left = style.panel_media_inset_x
     media_right = panel_width - style.panel_media_inset_x
-    media_top = style.retained_media_top
-    media_bottom = media_top + style.retained_media_height
+    media_top = style.long_axis_media_top
+    media_bottom = media_top + style.long_axis_media_height
+    viewport = _viewport(
+        projection,
+        _presentation_points(detection),
+        (media_left, media_top, media_right, media_bottom),
+        padding_fraction=0.018,
+    )
+    _paste_source(panel, source, viewport)
+    draw = ImageDraw.Draw(panel)
+    detected = _draw_detected_start_end(
+        draw,
+        workspace,
+        detection,
+        viewport,
+        style,
+    )
+    _draw_selected_start_end(draw, geometries, viewport, style)
     if not geometries:
-        viewport = _viewport(
-            projection,
-            (),
-            (media_left, media_top, media_right, media_bottom),
-            padding_fraction=0.0,
-        )
-        _paste_source(panel, source, viewport)
-        draw = ImageDraw.Draw(panel)
-        note = "NO CANONICAL REPRESENTATIVE · CANDIDATE AUDIT ONLY"
+        note = "NO SELECTED START / END · CANDIDATE AUDIT ONLY"
         font = _font(style.header_detail_font_size)
         note_width = _text_width(draw, note, font)
         draw.rectangle(
@@ -695,72 +683,25 @@ def _selected_geometry_panel(
             fill=style.review_color,
             font=font,
         )
-        return np.asarray(panel)
-    tile_count = len(geometries)
-    available_width = media_right - media_left - style.retained_tile_gap * (tile_count - 1)
-    tile_width = available_width / tile_count
-    retained = _retained_by_identity(detection)
-    tile_viewports: list[tuple[int, FrameFormatPlacement, _Viewport]] = []
-    for index, (ordinal, geometry) in enumerate(geometries):
-        left = int(round(media_left + index * (tile_width + style.retained_tile_gap)))
-        right = int(round(media_left + (index + 1) * tile_width + index * style.retained_tile_gap))
-        target = (left, media_top, right, media_bottom)
-        viewport = _viewport(
-            projection,
-            geometry.canonical_source_polygon,
-            target,
-            padding_fraction=0.0,
-            crop_to_aspect=True,
-        )
-        _paste_source(panel, source, viewport)
-        tile_viewports.append((ordinal, geometry, viewport))
-    overlay = Image.new("RGBA", panel.size, (0, 0, 0, 0))
-    overlay_draw = ImageDraw.Draw(overlay)
-    for ordinal, geometry, viewport in tile_viewports:
-        _fill_polygon(
-            overlay_draw,
-            geometry.canonical_source_polygon,
-            _frame_color(ordinal),
-            style.frame_fill_alpha,
-            viewport=viewport,
-        )
-    panel = Image.alpha_composite(panel.convert("RGBA"), overlay).convert("RGB")
-    draw = ImageDraw.Draw(panel)
-    for ordinal, geometry, viewport in tile_viewports:
-        identity = (geometry.lane_id, geometry.lane_ordinal)
-        for retained_geometry in retained.get(identity, ()):
-            _draw_dashed_polyline(
-                draw,
-                viewport.polygon(retained_geometry.canonical_source_polygon),
-                style.retained_color,
-                style.retained_line_width,
-                style.line_dash_length,
-                style.line_dash_gap,
-                closed=True,
-            )
-        draw.line(
-            viewport.polygon(geometry.canonical_source_polygon)
-            + (viewport.point(geometry.canonical_source_polygon[0]),),
-            fill=_frame_color(ordinal),
-            width=style.frame_line_width,
-        )
+    footer_y = style.long_axis_panel_height - 27
+    if detected:
         _draw_label_chip(
             draw,
-            (viewport.target_box[0] + 5, viewport.target_box[1] + 5),
-            f"F{ordinal}",
-            _frame_color(ordinal),
+            (media_left, footer_y),
+            "RAW / DETECTED",
+            style.detected_transition_color,
             style,
+            filled=False,
         )
-    _draw_bracket(draw, media_left + 7, media_right - 7, 61, "RETAINED UNION", True, style)
-    _draw_bracket(
-        draw,
-        media_left,
-        media_right,
-        style.retained_panel_height - 18,
-        "RETAINED · SAFETY AUTHORITY",
-        False,
-        style,
-    )
+    if geometries:
+        _draw_label_chip(
+            draw,
+            (media_left + 132, footer_y),
+            "SELECTED START / END",
+            style.selected_boundary_color,
+            style,
+            filled=False,
+        )
     return np.asarray(panel)
 
 
@@ -852,7 +793,7 @@ def _protected_output_panel(
         _draw_dashed_polyline(
             draw,
             viewport.polygon(envelope.required_source_footprint),
-            style.retained_color,
+            style.safety_envelope_color,
             style.retained_line_width,
             style.line_dash_length,
             style.line_dash_gap,
@@ -878,14 +819,51 @@ def _protected_output_panel(
                 fill=style.review_color,
                 font=font,
             )
-    _draw_observed_edges(draw, detection, viewport, style)
-    geometries = _geometry_by_identity(detection)
-    _draw_start_end_annotations(draw, geometries, viewport, style)
-    _draw_shared_direction(draw, detection, geometries, viewport, style)
-    footer_font = _font(style.title_font_size)
+        left = max(
+            target_box[0] + 4,
+            int(math.floor(min(point[0] for point in constrained))) + 4,
+        )
+        top = max(
+            target_box[1] + 4,
+            int(math.floor(min(point[1] for point in constrained))) + 4,
+        )
+        _draw_label_chip(
+            draw,
+            (left, top),
+            f"F{identity.global_output_ordinal}",
+            color,
+            style,
+        )
+    footer_font = _font(style.annotation_font_size)
+    if envelopes:
+        footer = (
+            "RETAINED / REQUIRED · SAFETY ENVELOPE    "
+            "FINAL SAFE OUTPUT · COLORED OVERLAY"
+        )
+    else:
+        footer = "NO SAFETY ENVELOPE · NO OFFICIAL OUTPUT"
+        note = "NO SAFE OUTPUT · SOURCE ATOMIC · 0 OFFICIAL TIFF"
+        note_font = _font(style.header_detail_font_size)
+        note_width = _text_width(draw, note, note_font)
+        center_y = (target_box[1] + target_box[3]) // 2
+        draw.rectangle(
+            (
+                (panel_width - note_width) // 2 - 12,
+                center_y - 15,
+                (panel_width + note_width) // 2 + 12,
+                center_y + 15,
+            ),
+            fill=style.panel_background,
+        )
+        draw.text(
+            ((panel_width - note_width) // 2, center_y - 8),
+            note,
+            fill=style.review_color,
+            font=note_font,
+        )
     draw.text(
         (19, style.output_panel_height - 25),
-        "START/END <= 5%  ·  TOP/BOTTOM <= 3%",
+        footer,
         fill=style.text_color,
         font=footer_font,
     )
@@ -898,8 +876,8 @@ def stack_debug_panels(
     style: DebugStyleParameters,
 ) -> np.ndarray:
     expected_heights = (
-        style.source_panel_height,
-        style.retained_panel_height,
+        style.cross_axis_panel_height,
+        style.long_axis_panel_height,
         style.output_panel_height,
     )
     panel_width = style.canvas_width - 2 * style.outer_margin
@@ -988,8 +966,8 @@ def make_debug_analysis_panel(
 ) -> np.ndarray:
     style = diagnostics.style
     panels = (
-        _source_evidence_panel(workspace, detection, style, render_cache),
-        _selected_geometry_panel(workspace, detection, style, render_cache),
+        _cross_axis_panel(workspace, detection, style, render_cache),
+        _long_axis_panel(workspace, detection, style, render_cache),
         _protected_output_panel(workspace, detection, style, render_cache),
     )
     canvas = stack_debug_panels(panels, style=style)

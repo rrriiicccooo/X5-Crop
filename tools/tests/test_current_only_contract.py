@@ -193,8 +193,8 @@ class CurrentOnlyContractTest(unittest.TestCase):
         self.assertIn("--allow-best-effort-output", option_strings)
         normalized_help = " ".join(help_text.split())
         self.assertIn(
-            "three-panel JPG preserving four V5 fact layers: source authority, "
-            "pixel evidence, canonical placement, and protected output",
+            "three-panel JPG comparing detected and selected TOP/BOTTOM, "
+            "detected and selected START/END, and final safe output envelopes",
             normalized_help,
         )
         for runtime_type in (RuntimeOptions, RunConfig):
