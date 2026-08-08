@@ -25,7 +25,12 @@ class CrossPlatformEntryContractTests(unittest.TestCase):
         for version in ("3.12", "3.13", "3.14"):
             self.assertIn(f'- "{version}"', workflow)
         self.assertIn("shell: bash", workflow)
+        self.assertIn("fetch-depth: 0", workflow)
         self.assertEqual(workflow.count("tools/verify full"), 1)
+
+    def test_tracked_text_has_one_cross_platform_byte_identity(self) -> None:
+        attributes = (ROOT / ".gitattributes").read_text(encoding="utf-8")
+        self.assertEqual(attributes, "* text=auto eol=lf\n")
 
     def test_windows_batch_file_is_only_a_git_bash_adapter(self) -> None:
         adapter = (ROOT / "tools/platform/X5_Crop_verify.bat").read_text(

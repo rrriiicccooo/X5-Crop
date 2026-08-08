@@ -25,7 +25,11 @@ from x5crop.runtime.outcome import (
 
 
 def _source(ordinal: int) -> PlannedSource:
-    return PlannedSource(ordinal, Path(f"/tmp/source-{ordinal}.tif"), f"source-{ordinal}")
+    return PlannedSource(
+        ordinal,
+        (Path.cwd() / f"source-{ordinal}.tif").resolve(),
+        f"source-{ordinal}",
+    )
 
 
 def _failed(source: PlannedSource) -> FailedInput:

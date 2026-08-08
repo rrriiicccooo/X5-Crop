@@ -244,9 +244,10 @@ class V5PerformanceContractTest(unittest.TestCase):
         packages_distributions.assert_called_once_with()
 
     def test_runtime_identity_collapses_equivalent_distribution_names(self) -> None:
+        distribution_root = (Path.cwd() / "user-site").resolve()
         distribution = SimpleNamespace(
             version="12.3.0",
-            locate_file=lambda _relative: Path("/user/site"),
+            locate_file=lambda _relative: distribution_root,
         )
         with mock.patch.object(
             dependency_identity_module.metadata,
@@ -256,7 +257,7 @@ class V5PerformanceContractTest(unittest.TestCase):
             owner = dependency_identity_module._distribution_package(
                 "PIL",
                 "Pillow",
-                Path("/user/site/PIL/__init__.py"),
+                distribution_root / "PIL/__init__.py",
                 {"PIL": ["pillow"]},
                 {},
             )
