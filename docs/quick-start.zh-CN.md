@@ -11,7 +11,8 @@
 - Windows：`install/X5_Crop_win_install.bat`
 
 安装器使用 Python 3.12–3.14 的用户级 package，不建立私有虚拟环境。若目标 Python 已有版本
-不同的冻结依赖，安装器会在改动前停止。
+不同的冻结依赖，或已经能导入没有受支持 distribution metadata 的 `cv2`，安装器会在改动前
+停止，不会叠加第二份 OpenCV。
 
 ## 2. 放入 TIFF 并启动
 

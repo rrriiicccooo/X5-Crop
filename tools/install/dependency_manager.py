@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 from dataclasses import dataclass
 import hashlib
-from importlib import metadata
+from importlib import metadata, util
 import json
 import os
 from pathlib import Path
@@ -142,6 +142,13 @@ def installed_opencv_conflicts() -> dict[str, str]:
         except metadata.PackageNotFoundError:
             pass
     return conflicts
+
+
+def visible_cv2_origin() -> str | None:
+    spec = util.find_spec("cv2")
+    if spec is None:
+        return None
+    return str(spec.origin or "origin unavailable")
 
 
 def build_uninstall_plan(
@@ -304,6 +311,17 @@ def install_dependencies(
             f"({details}). No package was changed. Use another supported Python "
             "interpreter or resolve those versions explicitly before running setup."
         )
+    if "opencv-python-headless" not in before:
+        cv2_origin = visible_cv2_origin()
+        if cv2_origin is not None:
+            raise RuntimeError(
+                "A cv2 module is already visible at "
+                f"{cv2_origin}, but its supported OpenCV distribution metadata "
+                "is unavailable. No package was changed. X5 Crop will not install "
+                "opencv-python-headless over an existing cv2 provider. Keep that "
+                "provider for a self-managed environment or use another supported "
+                "Python interpreter for X5 Crop setup."
+            )
     preexisting = _original_preexisting_versions(pins, before, previous)
     command = [
         sys.executable,

@@ -43,7 +43,13 @@ Run the platform installer:
 
 Dependencies are installed in the target Python's user package site. No private
 `.venv` is created. If a frozen dependency already exists at another version,
-the installer stops before upgrading, downgrading, or overwriting it.
+the installer stops before upgrading, downgrading, or overwriting it. If the
+target Python can already import `cv2` but has no supported OpenCV distribution
+metadata, as with a Homebrew-provided build, setup also stops before changing
+anything instead of layering `opencv-python-headless` over that provider. Such
+a self-managed environment may run the program directly when its other
+dependencies are satisfied, but it does not satisfy the frozen setup or formal
+performance-receipt environment.
 
 ## Input Contract
 

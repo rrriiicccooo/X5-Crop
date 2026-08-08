@@ -36,7 +36,10 @@ Pillow==12.3.0
 - Windows：`install/X5_Crop_win_install.bat`
 
 安装器把依赖安装到目标 Python 的用户级 site，不建立私有 `.venv`。如果任一冻结依赖已经以
-其它版本存在，安装器会在改动 package 前停止，不会静默升级、降级或覆盖。
+其它版本存在，安装器会在改动 package 前停止，不会静默升级、降级或覆盖。如果目标 Python
+已经能导入 `cv2`，但没有受支持的 OpenCV distribution metadata（例如由 Homebrew 提供），
+安装器同样会在改动前停止，不会在现有 `cv2` 上叠加 `opencv-python-headless`。这类自行管理的
+环境在其它依赖均满足时可以直接运行程序，但不满足冻结依赖安装或正式 performance receipt。
 
 ## 输入合同
 

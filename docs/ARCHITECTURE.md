@@ -365,6 +365,9 @@ readback 与 publication；SHA、cohort、profiling 和 Debug Analysis 位于计
 
 生产依赖为 NumPy、SciPy、opencv-python-headless、tifffile、imagecodecs 与 Pillow；测试、
 comparator、fixture、profiling 和故障注入不进入用户包，开发依赖单独拥有。
+依赖安装器在调用 pip 前同时检查已知 OpenCV distribution 冲突与可见 `cv2` namespace；若
+`cv2` 可见但缺少受支持 distribution metadata，则保持环境不变并停止，不把 Homebrew 或其它
+外部 provider 的模块版本冒充冻结的 `opencv-python-headless` wheel。
 
 ## 10. 工作量与性能
 

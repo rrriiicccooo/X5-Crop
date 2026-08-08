@@ -82,6 +82,54 @@ class DependencyInstallerContractTest(unittest.TestCase):
             run.assert_not_called()
             self.assertFalse(receipt.exists())
 
+    def test_installer_stops_before_pip_for_cv2_without_distribution_metadata(
+        self,
+    ) -> None:
+        installed = {
+            pin.canonical_name: pin.version
+            for pin in load_pins(ROOT / "tools/install/requirements.txt")
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            receipt = Path(temporary) / "receipt.json"
+            with (
+                mock.patch(
+                    "tools.install.dependency_manager.installed_opencv_conflicts",
+                    return_value={},
+                ),
+                mock.patch(
+                    "tools.install.dependency_manager.installed_versions",
+                    return_value={},
+                ),
+                mock.patch(
+                    "tools.install.dependency_manager.fresh_installed_versions",
+                    return_value=installed,
+                ),
+                mock.patch(
+                    "importlib.util.find_spec",
+                    return_value=mock.Mock(
+                        origin=(
+                            "/opt/homebrew/lib/python3.14/site-packages/"
+                            "cv2/__init__.py"
+                        )
+                    ),
+                ),
+                mock.patch(
+                    "tools.install.dependency_manager.subprocess.run",
+                    return_value=mock.Mock(returncode=0),
+                ) as run,
+                self.assertRaisesRegex(
+                    RuntimeError,
+                    "cv2.*distribution metadata.*No package was changed",
+                ),
+            ):
+                install_dependencies(
+                    ROOT / "tools/install/requirements.txt",
+                    receipt,
+                    break_system_packages=False,
+                )
+            run.assert_not_called()
+            self.assertFalse(receipt.exists())
+
     def test_uninstaller_never_removes_preexisting_or_changed_packages(self) -> None:
         receipt = (
             {

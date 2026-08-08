@@ -13,7 +13,9 @@ Extract the release archive and run the platform installer:
 
 The installer uses the user package site of Python 3.12–3.14 and does not make
 a private virtual environment. It stops before changing anything if the target
-Python already has a frozen dependency at another version.
+Python already has a frozen dependency at another version, or if `cv2` is
+already importable without supported distribution metadata. It never layers a
+second OpenCV installation over that provider.
 
 ## 2. Add TIFFs And Launch
 
