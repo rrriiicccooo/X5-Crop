@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 
 from ..domain import Box
 from ..utils import RGB_CHANNEL_COUNT
@@ -110,6 +110,7 @@ def draw_preview_label(
     *,
     inset: int,
     stroke_width: int,
+    font_size: int,
 ) -> None:
     bounds = _scaled_box(rgb, box, scale)
     if bounds is None:
@@ -121,6 +122,7 @@ def draw_preview_label(
         (left + inset, top + inset),
         text,
         fill=color,
+        font=ImageFont.load_default(size=font_size),
         stroke_width=stroke_width,
         stroke_fill=(0, 0, 0),
     )
@@ -135,6 +137,7 @@ def add_panel_label(
     origin: tuple[int, int],
     background: int,
     text_color: tuple[int, int, int],
+    font_size: int,
 ) -> np.ndarray:
     image_height, image_width = rgb.shape[:2]
     panel = np.full(
@@ -144,7 +147,12 @@ def add_panel_label(
     )
     panel[height:, :, :] = rgb
     image = Image.fromarray(panel, mode="RGB")
-    ImageDraw.Draw(image).text(origin, label, fill=text_color)
+    ImageDraw.Draw(image).text(
+        origin,
+        label,
+        fill=text_color,
+        font=ImageFont.load_default(size=font_size),
+    )
     return np.asarray(image)
 
 

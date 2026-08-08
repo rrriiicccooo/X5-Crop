@@ -191,8 +191,12 @@ class CurrentOnlyContractTest(unittest.TestCase):
         self.assertNotIn("--diagnostics", option_strings)
         self.assertNotIn("--overwrite", option_strings)
         self.assertIn("--allow-best-effort-output", option_strings)
-        self.assertIn("four-layer JPG", help_text)
-        self.assertNotIn("three-panel JPG", help_text)
+        normalized_help = " ".join(help_text.split())
+        self.assertIn(
+            "three-panel JPG preserving four V5 fact layers: source authority, "
+            "pixel evidence, canonical placement, and protected output",
+            normalized_help,
+        )
         for runtime_type in (RuntimeOptions, RunConfig):
             with self.subTest(runtime_type=runtime_type.__name__):
                 self.assertNotIn(

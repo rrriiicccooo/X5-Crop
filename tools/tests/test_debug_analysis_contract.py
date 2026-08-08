@@ -68,22 +68,21 @@ def _fixture(
         decision,
         layout="horizontal",
     )
-    return configuration, workspace, detection
+    return configuration, profile, workspace, detection
 
 
 class DebugAnalysisContractTest(unittest.TestCase):
-    def test_four_authority_panels_and_one_status_bar_are_current(self) -> None:
+    def test_three_panels_preserve_four_v5_fact_layers(self) -> None:
         self.assertEqual(
             DEBUG_ANALYSIS_PANEL_LABELS,
             (
-                "Source-coordinate gray and lane authority",
-                "Raw boundary evidence and shared direction",
-                "Canonical format placement and retained union",
-                "Continuous safe output geometry and budget",
+                "01 · SOURCE AUTHORITY & PIXEL EVIDENCE",
+                "02 · RETAINED PLACEMENTS & CANONICAL",
+                "03 · PROTECTED OUTPUT & DECISION",
             ),
         )
         with tempfile.TemporaryDirectory() as temporary:
-            configuration, workspace, detection = _fixture(
+            configuration, profile, workspace, detection = _fixture(
                 Path(temporary)
             )
             with mock.patch(
@@ -96,6 +95,8 @@ class DebugAnalysisContractTest(unittest.TestCase):
                 panel = make_debug_analysis_panel(
                     workspace,
                     detection,
+                    configuration,
+                    profile,
                     configuration.diagnostics,
                     DebugRenderCache(),
                     RunTerminalOutcome.NEEDS_REVIEW,
@@ -103,13 +104,13 @@ class DebugAnalysisContractTest(unittest.TestCase):
         self.assertEqual(status.call_count, 1)
         self.assertEqual(panel.ndim, 3)
         self.assertEqual(panel.shape[2], 3)
-        self.assertGreater(panel.shape[0], workspace.source_gray.shape[0] * 4)
+        self.assertGreater(panel.shape[0], workspace.source_gray.shape[0] * 3)
 
     def test_output_panel_reads_saved_placement_and_constrained_footprints(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            configuration, workspace, detection = _fixture(
+            configuration, _profile, workspace, detection = _fixture(
                 Path(temporary)
             )
             with mock.patch(
@@ -136,11 +137,33 @@ class DebugAnalysisContractTest(unittest.TestCase):
             ),
         )
 
+    def test_retained_panel_draws_every_complete_retained_state(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            configuration, _profile, workspace, detection = _fixture(
+                Path(temporary)
+            )
+            expected_frame_count = sum(
+                len(placement.canonical.frames)
+                for lane in detection.candidate.geometry.lane_reconstructions
+                for placement in lane.retained_placements
+            )
+            with mock.patch(
+                "x5crop.debug.panels._draw_dashed_polyline"
+            ) as retained_line:
+                _selected_geometry_panel(
+                    workspace,
+                    detection,
+                    configuration.diagnostics.style,
+                    DebugRenderCache(),
+                )
+        self.assertGreater(expected_frame_count, 0)
+        self.assertEqual(retained_line.call_count, expected_frame_count)
+
     def test_review_keeps_candidate_audit_without_official_output_geometry(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            configuration, workspace, detection = _fixture(
+            configuration, _profile, workspace, detection = _fixture(
                 Path(temporary)
             )
             with (
@@ -172,9 +195,9 @@ class DebugAnalysisContractTest(unittest.TestCase):
         self.assertFalse(detection.frame_export_eligible)
         self.assertEqual(detection.resolved_output_geometries, ())
         self.assertGreater(fill.call_count, 0)
-        self.assertIn("NOT EXPORTABLE", labeled.call_args.args[1])
+        self.assertIn("0 OFFICIAL TIFF", labeled.call_args.args[1])
         self.assertIn(
-            "candidate audit only - NOT EXPORTABLE",
+            "CANDIDATE AUDIT · NOT EXPORTABLE",
             selected_labeled.call_args.args[1],
         )
 
@@ -182,10 +205,7 @@ class DebugAnalysisContractTest(unittest.TestCase):
         self.assertEqual(len(FRAME_FILL_COLORS), 12)
         self.assertEqual(len(set(FRAME_FILL_COLORS)), 12)
         style = DebugStyleParameters()
-        panels = tuple(
-            np.zeros((4, 5, 3), dtype=np.uint8)
-            for _ in range(4)
-        )
+        panels = tuple(np.zeros((4, 5, 3), dtype=np.uint8) for _ in range(3))
         vertical = stack_debug_panels(
             panels,
             horizontal=False,
@@ -198,11 +218,11 @@ class DebugAnalysisContractTest(unittest.TestCase):
         )
         self.assertEqual(
             vertical.shape[:2],
-            (16 + style.panel_spacing * 3, 5),
+            (12 + style.panel_spacing * 2, 5),
         )
         self.assertEqual(
             horizontal.shape[:2],
-            (4, 20 + style.panel_spacing * 3),
+            (4, 15 + style.panel_spacing * 2),
         )
 
 

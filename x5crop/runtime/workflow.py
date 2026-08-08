@@ -217,6 +217,8 @@ def process_one(
             debug_analysis = write_debug_analysis(
                 workspace,
                 detection,
+                initial_configuration,
+                profile,
                 output_root,
                 source.portable_stem,
                 source.input_ordinal,

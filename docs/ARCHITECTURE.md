@@ -346,9 +346,10 @@ Manifest 只保存 `run_id`、输入 ordinal、便携名称、size、mtime、ter
 Git、cohort 或 performance receipt；inventory 不包含 manifest 自身。普通文件使用相对路径、
 role、type、size、mtime，目录只使用相对路径与 type。
 
-Debug Analysis 只读取 runtime/report facts，保持四层布局：source authority、pixel evidence、
-canonical placement、protected output。它不重新计算 detection、geometry 或 budget；Pillow 只在
-用户显式启用 Debug Analysis 后延迟导入。
+Debug Analysis 只读取 runtime/report facts，将四层事实组织为三联图：第一联合并
+source authority 与 pixel evidence，第二联显示全部 retained complete placements 和 canonical
+代表，第三联显示 protected output、budget 与 source-atomic decision。它不重新计算 detection、
+geometry 或 budget；Pillow 只在用户显式启用 Debug Analysis 后延迟导入。
 
 ## 9. 生产路径与开发验证
 
