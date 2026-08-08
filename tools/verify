@@ -1,6 +1,21 @@
 #!/bin/sh
 set -eu
 
+select_python() {
+    for candidate in python3 python; do
+        if command -v "$candidate" >/dev/null 2>&1 && \
+            "$candidate" -c 'import sys; raise SystemExit(sys.version_info[:2] not in {(3, 12), (3, 13), (3, 14)})' >/dev/null 2>&1
+        then
+            printf '%s\n' "$candidate"
+            return
+        fi
+    done
+    printf >&2 'X5 Crop verification requires Python 3.12, 3.13, or 3.14.\n'
+    exit 2
+}
+
+PYTHON=$(select_python)
+
 check_staged() {
     git diff --cached --check
     git diff --cached --name-only --diff-filter=ACMR | while IFS= read -r path; do
@@ -41,9 +56,9 @@ check_pushed_documentation() {
 }
 
 run_full() {
-    python3 -m unittest discover -s tools/tests
-    python3 -m compileall -q X5_Crop.py x5crop tools
-    python3 -m x5crop.configuration.consistency
+    "$PYTHON" -m unittest discover -s tools/tests
+    "$PYTHON" -m compileall -q X5_Crop.py x5crop tools
+    "$PYTHON" -m x5crop.configuration.consistency
     for script in \
         X5_Crop_Mac.command \
         tools/install/X5_Crop_Mac_install.command \
@@ -52,12 +67,12 @@ run_full() {
         [ ! -f "$script" ] || bash -n "$script"
     done
     check_diff_hygiene
-    python3 X5_Crop.py --version
+    "$PYTHON" X5_Crop.py --version
 }
 
 check_performance_receipt() {
     candidate_commit=$(git rev-parse HEAD)
-    python3 -m tools.regression.performance \
+    "$PYTHON" -m tools.regression.performance \
         --check-receipt build/v5-performance/performance_receipt.json \
         --expected-commit "$candidate_commit"
 }
@@ -70,13 +85,31 @@ case "${1:-}" in
         run_full
         ;;
     accuracy)
-        python3 -m tools.regression.accuracy
+        "$PYTHON" -m tools.regression.accuracy
         ;;
     diagnostic)
-        python3 -m tools.regression.diagnostic_cohort
+        "$PYTHON" -m tools.regression.diagnostic_cohort
         ;;
     performance)
-        python3 -m tools.regression.performance
+        "$PYTHON" -m tools.regression.performance
+        ;;
+    non-detection)
+        "$PYTHON" -m tools.regression.non_detection_freeze
+        ;;
+    audit)
+        "$PYTHON" -m tools.regression.non_detection_freeze --audit-only
+        ;;
+    platform)
+        shift
+        "$PYTHON" -m tools.regression.platform_receipt "$@"
+        ;;
+    platform-check)
+        shift
+        "$PYTHON" -m tools.regression.platform_check "$@"
+        ;;
+    platform-package)
+        shift
+        "$PYTHON" -m tools.regression.platform_package "$@"
         ;;
     pre-push)
         [ -z "$(git status --porcelain)" ] || {
@@ -85,7 +118,7 @@ case "${1:-}" in
         }
         scope=runtime
         if [ -n "${2:-}" ] && [ -f "$2" ]; then
-            scope=$(python3 -m tools.verification_scope --refs "$2")
+            scope=$("$PYTHON" -m tools.verification_scope --refs "$2")
         fi
         case "$scope" in
             documentation)
@@ -105,7 +138,8 @@ case "${1:-}" in
         esac
         ;;
     *)
-        printf >&2 'usage: %s staged|full|accuracy|diagnostic|performance|pre-push\n' "$0"
+        printf >&2 '%s\n' \
+            "usage: $0 staged|full|accuracy|diagnostic|performance|non-detection|audit|platform|platform-check|platform-package|pre-push"
         exit 2
         ;;
 esac

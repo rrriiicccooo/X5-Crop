@@ -139,7 +139,7 @@ class VerificationScopeContractTest(unittest.TestCase):
         )
         self.assertIn('tools/verify pre-push "$refs"', hook)
         self.assertIn(
-            "python3 -m tools.verification_scope --refs", verifier
+            '"$PYTHON" -m tools.verification_scope --refs', verifier
         )
         self.assertEqual(workflow.count('      - "**/*.md"'), 2)
 

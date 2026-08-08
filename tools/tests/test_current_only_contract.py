@@ -137,7 +137,7 @@ class CurrentOnlyContractTest(unittest.TestCase):
         self.assertNotIn("process_one", diagnostic)
         self.assertNotIn("diagnostics=True", diagnostic)
         self.assertIn(
-            "python3 -m tools.regression.diagnostic_cohort\n",
+            '"$PYTHON" -m tools.regression.diagnostic_cohort\n',
             verifier,
         )
         self.assertNotIn(
