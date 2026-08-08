@@ -49,14 +49,27 @@ standalone 只消费 current schema；不存在 V4.9 fallback、shim、feature f
 - 正式 CLI 删除 `--overwrite`、`--diagnostics` 和旧 debug flags；未验证文件系统的非交互运行必须
   显式使用 `--allow-best-effort-output`，但该选择不能绕过锁、路径、rename 或空间硬失败。
 
-验证拓扑已统一为 `tools/verify staged|full|accuracy|diagnostic|performance|pre-push`。`full`
+验证拓扑已统一为
+`tools/verify staged|full|accuracy|diagnostic|performance|non-detection|audit|platform|platform-check|platform-package|pre-push`。
+`full`
 只运行 CI 可获得的 contracts、合成 TIFF、schema、配置、standalone 与事务检查；`accuracy`
 使用九张 source-SHA-bound 黄金的十四项正式 CLI 任务；`diagnostic` 以正式 CLI 运行 111 sources；
 `performance` 在外部 SHA 核对后测量 24-source 完整用户路径并绑定 commit、依赖和 workload。
 
-当前完成边界：合成 full contracts 已通过 129 项（1 项平台条件跳过）；九张黄金十四项中，
+当前非检测收尾阶段以 `90e5e8c4` 建立十四项黄金语义基线，并以 `21da1131` 为 protected-path
+比较起点。冻结工具、normalizer、精确 protected manifest 与 contract 自 anchor `35ba1117`
+后不可修改；S109、S062、S051 的六个失败任务及整个检测判定链在本阶段不分析、不试修。
+性能 receipt 分为正式 production Gate 与不参与 5 秒 Gate 的外部 profiling 两遍，并记录命名
+验证机的硬件、卷、文件系统、电源和 Defender 状态。
+
+平台验证新增真实六样片 I/O cohort、S027 临时 Orientation 3/8 production integration、真实
+文件系统 cases、实机 receipt 内容校验与 Intel Git-bundle 验证包。Windows `.bat`、Intel
+`.command`、Hook 和 CI 都只转调唯一 `tools/verify`。这些是验证能力与证据格式，不表示 Apple
+Silicon、Windows x64 或 Intel macOS 已经取得最终实机 receipt。
+
+当前完成边界：九张黄金十四项中，
 S027、S035、S091 explicit/auto 与 S094 已正式通过，S055 和 S098 保持安全送审，仍有六个
-nominal 任务未达到冻结标准。111-source 工程诊断已达到 111/111，但
+nominal 任务未达到冻结标准。曾有 111-source 工程诊断达到 111/111，但
 原先绑定 `4ca03877` 的 Apple Silicon receipt 使用临时 PyPI OpenCV overlay，其依赖身份已由
 current-only provider-neutral 合同替代，不能继续作为当前 tree 的性能凭据。Windows x64、Intel
 macOS 性能，以及三平台完整依赖安装、真实 TIFF、中文路径、文件占用与恢复验证仍未完成。

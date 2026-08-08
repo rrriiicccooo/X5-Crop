@@ -59,6 +59,7 @@ x5_crop_output/
 `needs_review/` 和 `_debug_analysis/` 只在有内容时建立。每次成功运行会用完整新结果替换上一套
 可确认由 X5 Crop V5 创建的结果；旧目录含未知文件时程序停止，绝不擅自删除。
 
+APFS、HFS+ 与 NTFS 是本地事务验证目标，但正式支持仍以对应版本的实机 receipt 为准。
 在未验证文件系统上，交互启动会询问是否继续；非交互命令行必须明确加入
 `--allow-best-effort-output`。该选项不能绕过锁、路径、磁盘空间或 rename 的硬失败。
 

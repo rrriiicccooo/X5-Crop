@@ -68,7 +68,9 @@ x5_crop_output/
 run replaces the previous complete output only after ownership is verified. If
 unknown files are present, X5 Crop stops and never deletes them.
 
-On an unverified filesystem, an interactive launch asks for consent. A
+APFS, HFS+, and NTFS are local transaction-validation targets, but formal
+support still requires a receipt for the exact release. On an unverified
+filesystem, an interactive launch asks for consent. A
 non-interactive command must explicitly include `--allow-best-effort-output`.
 This option cannot bypass hard lock, path, disk-space, or rename failures.
 

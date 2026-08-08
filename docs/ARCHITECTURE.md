@@ -357,11 +357,31 @@ canonical placement、protected output。它不重新计算 detection、geometry
 它不计算 source-content SHA，不检查 Git/cohort/receipt，不运行 comparator、profiler、tracemalloc、
 故障注入或 Debug Analysis。
 
-`tools/verify` 是唯一验证入口。`accuracy`、`diagnostic` 和 `performance` 在生产程序外部先计算
-source SHA 并冻结 source stat，再通过子进程调用同一 `X5_Crop.py`。工具只观察正式 report、
-manifest 与 outputs；没有 detector bypass、样片参数、验证专用 producer 或较宽 Gate。性能
-计时从正式 CLI 启动开始，包含 import、decode、detection、decision、sampling、encode、
-readback 与 publication；SHA、cohort、profiling 和 Debug Analysis 位于计时外。
+`tools/verify` 是唯一验证入口。POSIX、GitHub Actions、Windows `.bat` 与 Intel macOS
+`.command` 都只作薄转调；入口从 `python3`、`python` 中选择 setup-python 提供且满足
+3.12--3.14 合同的解释器。CI 以 Ubuntu 24.04、Windows 2025、Apple Silicon macOS 15 与
+Intel macOS 15 乘以 Python 3.12、3.13、3.14 运行同一 `full`。Python 3.13/3.14 额外用
+`os.path.isreserved()` 交叉核对项目 portable-name authority，3.12 只消费项目冻结表。
+
+`accuracy`、`diagnostic` 和 `performance` 在生产程序外部先计算 source SHA 并冻结 source
+stat，再通过子进程调用同一 `X5_Crop.py`。工具只观察正式 report、manifest 与 outputs；没有
+detector bypass、样片参数、验证专用 producer 或较宽 Gate。`non-detection` 对绑定
+`90e5e8c4` 的十四项黄金语义作精确 schema 规范化比较；`audit` 还从 `21da1131` 检查逐文件
+protected manifest，并固定 freeze anchor 自提交 `35ba1117` 后不得变化。两者只负责防止当前
+非检测阶段悄然改动检测、format、Gate、budget、黄金 cohort 或 comparator，不改变 accuracy
+verdict。
+
+`platform` 只在干净 tree 上从真实 OS 与架构生成 receipt，运行 `full`、非检测审计、六张平台
+样片、真实文件系统 contracts 和关联 performance receipt。`platform-check` 恰好接受同一
+expected commit 的一份 Apple Silicon 与一份 Windows x64 receipt，读取并核对关联 performance
+文件的真实内容与 SHA；NTFS 结果不能替代 exFAT case。`platform-package intel-macos` 只生成
+Git bundle、六张样片的 SHA manifest、薄 `.command` 与校验清单，不包含 TIFF、receipt、RC
+或用户包。Receipt 是实机证据；源码相同、CI 或工具存在都不构成平台通过声明。
+
+六张平台样片中 S027、S062、S094、S098 运行完整用户路径；S046、S101 只证明真实
+Orientation/ICC/resolution/compression decode 与 report。工具从 S027 canonical pixels 临时
+反向派生 Orientation 3/8 raw raster，运行完整正式 CLI，并以普通 S027 输出证明 canonical
+像素、ordinal、Orientation=1 与 TIFF 复读一致；临时文件不进 Git，也不形成 accuracy 真值。
 
 生产模块为 NumPy、SciPy、cv2、tifffile、imagecodecs 与 PIL；测试、comparator、fixture、
 profiling 和故障注入不进入用户包，开发依赖单独拥有。`tools/install/dependencies.toml` 只冻结
@@ -408,6 +428,18 @@ X5 Crop 是唯一并发 owner：`--jobs` 调度 sources，OpenCV、BLAS、OpenMP
 为 1。性能 receipt 固定 24 sources，并绑定 Git commit、cohort SHA、source SHAs、依赖与线程
 身份；当前 commit 未生成有效 receipt 时不得作性能完成声明。
 
+性能验证分两遍。第一遍只计时完全相同的 production CLI，记录逐 source wall、输出数量与大小，
+且只有 mean wall 不超过 5 秒参与正式 Gate。第二遍由开发子进程在既有 runtime stage boundary
+外部采集 startup/import/unattributed、decode、detection+decision、sampling、encode/write、
+readback、publish、I/O total、process peak RSS 与 runtime peak temporary bytes；它只解释耗时，
+不进入速度 Gate，也不向默认 CLI 增加 instrumentation。Receipt 同时记录 CPU、物理/逻辑核心、
+内存、输入/输出卷与文件系统、可用空间、电源状态和 Windows Defender 实时保护状态。结论只适用
+于 receipt 中的命名验证机。
+
+安装器的 missing、update、uninstall 破坏性矩阵只能在一次性系统用户、专用全局 Python 或可恢复
+测试机快照执行，仍不使用 `.venv`。日常开发环境与 Homebrew 只作只读 capability/reuse 检查，
+不得为了生成 receipt 被自动改写。
+
 ## 11. 平面输出事务
 
 正式照片直接位于 target 根部。若 target 为 `MyCrops`，同父目录旁路为
@@ -417,12 +449,18 @@ X5 Crop 是唯一并发 owner：`--jobs` 调度 sources，OpenCV、BLAS、OpenMP
 流程固定为：获取锁并恢复明确状态；创建 staging；处理全部 sources；复读 TIFF；写 report、
 summary 和不含自身的 manifest inventory；至少一个 source 非 `runtime_error` 后写 journal；旧
 target rename 为 old；new rename 为 target；验证新 ownership；删除 old 与 journal。单 source
-失败不取消其它有效结果，全部失败不发布。
+失败不取消其它有效结果，全部 source 均为 `runtime_error` 时不发布并保留旧 output。
+`runtime_error` 只属于 `RunTerminalOutcome`，不得进入 `DecisionGate.decision.status` 或 final
+reasons；`needs_review` 是会随完整 run 发布 report、manifest、summary 与 review material 的
+合法终态。
 
 旧 target 只有 current owner、manifest 与完整 inventory 一致时才能替换。遍历使用 lstat
 语义并拒绝 symlink、Windows junction 和 reparse point；删除 bottom-up 且永不跟随链接。
 进程异常与强制结束支持自动恢复；突然断电后状态明确时恢复，状态歧义时保留 target、new、
-old 和 journal，绝不自动删除。
+old 和 journal，绝不自动删除。发布前的输入、preflight、run-wide ENOSPC 或整体 report/manifest
+失败，只有在 staging ownership 明确时才可清理 staging，退出码为 2。事务恢复、rename、发布
+或回滚失败一律保留 target、new、old 与 journal 的全部候选，退出码为 3；此时不得声称旧
+output 已恢复。
 
 `FilesystemPolicy` 区分 `verified_local` 与 `best_effort_unverified`。未验证文件系统的交互运行
 必须明确确认，非交互运行必须显式传入 `--allow-best-effort-output`；同文件系统、锁、rename、

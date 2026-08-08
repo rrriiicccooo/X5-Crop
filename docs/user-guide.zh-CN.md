@@ -129,15 +129,17 @@ x5_crop_output/
 新运行先在输出目录旁建立完整内部事务目录。全部输入处理结束、正式 TIFF 复读通过、报告和
 manifest 完整后，程序用两次同父目录 rename 发布新结果，再删除旧结果。程序异常或强制结束
 后会在状态明确时恢复；突然断电造成状态歧义时保留 target、new、old 和 journal，要求人工
-确认，绝不自动删除。
+确认，绝不自动删除。若事务恢复、rename、发布或回滚失败，程序同样保留全部候选并以退出码
+`3` 停止；此时不承诺旧输出已经回到原位置。
 
 只有固定 owner marker、current manifest 和完整 inventory 全部匹配的旧目录才能自动替换。
 额外文件、缺失文件、链接、junction、reparse point、旧 schema 或人工目录都会使程序停止。
 
 ## 文件系统与磁盘空间
 
-已验证本地文件系统可直接运行。SMB、NAS、云盘同步目录、未验证 exFAT 或无法确认语义的文件
-系统属于 best effort：
+APFS、HFS+ 与 NTFS 是 V5 事务模型的本地验证目标；是否已正式通过由对应版本的实机 receipt
+证明，不由文件系统名称本身保证。SMB、NAS、云盘同步目录、没有自身 receipt 的 exFAT 或
+无法确认语义的文件系统属于 best effort：
 
 - 交互运行显示风险和目标路径，默认拒绝；
 - 非交互 CLI 必须明确加入 `--allow-best-effort-output`。
@@ -159,9 +161,10 @@ profiler 或故障注入。它只记录 `run_id`、输入序号、便携文件�
 ## 当前验证边界
 
 V5 已是仓库唯一运行时，并已建立合成 contracts、严格 TIFF/Orientation、正式 schema、
-standalone 构建和可恢复平面输出事务。V5 仍未完成全部真实黄金准确率、24-source 性能和
-Windows x64、Apple Silicon、Intel macOS 三个平台的正式 receipt，因此不能据此宣布 V5 已
-release-ready 或所有平台已经正式支持。当前用户应继续使用公开稳定版 v4.2.8。
+standalone 构建和可恢复平面输出事务。验证工具与 receipt 格式存在不等于实机已经通过；只有
+绑定同一 commit 的对应平台 receipt 才能证明该平台。本开发版本仍有黄金准确率与平台证据未
+闭合，因此不能据此宣布 V5 已 release-ready 或所有平台已经正式支持。当前用户应继续使用公开
+稳定版 v4.2.8。
 
 ## 移除与许可
 

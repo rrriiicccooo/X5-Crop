@@ -153,7 +153,10 @@ target. After all inputs finish, official TIFF readback succeeds, and report and
 manifest are complete, two same-parent renames publish the new result. The old
 result is then deleted. Clear process crashes or forced termination can be
 recovered. If sudden power loss leaves an ambiguous state, target, new, old, and
-journal are all preserved for manual confirmation.
+journal are all preserved for manual confirmation. Recovery, rename,
+publication, or rollback failure also preserves every candidate and exits with
+code `3`; it does not promise that the old output has returned to its original
+location.
 
 Automatic replacement requires a fixed owner marker, current manifest, and an
 exact inventory match. An extra or missing file, link, junction, reparse point,
@@ -162,9 +165,10 @@ silently deleted.
 
 ## Filesystems And Disk Space
 
-Verified local filesystems run directly. SMB, NAS, cloud-synchronized folders,
-unverified exFAT, and filesystems whose semantics cannot be established are
-best effort:
+APFS, HFS+, and NTFS are local validation targets for the V5 transaction model;
+formal status still requires a receipt for the specific release and machine.
+SMB, NAS, cloud-synchronized folders, exFAT without its own receipt, and
+filesystems whose semantics cannot be established are best effort:
 
 - an interactive launch shows the risk and target and defaults to refusal;
 - non-interactive use must explicitly include `--allow-best-effort-output`.
@@ -191,11 +195,11 @@ publication facts. Pillow is imported lazily only when Debug Analysis is enabled
 
 V5 is now the repository's only runtime. Synthetic contracts, strict TIFF and
 Orientation handling, current schemas, standalone construction, and recoverable
-flat-output publication exist. Full real golden accuracy, the 24-source
-performance receipt, and formal Windows x64, Apple Silicon, and Intel macOS
-receipts are not complete. This repository state is therefore not a V5 release-
-ready or all-platform-support claim. Users should continue to use public stable
-v4.2.8.
+flat-output publication exist. Validation tools and receipt schemas do not prove
+that a physical host has passed; only a receipt bound to the exact commit can do
+that. Golden accuracy and platform evidence are not closed for this development
+version, so it is not a V5 release-ready or all-platform-support claim. Users
+should continue to use public stable v4.2.8.
 
 ## Remove And License
 
