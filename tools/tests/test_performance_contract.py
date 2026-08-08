@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 import sys
+from types import SimpleNamespace
 import unittest
 from unittest import mock
 
@@ -28,6 +30,7 @@ from x5crop.runtime.threading import (
     THREAD_ENVIRONMENT_KEYS,
     configure_numeric_threads,
 )
+from x5crop.runtime import dependency_identity as dependency_identity_module
 
 
 class V5PerformanceContractTest(unittest.TestCase):
@@ -137,6 +140,49 @@ class V5PerformanceContractTest(unittest.TestCase):
             cv2.setNumThreads.call_args_list,
             [mock.call(1), mock.call(0)],
         )
+
+    def test_runtime_dependency_identity_scans_distribution_owners_once(self) -> None:
+        modules = {}
+        owners = {}
+        distributions = {}
+        for name, module_name, distribution_name in (
+            dependency_identity_module.DEPENDENCY_MODULES
+        ):
+            module = SimpleNamespace(
+                __version__="1.0",
+                __file__=f"/external/site/{module_name}/__init__.py",
+            )
+            if name == "opencv":
+                module.getBuildInformation = lambda: "build"
+            modules[module_name] = module
+            owners[module_name.split(".", 1)[0]] = [distribution_name]
+            distributions[distribution_name] = SimpleNamespace(
+                version="1.0",
+                locate_file=lambda _relative: Path("/external/site"),
+            )
+        with (
+            mock.patch.object(
+                dependency_identity_module,
+                "import_module",
+                side_effect=lambda name: modules[name],
+            ),
+            mock.patch.object(
+                dependency_identity_module.metadata,
+                "packages_distributions",
+                return_value=owners,
+            ) as packages_distributions,
+            mock.patch.object(
+                dependency_identity_module.metadata,
+                "distribution",
+                side_effect=lambda name: distributions[name],
+            ),
+        ):
+            identity = dependency_identity_module.runtime_dependency_identity()
+        self.assertEqual(
+            set(identity),
+            {item[0] for item in dependency_identity_module.DEPENDENCY_MODULES},
+        )
+        packages_distributions.assert_called_once_with()
 
     def test_diagnostic_memory_bound_is_ten_pixels_plus_guard(self) -> None:
         source_pixels = 115_000_000

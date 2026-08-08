@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 from importlib import import_module, metadata
 from pathlib import Path
+from typing import Mapping
 
 
 DEPENDENCY_MODULES = (
@@ -32,9 +33,11 @@ def _distribution_package(
     module_name: str,
     preferred_distribution: str,
     origin: Path,
+    owners: Mapping[str, list[str]],
+    cache: dict[str, tuple[Path, str] | None],
 ) -> tuple[str, str] | None:
     top_level = module_name.split(".", 1)[0]
-    candidates = set(metadata.packages_distributions().get(top_level, ()))
+    candidates = set(owners.get(top_level, ()))
     candidates.add(preferred_distribution)
     preferred = preferred_distribution.casefold()
     matches: list[tuple[str, str]] = []
@@ -42,16 +45,26 @@ def _distribution_package(
         candidates,
         key=lambda value: value.casefold() != preferred,
     ):
-        try:
-            distribution = metadata.distribution(distribution_name)
-        except metadata.PackageNotFoundError:
+        cache_key = distribution_name.casefold()
+        if cache_key not in cache:
+            try:
+                distribution = metadata.distribution(distribution_name)
+            except metadata.PackageNotFoundError:
+                cache[cache_key] = None
+            else:
+                cache[cache_key] = (
+                    Path(distribution.locate_file("")).resolve(),
+                    distribution.version,
+                )
+        cached = cache[cache_key]
+        if cached is None:
             continue
-        root = Path(distribution.locate_file("")).resolve()
+        root, version = cached
         try:
             origin.relative_to(root)
         except ValueError:
             continue
-        matches.append((distribution_name, distribution.version))
+        matches.append((distribution_name, version))
     unique = tuple(dict.fromkeys(matches))
     if len(unique) > 1:
         owners = ", ".join(name for name, _version in unique)
@@ -64,6 +77,8 @@ def _distribution_package(
 
 def runtime_dependency_identity() -> dict[str, dict[str, str | None]]:
     dependencies: dict[str, dict[str, str | None]] = {}
+    distribution_owners: Mapping[str, list[str]] | None = None
+    distribution_cache: dict[str, tuple[Path, str] | None] = {}
     for name, module_name, preferred_distribution in DEPENDENCY_MODULES:
         try:
             module = import_module(module_name)
@@ -76,21 +91,28 @@ def runtime_dependency_identity() -> dict[str, dict[str, str | None]]:
             raise RuntimeError(f"Dependency module has no origin: {module_name}")
         origin = Path(origin_value).resolve()
         homebrew = _homebrew_package(origin)
-        distribution = _distribution_package(
-            module_name,
-            preferred_distribution,
-            origin,
-        )
         if homebrew is not None:
             provider = "homebrew"
             package, package_version = homebrew
-        elif distribution is not None:
-            provider = "pip"
-            package, package_version = distribution
         else:
-            provider = "external"
-            package = module_name
-            package_version = str(getattr(module, "__version__", "unavailable"))
+            if distribution_owners is None:
+                distribution_owners = metadata.packages_distributions()
+            distribution = _distribution_package(
+                module_name,
+                preferred_distribution,
+                origin,
+                distribution_owners,
+                distribution_cache,
+            )
+            if distribution is not None:
+                provider = "pip"
+                package, package_version = distribution
+            else:
+                provider = "external"
+                package = module_name
+                package_version = str(
+                    getattr(module, "__version__", "unavailable")
+                )
         build_information_sha256 = None
         if module_name == "cv2":
             build_information_sha256 = hashlib.sha256(
