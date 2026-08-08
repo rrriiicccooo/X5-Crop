@@ -960,6 +960,7 @@ def make_debug_analysis_panel(
     detection: FinalDetection,
     configuration: DetectionConfiguration,
     profile: ImageProfile,
+    source_name: str,
     diagnostics: DiagnosticsConfiguration,
     render_cache: DebugRenderCache,
     terminal_outcome: RunTerminalOutcome,
@@ -977,6 +978,7 @@ def make_debug_analysis_panel(
         detection,
         configuration,
         profile,
+        source_name,
         style,
         terminal_outcome,
     )

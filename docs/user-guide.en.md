@@ -106,8 +106,9 @@ Production options:
 - `--debug-analysis`: explicitly write a three-panel diagnostic JPG on a fixed
   `1653 × 952` dark audit grid. Row one compares detected and selected TOP/BOTTOM,
   row two compares detected and selected START/END, and row three shows safety
-  envelopes with translucent per-frame final output. The actual deskew angle and
-  Orientation appear only in the upper-right status header. It is off by default.
+  envelopes with translucent per-frame final output. The original input filename
+  appears in the upper-left status header; the actual deskew angle and Orientation
+  appear only in the upper-right status header. It is off by default.
 - `--allow-best-effort-output`: explicitly accept weaker publication semantics
   on an unverified filesystem.
 - `--interactive`: prompt for format, mode, count, and Debug Analysis.

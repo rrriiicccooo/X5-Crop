@@ -52,7 +52,8 @@ standalone 只消费 current schema；不存在 V4.9 fallback、shim、feature f
 - Debug Analysis 使用固定 `1653 × 952` 三联深色审计网格：第一联专属 detected/selected
   TOP/BOTTOM，第二联专属 detected/selected START/END，第三联专属 `SafeCropEnvelope`、彩色半透明
   final output、budget 与 source-atomic decision。Deskew/identity 与 Orientation 只在右上状态头
-  显示一次。它不重新计算任何检测事实，也不在 current report 未保存 polygon 时伪造
+  显示一次；原始输入文件名在左上状态头显示一次。它不重新计算任何检测事实，也不在 current
+  report 未保存 polygon 时伪造
   `MaximumLegalWindow`。
 
 验证拓扑已统一为

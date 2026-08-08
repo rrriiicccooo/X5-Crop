@@ -353,7 +353,9 @@ Debug Analysis 只读取 runtime/report facts，并按坐标职责组织为三�
 violation 与 source-atomic decision。它不重新计算 detection、geometry 或 budget。渲染使用固定
 `1653 × 952` 审计网格、一个共享 source preview cache、第三联一个 RGBA overlay 和一次最终
 JPEG 编码；竖向片条只旋转展示坐标，不改变 source facts。实际 deskew/identity 角度与 Orientation 映射
-只在右上状态头出现，三联内部不重复。当前 report 没有可绘制的 `MaximumLegalWindow` polygon，
+只在右上状态头出现，原始输入文件名只在左上状态头出现，三联内部不重复。文件名直接来自
+runtime 的输入路径 basename，不从输出名或 report 反推。当前 report 没有可绘制的
+`MaximumLegalWindow` polygon，
 因此不伪造绿色窗口。Pillow 只在用户显式启用 Debug Analysis 后延迟导入。
 
 ## 9. 生产路径与开发验证

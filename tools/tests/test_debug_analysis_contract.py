@@ -8,6 +8,7 @@ import unittest
 from unittest import mock
 
 import numpy as np
+from PIL import Image, ImageDraw, ImageFont
 import tifffile
 
 import x5crop.debug.panels as debug_panels
@@ -22,7 +23,7 @@ from x5crop.debug.panels import (
     make_debug_analysis_panel,
     stack_debug_panels,
 )
-from x5crop.debug.status import _transform_lines
+from x5crop.debug.status import _fit_text, _source_header, _transform_lines
 from x5crop.detection.decision.decision_gate import apply_decision_gate
 from x5crop.detection.final.finalize import finalize_detection
 from x5crop.detection.pipeline import choose_detection
@@ -102,11 +103,13 @@ class DebugAnalysisContractTest(unittest.TestCase):
                     detection,
                     configuration,
                     profile,
+                    "135.tif",
                     configuration.diagnostics,
                     DebugRenderCache(),
                     RunTerminalOutcome.NEEDS_REVIEW,
                 )
         self.assertEqual(status.call_count, 1)
+        self.assertEqual(status.call_args.args[4], "135.tif")
         style = configuration.diagnostics.style
         self.assertEqual(
             panel.shape,
@@ -284,6 +287,28 @@ class DebugAnalysisContractTest(unittest.TestCase):
         self.assertEqual(first, "V5 · DESKEW APPLIED -0.153°")
         self.assertIn("observed -0.166°…+0.166°", second)
         self.assertIn("ORIENTATION 1>CANONICAL>1", second)
+
+    def test_header_displays_and_bounds_the_original_source_filename(self) -> None:
+        self.assertEqual(
+            _source_header("原始扫描 01.tif"),
+            "SOURCE · 原始扫描 01.tif",
+        )
+        with self.assertRaisesRegex(ValueError, "source filename"):
+            _source_header("\n\t")
+        image = Image.new("RGB", (300, 60))
+        draw = ImageDraw.Draw(image)
+        font = ImageFont.load_default(size=15)
+        fitted = _fit_text(
+            draw,
+            _source_header("a" * 500 + ".tif"),
+            font,
+            180,
+        )
+        self.assertTrue(fitted.endswith("..."))
+        self.assertLessEqual(
+            draw.textbbox((0, 0), fitted, font=font)[2],
+            180,
+        )
 
     def test_deskew_data_is_owned_only_by_the_status_header(self) -> None:
         self.assertNotIn(

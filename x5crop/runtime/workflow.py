@@ -219,6 +219,7 @@ def process_one(
                 detection,
                 initial_configuration,
                 profile,
+                input_file.name,
                 output_root,
                 source.portable_stem,
                 source.input_ordinal,

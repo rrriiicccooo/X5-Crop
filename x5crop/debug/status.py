@@ -25,6 +25,41 @@ def _text_width(
     return box[2] - box[0]
 
 
+def _fit_text(
+    draw: ImageDraw.ImageDraw,
+    text: str,
+    font: ImageFont.ImageFont,
+    max_width: int,
+) -> str:
+    if max_width <= 0:
+        return ""
+    if _text_width(draw, text, font) <= max_width:
+        return text
+    suffix = "..."
+    if _text_width(draw, suffix, font) > max_width:
+        return ""
+    low = 0
+    high = len(text)
+    while low < high:
+        middle = (low + high + 1) // 2
+        candidate = text[:middle] + suffix
+        if _text_width(draw, candidate, font) <= max_width:
+            low = middle
+        else:
+            high = middle - 1
+    return text[:low] + suffix
+
+
+def _source_header(source_name: str) -> str:
+    printable = "".join(
+        character if character.isprintable() else " "
+        for character in source_name
+    ).strip()
+    if not printable:
+        raise ValueError("Debug Analysis requires a source filename")
+    return f"SOURCE · {printable}"
+
+
 def debug_status_parts(
     detection: FinalDetection,
     style: DebugStyleParameters,
@@ -83,6 +118,7 @@ def add_status_bar(
     detection: FinalDetection,
     configuration: DetectionConfiguration,
     profile: ImageProfile,
+    source_name: str,
     style: DebugStyleParameters,
     terminal_outcome: RunTerminalOutcome,
 ) -> np.ndarray:
@@ -119,17 +155,10 @@ def add_status_bar(
         font=status_font,
     )
     detail_font = _font(style.header_detail_font_size)
-    draw.text((178, 18), detail, fill=style.text_color, font=detail_font)
     context = (
         f"{configuration.physical_spec.format_id}/{configuration.strip_mode} · "
         f"count={_count_authority(configuration)} · "
         f"slots={detection.output_slot_count or 0}"
-    )
-    draw.text(
-        (178, 39),
-        context,
-        fill=style.secondary_text_color,
-        font=detail_font,
     )
     runtime_chip = (1490, 16, width - 16, 50)
     draw.rounded_rectangle(
@@ -152,15 +181,44 @@ def add_status_bar(
     )
     first, second = _transform_lines(detection, profile)
     transform_right = runtime_chip[0] - 16
-    for text, y, color in (
+    transform_lines = (
         (first, 16, style.text_color),
         (second, 38, style.secondary_text_color),
-    ):
+    )
+    transform_lefts = []
+    for text, y, color in transform_lines:
         text_width = _text_width(draw, text, detail_font)
+        transform_lefts.append(transform_right - text_width)
         draw.text(
             (transform_right - text_width, y),
             text,
             fill=color,
             font=detail_font,
         )
+    left_text_x = 178
+    clearance = 24
+    source_text = _fit_text(
+        draw,
+        _source_header(source_name),
+        detail_font,
+        transform_lefts[0] - left_text_x - clearance,
+    )
+    draw.text(
+        (left_text_x, 18),
+        source_text,
+        fill=style.text_color,
+        font=detail_font,
+    )
+    detail_text = _fit_text(
+        draw,
+        f"{detail} · {context}",
+        detail_font,
+        transform_lefts[1] - left_text_x - clearance,
+    )
+    draw.text(
+        (left_text_x, 39),
+        detail_text,
+        fill=style.secondary_text_color,
+        font=detail_font,
+    )
     return np.asarray(image)

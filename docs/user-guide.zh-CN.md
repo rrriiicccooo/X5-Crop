@@ -87,7 +87,7 @@ python3 X5_Crop.py /path/to/scans \
   一次处理多张原 TIFF 时可显式使用 `--jobs 2`。数值库内部线程固定为 1。
 - `--debug-analysis`：显式生成固定 `1653 × 952` 深色网格的三联诊断 JPG；第一联对比检测与选定的
   TOP/BOTTOM，第二联对比检测与选定的 START/END，第三联显示安全包络和逐帧彩色半透明最终输出。
-  实际 deskew 角度与 Orientation 只在右上状态头显示，默认关闭。
+  原始输入文件名显示在左上状态头；实际 deskew 角度与 Orientation 只在右上状态头显示，默认关闭。
 - `--allow-best-effort-output`：明确接受未验证文件系统的较弱发布语义。
 - `--interactive`：交互选择格式、模式、张数和 Debug Analysis。
 
