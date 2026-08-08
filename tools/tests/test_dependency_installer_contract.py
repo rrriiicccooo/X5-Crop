@@ -7,6 +7,7 @@ from unittest import mock
 
 from tools.install.dependency_manager import (
     DependencyState,
+    _pip_package_for_record,
     build_uninstall_plan,
     check_dependencies,
     fresh_installed_versions,
@@ -312,6 +313,27 @@ class DependencyInstallerContractTest(unittest.TestCase):
             from tools.install.dependency_manager import inspect_dependency_states
 
             inspect_dependency_states(contract)
+
+    def test_equivalent_distribution_spellings_are_one_pip_owner(self) -> None:
+        pillow = load_dependency_contract(CONTRACT_PATH).by_name()["pillow"]
+        record = {
+            "module_origin": "/user/site/PIL/__init__.py",
+            "distributions": {
+                "pillow": {
+                    "version": "12.3.0",
+                    "root": "/user/site",
+                },
+                "Pillow": {
+                    "version": "12.3.0",
+                    "root": "/user/site",
+                },
+            },
+        }
+
+        self.assertEqual(
+            _pip_package_for_record(pillow, record),
+            ("Pillow", "12.3.0"),
+        )
 
     def test_uninstaller_never_removes_preexisting_or_changed_packages(self) -> None:
         receipt = (

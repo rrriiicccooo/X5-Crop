@@ -213,7 +213,10 @@ def _fresh_module_records(
         "import hashlib\n"
         "import json\n"
         "from pathlib import Path\n"
+        "import re\n"
         "import sys\n"
+        "def canonical_distribution_name(name):\n"
+        "    return re.sub(r'[-_.]+', '-', name).lower()\n"
         "specifications = json.loads(sys.argv[1])\n"
         "owners = metadata.packages_distributions()\n"
         "records = {}\n"
@@ -221,15 +224,18 @@ def _fresh_module_records(
         "    name = spec['name']\n"
         "    module_name = spec['module']\n"
         "    top_level = module_name.split('.', 1)[0]\n"
-        "    candidates = set(owners.get(top_level, ()))\n"
-        "    candidates.add(spec['pip_distribution'])\n"
+        "    candidates = {}\n"
+        "    for candidate in (*owners.get(top_level, ()), spec['pip_distribution']):\n"
+        "        candidates.setdefault(canonical_distribution_name(candidate), candidate)\n"
         "    distributions = {}\n"
-        "    for candidate in candidates:\n"
+        "    for candidate in candidates.values():\n"
         "        try:\n"
         "            package = metadata.distribution(candidate)\n"
         "        except metadata.PackageNotFoundError:\n"
         "            continue\n"
-        "        distributions[candidate] = {\n"
+        "        distribution = str(package.metadata.get('Name') or candidate)\n"
+        "        distributions[canonical_distribution_name(distribution)] = {\n"
+        "            'distribution': distribution,\n"
         "            'version': package.version,\n"
         "            'root': str(Path(package.locate_file('')).resolve()),\n"
         "        }\n"
@@ -342,7 +348,7 @@ def _pip_package_for_record(
         raw_distributions,
         key=lambda name: canonical_distribution_name(str(name)) != preferred,
     )
-    matches: list[tuple[str, str]] = []
+    matches: dict[str, tuple[str, str]] = {}
     for raw_name in ordered:
         detail = raw_distributions.get(raw_name)
         if not isinstance(detail, dict) or "version" not in detail:
@@ -353,8 +359,18 @@ def _pip_package_for_record(
                 origin.relative_to(root)
             except ValueError:
                 continue
-        matches.append((str(raw_name), str(detail["version"])))
-    unique = tuple(dict.fromkeys(matches))
+        distribution = str(detail.get("distribution", raw_name))
+        identity = canonical_distribution_name(distribution)
+        version = str(detail["version"])
+        display_name = pin.pip_distribution if identity == preferred else distribution
+        existing = matches.get(identity)
+        if existing is not None and existing[1] != version:
+            raise RuntimeError(
+                f"{pin.module} has conflicting pip metadata for {identity}; "
+                "no dependency was changed"
+            )
+        matches[identity] = (display_name, version)
+    unique = tuple(matches.values())
     if len(unique) > 1:
         owners = ", ".join(name for name, _version in unique)
         raise RuntimeError(
