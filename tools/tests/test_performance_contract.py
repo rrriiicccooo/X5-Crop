@@ -184,6 +184,27 @@ class V5PerformanceContractTest(unittest.TestCase):
         )
         packages_distributions.assert_called_once_with()
 
+    def test_runtime_identity_collapses_equivalent_distribution_names(self) -> None:
+        distribution = SimpleNamespace(
+            version="12.3.0",
+            locate_file=lambda _relative: Path("/user/site"),
+        )
+        with mock.patch.object(
+            dependency_identity_module.metadata,
+            "distribution",
+            return_value=distribution,
+        ) as lookup:
+            owner = dependency_identity_module._distribution_package(
+                "PIL",
+                "Pillow",
+                Path("/user/site/PIL/__init__.py"),
+                {"PIL": ["pillow"]},
+                {},
+            )
+
+        self.assertEqual(owner, ("Pillow", "12.3.0"))
+        lookup.assert_called_once()
+
     def test_diagnostic_memory_bound_is_ten_pixels_plus_guard(self) -> None:
         source_pixels = 115_000_000
         self.assertEqual(

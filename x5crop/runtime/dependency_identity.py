@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 from importlib import import_module, metadata
 from pathlib import Path
+import re
 from typing import Mapping
 
 
@@ -14,6 +15,10 @@ DEPENDENCY_MODULES = (
     ("imagecodecs", "imagecodecs", "imagecodecs"),
     ("pillow", "PIL", "Pillow"),
 )
+
+
+def _canonical_distribution_name(name: str) -> str:
+    return re.sub(r"[-_.]+", "-", name).lower()
 
 
 def _homebrew_package(origin: Path) -> tuple[str, str] | None:
@@ -37,15 +42,22 @@ def _distribution_package(
     cache: dict[str, tuple[Path, str] | None],
 ) -> tuple[str, str] | None:
     top_level = module_name.split(".", 1)[0]
-    candidates = set(owners.get(top_level, ()))
-    candidates.add(preferred_distribution)
-    preferred = preferred_distribution.casefold()
-    matches: list[tuple[str, str]] = []
-    for distribution_name in sorted(
-        candidates,
-        key=lambda value: value.casefold() != preferred,
+    candidates: dict[str, str] = {}
+    for distribution_name in (
+        *owners.get(top_level, ()),
+        preferred_distribution,
     ):
-        cache_key = distribution_name.casefold()
+        candidates.setdefault(
+            _canonical_distribution_name(distribution_name),
+            distribution_name,
+        )
+    preferred = _canonical_distribution_name(preferred_distribution)
+    matches: dict[str, tuple[str, str]] = {}
+    for identity, distribution_name in sorted(
+        candidates.items(),
+        key=lambda item: item[0] != preferred,
+    ):
+        cache_key = identity
         if cache_key not in cache:
             try:
                 distribution = metadata.distribution(distribution_name)
@@ -64,8 +76,11 @@ def _distribution_package(
             origin.relative_to(root)
         except ValueError:
             continue
-        matches.append((distribution_name, version))
-    unique = tuple(dict.fromkeys(matches))
+        display_name = (
+            preferred_distribution if identity == preferred else distribution_name
+        )
+        matches[identity] = (display_name, version)
+    unique = tuple(matches.values())
     if len(unique) > 1:
         owners = ", ".join(name for name, _version in unique)
         raise RuntimeError(

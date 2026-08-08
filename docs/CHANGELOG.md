@@ -41,8 +41,9 @@ standalone 只消费 current schema；不存在 V4.9 fallback、shim、feature f
   ownership：可用项零改动复用，缺失项才安装 user-site binary wheel，版本不符项沿已确认的
   pip distribution 或 Homebrew formula 更新；未知 provider 在写入前停止。Homebrew 从来不是
   macOS 前置条件，OpenCV 也不再由 distribution metadata 是否存在决定“已安装/未安装”。pip
-  distribution identity 在检查边界按 Python packaging 规则规范化，因此 `Pillow`/`pillow`
-  等价拼写只表示同一个 owner，真正不同的 OpenCV distributions 仍会在写入前停止。
+  distribution identity 在安装与 runtime report 检查边界都按 Python packaging 规则规范化，
+  因此 `Pillow`/`pillow` 等价拼写只表示同一个 owner，真正不同的 OpenCV distributions 仍会在
+  写入前停止。
 - OpenCV 内部线程先请求 1；若当前并发 backend 忽略该值，则改用 0 明确关闭内部并发，使
   不同 OpenCV provider 都保持实际单线程，source 级并发仍只由 `--jobs` 拥有。
 - 正式 CLI 删除 `--overwrite`、`--diagnostics` 和旧 debug flags；未验证文件系统的非交互运行必须
@@ -53,7 +54,7 @@ standalone 只消费 current schema；不存在 V4.9 fallback、shim、feature f
 使用九张 source-SHA-bound 黄金的十四项正式 CLI 任务；`diagnostic` 以正式 CLI 运行 111 sources；
 `performance` 在外部 SHA 核对后测量 24-source 完整用户路径并绑定 commit、依赖和 workload。
 
-当前完成边界：合成 full contracts 已通过 128 项（1 项平台条件跳过）；九张黄金十四项中，
+当前完成边界：合成 full contracts 已通过 129 项（1 项平台条件跳过）；九张黄金十四项中，
 S027、S035、S091 explicit/auto 与 S094 已正式通过，S055 和 S098 保持安全送审，仍有六个
 nominal 任务未达到冻结标准。111-source 工程诊断已达到 111/111，但
 原先绑定 `4ca03877` 的 Apple Silicon receipt 使用临时 PyPI OpenCV overlay，其依赖身份已由
