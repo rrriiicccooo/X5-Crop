@@ -17,12 +17,7 @@ RUNTIME_SCOPE = "runtime"
 _RUNTIME_EXACT_PATHS = frozenset(
     {
         "X5_Crop.py",
-        "pyproject.toml",
-        "requirements.txt",
-        "requirements.lock",
         "tools/install/dependencies.toml",
-        "uv.lock",
-        "poetry.lock",
         "tools/regression/performance.py",
         "tools/regression/performance_identity.py",
         "tools/regression/cohorts/production_performance.jsonl",
@@ -45,10 +40,6 @@ def _is_runtime_path(path: str) -> bool:
     return (
         path in _RUNTIME_EXACT_PATHS
         or path.startswith("x5crop/")
-        or (
-            path.startswith("requirements")
-            and path.endswith((".in", ".txt", ".lock"))
-        )
     )
 
 

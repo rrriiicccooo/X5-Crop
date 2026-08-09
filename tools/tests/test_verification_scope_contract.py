@@ -34,7 +34,6 @@ class VerificationScopeContractTest(unittest.TestCase):
             "tools/regression/performance_identity.py",
             "tools/regression/cohorts/production_performance.jsonl",
             "tools/install/dependencies.toml",
-            "pyproject.toml",
         ):
             with self.subTest(path=path):
                 self.assertEqual(
@@ -141,7 +140,25 @@ class VerificationScopeContractTest(unittest.TestCase):
         self.assertIn(
             '"$PYTHON" -m tools.verification_scope --refs', verifier
         )
+        self.assertIn(
+            '"$PYTHON" -m unittest tools.tests.test_current_only_contract',
+            verifier,
+        )
         self.assertEqual(workflow.count('      - "**/*.md"'), 2)
+
+    def test_scope_has_no_speculative_dependency_owners(self) -> None:
+        source = (ROOT / "tools/verification_scope.py").read_text(
+            encoding="utf-8"
+        )
+        for retired in (
+            "pyproject.toml",
+            "requirements.txt",
+            "requirements.lock",
+            "uv.lock",
+            "poetry.lock",
+        ):
+            with self.subTest(retired=retired):
+                self.assertNotIn(retired, source)
 
 
 if __name__ == "__main__":

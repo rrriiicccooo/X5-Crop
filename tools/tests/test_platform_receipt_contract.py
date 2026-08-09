@@ -74,7 +74,6 @@ def _receipt(target: str, performance_name: str, performance_sha: str) -> dict:
         "environment": environment,
         "verification": {
             "full": {"status": "passed"},
-            "non_detection_audit": {"status": "passed"},
         },
         "platform_cohort_sha256": cohort_sha256(),
         "source_sha256s": [

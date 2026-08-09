@@ -20,7 +20,7 @@ check_staged() {
     git diff --cached --check
     git diff --cached --name-only --diff-filter=ACMR | while IFS= read -r path; do
         case "/$path" in
-            */.DS_Store|/.venv/*|/.venv-build/*|/build/*|/dist/*|/release/*|/downloaded_apps/*|/Test/*|/x5_crop_output/*)
+            */.DS_Store|*/.venv/*|*/.venv-build/*|*/build/*|*/dist/*|*/release/*|*/downloaded_apps/*|*/Test/*|*/x5_crop_output/*)
                 printf >&2 'Refusing generated or local file: %s\n' "$path"
                 exit 1
                 ;;
@@ -53,6 +53,7 @@ check_pushed_documentation() {
         git diff --check "$remote_sha" "$local_sha"
     done <"$refs"
     check_diff_hygiene
+    "$PYTHON" -m unittest tools.tests.test_current_only_contract
 }
 
 run_full() {
@@ -62,7 +63,8 @@ run_full() {
     for script in \
         X5_Crop_Mac.command \
         tools/install/X5_Crop_Mac_install.command \
-        tools/install/X5_Crop_Mac_uninstall.command
+        tools/install/X5_Crop_Mac_uninstall.command \
+        tools/platform/X5_Crop_Intel_validate.command
     do
         [ ! -f "$script" ] || bash -n "$script"
     done
@@ -92,12 +94,6 @@ case "${1:-}" in
         ;;
     performance)
         "$PYTHON" -m tools.regression.performance
-        ;;
-    non-detection)
-        "$PYTHON" -m tools.regression.non_detection_freeze
-        ;;
-    audit)
-        "$PYTHON" -m tools.regression.non_detection_freeze --audit-only
         ;;
     platform)
         shift
@@ -139,7 +135,7 @@ case "${1:-}" in
         ;;
     *)
         printf >&2 '%s\n' \
-            "usage: $0 staged|full|accuracy|diagnostic|performance|non-detection|audit|platform|platform-check|platform-package|pre-push"
+            "usage: $0 staged|full|accuracy|diagnostic|performance|platform|platform-check|platform-package|pre-push"
         exit 2
         ;;
 esac

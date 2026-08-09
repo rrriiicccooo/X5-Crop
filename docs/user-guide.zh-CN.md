@@ -85,12 +85,8 @@ python3 X5_Crop.py /path/to/scans \
 - `--count N|auto`：partial 的明确张数或片夹容量；full 使用格式固定张数。
 - `--jobs N`：source 并发数；默认 1，上限 3。默认值优先控制一般电脑的峰值内存；内存充足且
   一次处理多张原 TIFF 时可显式使用 `--jobs 2`。数值库内部线程固定为 1。
-- `--debug-analysis`：显式生成固定 `1653 px` 宽度、自适应高度的深色三联诊断 JPG；第一联对比
-  检测与选定的
-  TOP/BOTTOM，第二联对比检测与选定的 START/END，第三联显示安全包络和逐帧彩色半透明最终输出。
-  原始输入文件名显示在左上状态头；实际 deskew 角度与 Orientation 只在右上状态头显示，默认关闭。
-  三联会把完整片条等比铺满媒体槽，并随片条比例增加画布高度，不裁切或压缩照片。密集
-  START/END 标签会自动错行；budget violation 只标记候选框边缘，不遮盖框内照片证据。
+- `--debug-analysis`：显式生成自适应高度的三联诊断 JPG，依次显示 TOP/BOTTOM、START/END 与
+  最终安全输出；默认关闭。完整片条保持原比例，不裁切照片。
 - `--allow-best-effort-output`：明确接受未验证文件系统的较弱发布语义。
 - `--interactive`：交互选择格式、模式、张数和 Debug Analysis。
 
@@ -162,14 +158,6 @@ metadata、无损压缩与 `Orientation=1`。
 普通运行不读取原 TIFF 来计算内容 SHA，不检查 Git、黄金样片或性能 receipt，也不启用
 profiler 或故障注入。它只记录 `run_id`、输入序号、便携文件名、size、mtime、依赖/线程和输出
 事务所需的轻量身份。Pillow 只在用户明确启用 Debug Analysis 后延迟导入。
-
-## 当前验证边界
-
-V5 已是仓库唯一运行时，并已建立合成 contracts、严格 TIFF/Orientation、正式 schema、
-standalone 构建和可恢复平面输出事务。验证工具与 receipt 格式存在不等于实机已经通过；只有
-绑定同一 commit 的对应平台 receipt 才能证明该平台。本开发版本仍有黄金准确率与平台证据未
-闭合，因此不能据此宣布 V5 已 release-ready 或所有平台已经正式支持。当前用户应继续使用公开
-稳定版 v4.2.8。
 
 ## 移除与许可
 

@@ -346,22 +346,11 @@ Manifest 只保存 `run_id`、输入 ordinal、便携名称、size、mtime、ter
 Git、cohort 或 performance receipt；inventory 不包含 manifest 自身。普通文件使用相对路径、
 role、type、size、mtime，目录只使用相对路径与 type。
 
-Debug Analysis 只读取 runtime/report facts，并按坐标职责组织为三联图：第一联只对比
-`raw_top_bottom_observations` 检测值与 canonical top/bottom 选定值；第二联只对比
-`side_transition_regions` 检测值与 canonical START/END 选定值；第三联只显示
-`SafeCropEnvelope` 的 placement、required、constrained footprints、逐帧彩色半透明最终输出、budget
-violation 与 source-atomic decision。它不重新计算 detection、geometry 或 budget。渲染使用固定
-`1653 px` 宽度与 source-aspect 驱动的自适应高度、一个共享 source preview cache、第三联一个 RGBA
-overlay 和一次最终 JPEG 编码。三联先把完整 source strip 分别等比铺满 media viewport，再通过
-同一份 source-to-display 映射叠加各自 evidence；panel 与 canvas 高度随完整片条比例增长，因此既不
-裁 source，也不压缩照片比例，更不改变任何 source-coordinate fact。竖向片条只旋转展示坐标。
-实际 deskew/identity 角度与 Orientation 映射
-只在右上状态头出现，原始输入文件名只在左上状态头出现，三联内部不重复。文件名直接来自
-runtime 的输入路径 basename，不从输出名或 report 反推。当前 report 没有可绘制的
-`MaximumLegalWindow` polygon，
-因此不伪造绿色窗口。所有图像 evidence 都裁切在各联的 media viewport 内；START/END 只向图片
-上缘外延伸并在近邻时错行避让。Budget violation 使用框边斜线而非整面遮罩，避免覆盖照片、安全
-包络与逐帧颜色。Pillow 只在用户显式启用 Debug Analysis 后延迟导入。
+Debug Analysis 只读取 runtime/report facts。三联图分别呈现 detected/selected TOP/BOTTOM、
+detected/selected START/END，以及 `SafeCropEnvelope`、final output、budget 与 source-atomic
+decision。渲染共用一份 source preview 和 source-to-display mapping，以固定 `1653 px` 宽度和
+source-aspect 自适应高度显示完整片条；不裁切照片、不重算 detection/geometry/budget，也不伪造
+report 中不存在的 polygon。Pillow 只在用户显式启用后延迟导入。
 
 ## 9. 生产路径与开发验证
 
@@ -378,14 +367,11 @@ Intel macOS 15 乘以 Python 3.12、3.13、3.14 运行同一 `full`。Python 3.1
 
 `accuracy`、`diagnostic` 和 `performance` 在生产程序外部先计算 source SHA 并冻结 source
 stat，再通过子进程调用同一 `X5_Crop.py`。工具只观察正式 report、manifest 与 outputs；没有
-detector bypass、样片参数、验证专用 producer 或较宽 Gate。`non-detection` 对绑定
-`90e5e8c4` 的十四项黄金语义作精确 schema 规范化比较；`audit` 还从 `21da1131` 检查逐文件
-protected manifest，并固定 freeze anchor 自提交 `35ba1117` 后不得变化。两者只负责防止当前
-非检测阶段悄然改动检测、format、Gate、budget、黄金 cohort 或 comparator，不改变 accuracy
-verdict。
+detector bypass、样片参数、验证专用 producer 或较宽 Gate。Detection 变化直接使用 current
+accuracy comparator 与 current-schema report comparison，不保留阶段性 freeze verifier。
 
-`platform` 只在干净 tree 上从真实 OS 与架构生成 receipt，运行 `full`、非检测审计、六张平台
-样片、真实文件系统 contracts 和关联 performance receipt。`platform-check` 恰好接受同一
+`platform` 只在干净 tree 上从真实 OS 与架构生成 `x5crop_platform_receipt_v2`，运行 `full`、
+六张平台样片、真实文件系统 contracts 和关联 performance receipt。`platform-check` 恰好接受同一
 expected commit 的一份 Apple Silicon 与一份 Windows x64 receipt，读取并核对关联 performance
 文件的真实内容与 SHA；NTFS 结果不能替代 exFAT case。`platform-package intel-macos` 只生成
 Git bundle、六张样片的 SHA manifest、薄 `.command` 与校验清单，不包含 TIFF、receipt、RC
@@ -401,13 +387,10 @@ profiling 和故障注入不进入用户包，开发依赖单独拥有。`tools/
 模块能力、模块版本、缺失时的用户级 pip fallback，以及可识别的 Homebrew formula；它不把
 平台绑定到 package manager。
 
-依赖安装器先用目标 Python 的 fresh interpreter 检查 import、模块版本、真实 origin、distribution
-和 Homebrew Cellar ownership。满足能力合同的模块一律 `reused`；缺失模块才安装最小 user-site
-binary wheel；已存在但版本不符时，确认属于 pip 就更新原 distribution，确认属于 Homebrew 且
-当前 formula 可提供所需版本才执行 formula update。未知 ownership 在任何写入前失败，禁止用
-第二份包遮盖。收据分别记录每项 `reused`、`pip_installed`、`pip_updated` 或
-`homebrew_updated`，runtime/report 记录逻辑模块、实际 provider、package、origin、版本和 OpenCV
-build fingerprint，不再把缺失 distribution metadata 当作模块缺失。
+依赖安装器以 fresh interpreter 检查 import、版本和真实 ownership：满足合同的模块直接复用，
+缺失模块才安装最小 user-site binary wheel，版本不符只沿确认的 pip distribution 或 Homebrew
+formula 更新，未知 ownership 在写入前失败。Receipt 与 runtime report 记录实际 provider、origin、
+版本和必要 build/thread identity；distribution metadata 缺失不等于模块缺失。
 
 ## 10. 工作量与性能
 

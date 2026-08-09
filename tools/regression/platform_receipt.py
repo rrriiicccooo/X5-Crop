@@ -28,7 +28,7 @@ from .platform_io import (
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-PLATFORM_RECEIPT_SCHEMA = "x5crop_platform_receipt_v1"
+PLATFORM_RECEIPT_SCHEMA = "x5crop_platform_receipt_v2"
 DEFAULT_PLATFORM_ROOT = PROJECT_ROOT / "build" / "v5-platform"
 TARGET_APPLE_SILICON = "apple_silicon_macos"
 TARGET_INTEL_MAC = "intel_macos"
@@ -155,7 +155,6 @@ def build_platform_receipt(
         raise ValueError("current HEAD does not match the expected platform commit")
     target = actual_target()
     verifier_full = _run_verifier("full")
-    verifier_audit = _run_verifier("audit")
     performance_record = _load_or_build_performance(performance_receipt, commit)
     platform_io = run_platform_io_validation()
     filesystems = run_platform_filesystem_validation()
@@ -187,7 +186,6 @@ def build_platform_receipt(
         "environment": environment,
         "verification": {
             "full": verifier_full,
-            "non_detection_audit": verifier_audit,
         },
         "platform_cohort_sha256": platform_cohort_sha256(),
         "source_sha256s": [source.source_sha256 for source in sources],
@@ -256,7 +254,7 @@ def validate_platform_receipt(
         or record.get("source_sha256s")
         != [source.source_sha256 for source in sources]
         or not isinstance(verification, dict)
-        or set(verification) != {"full", "non_detection_audit"}
+        or set(verification) != {"full"}
         or any(item.get("status") != "passed" for item in verification.values())
         or record.get("platform_io", {}).get("accuracy_verdict") != "not_assessed"
         or record.get("platform_io", {}).get("cohort_sha256")

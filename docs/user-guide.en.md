@@ -103,17 +103,9 @@ Production options:
   memory on ordinary computers; when memory is plentiful and processing a batch
   of source TIFFs, you may explicitly use `--jobs 2`. Numerical library threads
   remain fixed at 1.
-- `--debug-analysis`: explicitly write a three-panel diagnostic JPG with a fixed
-  `1653 px` width and a source-adaptive canvas height. Row one compares detected
-  and selected TOP/BOTTOM,
-  row two compares detected and selected START/END, and row three shows safety
-  envelopes with translucent per-frame final output. The original input filename
-  appears in the upper-left status header; the actual deskew angle and Orientation
-  appear only in the upper-right status header. It is off by default.
-  Each row lays out the complete strip at its original display aspect, expanding
-  the panel and canvas height instead of cropping or compressing the photographs.
-  Dense START/END labels stagger automatically, and budget-violation hatching stays
-  on candidate borders so the photographic evidence remains visible.
+- `--debug-analysis`: explicitly write a source-adaptive three-panel diagnostic
+  JPG for TOP/BOTTOM, START/END, and final safe output. It is off by default and
+  preserves the full strip aspect without cropping the photographs.
 - `--allow-best-effort-output`: explicitly accept weaker publication semantics
   on an unverified filesystem.
 - `--interactive`: prompt for format, mode, count, and Debug Analysis.
@@ -201,16 +193,6 @@ test cohorts, create performance receipts, profile, or inject faults. They keep
 only lightweight identity needed for the run and output transaction: `run_id`,
 input ordinal, portable filename, size, mtime, dependency/thread identity, and
 publication facts. Pillow is imported lazily only when Debug Analysis is enabled.
-
-## Current Validation Boundary
-
-V5 is now the repository's only runtime. Synthetic contracts, strict TIFF and
-Orientation handling, current schemas, standalone construction, and recoverable
-flat-output publication exist. Validation tools and receipt schemas do not prove
-that a physical host has passed; only a receipt bound to the exact commit can do
-that. Golden accuracy and platform evidence are not closed for this development
-version, so it is not a V5 release-ready or all-platform-support claim. Users
-should continue to use public stable v4.2.8.
 
 ## Remove And License
 

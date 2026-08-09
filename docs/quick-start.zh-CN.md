@@ -10,10 +10,8 @@
 - macOS：`install/X5_Crop_Mac_install.command`
 - Windows：`install/X5_Crop_win_install.bat`
 
-安装器先寻找 Python 3.12–3.14，再复用所有版本已经满足的依赖，不区分 Homebrew、pip 或其它
-来源。缺失项才安装到该 Python 的用户级 site；版本不符时只通过能够确认的原 package manager
-更新，未知来源会安全停止而不叠加第二份包。Homebrew 不是必需项，也不会仅为 OpenCV 被强制
-安装。不建立私有虚拟环境，因此 `X5_Crop.py` 可放在任意文件夹运行。
+安装器寻找 Python 3.12–3.14，并直接复用已满足版本合同的依赖。缺失项才安装；未知来源或无法
+安全更新的环境会在改动前停止。Homebrew 不是前置条件，也不建立私有虚拟环境。
 
 ## 2. 放入 TIFF 并启动
 

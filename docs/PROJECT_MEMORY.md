@@ -1,58 +1,50 @@
 # 项目记忆
 
-更新：2026-08-07
+更新：2026-08-09
 
-这是唯一跨会话检查点，只保存当前目标、已验证检查点、开放风险与精确下一步。长期产品与
-实现政策见 [AGENTS.md](../AGENTS.md)，当前运行架构见 [ARCHITECTURE.md](ARCHITECTURE.md)，
-版本变化见 [CHANGELOG.md](CHANGELOG.md)。源码、Git、原 TIFF、current report、Debug Analysis
-与现场命令输出始终优先。
+这是唯一跨会话检查点。长期政策见 [AGENTS.md](../AGENTS.md)，当前系统见
+[ARCHITECTURE.md](ARCHITECTURE.md)，版本变化见 [CHANGELOG.md](CHANGELOG.md)。Git、源码、
+原 TIFF、current report、Debug Analysis 和现场命令输出始终优先。
 
 ## 当前目标
 
-V4.9 已完成 template-first 架构实验使命，不再作为发布目标。下一生产版本是 V5，直接在
-`main` 上 current-only 实现，不创建 V5 分支，也不先把 V4.9 修到黄金样片全部通过。
+仓库已经是唯一 V5 current-only runtime。工具与文档审计已闭合；下一阶段单独人工诊断黄金
+失败，顺序为 S109 → S062 → S051。只修改通用 evidence、geometry 或 safety owner；不增加
+样片规则，不放宽逐边 direct-use budget，并在每次检测变化后重跑全部黄金、111-source
+diagnostic 和两遍性能。
 
-产品优先级依次是：不切掉真实内容；提高识别覆盖与边界准确率；提高安全自动批准率；保持
-整体速度；改善 deskew；最后才是减少 blank TIFF。V5 不实现 blank TIFF suppression。
+V5 在黄金准确率与最终平台证据闭合前不生成 RC、tag、GitHub Release 或公开 ZIP。公开稳定版
+仍为 `v4.2.8`。
 
 ## 已验证检查点
 
-- `8c8040b0` 是 V5 开工前的 V4.9 实验架构 checkpoint；旧 producer 与兼容路径已删除。
-- `192a8318` 已建立六项固定生产依赖、Python 3.12-3.14 用户级安装器、依赖收据、保守卸载器、
-  macOS/Windows 启动器接线和 Release manifest。`561a9af5` 修复 CI workflow 解析，GitHub
-  Verify 已通过。
-- 安装器不会静默改变已有 Python 环境：其它 OpenCV distribution 或任一冻结依赖的不同版本
-  都会在 package 变更前安全停止。
-- 当前非黄金验证为 94 个 tests、13 个配置 format/mode pairs、168-task 固定 workload、
-  compileall 与 standalone version；固定依赖下的 V4.9 性能 receipts 已重建。
-- 111-source 工程诊断已有 111/111 terminal records，runtime、authority、query/template、内存
-  与正式 TIFF failure 均为零；accuracy 明确为 `not_assessed`。
-- 九张 source-SHA-bound 黄金展开为 14 个场景；原 TIFF 与人工确认资产已有 Git 外备份。
+- `main` 在本轮审计开始时为 `67c6f3e4`，工作树干净且与 `origin/main` 同步。生产默认
+  `--jobs 1`，显式 2/3 保留；Debug Analysis 使用 detected/selected TOP/BOTTOM、
+  detected/selected START/END 与 final safety/output 三联自适应布局。
+- 审计后的 `tools/verify full` 为 166 tests 通过、3 项平台条件跳过。审计前的 `67c6f3e4`
+  GitHub Verify 在四个 runner × Python 3.12–3.14 共 12 个 job 全部通过；审计 commit 仍须以
+  自身 Actions 结果为准。
+- 2026-08-09 现场运行十四项黄金：S027、S035、S091 explicit/auto 与 S094 通过；S055
+  explicit/auto 和 S098 为可接受的安全 `needs_review`；失败仍固定为 S051、S062、S109 的
+  explicit/auto 六项。
+- 111-source cohort 的 111 个 source identity 当前完整。最近一次 111/111 工程运行不是本轮
+  audit tree 的新证据，检测变化后必须重跑。
+- 用户已确认 Windows x64 实机验证曾执行通过；平台 receipt 绑定 commit，不能替代最终 release
+  commit 的 Apple Silicon、Windows x64 与 Intel macOS 证据。
 
 ## 验证边界与开放风险
 
-- 当前源码和 [ARCHITECTURE.md](ARCHITECTURE.md) 仍是 V4.9 实验实现。V5 runtime、唯一 schema、
-  黄金 comparator、完整用户路径性能 receipt、accuracy 与发布验证都尚未建立。
-- 当前 `gold_accuracy.jsonl` 仍使用 V4.9 角色字段：S055 为 `nominal`，S098 为
-  `stress_excluded`。V5 已冻结二者均为 challenge，其余七张为 nominal；必须随 V5 schema 与
-  comparator 原子迁移，不能让旧字段成为 V5 truth。
-- V5 首版只使用已冻结的六项生产依赖，不引入通用视觉大模型、训练模型、ONNX Runtime 或
-  PyTorch runtime。
-- 5%/3% 是逐边 direct-use 硬上限，不是理想边界准确率。第一条端到端 slice 后，需要用黄金
-  结果冻结边界质量、完整用户路径速度/内存与 deskew 最大垂直漂移门槛。
-- 弱边、接触/重叠、空槽与 Orientation challenge 样片以后按 source-SHA-bound 人工确认流程
-  增加，不阻断当前实现。XPan 与 120-645 样片以后加入；135-dual 不增加真实样片。
-- macOS Apple Silicon、Intel Mac 与 64 位 Windows 都是正式平台，但仍需分别完成 Release
-  Candidate 安装、启动、依赖版本、代表性黄金、TIFF I/O 与性能验证。
+- 阶段性的 non-detection freeze 已删除；它在后续合法 Debug 修改后失效并阻断 platform，不能
+  继续充当当前验证 owner。Detection 回归直接使用 accuracy comparator、current-schema report
+  comparison、111-source diagnostic 与性能证据。
+- 当前工作区没有绑定最新 HEAD 的 production performance receipt；此前按用户决定跳过了一次
+  `jobs=1` 提交的性能生成。下一次检测或 runtime 变化必须重新生成，不得复用旧 receipt。
+- 六个 nominal 黄金失败仍是发布 blocker。本轮只确认集合，没有分析或试修。
+- Intel macOS 实机 receipt 仍是明确外部待办。CI、源码相同或验证包存在都不能代替它。
 
 ## 精确下一步
 
-1. 在新任务中制定 V5 vertical-slice 实现计划；固定依赖与安装体系视为已完成前置条件。
-2. 第一批 runtime 同时建立 V5 唯一 schema、黄金 comparator、cohort 角色迁移和完整用户路径
-   performance receipt，并删除同批被替代的 V4.9 路径。
-3. 完成 TIFF decode/Orientation → registered bounded measurement → template placement → source-
-   atomic safe output → TIFF readback 的端到端 slice。
-4. 从第一条 slice 起运行全部黄金，检查 observation、placement survival、真实内容
-   containment、逐边 5%/3%、批准与 deskew；只修通用算法，不增加样片规则。
-5. 输出边界误差、完整用户路径性能/内存、deskew 最大垂直漂移与视觉对比，由用户一次冻结门槛；
-   随后扩展 format/mode、困难 challenge 和双平台 Release Candidate 验证。
+1. 新开人工黄金诊断，依次处理 S109、S062、S051；每次只改一个通用物理 owner。
+2. 检测完成后重跑十四项黄金、111-source diagnostic、24-source 两遍性能与全局残留审计。
+3. 在最终 release commit 上重新生成 Apple Silicon、Windows x64 与 Intel macOS 实机 receipt，
+   然后再决定是否制作 RC。

@@ -350,7 +350,11 @@ class CurrentOnlyContractTest(unittest.TestCase):
             "tools/regression/safe_crop_acceptance.py",
             "tools/regression/gold_comparator.py",
             "tools/regression/gold_accuracy.py",
+            "tools/regression/non_detection_freeze.py",
+            "tools/regression/contracts/non_detection_freeze_v1.json",
+            "tools/regression/contracts/non_detection_protected_paths_v1.txt",
             "tools/tests/test_bounded_grid_contract.py",
+            "tools/tests/test_non_detection_freeze_contract.py",
         ):
             with self.subTest(absent=relative):
                 self.assertFalse((ROOT / relative).exists())
@@ -445,9 +449,54 @@ class CurrentOnlyContractTest(unittest.TestCase):
             "GridInferredBlankOutputGeometry",
             "lane-local ordered DP",
             "source_coordinate_photo_geometry",
+            "non-detection",
         ):
             with self.subTest(retired_architecture=retired):
                 self.assertNotIn(retired, architecture)
+
+    def test_documents_keep_their_single_current_responsibility(self) -> None:
+        agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
+        changelog = (ROOT / "docs/CHANGELOG.md").read_text(encoding="utf-8")
+        memory = (ROOT / "docs/PROJECT_MEMORY.md").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertNotIn("当前源码检查点是 `X5_Crop.py` V4.9", agents)
+        self.assertIn("仓库只有一条 V5 current-only production path", agents)
+        for task_state in (
+            "当前完成边界",
+            "S051/explicit",
+            "S062/explicit",
+            "S109/explicit",
+            "精确下一步",
+        ):
+            with self.subTest(changelog_task_state=task_state):
+                self.assertNotIn(task_state, changelog)
+        for stale_memory in (
+            "当前源码和 [ARCHITECTURE.md](ARCHITECTURE.md) 仍是 V4.9",
+            "V5 runtime、唯一 schema",
+            "第一条端到端 slice",
+        ):
+            with self.subTest(stale_memory=stale_memory):
+                self.assertNotIn(stale_memory, memory)
+
+    def test_completed_phase_freeze_is_not_a_verifier_owner(self) -> None:
+        verifier = (ROOT / "tools/verify").read_text(encoding="utf-8")
+        platform_receipt = (
+            ROOT / "tools/regression/platform_receipt.py"
+        ).read_text(encoding="utf-8")
+        for retired in (
+            "non-detection)",
+            "audit)",
+            "tools.regression.non_detection_freeze",
+        ):
+            with self.subTest(retired=retired):
+                self.assertNotIn(retired, verifier)
+        self.assertNotIn("non_detection_audit", platform_receipt)
+        self.assertIn(
+            'PLATFORM_RECEIPT_SCHEMA = "x5crop_platform_receipt_v2"',
+            platform_receipt,
+        )
 
     def test_launcher_is_thin_and_standalone_embeds_current_modules(self) -> None:
         launcher = (ROOT / "X5_Crop.py").read_text(encoding="utf-8")
