@@ -99,8 +99,12 @@ platform | platform-check | platform-package | pre-push
 
 - Hook、CI、Windows `.bat` 与 Intel `.command` 只能薄调用该入口，不复制验证逻辑。
 - `.githooks/pre-commit` 运行 staged hygiene；`.githooks/pre-push` 根据实际 commit range 选择
-  documentation、full 或 runtime scope。不得使用 `--no-verify`。
-- Runtime scope 必须验证绑定当前 HEAD 的 performance receipt；tree 变化后旧 receipt 立即失效。
+  documentation、full 或 performance scope。不得使用 `--no-verify`。
+- 纯 Markdown 使用 documentation；测试、工具和明确的 Debug-only owner 使用 full；默认生产
+  路径、冻结依赖、性能工具或 cohort 使用 performance。混合变更取最强 scope，未知情况按
+  performance 安全失败，不提供人工 skip 参数。
+- Performance scope 必须验证绑定当前 HEAD 的 performance receipt；tree 变化后旧 receipt 立即
+  失效。
 - `Test/` 不受 Git 跟踪，目录布局不是源码合同；工具以 cohort 中的相对路径和 source SHA 绑定
   样片。不得把 TIFF、生成输出或 receipt 提交到 Git。
 - Accuracy 只有 `gold_accuracy_blocking` 与 `diagnostic_unreviewed` 两种角色。九张黄金共十四项；

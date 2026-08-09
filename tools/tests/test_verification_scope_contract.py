@@ -8,7 +8,7 @@ from pathlib import Path
 from tools.verification_scope import (
     DOCUMENTATION_SCOPE,
     FULL_SCOPE,
-    RUNTIME_SCOPE,
+    PERFORMANCE_SCOPE,
     verification_scope_for_paths,
     verification_scope_for_push,
 )
@@ -26,7 +26,9 @@ class VerificationScopeContractTest(unittest.TestCase):
             DOCUMENTATION_SCOPE,
         )
 
-    def test_runtime_and_performance_inputs_require_runtime_scope(self) -> None:
+    def test_default_runtime_and_performance_inputs_require_performance_scope(
+        self,
+    ) -> None:
         for path in (
             "X5_Crop.py",
             "x5crop/detection/pipeline.py",
@@ -38,8 +40,35 @@ class VerificationScopeContractTest(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertEqual(
                     verification_scope_for_paths(("README.md", path)),
-                    RUNTIME_SCOPE,
+                    PERFORMANCE_SCOPE,
                 )
+
+    def test_debug_only_owners_use_full_scope(self) -> None:
+        for path in (
+            "x5crop/configuration/diagnostics.py",
+            "x5crop/debug/canvas.py",
+            "x5crop/debug/panels.py",
+            "x5crop/debug/status.py",
+            "x5crop/debug/writer.py",
+        ):
+            with self.subTest(path=path):
+                self.assertEqual(
+                    verification_scope_for_paths(
+                        ("tools/tests/test_debug_analysis_contract.py", path)
+                    ),
+                    FULL_SCOPE,
+                )
+
+    def test_mixed_debug_and_default_runtime_uses_performance_scope(self) -> None:
+        self.assertEqual(
+            verification_scope_for_paths(
+                (
+                    "x5crop/debug/panels.py",
+                    "x5crop/runtime/workflow.py",
+                )
+            ),
+            PERFORMANCE_SCOPE,
+        )
 
     def test_non_runtime_code_and_configuration_use_full_scope(self) -> None:
         for path in (
@@ -55,11 +84,11 @@ class VerificationScopeContractTest(unittest.TestCase):
                     FULL_SCOPE,
                 )
 
-    def test_empty_or_invalid_path_sets_fail_safe_to_runtime(self) -> None:
-        self.assertEqual(verification_scope_for_paths(()), RUNTIME_SCOPE)
+    def test_empty_or_invalid_path_sets_fail_safe_to_performance(self) -> None:
+        self.assertEqual(verification_scope_for_paths(()), PERFORMANCE_SCOPE)
         self.assertEqual(
             verification_scope_for_paths(("",)),
-            RUNTIME_SCOPE,
+            PERFORMANCE_SCOPE,
         )
 
     def test_pre_push_refs_classify_the_actual_commit_range(self) -> None:
@@ -83,6 +112,10 @@ class VerificationScopeContractTest(unittest.TestCase):
             (root / "tools").mkdir()
             (root / "tools" / "verify").write_text("base\n", encoding="utf-8")
             (root / "x5crop").mkdir()
+            (root / "x5crop" / "debug").mkdir()
+            (root / "x5crop" / "debug" / "panels.py").write_text(
+                "base\n", encoding="utf-8"
+            )
             (root / "x5crop" / "runtime.py").write_text(
                 "base\n", encoding="utf-8"
             )
@@ -116,18 +149,32 @@ class VerificationScopeContractTest(unittest.TestCase):
                 FULL_SCOPE,
             )
 
+            (root / "x5crop" / "debug" / "panels.py").write_text(
+                "debug\n", encoding="utf-8"
+            )
+            git("commit", "-qam", "debug")
+            debug = git("rev-parse", "HEAD")
+            refs.write_text(
+                f"refs/heads/main {debug} refs/heads/main {full}\n",
+                encoding="utf-8",
+            )
+            self.assertEqual(
+                verification_scope_for_push(refs, project_root=root),
+                FULL_SCOPE,
+            )
+
             (root / "x5crop" / "runtime.py").write_text(
                 "runtime\n", encoding="utf-8"
             )
             git("commit", "-qam", "runtime")
             runtime = git("rev-parse", "HEAD")
             refs.write_text(
-                f"refs/heads/main {runtime} refs/heads/main {full}\n",
+                f"refs/heads/main {runtime} refs/heads/main {debug}\n",
                 encoding="utf-8",
             )
             self.assertEqual(
                 verification_scope_for_push(refs, project_root=root),
-                RUNTIME_SCOPE,
+                PERFORMANCE_SCOPE,
             )
 
     def test_hooks_and_ci_delegate_documentation_scope_once(self) -> None:
@@ -140,6 +187,9 @@ class VerificationScopeContractTest(unittest.TestCase):
         self.assertIn(
             '"$PYTHON" -m tools.verification_scope --refs', verifier
         )
+        self.assertIn("scope=performance", verifier)
+        self.assertIn("            performance)", verifier)
+        self.assertNotIn("scope=runtime", verifier)
         self.assertIn(
             '"$PYTHON" -m unittest tools.tests.test_current_only_contract',
             verifier,

@@ -112,7 +112,7 @@ case "${1:-}" in
             printf >&2 'Refusing push from a dirty worktree. Commit intentional changes first.\n'
             exit 1
         }
-        scope=runtime
+        scope=performance
         if [ -n "${2:-}" ] && [ -f "$2" ]; then
             scope=$("$PYTHON" -m tools.verification_scope --refs "$2")
         fi
@@ -123,7 +123,7 @@ case "${1:-}" in
             full)
                 run_full
                 ;;
-            runtime)
+            performance)
                 check_performance_receipt
                 run_full
                 ;;

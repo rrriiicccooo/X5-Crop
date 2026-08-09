@@ -40,6 +40,9 @@ standalone 只消费当前 owner，不保留 fallback、shim、feature flag 或�
 - 唯一入口为
   `tools/verify staged|full|accuracy|diagnostic|performance|platform|platform-check|platform-package|pre-push`。
   CI 在 Ubuntu、Windows、Apple Silicon macOS 与 Intel macOS 上覆盖 Python 3.12–3.14。
+- Pre-push 只对默认生产路径、冻结依赖、性能工具或 performance cohort 的变化要求 HEAD-bound
+  receipt；纯文档、测试、工具和 Debug-only owner 走各自较小验证范围，混合或未知变更仍安全
+  提升到 performance。
 - Accuracy 使用九张 source-SHA-bound 黄金的十四项正式 CLI 任务；111-source diagnostic 只作
   工程合同；24-source performance 分离正式用户路径 Gate 与外部 profiling。
 - Platform receipt schema 为 `x5crop_platform_receipt_v2`，绑定当前 `full`、真实平台 I/O、

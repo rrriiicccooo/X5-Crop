@@ -370,6 +370,11 @@ stat，再通过子进程调用同一 `X5_Crop.py`。工具只观察正式 repor
 detector bypass、样片参数、验证专用 producer 或较宽 Gate。Detection 变化直接使用 current
 accuracy comparator 与 current-schema report comparison，不保留阶段性 freeze verifier。
 
+Pre-push 按提交范围选择 documentation、full 或 performance。只有默认生产路径、冻结依赖、
+性能工具或 performance cohort 的变化要求 HEAD-bound receipt；测试、工具与明确的
+Debug-only owner 只运行 full。混合变更取最强等级，未知路径或无法解析的 refs 一律按
+performance 处理，不存在人工 skip。
+
 `platform` 只在干净 tree 上从真实 OS 与架构生成 `x5crop_platform_receipt_v2`，运行 `full`、
 六张平台样片、真实文件系统 contracts 和关联 performance receipt。`platform-check` 恰好接受同一
 expected commit 的一份 Apple Silicon 与一份 Windows x64 receipt，读取并核对关联 performance
