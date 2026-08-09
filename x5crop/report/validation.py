@@ -162,7 +162,7 @@ def _validate_finalization(record: dict[str, Any]) -> None:
             or fidelity["write_readback_validated"]
             or fidelity["success_receipt"] != "not_created"
         ):
-            raise ValueError("preview output created production artifacts")
+            raise ValueError("analysis-only output created production artifacts")
     elif status == "needs_review" and (
         finalization["frame_export_performed"]
         or finalization["official_tiff_expected"]

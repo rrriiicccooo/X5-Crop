@@ -93,9 +93,7 @@ python3 X5_Crop.py /path/to/scans \
 Command-line options:
 
 - `input`: one TIFF or a directory; defaults to the current directory.
-- `--output PATH`: production output directory; defaults to `x5_crop_output`
-  beside input. Preview uses the adjacent `PATH_preview`, or
-  `x5_crop_preview` when this option is omitted.
+- `--output PATH`: output directory; defaults to `x5_crop_output` beside input.
 - `--format`: `135`, `135-dual`, `half`, `xpan`, `120-645`, `120-66`, or `120-67`.
 - `--layout`: `auto`, `horizontal`, or `vertical`.
 - `--strip`: `full` or `partial`.
@@ -105,13 +103,11 @@ Command-line options:
   memory on ordinary computers; when memory is plentiful and processing a batch
   of source TIFFs, you may explicitly use `--jobs 2`. Numerical library threads
   remain fixed at 1.
-- `--debug-analysis`: explicitly write a source-adaptive three-panel diagnostic
-  JPG for TOP/BOTTOM, START/END, and final safe output. It is off by default and
-  preserves the full strip aspect without cropping the photographs.
-- `--preview`: run the complete detector and write Debug Analysis, reports, and
-  an independent detection snapshot, but no official TIFFs or review copy. A
-  later normal run with matching input and detection parameters automatically
-  attempts to reuse the snapshot.
+- `--debug-analysis`: run the complete detector and write a source-adaptive
+  three-panel diagnostic JPG, report, summary, and manifest, but no official
+  TIFFs or review copy. It is off by default and preserves the full strip aspect
+  without cropping the photographs. A later matching normal run automatically
+  attempts to reuse the report.
 - `--allow-best-effort-output`: explicitly accept weaker publication semantics
   on an unverified filesystem.
 - `--interactive`: prompt for format, mode, count, and Debug Analysis.
@@ -119,30 +115,30 @@ Command-line options:
 There is no `--overwrite`. A successful run always replaces the previous
 complete, verified V5-owned output.
 
-Preview and production cropping can be run as two steps:
+Debug Analysis and production cropping can be run as two steps:
 
 ```bash
-python3 X5_Crop.py /path/to/scans --format 120-66 --strip partial --count auto --preview
+python3 X5_Crop.py /path/to/scans --format 120-66 --strip partial --count auto --debug-analysis
 python3 X5_Crop.py /path/to/scans --format 120-66 --strip partial --count auto
 ```
 
-The first command updates only `x5_crop_preview/`; it does not replace
-`x5_crop_output/`. The second skips detection only when the source TIFF
-SHA-256, complete detection configuration, resolved layout, report schema,
-runtime dependency identity, snapshot integrity, and exact implementation
-fingerprint all match. Any mismatch automatically runs fresh detection. The ordinary
-`x5_crop_report.jsonl` remains an audit artifact and cannot enable reuse by
-itself. Adding `--debug-analysis` to the production run also forces fresh
-detection so the diagnostic image belongs to that run.
+The first command publishes only Debug Analysis and report files in
+`x5_crop_output/`. The second automatically reads `x5_crop_report.jsonl` and
+skips detection only when the current schema and integrity hash, program
+version, source-file identity and TIFF profile, complete detection
+configuration, and resolved layout all match. Any mismatch automatically runs
+fresh detection. Report reuse skips only detection, physical solving, and the
+Gates; official TIFFs are still written from the source and read back for
+validation.
 
 ## Status And Exit Codes
 
 Each input has one terminal status:
 
 - `approved_auto`: a normal run writes the complete set of official photo
-  TIFFs; preview records only that the Gate passed.
+  TIFFs; a Debug Analysis run records only that the Gate passed.
 - `needs_review`: a normal run writes no official photos and copies the source
-  into `needs_review/`; preview records only the reasons.
+  into `needs_review/`; a Debug Analysis run records only the reasons.
 - `runtime_error`: writes no photos for that input while other inputs continue.
 
 Exit codes:
@@ -166,17 +162,15 @@ x5_crop_output/
   source_name_02.tif
   needs_review/
   _debug_analysis/
-  _detection_snapshot/
   x5_crop_report.jsonl
   x5_crop_summary.csv
   x5_crop_run_manifest.jsonl
 ```
 
 Photos stay directly in the root. There are no `run-*` or per-source folders.
-`needs_review/`, `_debug_analysis/`, and `_detection_snapshot/` appear only
-when needed. Preview is published separately in `x5_crop_preview/`, containing
-only Debug Analysis, detection snapshots, reports, summary, and manifest—never
-official TIFFs or review copies.
+`needs_review/` and `_debug_analysis/` appear only when needed. A Debug Analysis
+run publishes to the same `x5_crop_output/`, containing only diagnostic JPGs,
+reports, summary, and manifest—never official TIFFs or review copies.
 
 A new run first builds a complete internal transaction directory beside the
 target. After all inputs finish, official TIFF readback succeeds, and report and
@@ -215,11 +209,9 @@ is reopened after its write handle closes and checked for 16-bit RGB, three
 channels, contiguous planar layout, shape, pixels, ICC, resolution, resolution
 unit, supported metadata, lossless compression, and `Orientation=1`.
 
-Normal runs without a candidate detection snapshot do not reread source TIFFs
-to calculate content SHA, inspect Git or test cohorts, create performance
-receipts, profile, or inject faults. Preview and production runs that discover
-a candidate snapshot calculate SHA-256 locally only to bind or invalidate that
-snapshot. Pillow is imported lazily only for Debug Analysis or preview.
+Normal runs and report reuse do not calculate a content SHA for the source TIFF,
+inspect Git or test cohorts, create performance receipts, profile, or inject
+faults. Pillow is imported lazily only for Debug Analysis.
 
 ## Remove And License
 

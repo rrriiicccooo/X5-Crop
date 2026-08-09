@@ -12,6 +12,7 @@ from unittest import mock
 import numpy as np
 import tifffile
 
+from x5crop.app_info import REPORT_JSONL_NAME
 from x5crop.configuration.bundle import DetectionConfigurationBundle
 from x5crop.configuration.registry import get_detection_configuration
 from x5crop.detection.candidate.assessment.model import (
@@ -21,6 +22,7 @@ from x5crop.detection.decision.vocabulary import (
     FINAL_REASON_SCAN_CANVAS_AUTHORITY_UNAVAILABLE,
 )
 from x5crop.report.identity import REPORT_SCHEMA_ID, REPORT_SCHEMA_REVISION
+from x5crop.report.outputs import write_report_outputs_for_result
 from x5crop.report.validation import validate_current_report_record
 from x5crop.output.ownership import read_owned_output
 from x5crop.run_config import RunConfig
@@ -38,7 +40,6 @@ def _run_config(
     strip_mode: str = "partial",
     requested_count: int | None = None,
     *,
-    preview: bool = False,
     debug_analysis: bool = False,
 ) -> RunConfig:
     configuration = get_detection_configuration(
@@ -55,7 +56,6 @@ def _run_config(
         strip_mode=strip_mode,
         count_request=configuration.count_request,
         debug_analysis=debug_analysis,
-        preview=preview,
         allow_best_effort_output=False,
         jobs=2,
     )
@@ -222,7 +222,9 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
         assert isinstance(outcome, FailedInput)
         self.assertEqual(outcome.failure_stage, FailureStage.INPUT_PROFILE)
 
-    def test_preview_snapshot_is_reused_without_running_detector_again(self) -> None:
+    def test_debug_analysis_report_is_reused_without_running_detector_again(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             source = (root / "135.tif").resolve()
@@ -236,28 +238,30 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
                 "135", "partial"
             )
             planned = PlannedSource(1, source, source.stem)
-            preview_output = root / "preview"
-            preview_outcome = process_one(
+            analysis_output = root / "analysis"
+            analysis_outcome = process_one(
                 planned,
                 _run_config(
                     source,
-                    preview_output,
-                    preview=True,
+                    analysis_output,
                     debug_analysis=True,
                 ),
                 bundle,
-                preview_output,
+                analysis_output,
             )
-            self.assertIsInstance(preview_outcome, CompletedInput)
-            assert isinstance(preview_outcome, CompletedInput)
+            self.assertIsInstance(analysis_outcome, CompletedInput)
+            assert isinstance(analysis_outcome, CompletedInput)
             self.assertFalse(
-                preview_outcome.result.record["output"]["finalization"][
+                analysis_outcome.result.record["output"]["finalization"][
                     "frame_export_requested"
                 ]
             )
-            self.assertIsNone(preview_outcome.artifacts.review_copy)
-            self.assertIsNotNone(preview_outcome.artifacts.debug_analysis)
-            self.assertIsNotNone(preview_outcome.artifacts.detection_snapshot)
+            self.assertIsNone(analysis_outcome.artifacts.review_copy)
+            self.assertIsNotNone(analysis_outcome.artifacts.debug_analysis)
+            write_report_outputs_for_result(
+                analysis_outcome.result,
+                analysis_output,
+            )
 
             normal_output = root / "normal"
             with mock.patch(
@@ -269,7 +273,7 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
                     _run_config(source, normal_output),
                     bundle,
                     normal_output,
-                    (preview_output,),
+                    analysis_output / REPORT_JSONL_NAME,
                 )
             self.assertIsInstance(reused_outcome, CompletedInput)
             assert isinstance(reused_outcome, CompletedInput)
@@ -279,13 +283,13 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
                 ]
             )
             self.assertIn(
-                "detection snapshot reused:",
+                "analysis report reused: x5_crop_report.jsonl",
                 "\n".join(reused_outcome.result.record["output"]["warnings"]),
             )
             self.assertIsNotNone(reused_outcome.artifacts.review_copy)
-            self.assertIsNotNone(reused_outcome.artifacts.detection_snapshot)
+            self.assertIsNone(reused_outcome.artifacts.debug_analysis)
 
-    def test_changed_source_invalidates_preview_snapshot(self) -> None:
+    def test_changed_source_invalidates_analysis_report(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             source = (root / "135.tif").resolve()
@@ -299,22 +303,25 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
                 "135", "partial"
             )
             planned = PlannedSource(1, source, source.stem)
-            preview_output = root / "preview"
-            preview_outcome = process_one(
+            analysis_output = root / "analysis"
+            analysis_outcome = process_one(
                 planned,
                 _run_config(
                     source,
-                    preview_output,
-                    preview=True,
+                    analysis_output,
                     debug_analysis=True,
                 ),
                 bundle,
-                preview_output,
+                analysis_output,
             )
-            self.assertIsInstance(preview_outcome, CompletedInput)
+            self.assertIsInstance(analysis_outcome, CompletedInput)
+            assert isinstance(analysis_outcome, CompletedInput)
+            write_report_outputs_for_result(
+                analysis_outcome.result,
+                analysis_output,
+            )
 
-            pixels = np.zeros((100, 720), dtype=np.uint16)
-            pixels[0, 0] = 1
+            pixels = np.zeros((101, 720), dtype=np.uint16)
             tifffile.imwrite(
                 source,
                 _rgb16(pixels),
@@ -327,16 +334,16 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
                 _run_config(source, normal_output),
                 bundle,
                 normal_output,
-                (preview_output,),
+                analysis_output / REPORT_JSONL_NAME,
             )
             self.assertIsInstance(outcome, CompletedInput)
             assert isinstance(outcome, CompletedInput)
             self.assertIn(
-                "snapshot source SHA-256 does not match",
+                "analysis report source identity does not match",
                 "\n".join(outcome.result.record["output"]["warnings"]),
             )
 
-    def test_preview_and_normal_runs_publish_separate_owned_targets(self) -> None:
+    def test_debug_analysis_and_normal_run_share_one_owned_target(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             source = (root / "135.tif").resolve()
@@ -347,7 +354,7 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
                 planarconfig="contig",
             )
             production = root / "MyCrops"
-            preview_options = RuntimeOptions(
+            analysis_options = RuntimeOptions(
                 input_path=source,
                 output_dir=production,
                 format_id="135",
@@ -355,21 +362,22 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
                 strip_mode="partial",
                 requested_count=None,
                 debug_analysis=True,
-                preview=True,
                 allow_best_effort_output=True,
                 jobs=1,
             )
             with contextlib.redirect_stdout(io.StringIO()):
-                self.assertEqual(run_options(preview_options), 0)
-            preview = root / "MyCrops_preview"
-            self.assertFalse(production.exists())
-            read_owned_output(preview)
+                self.assertEqual(run_options(analysis_options), 0)
+            read_owned_output(production)
             manifest_record = json.loads(
-                (preview / "x5_crop_run_manifest.jsonl")
+                (production / "x5_crop_run_manifest.jsonl")
                 .read_text(encoding="utf-8")
                 .splitlines()[0]
             )
-            self.assertTrue(manifest_record["preview"])
+            self.assertNotIn("preview", manifest_record)
+            self.assertTrue((production / REPORT_JSONL_NAME).is_file())
+            self.assertTrue(any((production / "_debug_analysis").glob("*.jpg")))
+            self.assertFalse(any(production.glob("*.tif")))
+            self.assertFalse((production / "needs_review").exists())
 
             normal_options = RuntimeOptions(
                 input_path=source,
@@ -379,7 +387,6 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
                 strip_mode="partial",
                 requested_count=None,
                 debug_analysis=False,
-                preview=False,
                 allow_best_effort_output=True,
                 jobs=1,
             )
@@ -389,14 +396,13 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
             ), contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(run_options(normal_options), 0)
             read_owned_output(production)
-            self.assertTrue(preview.exists())
             report = json.loads(
                 (production / "x5_crop_report.jsonl")
                 .read_text(encoding="utf-8")
                 .splitlines()[0]
             )
             self.assertIn(
-                "detection snapshot reused:",
+                "analysis report reused: x5_crop_report.jsonl",
                 "\n".join(report["output"]["warnings"]),
             )
 

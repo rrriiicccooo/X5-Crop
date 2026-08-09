@@ -35,21 +35,21 @@ TIFF。其它结构会安全失败，不会猜测。
 - `partial --count N`：`N` 是用户明确给出的输出张数。
 - `partial --count auto`：保守输出匹配片夹对该格式的全部有效 slots，可能包含空白 TIFF。
 - `--layout auto`：按扫描方向选择水平或垂直；也可明确指定。
-- `--debug-analysis`：显式生成诊断 JPG；默认关闭。
-- `--preview`：只生成 Debug Analysis、报告和严格绑定的检测快照，不写正式 TIFF 或 review copy。
+- `--debug-analysis`：只生成 Debug Analysis JPG 和报告类文件，不写正式 TIFF 或 review copy；
+  默认关闭。
 
 程序不从文件名猜 format 或 count，也不自动删除空白 slot。
 
-要先看检测结果再裁切，连续运行同一组参数，第二次去掉 `--preview`：
+要先看检测结果再裁切，连续运行同一组参数，第二次去掉 `--debug-analysis`：
 
 ```bash
-python3 X5_Crop.py /path/to/scans --format 135 --strip full --preview
+python3 X5_Crop.py /path/to/scans --format 135 --strip full --debug-analysis
 python3 X5_Crop.py /path/to/scans --format 135 --strip full
 ```
 
-预览写入独立的 `x5_crop_preview/`，不会覆盖正式输出。只有 source SHA-256、检测配置、layout、
-schema、运行依赖、程序实现和快照完整性全部匹配时，正式运行才复用；否则自动重新检测。普通
-报告不能单独用来裁切。
+两次运行使用同一个 `x5_crop_output/`。第二次会自动验证并复用现有 report；只有 current schema、
+完整性、程序版本、原 TIFF 身份与 profile、检测配置和 layout 全部匹配时才跳过检测，否则自动
+重新检测。正式 TIFF 始终从原图写出并复读验证。
 
 ## 4. 查看结果
 
@@ -61,13 +61,12 @@ x5_crop_output/
   原文件名_02.tif
   needs_review/
   _debug_analysis/
-  _detection_snapshot/
   x5_crop_report.jsonl
   x5_crop_summary.csv
   x5_crop_run_manifest.jsonl
 ```
 
-`needs_review/`、`_debug_analysis/` 和 `_detection_snapshot/` 只在有内容时建立。每次成功运行
+`needs_review/` 和 `_debug_analysis/` 只在有内容时建立。每次成功运行
 会用完整新结果替换上一套可确认由 X5 Crop V5 创建的结果；旧目录含未知文件时程序停止，绝不
 擅自删除。
 

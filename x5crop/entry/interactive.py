@@ -104,29 +104,19 @@ def interactive_options() -> RuntimeOptions:
         print(f"{format_id} supports full mode only.")
     strip_mode = "partial" if partial else "full"
     requested_count = ask_partial_count(format_id) if partial else None
-    preview = ask_yes_no(
-        "preview only (no TIFF export)? [y/n, return=no]: ",
+    debug_analysis = ask_yes_no(
+        "debug analysis? [y/n, return=no]: ",
         default=False,
-    )
-    debug_analysis = (
-        True
-        if preview
-        else ask_yes_no("debug analysis? [y/n, return=no]: ", default=False)
     )
 
     print()
     if debug_analysis:
         print("debug analysis: enabled")
+        print("analysis only: no cropped TIFF files will be written")
     else:
         print("debug analysis: off")
-    print(
-        "frame TIFF export: "
-        + (
-            "preview only; disabled"
-            if preview
-            else "enabled after the bounded safety Gate"
-        )
-    )
+        print("matching analysis report: reused automatically when valid")
+        print("frame TIFF export: enabled after the bounded safety Gate")
     print(f"strip mode: {strip_mode}")
     if partial:
         print(f"count: {'auto' if requested_count is None else requested_count}")
@@ -140,7 +130,6 @@ def interactive_options() -> RuntimeOptions:
         strip_mode=strip_mode,
         requested_count=requested_count,
         debug_analysis=debug_analysis,
-        preview=preview,
         allow_best_effort_output=False,
         jobs=STANDARD_JOB_DEFAULT,
         interactive=True,

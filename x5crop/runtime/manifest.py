@@ -56,9 +56,6 @@ class SourceTerminalRecord:
                 "frame_outputs": [relative(path) for path in self.artifacts.frame_outputs],
                 "review_copy": relative(self.artifacts.review_copy),
                 "debug_analysis": relative(self.artifacts.debug_analysis),
-                "detection_snapshot": relative(
-                    self.artifacts.detection_snapshot
-                ),
             },
         }
 
@@ -70,7 +67,6 @@ def write_run_manifest(
     started_at_utc: str,
     finished_at_utc: str,
     jobs: int,
-    preview: bool,
     filesystem: FilesystemIdentity,
     best_effort_consent: str,
     disk_reservation: dict[str, int],
@@ -88,7 +84,6 @@ def write_run_manifest(
             "started_at_utc": started_at_utc,
             "finished_at_utc": finished_at_utc,
             "jobs": jobs,
-            "preview": preview,
             "filesystem": filesystem.as_record(),
             "best_effort_consent": best_effort_consent,
             "disk_reservation": dict(disk_reservation),

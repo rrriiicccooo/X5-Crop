@@ -27,10 +27,6 @@ def output_role(relative: Path) -> str:
         return "needs_review"
     if value.startswith("_debug_analysis/"):
         return "debug_analysis"
-    if value.startswith("_detection_snapshot/") and value.endswith(
-        "_detection_snapshot.json.gz"
-    ):
-        return "detection_snapshot"
     if value.lower().endswith((".tif", ".tiff")):
         return "official_tiff"
     raise OutputOwnershipError(f"Unknown V5 output role: {value}")

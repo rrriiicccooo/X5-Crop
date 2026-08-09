@@ -15,11 +15,6 @@ class RunConfig:
     strip_mode: str
     count_request: FrameCountRequest
     debug_analysis: bool
-    preview: bool
     allow_best_effort_output: bool
     jobs: int
     interactive: bool = False
-
-    def __post_init__(self) -> None:
-        if self.preview and not self.debug_analysis:
-            raise ValueError("preview requires Debug Analysis")

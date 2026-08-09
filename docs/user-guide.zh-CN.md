@@ -78,42 +78,40 @@ python3 X5_Crop.py /path/to/scans \
 命令行参数：
 
 - `input`：一个 TIFF 或包含 TIFF 的目录；省略时为当前目录。
-- `--output PATH`：正式输出目录；默认是输入旁的 `x5_crop_output`。预览使用相邻的
-  `PATH_preview`；未指定时使用 `x5_crop_preview`。
+- `--output PATH`：输出目录；默认是输入旁的 `x5_crop_output`。
 - `--format`：`135`、`135-dual`、`half`、`xpan`、`120-645`、`120-66`、`120-67`。
 - `--layout`：`auto`、`horizontal` 或 `vertical`。
 - `--strip`：`full` 或 `partial`。
 - `--count N|auto`：partial 的明确张数或片夹容量；full 使用格式固定张数。
 - `--jobs N`：source 并发数；默认 1，上限 3。默认值优先控制一般电脑的峰值内存；内存充足且
   一次处理多张原 TIFF 时可显式使用 `--jobs 2`。数值库内部线程固定为 1。
-- `--debug-analysis`：显式生成自适应高度的三联诊断 JPG，依次显示 TOP/BOTTOM、START/END 与
-  最终安全输出；默认关闭。完整片条保持原比例，不裁切照片。
-- `--preview`：执行完整检测并生成 Debug Analysis、报告和独立检测快照，但不写正式 TIFF，也
-  不复制 `needs_review` 原图。之后用相同输入和检测参数做普通运行时会自动尝试复用快照。
+- `--debug-analysis`：执行完整检测并生成自适应高度的三联诊断 JPG、报告、summary 和 manifest，
+  但不写正式 TIFF，也不复制 `needs_review` 原图；默认关闭。完整片条保持原比例，不裁切照片。
+  之后用相同输入和检测参数做普通运行时会自动尝试复用报告。
 - `--allow-best-effort-output`：明确接受未验证文件系统的较弱发布语义。
 - `--interactive`：交互选择格式、模式、张数和 Debug Analysis。
 
 没有 `--overwrite`。一次成功运行总是以完整新结果替换上一套可确认归属的 V5 输出。
 
-纯预览和正式裁切可分两步运行：
+Debug Analysis 和正式裁切可分两步运行：
 
 ```bash
-python3 X5_Crop.py /path/to/scans --format 120-66 --strip partial --count auto --preview
+python3 X5_Crop.py /path/to/scans --format 120-66 --strip partial --count auto --debug-analysis
 python3 X5_Crop.py /path/to/scans --format 120-66 --strip partial --count auto
 ```
 
-第一条命令只更新独立的 `x5_crop_preview/`，不会覆盖 `x5_crop_output/`。第二条命令只有在原
-TIFF 的 SHA-256、完整检测配置、resolved layout、report schema、运行依赖身份、快照完整性和
-程序实现指纹全部一致时才跳过检测；任一项不一致就自动重新检测。普通
-`x5_crop_report.jsonl` 只用于审计，
-不能单独触发复用。正式运行显式加入 `--debug-analysis` 时也会重新检测，以生成当次诊断图。
+第一条命令在 `x5_crop_output/` 中只发布 Debug Analysis 和报告类文件。第二条命令会自动读取
+其中的 `x5_crop_report.jsonl`；只有 current schema 与完整性哈希、程序版本、原 TIFF 的文件身份
+与 profile、完整检测配置和 resolved layout 全部匹配时才跳过检测。任一项不一致就自动重新
+检测。复用报告只省略检测、物理求解与 Gate；正式 TIFF 仍从原图写出并复读验证。
 
 ## 状态与退出码
 
 每个输入只有一个终态：
 
-- `approved_auto`：普通运行写出完整正式照片 TIFF；预览只记录 Gate 已通过。
-- `needs_review`：普通运行不写正式照片，将原扫描件复制到 `needs_review/`；预览只记录原因。
+- `approved_auto`：普通运行写出完整正式照片 TIFF；Debug Analysis 运行只记录 Gate 已通过。
+- `needs_review`：普通运行不写正式照片，将原扫描件复制到 `needs_review/`；Debug Analysis 运行
+  只记录原因。
 - `runtime_error`：该输入失败，不写它的照片；其它输入继续处理。
 
 退出码：
@@ -135,15 +133,14 @@ x5_crop_output/
   原文件名_02.tif
   needs_review/
   _debug_analysis/
-  _detection_snapshot/
   x5_crop_report.jsonl
   x5_crop_summary.csv
   x5_crop_run_manifest.jsonl
 ```
 
-照片直接位于根部，不建立 `run-*` 或 source 子目录。`needs_review/`、`_debug_analysis/` 和
-`_detection_snapshot/` 仅在有内容时出现。预览结果单独发布到 `x5_crop_preview/`，其中只有
-Debug Analysis、检测快照、报告、summary 和 manifest，没有正式 TIFF 或 review copy。
+照片直接位于根部，不建立 `run-*` 或 source 子目录。`needs_review/` 和 `_debug_analysis/` 仅在
+有内容时出现。Debug Analysis 运行发布到同一个 `x5_crop_output/`，其中只有诊断 JPG、报告、
+summary 和 manifest，没有正式 TIFF 或 review copy。
 
 新运行先在输出目录旁建立完整内部事务目录。全部输入处理结束、正式 TIFF 复读通过、报告和
 manifest 完整后，程序用两次同父目录 rename 发布新结果，再删除旧结果。程序异常或强制结束
@@ -173,9 +170,8 @@ APFS、HFS+ 与 NTFS 是 V5 事务模型的本地验证目标；是否已正式�
 16-bit RGB、三通道、contiguous planar、形状、像素、ICC、resolution、resolution unit、受支持
 metadata、无损压缩与 `Orientation=1`。
 
-没有可用检测快照的普通运行不额外读取原 TIFF 来计算内容 SHA，也不检查 Git、黄金样片或性能
-receipt，不启用 profiler 或故障注入。`--preview` 和发现候选快照后的正式运行会计算 SHA-256，
-但只在本机用于严格绑定或失效快照。Pillow 只在用户明确启用 Debug Analysis 或预览时延迟导入。
+普通运行与报告复用都不额外计算原 TIFF 的内容 SHA，也不检查 Git、黄金样片或性能 receipt，
+不启用 profiler 或故障注入。Pillow 只在用户明确启用 Debug Analysis 时延迟导入。
 
 ## 移除与许可
 

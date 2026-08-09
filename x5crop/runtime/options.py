@@ -15,7 +15,6 @@ class RuntimeOptions:
     strip_mode: str
     requested_count: int | None
     debug_analysis: bool
-    preview: bool
     allow_best_effort_output: bool
     jobs: int
     interactive: bool = False

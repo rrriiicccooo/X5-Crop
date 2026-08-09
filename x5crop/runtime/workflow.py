@@ -6,18 +6,6 @@ from time import perf_counter
 import traceback
 
 from .identity import make_runtime_identity, source_runtime_identity
-from .detection_snapshot import (
-    DetectionSnapshotError,
-    ReusableDetectionSnapshot,
-    SourceContentIdentity,
-    carry_detection_snapshot,
-    detection_configuration_binding,
-    detection_snapshot_path,
-    load_detection_snapshot,
-    result_from_detection_snapshot,
-    source_content_identity,
-    write_detection_snapshot,
-)
 from ..configuration.bundle import DetectionConfigurationBundle
 from ..detection.decision.decision_gate import apply_decision_gate
 from ..detection.final.finalize import finalize_detection
@@ -26,7 +14,6 @@ from ..detection.workspace import DetectionWorkspace, prepare_detection_workspac
 from ..export.actions import prepare_review_artifact
 from ..export.crops import write_crops
 from ..geometry.layout import infer_layout
-from ..io.model import ImageProfile
 from ..io.tiff import read_tiff, read_tiff_profile
 from ..report.configuration import detection_configuration_read_model
 from ..report.result_builder import result_from_detection
@@ -42,65 +29,10 @@ from .outcome import (
     RuntimeMetrics,
 )
 from .invocation import PlannedSource
-
-
-def _source_identity_is_stable(
-    runtime_identity: dict,
-    content_identity: SourceContentIdentity,
-) -> bool:
-    return (
-        runtime_identity["size"] == content_identity.size
-        and runtime_identity["mtime_ns"] == content_identity.mtime_ns
-    )
-
-
-def _try_reusable_snapshot(
-    source: PlannedSource,
-    config: RunConfig,
-    snapshot_roots: tuple[Path, ...],
-    configuration_binding: dict,
-    profile: ImageProfile,
-    source_identity: dict,
-) -> tuple[
-    ReusableDetectionSnapshot | None,
-    SourceContentIdentity | None,
-    str | None,
-]:
-    candidates: list[Path] = []
-    for root in dict.fromkeys(snapshot_roots):
-        candidate = detection_snapshot_path(root, source)
-        if candidate.is_file():
-            candidates.append(candidate)
-    if not candidates:
-        return None, None, None
-    if config.debug_analysis:
-        return None, None, "fresh Debug Analysis was requested"
-    try:
-        content_identity = source_content_identity(source)
-    except (OSError, DetectionSnapshotError) as exc:
-        return None, None, str(exc)
-    if not _source_identity_is_stable(source_identity, content_identity):
-        return None, content_identity, "source changed during input processing"
-    failures: list[str] = []
-    for candidate in candidates:
-        try:
-            return (
-                load_detection_snapshot(
-                    candidate,
-                    source_identity=content_identity,
-                    configuration_binding=configuration_binding,
-                    profile=profile,
-                ),
-                content_identity,
-                None,
-            )
-        except (KeyError, TypeError, ValueError) as exc:
-            failures.append(str(exc))
-    return (
-        None,
-        content_identity,
-        failures[-1] if failures else "snapshot validation failed",
-    )
+from .report_reuse import (
+    find_reusable_analysis_report,
+    result_from_reusable_analysis_report,
+)
 
 
 def _metrics(
@@ -179,7 +111,7 @@ def process_one(
     config: RunConfig,
     configuration_bundle: DetectionConfigurationBundle,
     output_root: Path,
-    snapshot_roots: tuple[Path, ...] = (),
+    reusable_report_path: Path | None = None,
 ) -> InputProcessingOutcome:
     input_file = source.path
     started_at = perf_counter()
@@ -207,40 +139,37 @@ def process_one(
         configuration_detail = detection_configuration_read_model(
             initial_configuration
         )
-        configuration_binding = detection_configuration_binding(
-            configuration_detail,
-            config.layout,
-        )
-        snapshot, content_identity, snapshot_miss = _try_reusable_snapshot(
-            source,
-            config,
-            snapshot_roots,
-            configuration_binding,
-            profile,
-            source_identity,
-        )
-        if snapshot_miss is not None:
-            warnings.append(
-                "detection snapshot not reused: "
-                + snapshot_miss
-                + "; fresh detection performed"
+        reusable = None
+        if reusable_report_path is not None and not config.debug_analysis:
+            reusable, report_miss = find_reusable_analysis_report(
+                reusable_report_path,
+                source=source,
+                source_identity=source_identity,
+                configuration_detail=configuration_detail,
+                profile=profile,
+                config=config,
             )
-        if snapshot is not None:
+            if report_miss is not None:
+                warnings.append(
+                    "analysis report not reused: "
+                    + report_miss
+                    + "; fresh detection performed"
+                )
+        if reusable is not None:
             failure_stage = FailureStage.OUTPUT
             warnings.append(
-                "detection snapshot reused: "
-                + snapshot.path.relative_to(snapshot.path.parents[1]).as_posix()
+                "analysis report reused: " + reusable.path.name
             )
             output_root.mkdir(parents=True, exist_ok=True)
-            if snapshot.decision_status == "approved_auto":
+            if reusable.decision_status == "approved_auto":
                 frame_outputs = write_crops(
                     source.portable_stem,
                     source.input_ordinal,
                     arr,
                     profile,
-                    snapshot.final_boxes,
-                    snapshot.sampling_authority_boxes,
-                    snapshot.transform,
+                    reusable.final_boxes,
+                    reusable.sampling_authority_boxes,
+                    reusable.transform,
                     output_root,
                 )
                 artifacts = replace(
@@ -253,22 +182,14 @@ def process_one(
                     source.portable_stem,
                     source.input_ordinal,
                     output_root,
-                    snapshot.final_review_reasons,
+                    reusable.final_review_reasons,
                     warnings,
                 )
                 artifacts = replace(artifacts, review_copy=review_copy)
 
-            failure_stage = FailureStage.SNAPSHOT
-            carried_path = detection_snapshot_path(output_root, source)
-            artifacts = replace(
-                artifacts,
-                detection_snapshot=str(carried_path),
-            )
-            carry_detection_snapshot(snapshot, output_root, source)
-
             failure_stage = FailureStage.REPORT_VALIDATION
-            result = result_from_detection_snapshot(
-                snapshot,
+            result = result_from_reusable_analysis_report(
+                reusable,
                 input_file=input_file,
                 profile=profile,
                 source_runtime_identity=source_identity,
@@ -344,9 +265,9 @@ def process_one(
         )
 
         failure_stage = FailureStage.OUTPUT
-        if config.preview:
+        if config.debug_analysis:
             warnings.append(
-                "preview: no official TIFF or review copy was written"
+                "debug analysis only: no official TIFF or review copy was written"
             )
         elif detection.frame_export_eligible:
             output_root.mkdir(parents=True, exist_ok=True)
@@ -400,24 +321,6 @@ def process_one(
                 debug_analysis=debug_analysis,
             )
 
-        if config.preview:
-            failure_stage = FailureStage.SNAPSHOT
-            if content_identity is None:
-                content_identity = source_content_identity(source)
-            if not _source_identity_is_stable(source_identity, content_identity):
-                raise DetectionSnapshotError(
-                    "source changed during preview processing"
-                )
-            snapshot_output = detection_snapshot_path(output_root, source)
-            warnings.append(
-                "detection snapshot: "
-                + snapshot_output.relative_to(output_root).as_posix()
-            )
-            artifacts = replace(
-                artifacts,
-                detection_snapshot=str(snapshot_output),
-            )
-
         failure_stage = FailureStage.REPORT_VALIDATION
         result = result_from_detection(
             input_file,
@@ -438,23 +341,8 @@ def process_one(
             warnings,
             configuration_detail=configuration_detail,
             runtime_identity=runtime_identity,
-            frame_export_requested=not config.preview,
+            frame_export_requested=not config.debug_analysis,
         )
-        if config.preview:
-            failure_stage = FailureStage.SNAPSHOT
-            if (
-                content_identity is None
-                or artifacts.detection_snapshot is None
-            ):
-                raise DetectionSnapshotError(
-                    "preview snapshot identity is incomplete"
-                )
-            write_detection_snapshot(
-                Path(artifacts.detection_snapshot),
-                source_identity=content_identity,
-                configuration_binding=configuration_binding,
-                report=result.record,
-            )
         return CompletedInput(
             result=result,
             artifacts=artifacts,
