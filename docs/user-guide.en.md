@@ -103,16 +103,17 @@ Production options:
   memory on ordinary computers; when memory is plentiful and processing a batch
   of source TIFFs, you may explicitly use `--jobs 2`. Numerical library threads
   remain fixed at 1.
-- `--debug-analysis`: explicitly write a three-panel diagnostic JPG on a fixed
-  `1653 × 952` dark audit grid. Row one compares detected and selected TOP/BOTTOM,
+- `--debug-analysis`: explicitly write a three-panel diagnostic JPG with a fixed
+  `1653 px` width and a source-adaptive canvas height. Row one compares detected
+  and selected TOP/BOTTOM,
   row two compares detected and selected START/END, and row three shows safety
   envelopes with translucent per-frame final output. The original input filename
   appears in the upper-left status header; the actual deskew angle and Orientation
   appear only in the upper-right status header. It is off by default.
-  Each row normalizes the complete strip to fill its fixed media viewport; the
-  display aspect is not a physical measurement. Dense START/END labels stagger
-  automatically, and budget-violation hatching stays on candidate borders so the
-  photographic evidence remains visible.
+  Each row lays out the complete strip at its original display aspect, expanding
+  the panel and canvas height instead of cropping or compressing the photographs.
+  Dense START/END labels stagger automatically, and budget-violation hatching stays
+  on candidate borders so the photographic evidence remains visible.
 - `--allow-best-effort-output`: explicitly accept weaker publication semantics
   on an unverified filesystem.
 - `--interactive`: prompt for format, mode, count, and Debug Analysis.

@@ -22,7 +22,9 @@ from x5crop.debug.panels import (
     _draw_hatched_polygon,
     _keep_evidence_inside_media,
     _long_axis_panel,
+    _presentation_grid,
     _Projection,
+    _projection,
     _protected_output_panel,
     _viewport,
     make_debug_analysis_panel,
@@ -82,6 +84,10 @@ def _fixture(
     return configuration, profile, workspace, detection
 
 
+def _grid(workspace, style: DebugStyleParameters):
+    return _presentation_grid(_projection(workspace), style)
+
+
 class DebugAnalysisContractTest(unittest.TestCase):
     def test_three_panels_preserve_four_v5_fact_layers(self) -> None:
         self.assertEqual(
@@ -116,9 +122,10 @@ class DebugAnalysisContractTest(unittest.TestCase):
         self.assertEqual(status.call_count, 1)
         self.assertEqual(status.call_args.args[4], "135.tif")
         style = configuration.diagnostics.style
+        grid = _grid(workspace, style)
         self.assertEqual(
             panel.shape,
-            (style.canvas_height, style.canvas_width, 3),
+            (grid.canvas_height, style.canvas_width, 3),
         )
 
     def test_output_panel_reads_saved_placement_and_constrained_footprints(
@@ -136,6 +143,7 @@ class DebugAnalysisContractTest(unittest.TestCase):
                     detection,
                     configuration.diagnostics.style,
                     DebugRenderCache(),
+                    _grid(workspace, configuration.diagnostics.style),
                 )
         self.assertFalse(detection.frame_export_eligible)
         self.assertEqual(
@@ -188,7 +196,7 @@ class DebugAnalysisContractTest(unittest.TestCase):
         self.assertTrue(np.all(clipped[30:70, 20:80] == (200, 40, 40)))
         self.assertTrue(np.all(clipped[70:] == 20))
 
-    def test_square_frame_strip_normalizes_full_source_into_fixed_grid(
+    def test_square_frame_strip_expands_canvas_without_aspect_compression(
         self,
     ) -> None:
         projection = _Projection(
@@ -202,21 +210,32 @@ class DebugAnalysisContractTest(unittest.TestCase):
             (2_797.0, 9_899.0),
             (0.0, 9_899.0),
         )
-        viewport = _viewport(
-            projection,
-            (27, 81, 1_602, 249),
+        style = DebugStyleParameters()
+        grid = _presentation_grid(projection, style)
+        panel_width = style.canvas_width - 2 * style.outer_margin
+        target_box = (
+            style.panel_media_inset_x,
+            style.cross_axis_media_top,
+            panel_width - style.panel_media_inset_x,
+            style.cross_axis_media_top + grid.media_height,
         )
+        viewport = _viewport(projection, target_box)
         self.assertEqual(viewport.source_box, (0, 0, 9_899, 2_797))
-        self.assertEqual(viewport.target_box, (27, 81, 1_602, 249))
+        self.assertEqual(grid.media_height, 445)
+        self.assertEqual(viewport.target_box, (27, 81, 1_602, 526))
         displayed = tuple(viewport.point(point) for point in source_corners)
-        self.assertEqual(
-            (
-                min(point[0] for point in displayed),
-                min(point[1] for point in displayed),
-                max(point[0] for point in displayed),
-                max(point[1] for point in displayed),
-            ),
-            (27.0, 81.0, 1_602.0, 249.0),
+        scale_x = (
+            max(point[0] for point in displayed)
+            - min(point[0] for point in displayed)
+        ) / projection.display_width
+        scale_y = (
+            max(point[1] for point in displayed)
+            - min(point[1] for point in displayed)
+        ) / projection.display_height
+        self.assertAlmostEqual(
+            scale_x,
+            scale_y,
+            delta=1.0 / projection.display_height,
         )
 
     def test_cross_axis_panel_separates_detected_and_selected_edges(
@@ -241,6 +260,7 @@ class DebugAnalysisContractTest(unittest.TestCase):
                     detection,
                     configuration.diagnostics.style,
                     DebugRenderCache(),
+                    _grid(workspace, configuration.diagnostics.style),
                 )
         self.assertEqual(detected.call_count, 1)
         self.assertEqual(selected.call_count, 1)
@@ -262,6 +282,7 @@ class DebugAnalysisContractTest(unittest.TestCase):
                     detection,
                     configuration.diagnostics.style,
                     DebugRenderCache(),
+                    _grid(workspace, configuration.diagnostics.style),
                 )
         self.assertGreater(expected_transition_count, 0)
         self.assertEqual(detected_line.call_count, expected_transition_count)
@@ -290,6 +311,7 @@ class DebugAnalysisContractTest(unittest.TestCase):
                     detection,
                     configuration.diagnostics.style,
                     DebugRenderCache(),
+                    _grid(workspace, configuration.diagnostics.style),
                 )
             with mock.patch(
                 "x5crop.debug.panels._panel_base",
@@ -303,6 +325,7 @@ class DebugAnalysisContractTest(unittest.TestCase):
                     detection,
                     configuration.diagnostics.style,
                     DebugRenderCache(),
+                    _grid(workspace, configuration.diagnostics.style),
                 )
         self.assertEqual(detection.decision.status, "needs_review")
         self.assertFalse(detection.frame_export_eligible)
@@ -317,24 +340,28 @@ class DebugAnalysisContractTest(unittest.TestCase):
             long_axis_base.call_args.args[3],
         )
 
-    def test_fixed_palette_and_panel_stacking_are_bounded(self) -> None:
+    def test_adaptive_panel_stacking_is_bounded(self) -> None:
         self.assertEqual(len(FRAME_FILL_COLORS), 12)
         self.assertEqual(len(set(FRAME_FILL_COLORS)), 12)
         style = DebugStyleParameters()
+        grid = _presentation_grid(
+            _Projection(720, 100, rotate_clockwise=False),
+            style,
+        )
         width = style.canvas_width - style.outer_margin * 2
         panels = tuple(
             np.zeros((height, width, 3), dtype=np.uint8)
             for height in (
-                style.cross_axis_panel_height,
-                style.long_axis_panel_height,
-                style.output_panel_height,
+                grid.cross_axis_panel_height,
+                grid.long_axis_panel_height,
+                grid.output_panel_height,
             )
         )
-        body = stack_debug_panels(panels, style=style)
+        body = stack_debug_panels(panels, style=style, grid=grid)
         self.assertEqual(
             body.shape,
             (
-                style.canvas_height
+                grid.canvas_height
                 - style.status_bar_height
                 - style.legend_bar_height,
                 style.canvas_width,

@@ -49,13 +49,15 @@ standalone 只消费 current schema；不存在 V4.9 fallback、shim、feature f
   `--jobs 1` 以约束一般电脑的峰值内存；`--jobs 2/3` 保留为内存充足时的显式批量选择。
 - 正式 CLI 删除 `--overwrite`、`--diagnostics` 和旧 debug flags；未验证文件系统的非交互运行必须
   显式使用 `--allow-best-effort-output`，但该选择不能绕过锁、路径、rename 或空间硬失败。
-- Debug Analysis 使用固定 `1653 × 952` 三联深色审计网格：第一联专属 detected/selected
+- Debug Analysis 使用固定 `1653 px` 宽度、source-aspect 自适应高度的三联深色审计网格：
+  第一联专属 detected/selected
   TOP/BOTTOM，第二联专属 detected/selected START/END，第三联专属 `SafeCropEnvelope`、彩色半透明
   final output、budget 与 source-atomic decision。Deskew/identity 与 Orientation 只在右上状态头
   显示一次；原始输入文件名在左上状态头显示一次。它不重新计算任何检测事实，也不在 current
   report 未保存 polygon 时伪造
-  `MaximumLegalWindow`。三联先把完整 source strip 标准化铺满固定 media viewport，再用同一
-  source-to-display 映射叠加 evidence；显示比例不作为物理测量。密集 START/END 标签自动错行，
+  `MaximumLegalWindow`。三联先把完整 source strip 等比铺满 media viewport，再用同一
+  source-to-display 映射叠加 evidence；panel 与 canvas 高度随片条比例增长，不裁切或压缩照片。
+  密集 START/END 标签自动错行，
   budget violation 只在候选框边缘使用斜线，避免遮盖照片与安全包络。
 
 验证拓扑已统一为

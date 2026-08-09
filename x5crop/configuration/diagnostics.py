@@ -22,25 +22,21 @@ class DebugLegendEntry:
 
 @dataclass(frozen=True)
 class DebugStyleParameters:
-    """The fixed V5 Debug Analysis presentation grid and visual tokens."""
+    """The adaptive V5 Debug Analysis presentation grid and visual tokens."""
 
     canvas_width: int = 1653
-    canvas_height: int = 952
     status_bar_height: int = 70
     outer_margin: int = 12
     panel_gap: int = 10
-    cross_axis_panel_height: int = 280
-    long_axis_panel_height: int = 258
-    output_panel_height: int = 273
     legend_bar_height: int = 51
     panel_title_height: int = 40
     panel_media_inset_x: int = 27
     cross_axis_media_top: int = 81
-    cross_axis_media_height: int = 168
+    cross_axis_media_bottom_padding: int = 31
     long_axis_media_top: int = 76
-    long_axis_media_height: int = 145
+    long_axis_media_bottom_padding: int = 37
     output_media_top: int = 81
-    output_media_height: int = 148
+    output_media_bottom_padding: int = 44
     frame_fill_alpha: float = 0.20
     safe_fill_alpha: float = 0.25
     frame_line_width: int = 2
@@ -79,22 +75,18 @@ class DebugStyleParameters:
     def __post_init__(self) -> None:
         positive_values = (
             self.canvas_width,
-            self.canvas_height,
             self.status_bar_height,
             self.outer_margin,
             self.panel_gap,
-            self.cross_axis_panel_height,
-            self.long_axis_panel_height,
-            self.output_panel_height,
             self.legend_bar_height,
             self.panel_title_height,
             self.panel_media_inset_x,
             self.cross_axis_media_top,
-            self.cross_axis_media_height,
+            self.cross_axis_media_bottom_padding,
             self.long_axis_media_top,
-            self.long_axis_media_height,
+            self.long_axis_media_bottom_padding,
             self.output_media_top,
-            self.output_media_height,
+            self.output_media_bottom_padding,
             self.frame_line_width,
             self.retained_line_width,
             self.evidence_line_width,
@@ -115,20 +107,12 @@ class DebugStyleParameters:
             self.reason_display_limit,
         )
         for value in positive_values:
-            require_positive("debug fixed-grid value", value)
+            require_positive("debug adaptive-grid value", value)
         require_unit_interval("debug frame fill alpha", self.frame_fill_alpha)
         require_unit_interval("debug safe fill alpha", self.safe_fill_alpha)
-        body_height = (
-            self.cross_axis_panel_height
-            + self.panel_gap
-            + self.long_axis_panel_height
-            + self.panel_gap
-            + self.output_panel_height
-            + self.legend_bar_height
-        )
-        if self.status_bar_height + body_height != self.canvas_height:
-            raise ValueError("debug fixed grid does not fill the canvas")
-        if self.canvas_width <= self.outer_margin * 2:
+        if self.canvas_width <= 2 * (
+            self.outer_margin + self.panel_media_inset_x
+        ):
             raise ValueError("debug canvas cannot contain the panel grid")
         if self.jpeg_quality > JPEG_QUALITY_MAX:
             raise ValueError("debug JPEG quality exceeds the standard maximum")

@@ -84,6 +84,63 @@ class _Viewport:
         return tuple(self.point(point) for point in polygon)
 
 
+@dataclass(frozen=True)
+class _PresentationGrid:
+    media_height: int
+    cross_axis_panel_height: int
+    long_axis_panel_height: int
+    output_panel_height: int
+    canvas_height: int
+
+
+def _presentation_grid(
+    projection: _Projection,
+    style: DebugStyleParameters,
+) -> _PresentationGrid:
+    panel_width = style.canvas_width - 2 * style.outer_margin
+    media_width = panel_width - 2 * style.panel_media_inset_x
+    media_height = max(
+        1,
+        int(
+            round(
+                media_width
+                * projection.display_height
+                / projection.display_width
+            )
+        ),
+    )
+    cross_axis_panel_height = (
+        style.cross_axis_media_top
+        + media_height
+        + style.cross_axis_media_bottom_padding
+    )
+    long_axis_panel_height = (
+        style.long_axis_media_top
+        + media_height
+        + style.long_axis_media_bottom_padding
+    )
+    output_panel_height = (
+        style.output_media_top
+        + media_height
+        + style.output_media_bottom_padding
+    )
+    canvas_height = (
+        style.status_bar_height
+        + cross_axis_panel_height
+        + long_axis_panel_height
+        + output_panel_height
+        + 2 * style.panel_gap
+        + style.legend_bar_height
+    )
+    return _PresentationGrid(
+        media_height=media_height,
+        cross_axis_panel_height=cross_axis_panel_height,
+        long_axis_panel_height=long_axis_panel_height,
+        output_panel_height=output_panel_height,
+        canvas_height=canvas_height,
+    )
+
+
 def _font(size: int) -> ImageFont.ImageFont:
     return ImageFont.load_default(size=size)
 
@@ -505,11 +562,12 @@ def _cross_axis_panel(
     detection: FinalDetection,
     style: DebugStyleParameters,
     render_cache: DebugRenderCache,
+    grid: _PresentationGrid,
 ) -> np.ndarray:
     panel_width = style.canvas_width - 2 * style.outer_margin
     panel, draw = _panel_base(
         panel_width,
-        style.cross_axis_panel_height,
+        grid.cross_axis_panel_height,
         DEBUG_ANALYSIS_PANEL_LABELS[0],
         "DETECTED EVIDENCE / SELECTED EDGE",
         style,
@@ -519,7 +577,7 @@ def _cross_axis_panel(
         style.panel_media_inset_x,
         style.cross_axis_media_top,
         panel_width - style.panel_media_inset_x,
-        style.cross_axis_media_top + style.cross_axis_media_height,
+        style.cross_axis_media_top + grid.media_height,
     )
     viewport = _viewport(
         projection,
@@ -531,7 +589,7 @@ def _cross_axis_panel(
     detected = _draw_detected_top_bottom(draw, detection, viewport, style)
     selected = _draw_selected_top_bottom(draw, geometries, viewport, style)
     top_y = style.panel_title_height + 6
-    bottom_y = style.cross_axis_panel_height - 27
+    bottom_y = grid.cross_axis_panel_height - 27
     left = viewport.target_box[0]
     if BoundaryRole.TOP in detected:
         _draw_label_chip(
@@ -620,11 +678,12 @@ def _long_axis_panel(
     detection: FinalDetection,
     style: DebugStyleParameters,
     render_cache: DebugRenderCache,
+    grid: _PresentationGrid,
 ) -> np.ndarray:
     panel_width = style.canvas_width - 2 * style.outer_margin
     panel, _draw = _panel_base(
         panel_width,
-        style.long_axis_panel_height,
+        grid.long_axis_panel_height,
         DEBUG_ANALYSIS_PANEL_LABELS[1],
         "DETECTED TRANSITION / SELECTED BOUNDARY",
         style,
@@ -634,7 +693,7 @@ def _long_axis_panel(
     media_left = style.panel_media_inset_x
     media_right = panel_width - style.panel_media_inset_x
     media_top = style.long_axis_media_top
-    media_bottom = media_top + style.long_axis_media_height
+    media_bottom = media_top + grid.media_height
     viewport = _viewport(
         projection,
         (media_left, media_top, media_right, media_bottom),
@@ -668,7 +727,7 @@ def _long_axis_panel(
             fill=style.review_color,
             font=font,
         )
-    footer_y = style.long_axis_panel_height - 27
+    footer_y = grid.long_axis_panel_height - 27
     if detected:
         _draw_label_chip(
             draw,
@@ -730,6 +789,7 @@ def _protected_output_panel(
     detection: FinalDetection,
     style: DebugStyleParameters,
     render_cache: DebugRenderCache,
+    grid: _PresentationGrid,
 ) -> np.ndarray:
     panel_width = style.canvas_width - 2 * style.outer_margin
     right_title = (
@@ -739,7 +799,7 @@ def _protected_output_panel(
     )
     panel, _draw = _panel_base(
         panel_width,
-        style.output_panel_height,
+        grid.output_panel_height,
         DEBUG_ANALYSIS_PANEL_LABELS[2],
         right_title,
         style,
@@ -749,7 +809,7 @@ def _protected_output_panel(
         style.panel_media_inset_x,
         style.output_media_top,
         panel_width - style.panel_media_inset_x,
-        style.output_media_top + style.output_media_height,
+        style.output_media_top + grid.media_height,
     )
     viewport = _viewport(
         projection,
@@ -888,7 +948,7 @@ def _protected_output_panel(
             font=note_font,
         )
     draw.text(
-        (19, style.output_panel_height - 25),
+        (19, grid.output_panel_height - 25),
         footer,
         fill=style.text_color,
         font=footer_font,
@@ -900,18 +960,19 @@ def stack_debug_panels(
     panels: tuple[np.ndarray, ...],
     *,
     style: DebugStyleParameters,
+    grid: _PresentationGrid,
 ) -> np.ndarray:
     expected_heights = (
-        style.cross_axis_panel_height,
-        style.long_axis_panel_height,
-        style.output_panel_height,
+        grid.cross_axis_panel_height,
+        grid.long_axis_panel_height,
+        grid.output_panel_height,
     )
     panel_width = style.canvas_width - 2 * style.outer_margin
     if len(panels) != len(expected_heights) or any(
         panel.shape != (height, panel_width, RGB_CHANNEL_COUNT)
         for panel, height in zip(panels, expected_heights, strict=True)
     ):
-        raise ValueError("Debug Analysis panels do not match the fixed grid")
+        raise ValueError("Debug Analysis panels do not match the adaptive grid")
     body_height = sum(expected_heights) + style.panel_gap * 2
     body = np.full(
         (body_height, style.canvas_width, RGB_CHANNEL_COUNT),
@@ -992,12 +1053,13 @@ def make_debug_analysis_panel(
     terminal_outcome: RunTerminalOutcome,
 ) -> np.ndarray:
     style = diagnostics.style
+    grid = _presentation_grid(_projection(workspace), style)
     panels = (
-        _cross_axis_panel(workspace, detection, style, render_cache),
-        _long_axis_panel(workspace, detection, style, render_cache),
-        _protected_output_panel(workspace, detection, style, render_cache),
+        _cross_axis_panel(workspace, detection, style, render_cache, grid),
+        _long_axis_panel(workspace, detection, style, render_cache, grid),
+        _protected_output_panel(workspace, detection, style, render_cache, grid),
     )
-    canvas = stack_debug_panels(panels, style=style)
+    canvas = stack_debug_panels(panels, style=style, grid=grid)
     canvas = add_legend_bar(canvas, diagnostics.legend_entries, style)
     canvas = add_status_bar(
         canvas,
@@ -1008,6 +1070,6 @@ def make_debug_analysis_panel(
         style,
         terminal_outcome,
     )
-    if canvas.shape != (style.canvas_height, style.canvas_width, RGB_CHANNEL_COUNT):
-        raise ValueError("Debug Analysis output does not match the fixed design canvas")
+    if canvas.shape != (grid.canvas_height, style.canvas_width, RGB_CHANNEL_COUNT):
+        raise ValueError("Debug Analysis output does not match the adaptive design canvas")
     return canvas
