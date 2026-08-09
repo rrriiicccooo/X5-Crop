@@ -48,7 +48,7 @@ format / count / ScanCanvas / lane authority
 → canonical representative
 → SafeCropEnvelope + direct-use assessment
 → CandidateGate → DecisionGate → Finalization
-→ one chunked lane-safe inverse-affine sampling
+→ preview snapshot or one chunked lane-safe inverse-affine sampling
 → validated TIFF / report / optional Debug Analysis
 → run manifest → journaled flat-output publication
 ```
@@ -330,16 +330,31 @@ Current-only schema：
 
 ```text
 report schema id       = x5crop_detection_report_v5
-report schema revision = x5crop_v5_current_1
+report schema revision = x5crop_v5_current_2
 run manifest           = x5crop_run_manifest_v5
 output owner            = x5_crop_v5
+detection snapshot      = x5crop_detection_snapshot_v1
 ```
 
 Report 保存 raw observations、profiles、phase groups、direction classes、joint source geometry、
 local advances、retained placements、canonical、safe envelope、budget、两级 Gate、transform 与
 最终 I/O facts。Transition 至少包含 coordinate interval、peak width、prominence、polarity、
 local noise、trace/support 与 provenance。Report 是审计产物，不是 detection cache；不得保存
-profiler、候选海洋或开发调用轨迹。
+profiler、候选海洋或开发调用轨迹，也不能单独取得正式裁切权限。
+
+`--preview` 仍执行同一 decode、registered detection、物理求解、两级 Gate 与 Finalization，但将
+`frame_export_requested` 记录为 false，不写正式 TIFF 或 review copy。它在独立事务 target
+`x5_crop_preview/` 中写 Debug Analysis、current report 和 gzip 检测快照。快照包含完整 current
+report payload，并额外绑定 source SHA-256、完整 detection configuration、resolved layout、report
+schema、runtime environment identity、快照内容 hash 与全部 embedded/local `x5crop` Python
+sources 的实现指纹。
+
+普通运行只在现有正式 target 或相邻 preview target 中发现 current owned 快照后才计算 source
+SHA 和实现指纹。全部 binding 一致时，Writer 只消费快照中已经由 DecisionGate/Finalization 暴露
+的 boxes、sampling authority 与 affine transform；current report 的 runtime/output facts 会按本次
+写出重新绑定。任一 binding、gzip、JSON、report validation 或完整性检查失败时，快照不取得任何
+authority，运行回到同一 current detector；不存在旧报告 reader、宽松匹配或缓存专用 Gate。
+正式运行要求新的 Debug Analysis 时也回到 detector，避免复用旧诊断图。
 
 Manifest 只保存 `run_id`、输入 ordinal、便携名称、size、mtime、terminal、依赖/线程、文件系统
 等级、best-effort 同意方式、disk reservation 与发布 inventory。它不保存 source-content SHA、
@@ -354,10 +369,14 @@ report 中不存在的 polygon。Pillow 只在用户显式启用后延迟导入�
 
 ## 9. 生产路径与开发验证
 
-默认生产路径只执行 TIFF/Orientation 校验、一次 decode、registered detection、物理求解、
-不确定性传播、Gate、一次正式 sampling、TIFF 写出复读、轻量 report/manifest 与安全发布。
+默认且未发现候选快照的生产路径只执行 TIFF/Orientation 校验、一次 decode、registered
+detection、物理求解、不确定性传播、Gate、一次正式 sampling、TIFF 写出复读、轻量
+report/manifest 与安全发布。
 它不计算 source-content SHA，不检查 Git/cohort/receipt，不运行 comparator、profiler、tracemalloc、
 故障注入或 Debug Analysis。
+
+Preview 和发现候选快照后的正式运行是显式 SHA-bound 路径。SHA 只用于本机快照 binding，不进入
+普通 report runtime identity 或 run manifest。普通报告永远不会被扫描为缓存。
 
 `tools/verify` 是唯一验证入口。POSIX、GitHub Actions、Windows `.bat` 与 Intel macOS
 `.command` 都只作薄转调；入口从 `python3`、`python` 中选择 setup-python 提供且满足
@@ -489,7 +508,7 @@ output 已恢复。
 | `x5crop/detection/final/` | approved geometry exposure |
 | `x5crop/export/` | lane-safe TIFF sampling、write 与 readback |
 | `x5crop/report/` | current report read model 与 validation |
-| `x5crop/runtime/` | invocation、source terminal、run-wide budget 与轻量 manifest |
+| `x5crop/runtime/` | invocation、source terminal、SHA-bound detection snapshot、run-wide budget 与轻量 manifest |
 | `x5crop/output/` | portable name、safe tree、filesystem policy、lock、journal 与 publication |
 | `x5crop/debug/` | current facts 的只读可视化 |
 | `tools/verify` | 唯一 tracked verifier 入口 |

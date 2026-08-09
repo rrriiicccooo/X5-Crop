@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ..detection.final.model import FinalDetection
 from .review import copy_for_review, review_directory_for
 
 
@@ -11,12 +10,12 @@ def prepare_review_artifact(
     portable_stem: str,
     input_ordinal: int,
     output_dir: Path,
-    detection: FinalDetection,
+    final_review_reasons: tuple[str, ...],
     warnings: list[str],
 ) -> str | None:
-    reasons = detection.decision.final_review_reasons
     warnings.append(
-        f"review required: reasons={','.join(reasons) or 'none'}"
+        "review required: reasons="
+        + (",".join(final_review_reasons) or "none")
     )
     review_copy = str(
         copy_for_review(

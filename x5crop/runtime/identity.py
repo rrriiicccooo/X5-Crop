@@ -57,6 +57,7 @@ def runtime_configuration_identity(config: RunConfig) -> dict[str, Any]:
         "strip_mode": config.strip_mode,
         "output_slot_policy": count_policy,
         "debug_analysis": config.debug_analysis,
+        "preview": config.preview,
     }
 
 

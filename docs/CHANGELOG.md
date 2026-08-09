@@ -26,8 +26,13 @@ standalone 只消费当前 owner，不保留 fallback、shim、feature flag 或�
 - 照片直接位于 `x5_crop_output/` 根部。新结果在同父目录完整构建后通过 lock、journal 和两次
   rename 发布；旧结果只有 owner marker、current manifest 与 inventory 全部一致时才删除。
   单 source `runtime_error` 不取消其它结果；全部失败不发布。
-- 普通运行不计算 source-content SHA，不加载 Git、cohort、comparator、profiling、receipt 或
-  fault injection。Pillow 只在显式 Debug Analysis 时延迟导入。
+- 新增纯 `--preview`：完整检测后只在独立 `x5_crop_preview/` 发布 Debug Analysis、报告与检测
+  快照，不写正式 TIFF 或 review copy。之后的普通运行仅在 source SHA-256、完整检测配置、
+  resolved layout、current schema、runtime environment identity、快照 hash 和精确实现指纹
+  全部一致时复用 Finalization；否则自动重新检测。普通 report 仍是审计产物，不能单独用来裁切。
+- 未发现候选快照的普通运行不计算 source-content SHA，不加载 Git、cohort、comparator、
+  profiling、receipt 或 fault injection。Preview 与快照复用路径只为 binding 计算本机 SHA；
+  Pillow 只在显式 Debug Analysis 或 preview 时延迟导入。
 - 依赖安装改为 provider-neutral 的模块能力合同：可用项零改动复用，缺失项最小安装，版本不符
   只沿确认的 pip 或 Homebrew owner 更新，未知 ownership 在写入前停止。
 - 正式 CLI 删除 `--overwrite` 与旧 debug/diagnostic flags。生产默认 `--jobs 1`、上限 3；数值

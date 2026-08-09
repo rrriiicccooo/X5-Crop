@@ -17,8 +17,11 @@ from ..output.filesystem import (
     probe_same_parent_rename,
 )
 from ..output.ownership import OutputOwnershipError, read_owned_output
-from ..output.safe_tree import safe_remove_tree
-from ..output.surface import output_directory_for
+from ..output.safe_tree import UnsafeOutputTreeError, safe_remove_tree
+from ..output.surface import (
+    output_directory_for,
+    preview_output_directory_for,
+)
 from ..output.transaction import (
     OutputTransaction,
     OutputTransactionError,
@@ -76,6 +79,8 @@ def print_run_header(invocation: RuntimeInvocation, output_root: Path) -> None:
         mode_parts.append("count: auto")
     if config.debug_analysis:
         mode_parts.append("debug analysis")
+    if config.preview:
+        mode_parts.append("preview only")
     print("; ".join(mode_parts))
     if len(sources) > 1 and config.jobs > 1:
         print(f"parallel: {config.jobs} workers")
@@ -97,23 +102,34 @@ def _process_source(
     source: PlannedSource,
     invocation: RuntimeInvocation,
     output_root: Path,
+    snapshot_roots: tuple[Path, ...],
 ) -> InputProcessingOutcome:
     return process_one(
         source,
         invocation.config,
         invocation.configuration_bundle,
         output_root,
+        snapshot_roots,
     )
 
 
 def _process_all(
     invocation: RuntimeInvocation,
     output_root: Path,
+    snapshot_roots: tuple[Path, ...],
 ) -> tuple[tuple[PlannedSource, InputProcessingOutcome], ...]:
     sources = invocation.sources
     if len(sources) <= 1 or invocation.config.jobs <= 1:
         return tuple(
-            (source, _process_source(source, invocation, output_root))
+            (
+                source,
+                _process_source(
+                    source,
+                    invocation,
+                    output_root,
+                    snapshot_roots,
+                ),
+            )
             for source in sources
         )
     try:
@@ -127,7 +143,13 @@ def _process_all(
     outcomes: dict[int, tuple[PlannedSource, InputProcessingOutcome]] = {}
     with executor:
         futures = {
-            executor.submit(_process_source, source, invocation, output_root): source
+            executor.submit(
+                _process_source,
+                source,
+                invocation,
+                output_root,
+                snapshot_roots,
+            ): source
             for source in sources
         }
         for future in concurrent.futures.as_completed(futures):
@@ -183,6 +205,7 @@ def _discard_failed_artifacts(outcome: FailedInput, output_root: Path) -> Failed
         *outcome.artifacts.frame_outputs,
         outcome.artifacts.review_copy,
         outcome.artifacts.debug_analysis,
+        outcome.artifacts.detection_snapshot,
     ):
         if value is None:
             continue
@@ -193,7 +216,11 @@ def _discard_failed_artifacts(outcome: FailedInput, output_root: Path) -> Failed
             raise RuntimeError("failed source exposed an artifact outside output") from exc
         if path.is_file() and not path.is_symlink():
             path.unlink()
-    for directory_name in ("needs_review", "_debug_analysis"):
+    for directory_name in (
+        "needs_review",
+        "_debug_analysis",
+        "_detection_snapshot",
+    ):
         directory = output_root / directory_name
         if directory.is_dir() and not any(directory.iterdir()):
             directory.rmdir()
@@ -272,8 +299,28 @@ def run_runtime(invocation: RuntimeInvocation) -> int:
                 transaction.paths.target.parent,
                 transaction.paths.token,
             )
+            snapshot_roots: list[Path] = []
             if os.path.lexists(transaction.paths.target):
                 read_owned_output(transaction.paths.target)
+                if not config.preview:
+                    snapshot_roots.append(transaction.paths.target)
+            if not config.preview:
+                preview_root = preview_output_directory_for(config)
+                if (
+                    preview_root != transaction.paths.target
+                    and os.path.lexists(preview_root)
+                ):
+                    try:
+                        read_owned_output(preview_root)
+                    except (
+                        OSError,
+                        OutputOwnershipError,
+                        UnsafeOutputTreeError,
+                        ValueError,
+                    ):
+                        pass
+                    else:
+                        snapshot_roots.insert(0, preview_root)
             _budget = RunWideDiskBudget.reserve(
                 transaction.paths.target.parent,
                 estimate.total_bytes,
@@ -281,7 +328,11 @@ def run_runtime(invocation: RuntimeInvocation) -> int:
             transaction_id, staging = transaction.create_staging(run_id)
             publication_started = False
             try:
-                outcomes = _process_all(invocation, staging)
+                outcomes = _process_all(
+                    invocation,
+                    staging,
+                    tuple(snapshot_roots),
+                )
                 disposition = publication_disposition(invocation.sources, outcomes)
                 _cleanup_source_workspaces(staging)
                 if any(
@@ -324,6 +375,7 @@ def run_runtime(invocation: RuntimeInvocation) -> int:
                     started_at_utc=started_at,
                     finished_at_utc=_utc_now(),
                     jobs=config.jobs,
+                    preview=config.preview,
                     filesystem=filesystem,
                     best_effort_consent=consent,
                     disk_reservation=_budget.as_record(),

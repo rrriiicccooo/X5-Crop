@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import contextlib
+import io
+import json
 from pathlib import Path
 import tempfile
 import unittest
@@ -19,8 +22,11 @@ from x5crop.detection.decision.vocabulary import (
 )
 from x5crop.report.identity import REPORT_SCHEMA_ID, REPORT_SCHEMA_REVISION
 from x5crop.report.validation import validate_current_report_record
+from x5crop.output.ownership import read_owned_output
 from x5crop.run_config import RunConfig
 from x5crop.runtime.invocation import PlannedSource
+from x5crop.runtime.bootstrap import run_options
+from x5crop.runtime.options import RuntimeOptions
 from x5crop.runtime.outcome import CompletedInput, FailedInput, FailureStage
 from x5crop.runtime.workflow import process_one
 
@@ -31,6 +37,9 @@ def _run_config(
     format_id: str = "135",
     strip_mode: str = "partial",
     requested_count: int | None = None,
+    *,
+    preview: bool = False,
+    debug_analysis: bool = False,
 ) -> RunConfig:
     configuration = get_detection_configuration(
         format_id,
@@ -45,7 +54,8 @@ def _run_config(
         layout="horizontal",
         strip_mode=strip_mode,
         count_request=configuration.count_request,
-        debug_analysis=False,
+        debug_analysis=debug_analysis,
+        preview=preview,
         allow_best_effort_output=False,
         jobs=2,
     )
@@ -211,6 +221,184 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
         self.assertIsInstance(outcome, FailedInput)
         assert isinstance(outcome, FailedInput)
         self.assertEqual(outcome.failure_stage, FailureStage.INPUT_PROFILE)
+
+    def test_preview_snapshot_is_reused_without_running_detector_again(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = (root / "135.tif").resolve()
+            tifffile.imwrite(
+                source,
+                _rgb16(np.zeros((100, 720), dtype=np.uint16)),
+                photometric="rgb",
+                planarconfig="contig",
+            )
+            bundle = DetectionConfigurationBundle.for_format_mode(
+                "135", "partial"
+            )
+            planned = PlannedSource(1, source, source.stem)
+            preview_output = root / "preview"
+            preview_outcome = process_one(
+                planned,
+                _run_config(
+                    source,
+                    preview_output,
+                    preview=True,
+                    debug_analysis=True,
+                ),
+                bundle,
+                preview_output,
+            )
+            self.assertIsInstance(preview_outcome, CompletedInput)
+            assert isinstance(preview_outcome, CompletedInput)
+            self.assertFalse(
+                preview_outcome.result.record["output"]["finalization"][
+                    "frame_export_requested"
+                ]
+            )
+            self.assertIsNone(preview_outcome.artifacts.review_copy)
+            self.assertIsNotNone(preview_outcome.artifacts.debug_analysis)
+            self.assertIsNotNone(preview_outcome.artifacts.detection_snapshot)
+
+            normal_output = root / "normal"
+            with mock.patch(
+                "x5crop.runtime.workflow.prepare_detection_workspace",
+                side_effect=AssertionError("detector must not run"),
+            ):
+                reused_outcome = process_one(
+                    planned,
+                    _run_config(source, normal_output),
+                    bundle,
+                    normal_output,
+                    (preview_output,),
+                )
+            self.assertIsInstance(reused_outcome, CompletedInput)
+            assert isinstance(reused_outcome, CompletedInput)
+            self.assertTrue(
+                reused_outcome.result.record["output"]["finalization"][
+                    "frame_export_requested"
+                ]
+            )
+            self.assertIn(
+                "detection snapshot reused:",
+                "\n".join(reused_outcome.result.record["output"]["warnings"]),
+            )
+            self.assertIsNotNone(reused_outcome.artifacts.review_copy)
+            self.assertIsNotNone(reused_outcome.artifacts.detection_snapshot)
+
+    def test_changed_source_invalidates_preview_snapshot(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = (root / "135.tif").resolve()
+            tifffile.imwrite(
+                source,
+                _rgb16(np.zeros((100, 720), dtype=np.uint16)),
+                photometric="rgb",
+                planarconfig="contig",
+            )
+            bundle = DetectionConfigurationBundle.for_format_mode(
+                "135", "partial"
+            )
+            planned = PlannedSource(1, source, source.stem)
+            preview_output = root / "preview"
+            preview_outcome = process_one(
+                planned,
+                _run_config(
+                    source,
+                    preview_output,
+                    preview=True,
+                    debug_analysis=True,
+                ),
+                bundle,
+                preview_output,
+            )
+            self.assertIsInstance(preview_outcome, CompletedInput)
+
+            pixels = np.zeros((100, 720), dtype=np.uint16)
+            pixels[0, 0] = 1
+            tifffile.imwrite(
+                source,
+                _rgb16(pixels),
+                photometric="rgb",
+                planarconfig="contig",
+            )
+            normal_output = root / "normal"
+            outcome = process_one(
+                planned,
+                _run_config(source, normal_output),
+                bundle,
+                normal_output,
+                (preview_output,),
+            )
+            self.assertIsInstance(outcome, CompletedInput)
+            assert isinstance(outcome, CompletedInput)
+            self.assertIn(
+                "snapshot source SHA-256 does not match",
+                "\n".join(outcome.result.record["output"]["warnings"]),
+            )
+
+    def test_preview_and_normal_runs_publish_separate_owned_targets(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = (root / "135.tif").resolve()
+            tifffile.imwrite(
+                source,
+                _rgb16(np.zeros((100, 720), dtype=np.uint16)),
+                photometric="rgb",
+                planarconfig="contig",
+            )
+            production = root / "MyCrops"
+            preview_options = RuntimeOptions(
+                input_path=source,
+                output_dir=production,
+                format_id="135",
+                layout="horizontal",
+                strip_mode="partial",
+                requested_count=None,
+                debug_analysis=True,
+                preview=True,
+                allow_best_effort_output=True,
+                jobs=1,
+            )
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(run_options(preview_options), 0)
+            preview = root / "MyCrops_preview"
+            self.assertFalse(production.exists())
+            read_owned_output(preview)
+            manifest_record = json.loads(
+                (preview / "x5_crop_run_manifest.jsonl")
+                .read_text(encoding="utf-8")
+                .splitlines()[0]
+            )
+            self.assertTrue(manifest_record["preview"])
+
+            normal_options = RuntimeOptions(
+                input_path=source,
+                output_dir=production,
+                format_id="135",
+                layout="horizontal",
+                strip_mode="partial",
+                requested_count=None,
+                debug_analysis=False,
+                preview=False,
+                allow_best_effort_output=True,
+                jobs=1,
+            )
+            with mock.patch(
+                "x5crop.runtime.workflow.prepare_detection_workspace",
+                side_effect=AssertionError("detector must not run"),
+            ), contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(run_options(normal_options), 0)
+            read_owned_output(production)
+            self.assertTrue(preview.exists())
+            report = json.loads(
+                (production / "x5_crop_report.jsonl")
+                .read_text(encoding="utf-8")
+                .splitlines()[0]
+            )
+            self.assertIn(
+                "detection snapshot reused:",
+                "\n".join(report["output"]["warnings"]),
+            )
 
 
 if __name__ == "__main__":

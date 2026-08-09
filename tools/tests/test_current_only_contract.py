@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import contextlib
+from hashlib import sha256
 import io
 from dataclasses import fields
 from pathlib import Path
+import sys
 import unittest
 from unittest import mock
 
@@ -37,6 +39,7 @@ from x5crop.runtime.limits import (
     STANDARD_JOB_LIMIT,
 )
 from x5crop.runtime.options import RuntimeOptions
+from x5crop.runtime.detection_snapshot import implementation_sha256
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -187,6 +190,7 @@ class CurrentOnlyContractTest(unittest.TestCase):
         }
         self.assertNotIn("--debug", option_strings)
         self.assertIn("--debug-analysis", option_strings)
+        self.assertIn("--preview", option_strings)
         self.assertNotIn("--debug-errors", option_strings)
         self.assertNotIn("--diagnostics", option_strings)
         self.assertNotIn("--overwrite", option_strings)
@@ -197,6 +201,15 @@ class CurrentOnlyContractTest(unittest.TestCase):
             "detected and selected START/END, and final safe output envelopes",
             normalized_help,
         )
+        self.assertIn(
+            "SHA-bound detection snapshot, but no official TIFFs or review copies",
+            normalized_help,
+        )
+        preview_options = options_from_args(
+            parser.parse_args(["input.tif", "--format", "135", "--preview"])
+        )
+        self.assertTrue(preview_options.preview)
+        self.assertTrue(preview_options.debug_analysis)
         for runtime_type in (RuntimeOptions, RunConfig):
             with self.subTest(runtime_type=runtime_type.__name__):
                 self.assertNotIn(
@@ -275,7 +288,7 @@ class CurrentOnlyContractTest(unittest.TestCase):
         self,
     ) -> None:
         with (
-            mock.patch("builtins.input", side_effect=("dual", "n")),
+            mock.patch("builtins.input", side_effect=("dual", "n", "n")),
             contextlib.redirect_stdout(io.StringIO()),
         ):
             options = interactive_options()
@@ -287,7 +300,7 @@ class CurrentOnlyContractTest(unittest.TestCase):
         self.assertEqual(REPORT_SCHEMA_ID, "x5crop_detection_report_v5")
         self.assertEqual(
             REPORT_SCHEMA_REVISION,
-            "x5crop_v5_current_1",
+            "x5crop_v5_current_2",
         )
         candidate = candidate_gate_assessment(
             {
@@ -520,6 +533,28 @@ class CurrentOnlyContractTest(unittest.TestCase):
         ):
             with self.subTest(retired=module):
                 self.assertNotIn(module, sources)
+
+    def test_snapshot_implementation_identity_matches_standalone_sources(
+        self,
+    ) -> None:
+        sources = read_sources()
+        expected = sha256()
+        for name in sorted(sources):
+            expected.update(name.encode("utf-8"))
+            expected.update(b"\0")
+            expected.update(sources[name].encode("utf-8"))
+            expected.update(b"\0")
+        implementation_sha256.cache_clear()
+        self.assertEqual(implementation_sha256(), expected.hexdigest())
+        with mock.patch.object(
+            sys.modules["__main__"],
+            "_X5_EMBEDDED_SOURCES",
+            sources,
+            create=True,
+        ):
+            implementation_sha256.cache_clear()
+            self.assertEqual(implementation_sha256(), expected.hexdigest())
+        implementation_sha256.cache_clear()
 
 
 if __name__ == "__main__":

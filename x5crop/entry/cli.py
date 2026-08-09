@@ -65,6 +65,15 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--preview",
+        action="store_true",
+        help=(
+            "Run the complete detector and write Debug Analysis plus a "
+            "SHA-bound detection snapshot, but no official TIFFs or review "
+            "copies. A later matching normal run reuses the snapshot."
+        ),
+    )
+    parser.add_argument(
         "--allow-best-effort-output",
         action="store_true",
         help=(
@@ -98,7 +107,8 @@ def options_from_args(args: argparse.Namespace) -> RuntimeOptions:
         layout=str(args.layout),
         strip_mode=str(args.strip),
         requested_count=(None if args.count is None else int(args.count)),
-        debug_analysis=bool(args.debug_analysis),
+        debug_analysis=bool(args.debug_analysis or args.preview),
+        preview=bool(args.preview),
         allow_best_effort_output=bool(args.allow_best_effort_output),
         jobs=int(args.jobs),
     )

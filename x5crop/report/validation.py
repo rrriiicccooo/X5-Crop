@@ -109,6 +109,7 @@ def _validate_finalization(record: dict[str, Any]) -> None:
     authorities = finalization["sampling_authority_boxes"]
     boxes = finalization["final_boxes"]
     output_files = record["output"]["output_files"]
+    review_copy = record["output"]["review_copy"]
     fidelity = record["output"]["tiff_fidelity"]
     if fidelity.get("source_sample_count_per_roi") != 1:
         raise ValueError("TIFF output must use one source sample per ROI")
@@ -120,6 +121,9 @@ def _validate_finalization(record: dict[str, Any]) -> None:
         or len(identities) != count
     ):
         raise ValueError("resolved output-slot identity is inconsistent")
+    requested = finalization["frame_export_requested"]
+    if not isinstance(requested, bool):
+        raise ValueError("frame-export request must be boolean")
     if status == "approved_auto":
         if (
             not finalization["frame_export_eligible"]
@@ -130,31 +134,44 @@ def _validate_finalization(record: dict[str, Any]) -> None:
             or len(boxes) != count
         ):
             raise ValueError("approved output lacks complete geometry")
-        if (
-            not finalization["frame_export_requested"]
-            or not finalization["frame_export_performed"]
-            or not finalization["official_tiff_expected"]
-            or finalization["official_tiff_count"] != count
-            or len(output_files) != count
-            or not fidelity["write_readback_validated"]
-            or fidelity["success_receipt"] != "validated"
-        ):
-            raise ValueError("approved output lacks validated TIFFs")
-    elif (
-        status != "needs_review"
-        or finalization["frame_export_eligible"]
-        or not finalization["frame_export_requested"]
-        or finalization["frame_export_performed"]
-        or finalization["official_tiff_expected"]
-        or finalization["official_tiff_count"] != 0
+        if requested:
+            if (
+                not finalization["frame_export_performed"]
+                or not finalization["official_tiff_expected"]
+                or finalization["official_tiff_count"] != count
+                or len(output_files) != count
+                or review_copy is not None
+                or not fidelity["write_readback_validated"]
+                or fidelity["success_receipt"] != "validated"
+            ):
+                raise ValueError("approved output lacks validated TIFFs")
+    elif status != "needs_review" or (
+        finalization["frame_export_eligible"]
         or geometries
         or authorities
         or boxes
+    ):
+        raise ValueError("review output exposed official geometry")
+    if not requested:
+        if (
+            finalization["frame_export_performed"]
+            or finalization["official_tiff_expected"]
+            or finalization["official_tiff_count"] != 0
+            or output_files
+            or review_copy is not None
+            or fidelity["write_readback_validated"]
+            or fidelity["success_receipt"] != "not_created"
+        ):
+            raise ValueError("preview output created production artifacts")
+    elif status == "needs_review" and (
+        finalization["frame_export_performed"]
+        or finalization["official_tiff_expected"]
+        or finalization["official_tiff_count"] != 0
         or output_files
         or fidelity["write_readback_validated"]
         or fidelity["success_receipt"] != "not_created"
     ):
-        raise ValueError("review output exposed official geometry")
+        raise ValueError("review output exposed official TIFFs")
     if finalization["post_decision_mutation"]:
         raise ValueError("post-DecisionGate mutation is forbidden")
 

@@ -88,6 +88,7 @@ def report_record_for_final_detection(
     warnings: list[str],
     configuration: dict,
     runtime_identity: dict,
+    frame_export_requested: bool,
 ) -> dict:
     core = detection.source_core
     candidate_geometry = detection.candidate.geometry
@@ -172,9 +173,12 @@ def report_record_for_final_detection(
         "output": {
             "finalization": {
                 "frame_export_eligible": detection.frame_export_eligible,
-                "frame_export_requested": True,
+                "frame_export_requested": frame_export_requested,
                 "frame_export_performed": export_performed,
-                "official_tiff_expected": detection.frame_export_eligible,
+                "official_tiff_expected": (
+                    detection.frame_export_eligible
+                    and frame_export_requested
+                ),
                 "official_tiff_count": len(output_files),
                 "reason": detection.frame_export_reason,
                 "resolved_output_slots": typed_read_model(

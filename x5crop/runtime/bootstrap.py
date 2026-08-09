@@ -41,6 +41,7 @@ def runtime_invocation_from_options(options: RuntimeOptions) -> RuntimeInvocatio
         strip_mode=options.strip_mode,
         count_request=count_request,
         debug_analysis=options.debug_analysis,
+        preview=options.preview,
         allow_best_effort_output=options.allow_best_effort_output,
         jobs=max(1, min(STANDARD_JOB_LIMIT, int(options.jobs))),
         interactive=options.interactive,

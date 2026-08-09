@@ -19,6 +19,7 @@ class FailureStage(str, Enum):
     OUTPUT = "output"
     DEBUG = "debug"
     REPORT_VALIDATION = "report_validation"
+    SNAPSHOT = "snapshot"
     REPORT_WRITE = "report_write"
     WORKER = "worker"
 
@@ -78,16 +79,18 @@ class RuntimeArtifacts:
     frame_outputs: tuple[str, ...]
     review_copy: str | None
     debug_analysis: str | None
+    detection_snapshot: str | None
 
     @classmethod
     def empty(cls) -> "RuntimeArtifacts":
-        return cls((), None, None)
+        return cls((), None, None, None)
 
     def as_record(self) -> dict[str, Any]:
         return {
             "frame_outputs": list(self.frame_outputs),
             "review_copy": self.review_copy,
             "debug_analysis": self.debug_analysis,
+            "detection_snapshot": self.detection_snapshot,
         }
 
 

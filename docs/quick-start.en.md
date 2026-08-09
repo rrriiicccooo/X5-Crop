@@ -42,9 +42,25 @@ safely instead of being guessed.
 - `--layout auto` selects horizontal or vertical from the scan; either may be
   specified explicitly.
 - `--debug-analysis` explicitly creates a diagnostic JPG; it is off by default.
+- `--preview` writes only Debug Analysis, reports, and a strictly bound
+  detection snapshot—never official TIFFs or a review copy.
 
 The program does not infer format or count from filenames and does not suppress
 blank slots.
+
+To inspect detection before cropping, run the same parameters twice and remove
+`--preview` from the second command:
+
+```bash
+python3 X5_Crop.py /path/to/scans --format 135 --strip full --preview
+python3 X5_Crop.py /path/to/scans --format 135 --strip full
+```
+
+Preview uses the separate `x5_crop_preview/` and does not replace production
+output. Reuse occurs only when source SHA-256, detection configuration, layout,
+schema, runtime dependencies, implementation, and snapshot integrity all
+match; otherwise fresh detection runs automatically. An ordinary report cannot
+enable cropping by itself.
 
 ## 4. Read The Result
 
@@ -56,14 +72,16 @@ x5_crop_output/
   source_name_02.tif
   needs_review/
   _debug_analysis/
+  _detection_snapshot/
   x5_crop_report.jsonl
   x5_crop_summary.csv
   x5_crop_run_manifest.jsonl
 ```
 
-`needs_review/` and `_debug_analysis/` are created only when needed. A successful
-run replaces the previous complete output only after ownership is verified. If
-unknown files are present, X5 Crop stops and never deletes them.
+`needs_review/`, `_debug_analysis/`, and `_detection_snapshot/` are created only
+when needed. A successful run replaces the previous complete output only after
+ownership is verified. If unknown files are present, X5 Crop stops and never
+deletes them.
 
 APFS, HFS+, and NTFS are local transaction-validation targets, but formal
 support still requires a receipt for the exact release. On an unverified
