@@ -18,12 +18,11 @@ V5 在黄金准确率与最终平台证据闭合前不生成 RC、tag、GitHub R
 
 ## 已验证检查点
 
-- `main` 在本轮审计开始时为 `67c6f3e4`，工作树干净且与 `origin/main` 同步。生产默认
-  `--jobs 1`，显式 2/3 保留；Debug Analysis 使用 detected/selected TOP/BOTTOM、
-  detected/selected START/END 与 final safety/output 三联自适应布局。
-- 审计后的 `tools/verify full` 为 166 tests 通过、3 项平台条件跳过。审计前的 `67c6f3e4`
-  GitHub Verify 在四个 runner × Python 3.12–3.14 共 12 个 job 全部通过；审计 commit 仍须以
-  自身 Actions 结果为准。
+- `d2efbcb7` 完成工具与文档审计并已同步 GitHub。生产默认 `--jobs 1`，显式 2/3 保留；
+  Debug Analysis 使用 detected/selected TOP/BOTTOM、detected/selected START/END 与 final
+  safety/output 三联自适应布局。
+- 该 checkpoint 的 `tools/verify full` 为 166 tests 通过、3 项平台条件跳过；GitHub Verify 在
+  四个 runner × Python 3.12–3.14 共 12 个 job 全部通过。
 - 2026-08-09 现场运行十四项黄金：S027、S035、S091 explicit/auto 与 S094 通过；S055
   explicit/auto 和 S098 为可接受的安全 `needs_review`；失败仍固定为 S051、S062、S109 的
   explicit/auto 六项。
