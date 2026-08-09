@@ -88,7 +88,8 @@ python3 X5_Crop.py /path/to/scans \
 - `--debug-analysis`：显式生成固定 `1653 × 952` 深色网格的三联诊断 JPG；第一联对比检测与选定的
   TOP/BOTTOM，第二联对比检测与选定的 START/END，第三联显示安全包络和逐帧彩色半透明最终输出。
   原始输入文件名显示在左上状态头；实际 deskew 角度与 Orientation 只在右上状态头显示，默认关闭。
-  密集 START/END 标签会自动错行；budget violation 只标记候选框边缘，不遮盖框内照片证据。
+  三联会把完整片条标准化铺满固定媒体槽，显示比例不作为物理测量。密集 START/END 标签会自动
+  错行；budget violation 只标记候选框边缘，不遮盖框内照片证据。
 - `--allow-best-effort-output`：明确接受未验证文件系统的较弱发布语义。
 - `--interactive`：交互选择格式、模式、张数和 Debug Analysis。
 

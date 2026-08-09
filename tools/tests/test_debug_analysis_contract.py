@@ -188,7 +188,7 @@ class DebugAnalysisContractTest(unittest.TestCase):
         self.assertTrue(np.all(clipped[30:70, 20:80] == (200, 40, 40)))
         self.assertTrue(np.all(clipped[70:] == 20))
 
-    def test_square_frame_strip_uses_contain_viewport_without_cross_axis_crop(
+    def test_square_frame_strip_normalizes_full_source_into_fixed_grid(
         self,
     ) -> None:
         projection = _Projection(
@@ -204,14 +204,20 @@ class DebugAnalysisContractTest(unittest.TestCase):
         )
         viewport = _viewport(
             projection,
-            source_corners,
             (27, 81, 1_602, 249),
-            padding_fraction=0.018,
         )
         self.assertEqual(viewport.source_box, (0, 0, 9_899, 2_797))
+        self.assertEqual(viewport.target_box, (27, 81, 1_602, 249))
         displayed = tuple(viewport.point(point) for point in source_corners)
-        self.assertGreaterEqual(min(point[1] for point in displayed), 81)
-        self.assertLessEqual(max(point[1] for point in displayed), 249)
+        self.assertEqual(
+            (
+                min(point[0] for point in displayed),
+                min(point[1] for point in displayed),
+                max(point[0] for point in displayed),
+                max(point[1] for point in displayed),
+            ),
+            (27.0, 81.0, 1_602.0, 249.0),
+        )
 
     def test_cross_axis_panel_separates_detected_and_selected_edges(
         self,

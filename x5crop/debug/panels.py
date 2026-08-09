@@ -134,81 +134,15 @@ def _panel_base(
     return panel, draw
 
 
-def _display_points(
-    projection: _Projection,
-    points: tuple[tuple[float, float], ...],
-) -> tuple[tuple[float, float], ...]:
-    return tuple(projection.point(point) for point in points)
-
-
-def _source_box_for_points(
-    projection: _Projection,
-    points: tuple[tuple[float, float], ...],
-    *,
-    padding_fraction: float,
-) -> tuple[int, int, int, int]:
-    display_width = projection.display_width
-    display_height = projection.display_height
-    transformed = _display_points(projection, points)
-    if transformed:
-        left = min(point[0] for point in transformed)
-        top = min(point[1] for point in transformed)
-        right = max(point[0] for point in transformed)
-        bottom = max(point[1] for point in transformed)
-        span_x = max(1.0, right - left)
-        span_y = max(1.0, bottom - top)
-        left -= span_x * padding_fraction
-        right += span_x * padding_fraction
-        top -= span_y * padding_fraction
-        bottom += span_y * padding_fraction
-    else:
-        left, top, right, bottom = 0.0, 0.0, float(display_width), float(display_height)
-    left = max(0.0, left)
-    top = max(0.0, top)
-    right = min(float(display_width), right)
-    bottom = min(float(display_height), bottom)
-    int_left = max(0, int(math.floor(left)))
-    int_top = max(0, int(math.floor(top)))
-    int_right = min(display_width, int(math.ceil(right)))
-    int_bottom = min(display_height, int(math.ceil(bottom)))
-    if int_right <= int_left or int_bottom <= int_top:
-        raise ValueError("Debug Analysis source viewport is empty")
-    return int_left, int_top, int_right, int_bottom
-
-
 def _viewport(
     projection: _Projection,
-    points: tuple[tuple[float, float], ...],
     target_box: tuple[int, int, int, int],
-    *,
-    padding_fraction: float,
 ) -> _Viewport:
-    target_left, target_top, target_right, target_bottom = target_box
-    source_box = _source_box_for_points(
+    return _Viewport(
         projection,
-        points,
-        padding_fraction=padding_fraction,
+        (0, 0, projection.display_width, projection.display_height),
+        target_box,
     )
-    source_left, source_top, source_right, source_bottom = source_box
-    source_aspect = (source_right - source_left) / (source_bottom - source_top)
-    available_width = target_right - target_left
-    available_height = target_bottom - target_top
-    target_aspect = available_width / available_height
-    if source_aspect >= target_aspect:
-        fitted_width = available_width
-        fitted_height = max(1, int(round(fitted_width / source_aspect)))
-    else:
-        fitted_height = available_height
-        fitted_width = max(1, int(round(fitted_height * source_aspect)))
-    fitted_left = target_left + (available_width - fitted_width) // 2
-    fitted_top = target_top + (available_height - fitted_height) // 2
-    fitted_target_box = (
-        fitted_left,
-        fitted_top,
-        fitted_left + fitted_width,
-        fitted_top + fitted_height,
-    )
-    return _Viewport(projection, source_box, fitted_target_box)
 
 
 def _paste_source(
@@ -366,27 +300,6 @@ def _safe_crop_envelopes(
     detection: FinalDetection,
 ) -> tuple[SafeCropEnvelope, ...]:
     return detection.candidate.geometry.safe_crop_envelopes
-
-
-def _presentation_points(
-    detection: FinalDetection,
-) -> tuple[tuple[float, float], ...]:
-    canonical = tuple(
-        point
-        for _ordinal, geometry in _geometry_by_identity(detection)
-        for point in geometry.canonical_source_polygon
-    )
-    protected = tuple(
-        point
-        for geometry in _safe_crop_envelopes(detection)
-        for polygon in (
-            geometry.placement_source_footprint,
-            geometry.required_source_footprint,
-            geometry.constrained_source_footprint,
-        )
-        for point in polygon
-    )
-    return canonical + protected
 
 
 def _projection(workspace: DetectionWorkspace) -> _Projection:
@@ -610,9 +523,7 @@ def _cross_axis_panel(
     )
     viewport = _viewport(
         projection,
-        _presentation_points(detection),
         target_box,
-        padding_fraction=0.018,
     )
     _paste_source(panel, source, viewport)
     draw = ImageDraw.Draw(panel)
@@ -726,9 +637,7 @@ def _long_axis_panel(
     media_bottom = media_top + style.long_axis_media_height
     viewport = _viewport(
         projection,
-        _presentation_points(detection),
         (media_left, media_top, media_right, media_bottom),
-        padding_fraction=0.018,
     )
     _paste_source(panel, source, viewport)
     draw = ImageDraw.Draw(panel)
@@ -844,9 +753,7 @@ def _protected_output_panel(
     )
     viewport = _viewport(
         projection,
-        _presentation_points(detection),
         available_target_box,
-        padding_fraction=0.018,
     )
     target_box = viewport.target_box
     _paste_source(panel, source, viewport)

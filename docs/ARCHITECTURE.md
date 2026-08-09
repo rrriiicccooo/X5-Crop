@@ -352,7 +352,9 @@ Debug Analysis 只读取 runtime/report facts，并按坐标职责组织为三�
 `SafeCropEnvelope` 的 placement、required、constrained footprints、逐帧彩色半透明最终输出、budget
 violation 与 source-atomic decision。它不重新计算 detection、geometry 或 budget。渲染使用固定
 `1653 × 952` 审计网格、一个共享 source preview cache、第三联一个 RGBA overlay 和一次最终
-JPEG 编码；竖向片条只旋转展示坐标，不改变 source facts。实际 deskew/identity 角度与 Orientation 映射
+JPEG 编码。三联先把完整 source strip 分别标准化铺满固定 media viewport，再通过同一份
+source-to-display 映射叠加各自 evidence；该预览允许横纵显示比例不同，但不裁 source，也不改变
+任何 source-coordinate fact。竖向片条只旋转展示坐标。实际 deskew/identity 角度与 Orientation 映射
 只在右上状态头出现，原始输入文件名只在左上状态头出现，三联内部不重复。文件名直接来自
 runtime 的输入路径 basename，不从输出名或 report 反推。当前 report 没有可绘制的
 `MaximumLegalWindow` polygon，

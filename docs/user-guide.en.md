@@ -109,8 +109,10 @@ Production options:
   envelopes with translucent per-frame final output. The original input filename
   appears in the upper-left status header; the actual deskew angle and Orientation
   appear only in the upper-right status header. It is off by default.
-  Dense START/END labels stagger automatically, and budget-violation hatching stays
-  on candidate borders so the photographic evidence remains visible.
+  Each row normalizes the complete strip to fill its fixed media viewport; the
+  display aspect is not a physical measurement. Dense START/END labels stagger
+  automatically, and budget-violation hatching stays on candidate borders so the
+  photographic evidence remains visible.
 - `--allow-best-effort-output`: explicitly accept weaker publication semantics
   on an unverified filesystem.
 - `--interactive`: prompt for format, mode, count, and Debug Analysis.
