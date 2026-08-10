@@ -70,7 +70,9 @@ H：format 名义高度的 ±0.40%
 片夹物理 extent：±3.5%
 ```
 
-完整 opposite-edge pair 可以验证并收紧共享范围，但不是从零建立尺寸。双 lane 共享扫描尺度；
+不建立 `W_effective_px`、`H_effective_px` 或逐张尺寸；`W` 与 `H` 就是当前 source 共享的可行
+窄范围。一组兼容的完整 opposite-edge pair 可以验证并收紧该范围，多组兼容测量取共同交集；
+直接测量互相冲突时保持 unresolved，不能平均，也不能分别赋给不同照片。双 lane 共享扫描尺度；
 每个 lane 分别拥有方向、中心线、相位、`G_source`、局部异常和可见范围。
 
 ## 3. 片条几何
@@ -108,6 +110,18 @@ start[i+1] = start[i] + W + G_source + delta[i]
 已证明的局部异常只在该 adjacency 改变一次相位；后续照片整体平移，后续间隙恢复正常，除非
 另有异常证据。固定 pitch 一路复制和每个 slot 完全自由移动都不符合物理关系。
 
+间隙 authority 固定为：
+
+```text
+完成角色绑定的直接局部边缘或 separator
+> 当前 lane 已建立的 G_source
+> G_format 搜索先验
+```
+
+直接观察必须先通过方向、W/H、ordinal、短轴连续性和内容否决检查；孤立的照片内部线不能仅凭
+强度推翻正常模板。可靠直接证据与 `G_source` 冲突时，该处成为异常证据；多组同等级直接证据
+互相冲突时保持 unresolved，不能平均。
+
 ### 4.1 建立 `G_source`
 
 一段 pitch 只能提出 `G_source`，不能证明它是正常间隙。最低成立条件是三条按 ordinal 排列的
@@ -125,7 +139,8 @@ G_source = P_source - W
 - 3 段以上：使用全部兼容证据共同收紧；
 - 证据不兼容：保持 unresolved，不平均，也不选择更接近名义值的一段。
 
-120 partial 若只有一段 pitch，`G_source` 始终 unresolved；不得从其它样片建立先验。
+“兼容”由各段 pitch 的测量可行区间是否存在共同交集决定，不另设随意百分比。120 partial 若
+只有一段 pitch，`G_source` 始终 unresolved；不得从其它样片建立先验。
 
 ### 4.2 缺失 separator
 
@@ -149,14 +164,15 @@ G_source = P_source - W
 g[i] = start[i+1] - end[i]
 ```
 
-- `g[i] > 0`：存在 separator；
-- `g[i] ≈ 0`：接触；
-- `g[i] < 0`：叠片，最小物理界为 `-W`；
+- `g[i]` 的可行区间完全大于零：存在 separator；
+- `g[i]` 的可行区间包含零：接触候选或接触附近的不确定关系；
+- `g[i]` 的可行区间完全小于零：叠片，最小物理界为 `-W`；
 - 很大的 `g[i]`：大间隙。
 
 这些情况都不改变 count、ordinal 或单向顺序。大间隙不能自动增加 slot，叠片不能合并 slot。
 叠片时两张照片各自保持完整 `W`，重叠 source pixels 合法地同时出现在两张输出中；重叠量不消耗
-5% budget。单条接触线可以同时承担 `end[i]` 与 `start[i+1]`，但底层仍是一份观察。
+5% budget。单条接触线可以同时承担 `end[i]` 与 `start[i+1]`，但底层仍是一份观察；它不能单独
+证明接触，还需与共享 W、两侧锚点或整体跨度相容。
 
 局部异常没有统一的允许间隙常数；相机故障、老化和装片状态可以造成接触、叠片或很大空隙，
 是否成立只由实际证据决定。若已观察到相邻异常两侧的锚点，可直接约束：
@@ -178,12 +194,12 @@ g[i] = end[i+1] - start[i] - 2W
 没有检测到边缘不等于反对边界；强烈的画面线、灰尘、片夹或胶片边也不自动成为照片边界。
 一个 slot 即使四边都不完整可见，仍由 count、共享尺寸和物理序列保留。
 
-内容占用层与边缘外观层必须分开：
+内容占用层与边缘外观层必须分开。内容观察先在 source 坐标中独立建立，不能随候选位置改变：
 
 - separator 的黑度、低纹理和连贯性可以成为 band 的正向观察质量；
 - 内容层只提供负向否决，永远不提供正票；
 - 没有内容不能证明边界，也不能证明 slot 是空片；
-- 内容必须可靠、连续并且属于候选应保留的一侧，才能否决候选。
+- 内容必须可靠、连续并且跨过候选本应保留的边界，才能否决候选。
 
 ## 6. `top/bottom` 与中心线
 
@@ -196,6 +212,9 @@ g[i] = end[i+1] - start[i] - 2W
 同时观察两边  → 验证并收紧共享 H
 ```
 
+实际看到的边缘是 observed evidence；由共享 H 推出的另一边只是 template inference。两者必须
+在 report 中分开，推导边不能反过来冒充第二份观察。
+
 项目不需要区分照片边缘、胶片边缘或片夹可见开口。只要某条边界外没有可恢复的照片内容，它们
 对裁切等价：
 
@@ -206,14 +225,15 @@ g[i] = end[i+1] - start[i] - 2W
 局部连续段是最小观察单位。两个物理分离的纵向区域是建立 source/lane 边缘族的最低重复证据；
 一条贯穿长图的连续线可以按前、中、后等空间分离区域提供有限支持，不能按像素无限计票。
 
-`top` 与 `bottom` 分别聚合，再通过共享 H、共同方向和连续中心线配对。最终选择与 format 矩形
-相容、未被外侧可靠内容否决的最小完整安全 pair；不得把多个候选取 union，也不在选择后重复
-添加 guard。片夹遮挡或 source 边界以外的内容不可恢复，不要求 padding。
+`top` 与 `bottom` 分别聚合，再通过共享 H、共同方向和连续中心线配对。一处可靠、连续的跨线
+内容就足以否决候选，不要求整条线多数反对；没有跨线内容仍然只是不反对。最终选择能放置共享
+H 的 format 矩形、未被外侧内容否决的最小完整安全 pair；不得把多个候选取 union，也不在选择
+后重复添加 guard。片夹遮挡或 source 边界以外的内容不可恢复，不要求 padding。
 
 ## 7. `start/end` 与 separator chain
 
-`W_nominal_px` 同样从 format 与片夹画布开始就是共享窄范围。主要检测对象不是孤立线，而是
-相邻照片之间的 separator band：
+`W_nominal_px` 同样从 format 与片夹画布开始就是共享窄范围，不再建立 `W_effective_px`。主要
+检测对象不是孤立线，而是相邻照片之间的 separator band：
 
 ```text
 band[i] = [L[i], R[i]]
@@ -223,7 +243,8 @@ g[i] = R[i] - L[i]
 ```
 
 完整 separator 是一段跨短轴连贯、黑暗、低纹理并与共同方向相容的材料区域，必须保留左右两边
-及宽度。相邻两条 separator 还能直接验证中间照片的共享宽度：
+及宽度。它是一份像素观察，在完成 chain role binding 前不拥有 ordinal。相邻两条 separator
+还能直接验证中间照片的共享宽度：
 
 ```text
 L[i+1] - R[i] = W
@@ -250,6 +271,9 @@ Band 只有通过 W、count、顺序和整条 chain 才绑定 ordinal：
 对 start/end，候选外有内容可能只是邻片，不能据此否决。只有属于当前 slot 的可靠内容连续穿过
 候选边界，或内容穿过预计的正 separator core，才能否决正常解释。在接触或叠片中，跨边内容
 是中性或预期现象，不能单独产生边界坐标。
+
+Start/end 与 top/bottom 使用同一个最小安全原则：先放置共享 W 的 format 框，再选择未切入当前
+slot 可靠内容的最小边界区间。落选位置不能取 union，模板推导边也不能报告为直接检测。
 
 ## 8. 有界检测与完整链投票
 
@@ -338,6 +362,10 @@ count=2 的一条完整 role-bound separator，或一个直接外边缘加可靠
 Detector 先依据 format 的共享 W/H、lane 方向和中心线生成固定尺寸 `R_format`，再以胜出 chain
 放置每个 slot。正常间隙、接触、叠片或大间隙只改变框的位置，不改变框的尺寸。
 
+所谓“选择更小的安全 top/bottom 或 start/end”，比较的是同一固定 format 框的安全放置与可见
+包络，不是缩小 W/H。只有 source/lane 可见 authority 的真实截断可以让输出少于物理框；被遮挡
+或未扫描的部分不属于可恢复内容。
+
 ```text
 SafeCropEnvelope
   = 胜出 FormatPlacement
@@ -351,6 +379,9 @@ SafeCropEnvelope
 内容证据可以否决位置，不能拖动或自由放大 format 框去包围 content bbox。落选候选不得进入
 `SafeCropEnvelope`。若存在多个安全边界描述，选择能够完整保护胜出位置且按包含关系最小的矩形，
 不能从不同候选拼接四边，也不能按面积拍脑袋选择。
+
+若接触与极小叠片等解释只形成同一个 placement 可行区间，并得到相同或近乎相同的 sampling，
+它们属于胜出位置自身的测量不确定性；只有产生不同 format 框位置时，才是结构性竞争候选。
 
 片夹、lane 或 source 遮挡外没有可恢复内容；与可见 authority 求交不算内切，也不补黑边。
 
@@ -476,12 +507,12 @@ platform | platform-check | platform-package | pre-push
 | `x5crop/configuration/` | partial count、片夹容量、ScanCanvas 与 runtime configuration |
 | `x5crop/io/` | TIFF domain、Orientation、metadata 与 readback |
 | `x5crop/detection/source_core.py` | source/lane 可见 authority |
-| `photo_geometry/measurement.py` | registered transitions、boundary intervals 与 material evidence |
-| `photo_geometry/template_profiles.py` | 一维 profiles、separator bands、roles 与 bounded grouping |
-| `photo_geometry/source_geometry.py` | 共享 W/H、方向、中心线与 `G_source` |
-| `photo_geometry/template_model.py` | format template、local gap、完整 chain 与 vote ledger |
-| `photo_geometry/template_first.py` | bounded producer 与 chain selection orchestration |
-| `photo_geometry/output.py` | selected placement、`SafeCropEnvelope` 与 direct-use assessment |
+| `x5crop/detection/photo_geometry/measurement.py` | registered transitions、separator material、boundary intervals 与 candidate-independent content veto observations |
+| `x5crop/detection/photo_geometry/template_profiles.py` | 一维 profiles、separator bands、roles 与 bounded grouping |
+| `x5crop/detection/photo_geometry/source_geometry.py` | 共享 W/H、方向、中心线与 `G_source` |
+| `x5crop/detection/photo_geometry/template_model.py` | format template、local gap、完整 chain 与 vote ledger |
+| `x5crop/detection/photo_geometry/template_first.py` | bounded producer 与 chain selection orchestration |
+| `x5crop/detection/photo_geometry/output.py` | selected placement、`SafeCropEnvelope` 与 direct-use assessment |
 | `x5crop/geometry/convex.py` | 唯一 convex footprint primitives |
 | `x5crop/detection/candidate/` | `CandidateGate` typed facts |
 | `x5crop/detection/decision/` | final status 与 reason mapping |

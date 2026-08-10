@@ -8,7 +8,8 @@
 
 V5 是 current-only runtime。源码、CLI、schema、tests、tools 与 standalone 只保留当前 owner，
 不提供旧 schema reader、fallback、shim、feature flag 或平行 producer。公开稳定版仍是
-`v4.2.8`。
+`v4.2.8`。以下记录已确认的 V5 版本合同；尚未对齐的实现只在
+[PROJECT_MEMORY.md](PROJECT_MEMORY.md) 跟踪。
 
 ### 输入与物理模型
 
