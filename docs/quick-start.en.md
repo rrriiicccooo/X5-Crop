@@ -35,17 +35,18 @@ safely instead of being guessed.
 
 ## 3. Choose Format, Mode, And Count
 
-- `full` uses the fixed holder count for the format.
-- `partial --count N` is the actual exposure-slot count for the strip, including
-  intermediate blank exposures. It must not exceed holder capacity; interactive
-  launch asks again after invalid input.
+- `full` means the strip has the complete slot count defined by its format and
+  holder, even when the film does not fill the holder.
+- `partial --count N` is a smaller actual exposure-slot count, including
+  intermediate blank exposures. It must be below the complete count and must not
+  exceed holder capacity; interactive launch asks again after invalid input.
 - `--layout auto` selects horizontal or vertical from the scan; either may be
   specified explicitly.
 - `--debug-analysis` writes only Debug Analysis JPGs and report files—never
   official TIFFs or a review copy. It is off by default.
 
-The program does not infer count from filenames or holder capacity and does not
-suppress blank slots.
+The program does not infer count from filenames or holder capacity, does not use
+proximity to holder ends to choose the mode, and does not suppress blank slots.
 
 To inspect detection before cropping, run the same parameters twice and remove
 `--debug-analysis` from the second command:

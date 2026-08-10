@@ -13,8 +13,9 @@ V5 是 current-only runtime。源码、CLI、schema、tests、tools 与 standalo
 
 ### 输入与物理模型
 
-- Format 由用户提供；full 使用固定 count，partial 只接受用户明确输入的曝光格数。片夹容量只
-  校验上限，空白曝光仍占 slot；删除 `partial auto`，不实现 blank suppression。
+- Format 由用户提供；full 表示完整固定 slot 数，partial 只接受更少的用户明确 count。模式不再
+  表示片条是否铺满片夹，也不决定首尾位置或 Grid phase。片夹容量只校验上限，空白曝光仍占
+  slot；删除 `partial auto`，不实现 blank suppression。
 - 120 格式冻结为 42×56、56×56 与 70×56 mm，不再保留 54 mm component。135、half、XPan
   的 format gap 先验分别为 2、1、2 mm；120 gap 保持未定义。
 - Format 与片夹画布从一开始给出共享 W/H 窄范围；宽度兼容为 ±1.25%，高度为 ±0.40%。

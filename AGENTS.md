@@ -60,9 +60,10 @@ GitHub 是 tracked 源码与文档的权威来源。NAS 和复制目录只用于
 
 以下产品语义不可被便利性优化绕过：
 
-- 用户 format 始终是 authority。Full 使用固定张数；partial 必须使用用户明确输入的 count，且
-  count 包含中间需要保留的空白曝光格。片夹容量只校验上限，不得生成 count，也不得猜 format、
-  真实照片数或 filename count。
+- 用户 format 始终是 authority。Full 表示实际 slot 数等于 format/片夹合同的完整固定 count；
+  partial 只允许更少的用户明确 count，且包含中间空白曝光格。模式不表达片条是否铺满片夹，也
+  不创建首尾位置或 Grid phase。片夹容量只校验上限，不得生成 count，也不得猜 format、真实
+  照片数或 filename count。
 - Detector 先按物理合同淘汰非法完整链，再按证据等级和独立像素观察选出明显胜出的完整链。
   `SafeCropEnvelope` 只保护胜出 placement 自身的测量不确定性，不合并落选位置；没有明显胜出者
   时保持 `placement unresolved`。
@@ -114,7 +115,8 @@ platform | platform-check | platform-package | pre-push
   Nominal 必须安全自动批准，challenge 允许安全 `needs_review`。不得新增样片规则、whitelist、
   格式 denylist 或根据当前输出自动晋升黄金。
 - Accuracy、diagnostic、performance 与 platform cohort 的 partial 记录必须携带明确 count；工具
-  不得从片夹容量、文件名或像素推导。
+  不得从片夹容量、文件名或像素推导。Cohort 的 full/partial 标签必须由完整 count 语义决定，
+  不能沿用目录名或历史标签。
 - 111-source diagnostic 只判断 crash、hang、terminal/schema 完整性、authority、query/template、
   内存和 TIFF 工程合同，不产生 accuracy verdict。
 - 性能 Gate 使用 24-source 完整用户路径，正式 mean 上限为 5 秒；SHA、profiling 和 Debug

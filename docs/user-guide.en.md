@@ -14,12 +14,14 @@ protection, excess margins, transform, and TIFF output are all safe. Otherwise
 the whole source enters `needs_review`; individual slots are never salvaged.
 
 The program does not claim to recover one uniquely true photo boundary and does
-not infer format or count from filenames. Full strips use the format's fixed
-count. Partial strips require the user to enter the actual number of exposure
-slots in the strip, including blank exposures that must remain in sequence.
-Holder capacity validates only the upper bound; it never supplies the count. An
-interactive launch asks again after a missing, invalid, or excessive count;
-non-interactive CLI use stops with an input error. Blank slots are never removed.
+not infer format or count from filenames. Full means the strip contains the
+complete exposure-slot count defined by its format and holder; partial means a
+smaller user-entered count, including blank exposures that remain in sequence.
+Neither mode requires the film to fill the holder or touch the canvas ends. If
+the count is complete, choose full. Holder capacity validates only the upper
+bound; it never supplies the count. Interactive launch asks again after invalid
+input; non-interactive CLI use stops with an input error. Blank slots are never
+removed.
 
 The format fixes the physical photo rectangle. Detection places those rectangles
 from strip direction, top/bottom evidence, dark separator bands, shared dimensions,
@@ -108,8 +110,8 @@ Command-line options:
 - `--layout`: `auto`, `horizontal`, or `vertical`.
 - `--strip`: `full` or `partial`.
 - `--count N`: required partial exposure-slot count, including intermediate
-  blank exposures; it must not exceed holder capacity. Full mode uses the fixed
-  format count.
+  blank exposures; it must be smaller than the complete count and must not
+  exceed holder capacity. Use full when the count is complete.
 - `--jobs N`: source concurrency; default 1, maximum 3. The default limits peak
   memory on ordinary computers; when memory is plentiful and processing a batch
   of source TIFFs, you may explicitly use `--jobs 2`. Numerical library threads

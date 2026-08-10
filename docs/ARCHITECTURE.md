@@ -9,8 +9,10 @@
 X5 Crop 处理用户已经知道 format 与片条数量的 Hasselblad / Imacon X5 片夹扫描 TIFF。
 
 - format 是硬 authority，程序不从像素或文件名猜 format。
-- full 使用格式与片夹规定的固定 count。
-- partial 必须由用户明确输入 count；count 表示曝光格数，包括中间空白曝光格。
+- `full_count` 是当前 format 与匹配片夹合同定义的完整曝光格数。
+- full 表示实际 slot 数等于 `full_count`；它不表示片条铺满片夹或贴近画布两端。
+- partial 必须由用户明确输入 `1 <= count < full_count`；count 包括中间空白曝光格。若 count 等于
+  `full_count`，必须使用 full。
 - 片夹容量只校验 count 上限，不生成 count。交互入口对无效 count 重新询问，非交互入口失败。
 - 空白曝光仍占 slot 并参与几何求解；V5 不删除、不合并也不抑制空白 slot。
 - 任一 slot 不能安全输出时，整个 source 为 `needs_review`，不做 slot salvage。
@@ -91,8 +93,9 @@ H：format 名义高度的 ±0.40%
 
 Deskew 使用 lane 的共同方向，只要求输出在视觉上平直，不追逐每张照片的内部线条。
 
-Partial 片条可以从画布长轴的任意位置开始；source 或片夹边缘都不能证明第一张照片的位置。
-Expected position 只决定先搜索哪里，不能创建照片位置。Grid phase 与可见照片边缘必须分开。
+Full 与 partial 片条都可以从画布长轴的任意位置开始；模式、source 或片夹边缘都不能证明第一张
+或最后一张照片的位置。Expected position 只决定先搜索哪里，不能创建照片位置。Grid phase 与
+可见照片边缘必须分开。
 
 ## 4. 正常间隙与局部异常
 
@@ -494,7 +497,8 @@ platform | platform-check | platform-package | pre-push
 - 九张用户确认黄金各运行一项，共九项：full 使用固定 count，partial 使用 cohort 中明确确认的
   count。七项 nominal 必须安全自动批准，两项 challenge 允许安全 review；不再运行 auto 副本。
 - Accuracy、diagnostic、performance 与 platform cohort 的 partial 记录都必须携带明确 count；
-  工具不得从片夹容量、文件名或像素推导。
+  工具不得从片夹容量、文件名或像素推导。Full/partial 标签必须按 `count == full_count` 或
+  `count < full_count` 生成，不能继承目录名或历史标签。
 - 111-source diagnostic 只验证 crash、hang、工作量、schema、authority、内存和 TIFF 工程合同，
   不产生 accuracy verdict。
 - 24-source performance 使用完整用户路径，正式 mean 上限为 5 秒；profiling 在 Gate 外。

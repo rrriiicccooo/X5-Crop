@@ -17,7 +17,7 @@ from x5crop.report.validation import validate_current_report_record
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 GOLD_COHORT_PATH = Path(__file__).with_name("cohorts") / "gold_accuracy.jsonl"
 EXPECTED_SOURCE_COUNT = 9
-EXPECTED_TASK_COUNT = 14
+EXPECTED_TASK_COUNT = 9
 
 
 def _source_sha256(path: Path) -> str:
@@ -45,14 +45,18 @@ def validate_gold_source_identities() -> tuple[dict[str, object], ...]:
         source = (PROJECT_ROOT / relative).resolve()
         expected_sha = str(record.get("source_sha256", "")).lower()
         count_modes = tuple(record.get("count_modes", ()))
+        strip_mode = str(record.get("strip_mode", ""))
+        expected_count_modes = {
+            "full": ("fixed_full",),
+            "partial": ("explicit",),
+        }.get(strip_mode)
         if (
             record.get("cohort_schema") != "x5crop_gold_accuracy_cohort_v3"
             or not sample_id
             or sample_id in sample_ids
             or record.get("validation_role") != "gold_accuracy_blocking"
             or record.get("cohort_role") not in {"nominal", "challenge"}
-            or not count_modes
-            or any(mode not in {"fixed_full", "explicit", "auto"} for mode in count_modes)
+            or count_modes != expected_count_modes
             or relative.is_absolute()
             or not source.is_relative_to(project_root)
             or not source.is_file()
@@ -72,7 +76,7 @@ def validate_gold_source_identities() -> tuple[dict[str, object], ...]:
         sample_ids.add(sample_id)
         task_count += len(count_modes)
     if task_count != EXPECTED_TASK_COUNT:
-        raise ValueError("gold accuracy cohort must contain exactly fourteen tasks")
+        raise ValueError("gold accuracy cohort must contain exactly nine tasks")
     return records
 
 
@@ -225,8 +229,6 @@ def _production_command(
     ]
     if count_mode == "explicit":
         command.extend(("--count", str(record["confirmed_photo_count"])))
-    elif count_mode == "auto":
-        command.extend(("--count", "auto"))
     return command
 
 

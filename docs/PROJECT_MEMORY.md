@@ -18,6 +18,13 @@
 - [ARCHITECTURE.md](ARCHITECTURE.md) 已集中保存讨论确认的 format、尺度、间隙、中心线、
   top/bottom、separator chain、内容否决、完整链投票、`SafeCropEnvelope` 与 Gate 合同。公共文档只
   保存用户可见行为。这些新合同尚未在源码落地，不构成实现或验证证据。
+- 用户已确认的 120-66 三格完整片条已迁至 `Test/66/full/`，两张人工标注样片也迁至对应 `full/`
+  目录。Gold、diagnostic、performance 与 platform cohort 的 120-66 路径和模式已同步；S062、
+  S091 现按 full/fixed_full 验证。`Test/` 不受 Git 跟踪，权威仍是 cohort 路径与 source SHA。
+- 本次同步后的 `tools/verify full` 为 171 项通过、3 项按环境跳过；九项黄金 accuracy 为 6/9
+  安全。当前三个 nominal 失败是 S051/explicit、S062/fixed_full 与 S109/explicit，均落入
+  `needs_review`。这证明 cohort 与路径可运行，不证明新检测合同已经实现。本次 24-source 性能
+  验证按用户要求跳过，当前 tree 没有有效 performance receipt；中断前的局部计时不构成证据。
 - 现场源码仍保留可复用的 template-first、registered measurement、Grid/edge-pair 基础、两级
   Gate、TIFF 事务和严格 Debug Analysis report reuse；新实现应在这些 current owner 上收敛，
   不恢复历史 detector 或建立平行路径。
@@ -26,12 +33,11 @@
 ## 开放实现差距
 
 1. `FrameCountMode.AUTO` 仍贯穿 CLI、交互启动器、runtime、Gate、report、regression cohort 和
-   tests。Partial 必须改为明确 count；启动器只保留重新输入，片夹容量只校验上限。现有九张
-   黄金因五张 partial 的 explicit/auto 副本形成十四项，需收敛为九张各一项；diagnostic、
-   performance 和 platform cohort 的每个 partial source 也必须保存明确 count，不得从容量或
-   filename 推导。现场分别有 51/111、9/24、1/6 条 partial 记录缺少该字段，须取得独立 count
-   authority 后才能继续作为完整检测验证样片。Count/schema 改变后，旧 auto report 必须失效并
-   重新检测。
+   tests；`partial_count_range` 也仍允许 count 等于完整 count。Partial 必须改为明确且更少的
+   count，启动器只保留重新输入，片夹容量只校验上限。黄金 cohort 已收紧为九张各一项：六张
+   full/fixed_full、三张 partial/explicit。Diagnostic 仍有 19/111、performance 仍有 5/24 条历史
+   partial 记录缺少 count authority，确认前不能用于完整检测验证。Count/schema 改变后，旧 auto
+   report 必须失效并重新检测。
 2. Format catalog 仍包含 120 的 54 mm component、format-owned 固定 local-gap 区间以及旧 gap：
    135 为 1.625 mm、XPan 为 2.5 mm、120 族均有固定值。合同要求只保留 56 mm 短边，135/half/
    XPan 分别使用 2/1/2 mm 搜索先验，120 `G_format` 必须在数据合同中显式表示为 unresolved，
@@ -59,8 +65,8 @@
 
 ## 精确下一步
 
-1. 为 diagnostic、performance 与 platform cohort 中缺少 count 的 partial 记录取得独立 count
-   authority；无法确认的记录不能用于完整检测验证。
+1. 为 diagnostic 剩余 19 条与 performance 剩余 5 条历史 partial 记录取得独立 count authority；
+   按新语义重分类，无法确认的记录不能用于完整检测验证。
 2. 在不修改源码的前提下，把五类差距映射为 current owner、数据合同、删除项和验证项，形成一次
    可审查的实现计划。
 3. 获得实施确认后，按 count/catalog、共享 geometry/evidence、chain selection/`SafeCropEnvelope`、
