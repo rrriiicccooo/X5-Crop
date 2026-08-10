@@ -568,7 +568,7 @@ class TemplateRuntimeContractTest(unittest.TestCase):
         self.assertEqual(candidate.geometry.safe_crop_envelopes, ())
         self.assertTrue(
             all(
-                not lane.retained_placements
+                not lane.materialized_chains
                 for lane in candidate.geometry.lane_reconstructions
             )
         )

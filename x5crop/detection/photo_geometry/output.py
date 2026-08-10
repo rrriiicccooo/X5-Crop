@@ -212,9 +212,8 @@ def _saturation_facts(
     )
 
 
-def safe_crop_envelope_from_placements(
-    placements: tuple[FormatPlacement, ...],
-    canonical: FormatPlacement,
+def safe_crop_envelope_from_placement(
+    placement: FormatPlacement,
     *,
     lane: SourceLaneEvidence,
     lane_ordinal: int,
@@ -224,47 +223,28 @@ def safe_crop_envelope_from_placements(
 ) -> SafeCropEnvelope:
     """Build the sole saved footprint and mapped-box owner for one slot."""
 
-    if (
-        not placements
-        or canonical not in placements
-        or lane_ordinal <= 0
-        or any(
-            placement.lane_id != canonical.lane_id
-            or placement.output_slot_count < lane_ordinal
-            or placement.direction.direction_id != canonical.direction.direction_id
-            for placement in placements
-        )
-    ):
-        raise ValueError("safe envelope requires one coherent placement set")
+    if lane_ordinal <= 0 or placement.output_slot_count < lane_ordinal:
+        raise ValueError("safe envelope requires one selected placement")
     authority = source_lane_box(lane, layout)
-    canonical_frame = canonical.canonical.frames[lane_ordinal - 1]
-    placement_footprints = tuple(
-        format_placement_frame_footprint(placement, lane_ordinal)
-        for placement in placements
+    canonical_frame = placement.canonical.frames[lane_ordinal - 1]
+    placement_footprint = format_placement_frame_footprint(
+        placement,
+        lane_ordinal,
     )
-    if any(
-        not all(_inside_authority(point, authority) for point in footprint)
-        for footprint in placement_footprints
+    if not all(
+        _inside_authority(point, authority) for point in placement_footprint
     ):
         raise ValueError("format placement exceeds source/lane authority")
-    placement_union = _oriented_outer_footprint(
-        tuple(
-            point
-            for footprint in placement_footprints
-            for point in footprint
-        ),
-        canonical_frame,
-    )
-    canonical_width = canonical.canonical_sequence
+    canonical_width = placement.canonical_sequence
     start_index = (lane_ordinal - 1) * 2
     end_index = start_index + 1
     width_guard_px = (
         minimum_guard.sequence_axis_mm_per_side
-        * canonical.source_frame_geometry.width_state.feasible_scale_interval().maximum
+        * placement.source_frame_geometry.width_state.feasible_scale_interval().maximum
     )
     height_guard_px = (
         minimum_guard.cross_axis_mm_per_side
-        * canonical.source_frame_geometry.height_state.feasible_scale_interval().maximum
+        * placement.source_frame_geometry.height_state.feasible_scale_interval().maximum
     )
     minimum_guard_footprint = convex_hull(
         _boundary_polygon(
@@ -286,7 +266,7 @@ def safe_crop_envelope_from_placements(
         )
     )
     geometric_requirement = _oriented_outer_footprint(
-        placement_union + minimum_guard_footprint,
+        placement_footprint + minimum_guard_footprint,
         canonical_frame,
     )
     required = axis_aligned_minkowski_guard(
@@ -303,11 +283,10 @@ def safe_crop_envelope_from_placements(
         raise ValueError("canonical placement exceeds source/lane authority")
     constrained = clip_convex_polygon_to_box(required, authority)
     if (
-        not all(contains_point(constrained, point) for point in placement_union)
+        not all(contains_point(constrained, point) for point in placement_footprint)
         or not all(contains_point(constrained, point) for point in canonical_polygon)
     ):
         raise ValueError("authority clipping removed a valid placement")
-    solution_ids = tuple(sorted(item.placement_id for item in placements))
     mapped = mapped_half_open_box(constrained, transform.map_point)
     if (
         mapped.left < 0
@@ -319,13 +298,13 @@ def safe_crop_envelope_from_placements(
     return SafeCropEnvelope(
         geometry_id=_stable_id(
             "safe-format-placement-envelope",
-            canonical.lane_id,
+            placement.lane_id,
             lane_ordinal,
-            *solution_ids,
+            placement.placement_id,
         ),
-        lane_id=canonical.lane_id,
+        lane_id=placement.lane_id,
         lane_ordinal=lane_ordinal,
-        placement_source_footprint=placement_union,
+        placement_source_footprint=placement_footprint,
         required_source_footprint=required,
         constrained_source_footprint=constrained,
         saturation_facts=_saturation_facts(
@@ -384,21 +363,17 @@ def _line_offset_at_position(frame_boundary, position: float, side_line) -> floa
 
 
 def direct_use_budget_assessment(
-    placements: tuple[FormatPlacement, ...],
+    placement: FormatPlacement,
     output_geometry: SafeCropEnvelope,
     transform: AffineCoordinateTransform | None,
 ) -> DirectUseBudgetAssessment:
-    """Judge worst per-side expansion against every retained placement."""
+    """Judge per-side expansion against the selected placement only."""
 
     if (
         transform is None
         or output_geometry.mapped_output_box is None
-        or not placements
-        or any(
-            placement.lane_id != output_geometry.lane_id
-            or placement.output_slot_count < output_geometry.lane_ordinal
-            for placement in placements
-        )
+        or placement.lane_id != output_geometry.lane_id
+        or placement.output_slot_count < output_geometry.lane_ordinal
     ):
         return DirectUseBudgetAssessment(
             geometry_id=output_geometry.geometry_id,
@@ -416,7 +391,7 @@ def direct_use_budget_assessment(
         tuple[float, float, float, float, float, str, bool],
     ] = {}
     index = output_geometry.lane_ordinal - 1
-    for placement in placements:
+    for placement in (placement,):
         frame = placement.canonical.frames[index]
         boundaries = (
             frame.start,
@@ -558,9 +533,7 @@ def direct_use_budget_assessment(
     )
     return DirectUseBudgetAssessment(
         geometry_id=output_geometry.geometry_id,
-        placement_solution_ids=tuple(
-            sorted(item.placement_id for item in placements)
-        ),
+        placement_solution_ids=(placement.placement_id,),
         edge_assessments=edge_assessments,
         state=state,
         named_gap=None,

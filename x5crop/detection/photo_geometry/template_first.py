@@ -20,6 +20,7 @@ from .boundary_geometry import (
     source_cross_axis_slope_interval,
     source_sequence_axis_slope_interval,
 )
+from .bounds import MAX_COMPLETE_CHAINS_PER_LANE
 from .measurement import (
     continuous_trace_support_fraction,
     fit_template_bound_boundary_observation,
@@ -4330,109 +4331,65 @@ def _materialize_component_seed(
     )
 
 
-def _retain_component_placements(
-    placements: tuple[FormatPlacement, ...],
-) -> tuple[FormatPlacement, ...]:
-    authorized = tuple(
-        item
-        for item in placements
-        if item.canonical_sequence.exclusion_authorized
-    )
-    if not authorized:
-        evidence_retained = placements
-    else:
-        evidence_retained = None
-
-    def shares_source_geometry(
-        authority: FormatPlacement,
-        item: FormatPlacement,
-    ) -> bool:
-        try:
-            authority.source_frame_geometry.intersect_source_state(
-                item.source_frame_geometry
-            )
-        except ValueError:
-            return False
-        return True
-
-    def safety_support(
-        item: FormatPlacement,
-    ) -> frozenset[str]:
-        values = item.canonical_sequence.safety_support_transition_ids
-        if not isinstance(values, tuple):
-            return frozenset()
-        return frozenset(
-            str(identity)
-            for role_values in values
-            for identity in role_values
-        )
-
-    def strictly_evidence_dominates(
-        authority: FormatPlacement,
-        item: FormatPlacement,
-    ) -> bool:
-        """Exclude only a same-count interpretation with weaker evidence.
-
-        A strict transition superset is not a score: every pixel fact used by
-        the weaker placement is preserved by the authority, which additionally
-        explains at least one registered fact under the same physical source
-        geometry.  Explicit count/order therefore forbids retaining the weaker
-        placement as another shifted subset of the same strip.
-        """
-
-        if (
-            authority is item
-            or not authority.canonical_sequence.exclusion_authorized
-            or authority.output_slot_count != item.output_slot_count
-            or authority.component.component_id != item.component.component_id
-            or not shares_source_geometry(authority, item)
-        ):
-            return False
-        authority_support = safety_support(authority)
-        item_support = safety_support(item)
-        return bool(item_support) and item_support < authority_support
-
-    if evidence_retained is None:
-        evidence_retained = tuple(
-            item
-            for item in placements
-            if not any(
-                strictly_evidence_dominates(authority, item)
-                for authority in authorized
-            )
-            and (
-                item in authorized
-                or not (
-                    any(
-                        shares_source_geometry(authority, item)
-                        for authority in authorized
-                    )
-                    and item.canonical_sequence.observed_role_count == 1
-                    and item.canonical_sequence.observed_opposite_pair_count == 0
-                    and not any(
-                        relation.kind != LocalAdvanceKind.NOMINAL
-                        for relation in item.canonical_sequence.local_advance_relations
-                    )
-                )
-            )
-        )
-    return evidence_retained
-
-
-def _materialize_component_placements(
+def materialize_lane_placements(
     proposal: TemplateLaneProposal,
-    component: ComponentTemplateProposal,
     direction: SharedStripDirection,
     registered_runs: dict[str, ProfileRun],
-) -> tuple[FormatPlacement, ...]:
-    values = tuple(
-        placement
+) -> tuple[tuple[FormatPlacement, ...], int, bool]:
+    proposed_unsorted = tuple(
+        (component, seed)
+        for component in sorted(
+            proposal.components,
+            key=lambda item: item.component.component_id,
+        )
         for seed in _component_materialization_seeds(
             proposal,
             component,
             direction,
             registered_runs,
         )
+    )
+    proposed = tuple(
+        sorted(
+            proposed_unsorted,
+            key=lambda item: (
+                -sum(
+                    {
+                        vote.role.role
+                        for vote in item[1].votes
+                        if vote.role.lane_ordinal == ordinal
+                    }
+                    == {BoundaryRole.START, BoundaryRole.END}
+                    for ordinal in {
+                        vote.role.lane_ordinal for vote in item[1].votes
+                    }
+                ),
+                -len({vote.role.role_index for vote in item[1].votes}),
+                min(vote.role.lane_ordinal for vote in item[1].votes),
+                tuple(
+                    value
+                    for vote in item[1].votes
+                    for value in (
+                        vote.phase_interval_px.minimum.hex(),
+                        vote.phase_interval_px.maximum.hex(),
+                    )
+                ),
+                tuple(
+                    sorted(
+                        str(identity)
+                        for vote in item[1].votes
+                        for identity in vote.transition_ids
+                    )
+                ),
+                item[0].component.component_id,
+                item[1].seed_id,
+            ),
+        )
+    )
+    bound_exceeded = len(proposed) > MAX_COMPLETE_CHAINS_PER_LANE
+    values = tuple(
+        placement
+        for component, seed in proposed[:MAX_COMPLETE_CHAINS_PER_LANE]
         if (
             placement := _materialize_component_seed(
                 proposal,
@@ -4443,27 +4400,12 @@ def _materialize_component_placements(
         )
         is not None
     )
-    return _retain_component_placements(
-        tuple(sorted(values, key=lambda item: item.placement_id)),
+    unique = {item.placement_id: item for item in values}
+    return (
+        tuple(unique[key] for key in sorted(unique)),
+        len(proposed),
+        bound_exceeded,
     )
-
-
-def materialize_lane_placements(
-    proposal: TemplateLaneProposal,
-    direction: SharedStripDirection,
-    registered_runs: dict[str, ProfileRun],
-) -> tuple[FormatPlacement, ...]:
-    values = tuple(
-        placement
-        for component in proposal.components
-        for placement in _materialize_component_placements(
-            proposal,
-            component,
-            direction,
-            registered_runs,
-        )
-    )
-    return tuple(sorted(values, key=lambda item: item.placement_id))
 
 
 def _basic_lane_structurally_closed(
@@ -4486,7 +4428,7 @@ def materialize_source_placements(
     """Materialize every lane from one source-wide component geometry."""
 
     if not lane_proposals:
-        return SourcePlacementMaterialization((), (), ())
+        return SourcePlacementMaterialization((), (), (), (), ())
     phase_lanes: list[TemplateLaneProposal] = []
     phase_counts: list[int] = []
     for lane in lane_proposals:
@@ -4508,8 +4450,8 @@ def materialize_source_placements(
         for lane in phase_lane_proposals
     )
     basic_closed = tuple(
-        _basic_lane_structurally_closed(placements)
-        for placements in basic_independent
+        _basic_lane_structurally_closed(materialization[0])
+        for materialization in basic_independent
     )
     if all(basic_closed):
         refined_lane_proposals = phase_lane_proposals
@@ -4562,76 +4504,14 @@ def materialize_source_placements(
                 strict=True,
             )
         )
-    if len(refined_lane_proposals) == 1:
-        return SourcePlacementMaterialization(
-            independent,
-            tuple(enhanced_counts),
-            refined_lane_proposals,
-        )
-    if len(refined_lane_proposals) != 2:
+    if len(refined_lane_proposals) > 2:
         raise ValueError("template-first source supports at most two lanes")
-
-    components_by_lane = tuple(
-        {
-            item.component.component_id: item
-            for item in lane.components
-        }
-        for lane in refined_lane_proposals
-    )
-    retained: tuple[list[FormatPlacement], list[FormatPlacement]] = ([], [])
-    for left in independent[0]:
-        for right in independent[1]:
-            if left.component != right.component:
-                continue
-            try:
-                shared = left.source_frame_geometry.intersect_source_state(
-                    right.source_frame_geometry
-                )
-            except ValueError:
-                continue
-            seed_ids = (
-                left.canonical_sequence.template_seed_id,
-                right.canonical_sequence.template_seed_id,
-            )
-            rematerialized: list[FormatPlacement] = []
-            for lane_index, seed_id in enumerate(seed_ids):
-                component = components_by_lane[lane_index][
-                    left.component.component_id
-                ]
-                seed = next(
-                    item
-                    for item in _component_materialization_seeds(
-                        refined_lane_proposals[lane_index],
-                        component,
-                        direction,
-                        registered_runs_by_lane[lane_index],
-                    )
-                    if item.seed_id == seed_id
-                )
-                value = _materialize_component_seed(
-                    refined_lane_proposals[lane_index],
-                    component,
-                    seed,
-                    direction,
-                    source_geometry=shared,
-                )
-                if value is None:
-                    rematerialized = []
-                    break
-                rematerialized.append(value)
-            if len(rematerialized) == 2:
-                retained[0].append(rematerialized[0])
-                retained[1].append(rematerialized[1])
     return SourcePlacementMaterialization(
-        placements_by_lane=tuple(
-            tuple(
-                {item.placement_id: item for item in values}[key]
-                for key in sorted(
-                    {item.placement_id: item for item in values}
-                )
-            )
-            for values in retained
+        placements_by_lane=tuple(item[0] for item in independent),
+        proposed_complete_chain_counts_by_lane=tuple(
+            item[1] for item in independent
         ),
+        chain_bound_exceeded_by_lane=tuple(item[2] for item in independent),
         enhanced_query_counts_by_lane=tuple(enhanced_counts),
         lane_proposals=refined_lane_proposals,
     )

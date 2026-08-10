@@ -329,6 +329,8 @@ class TemplateLaneProposal:
 @dataclass(frozen=True)
 class SourcePlacementMaterialization:
     placements_by_lane: tuple[tuple[FormatPlacement, ...], ...]
+    proposed_complete_chain_counts_by_lane: tuple[int, ...]
+    chain_bound_exceeded_by_lane: tuple[bool, ...]
     enhanced_query_counts_by_lane: tuple[int, ...]
     lane_proposals: tuple[TemplateLaneProposal, ...]
 
@@ -336,8 +338,20 @@ class SourcePlacementMaterialization:
         if (
             len(self.placements_by_lane)
             != len(self.enhanced_query_counts_by_lane)
+            or len(self.placements_by_lane)
+            != len(self.proposed_complete_chain_counts_by_lane)
+            or len(self.placements_by_lane)
+            != len(self.chain_bound_exceeded_by_lane)
             or len(self.placements_by_lane) != len(self.lane_proposals)
             or any(value < 0 for value in self.enhanced_query_counts_by_lane)
+            or any(
+                proposed < len(materialized)
+                for proposed, materialized in zip(
+                    self.proposed_complete_chain_counts_by_lane,
+                    self.placements_by_lane,
+                    strict=True,
+                )
+            )
         ):
             raise ValueError("source placement materialization is invalid")
 

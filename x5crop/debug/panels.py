@@ -343,20 +343,47 @@ def _geometry_by_identity(
     }
     values: list[tuple[int, FrameFormatPlacement]] = []
     for lane in detection.candidate.geometry.lane_reconstructions:
-        placement = lane.canonical_placement
-        if placement is None:
-            continue
-        for geometry in placement.canonical.frames:
-            ordinal = global_ordinals.get((geometry.lane_id, geometry.lane_ordinal))
-            if ordinal is not None:
-                values.append((ordinal, geometry))
-    return tuple(sorted(values, key=lambda item: item[0]))
+        placements = (
+            (lane.selected_placement,)
+            if lane.selected_placement is not None
+            else lane.materialized_chains
+        )
+        for placement in placements:
+            for geometry in placement.canonical.frames:
+                ordinal = global_ordinals.get(
+                    (geometry.lane_id, geometry.lane_ordinal)
+                )
+                if ordinal is not None:
+                    values.append((ordinal, geometry))
+    return tuple(
+        sorted(
+            values,
+            key=lambda item: (item[0], item[1].placement_geometry_id),
+        )
+    )
 
 
 def _safe_crop_envelopes(
     detection: FinalDetection,
 ) -> tuple[SafeCropEnvelope, ...]:
     return detection.candidate.geometry.safe_crop_envelopes
+
+
+def _selection_summary(detection: FinalDetection) -> str:
+    lanes = detection.candidate.geometry.lane_reconstructions
+    chains = sum(len(item.materialized_chains) for item in lanes)
+    clusters = sum(len(item.placement_selection.clusters) for item in lanes)
+    vetoes = sum(
+        len(assessment.facts)
+        for lane in lanes
+        for assessment in lane.placement_selection.content_veto_assessments
+    )
+    selected = sum(item.selected_placement is not None for item in lanes)
+    bounded = any(item.producer_bounds.bound_exceeded for item in lanes)
+    return (
+        f"CHAINS {chains} · CLUSTERS {clusters} · SELECTED {selected} · "
+        f"VETO {vetoes} · BOUND {'EXCEEDED' if bounded else 'OK'}"
+    )
 
 
 def _projection(workspace: DetectionWorkspace) -> _Projection:
@@ -746,6 +773,17 @@ def _long_axis_panel(
             style,
             filled=False,
         )
+    summary = _selection_summary(detection)
+    summary_font = _font(style.annotation_font_size)
+    draw.text(
+        (
+            media_right - _text_width(draw, summary, summary_font),
+            footer_y,
+        ),
+        summary,
+        fill=style.secondary_text_color,
+        font=summary_font,
+    )
     return np.asarray(panel)
 
 
@@ -830,6 +868,15 @@ def _protected_output_panel(
     overlay_draw = ImageDraw.Draw(overlay)
     envelopes = _safe_crop_envelopes(detection)
     budget_labels: list[tuple[int, str]] = []
+    if not envelopes:
+        for ordinal, geometry in _geometry_by_identity(detection):
+            _fill_polygon(
+                overlay_draw,
+                geometry.canonical_source_polygon,
+                _frame_color(ordinal),
+                style.frame_fill_alpha,
+                viewport=viewport,
+            )
     for envelope in envelopes:
         identity = identities[(envelope.lane_id, envelope.lane_ordinal)]
         color = _frame_color(identity.global_output_ordinal)
@@ -947,6 +994,7 @@ def _protected_output_panel(
             fill=style.review_color,
             font=note_font,
         )
+    footer = f"{footer}    {_selection_summary(detection)}"
     draw.text(
         (19, grid.output_panel_height - 25),
         footer,

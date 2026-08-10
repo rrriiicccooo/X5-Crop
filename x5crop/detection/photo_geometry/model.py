@@ -778,7 +778,7 @@ class SafeCropEnvelope:
     sampling_authority_box: Box
     authority_profile_id: str
     mapped_output_box: Box | None = None
-    provenance: str = "continuous_format_placement_safety_footprint"
+    provenance: str = "selected_placement_safety_footprint"
 
     def __post_init__(self) -> None:
         if (
@@ -792,7 +792,7 @@ class SafeCropEnvelope:
                 and not self.mapped_output_box.valid()
             )
             or self.provenance
-            != "continuous_format_placement_safety_footprint"
+            != "selected_placement_safety_footprint"
         ):
             raise ValueError("safe crop envelope is invalid")
         _validate_continuous_footprint(

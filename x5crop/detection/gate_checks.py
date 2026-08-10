@@ -16,14 +16,17 @@ class GateGap(str, Enum):
     HOLDER_FULL_COUNT_UNRESOLVED = "holder_full_count_unresolved"
     HOLDER_IDENTITY_UNRESOLVED = "holder_identity_unresolved"
     OUTPUT_SLOT_COUNT_UNAVAILABLE = "output_slot_count_unavailable"
-    FORMAT_PLACEMENT_UNAVAILABLE = "format_placement_unavailable"
+    COMPLETE_CHAIN_UNAVAILABLE = "complete_chain_unavailable"
+    PRODUCER_BOUND_EXCEEDED = "producer_bound_exceeded"
     SHARED_STRIP_DIRECTION_UNAVAILABLE = "shared_strip_direction_unavailable"
     SHARED_STRIP_DIRECTION_NONUNIQUE = "shared_strip_direction_nonunique"
     SOURCE_FRAME_GEOMETRY_UNAVAILABLE = "source_frame_geometry_unavailable"
+    PLACEMENT_UNRESOLVED = "placement_unresolved"
+    CONTENT_VETO_REJECTED = "content_veto_rejected"
     SLOT_ORDINAL_ASSIGNMENT_UNRESOLVED = "slot_ordinal_assignment_unresolved"
     SOURCE_LANE_AUTHORITY_INVALID = "source_lane_authority_invalid"
-    PLACEMENT_SET_CONTAINMENT_UNAVAILABLE = (
-        "placement_set_containment_unavailable"
+    SELECTED_PLACEMENT_CONTAINMENT_UNAVAILABLE = (
+        "selected_placement_containment_unavailable"
     )
     DIRECT_USE_BUDGET_EXCEEDED = "direct_use_budget_exceeded"
     DIRECT_USE_BUDGET_UNAVAILABLE = "direct_use_budget_unavailable"

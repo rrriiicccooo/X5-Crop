@@ -12,6 +12,11 @@ from ..output_geometry import (
     output_transform_assessment,
 )
 from ..source_core import SourceLaneEvidence
+from ..evidence.content_occupancy import ContentOccupancyObservationSet
+from .bounds import (
+    MAX_BANDS_PER_CORRIDOR,
+    MAX_LEDGER_ENTRIES_PER_SOURCE,
+)
 from .corridors import (
     build_sequence_anchor_discovery_domain,
     build_top_bottom_search_corridors,
@@ -36,8 +41,18 @@ from .model import (
     SharedStripDirection,
     SideTransitionRegion,
 )
-from .output import direct_use_budget_assessment, safe_crop_envelope_from_placements
+from .output import direct_use_budget_assessment, safe_crop_envelope_from_placement
 from .source_geometry import LaneGapModel, SourceFrameGeometry
+from .selection import (
+    CompleteChainRecord,
+    CorridorBandCount,
+    LanePlacementSelection,
+    ProducerBoundsReceipt,
+    ProducerPruneReason,
+    ProducerPruneSummary,
+    complete_chain_record,
+    select_placement_clusters,
+)
 from .protection import minimum_guard_spec
 from .template_first import (
     build_lane_template_proposal,
@@ -70,8 +85,10 @@ class LaneFormatPlacementReconstruction:
     provisional_height_templates: tuple[ProvisionalHeightTemplate, ...]
     lane_gap_model: LaneGapModel
     direction_classes: tuple[SharedStripDirection, ...]
-    retained_placements: tuple[FormatPlacement, ...]
-    canonical_placement: FormatPlacement | None
+    materialized_chains: tuple[FormatPlacement, ...]
+    placement_selection: LanePlacementSelection
+    selected_placement: FormatPlacement | None
+    producer_bounds: ProducerBoundsReceipt
     safe_crop_envelopes: tuple[SafeCropEnvelope, ...]
     direct_use_budget_assessments: tuple[DirectUseBudgetAssessment, ...]
     work: TemplateWorkReceipt
@@ -79,16 +96,20 @@ class LaneFormatPlacementReconstruction:
     def __post_init__(self) -> None:
         if not self.lane_id or self.anchor_domain.lane_id != self.lane_id:
             raise ValueError("lane format placement lacks authority")
-        if (self.canonical_placement is None) != (not self.retained_placements):
-            raise ValueError("canonical placement and retained set disagree")
-        if self.canonical_placement is not None and (
-            self.canonical_placement not in self.retained_placements
+        if (self.selected_placement is None) != (
+            self.placement_selection.state != EvidenceState.SUPPORTED
         ):
-            raise ValueError("canonical placement is not retained")
+            raise ValueError("selected placement and selection state disagree")
+        if self.selected_placement is not None and (
+            self.selected_placement not in self.materialized_chains
+            or self.selected_placement.placement_id
+            != self.placement_selection.selected_placement_id
+        ):
+            raise ValueError("selected placement is not a materialized chain")
         if self.safe_crop_envelopes and (
-            self.canonical_placement is None
+            self.selected_placement is None
             or len(self.safe_crop_envelopes)
-            != self.canonical_placement.output_slot_count
+            != self.selected_placement.output_slot_count
         ):
             raise ValueError("lane outputs do not cover every format slot")
 
@@ -147,6 +168,8 @@ class _PreparedLane:
     cross_profile: BasicAxisProfile
     proposal: TemplateLaneProposal
     lane_gap_model: LaneGapModel
+    corridor_band_counts: tuple[CorridorBandCount, ...]
+    band_bound_exceeded: bool
 
 
 def _lane_gap_model(
@@ -235,6 +258,59 @@ def _coordinate_count(interval: FiniteInterval) -> int:
     return max(1, int(math.floor(interval.maximum) - math.ceil(interval.minimum) + 1))
 
 
+def _bounded_transition_regions(
+    measurement_sets: tuple[PhotoBoundaryMeasurementSet, ...],
+    *,
+    reference_trace_px: float,
+    boundary_axis_scale_px_per_mm,
+) -> tuple[tuple[SideTransitionRegion, ...], tuple[CorridorBandCount, ...], bool]:
+    retained: dict[str, SideTransitionRegion] = {}
+    counts: list[CorridorBandCount] = []
+    exceeded = False
+    for measurement_set in measurement_sets:
+        proposed = track_side_transition_regions(
+            (measurement_set,),
+            reference_trace_px=reference_trace_px,
+            boundary_axis_scale_px_per_mm=boundary_axis_scale_px_per_mm,
+        )
+        ordered = tuple(
+            sorted(
+                proposed,
+                key=lambda item: (
+                    1 if item.ambiguous else 0,
+                    -item.trace_support_count,
+                    item.proposal_position_interval_px.minimum,
+                    item.proposal_position_interval_px.maximum,
+                    item.region_id,
+                ),
+            )
+        )
+        materialized = ordered[:MAX_BANDS_PER_CORRIDOR]
+        exceeded = exceeded or len(ordered) > len(materialized)
+        counts.append(
+            CorridorBandCount(
+                corridor_id=measurement_set.query.query_id,
+                proposed_count=len(ordered),
+                materialized_count=len(materialized),
+            )
+        )
+        retained.update({item.region_id: item for item in materialized})
+    return (
+        tuple(
+            sorted(
+                retained.values(),
+                key=lambda item: (
+                    item.proposal_position_interval_px.minimum,
+                    item.proposal_position_interval_px.maximum,
+                    item.region_id,
+                ),
+            )
+        ),
+        tuple(counts),
+        exceeded,
+    )
+
+
 def _prepare_lane(
     field: PhotoBoundaryMeasurementField,
     lane: SourceLaneEvidence,
@@ -283,17 +359,17 @@ def _prepare_lane(
         for measurement_set in measurement_sets
         for transition in measurement_set.transitions
     }
-    side_regions = track_side_transition_regions(
+    side_regions, side_counts, side_exceeded = _bounded_transition_regions(
         measurement_sets[2:],
         reference_trace_px=height_authority.center,
         boundary_axis_scale_px_per_mm=scales.width_axis_px_per_mm,
     )
-    top_regions = track_side_transition_regions(
+    top_regions, top_counts, top_exceeded = _bounded_transition_regions(
         (measurement_sets[0],),
         reference_trace_px=width_authority.center,
         boundary_axis_scale_px_per_mm=scales.height_axis_px_per_mm,
     )
-    bottom_regions = track_side_transition_regions(
+    bottom_regions, bottom_counts, bottom_exceeded = _bounded_transition_regions(
         (measurement_sets[1],),
         reference_trace_px=width_authority.center,
         boundary_axis_scale_px_per_mm=scales.height_axis_px_per_mm,
@@ -357,6 +433,10 @@ def _prepare_lane(
         cross_profile=cross_profile,
         proposal=proposal,
         lane_gap_model=lane_gap_model,
+        corridor_band_counts=(*top_counts, *bottom_counts, *side_counts),
+        band_bound_exceeded=(
+            top_exceeded or bottom_exceeded or side_exceeded
+        ),
     )
 
 
@@ -488,7 +568,73 @@ def _work_receipt(
     return receipt
 
 
-def _empty_reconstruction(prepared: _PreparedLane) -> LaneFormatPlacementReconstruction:
+def _producer_bounds_receipt(
+    prepared: _PreparedLane,
+    *,
+    proposed_chain_count: int = 0,
+    chains: tuple[CompleteChainRecord, ...] = (),
+    chain_bound_exceeded: bool = False,
+    sampling_invalid_count: int = 0,
+    content_observation_overflowed: bool = False,
+    content_veto_pruned_count: int = 0,
+) -> ProducerBoundsReceipt:
+    pruned: dict[ProducerPruneReason, int] = {}
+    if sampling_invalid_count:
+        pruned[ProducerPruneReason.SAMPLING_CONTAINMENT_INVALID] = (
+            sampling_invalid_count
+        )
+    band_pruned = sum(
+        item.proposed_count - item.materialized_count
+        for item in prepared.corridor_band_counts
+    )
+    if band_pruned:
+        pruned[ProducerPruneReason.BAND_BOUND] = band_pruned
+    if chain_bound_exceeded:
+        pruned[ProducerPruneReason.COMPLETE_CHAIN_BOUND] = max(
+            1,
+            proposed_chain_count - len(chains),
+        )
+    ledger_pruned = sum(item.ledger_pruned_count for item in chains)
+    if ledger_pruned:
+        pruned[ProducerPruneReason.CHAIN_LEDGER_BOUND] = ledger_pruned
+    if content_observation_overflowed:
+        pruned[ProducerPruneReason.CONTENT_OBSERVATION_BOUND] = 1
+    if content_veto_pruned_count:
+        pruned[ProducerPruneReason.CONTENT_VETO_FACT_BOUND] = (
+            content_veto_pruned_count
+        )
+    return ProducerBoundsReceipt(
+        lane_id=prepared.lane.domain.lane_id,
+        corridor_bands=prepared.corridor_band_counts,
+        proposed_complete_chain_count=proposed_chain_count,
+        materialized_complete_chain_count=len(chains),
+        chain_ledger_entry_count=sum(len(item.ledger) for item in chains),
+        prune_summaries=tuple(
+            ProducerPruneSummary(reason=reason, count=pruned[reason])
+            for reason in ProducerPruneReason
+            if reason in pruned
+        ),
+        bound_exceeded=any(
+            reason
+            != ProducerPruneReason.SAMPLING_CONTAINMENT_INVALID
+            for reason in pruned
+        ),
+    )
+
+
+def _empty_reconstruction(
+    prepared: _PreparedLane,
+    *,
+    content_observation_overflowed: bool = False,
+) -> LaneFormatPlacementReconstruction:
+    selection = LanePlacementSelection(
+        chains=(),
+        clusters=(),
+        content_veto_assessments=(),
+        selected_cluster_id=None,
+        selected_placement_id=None,
+        state=EvidenceState.UNAVAILABLE,
+    )
     return LaneFormatPlacementReconstruction(
         lane_id=prepared.lane.domain.lane_id,
         anchor_domain=prepared.anchor_domain,
@@ -506,8 +652,13 @@ def _empty_reconstruction(prepared: _PreparedLane) -> LaneFormatPlacementReconst
         ),
         lane_gap_model=prepared.lane_gap_model,
         direction_classes=prepared.proposal.direction_classes,
-        retained_placements=(),
-        canonical_placement=None,
+        materialized_chains=(),
+        placement_selection=selection,
+        selected_placement=None,
+        producer_bounds=_producer_bounds_receipt(
+            prepared,
+            content_observation_overflowed=content_observation_overflowed,
+        ),
         safe_crop_envelopes=(),
         direct_use_budget_assessments=(),
         work=_work_receipt(prepared, ()),
@@ -518,19 +669,22 @@ def _unresolved_facts(direction_gap: GateGap) -> dict[str, TypedAssessment]:
     return {
         "scan_canvas_authority": _supported(),
         "output_slot_count": _supported(),
-        "format_placement": _unavailable(GateGap.FORMAT_PLACEMENT_UNAVAILABLE),
+        "complete_chain": _unavailable(GateGap.COMPLETE_CHAIN_UNAVAILABLE),
+        "producer_bounds": _supported(),
         "shared_strip_direction": _unavailable(direction_gap),
         "source_frame_geometry": _unavailable(
             GateGap.SOURCE_FRAME_GEOMETRY_UNAVAILABLE
         ),
+        "placement_selection": _unavailable(GateGap.PLACEMENT_UNRESOLVED),
+        "content_veto": _supported(),
         "slot_ordinal_assignment": _unavailable(
             GateGap.SLOT_ORDINAL_ASSIGNMENT_UNRESOLVED
         ),
         "source_lane_authority": _unavailable(
             GateGap.SOURCE_LANE_AUTHORITY_INVALID
         ),
-        "placement_set_containment": _unavailable(
-            GateGap.PLACEMENT_SET_CONTAINMENT_UNAVAILABLE
+        "selected_placement_containment": _unavailable(
+            GateGap.SELECTED_PLACEMENT_CONTAINMENT_UNAVAILABLE
         ),
         "direct_use_budget": _unavailable(GateGap.DIRECT_USE_BUDGET_UNAVAILABLE),
         "output_transform": _unavailable(GateGap.OUTPUT_TRANSFORM_UNAVAILABLE),
@@ -540,6 +694,7 @@ def _unresolved_facts(direction_gap: GateGap) -> dict[str, TypedAssessment]:
 def reconstruct_photo_geometry(
     field: PhotoBoundaryMeasurementField,
     lanes: tuple[SourceLaneEvidence, ...],
+    content_observations: tuple[ContentOccupancyObservationSet, ...],
     *,
     layout: str,
     configuration: DetectionConfiguration,
@@ -547,6 +702,10 @@ def reconstruct_photo_geometry(
     resolved_slot_count: ResolvedSlotCount | None,
 ) -> PhotoGeometryDetectionResult:
     del lane_configuration
+    if tuple(item.lane_id for item in content_observations) != tuple(
+        lane.domain.lane_id for lane in lanes
+    ):
+        raise ValueError("content observations must cover source lanes")
     resolved = resolve_output_slots(configuration, lanes, resolved_slot_count)
     if resolved is None:
         transform = _empty_transform(field, layout, "output_slot_count_unavailable")
@@ -590,14 +749,31 @@ def reconstruct_photo_geometry(
             else GateGap.SHARED_STRIP_DIRECTION_NONUNIQUE
         )
         transform = _empty_transform(field, layout, gap.value)
+        empty_reconstructions = tuple(
+            _empty_reconstruction(
+                item,
+                content_observation_overflowed=observation.overflowed,
+            )
+            for item, observation in zip(
+                prepared,
+                content_observations,
+                strict=True,
+            )
+        )
+        facts = _unresolved_facts(gap)
+        if any(
+            item.producer_bounds.bound_exceeded
+            for item in empty_reconstructions
+        ):
+            facts["producer_bounds"] = _contradicted(
+                GateGap.PRODUCER_BOUND_EXCEEDED
+            )
         return PhotoGeometryDetectionResult(
             resolved_output_slots=resolved,
-            lane_reconstructions=tuple(
-                _empty_reconstruction(item) for item in prepared
-            ),
+            lane_reconstructions=empty_reconstructions,
             output_slot_identities=_output_slot_identities(lanes, resolved),
             transform_assessment=transform,
-            assessment_facts=_unresolved_facts(gap),
+            assessment_facts=facts,
         )
 
     direction = source_directions[0]
@@ -617,55 +793,118 @@ def reconstruct_photo_geometry(
         direction,
     )
     placements_by_lane = materialization.placements_by_lane
-    complete = (
-        len(placements_by_lane) == len(prepared)
-        and all(placements_by_lane)
-    )
     reconstructions: list[LaneFormatPlacementReconstruction] = []
     all_budgets: list[DirectUseBudgetAssessment] = []
-    lane_authority_valid = True
-    containment_valid = True
-    for prepared_lane, placements, enhanced_query_count, refined_proposal in zip(
+    for (
+        prepared_lane,
+        placements,
+        proposed_chain_count,
+        chain_bound_exceeded,
+        enhanced_query_count,
+        refined_proposal,
+        content_observation,
+    ) in zip(
         prepared,
-        placements_by_lane if complete else tuple(() for _item in prepared),
+        placements_by_lane,
+        materialization.proposed_complete_chain_counts_by_lane,
+        materialization.chain_bound_exceeded_by_lane,
         materialization.enhanced_query_counts_by_lane,
         materialization.lane_proposals,
+        content_observations,
         strict=True,
     ):
-        canonical = (
-            min(placements, key=lambda item: item.canonical.canonical_rank)
-            if placements
-            else None
+        candidate_envelopes: dict[str, tuple[SafeCropEnvelope, ...]] = {}
+        materialized_chains: list[FormatPlacement] = []
+        chain_records: list[CompleteChainRecord] = []
+        sampling_invalid_count = 0
+        if transform.transform is not None:
+            for placement in placements:
+                try:
+                    envelopes = tuple(
+                        safe_crop_envelope_from_placement(
+                            placement,
+                            lane=prepared_lane.lane,
+                            lane_ordinal=ordinal,
+                            layout=layout,
+                            minimum_guard=minimum_guard_spec(
+                                configuration.physical_spec.format_id
+                            ),
+                            transform=transform.transform,
+                        )
+                        for ordinal in range(1, placement.output_slot_count + 1)
+                    )
+                    record = complete_chain_record(placement, envelopes)
+                except ValueError:
+                    sampling_invalid_count += 1
+                    continue
+                candidate_envelopes[placement.placement_id] = envelopes
+                materialized_chains.append(placement)
+                chain_records.append(record)
+        ordered_records = tuple(
+            sorted(
+                chain_records,
+                key=lambda item: (
+                    -item.direct_opposite_pair_count,
+                    -item.direct_boundary_count,
+                    len(reconstructions) + 1,
+                    tuple(
+                        value
+                        for interval in item.boundary_intervals_px
+                        for value in (
+                            interval.minimum.hex(),
+                            interval.maximum.hex(),
+                        )
+                    ),
+                    tuple(map(str, item.direct_boundary_observation_ids)),
+                    item.chain_id,
+                ),
+            )
+        )
+        placements_by_id = {
+            item.placement_id: item for item in materialized_chains
+        }
+        ordered_placements = tuple(
+            placements_by_id[item.placement_id] for item in ordered_records
+        )
+        selection = select_placement_clusters(
+            ordered_records,
+            placements_by_id,
+            content_observation,
+            layout=layout,
+        )
+        selected = (
+            None
+            if selection.selected_placement_id is None
+            else placements_by_id[selection.selected_placement_id]
+        )
+        producer_bounds = _producer_bounds_receipt(
+            prepared_lane,
+            proposed_chain_count=proposed_chain_count,
+            chains=ordered_records,
+            chain_bound_exceeded=chain_bound_exceeded,
+            sampling_invalid_count=sampling_invalid_count,
+            content_observation_overflowed=content_observation.overflowed,
+            content_veto_pruned_count=sum(
+                item.pruned_fact_count
+                for item in selection.content_veto_assessments
+            ),
         )
         geometries: list[SafeCropEnvelope] = []
         budgets: list[DirectUseBudgetAssessment] = []
-        if canonical is not None and transform.transform is not None:
-            for ordinal in range(1, canonical.output_slot_count + 1):
-                try:
-                    geometry = safe_crop_envelope_from_placements(
-                        placements,
-                        canonical,
-                        lane=prepared_lane.lane,
-                        lane_ordinal=ordinal,
-                        layout=layout,
-                        minimum_guard=minimum_guard_spec(
-                            configuration.physical_spec.format_id
-                        ),
-                        transform=transform.transform,
-                    )
-                    budget = direct_use_budget_assessment(
-                        placements,
-                        geometry,
-                        transform.transform,
-                    )
-                except ValueError:
-                    lane_authority_valid = False
-                    containment_valid = False
-                    geometries.clear()
-                    budgets.clear()
-                    break
-                geometries.append(geometry)
-                budgets.append(budget)
+        if (
+            selected is not None
+            and transform.transform is not None
+            and not producer_bounds.bound_exceeded
+        ):
+            geometries.extend(candidate_envelopes[selected.placement_id])
+            budgets.extend(
+                direct_use_budget_assessment(
+                    selected,
+                    geometry,
+                    transform.transform,
+                )
+                for geometry in geometries
+            )
         all_budgets.extend(budgets)
         reconstructions.append(
             LaneFormatPlacementReconstruction(
@@ -685,20 +924,36 @@ def reconstruct_photo_geometry(
                 ),
                 lane_gap_model=prepared_lane.lane_gap_model,
                 direction_classes=source_directions,
-                retained_placements=placements,
-                canonical_placement=canonical,
+                materialized_chains=ordered_placements,
+                placement_selection=selection,
+                selected_placement=selected,
+                producer_bounds=producer_bounds,
                 safe_crop_envelopes=tuple(geometries),
                 direct_use_budget_assessments=tuple(budgets),
                 work=_work_receipt(
                     prepared_lane,
-                    placements,
+                    ordered_placements,
                     enhanced_query_count=enhanced_query_count,
                     proposal=refined_proposal,
                 ),
             )
         )
+    complete = bool(reconstructions) and all(
+        item.materialized_chains for item in reconstructions
+    )
+    selection_complete = complete and all(
+        item.placement_selection.state == EvidenceState.SUPPORTED
+        for item in reconstructions
+    )
+    producer_bounds_valid = all(
+        not item.producer_bounds.bound_exceeded for item in reconstructions
+    ) and sum(
+        item.producer_bounds.chain_ledger_entry_count
+        for item in reconstructions
+    ) <= MAX_LEDGER_ENTRIES_PER_SOURCE
     output_geometry_complete = (
-        complete
+        selection_complete
+        and producer_bounds_valid
         and sum(
             len(item.safe_crop_envelopes)
             for item in reconstructions
@@ -716,13 +971,26 @@ def reconstruct_photo_geometry(
         )
         else _unavailable(GateGap.DIRECT_USE_BUDGET_UNAVAILABLE)
     )
+    all_clusters_vetoed = any(
+        item.placement_selection.clusters
+        and all(
+            assessment.vetoed
+            for assessment in item.placement_selection.content_veto_assessments
+        )
+        for item in reconstructions
+    )
     facts = {
         "scan_canvas_authority": _supported(),
         "output_slot_count": _supported(),
-        "format_placement": (
+        "complete_chain": (
             _supported()
             if complete
-            else _unavailable(GateGap.FORMAT_PLACEMENT_UNAVAILABLE)
+            else _unavailable(GateGap.COMPLETE_CHAIN_UNAVAILABLE)
+        ),
+        "producer_bounds": (
+            _supported()
+            if producer_bounds_valid
+            else _contradicted(GateGap.PRODUCER_BOUND_EXCEEDED)
         ),
         "shared_strip_direction": _supported(),
         "source_frame_geometry": (
@@ -730,6 +998,16 @@ def reconstruct_photo_geometry(
             if complete
             else _unavailable(GateGap.SOURCE_FRAME_GEOMETRY_UNAVAILABLE)
         ),
+        "placement_selection": (
+            _supported()
+            if selection_complete
+            else _unavailable(
+                GateGap.CONTENT_VETO_REJECTED
+                if all_clusters_vetoed
+                else GateGap.PLACEMENT_UNRESOLVED
+            )
+        ),
+        "content_veto": _supported(),
         "slot_ordinal_assignment": (
             _supported()
             if complete
@@ -737,13 +1015,15 @@ def reconstruct_photo_geometry(
         ),
         "source_lane_authority": (
             _supported()
-            if complete and lane_authority_valid
+            if complete
             else _contradicted(GateGap.SOURCE_LANE_AUTHORITY_INVALID)
         ),
-        "placement_set_containment": (
+        "selected_placement_containment": (
             _supported()
-            if output_geometry_complete and containment_valid
-            else _unavailable(GateGap.PLACEMENT_SET_CONTAINMENT_UNAVAILABLE)
+            if output_geometry_complete
+            else _unavailable(
+                GateGap.SELECTED_PLACEMENT_CONTAINMENT_UNAVAILABLE
+            )
         ),
         "direct_use_budget": budget_state,
         "output_transform": (

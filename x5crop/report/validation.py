@@ -3,6 +3,13 @@ from __future__ import annotations
 from typing import Any
 
 from ..detection.candidate.assessment.model import CANDIDATE_GATE_CHECK_CODES
+from ..detection.photo_geometry.bounds import (
+    MAX_BANDS_PER_CORRIDOR,
+    MAX_COMPLETE_CHAINS_PER_LANE,
+    MAX_LEDGER_ENTRIES_PER_CHAIN,
+    MAX_LEDGER_ENTRIES_PER_LANE,
+    MAX_LEDGER_ENTRIES_PER_SOURCE,
+)
 from ..detection.decision.vocabulary import FINAL_REVIEW_REASONS
 from .identity import (
     REPORT_SCHEMA_ID,
@@ -201,7 +208,7 @@ def validate_current_report_record(record: dict[str, Any]) -> None:
         record["schema_id"] != REPORT_SCHEMA_ID
         or record["schema_revision"] != REPORT_SCHEMA_REVISION
         or record["configuration"]["execution"]["detector_kind"]
-        != "v5_template_first_format_placement"
+        != "v5_bounded_physical_chain_selection"
     ):
         raise ValueError("report does not use the current-only schema")
     _validate_measurement(record)
@@ -213,8 +220,9 @@ def validate_current_report_record(record: dict[str, Any]) -> None:
             "frame_dimensions_tolerance_gap_component_count_fit"
         ),
         "canonical": "representative_only_no_safety_pruning",
-        "safety": "union_of_retained_complete_format_placements",
-        "search": "measurement_coverage_only",
+        "selection": "sampling_cluster_then_tiered_direct_dominance",
+        "safety": "selected_placement_uncertainty_only",
+        "search": "bounded_measurement_coverage_only",
     }
     geometry = record["photo_geometry"]
     matched_holder = geometry.get("matched_holder")
@@ -229,41 +237,64 @@ def validate_current_report_record(record: dict[str, Any]) -> None:
         raise ValueError("matched holder and resolved count disagree")
     if geometry["authority_partition"] != expected_partition:
         raise ValueError("format-placement authority partition is invalid")
+    source_ledger_count = 0
     for lane in geometry["lanes"]:
-        if lane["search"]["authority"] != "measurement_coverage_only":
+        if lane["search"]["authority"] != "bounded_measurement_coverage_only":
             raise ValueError("search proposal gained placement authority")
-        placement = lane["placement"]
+        chains = lane["chains"]
+        selection = lane["selection"]
         if (
-            placement["authority"]
-            != "template_group_pixel_evidence"
-            or placement["safety_union_rule"]
-            != "all_retained_complete_placements"
+            chains["authority"] != "bounded_complete_chain_producer"
+            or selection["authority"]
+            != "sampling_cluster_tiered_dominance"
+            or selection["safety_rule"] != "selected_placement_only"
         ):
             raise ValueError("placement safety authority is invalid")
-        retained = placement["retained_placements"]
-        canonical_id = placement["canonical_placement_id"]
-        if bool(retained) != (canonical_id is not None) or (
-            retained
-            and canonical_id
-            not in {item["placement_id"] for item in retained}
+        materialized = chains["materialized"]
+        ledger = chains["ledger"]
+        bounds = chains["producer_bounds"]
+        selected_id = selection["selected_placement_id"]
+        if (
+            len(materialized) > MAX_COMPLETE_CHAINS_PER_LANE
+            or len(ledger) != len(materialized)
+            or bounds["materialized_complete_chain_count"] != len(materialized)
+            or bounds["proposed_complete_chain_count"] < len(materialized)
+            or any(
+                item["materialized_count"] > MAX_BANDS_PER_CORRIDOR
+                or item["proposed_count"] < item["materialized_count"]
+                for item in bounds["corridor_bands"]
+            )
+            or any(
+                len(item["ledger"]) > MAX_LEDGER_ENTRIES_PER_CHAIN
+                for item in ledger
+            )
+            or sum(len(item["ledger"]) for item in ledger)
+            > MAX_LEDGER_ENTRIES_PER_LANE
+            or selected_id
+            not in ({None} | {item["placement_id"] for item in materialized})
         ):
-            raise ValueError("canonical placement is outside the retained set")
-        outputs = placement["safe_crop_envelopes"]
-        budgets = placement["direct_use_budget_assessments"]
+            raise ValueError("bounded chain ledger is invalid")
+        source_ledger_count += sum(len(item["ledger"]) for item in ledger)
+        outputs = selection["safe_crop_envelopes"]
+        budgets = selection["direct_use_budget_assessments"]
         if {item["geometry_id"] for item in outputs} != {
             item["geometry_id"] for item in budgets
         }:
-            raise ValueError("budget does not cover every retained output")
+            raise ValueError("budget does not cover every selected output")
+        if outputs and selected_id is None:
+            raise ValueError("safe envelope lacks a selected placement")
         for item in outputs:
             if (
                 item.get("provenance")
-                != "continuous_format_placement_safety_footprint"
+                != "selected_placement_safety_footprint"
                 or item.get("mapped_output_box") is None
                 or len(item.get("placement_source_footprint", ())) < 3
                 or len(item.get("required_source_footprint", ())) < 3
                 or len(item.get("constrained_source_footprint", ())) < 3
             ):
                 raise ValueError("continuous placement output is incomplete")
+    if source_ledger_count > MAX_LEDGER_ENTRIES_PER_SOURCE:
+        raise ValueError("source chain ledger exceeds its bound")
     _validate_gate(record["candidate_gate"], "candidate")
     decision = record["decision"]
     _validate_gate(decision["gate"], "decision")

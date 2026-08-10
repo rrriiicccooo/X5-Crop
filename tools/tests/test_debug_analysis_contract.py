@@ -144,16 +144,24 @@ class DebugAnalysisContractTest(unittest.TestCase):
                     _grid(workspace, configuration.diagnostics.style),
                 )
         self.assertFalse(detection.frame_export_eligible)
-        self.assertEqual(
+        safe_envelopes = detection.candidate.geometry.safe_crop_envelopes
+        self.assertCountEqual(
             tuple(call.args[1] for call in fill.call_args_list),
-            tuple(
-                footprint
-                for geometry in (
-                    detection.candidate.geometry.safe_crop_envelopes
+            (
+                tuple(
+                    footprint
+                    for geometry in safe_envelopes
+                    for footprint in (
+                        geometry.placement_source_footprint,
+                        geometry.constrained_source_footprint,
+                    )
                 )
-                for footprint in (
-                    geometry.placement_source_footprint,
-                    geometry.constrained_source_footprint,
+                if safe_envelopes
+                else tuple(
+                    frame.canonical_source_polygon
+                    for lane in detection.candidate.geometry.lane_reconstructions
+                    for chain in lane.materialized_chains
+                    for frame in chain.canonical.frames
                 )
             ),
         )

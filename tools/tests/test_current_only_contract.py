@@ -310,7 +310,7 @@ class CurrentOnlyContractTest(unittest.TestCase):
         self.assertEqual(REPORT_SCHEMA_ID, "x5crop_detection_report_v5")
         self.assertEqual(
             REPORT_SCHEMA_REVISION,
-            "x5crop_v5_current_5",
+            "x5crop_v5_current_6",
         )
         candidate = candidate_gate_assessment(
             {
@@ -530,6 +530,8 @@ class CurrentOnlyContractTest(unittest.TestCase):
             "x5crop.detection.photo_geometry.detector",
             "x5crop.detection.photo_geometry.measurement",
             "x5crop.detection.photo_geometry.source_geometry",
+            "x5crop.detection.photo_geometry.bounds",
+            "x5crop.detection.photo_geometry.selection",
             "x5crop.detection.photo_geometry.template_profiles",
             "x5crop.detection.photo_geometry.template_model",
             "x5crop.detection.photo_geometry.template_first",
@@ -538,7 +540,6 @@ class CurrentOnlyContractTest(unittest.TestCase):
                 self.assertIn(module, sources)
         for module in (
             "x5crop.detection.photo_geometry.geometry_build",
-            "x5crop.detection.photo_geometry.selection",
             "x5crop.detection.photo_geometry.sequence",
         ):
             with self.subTest(retired=module):

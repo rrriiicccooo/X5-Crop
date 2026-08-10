@@ -69,6 +69,7 @@ def choose_detection(
     geometry = reconstruct_photo_geometry(
         workspace.boundary_measurement_field,
         workspace.source_core.lanes,
+        workspace.source_core.content_occupancy,
         layout=workspace.boundary_measurement_field.layout,
         configuration=configuration,
         lane_configuration=lane_configuration,

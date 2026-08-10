@@ -35,7 +35,7 @@ def _lane_placement_read_model(lane: object) -> dict[str, object]:
     return {
         "lane_id": lane.lane_id,
         "search": {
-            "authority": "measurement_coverage_only",
+            "authority": "bounded_measurement_coverage_only",
             "anchor_domain": typed_read_model(lane.anchor_domain),
             "sequence_profile": typed_read_model(lane.sequence_profile),
             "provisional_cross_profile": typed_read_model(
@@ -56,17 +56,25 @@ def _lane_placement_read_model(lane: object) -> dict[str, object]:
             "raw_lines_are_canonical_direction": False,
         },
         "direction_classes": typed_read_model(lane.direction_classes),
-        "placement": {
-            "authority": "template_group_pixel_evidence",
-            "retained_placements": typed_read_model(
-                lane.retained_placements
+        "chains": {
+            "authority": "bounded_complete_chain_producer",
+            "materialized": typed_read_model(lane.materialized_chains),
+            "ledger": typed_read_model(lane.placement_selection.chains),
+            "producer_bounds": typed_read_model(lane.producer_bounds),
+        },
+        "selection": {
+            "authority": "sampling_cluster_tiered_dominance",
+            "clusters": typed_read_model(lane.placement_selection.clusters),
+            "content_veto_assessments": typed_read_model(
+                lane.placement_selection.content_veto_assessments
             ),
-            "canonical_placement_id": (
+            "selected_cluster_id": lane.placement_selection.selected_cluster_id,
+            "selected_placement_id": (
                 None
-                if lane.canonical_placement is None
-                else lane.canonical_placement.placement_id
+                if lane.selected_placement is None
+                else lane.selected_placement.placement_id
             ),
-            "safety_union_rule": "all_retained_complete_placements",
+            "safety_rule": "selected_placement_only",
             "safe_crop_envelopes": typed_read_model(
                 lane.safe_crop_envelopes
             ),
@@ -144,8 +152,9 @@ def report_record_for_final_detection(
                     "frame_dimensions_tolerance_gap_component_count_fit"
                 ),
                 "canonical": "representative_only_no_safety_pruning",
-                "safety": "union_of_retained_complete_format_placements",
-                "search": "measurement_coverage_only",
+                "selection": "sampling_cluster_then_tiered_direct_dominance",
+                "safety": "selected_placement_uncertainty_only",
+                "search": "bounded_measurement_coverage_only",
             },
             "measurement_contract_id": (
                 PHOTO_BOUNDARY_MEASUREMENT_SPEC.contract_id

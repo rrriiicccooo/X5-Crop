@@ -31,7 +31,6 @@ from x5crop.detection.photo_geometry.measurement import (
 from x5crop.detection.photo_geometry.template_first import (
     _cross_pair_seed_qualified,
     _template_bound_opposite_run,
-    _retain_component_placements,
     build_template_sequence_seeds,
     local_advance_delta_from_observed_gap,
     local_advance_prefix,
@@ -260,75 +259,6 @@ class TemplateFirstArchitectureContractTest(unittest.TestCase):
             ),
         )
 
-    def test_complete_pairs_exclude_compatible_singleton_phase(self) -> None:
-        geometry = mock.Mock()
-        authorized = tuple(
-            mock.Mock(
-                canonical_sequence=SimpleNamespace(
-                    exclusion_authorized=True,
-                    observed_role_count=2,
-                    observed_opposite_pair_count=1,
-                    local_advance_relations=(),
-                ),
-                source_frame_geometry=geometry,
-            )
-            for _index in range(2)
-        )
-        singleton = mock.Mock(
-            canonical_sequence=SimpleNamespace(
-                exclusion_authorized=False,
-                observed_role_count=1,
-                observed_opposite_pair_count=0,
-                local_advance_relations=(
-                    SimpleNamespace(kind=LocalAdvanceKind.NOMINAL),
-                ),
-            ),
-            source_frame_geometry=geometry,
-        )
-
-        retained = _retain_component_placements((*authorized, singleton))
-
-        self.assertEqual(retained, authorized)
-
-    def test_strict_transition_superset_excludes_shifted_same_count_phase(
-        self,
-    ) -> None:
-        geometry = mock.Mock()
-        geometry.intersect_source_state.return_value = geometry
-        component = SimpleNamespace(component_id="36x24mm")
-
-        def placement(name: str, identities: tuple[str, ...]):
-            return SimpleNamespace(
-                placement_id=name,
-                output_slot_count=3,
-                component=component,
-                canonical_sequence=SimpleNamespace(
-                    exclusion_authorized=True,
-                    safety_support_transition_ids=(
-                        tuple(ObservationId(value) for value in identities),
-                        (),
-                        (),
-                        (),
-                        (),
-                        (),
-                    ),
-                    observed_role_count=2,
-                    observed_opposite_pair_count=1,
-                    local_advance_relations=(),
-                ),
-                source_frame_geometry=geometry,
-            )
-
-        complete = placement("complete", ("a", "b", "c"))
-        shifted = placement("shifted", ("a", "b"))
-        unrelated = placement("unrelated", ("x", "y"))
-
-        retained = _retain_component_placements(
-            (complete, shifted, unrelated)
-        )
-
-        self.assertEqual(retained, (complete, unrelated))
-
     def test_basic_lane_does_not_consume_registered_role_enhancement(
         self,
     ) -> None:
@@ -349,7 +279,7 @@ class TemplateFirstArchitectureContractTest(unittest.TestCase):
         ), mock.patch(
             "x5crop.detection.photo_geometry.template_first."
             "materialize_lane_placements",
-            return_value=(placement,),
+            return_value=((placement,), 1, False),
         ), mock.patch(
             "x5crop.detection.photo_geometry.template_first."
             "_bind_registered_sequence_roles",

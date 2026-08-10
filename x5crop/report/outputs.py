@@ -37,7 +37,7 @@ def append_summary_csv(path: Path, result: ReportResult) -> None:
         "lane_output_slot_counts",
         "output_slot_count",
         "canonical_components",
-        "retained_placement_count",
+        "materialized_chain_count",
         "candidate_gate_gaps",
         "final_review_reasons",
         "output_count",
@@ -84,17 +84,17 @@ def append_summary_csv(path: Path, result: ReportResult) -> None:
                     str(
                         next(
                             item["component"]["component_id"]
-                            for item in lane["placement"]["retained_placements"]
+                            for item in lane["chains"]["materialized"]
                             if item["placement_id"]
-                            == lane["placement"]["canonical_placement_id"]
+                            == lane["selection"]["selected_placement_id"]
                         )
                     )
                     for lane in record["photo_geometry"]["lanes"]
-                    if lane["placement"]["canonical_placement_id"]
+                    if lane["selection"]["selected_placement_id"]
                     is not None
                 ),
-                "retained_placement_count": sum(
-                    len(lane["placement"]["retained_placements"])
+                "materialized_chain_count": sum(
+                    len(lane["chains"]["materialized"])
                     for lane in record["photo_geometry"]["lanes"]
                 ),
                 "candidate_gate_gaps": ";".join(

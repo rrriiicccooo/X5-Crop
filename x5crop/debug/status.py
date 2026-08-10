@@ -78,11 +78,14 @@ def debug_status_parts(
     return "REVIEW", f"{reason} · NOT EXPORTABLE", style.review_color
 
 
-def _count_authority(configuration: DetectionConfiguration) -> str:
-    request = configuration.count_request
-    if request.user_count is None:
-        return "matched_holder_full_count"
-    return f"user_explicit_partial_count:{request.user_count}"
+def _count_authority(detection: FinalDetection) -> str:
+    resolved = detection.source_core.resolved_slot_count
+    if resolved is None:
+        return "unresolved"
+    return (
+        f"{resolved.authority.value}:"
+        f"{resolved.output_count}/{resolved.full_count}"
+    )
 
 
 def _transform_lines(
@@ -155,9 +158,15 @@ def add_status_bar(
         font=status_font,
     )
     detail_font = _font(style.header_detail_font_size)
+    holder_id = (
+        "unresolved"
+        if detection.source_core.matched_holder is None
+        else detection.source_core.matched_holder.profile.profile_id
+    )
     context = (
         f"{configuration.physical_spec.format_id}/{configuration.strip_mode} · "
-        f"count={_count_authority(configuration)} · "
+        f"holder={holder_id} · "
+        f"count={_count_authority(detection)} · "
         f"slots={detection.output_slot_count or 0}"
     )
     runtime_chip = (1490, 16, width - 16, 50)
