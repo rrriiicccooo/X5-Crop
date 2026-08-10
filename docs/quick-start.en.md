@@ -36,7 +36,8 @@ safely instead of being guessed.
 ## 3. Choose Format, Mode, And Count
 
 - `full` means the strip has the complete slot count defined by its format and
-  holder, even when the film does not fill the holder.
+  holder, even when the film does not fill the holder. A complete three-slot
+  120-66 strip is therefore full.
 - `partial --count N` is a smaller actual exposure-slot count, including
   intermediate blank exposures. It must be below the complete count and must not
   exceed holder capacity; interactive launch asks again after invalid input.

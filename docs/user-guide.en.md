@@ -21,7 +21,8 @@ Neither mode requires the film to fill the holder or touch the canvas ends. If
 the count is complete, choose full. Holder capacity validates only the upper
 bound; it never supplies the count. Interactive launch asks again after invalid
 input; non-interactive CLI use stops with an input error. Blank slots are never
-removed.
+removed. For example, a complete three-slot 120-66 strip uses full even when it
+sits in the middle of the holder; only a one- or two-slot strip is partial.
 
 The format fixes the physical photo rectangle. Detection places those rectangles
 from strip direction, top/bottom evidence, dark separator bands, shared dimensions,

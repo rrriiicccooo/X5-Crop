@@ -13,6 +13,8 @@ X5 Crop 处理用户已经知道 format 与片条数量的 Hasselblad / Imacon X
 - full 表示实际 slot 数等于 `full_count`；它不表示片条铺满片夹或贴近画布两端。
 - partial 必须由用户明确输入 `1 <= count < full_count`；count 包括中间空白曝光格。若 count 等于
   `full_count`，必须使用 full。
+- 例如 120-66 的完整三格片条始终使用 full，即使片条位于片夹中间；只有一格或两格才使用
+  partial。
 - 片夹容量只校验 count 上限，不生成 count。交互入口对无效 count 重新询问，非交互入口失败。
 - 空白曝光仍占 slot 并参与几何求解；V5 不删除、不合并也不抑制空白 slot。
 - 任一 slot 不能安全输出时，整个 source 为 `needs_review`，不做 slot salvage。
@@ -514,7 +516,7 @@ platform | platform-check | platform-package | pre-push
 | 路径 | 唯一职责 |
 |---|---|
 | `x5crop/formats/` | format 物理尺寸、W/H tolerance 与 gap 先验 |
-| `x5crop/configuration/` | partial count、片夹容量、ScanCanvas 与 runtime configuration |
+| `x5crop/configuration/` | matching-holder `full_count`、partial count、片夹容量、ScanCanvas 与 runtime configuration |
 | `x5crop/io/` | TIFF domain、Orientation、metadata 与 readback |
 | `x5crop/detection/source_core.py` | source/lane 可见 authority |
 | `x5crop/detection/photo_geometry/measurement.py` | registered transitions、separator material、boundary intervals 与 candidate-independent content veto observations |
