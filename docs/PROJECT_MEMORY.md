@@ -1,49 +1,61 @@
 # 项目记忆
 
-更新：2026-08-09
+更新：2026-08-10
 
-这是唯一跨会话检查点。长期政策见 [AGENTS.md](../AGENTS.md)，当前系统见
-[ARCHITECTURE.md](ARCHITECTURE.md)，版本变化见 [CHANGELOG.md](CHANGELOG.md)。Git、源码、
-原 TIFF、current report、Debug Analysis 和现场命令输出始终优先。
+这是唯一跨会话检查点。长期政策见 [AGENTS.md](../AGENTS.md)，已确认的 V5 合同见
+[ARCHITECTURE.md](ARCHITECTURE.md)，版本行为见 [CHANGELOG.md](CHANGELOG.md)。现场 Git、
+源码、原 TIFF、current report、Debug Analysis 和最新命令输出始终优先。
 
 ## 当前目标
 
-仓库已经是唯一 V5 current-only runtime。工具与文档审计已闭合；下一阶段单独人工诊断黄金
-失败，顺序为 S109 → S062 → S051。只修改通用 evidence、geometry 或 safety owner；不增加
-样片规则，不放宽逐边 direct-use budget，并在每次检测变化后重跑全部黄金、111-source
-diagnostic 和两遍性能。
+把现有 V5 current-only runtime 对齐到已确认的固定 format 框放置模型：物理事实约束候选，
+分级独立证据选择明显胜出的完整 chain，胜出位置独占 `SafeCropEnvelope`，两级 Gate 分别审查
+选择可信度与输出安全。V5 在实现、黄金 accuracy、性能和目标平台证据全部闭合前不发布；公开
+稳定版仍为 `v4.2.8`。
 
-V5 在黄金准确率与最终平台证据闭合前不生成 RC、tag、GitHub Release 或公开 ZIP。公开稳定版
-仍为 `v4.2.8`。
+## 已确认检查点
 
-## 已验证检查点
+- Format/count 是硬输入。Partial 只接受用户明确 count，包含空白曝光格；片夹容量只校验上限，
+  不再提供 auto。V5 不删除空白 slot。
+- Format 尺寸、gap 先验、共享 W/H、方向、中心线、`G_source`、separator chain、接触/叠片、
+  top/bottom 与 start/end 的物理和证据语义已由 [ARCHITECTURE.md](ARCHITECTURE.md) 冻结。
+- 选择以完整 chain 为单位，先比较证据等级，再比较同等级独立观察；弱先验不能击败直接物理
+  证据。没有明显胜出者才 `placement unresolved`。
+- `SafeCropEnvelope` 只保护胜出 format placement 自身的不确定性，不合并落选位置，不重复添加
+  guard。逐边 5%/3% 只验证最终 direct-use 输出。
+- 文档已按职责同步：公共文档只写用户行为，架构保存合同，更新日志保存版本差异，本文件只保存
+  当前实现差距和下一步。本次同步不构成源码、accuracy、performance 或平台验证。
 
-- `d2efbcb7` 完成工具与文档审计并已同步 GitHub。生产默认 `--jobs 1`，显式 2/3 保留；
-  Debug Analysis 使用 detected/selected TOP/BOTTOM、detected/selected START/END 与 final
-  safety/output 三联自适应布局。
-- 该 checkpoint 的 `tools/verify full` 为 166 tests 通过、3 项平台条件跳过；GitHub Verify 在
-  四个 runner × Python 3.12–3.14 共 12 个 job 全部通过。
-- 2026-08-09 现场运行十四项黄金：S027、S035、S091 explicit/auto 与 S094 通过；S055
-  explicit/auto 和 S098 为可接受的安全 `needs_review`；失败仍固定为 S051、S062、S109 的
-  explicit/auto 六项。
-- 111-source cohort 的 111 个 source identity 当前完整。最近一次 111/111 工程运行不是本轮
-  audit tree 的新证据，检测变化后必须重跑。
-- 用户已确认 Windows x64 实机验证曾执行通过；平台 receipt 绑定 commit，不能替代最终 release
-  commit 的 Apple Silicon、Windows x64 与 Intel macOS 证据。
+## 开放实现差距
 
-## 验证边界与开放风险
+1. 输入仍需删除 `partial auto`，让 CLI 要求明确 count，并让启动器在缺失、无效或超过容量时
+   重新询问。
+2. Format catalog 仍需删除 120 的 54 mm component，冻结 135/half/XPan gap 先验并让 120 gap
+   保持 unresolved；所有齿孔依赖必须为零。
+3. `frame_height_tolerance_ratio` 当前实现为 2.00%，属于历史调试漂移；已确认合同是 0.40%。
+   宽度合同为 1.25%。
+4. Geometry 仍需落地共享 W/H、连续中心线、两段 pitch 建立 `G_source`、正常链优先和证据驱动
+   的接触/叠片/大间隙。
+5. Selection 仍需从旧 retained-placement union/代表解语义收敛为完整 chain 的分级独立证据投票；
+   `SafeCropEnvelope` 必须改为胜出位置自身不确定性，删除额外 minimum guard。
+6. `CandidateGate`、`DecisionGate`、report 与 Debug Analysis 仍需消费新的 vote ledger、
+   observed/inferred、竞争者和 review reasons。精确全局胜出 margin 尚未用黄金样片冻结。
 
-- 阶段性的 non-detection freeze 已删除；它在后续合法 Debug 修改后失效并阻断 platform，不能
-  继续充当当前验证 owner。Detection 回归直接使用 accuracy comparator、current-schema report
-  comparison、111-source diagnostic 与性能证据。
-- 当前工作区没有绑定最新 HEAD 的 production performance receipt；此前按用户决定跳过了一次
-  `jobs=1` 提交的性能生成。下一次检测或 runtime 变化必须重新生成，不得复用旧 receipt。
-- 六个 nominal 黄金失败仍是发布 blocker。本轮只确认集合，没有分析或试修。
-- Intel macOS 实机 receipt 仍是明确外部待办。CI、源码相同或验证包存在都不能代替它。
+## 验证边界与风险
+
+- 当前源码行为不能因文档已更新而声称符合新合同。旧黄金、111-source、performance 或平台
+  receipt 都不能证明未来实现，也不能迁移到检测变更后的 tree。
+- 物理模型已闭合，但具体 detector 能否从真实 TIFF 稳定生成所需观察仍须用用户确认黄金验证。
+  真值歧义保持 unresolved，不从算法输出自动生成 baseline。
+- 111-source diagnostic 只证明工程稳定和工作量有界，不证明位置投票正确。
+- 任何为单一样片增加的阈值、format 特例、whitelist 或更容易通过的验证路径都不可接受。
 
 ## 精确下一步
 
-1. 新开人工黄金诊断，依次处理 S109、S062、S051；每次只改一个通用物理 owner。
-2. 检测完成后重跑十四项黄金、111-source diagnostic、24-source 两遍性能与全局残留审计。
-3. 在最终 release commit 上重新生成 Apple Silicon、Windows x64 与 Intel macOS 实机 receipt，
-   然后再决定是否制作 RC。
+1. 只读审计源码与测试，把上述六类差距逐项映射到唯一 owner，形成不恢复旧路径的实现计划。
+2. 按输入/catalog、共享 geometry 与 evidence、chain voting 与 `SafeCropEnvelope`、Gate/report/debug
+   四个边界批次实施；每批同步删除被替代的 API、schema、tests 和 dead code。
+3. 每个批次先运行相应 unit/full；检测合同完成后统一重跑十四项黄金、challenge、111-source
+   diagnostic、24-source 两遍性能与全局残留审计。
+4. 只在最终 release commit 上重新生成 Apple Silicon、Windows x64、Intel macOS 与文件系统
+   receipt，再决定是否制作 RC。

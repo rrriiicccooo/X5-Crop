@@ -14,10 +14,20 @@ protection, excess margins, transform, and TIFF output are all safe. Otherwise
 the whole source enters `needs_review`; individual slots are never salvaged.
 
 The program does not claim to recover one uniquely true photo boundary and does
-not infer format or count from filenames. `partial --count auto` uses the valid
-maximum capacity of the matched holder. Blank suppression is not implemented,
-so blank slots may be emitted. When adjacent photos touch or locally overlap,
-neighboring outputs may share a small amount of source pixels to protect content.
+not infer format or count from filenames. Full strips use the format's fixed
+count. Partial strips require the user to enter the actual number of exposure
+slots in the strip, including blank exposures that must remain in sequence.
+Holder capacity validates only the upper bound; it never supplies the count. An
+interactive launch asks again after a missing, invalid, or excessive count;
+non-interactive CLI use stops with an input error. Blank slots are never removed.
+
+The format fixes the physical photo rectangle. Detection places those rectangles
+from strip direction, top/bottom evidence, dark separator bands, shared dimensions,
+and local film advance, then includes only the minimum boundary uncertainty needed
+to protect visible content. Every final side must remain within 5% of format width
+for start/end and 3% of format height for top/bottom. When photos touch or overlap,
+neighboring outputs may deliberately share source pixels; the slot count does not
+change.
 
 ## Install
 
@@ -87,7 +97,7 @@ Command-line example:
 python3 X5_Crop.py /path/to/scans \
   --format 120-66 \
   --strip partial \
-  --count auto
+  --count 2
 ```
 
 Command-line options:
@@ -97,8 +107,9 @@ Command-line options:
 - `--format`: `135`, `135-dual`, `half`, `xpan`, `120-645`, `120-66`, or `120-67`.
 - `--layout`: `auto`, `horizontal`, or `vertical`.
 - `--strip`: `full` or `partial`.
-- `--count N|auto`: authoritative partial count or matched-holder capacity;
-  full mode uses the fixed format count.
+- `--count N`: required partial exposure-slot count, including intermediate
+  blank exposures; it must not exceed holder capacity. Full mode uses the fixed
+  format count.
 - `--jobs N`: source concurrency; default 1, maximum 3. The default limits peak
   memory on ordinary computers; when memory is plentiful and processing a batch
   of source TIFFs, you may explicitly use `--jobs 2`. Numerical library threads
@@ -110,7 +121,8 @@ Command-line options:
   attempts to reuse the report.
 - `--allow-best-effort-output`: explicitly accept weaker publication semantics
   on an unverified filesystem.
-- `--interactive`: prompt for format, mode, count, and Debug Analysis.
+- `--interactive`: prompt for format, mode, count, and Debug Analysis; an invalid
+  partial count is requested again until it is valid or the user cancels.
 
 There is no `--overwrite`. A successful run always replaces the previous
 complete, verified V5-owned output.
@@ -118,8 +130,8 @@ complete, verified V5-owned output.
 Debug Analysis and production cropping can be run as two steps:
 
 ```bash
-python3 X5_Crop.py /path/to/scans --format 120-66 --strip partial --count auto --debug-analysis
-python3 X5_Crop.py /path/to/scans --format 120-66 --strip partial --count auto
+python3 X5_Crop.py /path/to/scans --format 120-66 --strip partial --count 2 --debug-analysis
+python3 X5_Crop.py /path/to/scans --format 120-66 --strip partial --count 2
 ```
 
 The first command publishes only Debug Analysis and report files in

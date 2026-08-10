@@ -10,9 +10,15 @@ X5 Crop 的目标是自动产生足够安全且不切掉真实照片内容的 TI
 扫描像素、固定物理尺寸、片夹画布、张数与顺序共同判断。只有内容保护、多余边缘限制、变换和
 TIFF 写出均成立时才输出正式照片，否则整张 source 进入 `needs_review`，不做部分 slot 挽救。
 
-程序不承诺恢复唯一的真实照片边界，也不从文件名猜 format 或 count。`partial --count auto`
-使用匹配片夹对该格式的有效最大容量；没有 blank suppression，因此空白 slot 也可能输出。
-相邻照片接触或局部重叠时，相邻输出可以重复包含少量 source pixels，以保护真实内容。
+程序不承诺恢复唯一的真实照片边界，也不从文件名猜 format 或 count。Full 使用格式固定张数；
+partial 必须由用户输入这段片条实际包含的曝光格数，包括中间需要保留的空白曝光格。片夹容量只
+校验上限，不能代替 count。交互启动时，缺失、无效或超过容量的 count 会要求重新输入；命令行
+则以输入错误停止。程序不删除空白 slot。
+
+Format 决定照片矩形的物理尺寸。检测只负责根据片条方向、照片上下边缘、照片间黑带、共同尺寸
+和局部卷片关系放置这些矩形，再把边缘测量所需的最小安全范围纳入输出。最终每一边都必须通过
+以 format 尺寸为基准的 5%（start/end）或 3%（top/bottom）限制。相邻照片接触或重叠时，
+相邻输出可以重复包含同一段 source pixels；这不是额外边缘，也不会改变照片数。
 
 ## 安装
 
@@ -72,7 +78,7 @@ V5 正式输入域为：
 python3 X5_Crop.py /path/to/scans \
   --format 120-66 \
   --strip partial \
-  --count auto
+  --count 2
 ```
 
 命令行参数：
@@ -82,22 +88,24 @@ python3 X5_Crop.py /path/to/scans \
 - `--format`：`135`、`135-dual`、`half`、`xpan`、`120-645`、`120-66`、`120-67`。
 - `--layout`：`auto`、`horizontal` 或 `vertical`。
 - `--strip`：`full` 或 `partial`。
-- `--count N|auto`：partial 的明确张数或片夹容量；full 使用格式固定张数。
+- `--count N`：partial 必填的明确曝光格数；包括中间空白曝光格，并且不能超过片夹容量。full
+  使用格式固定张数。
 - `--jobs N`：source 并发数；默认 1，上限 3。默认值优先控制一般电脑的峰值内存；内存充足且
   一次处理多张原 TIFF 时可显式使用 `--jobs 2`。数值库内部线程固定为 1。
 - `--debug-analysis`：执行完整检测并生成自适应高度的三联诊断 JPG、报告、summary 和 manifest，
   但不写正式 TIFF，也不复制 `needs_review` 原图；默认关闭。完整片条保持原比例，不裁切照片。
   之后用相同输入和检测参数做普通运行时会自动尝试复用报告。
 - `--allow-best-effort-output`：明确接受未验证文件系统的较弱发布语义。
-- `--interactive`：交互选择格式、模式、张数和 Debug Analysis。
+- `--interactive`：交互选择格式、模式、张数和 Debug Analysis；无效的 partial count 会要求
+  重新输入，直到有效或用户取消。
 
 没有 `--overwrite`。一次成功运行总是以完整新结果替换上一套可确认归属的 V5 输出。
 
 Debug Analysis 和正式裁切可分两步运行：
 
 ```bash
-python3 X5_Crop.py /path/to/scans --format 120-66 --strip partial --count auto --debug-analysis
-python3 X5_Crop.py /path/to/scans --format 120-66 --strip partial --count auto
+python3 X5_Crop.py /path/to/scans --format 120-66 --strip partial --count 2 --debug-analysis
+python3 X5_Crop.py /path/to/scans --format 120-66 --strip partial --count 2
 ```
 
 第一条命令在 `x5_crop_output/` 中只发布 Debug Analysis 和报告类文件。第二条命令会自动读取

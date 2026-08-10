@@ -30,7 +30,7 @@ GitHub 是 tracked 源码与文档的权威来源。NAS 和复制目录只用于
 | `docs/user-guide.en.md` | English user guide | English |
 | `docs/quick-start.zh-CN.md` | 中文发布版快速启动 | 中文 |
 | `docs/quick-start.en.md` | English release quick start | English |
-| `docs/ARCHITECTURE.md` | 当前运行流、数值合同与源码 owner | 中文 |
+| `docs/ARCHITECTURE.md` | 已确认的 V5 合同、运行流、数值合同与源码 owner | 中文 |
 | `docs/CHANGELOG.md` | 版本级行为与验证边界 | 中文 |
 | `docs/PROJECT_MEMORY.md` | 当前目标、证据边界、风险与下一步 | 中文 |
 | `AGENTS.md` | 长期协作政策 | 中文 |
@@ -60,10 +60,12 @@ GitHub 是 tracked 源码与文档的权威来源。NAS 和复制目录只用于
 
 以下产品语义不可被便利性优化绕过：
 
-- 用户 format 始终是 authority。Full 使用固定张数；partial explicit 使用用户 count；partial
-  auto 使用唯一匹配片夹的有效容量。不得猜 format、真实照片数或 filename count。
-- 自动批准必须保护所有仍符合正式 evidence、物理、count/order 与 source/lane authority 的
-  retained placements。Canonical 只作代表解，不独占安全真相。
+- 用户 format 始终是 authority。Full 使用固定张数；partial 必须使用用户明确输入的 count，且
+  count 包含中间需要保留的空白曝光格。片夹容量只校验上限，不得生成 count，也不得猜 format、
+  真实照片数或 filename count。
+- Detector 先按物理合同淘汰非法完整链，再按证据等级和独立像素观察选出明显胜出的完整链。
+  `SafeCropEnvelope` 只保护胜出 placement 自身的测量不确定性，不合并落选位置；没有明显胜出者
+  时保持 `placement unresolved`。
 - `CandidateGate` 只记录 typed assessment；只有 `DecisionGate` 创建 final status 与 reasons。
 - 任一 slot 不安全时，整个 source `needs_review` 且不写正式照片；不做 slot salvage。
 - 不为减少 blank TIFF 牺牲内容保护或 direct-use 质量。V5 不实现 blank suppression。

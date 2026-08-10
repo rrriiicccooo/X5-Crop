@@ -32,13 +32,13 @@ TIFF。其它结构会安全失败，不会猜测。
 ## 3. 选择格式、模式与张数
 
 - `full`：使用该格式的固定片夹张数。
-- `partial --count N`：`N` 是用户明确给出的输出张数。
-- `partial --count auto`：保守输出匹配片夹对该格式的全部有效 slots，可能包含空白 TIFF。
+- `partial --count N`：`N` 是这段片条实际包含的曝光格数，包括中间空白曝光格；不能超过
+  片夹容量。交互启动时输入无效会要求重新输入。
 - `--layout auto`：按扫描方向选择水平或垂直；也可明确指定。
 - `--debug-analysis`：只生成 Debug Analysis JPG 和报告类文件，不写正式 TIFF 或 review copy；
   默认关闭。
 
-程序不从文件名猜 format 或 count，也不自动删除空白 slot。
+程序不从文件名或片夹容量猜 count，也不自动删除空白 slot。
 
 要先看检测结果再裁切，连续运行同一组参数，第二次去掉 `--debug-analysis`：
 
