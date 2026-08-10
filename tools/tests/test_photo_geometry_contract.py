@@ -572,6 +572,12 @@ class TemplateRuntimeContractTest(unittest.TestCase):
                 for lane in candidate.geometry.lane_reconstructions
             )
         )
+        self.assertTrue(
+            all(
+                lane.lane_gap_model.lane_id == lane.lane_id
+                for lane in candidate.geometry.lane_reconstructions
+            )
+        )
 
 
 if __name__ == "__main__":

@@ -96,6 +96,7 @@ class MeasurementIdentity(str, Enum):
     IMAGE_MEASUREMENT_STATISTICS = "image_measurement_statistics"
     SCAN_CANVAS_GEOMETRY = "scan_canvas_geometry"
     PHOTO_BOUNDARY = "photo_boundary"
+    CONTENT_OCCUPANCY = "content_occupancy"
 
 
 class ObservationId(str):

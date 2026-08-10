@@ -40,7 +40,7 @@ from .model import (
 )
 from .source_geometry import (
     JointAxisGeometry,
-    NominalPitch,
+    LaneGapModel,
     SourceFrameGeometry,
 )
 from .template_model import (
@@ -3146,9 +3146,21 @@ def _materialize_sequence_placement(
         roles=proposal.roles,
         phase_fit_interval_px=phase_fit,
         phase_full_interval_px=phase_full,
-        nominal_pitch=NominalPitch.from_geometry(
+        lane_gap_model=LaneGapModel.from_edge_families(
             geometry.width_state,
-            nominal_gap_mm=_gap_seed_mm(proposal.component),
+            lane_id=lane.lane_id,
+            edge_families=tuple(
+                tuple(
+                    (
+                        run.coordinate_interval_px,
+                        run.transition_ids,
+                    )
+                    for run in lane.sequence_profile.runs
+                    if run.anchor_qualified_for(role)
+                )
+                for role in (BoundaryRole.START, BoundaryRole.END)
+            ),
+            format_gap_prior_mm=proposal.component.format_gap_prior_mm,
         ),
         local_advance_relations=relations,
         canonical_positions_px=tuple(canonical_positions),
@@ -3630,7 +3642,7 @@ def _canonical_frames(
             named_position_inference=(
                 None
                 if start_index in sequence_observations
-                else "start_from_template_phase_and_nominal_pitch"
+                else "start_from_template_phase_and_lane_gap"
             ),
             sequence_direction_interval_degrees=(
                 sequence.sequence_edge_direction_intervals_degrees[
@@ -3657,7 +3669,7 @@ def _canonical_frames(
             named_position_inference=(
                 None
                 if end_index in sequence_observations
-                else "end_from_template_phase_and_nominal_pitch"
+                else "end_from_template_phase_and_lane_gap"
             ),
             sequence_direction_interval_degrees=(
                 sequence.sequence_edge_direction_intervals_degrees[

@@ -15,7 +15,7 @@ from .model import (
     PhotoBoundaryTransition,
     SharedStripDirection,
 )
-from .source_geometry import NominalPitch, SourceFrameGeometry
+from .source_geometry import LaneGapModel, SourceFrameGeometry
 from .template_profiles import (
     BasicAxisProfile,
     PhaseGroupingWork,
@@ -389,7 +389,7 @@ class SequencePlacement:
     roles: tuple[TemplateRole, ...]
     phase_fit_interval_px: FiniteInterval
     phase_full_interval_px: FiniteInterval
-    nominal_pitch: NominalPitch
+    lane_gap_model: LaneGapModel
     local_advance_relations: tuple[LocalAdvanceRelation, ...]
     canonical_positions_px: tuple[float, ...]
     fit_positions_px: tuple[FiniteInterval, ...]

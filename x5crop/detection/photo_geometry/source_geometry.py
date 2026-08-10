@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from hashlib import sha256
 import math
 
-from ...domain import FiniteInterval, ObservationId, PositiveInterval
+from ...domain import EvidenceState, FiniteInterval, ObservationId, PositiveInterval
 from ...formats import (
     FRAME_DIMENSION_TOLERANCE_SPEC,
     FramePhysicalSpec,
@@ -532,49 +532,126 @@ class SourceFrameGeometry:
 
 
 @dataclass(frozen=True)
-class NominalPitch:
-    nominal_gap_mm: float
+class LaneGapModel:
+    gap_model_id: str
+    lane_id: str
+    state: EvidenceState
+    gap_interval_px: FiniteInterval | None
+    direct_gap_proposals_px: tuple[FiniteInterval, ...]
+    supporting_observation_ids: tuple[ObservationId, ...]
+    format_gap_prior_mm: float | None
     joint_width_geometry_id: str
-    pitch_interval_px: FiniteInterval
-    canonical_pitch_px: float
+    placement_pitch_interval_px: FiniteInterval
+    canonical_placement_pitch_px: float
 
     @classmethod
-    def from_geometry(
+    def from_edge_families(
         cls,
         width_state: JointAxisGeometry,
         *,
-        nominal_gap_mm: float,
-    ) -> "NominalPitch":
-        if width_state.axis_name != "width" or nominal_gap_mm < 0.0:
-            raise ValueError("nominal pitch requires width geometry")
-        pitch = width_state.project_affine(
-            q_coefficient=width_state.design_extent_mm,
-            scale_coefficient=nominal_gap_mm,
-        )
-        scale, normalized, _factor = width_state.canonical_state()
-        canonical = (
-            width_state.design_extent_mm * normalized
-            + nominal_gap_mm * scale
-        )
+        lane_id: str,
+        edge_families: tuple[
+            tuple[tuple[FiniteInterval, tuple[ObservationId, ...]], ...], ...
+        ],
+        format_gap_prior_mm: float | None,
+    ) -> "LaneGapModel":
+        if width_state.axis_name != "width" or not lane_id:
+            raise ValueError("lane gap requires lane width geometry")
+        width = width_state.extent_projection_px()
+        proposals: list[FiniteInterval] = []
+        observations: list[ObservationId] = []
+        for family in edge_families:
+            ordered = tuple(sorted(family, key=lambda item: item[0].center))
+            for left, right in zip(ordered, ordered[1:]):
+                left_interval, left_ids = left
+                right_interval, right_ids = right
+                proposals.append(
+                    FiniteInterval(
+                        right_interval.minimum
+                        - left_interval.maximum
+                        - width.maximum,
+                        right_interval.maximum
+                        - left_interval.minimum
+                        - width.minimum,
+                    )
+                )
+                observations.extend((*left_ids, *right_ids))
+        proposal_tuple = tuple(proposals)
+        common = _common(proposal_tuple)
+        if len(proposal_tuple) >= 2 and common is not None:
+            state = EvidenceState.SUPPORTED
+            gap = common
+        elif len(proposal_tuple) >= 2:
+            state = EvidenceState.CONTRADICTED
+            gap = None
+        elif proposal_tuple:
+            state = EvidenceState.UNAVAILABLE
+            gap = proposal_tuple[0]
+        else:
+            state = EvidenceState.UNAVAILABLE
+            gap = None
+        if state == EvidenceState.SUPPORTED and gap is not None:
+            placement_pitch = FiniteInterval(
+                width.minimum + gap.minimum,
+                width.maximum + gap.maximum,
+            )
+            canonical = placement_pitch.center
+        else:
+            seed = 0.0 if format_gap_prior_mm is None else format_gap_prior_mm
+            placement_pitch = width_state.project_affine(
+                q_coefficient=width_state.design_extent_mm,
+                scale_coefficient=seed,
+            )
+            canonical = placement_pitch.center
+        unique_ids = tuple(sorted(set(observations), key=str))
+        encoded = "\x1f".join(
+            (
+                lane_id,
+                state.value,
+                *(value.minimum.hex() for value in proposal_tuple),
+                *(value.maximum.hex() for value in proposal_tuple),
+                *(str(value) for value in unique_ids),
+                "none" if format_gap_prior_mm is None else format_gap_prior_mm.hex(),
+            )
+        ).encode("utf-8")
         return cls(
-            nominal_gap_mm=nominal_gap_mm,
+            gap_model_id=f"lane-gap:{sha256(encoded).hexdigest()[:24]}",
+            lane_id=lane_id,
+            state=state,
+            gap_interval_px=gap,
+            direct_gap_proposals_px=proposal_tuple,
+            supporting_observation_ids=unique_ids,
+            format_gap_prior_mm=format_gap_prior_mm,
             joint_width_geometry_id=_stable_id(
                 "joint-width-state",
                 width_state.vertices,
                 width_state.observation_ids,
             ),
-            pitch_interval_px=pitch,
-            canonical_pitch_px=canonical,
+            placement_pitch_interval_px=placement_pitch,
+            canonical_placement_pitch_px=canonical,
         )
 
     def __post_init__(self) -> None:
         if (
-            not self.joint_width_geometry_id
-            or not math.isfinite(self.nominal_gap_mm)
-            or self.nominal_gap_mm < 0.0
-            or not self.pitch_interval_px.contains(
-                self.canonical_pitch_px,
+            not self.gap_model_id
+            or not self.lane_id
+            or not self.joint_width_geometry_id
+            or (
+                self.format_gap_prior_mm is not None
+                and (
+                    not math.isfinite(self.format_gap_prior_mm)
+                    or self.format_gap_prior_mm <= 0.0
+                )
+            )
+            or not self.placement_pitch_interval_px.contains(
+                self.canonical_placement_pitch_px,
                 epsilon=1.0e-9,
             )
+            or (self.state == EvidenceState.SUPPORTED) != (
+                self.gap_interval_px is not None
+                and len(self.direct_gap_proposals_px) >= 2
+            )
+            or len(set(self.supporting_observation_ids))
+            != len(self.supporting_observation_ids)
         ):
-            raise ValueError("nominal pitch is invalid")
+            raise ValueError("lane gap model is invalid")

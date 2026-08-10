@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from ..domain import Box, EvidenceState
 from ..configuration.model import ResolvedSlotCount
 from .evidence.scan_canvas import MatchedHolder, ScanCanvasEvidence, ScanCanvasOutcome
+from .evidence.content_occupancy import ContentOccupancyObservationSet
 
 
 @dataclass(frozen=True)
@@ -40,6 +41,7 @@ class SourceCoreEvidence:
     scan_canvas: ScanCanvasEvidence
     matched_holder: MatchedHolder | None
     resolved_slot_count: ResolvedSlotCount | None
+    content_occupancy: tuple[ContentOccupancyObservationSet, ...]
     lanes: tuple[SourceLaneEvidence, ...]
     incomplete_reasons: tuple[str, ...]
 
@@ -48,6 +50,10 @@ class SourceCoreEvidence:
             raise ValueError("source-core lane identities must be unique")
         if len(set(self.incomplete_reasons)) != len(self.incomplete_reasons):
             raise ValueError("source-core incomplete reasons must be unique")
+        if tuple(item.lane_id for item in self.content_occupancy) != tuple(
+            lane.domain.lane_id for lane in self.lanes
+        ):
+            raise ValueError("content observations must cover ordered lanes")
         if self.resolved_slot_count is not None and self.matched_holder is None:
             raise ValueError("resolved slot count requires a matched holder")
         if self.matched_holder is not None and (

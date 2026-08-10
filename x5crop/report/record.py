@@ -43,6 +43,7 @@ def _lane_placement_read_model(lane: object) -> dict[str, object]:
             ),
         },
         "observations": {
+            "lane_gap_model": typed_read_model(lane.lane_gap_model),
             "side_transition_regions": typed_read_model(
                 lane.side_transition_regions
             ),
@@ -123,6 +124,9 @@ def report_record_for_final_detection(
             "source_lanes": [
                 _source_lane_read_model(lane) for lane in core.lanes
             ],
+            "content_occupancy": typed_read_model(
+                core.content_occupancy
+            ),
             "queries": [
                 _measurement_set_read_model(measurement_set)
                 for lane in candidate_geometry.lane_reconstructions

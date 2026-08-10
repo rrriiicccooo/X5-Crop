@@ -24,6 +24,7 @@ from .evidence.scan_canvas import (
     matched_holder_from_evidence,
     observe_scan_canvas,
 )
+from .evidence.content_occupancy import observe_content_occupancy
 from .photo_geometry.measurement import (
     make_photo_boundary_measurement_field,
 )
@@ -242,6 +243,15 @@ def prepare_detection_workspace(
         scan_canvas=scan_canvas,
         matched_holder=matched_holder,
         resolved_slot_count=resolved_slot_count,
+        content_occupancy=tuple(
+            observe_content_occupancy(
+                gray_work,
+                lane_id=lane.domain.lane_id,
+                lane_work_box=lane.domain.work_box,
+                layout=layout,
+            )
+            for lane in lanes
+        ),
         lanes=lanes,
         incomplete_reasons=incomplete_reasons,
     )

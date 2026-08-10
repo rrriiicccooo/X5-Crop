@@ -70,6 +70,24 @@ def _validate_measurement(record: dict[str, Any]) -> None:
         or not field.get("streaming_transition_records_only")
     ):
         raise ValueError("measurement field owner is not current")
+    for observation_set in record["measurement"]["content_occupancy"]:
+        if (
+            observation_set["long_sample_count"] > 256
+            or observation_set["cross_sample_count"] > 64
+            or len(observation_set["observations"]) > 64
+            or any(
+                set(observation)
+                != {
+                    "observation_id",
+                    "lane_id",
+                    "source_box",
+                    "reliability",
+                    "provenance",
+                }
+                for observation in observation_set["observations"]
+            )
+        ):
+            raise ValueError("content occupancy observations are unbounded")
     for measurement_set in record["measurement"]["queries"]:
         coverage = measurement_set["coverage"]
         complete = bool(coverage["complete"])

@@ -6,6 +6,7 @@ import unittest
 from unittest import mock
 
 from x5crop.domain import (
+    EvidenceState,
     FiniteInterval,
     MeasurementIdentity,
     MeasurementProvenance,
@@ -61,7 +62,7 @@ from x5crop.detection.photo_geometry.template_profiles import (
 )
 from x5crop.detection.photo_geometry.source_geometry import (
     JointAxisGeometry,
-    NominalPitch,
+    LaneGapModel,
     SourceFrameGeometry,
 )
 
@@ -783,19 +784,59 @@ class TemplateFirstArchitectureContractTest(unittest.TestCase):
             self.assertGreaterEqual(q, 0.9875 * s - 1.0e-9)
             self.assertLessEqual(q, 1.0125 * s + 1.0e-9)
 
-    def test_nominal_pitch_and_budget_consume_same_joint_state(self) -> None:
+    def test_lane_gap_requires_two_compatible_direct_pitch_segments(self) -> None:
         state = JointAxisGeometry.create(
             axis_name="width",
             design_extent_mm=36.0,
-            scale_interval_px_per_mm=PositiveInterval(99.0, 101.0),
-            factor_interval=PositiveInterval(0.9875, 1.0125),
+            scale_interval_px_per_mm=PositiveInterval(100.0, 100.0),
+            factor_interval=PositiveInterval(1.0, 1.0),
         )
-        pitch = NominalPitch.from_geometry(state, nominal_gap_mm=1.625)
-        expected = state.project_affine(
-            q_coefficient=36.0,
-            scale_coefficient=1.625,
+        gap = LaneGapModel.from_edge_families(
+            state,
+            lane_id="lane:0",
+            edge_families=(
+                (
+                    (FiniteInterval.exact(0.0), (ObservationId("edge:0"),)),
+                    (FiniteInterval.exact(3800.0), (ObservationId("edge:1"),)),
+                    (FiniteInterval.exact(7600.0), (ObservationId("edge:2"),)),
+                ),
+            ),
+            format_gap_prior_mm=2.0,
         )
-        self.assertEqual(pitch.pitch_interval_px, expected)
+        self.assertEqual(gap.state, EvidenceState.SUPPORTED)
+        self.assertEqual(gap.gap_interval_px, FiniteInterval.exact(200.0))
+        self.assertEqual(
+            gap.placement_pitch_interval_px,
+            FiniteInterval.exact(3800.0),
+        )
+        second_lane = LaneGapModel.from_edge_families(
+            state,
+            lane_id="lane:1",
+            edge_families=(
+                (
+                    (FiniteInterval.exact(0.0), (ObservationId("edge:3"),)),
+                    (FiniteInterval.exact(3800.0), (ObservationId("edge:4"),)),
+                    (FiniteInterval.exact(7600.0), (ObservationId("edge:5"),)),
+                ),
+            ),
+            format_gap_prior_mm=2.0,
+        )
+        self.assertEqual(second_lane.gap_interval_px, gap.gap_interval_px)
+        self.assertNotEqual(second_lane.gap_model_id, gap.gap_model_id)
+        contradicted = LaneGapModel.from_edge_families(
+            state,
+            lane_id="lane:0",
+            edge_families=(
+                (
+                    (FiniteInterval.exact(0.0), (ObservationId("edge:6"),)),
+                    (FiniteInterval.exact(3800.0), (ObservationId("edge:7"),)),
+                    (FiniteInterval.exact(7900.0), (ObservationId("edge:8"),)),
+                ),
+            ),
+            format_gap_prior_mm=2.0,
+        )
+        self.assertEqual(contradicted.state, EvidenceState.CONTRADICTED)
+        self.assertIsNone(contradicted.gap_interval_px)
         self.assertEqual(
             state.retained_extent_budget_px(0.05),
             FiniteInterval(

@@ -12,6 +12,9 @@ from x5crop.detection.evidence.scan_canvas import (
     ScanCanvasOutcome,
     observe_scan_canvas,
 )
+from x5crop.detection.evidence.content_occupancy import (
+    ContentOccupancyObservation,
+)
 from x5crop.detection.gate_checks import GateGap
 from x5crop.detection.pipeline import choose_detection
 from x5crop.detection.photo_geometry.corridors import (
@@ -180,6 +183,55 @@ class PhysicalAuthorityContractTest(unittest.TestCase):
         self.assertEqual(holder.full_count, 2)
         self.assertEqual(resolved.output_count, 2)
         self.assertEqual(resolved.authority.value, "matched_holder_full_count")
+
+    def test_content_occupancy_is_candidate_independent_and_deterministic(
+        self,
+    ) -> None:
+        configuration = get_detection_configuration("135", "full")
+        pixels = np.zeros((100, 720), dtype=np.uint8)
+        pixels[::2, 300:330] = 255
+        profile = ImageProfile(
+            shape=pixels.shape,
+            dtype="uint8",
+            axes="YX",
+            photometric="MINISBLACK",
+            compression="NONE",
+            sample_format=None,
+            bits_per_sample=(8,),
+            samples_per_pixel=1,
+            planar_config=None,
+            resolution=None,
+            resolution_unit=None,
+            icc_profile=None,
+            metadata=TiffMetadata(None, None, None, ()),
+            orientation=orientation_mapping(1, 720, 100),
+        )
+        first = prepare_detection_workspace(
+            pixels,
+            profile,
+            "horizontal",
+            configuration,
+            None,
+        ).source_core.content_occupancy[0]
+        second = prepare_detection_workspace(
+            pixels,
+            profile,
+            "horizontal",
+            configuration,
+            None,
+        ).source_core.content_occupancy[0]
+        self.assertTrue(first.observations)
+        self.assertEqual(first, second)
+        self.assertEqual(
+            tuple(item.name for item in fields(ContentOccupancyObservation)),
+            (
+                "observation_id",
+                "lane_id",
+                "source_box",
+                "reliability",
+                "provenance",
+            ),
+        )
 
     def test_competing_holder_counts_remain_unresolved(self) -> None:
         configuration = get_detection_configuration("120-67", "full")

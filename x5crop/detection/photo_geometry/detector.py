@@ -23,6 +23,7 @@ from .corridors import (
 from .measurement import measure_registered_queries, track_side_transition_regions
 from .model import (
     BoundaryAxis,
+    BoundaryRole,
     DirectUseBudgetAssessment,
     OutputSlotIdentity,
     PhotoBoundaryMeasurementField,
@@ -36,6 +37,7 @@ from .model import (
     SideTransitionRegion,
 )
 from .output import direct_use_budget_assessment, safe_crop_envelope_from_placements
+from .source_geometry import LaneGapModel, SourceFrameGeometry
 from .protection import minimum_guard_spec
 from .template_first import (
     build_lane_template_proposal,
@@ -66,6 +68,7 @@ class LaneFormatPlacementReconstruction:
     cross_profile: BasicAxisProfile
     raw_top_bottom_observations: tuple[PhotoBoundaryObservation, ...]
     provisional_height_templates: tuple[ProvisionalHeightTemplate, ...]
+    lane_gap_model: LaneGapModel
     direction_classes: tuple[SharedStripDirection, ...]
     retained_placements: tuple[FormatPlacement, ...]
     canonical_placement: FormatPlacement | None
@@ -143,6 +146,26 @@ class _PreparedLane:
     sequence_profile: BasicAxisProfile
     cross_profile: BasicAxisProfile
     proposal: TemplateLaneProposal
+    lane_gap_model: LaneGapModel
+
+
+def _lane_gap_model(
+    lane_input: TemplateLaneInput,
+    source_geometry: SourceFrameGeometry,
+) -> LaneGapModel:
+    return LaneGapModel.from_edge_families(
+        source_geometry.width_state,
+        lane_id=lane_input.lane_id,
+        edge_families=tuple(
+            tuple(
+                (run.coordinate_interval_px, run.transition_ids)
+                for run in lane_input.sequence_profile.runs
+                if run.anchor_qualified_for(role)
+            )
+            for role in (BoundaryRole.START, BoundaryRole.END)
+        ),
+        format_gap_prior_mm=source_geometry.component.format_gap_prior_mm,
+    )
 
 
 def _profile_capacity(
@@ -307,6 +330,14 @@ def _prepare_lane(
         lane_input,
         configuration.physical_spec.frame_components,
     )
+    lane_gap_model = _lane_gap_model(
+        lane_input,
+        SourceFrameGeometry.create(
+            configuration.physical_spec.frame_components[0],
+            width_scale_px_per_mm=scales.width_axis_px_per_mm,
+            height_scale_px_per_mm=scales.height_axis_px_per_mm,
+        ),
+    )
     return _PreparedLane(
         lane=lane,
         layout=layout,
@@ -325,6 +356,7 @@ def _prepare_lane(
         sequence_profile=sequence_profile,
         cross_profile=cross_profile,
         proposal=proposal,
+        lane_gap_model=lane_gap_model,
     )
 
 
@@ -472,6 +504,7 @@ def _empty_reconstruction(prepared: _PreparedLane) -> LaneFormatPlacementReconst
             for component in prepared.proposal.components
             for template in component.height_templates
         ),
+        lane_gap_model=prepared.lane_gap_model,
         direction_classes=prepared.proposal.direction_classes,
         retained_placements=(),
         canonical_placement=None,
@@ -650,6 +683,7 @@ def reconstruct_photo_geometry(
                     for component in refined_proposal.components
                     for template in component.height_templates
                 ),
+                lane_gap_model=prepared_lane.lane_gap_model,
                 direction_classes=source_directions,
                 retained_placements=placements,
                 canonical_placement=canonical,
