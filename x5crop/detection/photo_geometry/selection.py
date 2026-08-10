@@ -12,7 +12,6 @@ from .bounds import (
     MAX_CONTENT_VETO_FACTS_PER_CHAIN,
     MAX_LEDGER_ENTRIES_PER_CHAIN,
     MAX_LEDGER_ENTRIES_PER_LANE,
-    MAX_LEDGER_ENTRIES_PER_SOURCE,
 )
 from .model import BoundaryRole, SafeCropEnvelope
 from .template_model import FormatPlacement, LocalAdvanceKind
@@ -285,7 +284,7 @@ def _boundary_intervals(placement: FormatPlacement) -> tuple[FiniteInterval, ...
 def _direct_evidence(
     placement: FormatPlacement,
 ) -> tuple[int, int, tuple[ObservationId, ...], tuple[ObservationId, ...]]:
-    sequence = placement.canonical_sequence
+    sequence = placement.sequence
     sequence_by_ordinal: dict[int, dict[BoundaryRole, tuple[ObservationId, ...]]] = {}
     for evidence in sequence.observations:
         sequence_by_ordinal.setdefault(evidence.role.lane_ordinal, {})[
@@ -309,7 +308,7 @@ def _direct_evidence(
         for identity in values
     }
     direct_count = sum(len(roles) for roles in sequence_by_ordinal.values())
-    cross = placement.canonical_cross
+    cross = placement.cross
     cross_roles = {item.role for item in cross.evidence}
     cross_ids = {
         identity
@@ -336,7 +335,7 @@ def _chain_ledger(
     raw: list[tuple[ChainEvidenceTier, tuple[ObservationId, ...], FiniteInterval | None]] = [
         (ChainEvidenceTier.PHYSICAL_CONTRACT, (), None)
     ]
-    sequence = placement.canonical_sequence
+    sequence = placement.sequence
     paired_ordinals = {
         ordinal
         for ordinal in range(1, placement.output_slot_count + 1)
@@ -357,7 +356,7 @@ def _chain_ledger(
         )
         for item in sequence.observations
     )
-    cross_roles = {item.role for item in placement.canonical_cross.evidence}
+    cross_roles = {item.role for item in placement.cross.evidence}
     raw.extend(
         (
             ChainEvidenceTier.DIRECT_OPPOSITE_PAIR
@@ -366,7 +365,7 @@ def _chain_ledger(
             item.observation.transition_ids,
             item.full_position_at_lane_reference_px,
         )
-        for item in placement.canonical_cross.evidence
+        for item in placement.cross.evidence
     )
     raw.extend(
         (
@@ -437,6 +436,7 @@ def complete_chain_record(
     chain_id = _stable_id(
         "complete-chain",
         (
+            placement.placement_id,
             placement.lane_id,
             placement.component.component_id,
             placement.direction.direction_id,
@@ -478,10 +478,10 @@ def _weak_representative_key(
     placement: FormatPlacement,
 ) -> tuple[object, ...]:
     residual = sum(
-        item.fit_residual_px for item in placement.canonical_sequence.observations
+        item.fit_residual_px for item in placement.sequence.observations
     ) + sum(
         item.observation.fit_residual_px
-        for item in placement.canonical_cross.evidence
+        for item in placement.cross.evidence
     )
     uncertainty = sum(
         interval.width for interval in _boundary_intervals(placement)
@@ -648,14 +648,14 @@ def content_veto_assessment(
                             observation_ids=(observation.observation_id,),
                         )
                     )
-        gap = placement.canonical_sequence.lane_gap_model
+        gap = placement.sequence.lane_gap_model
         if (
             gap.state != EvidenceState.SUPPORTED
             or gap.gap_interval_px is None
             or gap.gap_interval_px.minimum <= 0.0
         ):
             continue
-        relations = placement.canonical_sequence.local_advance_relations
+        relations = placement.sequence.local_advance_relations
         for ordinal, (left, right) in enumerate(zip(frames, frames[1:]), 1):
             relation = relations[ordinal - 1]
             if relation.kind in {LocalAdvanceKind.CONTACT, LocalAdvanceKind.OVERLAP}:

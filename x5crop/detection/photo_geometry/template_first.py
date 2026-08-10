@@ -3776,61 +3776,6 @@ def _cross_within_authority(
     )
 
 
-def _representative_cross_placement(
-    placements: tuple[CrossPlacement, ...],
-) -> CrossPlacement:
-    if not placements:
-        raise ValueError("canonical cross requires retained placements")
-    if len(placements) == 1:
-        return placements[0]
-    first = placements[0]
-    if any(
-        item.source_geometry_id != first.source_geometry_id
-        or item.frame_reference_traces_px != first.frame_reference_traces_px
-        for item in placements[1:]
-    ):
-        raise ValueError("retained crosses cannot share one representative")
-
-    def centers(name: str) -> tuple[float, ...]:
-        values = tuple(getattr(item, name) for item in placements)
-        return tuple(
-            sum(item[index] for item in values) / len(values)
-            for index in range(len(values[0]))
-        )
-
-    top = centers("top_canonical_positions_px")
-    bottom = centers("bottom_canonical_positions_px")
-    top_intervals = tuple(FiniteInterval.exact(value) for value in top)
-    bottom_intervals = tuple(FiniteInterval.exact(value) for value in bottom)
-    evidence = tuple(
-        {
-            (item.role, item.run_id): item
-            for placement in placements
-            for item in placement.evidence
-        }.values()
-    )
-    return CrossPlacement(
-        placement_id=_stable_id(
-            "canonical-cross-representative",
-            *(item.placement_id for item in placements),
-        ),
-        provisional_template_id=_stable_id(
-            "canonical-height-representative",
-            *(item.provisional_template_id for item in placements),
-        ),
-        source_geometry_id=first.source_geometry_id,
-        lane_reference_trace_px=first.lane_reference_trace_px,
-        frame_reference_traces_px=first.frame_reference_traces_px,
-        top_canonical_positions_px=top,
-        bottom_canonical_positions_px=bottom,
-        top_fit_positions_px=top_intervals,
-        bottom_fit_positions_px=bottom_intervals,
-        top_full_positions_px=top_intervals,
-        bottom_full_positions_px=bottom_intervals,
-        evidence=evidence,
-    )
-
-
 def _compatible_height_templates(
     lane_proposal: TemplateLaneProposal,
     component_proposal: ComponentTemplateProposal,
@@ -4126,7 +4071,7 @@ def _materialize_component_seed(
     seed: TemplateSequenceSeed,
     direction: SharedStripDirection,
     source_geometry: SourceFrameGeometry | None = None,
-) -> FormatPlacement | None:
+) -> tuple[FormatPlacement, ...]:
     """Materialize one complete template interpretation.
 
     A seed owns one correlated source-geometry and local-advance hypothesis.
@@ -4140,7 +4085,7 @@ def _materialize_component_seed(
         direction,
     )
     if not compatible_heights:
-        return None
+        return ()
     if source_geometry is None:
         try:
             geometry = _refine_source_geometry(
@@ -4176,7 +4121,7 @@ def _materialize_component_seed(
                     sequence_seeds=(seed,),
                 )
         except ValueError:
-            return None
+            return ()
     else:
         if source_geometry.component != component_proposal.component:
             raise ValueError("source geometry component disagrees")
@@ -4190,9 +4135,9 @@ def _materialize_component_seed(
             geometry,
         )
     except ValueError:
-        return None
+        return ()
     if not _sequence_within_authority(sequence, lane.width_authority_px):
-        return None
+        return ()
     sequence_support_px = FiniteInterval(
         min(item.minimum for item in sequence.full_positions_px),
         max(item.maximum for item in sequence.full_positions_px),
@@ -4227,9 +4172,9 @@ def _materialize_component_seed(
                     geometry,
                 )
             except ValueError:
-                return None
+                return ()
     if not _sequence_within_authority(sequence, lane.width_authority_px):
-        return None
+        return ()
     frame_references = tuple(
         (
             sequence.canonical_positions_px[index * 2]
@@ -4269,7 +4214,7 @@ def _materialize_component_seed(
         except ValueError:
             continue
     if not crosses:
-        return None
+        return ()
     unique_crosses = {item.placement_id: item for item in crosses}
     retained_crosses = tuple(
         unique_crosses[key]
@@ -4280,54 +4225,42 @@ def _materialize_component_seed(
         )
     )
     if not retained_crosses:
-        return None
-    complete_pairs = tuple(
-        item
-        for item in retained_crosses
-        if item.observed_role_count == 2
-    )
-    if complete_pairs:
-        retained_crosses = complete_pairs
-    canonical_cross = _representative_cross_placement(retained_crosses)
-    frames = _canonical_frames(
-        lane,
-        direction,
-        sequence,
-        canonical_cross,
-    )
-    canonical = CanonicalFormatPlacement(
-        canonical_id=_stable_id(
-            "canonical-format-placement",
-            sequence.placement_id,
-            canonical_cross.placement_id,
-        ),
-        sequence_placement_id=sequence.placement_id,
-        cross_placement_id=canonical_cross.placement_id,
-        frames=frames,
-        canonical_rank=(
-            *sequence.canonical_rank,
-            *canonical_cross.canonical_rank,
-        ),
-    )
-    return FormatPlacement(
-        placement_id=_stable_id(
-            "format-placement",
-            lane.lane_id,
-            component_proposal.component.component_id,
-            direction.direction_id,
-            geometry.geometry_id,
-            sequence.placement_id,
-            *(item.placement_id for item in retained_crosses),
-        ),
-        lane_id=lane.lane_id,
-        component=component_proposal.component,
-        output_slot_count=lane.output_slot_count,
-        direction=direction,
-        source_frame_geometry=geometry,
-        sequence_placements=(sequence,),
-        cross_placements=retained_crosses,
-        canonical_cross_placement=canonical_cross,
-        canonical=canonical,
+        return ()
+    return tuple(
+        FormatPlacement(
+            placement_id=_stable_id(
+                "format-placement",
+                lane.lane_id,
+                component_proposal.component.component_id,
+                direction.direction_id,
+                geometry.geometry_id,
+                sequence.placement_id,
+                cross.placement_id,
+            ),
+            lane_id=lane.lane_id,
+            component=component_proposal.component,
+            output_slot_count=lane.output_slot_count,
+            direction=direction,
+            source_frame_geometry=geometry,
+            sequence=sequence,
+            cross=cross,
+            canonical=CanonicalFormatPlacement(
+                canonical_id=_stable_id(
+                    "canonical-format-placement",
+                    sequence.placement_id,
+                    cross.placement_id,
+                ),
+                sequence_placement_id=sequence.placement_id,
+                cross_placement_id=cross.placement_id,
+                frames=_canonical_frames(
+                    lane,
+                    direction,
+                    sequence,
+                    cross,
+                ),
+            ),
+        )
+        for cross in retained_crosses
     )
 
 
@@ -4386,24 +4319,28 @@ def materialize_lane_placements(
             ),
         )
     )
-    bound_exceeded = len(proposed) > MAX_COMPLETE_CHAINS_PER_LANE
+    seed_materializations = tuple(
+        placements
+        for component, seed in proposed[:MAX_COMPLETE_CHAINS_PER_LANE]
+        if (placements := _materialize_component_seed(
+            proposal,
+            component,
+            seed,
+            direction,
+        ))
+    )
     values = tuple(
         placement
-        for component, seed in proposed[:MAX_COMPLETE_CHAINS_PER_LANE]
-        if (
-            placement := _materialize_component_seed(
-                proposal,
-                component,
-                seed,
-                direction,
-            )
-        )
-        is not None
+        for placements in seed_materializations
+        for placement in placements
     )
     unique = {item.placement_id: item for item in values}
+    ordered = tuple(unique[key] for key in sorted(unique))
+    proposed_count = max(len(proposed), len(ordered))
+    bound_exceeded = proposed_count > MAX_COMPLETE_CHAINS_PER_LANE
     return (
-        tuple(unique[key] for key in sorted(unique)),
-        len(proposed),
+        ordered[:MAX_COMPLETE_CHAINS_PER_LANE],
+        proposed_count,
         bound_exceeded,
     )
 
@@ -4412,11 +4349,7 @@ def _basic_lane_structurally_closed(
     placements: tuple[FormatPlacement, ...],
 ) -> bool:
     return bool(placements) and all(
-        placement.sequence_placements
-        and all(
-            sequence.exclusion_authorized
-            for sequence in placement.sequence_placements
-        )
+        placement.sequence.exclusion_authorized
         for placement in placements
     )
 

@@ -14,15 +14,25 @@ protection, excess margins, transform, and TIFF output are all safe. Otherwise
 the whole source enters `needs_review`; individual slots are never salvaged.
 
 The program does not claim to recover one uniquely true photo boundary and does
-not infer format or count from filenames. Full means the strip contains the
-complete exposure-slot count defined by its format and holder; partial means a
+not infer format or count from filenames. It independently matches the holder
+from the image before obtaining that holder contract's complete slot count.
+Full uses that count; partial means a
 smaller user-entered count, including blank exposures that remain in sequence.
 Neither mode requires the film to fill the holder or touch the canvas ends. If
 the count is complete, choose full. Holder capacity validates only the upper
-bound; it never supplies the count. Interactive launch asks again after invalid
-input; non-interactive CLI use stops with an input error. Blank slots are never
+bound; it never supplies the count. Blank slots are never
 removed. For example, a complete three-slot 120-66 strip uses full even when it
 sits in the middle of the holder; only a one- or two-slot strip is partial.
+
+Invocation preflight rejects partial without a count, a non-positive count, or
+full with a count, and exits with code `2`. After source reading, a partial
+count that is not below the matched holder's full count makes only that source
+`runtime_error`; it does not enter detection or write official TIFFs, while a
+non-interactive batch continues with other valid sources. Interactive multi-file
+use preflights holder/count for the entire batch, lists every conflict, and
+cancels that input so the batch choices must be restarted; it never rewrites
+count one source at a time. Ambiguous holder matching remains `needs_review`
+instead of guessing holder identity or count.
 
 The format fixes the physical photo rectangle. Detection places those rectangles
 from strip direction, top/bottom evidence, dark separator bands, shared dimensions,
@@ -110,9 +120,10 @@ Command-line options:
 - `--format`: `135`, `135-dual`, `half`, `xpan`, `120-645`, `120-66`, or `120-67`.
 - `--layout`: `auto`, `horizontal`, or `vertical`.
 - `--strip`: `full` or `partial`.
-- `--count N`: required partial exposure-slot count, including intermediate
-  blank exposures; it must be smaller than the complete count and must not
-  exceed holder capacity. Use full when the count is complete.
+- `--count N`: a positive integer used only by partial and required there,
+  including intermediate blank exposures; it must be smaller than the matched
+  holder's complete count. Full rejects `--count`; use full when the count is
+  complete.
 - `--jobs N`: source concurrency; default 1, maximum 3. The default limits peak
   memory on ordinary computers; when memory is plentiful and processing a batch
   of source TIFFs, you may explicitly use `--jobs 2`. Numerical library threads
@@ -124,8 +135,9 @@ Command-line options:
   attempts to reuse the report.
 - `--allow-best-effort-output`: explicitly accept weaker publication semantics
   on an unverified filesystem.
-- `--interactive`: prompt for format, mode, count, and Debug Analysis; an invalid
-  partial count is requested again until it is valid or the user cancels.
+- `--interactive`: prompt for format, mode, count, and Debug Analysis; a
+  multi-file holder/count preflight covers the whole batch and cancels the
+  current input after listing every conflict.
 
 There is no `--overwrite`. A successful run always replaces the previous
 complete, verified V5-owned output.
@@ -155,6 +167,12 @@ Each input has one terminal status:
 - `needs_review`: a normal run writes no official photos and copies the source
   into `needs_review/`; a Debug Analysis run records only the reasons.
 - `runtime_error`: writes no photos for that input while other inputs continue.
+
+An unresolved holder, a producer bound being reached, no uniquely dominant
+physical placement, or reliable content vetoing every placement all remain
+`needs_review`; X5 Crop writes no guessed photo TIFFs. Debug Analysis and the
+JSONL report retain matched-holder and count authority, every bounded materialized
+chain, placement clusters, content vetoes, the safe envelope, and final reasons.
 
 Exit codes:
 

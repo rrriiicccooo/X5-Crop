@@ -2,13 +2,19 @@ from __future__ import annotations
 
 import contextlib
 import io
+import json
 from dataclasses import fields
 from pathlib import Path
+from tempfile import TemporaryDirectory
 import unittest
 from unittest import mock
 
 from tools.release.manifest import RELEASE_FILES, RELEASE_PATHS
 from tools.release.standalone import read_sources
+from tools.regression.cohort_count_authority import (
+    confirmed_slot_count,
+    validate_count_authority,
+)
 from x5crop.configuration.model import (
     SlotCountRequest,
 )
@@ -42,6 +48,74 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class CurrentOnlyContractTest(unittest.TestCase):
+    def test_cohort_count_authority_is_explicit_and_filename_independent(
+        self,
+    ) -> None:
+        filename_only = {
+            "source_relative_path": "Test/135/partial/pass_X5_99_00001.tif",
+            "strip_mode": "partial",
+        }
+        self.assertIsNone(confirmed_slot_count(filename_only))
+        filename_only["confirmed_slot_count"] = 3
+        self.assertEqual(confirmed_slot_count(filename_only), 3)
+
+        def validate(rows: tuple[dict[str, object], ...]) -> None:
+            with TemporaryDirectory() as temporary:
+                path = Path(temporary) / "cohort.jsonl"
+                path.write_text(
+                    "".join(json.dumps(row) + "\n" for row in rows),
+                    encoding="utf-8",
+                )
+                validate_count_authority((path,))
+
+        validate(
+            (
+                {
+                    "sample_id": "full",
+                    "source_sha256": "a" * 64,
+                    "strip_mode": "full",
+                    "count_authority": "matched_holder_full_count",
+                },
+                {
+                    "sample_id": "partial",
+                    "source_sha256": "b" * 64,
+                    "strip_mode": "partial",
+                    "confirmed_slot_count": 3,
+                    "count_authority": "user_explicit_partial_count",
+                },
+            )
+        )
+        with self.assertRaisesRegex(ValueError, "full cohort"):
+            validate(
+                (
+                    {
+                        "sample_id": "invalid-full",
+                        "source_sha256": "c" * 64,
+                        "strip_mode": "full",
+                        "confirmed_slot_count": 6,
+                        "count_authority": "matched_holder_full_count",
+                    },
+                )
+            )
+        with self.assertRaisesRegex(ValueError, "conflicting mode/count"):
+            validate(
+                (
+                    {
+                        "sample_id": "first",
+                        "source_sha256": "d" * 64,
+                        "strip_mode": "full",
+                        "count_authority": "matched_holder_full_count",
+                    },
+                    {
+                        "sample_id": "alias",
+                        "source_sha256": "d" * 64,
+                        "strip_mode": "partial",
+                        "confirmed_slot_count": 5,
+                        "count_authority": "user_explicit_partial_count",
+                    },
+                )
+            )
+
     def test_obsolete_detector_files_are_absent(self) -> None:
         forbidden_paths = (
             "x5crop/detection/physical",
@@ -112,6 +186,11 @@ class CurrentOnlyContractTest(unittest.TestCase):
             "format_physical_templates",
             "dp_states",
             "dp_transitions",
+            "canonical_rank",
+            "representative_cross_placement",
+            "minimum_guard",
+            "retained_placements",
+            "placement_set_containment",
         )
         active_paths = tuple((ROOT / "x5crop").rglob("*.py")) + tuple(
             path

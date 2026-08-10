@@ -13,6 +13,8 @@ from typing import Iterable, Sequence
 
 from x5crop.report.validation import validate_current_report_record
 
+from .cohort_count_authority import validate_count_authority
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 GOLD_COHORT_PATH = Path(__file__).with_name("cohorts") / "gold_accuracy.jsonl"
@@ -29,6 +31,7 @@ def _source_sha256(path: Path) -> str:
 
 
 def validate_gold_source_identities() -> tuple[dict[str, object], ...]:
+    validate_count_authority()
     records = tuple(
         json.loads(line)
         for line in GOLD_COHORT_PATH.read_text(encoding="utf-8").splitlines()
@@ -44,19 +47,26 @@ def validate_gold_source_identities() -> tuple[dict[str, object], ...]:
         relative = Path(str(record.get("source_relative_path", "")))
         source = (PROJECT_ROOT / relative).resolve()
         expected_sha = str(record.get("source_sha256", "")).lower()
-        count_modes = tuple(record.get("count_modes", ()))
         strip_mode = str(record.get("strip_mode", ""))
-        expected_count_modes = {
-            "full": ("fixed_full",),
-            "partial": ("explicit",),
+        partial_count = record.get("confirmed_slot_count")
+        expected_authority = {
+            "full": "matched_holder_full_count",
+            "partial": "user_explicit_partial_count",
         }.get(strip_mode)
         if (
-            record.get("cohort_schema") != "x5crop_gold_accuracy_cohort_v3"
+            record.get("cohort_schema") != "x5crop_gold_accuracy_cohort_v4"
             or not sample_id
             or sample_id in sample_ids
             or record.get("validation_role") != "gold_accuracy_blocking"
             or record.get("cohort_role") not in {"nominal", "challenge"}
-            or count_modes != expected_count_modes
+            or record.get("count_authority") != expected_authority
+            or (
+                strip_mode == "full" and partial_count is not None
+            )
+            or (
+                strip_mode == "partial"
+                and (not isinstance(partial_count, int) or partial_count <= 0)
+            )
             or relative.is_absolute()
             or not source.is_relative_to(project_root)
             or not source.is_file()
@@ -70,11 +80,11 @@ def validate_gold_source_identities() -> tuple[dict[str, object], ...]:
             or geometry.get("status") != "user_confirmed"
             or geometry.get("source_sha256") != expected_sha
             or len(geometry.get("frames", ()))
-            != int(record.get("confirmed_photo_count", 0))
+            != int(record.get("confirmed_geometry_slot_count", 0))
         ):
             raise ValueError(f"gold geometry is invalid: {sample_id}")
         sample_ids.add(sample_id)
-        task_count += len(count_modes)
+        task_count += 1
     if task_count != EXPECTED_TASK_COUNT:
         raise ValueError("gold accuracy cohort must contain exactly nine tasks")
     return records
@@ -212,7 +222,6 @@ def _production_command(
     source: Path,
     output: Path,
     record: dict[str, object],
-    count_mode: str,
 ) -> list[str]:
     command = [
         sys.executable,
@@ -227,8 +236,8 @@ def _production_command(
         "--jobs",
         "1",
     ]
-    if count_mode == "explicit":
-        command.extend(("--count", str(record["confirmed_photo_count"])))
+    if record["strip_mode"] == "partial":
+        command.extend(("--count", str(record["confirmed_slot_count"])))
     return command
 
 
@@ -268,13 +277,13 @@ def _validate_approved_geometry(
         raise ValueError(f"{sample_id} deskew interval excludes confirmed edges")
 
 
-def _run_task(record: dict[str, object], count_mode: str) -> str:
+def _run_task(record: dict[str, object]) -> str:
     source = (PROJECT_ROOT / str(record["source_relative_path"])).resolve()
     before = source.stat()
     with TemporaryDirectory(prefix="x5crop-accuracy-") as temporary:
         output = Path(temporary) / "x5_crop_output"
         completed = subprocess.run(
-            _production_command(source, output, record, count_mode),
+            _production_command(source, output, record),
             cwd=PROJECT_ROOT,
             text=True,
             stdout=subprocess.PIPE,
@@ -283,7 +292,7 @@ def _run_task(record: dict[str, object], count_mode: str) -> str:
         )
         if completed.returncode != 0:
             raise ValueError(
-                f"{record['sample_id']}/{count_mode} production CLI failed:\n"
+                f"{record['sample_id']}/{record['strip_mode']} production CLI failed:\n"
                 + completed.stdout[-4000:]
             )
         report_path = output / "x5_crop_report.jsonl"
@@ -311,14 +320,14 @@ def _run_task(record: dict[str, object], count_mode: str) -> str:
         role = str(record["cohort_role"])
         if role == "nominal" and status != "approved_auto":
             raise ValueError(
-                f"{record['sample_id']}/{count_mode} nominal task is {status}"
+                f"{record['sample_id']}/{record['strip_mode']} nominal task is {status}"
             )
         if role == "challenge" and status not in {
             "approved_auto",
             "needs_review",
         }:
             raise ValueError(
-                f"{record['sample_id']}/{count_mode} challenge task is {status}"
+                f"{record['sample_id']}/{record['strip_mode']} challenge task is {status}"
             )
         if status == "approved_auto":
             _validate_approved_geometry(record, report)
@@ -330,17 +339,16 @@ def run_accuracy(records: Iterable[dict[str, object]]) -> tuple[int, int]:
     approved = 0
     failures: list[str] = []
     for record in records:
-        for count_mode in record["count_modes"]:
-            identity = f"{record['sample_id']}/{count_mode}"
-            try:
-                status = _run_task(record, str(count_mode))
-            except Exception as exc:
-                failures.append(f"{identity}: {exc}")
-                print(f"{identity}: FAIL: {exc}")
-                continue
-            passed += 1
-            approved += status == "approved_auto"
-            print(f"{identity}: {status}")
+        identity = f"{record['sample_id']}/{record['strip_mode']}"
+        try:
+            status = _run_task(record)
+        except Exception as exc:
+            failures.append(f"{identity}: {exc}")
+            print(f"{identity}: FAIL: {exc}")
+            continue
+        passed += 1
+        approved += status == "approved_auto"
+        print(f"{identity}: {status}")
     if failures:
         raise ValueError(
             f"gold accuracy failed {len(failures)} task(s):\n"

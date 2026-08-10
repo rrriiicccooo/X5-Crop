@@ -27,7 +27,7 @@ class PerformanceSourceIdentity:
     format_id: str
     strip_mode: str
     confirmed_slot_count: int | None
-    confirmed_count_authority: str | None
+    count_authority: str
     compression: str
 
     @property
@@ -75,11 +75,7 @@ def load_performance_sources(
                 if row.get("confirmed_slot_count") is None
                 else int(row["confirmed_slot_count"])
             ),
-            confirmed_count_authority=(
-                None
-                if row.get("confirmed_count_authority") is None
-                else str(row["confirmed_count_authority"])
-            ),
+            count_authority=str(row.get("count_authority", "")),
             compression=str(row.get("compression", "")),
         )
         path = source.source_path.resolve()

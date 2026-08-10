@@ -265,7 +265,7 @@ class TemplateFirstArchitectureContractTest(unittest.TestCase):
         component = mock.sentinel.component
         lane = mock.Mock(components=(component,))
         placement = mock.Mock(
-            sequence_placements=(mock.Mock(exclusion_authorized=True),)
+            sequence=mock.Mock(exclusion_authorized=True)
         )
         direction = mock.sentinel.direction
 

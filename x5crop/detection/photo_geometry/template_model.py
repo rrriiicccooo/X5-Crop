@@ -465,28 +465,6 @@ class SequencePlacement:
             for roles in roles_by_ordinal.values()
         )
 
-    @property
-    def canonical_rank(self) -> tuple[object, ...]:
-        support = sum(item.support_fraction for item in self.observations)
-        continuity = sum(
-            item.continuous_support_fraction for item in self.observations
-        )
-        residual = sum(item.fit_residual_px for item in self.observations)
-        background = sum(
-            item.background_preference for item in self.observations
-        )
-        return (
-            -self.observed_role_count,
-            -self.observed_opposite_pair_count,
-            -support,
-            -continuity,
-            residual,
-            sum(item.width for item in self.full_positions_px),
-            -background,
-            self.placement_id,
-        )
-
-
 @dataclass(frozen=True)
 class CrossRoleEvidence:
     role: BoundaryRole
@@ -581,32 +559,6 @@ class CrossPlacement:
     def observed_role_count(self) -> int:
         return len({item.role for item in self.evidence})
 
-    @property
-    def canonical_rank(self) -> tuple[object, ...]:
-        support = sum(
-            item.observation.trace_support_count for item in self.evidence
-        )
-        continuity = sum(
-            item.observation.continuous_support_fraction
-            for item in self.evidence
-        )
-        residual = sum(
-            item.observation.fit_residual_px for item in self.evidence
-        )
-        uncertainty = sum(
-            value.width
-            for value in (*self.top_full_positions_px, *self.bottom_full_positions_px)
-        )
-        return (
-            -self.observed_role_count,
-            -support,
-            -continuity,
-            residual,
-            uncertainty,
-            self.placement_id,
-        )
-
-
 def _polygon_area(points: tuple[tuple[float, float], ...]) -> float:
     return 0.5 * sum(
         left[0] * right[1] - right[0] * left[1]
@@ -651,7 +603,6 @@ class CanonicalFormatPlacement:
     sequence_placement_id: str
     cross_placement_id: str
     frames: tuple[FrameFormatPlacement, ...]
-    canonical_rank: tuple[object, ...]
 
     def __post_init__(self) -> None:
         if (
@@ -673,9 +624,8 @@ class FormatPlacement:
     output_slot_count: int
     direction: SharedStripDirection
     source_frame_geometry: SourceFrameGeometry
-    sequence_placements: tuple[SequencePlacement, ...]
-    cross_placements: tuple[CrossPlacement, ...]
-    canonical_cross_placement: CrossPlacement
+    sequence: SequencePlacement
+    cross: CrossPlacement
     canonical: CanonicalFormatPlacement
 
     def __post_init__(self) -> None:
@@ -683,33 +633,15 @@ class FormatPlacement:
             not self.placement_id
             or not self.lane_id
             or self.output_slot_count <= 0
-            or not self.sequence_placements
-            or not self.cross_placements
-            or self.canonical_cross_placement.source_geometry_id
+            or self.sequence.source_geometry_id
             != self.source_frame_geometry.geometry_id
+            or self.cross.source_geometry_id
+            != self.source_frame_geometry.geometry_id
+            or self.canonical.sequence_placement_id
+            != self.sequence.placement_id
             or self.canonical.cross_placement_id
-            != self.canonical_cross_placement.placement_id
+            != self.cross.placement_id
             or len(self.canonical.frames) != self.output_slot_count
             or self.source_frame_geometry.component != self.component
-            or any(
-                item.source_geometry_id
-                != self.source_frame_geometry.geometry_id
-                for item in (
-                    *self.sequence_placements,
-                    *self.cross_placements,
-                )
-            )
         ):
             raise ValueError("format placement is invalid")
-
-    @property
-    def canonical_sequence(self) -> SequencePlacement:
-        return next(
-            item
-            for item in self.sequence_placements
-            if item.placement_id == self.canonical.sequence_placement_id
-        )
-
-    @property
-    def canonical_cross(self) -> CrossPlacement:
-        return self.canonical_cross_placement

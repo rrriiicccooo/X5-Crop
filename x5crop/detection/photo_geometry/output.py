@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import replace
 from hashlib import sha256
 
 from ...domain import Box, EvidenceState
@@ -30,10 +29,7 @@ from .template_model import (
     FormatPlacement,
     FrameFormatPlacement,
 )
-from .protection import (
-    DIRECT_USE_BUDGET_SPEC,
-    MinimumGuardSpec,
-)
+from .protection import DIRECT_USE_BUDGET_SPEC
 
 
 def _stable_id(prefix: str, *parts: object) -> str:
@@ -88,72 +84,14 @@ def format_placement_frame_footprint(
     return convex_hull(
         _boundary_polygon(
             frame,
-            top_position_px=min(
-                item.top_full_positions_px[index].minimum
-                for item in placement.cross_placements
-            ),
-            bottom_position_px=max(
-                item.bottom_full_positions_px[index].maximum
-                for item in placement.cross_placements
-            ),
-            start_position_px=min(
-                item.full_positions_px[index * 2].minimum
-                for item in placement.sequence_placements
-            ),
-            end_position_px=max(
-                item.full_positions_px[index * 2 + 1].maximum
-                for item in placement.sequence_placements
-            ),
-        )
-    )
-
-
-def _oriented_outer_footprint(
-    points: tuple[tuple[float, float], ...],
-    canonical_frame: FrameFormatPlacement,
-) -> ConvexPolygon:
-    """Form one rectangle from the outermost value of each boundary role."""
-
-    if not points:
-        raise ValueError("oriented outer footprint requires source points")
-    sequence_normal = (
-        canonical_frame.start.line.normal_x,
-        canonical_frame.start.line.normal_y,
-    )
-    cross_normal = (
-        canonical_frame.top.line.normal_x,
-        canonical_frame.top.line.normal_y,
-    )
-    sequence_offsets = tuple(
-        sequence_normal[0] * x + sequence_normal[1] * y
-        for x, y in points
-    )
-    cross_offsets = tuple(
-        cross_normal[0] * x + cross_normal[1] * y
-        for x, y in points
-    )
-    start = replace(
-        canonical_frame.start.line,
-        offset_px=min(sequence_offsets),
-    )
-    end = replace(
-        canonical_frame.end.line,
-        offset_px=max(sequence_offsets),
-    )
-    top = replace(
-        canonical_frame.top.line,
-        offset_px=min(cross_offsets),
-    )
-    bottom = replace(
-        canonical_frame.bottom.line,
-        offset_px=max(cross_offsets),
-    )
-    return convex_hull(
-        (
-            top.intersection(start),
-            top.intersection(end),
-            bottom.intersection(end),
-            bottom.intersection(start),
+            top_position_px=placement.cross.top_full_positions_px[index].minimum,
+            bottom_position_px=placement.cross.bottom_full_positions_px[index].maximum,
+            start_position_px=placement.sequence.full_positions_px[
+                index * 2
+            ].minimum,
+            end_position_px=placement.sequence.full_positions_px[
+                index * 2 + 1
+            ].maximum,
         )
     )
 
@@ -182,33 +120,21 @@ def _outside_authority_sides(
 
 
 def _saturation_facts(
-    minimum_guard_footprint: ConvexPolygon,
     required_footprint: ConvexPolygon,
     authority: Box,
 ) -> tuple[FootprintSaturationFact, ...]:
-    guard_sides = set(
-        _outside_authority_sides(minimum_guard_footprint, authority)
-    )
     visible_sides = set(
         _outside_authority_sides(required_footprint, authority)
     )
     return tuple(
         FootprintSaturationFact(
             authority_side=side,
-            clipped_requirements=tuple(
-                requirement
-                for requirement, applies in (
-                    (ClippedRequirement.MINIMUM_GUARD, side in guard_sides),
-                    (
-                        ClippedRequirement.VISIBLE_INTERPOLATION_GUARD,
-                        side in visible_sides,
-                    ),
-                )
-                if applies
+            clipped_requirements=(
+                ClippedRequirement.VISIBLE_INTERPOLATION_GUARD,
             ),
         )
         for side in AuthoritySide
-        if side in guard_sides or side in visible_sides
+        if side in visible_sides
     )
 
 
@@ -218,7 +144,6 @@ def safe_crop_envelope_from_placement(
     lane: SourceLaneEvidence,
     lane_ordinal: int,
     layout: str,
-    minimum_guard: MinimumGuardSpec,
     transform: AffineCoordinateTransform,
 ) -> SafeCropEnvelope:
     """Build the sole saved footprint and mapped-box owner for one slot."""
@@ -235,42 +160,8 @@ def safe_crop_envelope_from_placement(
         _inside_authority(point, authority) for point in placement_footprint
     ):
         raise ValueError("format placement exceeds source/lane authority")
-    canonical_width = placement.canonical_sequence
-    start_index = (lane_ordinal - 1) * 2
-    end_index = start_index + 1
-    width_guard_px = (
-        minimum_guard.sequence_axis_mm_per_side
-        * placement.source_frame_geometry.width_state.feasible_scale_interval().maximum
-    )
-    height_guard_px = (
-        minimum_guard.cross_axis_mm_per_side
-        * placement.source_frame_geometry.height_state.feasible_scale_interval().maximum
-    )
-    minimum_guard_footprint = convex_hull(
-        _boundary_polygon(
-            canonical_frame,
-            top_position_px=(
-                canonical_frame.top.canonical_position_px - height_guard_px
-            ),
-            bottom_position_px=(
-                canonical_frame.bottom.canonical_position_px + height_guard_px
-            ),
-            start_position_px=(
-                canonical_width.canonical_positions_px[start_index]
-                - width_guard_px
-            ),
-            end_position_px=(
-                canonical_width.canonical_positions_px[end_index]
-                + width_guard_px
-            ),
-        )
-    )
-    geometric_requirement = _oriented_outer_footprint(
-        placement_footprint + minimum_guard_footprint,
-        canonical_frame,
-    )
     required = axis_aligned_minkowski_guard(
-        geometric_requirement,
+        placement_footprint,
         PHOTO_BOUNDARY_MEASUREMENT_SPEC.interpolation_allowance_source_px,
     )
     canonical_polygon = convex_hull(
@@ -308,7 +199,6 @@ def safe_crop_envelope_from_placement(
         required_source_footprint=required,
         constrained_source_footprint=constrained,
         saturation_facts=_saturation_facts(
-            minimum_guard_footprint,
             required,
             authority,
         ),
@@ -426,7 +316,7 @@ def direct_use_budget_assessment(
                 height_budget_px
             )
         )
-        for width in placement.sequence_placements:
+        for width in (placement.sequence,):
             start_position = width.fit_positions_px[index * 2]
             end_position = width.fit_positions_px[index * 2 + 1]
             for role, position, actual_offset, limit_mm in (
@@ -470,7 +360,7 @@ def direct_use_budget_assessment(
                 current = worst.get(role)
                 if current is None or candidate > current:
                     worst[role] = candidate
-        for height in placement.cross_placements:
+        for height in (placement.cross,):
             for role, position, actual_offset in (
                 (
                     BoundaryRole.TOP,

@@ -56,8 +56,6 @@ class AuthoritySide(str, Enum):
 
 
 class ClippedRequirement(str, Enum):
-    FULL_INTERVAL = "full_interval"
-    MINIMUM_GUARD = "minimum_guard"
     VISIBLE_INTERPOLATION_GUARD = "visible_interpolation_guard"
 
 

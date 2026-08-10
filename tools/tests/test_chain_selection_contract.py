@@ -88,10 +88,10 @@ def _placement(name: str, residual: float = 0.0):
                 ),
             )
         ),
-        canonical_sequence=SimpleNamespace(
+        sequence=SimpleNamespace(
             observations=(SimpleNamespace(fit_residual_px=residual),)
         ),
-        canonical_cross=SimpleNamespace(evidence=()),
+        cross=SimpleNamespace(evidence=()),
     )
 
 
@@ -161,7 +161,7 @@ def _content_placement(
     return SimpleNamespace(
         placement_id="placement:content",
         canonical=SimpleNamespace(frames=frames),
-        canonical_sequence=SimpleNamespace(
+        sequence=SimpleNamespace(
             lane_gap_model=SimpleNamespace(
                 state=EvidenceState.SUPPORTED,
                 gap_interval_px=FiniteInterval.exact(4.0),
@@ -175,7 +175,7 @@ def _content_placement(
 
 class ChainSelectionContractTest(unittest.TestCase):
     def test_producer_limits_are_frozen_and_source_bounded(self) -> None:
-        self.assertCountEqual(
+        self.assertEqual(
             (
                 MAX_BANDS_PER_CORRIDOR,
                 MAX_COMPLETE_CHAINS_PER_LANE,
@@ -245,7 +245,7 @@ class ChainSelectionContractTest(unittest.TestCase):
         )
 
         def materialize(_proposal, _component, seed, _direction):
-            return SimpleNamespace(placement_id=f"placement:{seed.seed_id}")
+            return (SimpleNamespace(placement_id=f"placement:{seed.seed_id}"),)
 
         with (
             mock.patch(
@@ -312,6 +312,10 @@ class ChainSelectionContractTest(unittest.TestCase):
         self.assertNotIn(
             "placements",
             inspect.signature(direct_use_budget_assessment).parameters,
+        )
+        self.assertNotIn(
+            "minimum_guard",
+            inspect.getsource(safe_crop_envelope_from_placement),
         )
 
     def test_sampling_cluster_requires_exact_boxes_and_common_intervals(

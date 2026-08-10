@@ -15,7 +15,19 @@ X5 Crop 处理用户已经知道 format 与片条数量的 Hasselblad / Imacon X
   `full_count`，必须使用 full。
 - 例如 120-66 的完整三格片条始终使用 full，即使片条位于片夹中间；只有一格或两格才使用
   partial。
-- 片夹容量只校验 count 上限，不生成 count。交互入口对无效 count 重新询问，非交互入口失败。
+- 片夹匹配不接受 requested count 过滤，固定数据流为：
+  `SlotCountRequest → MatchedHolder/full_count → ResolvedSlotCount`。Request 只记录用户意图；
+  只有匹配完成后才能产生 `MATCHED_HOLDER_FULL_COUNT` 或
+  `USER_EXPLICIT_PARTIAL_COUNT` authority。
+- 片夹容量只校验 count 上限，不生成 count。Partial 缺 count、count 非正数或 full 携带 count
+  属于调用级 preflight 错误，在读取 source 前以退出码 `2` 失败。
+- 匹配后发现 partial count 不小于 `full_count` 时，该 source 为 `runtime_error`，错误码固定为
+  `partial_count_not_less_than_matched_full_count`，不进入 detector、不写 TIFF；非交互批处理继续
+  其它 source。交互式多文件先检查整批 holder/count，任一冲突都列出全部冲突并取消本次输入，
+  只能重新启动整批选择。
+- Holder 候选不唯一且 `full_count` 不同则 reason 为 `holder_full_count_unresolved`；相同
+  `full_count` 但 holder/scale 仍不唯一则为 `holder_identity_unresolved`。两者都由
+  `DecisionGate` 终结为 `needs_review`，不进入正式几何检测、不写正式 TIFF。
 - 空白曝光仍占 slot 并参与几何求解；V5 不删除、不合并也不抑制空白 slot。
 - 任一 slot 不能安全输出时，整个 source 为 `needs_review`，不做 slot salvage。
 
@@ -70,7 +82,7 @@ H_nominal_px      = nominal_px_per_mm × format 短轴尺寸
 片夹实物和扫描设置会有小偏差，因此它们是窄范围先验，不是精密校准尺。对本项目而言，相机片门
 尺寸偏差与扫描比例偏差不可区分，也无需区分；可直接观测的是 source 共享的像素尺寸。
 
-同一 source 的所有照片共享 `W`、`H` 与扫描尺度，不允许逐张尺寸。设计兼容范围固定为：
+同一 source 的所有照片共享 `W`、`H`、扫描尺度和唯一主方向，不允许逐张尺寸。设计兼容范围固定为：
 
 ```text
 W：format 名义宽度的 ±1.25%
@@ -80,8 +92,9 @@ H：format 名义高度的 ±0.40%
 
 不建立 `W_effective_px`、`H_effective_px` 或逐张尺寸；`W` 与 `H` 就是当前 source 共享的可行
 窄范围。一组兼容的完整 opposite-edge pair 可以验证并收紧该范围，多组兼容测量取共同交集；
-直接测量互相冲突时保持 unresolved，不能平均，也不能分别赋给不同照片。双 lane 共享扫描尺度；
-每个 lane 分别拥有方向、中心线、相位、`G_source`、局部异常和可见范围。
+直接测量互相冲突时保持 unresolved，不能平均，也不能分别赋给不同照片。双 lane 共享扫描尺度与
+source 主方向；每个 lane 分别拥有中心轴、相位、`LaneGapModel`、局部异常和可见范围，两个 lane
+的 `G_source` 不得平均或共享。
 
 ## 3. 片条几何
 
@@ -131,7 +144,7 @@ start[i+1] = start[i] + W + G_source + delta[i]
 强度推翻正常模板。可靠直接证据与 `G_source` 冲突时，该处成为异常证据；多组同等级直接证据
 互相冲突时保持 unresolved，不能平均。
 
-### 4.1 建立 `G_source`
+### 4.1 建立 `LaneGapModel/G_source`
 
 一段 pitch 只能提出 `G_source`，不能证明它是正常间隙。最低成立条件是三条按 ordinal 排列的
 同类边形成两段相互兼容的独立 pitch：
@@ -147,6 +160,9 @@ G_source = P_source - W
 - 2 段一致：最低限度建立 `G_source`；
 - 3 段以上：使用全部兼容证据共同收紧；
 - 证据不兼容：保持 unresolved，不平均，也不选择更接近名义值的一段。
+
+`LaneGapModel` 是唯一 gap owner；它只消费本 lane 的重复直接 edge family。共享 source direction
+与 lane 中心轴不赋予跨 lane 合并 gap 的权限。
 
 “兼容”由各段 pitch 的测量可行区间是否存在共同交集决定，不另设随意百分比。120 partial 若
 只有一段 pitch，`G_source` 始终 unresolved；不得从其它样片建立先验。
@@ -203,12 +219,18 @@ g[i] = end[i+1] - start[i] - 2W
 没有检测到边缘不等于反对边界；强烈的画面线、灰尘、片夹或胶片边也不自动成为照片边界。
 一个 slot 即使四边都不完整可见，仍由 count、共享尺寸和物理序列保留。
 
-内容占用层与边缘外观层必须分开。内容观察先在 source 坐标中独立建立，不能随候选位置改变：
+内容占用层与边缘外观层必须分开。`ContentOccupancyObservation` 先在 source 坐标中独立建立，
+不能引用或随候选位置改变；候选经过检查后才生成可以引用 placement/slot/boundary 的
+`ContentVetoAssessment`：
 
 - separator 的黑度、低纹理和连贯性可以成为 band 的正向观察质量；
 - 内容层只提供负向否决，永远不提供正票；
 - 没有内容不能证明边界，也不能证明 slot 是空片；
-- 内容必须可靠、连续并且跨过候选本应保留的边界，才能否决候选。
+- 只有当前 slot 的可靠内容会被候选裁入，或正常正间隙的 separator core 被可靠内容穿过，才能
+  否决候选。
+- start/end 外侧内容可能属于邻片，保持中性；接触或叠片中的跨边内容是正常或中性现象；被
+  丢弃一侧没有内容也不提供安全证明。
+- 内容 veto 只淘汰候选，不产生边界、片夹、count 或最终 approval。
 
 ## 6. `top/bottom` 与中心线
 
@@ -323,6 +345,24 @@ local_relation_evaluation_count
 10 × source_pixels + 32 MiB
 ```
 
+生产上限固定为：
+
+```text
+每个 boundary corridor    最多 4 个 band
+每个 lane                最多物化 8 条 complete chain
+每条 chain ledger        最多 64 项
+每个 lane chain-ledger   最多 512 项
+双 lane source ledger    最多 1024 项
+```
+
+Report 保存全部实际物化且在上限内的 complete chain；未物化或提前剪枝的 proposal 只按固定
+枚举 reason 汇总数量，不保存逐项 payload。任一上限被触发都生成 `producer_bound_exceeded`
+typed fact 并阻断自动批准；不得截断后继续批准，也不得扩大为 DP、top-K 或候选笛卡尔积。
+
+确定性顺序固定为 evidence tier、lane ordinal、物理坐标区间、canonical observation ID。Observation、
+chain 与 cluster ID 由 canonical 字段序列计算 SHA-256，浮点区间用 `float.hex()` 序列化；不得
+依赖 set 迭代顺序或 Python hash。
+
 候选首先通过硬物理过滤：format/count、共享 W/H、方向、ordinal、source/lane authority、内容
 否决和异常依据。之后比较的是完整 chain，不允许每个 slot 各自选择最高分。
 
@@ -335,8 +375,9 @@ local_relation_evaluation_count
 3. separator 外观质量；
 4. expected position、片夹布局等弱先验。
 
-低等级证据不能靠数量推翻高等级证据；只有同等级才比较独立单位。弱先验只能在 sampling 等价
-或近乎相同的位置间选择代表中心，不能解决两个不同 format 框的同等级竞争。
+低等级证据不能靠数量推翻高等级证据；只有同等级才比较独立单位。弱先验只能在最终 sampling
+box 完全相同且边界不确定区间有共同交集的 cluster 内选择一个已物化的代表 placement，不能平均
+生成新位置，也不能解决两个不同 format 框的同等级竞争。
 
 ### 8.2 独立证据单位
 
@@ -355,10 +396,19 @@ count=2 的一条完整 role-bound separator，或一个直接外边缘加可靠
 
 ### 8.3 明显胜出
 
+竞争前先合并 sampling 等价 placement。只有以下三项同时成立才属于同一 cluster：
+
+- lane transform authority 相同；
+- 每一对应边界的不确定区间都有共同交集；
+- 每个 slot 的最终 source sampling box 完全相同。
+
+弱线索只允许在 cluster 内选择代表位置。最终 sampling box 不同就是不同真实位置，不能用
+“近似”隐藏竞争。
+
 候选 A 只有在以下条件同时成立时才明显胜出：
 
 - A 与竞争者都先经过硬物理过滤；
-- A 在更高证据等级占优，或在同等级拥有更多独立物理单位；
+- A 在最高一个出现差异的证据等级严格优于竞争者；
 - 竞争者没有 A 无法解释的同等级直接证据；
 - A 的胜出不只来自黑度、expected position 或微小总分差；
 - A 能形成完整 chain 和安全输出；其中异常均有证据。
@@ -385,11 +435,11 @@ SafeCropEnvelope
 边界不确定区间直接向外消费一次：`start/top` 取最小值，`end/bottom` 取最大值。它已经是保护，
 不得再增加固定或最小 guard。连续坐标到整数像素的向外取整属于坐标正确性，不是 padding。
 
-内容证据可以否决位置，不能拖动或自由放大 format 框去包围 content bbox。落选候选不得进入
-`SafeCropEnvelope`。若存在多个安全边界描述，选择能够完整保护胜出位置且按包含关系最小的矩形，
-不能从不同候选拼接四边，也不能按面积拍脑袋选择。
+内容证据可以否决位置，不能拖动或自由放大 format 框去包围 content bbox。每个 sequence/cross
+组合独立成为一个已物化 placement；不得先平均多个 cross 候选生成代表边界。落选候选不得进入
+`SafeCropEnvelope`，也不能从不同候选拼接四边。
 
-若接触与极小叠片等解释只形成同一个 placement 可行区间，并得到相同或近乎相同的 sampling，
+若接触与极小叠片等解释只形成有共同交集的 placement 可行区间，并得到完全相同的 sampling box，
 它们属于胜出位置自身的测量不确定性；只有产生不同 format 框位置时，才是结构性竞争候选。
 
 片夹、lane 或 source 遮挡外没有可恢复内容；与可见 authority 求交不算内切，也不补黑边。
@@ -452,6 +502,8 @@ Current report 必须让用户看出：
 - observed、template inferred 和 unresolved 的区别；
 - 竞争 chain 有什么证据、为何被淘汰或为何阻断批准；
 - `SafeCropEnvelope`、逐边 5%/3% 和 Gate reasons。
+- holder/count authority、每个 corridor 的 producer 计数、全部有界 materialized chain、固定 reason
+  的 prune 汇总、sampling cluster 和 `ContentVetoAssessment`。
 
 不能只报告总分。Debug Analysis 只读取 runtime/report facts，展示 detected/selected
 TOP/BOTTOM、detected/selected START/END、胜出 chain、最终 safety/output 和 source-atomic
@@ -519,11 +571,14 @@ platform | platform-check | platform-package | pre-push
 | `x5crop/configuration/` | matching-holder `full_count`、partial count、片夹容量、ScanCanvas 与 runtime configuration |
 | `x5crop/io/` | TIFF domain、Orientation、metadata 与 readback |
 | `x5crop/detection/source_core.py` | source/lane 可见 authority |
-| `x5crop/detection/photo_geometry/measurement.py` | registered transitions、separator material、boundary intervals 与 candidate-independent content veto observations |
+| `x5crop/detection/evidence/content_occupancy.py` | candidate-independent `ContentOccupancyObservation` |
+| `x5crop/detection/photo_geometry/measurement.py` | registered transitions、separator material 与 boundary intervals |
+| `x5crop/detection/photo_geometry/bounds.py` | band、chain、ledger 与 source 的固定生产上限 |
 | `x5crop/detection/photo_geometry/template_profiles.py` | 一维 profiles、separator bands、roles 与 bounded grouping |
 | `x5crop/detection/photo_geometry/source_geometry.py` | 共享 W/H、方向、中心线与 `G_source` |
 | `x5crop/detection/photo_geometry/template_model.py` | format template、local gap、完整 chain 与 vote ledger |
-| `x5crop/detection/photo_geometry/template_first.py` | bounded producer 与 chain selection orchestration |
+| `x5crop/detection/photo_geometry/template_first.py` | bounded complete-chain producer |
+| `x5crop/detection/photo_geometry/selection.py` | ledger、sampling cluster、分层 dominance 与 `ContentVetoAssessment` |
 | `x5crop/detection/photo_geometry/output.py` | selected placement、`SafeCropEnvelope` 与 direct-use assessment |
 | `x5crop/geometry/convex.py` | 唯一 convex footprint primitives |
 | `x5crop/detection/candidate/` | `CandidateGate` typed facts |

@@ -10,12 +10,17 @@ X5 Crop 的目标是自动产生足够安全且不切掉真实照片内容的 TI
 扫描像素、固定物理尺寸、片夹画布、张数与顺序共同判断。只有内容保护、多余边缘限制、变换和
 TIFF 写出均成立时才输出正式照片，否则整张 source 进入 `needs_review`，不做部分 slot 挽救。
 
-程序不承诺恢复唯一的真实照片边界，也不从文件名猜 format 或 count。Full 表示这段片条包含该
-format 与片夹规定的完整曝光格数；partial 表示格数更少，必须由用户输入实际 count，包括中间
+程序不承诺恢复唯一的真实照片边界，也不从文件名猜 format 或 count。程序先从图像独立匹配
+片夹，再取得该片夹合同的完整曝光格数。Full 使用这个完整格数；partial 表示格数更少，必须由用户输入实际 count，包括中间
 空白曝光格。两种模式都不要求胶片铺满片夹，也不要求首尾靠近画布边缘。若 count 等于完整张数，
-应选择 full。片夹容量只校验上限，不能代替 count。交互启动时，无效 count 会要求重新输入；
-命令行则以输入错误停止。程序不删除空白 slot。例如 120-66 的三格完整片条使用 full；只有一格
+应选择 full。片夹容量只校验上限，不能代替 count。程序不删除空白 slot。例如 120-66 的三格完整片条使用 full；只有一格
 或两格才使用 partial。
+
+调用前语法检查会拒绝 partial 缺少 count、count 非正数或 full 携带 count，并以退出码 `2`
+停止。读取 source 后，若 partial count 不小于实际匹配片夹的完整格数，该 source 记为
+`runtime_error`，不进入检测也不写正式 TIFF；非交互批处理继续处理其它合法 source。交互式
+多文件运行会先检查整批片夹与 count，列出全部冲突并取消本次输入，必须重新启动整批选择，
+不会逐 source 临时改写 count。图像不能唯一匹配片夹时保持 `needs_review`，不猜片夹或格数。
 
 Format 决定照片矩形的物理尺寸。检测只负责根据片条方向、照片上下边缘、照片间黑带、共同尺寸
 和局部卷片关系放置这些矩形，再把边缘测量所需的最小安全范围纳入输出。最终每一边都必须通过
@@ -90,16 +95,16 @@ python3 X5_Crop.py /path/to/scans \
 - `--format`：`135`、`135-dual`、`half`、`xpan`、`120-645`、`120-66`、`120-67`。
 - `--layout`：`auto`、`horizontal` 或 `vertical`。
 - `--strip`：`full` 或 `partial`。
-- `--count N`：partial 必填的明确曝光格数；包括中间空白曝光格，必须少于完整张数且不能超过
-  片夹容量。若格数完整，使用 full。
+- `--count N`：仅 partial 使用且必填的正整数曝光格数；包括中间空白曝光格，必须少于匹配片夹
+  的完整张数。Full 不接受 `--count`；若格数完整，使用 full。
 - `--jobs N`：source 并发数；默认 1，上限 3。默认值优先控制一般电脑的峰值内存；内存充足且
   一次处理多张原 TIFF 时可显式使用 `--jobs 2`。数值库内部线程固定为 1。
 - `--debug-analysis`：执行完整检测并生成自适应高度的三联诊断 JPG、报告、summary 和 manifest，
   但不写正式 TIFF，也不复制 `needs_review` 原图；默认关闭。完整片条保持原比例，不裁切照片。
   之后用相同输入和检测参数做普通运行时会自动尝试复用报告。
 - `--allow-best-effort-output`：明确接受未验证文件系统的较弱发布语义。
-- `--interactive`：交互选择格式、模式、张数和 Debug Analysis；无效的 partial count 会要求
-  重新输入，直到有效或用户取消。
+- `--interactive`：交互选择格式、模式、张数和 Debug Analysis；多文件的片夹/count 检查针对
+  整批执行，存在冲突时列出全部冲突并取消本次输入。
 
 没有 `--overwrite`。一次成功运行总是以完整新结果替换上一套可确认归属的 V5 输出。
 
@@ -123,6 +128,11 @@ python3 X5_Crop.py /path/to/scans --format 120-66 --strip partial --count 2
 - `needs_review`：普通运行不写正式照片，将原扫描件复制到 `needs_review/`；Debug Analysis 运行
   只记录原因。
 - `runtime_error`：该输入失败，不写它的照片；其它输入继续处理。
+
+无法区分候选片夹、producer 上限被触发、不同最终裁切位置没有唯一物理胜出者，或可靠内容否决
+所有位置时，结果均保持 `needs_review`，不输出猜测的照片 TIFF。Debug Analysis 与 JSONL report
+会记录匹配片夹、count authority、实际物化的有界 chain、候选 cluster、内容否决、安全范围和
+最终原因。
 
 退出码：
 

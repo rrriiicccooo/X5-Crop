@@ -110,7 +110,7 @@ def _source_geometry_within_authority(
     height: int,
 ) -> bool:
     for lane in report["photo_geometry"]["lanes"]:
-        for geometry in lane["placement"]["safe_crop_envelopes"]:
+        for geometry in lane["selection"]["safe_crop_envelopes"]:
             footprint = geometry["constrained_source_footprint"]
             if not footprint or not all(
                 0.0 <= float(point[0]) <= width - 1
@@ -384,11 +384,9 @@ def run_diagnostic_source(source: DiagnosticSource) -> dict[str, Any]:
                 next(
                     (
                         item["component"]["component_id"]
-                        for item in lane["placement"][
-                            "retained_placements"
-                        ]
+                        for item in lane["chains"]["materialized"]
                         if item["placement_id"]
-                        == lane["placement"]["canonical_placement_id"]
+                        == lane["selection"]["selected_placement_id"]
                     ),
                     None,
                 )

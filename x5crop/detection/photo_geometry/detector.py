@@ -53,7 +53,6 @@ from .selection import (
     complete_chain_record,
     select_placement_clusters,
 )
-from .protection import minimum_guard_spec
 from .template_first import (
     build_lane_template_proposal,
     materialize_source_placements,
@@ -826,9 +825,6 @@ def reconstruct_photo_geometry(
                             lane=prepared_lane.lane,
                             lane_ordinal=ordinal,
                             layout=layout,
-                            minimum_guard=minimum_guard_spec(
-                                configuration.physical_spec.format_id
-                            ),
                             transform=transform.transform,
                         )
                         for ordinal in range(1, placement.output_slot_count + 1)
