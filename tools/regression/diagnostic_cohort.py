@@ -17,6 +17,8 @@ from typing import Any, Sequence
 from x5crop.output.ownership import read_owned_output
 from x5crop.report.validation import validate_current_report_record
 
+from .cohort_count_authority import validate_count_authority
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DIAGNOSTIC_COHORT_PATH = (
@@ -63,6 +65,7 @@ def _sha256(path: Path) -> str:
 
 
 def load_diagnostic_sources() -> tuple[DiagnosticSource, ...]:
+    validate_count_authority()
     rows = tuple(
         json.loads(line)
         for line in DIAGNOSTIC_COHORT_PATH.read_text(
@@ -202,7 +205,9 @@ def _production_command(source: DiagnosticSource, output: Path) -> list[str]:
         "1",
     ]
     if source.identity["strip_mode"] == "partial":
-        command.extend(("--count", "auto"))
+        command.extend(
+            ("--count", str(source.identity["confirmed_slot_count"]))
+        )
     return command
 
 

@@ -72,8 +72,8 @@ def print_run_header(invocation: RuntimeInvocation, output_root: Path) -> None:
     mode_parts = [f"layout: {layout_label}", f"strip: {config.strip_mode}"]
     configuration = invocation.configuration_bundle.initial_configuration
     mode_parts.append(f"configuration: {configuration.configuration_id}")
-    if config.count_request.mode.value == "auto":
-        mode_parts.append("count: auto")
+    if config.count_request.user_count is not None:
+        mode_parts.append(f"count: {config.count_request.user_count}")
     if config.debug_analysis:
         mode_parts.append("debug analysis only")
     print("; ".join(mode_parts))

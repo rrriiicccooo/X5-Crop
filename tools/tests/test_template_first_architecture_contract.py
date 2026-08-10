@@ -238,7 +238,6 @@ class TemplateFirstArchitectureContractTest(unittest.TestCase):
                 36.0,
                 24.0,
                 1.5,
-                FiniteInterval(-0.5, 2.5),
             ),
             width_scale_px_per_mm=PositiveInterval(10.0, 10.0),
             height_scale_px_per_mm=PositiveInterval(10.0, 10.0),
@@ -420,7 +419,6 @@ class TemplateFirstArchitectureContractTest(unittest.TestCase):
             36.0,
             24.0,
             1.5,
-            FiniteInterval(-0.5, 2.5),
         )
         geometry = SourceFrameGeometry.create(
             component,
@@ -503,7 +501,6 @@ class TemplateFirstArchitectureContractTest(unittest.TestCase):
             36.0,
             24.0,
             1.5,
-            FiniteInterval(-1.0, 4.0),
         )
         geometry = SourceFrameGeometry.create(
             component,
@@ -532,7 +529,6 @@ class TemplateFirstArchitectureContractTest(unittest.TestCase):
             36.0,
             24.0,
             1.5,
-            FiniteInterval(-1.0, 4.0),
         )
         geometry = SourceFrameGeometry.create(
             component,
@@ -816,7 +812,6 @@ class TemplateFirstArchitectureContractTest(unittest.TestCase):
             36.0,
             24.0,
             1.5,
-            FiniteInterval(-0.5, 2.5),
         )
         geometry = SourceFrameGeometry.create(
             component,
@@ -825,7 +820,7 @@ class TemplateFirstArchitectureContractTest(unittest.TestCase):
         )
         self.assertIsNone(
             local_advance_delta_from_observed_gap(
-                FiniteInterval(300.0, 310.0),
+                FiniteInterval(4000.0, 4010.0),
                 geometry,
             )
         )

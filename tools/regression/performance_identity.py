@@ -8,6 +8,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from .cohort_count_authority import validate_count_authority
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 PERFORMANCE_COHORT_PATH = (
@@ -24,6 +26,8 @@ class PerformanceSourceIdentity:
     source_sha256: str
     format_id: str
     strip_mode: str
+    confirmed_slot_count: int | None
+    confirmed_count_authority: str | None
     compression: str
 
     @property
@@ -47,6 +51,7 @@ def load_performance_sources(
     *,
     verify_source_files: bool = True,
 ) -> tuple[PerformanceSourceIdentity, ...]:
+    validate_count_authority()
     rows: tuple[dict[str, Any], ...] = tuple(
         json.loads(line)
         for line in PERFORMANCE_COHORT_PATH.read_text(
@@ -65,6 +70,16 @@ def load_performance_sources(
             source_sha256=str(row.get("source_sha256", "")).lower(),
             format_id=str(row.get("format_id", "")),
             strip_mode=str(row.get("strip_mode", "")),
+            confirmed_slot_count=(
+                None
+                if row.get("confirmed_slot_count") is None
+                else int(row["confirmed_slot_count"])
+            ),
+            confirmed_count_authority=(
+                None
+                if row.get("confirmed_count_authority") is None
+                else str(row["confirmed_count_authority"])
+            ),
             compression=str(row.get("compression", "")),
         )
         path = source.source_path.resolve()

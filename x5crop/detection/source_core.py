@@ -3,7 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from ..domain import Box, EvidenceState
-from .evidence.scan_canvas import ScanCanvasEvidence, ScanCanvasOutcome
+from ..configuration.model import ResolvedSlotCount
+from .evidence.scan_canvas import MatchedHolder, ScanCanvasEvidence, ScanCanvasOutcome
 
 
 @dataclass(frozen=True)
@@ -36,6 +37,9 @@ class SourceLaneEvidence:
 
 @dataclass(frozen=True)
 class SourceCoreEvidence:
+    scan_canvas: ScanCanvasEvidence
+    matched_holder: MatchedHolder | None
+    resolved_slot_count: ResolvedSlotCount | None
     lanes: tuple[SourceLaneEvidence, ...]
     incomplete_reasons: tuple[str, ...]
 
@@ -44,11 +48,17 @@ class SourceCoreEvidence:
             raise ValueError("source-core lane identities must be unique")
         if len(set(self.incomplete_reasons)) != len(self.incomplete_reasons):
             raise ValueError("source-core incomplete reasons must be unique")
+        if self.resolved_slot_count is not None and self.matched_holder is None:
+            raise ValueError("resolved slot count requires a matched holder")
+        if self.matched_holder is not None and (
+            self.scan_canvas.selected_profile != self.matched_holder.profile
+        ):
+            raise ValueError("source-core holder disagrees with canvas evidence")
 
     @property
     def scan_canvas_state(self) -> EvidenceState:
         return (
             EvidenceState.SUPPORTED
-            if self.lanes
+            if self.matched_holder is not None and self.lanes
             else EvidenceState.UNAVAILABLE
         )

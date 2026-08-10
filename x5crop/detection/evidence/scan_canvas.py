@@ -13,6 +13,7 @@ from ...domain import (
     PositiveInterval,
 )
 from ...formats.scan_canvas import ScanCanvasPhysicalSpec
+from ...formats import FormatSpec
 from ...geometry.layout import is_horizontal_layout
 
 
@@ -55,6 +56,22 @@ class ScanCanvasProfileMatch:
             raise ValueError(
                 "scan-canvas aspect error must be finite and non-negative"
             )
+
+
+@dataclass(frozen=True)
+class MatchedHolder:
+    profile: ScanCanvasPhysicalSpec
+    full_count: int
+    aspect_error_ratio: float
+    axis_scales: CanvasAxisScaleIntervals
+
+    def __post_init__(self) -> None:
+        if self.full_count <= 0:
+            raise ValueError("matched holder requires positive full count")
+        if self.axis_scales.component_id != self.profile.profile_id:
+            raise ValueError("matched-holder scale authority disagrees")
+        if not math.isfinite(self.aspect_error_ratio) or self.aspect_error_ratio < 0:
+            raise ValueError("matched-holder aspect error is invalid")
 
 
 @dataclass(frozen=True)
@@ -224,4 +241,28 @@ def observe_scan_canvas(
             source_height_axis="y" if is_horizontal_layout(layout) else "x",
         ),
         provenance=provenance,
+    )
+
+
+def matched_holder_from_evidence(
+    evidence: ScanCanvasEvidence,
+    format_spec: FormatSpec,
+) -> MatchedHolder | None:
+    if (
+        evidence.outcome != ScanCanvasOutcome.SUPPORTED
+        or evidence.selected_profile is None
+        or evidence.axis_scales is None
+        or len(evidence.matches) != 1
+    ):
+        return None
+    full_count = format_spec.holder_full_count(
+        evidence.selected_profile.profile_id
+    )
+    if full_count is None:
+        return None
+    return MatchedHolder(
+        profile=evidence.selected_profile,
+        full_count=full_count,
+        aspect_error_ratio=evidence.matches[0].aspect_error_ratio,
+        axis_scales=evidence.axis_scales,
     )

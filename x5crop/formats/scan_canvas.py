@@ -64,12 +64,9 @@ SCAN_CANVAS_PHYSICAL_SPECS = (
 
 def scan_canvas_specs_for_format(
     format_id: str,
-    frame_count: int | None = None,
 ) -> tuple[ScanCanvasPhysicalSpec, ...]:
     from . import format_spec
 
-    if frame_count is not None:
-        require_positive("scan-canvas requested frame count", frame_count)
     physical = format_spec(format_id)
     profile_by_id = {
         spec.profile_id: spec for spec in SCAN_CANVAS_PHYSICAL_SPECS
@@ -77,7 +74,6 @@ def scan_canvas_specs_for_format(
     return tuple(
         profile_by_id[fit.profile_id]
         for fit in physical.scan_canvas_fits
-        if frame_count is None or frame_count <= fit.maximum_frame_count
     )
 
 

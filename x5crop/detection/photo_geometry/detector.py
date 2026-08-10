@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import math
 
-from ...configuration.model import DetectionConfiguration, FrameCountMode
+from ...configuration.model import DetectionConfiguration, ResolvedSlotCount
 from ...domain import Box, EvidenceState, FiniteInterval
 from ..gate_checks import GateGap, TypedAssessment
 from ..output_geometry import (
@@ -152,7 +152,7 @@ def _profile_capacity(
     profile = lane.scan_canvas.selected_profile
     if profile is None:
         return 0
-    return configuration.physical_spec.maximum_frame_count(profile.profile_id) or 0
+    return configuration.physical_spec.holder_full_count(profile.profile_id) or 0
 
 
 def _lane_measurement_capacity(
@@ -171,16 +171,15 @@ def _lane_measurement_capacity(
 def resolve_output_slots(
     configuration: DetectionConfiguration,
     lanes: tuple[SourceLaneEvidence, ...],
+    resolved_slot_count: ResolvedSlotCount | None,
 ) -> ResolvedOutputSlots | None:
-    if not lanes:
+    if not lanes or resolved_slot_count is None:
         return None
-    request = configuration.count_request
+    requested = resolved_slot_count.output_count
     if configuration.physical_spec.layout.kind == "dual_lane":
         capacity = _profile_capacity(configuration, lanes[0])
-        requested = request.authoritative_count
         if (
-            requested is None
-            or requested != capacity
+            requested != capacity
             or requested % len(lanes)
         ):
             return None
@@ -188,12 +187,7 @@ def resolve_output_slots(
             tuple(requested // len(lanes) for _lane in lanes)
         )
     capacity = _profile_capacity(configuration, lanes[0])
-    requested = (
-        capacity
-        if request.mode == FrameCountMode.AUTO
-        else request.authoritative_count
-    )
-    if requested is None or requested <= 0 or requested > capacity:
+    if requested <= 0 or requested > capacity:
         return None
     return ResolvedOutputSlots((requested,))
 
@@ -517,9 +511,10 @@ def reconstruct_photo_geometry(
     layout: str,
     configuration: DetectionConfiguration,
     lane_configuration: DetectionConfiguration | None,
+    resolved_slot_count: ResolvedSlotCount | None,
 ) -> PhotoGeometryDetectionResult:
     del lane_configuration
-    resolved = resolve_output_slots(configuration, lanes)
+    resolved = resolve_output_slots(configuration, lanes, resolved_slot_count)
     if resolved is None:
         transform = _empty_transform(field, layout, "output_slot_count_unavailable")
         facts = _unresolved_facts(GateGap.SHARED_STRIP_DIRECTION_UNAVAILABLE)

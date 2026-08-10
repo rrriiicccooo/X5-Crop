@@ -4,7 +4,7 @@ from pathlib import Path
 
 from ..app_info import SCRIPT_NAME, VERSION
 from ..formats import FORMATS
-from ..runtime.bootstrap import run_options
+from ..runtime.bootstrap import InteractiveBatchCountPreflightError, run_options
 from ..runtime.limits import STANDARD_JOB_DEFAULT
 from ..runtime.options import RuntimeOptions
 
@@ -65,16 +65,13 @@ def ask_format() -> str:
         print("use return/135, dual, xpan, half, 645, 66, or 67.")
 
 
-def ask_partial_count(format_id: str) -> int | None:
+def ask_partial_count(format_id: str) -> int:
     partial_count_range = FORMATS[format_id].strip.partial_count_range
     allowed_text = " ".join(str(count) for count in partial_count_range)
     while True:
         print("partial output slots:")
-        print("  return or auto = matched-holder capacity")
         print(f"  explicit slots: {allowed_text}")
         answer = normalized_input(input("count: "))
-        if answer in {"", "auto"}:
-            return None
         try:
             count = int(answer)
         except ValueError:
@@ -82,7 +79,7 @@ def ask_partial_count(format_id: str) -> int | None:
         if count in partial_count_range:
             return count
         print(f"unknown count: {answer}")
-        print(f"use auto or one of: {allowed_text}")
+        print(f"use one of: {allowed_text}")
 
 
 def interactive_options() -> RuntimeOptions:
@@ -119,7 +116,7 @@ def interactive_options() -> RuntimeOptions:
         print("frame TIFF export: enabled after the bounded safety Gate")
     print(f"strip mode: {strip_mode}")
     if partial:
-        print(f"count: {'auto' if requested_count is None else requested_count}")
+        print(f"count: {requested_count}")
     print()
 
     return RuntimeOptions(
@@ -137,4 +134,10 @@ def interactive_options() -> RuntimeOptions:
 
 
 def run_interactive() -> int:
-    return run_options(interactive_options())
+    while True:
+        try:
+            return run_options(interactive_options())
+        except InteractiveBatchCountPreflightError as exc:
+            print()
+            print(str(exc))
+            print("restart all format, mode, and count input for this batch.")

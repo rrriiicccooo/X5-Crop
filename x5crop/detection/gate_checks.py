@@ -13,6 +13,8 @@ class GateStage(str, Enum):
 
 class GateGap(str, Enum):
     SCAN_CANVAS_AUTHORITY_UNAVAILABLE = "scan_canvas_authority_unavailable"
+    HOLDER_FULL_COUNT_UNRESOLVED = "holder_full_count_unresolved"
+    HOLDER_IDENTITY_UNRESOLVED = "holder_identity_unresolved"
     OUTPUT_SLOT_COUNT_UNAVAILABLE = "output_slot_count_unavailable"
     FORMAT_PLACEMENT_UNAVAILABLE = "format_placement_unavailable"
     SHARED_STRIP_DIRECTION_UNAVAILABLE = "shared_strip_direction_unavailable"

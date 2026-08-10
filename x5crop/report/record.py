@@ -95,8 +95,8 @@ def report_record_for_final_detection(
     export_performed = bool(output_files)
     selected_profile_id = (
         None
-        if not core.lanes
-        else core.lanes[0].scan_canvas.selected_profile.profile_id
+        if core.matched_holder is None
+        else core.matched_holder.profile.profile_id
     )
     record = {
         "schema_id": REPORT_SCHEMA_ID,
@@ -147,6 +147,10 @@ def report_record_for_final_detection(
                 PHOTO_BOUNDARY_MEASUREMENT_SPEC.contract_id
             ),
             "selected_scan_canvas_profile_id": selected_profile_id,
+            "matched_holder": typed_read_model(core.matched_holder),
+            "resolved_slot_count": typed_read_model(
+                core.resolved_slot_count
+            ),
             "resolved_output_slots": typed_read_model(
                 detection.resolved_output_slots
             ),

@@ -16,15 +16,13 @@ from .text_output import configure_entry_text_output
 CLI_USAGE_ERROR_EXIT_CODE = 2
 
 
-def parse_count_argument(value: str) -> int | None:
+def parse_count_argument(value: str) -> int:
     normalized = value.strip().lower()
-    if normalized == "auto":
-        return None
     try:
         return int(normalized)
     except ValueError as exc:
         raise argparse.ArgumentTypeError(
-            "--count must be a positive integer or auto"
+            "--count must be a positive integer"
         ) from exc
 
 
@@ -43,7 +41,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--strip",
         choices=STRIP_MODES,
         default="full",
-        help="Holder occupancy: full when film fills the holder, partial when it does not.",
+        help=(
+            "Slot-count intent: full uses the matched holder's complete fixed "
+            "count; partial requires a smaller explicit count."
+        ),
     )
     parser.add_argument(
         "-n",
@@ -51,8 +52,8 @@ def build_parser() -> argparse.ArgumentParser:
         type=parse_count_argument,
         default=None,
         help=(
-            "Partial output slots: a positive integer is explicit; auto or "
-            "omission uses matched-holder capacity. Full uses the format default."
+            "Required positive exposure-slot count for partial mode, including "
+            "blank slots. Full mode must omit --count."
         ),
     )
     parser.add_argument(
@@ -92,6 +93,12 @@ def options_from_args(args: argparse.Namespace) -> RuntimeOptions:
         raise ValueError("--format is required unless --interactive is used")
     if int(args.jobs) < 1:
         raise ValueError("--jobs must be 1 or greater")
+    if str(args.strip) == "partial" and args.count is None:
+        raise ValueError("partial mode requires --count")
+    if str(args.strip) == "full" and args.count is not None:
+        raise ValueError("full mode must not carry --count")
+    if args.count is not None and int(args.count) <= 0:
+        raise ValueError("partial --count must be a positive integer")
 
     return RuntimeOptions(
         input_path=Path(args.input).expanduser().resolve(),

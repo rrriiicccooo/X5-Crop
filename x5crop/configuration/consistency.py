@@ -13,6 +13,7 @@ def configuration_consistency_issues() -> tuple[str, ...]:
                 configuration = get_detection_configuration(
                     format_id,
                     strip_mode,
+                    1 if strip_mode == PARTIAL else None,
                 )
             except ValueError:
                 if (

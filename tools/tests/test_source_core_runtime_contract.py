@@ -38,7 +38,7 @@ def _run_config(
     output: Path,
     format_id: str = "135",
     strip_mode: str = "partial",
-    requested_count: int | None = None,
+    requested_count: int | None = 3,
     *,
     debug_analysis: bool = False,
 ) -> RunConfig:
@@ -73,7 +73,7 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
         pixels: np.ndarray,
         format_id: str = "135",
         strip_mode: str = "partial",
-        requested_count: int | None = None,
+        requested_count: int | None = 3,
     ):
         root.mkdir(parents=True, exist_ok=True)
         source = (root / f"{format_id}.tif").resolve()
@@ -114,14 +114,14 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
         self.assertEqual(record["schema_id"], REPORT_SCHEMA_ID)
         self.assertEqual(record["schema_revision"], REPORT_SCHEMA_REVISION)
         self.assertEqual(record["decision"]["status"], "needs_review")
-        self.assertEqual(record["photo_geometry"]["output_slot_count"], 6)
+        self.assertEqual(record["photo_geometry"]["output_slot_count"], 3)
         self.assertEqual(
             record["photo_geometry"]["resolved_output_slots"],
-            {"lane_output_slot_counts": [6]},
+            {"lane_output_slot_counts": [3]},
         )
         self.assertEqual(
             len(record["photo_geometry"]["slot_identities"]),
-            6,
+            3,
         )
         self.assertEqual(outcome.artifacts.frame_outputs, ())
         self.assertEqual(
@@ -152,10 +152,31 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
                 Path(temporary),
                 np.zeros((100, 720), dtype=np.uint16),
                 strip_mode="full",
+                requested_count=None,
             )
         self.assertIsInstance(outcome, CompletedInput)
         assert isinstance(outcome, CompletedInput)
         self.assertEqual(outcome.result.record["decision"]["status"], "needs_review")
+        self.assertEqual(outcome.artifacts.frame_outputs, ())
+
+    def test_partial_count_equal_to_matched_holder_full_count_is_source_error(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            outcome = self._process_pixels(
+                Path(temporary),
+                np.zeros((1000, 2972), dtype=np.uint16),
+                format_id="120-67",
+                strip_mode="partial",
+                requested_count=2,
+            )
+        self.assertIsInstance(outcome, FailedInput)
+        assert isinstance(outcome, FailedInput)
+        self.assertEqual(outcome.failure_stage, FailureStage.DETECTION)
+        self.assertEqual(
+            outcome.error_code,
+            "partial_count_not_less_than_matched_full_count",
+        )
         self.assertEqual(outcome.artifacts.frame_outputs, ())
 
     def test_current_report_rejects_false_tiff_readback_receipt(self) -> None:
@@ -210,7 +231,7 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
             tifffile.imwrite(source, np.zeros((100, 720), dtype=np.uint8))
             output = root / "output"
             bundle = DetectionConfigurationBundle.for_format_mode(
-                "135", "partial"
+                "135", "partial", 3
             )
             outcome = process_one(
                 PlannedSource(1, source, "gray"),
@@ -235,7 +256,7 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
                 planarconfig="contig",
             )
             bundle = DetectionConfigurationBundle.for_format_mode(
-                "135", "partial"
+                "135", "partial", 3
             )
             planned = PlannedSource(1, source, source.stem)
             analysis_output = root / "analysis"
@@ -300,7 +321,7 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
                 planarconfig="contig",
             )
             bundle = DetectionConfigurationBundle.for_format_mode(
-                "135", "partial"
+                "135", "partial", 3
             )
             planned = PlannedSource(1, source, source.stem)
             analysis_output = root / "analysis"
@@ -360,7 +381,7 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
                 format_id="135",
                 layout="horizontal",
                 strip_mode="partial",
-                requested_count=None,
+                requested_count=3,
                 debug_analysis=True,
                 allow_best_effort_output=True,
                 jobs=1,
@@ -385,7 +406,7 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
                 format_id="135",
                 layout="horizontal",
                 strip_mode="partial",
-                requested_count=None,
+                requested_count=3,
                 debug_analysis=False,
                 allow_best_effort_output=True,
                 jobs=1,

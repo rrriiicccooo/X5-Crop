@@ -199,6 +199,16 @@ def validate_current_report_record(record: dict[str, Any]) -> None:
         "search": "measurement_coverage_only",
     }
     geometry = record["photo_geometry"]
+    matched_holder = geometry.get("matched_holder")
+    resolved_count = geometry.get("resolved_slot_count")
+    if resolved_count is not None and (
+        matched_holder is None
+        or resolved_count["matched_holder_profile_id"]
+        != matched_holder["profile"]["profile_id"]
+        or resolved_count["full_count"] != matched_holder["full_count"]
+        or resolved_count["output_count"] != geometry["output_slot_count"]
+    ):
+        raise ValueError("matched holder and resolved count disagree")
     if geometry["authority_partition"] != expected_partition:
         raise ValueError("format-placement authority partition is invalid")
     for lane in geometry["lanes"]:

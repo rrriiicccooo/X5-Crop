@@ -32,7 +32,7 @@ def append_summary_csv(path: Path, result: ReportResult) -> None:
         "format_id",
         "layout",
         "strip_mode",
-        "count_mode",
+        "count_intent",
         "selected_scan_canvas_profile_id",
         "lane_output_slot_counts",
         "output_slot_count",
@@ -58,9 +58,9 @@ def append_summary_csv(path: Path, result: ReportResult) -> None:
                     "runtime_configuration"
                 ]["layout"],
                 "strip_mode": record["configuration"]["strip_mode"],
-                "count_mode": record["configuration"][
-                    "output_slot_request"
-                ]["mode"],
+                "count_intent": record["configuration"][
+                    "slot_count_request"
+                ]["strip_mode"],
                 "selected_scan_canvas_profile_id": record[
                     "photo_geometry"
                 ]["selected_scan_canvas_profile_id"],

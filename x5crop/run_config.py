@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from .configuration.model import FrameCountRequest
+from .configuration.model import SlotCountRequest
 
 
 @dataclass(frozen=True)
@@ -13,7 +13,7 @@ class RunConfig:
     layout_auto: bool
     layout: str
     strip_mode: str
-    count_request: FrameCountRequest
+    count_request: SlotCountRequest
     debug_analysis: bool
     allow_best_effort_output: bool
     jobs: int

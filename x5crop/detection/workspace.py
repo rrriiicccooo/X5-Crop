@@ -6,14 +6,24 @@ import numpy as np
 
 from ..cache import MeasurementCache
 from ..cache.analysis import make_measurement_cache
-from ..configuration.model import DetectionConfiguration
+from ..configuration.model import (
+    DetectionConfiguration,
+    ResolvedSlotCount,
+    SlotCountAuthority,
+)
 from ..domain import Box
 from ..geometry.layout import is_horizontal_layout, work_gray
 from ..image.gray import make_base_gray_u8
 from ..image.statistics import image_measurement_statistics
 from ..image.workspace import WorkspaceIdentity
 from ..io.model import ImageProfile
-from .evidence.scan_canvas import ScanCanvasOutcome, observe_scan_canvas
+from .evidence.scan_canvas import (
+    MatchedHolder,
+    ScanCanvasEvidence,
+    ScanCanvasOutcome,
+    matched_holder_from_evidence,
+    observe_scan_canvas,
+)
 from .photo_geometry.measurement import (
     make_photo_boundary_measurement_field,
 )
@@ -57,17 +67,45 @@ class DetectionWorkspace:
         )
 
 
+class SourceInputContractError(ValueError):
+    def __init__(self, error_code: str, message: str) -> None:
+        super().__init__(message)
+        self.error_code = error_code
+
+
+def resolve_slot_count(
+    configuration: DetectionConfiguration,
+    matched_holder: MatchedHolder,
+) -> ResolvedSlotCount:
+    request = configuration.count_request
+    if request.strip_mode == "full":
+        return ResolvedSlotCount(
+            matched_holder.profile.profile_id,
+            matched_holder.full_count,
+            matched_holder.full_count,
+            SlotCountAuthority.MATCHED_HOLDER_FULL_COUNT,
+        )
+    assert request.user_count is not None
+    if request.user_count >= matched_holder.full_count:
+        raise SourceInputContractError(
+            "partial_count_not_less_than_matched_full_count",
+            f"partial count {request.user_count} must be less than matched "
+            f"holder full count {matched_holder.full_count} "
+            f"({matched_holder.profile.profile_id})",
+        )
+    return ResolvedSlotCount(
+        matched_holder.profile.profile_id,
+        matched_holder.full_count,
+        request.user_count,
+        SlotCountAuthority.USER_EXPLICIT_PARTIAL_COUNT,
+    )
+
+
 def _single_lane(
     gray_work: np.ndarray,
     layout: str,
-    configuration: DetectionConfiguration,
+    scan_canvas: ScanCanvasEvidence,
 ) -> tuple[tuple[SourceLaneEvidence, ...], tuple[str, ...]]:
-    scan_canvas = observe_scan_canvas(
-        gray_work.shape[1],
-        gray_work.shape[0],
-        layout,
-        configuration.scan_canvas,
-    )
     if (
         scan_canvas.outcome != ScanCanvasOutcome.SUPPORTED
         or scan_canvas.axis_scales is None
@@ -94,17 +132,11 @@ def _single_lane(
 def _dual_lanes(
     gray_work: np.ndarray,
     layout: str,
-    configuration: DetectionConfiguration,
+    scan_canvas: ScanCanvasEvidence,
     lane_configuration: DetectionConfiguration | None,
 ) -> tuple[tuple[SourceLaneEvidence, ...], tuple[str, ...]]:
     if lane_configuration is None or gray_work.shape[0] % 2:
         return (), ("dual_lane_center_partition_unavailable",)
-    scan_canvas = observe_scan_canvas(
-        gray_work.shape[1],
-        gray_work.shape[0],
-        layout,
-        configuration.scan_canvas,
-    )
     if (
         scan_canvas.outcome != ScanCanvasOutcome.SUPPORTED
         or scan_canvas.axis_scales is None
@@ -160,20 +192,56 @@ def prepare_detection_workspace(
         configuration.preprocess.image_statistics,
     )
     gray_work = measurement_cache.gray_work
+    scan_canvas = observe_scan_canvas(
+        gray_work.shape[1],
+        gray_work.shape[0],
+        layout,
+        configuration.scan_canvas,
+    )
+    matched_holder = matched_holder_from_evidence(
+        scan_canvas,
+        configuration.physical_spec,
+    )
+    resolved_slot_count = (
+        None
+        if matched_holder is None
+        else resolve_slot_count(configuration, matched_holder)
+    )
     if configuration.physical_spec.layout.kind == "dual_lane":
         lanes, incomplete_reasons = _dual_lanes(
             gray_work,
             layout,
-            configuration,
+            scan_canvas,
             lane_configuration,
         )
     else:
         lanes, incomplete_reasons = _single_lane(
             gray_work,
             layout,
-            configuration,
+            scan_canvas,
         )
+    if matched_holder is None:
+        candidate_full_counts = {
+            configuration.physical_spec.holder_full_count(
+                match.profile.profile_id
+            )
+            for match in scan_canvas.matches
+        }
+        candidate_full_counts.discard(None)
+        if len(candidate_full_counts) > 1:
+            incomplete_reasons = (
+                *incomplete_reasons,
+                "holder_full_count_unresolved",
+            )
+        elif len(scan_canvas.matches) > 1:
+            incomplete_reasons = (
+                *incomplete_reasons,
+                "holder_identity_unresolved",
+            )
     source_core = SourceCoreEvidence(
+        scan_canvas=scan_canvas,
+        matched_holder=matched_holder,
+        resolved_slot_count=resolved_slot_count,
         lanes=lanes,
         incomplete_reasons=incomplete_reasons,
     )

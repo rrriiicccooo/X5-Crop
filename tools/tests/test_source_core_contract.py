@@ -1,18 +1,19 @@
 from __future__ import annotations
 
-from dataclasses import fields
+from dataclasses import fields, replace
 import math
 import unittest
 
 import numpy as np
 
-from x5crop.configuration.model import FrameCountMode
 from x5crop.configuration.registry import get_detection_configuration
 from x5crop.configuration.scan_canvas import ScanCanvasDetectionConfiguration
 from x5crop.detection.evidence.scan_canvas import (
     ScanCanvasOutcome,
     observe_scan_canvas,
 )
+from x5crop.detection.gate_checks import GateGap
+from x5crop.detection.pipeline import choose_detection
 from x5crop.detection.photo_geometry.corridors import (
     build_top_bottom_search_corridors,
     frame_physical_pixel_intervals,
@@ -45,9 +46,9 @@ class PhysicalAuthorityContractTest(unittest.TestCase):
             "135-dual": ((36.0, 24.0), 12, False),
             "half": ((18.0, 24.0), 12, True),
             "xpan": ((65.0, 24.0), 3, True),
-            "120-645": ((42.0, 54.0), (42.0, 56.0), 4, True),
-            "120-66": ((54.0, 54.0), (56.0, 56.0), 3, True),
-            "120-67": ((70.0, 54.0), (70.0, 56.0), 3, True),
+            "120-645": ((42.0, 56.0), 4, True),
+            "120-66": ((56.0, 56.0), 3, True),
+            "120-67": ((70.0, 56.0), 3, True),
         }
         for format_id, values in expected.items():
             spec = format_spec(format_id)
@@ -67,7 +68,7 @@ class PhysicalAuthorityContractTest(unittest.TestCase):
         )
         self.assertEqual(
             FRAME_DIMENSION_TOLERANCE_SPEC.frame_height_tolerance_ratio,
-            0.0200,
+            0.0040,
         )
 
     def test_aperture_pixel_interval_propagates_scale_and_tolerance(
@@ -82,8 +83,8 @@ class PhysicalAuthorityContractTest(unittest.TestCase):
         )
         self.assertAlmostEqual(intervals.frame_width_px.minimum, 355.5)
         self.assertAlmostEqual(intervals.frame_width_px.maximum, 400.95)
-        self.assertAlmostEqual(intervals.frame_height_px.minimum, 211.68)
-        self.assertAlmostEqual(intervals.frame_height_px.maximum, 244.8)
+        self.assertAlmostEqual(intervals.frame_height_px.minimum, 215.136)
+        self.assertAlmostEqual(intervals.frame_height_px.maximum, 240.96)
         self.assertNotEqual(
             PHOTO_BOUNDARY_MEASUREMENT_SPEC.dimension_search_allowance_mm,
             aperture.frame_width_mm
@@ -137,24 +138,99 @@ class PhysicalAuthorityContractTest(unittest.TestCase):
             ("domain", "scan_canvas"),
         )
 
-    def test_scan_canvas_catalog_preserves_capacity_authority(self) -> None:
+    def test_holder_catalog_is_not_filtered_by_requested_count(self) -> None:
         self.assertEqual(len(SCAN_CANVAS_PHYSICAL_SPECS), 7)
-        self.assertNotIn(
+        self.assertIn(
             "120_wide_188_5",
             tuple(
                 item.profile_id
-                for item in scan_canvas_specs_for_format("120-67", 3)
+                for item in scan_canvas_specs_for_format("120-67")
             ),
         )
-        auto = get_detection_configuration("120-67", "partial", None)
+
+    def test_holder_match_precedes_full_count_resolution(self) -> None:
+        configuration = get_detection_configuration("120-67", "full")
+        pixels = np.zeros((1000, 2972), dtype=np.uint8)
+        workspace = prepare_detection_workspace(
+            pixels,
+            ImageProfile(
+                shape=pixels.shape,
+                dtype="uint8",
+                axes="YX",
+                photometric="MINISBLACK",
+                compression="NONE",
+                sample_format=None,
+                bits_per_sample=(8,),
+                samples_per_pixel=1,
+                planar_config=None,
+                resolution=None,
+                resolution_unit=None,
+                icc_profile=None,
+                metadata=TiffMetadata(None, None, None, ()),
+                orientation=orientation_mapping(1, 2972, 1000),
+            ),
+            "horizontal",
+            configuration,
+            None,
+        )
+        holder = workspace.source_core.matched_holder
+        resolved = workspace.source_core.resolved_slot_count
+        assert holder is not None and resolved is not None
+        self.assertEqual(holder.profile.profile_id, "120_wide_188_5")
+        self.assertEqual(holder.full_count, 2)
+        self.assertEqual(resolved.output_count, 2)
+        self.assertEqual(resolved.authority.value, "matched_holder_full_count")
+
+    def test_competing_holder_counts_remain_unresolved(self) -> None:
+        configuration = get_detection_configuration("120-67", "full")
+        same_aspect_profiles = (
+            ScanCanvasPhysicalSpec("120_standard", 60.0, 180.0),
+            ScanCanvasPhysicalSpec("120_wide_188_5", 60.0, 180.0),
+        )
+        configuration = replace(
+            configuration,
+            scan_canvas=ScanCanvasDetectionConfiguration(same_aspect_profiles),
+        )
+        pixels = np.zeros((100, 300), dtype=np.uint8)
+        workspace = prepare_detection_workspace(
+            pixels,
+            ImageProfile(
+                shape=pixels.shape,
+                dtype="uint8",
+                axes="YX",
+                photometric="MINISBLACK",
+                compression="NONE",
+                sample_format=None,
+                bits_per_sample=(8,),
+                samples_per_pixel=1,
+                planar_config=None,
+                resolution=None,
+                resolution_unit=None,
+                icc_profile=None,
+                metadata=TiffMetadata(None, None, None, ()),
+                orientation=orientation_mapping(1, 300, 100),
+            ),
+            "horizontal",
+            configuration,
+            None,
+        )
+        self.assertIsNone(workspace.source_core.matched_holder)
+        self.assertIsNone(workspace.source_core.resolved_slot_count)
+        self.assertIn(
+            "holder_full_count_unresolved",
+            workspace.source_core.incomplete_reasons,
+        )
+        candidate = choose_detection(workspace, configuration, None)
+        self.assertEqual(
+            candidate.gate.checks[0].gap,
+            GateGap.HOLDER_FULL_COUNT_UNRESOLVED,
+        )
         explicit = get_detection_configuration("120-67", "partial", 2)
-        self.assertEqual(auto.count_request.mode, FrameCountMode.AUTO)
-        self.assertIsNone(auto.count_request.authoritative_count)
-        self.assertEqual(explicit.count_request.mode, FrameCountMode.EXPLICIT)
-        self.assertEqual(explicit.count_request.authoritative_count, 2)
+        self.assertEqual(explicit.count_request.strip_mode, "partial")
+        self.assertEqual(explicit.count_request.user_count, 2)
         self.assertIn(
             "120_wide_188_5",
-            tuple(item.profile_id for item in auto.scan_canvas.profiles),
+            tuple(item.profile_id for item in explicit.scan_canvas.profiles),
         )
 
     def test_top_bottom_corridor_has_narrow_core_and_complete_halo(
@@ -162,7 +238,7 @@ class PhysicalAuthorityContractTest(unittest.TestCase):
     ) -> None:
         configuration = get_detection_configuration(
             "135",
-            "partial",
+            "full",
             None,
         )
         pixels = np.zeros((100, 720), dtype=np.uint8)

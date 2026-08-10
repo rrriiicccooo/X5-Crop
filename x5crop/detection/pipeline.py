@@ -72,12 +72,18 @@ def choose_detection(
         layout=workspace.boundary_measurement_field.layout,
         configuration=configuration,
         lane_configuration=lane_configuration,
+        resolved_slot_count=workspace.source_core.resolved_slot_count,
     )
     facts = dict(geometry.assessment_facts)
     if workspace.source_core.scan_canvas_state != EvidenceState.SUPPORTED:
+        canvas_gap = GateGap.SCAN_CANVAS_AUTHORITY_UNAVAILABLE
+        if "holder_full_count_unresolved" in workspace.source_core.incomplete_reasons:
+            canvas_gap = GateGap.HOLDER_FULL_COUNT_UNRESOLVED
+        elif "holder_identity_unresolved" in workspace.source_core.incomplete_reasons:
+            canvas_gap = GateGap.HOLDER_IDENTITY_UNRESOLVED
         facts["scan_canvas_authority"] = TypedAssessment(
             workspace.source_core.scan_canvas_state,
-            GateGap.SCAN_CANVAS_AUTHORITY_UNAVAILABLE,
+            canvas_gap,
         )
     gate = candidate_gate_assessment(facts)
     return PhotoGeometryCandidate(

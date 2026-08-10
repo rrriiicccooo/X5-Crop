@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from ..formats import format_spec
+from pathlib import Path
+
 from ..configuration.bundle import DetectionConfigurationBundle
-from ..configuration.model import FrameCountRequest
+from ..configuration.model import SlotCountRequest
 from ..output.naming import portable_source_stems
 from ..run_config import RunConfig
 from .app import run_runtime
@@ -11,15 +12,67 @@ from .identity import runtime_environment_identity
 from .invocation import PlannedSource, RuntimeInvocation
 from .limits import STANDARD_JOB_LIMIT
 from .options import RuntimeOptions
+from ..detection.evidence.scan_canvas import (
+    matched_holder_from_evidence,
+    observe_scan_canvas,
+)
+from ..geometry.layout import infer_layout, is_horizontal_layout
+from ..io.tiff import read_tiff_profile
+from ..utils import spatial_shape_from_shape
+
+
+class InteractiveBatchCountPreflightError(ValueError):
+    pass
+
+
+def _preflight_interactive_batch_count(
+    files: list[Path],
+    options: RuntimeOptions,
+    configuration_bundle: DetectionConfigurationBundle,
+) -> None:
+    if not options.interactive or options.strip_mode != "partial":
+        return
+    configuration = configuration_bundle.initial_configuration
+    assert options.requested_count is not None
+    conflicts: list[str] = []
+    for path in files:
+        profile, _warnings = read_tiff_profile(path)
+        height, width = spatial_shape_from_shape(profile.shape)
+        layout = (
+            infer_layout(width, height)
+            if options.layout == "auto"
+            else options.layout
+        )
+        work_width, work_height = (
+            (width, height) if is_horizontal_layout(layout) else (height, width)
+        )
+        evidence = observe_scan_canvas(
+            work_width,
+            work_height,
+            layout,
+            configuration.scan_canvas,
+        )
+        holder = matched_holder_from_evidence(
+            evidence,
+            configuration.physical_spec,
+        )
+        if holder is not None and options.requested_count >= holder.full_count:
+            conflicts.append(
+                f"{path.name}: partial count {options.requested_count} must be "
+                f"less than {holder.full_count} for {holder.profile.profile_id}"
+            )
+    if conflicts:
+        raise InteractiveBatchCountPreflightError(
+            "interactive batch count preflight failed; restart the entire input:\n"
+            + "\n".join(conflicts)
+        )
 
 
 def runtime_invocation_from_options(options: RuntimeOptions) -> RuntimeInvocation:
     files = iter_input_files(options.input_path)
     if not files:
         raise ValueError(f"No TIFF files found: {options.input_path}")
-    fmt = format_spec(options.format_id)
-    count_request = FrameCountRequest.from_user_input(
-        fmt,
+    count_request = SlotCountRequest.from_user_input(
         options.strip_mode,
         options.requested_count,
     )
@@ -28,6 +81,7 @@ def runtime_invocation_from_options(options: RuntimeOptions) -> RuntimeInvocatio
         options.strip_mode,
         options.requested_count,
     )
+    _preflight_interactive_batch_count(files, options, configuration_bundle)
 
     layout_auto = options.layout == "auto"
     layout = options.layout

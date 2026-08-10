@@ -7,7 +7,6 @@ import sys
 from typing import Any
 
 from ..app_info import SCRIPT_NAME, VERSION
-from ..configuration.model import FrameCountMode
 from ..detection.photo_geometry.model import OutputSlotIdentity, ResolvedOutputSlots
 from ..image.workspace import WorkspaceIdentity
 from ..io.model import ImageProfile
@@ -39,18 +38,10 @@ def source_runtime_identity(
 
 def runtime_configuration_identity(config: RunConfig) -> dict[str, Any]:
     request = config.count_request
-    count_policy = (
-        {"policy": "scan_canvas_capacity"}
-        if request.mode == FrameCountMode.AUTO
-        else {
-            "policy": (
-                "format_default"
-                if request.mode == FrameCountMode.FIXED_FULL
-                else "user_explicit"
-            ),
-            "authoritative_count": request.authoritative_count,
-        }
-    )
+    count_policy = {
+        "intent": request.strip_mode,
+        "user_count": request.user_count,
+    }
     return {
         "format_id": config.format_id,
         "layout": config.layout,

@@ -80,9 +80,9 @@ def debug_status_parts(
 
 def _count_authority(configuration: DetectionConfiguration) -> str:
     request = configuration.count_request
-    if request.authoritative_count is None:
-        return request.mode.value
-    return f"{request.mode.value}:{request.authoritative_count}"
+    if request.user_count is None:
+        return "matched_holder_full_count"
+    return f"user_explicit_partial_count:{request.user_count}"
 
 
 def _transform_lines(

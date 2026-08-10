@@ -5,7 +5,6 @@ from unittest import mock
 
 import numpy as np
 
-from x5crop.configuration.model import FrameCountMode
 from x5crop.configuration.registry import get_detection_configuration
 from x5crop.detection.photo_geometry.measurement import (
     fit_template_bound_boundary_observation,
@@ -69,7 +68,7 @@ def _profile(shape: tuple[int, int]) -> ImageProfile:
 
 
 def _candidate(pixels: np.ndarray):
-    configuration = get_detection_configuration("135", "partial", None)
+    configuration = get_detection_configuration("135", "full", None)
     workspace = prepare_detection_workspace(
         pixels,
         _profile(tuple(int(value) for value in pixels.shape)),
@@ -530,10 +529,10 @@ class TemplateRuntimeContractTest(unittest.TestCase):
         self.assertEqual(direction.gap, GateGap.SHARED_STRIP_DIRECTION_NONUNIQUE)
         self.assertFalse(candidate.gate.passed)
 
-    def test_capacity_auto_keeps_slots_and_complete_query_coverage(self) -> None:
+    def test_matched_holder_full_count_keeps_complete_query_coverage(self) -> None:
         pixels = np.zeros((100, 720), dtype=np.uint8)
         workspace, configuration, candidate = _candidate(pixels)
-        self.assertEqual(configuration.count_request.mode, FrameCountMode.AUTO)
+        self.assertEqual(configuration.count_request.strip_mode, "full")
         self.assertEqual(candidate.resolved_output_slots, ResolvedOutputSlots((6,)))
         lane = candidate.geometry.lane_reconstructions[0]
         tiles = tuple(

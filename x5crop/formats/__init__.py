@@ -2,32 +2,25 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ..domain import FiniteInterval
 from ..utils import require_positive
 
 
 @dataclass(frozen=True, order=True)
 class FramePhysicalSpec:
-    """One format-owned frame template and local advance authority."""
+    """One format-owned frame rectangle and optional search prior."""
 
     component_id: str
     frame_width_mm: float
     frame_height_mm: float
-    nominal_gap_mm: float
-    local_advance_gap_mm: FiniteInterval
+    format_gap_prior_mm: float | None
 
     def __post_init__(self) -> None:
         if not self.component_id:
             raise ValueError("frame physical component requires an identity")
         require_positive("frame design width", self.frame_width_mm)
         require_positive("frame design height", self.frame_height_mm)
-        if (
-            not 0.0 <= self.nominal_gap_mm
-            or not self.local_advance_gap_mm.contains(self.nominal_gap_mm)
-        ):
-            raise ValueError(
-                "nominal gap must be finite, non-negative, and locally allowed"
-            )
+        if self.format_gap_prior_mm is not None:
+            require_positive("format gap search prior", self.format_gap_prior_mm)
 
 
 @dataclass(frozen=True, order=True)
@@ -39,7 +32,7 @@ class FrameDimensionToleranceSpec:
     """
 
     frame_width_tolerance_ratio: float = 0.0125
-    frame_height_tolerance_ratio: float = 0.0200
+    frame_height_tolerance_ratio: float = 0.0040
 
     def __post_init__(self) -> None:
         for name, value in (
@@ -65,7 +58,7 @@ class StripHandlingSpec:
     def partial_count_range(self) -> tuple[int, ...]:
         if not self.partial_mode_supported:
             return ()
-        return tuple(range(1, self.default_count + 1))
+        return tuple(range(1, self.default_count))
 
 
 @dataclass(frozen=True)
@@ -88,15 +81,15 @@ class ScanLayoutSpec:
 
 @dataclass(frozen=True, order=True)
 class ScanCanvasFit:
-    """Format-owned applicability and capacity for one physical canvas."""
+    """Format-owned applicability and full count for one physical holder."""
 
     profile_id: str
-    maximum_frame_count: int
+    full_count: int
 
     def __post_init__(self) -> None:
         if not self.profile_id:
             raise ValueError("scan-canvas fit requires a profile identity")
-        require_positive("scan-canvas maximum frame count", self.maximum_frame_count)
+        require_positive("scan-canvas full count", self.full_count)
 
 
 @dataclass(frozen=True)
@@ -110,8 +103,8 @@ class FormatSpec:
     def __post_init__(self) -> None:
         if not self.format_id:
             raise ValueError("format identity must not be empty")
-        if not self.frame_components:
-            raise ValueError("format requires physical frame components")
+        if len(self.frame_components) != 1:
+            raise ValueError("format requires one canonical frame component")
         component_ids = tuple(item.component_id for item in self.frame_components)
         if len(set(component_ids)) != len(component_ids):
             raise ValueError("format physical components must be unique")
@@ -124,10 +117,10 @@ class FormatSpec:
         if not profile_ids or len(set(profile_ids)) != len(profile_ids):
             raise ValueError("format scan-canvas fits must be non-empty and unique")
 
-    def maximum_frame_count(self, profile_id: str) -> int | None:
+    def holder_full_count(self, profile_id: str) -> int | None:
         return next(
             (
-                item.maximum_frame_count
+                item.full_count
                 for item in self.scan_canvas_fits
                 if item.profile_id == profile_id
             ),
@@ -143,8 +136,7 @@ FORMATS: dict[str, FormatSpec] = {
                 "36x24mm",
                 36.0,
                 24.0,
-                1.625,
-                FiniteInterval(1.0, 2.25),
+                2.0,
             ),
         ),
         StripHandlingSpec(6, True),
@@ -161,8 +153,7 @@ FORMATS: dict[str, FormatSpec] = {
                 "36x24mm",
                 36.0,
                 24.0,
-                1.625,
-                FiniteInterval(1.0, 2.25),
+                2.0,
             ),
         ),
         StripHandlingSpec(12, False),
@@ -177,7 +168,6 @@ FORMATS: dict[str, FormatSpec] = {
                 18.0,
                 24.0,
                 1.0,
-                FiniteInterval(-0.5, 2.5),
             ),
         ),
         StripHandlingSpec(12, True),
@@ -194,8 +184,7 @@ FORMATS: dict[str, FormatSpec] = {
                 "65x24mm",
                 65.0,
                 24.0,
-                2.5,
-                FiniteInterval(1.0, 4.0),
+                2.0,
             ),
         ),
         StripHandlingSpec(3, True),
@@ -208,12 +197,7 @@ FORMATS: dict[str, FormatSpec] = {
     "120-645": FormatSpec(
         "120-645",
         (
-            FramePhysicalSpec(
-                "42x54mm", 42.0, 54.0, 6.5, FiniteInterval(4.0, 9.0)
-            ),
-            FramePhysicalSpec(
-                "42x56mm", 42.0, 56.0, 6.5, FiniteInterval(4.0, 9.0)
-            ),
+            FramePhysicalSpec("42x56mm", 42.0, 56.0, None),
         ),
         StripHandlingSpec(4, True),
         ScanLayoutSpec(),
@@ -227,12 +211,7 @@ FORMATS: dict[str, FormatSpec] = {
     "120-66": FormatSpec(
         "120-66",
         (
-            FramePhysicalSpec(
-                "54x54mm", 54.0, 54.0, 7.5, FiniteInterval(4.0, 11.0)
-            ),
-            FramePhysicalSpec(
-                "56x56mm", 56.0, 56.0, 5.5, FiniteInterval(2.0, 9.0)
-            ),
+            FramePhysicalSpec("56x56mm", 56.0, 56.0, None),
         ),
         StripHandlingSpec(3, True),
         ScanLayoutSpec(),
@@ -246,12 +225,7 @@ FORMATS: dict[str, FormatSpec] = {
     "120-67": FormatSpec(
         "120-67",
         (
-            FramePhysicalSpec(
-                "70x54mm", 70.0, 54.0, 5.0, FiniteInterval(2.0, 8.0)
-            ),
-            FramePhysicalSpec(
-                "70x56mm", 70.0, 56.0, 5.0, FiniteInterval(2.0, 8.0)
-            ),
+            FramePhysicalSpec("70x56mm", 70.0, 56.0, None),
         ),
         StripHandlingSpec(3, True),
         ScanLayoutSpec(),

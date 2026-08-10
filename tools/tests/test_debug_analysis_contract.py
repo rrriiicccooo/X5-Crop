@@ -62,6 +62,7 @@ def _fixture(
     bundle = DetectionConfigurationBundle.for_format_mode(
         "135",
         "partial",
+        3,
     )
     configuration = bundle.initial_configuration
     workspace = prepare_detection_workspace(
@@ -72,10 +73,7 @@ def _fixture(
         None,
     )
     candidate = choose_detection(workspace, configuration, None)
-    decision = apply_decision_gate(
-        candidate.gate,
-        configuration.count_request.mode,
-    )
+    decision = apply_decision_gate(candidate.gate)
     detection = finalize_detection(
         candidate,
         decision,

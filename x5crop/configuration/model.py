@@ -10,68 +10,66 @@ from .preprocess import PreprocessConfiguration
 from .scan_canvas import ScanCanvasDetectionConfiguration
 
 
-class FrameCountMode(str, Enum):
-    FIXED_FULL = "fixed_full"
-    EXPLICIT = "explicit"
-    AUTO = "auto"
+class SlotCountAuthority(str, Enum):
+    MATCHED_HOLDER_FULL_COUNT = "matched_holder_full_count"
+    USER_EXPLICIT_PARTIAL_COUNT = "user_explicit_partial_count"
 
 
 @dataclass(frozen=True)
-class FrameCountRequest:
-    mode: FrameCountMode
-    authoritative_count: int | None
+class SlotCountRequest:
+    strip_mode: str
+    user_count: int | None
 
     def __post_init__(self) -> None:
-        if not isinstance(self.mode, FrameCountMode):
-            raise TypeError("frame-count request requires a typed mode")
-        if self.mode == FrameCountMode.AUTO:
-            if self.authoritative_count is not None:
-                raise ValueError("automatic count cannot carry an explicit value")
-        elif self.authoritative_count is None or self.authoritative_count <= 0:
-            raise ValueError(
-                "fixed and explicit count requests require one positive authority"
-            )
+        if self.strip_mode == FULL:
+            if self.user_count is not None:
+                raise ValueError("full mode must not carry --count")
+            return
+        if self.strip_mode != PARTIAL:
+            raise ValueError(f"unsupported strip mode: {self.strip_mode}")
+        if self.user_count is None:
+            raise ValueError("partial mode requires --count")
+        if self.user_count <= 0:
+            raise ValueError("partial --count must be a positive integer")
 
     @classmethod
     def from_user_input(
         cls,
-        physical_spec: FormatSpec,
         strip_mode: str,
         requested_count: int | None,
-    ) -> "FrameCountRequest":
-        if strip_mode == FULL:
-            if (
-                requested_count is not None
-                and requested_count != physical_spec.strip.default_count
-            ):
-                raise ValueError(
-                    f"--format {physical_spec.format_id} full mode requires "
-                    f"--count {physical_spec.strip.default_count}"
-                )
-            count = physical_spec.strip.default_count
-            return cls(FrameCountMode.FIXED_FULL, count)
-        if strip_mode != PARTIAL:
-            raise ValueError(f"unsupported strip mode: {strip_mode}")
-        if not physical_spec.strip.partial_mode_supported:
-            raise ValueError(
-                f"--format {physical_spec.format_id} does not support partial mode"
-            )
-        if requested_count is None:
-            return cls(FrameCountMode.AUTO, None)
-        if requested_count not in physical_spec.strip.partial_count_range:
-            allowed = f"1..{physical_spec.strip.default_count}"
-            raise ValueError(
-                f"--format {physical_spec.format_id} partial mode allows "
-                f"--count values: {allowed}"
-            )
-        return cls(FrameCountMode.EXPLICIT, requested_count)
+    ) -> "SlotCountRequest":
+        return cls(strip_mode, requested_count)
+
+
+@dataclass(frozen=True)
+class ResolvedSlotCount:
+    matched_holder_profile_id: str
+    full_count: int
+    output_count: int
+    authority: SlotCountAuthority
+
+    def __post_init__(self) -> None:
+        if not self.matched_holder_profile_id:
+            raise ValueError("resolved count requires matched-holder identity")
+        if self.full_count <= 0 or self.output_count <= 0:
+            raise ValueError("resolved counts must be positive")
+        if self.output_count > self.full_count:
+            raise ValueError("resolved output count exceeds holder full count")
+        if self.authority == SlotCountAuthority.MATCHED_HOLDER_FULL_COUNT:
+            if self.output_count != self.full_count:
+                raise ValueError("full authority requires the holder full count")
+        elif self.authority == SlotCountAuthority.USER_EXPLICIT_PARTIAL_COUNT:
+            if self.output_count >= self.full_count:
+                raise ValueError("partial authority must be below holder full count")
+        else:
+            raise TypeError("resolved count requires typed authority")
 
 
 @dataclass(frozen=True)
 class DetectionConfiguration:
     physical_spec: FormatSpec
     strip_mode: str
-    count_request: FrameCountRequest
+    count_request: SlotCountRequest
     preprocess: PreprocessConfiguration
     scan_canvas: ScanCanvasDetectionConfiguration
     diagnostics: DiagnosticsConfiguration
@@ -79,21 +77,16 @@ class DetectionConfiguration:
     def __post_init__(self) -> None:
         if self.strip_mode not in {FULL, PARTIAL}:
             raise ValueError(f"unsupported strip mode: {self.strip_mode}")
-        if self.strip_mode == FULL:
-            if self.count_request.mode != FrameCountMode.FIXED_FULL:
-                raise ValueError(
-                    "full detection configuration requires fixed-full count"
-                )
-        elif self.count_request.mode == FrameCountMode.FIXED_FULL:
-            raise ValueError(
-                "partial detection configuration cannot use fixed-full mode"
-            )
+        if self.count_request.strip_mode != self.strip_mode:
+            raise ValueError("slot-count request and strip mode disagree")
         if (
-            self.count_request.authoritative_count is not None
-            and self.count_request.authoritative_count
-            > self.physical_spec.strip.default_count
+            self.strip_mode == PARTIAL
+            and not self.physical_spec.strip.partial_mode_supported
         ):
-            raise ValueError("authoritative output-slot count exceeds the format maximum")
+            raise ValueError(
+                f"--format {self.physical_spec.format_id} does not support "
+                "partial mode"
+            )
         if not self.scan_canvas.profiles:
             raise ValueError(
                 "detection configuration requires scan-canvas profiles"
@@ -105,12 +98,10 @@ class DetectionConfiguration:
 
     @property
     def configuration_id(self) -> str:
-        count_identity = {
-            FrameCountMode.FIXED_FULL: "format_default",
-            FrameCountMode.AUTO: "scan_canvas_capacity",
-        }.get(
-            self.count_request.mode,
-            f"user_explicit:{self.count_request.authoritative_count}",
+        count_identity = (
+            "matched_holder_full_count"
+            if self.strip_mode == FULL
+            else f"user_explicit:{self.count_request.user_count}"
         )
         return (
             f"detection:{self.physical_spec.format_id}:{self.strip_mode}:"

@@ -240,7 +240,6 @@ def process_one(
         failure_stage = FailureStage.DECISION
         decision = apply_decision_gate(
             candidate.gate,
-            initial_configuration.count_request.mode,
         )
 
         failure_stage = FailureStage.FINALIZATION
@@ -357,7 +356,7 @@ def process_one(
         return FailedInput(
             source=input_file,
             failure_stage=failure_stage,
-            error_code=type(exc).__name__,
+            error_code=str(getattr(exc, "error_code", type(exc).__name__)),
             error_message=str(exc),
             artifacts=artifacts,
             traceback_text=traceback.format_exc(),

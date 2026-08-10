@@ -47,6 +47,8 @@ class PlatformSource:
     format_id: str
     strip_mode: str
     requested_count: int | None
+    confirmed_slot_count: int
+    confirmed_count_authority: str
     expected_orientation: int
     expected_compression: str
     expected_icc_bytes: int
@@ -67,6 +69,8 @@ def load_platform_sources(*, verify_files: bool) -> tuple[PlatformSource, ...]:
         "format_id",
         "strip_mode",
         "requested_count",
+        "confirmed_slot_count",
+        "confirmed_count_authority",
         "expected_orientation",
         "expected_compression",
         "expected_icc_bytes",
@@ -105,6 +109,10 @@ def load_platform_sources(*, verify_files: bool) -> tuple[PlatformSource, ...]:
                     None
                     if record["requested_count"] is None
                     else int(record["requested_count"])
+                ),
+                confirmed_slot_count=int(record["confirmed_slot_count"]),
+                confirmed_count_authority=str(
+                    record["confirmed_count_authority"]
                 ),
                 expected_orientation=int(record["expected_orientation"]),
                 expected_compression=str(record["expected_compression"]),

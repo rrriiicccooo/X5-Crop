@@ -173,7 +173,9 @@ def _run_source(source) -> SourceTiming:
             "1",
         ]
         if source.strip_mode == "partial":
-            command.extend(("--count", "auto"))
+            if source.confirmed_slot_count is None:
+                raise ValueError(f"{source.sample_id} lacks explicit partial count")
+            command.extend(("--count", str(source.confirmed_slot_count)))
         started = perf_counter()
         completed = subprocess.run(
             command,

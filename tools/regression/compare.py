@@ -28,8 +28,8 @@ class ReportComparisonIdentity:
     format_id: str
     layout: str
     strip_mode: str
-    output_slot_policy: str
-    authoritative_count: int | None
+    count_intent: str
+    user_count: int | None
 
 
 @dataclass(frozen=True)
@@ -69,11 +69,11 @@ def report_key(row: dict[str, Any]) -> ReportComparisonIdentity:
         format_id=str(config["format_id"]),
         layout=str(config["layout"]),
         strip_mode=str(config["strip_mode"]),
-        output_slot_policy=str(policy["policy"]),
-        authoritative_count=(
+        count_intent=str(policy["intent"]),
+        user_count=(
             None
-            if policy.get("authoritative_count") is None
-            else int(policy["authoritative_count"])
+            if policy.get("user_count") is None
+            else int(policy["user_count"])
         ),
     )
 

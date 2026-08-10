@@ -18,7 +18,7 @@ def detection_configuration_read_model(
         "configuration_id": configuration.configuration_id,
         "format_id": spec.format_id,
         "strip_mode": configuration.strip_mode,
-        "output_slot_request": typed_read_model(
+        "slot_count_request": typed_read_model(
             configuration.count_request
         ),
         "design_aperture_components_mm": typed_read_model(

@@ -10,8 +10,7 @@ from unittest import mock
 from tools.release.manifest import RELEASE_FILES, RELEASE_PATHS
 from tools.release.standalone import read_sources
 from x5crop.configuration.model import (
-    FrameCountMode,
-    FrameCountRequest,
+    SlotCountRequest,
 )
 from x5crop.detection.candidate.assessment.candidate_gate import (
     candidate_gate_assessment,
@@ -145,17 +144,17 @@ class CurrentOnlyContractTest(unittest.TestCase):
             verifier,
         )
 
-    def test_input_mapping_is_frozen_without_parallel_auto_switch(self) -> None:
-        partial = format_spec("135")
-        auto = FrameCountRequest.from_user_input(partial, "partial", None)
-        explicit = FrameCountRequest.from_user_input(partial, "partial", 3)
-        fixed = FrameCountRequest.from_user_input(partial, "full", 6)
-        self.assertEqual(auto.mode, FrameCountMode.AUTO)
-        self.assertIsNone(auto.authoritative_count)
-        self.assertEqual(explicit.mode, FrameCountMode.EXPLICIT)
-        self.assertEqual(explicit.authoritative_count, 3)
-        self.assertEqual(fixed.mode, FrameCountMode.FIXED_FULL)
-        self.assertEqual(fixed.authoritative_count, 6)
+    def test_count_request_carries_only_user_intent(self) -> None:
+        explicit = SlotCountRequest.from_user_input("partial", 3)
+        full = SlotCountRequest.from_user_input("full", None)
+        self.assertEqual(explicit.strip_mode, "partial")
+        self.assertEqual(explicit.user_count, 3)
+        self.assertEqual(full.strip_mode, "full")
+        self.assertIsNone(full.user_count)
+        with self.assertRaises(ValueError):
+            SlotCountRequest.from_user_input("partial", None)
+        with self.assertRaises(ValueError):
+            SlotCountRequest.from_user_input("full", 6)
         parser = build_parser()
         option_strings = {
             value
@@ -163,10 +162,13 @@ class CurrentOnlyContractTest(unittest.TestCase):
             for value in action.option_strings
         }
         self.assertNotIn("--auto-count", option_strings)
-        parsed = parser.parse_args(
-            ["input.tif", "--format", "135", "--strip", "partial", "--count", "auto"]
-        )
-        self.assertIsNone(options_from_args(parsed).requested_count)
+        with (
+            contextlib.redirect_stderr(io.StringIO()),
+            self.assertRaises(SystemExit),
+        ):
+            parser.parse_args(
+                ["input.tif", "--format", "135", "--strip", "partial", "--count", "auto"]
+            )
         with (
             contextlib.redirect_stderr(io.StringIO()),
             self.assertRaises(SystemExit),
@@ -282,7 +284,7 @@ class CurrentOnlyContractTest(unittest.TestCase):
             strip = format_spec(format_id).strip
             self.assertEqual(
                 strip.partial_count_range,
-                tuple(range(1, strip.default_count + 1)),
+                tuple(range(1, strip.default_count)),
             )
         self.assertFalse(
             format_spec("135-dual").strip.partial_mode_supported
@@ -308,7 +310,7 @@ class CurrentOnlyContractTest(unittest.TestCase):
         self.assertEqual(REPORT_SCHEMA_ID, "x5crop_detection_report_v5")
         self.assertEqual(
             REPORT_SCHEMA_REVISION,
-            "x5crop_v5_current_3",
+            "x5crop_v5_current_4",
         )
         candidate = candidate_gate_assessment(
             {
@@ -330,7 +332,7 @@ class CurrentOnlyContractTest(unittest.TestCase):
                 "blocks",
             ),
         )
-        decision = apply_decision_gate(candidate, FrameCountMode.AUTO)
+        decision = apply_decision_gate(candidate)
         self.assertEqual(decision.status, "approved_auto")
         self.assertEqual(decision.final_review_reasons, ())
 

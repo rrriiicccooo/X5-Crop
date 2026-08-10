@@ -81,6 +81,23 @@ def _stable_id(prefix: str, *parts: object) -> str:
     return f"{prefix}:{sha256(payload).hexdigest()[:24]}"
 
 
+def _gap_seed_mm(component: FramePhysicalSpec) -> float:
+    """Return a search origin, never a source-gap authority."""
+
+    return (
+        component.format_gap_prior_mm
+        if component.format_gap_prior_mm is not None
+        else 0.0
+    )
+
+
+def _gap_observation_domain_mm(component: FramePhysicalSpec) -> FiniteInterval:
+    if component.format_gap_prior_mm is None:
+        return FiniteInterval(-component.frame_width_mm, component.frame_width_mm)
+    prior = component.format_gap_prior_mm
+    return FiniteInterval(max(-component.frame_width_mm, prior - 2.0), prior + 2.0)
+
+
 def _intersection(
     left: FiniteInterval,
     right: FiniteInterval,
@@ -298,7 +315,7 @@ def _role_relative_projection(
     width_count = index + (1 if role.role == BoundaryRole.END else 0)
     return width_state.project_affine(
         q_coefficient=width_count * component.frame_width_mm,
-        scale_coefficient=index * component.nominal_gap_mm,
+        scale_coefficient=index * _gap_seed_mm(component),
     )
 
 
@@ -313,7 +330,7 @@ def _role_canonical_relative(
         (index + (1 if role.role == BoundaryRole.END else 0))
         * component.frame_width_mm
         * normalized
-        + index * component.nominal_gap_mm * scale
+        + index * _gap_seed_mm(component) * scale
     )
 
 
@@ -328,7 +345,7 @@ def _role_affine_coefficients(
             + (1 if role.role == BoundaryRole.END else 0)
         )
         * component.frame_width_mm,
-        index * component.nominal_gap_mm,
+        index * _gap_seed_mm(component),
     )
 
 
@@ -2177,11 +2194,12 @@ def _refine_source_geometry(
                 binding_domain.maximum + maximum_half_width,
             )
             candidates: list[tuple[ProfileRun, _BoundRunProjection]] = []
+            gap_domain = _gap_observation_domain_mm(proposal.component)
             allowed_gap_values = tuple(
                 gap * scale
                 for gap in (
-                    proposal.component.local_advance_gap_mm.minimum,
-                    proposal.component.local_advance_gap_mm.maximum,
+                    gap_domain.minimum,
+                    gap_domain.maximum,
                 )
                 for scale in (
                     width_state.feasible_scale_interval().minimum,
@@ -2401,10 +2419,10 @@ def local_advance_delta_from_observed_gap(
     observed_gap_px: FiniteInterval,
     geometry: SourceFrameGeometry,
 ) -> FiniteInterval | None:
-    """Constrain one observed gap by the format-owned local advance range."""
+    """Constrain one observed gap by physical ordering, not a fixed gap."""
 
     scale = geometry.width_state.feasible_scale_interval()
-    gap_mm = geometry.component.local_advance_gap_mm
+    gap_mm = _gap_observation_domain_mm(geometry.component)
     allowed_products = tuple(
         gap * pixels_per_mm
         for gap in (gap_mm.minimum, gap_mm.maximum)
@@ -2419,7 +2437,7 @@ def local_advance_delta_from_observed_gap(
         return None
     nominal_gap_px = geometry.width_state.project_affine(
         q_coefficient=0.0,
-        scale_coefficient=geometry.component.nominal_gap_mm,
+        scale_coefficient=_gap_seed_mm(geometry.component),
     )
     if _intersection(constrained_gap, nominal_gap_px) is not None:
         return FiniteInterval.exact(0.0)
@@ -3130,7 +3148,7 @@ def _materialize_sequence_placement(
         phase_full_interval_px=phase_full,
         nominal_pitch=NominalPitch.from_geometry(
             geometry.width_state,
-            nominal_gap_mm=proposal.component.nominal_gap_mm,
+            nominal_gap_mm=_gap_seed_mm(proposal.component),
         ),
         local_advance_relations=relations,
         canonical_positions_px=tuple(canonical_positions),
