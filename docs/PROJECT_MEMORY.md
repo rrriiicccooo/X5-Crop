@@ -17,7 +17,7 @@
 
 - [ARCHITECTURE.md](ARCHITECTURE.md) 已集中保存讨论确认的 format、尺度、间隙、中心线、
   top/bottom、separator chain、内容否决、完整链投票、`SafeCropEnvelope` 与 Gate 合同。公共文档只
-  保存用户可见行为。本轮只有文档变化，不构成实现或验证证据。
+  保存用户可见行为。这些新合同尚未在源码落地，不构成实现或验证证据。
 - 现场源码仍保留可复用的 template-first、registered measurement、Grid/edge-pair 基础、两级
   Gate、TIFF 事务和严格 Debug Analysis report reuse；新实现应在这些 current owner 上收敛，
   不恢复历史 detector 或建立平行路径。
@@ -59,11 +59,13 @@
 
 ## 精确下一步
 
-1. 在不修改源码的前提下，把五类差距映射为 current owner、数据合同、删除项和验证项，形成一次
+1. 为 diagnostic、performance 与 platform cohort 中缺少 count 的 partial 记录取得独立 count
+   authority；无法确认的记录不能用于完整检测验证。
+2. 在不修改源码的前提下，把五类差距映射为 current owner、数据合同、删除项和验证项，形成一次
    可审查的实现计划。
-2. 获得实施确认后，按 count/catalog、共享 geometry/evidence、chain selection/`SafeCropEnvelope`、
+3. 获得实施确认后，按 count/catalog、共享 geometry/evidence、chain selection/`SafeCropEnvelope`、
    Gate/report/debug 四个边界批次修改；每批同步删除被替代的 API、schema、tests 和 dead code。
-3. 每批先运行对应 unit/full；检测合同完成后统一重跑九项黄金、111-source
+4. 每批先运行对应 unit/full；检测合同完成后统一重跑九项黄金、111-source
    diagnostic、24-source 两遍性能与全局残留审计。
-4. 只在最终 release commit 上生成 Apple Silicon、Windows x64、Intel macOS 与文件系统 receipt，
+5. 只在最终 release commit 上生成 Apple Silicon、Windows x64、Intel macOS 与文件系统 receipt，
    再决定是否制作 RC。
