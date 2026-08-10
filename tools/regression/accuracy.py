@@ -262,7 +262,9 @@ def _validate_approved_geometry(
             output_polygon,
             str(gold["strip_orientation"]),
         )
-    transform = report["output"]["finalization"]["transform_assessment"]
+    transform = report["output"]["finalization"][
+        "source_transform_assessment"
+    ]
     observed_angle = transform["observed_angle_interval_degrees"]
     gold_angles = tuple(
         math.degrees(math.atan(float(edge["slope"])))

@@ -26,8 +26,8 @@ DIAGNOSTIC_COHORT_PATH = (
     / "diagnostic_unreviewed.jsonl"
 )
 COHORT_SCHEMA = "x5crop_diagnostic_unreviewed_cohort_v1"
-RECORD_SCHEMA = "x5crop_diagnostic_record_v2"
-SUMMARY_SCHEMA = "x5crop_diagnostic_summary_v2"
+RECORD_SCHEMA = "x5crop_diagnostic_record_v3"
+SUMMARY_SCHEMA = "x5crop_diagnostic_summary_v3"
 EXPECTED_RECORD_COUNT = 111
 MAXIMUM_PEAK_TEMPORARY_BYTES_PER_SOURCE_PIXEL = 10
 MAXIMUM_PEAK_TEMPORARY_FIXED_ALLOWANCE_BYTES = 32 * 1024 * 1024
@@ -395,9 +395,15 @@ def run_diagnostic_source(source: DiagnosticSource) -> dict[str, Any]:
                 for lane in geometry["lanes"]
             ],
         },
-        "transform_outcome": report["output"]["finalization"][
-            "transform_assessment"
-        ],
+        "transform_outcome": {
+            "source": report["output"]["finalization"][
+                "source_transform_assessment"
+            ],
+            "lanes": geometry["lane_transform_assessments"],
+            "output_transforms": report["output"]["finalization"][
+                "output_transforms"
+            ],
+        },
         "metrics": metrics,
         "structured_exception": None,
         "engineering_checks": engineering_checks,

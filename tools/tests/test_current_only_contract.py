@@ -214,6 +214,13 @@ class CurrentOnlyContractTest(unittest.TestCase):
         self.assertNotIn("runtime_invocation_from_options", diagnostic)
         self.assertNotIn("process_one", diagnostic)
         self.assertNotIn("diagnostics=True", diagnostic)
+        self.assertNotIn('["transform_assessment"]', diagnostic)
+        self.assertIn('"source_transform_assessment"', diagnostic)
+        accuracy = (ROOT / "tools/regression/accuracy.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotIn('["transform_assessment"]', accuracy)
+        self.assertIn('"source_transform_assessment"', accuracy)
         self.assertIn(
             '"$PYTHON" -m tools.regression.diagnostic_cohort\n',
             verifier,
