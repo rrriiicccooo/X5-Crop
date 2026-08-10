@@ -109,9 +109,12 @@ platform | platform-check | platform-package | pre-push
   失效。
 - `Test/` 不受 Git 跟踪，目录布局不是源码合同；工具以 cohort 中的相对路径和 source SHA 绑定
   样片。不得把 TIFF、生成输出或 receipt 提交到 Git。
-- Accuracy 只有 `gold_accuracy_blocking` 与 `diagnostic_unreviewed` 两种角色。九张黄金共十四项；
-  nominal 必须安全自动批准，challenge 允许安全 `needs_review`。不得新增样片规则、whitelist、
+- Accuracy 只有 `gold_accuracy_blocking` 与 `diagnostic_unreviewed` 两种角色。九张黄金各运行一项，
+  共九项：full 使用固定 count，partial 使用 cohort 中明确确认的 count；不保留 auto 重复任务。
+  Nominal 必须安全自动批准，challenge 允许安全 `needs_review`。不得新增样片规则、whitelist、
   格式 denylist 或根据当前输出自动晋升黄金。
+- Accuracy、diagnostic、performance 与 platform cohort 的 partial 记录必须携带明确 count；工具
+  不得从片夹容量、文件名或像素推导。
 - 111-source diagnostic 只判断 crash、hang、terminal/schema 完整性、authority、query/template、
   内存和 TIFF 工程合同，不产生 accuracy verdict。
 - 性能 Gate 使用 24-source 完整用户路径，正式 mean 上限为 5 秒；SHA、profiling 和 Debug

@@ -26,13 +26,19 @@
 ## 开放实现差距
 
 1. `FrameCountMode.AUTO` 仍贯穿 CLI、交互启动器、runtime、Gate、report、regression cohort 和
-   tests。Partial 必须改为明确 count；启动器只保留重新输入，片夹容量只校验上限。
+   tests。Partial 必须改为明确 count；启动器只保留重新输入，片夹容量只校验上限。现有九张
+   黄金因五张 partial 的 explicit/auto 副本形成十四项，需收敛为九张各一项；diagnostic、
+   performance 和 platform cohort 的每个 partial source 也必须保存明确 count，不得从容量或
+   filename 推导。现场分别有 51/111、9/24、1/6 条 partial 记录缺少该字段，须取得独立 count
+   authority 后才能继续作为完整检测验证样片。Count/schema 改变后，旧 auto report 必须失效并
+   重新检测。
 2. Format catalog 仍包含 120 的 54 mm component、format-owned 固定 local-gap 区间以及旧 gap：
    135 为 1.625 mm、XPan 为 2.5 mm、120 族均有固定值。合同要求只保留 56 mm 短边，135/half/
-   XPan 分别使用 2/1/2 mm 搜索先验，120 `G_format` unresolved，异常 gap 由证据决定。
-3. `frame_height_tolerance_ratio` 当前为 2.00%，属于历史调试漂移；合同为 0.40%。宽度 1.25%
-   已正确。共享 W/H、连续中心线、两段 pitch 建立 `G_source`、正常链优先和 negative-only content
-   veto 仍需在同一 geometry/evidence path 落地。
+   XPan 分别使用 2/1/2 mm 搜索先验，120 `G_format` 必须在数据合同中显式表示为 unresolved，
+   不能用零或固定局部区间代替；异常 gap 只由证据决定。
+3. `frame_height_tolerance_ratio` 当前为 2.00%，属于未获确认的 S027 调试漂移；用户确认合同为
+   0.40%。宽度 1.25% 已正确。共享 W/H、连续中心线、两段 pitch 建立 `G_source`、正常链优先和
+   negative-only content veto 仍需在同一 geometry/evidence path 落地。
 4. 当前 selection 仍保存 `CanonicalFormatPlacement`、全部 retained placements 的 safety union 与
    format-specific minimum guard。它必须改为完整 chain 的分级独立证据投票，并只保留胜出位置
    自身的测量不确定性。
@@ -42,8 +48,9 @@
 
 ## 验证边界与风险
 
-- 文档合同不能证明当前源码已经具备新行为。检测变化后，旧黄金、111-source、performance 和
-  平台 receipt 都不能迁移为新 tree 的证据。
+- 文档合同不能证明当前源码已经具备新行为。Source-SHA-bound、用户确认的黄金坐标仍是 reference
+  authority；但旧 accuracy 结果、111-source 结果、performance 和平台 receipt 都不能迁移为
+  新 tree 的证据。
 - 物理关系已经明确，但真实 TIFF 能否稳定提供所需边缘、separator 与内容否决观察，仍须以
   用户确认黄金验证；算法输出不能自动成为 baseline。
 - 111-source diagnostic 只证明工程稳定和工作量有界，不证明 chain 选择正确。
@@ -56,7 +63,7 @@
    可审查的实现计划。
 2. 获得实施确认后，按 count/catalog、共享 geometry/evidence、chain selection/`SafeCropEnvelope`、
    Gate/report/debug 四个边界批次修改；每批同步删除被替代的 API、schema、tests 和 dead code。
-3. 每批先运行对应 unit/full；检测合同完成后统一重跑十四项黄金、challenge、111-source
+3. 每批先运行对应 unit/full；检测合同完成后统一重跑九项黄金、111-source
    diagnostic、24-source 两遍性能与全局残留审计。
 4. 只在最终 release commit 上生成 Apple Silicon、Windows x64、Intel macOS 与文件系统 receipt，
    再决定是否制作 RC。

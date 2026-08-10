@@ -44,6 +44,10 @@ X5 Crop 处理用户已经知道 format 与片条数量的 Hasselblad / Imacon X
 | `120-66` | 56 × 56 | 未定义 |
 | `120-67` | 70 × 56 | 未定义 |
 
+135 的 2 mm 来自 38 mm 名义 frame pitch 减去 36 mm 照片宽度；half 的 1 mm 来自 19 mm
+名义 pitch 减去 18 mm 照片宽度；XPan 采用已确认的 2 mm。它们只提供第一次搜索的中心，不能
+证明当前 source 的真实间隙。
+
 120 族只使用 56 mm 短边，不保留 54 mm component。其正常间隙受相机或后背影响，联网名义值
 和项目样片都不能成为 format 级 authority，因此 `G_format` 保持未定义，而不是零。
 
@@ -487,8 +491,10 @@ staged | full | accuracy | diagnostic | performance |
 platform | platform-check | platform-package | pre-push
 ```
 
-- 九张用户确认黄金的十四项任务验证选择、内容保护和 budget；nominal 必须安全自动批准，
-  challenge 允许安全 review。
+- 九张用户确认黄金各运行一项，共九项：full 使用固定 count，partial 使用 cohort 中明确确认的
+  count。七项 nominal 必须安全自动批准，两项 challenge 允许安全 review；不再运行 auto 副本。
+- Accuracy、diagnostic、performance 与 platform cohort 的 partial 记录都必须携带明确 count；
+  工具不得从片夹容量、文件名或像素推导。
 - 111-source diagnostic 只验证 crash、hang、工作量、schema、authority、内存和 TIFF 工程合同，
   不产生 accuracy verdict。
 - 24-source performance 使用完整用户路径，正式 mean 上限为 5 秒；profiling 在 Gate 外。

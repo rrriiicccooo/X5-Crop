@@ -51,8 +51,9 @@ V5 是 current-only runtime。源码、CLI、schema、tests、tools 与 standalo
 
 ### 验证与发布边界
 
-- `tools/verify` 是唯一入口。九张黄金十四项验证 accuracy，111-source diagnostic 只验证工程
-  合同，24-source performance 的正式 mean 上限为 5 秒。
+- `tools/verify` 是唯一入口。九张黄金各运行一项，共九项；partial 只使用明确 count，不再运行
+  auto 副本。111-source diagnostic 只验证工程合同，24-source performance 的正式 mean 上限为
+  5 秒。
 - 不增加样片规则、whitelist、format denylist 或验证专用 detector path。投票 margin 必须在
   用户确认黄金上全局验证，不能按 format 或单样片调参。
 - `full`、旧 receipt 或 CI 通过都不能替代 accuracy、performance 与真实平台证据。只有全部
