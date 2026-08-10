@@ -43,6 +43,8 @@ def _lane_placement_read_model(lane: object) -> dict[str, object]:
             ),
         },
         "observations": {
+            "sequence_edges": typed_read_model(lane.sequence_edges),
+            "separator_bands": typed_read_model(lane.separator_bands),
             "lane_gap_model": typed_read_model(lane.lane_gap_model),
             "side_transition_regions": typed_read_model(
                 lane.side_transition_regions
@@ -50,16 +52,23 @@ def _lane_placement_read_model(lane: object) -> dict[str, object]:
             "raw_top_bottom_lines": typed_read_model(
                 lane.raw_top_bottom_observations
             ),
-            "provisional_height_templates": typed_read_model(
-                lane.provisional_height_templates
+            "cross_axis_proposals": typed_read_model(
+                lane.cross_axis_proposals
             ),
             "raw_lines_are_canonical_direction": False,
         },
+        "local_advance_unresolved_count": (
+            lane.local_advance_unresolved_count
+        ),
         "direction_classes": typed_read_model(lane.direction_classes),
         "chains": {
             "authority": "bounded_complete_chain_producer",
-            "materialized": typed_read_model(lane.materialized_chains),
-            "ledger": typed_read_model(lane.placement_selection.chains),
+            "lane_complete_proposals": typed_read_model(
+                lane.materialized_chains
+            ),
+            "proposal_ledgers": typed_read_model(
+                lane.placement_selection.chains
+            ),
             "producer_bounds": typed_read_model(lane.producer_bounds),
         },
         "selection": {
@@ -73,6 +82,9 @@ def _lane_placement_read_model(lane: object) -> dict[str, object]:
                 None
                 if lane.selected_placement is None
                 else lane.selected_placement.placement_id
+            ),
+            "source_joint_selected_chain": typed_read_model(
+                lane.selected_chain_record
             ),
             "safety_rule": "selected_placement_only",
             "safe_crop_envelopes": typed_read_model(
@@ -149,7 +161,7 @@ def report_record_for_final_detection(
                     "direction_free_side_regions_and_raw_top_bottom_lines"
                 ),
                 "format_physical": (
-                    "frame_dimensions_tolerance_gap_component_count_fit"
+                    "fixed_frame_dimensions_shared_scale_gap_count"
                 ),
                 "canonical": "representative_only_no_safety_pruning",
                 "selection": "sampling_cluster_then_tiered_direct_dominance",
@@ -170,6 +182,15 @@ def report_record_for_final_detection(
             "output_slot_count": detection.output_slot_count,
             "slot_identities": typed_read_model(
                 detection.output_slot_identities
+            ),
+            "source_placement_selection": typed_read_model(
+                candidate_geometry.source_placement_selection
+            ),
+            "source_transform_assessment": typed_read_model(
+                candidate_geometry.source_transform_assessment
+            ),
+            "lane_transform_assessments": typed_read_model(
+                candidate_geometry.lane_transform_assessments
             ),
             "lanes": [
                 _lane_placement_read_model(lane)
@@ -205,8 +226,11 @@ def report_record_for_final_detection(
                 "slot_identities": typed_read_model(
                     detection.output_slot_identities
                 ),
-                "transform_assessment": typed_read_model(
-                    detection.transform_assessment
+                "source_transform_assessment": typed_read_model(
+                    detection.source_transform_assessment
+                ),
+                "output_transforms": typed_read_model(
+                    detection.output_transforms
                 ),
                 "resolved_output_geometries": typed_read_model(
                     detection.resolved_output_geometries

@@ -452,24 +452,24 @@ class JointAxisGeometry:
 
 
 @dataclass(frozen=True)
-class SourceFrameGeometry:
+class SourceScanGeometry:
     geometry_id: str
-    component: FramePhysicalSpec
+    frame_spec: FramePhysicalSpec
     width_state: JointAxisGeometry
     height_state: JointAxisGeometry
 
     @classmethod
     def create(
         cls,
-        component: FramePhysicalSpec,
+        frame_spec: FramePhysicalSpec,
         *,
         width_scale_px_per_mm: PositiveInterval,
         height_scale_px_per_mm: PositiveInterval,
-    ) -> "SourceFrameGeometry":
+    ) -> "SourceScanGeometry":
         tolerance = FRAME_DIMENSION_TOLERANCE_SPEC
         width = JointAxisGeometry.create(
             axis_name="width",
-            design_extent_mm=component.frame_width_mm,
+            design_extent_mm=frame_spec.frame_width_mm,
             scale_interval_px_per_mm=width_scale_px_per_mm,
             factor_interval=PositiveInterval(
                 1.0 - tolerance.frame_width_tolerance_ratio,
@@ -478,7 +478,7 @@ class SourceFrameGeometry:
         )
         height = JointAxisGeometry.create(
             axis_name="height",
-            design_extent_mm=component.frame_height_mm,
+            design_extent_mm=frame_spec.frame_height_mm,
             scale_interval_px_per_mm=height_scale_px_per_mm,
             factor_interval=PositiveInterval(
                 1.0 - tolerance.frame_height_tolerance_ratio,
@@ -487,12 +487,12 @@ class SourceFrameGeometry:
         )
         return cls(
             geometry_id=_stable_id(
-                "source-frame-geometry",
-                component.component_id,
+                "source-scan-geometry",
+                frame_spec.identity_fields,
                 width_scale_px_per_mm,
                 height_scale_px_per_mm,
             ),
-            component=component,
+            frame_spec=frame_spec,
             width_state=width,
             height_state=height,
         )
@@ -502,30 +502,30 @@ class SourceFrameGeometry:
             not self.geometry_id
             or self.width_state.axis_name != "width"
             or self.height_state.axis_name != "height"
-            or self.width_state.design_extent_mm != self.component.frame_width_mm
+            or self.width_state.design_extent_mm != self.frame_spec.frame_width_mm
             or self.height_state.design_extent_mm
-            != self.component.frame_height_mm
+            != self.frame_spec.frame_height_mm
         ):
-            raise ValueError("source frame geometry is invalid")
+            raise ValueError("source scan geometry is invalid")
 
     def intersect_source_state(
         self,
-        other: "SourceFrameGeometry",
-    ) -> "SourceFrameGeometry":
-        if self.component != other.component:
-            raise ValueError("source geometries use different components")
+        other: "SourceScanGeometry",
+    ) -> "SourceScanGeometry":
+        if self.frame_spec != other.frame_spec:
+            raise ValueError("source geometries use different frame specs")
         width = self.width_state.intersect_state(other.width_state)
         height = self.height_state.intersect_state(other.height_state)
-        return SourceFrameGeometry(
+        return SourceScanGeometry(
             geometry_id=_stable_id(
-                "source-frame-geometry",
-                self.component.component_id,
+                "source-scan-geometry",
+                self.frame_spec.identity_fields,
                 width.vertices,
                 height.vertices,
                 width.observation_ids,
                 height.observation_ids,
             ),
-            component=self.component,
+            frame_spec=self.frame_spec,
             width_state=width,
             height_state=height,
         )
@@ -545,13 +545,15 @@ class LaneGapModel:
     canonical_placement_pitch_px: float
 
     @classmethod
-    def from_edge_families(
+    def from_ordinal_edges(
         cls,
         width_state: JointAxisGeometry,
         *,
         lane_id: str,
         edge_families: tuple[
-            tuple[tuple[FiniteInterval, tuple[ObservationId, ...]], ...], ...
+            tuple[
+                tuple[int, FiniteInterval, tuple[ObservationId, ...]], ...
+            ], ...
         ],
         format_gap_prior_mm: float | None,
     ) -> "LaneGapModel":
@@ -561,10 +563,12 @@ class LaneGapModel:
         proposals: list[FiniteInterval] = []
         observations: list[ObservationId] = []
         for family in edge_families:
-            ordered = tuple(sorted(family, key=lambda item: item[0].center))
+            ordered = tuple(sorted(family, key=lambda item: item[0]))
             for left, right in zip(ordered, ordered[1:]):
-                left_interval, left_ids = left
-                right_interval, right_ids = right
+                left_ordinal, left_interval, left_ids = left
+                right_ordinal, right_interval, right_ids = right
+                if right_ordinal != left_ordinal + 1:
+                    continue
                 proposals.append(
                     FiniteInterval(
                         right_interval.minimum

@@ -277,14 +277,14 @@ class V5PerformanceContractTest(unittest.TestCase):
             32 * 1024 * 1024,
         )
 
-    def test_diagnostic_enhanced_work_is_bounded_by_groups_times_roles(
+    def test_diagnostic_refinement_work_is_bounded_by_groups_times_roles(
         self,
     ) -> None:
         work = {field: 0 for field in WORK_FIELDS}
         work.update(
-            phase_vote_count=5,
-            template_group_count=4,
-            enhanced_query_count=29,
+            role_proposal_count=5,
+            sequence_group_count=4,
+            refinement_query_count=29,
             domain_pixels=100,
         )
         report = {
@@ -297,7 +297,7 @@ class V5PerformanceContractTest(unittest.TestCase):
         }
 
         self.assertTrue(_bounded_work(report, source_pixels=100))
-        work["enhanced_query_count"] = 30
+        work["refinement_query_count"] = 30
         self.assertFalse(_bounded_work(report, source_pixels=100))
 
 

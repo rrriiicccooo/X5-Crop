@@ -36,7 +36,7 @@ def append_summary_csv(path: Path, result: ReportResult) -> None:
         "selected_scan_canvas_profile_id",
         "lane_output_slot_counts",
         "output_slot_count",
-        "canonical_components",
+        "selected_frame_specs",
         "materialized_chain_count",
         "candidate_gate_gaps",
         "final_review_reasons",
@@ -80,11 +80,13 @@ def append_summary_csv(path: Path, result: ReportResult) -> None:
                 "output_slot_count": record["photo_geometry"][
                     "output_slot_count"
                 ],
-                "canonical_components": ";".join(
+                "selected_frame_specs": ";".join(
                     str(
                         next(
-                            item["component"]["component_id"]
-                            for item in lane["chains"]["materialized"]
+                            item["frame_spec"]["frame_spec_id"]
+                            for item in lane["chains"][
+                                "lane_complete_proposals"
+                            ]
                             if item["placement_id"]
                             == lane["selection"]["selected_placement_id"]
                         )
@@ -94,7 +96,7 @@ def append_summary_csv(path: Path, result: ReportResult) -> None:
                     is not None
                 ),
                 "materialized_chain_count": sum(
-                    len(lane["chains"]["materialized"])
+                    len(lane["chains"]["lane_complete_proposals"])
                     for lane in record["photo_geometry"]["lanes"]
                 ),
                 "candidate_gate_gaps": ";".join(

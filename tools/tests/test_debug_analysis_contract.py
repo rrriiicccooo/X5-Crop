@@ -161,7 +161,7 @@ class DebugAnalysisContractTest(unittest.TestCase):
                     frame.canonical_source_polygon
                     for lane in detection.candidate.geometry.lane_reconstructions
                     for chain in lane.materialized_chains
-                    for frame in chain.canonical.frames
+                    for frame in chain.fixed_frames.frames
                 )
             ),
         )
@@ -384,10 +384,11 @@ class DebugAnalysisContractTest(unittest.TestCase):
             outcome="shared_rotation",
             applied_source_rotation_degrees=-0.153,
             observed_angle_interval_degrees=(
-                detection.transform_assessment.observed_angle_interval_degrees
+                detection.source_transform_assessment
+                .observed_angle_interval_degrees
             ),
         )
-        applied = SimpleNamespace(transform_assessment=assessment)
+        applied = SimpleNamespace(source_transform_assessment=assessment)
         first, second = _transform_lines(applied, profile)
         self.assertEqual(first, "V5 · DESKEW APPLIED -0.153°")
         self.assertIn("observed -0.166°…+0.166°", second)

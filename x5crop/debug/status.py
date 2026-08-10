@@ -92,7 +92,7 @@ def _transform_lines(
     detection: FinalDetection,
     profile: ImageProfile,
 ) -> tuple[str, str]:
-    transform = detection.transform_assessment
+    transform = detection.source_transform_assessment
     interval = transform.observed_angle_interval_degrees
     if interval is None:
         first = "V5 · DIRECTION UNAVAILABLE"

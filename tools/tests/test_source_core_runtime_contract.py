@@ -19,7 +19,7 @@ from x5crop.detection.candidate.assessment.model import (
     CANDIDATE_GATE_CHECK_CODES,
 )
 from x5crop.detection.decision.vocabulary import (
-    FINAL_REASON_SCAN_CANVAS_AUTHORITY_UNAVAILABLE,
+    FINAL_REASON_NO_LEGAL_PLACEMENT,
 )
 from x5crop.report.identity import REPORT_SCHEMA_ID, REPORT_SCHEMA_REVISION
 from x5crop.report.outputs import write_report_outputs_for_result
@@ -203,7 +203,7 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
         record = outcome.result.record
         self.assertEqual(record["decision"]["status"], "needs_review")
         self.assertIn(
-            FINAL_REASON_SCAN_CANVAS_AUTHORITY_UNAVAILABLE,
+            FINAL_REASON_NO_LEGAL_PLACEMENT,
             record["decision"]["final_review_reasons"],
         )
 

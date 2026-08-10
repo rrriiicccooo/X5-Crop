@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from ...domain import Box
+from ...geometry.affine import AffineCoordinateTransform
 from ..decision.model import DecisionGateAssessment
 from ..output_geometry import OutputTransformAssessment
 from ..photo_geometry.model import (
@@ -28,7 +29,8 @@ class FinalDetection:
     source_core: SourceCoreEvidence
     resolved_output_slots: ResolvedOutputSlots | None
     output_slot_identities: tuple[OutputSlotIdentity, ...]
-    transform_assessment: OutputTransformAssessment
+    source_transform_assessment: OutputTransformAssessment
+    output_transforms: tuple[AffineCoordinateTransform, ...]
     resolved_output_geometries: tuple[ResolvedOutputGeometry, ...]
     sampling_authority_boxes: tuple[Box, ...]
     final_boxes: tuple[Box, ...]
@@ -36,7 +38,10 @@ class FinalDetection:
     def __post_init__(self) -> None:
         if self.candidate.source_core is not self.source_core:
             raise ValueError("final detection must preserve source-core identity")
-        if self.transform_assessment is not self.candidate.transform_assessment:
+        if (
+            self.source_transform_assessment
+            is not self.candidate.source_transform_assessment
+        ):
             raise ValueError("finalization cannot replace the selected transform")
         if self.resolved_output_slots is not self.candidate.resolved_output_slots:
             raise ValueError(
@@ -53,7 +58,8 @@ class FinalDetection:
             )
             if (
                 expected is None
-                or self.transform_assessment.transform is None
+                or self.source_transform_assessment.transform is None
+                or len(self.output_transforms) != expected
                 or len(self.output_slot_identities) != expected
                 or len(self.resolved_output_geometries) != expected
                 or len(self.sampling_authority_boxes) != expected
@@ -67,6 +73,7 @@ class FinalDetection:
                 )
         elif (
             self.decision.status != "needs_review"
+            or self.output_transforms
             or self.resolved_output_geometries
             or self.sampling_authority_boxes
             or self.final_boxes

@@ -21,22 +21,27 @@ from ..io.tiff import read_tiff_profile
 from ..utils import spatial_shape_from_shape
 
 
-class InteractiveBatchCountPreflightError(ValueError):
+class SlotCountPreflightError(ValueError):
     pass
 
 
-def _preflight_interactive_batch_count(
+def _preflight_batch_count(
     files: list[Path],
     options: RuntimeOptions,
     configuration_bundle: DetectionConfigurationBundle,
 ) -> None:
-    if not options.interactive or options.strip_mode != "partial":
+    if options.strip_mode != "partial":
         return
     configuration = configuration_bundle.initial_configuration
     assert options.requested_count is not None
     conflicts: list[str] = []
     for path in files:
-        profile, _warnings = read_tiff_profile(path)
+        try:
+            profile, _warnings = read_tiff_profile(path)
+        except Exception:
+            # Input-domain failures remain per-source runtime errors.  This
+            # preflight owns only matched-holder count authority.
+            continue
         height, width = spatial_shape_from_shape(profile.shape)
         layout = (
             infer_layout(width, height)
@@ -62,8 +67,8 @@ def _preflight_interactive_batch_count(
                 f"less than {holder.full_count} for {holder.profile.profile_id}"
             )
     if conflicts:
-        raise InteractiveBatchCountPreflightError(
-            "interactive batch count preflight failed; restart the entire input:\n"
+        raise SlotCountPreflightError(
+            "matched-holder count preflight failed:\n"
             + "\n".join(conflicts)
         )
 
@@ -81,7 +86,7 @@ def runtime_invocation_from_options(options: RuntimeOptions) -> RuntimeInvocatio
         options.strip_mode,
         options.requested_count,
     )
-    _preflight_interactive_batch_count(files, options, configuration_bundle)
+    _preflight_batch_count(files, options, configuration_bundle)
 
     layout_auto = options.layout == "auto"
     layout = options.layout

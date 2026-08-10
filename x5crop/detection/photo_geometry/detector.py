@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import math
 
 from ...configuration.model import DetectionConfiguration, ResolvedSlotCount
 from ...domain import Box, EvidenceState, FiniteInterval
+from ...geometry.affine import AffineCoordinateTransform
 from ..gate_checks import GateGap, TypedAssessment
 from ..output_geometry import (
     OutputTransformAssessment,
@@ -15,12 +16,10 @@ from ..source_core import SourceLaneEvidence
 from ..evidence.content_occupancy import ContentOccupancyObservationSet
 from .bounds import (
     MAX_BANDS_PER_CORRIDOR,
-    MAX_LEDGER_ENTRIES_PER_SOURCE,
 )
 from .corridors import (
     build_sequence_anchor_discovery_domain,
     build_top_bottom_search_corridors,
-    combined_frame_measurement_intervals,
     frame_physical_pixel_intervals,
     registered_lane_measurement_queries,
     source_lane_box,
@@ -42,7 +41,7 @@ from .model import (
     SideTransitionRegion,
 )
 from .output import direct_use_budget_assessment, safe_crop_envelope_from_placement
-from .source_geometry import LaneGapModel, SourceFrameGeometry
+from .source_geometry import LaneGapModel, SourceScanGeometry
 from .selection import (
     CompleteChainRecord,
     CorridorBandCount,
@@ -50,23 +49,31 @@ from .selection import (
     ProducerBoundsReceipt,
     ProducerPruneReason,
     ProducerPruneSummary,
+    SourcePlacementSelection,
     complete_chain_record,
-    select_placement_clusters,
+    placement_local_advance_authorized,
+    prepare_placement_clusters,
+    select_source_placement_clusters,
 )
-from .template_first import (
-    build_lane_template_proposal,
+from .solver import (
+    build_lane_physical_proposals,
+    lane_directions_within_source_family,
     materialize_source_placements,
+    rematerialize_complete_chain,
     shared_source_direction_classes,
 )
-from .template_model import (
-    FormatPlacement,
-    ProvisionalHeightTemplate,
-    TemplateLaneInput,
-    TemplateLaneProposal,
-    TemplateWorkReceipt,
+from .chains import (
+    CompleteFormatChain,
+    CrossAxisProposal,
+    LaneObservationInput,
+    LanePhysicalProposals,
+    ChainProducerWorkReceipt,
 )
-from .template_profiles import (
+from .observations import (
     BasicAxisProfile,
+    BoundaryEdgeObservation,
+    SeparatorBandObservation,
+    build_sequence_observations,
     cross_profile_from_regions,
     sequence_profile_from_regions,
 )
@@ -80,21 +87,27 @@ class LaneFormatPlacementReconstruction:
     side_transition_regions: tuple[SideTransitionRegion, ...]
     sequence_profile: BasicAxisProfile
     cross_profile: BasicAxisProfile
+    sequence_edges: tuple[BoundaryEdgeObservation, ...]
+    separator_bands: tuple[SeparatorBandObservation, ...]
     raw_top_bottom_observations: tuple[PhotoBoundaryObservation, ...]
-    provisional_height_templates: tuple[ProvisionalHeightTemplate, ...]
+    cross_axis_proposals: tuple[CrossAxisProposal, ...]
     lane_gap_model: LaneGapModel
     direction_classes: tuple[SharedStripDirection, ...]
-    materialized_chains: tuple[FormatPlacement, ...]
+    materialized_chains: tuple[CompleteFormatChain, ...]
     placement_selection: LanePlacementSelection
-    selected_placement: FormatPlacement | None
+    selected_placement: CompleteFormatChain | None
+    selected_chain_record: CompleteChainRecord | None
     producer_bounds: ProducerBoundsReceipt
+    local_advance_unresolved_count: int
     safe_crop_envelopes: tuple[SafeCropEnvelope, ...]
     direct_use_budget_assessments: tuple[DirectUseBudgetAssessment, ...]
-    work: TemplateWorkReceipt
+    work: ChainProducerWorkReceipt
 
     def __post_init__(self) -> None:
         if not self.lane_id or self.anchor_domain.lane_id != self.lane_id:
             raise ValueError("lane format placement lacks authority")
+        if self.local_advance_unresolved_count < 0:
+            raise ValueError("local advance unresolved count cannot be negative")
         if (self.selected_placement is None) != (
             self.placement_selection.state != EvidenceState.SUPPORTED
         ):
@@ -105,6 +118,17 @@ class LaneFormatPlacementReconstruction:
             != self.placement_selection.selected_placement_id
         ):
             raise ValueError("selected placement is not a materialized chain")
+        if (self.selected_chain_record is None) != (
+            self.selected_placement is None or not self.safe_crop_envelopes
+        ):
+            raise ValueError("selected chain audit record is incomplete")
+        if self.selected_chain_record is not None and (
+            self.selected_chain_record.placement_id
+            != self.selected_placement.placement_id
+            or self.selected_chain_record.source_scan_geometry_id
+            != self.selected_placement.source_scan_geometry.geometry_id
+        ):
+            raise ValueError("selected chain audit record is not source-joint")
         if self.safe_crop_envelopes and (
             self.selected_placement is None
             or len(self.safe_crop_envelopes)
@@ -117,8 +141,10 @@ class LaneFormatPlacementReconstruction:
 class PhotoGeometryDetectionResult:
     resolved_output_slots: ResolvedOutputSlots | None
     lane_reconstructions: tuple[LaneFormatPlacementReconstruction, ...]
+    source_placement_selection: SourcePlacementSelection
     output_slot_identities: tuple[OutputSlotIdentity, ...]
-    transform_assessment: OutputTransformAssessment
+    source_transform_assessment: OutputTransformAssessment
+    lane_transform_assessments: tuple[OutputTransformAssessment, ...]
     assessment_facts: dict[str, TypedAssessment]
 
     def __post_init__(self) -> None:
@@ -127,6 +153,18 @@ class PhotoGeometryDetectionResult:
             != self.resolved_output_slots.output_slot_count
         ):
             raise ValueError("resolved output slots require exact identities")
+        if len(self.lane_transform_assessments) != len(
+            self.lane_reconstructions
+        ):
+            raise ValueError("each reconstructed lane requires one transform")
+        lane_selection_supported = bool(self.lane_reconstructions) and all(
+            lane.placement_selection.state == EvidenceState.SUPPORTED
+            for lane in self.lane_reconstructions
+        )
+        if lane_selection_supported != (
+            self.source_placement_selection.state == EvidenceState.SUPPORTED
+        ):
+            raise ValueError("source and lane placement selections disagree")
 
     @property
     def safe_crop_envelopes(self) -> tuple[SafeCropEnvelope, ...]:
@@ -145,6 +183,21 @@ class PhotoGeometryDetectionResult:
             for lane in self.lane_reconstructions
             for assessment in lane.direct_use_budget_assessments
         )
+
+    @property
+    def output_transforms(self) -> tuple[AffineCoordinateTransform, ...]:
+        values: list[AffineCoordinateTransform] = []
+        for lane, assessment in zip(
+            self.lane_reconstructions,
+            self.lane_transform_assessments,
+            strict=True,
+        ):
+            if assessment.transform is None:
+                continue
+            values.extend(
+                assessment.transform for _geometry in lane.safe_crop_envelopes
+            )
+        return tuple(values)
 
 
 @dataclass(frozen=True)
@@ -165,28 +218,25 @@ class _PreparedLane:
     transition_by_id: dict[str, PhotoBoundaryTransition]
     sequence_profile: BasicAxisProfile
     cross_profile: BasicAxisProfile
-    proposal: TemplateLaneProposal
+    sequence_edges: tuple[BoundaryEdgeObservation, ...]
+    separator_bands: tuple[SeparatorBandObservation, ...]
+    proposal: LanePhysicalProposals
     lane_gap_model: LaneGapModel
     corridor_band_counts: tuple[CorridorBandCount, ...]
     band_bound_exceeded: bool
 
 
 def _lane_gap_model(
-    lane_input: TemplateLaneInput,
-    source_geometry: SourceFrameGeometry,
+    lane_input: LaneObservationInput,
+    source_geometry: SourceScanGeometry,
 ) -> LaneGapModel:
-    return LaneGapModel.from_edge_families(
+    # Search-time edge families have no ordinal authority.  The selected lane
+    # gap model is created only after a complete sequence binds those roles.
+    return LaneGapModel.from_ordinal_edges(
         source_geometry.width_state,
         lane_id=lane_input.lane_id,
-        edge_families=tuple(
-            tuple(
-                (run.coordinate_interval_px, run.transition_ids)
-                for run in lane_input.sequence_profile.runs
-                if run.anchor_qualified_for(role)
-            )
-            for role in (BoundaryRole.START, BoundaryRole.END)
-        ),
-        format_gap_prior_mm=source_geometry.component.format_gap_prior_mm,
+        edge_families=(),
+        format_gap_prior_mm=source_geometry.frame_spec.format_gap_prior_mm,
     )
 
 
@@ -284,8 +334,12 @@ def _bounded_transition_regions(
                 ),
             )
         )
-        materialized = ordered[:MAX_BANDS_PER_CORRIDOR]
-        exceeded = exceeded or len(ordered) > len(materialized)
+        overflowed = len(ordered) > MAX_BANDS_PER_CORRIDOR
+        # An overflowing corridor is not partially ranked.  Preserve its full
+        # proposed count, materialize no biased subset, and let the typed
+        # producer Gate route the source to review.
+        materialized = () if overflowed else ordered
+        exceeded = exceeded or overflowed
         counts.append(
             CorridorBandCount(
                 corridor_id=measurement_set.query.query_id,
@@ -324,30 +378,26 @@ def _prepare_lane(
     width_authority = _axis_interval(authority, width_axis)
     height_authority = _axis_interval(authority, height_axis)
     scales = lane.scan_canvas.axis_scales
-    component_pixels = tuple(
-        frame_physical_pixel_intervals(
-            component,
-            scales.width_axis_px_per_mm,
-            scales.height_axis_px_per_mm,
-        )
-        for component in configuration.physical_spec.frame_components
+    frame_spec_pixels = frame_physical_pixel_intervals(
+        configuration.physical_spec.frame,
+        scales.width_axis_px_per_mm,
+        scales.height_axis_px_per_mm,
     )
-    combined_pixels = combined_frame_measurement_intervals(component_pixels)
     top_corridor, bottom_corridor = build_top_bottom_search_corridors(
         lane,
         layout=layout,
-        aperture_pixels=combined_pixels,
+        aperture_pixels=frame_spec_pixels,
     )
     anchor_domain = build_sequence_anchor_discovery_domain(
         lane,
         layout=layout,
         authoritative_sequence_length=measurement_slot_count,
-        aperture_pixels=combined_pixels,
+        aperture_pixels=frame_spec_pixels,
     )
     queries = registered_lane_measurement_queries(
         lane,
         layout=layout,
-        aperture_pixels=combined_pixels,
+        aperture_pixels=frame_spec_pixels,
         top_corridor=top_corridor,
         bottom_corridor=bottom_corridor,
         anchor_domain=anchor_domain,
@@ -384,7 +434,11 @@ def _prepare_lane(
         coordinate_count=_coordinate_count(height_authority),
         transition_by_id=transition_by_id,
     )
-    lane_input = TemplateLaneInput(
+    sequence_edges, separator_bands = build_sequence_observations(
+        sequence_profile,
+        transition_by_id,
+    )
+    lane_input = LaneObservationInput(
         lane_id=lane.domain.lane_id,
         output_slot_count=output_slot_count,
         measurement_slot_count=measurement_slot_count,
@@ -396,19 +450,21 @@ def _prepare_lane(
         height_scale_px_per_mm=scales.height_axis_px_per_mm,
         sequence_profile=sequence_profile,
         cross_profile=cross_profile,
+        sequence_edges=sequence_edges,
+        separator_bands=separator_bands,
         sequence_measurement_sets=measurement_sets[2:],
         top_measurement_set=measurement_sets[0],
         bottom_measurement_set=measurement_sets[1],
         transition_by_id=transition_by_id,
     )
-    proposal = build_lane_template_proposal(
+    proposal = build_lane_physical_proposals(
         lane_input,
-        configuration.physical_spec.frame_components,
+        configuration.physical_spec.frame,
     )
     lane_gap_model = _lane_gap_model(
         lane_input,
-        SourceFrameGeometry.create(
-            configuration.physical_spec.frame_components[0],
+        SourceScanGeometry.create(
+            configuration.physical_spec.frame,
             width_scale_px_per_mm=scales.width_axis_px_per_mm,
             height_scale_px_per_mm=scales.height_axis_px_per_mm,
         ),
@@ -430,6 +486,8 @@ def _prepare_lane(
         transition_by_id=transition_by_id,
         sequence_profile=sequence_profile,
         cross_profile=cross_profile,
+        sequence_edges=sequence_edges,
+        separator_bands=separator_bands,
         proposal=proposal,
         lane_gap_model=lane_gap_model,
         corridor_band_counts=(*top_counts, *bottom_counts, *side_counts),
@@ -487,20 +545,20 @@ def _output_slot_identities(
 
 def _work_receipt(
     prepared: _PreparedLane,
-    placements: tuple[FormatPlacement, ...],
+    placements: tuple[CompleteFormatChain, ...],
     *,
-    enhanced_query_count: int = 0,
-    proposal: TemplateLaneProposal | None = None,
-) -> TemplateWorkReceipt:
+    refinement_query_count: int = 0,
+    proposal: LanePhysicalProposals | None = None,
+) -> ChainProducerWorkReceipt:
     active_proposal = prepared.proposal if proposal is None else proposal
     active_sequence_profile = active_proposal.lane.sequence_profile
     grouping = tuple(
-        component.grouping_work
-        for component in active_proposal.components
+        frame_spec.grouping_work
+        for frame_spec in active_proposal.frame_proposals
     )
     group_count = sum(
-        len(component.phase_groups)
-        for component in active_proposal.components
+        len(frame_spec.sequence_groups)
+        for frame_spec in active_proposal.frame_proposals
     )
     profile_query_ids = {
         prepared.transition_by_id[str(identity)].query_id
@@ -511,7 +569,7 @@ def _work_receipt(
     completed_measurement_count = sum(
         item.coverage.complete for item in prepared.measurement_sets
     )
-    receipt = TemplateWorkReceipt(
+    receipt = ChainProducerWorkReceipt(
         measurement_query_count=len(prepared.measurement_sets),
         pixel_query_count=sum(
             item.coverage.pixel_query_count for item in prepared.measurement_sets
@@ -524,23 +582,23 @@ def _work_receipt(
             len(active_sequence_profile.runs)
             + len(prepared.cross_profile.runs)
         ),
-        phase_vote_count=sum(
-            len(component.phase_votes)
-            for component in active_proposal.components
+        role_proposal_count=sum(
+            len(frame_spec.role_proposals)
+            for frame_spec in active_proposal.frame_proposals
         ),
-        template_group_count=group_count,
-        template_role_lookup_count=sum(
-            item.template_role_lookup_count for item in grouping
+        sequence_group_count=group_count,
+        ordinal_role_lookup_count=sum(
+            item.ordinal_role_lookup_count for item in grouping
         ),
-        template_role_match_count=sum(
-            item.template_role_match_count for item in grouping
+        ordinal_role_match_count=sum(
+            item.ordinal_role_match_count for item in grouping
         ),
         local_relation_evaluation_count=(
             group_count * max(0, prepared.output_slot_count - 1)
         ),
-        enhanced_query_count=enhanced_query_count,
+        refinement_query_count=refinement_query_count,
         materialized_frame_geometry_count=sum(
-            len(item.canonical.frames) for item in placements
+            len(item.fixed_frames.frames) for item in placements
         ),
         shared_measurement_reuse_count=(
             completed_measurement_count + len(profile_query_ids)
@@ -554,14 +612,13 @@ def _work_receipt(
             default=0,
         ),
     )
-    if active_proposal.components:
+    if active_proposal.frame_proposals:
         receipt.validate_bounds(
             ordered_role_count=prepared.output_slot_count * 2,
             slot_count=prepared.output_slot_count,
-            registered_enhanced_query_count=sum(
-                len(component.enhanced_phase_queries)
-                + len(component.registered_sequence_role_queries)
-                for component in active_proposal.components
+            registered_refinement_query_count=sum(
+                len(frame_spec.registered_sequence_role_queries)
+                for frame_spec in active_proposal.frame_proposals
             ),
         )
     return receipt
@@ -572,10 +629,8 @@ def _producer_bounds_receipt(
     *,
     proposed_chain_count: int = 0,
     chains: tuple[CompleteChainRecord, ...] = (),
-    chain_bound_exceeded: bool = False,
     sampling_invalid_count: int = 0,
-    content_observation_overflowed: bool = False,
-    content_veto_pruned_count: int = 0,
+    content_observation_excess_count: int = 0,
 ) -> ProducerBoundsReceipt:
     pruned: dict[ProducerPruneReason, int] = {}
     if sampling_invalid_count:
@@ -588,19 +643,9 @@ def _producer_bounds_receipt(
     )
     if band_pruned:
         pruned[ProducerPruneReason.BAND_BOUND] = band_pruned
-    if chain_bound_exceeded:
-        pruned[ProducerPruneReason.COMPLETE_CHAIN_BOUND] = max(
-            1,
-            proposed_chain_count - len(chains),
-        )
-    ledger_pruned = sum(item.ledger_pruned_count for item in chains)
-    if ledger_pruned:
-        pruned[ProducerPruneReason.CHAIN_LEDGER_BOUND] = ledger_pruned
-    if content_observation_overflowed:
-        pruned[ProducerPruneReason.CONTENT_OBSERVATION_BOUND] = 1
-    if content_veto_pruned_count:
-        pruned[ProducerPruneReason.CONTENT_VETO_FACT_BOUND] = (
-            content_veto_pruned_count
+    if content_observation_excess_count:
+        pruned[ProducerPruneReason.CONTENT_OBSERVATION_BOUND] = (
+            content_observation_excess_count
         )
     return ProducerBoundsReceipt(
         lane_id=prepared.lane.domain.lane_id,
@@ -624,7 +669,7 @@ def _producer_bounds_receipt(
 def _empty_reconstruction(
     prepared: _PreparedLane,
     *,
-    content_observation_overflowed: bool = False,
+    content_observation_excess_count: int = 0,
 ) -> LaneFormatPlacementReconstruction:
     selection = LanePlacementSelection(
         chains=(),
@@ -641,52 +686,74 @@ def _empty_reconstruction(
         side_transition_regions=prepared.side_regions,
         sequence_profile=prepared.sequence_profile,
         cross_profile=prepared.cross_profile,
+        sequence_edges=prepared.sequence_edges,
+        separator_bands=prepared.separator_bands,
         raw_top_bottom_observations=(
             prepared.proposal.raw_top_bottom_observations
         ),
-        provisional_height_templates=tuple(
-            template
-            for component in prepared.proposal.components
-            for template in component.height_templates
+        cross_axis_proposals=tuple(
+            cross_proposal
+            for frame_spec in prepared.proposal.frame_proposals
+            for cross_proposal in frame_spec.cross_proposals
         ),
         lane_gap_model=prepared.lane_gap_model,
         direction_classes=prepared.proposal.direction_classes,
         materialized_chains=(),
         placement_selection=selection,
         selected_placement=None,
+        selected_chain_record=None,
         producer_bounds=_producer_bounds_receipt(
             prepared,
-            content_observation_overflowed=content_observation_overflowed,
+            content_observation_excess_count=content_observation_excess_count,
         ),
+        local_advance_unresolved_count=0,
         safe_crop_envelopes=(),
         direct_use_budget_assessments=(),
         work=_work_receipt(prepared, ()),
     )
 
 
-def _unresolved_facts(direction_gap: GateGap) -> dict[str, TypedAssessment]:
+def _empty_source_placement_selection() -> SourcePlacementSelection:
+    return SourcePlacementSelection(
+        combinations=(),
+        selected_combination_id=None,
+        shared_scan_geometry=None,
+        state=EvidenceState.UNAVAILABLE,
+    )
+
+
+def _unresolved_facts(
+    direction_gap: GateGap,
+    *,
+    source_lane_authority_available: bool = True,
+) -> dict[str, TypedAssessment]:
     return {
         "scan_canvas_authority": _supported(),
         "output_slot_count": _supported(),
-        "complete_chain": _unavailable(GateGap.COMPLETE_CHAIN_UNAVAILABLE),
-        "producer_bounds": _supported(),
-        "shared_strip_direction": _unavailable(direction_gap),
-        "source_frame_geometry": _unavailable(
-            GateGap.SOURCE_FRAME_GEOMETRY_UNAVAILABLE
+        "observation_completeness": _supported(),
+        "source_scan_geometry": _unavailable(
+            GateGap.SOURCE_SCAN_GEOMETRY_UNAVAILABLE
         ),
-        "placement_selection": _unavailable(GateGap.PLACEMENT_UNRESOLVED),
-        "content_veto": _supported(),
+        "shared_strip_direction": _unavailable(direction_gap),
+        "complete_chain": _unavailable(GateGap.COMPLETE_CHAIN_UNAVAILABLE),
+        "producer_coverage": _supported(),
+        "independent_evidence": _unavailable(GateGap.PLACEMENT_UNRESOLVED),
+        "local_advance_authority": _supported(),
+        "content_protection": _supported(),
+        "selected_placement": _unavailable(GateGap.PLACEMENT_UNRESOLVED),
         "slot_ordinal_assignment": _unavailable(
             GateGap.SLOT_ORDINAL_ASSIGNMENT_UNRESOLVED
         ),
-        "source_lane_authority": _unavailable(
-            GateGap.SOURCE_LANE_AUTHORITY_INVALID
+        "source_lane_authority": (
+            _supported()
+            if source_lane_authority_available
+            else _unavailable(GateGap.SOURCE_LANE_AUTHORITY_INVALID)
         ),
-        "selected_placement_containment": _unavailable(
+        "selected_only_envelope": _unavailable(
             GateGap.SELECTED_PLACEMENT_CONTAINMENT_UNAVAILABLE
         ),
         "direct_use_budget": _unavailable(GateGap.DIRECT_USE_BUDGET_UNAVAILABLE),
-        "output_transform": _unavailable(GateGap.OUTPUT_TRANSFORM_UNAVAILABLE),
+        "transform_sampling": _unavailable(GateGap.OUTPUT_TRANSFORM_UNAVAILABLE),
     }
 
 
@@ -708,7 +775,10 @@ def reconstruct_photo_geometry(
     resolved = resolve_output_slots(configuration, lanes, resolved_slot_count)
     if resolved is None:
         transform = _empty_transform(field, layout, "output_slot_count_unavailable")
-        facts = _unresolved_facts(GateGap.SHARED_STRIP_DIRECTION_UNAVAILABLE)
+        facts = _unresolved_facts(
+            GateGap.SHARED_STRIP_DIRECTION_UNAVAILABLE,
+            source_lane_authority_available=bool(lanes),
+        )
         facts["scan_canvas_authority"] = (
             _supported()
             if lanes
@@ -717,7 +787,15 @@ def reconstruct_photo_geometry(
         facts["output_slot_count"] = _unavailable(
             GateGap.OUTPUT_SLOT_COUNT_UNAVAILABLE
         )
-        return PhotoGeometryDetectionResult(None, (), (), transform, facts)
+        return PhotoGeometryDetectionResult(
+            None,
+            (),
+            _empty_source_placement_selection(),
+            (),
+            transform,
+            (),
+            facts,
+        )
 
     prepared = tuple(
         _prepare_lane(
@@ -751,7 +829,9 @@ def reconstruct_photo_geometry(
         empty_reconstructions = tuple(
             _empty_reconstruction(
                 item,
-                content_observation_overflowed=observation.overflowed,
+                content_observation_excess_count=(
+                    observation.producer_excess_count
+                ),
             )
             for item, observation in zip(
                 prepared,
@@ -764,18 +844,47 @@ def reconstruct_photo_geometry(
             item.producer_bounds.bound_exceeded
             for item in empty_reconstructions
         ):
-            facts["producer_bounds"] = _contradicted(
+            facts["producer_coverage"] = _contradicted(
                 GateGap.PRODUCER_BOUND_EXCEEDED
             )
         return PhotoGeometryDetectionResult(
             resolved_output_slots=resolved,
             lane_reconstructions=empty_reconstructions,
+            source_placement_selection=_empty_source_placement_selection(),
             output_slot_identities=_output_slot_identities(lanes, resolved),
-            transform_assessment=transform,
+            source_transform_assessment=transform,
+            lane_transform_assessments=tuple(
+                transform for _lane in empty_reconstructions
+            ),
             assessment_facts=facts,
         )
 
     direction = source_directions[0]
+    lane_directions = lane_directions_within_source_family(
+        tuple(item.proposal for item in prepared),
+        direction,
+    )
+    if len(lane_directions) != len(prepared):
+        transform = _empty_transform(
+            field,
+            layout,
+            GateGap.SHARED_STRIP_DIRECTION_NONUNIQUE.value,
+        )
+        return PhotoGeometryDetectionResult(
+            resolved_output_slots=resolved,
+            lane_reconstructions=tuple(
+                _empty_reconstruction(item) for item in prepared
+            ),
+            source_placement_selection=_empty_source_placement_selection(),
+            output_slot_identities=_output_slot_identities(lanes, resolved),
+            source_transform_assessment=transform,
+            lane_transform_assessments=tuple(
+                transform for _lane in prepared
+            ),
+            assessment_facts=_unresolved_facts(
+                GateGap.SHARED_STRIP_DIRECTION_NONUNIQUE
+            ),
+        )
     direction_resolution = SharedStripDirectionResolution(
         direction=direction,
         state=EvidenceState.SUPPORTED,
@@ -787,37 +896,59 @@ def reconstruct_photo_geometry(
         source_width=field.source_extent.width,
         source_height=field.source_extent.height,
     )
+    lane_transforms = tuple(
+        output_transform_assessment(
+            SharedStripDirectionResolution(
+                direction=lane_direction,
+                state=EvidenceState.SUPPORTED,
+                named_gap=None,
+            ),
+            layout=layout,
+            source_width=field.source_extent.width,
+            source_height=field.source_extent.height,
+        )
+        for lane_direction in lane_directions
+    )
     materialization = materialize_source_placements(
         tuple(item.proposal for item in prepared),
-        direction,
+        lane_directions,
     )
     placements_by_lane = materialization.placements_by_lane
     reconstructions: list[LaneFormatPlacementReconstruction] = []
-    all_budgets: list[DirectUseBudgetAssessment] = []
+    lane_candidate_envelopes: list[
+        dict[str, tuple[SafeCropEnvelope, ...]]
+    ] = []
+    lane_placements_by_id: list[dict[str, CompleteFormatChain]] = []
     for (
         prepared_lane,
         placements,
         proposed_chain_count,
-        chain_bound_exceeded,
-        enhanced_query_count,
+        refinement_query_count,
         refined_proposal,
         content_observation,
+        lane_direction,
+        lane_transform,
     ) in zip(
         prepared,
         placements_by_lane,
         materialization.proposed_complete_chain_counts_by_lane,
-        materialization.chain_bound_exceeded_by_lane,
-        materialization.enhanced_query_counts_by_lane,
+        materialization.refinement_query_counts_by_lane,
         materialization.lane_proposals,
         content_observations,
+        lane_directions,
+        lane_transforms,
         strict=True,
     ):
         candidate_envelopes: dict[str, tuple[SafeCropEnvelope, ...]] = {}
-        materialized_chains: list[FormatPlacement] = []
+        materialized_chains: list[CompleteFormatChain] = []
         chain_records: list[CompleteChainRecord] = []
         sampling_invalid_count = 0
-        if transform.transform is not None:
+        local_advance_unresolved_count = 0
+        if lane_transform.transform is not None:
             for placement in placements:
+                if not placement_local_advance_authorized(placement):
+                    local_advance_unresolved_count += 1
+                    continue
                 try:
                     envelopes = tuple(
                         safe_crop_envelope_from_placement(
@@ -825,11 +956,19 @@ def reconstruct_photo_geometry(
                             lane=prepared_lane.lane,
                             lane_ordinal=ordinal,
                             layout=layout,
-                            transform=transform.transform,
+                            transform=lane_transform.transform,
                         )
                         for ordinal in range(1, placement.output_slot_count + 1)
                     )
-                    record = complete_chain_record(placement, envelopes)
+                    record = complete_chain_record(
+                        placement,
+                        envelopes,
+                        sequence_edges=prepared_lane.sequence_edges,
+                        separator_bands=prepared_lane.separator_bands,
+                        top_bottom_observations=(
+                            refined_proposal.raw_top_bottom_observations
+                        ),
+                    )
                 except ValueError:
                     sampling_invalid_count += 1
                     continue
@@ -840,8 +979,8 @@ def reconstruct_photo_geometry(
             sorted(
                 chain_records,
                 key=lambda item: (
-                    -item.direct_opposite_pair_count,
-                    -item.direct_boundary_count,
+                    -item.direct_observation_count,
+                    -item.structural_pair_count,
                     len(reconstructions) + 1,
                     tuple(
                         value
@@ -851,7 +990,7 @@ def reconstruct_photo_geometry(
                             interval.maximum.hex(),
                         )
                     ),
-                    tuple(map(str, item.direct_boundary_observation_ids)),
+                    tuple(map(str, item.direct_observation_ids)),
                     item.chain_id,
                 ),
             )
@@ -862,46 +1001,23 @@ def reconstruct_photo_geometry(
         ordered_placements = tuple(
             placements_by_id[item.placement_id] for item in ordered_records
         )
-        selection = select_placement_clusters(
+        selection = prepare_placement_clusters(
             ordered_records,
             placements_by_id,
             content_observation,
             layout=layout,
         )
-        selected = (
-            None
-            if selection.selected_placement_id is None
-            else placements_by_id[selection.selected_placement_id]
-        )
         producer_bounds = _producer_bounds_receipt(
             prepared_lane,
             proposed_chain_count=proposed_chain_count,
             chains=ordered_records,
-            chain_bound_exceeded=chain_bound_exceeded,
             sampling_invalid_count=sampling_invalid_count,
-            content_observation_overflowed=content_observation.overflowed,
-            content_veto_pruned_count=sum(
-                item.pruned_fact_count
-                for item in selection.content_veto_assessments
+            content_observation_excess_count=(
+                content_observation.producer_excess_count
             ),
         )
-        geometries: list[SafeCropEnvelope] = []
-        budgets: list[DirectUseBudgetAssessment] = []
-        if (
-            selected is not None
-            and transform.transform is not None
-            and not producer_bounds.bound_exceeded
-        ):
-            geometries.extend(candidate_envelopes[selected.placement_id])
-            budgets.extend(
-                direct_use_budget_assessment(
-                    selected,
-                    geometry,
-                    transform.transform,
-                )
-                for geometry in geometries
-            )
-        all_budgets.extend(budgets)
+        lane_candidate_envelopes.append(candidate_envelopes)
+        lane_placements_by_id.append(placements_by_id)
         reconstructions.append(
             LaneFormatPlacementReconstruction(
                 lane_id=prepared_lane.lane.domain.lane_id,
@@ -910,43 +1026,153 @@ def reconstruct_photo_geometry(
                 side_transition_regions=prepared_lane.side_regions,
                 sequence_profile=refined_proposal.lane.sequence_profile,
                 cross_profile=prepared_lane.cross_profile,
+                sequence_edges=prepared_lane.sequence_edges,
+                separator_bands=prepared_lane.separator_bands,
                 raw_top_bottom_observations=(
                     refined_proposal.raw_top_bottom_observations
                 ),
-                provisional_height_templates=tuple(
-                    template
-                    for component in refined_proposal.components
-                    for template in component.height_templates
+                cross_axis_proposals=tuple(
+                    cross_proposal
+                    for frame_spec in refined_proposal.frame_proposals
+                    for cross_proposal in frame_spec.cross_proposals
                 ),
                 lane_gap_model=prepared_lane.lane_gap_model,
-                direction_classes=source_directions,
+                direction_classes=(lane_direction,),
                 materialized_chains=ordered_placements,
                 placement_selection=selection,
-                selected_placement=selected,
+                selected_placement=None,
+                selected_chain_record=None,
                 producer_bounds=producer_bounds,
-                safe_crop_envelopes=tuple(geometries),
-                direct_use_budget_assessments=tuple(budgets),
+                local_advance_unresolved_count=local_advance_unresolved_count,
+                safe_crop_envelopes=(),
+                direct_use_budget_assessments=(),
                 work=_work_receipt(
                     prepared_lane,
                     ordered_placements,
-                    enhanced_query_count=enhanced_query_count,
+                    refinement_query_count=refinement_query_count,
                     proposal=refined_proposal,
                 ),
             )
         )
-    complete = bool(reconstructions) and all(
+    resolved_lane_selections, source_selection = select_source_placement_clusters(
+        tuple(item.placement_selection for item in reconstructions),
+        tuple(lane_placements_by_id),
+    )
+    resolved_reconstructions: list[LaneFormatPlacementReconstruction] = []
+    all_budgets: list[DirectUseBudgetAssessment] = []
+    for (
+        reconstruction,
+        selection,
+        placements_by_id,
+        candidate_envelopes,
+        lane_transform,
+        refined_proposal,
+    ) in zip(
+        reconstructions,
+        resolved_lane_selections,
+        lane_placements_by_id,
+        lane_candidate_envelopes,
+        lane_transforms,
+        materialization.lane_proposals,
+        strict=True,
+    ):
+        selected = (
+            None
+            if selection.selected_placement_id is None
+            else placements_by_id[selection.selected_placement_id]
+        )
+        if (
+            selected is not None
+            and source_selection.shared_scan_geometry is not None
+        ):
+            try:
+                selected = rematerialize_complete_chain(
+                    refined_proposal,
+                    selected,
+                    source_selection.shared_scan_geometry,
+                )
+                placements_by_id[selected.placement_id] = selected
+                candidate_envelopes[selected.placement_id] = tuple(
+                    safe_crop_envelope_from_placement(
+                        selected,
+                        lane=next(
+                            item.lane
+                            for item in prepared
+                            if item.lane.domain.lane_id == selected.lane_id
+                        ),
+                        lane_ordinal=ordinal,
+                        layout=layout,
+                        transform=lane_transform.transform,
+                    )
+                    for ordinal in range(1, selected.output_slot_count + 1)
+                )
+            except ValueError:
+                candidate_envelopes.pop(selected.placement_id, None)
+        geometries = (
+            ()
+            if selected is None
+            or lane_transform.transform is None
+            or reconstruction.producer_bounds.bound_exceeded
+            else candidate_envelopes.get(selected.placement_id, ())
+        )
+        selected_chain_record = (
+            None
+            if selected is None or not geometries
+            else complete_chain_record(
+                selected,
+                geometries,
+                sequence_edges=reconstruction.sequence_edges,
+                separator_bands=reconstruction.separator_bands,
+                top_bottom_observations=(
+                    reconstruction.raw_top_bottom_observations
+                ),
+            )
+        )
+        budgets = tuple(
+            direct_use_budget_assessment(
+                selected,
+                geometry,
+                lane_transform.transform,
+            )
+            for geometry in geometries
+            if selected is not None and lane_transform.transform is not None
+        )
+        all_budgets.extend(budgets)
+        resolved_reconstructions.append(
+            replace(
+                reconstruction,
+                materialized_chains=tuple(
+                    selected
+                    if selected is not None
+                    and item.placement_id == selected.placement_id
+                    else item
+                    for item in reconstruction.materialized_chains
+                ),
+                placement_selection=selection,
+                selected_placement=selected,
+                selected_chain_record=selected_chain_record,
+                lane_gap_model=(
+                    reconstruction.lane_gap_model
+                    if selected is None
+                    else selected.sequence.lane_gap_model
+                ),
+                safe_crop_envelopes=geometries,
+                direct_use_budget_assessments=budgets,
+            )
+        )
+    reconstructions = resolved_reconstructions
+    lane_chains_complete = bool(reconstructions) and all(
         item.materialized_chains for item in reconstructions
     )
+    source_legal = bool(source_selection.combinations)
+    complete = lane_chains_complete and source_legal
     selection_complete = complete and all(
         item.placement_selection.state == EvidenceState.SUPPORTED
         for item in reconstructions
     )
     producer_bounds_valid = all(
         not item.producer_bounds.bound_exceeded for item in reconstructions
-    ) and sum(
-        item.producer_bounds.chain_ledger_entry_count
-        for item in reconstructions
-    ) <= MAX_LEDGER_ENTRIES_PER_SOURCE
+    )
     output_geometry_complete = (
         selection_complete
         and producer_bounds_valid
@@ -975,46 +1201,74 @@ def reconstruct_photo_geometry(
         )
         for item in reconstructions
     )
+    local_advance_unresolved = (
+        not selection_complete
+        and any(
+            item.local_advance_unresolved_count > 0
+            for item in reconstructions
+        )
+    )
     facts = {
         "scan_canvas_authority": _supported(),
         "output_slot_count": _supported(),
+        "observation_completeness": (
+            _supported()
+            if producer_bounds_valid
+            else _contradicted(GateGap.PRODUCER_BOUND_EXCEEDED)
+        ),
+        "source_scan_geometry": (
+            _supported()
+            if source_legal
+            else _unavailable(GateGap.SOURCE_SCAN_GEOMETRY_UNAVAILABLE)
+        ),
+        "shared_strip_direction": _supported(),
         "complete_chain": (
             _supported()
             if complete
             else _unavailable(GateGap.COMPLETE_CHAIN_UNAVAILABLE)
         ),
-        "producer_bounds": (
+        "producer_coverage": (
             _supported()
             if producer_bounds_valid
             else _contradicted(GateGap.PRODUCER_BOUND_EXCEEDED)
         ),
-        "shared_strip_direction": _supported(),
-        "source_frame_geometry": (
+        "independent_evidence": (
             _supported()
-            if complete
-            else _unavailable(GateGap.SOURCE_FRAME_GEOMETRY_UNAVAILABLE)
+            if selection_complete
+            else _unavailable(
+                GateGap.PLACEMENT_UNRESOLVED
+                if source_legal
+                else GateGap.COMPLETE_CHAIN_UNAVAILABLE
+            )
         ),
-        "placement_selection": (
+        "local_advance_authority": (
+            _unavailable(GateGap.LOCAL_ADVANCE_UNRESOLVED)
+            if local_advance_unresolved
+            else _supported()
+        ),
+        "content_protection": (
+            _contradicted(GateGap.CONTENT_VETO_REJECTED)
+            if all_clusters_vetoed
+            else _supported()
+        ),
+        "selected_placement": (
             _supported()
             if selection_complete
             else _unavailable(
                 GateGap.CONTENT_VETO_REJECTED
                 if all_clusters_vetoed
                 else GateGap.PLACEMENT_UNRESOLVED
+                if source_legal
+                else GateGap.COMPLETE_CHAIN_UNAVAILABLE
             )
         ),
-        "content_veto": _supported(),
         "slot_ordinal_assignment": (
             _supported()
-            if complete
+            if lane_chains_complete
             else _unavailable(GateGap.SLOT_ORDINAL_ASSIGNMENT_UNRESOLVED)
         ),
-        "source_lane_authority": (
-            _supported()
-            if complete
-            else _contradicted(GateGap.SOURCE_LANE_AUTHORITY_INVALID)
-        ),
-        "selected_placement_containment": (
+        "source_lane_authority": _supported(),
+        "selected_only_envelope": (
             _supported()
             if output_geometry_complete
             else _unavailable(
@@ -1022,16 +1276,22 @@ def reconstruct_photo_geometry(
             )
         ),
         "direct_use_budget": budget_state,
-        "output_transform": (
+        "transform_sampling": (
             _supported()
             if transform.state == EvidenceState.SUPPORTED
+            and all(
+                item.state == EvidenceState.SUPPORTED
+                for item in lane_transforms
+            )
             else _unavailable(GateGap.OUTPUT_TRANSFORM_UNAVAILABLE)
         ),
     }
     return PhotoGeometryDetectionResult(
         resolved_output_slots=resolved,
         lane_reconstructions=tuple(reconstructions),
+        source_placement_selection=source_selection,
         output_slot_identities=_output_slot_identities(lanes, resolved),
-        transform_assessment=transform,
+        source_transform_assessment=transform,
+        lane_transform_assessments=lane_transforms,
         assessment_facts=facts,
     )

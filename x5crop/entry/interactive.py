@@ -4,28 +4,20 @@ from pathlib import Path
 
 from ..app_info import SCRIPT_NAME, VERSION
 from ..formats import FORMATS
-from ..runtime.bootstrap import InteractiveBatchCountPreflightError, run_options
+from ..runtime.bootstrap import SlotCountPreflightError, run_options
 from ..runtime.limits import STANDARD_JOB_DEFAULT
 from ..runtime.options import RuntimeOptions
 
 
-FORMAT_ALIASES = {
+FORMAT_SELECTIONS = {
     "": "135",
     "135": "135",
     "dual": "135-dual",
-    "135dual": "135-dual",
-    "135-dual": "135-dual",
     "xpan": "xpan",
     "half": "half",
     "645": "120-645",
-    "120645": "120-645",
-    "120-645": "120-645",
     "66": "120-66",
-    "12066": "120-66",
-    "120-66": "120-66",
     "67": "120-67",
-    "12067": "120-67",
-    "120-67": "120-67",
 }
 
 
@@ -58,7 +50,7 @@ def ask_format() -> str:
     print()
     while True:
         answer = normalized_input(input("format: "))
-        format_id = FORMAT_ALIASES.get(answer)
+        format_id = FORMAT_SELECTIONS.get(answer)
         if format_id in FORMATS:
             return format_id
         print(f"unknown format: {answer}")
@@ -66,7 +58,7 @@ def ask_format() -> str:
 
 
 def ask_partial_count(format_id: str) -> int:
-    partial_count_range = FORMATS[format_id].strip.partial_count_range
+    partial_count_range = FORMATS[format_id].interactive_partial_counts
     allowed_text = " ".join(str(count) for count in partial_count_range)
     while True:
         print("partial output slots:")
@@ -82,16 +74,20 @@ def ask_partial_count(format_id: str) -> int:
         print(f"use one of: {allowed_text}")
 
 
-def interactive_options() -> RuntimeOptions:
-    print(f"{SCRIPT_NAME} {VERSION} launcher")
-    print(f"Folder: {Path.cwd()}")
-    print()
-    print("This creates conservative bounded-safe frame TIFF crops.")
-    print("A complete new output replaces the prior X5 Crop-owned output.")
-    print()
-
-    format_id = ask_format()
-    partial_supported = FORMATS[format_id].strip.partial_mode_supported
+def interactive_options(
+    *,
+    selected_format_id: str | None = None,
+    selected_debug_analysis: bool | None = None,
+) -> RuntimeOptions:
+    if selected_format_id is None:
+        print(f"{SCRIPT_NAME} {VERSION} launcher")
+        print(f"Folder: {Path.cwd()}")
+        print()
+        print("This creates conservative bounded-safe frame TIFF crops.")
+        print("A complete new output replaces the prior X5 Crop-owned output.")
+        print()
+    format_id = selected_format_id or ask_format()
+    partial_supported = FORMATS[format_id].partial_mode_supported
     partial = (
         ask_yes_no("partial mode? [y/n, return=no]: ", default=False)
         if partial_supported
@@ -101,9 +97,13 @@ def interactive_options() -> RuntimeOptions:
         print(f"{format_id} supports full mode only.")
     strip_mode = "partial" if partial else "full"
     requested_count = ask_partial_count(format_id) if partial else None
-    debug_analysis = ask_yes_no(
-        "debug analysis? [y/n, return=no]: ",
-        default=False,
+    debug_analysis = (
+        ask_yes_no(
+            "debug analysis? [y/n, return=no]: ",
+            default=False,
+        )
+        if selected_debug_analysis is None
+        else selected_debug_analysis
     )
 
     print()
@@ -134,10 +134,15 @@ def interactive_options() -> RuntimeOptions:
 
 
 def run_interactive() -> int:
+    options = interactive_options()
     while True:
         try:
-            return run_options(interactive_options())
-        except InteractiveBatchCountPreflightError as exc:
+            return run_options(options)
+        except SlotCountPreflightError as exc:
             print()
             print(str(exc))
-            print("restart all format, mode, and count input for this batch.")
+            print("re-enter mode and count for this batch.")
+            options = interactive_options(
+                selected_format_id=options.format_id,
+                selected_debug_analysis=options.debug_analysis,
+            )

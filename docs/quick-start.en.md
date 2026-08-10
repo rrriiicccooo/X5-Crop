@@ -41,6 +41,7 @@ safely instead of being guessed.
 - `partial --count N` is a smaller actual exposure-slot count, including
   intermediate blank exposures. It must be positive and below the matched
   holder's complete count. Full rejects `--count`.
+- `135-dual` is full-only: 12 slots total, six per lane.
 - `--layout auto` selects horizontal or vertical from the scan; either may be
   specified explicitly.
 - `--debug-analysis` writes only Debug Analysis JPGs and report files—never
@@ -48,10 +49,10 @@ safely instead of being guessed.
 
 The program does not infer count from filenames or holder capacity, does not use
 proximity to holder ends to choose the mode, and does not suppress blank slots.
-Partial without a count, a non-positive count, or full with a count fails before
-source reading with exit code `2`. Interactive multi-file use preflights the
-entire batch; any holder/count conflict is listed and cancels the current input,
-so the whole batch choice must be restarted. An unresolved holder or physical
+Partial without a count, a non-positive count, full with a count, or a matched
+partial count that is not below the complete count fails before detection with
+exit code `2`. Interactive multi-file use lists all holder/count conflicts and
+returns to the mode/count step. An unresolved holder or physical
 placement enters `needs_review` rather than producing guessed TIFFs.
 
 To inspect detection before cropping, run the same parameters twice and remove

@@ -19,7 +19,7 @@ from ..detection.photo_geometry.model import (
     BoundaryRole,
     SafeCropEnvelope,
 )
-from ..detection.photo_geometry.template_model import FrameFormatPlacement
+from ..detection.photo_geometry.chains import FixedFormatFrame
 from ..detection.workspace import DetectionWorkspace
 from ..io.model import ImageProfile
 from ..run_status import RunTerminalOutcome
@@ -336,12 +336,12 @@ def _source_line_points(observation: object) -> tuple[tuple[float, float], ...]:
 
 def _geometry_by_identity(
     detection: FinalDetection,
-) -> tuple[tuple[int, FrameFormatPlacement], ...]:
+) -> tuple[tuple[int, FixedFormatFrame], ...]:
     global_ordinals = {
         (item.lane_id, item.lane_ordinal): item.global_output_ordinal
         for item in detection.output_slot_identities
     }
-    values: list[tuple[int, FrameFormatPlacement]] = []
+    values: list[tuple[int, FixedFormatFrame]] = []
     for lane in detection.candidate.geometry.lane_reconstructions:
         placements = (
             (lane.selected_placement,)
@@ -349,7 +349,7 @@ def _geometry_by_identity(
             else lane.materialized_chains
         )
         for placement in placements:
-            for geometry in placement.canonical.frames:
+            for geometry in placement.fixed_frames.frames:
                 ordinal = global_ordinals.get(
                     (geometry.lane_id, geometry.lane_ordinal)
                 )
@@ -439,7 +439,7 @@ def _draw_label_chip(
 
 
 def _boundary_points(
-    geometry: FrameFormatPlacement,
+    geometry: FixedFormatFrame,
     role: BoundaryRole,
 ) -> tuple[tuple[float, float], tuple[float, float]]:
     boundary = geometry.start if role == BoundaryRole.START else geometry.end
@@ -455,7 +455,7 @@ def _boundary_points(
 
 def _draw_selected_start_end(
     draw: ImageDraw.ImageDraw,
-    geometries: tuple[tuple[int, FrameFormatPlacement], ...],
+    geometries: tuple[tuple[int, FixedFormatFrame], ...],
     viewport: _Viewport,
     style: DebugStyleParameters,
 ) -> None:
@@ -557,7 +557,7 @@ def _draw_detected_top_bottom(
 
 def _draw_selected_top_bottom(
     draw: ImageDraw.ImageDraw,
-    geometries: tuple[tuple[int, FrameFormatPlacement], ...],
+    geometries: tuple[tuple[int, FixedFormatFrame], ...],
     viewport: _Viewport,
     style: DebugStyleParameters,
 ) -> set[BoundaryRole]:

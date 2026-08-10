@@ -76,18 +76,18 @@ def _metrics(
         basic_profile_run_count=sum(
             item.basic_profile_run_count for item in work
         ),
-        phase_vote_count=sum(item.phase_vote_count for item in work),
-        template_group_count=sum(item.template_group_count for item in work),
-        template_role_lookup_count=sum(
-            item.template_role_lookup_count for item in work
+        role_proposal_count=sum(item.role_proposal_count for item in work),
+        sequence_group_count=sum(item.sequence_group_count for item in work),
+        ordinal_role_lookup_count=sum(
+            item.ordinal_role_lookup_count for item in work
         ),
-        template_role_match_count=sum(
-            item.template_role_match_count for item in work
+        ordinal_role_match_count=sum(
+            item.ordinal_role_match_count for item in work
         ),
         local_relation_evaluation_count=sum(
             item.local_relation_evaluation_count for item in work
         ),
-        enhanced_query_count=sum(item.enhanced_query_count for item in work),
+        refinement_query_count=sum(item.refinement_query_count for item in work),
         materialized_frame_geometry_count=sum(
             item.materialized_frame_geometry_count for item in work
         ),
@@ -169,7 +169,7 @@ def process_one(
                     profile,
                     reusable.final_boxes,
                     reusable.sampling_authority_boxes,
-                    reusable.transform,
+                    reusable.transforms,
                     output_root,
                 )
                 artifacts = replace(
@@ -277,7 +277,7 @@ def process_one(
                 profile,
                 detection.final_boxes,
                 detection.sampling_authority_boxes,
-                detection.transform_assessment.transform,
+                detection.output_transforms,
                 output_root,
             )
             artifacts = replace(

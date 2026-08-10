@@ -1,3 +1,5 @@
+"""Candidate-independent bounded edge and separator observations."""
+
 from __future__ import annotations
 
 from bisect import bisect_left, bisect_right
@@ -7,6 +9,7 @@ import math
 
 from ...domain import FiniteInterval, ObservationId
 from .model import (
+    BoundaryEvidenceState,
     BoundaryRole,
     PHOTO_BOUNDARY_MEASUREMENT_SPEC,
     PhotoBoundaryTransition,
@@ -98,6 +101,186 @@ class ProfileRun:
 
     def anchor_qualified_for(self, role: BoundaryRole) -> bool:
         return role in self.qualified_anchor_roles
+
+
+@dataclass(frozen=True)
+class BoundaryEdgeObservation:
+    observation_id: ObservationId
+    run_id: str
+    coordinate_interval_px: FiniteInterval
+    transition_ids: tuple[ObservationId, ...]
+    trace_coordinates_px: tuple[int, ...]
+    polarity: int
+    support_fraction: float
+    continuous_support_fraction: float
+    fit_residual_px: float
+    evidence_state: BoundaryEvidenceState = BoundaryEvidenceState.SUPPORT
+
+    def __post_init__(self) -> None:
+        if (
+            not self.run_id
+            or not self.transition_ids
+            or self.polarity not in {-1, 1}
+            or not self.trace_coordinates_px
+            or not 0.0 <= self.support_fraction <= 1.0
+            or not 0.0 <= self.continuous_support_fraction <= 1.0
+            or not math.isfinite(self.fit_residual_px)
+            or self.fit_residual_px < 0.0
+            or self.evidence_state != BoundaryEvidenceState.SUPPORT
+        ):
+            raise ValueError("boundary edge observation is invalid")
+
+
+@dataclass(frozen=True)
+class SeparatorBandObservation:
+    observation_id: ObservationId
+    left_edge_observation_id: ObservationId
+    right_edge_observation_id: ObservationId
+    left_run_id: str
+    right_run_id: str
+    gap_interval_px: FiniteInterval
+    transition_ids: tuple[ObservationId, ...]
+    continuous_support_fraction: float
+    darkness_contrast: float
+    texture_contrast: float
+    evidence_state: BoundaryEvidenceState = BoundaryEvidenceState.SUPPORT
+
+    def __post_init__(self) -> None:
+        if (
+            not self.left_run_id
+            or not self.right_run_id
+            or self.gap_interval_px.minimum < 0.0
+            or not self.transition_ids
+            or len(set(self.transition_ids)) != len(self.transition_ids)
+            or not 0.0 <= self.continuous_support_fraction <= 1.0
+            or not math.isfinite(self.darkness_contrast)
+            or not math.isfinite(self.texture_contrast)
+            or self.darkness_contrast < 0.0
+            or self.texture_contrast < 0.0
+            or self.evidence_state != BoundaryEvidenceState.SUPPORT
+        ):
+            raise ValueError("separator band observation is invalid")
+
+
+def _dominant_polarity(
+    run: ProfileRun,
+    transitions: dict[str, PhotoBoundaryTransition],
+) -> int:
+    value = sum(
+        transitions[str(identity)].polarity for identity in run.transition_ids
+    )
+    return 1 if value > 0 else -1 if value < 0 else 0
+
+
+def _median_transition_value(
+    run: ProfileRun,
+    transitions: dict[str, PhotoBoundaryTransition],
+    field_name: str,
+) -> float:
+    values = sorted(
+        float(getattr(transitions[str(identity)], field_name))
+        for identity in run.transition_ids
+    )
+    return values[len(values) // 2]
+
+
+def build_sequence_observations(
+    profile: "BasicAxisProfile",
+    transitions: dict[str, PhotoBoundaryTransition],
+) -> tuple[
+    tuple[BoundaryEdgeObservation, ...],
+    tuple[SeparatorBandObservation, ...],
+]:
+    edges: list[BoundaryEdgeObservation] = []
+    for run in profile.runs:
+        polarity = _dominant_polarity(run, transitions)
+        if polarity == 0:
+            continue
+        identity = ObservationId(
+            _stable_id(
+                "boundary-edge",
+                run.run_id,
+                run.coordinate_interval_px.minimum.hex(),
+                run.coordinate_interval_px.maximum.hex(),
+                polarity,
+            )
+        )
+        edges.append(
+            BoundaryEdgeObservation(
+                observation_id=identity,
+                run_id=run.run_id,
+                coordinate_interval_px=run.coordinate_interval_px,
+                transition_ids=run.transition_ids,
+                trace_coordinates_px=run.trace_coordinates_px,
+                polarity=polarity,
+                support_fraction=run.support_fraction,
+                continuous_support_fraction=run.continuous_support_fraction,
+                fit_residual_px=run.fit_residual_px,
+            )
+        )
+    ordered = tuple(
+        sorted(edges, key=lambda item: (item.coordinate_interval_px.center, str(item.observation_id)))
+    )
+    bands: list[SeparatorBandObservation] = []
+    for left, right in zip(ordered, ordered[1:]):
+        if left.polarity == right.polarity:
+            continue
+        gap = FiniteInterval(
+            max(0.0, right.coordinate_interval_px.minimum - left.coordinate_interval_px.maximum),
+            max(0.0, right.coordinate_interval_px.maximum - left.coordinate_interval_px.minimum),
+        )
+        left_run = next(run for run in profile.runs if run.run_id == left.run_id)
+        right_run = next(run for run in profile.runs if run.run_id == right.run_id)
+        core_tone = 0.5 * (
+            _median_transition_value(left_run, transitions, "right_tone_mean")
+            + _median_transition_value(right_run, transitions, "left_tone_mean")
+        )
+        outer_tone = 0.5 * (
+            _median_transition_value(left_run, transitions, "left_tone_mean")
+            + _median_transition_value(right_run, transitions, "right_tone_mean")
+        )
+        core_texture = 0.5 * (
+            _median_transition_value(left_run, transitions, "right_texture_mean")
+            + _median_transition_value(right_run, transitions, "left_texture_mean")
+        )
+        outer_texture = 0.5 * (
+            _median_transition_value(left_run, transitions, "left_texture_mean")
+            + _median_transition_value(right_run, transitions, "right_texture_mean")
+        )
+        darkness = max(0.0, outer_tone - core_tone)
+        texture = max(0.0, outer_texture - core_texture)
+        if darkness == 0.0 and texture == 0.0:
+            continue
+        transition_ids = tuple(
+            sorted(set((*left.transition_ids, *right.transition_ids)), key=str)
+        )
+        identity = ObservationId(
+            _stable_id(
+                "separator-band",
+                left.observation_id,
+                right.observation_id,
+                gap.minimum.hex(),
+                gap.maximum.hex(),
+            )
+        )
+        bands.append(
+            SeparatorBandObservation(
+                observation_id=identity,
+                left_edge_observation_id=left.observation_id,
+                right_edge_observation_id=right.observation_id,
+                left_run_id=left.run_id,
+                right_run_id=right.run_id,
+                gap_interval_px=gap,
+                transition_ids=transition_ids,
+                continuous_support_fraction=min(
+                    left.continuous_support_fraction,
+                    right.continuous_support_fraction,
+                ),
+                darkness_contrast=darkness,
+                texture_contrast=texture,
+            )
+        )
+    return ordered, tuple(bands)
 
 
 @dataclass(frozen=True)
@@ -370,7 +553,7 @@ def cross_profile_from_regions(
 
 
 @dataclass(frozen=True, order=True)
-class TemplateRole:
+class OrdinalBoundaryRole:
     role_index: int
     lane_ordinal: int
     role: BoundaryRole
@@ -381,14 +564,14 @@ class TemplateRole:
             or self.lane_ordinal <= 0
             or self.role not in {BoundaryRole.START, BoundaryRole.END}
         ):
-            raise ValueError("template role is invalid")
+            raise ValueError("cross_proposal role is invalid")
 
 
-def ordered_template_roles(output_slot_count: int) -> tuple[TemplateRole, ...]:
+def ordered_ordinal_roles(output_slot_count: int) -> tuple[OrdinalBoundaryRole, ...]:
     if output_slot_count <= 0:
-        raise ValueError("template requires a positive output-slot count")
+        raise ValueError("cross_proposal requires a positive output-slot count")
     return tuple(
-        TemplateRole(
+        OrdinalBoundaryRole(
             role_index=(ordinal - 1) * 2 + role_offset,
             lane_ordinal=ordinal,
             role=role,
@@ -401,54 +584,54 @@ def ordered_template_roles(output_slot_count: int) -> tuple[TemplateRole, ...]:
 
 
 @dataclass(frozen=True)
-class PhaseVote:
-    vote_id: str
+class SequenceRoleProposal:
+    proposal_id: str
     run_id: str
-    role: TemplateRole
+    role: OrdinalBoundaryRole
     phase_interval_px: FiniteInterval
     transition_ids: tuple[ObservationId, ...]
-    template_coordinate_px: float
+    role_coordinate_px: float
 
     def __post_init__(self) -> None:
         if (
-            not self.vote_id
+            not self.proposal_id
             or not self.run_id
             or not self.transition_ids
             or len(set(self.transition_ids)) != len(self.transition_ids)
-            or not math.isfinite(self.template_coordinate_px)
+            or not math.isfinite(self.role_coordinate_px)
         ):
-            raise ValueError("phase vote is invalid")
+            raise ValueError("sequence-role proposal is invalid")
 
 
 @dataclass(frozen=True)
-class TemplatePhaseGroup:
+class SequenceHypothesisGroup:
     group_id: str
     phase_interval_px: FiniteInterval
-    votes: tuple[PhaseVote, ...]
-    ambiguous_vote_ids: tuple[str, ...]
+    role_proposals: tuple[SequenceRoleProposal, ...]
+    ambiguous_proposal_ids: tuple[str, ...]
     exclusion_authorized: bool
 
     def __post_init__(self) -> None:
         if (
             not self.group_id
-            or not self.votes
-            or len({vote.vote_id for vote in self.votes}) != len(self.votes)
-            or len(set(self.ambiguous_vote_ids)) != len(self.ambiguous_vote_ids)
+            or not self.role_proposals
+            or len({proposal.proposal_id for proposal in self.role_proposals}) != len(self.role_proposals)
+            or len(set(self.ambiguous_proposal_ids)) != len(self.ambiguous_proposal_ids)
         ):
-            raise ValueError("template phase group is invalid")
+            raise ValueError("sequence hypothesis group is invalid")
 
 
 @dataclass(frozen=True)
-class PhaseGroupingWork:
-    template_role_lookup_count: int
-    template_role_match_count: int
+class SequenceGroupingWork:
+    ordinal_role_lookup_count: int
+    ordinal_role_match_count: int
 
     def __post_init__(self) -> None:
         if (
-            self.template_role_lookup_count < 0
-            or self.template_role_match_count < 0
+            self.ordinal_role_lookup_count < 0
+            or self.ordinal_role_match_count < 0
         ):
-            raise ValueError("phase grouping work is invalid")
+            raise ValueError("sequence grouping work is invalid")
 
 
 def group_support_exclusion_authorized(
@@ -491,19 +674,19 @@ def group_support_exclusion_authorized(
 
 
 def _endpoint_peak_intervals(
-    votes: tuple[PhaseVote, ...],
+    proposals: tuple[SequenceRoleProposal, ...],
 ) -> tuple[FiniteInterval, ...]:
-    if not votes:
+    if not proposals:
         return ()
-    vote_by_id = {vote.vote_id: vote for vote in votes}
+    proposal_by_id = {proposal.proposal_id: proposal for proposal in proposals}
     starts: dict[float, list[str]] = {}
     ends: dict[float, list[str]] = {}
-    for vote in votes:
-        starts.setdefault(vote.phase_interval_px.minimum, []).append(
-            vote.vote_id
+    for proposal in proposals:
+        starts.setdefault(proposal.phase_interval_px.minimum, []).append(
+            proposal.proposal_id
         )
-        ends.setdefault(vote.phase_interval_px.maximum, []).append(
-            vote.vote_id
+        ends.setdefault(proposal.phase_interval_px.maximum, []).append(
+            proposal.proposal_id
         )
     active: set[str] = set()
     candidate_sets: list[frozenset[str]] = []
@@ -521,12 +704,12 @@ def _endpoint_peak_intervals(
     maximal = tuple(
         FiniteInterval(
             max(
-                vote_by_id[vote_id].phase_interval_px.minimum
-                for vote_id in active_set
+                proposal_by_id[proposal_id].phase_interval_px.minimum
+                for proposal_id in active_set
             ),
             min(
-                vote_by_id[vote_id].phase_interval_px.maximum
-                for vote_id in active_set
+                proposal_by_id[proposal_id].phase_interval_px.maximum
+                for proposal_id in active_set
             ),
         )
         for active_set in maximal_sets
@@ -539,43 +722,43 @@ def _endpoint_peak_intervals(
     )
 
 
-def build_phase_groups(
-    votes: tuple[PhaseVote, ...],
-    roles: tuple[TemplateRole, ...],
+def build_sequence_groups(
+    proposals: tuple[SequenceRoleProposal, ...],
+    roles: tuple[OrdinalBoundaryRole, ...],
     *,
     frame_width_lower_px: float = 1.0,
-) -> tuple[tuple[TemplatePhaseGroup, ...], PhaseGroupingWork]:
-    """Assign phase votes through one endpoint sweep and indexed role lookup."""
+) -> tuple[tuple[SequenceHypothesisGroup, ...], SequenceGroupingWork]:
+    """Assign sequence-role proposals through one endpoint sweep and indexed role lookup."""
 
-    if not votes or not roles:
-        return (), PhaseGroupingWork(0, 0)
-    if len({vote.vote_id for vote in votes}) != len(votes):
-        raise ValueError("phase vote identities must be unique")
-    seeds = _endpoint_peak_intervals(votes)
-    by_role: dict[int, tuple[tuple[float, PhaseVote], ...]] = {}
+    if not proposals or not roles:
+        return (), SequenceGroupingWork(0, 0)
+    if len({proposal.proposal_id for proposal in proposals}) != len(proposals):
+        raise ValueError("sequence-role proposal identities must be unique")
+    seeds = _endpoint_peak_intervals(proposals)
+    by_role: dict[int, tuple[tuple[float, SequenceRoleProposal], ...]] = {}
     centers_by_role: dict[int, tuple[float, ...]] = {}
     maximum_half_width: dict[int, float] = {}
     for role in roles:
         indexed = tuple(
             sorted(
                 (
-                    (vote.phase_interval_px.center, vote)
-                    for vote in votes
-                    if vote.role == role
+                    (proposal.phase_interval_px.center, proposal)
+                    for proposal in proposals
+                    if proposal.role == role
                 ),
-                key=lambda item: (item[0], item[1].vote_id),
+                key=lambda item: (item[0], item[1].proposal_id),
             )
         )
         by_role[role.role_index] = indexed
         centers_by_role[role.role_index] = tuple(
-            center for center, _vote in indexed
+            center for center, _proposal in indexed
         )
         maximum_half_width[role.role_index] = max(
-            (vote.phase_interval_px.width / 2.0 for _center, vote in indexed),
+            (proposal.phase_interval_px.width / 2.0 for _center, proposal in indexed),
             default=0.0,
         )
-    claims: dict[str, list[int]] = {vote.vote_id: [] for vote in votes}
-    candidates_by_seed: list[list[PhaseVote]] = [[] for _seed in seeds]
+    claims: dict[str, list[int]] = {proposal.proposal_id: [] for proposal in proposals}
+    candidates_by_seed: list[list[SequenceRoleProposal]] = [[] for _seed in seeds]
     lookup_count = 0
     for seed_index, seed in enumerate(seeds):
         for role in roles:
@@ -585,48 +768,50 @@ def build_phase_groups(
             allowance = maximum_half_width[role.role_index]
             start = bisect_left(centers, seed.minimum - allowance)
             stop = bisect_right(centers, seed.maximum + allowance)
-            for _center, vote in indexed[start:stop]:
-                if _intersection(seed, vote.phase_interval_px) is None:
+            for _center, proposal in indexed[start:stop]:
+                if _intersection(seed, proposal.phase_interval_px) is None:
                     continue
-                claims[vote.vote_id].append(seed_index)
-    vote_by_id = {vote.vote_id: vote for vote in votes}
+                claims[proposal.proposal_id].append(seed_index)
+    proposal_by_id = {proposal.proposal_id: proposal for proposal in proposals}
     ambiguous = tuple(
-        sorted(vote_id for vote_id, values in claims.items() if len(values) > 1)
+        sorted(proposal_id for proposal_id, values in claims.items() if len(values) > 1)
     )
-    for vote_id, seed_indices in claims.items():
+    for proposal_id, seed_indices in claims.items():
         if len(seed_indices) == 1:
-            candidates_by_seed[seed_indices[0]].append(vote_by_id[vote_id])
-    groups: list[TemplatePhaseGroup] = []
+            candidates_by_seed[seed_indices[0]].append(
+                proposal_by_id[proposal_id]
+            )
+    groups: list[SequenceHypothesisGroup] = []
     matched = 0
     structurally_ambiguous: set[str] = set(ambiguous)
     for seed, assigned in zip(seeds, candidates_by_seed, strict=True):
         if not assigned:
             continue
         distance = {
-            vote.vote_id: abs(
-                vote.phase_interval_px.center - seed.center
+            proposal.proposal_id: abs(
+                proposal.phase_interval_px.center - seed.center
             )
-            for vote in assigned
+            for proposal in assigned
         }
-        by_run: dict[str, list[PhaseVote]] = {}
-        by_role_index: dict[int, list[PhaseVote]] = {}
-        for vote in assigned:
-            by_run.setdefault(vote.run_id, []).append(vote)
-            by_role_index.setdefault(vote.role.role_index, []).append(vote)
+        by_run: dict[str, list[SequenceRoleProposal]] = {}
+        by_role_index: dict[int, list[SequenceRoleProposal]] = {}
+        for proposal in assigned:
+            by_run.setdefault(proposal.run_id, []).append(proposal)
+            by_role_index.setdefault(proposal.role.role_index, []).append(proposal)
 
-        def unique_nearest(values: list[PhaseVote]) -> str | None:
+        def unique_nearest(values: list[SequenceRoleProposal]) -> str | None:
             ordered = sorted(
                 values,
-                key=lambda item: (distance[item.vote_id], item.vote_id),
+                key=lambda item: (distance[item.proposal_id], item.proposal_id),
             )
             if len(ordered) > 1 and math.isclose(
-                distance[ordered[0].vote_id],
-                distance[ordered[1].vote_id],
+                distance[ordered[0].proposal_id],
+                distance[ordered[1].proposal_id],
                 rel_tol=0.0,
                 abs_tol=1.0e-12,
             ):
                 return None
-            return ordered[0].vote_id
+            return ordered[0].proposal_id
 
         run_choices = {
             run_id: unique_nearest(values)
@@ -637,72 +822,72 @@ def build_phase_groups(
             for role_index, values in by_role_index.items()
         }
         selected = [
-            vote
-            for vote in assigned
-            if run_choices[vote.run_id] == vote.vote_id
-            and role_choices[vote.role.role_index] == vote.vote_id
+            proposal
+            for proposal in assigned
+            if run_choices[proposal.run_id] == proposal.proposal_id
+            and role_choices[proposal.role.role_index] == proposal.proposal_id
         ]
-        selected_ids = {vote.vote_id for vote in selected}
+        selected_ids = {proposal.proposal_id for proposal in selected}
         structurally_ambiguous.update(
-            vote.vote_id
-            for vote in assigned
-            if vote.vote_id not in selected_ids
+            proposal.proposal_id
+            for proposal in assigned
+            if proposal.proposal_id not in selected_ids
         )
         if not selected:
             continue
-        phase = _common(tuple(vote.phase_interval_px for vote in selected))
+        phase = _common(tuple(proposal.phase_interval_px for proposal in selected))
         if phase is None:
             continue
-        selected.sort(key=lambda vote: (vote.role.role_index, vote.vote_id))
+        selected.sort(key=lambda proposal: (proposal.role.role_index, proposal.proposal_id))
         matched += len(selected)
         role_coordinates = tuple(
-            vote.template_coordinate_px for vote in selected
+            proposal.role_coordinate_px for proposal in selected
         )
         exclusion = group_support_exclusion_authorized(
             role_coordinates_px=role_coordinates,
             role_identities=tuple(
-                (vote.role.lane_ordinal, vote.role.role)
-                for vote in selected
+                (proposal.role.lane_ordinal, proposal.role.role)
+                for proposal in selected
             ),
             transition_id_sets=tuple(
-                vote.transition_ids for vote in selected
+                proposal.transition_ids for proposal in selected
             ),
             frame_width_lower_px=frame_width_lower_px,
         )
         groups.append(
-            TemplatePhaseGroup(
+            SequenceHypothesisGroup(
                 group_id=_stable_id(
-                    "template-phase-group",
-                    *(vote.vote_id for vote in selected),
+                    "cross_proposal-phase-group",
+                    *(proposal.proposal_id for proposal in selected),
                     phase.minimum,
                     phase.maximum,
                 ),
                 phase_interval_px=phase,
-                votes=tuple(selected),
-                ambiguous_vote_ids=tuple(
-                    vote_id
-                    for vote_id in ambiguous
-                    if vote_by_id[vote_id].phase_interval_px.minimum
+                role_proposals=tuple(selected),
+                ambiguous_proposal_ids=tuple(
+                    proposal_id
+                    for proposal_id in ambiguous
+                    if proposal_by_id[proposal_id].phase_interval_px.minimum
                     <= seed.maximum
-                    and vote_by_id[vote_id].phase_interval_px.maximum
+                    and proposal_by_id[proposal_id].phase_interval_px.maximum
                     >= seed.minimum
                 ),
                 exclusion_authorized=exclusion,
             )
         )
-    # A wide vote that touches multiple separated groups remains a bounded,
+    # A wide proposal that touches multiple separated groups remains a bounded,
     # single-role conservative proposal.  It never gains exclusion authority.
-    for vote_id in sorted(structurally_ambiguous):
-        vote = vote_by_id[vote_id]
+    for proposal_id in sorted(structurally_ambiguous):
+        proposal = proposal_by_id[proposal_id]
         groups.append(
-            TemplatePhaseGroup(
-                group_id=_stable_id("ambiguous-phase-vote", vote.vote_id),
-                phase_interval_px=vote.phase_interval_px,
-                votes=(vote,),
-                ambiguous_vote_ids=(vote.vote_id,),
+            SequenceHypothesisGroup(
+                group_id=_stable_id("ambiguous-phase-proposal", proposal.proposal_id),
+                phase_interval_px=proposal.phase_interval_px,
+                role_proposals=(proposal,),
+                ambiguous_proposal_ids=(proposal.proposal_id,),
                 exclusion_authorized=False,
             )
         )
     unique = {group.group_id: group for group in groups}
     ordered = tuple(unique[key] for key in sorted(unique))
-    return ordered, PhaseGroupingWork(lookup_count, matched)
+    return ordered, SequenceGroupingWork(lookup_count, matched)

@@ -22,10 +22,12 @@ def write_crops(
     profile: ImageProfile,
     frames: tuple[Box, ...],
     sampling_authority_boxes: tuple[Box, ...],
-    transform: AffineCoordinateTransform,
+    transforms: tuple[AffineCoordinateTransform, ...],
     output_dir: Path,
 ) -> list[str]:
-    if len(frames) != len(sampling_authority_boxes):
+    if not (
+        len(frames) == len(sampling_authority_boxes) == len(transforms)
+    ):
         raise ValueError("each crop requires one aligned sampling authority")
     output_files: list[str] = []
     promoted: list[Path] = []
@@ -38,8 +40,8 @@ def write_crops(
             source_arr,
             profile.photometric,
         )
-        for i, (box, sampling_authority_box) in enumerate(
-            zip(frames, sampling_authority_boxes, strict=True),
+        for i, (box, sampling_authority_box, transform) in enumerate(
+            zip(frames, sampling_authority_boxes, transforms, strict=True),
             1,
         ):
             if not box.valid():

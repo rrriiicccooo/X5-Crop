@@ -5,10 +5,6 @@ from typing import Any
 from ..detection.candidate.assessment.model import CANDIDATE_GATE_CHECK_CODES
 from ..detection.photo_geometry.bounds import (
     MAX_BANDS_PER_CORRIDOR,
-    MAX_COMPLETE_CHAINS_PER_LANE,
-    MAX_LEDGER_ENTRIES_PER_CHAIN,
-    MAX_LEDGER_ENTRIES_PER_LANE,
-    MAX_LEDGER_ENTRIES_PER_SOURCE,
 )
 from ..detection.decision.vocabulary import FINAL_REVIEW_REASONS
 from .identity import (
@@ -81,6 +77,13 @@ def _validate_measurement(record: dict[str, Any]) -> None:
         if (
             observation_set["long_sample_count"] > 256
             or observation_set["cross_sample_count"] > 64
+            or observation_set["proposed_observation_count"]
+            < len(observation_set["observations"])
+            or observation_set["proposed_cell_run_count"]
+            < sum(
+                len(observation["source_cells"])
+                for observation in observation_set["observations"]
+            )
             or len(observation_set["observations"]) > 64
             or any(
                 set(observation)
@@ -88,6 +91,7 @@ def _validate_measurement(record: dict[str, Any]) -> None:
                     "observation_id",
                     "lane_id",
                     "source_box",
+                    "source_cells",
                     "reliability",
                     "provenance",
                 }
@@ -133,6 +137,7 @@ def _validate_finalization(record: dict[str, Any]) -> None:
     geometries = finalization["resolved_output_geometries"]
     authorities = finalization["sampling_authority_boxes"]
     boxes = finalization["final_boxes"]
+    transforms = finalization["output_transforms"]
     output_files = record["output"]["output_files"]
     review_copy = record["output"]["review_copy"]
     fidelity = record["output"]["tiff_fidelity"]
@@ -157,6 +162,7 @@ def _validate_finalization(record: dict[str, Any]) -> None:
             or len(geometries) != count
             or len(authorities) != count
             or len(boxes) != count
+            or len(transforms) != count
         ):
             raise ValueError("approved output lacks complete geometry")
         if requested:
@@ -175,6 +181,7 @@ def _validate_finalization(record: dict[str, Any]) -> None:
         or geometries
         or authorities
         or boxes
+        or transforms
     ):
         raise ValueError("review output exposed official geometry")
     if not requested:
@@ -217,7 +224,7 @@ def validate_current_report_record(record: dict[str, Any]) -> None:
             "direction_free_side_regions_and_raw_top_bottom_lines"
         ),
         "format_physical": (
-            "frame_dimensions_tolerance_gap_component_count_fit"
+            "fixed_frame_dimensions_shared_scale_gap_count"
         ),
         "canonical": "representative_only_no_safety_pruning",
         "selection": "sampling_cluster_then_tiered_direct_dominance",
@@ -236,8 +243,7 @@ def validate_current_report_record(record: dict[str, Any]) -> None:
     ):
         raise ValueError("matched holder and resolved count disagree")
     if geometry["authority_partition"] != expected_partition:
-        raise ValueError("format-placement authority partition is invalid")
-    source_ledger_count = 0
+        raise ValueError("physical-chain authority partition is invalid")
     for lane in geometry["lanes"]:
         if lane["search"]["authority"] != "bounded_measurement_coverage_only":
             raise ValueError("search proposal gained placement authority")
@@ -250,13 +256,12 @@ def validate_current_report_record(record: dict[str, Any]) -> None:
             or selection["safety_rule"] != "selected_placement_only"
         ):
             raise ValueError("placement safety authority is invalid")
-        materialized = chains["materialized"]
-        ledger = chains["ledger"]
+        materialized = chains["lane_complete_proposals"]
+        ledger = chains["proposal_ledgers"]
         bounds = chains["producer_bounds"]
         selected_id = selection["selected_placement_id"]
         if (
-            len(materialized) > MAX_COMPLETE_CHAINS_PER_LANE
-            or len(ledger) != len(materialized)
+            len(ledger) != len(materialized)
             or bounds["materialized_complete_chain_count"] != len(materialized)
             or bounds["proposed_complete_chain_count"] < len(materialized)
             or any(
@@ -264,17 +269,10 @@ def validate_current_report_record(record: dict[str, Any]) -> None:
                 or item["proposed_count"] < item["materialized_count"]
                 for item in bounds["corridor_bands"]
             )
-            or any(
-                len(item["ledger"]) > MAX_LEDGER_ENTRIES_PER_CHAIN
-                for item in ledger
-            )
-            or sum(len(item["ledger"]) for item in ledger)
-            > MAX_LEDGER_ENTRIES_PER_LANE
             or selected_id
             not in ({None} | {item["placement_id"] for item in materialized})
         ):
             raise ValueError("bounded chain ledger is invalid")
-        source_ledger_count += sum(len(item["ledger"]) for item in ledger)
         outputs = selection["safe_crop_envelopes"]
         budgets = selection["direct_use_budget_assessments"]
         if {item["geometry_id"] for item in outputs} != {
@@ -283,6 +281,15 @@ def validate_current_report_record(record: dict[str, Any]) -> None:
             raise ValueError("budget does not cover every selected output")
         if outputs and selected_id is None:
             raise ValueError("safe envelope lacks a selected placement")
+        selected_chain = selection["source_joint_selected_chain"]
+        if (selected_chain is None) != (not outputs) or (
+            selected_chain is not None
+            and (
+                selected_chain["placement_id"] != selected_id
+                or len(selected_chain["sampling_boxes"]) != len(outputs)
+            )
+        ):
+            raise ValueError("source-joint selected chain is incomplete")
         for item in outputs:
             if (
                 item.get("provenance")
@@ -293,8 +300,6 @@ def validate_current_report_record(record: dict[str, Any]) -> None:
                 or len(item.get("constrained_source_footprint", ())) < 3
             ):
                 raise ValueError("continuous placement output is incomplete")
-    if source_ledger_count > MAX_LEDGER_ENTRIES_PER_SOURCE:
-        raise ValueError("source chain ledger exceeds its bound")
     _validate_gate(record["candidate_gate"], "candidate")
     decision = record["decision"]
     _validate_gate(decision["gate"], "decision")

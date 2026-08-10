@@ -1,3 +1,5 @@
+"""Bounded joint solver for fixed-format physical placements."""
+
 from __future__ import annotations
 
 from bisect import bisect_left, bisect_right
@@ -7,7 +9,7 @@ import math
 
 import numpy as np
 
-from ...domain import FiniteInterval, ObservationId, PositiveInterval
+from ...domain import EvidenceState, FiniteInterval, ObservationId, PositiveInterval
 from ...formats import FRAME_DIMENSION_TOLERANCE_SPEC, FramePhysicalSpec
 from ..output_geometry import (
     observed_strip_angle_estimate_degrees,
@@ -20,10 +22,9 @@ from .boundary_geometry import (
     source_cross_axis_slope_interval,
     source_sequence_axis_slope_interval,
 )
-from .bounds import MAX_COMPLETE_CHAINS_PER_LANE
 from .measurement import (
     continuous_trace_support_fraction,
-    fit_template_bound_boundary_observation,
+    fit_format_bound_boundary_observation,
     robust_scalar_location,
     track_side_transition_regions,
 )
@@ -42,38 +43,38 @@ from .model import (
 from .source_geometry import (
     JointAxisGeometry,
     LaneGapModel,
-    SourceFrameGeometry,
+    SourceScanGeometry,
 )
-from .template_model import (
+from .chains import (
     BoundRoleEvidence,
-    CanonicalFormatPlacement,
-    ComponentTemplateProposal,
+    BoundSeparatorBand,
+    FixedFormatFrameSet,
+    FrameChainProposals,
     CrossPlacement,
     CrossRoleEvidence,
-    EnhancedPhaseQuery,
-    EnhancedQueryRegistry,
-    FormatPlacement,
-    FrameFormatPlacement,
+    CompleteFormatChain,
+    FixedFormatFrame,
+    LaneGeometry,
     LocalAdvanceKind,
     LocalAdvanceRelation,
-    ProvisionalHeightTemplate,
+    CrossAxisProposal,
     RegisteredSequenceRoleQuery,
     SequencePlacement,
     SourcePlacementMaterialization,
-    TemplateLaneInput,
-    TemplateLaneProposal,
-    TemplateSequenceSeed,
+    LaneObservationInput,
+    LanePhysicalProposals,
+    SequenceChainProposal,
 )
-from .template_profiles import (
+from .observations import (
     BasicAxisProfile,
-    PhaseVote,
+    SequenceRoleProposal,
     ProfileRun,
-    TemplatePhaseGroup,
-    TemplateRole,
-    build_phase_groups,
+    SequenceHypothesisGroup,
+    OrdinalBoundaryRole,
+    build_sequence_groups,
     cross_profile_from_regions,
     group_support_exclusion_authorized,
-    ordered_template_roles,
+    ordered_ordinal_roles,
 )
 
 
@@ -82,21 +83,14 @@ def _stable_id(prefix: str, *parts: object) -> str:
     return f"{prefix}:{sha256(payload).hexdigest()[:24]}"
 
 
-def _gap_seed_mm(component: FramePhysicalSpec) -> float:
+def _gap_seed_mm(frame_spec: FramePhysicalSpec) -> float:
     """Return a search origin, never a source-gap authority."""
 
     return (
-        component.format_gap_prior_mm
-        if component.format_gap_prior_mm is not None
+        frame_spec.format_gap_prior_mm
+        if frame_spec.format_gap_prior_mm is not None
         else 0.0
     )
-
-
-def _gap_observation_domain_mm(component: FramePhysicalSpec) -> FiniteInterval:
-    if component.format_gap_prior_mm is None:
-        return FiniteInterval(-component.frame_width_mm, component.frame_width_mm)
-    prior = component.format_gap_prior_mm
-    return FiniteInterval(max(-component.frame_width_mm, prior - 2.0), prior + 2.0)
 
 
 def _intersection(
@@ -174,7 +168,7 @@ def merge_sampling_equivalent_direction_classes(
 ) -> tuple[SharedStripDirection, ...]:
     """Merge only direction classes that produce the exact same transform.
 
-    The interval hull preserves every template-bound direction interpretation;
+    The interval hull preserves every cross_proposal-bound direction interpretation;
     ordinary support or residual scores never collapse a distinct transform.
     """
 
@@ -206,7 +200,7 @@ def merge_sampling_equivalent_direction_classes(
         merged.append(
             SharedStripDirection(
                 direction_id=_stable_id(
-                    "template-direction-class",
+                    "cross_proposal-direction-class",
                     canonical_angle,
                     full_angle_interval.minimum,
                     full_angle_interval.maximum,
@@ -220,24 +214,24 @@ def merge_sampling_equivalent_direction_classes(
     return tuple(sorted(merged, key=direction_class_key))
 
 
-def _template_bound_direction_classes(
-    templates: tuple[ProvisionalHeightTemplate, ...],
+def _physical_bound_direction_classes(
+    cross_proposals: tuple[CrossAxisProposal, ...],
 ) -> tuple[SharedStripDirection, ...]:
     directions: list[SharedStripDirection] = []
-    for template in templates:
+    for cross_proposal in cross_proposals:
         fit_intervals = tuple(
             item.fit_angle_interval_degrees
-            for item in template.raw_observations
+            for item in cross_proposal.raw_observations
             if item.fit_angle_interval_degrees is not None
         )
-        if len(fit_intervals) != len(template.raw_observations):
-            raise ValueError("template direction lacks fit intervals")
-        resolution = resolve_shared_strip_direction(template.raw_observations)
+        if len(fit_intervals) != len(cross_proposal.raw_observations):
+            raise ValueError("cross_proposal direction lacks fit intervals")
+        resolution = resolve_shared_strip_direction(cross_proposal.raw_observations)
         if resolution.direction is not None:
             hull = _hull(
                 tuple(
                     item.angle_interval_degrees
-                    for item in template.raw_observations
+                    for item in cross_proposal.raw_observations
                 )
             )
             if _hull(fit_intervals).width > (
@@ -247,7 +241,7 @@ def _template_bound_direction_classes(
             directions.append(
                 SharedStripDirection(
                     direction_id=_stable_id(
-                        "template-direction-safety-hull",
+                        "cross_proposal-direction-safety-hull",
                         resolution.direction.direction_id,
                         hull.minimum,
                         hull.maximum,
@@ -264,7 +258,7 @@ def _template_bound_direction_classes(
             continue
         full_intervals = tuple(
             item.angle_interval_degrees
-            for item in template.raw_observations
+            for item in cross_proposal.raw_observations
         )
         if len(fit_intervals) < 2:
             continue
@@ -275,7 +269,7 @@ def _template_bound_direction_classes(
             continue
         hull = _hull(full_intervals)
         canonical = observed_strip_angle_estimate_degrees(
-            template.raw_observations
+            cross_proposal.raw_observations
         )
         canonical = min(
             fit_hull.maximum,
@@ -285,7 +279,7 @@ def _template_bound_direction_classes(
             sorted(
                 (
                     item.observation_id
-                    for item in template.raw_observations
+                    for item in cross_proposal.raw_observations
                 ),
                 key=str,
             )
@@ -293,7 +287,7 @@ def _template_bound_direction_classes(
         directions.append(
             SharedStripDirection(
                 direction_id=_stable_id(
-                    "bounded-template-direction",
+                    "bounded-cross_proposal-direction",
                     hull.minimum,
                     hull.maximum,
                     canonical,
@@ -308,36 +302,59 @@ def _template_bound_direction_classes(
 
 
 def _role_relative_projection(
-    role: TemplateRole,
-    component: FramePhysicalSpec,
+    role: OrdinalBoundaryRole,
+    frame_spec: FramePhysicalSpec,
     width_state: JointAxisGeometry,
+    gap_model: LaneGapModel | None = None,
 ) -> FiniteInterval:
     index = role.lane_ordinal - 1
     width_count = index + (1 if role.role == BoundaryRole.END else 0)
-    return width_state.project_affine(
-        q_coefficient=width_count * component.frame_width_mm,
-        scale_coefficient=index * _gap_seed_mm(component),
+    width = width_state.project_affine(
+        q_coefficient=width_count * frame_spec.frame_width_mm,
+        scale_coefficient=0.0,
+    )
+    gap = (
+        gap_model.gap_interval_px
+        if gap_model is not None
+        and gap_model.state == EvidenceState.SUPPORTED
+        and gap_model.gap_interval_px is not None
+        else width_state.project_affine(
+            q_coefficient=0.0,
+            scale_coefficient=_gap_seed_mm(frame_spec),
+        )
+    )
+    return _add(
+        width,
+        FiniteInterval(index * gap.minimum, index * gap.maximum),
     )
 
 
 def _role_canonical_relative(
-    role: TemplateRole,
-    component: FramePhysicalSpec,
+    role: OrdinalBoundaryRole,
+    frame_spec: FramePhysicalSpec,
     width_state: JointAxisGeometry,
+    gap_model: LaneGapModel | None = None,
 ) -> float:
     scale, normalized, _factor = width_state.canonical_state()
     index = role.lane_ordinal - 1
     return (
         (index + (1 if role.role == BoundaryRole.END else 0))
-        * component.frame_width_mm
+        * frame_spec.frame_width_mm
         * normalized
-        + index * _gap_seed_mm(component) * scale
+        + index
+        * (
+            gap_model.canonical_placement_pitch_px
+            - width_state.extent_projection_px().center
+            if gap_model is not None
+            and gap_model.state == EvidenceState.SUPPORTED
+            else _gap_seed_mm(frame_spec) * scale
+        )
     )
 
 
 def _role_affine_coefficients(
-    role: TemplateRole,
-    component: FramePhysicalSpec,
+    role: OrdinalBoundaryRole,
+    frame_spec: FramePhysicalSpec,
 ) -> tuple[float, float]:
     index = role.lane_ordinal - 1
     return (
@@ -345,18 +362,18 @@ def _role_affine_coefficients(
             index
             + (1 if role.role == BoundaryRole.END else 0)
         )
-        * component.frame_width_mm,
-        index * _gap_seed_mm(component),
+        * frame_spec.frame_width_mm,
+        index * _gap_seed_mm(frame_spec),
     )
 
 
-def _sequence_phase_votes(
-    lane: TemplateLaneInput,
-    geometry: SourceFrameGeometry,
-    roles: tuple[TemplateRole, ...],
-) -> tuple[PhaseVote, ...]:
+def _sequence_role_proposals(
+    lane: LaneObservationInput,
+    geometry: SourceScanGeometry,
+    roles: tuple[OrdinalBoundaryRole, ...],
+) -> tuple[SequenceRoleProposal, ...]:
     runs = {run.run_id: run for run in lane.sequence_profile.runs}
-    values: list[PhaseVote] = []
+    values: list[SequenceRoleProposal] = []
     for region in lane.sequence_profile.runs:
         run = runs[region.run_id]
         for role in roles:
@@ -364,14 +381,14 @@ def _sequence_phase_votes(
                 continue
             relative = _role_relative_projection(
                 role,
-                geometry.component,
+                geometry.frame_spec,
                 geometry.width_state,
             )
             values.append(
-                PhaseVote(
-                    vote_id=_stable_id(
-                        "phase-vote",
-                        geometry.component.component_id,
+                SequenceRoleProposal(
+                    proposal_id=_stable_id(
+                        "phase-proposal",
+                        geometry.frame_spec.frame_spec_id,
                         run.run_id,
                         role.role_index,
                     ),
@@ -382,15 +399,15 @@ def _sequence_phase_votes(
                         relative,
                     ),
                     transition_ids=run.transition_ids,
-                    template_coordinate_px=_role_canonical_relative(
+                    role_coordinate_px=_role_canonical_relative(
                         role,
-                        geometry.component,
+                        geometry.frame_spec,
                         geometry.width_state,
                     ),
                 )
             )
     return tuple(
-        sorted(values, key=lambda item: (item.role.role_index, item.vote_id))
+        sorted(values, key=lambda item: (item.role.role_index, item.proposal_id))
     )
 
 
@@ -422,7 +439,7 @@ def reference_role_transition_ids(
 ) -> tuple[ObservationId, ...]:
     """Bind one unambiguous measured transition per registered trace.
 
-    The physical template reference proposes where to look inside the already
+    The physical cross_proposal reference proposes where to look inside the already
     completed query.  It does not create evidence: a trace is omitted whenever
     its two nearest transitions are indistinguishable at the frozen geometry
     equivalence scale.
@@ -485,7 +502,7 @@ def _observation_coordinate_interval(
 
 
 def _reference_role_run(
-    lane: TemplateLaneInput,
+    lane: LaneObservationInput,
     *,
     role: BoundaryRole,
     measurement_set: PhotoBoundaryMeasurementSet,
@@ -498,7 +515,7 @@ def _reference_role_run(
         target_coordinate_px=target_coordinate_px,
         equivalence_px=equivalence_px,
     )
-    observation = fit_template_bound_boundary_observation(
+    observation = fit_format_bound_boundary_observation(
         measurement_set,
         transition_ids=transition_ids,
         role=role,
@@ -571,7 +588,7 @@ def _reference_role_run(
 
 
 def _inlier_profile_run(
-    lane: TemplateLaneInput,
+    lane: LaneObservationInput,
     run: ProfileRun,
     observation: PhotoBoundaryObservation,
     measurement_set: PhotoBoundaryMeasurementSet,
@@ -623,13 +640,13 @@ def _inlier_profile_run(
     )
 
 
-def _reference_pair_height_template(
-    lane: TemplateLaneInput,
-    geometry: SourceFrameGeometry,
+def _reference_pair_cross_proposal(
+    lane: LaneObservationInput,
+    geometry: SourceScanGeometry,
     broad_height: FiniteInterval,
     *,
     support_interval_px: FiniteInterval | None = None,
-) -> ProvisionalHeightTemplate | None:
+) -> CrossAxisProposal | None:
     height = geometry.height_state.extent_projection_px()
     center = lane.height_authority_px.center
     equivalence_px = (
@@ -687,28 +704,28 @@ def _reference_pair_height_template(
         > PHOTO_BOUNDARY_MEASUREMENT_SPEC.maximum_shared_direction_hull_degrees
     ):
         return None
-    return ProvisionalHeightTemplate(
-        template_id=_stable_id(
-            "reference-pair-height-template",
-            geometry.component.component_id,
+    return CrossAxisProposal(
+        cross_proposal_id=_stable_id(
+            "reference-pair-height-cross_proposal",
+            geometry.frame_spec.frame_spec_id,
             top[0].run_id,
             bottom[0].run_id,
         ),
-        component_id=geometry.component.component_id,
+        frame_spec_id=geometry.frame_spec.frame_spec_id,
         origin_interval_px=origin,
         observed_runs=(top[0], bottom[0]),
         raw_observations=(top[1], bottom[1]),
     )
 
 
-def _template_bound_opposite_run(
-    lane: TemplateLaneInput,
-    geometry: SourceFrameGeometry,
+def _format_bound_opposite_run(
+    lane: LaneObservationInput,
+    geometry: SourceScanGeometry,
     top_run: ProfileRun,
     top_observation: PhotoBoundaryObservation,
     support_interval_px: FiniteInterval | None = None,
 ) -> ProfileRun | None:
-    """Bind bottom transitions through the top edge and height template.
+    """Bind bottom transitions through the top edge and height cross_proposal.
 
     The bottom query is registered and executed before this function.  This
     stage only groups its existing transitions against one fixed physical
@@ -834,8 +851,8 @@ def _template_bound_opposite_run(
     continuity = continuous_trace_support_fraction(queried, traces)
     return ProfileRun(
         run_id=_stable_id(
-            "template-bound-opposite-run",
-            geometry.component.component_id,
+            "cross_proposal-bound-opposite-run",
+            geometry.frame_spec.frame_spec_id,
             top_observation.observation_id,
             *(str(item.transition_id) for item in selected),
         ),
@@ -873,18 +890,18 @@ def _cross_pair_seed_qualified(run: ProfileRun) -> bool:
     )
 
 
-def provisional_height_templates(
-    lane: TemplateLaneInput,
-    geometry: SourceFrameGeometry,
+def build_cross_axis_proposals(
+    lane: LaneObservationInput,
+    geometry: SourceScanGeometry,
     *,
     support_interval_px: FiniteInterval | None = None,
-) -> tuple[ProvisionalHeightTemplate, ...]:
+) -> tuple[CrossAxisProposal, ...]:
     allowance_mm = PHOTO_BOUNDARY_MEASUREMENT_SPEC.dimension_search_allowance_mm
     scale = geometry.height_state.scale_authority
     broad_height = FiniteInterval(
-        max(0.0, geometry.component.frame_height_mm - allowance_mm)
+        max(0.0, geometry.frame_spec.frame_height_mm - allowance_mm)
         * scale.minimum,
-        (geometry.component.frame_height_mm + allowance_mm) * scale.maximum,
+        (geometry.frame_spec.frame_height_mm + allowance_mm) * scale.maximum,
     )
     fit_cache: dict[tuple[BoundaryRole, str], PhotoBoundaryObservation | None] = {}
     fitted: dict[
@@ -907,7 +924,7 @@ def provisional_height_templates(
                 continue
             key = (role, run.run_id)
             if key not in fit_cache:
-                fit_cache[key] = fit_template_bound_boundary_observation(
+                fit_cache[key] = fit_format_bound_boundary_observation(
                     measurement_set,
                     transition_ids=run.transition_ids,
                     role=role,
@@ -939,7 +956,7 @@ def provisional_height_templates(
     for top_run, top_observation, _top_origin in tuple(
         fitted[BoundaryRole.TOP]
     ):
-        bottom_run = _template_bound_opposite_run(
+        bottom_run = _format_bound_opposite_run(
             lane,
             geometry,
             top_run,
@@ -948,7 +965,7 @@ def provisional_height_templates(
         )
         if bottom_run is None:
             continue
-        bottom_observation = fit_template_bound_boundary_observation(
+        bottom_observation = fit_format_bound_boundary_observation(
             lane.bottom_measurement_set,
             transition_ids=bottom_run.transition_ids,
             role=BoundaryRole.BOTTOM,
@@ -984,7 +1001,7 @@ def provisional_height_templates(
             key=lambda item: (item[2].center, item[0].run_id)
         )
 
-    templates: list[ProvisionalHeightTemplate] = []
+    cross_proposals: list[CrossAxisProposal] = []
     bottom_values = fitted[BoundaryRole.BOTTOM]
     bottom_centers = tuple(item[2].center for item in bottom_values)
     maximum_bottom_half_width = max(
@@ -1005,15 +1022,15 @@ def provisional_height_templates(
             origin = _intersection(top_origin, bottom[2])
             if origin is None:
                 continue
-            templates.append(
-                ProvisionalHeightTemplate(
-                    template_id=_stable_id(
-                        "provisional-height-template",
-                        geometry.component.component_id,
+            cross_proposals.append(
+                CrossAxisProposal(
+                    cross_proposal_id=_stable_id(
+                        "provisional-height-cross_proposal",
+                        geometry.frame_spec.frame_spec_id,
                         top[0].run_id,
                         bottom[0].run_id,
                     ),
-                    component_id=geometry.component.component_id,
+                    frame_spec_id=geometry.frame_spec.frame_spec_id,
                     origin_interval_px=origin,
                     observed_runs=(top[0], bottom[0]),
                     raw_observations=(top[1], bottom[1]),
@@ -1023,101 +1040,76 @@ def provisional_height_templates(
         for run, observation, origin in values:
             if not run.anchor_qualified_for(run.role_hint):
                 continue
-            templates.append(
-                ProvisionalHeightTemplate(
-                    template_id=_stable_id(
-                        "provisional-height-template",
-                        geometry.component.component_id,
+            cross_proposals.append(
+                CrossAxisProposal(
+                    cross_proposal_id=_stable_id(
+                        "provisional-height-cross_proposal",
+                        geometry.frame_spec.frame_spec_id,
                         run.run_id,
                     ),
-                    component_id=geometry.component.component_id,
+                    frame_spec_id=geometry.frame_spec.frame_spec_id,
                     origin_interval_px=origin,
                     observed_runs=(run,),
                     raw_observations=(observation,),
                 )
             )
-    if not templates:
-        reference_pair = _reference_pair_height_template(
+    if not cross_proposals:
+        reference_pair = _reference_pair_cross_proposal(
             lane,
             geometry,
             broad_height,
             support_interval_px=support_interval_px,
         )
         if reference_pair is not None:
-            templates.append(reference_pair)
-    unique = {item.template_id: item for item in templates}
+            cross_proposals.append(reference_pair)
+    unique = {item.cross_proposal_id: item for item in cross_proposals}
     return tuple(unique[key] for key in sorted(unique))
 
 
-def build_lane_template_proposal(
-    lane: TemplateLaneInput,
-    components: tuple[FramePhysicalSpec, ...],
-) -> TemplateLaneProposal:
-    component_proposals: list[ComponentTemplateProposal] = []
-    all_height_templates: list[ProvisionalHeightTemplate] = []
-    for component in components:
-        geometry = SourceFrameGeometry.create(
-            component,
-            width_scale_px_per_mm=lane.width_scale_px_per_mm,
-            height_scale_px_per_mm=lane.height_scale_px_per_mm,
-        )
-        roles = ordered_template_roles(lane.output_slot_count)
-        votes = _sequence_phase_votes(lane, geometry, roles)
-        groups, work = build_phase_groups(
-            votes,
-            roles,
-            frame_width_lower_px=(
-                geometry.width_state.extent_projection_px().minimum
+def build_lane_physical_proposals(
+    lane: LaneObservationInput,
+    frame_spec: FramePhysicalSpec,
+) -> LanePhysicalProposals:
+    geometry = SourceScanGeometry.create(
+        frame_spec,
+        width_scale_px_per_mm=lane.width_scale_px_per_mm,
+        height_scale_px_per_mm=lane.height_scale_px_per_mm,
+    )
+    roles = ordered_ordinal_roles(lane.output_slot_count)
+    proposals = _sequence_role_proposals(lane, geometry, roles)
+    groups, work = build_sequence_groups(
+        proposals,
+        roles,
+        frame_width_lower_px=geometry.width_state.extent_projection_px().minimum,
+    )
+    cross_proposals = build_cross_axis_proposals(lane, geometry)
+    frame_proposals = (
+        ()
+        if not groups
+        else (
+            FrameChainProposals(
+                frame_spec=frame_spec,
+                initial_source_scan_geometry=geometry,
+                roles=roles,
+                role_proposals=proposals,
+                sequence_groups=groups,
+                registered_sequence_role_queries=(),
+                cross_proposals=cross_proposals,
+                grouping_work=work,
             ),
         )
-        if not groups:
-            continue
-        ambiguous_vote_ids = tuple(
-            sorted(
-                {
-                    vote_id
-                    for group in groups
-                    for vote_id in group.ambiguous_vote_ids
-                }
-            )
-        )
-        heights = provisional_height_templates(lane, geometry)
-        all_height_templates.extend(heights)
-        component_proposal = ComponentTemplateProposal(
-            component=component,
-            initial_source_geometry=geometry,
-            roles=roles,
-            phase_votes=votes,
-            phase_groups=groups,
-            enhanced_phase_queries=tuple(
-                EnhancedPhaseQuery(
-                    query_id=_stable_id(
-                        "enhanced-phase-query",
-                        component.component_id,
-                        vote_id,
-                    ),
-                    vote_id=vote_id,
-                )
-                for vote_id in ambiguous_vote_ids
-            ),
-            registered_sequence_role_queries=(),
-            height_templates=heights,
-            grouping_work=work,
-        )
-        component_proposals.append(component_proposal)
+    )
     observations = tuple(
         {
             str(observation.observation_id): observation
-            for template in all_height_templates
-            for observation in template.raw_observations
+            for cross_proposal in cross_proposals
+            for observation in cross_proposal.raw_observations
         }.values()
     )
-    directions = _template_bound_direction_classes(
-        tuple(all_height_templates)
-    )
-    return TemplateLaneProposal(
+    directions = _physical_bound_direction_classes(cross_proposals)
+    return LanePhysicalProposals(
         lane=lane,
-        components=tuple(component_proposals),
+        frame_proposals=frame_proposals,
         raw_top_bottom_observations=tuple(
             sorted(observations, key=lambda item: str(item.observation_id))
         ),
@@ -1128,7 +1120,7 @@ def build_lane_template_proposal(
 
 
 def shared_source_direction_classes(
-    lane_proposals: tuple[TemplateLaneProposal, ...],
+    lane_proposals: tuple[LanePhysicalProposals, ...],
 ) -> tuple[SharedStripDirection, ...]:
     if not lane_proposals:
         return ()
@@ -1156,7 +1148,9 @@ def shared_source_direction_classes(
         for lane in lane_proposals
         for direction in lane.direction_classes
     )
-    if any(len(lane.direction_classes) > 1 for lane in lane_proposals):
+    if len(lane_proposals) > 1 or any(
+        len(lane.direction_classes) > 1 for lane in lane_proposals
+    ):
         hull = FiniteInterval(
             min(
                 direction.full_angle_interval_degrees.minimum
@@ -1203,6 +1197,32 @@ def shared_source_direction_classes(
         )
     resolution = resolve_shared_strip_direction(observations)
     return () if resolution.direction is None else (resolution.direction,)
+
+
+def lane_directions_within_source_family(
+    lane_proposals: tuple[LanePhysicalProposals, ...],
+    source_direction: SharedStripDirection,
+) -> tuple[SharedStripDirection, ...]:
+    lane_directions: list[SharedStripDirection] = []
+    for lane in lane_proposals:
+        compatible = tuple(
+            direction
+            for direction in lane.direction_classes
+            if _intersection(
+                direction.full_angle_interval_degrees,
+                source_direction.full_angle_interval_degrees,
+            )
+            is not None
+            and abs(
+                direction.canonical_angle_degrees
+                - source_direction.canonical_angle_degrees
+            )
+            <= PHOTO_BOUNDARY_MEASUREMENT_SPEC.maximum_shared_direction_hull_degrees
+        )
+        if len(compatible) != 1:
+            return ()
+        lane_directions.append(compatible[0])
+    return tuple(lane_directions)
 
 
 @dataclass(frozen=True)
@@ -1323,7 +1343,7 @@ def _background_preference(run: ProfileRun, role: BoundaryRole) -> float:
 
 
 def _registered_sequence_transition_index(
-    lane: TemplateLaneInput,
+    lane: LaneObservationInput,
     direction: SharedStripDirection,
 ) -> dict[int, tuple[tuple[float, PhotoBoundaryTransition], ...]]:
     sequence_query_ids = {
@@ -1353,22 +1373,22 @@ def _registered_sequence_transition_index(
 
 
 def _register_sequence_role_queries(
-    proposal: TemplateLaneProposal,
-) -> TemplateLaneProposal:
-    components: list[ComponentTemplateProposal] = []
+    proposal: LanePhysicalProposals,
+) -> LanePhysicalProposals:
+    frame_specs: list[FrameChainProposals] = []
     search_allowance_px = (
         PHOTO_BOUNDARY_MEASUREMENT_SPEC.center_offset_allowance_mm
         * proposal.lane.width_scale_px_per_mm.maximum
     )
-    for component in proposal.components:
+    for frame_spec in proposal.frame_proposals:
         queries = tuple(
             RegisteredSequenceRoleQuery(
                 query_id=_stable_id(
                     "registered-sequence-role-query",
-                    seed.seed_id,
+                    seed.chain_proposal_id,
                     role.role_index,
                 ),
-                seed_id=seed.seed_id,
+                chain_proposal_id=seed.chain_proposal_id,
                 role=role,
                 target_interval_px=_add(
                     _add(
@@ -1376,8 +1396,8 @@ def _register_sequence_role_queries(
                             seed.base_phase_interval_px,
                             _role_relative_projection(
                                 role,
-                                component.component,
-                                component.initial_source_geometry.width_state,
+                                frame_spec.frame_spec,
+                                frame_spec.initial_source_scan_geometry.width_state,
                             ),
                         ),
                         local_advance_prefix(
@@ -1391,20 +1411,20 @@ def _register_sequence_role_queries(
                     ),
                 ),
             )
-            for seed in build_template_sequence_seeds(component)
-            for role in component.roles
+            for seed in build_sequence_chain_proposals(frame_spec)
+            for role in frame_spec.roles
         )
-        components.append(
+        frame_specs.append(
             replace(
-                component,
+                frame_spec,
                 registered_sequence_role_queries=queries,
             )
         )
-    return replace(proposal, components=tuple(components))
+    return replace(proposal, frame_proposals=tuple(frame_specs))
 
 
 def _registered_sequence_role_run(
-    lane: TemplateLaneInput,
+    lane: LaneObservationInput,
     query: RegisteredSequenceRoleQuery,
     direction: SharedStripDirection,
     transition_index: dict[
@@ -1412,7 +1432,7 @@ def _registered_sequence_role_run(
         tuple[tuple[float, PhotoBoundaryTransition], ...],
     ],
 ) -> ProfileRun | None:
-    """Bind an existing registered transition field to one template role."""
+    """Bind an existing registered transition field to one cross_proposal role."""
 
     slope_interval = source_sequence_axis_slope_interval(
         direction,
@@ -1529,25 +1549,22 @@ def _registered_sequence_role_run(
 
 
 def _bind_registered_sequence_roles(
-    proposal: TemplateLaneProposal,
+    proposal: LanePhysicalProposals,
     direction: SharedStripDirection,
-) -> tuple[TemplateLaneProposal, dict[str, ProfileRun], int]:
+) -> tuple[LanePhysicalProposals, dict[str, ProfileRun], int]:
     queries = tuple(
         query
-        for component in proposal.components
-        for query in component.registered_sequence_role_queries
+        for frame_spec in proposal.frame_proposals
+        for query in frame_spec.registered_sequence_role_queries
     )
     if not queries:
         return proposal, {}, 0
-    registry = EnhancedQueryRegistry(tuple(query.query_id for query in queries))
     transition_index = _registered_sequence_transition_index(
         proposal.lane,
         direction,
     )
     runs: dict[str, ProfileRun] = {}
     for query in queries:
-        if not registry.consume(query.query_id):
-            raise ValueError("registered sequence role query executed twice")
         run = _registered_sequence_role_run(
             proposal.lane,
             query,
@@ -1588,27 +1605,27 @@ def _bind_registered_sequence_roles(
     return (
         replace(proposal, lane=replace(proposal.lane, sequence_profile=profile)),
         runs,
-        registry.consumed_count,
+        len(queries),
     )
 
 
 def _registered_pair_seeds(
-    lane: TemplateLaneInput,
-    component: ComponentTemplateProposal,
-    seed: TemplateSequenceSeed,
+    lane: LaneObservationInput,
+    frame_spec: FrameChainProposals,
+    seed: SequenceChainProposal,
     direction: SharedStripDirection,
     registered_runs: dict[str, ProfileRun],
-) -> tuple[TemplateSequenceSeed, ...]:
+) -> tuple[SequenceChainProposal, ...]:
     query_by_role = {
         query.role.role_index: query
-        for query in component.registered_sequence_role_queries
-        if query.seed_id == seed.seed_id and query.query_id in registered_runs
+        for query in frame_spec.registered_sequence_role_queries
+        if query.chain_proposal_id == seed.chain_proposal_id and query.query_id in registered_runs
     }
-    values: list[TemplateSequenceSeed] = []
-    for ordinal in range(1, len(component.roles) // 2 + 1):
+    values: list[SequenceChainProposal] = []
+    for ordinal in range(1, len(frame_spec.roles) // 2 + 1):
         roles = (
-            component.roles[(ordinal - 1) * 2],
-            component.roles[(ordinal - 1) * 2 + 1],
+            frame_spec.roles[(ordinal - 1) * 2],
+            frame_spec.roles[(ordinal - 1) * 2 + 1],
         )
         queries = tuple(query_by_role.get(role.role_index) for role in roles)
         if any(query is None for query in queries):
@@ -1633,12 +1650,12 @@ def _registered_pair_seeds(
         if (
             _intersection(
                 observed_width,
-                component.initial_source_geometry.width_state.extent_projection_px(),
+                frame_spec.initial_source_scan_geometry.width_state.extent_projection_px(),
             )
             is None
         ):
             continue
-        votes: list[PhaseVote] = []
+        proposals: list[SequenceRoleProposal] = []
         phase_intervals: list[FiniteInterval] = [seed.base_phase_interval_px]
         for role, run in zip(roles, runs, strict=True):
             prefix, _canonical_prefix = local_advance_prefix(
@@ -1650,18 +1667,18 @@ def _registered_pair_seeds(
                     run.coordinate_interval_px,
                     _role_relative_projection(
                         role,
-                        component.component,
-                        component.initial_source_geometry.width_state,
+                        frame_spec.frame_spec,
+                        frame_spec.initial_source_scan_geometry.width_state,
                     ),
                 ),
                 prefix,
             )
             phase_intervals.append(phase)
-            votes.append(
-                PhaseVote(
-                    vote_id=_stable_id(
-                        "registered-sequence-role-vote",
-                        seed.seed_id,
+            proposals.append(
+                SequenceRoleProposal(
+                    proposal_id=_stable_id(
+                        "registered-sequence-role-proposal",
+                        seed.chain_proposal_id,
                         role.role_index,
                         run.run_id,
                     ),
@@ -1669,10 +1686,10 @@ def _registered_pair_seeds(
                     role=role,
                     phase_interval_px=phase,
                     transition_ids=run.transition_ids,
-                    template_coordinate_px=_role_canonical_relative(
+                    role_coordinate_px=_role_canonical_relative(
                         role,
-                        component.component,
-                        component.initial_source_geometry.width_state,
+                        frame_spec.frame_spec,
+                        frame_spec.initial_source_scan_geometry.width_state,
                     ),
                 )
             )
@@ -1680,9 +1697,9 @@ def _registered_pair_seeds(
         if phase is None:
             continue
         relation_candidates: list[LocalAdvanceRelation] = []
-        original_evidence = _materialized_vote_evidence(
+        original_evidence = _materialized_role_evidence(
             lane,
-            seed.votes,
+            seed.role_proposals,
             direction,
         )
         for observation in original_evidence:
@@ -1704,9 +1721,21 @@ def _registered_pair_seeds(
                 )
                 relation_ordinal = ordinal
             observed_gap = _subtract(advance, observed_width)
+            combined_evidence = _materialized_role_evidence(
+                lane,
+                tuple((*seed.role_proposals, *proposals)),
+                direction,
+            )
+            gap_model = _gap_model_from_bound_roles(
+                frame_spec,
+                frame_spec.initial_source_scan_geometry,
+                lane.lane_id,
+                combined_evidence,
+            )
             delta = local_advance_delta_from_observed_gap(
                 observed_gap,
-                component.initial_source_geometry,
+                frame_spec.initial_source_scan_geometry,
+                gap_model,
             )
             if delta is None:
                 continue
@@ -1716,6 +1745,8 @@ def _registered_pair_seeds(
                     kind=(
                         LocalAdvanceKind.NOMINAL
                         if delta == FiniteInterval.exact(0.0)
+                        else LocalAdvanceKind.OBSERVED_UNCLASSIFIED
+                        if gap_model.state != EvidenceState.SUPPORTED
                         else LocalAdvanceKind.WIDE
                         if delta.center > 0.0
                         else LocalAdvanceKind.NARROW
@@ -1748,24 +1779,24 @@ def _registered_pair_seeds(
                 (relation,),
             )[0]
         combined = {
-            vote.vote_id: vote for vote in (*seed.votes, *votes)
+            proposal.proposal_id: proposal for proposal in (*seed.role_proposals, *proposals)
         }
         local = {
-            vote.vote_id: vote
-            for vote in (*seed.local_advance_votes, *votes)
+            proposal.proposal_id: proposal
+            for proposal in (*seed.local_advance_proposals, *proposals)
         }
         values.append(
             replace(
                 seed,
-                seed_id=_stable_id(
+                chain_proposal_id=_stable_id(
                     "registered-pair-seed",
-                    seed.seed_id,
+                    seed.chain_proposal_id,
                     ordinal,
-                    *(vote.vote_id for vote in votes),
+                    *(proposal.proposal_id for proposal in proposals),
                 ),
                 base_phase_interval_px=phase,
-                votes=tuple(combined[key] for key in sorted(combined)),
-                local_advance_votes=tuple(
+                role_proposals=tuple(combined[key] for key in sorted(combined)),
+                local_advance_proposals=tuple(
                     local[key] for key in sorted(local)
                 ),
                 local_advance_relations=tuple(relations),
@@ -1775,185 +1806,37 @@ def _registered_pair_seeds(
     return tuple(values) if values else (seed,)
 
 
-def _component_materialization_seeds(
-    proposal: TemplateLaneProposal,
-    component: ComponentTemplateProposal,
+def _frame_spec_materialization_seeds(
+    proposal: LanePhysicalProposals,
+    frame_spec: FrameChainProposals,
     direction: SharedStripDirection,
     registered_runs: dict[str, ProfileRun],
-) -> tuple[TemplateSequenceSeed, ...]:
+) -> tuple[SequenceChainProposal, ...]:
     values = tuple(
-        enhanced
-        for seed in build_template_sequence_seeds(component)
-        for enhanced in _registered_pair_seeds(
+        refined_seed
+        for seed in build_sequence_chain_proposals(frame_spec)
+        for refined_seed in _registered_pair_seeds(
             proposal.lane,
-            component,
+            frame_spec,
             seed,
             direction,
             registered_runs,
         )
     )
-    unique = {item.seed_id: item for item in values}
+    unique = {item.chain_proposal_id: item for item in values}
     return tuple(unique[key] for key in sorted(unique))
 
 
-def _ambiguous_singleton_group(
-    group: TemplatePhaseGroup,
-    vote_id: str,
-) -> bool:
-    return (
-        len(group.votes) == 1
-        and group.votes[0].vote_id == vote_id
-        and vote_id in group.ambiguous_vote_ids
-    )
-
-
-def _refine_component_phase_groups(
-    lane: TemplateLaneInput,
-    proposal: ComponentTemplateProposal,
-    direction: SharedStripDirection,
-) -> tuple[ComponentTemplateProposal, int]:
-    """Resolve pre-registered ambiguous votes against existing groups only."""
-
-    queries = proposal.enhanced_phase_queries
-    if not queries:
-        return proposal, 0
-    registry = EnhancedQueryRegistry(tuple(item.query_id for item in queries))
-    vote_by_id = {item.vote_id: item for item in proposal.phase_votes}
-    run_by_id = {item.run_id: item for item in lane.sequence_profile.runs}
-    assignments: dict[str, list[PhaseVote]] = {}
-    for query in queries:
-        if not registry.consume(query.query_id):
-            raise ValueError("enhanced phase query executed more than once")
-        vote = vote_by_id[query.vote_id]
-        run = run_by_id[vote.run_id]
-        projection = _project_profile_run(
-            run,
-            transitions=lane.transition_by_id,
-            direction=direction,
-            boundary_axis=lane.width_axis,
-            source_width_axis=lane.width_axis,
-            reference_trace_px=lane.height_authority_px.center,
-            boundary_scale_px_per_mm=lane.width_scale_px_per_mm,
-        )
-        relative = _role_relative_projection(
-            vote.role,
-            proposal.component,
-            proposal.initial_source_geometry.width_state,
-        )
-        refined_vote = replace(
-            vote,
-            phase_interval_px=_subtract(
-                projection.fit_position_interval_px,
-                relative,
-            ),
-        )
-        targets = tuple(
-            group
-            for group in proposal.phase_groups
-            if not _ambiguous_singleton_group(group, vote.vote_id)
-            and all(
-                existing.run_id != vote.run_id
-                and existing.role.role_index != vote.role.role_index
-                and set(map(str, existing.transition_ids)).isdisjoint(
-                    map(str, vote.transition_ids)
-                )
-                for existing in group.votes
-            )
-            and _intersection(
-                group.phase_interval_px,
-                refined_vote.phase_interval_px,
-            )
-            is not None
-        )
-        if len(targets) == 1:
-            assignments.setdefault(targets[0].group_id, []).append(
-                refined_vote
-            )
-
-    accepted: dict[str, tuple[PhaseVote, ...]] = {}
-    for group in proposal.phase_groups:
-        additions = tuple(assignments.get(group.group_id, ()))
-        if not additions:
-            continue
-        combined = tuple((*group.votes, *additions))
-        if _common(tuple(item.phase_interval_px for item in combined)) is not None:
-            accepted[group.group_id] = additions
-    accepted_vote_ids = {
-        vote.vote_id for additions in accepted.values() for vote in additions
-    }
-    refined_groups: list[TemplatePhaseGroup] = []
-    frame_width_lower = (
-        proposal.initial_source_geometry.width_state.extent_projection_px().minimum
-    )
-    for group in proposal.phase_groups:
-        if any(
-            _ambiguous_singleton_group(group, vote_id)
-            for vote_id in accepted_vote_ids
-        ):
-            continue
-        additions = accepted.get(group.group_id, ())
-        if not additions:
-            refined_groups.append(group)
-            continue
-        combined = tuple(
-            sorted(
-                (*group.votes, *additions),
-                key=lambda item: (item.role.role_index, item.vote_id),
-            )
-        )
-        phase = _common(tuple(item.phase_interval_px for item in combined))
-        if phase is None:
-            raise ValueError("accepted enhanced phase evidence lost intersection")
-        refined_groups.append(
-            TemplatePhaseGroup(
-                group_id=_stable_id(
-                    "enhanced-template-phase-group",
-                    group.group_id,
-                    *(item.vote_id for item in additions),
-                    phase.minimum,
-                    phase.maximum,
-                ),
-                phase_interval_px=phase,
-                votes=combined,
-                ambiguous_vote_ids=tuple(
-                    vote_id
-                    for vote_id in group.ambiguous_vote_ids
-                    if vote_id not in accepted_vote_ids
-                ),
-                exclusion_authorized=group_support_exclusion_authorized(
-                    role_coordinates_px=tuple(
-                        item.template_coordinate_px for item in combined
-                    ),
-                    role_identities=tuple(
-                        (item.role.lane_ordinal, item.role.role)
-                        for item in combined
-                    ),
-                    transition_id_sets=tuple(
-                        item.transition_ids for item in combined
-                    ),
-                    frame_width_lower_px=frame_width_lower,
-                ),
-            )
-        )
-    unique = {item.group_id: item for item in refined_groups}
-    return (
-        replace(
-            proposal,
-            phase_groups=tuple(unique[key] for key in sorted(unique)),
-        ),
-        registry.consumed_count,
-    )
-
-
-def _materialized_vote_evidence(
-    lane: TemplateLaneInput,
-    votes: tuple[PhaseVote, ...],
+def _materialized_role_evidence(
+    lane: LaneObservationInput,
+    proposals: tuple[SequenceRoleProposal, ...],
     direction: SharedStripDirection,
 ) -> tuple[BoundRoleEvidence, ...]:
     run_by_id = {run.run_id: run for run in lane.sequence_profile.runs}
+    edge_by_run = {edge.run_id: edge for edge in lane.sequence_edges}
     values: list[BoundRoleEvidence] = []
-    for vote in votes:
-        run = run_by_id[vote.run_id]
+    for proposal in proposals:
+        run = run_by_id[proposal.run_id]
         projection = _project_profile_run(
             run,
             transitions=lane.transition_by_id,
@@ -1965,8 +1848,13 @@ def _materialized_vote_evidence(
         )
         values.append(
             BoundRoleEvidence(
-                role=vote.role,
+                role=proposal.role,
                 run_id=run.run_id,
+                observation_id=(
+                    None
+                    if run.run_id not in edge_by_run
+                    else edge_by_run[run.run_id].observation_id
+                ),
                 canonical_position_px=projection.canonical_position_px,
                 fit_position_interval_px=projection.fit_position_interval_px,
                 full_position_interval_px=projection.full_position_interval_px,
@@ -1976,7 +1864,7 @@ def _materialized_vote_evidence(
                 fit_residual_px=run.fit_residual_px,
                 background_preference=_background_preference(
                     run,
-                    vote.role.role,
+                    proposal.role.role,
                 ),
             )
         )
@@ -2036,25 +1924,25 @@ def _common_extent_constraint(
 
 
 def _refine_source_geometry(
-    lane: TemplateLaneInput,
-    proposal: ComponentTemplateProposal,
+    lane: LaneObservationInput,
+    proposal: FrameChainProposals,
     direction: SharedStripDirection,
-    compatible_heights: tuple[ProvisionalHeightTemplate, ...],
+    compatible_cross_proposals: tuple[CrossAxisProposal, ...],
     *,
-    sequence_seeds: tuple[TemplateSequenceSeed, ...] | None = None,
-) -> SourceFrameGeometry:
-    geometry = proposal.initial_source_geometry
+    sequence_seeds: tuple[SequenceChainProposal, ...] | None = None,
+) -> SourceScanGeometry:
+    geometry = proposal.initial_source_scan_geometry
     width_state = geometry.width_state
     for seed in (
-        build_template_sequence_seeds(proposal)
+        build_sequence_chain_proposals(proposal)
         if sequence_seeds is None
         else sequence_seeds
     ):
         if not seed.exclusion_authorized:
             continue
-        evidence = _materialized_vote_evidence(
+        evidence = _materialized_role_evidence(
             lane,
-            seed.votes,
+            seed.role_proposals,
             direction,
         )
         ordered = tuple(
@@ -2069,12 +1957,12 @@ def _refine_source_geometry(
                     continue
                 left_template = _role_canonical_relative(
                     left.role,
-                    proposal.component,
+                    proposal.frame_spec,
                     width_state,
                 )
                 right_template = _role_canonical_relative(
                     right.role,
-                    proposal.component,
+                    proposal.frame_spec,
                     width_state,
                 )
                 if right_template - left_template + 1.0e-9 < frame_width_lower:
@@ -2096,11 +1984,11 @@ def _refine_source_geometry(
                 )
                 left_q, left_scale = _role_affine_coefficients(
                     left.role,
-                    proposal.component,
+                    proposal.frame_spec,
                 )
                 right_q, right_scale = _role_affine_coefficients(
                     right.role,
-                    proposal.component,
+                    proposal.frame_spec,
                 )
                 observation_ids = tuple(
                     ObservationId(value)
@@ -2130,7 +2018,7 @@ def _refine_source_geometry(
                         observation.fit_position_interval_px,
                         _role_relative_projection(
                             observation.role,
-                            proposal.component,
+                            proposal.frame_spec,
                             width_state,
                         ),
                     ),
@@ -2161,7 +2049,7 @@ def _refine_source_geometry(
         )
 
         def unique_registered_run(
-            role: TemplateRole,
+            role: OrdinalBoundaryRole,
         ) -> tuple[ProfileRun, _BoundRunProjection] | None:
             prefix, _ = local_advance_prefix(
                 seed.local_advance_relations,
@@ -2172,7 +2060,7 @@ def _refine_source_geometry(
                     phase,
                     _role_relative_projection(
                         role,
-                        proposal.component,
+                        proposal.frame_spec,
                         width_state,
                     ),
                 ),
@@ -2195,21 +2083,9 @@ def _refine_source_geometry(
                 binding_domain.maximum + maximum_half_width,
             )
             candidates: list[tuple[ProfileRun, _BoundRunProjection]] = []
-            gap_domain = _gap_observation_domain_mm(proposal.component)
-            allowed_gap_values = tuple(
-                gap * scale
-                for gap in (
-                    gap_domain.minimum,
-                    gap_domain.maximum,
-                )
-                for scale in (
-                    width_state.feasible_scale_interval().minimum,
-                    width_state.feasible_scale_interval().maximum,
-                )
-            )
             allowed_gap = FiniteInterval(
-                min(allowed_gap_values),
-                max(allowed_gap_values),
+                -width_state.extent_projection_px().maximum,
+                lane.width_authority_px.width,
             )
             for run_index in range(start, stop):
                 run = indexed_runs[run_index]
@@ -2285,12 +2161,12 @@ def _refine_source_geometry(
                     FiniteInterval(
                         observed_width.minimum
                         / (
-                            proposal.component.frame_width_mm
+                            proposal.frame_spec.frame_width_mm
                             * (1.0 + width_tolerance)
                         ),
                         observed_width.maximum
                         / (
-                            proposal.component.frame_width_mm
+                            proposal.frame_spec.frame_width_mm
                             * (1.0 - width_tolerance)
                         ),
                     ),
@@ -2304,10 +2180,10 @@ def _refine_source_geometry(
     height_constraints: list[
         tuple[FiniteInterval, tuple[ObservationId, ...]]
     ] = []
-    for template in compatible_heights:
+    for cross_proposal in compatible_cross_proposals:
         template_runs = {
             run.role_hint: run
-            for run in template.observed_runs
+            for run in cross_proposal.observed_runs
         }
         if set(template_runs) != {BoundaryRole.TOP, BoundaryRole.BOTTOM}:
             continue
@@ -2394,16 +2270,16 @@ def _refine_source_geometry(
             height_common[0],
             observation_ids=height_common[1],
         )
-    return SourceFrameGeometry(
+    return SourceScanGeometry(
         geometry_id=_stable_id(
-            "source-frame-geometry",
-            proposal.component.component_id,
+            "source-scan-geometry",
+            proposal.frame_spec.frame_spec_id,
             width_state.vertices,
             height_state.vertices,
             width_state.observation_ids,
             height_state.observation_ids,
         ),
-        component=proposal.component,
+        frame_spec=proposal.frame_spec,
         width_state=width_state,
         height_state=height_state,
     )
@@ -2418,31 +2294,53 @@ def _interval_sum(values: tuple[FiniteInterval, ...]) -> FiniteInterval:
 
 def local_advance_delta_from_observed_gap(
     observed_gap_px: FiniteInterval,
-    geometry: SourceFrameGeometry,
+    geometry: SourceScanGeometry,
+    gap_model: LaneGapModel,
 ) -> FiniteInterval | None:
     """Constrain one observed gap by physical ordering, not a fixed gap."""
 
-    scale = geometry.width_state.feasible_scale_interval()
-    gap_mm = _gap_observation_domain_mm(geometry.component)
-    allowed_products = tuple(
-        gap * pixels_per_mm
-        for gap in (gap_mm.minimum, gap_mm.maximum)
-        for pixels_per_mm in (scale.minimum, scale.maximum)
-    )
-    allowed_gap_px = FiniteInterval(
-        min(allowed_products),
-        max(allowed_products),
-    )
+    width = geometry.width_state.extent_projection_px()
+    allowed_gap_px = FiniteInterval(-width.maximum, observed_gap_px.maximum)
     constrained_gap = _intersection(observed_gap_px, allowed_gap_px)
     if constrained_gap is None:
         return None
-    nominal_gap_px = geometry.width_state.project_affine(
-        q_coefficient=0.0,
-        scale_coefficient=_gap_seed_mm(geometry.component),
+    nominal_gap_px = (
+        gap_model.gap_interval_px
+        if gap_model.state == EvidenceState.SUPPORTED
+        and gap_model.gap_interval_px is not None
+        else geometry.width_state.project_affine(
+            q_coefficient=0.0,
+            scale_coefficient=_gap_seed_mm(geometry.frame_spec),
+        )
     )
     if _intersection(constrained_gap, nominal_gap_px) is not None:
         return FiniteInterval.exact(0.0)
     return _subtract(constrained_gap, nominal_gap_px)
+
+
+def _gap_model_from_bound_roles(
+    proposal: FrameChainProposals,
+    geometry: SourceScanGeometry,
+    lane_id: str,
+    observations: tuple[BoundRoleEvidence, ...],
+) -> LaneGapModel:
+    return LaneGapModel.from_ordinal_edges(
+        geometry.width_state,
+        lane_id=lane_id,
+        edge_families=tuple(
+            tuple(
+                (
+                    observation.role.lane_ordinal,
+                    observation.fit_position_interval_px,
+                    observation.transition_ids,
+                )
+                for observation in observations
+                if observation.role.role == role
+            )
+            for role in (BoundaryRole.START, BoundaryRole.END)
+        ),
+        format_gap_prior_mm=proposal.frame_spec.format_gap_prior_mm,
+    )
 
 
 def local_advance_prefix(
@@ -2464,8 +2362,9 @@ def local_advance_prefix(
 
 
 def _local_advance_relations(
-    proposal: ComponentTemplateProposal,
-    geometry: SourceFrameGeometry,
+    proposal: FrameChainProposals,
+    geometry: SourceScanGeometry,
+    gap_model: LaneGapModel,
     observations: tuple[BoundRoleEvidence, ...],
 ) -> tuple[LocalAdvanceRelation, ...]:
     by_role = _role_evidence_intervals(observations)
@@ -2499,6 +2398,7 @@ def _local_advance_relations(
         delta = local_advance_delta_from_observed_gap(
             observed_gap,
             geometry,
+            gap_model,
         )
         if delta is None:
             raise ValueError("observed gap exceeds format local advance authority")
@@ -2515,7 +2415,9 @@ def _local_advance_relations(
             continue
         canonical_delta = delta.center
         gap_center = observed_gap.center
-        if gap_center < 0.0:
+        if gap_model.state != EvidenceState.SUPPORTED:
+            kind = LocalAdvanceKind.OBSERVED_UNCLASSIFIED
+        elif gap_center < 0.0:
             kind = LocalAdvanceKind.OVERLAP
         elif observed_gap.contains(0.0):
             kind = LocalAdvanceKind.CONTACT
@@ -2536,45 +2438,45 @@ def _local_advance_relations(
 
 
 def _supported_role_subset(
-    group: TemplatePhaseGroup,
+    group: SequenceHypothesisGroup,
     *,
     first_ordinal: int,
     last_ordinal: int,
     frame_width_lower_px: float,
-) -> tuple[PhaseVote, ...]:
-    votes = tuple(
+) -> tuple[SequenceRoleProposal, ...]:
+    proposals = tuple(
         item
-        for item in group.votes
+        for item in group.role_proposals
         if first_ordinal <= item.role.lane_ordinal <= last_ordinal
     )
-    if not votes or not group_support_exclusion_authorized(
-        role_coordinates_px=tuple(item.template_coordinate_px for item in votes),
+    if not proposals or not group_support_exclusion_authorized(
+        role_coordinates_px=tuple(item.role_coordinate_px for item in proposals),
         role_identities=tuple(
-            (item.role.lane_ordinal, item.role.role) for item in votes
+            (item.role.lane_ordinal, item.role.role) for item in proposals
         ),
-        transition_id_sets=tuple(item.transition_ids for item in votes),
+        transition_id_sets=tuple(item.transition_ids for item in proposals),
         frame_width_lower_px=frame_width_lower_px,
     ):
         return ()
-    return votes
+    return proposals
 
 
-def _structural_authority_votes(
-    votes: tuple[PhaseVote, ...],
+def _structural_authority_proposals(
+    proposals: tuple[SequenceRoleProposal, ...],
     *,
     frame_width_lower_px: float,
-) -> tuple[PhaseVote, ...]:
+) -> tuple[SequenceRoleProposal, ...]:
     """Return the widest independent role pair that owns absolute phase.
 
-    Other transitions in the same phase group remain query evidence, but an
+    Other transitions in the same sequence hypothesis group remain query evidence, but an
     adjacent separator side cannot become another absolute-phase authority.
     Local adjacency is consumed by ``LocalAdvanceRelation`` instead.
     """
 
-    pairs: list[tuple[float, str, str, PhaseVote, PhaseVote]] = []
-    for left_index, left in enumerate(votes):
+    pairs: list[tuple[float, str, str, SequenceRoleProposal, SequenceRoleProposal]] = []
+    for left_index, left in enumerate(proposals):
         left_ids = set(map(str, left.transition_ids))
-        for right in votes[left_index + 1 :]:
+        for right in proposals[left_index + 1 :]:
             if not left_ids.isdisjoint(map(str, right.transition_ids)):
                 continue
             opposite = (
@@ -2583,21 +2485,21 @@ def _structural_authority_votes(
                 == {BoundaryRole.START, BoundaryRole.END}
             )
             separation = abs(
-                left.template_coordinate_px - right.template_coordinate_px
+                left.role_coordinate_px - right.role_coordinate_px
             )
             if not opposite and separation + 1.0e-9 < frame_width_lower_px:
                 continue
             pairs.append(
                 (
                     separation,
-                    left.vote_id,
-                    right.vote_id,
+                    left.proposal_id,
+                    right.proposal_id,
                     left,
                     right,
                 )
             )
     if not pairs:
-        return votes
+        return proposals
     _distance, _left_id, _right_id, left, right = min(
         pairs,
         key=lambda item: (-item[0], item[1], item[2]),
@@ -2608,22 +2510,22 @@ def _structural_authority_votes(
 
 
 def _phase_step_relation(
-    upstream: TemplatePhaseGroup,
-    downstream: TemplatePhaseGroup,
+    upstream: SequenceHypothesisGroup,
+    downstream: SequenceHypothesisGroup,
     *,
     relation_ordinal: int,
-    upstream_votes: tuple[PhaseVote, ...],
-    downstream_votes: tuple[PhaseVote, ...],
+    upstream_proposals: tuple[SequenceRoleProposal, ...],
+    downstream_proposals: tuple[SequenceRoleProposal, ...],
 ) -> LocalAdvanceRelation | None:
     upstream_ids = {
         str(identity)
-        for vote in upstream_votes
-        for identity in vote.transition_ids
+        for proposal in upstream_proposals
+        for identity in proposal.transition_ids
     }
     downstream_ids = {
         str(identity)
-        for vote in downstream_votes
-        for identity in vote.transition_ids
+        for proposal in downstream_proposals
+        for identity in proposal.transition_ids
     }
     if (
         upstream is downstream
@@ -2643,11 +2545,7 @@ def _phase_step_relation(
         return None
     return LocalAdvanceRelation(
         relation_ordinal=relation_ordinal,
-        kind=(
-            LocalAdvanceKind.WIDE
-            if delta.center > 0.0
-            else LocalAdvanceKind.NARROW
-        ),
+        kind=LocalAdvanceKind.OBSERVED_UNCLASSIFIED,
         delta_interval_px=delta,
         canonical_delta_px=delta.center,
         observation_ids=tuple(
@@ -2657,22 +2555,22 @@ def _phase_step_relation(
     )
 
 
-def build_template_sequence_seeds(
-    proposal: ComponentTemplateProposal,
-) -> tuple[TemplateSequenceSeed, ...]:
-    groups = proposal.phase_groups
+def build_sequence_chain_proposals(
+    proposal: FrameChainProposals,
+) -> tuple[SequenceChainProposal, ...]:
+    groups = proposal.sequence_groups
     slot_count = len(proposal.roles) // 2
     frame_width_lower = (
-        proposal.initial_source_geometry.width_state.extent_projection_px().minimum
+        proposal.initial_source_scan_geometry.width_state.extent_projection_px().minimum
     )
     downstream_by_split: dict[
         int,
-        tuple[TemplatePhaseGroup, tuple[PhaseVote, ...]] | None,
+        tuple[SequenceHypothesisGroup, tuple[SequenceRoleProposal, ...]] | None,
     ] = {}
-    upstream_support: dict[tuple[str, int], tuple[PhaseVote, ...]] = {}
+    upstream_support: dict[tuple[str, int], tuple[SequenceRoleProposal, ...]] = {}
     for split in range(1, slot_count):
         downstream: list[
-            tuple[TemplatePhaseGroup, tuple[PhaseVote, ...]]
+            tuple[SequenceHypothesisGroup, tuple[SequenceRoleProposal, ...]]
         ] = []
         for group in groups:
             upstream_support[(group.group_id, split)] = _supported_role_subset(
@@ -2681,22 +2579,22 @@ def build_template_sequence_seeds(
                 last_ordinal=split,
                 frame_width_lower_px=frame_width_lower,
             )
-            votes = _supported_role_subset(
+            proposals = _supported_role_subset(
                 group,
                 first_ordinal=split + 1,
                 last_ordinal=slot_count,
                 frame_width_lower_px=frame_width_lower,
             )
-            if votes:
-                downstream.append((group, votes))
+            if proposals:
+                downstream.append((group, proposals))
         downstream_by_split[split] = (
             downstream[0] if len(downstream) == 1 else None
         )
 
-    seeds: list[TemplateSequenceSeed] = []
+    seeds: list[SequenceChainProposal] = []
     for initial in groups:
         current = initial
-        group_for_ordinal: list[TemplatePhaseGroup] = []
+        group_for_ordinal: list[SequenceHypothesisGroup] = []
         relations: list[LocalAdvanceRelation] = []
         group_ids = [initial.group_id]
         for split in range(1, slot_count):
@@ -2704,14 +2602,14 @@ def build_template_sequence_seeds(
             downstream = downstream_by_split[split]
             relation = None
             if downstream is not None:
-                upstream_votes = upstream_support[(current.group_id, split)]
-                if upstream_votes:
+                upstream_proposals = upstream_support[(current.group_id, split)]
+                if upstream_proposals:
                     relation = _phase_step_relation(
                         current,
                         downstream[0],
                         relation_ordinal=split,
-                        upstream_votes=upstream_votes,
-                        downstream_votes=downstream[1],
+                        upstream_proposals=upstream_proposals,
+                        downstream_proposals=downstream[1],
                     )
             if relation is None:
                 relation = LocalAdvanceRelation(
@@ -2727,37 +2625,37 @@ def build_template_sequence_seeds(
                     group_ids.append(current.group_id)
             relations.append(relation)
         group_for_ordinal.append(current)
-        votes = tuple(
+        proposals = tuple(
             sorted(
                 {
-                    vote.vote_id: vote
+                    proposal.proposal_id: proposal
                     for ordinal, group in enumerate(group_for_ordinal, start=1)
-                    for vote in group.votes
-                    if vote.role.lane_ordinal == ordinal
+                    for proposal in group.role_proposals
+                    if proposal.role.lane_ordinal == ordinal
                 }.values(),
-                key=lambda item: (item.role.role_index, item.vote_id),
+                key=lambda item: (item.role.role_index, item.proposal_id),
             )
         )
-        if not votes:
+        if not proposals:
             continue
-        local_advance_votes = votes
+        local_advance_proposals = proposals
         if initial.exclusion_authorized:
-            votes = _structural_authority_votes(
-                votes,
+            proposals = _structural_authority_proposals(
+                proposals,
                 frame_width_lower_px=frame_width_lower,
             )
         seeds.append(
-            TemplateSequenceSeed(
-                seed_id=_stable_id(
-                    "template-sequence-seed",
+            SequenceChainProposal(
+                chain_proposal_id=_stable_id(
+                    "sequence-chain-proposal",
                     *(group_ids),
                     *(item.kind.value for item in relations),
                     *(item.delta_interval_px for item in relations),
                 ),
-                phase_group_ids=tuple(group_ids),
+                sequence_group_ids=tuple(group_ids),
                 base_phase_interval_px=initial.phase_interval_px,
-                votes=votes,
-                local_advance_votes=local_advance_votes,
+                role_proposals=proposals,
+                local_advance_proposals=local_advance_proposals,
                 local_advance_relations=tuple(relations),
                 exclusion_authorized=(
                     initial.exclusion_authorized
@@ -2769,7 +2667,7 @@ def build_template_sequence_seeds(
                 ),
             )
         )
-    unique = {item.seed_id: item for item in seeds}
+    unique = {item.chain_proposal_id: item for item in seeds}
     return tuple(unique[key] for key in sorted(unique))
 
 
@@ -2811,6 +2709,10 @@ def _merge_local_advance_relations(
                 kind=(
                     left.kind
                     if left.kind == right.kind
+                    else right.kind
+                    if left.kind == LocalAdvanceKind.OBSERVED_UNCLASSIFIED
+                    else left.kind
+                    if right.kind == LocalAdvanceKind.OBSERVED_UNCLASSIFIED
                     else LocalAdvanceKind.WIDE
                     if common.center > 0.0
                     else LocalAdvanceKind.NARROW
@@ -2865,27 +2767,58 @@ def _registered_sequence_run_direction_interval(
 
 
 def _materialize_sequence_placement(
-    lane: TemplateLaneInput,
-    proposal: ComponentTemplateProposal,
-    seed: TemplateSequenceSeed,
+    lane: LaneObservationInput,
+    proposal: FrameChainProposals,
+    seed: SequenceChainProposal,
     direction: SharedStripDirection,
-    geometry: SourceFrameGeometry,
+    geometry: SourceScanGeometry,
 ) -> SequencePlacement:
-    observations = _materialized_vote_evidence(
+    observations = _materialized_role_evidence(
         lane,
-        seed.votes,
+        seed.role_proposals,
         direction,
     )
     if not observations:
         raise ValueError("sequence placement has no absolute pixel anchor")
+    observed_by_role = {
+        (item.run_id, item.role.lane_ordinal, item.role.role): item
+        for item in observations
+    }
+    bound_separator_bands = tuple(
+        BoundSeparatorBand(
+            observation=band,
+            relation_ordinal=ordinal,
+            left_role_index=(ordinal - 1) * 2 + 1,
+            right_role_index=ordinal * 2,
+        )
+        for band in lane.separator_bands
+        for ordinal in range(1, lane.output_slot_count)
+        if (
+            (band.left_run_id, ordinal, BoundaryRole.END)
+            in observed_by_role
+            and (
+                band.right_run_id,
+                ordinal + 1,
+                BoundaryRole.START,
+            )
+            in observed_by_role
+        )
+    )
+    gap_model = _gap_model_from_bound_roles(
+        proposal,
+        geometry,
+        lane.lane_id,
+        observations,
+    )
     relations = _merge_local_advance_relations(
         seed.local_advance_relations,
         _local_advance_relations(
             proposal,
             geometry,
-            _materialized_vote_evidence(
+            gap_model,
+            _materialized_role_evidence(
                 lane,
-                seed.local_advance_votes,
+                seed.local_advance_proposals,
                 direction,
             ),
         ),
@@ -2901,8 +2834,9 @@ def _materialize_sequence_placement(
         )
         relative = _role_relative_projection(
             observation.role,
-            proposal.component,
+            proposal.frame_spec,
             geometry.width_state,
+            gap_model,
         )
         fit_phases.append(
             _subtract(
@@ -2920,8 +2854,9 @@ def _materialize_sequence_placement(
             observation.canonical_position_px
             - _role_canonical_relative(
                 observation.role,
-                proposal.component,
+                proposal.frame_spec,
                 geometry.width_state,
+                gap_model,
             )
             - prefix_canonical
         )
@@ -2935,7 +2870,7 @@ def _materialize_sequence_placement(
     phase_fit = _common(tuple(fit_phases))
     phase_full = _common(tuple(full_phases))
     if phase_fit is None or phase_full is None:
-        raise ValueError("template-bound observations disagree on phase")
+        raise ValueError("cross_proposal-bound observations disagree on phase")
     phase_full = _hull((phase_full, phase_fit))
     canonical_phase = robust_scalar_location(
         tuple(implied_canonical),
@@ -2996,13 +2931,15 @@ def _materialize_sequence_placement(
         )
         relative = _role_relative_projection(
             role,
-            proposal.component,
+            proposal.frame_spec,
             geometry.width_state,
+            gap_model,
         )
         relative_canonical = _role_canonical_relative(
             role,
-            proposal.component,
+            proposal.frame_spec,
             geometry.width_state,
+            gap_model,
         )
         fit = _add(_add(phase_fit, relative), prefix_interval)
         full = _add(_add(phase_full, relative), prefix_interval)
@@ -3011,7 +2948,7 @@ def _materialize_sequence_placement(
             fit_intersection = _intersection(fit, observed[0])
             full_intersection = _intersection(full, observed[1])
             if fit_intersection is None or full_intersection is None:
-                raise ValueError("observed role contradicts propagated template")
+                raise ValueError("observed role contradicts propagated cross_proposal")
             fit = fit_intersection
             full = _hull((fit, full_intersection))
         corridor = FiniteInterval(
@@ -3136,33 +3073,18 @@ def _materialize_sequence_placement(
     return SequencePlacement(
         placement_id=_stable_id(
             "sequence-placement",
-            proposal.component.component_id,
-            seed.seed_id,
+            proposal.frame_spec.frame_spec_id,
+            seed.chain_proposal_id,
             direction.direction_id,
             geometry.geometry_id,
         ),
-        template_seed_id=seed.seed_id,
-        phase_group_ids=seed.phase_group_ids,
-        source_geometry_id=geometry.geometry_id,
+        chain_proposal_id=seed.chain_proposal_id,
+        sequence_group_ids=seed.sequence_group_ids,
+        source_scan_geometry_id=geometry.geometry_id,
         roles=proposal.roles,
         phase_fit_interval_px=phase_fit,
         phase_full_interval_px=phase_full,
-        lane_gap_model=LaneGapModel.from_edge_families(
-            geometry.width_state,
-            lane_id=lane.lane_id,
-            edge_families=tuple(
-                tuple(
-                    (
-                        run.coordinate_interval_px,
-                        run.transition_ids,
-                    )
-                    for run in lane.sequence_profile.runs
-                    if run.anchor_qualified_for(role)
-                )
-                for role in (BoundaryRole.START, BoundaryRole.END)
-            ),
-            format_gap_prior_mm=proposal.component.format_gap_prior_mm,
-        ),
+        lane_gap_model=gap_model,
         local_advance_relations=relations,
         canonical_positions_px=tuple(canonical_positions),
         fit_positions_px=tuple(fit_positions),
@@ -3174,6 +3096,7 @@ def _materialize_sequence_placement(
             safety_support_transition_ids
         ),
         observations=observations,
+        separator_bands=bound_separator_bands,
         exclusion_authorized=seed.exclusion_authorized,
     )
 
@@ -3190,17 +3113,17 @@ def _slope_displacement_interval(
 
 
 def _materialize_cross_placement(
-    lane: TemplateLaneInput,
-    template: ProvisionalHeightTemplate,
+    lane: LaneObservationInput,
+    cross_proposal: CrossAxisProposal,
     direction: SharedStripDirection,
-    geometry: SourceFrameGeometry,
+    geometry: SourceScanGeometry,
     frame_reference_traces_px: tuple[float, ...],
     frame_reference_intervals_px: tuple[FiniteInterval, ...],
 ) -> CrossPlacement:
     lane_reference = lane.width_authority_px.center
     observed_runs = {
         run.role_hint: run
-        for run in template.observed_runs
+        for run in cross_proposal.observed_runs
     }
     lane_projections = {
         role: _project_profile_run(
@@ -3230,7 +3153,7 @@ def _materialize_cross_placement(
         ),
     )
     if phase is None:
-        raise ValueError("template-bound height roles disagree on source height")
+        raise ValueError("cross_proposal-bound height roles disagree on source height")
     phase_fit, phase_full = phase
     canonical_slope = canonical_source_cross_axis_slope(
         direction,
@@ -3312,7 +3235,7 @@ def _materialize_cross_placement(
                 ),
             )
             if conditioned is None:
-                raise ValueError("exact height projection contradicts template")
+                raise ValueError("exact height projection contradicts cross_proposal")
             frame_fit[role], frame_full[role] = conditioned
         frame_states.append((frame_fit, frame_full, canonical_shift))
 
@@ -3334,7 +3257,7 @@ def _materialize_cross_placement(
         raise ValueError("frame height is outside joint source geometry")
     shared_extent = _common(extent_constraints)
     if shared_extent is None:
-        raise ValueError("frame heights have no shared physical extent")
+        raise ValueError("frame cross_proposals have no shared physical extent")
     _scale, normalized, _factor = geometry.height_state.canonical_state()
     canonical_extent_preference = (
         geometry.height_state.design_extent_mm * normalized
@@ -3447,17 +3370,17 @@ def _materialize_cross_placement(
             )
         )
     observation_by_role = {
-        observation.role: observation for observation in template.raw_observations
+        observation.role: observation for observation in cross_proposal.raw_observations
     }
     return CrossPlacement(
         placement_id=_stable_id(
             "cross-placement",
-            template.template_id,
+            cross_proposal.cross_proposal_id,
             direction.direction_id,
             geometry.geometry_id,
         ),
-        provisional_template_id=template.template_id,
-        source_geometry_id=geometry.geometry_id,
+        cross_proposal_id=cross_proposal.cross_proposal_id,
+        source_scan_geometry_id=geometry.geometry_id,
         lane_reference_trace_px=lane_reference,
         frame_reference_traces_px=frame_reference_traces_px,
         top_canonical_positions_px=tuple(top_canonical),
@@ -3539,11 +3462,11 @@ def _boundary_geometry(
 
 
 def _canonical_frames(
-    lane: TemplateLaneInput,
+    lane: LaneObservationInput,
     direction: SharedStripDirection,
     sequence: SequencePlacement,
     cross: CrossPlacement,
-) -> tuple[FrameFormatPlacement, ...]:
+) -> tuple[FixedFormatFrame, ...]:
     sequence_observations: dict[int, tuple[ObservationId, ...]] = {}
     for role_index in range(len(sequence.roles)):
         identities = tuple(
@@ -3583,7 +3506,7 @@ def _canonical_frames(
             }
         )
     )
-    frames: list[FrameFormatPlacement] = []
+    frames: list[FixedFormatFrame] = []
     for ordinal in range(1, len(sequence.roles) // 2 + 1):
         start_index = (ordinal - 1) * 2
         end_index = start_index + 1
@@ -3643,7 +3566,7 @@ def _canonical_frames(
             named_position_inference=(
                 None
                 if start_index in sequence_observations
-                else "start_from_template_phase_and_lane_gap"
+                else "start_from_chain_phase_and_lane_gap"
             ),
             sequence_direction_interval_degrees=(
                 sequence.sequence_edge_direction_intervals_degrees[
@@ -3670,7 +3593,7 @@ def _canonical_frames(
             named_position_inference=(
                 None
                 if end_index in sequence_observations
-                else "end_from_template_phase_and_lane_gap"
+                else "end_from_chain_phase_and_lane_gap"
             ),
             sequence_direction_interval_degrees=(
                 sequence.sequence_edge_direction_intervals_degrees[
@@ -3732,9 +3655,9 @@ def _canonical_frames(
             bottom.line.intersection(start.line),
         )
         frames.append(
-            FrameFormatPlacement(
+            FixedFormatFrame(
                 placement_geometry_id=_stable_id(
-                    "frame-format-placement",
+                    "frame-complete-format-chain",
                     sequence.placement_id,
                     cross.placement_id,
                     ordinal,
@@ -3776,24 +3699,24 @@ def _cross_within_authority(
     )
 
 
-def _compatible_height_templates(
-    lane_proposal: TemplateLaneProposal,
-    component_proposal: ComponentTemplateProposal,
+def _compatible_cross_proposals(
+    lane_proposal: LanePhysicalProposals,
+    frame_proposal: FrameChainProposals,
     direction: SharedStripDirection,
-) -> tuple[ProvisionalHeightTemplate, ...]:
+) -> tuple[CrossAxisProposal, ...]:
     selected_ids = {str(identity) for identity in direction.selected_observation_ids}
     return tuple(
-        template
-        for template in component_proposal.height_templates
+        cross_proposal
+        for cross_proposal in frame_proposal.cross_proposals
         if {
             str(observation.observation_id)
-            for observation in template.raw_observations
+            for observation in cross_proposal.raw_observations
         }.issubset(selected_ids)
     )
 
 
 def _direction_bound_cross_profile_runs(
-    lane: TemplateLaneInput,
+    lane: LaneObservationInput,
     direction: SharedStripDirection,
     sequence_support_px: FiniteInterval,
 ) -> tuple[ProfileRun, ...]:
@@ -3801,7 +3724,7 @@ def _direction_bound_cross_profile_runs(
 
     V4.2.8's useful separator producer combined many scan lines before it
     localized an edge.  V5 keeps the stronger authority model: pixels have
-    already been queried, the shared direction is template-bound, and every
+    already been queried, the shared direction is cross_proposal-bound, and every
     aggregate run still consists solely of auditable transition identities.
     Two half-bin lattices prevent a real line from disappearing on one bin
     boundary; all structurally supported bins survive, so this is not top-K
@@ -3973,19 +3896,19 @@ def _direction_bound_cross_profile_runs(
     )
 
 
-def _staged_height_templates(
-    lane: TemplateLaneInput,
-    geometry: SourceFrameGeometry,
+def _staged_cross_proposals(
+    lane: LaneObservationInput,
+    geometry: SourceScanGeometry,
     direction: SharedStripDirection,
     sequence_support_px: FiniteInterval,
-) -> tuple[ProvisionalHeightTemplate, ...]:
+) -> tuple[CrossAxisProposal, ...]:
     """Rebind registered cross evidence inside one complete sequence span.
 
     The source-wide top/bottom lattice establishes possible shared directions.
     A partial strip, however, must not lose its actual photo edge merely because
     the rest of the scan canvas contains no frames.  This stage performs no new
     pixel query: it groups the already registered transition records again with
-    support restricted to the full uncertain span of this sequence template.
+    support restricted to the full uncertain span of this sequence cross_proposal.
     """
 
     top_regions = track_side_transition_regions(
@@ -4048,8 +3971,8 @@ def _staged_height_templates(
     )
 
     return tuple(
-        template
-        for template in provisional_height_templates(
+        cross_proposal
+        for cross_proposal in build_cross_axis_proposals(
             scoped_lane,
             geometry,
             support_interval_px=sequence_support_px,
@@ -4060,49 +3983,56 @@ def _staged_height_templates(
                 direction.full_angle_interval_degrees,
             )
             is not None
-            for observation in template.raw_observations
+            for observation in cross_proposal.raw_observations
         )
     )
 
 
-def _materialize_component_seed(
-    lane_proposal: TemplateLaneProposal,
-    component_proposal: ComponentTemplateProposal,
-    seed: TemplateSequenceSeed,
+def _materialize_frame_spec_seed(
+    lane_proposal: LanePhysicalProposals,
+    frame_proposal: FrameChainProposals,
+    seed: SequenceChainProposal,
     direction: SharedStripDirection,
-    source_geometry: SourceFrameGeometry | None = None,
-) -> tuple[FormatPlacement, ...]:
-    """Materialize one complete template interpretation.
+    source_geometry: SourceScanGeometry | None = None,
+) -> tuple[CompleteFormatChain, ...]:
+    """Materialize one complete cross_proposal interpretation.
 
     A seed owns one correlated source-geometry and local-advance hypothesis.
     Conflicting interpretations remain separate physical placements.
     """
 
     lane = lane_proposal.lane
-    compatible_heights = _compatible_height_templates(
+    compatible_cross_proposals = _compatible_cross_proposals(
         lane_proposal,
-        component_proposal,
+        frame_proposal,
         direction,
     )
-    if not compatible_heights:
+    if not compatible_cross_proposals:
         return ()
     if source_geometry is None:
         try:
             geometry = _refine_source_geometry(
                 lane,
-                component_proposal,
+                frame_proposal,
                 direction,
-                compatible_heights,
+                compatible_cross_proposals,
                 sequence_seeds=(seed,),
             )
+            bound_roles = _materialized_role_evidence(
+                lane,
+                seed.local_advance_proposals,
+                direction,
+            )
             observed_relations = _local_advance_relations(
-                component_proposal,
+                frame_proposal,
                 geometry,
-                _materialized_vote_evidence(
-                    lane,
-                    seed.local_advance_votes,
-                    direction,
+                _gap_model_from_bound_roles(
+                    frame_proposal,
+                    geometry,
+                    lane.lane_id,
+                    bound_roles,
                 ),
+                bound_roles,
             )
             joint_relations = _merge_local_advance_relations(
                 seed.local_advance_relations,
@@ -4115,21 +4045,21 @@ def _materialize_component_seed(
                 )
                 geometry = _refine_source_geometry(
                     lane,
-                    component_proposal,
+                    frame_proposal,
                     direction,
-                    compatible_heights,
+                    compatible_cross_proposals,
                     sequence_seeds=(seed,),
                 )
         except ValueError:
             return ()
     else:
-        if source_geometry.component != component_proposal.component:
-            raise ValueError("source geometry component disagrees")
+        if source_geometry.frame_spec != frame_proposal.frame_spec:
+            raise ValueError("source geometry frame_spec disagrees")
         geometry = source_geometry
     try:
         sequence = _materialize_sequence_placement(
             lane,
-            component_proposal,
+            frame_proposal,
             seed,
             direction,
             geometry,
@@ -4142,31 +4072,31 @@ def _materialize_component_seed(
         min(item.minimum for item in sequence.full_positions_px),
         max(item.maximum for item in sequence.full_positions_px),
     )
-    staged_heights = _staged_height_templates(
+    staged_heights = _staged_cross_proposals(
         lane,
         geometry,
         direction,
         sequence_support_px,
     )
     if staged_heights:
-        compatible_heights = tuple(
+        compatible_cross_proposals = tuple(
             {
-                item.template_id: item
-                for item in (*compatible_heights, *staged_heights)
+                item.cross_proposal_id: item
+                for item in (*compatible_cross_proposals, *staged_heights)
             }.values()
         )
         if source_geometry is None:
             try:
                 geometry = _refine_source_geometry(
                     lane,
-                    component_proposal,
+                    frame_proposal,
                     direction,
-                    compatible_heights,
+                    compatible_cross_proposals,
                     sequence_seeds=(seed,),
                 )
                 sequence = _materialize_sequence_placement(
                     lane,
-                    component_proposal,
+                    frame_proposal,
                     seed,
                     direction,
                     geometry,
@@ -4199,12 +4129,12 @@ def _materialize_component_seed(
         for index in range(lane.output_slot_count)
     )
     crosses: list[CrossPlacement] = []
-    for template in compatible_heights:
+    for cross_proposal in compatible_cross_proposals:
         try:
             crosses.append(
                 _materialize_cross_placement(
                     lane,
-                    template,
+                    cross_proposal,
                     direction,
                     geometry,
                     frame_references,
@@ -4226,27 +4156,65 @@ def _materialize_component_seed(
     )
     if not retained_crosses:
         return ()
-    return tuple(
-        FormatPlacement(
-            placement_id=_stable_id(
-                "format-placement",
+    height_by_id = {
+        item.cross_proposal_id: item for item in compatible_cross_proposals
+    }
+
+    def lane_geometry_for(cross: CrossPlacement) -> LaneGeometry:
+        centerlines = tuple(
+            FiniteInterval(
+                (top.minimum + bottom.minimum) / 2.0,
+                (top.maximum + bottom.maximum) / 2.0,
+            )
+            for top, bottom in zip(
+                cross.top_full_positions_px,
+                cross.bottom_full_positions_px,
+                strict=True,
+            )
+        )
+        return LaneGeometry(
+            lane_geometry_id=_stable_id(
+                "lane-geometry",
                 lane.lane_id,
-                component_proposal.component.component_id,
+                direction.direction_id,
+                sequence.phase_full_interval_px.minimum,
+                sequence.phase_full_interval_px.maximum,
+                sequence.lane_gap_model.gap_model_id,
+                *(value.minimum for value in centerlines),
+                *(value.maximum for value in centerlines),
+            ),
+            lane_id=lane.lane_id,
+            direction=direction,
+            centerline_intervals_px=centerlines,
+            sequence_phase_interval_px=sequence.phase_full_interval_px,
+            gap_model=sequence.lane_gap_model,
+            width_authority_px=lane.width_authority_px,
+            height_authority_px=lane.height_authority_px,
+        )
+
+    return tuple(
+        CompleteFormatChain(
+            placement_id=_stable_id(
+                "complete-format-chain",
+                lane.lane_id,
+                frame_proposal.frame_spec.frame_spec_id,
                 direction.direction_id,
                 geometry.geometry_id,
                 sequence.placement_id,
                 cross.placement_id,
             ),
             lane_id=lane.lane_id,
-            component=component_proposal.component,
+            frame_spec=frame_proposal.frame_spec,
             output_slot_count=lane.output_slot_count,
-            direction=direction,
-            source_frame_geometry=geometry,
+            source_scan_geometry=geometry,
+            chain_proposal=seed,
+            cross_proposal=height_by_id[cross.cross_proposal_id],
+            lane_geometry=lane_geometry_for(cross),
             sequence=sequence,
             cross=cross,
-            canonical=CanonicalFormatPlacement(
-                canonical_id=_stable_id(
-                    "canonical-format-placement",
+            fixed_frames=FixedFormatFrameSet(
+                fixed_frame_set_id=_stable_id(
+                    "canonical-complete-format-chain",
                     sequence.placement_id,
                     cross.placement_id,
                 ),
@@ -4264,20 +4232,60 @@ def _materialize_component_seed(
     )
 
 
+def rematerialize_complete_chain(
+    lane_proposal: LanePhysicalProposals,
+    chain: CompleteFormatChain,
+    source_scan_geometry: SourceScanGeometry,
+) -> CompleteFormatChain:
+    """Apply the selected source-wide W/H state to one lane chain.
+
+    Lane discovery may narrow the same source state from different physical
+    strips.  Output geometry is materialized again from the selected joint
+    state so two lanes cannot retain independent pixel scales.
+    """
+
+    frame_proposal = next(
+        (
+            item
+            for item in lane_proposal.frame_proposals
+            if item.frame_spec == chain.frame_spec
+        ),
+        None,
+    )
+    if frame_proposal is None:
+        raise ValueError("selected chain has no frame proposal")
+    candidates = _materialize_frame_spec_seed(
+        lane_proposal,
+        frame_proposal,
+        chain.chain_proposal,
+        chain.lane_geometry.direction,
+        source_geometry=source_scan_geometry,
+    )
+    matches = tuple(
+        item
+        for item in candidates
+        if item.cross_proposal.cross_proposal_id
+        == chain.cross_proposal.cross_proposal_id
+    )
+    if len(matches) != 1:
+        raise ValueError("source-wide W/H state cannot materialize selected chain")
+    return replace(matches[0], placement_id=chain.placement_id)
+
+
 def materialize_lane_placements(
-    proposal: TemplateLaneProposal,
+    proposal: LanePhysicalProposals,
     direction: SharedStripDirection,
     registered_runs: dict[str, ProfileRun],
-) -> tuple[tuple[FormatPlacement, ...], int, bool]:
+) -> tuple[tuple[CompleteFormatChain, ...], int]:
     proposed_unsorted = tuple(
-        (component, seed)
-        for component in sorted(
-            proposal.components,
-            key=lambda item: item.component.component_id,
+        (frame_spec, seed)
+        for frame_spec in sorted(
+            proposal.frame_proposals,
+            key=lambda item: item.frame_spec.frame_spec_id,
         )
-        for seed in _component_materialization_seeds(
+        for seed in _frame_spec_materialization_seeds(
             proposal,
-            component,
+            frame_spec,
             direction,
             registered_runs,
         )
@@ -4288,43 +4296,43 @@ def materialize_lane_placements(
             key=lambda item: (
                 -sum(
                     {
-                        vote.role.role
-                        for vote in item[1].votes
-                        if vote.role.lane_ordinal == ordinal
+                        proposal.role.role
+                        for proposal in item[1].role_proposals
+                        if proposal.role.lane_ordinal == ordinal
                     }
                     == {BoundaryRole.START, BoundaryRole.END}
                     for ordinal in {
-                        vote.role.lane_ordinal for vote in item[1].votes
+                        proposal.role.lane_ordinal for proposal in item[1].role_proposals
                     }
                 ),
-                -len({vote.role.role_index for vote in item[1].votes}),
-                min(vote.role.lane_ordinal for vote in item[1].votes),
+                -len({proposal.role.role_index for proposal in item[1].role_proposals}),
+                min(proposal.role.lane_ordinal for proposal in item[1].role_proposals),
                 tuple(
                     value
-                    for vote in item[1].votes
+                    for proposal in item[1].role_proposals
                     for value in (
-                        vote.phase_interval_px.minimum.hex(),
-                        vote.phase_interval_px.maximum.hex(),
+                        proposal.phase_interval_px.minimum.hex(),
+                        proposal.phase_interval_px.maximum.hex(),
                     )
                 ),
                 tuple(
                     sorted(
                         str(identity)
-                        for vote in item[1].votes
-                        for identity in vote.transition_ids
+                        for proposal in item[1].role_proposals
+                        for identity in proposal.transition_ids
                     )
                 ),
-                item[0].component.component_id,
-                item[1].seed_id,
+                item[0].frame_spec.frame_spec_id,
+                item[1].chain_proposal_id,
             ),
         )
     )
     seed_materializations = tuple(
         placements
-        for component, seed in proposed[:MAX_COMPLETE_CHAINS_PER_LANE]
-        if (placements := _materialize_component_seed(
+        for frame_spec, seed in proposed
+        if (placements := _materialize_frame_spec_seed(
             proposal,
-            component,
+            frame_spec,
             seed,
             direction,
         ))
@@ -4337,16 +4345,14 @@ def materialize_lane_placements(
     unique = {item.placement_id: item for item in values}
     ordered = tuple(unique[key] for key in sorted(unique))
     proposed_count = max(len(proposed), len(ordered))
-    bound_exceeded = proposed_count > MAX_COMPLETE_CHAINS_PER_LANE
     return (
-        ordered[:MAX_COMPLETE_CHAINS_PER_LANE],
+        ordered,
         proposed_count,
-        bound_exceeded,
     )
 
 
 def _basic_lane_structurally_closed(
-    placements: tuple[FormatPlacement, ...],
+    placements: tuple[CompleteFormatChain, ...],
 ) -> bool:
     return bool(placements) and all(
         placement.sequence.exclusion_authorized
@@ -4355,40 +4361,30 @@ def _basic_lane_structurally_closed(
 
 
 def materialize_source_placements(
-    lane_proposals: tuple[TemplateLaneProposal, ...],
-    direction: SharedStripDirection,
+    lane_proposals: tuple[LanePhysicalProposals, ...],
+    lane_directions: tuple[SharedStripDirection, ...],
 ) -> SourcePlacementMaterialization:
-    """Materialize every lane from one source-wide component geometry."""
+    """Materialize every lane from one source-wide frame_spec geometry."""
 
     if not lane_proposals:
-        return SourcePlacementMaterialization((), (), (), (), ())
-    phase_lanes: list[TemplateLaneProposal] = []
-    phase_counts: list[int] = []
-    for lane in lane_proposals:
-        components: list[ComponentTemplateProposal] = []
-        count = 0
-        for component in lane.components:
-            refined, consumed = _refine_component_phase_groups(
-                lane.lane,
-                component,
-                direction,
-            )
-            components.append(refined)
-            count += consumed
-        phase_lanes.append(replace(lane, components=tuple(components)))
-        phase_counts.append(count)
-    phase_lane_proposals = tuple(phase_lanes)
+        return SourcePlacementMaterialization((), (), (), ())
+    if len(lane_proposals) != len(lane_directions):
+        raise ValueError("each lane requires one lane-owned direction")
     basic_independent = tuple(
         materialize_lane_placements(lane, direction, {})
-        for lane in phase_lane_proposals
+        for lane, direction in zip(
+            lane_proposals,
+            lane_directions,
+            strict=True,
+        )
     )
     basic_closed = tuple(
         _basic_lane_structurally_closed(materialization[0])
         for materialization in basic_independent
     )
     if all(basic_closed):
-        refined_lane_proposals = phase_lane_proposals
-        enhanced_counts = phase_counts
+        refined_lane_proposals = lane_proposals
+        refinement_counts = [0 for _lane in lane_proposals]
         registered_runs_by_lane = [
             {} for _lane in refined_lane_proposals
         ]
@@ -4403,22 +4399,16 @@ def materialize_source_placements(
                     direction,
                 )
             )
-            for lane, closed in zip(
-                phase_lane_proposals,
+            for lane, direction, closed in zip(
+                lane_proposals,
+                lane_directions,
                 basic_closed,
                 strict=True,
             )
         )
         refined_lane_proposals = tuple(item[0] for item in bound)
         registered_runs_by_lane = [item[1] for item in bound]
-        enhanced_counts = [
-            phase_count + item[2]
-            for phase_count, item in zip(
-                phase_counts,
-                bound,
-                strict=True,
-            )
-        ]
+        refinement_counts = [item[2] for item in bound]
         independent = tuple(
             (
                 basic
@@ -4429,8 +4419,9 @@ def materialize_source_placements(
                     registered_runs,
                 )
             )
-            for lane, registered_runs, basic, closed in zip(
+            for lane, direction, registered_runs, basic, closed in zip(
                 refined_lane_proposals,
+                lane_directions,
                 registered_runs_by_lane,
                 basic_independent,
                 basic_closed,
@@ -4438,13 +4429,12 @@ def materialize_source_placements(
             )
         )
     if len(refined_lane_proposals) > 2:
-        raise ValueError("template-first source supports at most two lanes")
+        raise ValueError("physical-chain source supports at most two lanes")
     return SourcePlacementMaterialization(
         placements_by_lane=tuple(item[0] for item in independent),
         proposed_complete_chain_counts_by_lane=tuple(
             item[1] for item in independent
         ),
-        chain_bound_exceeded_by_lane=tuple(item[2] for item in independent),
-        enhanced_query_counts_by_lane=tuple(enhanced_counts),
+        refinement_query_counts_by_lane=tuple(refinement_counts),
         lane_proposals=refined_lane_proposals,
     )

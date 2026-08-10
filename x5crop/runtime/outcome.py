@@ -32,12 +32,12 @@ class RuntimeMetrics:
     pixel_query_count: int | None
     basic_profile_coordinate_count: int | None
     basic_profile_run_count: int | None
-    phase_vote_count: int | None
-    template_group_count: int | None
-    template_role_lookup_count: int | None
-    template_role_match_count: int | None
+    role_proposal_count: int | None
+    sequence_group_count: int | None
+    ordinal_role_lookup_count: int | None
+    ordinal_role_match_count: int | None
     local_relation_evaluation_count: int | None
-    enhanced_query_count: int | None
+    refinement_query_count: int | None
     materialized_frame_geometry_count: int | None
     shared_measurement_reuse_count: int | None
     peak_temporary_bytes: int | None

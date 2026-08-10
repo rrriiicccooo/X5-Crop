@@ -1211,7 +1211,7 @@ def continuous_trace_support_fraction(
     return min(1.0, longest / queried_span)
 
 
-def fit_template_bound_boundary_observation(
+def fit_format_bound_boundary_observation(
     measurement_set: PhotoBoundaryMeasurementSet,
     *,
     transition_ids: tuple[ObservationId, ...],
@@ -1222,16 +1222,16 @@ def fit_template_bound_boundary_observation(
     support_interval_px: FiniteInterval | None = None,
     spec: PhotoBoundaryMeasurementSpec = PHOTO_BOUNDARY_MEASUREMENT_SPEC,
 ) -> PhotoBoundaryObservation | None:
-    """Fit one robust line from transitions already bound to one template role.
+    """Fit one robust line from transitions bound to one fixed-format role.
 
-    This is deliberately not a line-family search.  The template producer
+    This is deliberately not a line-family search.  The observation owner
     binds one tracked run first; this function then estimates the sole raw
     line supported by that run.  Adding an unrelated transition therefore
     cannot create another slope candidate or move this observation.
     """
 
     if role not in {BoundaryRole.TOP, BoundaryRole.BOTTOM}:
-        raise ValueError("template-bound line requires top or bottom role")
+        raise ValueError("format-role line requires top or bottom role")
     if (
         measurement_set.state != EvidenceState.SUPPORTED
         or not measurement_set.coverage.complete
@@ -1276,7 +1276,7 @@ def fit_template_bound_boundary_observation(
         else minimum_trace_fraction
     )
     if not 0.0 < support_fraction <= 1.0:
-        raise ValueError("template-bound support fraction is invalid")
+        raise ValueError("format-role support fraction is invalid")
     minimum_support = max(
         spec.minimum_trace_count,
         math.ceil(support_fraction * len(queried_traces)),
@@ -1376,7 +1376,7 @@ def fit_template_bound_boundary_observation(
         sorted((point.transition.transition_id for point in inliers), key=str)
     )
     observation_id = _stable_observation_id(
-        "template-bound-line",
+        "format-role-bound-line",
         role.value,
         *(str(identity) for identity in selected_ids),
     )
@@ -1403,7 +1403,7 @@ def fit_template_bound_boundary_observation(
             dependencies=(MeasurementIdentity.BASE_GRAY,),
             description=(
                 "single robust line from transitions bound to one fixed "
-                "format template role"
+                "fixed-format role"
             ),
         ),
         background_side_support_fraction=(

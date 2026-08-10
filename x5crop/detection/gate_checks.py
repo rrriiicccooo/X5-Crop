@@ -20,9 +20,10 @@ class GateGap(str, Enum):
     PRODUCER_BOUND_EXCEEDED = "producer_bound_exceeded"
     SHARED_STRIP_DIRECTION_UNAVAILABLE = "shared_strip_direction_unavailable"
     SHARED_STRIP_DIRECTION_NONUNIQUE = "shared_strip_direction_nonunique"
-    SOURCE_FRAME_GEOMETRY_UNAVAILABLE = "source_frame_geometry_unavailable"
+    SOURCE_SCAN_GEOMETRY_UNAVAILABLE = "source_scan_geometry_unavailable"
     PLACEMENT_UNRESOLVED = "placement_unresolved"
     CONTENT_VETO_REJECTED = "content_veto_rejected"
+    LOCAL_ADVANCE_UNRESOLVED = "local_advance_unresolved"
     SLOT_ORDINAL_ASSIGNMENT_UNRESOLVED = "slot_ordinal_assignment_unresolved"
     SOURCE_LANE_AUTHORITY_INVALID = "source_lane_authority_invalid"
     SELECTED_PLACEMENT_CONTAINMENT_UNAVAILABLE = (

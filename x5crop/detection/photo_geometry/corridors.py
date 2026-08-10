@@ -25,67 +25,34 @@ from .model import (
 
 @dataclass(frozen=True)
 class FramePhysicalPixelIntervals:
-    component: FramePhysicalSpec
+    frame_spec: FramePhysicalSpec
     frame_width_px: PositiveInterval
     frame_height_px: PositiveInterval
 
 
 def frame_physical_pixel_intervals(
-    component: FramePhysicalSpec,
+    frame_spec: FramePhysicalSpec,
     width_axis_scale_px_per_mm: PositiveInterval,
     height_axis_scale_px_per_mm: PositiveInterval,
 ) -> FramePhysicalPixelIntervals:
     tolerance = FRAME_DIMENSION_TOLERANCE_SPEC
     return FramePhysicalPixelIntervals(
-        component=component,
+        frame_spec=frame_spec,
         frame_width_px=PositiveInterval(
-            component.frame_width_mm
+            frame_spec.frame_width_mm
             * (1.0 - tolerance.frame_width_tolerance_ratio)
             * width_axis_scale_px_per_mm.minimum,
-            component.frame_width_mm
+            frame_spec.frame_width_mm
             * (1.0 + tolerance.frame_width_tolerance_ratio)
             * width_axis_scale_px_per_mm.maximum,
         ),
         frame_height_px=PositiveInterval(
-            component.frame_height_mm
+            frame_spec.frame_height_mm
             * (1.0 - tolerance.frame_height_tolerance_ratio)
             * height_axis_scale_px_per_mm.minimum,
-            component.frame_height_mm
+            frame_spec.frame_height_mm
             * (1.0 + tolerance.frame_height_tolerance_ratio)
             * height_axis_scale_px_per_mm.maximum,
-        ),
-    )
-
-
-def combined_frame_measurement_intervals(
-    values: tuple[FramePhysicalPixelIntervals, ...],
-) -> FramePhysicalPixelIntervals:
-    """Union component dimensions for query coverage only.
-
-    The returned component is the largest real format component and remains a
-    measurement label; the numeric intervals are the complete union.  It never
-    enters placement compatibility or scale inference.
-    """
-
-    if not values:
-        raise ValueError("measurement coverage requires frame components")
-    reference = max(
-        values,
-        key=lambda item: (
-            item.component.frame_width_mm,
-            item.component.frame_height_mm,
-            item.component.component_id,
-        ),
-    ).component
-    return FramePhysicalPixelIntervals(
-        component=reference,
-        frame_width_px=PositiveInterval(
-            min(item.frame_width_px.minimum for item in values),
-            max(item.frame_width_px.maximum for item in values),
-        ),
-        frame_height_px=PositiveInterval(
-            min(item.frame_height_px.minimum for item in values),
-            max(item.frame_height_px.maximum for item in values),
         ),
     )
 
@@ -176,7 +143,7 @@ def build_top_bottom_search_corridors(
     long_scale = scales.width_axis_px_per_mm
     short_scale = scales.height_axis_px_per_mm
     spacing_mm = spec.lattice_spacing_mm(
-        aperture_pixels.component.frame_width_mm
+        aperture_pixels.frame_spec.frame_width_mm
     )
     trace_positions = _lattice_positions(
         long_min,
@@ -268,7 +235,7 @@ def build_top_bottom_search_corridors(
             corridor_id=_stable_id(
                 "photo-edge-corridor",
                 lane.domain.lane_id,
-                aperture_pixels.component,
+                aperture_pixels.frame_spec,
                 BoundaryRole.TOP.value,
             ),
             lane_id=lane.domain.lane_id,
@@ -283,7 +250,7 @@ def build_top_bottom_search_corridors(
             corridor_id=_stable_id(
                 "photo-edge-corridor",
                 lane.domain.lane_id,
-                aperture_pixels.component,
+                aperture_pixels.frame_spec,
                 BoundaryRole.BOTTOM.value,
             ),
             lane_id=lane.domain.lane_id,
@@ -373,7 +340,7 @@ def build_sequence_anchor_discovery_domain(
             "sequence-anchor-domain",
             lane.domain.lane_id,
             authoritative_sequence_length,
-            aperture_pixels.component,
+            aperture_pixels.frame_spec,
         ),
         lane_id=lane.domain.lane_id,
         long_axis_extent_px=long_max - long_min,
@@ -404,7 +371,7 @@ def _coarse_short_trace_positions(
     inner_min = max(short_min, int(math.ceil(center - half_height)))
     inner_max = min(short_max, int(math.floor(center + half_height)) + 1)
     spacing_mm = spec.lattice_spacing_mm(
-        aperture_pixels.component.frame_height_mm
+        aperture_pixels.frame_spec.frame_height_mm
     )
     return _lattice_positions(
         inner_min,

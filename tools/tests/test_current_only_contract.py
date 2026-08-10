@@ -25,9 +25,9 @@ from x5crop.detection.decision.decision_gate import apply_decision_gate
 from x5crop.detection.candidate.assessment.model import (
     CANDIDATE_GATE_CHECK_CODES,
 )
-from x5crop.detection.gate_checks import TypedAssessment
+from x5crop.detection.gate_checks import GateGap, TypedAssessment
 from x5crop.domain import EvidenceState
-from x5crop.entry.cli import build_parser, options_from_args
+from x5crop.entry.cli import build_parser, main, options_from_args
 from x5crop.entry.interactive import interactive_options
 from x5crop.formats import format_spec
 from x5crop.report.identity import (
@@ -256,6 +256,44 @@ class CurrentOnlyContractTest(unittest.TestCase):
                 ["input.tif", "--format", "135", "--auto-count"]
             )
 
+    def test_noninteractive_matched_holder_count_conflict_exits_two(self) -> None:
+        with TemporaryDirectory() as temporary:
+            source = Path(temporary) / "source.tif"
+            source.touch()
+            holder = mock.Mock(
+                full_count=2,
+                profile=mock.Mock(profile_id="120_wide_188_5"),
+            )
+            with (
+                mock.patch(
+                    "x5crop.runtime.bootstrap.read_tiff_profile",
+                    return_value=(mock.Mock(shape=(100, 200, 3)), ()),
+                ),
+                mock.patch(
+                    "x5crop.runtime.bootstrap.observe_scan_canvas",
+                    return_value=mock.Mock(),
+                ),
+                mock.patch(
+                    "x5crop.runtime.bootstrap.matched_holder_from_evidence",
+                    return_value=holder,
+                ),
+                contextlib.redirect_stderr(io.StringIO()),
+            ):
+                self.assertEqual(
+                    main(
+                        [
+                            str(source),
+                            "--format",
+                            "120-67",
+                            "--strip",
+                            "partial",
+                            "--count",
+                            "2",
+                        ]
+                    ),
+                    2,
+                )
+
     def test_only_current_debug_analysis_cli_and_runtime_surface_remain(
         self,
     ) -> None:
@@ -360,16 +398,15 @@ class CurrentOnlyContractTest(unittest.TestCase):
 
     def test_strip_handling_has_one_current_contract(self) -> None:
         for format_id in ("135", "half", "xpan", "120-645", "120-66", "120-67"):
-            strip = format_spec(format_id).strip
             self.assertEqual(
-                strip.partial_count_range,
-                tuple(range(1, strip.default_count)),
+                format_spec(format_id).interactive_partial_counts,
+                tuple(range(1, format_spec(format_id).maximum_full_count)),
             )
         self.assertFalse(
-            format_spec("135-dual").strip.partial_mode_supported
+            format_spec("135-dual").partial_mode_supported
         )
         self.assertEqual(
-            format_spec("135-dual").strip.partial_count_range,
+            format_spec("135-dual").interactive_partial_counts,
             (),
         )
 
@@ -389,7 +426,7 @@ class CurrentOnlyContractTest(unittest.TestCase):
         self.assertEqual(REPORT_SCHEMA_ID, "x5crop_detection_report_v5")
         self.assertEqual(
             REPORT_SCHEMA_REVISION,
-            "x5crop_v5_current_6",
+            "x5crop_v5_fixed_physical_chain_1",
         )
         candidate = candidate_gate_assessment(
             {
@@ -414,6 +451,33 @@ class CurrentOnlyContractTest(unittest.TestCase):
         decision = apply_decision_gate(candidate)
         self.assertEqual(decision.status, "approved_auto")
         self.assertEqual(decision.final_review_reasons, ())
+
+    def test_decision_reasons_distinguish_unavailable_from_exceeded(self) -> None:
+        facts = {
+            code: TypedAssessment(EvidenceState.SUPPORTED, None)
+            for code in CANDIDATE_GATE_CHECK_CODES
+        }
+        facts["complete_chain"] = TypedAssessment(
+            EvidenceState.UNAVAILABLE,
+            GateGap.COMPLETE_CHAIN_UNAVAILABLE,
+        )
+        facts["direct_use_budget"] = TypedAssessment(
+            EvidenceState.UNAVAILABLE,
+            GateGap.DIRECT_USE_BUDGET_UNAVAILABLE,
+        )
+        decision = apply_decision_gate(candidate_gate_assessment(facts))
+        self.assertEqual(decision.final_review_reasons, ("no_legal_placement",))
+
+        facts["complete_chain"] = TypedAssessment(EvidenceState.SUPPORTED, None)
+        facts["direct_use_budget"] = TypedAssessment(
+            EvidenceState.CONTRADICTED,
+            GateGap.DIRECT_USE_BUDGET_EXCEEDED,
+        )
+        decision = apply_decision_gate(candidate_gate_assessment(facts))
+        self.assertEqual(
+            decision.final_review_reasons,
+            ("direct_use_budget_exceeded",),
+        )
 
     def test_runtime_dependency_surface_is_pinned_and_shared(self) -> None:
         contract_path = ROOT / "tools/install/dependencies.toml"
@@ -528,9 +592,9 @@ class CurrentOnlyContractTest(unittest.TestCase):
             "CandidateGate",
             "DecisionGate",
             "schema_revision",
-            "SourceFrameGeometry",
+            "SourceScanGeometry",
             "NominalPitch",
-            "template_group_count",
+            "sequence_group_count",
             "gold_accuracy",
             "S062",
             "0fdb90dc",
@@ -611,9 +675,9 @@ class CurrentOnlyContractTest(unittest.TestCase):
             "x5crop.detection.photo_geometry.source_geometry",
             "x5crop.detection.photo_geometry.bounds",
             "x5crop.detection.photo_geometry.selection",
-            "x5crop.detection.photo_geometry.template_profiles",
-            "x5crop.detection.photo_geometry.template_model",
-            "x5crop.detection.photo_geometry.template_first",
+            "x5crop.detection.photo_geometry.observations",
+            "x5crop.detection.photo_geometry.chains",
+            "x5crop.detection.photo_geometry.solver",
         ):
             with self.subTest(embedded=module):
                 self.assertIn(module, sources)

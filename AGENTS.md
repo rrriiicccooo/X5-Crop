@@ -79,7 +79,7 @@ GitHub 是 tracked 源码与文档的权威来源。NAS 和复制目录只用于
   assessment、selection、decision、finalization、output、report、debug 单向流动。
 - 被替代的 API、schema、flag、alias、wrapper、test 和 import 同批删除；不保留 fallback、shim、
   feature flag、dead code 或平行 runtime。
-- Producer 必须 template-first 且工作量有界；不恢复通用 DP、top-K、候选笛卡尔积、逐帧尺寸、
+- Producer 必须 fixed-format chain-first 且工作量有界；不恢复通用 DP、top-K、候选笛卡尔积、逐帧尺寸、
   selected-placement 临时 query 或无界全图 evidence。
 - `tifffile + imagecodecs` 独占正式 TIFF I/O；OpenCV 只作有界像素测量；SciPy 只作数值与
   sampling；Pillow 只在显式 Debug Analysis 时延迟导入。

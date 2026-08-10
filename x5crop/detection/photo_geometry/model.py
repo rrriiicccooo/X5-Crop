@@ -37,6 +37,12 @@ class BoundaryRole(str, Enum):
     LONG_BOUNDARY = "long_boundary"
 
 
+class BoundaryEvidenceState(str, Enum):
+    SUPPORT = "support"
+    CONTRADICTION = "contradiction"
+    UNOBSERVABLE = "unobservable"
+
+
 class PositionSource(str, Enum):
     OBSERVED_TRANSITION = "observed_transition"
     INFERRED_OPPOSITE_EDGE = "inferred_opposite_edge"
@@ -56,7 +62,7 @@ class AuthoritySide(str, Enum):
 
 
 class ClippedRequirement(str, Enum):
-    VISIBLE_INTERPOLATION_GUARD = "visible_interpolation_guard"
+    VISIBLE_PLACEMENT = "visible_placement"
 
 
 class QueryPurpose(str, Enum):
@@ -98,7 +104,6 @@ class PhotoBoundaryMeasurementSpec:
     center_offset_allowance_mm: float = 1.0
     anchor_tile_width_mm: float = 6.0
     transition_coordinate_sampling_uncertainty_px: float = 0.5
-    interpolation_allowance_source_px: float = 1.0
     background_texture_ratio_minimum: float = 2.0
     background_tone_to_texture_minimum: float = 6.0
     directional_background_support_minimum: float = 0.25
@@ -132,7 +137,6 @@ class PhotoBoundaryMeasurementSpec:
             self.center_offset_allowance_mm,
             self.anchor_tile_width_mm,
             self.transition_coordinate_sampling_uncertainty_px,
-            self.interpolation_allowance_source_px,
             self.background_texture_ratio_minimum,
             self.background_tone_to_texture_minimum,
             self.directional_background_support_minimum,

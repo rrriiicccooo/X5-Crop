@@ -26,15 +26,15 @@ class ScanCanvasOutcome(str, Enum):
 
 @dataclass(frozen=True)
 class CanvasAxisScaleIntervals:
-    component_id: str
+    holder_profile_id: str
     width_axis_px_per_mm: PositiveInterval
     height_axis_px_per_mm: PositiveInterval
     source_width_axis: str
     source_height_axis: str
 
     def __post_init__(self) -> None:
-        if not self.component_id:
-            raise ValueError("canvas scale component requires an identity")
+        if not self.holder_profile_id:
+            raise ValueError("canvas scale requires a holder-profile identity")
         if (
             self.source_width_axis not in {"x", "y"}
             or self.source_height_axis not in {"x", "y"}
@@ -68,7 +68,7 @@ class MatchedHolder:
     def __post_init__(self) -> None:
         if self.full_count <= 0:
             raise ValueError("matched holder requires positive full count")
-        if self.axis_scales.component_id != self.profile.profile_id:
+        if self.axis_scales.holder_profile_id != self.profile.profile_id:
             raise ValueError("matched-holder scale authority disagrees")
         if not math.isfinite(self.aspect_error_ratio) or self.aspect_error_ratio < 0:
             raise ValueError("matched-holder aspect error is invalid")
@@ -228,7 +228,7 @@ def observe_scan_canvas(
         matches=matches,
         selected_profile=profile,
         axis_scales=CanvasAxisScaleIntervals(
-            component_id=profile.profile_id,
+            holder_profile_id=profile.profile_id,
             width_axis_px_per_mm=_scale_interval(
                 work_width_px,
                 profile.long_axis_mm,

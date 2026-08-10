@@ -16,16 +16,19 @@ TIFF 写出均成立时才输出正式照片，否则整张 source 进入 `needs
 应选择 full。片夹容量只校验上限，不能代替 count。程序不删除空白 slot。例如 120-66 的三格完整片条使用 full；只有一格
 或两格才使用 partial。
 
-调用前语法检查会拒绝 partial 缺少 count、count 非正数或 full 携带 count，并以退出码 `2`
-停止。读取 source 后，若 partial count 不小于实际匹配片夹的完整格数，该 source 记为
-`runtime_error`，不进入检测也不写正式 TIFF；非交互批处理继续处理其它合法 source。交互式
-多文件运行会先检查整批片夹与 count，列出全部冲突并取消本次输入，必须重新启动整批选择，
-不会逐 source 临时改写 count。图像不能唯一匹配片夹时保持 `needs_review`，不猜片夹或格数。
+语法检查会拒绝 partial 缺少 count、count 非正数或 full 携带 count。匹配片夹后，如果 partial
+count 不小于实际 `full_count`，非交互整批调用同样在 detector 前以退出码 `2` 停止；交互启动器
+列出全部冲突并返回模式/count 步骤，不要求重新选择 format 或 Debug Analysis，也不会逐 source
+临时改写 count。图像不能唯一匹配片夹时保持 `needs_review`，不猜片夹或格数。`135-dual` 只允许
+full，总计 12 格、每 lane 6 格。
 
 Format 决定照片矩形的物理尺寸。检测只负责根据片条方向、照片上下边缘、照片间黑带、共同尺寸
 和局部卷片关系放置这些矩形，再把边缘测量所需的最小安全范围纳入输出。最终每一边都必须通过
 以 format 尺寸为基准的 5%（start/end）或 3%（top/bottom）限制。相邻照片接触或重叠时，
 相邻输出可以重复包含同一段 source pixels；这不是额外边缘，也不会改变照片数。
+
+完整格数为：135=6、half=12、XPan=3、120-645=4、120-66=3；120-67 普通片夹为 3、短片夹
+为 2。135-dual 总计 12 格，每 lane 6 格。
 
 ## 安装
 
@@ -96,7 +99,7 @@ python3 X5_Crop.py /path/to/scans \
 - `--layout`：`auto`、`horizontal` 或 `vertical`。
 - `--strip`：`full` 或 `partial`。
 - `--count N`：仅 partial 使用且必填的正整数曝光格数；包括中间空白曝光格，必须少于匹配片夹
-  的完整张数。Full 不接受 `--count`；若格数完整，使用 full。
+  的完整张数。Full 不接受 `--count`；若格数完整，使用 full。`135-dual` 不接受 partial。
 - `--jobs N`：source 并发数；默认 1，上限 3。默认值优先控制一般电脑的峰值内存；内存充足且
   一次处理多张原 TIFF 时可显式使用 `--jobs 2`。数值库内部线程固定为 1。
 - `--debug-analysis`：执行完整检测并生成自适应高度的三联诊断 JPG、报告、summary 和 manifest，
@@ -104,7 +107,7 @@ python3 X5_Crop.py /path/to/scans \
   之后用相同输入和检测参数做普通运行时会自动尝试复用报告。
 - `--allow-best-effort-output`：明确接受未验证文件系统的较弱发布语义。
 - `--interactive`：交互选择格式、模式、张数和 Debug Analysis；多文件的片夹/count 检查针对
-  整批执行，存在冲突时列出全部冲突并取消本次输入。
+  整批执行，存在冲突时列出全部冲突并返回模式/count 步骤。
 
 没有 `--overwrite`。一次成功运行总是以完整新结果替换上一套可确认归属的 V5 输出。
 

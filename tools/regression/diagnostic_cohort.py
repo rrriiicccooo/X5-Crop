@@ -37,12 +37,12 @@ WORK_FIELDS = (
     "pixel_query_count",
     "basic_profile_coordinate_count",
     "basic_profile_run_count",
-    "phase_vote_count",
-    "template_group_count",
-    "template_role_lookup_count",
-    "template_role_match_count",
+    "role_proposal_count",
+    "sequence_group_count",
+    "ordinal_role_lookup_count",
+    "ordinal_role_match_count",
     "local_relation_evaluation_count",
-    "enhanced_query_count",
+    "refinement_query_count",
     "materialized_frame_geometry_count",
     "shared_measurement_reuse_count",
     "domain_pixels",
@@ -141,15 +141,15 @@ def _bounded_work(
         if field not in {"domain_pixels", "peak_temporary_bytes"}
     )
     structural_bounds = all(
-        int(row["template_role_lookup_count"])
-        <= int(row["template_group_count"]) * count * 2
-        and int(row["template_role_match_count"])
-        <= int(row["phase_vote_count"])
+        int(row["ordinal_role_lookup_count"])
+        <= int(row["sequence_group_count"]) * count * 2
+        and int(row["ordinal_role_match_count"])
+        <= int(row["role_proposal_count"])
         and int(row["local_relation_evaluation_count"])
-        <= int(row["template_group_count"]) * max(0, count - 1)
-        and int(row["enhanced_query_count"])
-        <= int(row["phase_vote_count"])
-        + int(row["template_group_count"]) * count * 2
+        <= int(row["sequence_group_count"]) * max(0, count - 1)
+        and int(row["refinement_query_count"])
+        <= int(row["role_proposal_count"])
+        + int(row["sequence_group_count"]) * count * 2
         for row, count in zip(work_rows, lane_counts, strict=True)
     )
     return (
@@ -380,11 +380,13 @@ def run_diagnostic_source(source: DiagnosticSource) -> dict[str, Any]:
         "output_slot_count": geometry["output_slot_count"],
         "slot_identities": geometry["slot_identities"],
         "geometry_outcome": {
-            "lane_canonical_components": [
+            "lane_frame_specs": [
                 next(
                     (
-                        item["component"]["component_id"]
-                        for item in lane["chains"]["materialized"]
+                        item["frame_spec"]["frame_spec_id"]
+                        for item in lane["chains"][
+                            "lane_complete_proposals"
+                        ]
                         if item["placement_id"]
                         == lane["selection"]["selected_placement_id"]
                     ),

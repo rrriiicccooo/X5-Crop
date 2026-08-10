@@ -54,15 +54,13 @@ class ReusableAnalysisReport:
         )
 
     @property
-    def transform(self) -> AffineCoordinateTransform:
-        value = self.record["output"]["finalization"][
-            "transform_assessment"
-        ]["transform"]
-        if not isinstance(value, dict):
+    def transforms(self) -> tuple[AffineCoordinateTransform, ...]:
+        values = self.record["output"]["finalization"]["output_transforms"]
+        if not isinstance(values, list) or not values:
             raise AnalysisReportReuseError(
-                "approved report lacks an affine transform"
+                "approved report lacks per-output affine transforms"
             )
-        return _transform_from_record(value)
+        return tuple(_transform_from_record(value) for value in values)
 
 
 def _read_report_records(path: Path) -> tuple[dict[str, Any], ...]:
@@ -160,11 +158,12 @@ def _validate_reusable_record(
             not reusable.final_boxes
             or len(reusable.final_boxes)
             != len(reusable.sampling_authority_boxes)
+            or len(reusable.final_boxes) != len(reusable.transforms)
         ):
             raise AnalysisReportReuseError(
                 "approved analysis report geometry is incomplete"
             )
-        reusable.transform
+        reusable.transforms
 
 
 def find_reusable_analysis_report(

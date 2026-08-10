@@ -11,10 +11,6 @@ from x5crop.detection.evidence.content_occupancy import (
 )
 from x5crop.detection.photo_geometry.bounds import (
     MAX_BANDS_PER_CORRIDOR,
-    MAX_COMPLETE_CHAINS_PER_LANE,
-    MAX_LEDGER_ENTRIES_PER_CHAIN,
-    MAX_LEDGER_ENTRIES_PER_LANE,
-    MAX_LEDGER_ENTRIES_PER_SOURCE,
 )
 from x5crop.detection.photo_geometry.model import BoundaryRole
 from x5crop.detection.photo_geometry.detector import _bounded_transition_regions
@@ -22,9 +18,7 @@ from x5crop.detection.photo_geometry.output import (
     direct_use_budget_assessment,
     safe_crop_envelope_from_placement,
 )
-from x5crop.detection.photo_geometry.template_first import (
-    materialize_lane_placements,
-)
+from x5crop.detection.photo_geometry import solver
 from x5crop.detection.photo_geometry.selection import (
     ChainEvidenceTier,
     ChainLedgerEntry,
@@ -32,11 +26,14 @@ from x5crop.detection.photo_geometry.selection import (
     ContentVetoReason,
     PlacementCluster,
     ProducerBoundsReceipt,
+    _compatible_source_geometry_clusters,
     cluster_sampling_equivalent_chains,
     cluster_strictly_dominates,
     content_veto_assessment,
 )
-from x5crop.detection.photo_geometry.template_model import LocalAdvanceKind
+from x5crop.detection.photo_geometry.source_geometry import SourceScanGeometry
+from x5crop.formats import FramePhysicalSpec
+from x5crop.detection.photo_geometry.chains import LocalAdvanceKind
 from x5crop.domain import (
     Box,
     EvidenceState,
@@ -44,6 +41,7 @@ from x5crop.domain import (
     MeasurementIdentity,
     MeasurementProvenance,
     ObservationId,
+    PositiveInterval,
 )
 
 
@@ -62,13 +60,19 @@ def _chain(
         placement_id=f"placement:{name}",
         lane_id="lane:0",
         sampling_boxes=(box,),
+        sampling_authority_boxes=(Box(0, 0, 20, 20),),
+        authority_profile_ids=("holder:test",),
         boundary_intervals_px=(interval,) * 4,
-        direct_opposite_pair_count=pair_count,
-        direct_boundary_count=direct_count,
-        opposite_pair_observation_ids=observation_ids,
-        direct_boundary_observation_ids=observation_ids,
+        direction_id="direction:test",
+        source_scan_geometry_id="source-geometry:test",
+        direct_observation_count=direct_count,
+        structural_pair_count=pair_count,
+        direct_observation_ids=observation_ids,
+        structural_observation_ids=observation_ids,
+        normal_gap_supported=True,
+        separator_material_quality=1.0,
+        local_advance_authorized=True,
         ledger=(),
-        ledger_pruned_count=0,
     )
 
 
@@ -78,7 +82,7 @@ def _placement(name: str, residual: float = 0.0):
     )
     return SimpleNamespace(
         placement_id=f"placement:{name}",
-        canonical=SimpleNamespace(
+        fixed_frames=SimpleNamespace(
             frames=(
                 SimpleNamespace(
                     start=boundary,
@@ -109,14 +113,16 @@ def _cluster(
         representative_placement_id=f"placement:{name}",
         sampling_boxes=(Box(0, 0, 10, 10),),
         boundary_intersections_px=(FiniteInterval.exact(1.0),) * 4,
-        direct_opposite_pair_count=pair_count,
-        direct_boundary_count=direct_count,
-        opposite_pair_observation_ids=tuple(
-            ObservationId(value) for value in pair_ids
-        ),
-        direct_boundary_observation_ids=tuple(
+        direct_observation_count=direct_count,
+        structural_pair_count=pair_count,
+        direct_observation_ids=tuple(
             ObservationId(value) for value in direct_ids
         ),
+        structural_observation_ids=tuple(
+            ObservationId(value) for value in pair_ids
+        ),
+        normal_gap_supported=True,
+        separator_material_quality=1.0,
     )
 
 
@@ -128,6 +134,7 @@ def _observation(box: Box) -> ContentOccupancyObservationSet:
         observation_id=identity,
         lane_id="lane:0",
         source_box=box,
+        source_cells=(box,),
         reliability=0.95,
         provenance=MeasurementProvenance(
             root_measurement=MeasurementIdentity.CONTENT_OCCUPANCY,
@@ -141,6 +148,8 @@ def _observation(box: Box) -> ContentOccupancyObservationSet:
         observations=(observation,),
         long_sample_count=16,
         cross_sample_count=16,
+        proposed_observation_count=1,
+        proposed_cell_run_count=1,
         overflowed=False,
     )
 
@@ -160,7 +169,7 @@ def _content_placement(
 ):
     return SimpleNamespace(
         placement_id="placement:content",
-        canonical=SimpleNamespace(frames=frames),
+        fixed_frames=SimpleNamespace(frames=frames),
         sequence=SimpleNamespace(
             lane_gap_model=SimpleNamespace(
                 state=EvidenceState.SUPPORTED,
@@ -174,29 +183,66 @@ def _content_placement(
 
 
 class ChainSelectionContractTest(unittest.TestCase):
-    def test_producer_limits_are_frozen_and_source_bounded(self) -> None:
-        self.assertEqual(
-            (
-                MAX_BANDS_PER_CORRIDOR,
-                MAX_COMPLETE_CHAINS_PER_LANE,
-                MAX_LEDGER_ENTRIES_PER_CHAIN,
-                MAX_LEDGER_ENTRIES_PER_LANE,
-                MAX_LEDGER_ENTRIES_PER_SOURCE,
-            ),
-            (4, 8, 64, 512, 1024),
-        )
-        with self.assertRaises(ValueError):
-            ProducerBoundsReceipt(
-                lane_id="lane:0",
-                corridor_bands=(),
-                proposed_complete_chain_count=9,
-                materialized_complete_chain_count=9,
-                chain_ledger_entry_count=0,
-                prune_summaries=(),
-                bound_exceeded=False,
+    def test_dual_lane_joint_solver_queries_only_scale_compatible_chains(
+        self,
+    ) -> None:
+        frame = FramePhysicalSpec(36.0, 24.0, 2.0)
+
+        def geometry(minimum: float, maximum: float) -> SourceScanGeometry:
+            return SourceScanGeometry.create(
+                frame,
+                width_scale_px_per_mm=PositiveInterval(minimum, maximum),
+                height_scale_px_per_mm=PositiveInterval(minimum, maximum),
             )
 
-    def test_boundary_corridor_materializes_at_most_four_bands(self) -> None:
+        compatible = _cluster(
+            "compatible",
+            pair_count=1,
+            direct_count=1,
+            pair_ids=("a",),
+            direct_ids=("a",),
+        )
+        incompatible = _cluster(
+            "incompatible",
+            pair_count=1,
+            direct_count=1,
+            pair_ids=("b",),
+            direct_ids=("b",),
+        )
+        right = {
+            compatible.representative_placement_id: SimpleNamespace(
+                frame_spec=frame,
+                source_scan_geometry=geometry(9.5, 10.5),
+            ),
+            incompatible.representative_placement_id: SimpleNamespace(
+                frame_spec=frame,
+                source_scan_geometry=geometry(11.0, 12.0),
+            ),
+        }
+        matches = _compatible_source_geometry_clusters(
+            (compatible, incompatible),
+            right,
+            SimpleNamespace(
+                frame_spec=frame,
+                source_scan_geometry=geometry(9.0, 10.0),
+            ),
+        )
+        self.assertEqual(
+            tuple(item.cluster_id for item, _shared in matches),
+            (compatible.cluster_id,),
+        )
+        self.assertEqual(
+            matches[0][1].width_state.feasible_scale_interval(),
+            PositiveInterval(9.5, 10.0),
+        )
+
+    def test_only_raw_corridor_observations_have_a_fixed_cap(self) -> None:
+        self.assertEqual(MAX_BANDS_PER_CORRIDOR, 4)
+        source = inspect.getsource(solver.materialize_lane_placements)
+        self.assertNotIn("proposed[:", source)
+        self.assertNotIn("ordered[:", source)
+
+    def test_overflowing_corridor_materializes_no_ranked_subset(self) -> None:
         regions = tuple(
             SimpleNamespace(
                 ambiguous=False,
@@ -217,84 +263,43 @@ class ChainSelectionContractTest(unittest.TestCase):
                 reference_trace_px=10.0,
                 boundary_axis_scale_px_per_mm=SimpleNamespace(),
             )
-        self.assertEqual(len(retained), 4)
+        self.assertEqual(retained, ())
         self.assertEqual(counts[0].proposed_count, 5)
+        self.assertEqual(counts[0].materialized_count, 0)
         self.assertTrue(exceeded)
 
-    def test_lane_producer_stops_after_eight_complete_chain_proposals(self) -> None:
-        component = SimpleNamespace(
-            component=SimpleNamespace(component_id="component:0")
-        )
-        role = SimpleNamespace(
-            role=BoundaryRole.START,
-            role_index=0,
-            lane_ordinal=1,
-        )
-        seeds = tuple(
-            SimpleNamespace(
-                seed_id=f"seed:{index}",
-                votes=(
-                    SimpleNamespace(
-                        role=role,
-                        phase_interval_px=FiniteInterval.exact(float(index)),
-                        transition_ids=(ObservationId(f"edge:{index}"),),
-                    ),
-                ),
-            )
-            for index in range(9)
-        )
-
-        def materialize(_proposal, _component, seed, _direction):
-            return (SimpleNamespace(placement_id=f"placement:{seed.seed_id}"),)
-
-        with (
-            mock.patch(
-                "x5crop.detection.photo_geometry.template_first."
-                "_component_materialization_seeds",
-                return_value=seeds,
-            ),
-            mock.patch(
-                "x5crop.detection.photo_geometry.template_first."
-                "_materialize_component_seed",
-                side_effect=materialize,
-            ) as materializer,
-        ):
-            placements, proposed_count, exceeded = materialize_lane_placements(
-                SimpleNamespace(components=(component,)),
-                SimpleNamespace(),
-                {},
-            )
-        self.assertEqual(proposed_count, 9)
-        self.assertEqual(len(placements), 8)
-        self.assertEqual(materializer.call_count, 8)
-        self.assertTrue(exceeded)
-
-    def test_chain_ledger_rejects_more_than_sixty_four_entries(self) -> None:
+    def test_chain_ledger_preserves_every_unique_entry(self) -> None:
         entries = tuple(
             ChainLedgerEntry(
                 entry_id=f"entry:{ordinal}",
                 chain_id="chain:overflow",
                 ordinal=ordinal,
-                evidence_tier=ChainEvidenceTier.PHYSICAL_CONTRACT,
+                evidence_tier=ChainEvidenceTier.WEAK_PRIOR,
                 observation_ids=(),
                 physical_interval_px=None,
             )
             for ordinal in range(1, 66)
         )
-        with self.assertRaises(ValueError):
-            CompleteChainRecord(
-                chain_id="chain:overflow",
-                placement_id="placement:overflow",
-                lane_id="lane:0",
-                sampling_boxes=(Box(0, 0, 10, 10),),
-                boundary_intervals_px=(FiniteInterval.exact(1.0),) * 4,
-                direct_opposite_pair_count=0,
-                direct_boundary_count=0,
-                opposite_pair_observation_ids=(),
-                direct_boundary_observation_ids=(),
-                ledger=entries,
-                ledger_pruned_count=0,
-            )
+        record = CompleteChainRecord(
+            chain_id="chain:overflow",
+            placement_id="placement:overflow",
+            lane_id="lane:0",
+            sampling_boxes=(Box(0, 0, 10, 10),),
+            sampling_authority_boxes=(Box(0, 0, 20, 20),),
+            authority_profile_ids=("holder:test",),
+            boundary_intervals_px=(FiniteInterval.exact(1.0),) * 4,
+            direction_id="direction:test",
+            source_scan_geometry_id="source-geometry:test",
+            direct_observation_count=0,
+            structural_pair_count=0,
+            direct_observation_ids=(),
+            structural_observation_ids=(),
+            normal_gap_supported=False,
+            separator_material_quality=0.0,
+            local_advance_authorized=True,
+            ledger=entries,
+        )
+        self.assertEqual(len(record.ledger), 65)
 
     def test_safe_envelope_and_budget_accept_one_selected_placement(self) -> None:
         self.assertIn(

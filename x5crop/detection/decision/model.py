@@ -37,9 +37,11 @@ class DecisionGateAssessment:
     @property
     def final_review_reasons(self) -> tuple[str, ...]:
         return tuple(
-            check.final_review_reason
-            for check in self.blocking_checks
-            if check.final_review_reason is not None
+            dict.fromkeys(
+                check.final_review_reason
+                for check in self.blocking_checks
+                if check.final_review_reason is not None
+            )
         )
 
     @property

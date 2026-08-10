@@ -24,15 +24,14 @@ bound; it never supplies the count. Blank slots are never
 removed. For example, a complete three-slot 120-66 strip uses full even when it
 sits in the middle of the holder; only a one- or two-slot strip is partial.
 
-Invocation preflight rejects partial without a count, a non-positive count, or
-full with a count, and exits with code `2`. After source reading, a partial
-count that is not below the matched holder's full count makes only that source
-`runtime_error`; it does not enter detection or write official TIFFs, while a
-non-interactive batch continues with other valid sources. Interactive multi-file
-use preflights holder/count for the entire batch, lists every conflict, and
-cancels that input so the batch choices must be restarted; it never rewrites
-count one source at a time. Ambiguous holder matching remains `needs_review`
-instead of guessing holder identity or count.
+Preflight rejects partial without a count, a non-positive count, or full with a
+count. If a partial count is not below the matched holder's full count, a
+non-interactive batch also stops before detection with exit code `2`.
+Interactive use lists all holder/count conflicts and returns to the mode/count
+step without asking for format or Debug Analysis again; it never rewrites count
+one source at a time. Ambiguous holder matching remains `needs_review` instead
+of guessing holder identity or count. `135-dual` is full-only: 12 slots total,
+six per lane.
 
 The format fixes the physical photo rectangle. Detection places those rectangles
 from strip direction, top/bottom evidence, dark separator bands, shared dimensions,
@@ -41,6 +40,10 @@ to protect visible content. Every final side must remain within 5% of format wid
 for start/end and 3% of format height for top/bottom. When photos touch or overlap,
 neighboring outputs may deliberately share source pixels; the slot count does not
 change.
+
+Complete counts are 135=6, half=12, XPan=3, 120-645=4, and 120-66=3.
+120-67 uses 3 on ordinary holders and 2 on the short holder. 135-dual uses 12
+in total, six per lane.
 
 ## Install
 
@@ -123,7 +126,7 @@ Command-line options:
 - `--count N`: a positive integer used only by partial and required there,
   including intermediate blank exposures; it must be smaller than the matched
   holder's complete count. Full rejects `--count`; use full when the count is
-  complete.
+  complete. `135-dual` rejects partial.
 - `--jobs N`: source concurrency; default 1, maximum 3. The default limits peak
   memory on ordinary computers; when memory is plentiful and processing a batch
   of source TIFFs, you may explicitly use `--jobs 2`. Numerical library threads
@@ -136,8 +139,8 @@ Command-line options:
 - `--allow-best-effort-output`: explicitly accept weaker publication semantics
   on an unverified filesystem.
 - `--interactive`: prompt for format, mode, count, and Debug Analysis; a
-  multi-file holder/count preflight covers the whole batch and cancels the
-  current input after listing every conflict.
+  multi-file holder/count preflight covers the whole batch and returns to the
+  mode/count step after listing every conflict.
 
 There is no `--overwrite`. A successful run always replaces the previous
 complete, verified V5-owned output.

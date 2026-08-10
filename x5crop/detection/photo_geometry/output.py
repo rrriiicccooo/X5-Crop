@@ -6,9 +6,7 @@ from ...domain import Box, EvidenceState
 from ...geometry.affine import AffineCoordinateTransform
 from ...geometry.convex import (
     ConvexPolygon,
-    axis_aligned_minkowski_guard,
     clip_convex_polygon_to_box,
-    contains_point,
     convex_hull,
     mapped_half_open_box,
 )
@@ -22,12 +20,11 @@ from .model import (
     DirectUseBudgetAssessment,
     DirectUseBudgetEdgeAssessment,
     FootprintSaturationFact,
-    PHOTO_BOUNDARY_MEASUREMENT_SPEC,
     SafeCropEnvelope,
 )
-from .template_model import (
-    FormatPlacement,
-    FrameFormatPlacement,
+from .chains import (
+    CompleteFormatChain,
+    FixedFormatFrame,
 )
 from .protection import DIRECT_USE_BUDGET_SPEC
 
@@ -38,7 +35,7 @@ def _stable_id(prefix: str, *parts: object) -> str:
 
 
 def _boundary_polygon(
-    placement: FrameFormatPlacement,
+    placement: FixedFormatFrame,
     *,
     top_position_px: float,
     bottom_position_px: float,
@@ -74,13 +71,13 @@ def _boundary_polygon(
 
 
 def format_placement_frame_footprint(
-    placement: FormatPlacement,
+    placement: CompleteFormatChain,
     lane_ordinal: int,
 ) -> ConvexPolygon:
     index = lane_ordinal - 1
     if index < 0 or index >= placement.output_slot_count:
-        raise ValueError("format-placement ordinal is out of range")
-    frame = placement.canonical.frames[index]
+        raise ValueError("complete-chain ordinal is out of range")
+    frame = placement.fixed_frames.frames[index]
     return convex_hull(
         _boundary_polygon(
             frame,
@@ -93,13 +90,6 @@ def format_placement_frame_footprint(
                 index * 2 + 1
             ].maximum,
         )
-    )
-
-
-def _inside_authority(point: tuple[float, float], authority: Box) -> bool:
-    return (
-        authority.left <= point[0] <= authority.right - 1
-        and authority.top <= point[1] <= authority.bottom - 1
     )
 
 
@@ -130,7 +120,7 @@ def _saturation_facts(
         FootprintSaturationFact(
             authority_side=side,
             clipped_requirements=(
-                ClippedRequirement.VISIBLE_INTERPOLATION_GUARD,
+                ClippedRequirement.VISIBLE_PLACEMENT,
             ),
         )
         for side in AuthoritySide
@@ -139,7 +129,7 @@ def _saturation_facts(
 
 
 def safe_crop_envelope_from_placement(
-    placement: FormatPlacement,
+    placement: CompleteFormatChain,
     *,
     lane: SourceLaneEvidence,
     lane_ordinal: int,
@@ -151,33 +141,12 @@ def safe_crop_envelope_from_placement(
     if lane_ordinal <= 0 or placement.output_slot_count < lane_ordinal:
         raise ValueError("safe envelope requires one selected placement")
     authority = source_lane_box(lane, layout)
-    canonical_frame = placement.canonical.frames[lane_ordinal - 1]
     placement_footprint = format_placement_frame_footprint(
         placement,
         lane_ordinal,
     )
-    if not all(
-        _inside_authority(point, authority) for point in placement_footprint
-    ):
-        raise ValueError("format placement exceeds source/lane authority")
-    required = axis_aligned_minkowski_guard(
-        placement_footprint,
-        PHOTO_BOUNDARY_MEASUREMENT_SPEC.interpolation_allowance_source_px,
-    )
-    canonical_polygon = convex_hull(
-        canonical_frame.canonical_source_polygon
-    )
-    if not all(
-        _inside_authority(point, authority)
-        for point in canonical_polygon
-    ):
-        raise ValueError("canonical placement exceeds source/lane authority")
+    required = placement_footprint
     constrained = clip_convex_polygon_to_box(required, authority)
-    if (
-        not all(contains_point(constrained, point) for point in placement_footprint)
-        or not all(contains_point(constrained, point) for point in canonical_polygon)
-    ):
-        raise ValueError("authority clipping removed a valid placement")
     mapped = mapped_half_open_box(constrained, transform.map_point)
     if (
         mapped.left < 0
@@ -188,7 +157,7 @@ def safe_crop_envelope_from_placement(
         raise ValueError("mapped footprint exceeds affine output authority")
     return SafeCropEnvelope(
         geometry_id=_stable_id(
-            "safe-format-placement-envelope",
+            "safe-crop-envelope",
             placement.lane_id,
             lane_ordinal,
             placement.placement_id,
@@ -227,23 +196,6 @@ def output_sampling_identity(
     )
 
 
-def _actual_source_sampling_polygon(
-    box: Box,
-    transform: AffineCoordinateTransform,
-) -> ConvexPolygon:
-    return convex_hull(
-        tuple(
-            transform.inverse_map_point(x, y)
-            for x, y in (
-                (float(box.left), float(box.top)),
-                (float(box.right - 1), float(box.top)),
-                (float(box.right - 1), float(box.bottom - 1)),
-                (float(box.left), float(box.bottom - 1)),
-            )
-        )
-    )
-
-
 def _line_offset_at_position(frame_boundary, position: float, side_line) -> float:
     return canonical_boundary_line_at_position(
         frame_boundary,
@@ -253,7 +205,7 @@ def _line_offset_at_position(frame_boundary, position: float, side_line) -> floa
 
 
 def direct_use_budget_assessment(
-    placement: FormatPlacement,
+    placement: CompleteFormatChain,
     output_geometry: SafeCropEnvelope,
     transform: AffineCoordinateTransform | None,
 ) -> DirectUseBudgetAssessment:
@@ -272,17 +224,14 @@ def direct_use_budget_assessment(
             state=EvidenceState.UNAVAILABLE,
             named_gap="direct_use_budget_unavailable",
         )
-    actual = _actual_source_sampling_polygon(
-        output_geometry.mapped_output_box,
-        transform,
-    )
+    actual = output_geometry.required_source_footprint
     worst: dict[
         BoundaryRole,
         tuple[float, float, float, float, float, str, bool],
     ] = {}
     index = output_geometry.lane_ordinal - 1
     for placement in (placement,):
-        frame = placement.canonical.frames[index]
+        frame = placement.fixed_frames.frames[index]
         boundaries = (
             frame.start,
             frame.end,
@@ -297,22 +246,22 @@ def direct_use_budget_assessment(
             for boundary in boundaries
         }
         width_budget_px = (
-            placement.source_frame_geometry.width_state.retained_extent_budget_px(
+            placement.source_scan_geometry.width_state.retained_extent_budget_px(
                 DIRECT_USE_BUDGET_SPEC.sequence_axis_ratio_per_side
             ).minimum
         )
         height_budget_px = (
-            placement.source_frame_geometry.height_state.retained_extent_budget_px(
+            placement.source_scan_geometry.height_state.retained_extent_budget_px(
                 DIRECT_USE_BUDGET_SPEC.cross_axis_ratio_per_side
             ).minimum
         )
         width_limit = (
-            placement.source_frame_geometry.width_state.worst_case_mm(
+            placement.source_scan_geometry.width_state.worst_case_mm(
                 width_budget_px
             )
         )
         height_limit = (
-            placement.source_frame_geometry.height_state.worst_case_mm(
+            placement.source_scan_geometry.height_state.worst_case_mm(
                 height_budget_px
             )
         )
@@ -345,7 +294,7 @@ def direct_use_budget_assessment(
                     if role == BoundaryRole.START
                     else actual_offset - boundary_offset,
                 )
-                expansion_mm = placement.source_frame_geometry.width_state.worst_case_mm(
+                expansion_mm = placement.source_scan_geometry.width_state.worst_case_mm(
                     expansion_px
                 )
                 candidate = (
@@ -385,7 +334,7 @@ def direct_use_budget_assessment(
                     if role == BoundaryRole.TOP
                     else actual_offset - boundary_offset,
                 )
-                expansion_mm = placement.source_frame_geometry.height_state.worst_case_mm(
+                expansion_mm = placement.source_scan_geometry.height_state.worst_case_mm(
                     expansion_px
                 )
                 candidate = (

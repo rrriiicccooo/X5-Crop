@@ -56,14 +56,11 @@ class PhysicalAuthorityContractTest(unittest.TestCase):
         for format_id, values in expected.items():
             spec = format_spec(format_id)
             self.assertEqual(
-                tuple(
-                    (item.frame_width_mm, item.frame_height_mm)
-                    for item in spec.frame_components
-                ),
+                ((spec.frame.frame_width_mm, spec.frame.frame_height_mm),),
                 values[:-2],
             )
-            self.assertEqual(spec.strip.default_count, values[-2])
-            self.assertEqual(spec.strip.partial_mode_supported, values[-1])
+            self.assertEqual(spec.maximum_full_count, values[-2])
+            self.assertEqual(spec.partial_mode_supported, values[-1])
             self.assertFalse(hasattr(spec, "aperture_tolerance"))
         self.assertEqual(
             FRAME_DIMENSION_TOLERANCE_SPEC.frame_width_tolerance_ratio,
@@ -78,7 +75,7 @@ class PhysicalAuthorityContractTest(unittest.TestCase):
         self,
     ) -> None:
         spec = format_spec("135")
-        aperture = spec.frame_components[0]
+        aperture = spec.frame
         intervals = frame_physical_pixel_intervals(
             aperture,
             PositiveInterval(10.0, 11.0),
@@ -228,6 +225,7 @@ class PhysicalAuthorityContractTest(unittest.TestCase):
                 "observation_id",
                 "lane_id",
                 "source_box",
+                "source_cells",
                 "reliability",
                 "provenance",
             ),
@@ -323,7 +321,7 @@ class PhysicalAuthorityContractTest(unittest.TestCase):
         lane = workspace.source_core.lanes[0]
         scan = lane.scan_canvas
         assert scan.axis_scales is not None
-        aperture = configuration.physical_spec.frame_components[0]
+        aperture = configuration.physical_spec.frame
         physical = frame_physical_pixel_intervals(
             aperture,
             scan.axis_scales.width_axis_px_per_mm,

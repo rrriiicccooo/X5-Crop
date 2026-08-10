@@ -17,16 +17,23 @@ from ...domain import (
 MAX_CONTENT_SAMPLES_LONG = 256
 MAX_CONTENT_SAMPLES_CROSS = 64
 MAX_CONTENT_OBSERVATIONS_PER_LANE = 64
+MAX_CONTENT_CELL_RUNS_PER_LANE = 1024
 
 
-def _stable_id(lane_id: str, box: Box, reliability: float) -> ObservationId:
+def _stable_id(
+    lane_id: str,
+    cells: tuple[Box, ...],
+    reliability: float,
+) -> ObservationId:
     payload = "\x1f".join(
         (
             lane_id,
-            str(box.left),
-            str(box.top),
-            str(box.right),
-            str(box.bottom),
+            *(str(value) for cell in cells for value in (
+                cell.left,
+                cell.top,
+                cell.right,
+                cell.bottom,
+            )),
             reliability.hex(),
         )
     ).encode("utf-8")
@@ -38,6 +45,7 @@ class ContentOccupancyObservation:
     observation_id: ObservationId
     lane_id: str
     source_box: Box
+    source_cells: tuple[Box, ...]
     reliability: float
     provenance: MeasurementProvenance
 
@@ -45,6 +53,12 @@ class ContentOccupancyObservation:
         if (
             not self.lane_id
             or not self.source_box.valid()
+            or not self.source_cells
+            or any(not cell.valid() for cell in self.source_cells)
+            or min(cell.left for cell in self.source_cells) < self.source_box.left
+            or min(cell.top for cell in self.source_cells) < self.source_box.top
+            or max(cell.right for cell in self.source_cells) > self.source_box.right
+            or max(cell.bottom for cell in self.source_cells) > self.source_box.bottom
             or not math.isfinite(self.reliability)
             or not 0.0 < self.reliability <= 1.0
             or self.provenance.root_measurement
@@ -60,6 +74,8 @@ class ContentOccupancyObservationSet:
     observations: tuple[ContentOccupancyObservation, ...]
     long_sample_count: int
     cross_sample_count: int
+    proposed_observation_count: int
+    proposed_cell_run_count: int
     overflowed: bool
 
     def __post_init__(self) -> None:
@@ -69,10 +85,32 @@ class ContentOccupancyObservationSet:
             or self.cross_sample_count <= 0
             or self.long_sample_count > MAX_CONTENT_SAMPLES_LONG
             or self.cross_sample_count > MAX_CONTENT_SAMPLES_CROSS
+            or self.proposed_observation_count < len(self.observations)
+            or self.proposed_cell_run_count
+            < sum(len(item.source_cells) for item in self.observations)
             or len(self.observations) > MAX_CONTENT_OBSERVATIONS_PER_LANE
+            or sum(len(item.source_cells) for item in self.observations)
+            > MAX_CONTENT_CELL_RUNS_PER_LANE
             or any(item.lane_id != self.lane_id for item in self.observations)
+            or self.overflowed
+            != (
+                self.proposed_observation_count
+                > MAX_CONTENT_OBSERVATIONS_PER_LANE
+                or self.proposed_cell_run_count
+                > MAX_CONTENT_CELL_RUNS_PER_LANE
+            )
         ):
             raise ValueError("content occupancy observation set is invalid")
+
+    @property
+    def producer_excess_count(self) -> int:
+        return max(
+            0,
+            self.proposed_observation_count
+            - MAX_CONTENT_OBSERVATIONS_PER_LANE,
+            self.proposed_cell_run_count
+            - MAX_CONTENT_CELL_RUNS_PER_LANE,
+        )
 
 
 def _source_box_from_work_box(box: Box, layout: str) -> Box:
@@ -81,6 +119,77 @@ def _source_box_from_work_box(box: Box, layout: str) -> Box:
     if layout == "vertical":
         return Box(box.top, box.left, box.bottom, box.right)
     raise ValueError(f"unsupported content-observation layout: {layout}")
+
+
+def _sample_edges(indices: np.ndarray, extent: int) -> np.ndarray:
+    edges = np.empty(indices.size + 1, dtype=np.int64)
+    edges[0] = 0
+    edges[-1] = extent
+    if indices.size > 1:
+        edges[1:-1] = (indices[:-1] + indices[1:] + 1) // 2
+    return edges
+
+
+def _components(mask: np.ndarray) -> tuple[tuple[tuple[int, int], ...], ...]:
+    visited = np.zeros(mask.shape, dtype=np.bool_)
+    values: list[tuple[tuple[int, int], ...]] = []
+    height, width = mask.shape
+    for row in range(height):
+        for column in range(width):
+            if not mask[row, column] or visited[row, column]:
+                continue
+            pending = [(row, column)]
+            visited[row, column] = True
+            component: list[tuple[int, int]] = []
+            while pending:
+                current_row, current_column = pending.pop()
+                component.append((current_row, current_column))
+                for next_row, next_column in (
+                    (current_row - 1, current_column),
+                    (current_row + 1, current_column),
+                    (current_row, current_column - 1),
+                    (current_row, current_column + 1),
+                ):
+                    if (
+                        0 <= next_row < height
+                        and 0 <= next_column < width
+                        and mask[next_row, next_column]
+                        and not visited[next_row, next_column]
+                    ):
+                        visited[next_row, next_column] = True
+                        pending.append((next_row, next_column))
+            values.append(tuple(sorted(component)))
+    return tuple(values)
+
+
+def _component_work_cells(
+    component: tuple[tuple[int, int], ...],
+    *,
+    lane_work_box: Box,
+    long_edges: np.ndarray,
+    cross_edges: np.ndarray,
+) -> tuple[Box, ...]:
+    by_row: dict[int, list[int]] = {}
+    for row, column in component:
+        by_row.setdefault(row, []).append(column)
+    cells: list[Box] = []
+    for row, columns in sorted(by_row.items()):
+        ordered = sorted(columns)
+        start = ordered[0]
+        previous = start
+        for column in (*ordered[1:], ordered[-1] + 2):
+            if column != previous + 1:
+                cells.append(
+                    Box(
+                        lane_work_box.left + int(long_edges[start]),
+                        lane_work_box.top + int(cross_edges[row]),
+                        lane_work_box.left + int(long_edges[previous + 1]),
+                        lane_work_box.top + int(cross_edges[row + 1]),
+                    )
+                )
+                start = column
+            previous = column
+    return tuple(cells)
 
 
 def observe_content_occupancy(
@@ -114,40 +223,61 @@ def observe_content_occupancy(
         np.float32,
         copy=False,
     )
-    contrast = np.std(sampled, axis=0, dtype=np.float64)
-    center = float(np.median(contrast))
-    mad = float(np.median(np.abs(contrast - center)))
+    horizontal = np.zeros(sampled.shape, dtype=np.float32)
+    vertical = np.zeros(sampled.shape, dtype=np.float32)
+    horizontal[:, 1:] = np.abs(np.diff(sampled, axis=1))
+    vertical[1:, :] = np.abs(np.diff(sampled, axis=0))
+    activity = np.maximum(horizontal, vertical)
+    center = float(np.median(activity))
+    mad = float(np.median(np.abs(activity - center)))
     threshold = center + max(4.0, 4.0 * 1.4826 * mad)
-    occupied = contrast > threshold
-    runs: list[tuple[int, int]] = []
-    start: int | None = None
-    for index, value in enumerate((*occupied.tolist(), False)):
-        if value and start is None:
-            start = index
-        elif not value and start is not None:
-            runs.append((start, index))
-            start = None
-    overflowed = len(runs) > MAX_CONTENT_OBSERVATIONS_PER_LANE
-    observations: list[ContentOccupancyObservation] = []
-    for start, stop in runs[:MAX_CONTENT_OBSERVATIONS_PER_LANE]:
-        left = lane_work_box.left + int(long_indices[start])
-        right_index = min(stop, len(long_indices) - 1)
-        right = lane_work_box.left + int(long_indices[right_index]) + 1
-        work_box = Box(
-            left,
-            lane_work_box.top,
-            min(lane_work_box.right, right),
-            lane_work_box.bottom,
+    occupied = activity > threshold
+    components = _components(occupied)
+    long_edges = _sample_edges(long_indices, lane.shape[1])
+    cross_edges = _sample_edges(cross_indices, lane.shape[0])
+    component_cells = tuple(
+        _component_work_cells(
+            component,
+            lane_work_box=lane_work_box,
+            long_edges=long_edges,
+            cross_edges=cross_edges,
         )
-        source_box = _source_box_from_work_box(work_box, layout)
-        peak = float(np.max(contrast[start:stop]))
-        reliability = min(1.0, max(1.0e-9, (peak - threshold) / 32.0))
-        identity = _stable_id(lane_id, source_box, reliability)
+        for component in components
+    )
+    proposed_cell_run_count = sum(len(value) for value in component_cells)
+    overflowed = (
+        len(components) > MAX_CONTENT_OBSERVATIONS_PER_LANE
+        or proposed_cell_run_count > MAX_CONTENT_CELL_RUNS_PER_LANE
+    )
+    observations: list[ContentOccupancyObservation] = []
+    retained_components = () if overflowed else components
+    retained_cells = () if overflowed else component_cells
+    for component, work_cells in zip(
+        retained_components,
+        retained_cells,
+        strict=True,
+    ):
+        source_cells = tuple(
+            _source_box_from_work_box(cell, layout) for cell in work_cells
+        )
+        source_box = Box(
+            min(cell.left for cell in source_cells),
+            min(cell.top for cell in source_cells),
+            max(cell.right for cell in source_cells),
+            max(cell.bottom for cell in source_cells),
+        )
+        peak = max(float(activity[row, column]) for row, column in component)
+        reliability = min(
+            1.0,
+            max(1.0e-9, (peak - threshold) / max(8.0, threshold)),
+        )
+        identity = _stable_id(lane_id, source_cells, reliability)
         observations.append(
             ContentOccupancyObservation(
                 observation_id=identity,
                 lane_id=lane_id,
                 source_box=source_box,
+                source_cells=source_cells,
                 reliability=reliability,
                 provenance=MeasurementProvenance(
                     root_measurement=MeasurementIdentity.CONTENT_OCCUPANCY,
@@ -164,5 +294,7 @@ def observe_content_occupancy(
         observations=tuple(observations),
         long_sample_count=long_count,
         cross_sample_count=cross_count,
+        proposed_observation_count=len(components),
+        proposed_cell_run_count=proposed_cell_run_count,
         overflowed=overflowed,
     )

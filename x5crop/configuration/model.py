@@ -81,7 +81,7 @@ class DetectionConfiguration:
             raise ValueError("slot-count request and strip mode disagree")
         if (
             self.strip_mode == PARTIAL
-            and not self.physical_spec.strip.partial_mode_supported
+            and not self.physical_spec.partial_mode_supported
         ):
             raise ValueError(
                 f"--format {self.physical_spec.format_id} does not support "

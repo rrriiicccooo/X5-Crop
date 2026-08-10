@@ -15,17 +15,18 @@ V5 是 current-only runtime。源码、CLI、schema、tests、tools 与 standalo
 
 - Count authority 改为 `SlotCountRequest → MatchedHolder → ResolvedSlotCount`；holder matching 不再
   使用 requested count 过滤。Full 取匹配片夹的 `full_count`，partial 只接受更少的用户明确
-  count。调用级语法错误以退出码 2 失败，匹配后的 partial 冲突为 source `runtime_error`；holder
-  identity 或 `full_count` 不唯一时保持 `needs_review`。
+  count。调用级语法和匹配后的 count 冲突都在 detector 前以退出码 2 失败；交互入口返回
+  mode/count 步骤。Holder identity 或 `full_count` 不唯一时保持 `needs_review`。
 - Format 由用户提供；full 表示完整固定 slot 数，partial 只接受更少的用户明确 count。模式不再
-  表示片条是否铺满片夹，也不决定首尾位置或 Grid phase。片夹容量只校验上限，空白曝光仍占
+  表示片条是否铺满片夹，也不决定首尾位置或 sequence phase。片夹容量只校验上限，空白曝光仍占
   slot；删除 `partial auto`，不实现 blank suppression。
+- `135-dual` 改为 full-only，总计 12 格、每 lane 6 格。
 - 120 格式冻结为 42×56、56×56 与 70×56 mm，不再保留 54 mm component。135、half、XPan
   的 format gap 先验分别为 2、1、2 mm；120 gap 保持未定义。
 - Format 与片夹画布从一开始给出共享 W/H 窄范围；宽度兼容为 ±1.25%，高度为 ±0.40%。
   同一 source 不允许逐帧尺寸或旋转，齿孔不参与检测。
-- 每个 lane 共享主方向和连续中心线。正常间隙优先；两段相容 pitch 是建立 `G_source` 的最低
-  证据。接触、叠片、大间隙和相位跳变必须有证据，不能从数学可能性枚举。
+- Source 共享比例、W/H 与主方向族；每个 lane 独立拥有连续中心线、小角度偏差、phase、gap
+  和异常。两段相容 pitch 是建立 `G_source` 的最低证据；异常不能从数学可能性枚举。
 - Diagnostic 的 19 条历史 partial 与 performance 的 5 条历史 partial 已迁为显式 count；S053、
   S054、S056、S057 按 135 full 迁移。Runtime 不解析文件名 count，同 source SHA 的 mode/count/
   authority 必须一致。
@@ -41,13 +42,14 @@ V5 是 current-only runtime。源码、CLI、schema、tests、tools 与 standalo
   物理证据、完整结构、separator 质量和弱先验分级比较。只统计独立观察，不使用任意加权总分。
 - 多个候选不自动 review；明显胜出的完整 chain 可以批准。同等级的不同位置无法区分时保持
   `placement unresolved`，不平均、不任选，也不合并为大 union。
-- 每个 sequence/cross 组合独立物化；删除先平均多个 cross 候选再生成代表位置的旧逻辑。
+- Cross 与 sequence 分别产生有限 proposal，再按共享尺度、方向、中心线和 authority 做兼容索引
+  联合；任何一轴不再提前选赢家，也不平均制造代表位置。
 - Format 决定固定照片框；`SafeCropEnvelope` 只包含胜出 placement 自身的测量不确定性，不合并
   落选候选，也不再添加固定或 format-specific minimum guard。接触或叠片时相邻输出可以共享
   source pixels。
-- Producer 上限固定为每 corridor 4 band、每 lane 8 complete chain、每 chain ledger 64、每 lane
-  ledger 512、双 lane source 1024；触发任一上限都产生 `producer_bound_exceeded` 并阻断批准。
-  未物化 proposal 只报告数量与固定 reason，不保存无界 payload。
+- 每 corridor 原始 observation 上限为 4；超限时保存完整 proposed count、物化零个偏置子集并以
+  `producer_bound_exceeded` 阻断批准。未超限时物化全部唯一且物理相容的 chain，不再 first-N、
+  chain top-K、DP 或 beam。
 - 竞争前只合并边界区间有共同交集、transform authority 相同且每 slot 最终 sampling box 完全
   相同的 cluster。跨 cluster 只按最高差异 evidence tier 的严格优势与同级可解释性判定 dominance，
   不使用隐藏总分。
@@ -61,9 +63,9 @@ V5 是 current-only runtime。源码、CLI、schema、tests、tools 与 standalo
   boundary 转为 canonical coordinates，正式输出写 `Orientation=1` 并复读验证。
 - `--debug-analysis` 执行同一检测与 Gate，只写三联诊断和报告类文件。后续普通运行仅在 current
   schema、完整性、版本、source identity、TIFF profile、配置和 layout 全部匹配时复用报告。
-- Report 与 Debug Analysis 显示胜出 chain、独立证据、observed/inferred、竞争者、
-  holder/count authority、有界 producer/ledger、sampling cluster、content veto、`SafeCropEnvelope`、
-  逐边 budget 与 Gate reason，不能只显示总分。
+- Report 与 Debug Analysis 显示全部 lane proposal、source-joint 胜出 chain、独立证据、
+  observed/inferred、竞争者、holder/count authority、producer/ledger、sampling cluster、content
+  veto、`SafeCropEnvelope`、逐边 budget 与 Gate reason，不能只显示总分。
 - 正式照片平铺在 target 根部。新结果通过 owner、inventory、lock、journal 与同父目录 rename
   安全发布；状态歧义保留所有候选，不猜测删除。
 - 生产默认 `--jobs 1`、上限 3；数值库内部线程固定为 1。依赖安装以模块能力和真实 provider

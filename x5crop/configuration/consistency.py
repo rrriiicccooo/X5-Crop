@@ -18,7 +18,7 @@ def configuration_consistency_issues() -> tuple[str, ...]:
             except ValueError:
                 if (
                     strip_mode == PARTIAL
-                    and not format_spec(format_id).strip.partial_mode_supported
+                    and not format_spec(format_id).partial_mode_supported
                 ):
                     continue
                 issues.append(
@@ -49,7 +49,7 @@ def main() -> int:
         for strip_mode in STRIP_MODES
         if not (
             strip_mode == PARTIAL
-            and not format_spec(format_id).strip.partial_mode_supported
+            and not format_spec(format_id).partial_mode_supported
         )
     )
     print(f"Configuration consistency check passed for {total} format/mode pairs.")

@@ -21,13 +21,11 @@ def detection_configuration_read_model(
         "slot_count_request": typed_read_model(
             configuration.count_request
         ),
-        "design_aperture_components_mm": typed_read_model(
-            spec.frame_components
-        ),
+        "frame_physical_spec_mm": typed_read_model(spec.frame),
         "frame_dimension_tolerance": typed_read_model(
             FRAME_DIMENSION_TOLERANCE_SPEC
         ),
-        "strip_handling": typed_read_model(spec.strip),
+        "partial_mode_supported": spec.partial_mode_supported,
         "scan_layout": typed_read_model(spec.layout),
         "measurement": {
             "preprocess": typed_read_model(configuration.preprocess),

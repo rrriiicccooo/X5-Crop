@@ -6,7 +6,7 @@ from typing import Any
 
 
 REPORT_SCHEMA_ID = "x5crop_detection_report_v5"
-REPORT_SCHEMA_REVISION = "x5crop_v5_current_6"
+REPORT_SCHEMA_REVISION = "x5crop_v5_fixed_physical_chain_1"
 
 
 def core_facts_sha256(record: dict[str, Any]) -> str:

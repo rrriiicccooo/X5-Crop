@@ -7,7 +7,7 @@ import numpy as np
 
 from x5crop.configuration.registry import get_detection_configuration
 from x5crop.detection.photo_geometry.measurement import (
-    fit_template_bound_boundary_observation,
+    fit_format_bound_boundary_observation,
     measure_registered_queries,
     track_side_transition_regions,
 )
@@ -16,7 +16,7 @@ from x5crop.detection.photo_geometry.boundary_geometry import (
     canonical_source_cross_axis_slope,
     canonical_source_sequence_axis_slope,
 )
-from x5crop.detection.photo_geometry.template_first import (
+from x5crop.detection.photo_geometry.solver import (
     reference_role_transition_ids,
 )
 from x5crop.detection.photo_geometry.model import (
@@ -212,7 +212,7 @@ class PhotoBoundaryMeasurementContractTest(unittest.TestCase):
             tuple((10.0 - index * 0.1,) for index in range(7))
         )
 
-        observation = fit_template_bound_boundary_observation(
+        observation = fit_format_bound_boundary_observation(
             measurement_set,
             transition_ids=tuple(
                 item.transition_id for item in measurement_set.transitions
@@ -226,7 +226,7 @@ class PhotoBoundaryMeasurementContractTest(unittest.TestCase):
         assert observation is not None
         self.assertLess(observation.angle_interval_degrees.center, 0.0)
 
-    def test_template_bound_observation_propagates_only_robust_inliers(
+    def test_format_role_observation_propagates_only_robust_inliers(
         self,
     ) -> None:
         measurement_set = _side_measurement_set(
@@ -241,7 +241,7 @@ class PhotoBoundaryMeasurementContractTest(unittest.TestCase):
             )
         )
 
-        observation = fit_template_bound_boundary_observation(
+        observation = fit_format_bound_boundary_observation(
             measurement_set,
             transition_ids=tuple(
                 item.transition_id for item in measurement_set.transitions
@@ -261,7 +261,7 @@ class PhotoBoundaryMeasurementContractTest(unittest.TestCase):
 
     def test_transition_width_expands_only_full_angle_safety(self) -> None:
         coordinates = tuple((10.0 + index * 0.1,) for index in range(7))
-        narrow = fit_template_bound_boundary_observation(
+        narrow = fit_format_bound_boundary_observation(
             _side_measurement_set(
                 coordinates,
                 transition_half_width_px=0.25,
@@ -274,7 +274,7 @@ class PhotoBoundaryMeasurementContractTest(unittest.TestCase):
             source_axis_long=BoundaryAxis.X,
             boundary_axis_scale_px_per_mm=PositiveInterval(10.0, 10.0),
         )
-        wide = fit_template_bound_boundary_observation(
+        wide = fit_format_bound_boundary_observation(
             _side_measurement_set(
                 coordinates,
                 transition_half_width_px=4.0,
@@ -474,7 +474,7 @@ class PhotoBoundaryMeasurementContractTest(unittest.TestCase):
         )
 
 
-class TemplateRuntimeContractTest(unittest.TestCase):
+class FixedFormatRuntimeContractTest(unittest.TestCase):
     def test_direct_use_limit_is_closed_and_has_no_positive_epsilon(self) -> None:
         exact = DirectUseBudgetEdgeAssessment(
             role=BoundaryRole.START,
@@ -560,7 +560,7 @@ class TemplateRuntimeContractTest(unittest.TestCase):
             workspace.source_gray,
         )
 
-    def test_zero_anchor_never_uses_grid_as_blank_geometry(self) -> None:
+    def test_zero_anchor_never_invents_blank_geometry(self) -> None:
         _workspace, _configuration, candidate = _candidate(
             np.zeros((100, 720), dtype=np.uint8)
         )

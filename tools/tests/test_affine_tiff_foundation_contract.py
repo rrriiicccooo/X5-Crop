@@ -174,7 +174,7 @@ class AffineFoundationContractTest(unittest.TestCase):
             saturation_facts=(
                 FootprintSaturationFact(
                     AuthoritySide.LEFT,
-                    (ClippedRequirement.VISIBLE_INTERPOLATION_GUARD,),
+                    (ClippedRequirement.VISIBLE_PLACEMENT,),
                 ),
             ),
         )
@@ -495,7 +495,7 @@ class TiffFoundationContractTest(unittest.TestCase):
                         ),
                         (box,),
                         (Box(0, 0, 14, 10),),
-                        AffineCoordinateTransform.identity(14, 10),
+                        (AffineCoordinateTransform.identity(14, 10),),
                         output,
                     )
                     self.assertEqual(len(written), 1)

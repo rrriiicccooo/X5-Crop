@@ -1,3 +1,5 @@
+"""Current-only complete physical-chain domain."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -15,19 +17,22 @@ from .model import (
     PhotoBoundaryTransition,
     SharedStripDirection,
 )
-from .source_geometry import LaneGapModel, SourceFrameGeometry
-from .template_profiles import (
+from .source_geometry import LaneGapModel, SourceScanGeometry
+from .observations import (
     BasicAxisProfile,
-    PhaseGroupingWork,
-    PhaseVote,
+    BoundaryEdgeObservation,
+    SequenceGroupingWork,
+    SequenceRoleProposal,
     ProfileRun,
-    TemplatePhaseGroup,
-    TemplateRole,
+    SeparatorBandObservation,
+    SequenceHypothesisGroup,
+    OrdinalBoundaryRole,
 )
 
 
 class LocalAdvanceKind(str, Enum):
     NOMINAL = "nominal"
+    OBSERVED_UNCLASSIFIED = "observed_unclassified"
     WIDE = "wide"
     NARROW = "narrow"
     CONTACT = "contact"
@@ -66,104 +71,66 @@ class LocalAdvanceRelation:
 
 
 @dataclass(frozen=True)
-class TemplateSequenceSeed:
-    """One bounded complete template interpretation with local phase steps."""
+class SequenceChainProposal:
+    """One bounded complete sequence interpretation with local advances."""
 
-    seed_id: str
-    phase_group_ids: tuple[str, ...]
+    chain_proposal_id: str
+    sequence_group_ids: tuple[str, ...]
     base_phase_interval_px: FiniteInterval
-    votes: tuple[PhaseVote, ...]
-    local_advance_votes: tuple[PhaseVote, ...]
+    role_proposals: tuple[SequenceRoleProposal, ...]
+    local_advance_proposals: tuple[SequenceRoleProposal, ...]
     local_advance_relations: tuple[LocalAdvanceRelation, ...]
     exclusion_authorized: bool
 
     def __post_init__(self) -> None:
         if (
-            not self.seed_id
-            or not self.phase_group_ids
-            or not self.votes
-            or len({item.vote_id for item in self.votes}) != len(self.votes)
+            not self.chain_proposal_id
+            or not self.sequence_group_ids
+            or not self.role_proposals
+            or len({item.proposal_id for item in self.role_proposals}) != len(self.role_proposals)
             or len(
-                {item.vote_id for item in self.local_advance_votes}
+                {item.proposal_id for item in self.local_advance_proposals}
             )
-            != len(self.local_advance_votes)
+            != len(self.local_advance_proposals)
             or not {
-                item.vote_id for item in self.votes
+                item.proposal_id for item in self.role_proposals
             }.issubset(
-                item.vote_id for item in self.local_advance_votes
+                item.proposal_id for item in self.local_advance_proposals
             )
             or tuple(
                 item.relation_ordinal for item in self.local_advance_relations
             )
             != tuple(range(1, len(self.local_advance_relations) + 1))
         ):
-            raise ValueError("template sequence seed is invalid")
-
-
-class EnhancedQueryRegistry:
-    """Pre-registered typed enhanced work; selection cannot add coverage."""
-
-    def __init__(self, query_ids: tuple[str, ...]) -> None:
-        if not query_ids or len(set(query_ids)) != len(query_ids):
-            raise ValueError("enhanced query registry requires unique identities")
-        self._registered = frozenset(query_ids)
-        self._consumed: set[str] = set()
-
-    @property
-    def registered_count(self) -> int:
-        return len(self._registered)
-
-    @property
-    def consumed_count(self) -> int:
-        return len(self._consumed)
-
-    def consume(self, query_id: str) -> bool:
-        if query_id not in self._registered:
-            raise KeyError(query_id)
-        if query_id in self._consumed:
-            return False
-        self._consumed.add(query_id)
-        return True
-
-
-@dataclass(frozen=True)
-class EnhancedPhaseQuery:
-    """A pre-registered exact reprojection of one ambiguous basic vote."""
-
-    query_id: str
-    vote_id: str
-
-    def __post_init__(self) -> None:
-        if not self.query_id or not self.vote_id:
-            raise ValueError("enhanced phase query requires identities")
+            raise ValueError("sequence chain proposal is invalid")
 
 
 @dataclass(frozen=True)
 class RegisteredSequenceRoleQuery:
-    """One template role registered before direction-aware evidence binding."""
+    """One ordinal role registered before direction-aware evidence binding."""
 
     query_id: str
-    seed_id: str
-    role: TemplateRole
+    chain_proposal_id: str
+    role: OrdinalBoundaryRole
     target_interval_px: FiniteInterval
 
     def __post_init__(self) -> None:
-        if not self.query_id or not self.seed_id:
+        if not self.query_id or not self.chain_proposal_id:
             raise ValueError("registered sequence role query requires identities")
 
 
 @dataclass(frozen=True)
-class TemplateWorkReceipt:
+class ChainProducerWorkReceipt:
     measurement_query_count: int
     pixel_query_count: int
     basic_profile_coordinate_count: int
     basic_profile_run_count: int
-    phase_vote_count: int
-    template_group_count: int
-    template_role_lookup_count: int
-    template_role_match_count: int
+    role_proposal_count: int
+    sequence_group_count: int
+    ordinal_role_lookup_count: int
+    ordinal_role_match_count: int
     local_relation_evaluation_count: int
-    enhanced_query_count: int
+    refinement_query_count: int
     materialized_frame_geometry_count: int
     shared_measurement_reuse_count: int
     domain_pixels: int
@@ -171,36 +138,36 @@ class TemplateWorkReceipt:
 
     def __post_init__(self) -> None:
         if any(value < 0 for value in self.__dict__.values()):
-            raise ValueError("template work receipt cannot be negative")
+            raise ValueError("chain-producer work receipt cannot be negative")
 
     def validate_bounds(
         self,
         *,
         ordered_role_count: int,
         slot_count: int,
-        registered_enhanced_query_count: int,
+        registered_refinement_query_count: int,
     ) -> None:
         if (
             ordered_role_count <= 0
             or slot_count <= 0
-            or registered_enhanced_query_count < 0
+            or registered_refinement_query_count < 0
         ):
-            raise ValueError("template work bound requires positive shape")
+            raise ValueError("chain-producer work bound requires positive shape")
         if (
-            self.template_role_lookup_count
-            > self.template_group_count * ordered_role_count
-            or self.template_role_match_count > self.phase_vote_count
-            or self.enhanced_query_count > registered_enhanced_query_count
+            self.ordinal_role_lookup_count
+            > self.sequence_group_count * ordered_role_count
+            or self.ordinal_role_match_count > self.role_proposal_count
+            or self.refinement_query_count > registered_refinement_query_count
             or self.local_relation_evaluation_count
-            > self.template_group_count * max(0, slot_count - 1)
+            > self.sequence_group_count * max(0, slot_count - 1)
         ):
-            raise ValueError("template work exceeded its structural bound")
+            raise ValueError("chain-producer work exceeded its structural bound")
 
 
 @dataclass(frozen=True)
-class ProvisionalHeightTemplate:
-    template_id: str
-    component_id: str
+class CrossAxisProposal:
+    cross_proposal_id: str
+    frame_spec_id: str
     origin_interval_px: FiniteInterval
     observed_runs: tuple[ProfileRun, ...]
     raw_observations: tuple[PhotoBoundaryObservation, ...]
@@ -211,8 +178,8 @@ class ProvisionalHeightTemplate:
             observation.role for observation in self.raw_observations
         )
         if (
-            not self.template_id
-            or not self.component_id
+            not self.cross_proposal_id
+            or not self.frame_spec_id
             or not 1 <= len(self.observed_runs) <= 2
             or len(self.raw_observations) != len(self.observed_runs)
             or run_roles != observation_roles
@@ -239,11 +206,11 @@ class ProvisionalHeightTemplate:
                 )
             )
         ):
-            raise ValueError("provisional height template is invalid")
+            raise ValueError("cross-axis proposal is invalid")
 
 
 @dataclass(frozen=True)
-class TemplateLaneInput:
+class LaneObservationInput:
     lane_id: str
     output_slot_count: int
     measurement_slot_count: int
@@ -255,6 +222,8 @@ class TemplateLaneInput:
     height_scale_px_per_mm: PositiveInterval
     sequence_profile: BasicAxisProfile
     cross_profile: BasicAxisProfile
+    sequence_edges: tuple[BoundaryEdgeObservation, ...]
+    separator_bands: tuple[SeparatorBandObservation, ...]
     sequence_measurement_sets: tuple[PhotoBoundaryMeasurementSet, ...]
     top_measurement_set: PhotoBoundaryMeasurementSet
     bottom_measurement_set: PhotoBoundaryMeasurementSet
@@ -269,33 +238,34 @@ class TemplateLaneInput:
             or self.sequence_profile.axis_name != "sequence"
             or self.cross_profile.axis_name != "cross"
             or any(
+                edge.run_id not in {run.run_id for run in self.sequence_profile.runs}
+                for edge in self.sequence_edges
+            )
+            or any(
                 item.query.boundary_axis != self.width_axis
                 for item in self.sequence_measurement_sets
             )
         ):
-            raise ValueError("template lane input is invalid")
+            raise ValueError("lane observation input is invalid")
 
 
 @dataclass(frozen=True)
-class ComponentTemplateProposal:
-    component: FramePhysicalSpec
-    initial_source_geometry: SourceFrameGeometry
-    roles: tuple[TemplateRole, ...]
-    phase_votes: tuple[PhaseVote, ...]
-    phase_groups: tuple[TemplatePhaseGroup, ...]
-    enhanced_phase_queries: tuple[EnhancedPhaseQuery, ...]
+class FrameChainProposals:
+    frame_spec: FramePhysicalSpec
+    initial_source_scan_geometry: SourceScanGeometry
+    roles: tuple[OrdinalBoundaryRole, ...]
+    role_proposals: tuple[SequenceRoleProposal, ...]
+    sequence_groups: tuple[SequenceHypothesisGroup, ...]
     registered_sequence_role_queries: tuple[RegisteredSequenceRoleQuery, ...]
-    height_templates: tuple[ProvisionalHeightTemplate, ...]
-    grouping_work: PhaseGroupingWork
+    cross_proposals: tuple[CrossAxisProposal, ...]
+    grouping_work: SequenceGroupingWork
 
     def __post_init__(self) -> None:
         if (
-            self.initial_source_geometry.component != self.component
+            self.initial_source_scan_geometry.frame_spec != self.frame_spec
             or not self.roles
-            or not self.phase_votes
-            or not self.phase_groups
-            or len({item.query_id for item in self.enhanced_phase_queries})
-            != len(self.enhanced_phase_queries)
+            or not self.role_proposals
+            or not self.sequence_groups
             or len(
                 {
                     item.query_id
@@ -303,47 +273,41 @@ class ComponentTemplateProposal:
                 }
             )
             != len(self.registered_sequence_role_queries)
-            or not {
-                item.vote_id for item in self.enhanced_phase_queries
-            }.issubset({item.vote_id for item in self.phase_votes})
         ):
-            raise ValueError("component template proposal is invalid")
+            raise ValueError("frame chain proposals are invalid")
 
 
 @dataclass(frozen=True)
-class TemplateLaneProposal:
-    lane: TemplateLaneInput
-    components: tuple[ComponentTemplateProposal, ...]
+class LanePhysicalProposals:
+    lane: LaneObservationInput
+    frame_proposals: tuple[FrameChainProposals, ...]
     raw_top_bottom_observations: tuple[PhotoBoundaryObservation, ...]
     direction_classes: tuple[SharedStripDirection, ...]
 
     def __post_init__(self) -> None:
         if any(
-            component.component.component_id
-            != component.initial_source_geometry.component.component_id
-            for component in self.components
+            proposal.frame_spec.frame_spec_id
+            != proposal.initial_source_scan_geometry.frame_spec.frame_spec_id
+            for proposal in self.frame_proposals
         ):
-            raise ValueError("lane proposal component identity is invalid")
+            raise ValueError("lane proposal frame identity is invalid")
 
 
 @dataclass(frozen=True)
 class SourcePlacementMaterialization:
-    placements_by_lane: tuple[tuple[FormatPlacement, ...], ...]
+    placements_by_lane: tuple[tuple[CompleteFormatChain, ...], ...]
     proposed_complete_chain_counts_by_lane: tuple[int, ...]
-    chain_bound_exceeded_by_lane: tuple[bool, ...]
-    enhanced_query_counts_by_lane: tuple[int, ...]
-    lane_proposals: tuple[TemplateLaneProposal, ...]
+    refinement_query_counts_by_lane: tuple[int, ...]
+    lane_proposals: tuple[LanePhysicalProposals, ...]
 
     def __post_init__(self) -> None:
         if (
             len(self.placements_by_lane)
-            != len(self.enhanced_query_counts_by_lane)
+            != len(self.refinement_query_counts_by_lane)
             or len(self.placements_by_lane)
             != len(self.proposed_complete_chain_counts_by_lane)
-            or len(self.placements_by_lane)
-            != len(self.chain_bound_exceeded_by_lane)
             or len(self.placements_by_lane) != len(self.lane_proposals)
-            or any(value < 0 for value in self.enhanced_query_counts_by_lane)
+            or any(value < 0 for value in self.refinement_query_counts_by_lane)
             or any(
                 proposed < len(materialized)
                 for proposed, materialized in zip(
@@ -358,8 +322,9 @@ class SourcePlacementMaterialization:
 
 @dataclass(frozen=True)
 class BoundRoleEvidence:
-    role: TemplateRole
+    role: OrdinalBoundaryRole
     run_id: str
+    observation_id: ObservationId | None
     canonical_position_px: float
     fit_position_interval_px: FiniteInterval
     full_position_interval_px: FiniteInterval
@@ -372,6 +337,11 @@ class BoundRoleEvidence:
     def __post_init__(self) -> None:
         if (
             not self.run_id
+            or (
+                self.observation_id is not None
+                and self.observation_id not in self.transition_ids
+                and not str(self.observation_id).startswith("boundary-edge:")
+            )
             or not self.fit_position_interval_px.contains(
                 self.canonical_position_px,
                 epsilon=1.0e-8,
@@ -395,12 +365,28 @@ class BoundRoleEvidence:
 
 
 @dataclass(frozen=True)
+class BoundSeparatorBand:
+    observation: SeparatorBandObservation
+    relation_ordinal: int
+    left_role_index: int
+    right_role_index: int
+
+    def __post_init__(self) -> None:
+        if (
+            self.relation_ordinal <= 0
+            or self.left_role_index <= 0
+            or self.right_role_index != self.left_role_index + 1
+        ):
+            raise ValueError("bound separator band is invalid")
+
+
+@dataclass(frozen=True)
 class SequencePlacement:
     placement_id: str
-    template_seed_id: str
-    phase_group_ids: tuple[str, ...]
-    source_geometry_id: str
-    roles: tuple[TemplateRole, ...]
+    chain_proposal_id: str
+    sequence_group_ids: tuple[str, ...]
+    source_scan_geometry_id: str
+    roles: tuple[OrdinalBoundaryRole, ...]
     phase_fit_interval_px: FiniteInterval
     phase_full_interval_px: FiniteInterval
     lane_gap_model: LaneGapModel
@@ -411,15 +397,16 @@ class SequencePlacement:
     sequence_edge_direction_intervals_degrees: tuple[FiniteInterval, ...]
     safety_support_transition_ids: tuple[tuple[ObservationId, ...], ...]
     observations: tuple[BoundRoleEvidence, ...]
+    separator_bands: tuple[BoundSeparatorBand, ...]
     exclusion_authorized: bool
 
     def __post_init__(self) -> None:
         role_count = len(self.roles)
         if (
             not self.placement_id
-            or not self.template_seed_id
-            or not self.phase_group_ids
-            or not self.source_geometry_id
+            or not self.chain_proposal_id
+            or not self.sequence_group_ids
+            or not self.source_scan_geometry_id
             or role_count <= 0
             or len(self.canonical_positions_px) != role_count
             or len(self.fit_positions_px) != role_count
@@ -434,6 +421,10 @@ class SequencePlacement:
                 for values in self.safety_support_transition_ids
             )
             or len(self.local_advance_relations) != max(0, role_count // 2 - 1)
+            or any(
+                band.relation_ordinal >= role_count // 2
+                for band in self.separator_bands
+            )
             or any(
                 not fit.contains(canonical, epsilon=1.0e-8)
                 or not full.contains(fit.minimum, epsilon=1.0e-8)
@@ -498,8 +489,8 @@ class CrossRoleEvidence:
 @dataclass(frozen=True)
 class CrossPlacement:
     placement_id: str
-    provisional_template_id: str
-    source_geometry_id: str
+    cross_proposal_id: str
+    source_scan_geometry_id: str
     lane_reference_trace_px: float
     frame_reference_traces_px: tuple[float, ...]
     top_canonical_positions_px: tuple[float, ...]
@@ -522,8 +513,8 @@ class CrossPlacement:
         )
         if (
             not self.placement_id
-            or not self.provisional_template_id
-            or not self.source_geometry_id
+            or not self.cross_proposal_id
+            or not self.source_scan_geometry_id
             or count <= 0
             or any(len(value) != count for value in values)
             or not self.evidence
@@ -567,7 +558,7 @@ def _polygon_area(points: tuple[tuple[float, float], ...]) -> float:
 
 
 @dataclass(frozen=True)
-class FrameFormatPlacement:
+class FixedFormatFrame:
     placement_geometry_id: str
     lane_id: str
     lane_ordinal: int
@@ -594,54 +585,83 @@ class FrameFormatPlacement:
             or len(self.canonical_source_polygon) != 4
             or abs(_polygon_area(self.canonical_source_polygon)) <= 1.0e-9
         ):
-            raise ValueError("frame format placement is invalid")
+            raise ValueError("fixed format frame is invalid")
 
 
 @dataclass(frozen=True)
-class CanonicalFormatPlacement:
-    canonical_id: str
+class FixedFormatFrameSet:
+    fixed_frame_set_id: str
     sequence_placement_id: str
     cross_placement_id: str
-    frames: tuple[FrameFormatPlacement, ...]
+    frames: tuple[FixedFormatFrame, ...]
 
     def __post_init__(self) -> None:
         if (
-            not self.canonical_id
+            not self.fixed_frame_set_id
             or not self.sequence_placement_id
             or not self.cross_placement_id
             or not self.frames
             or tuple(frame.lane_ordinal for frame in self.frames)
             != tuple(range(1, len(self.frames) + 1))
         ):
-            raise ValueError("canonical format placement is invalid")
+            raise ValueError("fixed format frame set is invalid")
 
 
 @dataclass(frozen=True)
-class FormatPlacement:
+class LaneGeometry:
+    lane_geometry_id: str
+    lane_id: str
+    direction: SharedStripDirection
+    centerline_intervals_px: tuple[FiniteInterval, ...]
+    sequence_phase_interval_px: FiniteInterval
+    gap_model: LaneGapModel
+    width_authority_px: FiniteInterval
+    height_authority_px: FiniteInterval
+
+    def __post_init__(self) -> None:
+        if (
+            not self.lane_geometry_id
+            or not self.lane_id
+            or not self.centerline_intervals_px
+            or self.gap_model.lane_id != self.lane_id
+        ):
+            raise ValueError("lane geometry is invalid")
+
+
+@dataclass(frozen=True)
+class CompleteFormatChain:
     placement_id: str
     lane_id: str
-    component: FramePhysicalSpec
+    frame_spec: FramePhysicalSpec
     output_slot_count: int
-    direction: SharedStripDirection
-    source_frame_geometry: SourceFrameGeometry
+    source_scan_geometry: SourceScanGeometry
+    chain_proposal: SequenceChainProposal
+    cross_proposal: CrossAxisProposal
+    lane_geometry: LaneGeometry
     sequence: SequencePlacement
     cross: CrossPlacement
-    canonical: CanonicalFormatPlacement
+    fixed_frames: FixedFormatFrameSet
 
     def __post_init__(self) -> None:
         if (
             not self.placement_id
             or not self.lane_id
             or self.output_slot_count <= 0
-            or self.sequence.source_geometry_id
-            != self.source_frame_geometry.geometry_id
-            or self.cross.source_geometry_id
-            != self.source_frame_geometry.geometry_id
-            or self.canonical.sequence_placement_id
+            or self.lane_geometry.lane_id != self.lane_id
+            or self.chain_proposal.chain_proposal_id
+            != self.sequence.chain_proposal_id
+            or self.cross_proposal.cross_proposal_id
+            != self.cross.cross_proposal_id
+            or self.sequence.source_scan_geometry_id
+            != self.source_scan_geometry.geometry_id
+            or self.cross.source_scan_geometry_id
+            != self.source_scan_geometry.geometry_id
+            or self.fixed_frames.sequence_placement_id
             != self.sequence.placement_id
-            or self.canonical.cross_placement_id
+            or self.fixed_frames.cross_placement_id
             != self.cross.placement_id
-            or len(self.canonical.frames) != self.output_slot_count
-            or self.source_frame_geometry.component != self.component
+            or len(self.fixed_frames.frames) != self.output_slot_count
+            or self.source_scan_geometry.frame_spec != self.frame_spec
+            or self.sequence.lane_gap_model != self.lane_geometry.gap_model
         ):
-            raise ValueError("format placement is invalid")
+            raise ValueError("complete format chain is invalid")

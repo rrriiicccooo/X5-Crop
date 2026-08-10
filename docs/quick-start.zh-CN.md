@@ -35,13 +35,15 @@ TIFF。其它结构会安全失败，不会猜测。
   的完整三格片条就是 full。
 - `partial --count N`：`N` 是更少的实际曝光格数，包括中间空白曝光格；必须少于完整张数且不能
   小于 1。Full 不接受 `--count`。
+- `135-dual`：只允许 full，总计 12 格、每 lane 6 格。
 - `--layout auto`：按扫描方向选择水平或垂直；也可明确指定。
 - `--debug-analysis`：只生成 Debug Analysis JPG 和报告类文件，不写正式 TIFF 或 review copy；
   默认关闭。
 
 程序不从文件名或片夹容量猜 count，也不以片条是否靠近片夹两端决定模式，不自动删除空白 slot。
-Partial 缺 count、count 非正数或 full 携带 count 会在读取 source 前以退出码 `2` 停止。交互式
-多文件运行会先检查整批片夹/count；存在冲突时列出全部冲突并取消本次输入，需重新启动整批选择。
+Partial 缺 count、count 非正数、full 携带 count，或匹配后 partial count 不小于完整张数，都会
+在 detector 前以退出码 `2` 停止。交互式多文件运行会检查整批片夹/count；存在冲突时列出全部
+冲突并返回模式/count 步骤。
 片夹或物理位置无法唯一确定时进入 `needs_review`，不会猜测并输出 TIFF。
 
 要先看检测结果再裁切，连续运行同一组参数，第二次去掉 `--debug-analysis`：

@@ -49,8 +49,12 @@ class PhotoGeometryCandidate:
         return self.geometry.safe_crop_envelopes
 
     @property
-    def transform_assessment(self):
-        return self.geometry.transform_assessment
+    def source_transform_assessment(self):
+        return self.geometry.source_transform_assessment
+
+    @property
+    def output_transforms(self):
+        return self.geometry.output_transforms
 
     @property
     def output_slot_count(self) -> int | None:
