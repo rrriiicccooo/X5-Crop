@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from ...domain import FiniteInterval
-from .chains import CompleteFormatChain
 from .content_boundary_queries import (
     content_cross_boundary_ids,
     content_sequence_boundary_ids,
@@ -17,14 +16,15 @@ from .content_veto_model import (
 )
 from .model import BoundaryRole
 from .selection_identity import selection_fact_id
+from .template_placement import FormatPlacement
 
 
 def content_veto_assessment(
-    placement: CompleteFormatChain,
+    placement: FormatPlacement,
     content_index: ContentTopologyIndex,
 ) -> ContentVetoAssessment:
     facts: list[ContentVetoFact] = []
-    frames = placement.fixed_frames.frames
+    frames = placement.frames
     for ordinal, frame in enumerate(frames, 1):
         slot_core_minimum = frame.start.full_position_interval_px.maximum
         slot_core_maximum = frame.end.full_position_interval_px.minimum
@@ -145,3 +145,6 @@ def content_veto_assessment(
         placement_id=placement.placement_id,
         facts=ordered,
     )
+
+
+__all__ = ["content_veto_assessment"]
