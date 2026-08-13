@@ -35,39 +35,35 @@ safely instead of being guessed.
 
 ## 3. Choose Format, Mode, And Count
 
-- `full` independently matches the holder and then uses that holder contract's
-  complete slot count, even when the film does not fill the holder. A complete three-slot
-  120-66 strip is therefore full.
-- `partial --count N` is a smaller actual exposure-slot count, including
-  intermediate blank exposures. It must be positive and below the matched
-  holder's complete count. Full rejects `--count`.
+- `full` confirms that the strip uses the matched holder's complete filled
+  layout; the program then uses that holder's complete slot count.
+- `partial --count N` confirms a non-filling strip. `N` includes intermediate
+  blank exposures and may satisfy `1 <= N <= full_count`. Full rejects
+  `--count`.
 - `135-dual` is full-only: 12 slots total, six per lane.
 - `--layout auto` selects horizontal or vertical from the scan; either may be
   specified explicitly.
 - `--debug-analysis` writes only Debug Analysis JPGs and report files—never
   official TIFFs or a review copy. It is off by default.
 
-The program does not infer count from filenames or holder capacity, does not use
-proximity to holder ends to choose the mode, and does not suppress blank slots.
+The program does not infer count from filenames or pixels and does not suppress
+blank slots. Partial receives no filled-layout centering authority even when its
+count equals `full_count`.
 Partial without a count, a non-positive count, full with a count, or a matched
-partial count that is not below the complete count fails before detection with
+partial count that exceeds the complete count fails before detection with
 exit code `2`. Interactive multi-file use lists all holder/count conflicts and
 returns to the mode/count step. An unresolved holder or physical
 placement enters `needs_review` rather than producing guessed TIFFs.
 
-To inspect detection before cropping, run the same parameters twice and remove
-`--debug-analysis` from the second command:
+To inspect detection before cropping, use two different fresh output paths:
 
 ```bash
-python3 X5_Crop.py /path/to/scans --format 135 --strip full --debug-analysis
-python3 X5_Crop.py /path/to/scans --format 135 --strip full
+python3 X5_Crop.py /path/to/scans --format 135 --strip full --debug-analysis --output /path/to/x5_debug
+python3 X5_Crop.py /path/to/scans --format 135 --strip full --output /path/to/x5_crops
 ```
 
-Both runs use the same `x5_crop_output/`. The second automatically validates and
-reuses the existing report only when its current schema, integrity, program
-version, source TIFF identity and profile, detection configuration, and layout
-all match; otherwise fresh detection runs automatically. Official TIFFs are
-always written from the source and read back for validation.
+The normal run always detects from the source TIFF; it does not reuse the Debug
+report. Each output path must not exist before the run.
 
 ## 4. Read The Result
 
@@ -81,18 +77,12 @@ x5_crop_output/
   _debug_analysis/
   x5_crop_report.jsonl
   x5_crop_summary.csv
-  x5_crop_run_manifest.jsonl
 ```
 
 `needs_review/` and `_debug_analysis/` are created only
-when needed. A successful run replaces the previous complete output only after
-ownership is verified. If unknown files are present, X5 Crop stops and never
-deletes them.
-
-APFS, HFS+, and NTFS are local transaction-validation targets, but formal
-support still requires a receipt for the exact release. On an unverified
-filesystem, an interactive launch asks for consent. A
-non-interactive command must explicitly include `--allow-best-effort-output`.
-This option cannot bypass hard lock, path, disk-space, or rename failures.
+when needed. A run writes a same-parent temporary directory and publishes it once
+complete. If the target already exists, X5 Crop stops and never replaces or
+deletes it. Disk-space, write, and rename failures clean only the unpublished
+temporary directory and report the actual error.
 
 See the [English User Guide](user-guide.en.md) for full details.

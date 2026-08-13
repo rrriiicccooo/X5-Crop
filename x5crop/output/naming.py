@@ -1,15 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from hashlib import sha256
 from pathlib import Path
-import re
 import unicodedata
 
 
 MAX_COMPONENT_UTF16_UNITS = 120
-MAX_PORTABLE_PATH_UTF16_UNITS = 240
-MAX_TRANSACTION_TOKEN_UTF16_UNITS = 64
 _INVALID_WINDOWS_CHARACTERS = frozenset('<>:"/\\|?*')
 _SUPERSCRIPT_DIGITS = str.maketrans({"¹": "1", "²": "2", "³": "3"})
 _DEVICE_NAMES = frozenset(
@@ -67,12 +63,6 @@ def normalized_name_string(value: str) -> str:
     return unicodedata.normalize("NFC", value)
 
 
-def short_name_digest(value: str) -> str:
-    """Hash only a short normalized name string, never source content."""
-
-    return sha256(normalized_name_string(value).encode("utf-8")).hexdigest()[:8]
-
-
 def is_windows_reserved_name(value: str) -> bool:
     normalized = normalized_name_string(value).rstrip(" .")
     if not normalized:
@@ -123,11 +113,6 @@ def validate_portable_component(value: str) -> None:
         raise PortableNameError(f"Not a portable output component: {value!r}")
 
 
-def validate_explicit_output_leaf(value: str) -> PortableOutputName:
-    validate_portable_component(value)
-    return PortableOutputName(value, collision_key(value))
-
-
 def portable_component(
     raw_value: str,
     *,
@@ -148,28 +133,12 @@ def portable_component(
     base = _sanitize(raw_value, fallback)
     candidate = base + suffix
     if utf16_units(candidate) > MAX_COMPONENT_UTF16_UNITS:
-        marker = f"~{input_ordinal:04d}-{short_name_digest(raw_value)}"
+        marker = f"~{input_ordinal:04d}"
         base_limit = MAX_COMPONENT_UTF16_UNITS - utf16_units(marker + suffix)
         base = _truncate_utf16(base, base_limit).rstrip(" .") or fallback
         candidate = base + marker + suffix
     validate_portable_component(candidate)
     return PortableOutputName(candidate, collision_key(candidate))
-
-
-def portable_frame_name(
-    source_name: str,
-    *,
-    input_ordinal: int,
-    slot_index: int,
-) -> PortableOutputName:
-    if slot_index <= 0:
-        raise PortableNameError("output slot index must be positive")
-    stem = Path(source_name).stem
-    return portable_component(
-        stem,
-        input_ordinal=input_ordinal,
-        suffix=f"_{slot_index:02d}.tif",
-    )
 
 
 def portable_source_stems(source_names: tuple[str, ...]) -> tuple[PortableOutputName, ...]:
@@ -193,7 +162,7 @@ def portable_source_stems(source_names: tuple[str, ...]) -> tuple[PortableOutput
         if counts[item.collision_key] == 1:
             planned.append(item)
             continue
-        marker = f"~{ordinal:04d}-{short_name_digest(Path(source_name).stem)}"
+        marker = f"~{ordinal:04d}"
         planned.append(
             portable_component(
                 item.value,
@@ -203,32 +172,6 @@ def portable_source_stems(source_names: tuple[str, ...]) -> tuple[PortableOutput
         )
     reject_collisions(planned)
     return tuple(planned)
-
-
-def transaction_token_for_target(target: Path) -> str:
-    leaf = validate_explicit_output_leaf(target.name).value
-    if utf16_units(leaf) <= MAX_TRANSACTION_TOKEN_UTF16_UNITS:
-        return leaf
-    digest = short_name_digest(str(target.absolute()))
-    marker = f"~{digest}"
-    prefix = _truncate_utf16(
-        leaf,
-        MAX_TRANSACTION_TOKEN_UTF16_UNITS - utf16_units(marker),
-    ).rstrip(" .")
-    token = prefix + marker
-    validate_portable_component(token)
-    return token
-
-
-def validate_portable_path(path: Path) -> None:
-    if utf16_units(str(path.absolute())) > MAX_PORTABLE_PATH_UTF16_UNITS:
-        raise PortableNameError(
-            f"Output path exceeds {MAX_PORTABLE_PATH_UTF16_UNITS} UTF-16 units: {path}"
-        )
-    for part in path.parts:
-        if part in {path.anchor, "", ".", ".."}:
-            continue
-        validate_portable_component(part)
 
 
 def reject_collisions(names: list[PortableOutputName]) -> None:

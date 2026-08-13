@@ -8,10 +8,7 @@ from .model import FinalDetection
 def finalize_detection(
     candidate: PhotoGeometryCandidate,
     decision: DecisionGateAssessment,
-    *,
-    layout: str,
 ) -> FinalDetection:
-    del layout  # Source-coordinate authority is already explicit in geometry.
     approved = decision.status == "approved_auto"
     geometries = candidate.safe_crop_envelopes if approved else ()
     authority_boxes = (

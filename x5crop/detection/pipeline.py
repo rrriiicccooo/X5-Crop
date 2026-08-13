@@ -7,11 +7,9 @@ from ..domain import EvidenceState
 from .candidate.assessment.candidate_gate import candidate_gate_assessment
 from .candidate.assessment.model import CandidateGateAssessment
 from .gate_checks import GateGap, TypedAssessment
-from .photo_geometry.detector import (
-    PhotoGeometryDetectionResult,
-    reconstruct_photo_geometry,
-)
-from .photo_geometry.model import (
+from .photo_geometry.detector import reconstruct_photo_geometry
+from .photo_geometry.reconstruction_model import PhotoGeometryDetectionResult
+from .photo_geometry.output_model import (
     OutputSlotIdentity,
     ResolvedOutputSlots,
     SafeCropEnvelope,
@@ -68,7 +66,8 @@ class PhotoGeometryCandidate:
 def choose_detection(
     workspace: DetectionWorkspace,
     configuration: DetectionConfiguration,
-    lane_configuration: DetectionConfiguration | None,
+    *,
+    development_detail: bool = False,
 ) -> PhotoGeometryCandidate:
     geometry = reconstruct_photo_geometry(
         workspace.boundary_measurement_field,
@@ -76,8 +75,8 @@ def choose_detection(
         workspace.source_core.content_occupancy,
         layout=workspace.boundary_measurement_field.layout,
         configuration=configuration,
-        lane_configuration=lane_configuration,
         resolved_slot_count=workspace.source_core.resolved_slot_count,
+        development_detail=development_detail,
     )
     facts = dict(geometry.assessment_facts)
     if workspace.source_core.scan_canvas_state != EvidenceState.SUPPORTED:

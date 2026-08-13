@@ -1,10 +1,9 @@
+"""Compose the three read-only Debug Analysis panels."""
+
 from __future__ import annotations
 
-from dataclasses import dataclass
-import math
-
 import numpy as np
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 
 from ..configuration.diagnostics import (
     DebugLegendEntry,
@@ -13,1002 +12,29 @@ from ..configuration.diagnostics import (
 )
 from ..configuration.model import DetectionConfiguration
 from ..detection.final.model import FinalDetection
-from ..detection.photo_geometry.corridors import source_lane_box
-from ..detection.photo_geometry.model import (
-    BoundaryAxis,
-    BoundaryRole,
-    SafeCropEnvelope,
-)
-from ..detection.photo_geometry.chains import FixedFormatFrame
 from ..detection.workspace import DetectionWorkspace
 from ..io.model import ImageProfile
 from ..run_status import RunTerminalOutcome
 from ..utils import RGB_CHANNEL_COUNT
-from .canvas import FRAME_FILL_COLORS, DebugRenderCache, cached_source_image
-from .status import add_status_bar
-
-
-DEBUG_ANALYSIS_PANEL_LABELS = (
-    "01 · CROSS-AXIS TOP / BOTTOM",
-    "02 · LONG-AXIS START / END",
-    "03 · FINAL SAFE OUTPUT",
+from .axis_panels import cross_axis_panel, long_axis_panel
+from .canvas import DebugRenderCache
+from .output_panel import protected_output_panel
+from .panel_facts import source_projection
+from .panel_layout import (
+    PresentationGrid,
+    draw_dashed_polyline,
+    font,
+    presentation_grid,
+    text_width,
 )
-
-
-@dataclass(frozen=True)
-class _Projection:
-    source_width: int
-    source_height: int
-    rotate_clockwise: bool
-
-    @property
-    def display_width(self) -> int:
-        return self.source_height if self.rotate_clockwise else self.source_width
-
-    @property
-    def display_height(self) -> int:
-        return self.source_width if self.rotate_clockwise else self.source_height
-
-    def point(self, point: tuple[float, float]) -> tuple[float, float]:
-        x, y = point
-        if self.rotate_clockwise:
-            return float(self.source_height) - y, x
-        return x, y
-
-
-@dataclass(frozen=True)
-class _Viewport:
-    projection: _Projection
-    source_box: tuple[int, int, int, int]
-    target_box: tuple[int, int, int, int]
-
-    def point(self, point: tuple[float, float]) -> tuple[float, float]:
-        x, y = self.projection.point(point)
-        source_left, source_top, source_right, source_bottom = self.source_box
-        target_left, target_top, target_right, target_bottom = self.target_box
-        return (
-            target_left
-            + (x - source_left)
-            * (target_right - target_left)
-            / (source_right - source_left),
-            target_top
-            + (y - source_top)
-            * (target_bottom - target_top)
-            / (source_bottom - source_top),
-        )
-
-    def polygon(
-        self,
-        polygon: tuple[tuple[float, float], ...],
-    ) -> tuple[tuple[float, float], ...]:
-        return tuple(self.point(point) for point in polygon)
-
-
-@dataclass(frozen=True)
-class _PresentationGrid:
-    media_height: int
-    cross_axis_panel_height: int
-    long_axis_panel_height: int
-    output_panel_height: int
-    canvas_height: int
-
-
-def _presentation_grid(
-    projection: _Projection,
-    style: DebugStyleParameters,
-) -> _PresentationGrid:
-    panel_width = style.canvas_width - 2 * style.outer_margin
-    media_width = panel_width - 2 * style.panel_media_inset_x
-    media_height = max(
-        1,
-        int(
-            round(
-                media_width
-                * projection.display_height
-                / projection.display_width
-            )
-        ),
-    )
-    cross_axis_panel_height = (
-        style.cross_axis_media_top
-        + media_height
-        + style.cross_axis_media_bottom_padding
-    )
-    long_axis_panel_height = (
-        style.long_axis_media_top
-        + media_height
-        + style.long_axis_media_bottom_padding
-    )
-    output_panel_height = (
-        style.output_media_top
-        + media_height
-        + style.output_media_bottom_padding
-    )
-    canvas_height = (
-        style.status_bar_height
-        + cross_axis_panel_height
-        + long_axis_panel_height
-        + output_panel_height
-        + 2 * style.panel_gap
-        + style.legend_bar_height
-    )
-    return _PresentationGrid(
-        media_height=media_height,
-        cross_axis_panel_height=cross_axis_panel_height,
-        long_axis_panel_height=long_axis_panel_height,
-        output_panel_height=output_panel_height,
-        canvas_height=canvas_height,
-    )
-
-
-def _font(size: int) -> ImageFont.ImageFont:
-    return ImageFont.load_default(size=size)
-
-
-def _text_width(
-    draw: ImageDraw.ImageDraw,
-    text: str,
-    font: ImageFont.ImageFont,
-) -> int:
-    bounds = draw.textbbox((0, 0), text, font=font)
-    return bounds[2] - bounds[0]
-
-
-def _frame_color(global_ordinal: int) -> tuple[int, int, int]:
-    if not 1 <= global_ordinal <= len(FRAME_FILL_COLORS):
-        raise ValueError("Debug Analysis frame ordinal exceeds the fixed color table")
-    return FRAME_FILL_COLORS[global_ordinal - 1]
-
-
-def _panel_base(
-    width: int,
-    height: int,
-    title: str,
-    right_title: str,
-    style: DebugStyleParameters,
-) -> tuple[Image.Image, ImageDraw.ImageDraw]:
-    panel = Image.new("RGB", (width, height), style.panel_background)
-    draw = ImageDraw.Draw(panel)
-    draw.rectangle(
-        (0, 0, width - 1, height - 1),
-        outline=style.panel_border_color,
-        width=1,
-    )
-    draw.line(
-        ((1, style.panel_title_height), (width - 2, style.panel_title_height)),
-        fill=style.divider_color,
-        width=1,
-    )
-    title_font = _font(style.title_font_size)
-    draw.text((16, 11), title, fill=style.text_color, font=title_font)
-    right_width = _text_width(draw, right_title, title_font)
-    draw.text(
-        (width - right_width - 17, 11),
-        right_title,
-        fill=style.secondary_text_color,
-        font=title_font,
-    )
-    return panel, draw
-
-
-def _viewport(
-    projection: _Projection,
-    target_box: tuple[int, int, int, int],
-) -> _Viewport:
-    return _Viewport(
-        projection,
-        (0, 0, projection.display_width, projection.display_height),
-        target_box,
-    )
-
-
-def _paste_source(
-    panel: Image.Image,
-    source: Image.Image,
-    viewport: _Viewport,
-) -> None:
-    left, top, right, bottom = viewport.target_box
-    crop = source.crop(viewport.source_box).resize(
-        (right - left, bottom - top),
-        Image.Resampling.LANCZOS,
-    )
-    panel.paste(crop, (left, top))
-
-
-def _draw_dashed_polyline(
-    draw: ImageDraw.ImageDraw,
-    points: tuple[tuple[float, float], ...],
-    color: tuple[int, int, int],
-    width: int,
-    dash_length: int,
-    dash_gap: int,
-    *,
-    closed: bool,
-) -> None:
-    if len(points) < 2:
-        return
-    path = points + ((points[0],) if closed else ())
-    period = float(dash_length + dash_gap)
-    for start, end in zip(path, path[1:]):
-        dx = end[0] - start[0]
-        dy = end[1] - start[1]
-        distance = math.hypot(dx, dy)
-        if distance <= 1.0e-9:
-            continue
-        cursor = 0.0
-        while cursor < distance:
-            stop = min(distance, cursor + dash_length)
-            draw.line(
-                (
-                    (
-                        start[0] + dx * cursor / distance,
-                        start[1] + dy * cursor / distance,
-                    ),
-                    (
-                        start[0] + dx * stop / distance,
-                        start[1] + dy * stop / distance,
-                    ),
-                ),
-                fill=color,
-                width=width,
-            )
-            cursor += period
-
-
-def _clip_segment_to_box(
-    start: tuple[float, float],
-    end: tuple[float, float],
-    box: tuple[int, int, int, int],
-) -> tuple[tuple[float, float], tuple[float, float]] | None:
-    left, top, right, bottom = (float(value) for value in box)
-    x0, y0 = start
-    dx = end[0] - x0
-    dy = end[1] - y0
-    lower = 0.0
-    upper = 1.0
-    for direction, distance in (
-        (-dx, x0 - left),
-        (dx, right - x0),
-        (-dy, y0 - top),
-        (dy, bottom - y0),
-    ):
-        if abs(direction) <= 1.0e-12:
-            if distance < 0.0:
-                return None
-            continue
-        ratio = distance / direction
-        if direction < 0.0:
-            if ratio > upper:
-                return None
-            lower = max(lower, ratio)
-        else:
-            if ratio < lower:
-                return None
-            upper = min(upper, ratio)
-    return (
-        (x0 + lower * dx, y0 + lower * dy),
-        (x0 + upper * dx, y0 + upper * dy),
-    )
-
-
-def _fill_polygon(
-    draw: ImageDraw.ImageDraw,
-    polygon: tuple[tuple[float, float], ...],
-    color: tuple[int, int, int],
-    alpha: float,
-    *,
-    viewport: _Viewport | None = None,
-) -> None:
-    if len(polygon) >= 3:
-        target = viewport.polygon(polygon) if viewport is not None else polygon
-        draw.polygon(target, fill=(*color, int(round(255.0 * alpha))))
-
-
-def _source_line_points(observation: object) -> tuple[tuple[float, float], ...]:
-    line = observation.line
-    support = line.support_projection_px
-    if line.source_axis_long == BoundaryAxis.X:
-        if abs(line.normal_y) <= 1.0e-12:
-            return ()
-        return (
-            (
-                support.minimum,
-                (line.offset_px - line.normal_x * support.minimum) / line.normal_y,
-            ),
-            (
-                support.maximum,
-                (line.offset_px - line.normal_x * support.maximum) / line.normal_y,
-            ),
-        )
-    if abs(line.normal_x) <= 1.0e-12:
-        return ()
-    return (
-        (
-            (line.offset_px - line.normal_y * support.minimum) / line.normal_x,
-            support.minimum,
-        ),
-        (
-            (line.offset_px - line.normal_y * support.maximum) / line.normal_x,
-            support.maximum,
-        ),
-    )
-
-
-def _geometry_by_identity(
-    detection: FinalDetection,
-) -> tuple[tuple[int, FixedFormatFrame], ...]:
-    global_ordinals = {
-        (item.lane_id, item.lane_ordinal): item.global_output_ordinal
-        for item in detection.output_slot_identities
-    }
-    values: list[tuple[int, FixedFormatFrame]] = []
-    for lane in detection.candidate.geometry.lane_reconstructions:
-        placements = (
-            (lane.selected_placement,)
-            if lane.selected_placement is not None
-            else lane.materialized_chains
-        )
-        for placement in placements:
-            for geometry in placement.fixed_frames.frames:
-                ordinal = global_ordinals.get(
-                    (geometry.lane_id, geometry.lane_ordinal)
-                )
-                if ordinal is not None:
-                    values.append((ordinal, geometry))
-    return tuple(
-        sorted(
-            values,
-            key=lambda item: (item[0], item[1].placement_geometry_id),
-        )
-    )
-
-
-def _safe_crop_envelopes(
-    detection: FinalDetection,
-) -> tuple[SafeCropEnvelope, ...]:
-    return detection.candidate.geometry.safe_crop_envelopes
-
-
-def _selection_summary(detection: FinalDetection) -> str:
-    lanes = detection.candidate.geometry.lane_reconstructions
-    chains = sum(len(item.materialized_chains) for item in lanes)
-    clusters = sum(len(item.placement_selection.clusters) for item in lanes)
-    vetoes = sum(
-        len(assessment.facts)
-        for lane in lanes
-        for assessment in lane.placement_selection.content_veto_assessments
-    )
-    selected = sum(item.selected_placement is not None for item in lanes)
-    bounded = any(item.producer_bounds.bound_exceeded for item in lanes)
-    return (
-        f"CHAINS {chains} · CLUSTERS {clusters} · SELECTED {selected} · "
-        f"VETO {vetoes} · BOUND {'EXCEEDED' if bounded else 'OK'}"
-    )
-
-
-def _projection(workspace: DetectionWorkspace) -> _Projection:
-    height, width = workspace.source_gray.shape
-    return _Projection(
-        source_width=width,
-        source_height=height,
-        rotate_clockwise=workspace.boundary_measurement_field.layout == "vertical",
-    )
-
-
-def _source_image(
-    workspace: DetectionWorkspace,
-    render_cache: DebugRenderCache,
-) -> tuple[Image.Image, _Projection]:
-    projection = _projection(workspace)
-    return (
-        cached_source_image(
-            render_cache,
-            workspace.source_gray,
-            rotate_clockwise=projection.rotate_clockwise,
-        ),
-        projection,
-    )
-
-
-def _draw_label_chip(
-    draw: ImageDraw.ImageDraw,
-    xy: tuple[int, int],
-    text: str,
-    color: tuple[int, int, int],
-    style: DebugStyleParameters,
-    *,
-    filled: bool = True,
-) -> None:
-    font = _font(style.frame_label_font_size)
-    x, y = xy
-    width = _text_width(draw, text, font) + 10
-    bounds = (x, y, x + width, y + 22)
-    if filled:
-        draw.rounded_rectangle(bounds, radius=3, fill=color)
-        text_color = (255, 255, 255)
-    else:
-        draw.rounded_rectangle(
-            bounds,
-            radius=3,
-            fill=style.panel_background,
-            outline=color,
-            width=1,
-        )
-        text_color = color
-    draw.text((x + 5, y + 3), text, fill=text_color, font=font)
-
-
-def _boundary_points(
-    geometry: FixedFormatFrame,
-    role: BoundaryRole,
-) -> tuple[tuple[float, float], tuple[float, float]]:
-    boundary = geometry.start if role == BoundaryRole.START else geometry.end
-    line = boundary.line
-    closest = sorted(
-        geometry.canonical_source_polygon,
-        key=lambda point: abs(
-            line.normal_x * point[0] + line.normal_y * point[1] - line.offset_px
-        ),
-    )[:2]
-    return closest[0], closest[1]
-
-
-def _draw_selected_start_end(
-    draw: ImageDraw.ImageDraw,
-    geometries: tuple[tuple[int, FixedFormatFrame], ...],
-    viewport: _Viewport,
-    style: DebugStyleParameters,
-) -> None:
-    font = _font(style.annotation_font_size)
-    viewport_top = viewport.target_box[1]
-    labels: list[tuple[float, int, str]] = []
-    for index, (_ordinal, geometry) in enumerate(geometries):
-        roles = (
-            ((BoundaryRole.END,) if index < len(geometries) - 1 else ())
-            + ((BoundaryRole.START,) if index > 0 else ())
-        )
-        for role in roles:
-            source_points = _boundary_points(geometry, role)
-            projected = tuple(viewport.point(point) for point in source_points)
-            clipped = _clip_segment_to_box(
-                projected[0],
-                projected[1],
-                viewport.target_box,
-            )
-            if clipped is None:
-                continue
-            points = clipped
-            upper, lower = sorted(points, key=lambda point: point[1])
-            dy = lower[1] - upper[1]
-            dx = lower[0] - upper[0]
-            extension_y = max(float(style.annotation_extension), upper[1] - viewport_top + 7.0)
-            extension_x = 0.0 if abs(dy) <= 1.0e-9 else dx * extension_y / dy
-            line_top = (upper[0] - extension_x, upper[1] - extension_y)
-            draw.line(
-                (line_top, lower),
-                fill=style.selected_boundary_color,
-                width=2,
-            )
-            text = role.value.upper()
-            text_width = _text_width(draw, text, font)
-            text_x = (
-                line_top[0] + 4
-                if role == BoundaryRole.START
-                else line_top[0] - text_width - 4
-            )
-            target_left, _top, target_right, _bottom = viewport.target_box
-            text_x = min(max(target_left, text_x), target_right - text_width)
-            labels.append((text_x, text_width, text))
-    occupied_right = [float("-inf"), float("-inf")]
-    label_rows = (
-        style.panel_title_height + 3,
-        style.panel_title_height + 3 + style.boundary_label_row_gap,
-    )
-    for text_x, text_width, text in sorted(labels, key=lambda item: item[0]):
-        row = next(
-            (
-                index
-                for index, right in enumerate(occupied_right)
-                if text_x >= right + style.boundary_label_horizontal_gap
-            ),
-            min(range(len(occupied_right)), key=occupied_right.__getitem__),
-        )
-        draw.text(
-            (text_x, label_rows[row]),
-            text,
-            fill=style.selected_boundary_color,
-            font=font,
-        )
-        occupied_right[row] = max(occupied_right[row], text_x + text_width)
-
-
-def _draw_detected_top_bottom(
-    draw: ImageDraw.ImageDraw,
-    detection: FinalDetection,
-    viewport: _Viewport,
-    style: DebugStyleParameters,
-) -> set[BoundaryRole]:
-    roles: set[BoundaryRole] = set()
-    for lane in detection.candidate.geometry.lane_reconstructions:
-        for observation in lane.raw_top_bottom_observations:
-            source_points = _source_line_points(observation)
-            if not source_points:
-                continue
-            projected = tuple(viewport.point(point) for point in source_points)
-            clipped = _clip_segment_to_box(
-                projected[0],
-                projected[1],
-                viewport.target_box,
-            )
-            if clipped is None:
-                continue
-            _draw_dashed_polyline(
-                draw,
-                clipped,
-                style.detected_edge_color,
-                2,
-                style.line_dash_length,
-                style.line_dash_gap,
-                closed=False,
-            )
-            roles.add(observation.role)
-    return roles
-
-
-def _draw_selected_top_bottom(
-    draw: ImageDraw.ImageDraw,
-    geometries: tuple[tuple[int, FixedFormatFrame], ...],
-    viewport: _Viewport,
-    style: DebugStyleParameters,
-) -> set[BoundaryRole]:
-    roles: set[BoundaryRole] = set()
-    for _ordinal, geometry in geometries:
-        for boundary in (geometry.top, geometry.bottom):
-            source_points = _source_line_points(boundary)
-            if not source_points:
-                continue
-            projected = tuple(viewport.point(point) for point in source_points)
-            clipped = _clip_segment_to_box(
-                projected[0],
-                projected[1],
-                viewport.target_box,
-            )
-            if clipped is None:
-                continue
-            draw.line(
-                clipped,
-                fill=style.selected_edge_color,
-                width=style.evidence_line_width,
-            )
-            roles.add(boundary.role)
-    return roles
-
-
-def _cross_axis_panel(
-    workspace: DetectionWorkspace,
-    detection: FinalDetection,
-    style: DebugStyleParameters,
-    render_cache: DebugRenderCache,
-    grid: _PresentationGrid,
-) -> np.ndarray:
-    panel_width = style.canvas_width - 2 * style.outer_margin
-    panel, draw = _panel_base(
-        panel_width,
-        grid.cross_axis_panel_height,
-        DEBUG_ANALYSIS_PANEL_LABELS[0],
-        "DETECTED EVIDENCE / SELECTED EDGE",
-        style,
-    )
-    source, projection = _source_image(workspace, render_cache)
-    target_box = (
-        style.panel_media_inset_x,
-        style.cross_axis_media_top,
-        panel_width - style.panel_media_inset_x,
-        style.cross_axis_media_top + grid.media_height,
-    )
-    viewport = _viewport(
-        projection,
-        target_box,
-    )
-    _paste_source(panel, source, viewport)
-    draw = ImageDraw.Draw(panel)
-    geometries = _geometry_by_identity(detection)
-    detected = _draw_detected_top_bottom(draw, detection, viewport, style)
-    selected = _draw_selected_top_bottom(draw, geometries, viewport, style)
-    top_y = style.panel_title_height + 6
-    bottom_y = grid.cross_axis_panel_height - 27
-    left = viewport.target_box[0]
-    if BoundaryRole.TOP in detected:
-        _draw_label_chip(
-            draw,
-            (left, top_y),
-            "DETECTED TOP",
-            style.detected_edge_color,
-            style,
-            filled=False,
-        )
-    if BoundaryRole.TOP in selected:
-        _draw_label_chip(
-            draw,
-            (left + 118, top_y),
-            "SELECTED TOP",
-            style.selected_edge_color,
-            style,
-        )
-    if BoundaryRole.BOTTOM in selected:
-        _draw_label_chip(
-            draw,
-            (left, bottom_y),
-            "SELECTED BOTTOM",
-            style.selected_edge_color,
-            style,
-        )
-    if BoundaryRole.BOTTOM in detected:
-        _draw_label_chip(
-            draw,
-            (left + 138, bottom_y),
-            "DETECTED BOTTOM",
-            style.detected_edge_color,
-            style,
-            filled=False,
-        )
-    return np.asarray(panel)
-
-
-def _draw_detected_start_end(
-    draw: ImageDraw.ImageDraw,
-    workspace: DetectionWorkspace,
-    detection: FinalDetection,
-    viewport: _Viewport,
-    style: DebugStyleParameters,
-) -> bool:
-    layout = workspace.boundary_measurement_field.layout
-    source_lanes = {
-        lane.domain.lane_id: lane for lane in workspace.source_core.lanes
-    }
-    found = False
-    for lane in detection.candidate.geometry.lane_reconstructions:
-        source_lane = source_lanes.get(lane.lane_id)
-        if source_lane is None:
-            continue
-        lane_box = source_lane_box(source_lane, layout)
-        for region in lane.side_transition_regions:
-            coordinate = region.proposal_position_interval_px.center
-            source_points = (
-                ((coordinate, lane_box.top), (coordinate, lane_box.bottom))
-                if layout == "horizontal"
-                else ((lane_box.left, coordinate), (lane_box.right, coordinate))
-            )
-            projected = tuple(viewport.point(point) for point in source_points)
-            clipped = _clip_segment_to_box(
-                projected[0],
-                projected[1],
-                viewport.target_box,
-            )
-            if clipped is None:
-                continue
-            _draw_dashed_polyline(
-                draw,
-                clipped,
-                style.detected_transition_color,
-                style.raw_transition_line_width,
-                style.line_dash_length,
-                style.line_dash_gap,
-                closed=False,
-            )
-            found = True
-    return found
-
-
-def _long_axis_panel(
-    workspace: DetectionWorkspace,
-    detection: FinalDetection,
-    style: DebugStyleParameters,
-    render_cache: DebugRenderCache,
-    grid: _PresentationGrid,
-) -> np.ndarray:
-    panel_width = style.canvas_width - 2 * style.outer_margin
-    panel, _draw = _panel_base(
-        panel_width,
-        grid.long_axis_panel_height,
-        DEBUG_ANALYSIS_PANEL_LABELS[1],
-        "DETECTED TRANSITION / SELECTED BOUNDARY",
-        style,
-    )
-    source, projection = _source_image(workspace, render_cache)
-    geometries = _geometry_by_identity(detection)
-    media_left = style.panel_media_inset_x
-    media_right = panel_width - style.panel_media_inset_x
-    media_top = style.long_axis_media_top
-    media_bottom = media_top + grid.media_height
-    viewport = _viewport(
-        projection,
-        (media_left, media_top, media_right, media_bottom),
-    )
-    _paste_source(panel, source, viewport)
-    draw = ImageDraw.Draw(panel)
-    detected = _draw_detected_start_end(
-        draw,
-        workspace,
-        detection,
-        viewport,
-        style,
-    )
-    _draw_selected_start_end(draw, geometries, viewport, style)
-    if not geometries:
-        note = "NO SELECTED START / END · CANDIDATE AUDIT ONLY"
-        font = _font(style.header_detail_font_size)
-        note_width = _text_width(draw, note, font)
-        draw.rectangle(
-            (
-                (media_left + media_right - note_width) // 2 - 12,
-                media_top + 57,
-                (media_left + media_right + note_width) // 2 + 12,
-                media_top + 86,
-            ),
-            fill=style.panel_background,
-        )
-        draw.text(
-            ((media_left + media_right - note_width) // 2, media_top + 63),
-            note,
-            fill=style.review_color,
-            font=font,
-        )
-    footer_y = grid.long_axis_panel_height - 27
-    if detected:
-        _draw_label_chip(
-            draw,
-            (media_left, footer_y),
-            "RAW / DETECTED",
-            style.detected_transition_color,
-            style,
-            filled=False,
-        )
-    if geometries:
-        _draw_label_chip(
-            draw,
-            (media_left + 132, footer_y),
-            "SELECTED START / END",
-            style.selected_boundary_color,
-            style,
-            filled=False,
-        )
-    summary = _selection_summary(detection)
-    summary_font = _font(style.annotation_font_size)
-    draw.text(
-        (
-            media_right - _text_width(draw, summary, summary_font),
-            footer_y,
-        ),
-        summary,
-        fill=style.secondary_text_color,
-        font=summary_font,
-    )
-    return np.asarray(panel)
-
-
-def _draw_hatched_polygon(
-    panel: Image.Image,
-    polygon: tuple[tuple[float, float], ...],
-    color: tuple[int, int, int],
-    border_width: int,
-) -> Image.Image:
-    mask = Image.new("L", panel.size, 0)
-    ImageDraw.Draw(mask).line(
-        polygon + (polygon[0],),
-        fill=255,
-        width=border_width,
-        joint="curve",
-    )
-    hatch = Image.new("RGBA", panel.size, (0, 0, 0, 0))
-    draw = ImageDraw.Draw(hatch)
-    left = int(math.floor(min(point[0] for point in polygon)))
-    top = int(math.floor(min(point[1] for point in polygon)))
-    right = int(math.ceil(max(point[0] for point in polygon)))
-    bottom = int(math.ceil(max(point[1] for point in polygon)))
-    for offset in range(left - (bottom - top), right + (bottom - top), 6):
-        draw.line((offset, bottom, offset + (bottom - top), top), fill=(*color, 210), width=2)
-    hatch.putalpha(Image.composite(hatch.getchannel("A"), Image.new("L", panel.size, 0), mask))
-    return Image.alpha_composite(panel.convert("RGBA"), hatch).convert("RGB")
-
-
-def _keep_evidence_inside_media(
-    base: Image.Image,
-    evidence: Image.Image,
-    target_box: tuple[int, int, int, int],
-) -> Image.Image:
-    clipped = base.copy()
-    clipped.paste(evidence.crop(target_box), target_box[:2])
-    return clipped
-
-
-def _protected_output_panel(
-    workspace: DetectionWorkspace,
-    detection: FinalDetection,
-    style: DebugStyleParameters,
-    render_cache: DebugRenderCache,
-    grid: _PresentationGrid,
-) -> np.ndarray:
-    panel_width = style.canvas_width - 2 * style.outer_margin
-    right_title = (
-        f"SOURCE ATOMIC · {detection.output_slot_count} TIFF ELIGIBLE"
-        if detection.frame_export_eligible
-        else "CANDIDATE AUDIT · NOT EXPORTABLE"
-    )
-    panel, _draw = _panel_base(
-        panel_width,
-        grid.output_panel_height,
-        DEBUG_ANALYSIS_PANEL_LABELS[2],
-        right_title,
-        style,
-    )
-    source, projection = _source_image(workspace, render_cache)
-    available_target_box = (
-        style.panel_media_inset_x,
-        style.output_media_top,
-        panel_width - style.panel_media_inset_x,
-        style.output_media_top + grid.media_height,
-    )
-    viewport = _viewport(
-        projection,
-        available_target_box,
-    )
-    target_box = viewport.target_box
-    _paste_source(panel, source, viewport)
-    media_base = panel.copy()
-    identities = {
-        (item.lane_id, item.lane_ordinal): item
-        for item in detection.output_slot_identities
-    }
-    budgets = {
-        item.geometry_id: item
-        for item in detection.candidate.geometry.direct_use_budget_assessments
-    }
-    overlay = Image.new("RGBA", panel.size, (0, 0, 0, 0))
-    overlay_draw = ImageDraw.Draw(overlay)
-    envelopes = _safe_crop_envelopes(detection)
-    budget_labels: list[tuple[int, str]] = []
-    if not envelopes:
-        for ordinal, geometry in _geometry_by_identity(detection):
-            _fill_polygon(
-                overlay_draw,
-                geometry.canonical_source_polygon,
-                _frame_color(ordinal),
-                style.frame_fill_alpha,
-                viewport=viewport,
-            )
-    for envelope in envelopes:
-        identity = identities[(envelope.lane_id, envelope.lane_ordinal)]
-        color = _frame_color(identity.global_output_ordinal)
-        _fill_polygon(
-            overlay_draw,
-            envelope.placement_source_footprint,
-            color,
-            style.frame_fill_alpha,
-            viewport=viewport,
-        )
-        _fill_polygon(
-            overlay_draw,
-            envelope.constrained_source_footprint,
-            color,
-            style.safe_fill_alpha,
-            viewport=viewport,
-        )
-    panel = Image.alpha_composite(panel.convert("RGBA"), overlay).convert("RGB")
-    draw = ImageDraw.Draw(panel)
-    for envelope in envelopes:
-        identity = identities[(envelope.lane_id, envelope.lane_ordinal)]
-        color = _frame_color(identity.global_output_ordinal)
-        _draw_dashed_polyline(
-            draw,
-            viewport.polygon(envelope.required_source_footprint),
-            style.safety_envelope_color,
-            style.retained_line_width,
-            style.line_dash_length,
-            style.line_dash_gap,
-            closed=True,
-        )
-        constrained = viewport.polygon(envelope.constrained_source_footprint)
-        draw.line(
-            constrained + (constrained[0],),
-            fill=color,
-            width=style.frame_line_width,
-        )
-        budget = budgets.get(envelope.geometry_id)
-        if budget is not None and budget.state.value == "contradicted":
-            panel = _draw_hatched_polygon(
-                panel,
-                constrained,
-                style.review_color,
-                style.budget_hatch_border_width,
-            )
-            draw = ImageDraw.Draw(panel)
-            failed_roles = "/".join(
-                edge.role.value.upper()
-                for edge in budget.edge_assessments
-                if not edge.within_limit
-            )
-            budget_labels.append(
-                (
-                    max(
-                        target_box[0],
-                        int(math.floor(min(point[0] for point in constrained))),
-                    ),
-                    f"F{identity.global_output_ordinal} · BUDGET {failed_roles}",
-                )
-            )
-        left = max(
-            target_box[0] + 4,
-            int(math.floor(min(point[0] for point in constrained))) + 4,
-        )
-        top = max(
-            target_box[1] + 4,
-            int(math.floor(min(point[1] for point in constrained))) + 4,
-        )
-        _draw_label_chip(
-            draw,
-            (left, top),
-            f"F{identity.global_output_ordinal}",
-            color,
-            style,
-        )
-    panel = _keep_evidence_inside_media(media_base, panel, target_box)
-    draw = ImageDraw.Draw(panel)
-    budget_font = _font(style.annotation_font_size)
-    previous_right = target_box[0]
-    for proposed_x, label in sorted(budget_labels):
-        label_width = _text_width(draw, label, budget_font)
-        x = max(previous_right + style.boundary_label_horizontal_gap, proposed_x)
-        x = min(x, target_box[2] - label_width)
-        draw.text(
-            (x, target_box[1] - 23),
-            label,
-            fill=style.review_color,
-            font=budget_font,
-        )
-        previous_right = x + label_width
-    footer_font = _font(style.annotation_font_size)
-    if envelopes:
-        footer = (
-            "RETAINED / REQUIRED · SAFETY ENVELOPE    "
-            "FINAL SAFE OUTPUT · COLORED OVERLAY"
-        )
-    else:
-        footer = "NO SAFETY ENVELOPE · NO OFFICIAL OUTPUT"
-        note = "NO SAFE OUTPUT · SOURCE ATOMIC · 0 OFFICIAL TIFF"
-        note_font = _font(style.header_detail_font_size)
-        note_width = _text_width(draw, note, note_font)
-        center_y = (target_box[1] + target_box[3]) // 2
-        draw.rectangle(
-            (
-                (panel_width - note_width) // 2 - 12,
-                center_y - 15,
-                (panel_width + note_width) // 2 + 12,
-                center_y + 15,
-            ),
-            fill=style.panel_background,
-        )
-        draw.text(
-            ((panel_width - note_width) // 2, center_y - 8),
-            note,
-            fill=style.review_color,
-            font=note_font,
-        )
-    footer = f"{footer}    {_selection_summary(detection)}"
-    draw.text(
-        (19, grid.output_panel_height - 25),
-        footer,
-        fill=style.text_color,
-        font=footer_font,
-    )
-    return np.asarray(panel)
+from .status import add_status_bar
 
 
 def stack_debug_panels(
     panels: tuple[np.ndarray, ...],
     *,
     style: DebugStyleParameters,
-    grid: _PresentationGrid,
+    grid: PresentationGrid,
 ) -> np.ndarray:
     expected_heights = (
         grid.cross_axis_panel_height,
@@ -1030,7 +56,10 @@ def stack_debug_panels(
     top = 0
     for panel in panels:
         height = panel.shape[0]
-        body[top : top + height, style.outer_margin : style.canvas_width - style.outer_margin] = panel
+        body[
+            top : top + height,
+            style.outer_margin : style.canvas_width - style.outer_margin,
+        ] = panel
         top += height + style.panel_gap
     return body
 
@@ -1044,15 +73,22 @@ def add_legend_bar(
         raise ValueError("Debug Analysis legend width is not canonical")
     height = rgb.shape[0]
     panel = np.full(
-        (height + style.legend_bar_height, style.canvas_width, RGB_CHANNEL_COUNT),
+        (
+            height + style.legend_bar_height,
+            style.canvas_width,
+            RGB_CHANNEL_COUNT,
+        ),
         style.canvas_background,
         dtype=np.uint8,
     )
     panel[:height] = rgb
     image = Image.fromarray(panel, mode="RGB")
     draw = ImageDraw.Draw(image)
-    font = _font(style.legend_font_size)
-    widths = tuple(38 + 9 + _text_width(draw, entry.label, font) + 20 for entry in entries)
+    legend_font = font(style.legend_font_size)
+    widths = tuple(
+        38 + 9 + text_width(draw, entry.label, legend_font) + 20
+        for entry in entries
+    )
     scale = min(1.0, (style.canvas_width - 48) / max(1, sum(widths)))
     x = 31.0
     center_y = height + style.legend_bar_height / 2.0
@@ -1063,9 +99,13 @@ def add_legend_bar(
         top = int(round(center_y - 9))
         bottom = int(round(center_y + 9))
         if entry.sample == "solid":
-            draw.line((left, center_y, right, center_y), fill=entry.color, width=2)
+            draw.line(
+                (left, center_y, right, center_y),
+                fill=entry.color,
+                width=2,
+            )
         elif entry.sample == "dashed":
-            _draw_dashed_polyline(
+            draw_dashed_polyline(
                 draw,
                 ((left, center_y), (right, center_y)),
                 entry.color,
@@ -1075,16 +115,24 @@ def add_legend_bar(
                 closed=False,
             )
         else:
-            draw.rectangle((left, top, right, bottom), outline=entry.color, width=1)
+            draw.rectangle(
+                (left, top, right, bottom),
+                outline=entry.color,
+                width=1,
+            )
             if entry.sample == "hatched":
                 for offset in range(left - 12, right + 12, 5):
-                    draw.line((offset, bottom, offset + 18, top), fill=entry.color, width=1)
+                    draw.line(
+                        (offset, bottom, offset + 18, top),
+                        fill=entry.color,
+                        width=1,
+                    )
         text_x = right + max(6, int(round(9 * scale)))
         draw.text(
             (text_x, center_y - 7),
             entry.label,
             fill=style.secondary_text_color,
-            font=font,
+            font=legend_font,
         )
         x += natural_width * scale
     return np.asarray(image)
@@ -1101,11 +149,13 @@ def make_debug_analysis_panel(
     terminal_outcome: RunTerminalOutcome,
 ) -> np.ndarray:
     style = diagnostics.style
-    grid = _presentation_grid(_projection(workspace), style)
+    grid = presentation_grid(source_projection(workspace), style)
     panels = (
-        _cross_axis_panel(workspace, detection, style, render_cache, grid),
-        _long_axis_panel(workspace, detection, style, render_cache, grid),
-        _protected_output_panel(workspace, detection, style, render_cache, grid),
+        cross_axis_panel(workspace, detection, style, render_cache, grid),
+        long_axis_panel(workspace, detection, style, render_cache, grid),
+        protected_output_panel(
+            workspace, detection, style, render_cache, grid
+        ),
     )
     canvas = stack_debug_panels(panels, style=style, grid=grid)
     canvas = add_legend_bar(canvas, diagnostics.legend_entries, style)
@@ -1118,6 +168,12 @@ def make_debug_analysis_panel(
         style,
         terminal_outcome,
     )
-    if canvas.shape != (grid.canvas_height, style.canvas_width, RGB_CHANNEL_COUNT):
-        raise ValueError("Debug Analysis output does not match the adaptive design canvas")
+    if canvas.shape != (
+        grid.canvas_height,
+        style.canvas_width,
+        RGB_CHANNEL_COUNT,
+    ):
+        raise ValueError(
+            "Debug Analysis output does not match the adaptive design canvas"
+        )
     return canvas

@@ -1,1 +1,1 @@
-"""Output-adjacent helpers shared by workflow, finalization, and reuse."""
+"""Fresh-directory publication and output naming helpers."""

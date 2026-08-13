@@ -16,6 +16,12 @@ from ..utils import (
 
 @dataclass(frozen=True)
 class BaseGrayParameters:
+    """Registered-gray calibration used only by pixel measurement.
+
+    Rec.709 luma coefficients preserve channel meaning.  Percentile clipping
+    is an explicit robust display-domain normalization; it creates no edge,
+    content, placement, or Gate authority.
+    """
     red_weight: float = 0.2126
     green_weight: float = 0.7152
     blue_weight: float = 0.0722

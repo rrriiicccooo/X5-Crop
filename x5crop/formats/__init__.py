@@ -57,6 +57,30 @@ class FrameDimensionToleranceSpec:
 FRAME_DIMENSION_TOLERANCE_SPEC = FrameDimensionToleranceSpec()
 
 
+@dataclass(frozen=True, order=True)
+class DirectUseBudgetSpec:
+    """Maximum selected-frame expansion that remains directly usable.
+
+    These format-relative limits are also the physical legality window for
+    visible boundary evidence around a fixed-size frame.  They are not crop
+    padding and do not create measurement support.
+    """
+
+    sequence_ratio_per_side: float = 0.05
+    cross_ratio_per_side: float = 0.03
+
+    def __post_init__(self) -> None:
+        for name, value in (
+            ("sequence direct-use ratio", self.sequence_ratio_per_side),
+            ("cross direct-use ratio", self.cross_ratio_per_side),
+        ):
+            if not 0.0 < value < 1.0:
+                raise ValueError(f"{name} must be between zero and one")
+
+
+DIRECT_USE_BUDGET_SPEC = DirectUseBudgetSpec()
+
+
 @dataclass(frozen=True)
 class ScanLayoutSpec:
     kind: str = "single_strip"
@@ -126,7 +150,7 @@ class FormatSpec:
     def interactive_partial_counts(self) -> tuple[int, ...]:
         if not self.partial_mode_supported:
             return ()
-        return tuple(range(1, self.maximum_full_count))
+        return tuple(range(1, self.maximum_full_count + 1))
 
 
 FRAME_135 = FramePhysicalSpec(36.0, 24.0, 2.0)

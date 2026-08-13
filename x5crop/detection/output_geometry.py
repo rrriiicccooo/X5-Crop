@@ -1,43 +1,45 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from hashlib import sha256
 import math
 
 from ..domain import EvidenceState, FiniteInterval
 from ..geometry.affine import AffineCoordinateTransform
-from .photo_geometry.model import (
-    BoundaryRole,
-    MAXIMUM_OUTPUT_ROTATION_DEGREES,
-    PhotoBoundaryObservation,
-    SharedStripDirection,
-)
+from .photo_geometry.line_observations import PhotoBoundaryObservation
+from .photo_geometry.output_model import SharedStripDirection
 
 
 def observed_strip_angle_estimate_degrees(
     observations: tuple[PhotoBoundaryObservation, ...],
 ) -> float:
-    """Return the support-weighted raw strip-angle estimate.
+    """Return one angle inside all retained direction evidence.
 
-    The estimate describes pixel evidence only.  It does not create the
-    canonical output direction and therefore does not apply the zero-angle
-    preference used by :func:`resolve_shared_strip_direction`.
+    Trace count and fit residual remain report evidence; they cannot pull a
+    shared physical direction toward one side.  Prefer the common robust-fit
+    interval, falling back to the common full measurement interval.  Complete
+    chain selection still owns the canonical output direction.
     """
 
     if not observations:
         raise ValueError("strip-angle estimate requires observations")
-    weighted_sum = sum(
-        item.fit_angle_interval_degrees.center
-        * max(1.0, float(item.trace_support_count))
-        / (1.0 + item.fit_residual_px)
-        for item in observations
+    fit_minimum = max(
+        item.fit_angle_interval_degrees.minimum for item in observations
     )
-    total_weight = sum(
-        max(1.0, float(item.trace_support_count))
-        / (1.0 + item.fit_residual_px)
-        for item in observations
+    fit_maximum = min(
+        item.fit_angle_interval_degrees.maximum for item in observations
     )
-    estimate = weighted_sum / total_weight
+    if fit_minimum <= fit_maximum:
+        estimate = (fit_minimum + fit_maximum) / 2.0
+    else:
+        full_minimum = max(
+            item.angle_interval_degrees.minimum for item in observations
+        )
+        full_maximum = min(
+            item.angle_interval_degrees.maximum for item in observations
+        )
+        if full_minimum > full_maximum:
+            raise ValueError("strip-angle observations have no common direction")
+        estimate = (full_minimum + full_maximum) / 2.0
     if not math.isfinite(estimate):
         raise ValueError("strip-angle estimate is not finite")
     return estimate
@@ -119,85 +121,6 @@ class OutputTransformAssessment:
             raise ValueError("unavailable transform assessment is inconsistent")
 
 
-def resolve_shared_strip_direction(
-    observations: tuple[PhotoBoundaryObservation, ...],
-) -> SharedStripDirectionResolution:
-    """Resolve the sole canonical direction from selected top/bottom evidence."""
-
-    unique_all = tuple(
-        {
-            str(item.observation_id): item
-            for item in observations
-        }.values()
-    )
-    unique = tuple(
-        item
-        for item in unique_all
-        if item.role in {BoundaryRole.TOP, BoundaryRole.BOTTOM}
-    )
-    if not unique:
-        return SharedStripDirectionResolution(
-            direction=None,
-            state=EvidenceState.UNAVAILABLE,
-            named_gap="observed_long_edge_rotation_unavailable",
-        )
-    fit_intervals = tuple(
-        item.fit_angle_interval_degrees for item in unique
-    )
-    if any(item is None for item in fit_intervals):
-        raise ValueError("direction observation lacks fit angle interval")
-    common_minimum = max(item.minimum for item in fit_intervals if item)
-    common_maximum = min(item.maximum for item in fit_intervals if item)
-    if common_minimum > common_maximum:
-        return SharedStripDirectionResolution(
-            direction=None,
-            state=EvidenceState.UNAVAILABLE,
-            named_gap="shared_observed_rotation_interval_unavailable",
-        )
-    common = FiniteInterval(common_minimum, common_maximum)
-    full = FiniteInterval(
-        min(item.angle_interval_degrees.minimum for item in unique),
-        max(item.angle_interval_degrees.maximum for item in unique),
-    )
-    estimate = observed_strip_angle_estimate_degrees(unique)
-    canonical_angle = (
-        0.0
-        if common.contains(0.0)
-        else min(common.maximum, max(common.minimum, estimate))
-    )
-    if (
-        abs(canonical_angle) > MAXIMUM_OUTPUT_ROTATION_DEGREES
-        or not math.isfinite(canonical_angle)
-    ):
-        return SharedStripDirectionResolution(
-            direction=None,
-            state=EvidenceState.UNAVAILABLE,
-            named_gap="observed_rotation_exceeds_two_degrees",
-        )
-    observation_ids = tuple(
-        sorted((item.observation_id for item in unique), key=str)
-    )
-    direction_payload = "\x1f".join(
-        (
-            *(str(identity) for identity in observation_ids),
-            f"{common.minimum:.12f}",
-            f"{common.maximum:.12f}",
-            f"{canonical_angle:.12f}",
-        )
-    ).encode("utf-8")
-    return SharedStripDirectionResolution(
-        direction=SharedStripDirection(
-            direction_id=(
-                "shared-strip-direction:"
-                + sha256(direction_payload).hexdigest()[:24]
-            ),
-            selected_observation_ids=observation_ids,
-            full_angle_interval_degrees=full,
-            canonical_angle_degrees=canonical_angle,
-        ),
-        state=EvidenceState.SUPPORTED,
-        named_gap=None,
-    )
 
 
 def output_transform_assessment(
@@ -245,7 +168,6 @@ def output_transform_assessment(
             source_width,
             source_height,
             source_rotation,
-            guard_px=1.0,
         ),
         outcome="shared_rotation",
         state=EvidenceState.SUPPORTED,

@@ -11,7 +11,7 @@ import subprocess
 import tempfile
 from typing import Any
 
-from x5crop.output.filesystem import identify_filesystem
+from .filesystem_identity import identify_filesystem
 
 
 def _command(*args: str) -> str | None:

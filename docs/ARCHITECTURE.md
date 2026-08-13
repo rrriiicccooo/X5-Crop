@@ -9,11 +9,11 @@ X5 Crop 处理用户已经知道 format、片条模式及必要 count 的 Hassel
 
 - format 是硬事实，程序不从像素或文件名猜 format。
 - count 包括中间空白曝光格；空白格不能删除、合并或改变 ordinal。
-- full 表示实际 slot 数等于匹配片夹的 `full_count`，不表示胶片铺满片夹或靠近画布两端。
-- partial 必须明确输入 `1 <= count < full_count`；片夹容量只校验上限，不能生成 count、phase
-  或照片位置。
-- `135-dual` 只允许 full，总计 12 格，每 lane 6 格。一个 total partial count 无法表达两条片条
-  的分配，因此不提供该模式。
+- full 表示用户确认片条采用匹配片夹的完整铺满布局；count 自动使用 `full_count`。
+- partial 表示片条没有铺满片夹，必须明确输入 `1 <= count <= full_count`。即使 count 相同，
+  partial 的 phase 仍可位于片夹长轴任意位置。
+- `135-dual` 只允许 full，总计 12 格，每 lane 6 格，表示两条 lane 都是用户确认的完整铺满布局。
+  一个 total partial count 无法表达两条片条的分配，因此不提供该模式。
 - 片夹匹配先于 matched-holder count 校验。非交互调用发现非法 count 时，在整批 detector 启动前
   以退出码 `2` 停止；交互入口列出全部冲突并返回 mode/count 步骤。
 - Holder identity 或 `full_count` 无法唯一确定时保持 `needs_review`，不猜片夹或 count。
@@ -27,6 +27,9 @@ SlotCountRequest
 → ResolvedSlotCount
 → ResolvedOutputSlots
 ```
+
+`ResolvedSlotCount` 同时保存用户给出的 `HolderLayoutAuthority`。片夹匹配只提供 profile 与
+`full_count`，不能替用户判断是否铺满。
 
 核心裁切原则是：format 先给出固定照片矩形；检测依据物理证据放置矩形，再只纳入该胜出位置
 自身的测量不确定区间。5%/3% 只验证最终结果，不参与搜索、选位或 padding。
@@ -105,9 +108,9 @@ X5 长图基本没有可用齿孔；源码、测试与 Gate 都不得依赖齿�
 - `unobservable`：遮挡、截断、空白、叠片或内容使边界不可观察。
 
 没有检测到边缘不等于边缘不存在；强烈内容线、灰尘、片夹线也不自动成为照片边界。Expected
-position 只限定首次搜索走廊和顺序，不能创建 phase 或边界。Full 与 partial 都可位于画布长轴
-任意位置。第一张或最后一张被遮挡时，物理框可以延伸到 authority 外；项目只保护 TIFF 中可
-恢复的部分。
+position 只限定首次搜索走廊和顺序，不能创建 phase 或边界。Partial 可位于画布长轴任意位置；
+full 只有在完整正常布局事实成立时才取得条件式居中权限。第一张或最后一张被遮挡时，物理框
+可以延伸到 authority 外；项目只保护 TIFF 中可恢复的部分。
 
 Source/lane authority 来自 raster、片夹布局和 lane 几何，不能从“没有内容”推导。
 
@@ -155,6 +158,11 @@ Band 保留左右边、gap 区间、黑度、纹理与跨短轴连续性。一�
 跨边内容、片夹遮挡外不存在像素。黑色区域不能证明大间隙；连续黑区仍须按 count、W 和物理链
 保留所有空白 slot。
 
+角落局部擦边同样中性。Top/bottom 的否决内容必须离开 start/end 角落并在照片长轴内部跨过完整
+边界不确定区间；start/end 亦须在照片短轴内部成立。二维结构还必须在边界内外各保持一个内容
+测量单元的连续深度。项目保护具有可靠二维延续的有效内容，不把角点、边缘锯齿、尘点或极小
+局部擦边升级成 veto。
+
 不保留 basic/enhanced 平行 detector。唯一 measurement owner 可对已登记缺口执行一次有界局部
 refinement，但结果仍进入同一 observation ledger。
 
@@ -179,6 +187,10 @@ g[i]      当前 adjacency 的实际局部间隙
 120 partial 只有一段 pitch 时始终 unresolved，不借用其它样片、lane 或相机型号。正常间隙是
 可行中心区间，包含测量误差与很小的机械波动；不为每段正常 gap 建立自由 delta。
 
+正常是 full 与 partial 的共同默认关系，但默认正常不等于已知 `G_source` 的具体数值。一段直接
+正间隙可记录为 `observed_normal`，能够放置该 adjacency，却不能补全其它缺失间隙或升级为
+`G_source supported`。`G_format` 始终只负责 registered search，不拥有 placement。
+
 ## 7. Sequence chain 与异常
 
 默认正常关系为：
@@ -191,6 +203,12 @@ start[i+1] = start[i] + W + G_source
 仅在 `G_source supported` 且正常链未被否决时由模板补全；模板位置标记 `inferred`。若全部 slot
 已由直接边缘完整锚定，即使 `G_source unresolved`，完整 chain 仍可成立；若缺失位置依赖未建立
 的 `G_source`，保持 unresolved。
+
+Full 额外声明铺满布局。没有异常证据、正常链的理论总跨度可容纳于片夹可见长轴时，完整链以片夹
+长轴中点为大致中心并按正常 pitch 均匀排布；曝光矩形总跨度不必等于整个扫描画布，片夹首尾可以
+保留物理余量。若所有 adjacency 都被直接观察，chain 即使尚不能建立共同 `G_source` 也可使用其
+直接正间隙验证居中；任何缺失 adjacency 仍要求 supported `G_source`。接触、叠片或大间隙的直接
+证据会关闭这项均匀居中模板权限，不能被 full 覆盖。Partial 永远不消费该布局权限。
 
 特殊锚定关系：
 
@@ -222,15 +240,17 @@ Cross 与 sequence 分别产生有限 proposal，但任何一轴都不能提前�
 
 ```text
 registered observations
-→ cross proposals + sequence proposals
+→ 按原始 transition、位置/方向区间与连续支持去重物理 edge family
+→ separator band 的固定 W 有向邻接路径 + cross proposals
 → 共享尺度、方向、中心线与 authority compatibility index
 → CompleteFormatChain
 ```
 
 联合只访问 compatibility index 中的相容组合，不做全量笛卡尔积，也不从不同候选拼接四条边。
 每条 chain 同时拥有 W/H、方向、中心线、ordinal、phase、gap、内容 assessment 与异常 authority。
-双 lane 先各自产生 chain，再在 source 级共同选择和收紧共享扫描尺度；最终选中链按 source 共享
-尺度重新物化。
+拥有 `count-1` 条直接 separator 时，sequence 由按长轴排序且相邻 W-compatible 的完整有向路径
+建立，不枚举任意角色组合。双 lane 在选择前先取 source 共享 W/H 交集并生成最终候选；选择后
+禁止重新绑定、重新求解或重新物化证据，输出层只能给被审查的原链增加 sampling 事实。
 
 Producer 上界由输入合同推导：
 
@@ -245,10 +265,10 @@ temporary memory
   ≤ 10 × source_pixels + 32 MiB
 ```
 
-每个 corridor 最多物化 4 个唯一原始 observation。若原始计数超限，保存完整 proposed count，
-不按强度或顺序截取 first-N，并产生 `producer_bound_exceeded`；该 corridor 不物化偏置子集。
-Observation 未超限时物化所有唯一且物理相容的 chain，不设置 chain top-K。重复阈值、重复拟合
-与同一原始边先按 canonical ID 去重。
+Producer 上限从去重后的 edge families、输出 count 与合法物理角色推导，不用固定“四条候选”
+阈值。若派生上界无法完整覆盖，保存 proposed count 并产生 `producer_bound_exceeded`，不按强度
+或顺序截取 first-N。重复 trace/window/fitting 只有在共享原始 transition、位置区间相交、方向
+相容且空间支持连续时才合并；连通 family 若不能整体共同拟合，则全部原 observation 保留。
 
 不得恢复通用 DP、beam、Grid、phase-vote、component chain、候选 query 削减、separator center
 裁切、固定 pitch 全链复制、content bbox 放置、逐帧尺寸或无界全图 evidence。
@@ -259,6 +279,10 @@ Observation 未超限时物化所有唯一且物理相容的 chain，不设置 c
 内部/非边界观察、contradiction 或 unobservable，再执行 format/count、共享 W/H、lane 方向与
 中心线、ordinal、单向顺序、authority、内容、异常与完整 slot 数硬过滤。
 
+便宜的区间与集合检查在 frame/sampling/report 物化前完成。基本绑定后立即按 sequence、cross、
+shared 三轴形成 Pareto frontier：三个轴均不弱且至少一轴明确更强才能淘汰竞争者；任一轴的票数
+不能补偿另一轴缺失的 authority。所有不可比较 placement 都保留，不使用 top-K。
+
 投票等级固定为：
 
 1. 独立直接物理观察；
@@ -266,7 +290,8 @@ Observation 未超限时物化所有唯一且物理相容的 chain，不设置 c
 3. separator 材料与拟合质量；
 4. expected position 等弱先验。
 
-一个 band 一票；接触线承担两个角色仍是一票；两个空间分离的 separator 是两票；opposite-edge
+一个 band 只有在左右 edge 均绑定到同一 adjacency 的明确 end/start 角色、并实际约束该 chain
+位置时才有一票；接触线承担两个角色仍是一票；两个空间分离的 separator 是两票；opposite-edge
 pair 是一份强结构证据。W/gap/ordinal 相容、supported `G_source` 和 inferred separator 都不是
 新增像素票。内容只否决。相同原始 observation 的多个拟合只能计一次。
 
@@ -338,33 +363,38 @@ assessments。它不重新选择位置，也不机械要求四条边都被直接
 一个可靠锚点、supported gap、完整正常 chain、无同级竞争者且输出安全时可以自动批准。任一 slot
 不安全时，整个 source `needs_review`，普通运行不写该 source 的正式照片。
 
-Current report 保存 observations、observed/inferred/unresolved、gap 状态、全部 lane proposal、
-source-joint selected chain、producer overflow 汇总、ledger、竞争关系、selected placement、逐边
-budget 与 Gate facts。旧 revision 一律失效并重新检测，不提供 reader 或迁移器。
+普通 report 只保存输入与配置、holder/count authority、最终选择、每个 slot 的安全框、逐边 budget、
+Gate 根因、输出文件和必要 TIFF 事实。Observations、全部 chain、ledger、content veto、dominance 与
+producer work 只在显式 Debug Analysis 或验证工具中生成。旧 report 不参与 runtime；每次运行都从
+原 TIFF 重新检测，不提供跨运行复用、旧 revision reader 或迁移器。
 
-Debug Analysis 只读取 report/runtime facts，不重算几何、不改变检测、不写 TIFF。显示层坐标归一化
-不能改变 source-coordinate placement、crop、budget 或 deskew。后续普通运行只在 current schema、
-完整性、版本、source identity、TIFF profile、完整配置和 layout 全部匹配时复用报告；否则重新
-检测。正式 TIFF 始终从原图 sampling 并复读验证。
+Debug Analysis 消费同一次 runtime 的 development facts，不重算几何、不改变检测、不写正式 TIFF。
+显示层坐标归一化不能改变 source-coordinate placement、crop、budget 或 deskew。
 
-## 12. TIFF、运行与输出事务
+## 12. TIFF、运行与输出发布
 
 正式输入限于单页 unsigned 16-bit、RGB 三通道、contiguous planar TIFF；压缩接受 `NONE`、
 `LZW`、`DEFLATE` / `ADOBE_DEFLATE` 或 `ZSTD`。Orientation 1–8 在 decode boundary 转为
 canonical coordinates，正式输出写 `Orientation=1`。
 
 `tifffile + imagecodecs` 独占正式 TIFF I/O；OpenCV 只作有界像素测量，SciPy 只作数值与
-sampling，Pillow 只在 Debug Analysis 时延迟导入。输出关闭后复读 pixels、结构、ICC、resolution、
-受支持 metadata、压缩与 Orientation。
+sampling，Pillow 只在 Debug Analysis 时延迟导入。普通写出关闭后只复开 header，检查可读性、
+shape、dtype、channels、ICC、resolution、受支持 metadata、压缩与 `Orientation=1`；完整像素复读
+属于 TIFF contract、named-TIFF、platform、端到端与发布验证。
 
-生产默认 `--jobs 1`、上限 3；数值库内部线程固定为 1。正式照片平铺在 target 根部。新结果在
-同父目录 staging 完整生成并复读后，通过 lock、journal 与 rename 发布；只有 owner marker、
-current manifest 和 inventory 完全匹配的旧 target 才能替换。状态歧义保留全部候选，绝不猜测
-删除。
+生产默认 `--jobs 1`、上限 3；数值库内部线程固定为 1。一次运行先在 target 同父目录写完整 staging，
+全部成功后用一次 rename 发布为新的 target。Target 已存在或处理中出现同名目录时直接报错；runtime
+不覆盖、接管、遍历或删除旧目录，不建立 lock、journal、ownership inventory、虚拟磁盘预留或文件
+系统侦察。实际 I/O 失败直接报告，未完成 staging 不公开。
 
 退出码为：`0` 完整发布且无 runtime error，`1` 已发布但含 runtime error或全部输入失败而未发布，
-`2` CLI/input/preflight 错误，`3` 事务、发布或恢复失败。全部 source 都是 `runtime_error` 时不发布
+`2` CLI/input/preflight 错误，`3` fresh-directory 发布失败。全部 source 都是 `runtime_error` 时不发布
 空结果。
+
+数值按职责分为三类：format/片夹尺寸及 1.25%/0.40%/3.5%、5%/3% 是物理或产品合同；像素中心、
+Scharr kernel 归一化、MAD consistency factor 是采样/统计恒等量；窗口毫米数、z 门槛、Huber loss
+scale、内容 cell 与结构张量门槛是具名测量校准。校准值只能存在于对应 spec，必须带单位和合成/
+黄金边界测试，不得散落成 placement、投票或 Gate 的隐藏阈值。
 
 ## 13. 验证与发布边界
 
@@ -392,26 +422,64 @@ platform | platform-check | platform-package | pre-push
 |---|---|
 | `x5crop/formats/` | 单一 `FramePhysicalSpec`、W/H tolerance、gap 先验与 holder full count |
 | `x5crop/configuration/` | count request/resolution、片夹合同与 runtime configuration |
-| `x5crop/io/` | TIFF domain、Orientation、metadata 与 readback |
+| `x5crop/io/` | TIFF domain、Orientation、metadata 与轻量 header readback |
 | `x5crop/detection/source_core.py` | source/lane 可见 authority |
-| `x5crop/detection/evidence/content_occupancy.py` | 候选无关的二维内容 observation |
-| `x5crop/detection/photo_geometry/measurement.py` | registered 像素测量与局部连续边缘段 |
-| `x5crop/detection/photo_geometry/observations.py` | edge、separator band 与 profile observation ledger |
-| `x5crop/detection/photo_geometry/source_geometry.py` | source 共享尺度、方向族与 `LaneGapModel` |
-| `x5crop/detection/photo_geometry/chains.py` | `LaneGeometry`、固定 frame 与 `CompleteFormatChain` 类型 |
-| `x5crop/detection/photo_geometry/solver.py` | cross/sequence proposal、compatibility index 与联合物化 |
-| `x5crop/detection/photo_geometry/bounds.py` | corridor observation 固定上限 |
-| `x5crop/detection/photo_geometry/selection.py` | ledger、sampling cluster、内容 veto 与分层 dominance |
+| `x5crop/detection/evidence/content_occupancy_model.py` | 二维内容 measurement spec 与 observation 类型 |
+| `x5crop/detection/evidence/content_occupancy.py` | OpenCV/SciPy 候选无关二维内容测量 |
+| `x5crop/detection/photo_geometry/model.py` | boundary 语义、空间重复规则与像素测量 spec |
+| `x5crop/detection/photo_geometry/measurement_model.py` | measurement field、query、transition、coverage 与 set 类型 |
+| `x5crop/detection/photo_geometry/search_model.py` | top/bottom corridor 与 sequence anchor domain 类型 |
+| `x5crop/detection/photo_geometry/line_observations.py` | source line、fit receipt 与局部 edge observation 类型 |
+| `x5crop/detection/photo_geometry/registered_transition_measurement.py` | 单 trace 的局部统计与 transition 峰测量 |
+| `x5crop/detection/photo_geometry/registered_measurement.py` | registered query 执行与 coverage receipt |
+| `x5crop/detection/photo_geometry/robust_line_fit.py` | 已绑定 transition family 的 SciPy Huber 数值拟合与收敛 receipt |
+| `x5crop/detection/photo_geometry/boundary_fitting.py` | 将已跟踪 family 绑定为 top/bottom observation，并生成物理方向区间 |
+| `x5crop/detection/photo_geometry/transition_tracking.py` | transition 到局部连续物理 edge family |
+| `x5crop/detection/photo_geometry/profile_adapters.py` | transition region 到 role-free axis profile 的适配 |
+| `x5crop/detection/photo_geometry/sequence_direction_measurement.py` | 单个 sequence edge 的候选无关方向区间 |
+| `x5crop/detection/photo_geometry/observations.py` | role-free sequence edge observation 组装 |
+| `x5crop/detection/photo_geometry/separator_observations.py` | separator band 配对与完整材料验证 |
+| `x5crop/detection/photo_geometry/source_geometry.py` | source 共享 W/H 可行几何 |
+| `x5crop/detection/photo_geometry/lane_gap_model.py` | lane 唯一 `G_source` 与 pitch authority |
+| `x5crop/detection/photo_geometry/sequence_models.py` | 正常/异常 advance 与 filled-holder authority 类型 |
+| `x5crop/detection/photo_geometry/chain_proposals.py` | lane 输入与有限 cross/sequence proposal 类型 |
+| `x5crop/detection/photo_geometry/chains.py` | materialized axis placement、固定 frame 与 `CompleteFormatChain` 类型 |
+| `x5crop/detection/photo_geometry/chain_authority.py` | 完整 chain 的 adjacency authority 判定 |
+| `x5crop/detection/photo_geometry/cross_edge_projection.py` | short-axis edge 的坐标投影与 fixed-H 条件观察 |
+| `x5crop/detection/photo_geometry/cross_edge_families.py` | 局部 short-axis 观察到有限物理 edge family 的聚合 |
+| `x5crop/detection/photo_geometry/cross_proposals.py` | edge family 到有限 top/bottom proposal 的组装 |
+| `x5crop/detection/photo_geometry/cross_conditioning.py` | shared direction、fixed H、短轴居中与 direct edge 的联合约束 |
+| `x5crop/detection/photo_geometry/sequence_*.py` | ordinal、separator、phase 与 sequence proposal/placement |
+| `x5crop/detection/photo_geometry/sequence_separator_seeds.py` | fixed-W separator 有向邻接路径与直接 sequence seed |
+| `x5crop/detection/photo_geometry/sequence_conditioning.py` | direct role 对共享 phase、W、gap 与方向不确定性的联合约束 |
+| `x5crop/detection/photo_geometry/holder_layout_authority.py` | 用户确认 full 的条件式长轴布局权限 |
+| `x5crop/detection/photo_geometry/early_physical_frontier.py` | 完整物化前的便宜物理过滤与三轴 Pareto frontier |
+| `x5crop/detection/photo_geometry/chain_materialization.py` | cross/sequence 相容联合与完整 chain 物化 |
+| `x5crop/detection/photo_geometry/chain_record_model.py` | 完整 chain 审计记录类型 |
+| `x5crop/detection/photo_geometry/chain_direction_evidence.py` | lane direction compatibility facts |
+| `x5crop/detection/photo_geometry/chain_records.py` | observation ledger 与完整 chain 记录生成 |
+| `x5crop/detection/photo_geometry/content_veto.py` | placement 相关的二维内容负向解释 |
+| `x5crop/detection/photo_geometry/placement_clusters.py` | sampling-equivalent placement cluster |
+| `x5crop/detection/photo_geometry/source_selection.py` | sequence/cross/shared 分轴支配与 source 选择 |
 | `x5crop/detection/photo_geometry/output.py` | selected-only envelope、budget 与 sampling assessment |
-| `x5crop/detection/photo_geometry/detector.py` | 唯一流程编排，不拥有几何规则 |
+| `x5crop/detection/photo_geometry/lane_reconstruction.py` | 每条 lane 的 bounded chain 记录、sampling 与 cluster 准备 |
+| `x5crop/detection/photo_geometry/shared_source_geometry.py` | 双 lane 选择前共享 W/H 绑定 |
+| `x5crop/detection/photo_geometry/chain_signature.py` | 选择前后不可变物理证据签名 |
+| `x5crop/detection/photo_geometry/selected_source_output.py` | 原样消费已审查链并生成 selected-only envelope/budget |
+| `x5crop/detection/photo_geometry/reconstruction_gate_facts.py` | source transform 与 typed Gate 事实汇总 |
+| `x5crop/detection/photo_geometry/detector.py` | 唯一顶层流程编排，不拥有几何规则 |
 | `x5crop/detection/candidate/` | `CandidateGate` typed assessments |
 | `x5crop/detection/decision/` | final status 与 reason mapping |
 | `x5crop/detection/final/` | approved geometry exposure |
 | `x5crop/export/` | lane-safe sampling、TIFF write 与 readback |
-| `x5crop/report/` | current report schema、read model 与复用 validation |
-| `x5crop/runtime/` | invocation、terminal、report reuse、budget 与 manifest |
-| `x5crop/output/` | safe tree、filesystem、lock、journal 与 publication |
-| `x5crop/debug/` | current facts 的只读可视化 |
+| `x5crop/report/` | compact production report、development facts 与外部验证 read model |
+| `x5crop/runtime/` | invocation、source workflow 与 terminal outcome |
+| `x5crop/output/` | fresh-directory publication 与 portable naming |
+| `x5crop/debug/panel_layout.py` | Debug presentation 坐标与绘图 primitives |
+| `x5crop/debug/panel_facts.py` | current report/runtime facts 的只读适配 |
+| `x5crop/debug/axis_panels.py` | cross/sequence 分轴面板 |
+| `x5crop/debug/output_panel.py` | selected-only safety 面板 |
+| `x5crop/debug/panels.py` | Debug panel 编排 |
 | `tools/verify` | 唯一 tracked verifier 入口 |
 | `tools/regression/` | SHA-bound accuracy、diagnostic 与 performance |
 | `tools/release/` | standalone 与发布 manifest |

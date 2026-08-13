@@ -23,6 +23,7 @@ def result_from_detection(
     configuration_detail: dict[str, Any],
     runtime_identity: dict[str, Any],
     frame_export_requested: bool,
+    development_detail: bool,
 ) -> ReportResult:
     return ReportResult(
         record=report_record_for_final_detection(
@@ -36,5 +37,6 @@ def result_from_detection(
             configuration=configuration_detail,
             runtime_identity=runtime_identity,
             frame_export_requested=frame_export_requested,
+            development_detail=development_detail,
         )
     )

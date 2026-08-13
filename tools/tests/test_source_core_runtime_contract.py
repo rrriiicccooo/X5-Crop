@@ -3,7 +3,6 @@ from __future__ import annotations
 from copy import deepcopy
 import contextlib
 import io
-import json
 from pathlib import Path
 import tempfile
 import unittest
@@ -22,9 +21,7 @@ from x5crop.detection.decision.vocabulary import (
     FINAL_REASON_NO_LEGAL_PLACEMENT,
 )
 from x5crop.report.identity import REPORT_SCHEMA_ID, REPORT_SCHEMA_REVISION
-from x5crop.report.outputs import write_report_outputs_for_result
 from x5crop.report.validation import validate_current_report_record
-from x5crop.output.ownership import read_owned_output
 from x5crop.run_config import RunConfig
 from x5crop.runtime.invocation import PlannedSource
 from x5crop.runtime.bootstrap import run_options
@@ -56,8 +53,8 @@ def _run_config(
         strip_mode=strip_mode,
         count_request=configuration.count_request,
         debug_analysis=debug_analysis,
-        allow_best_effort_output=False,
         jobs=2,
+        development_detail=debug_analysis,
     )
 
 
@@ -142,8 +139,9 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
         self.assertFalse(finalization["frame_export_performed"])
         self.assertEqual(finalization["official_tiff_count"], 0)
         self.assertEqual(finalization["resolved_output_geometries"], [])
-        self.assertFalse(
-            record["output"]["tiff_fidelity"]["write_readback_validated"]
+        self.assertEqual(
+            record["output"]["tiff_fidelity"]["validation"],
+            "not_created",
         )
 
     def test_fixed_full_without_photo_geometry_is_review(self) -> None:
@@ -159,7 +157,7 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
         self.assertEqual(outcome.result.record["decision"]["status"], "needs_review")
         self.assertEqual(outcome.artifacts.frame_outputs, ())
 
-    def test_partial_count_equal_to_matched_holder_full_count_is_source_error(
+    def test_partial_count_equal_to_holder_count_keeps_partial_layout_authority(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -170,12 +168,18 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
                 strip_mode="partial",
                 requested_count=2,
             )
-        self.assertIsInstance(outcome, FailedInput)
-        assert isinstance(outcome, FailedInput)
-        self.assertEqual(outcome.failure_stage, FailureStage.DETECTION)
+        self.assertIsInstance(outcome, CompletedInput)
+        assert isinstance(outcome, CompletedInput)
+        resolved = outcome.result.record["photo_geometry"]["resolved_slot_count"]
+        self.assertEqual(resolved["output_count"], 2)
+        self.assertEqual(resolved["full_count"], 2)
         self.assertEqual(
-            outcome.error_code,
-            "partial_count_not_less_than_matched_full_count",
+            resolved["authority"],
+            "user_explicit_partial_count",
+        )
+        self.assertEqual(
+            resolved["holder_layout_authority"],
+            "user_confirmed_nonfilling_layout",
         )
         self.assertEqual(outcome.artifacts.frame_outputs, ())
 
@@ -188,7 +192,7 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
         self.assertIsInstance(outcome, CompletedInput)
         assert isinstance(outcome, CompletedInput)
         record = deepcopy(outcome.result.record)
-        record["output"]["tiff_fidelity"]["success_receipt"] = "validated"
+        record["output"]["tiff_fidelity"]["validation"] = "pixel_validated"
         with self.assertRaises(ValueError):
             validate_current_report_record(record)
 
@@ -243,7 +247,7 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
         assert isinstance(outcome, FailedInput)
         self.assertEqual(outcome.failure_stage, FailureStage.INPUT_PROFILE)
 
-    def test_debug_analysis_report_is_reused_without_running_detector_again(
+    def test_debug_analysis_and_normal_run_each_detect_fresh(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -279,38 +283,31 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
             )
             self.assertIsNone(analysis_outcome.artifacts.review_copy)
             self.assertIsNotNone(analysis_outcome.artifacts.debug_analysis)
-            write_report_outputs_for_result(
-                analysis_outcome.result,
-                analysis_output,
-            )
-
             normal_output = root / "normal"
             with mock.patch(
                 "x5crop.runtime.workflow.prepare_detection_workspace",
-                side_effect=AssertionError("detector must not run"),
-            ):
-                reused_outcome = process_one(
+                wraps=__import__(
+                    "x5crop.runtime.workflow", fromlist=["prepare_detection_workspace"]
+                ).prepare_detection_workspace,
+            ) as detector:
+                normal_outcome = process_one(
                     planned,
                     _run_config(source, normal_output),
                     bundle,
                     normal_output,
-                    analysis_output / REPORT_JSONL_NAME,
                 )
-            self.assertIsInstance(reused_outcome, CompletedInput)
-            assert isinstance(reused_outcome, CompletedInput)
+            self.assertTrue(detector.called)
+            self.assertIsInstance(normal_outcome, CompletedInput)
+            assert isinstance(normal_outcome, CompletedInput)
             self.assertTrue(
-                reused_outcome.result.record["output"]["finalization"][
+                normal_outcome.result.record["output"]["finalization"][
                     "frame_export_requested"
                 ]
             )
-            self.assertIn(
-                "analysis report reused: x5_crop_report.jsonl",
-                "\n".join(reused_outcome.result.record["output"]["warnings"]),
-            )
-            self.assertIsNotNone(reused_outcome.artifacts.review_copy)
-            self.assertIsNone(reused_outcome.artifacts.debug_analysis)
+            self.assertIsNotNone(normal_outcome.artifacts.review_copy)
+            self.assertIsNone(normal_outcome.artifacts.debug_analysis)
 
-    def test_changed_source_invalidates_analysis_report(self) -> None:
+    def test_production_report_is_compact_and_debug_report_has_development_detail(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             source = (root / "135.tif").resolve()
@@ -337,34 +334,36 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
             )
             self.assertIsInstance(analysis_outcome, CompletedInput)
             assert isinstance(analysis_outcome, CompletedInput)
-            write_report_outputs_for_result(
-                analysis_outcome.result,
-                analysis_output,
-            )
-
-            pixels = np.zeros((101, 720), dtype=np.uint16)
-            tifffile.imwrite(
-                source,
-                _rgb16(pixels),
-                photometric="rgb",
-                planarconfig="contig",
-            )
             normal_output = root / "normal"
             outcome = process_one(
                 planned,
                 _run_config(source, normal_output),
                 bundle,
                 normal_output,
-                analysis_output / REPORT_JSONL_NAME,
             )
             self.assertIsInstance(outcome, CompletedInput)
             assert isinstance(outcome, CompletedInput)
-            self.assertIn(
-                "analysis report source identity does not match",
-                "\n".join(outcome.result.record["output"]["warnings"]),
+            self.assertEqual(analysis_outcome.result.record["detail_level"], "development")
+            self.assertIsNotNone(analysis_outcome.result.record["development"])
+            self.assertEqual(outcome.result.record["detail_level"], "production")
+            self.assertIsNone(outcome.result.record["development"])
+            production_geometry = outcome.result.record["photo_geometry"]
+            self.assertNotIn(
+                "legal_combination_count",
+                production_geometry["source_placement_selection"],
             )
+            for lane in production_geometry["lanes"]:
+                self.assertFalse(
+                    {
+                        "observation_counts",
+                        "complete_chain_count",
+                        "cluster_count",
+                        "selected_cluster_id",
+                    }
+                    & set(lane)
+                )
 
-    def test_debug_analysis_and_normal_run_share_one_owned_target(self) -> None:
+    def test_existing_output_is_refused_and_never_replaced(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             source = (root / "135.tif").resolve()
@@ -383,18 +382,10 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
                 strip_mode="partial",
                 requested_count=3,
                 debug_analysis=True,
-                allow_best_effort_output=True,
                 jobs=1,
             )
             with contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(run_options(analysis_options), 0)
-            read_owned_output(production)
-            manifest_record = json.loads(
-                (production / "x5_crop_run_manifest.jsonl")
-                .read_text(encoding="utf-8")
-                .splitlines()[0]
-            )
-            self.assertNotIn("preview", manifest_record)
             self.assertTrue((production / REPORT_JSONL_NAME).is_file())
             self.assertTrue(any((production / "_debug_analysis").glob("*.jpg")))
             self.assertFalse(any(production.glob("*.tif")))
@@ -408,23 +399,14 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
                 strip_mode="partial",
                 requested_count=3,
                 debug_analysis=False,
-                allow_best_effort_output=True,
                 jobs=1,
             )
-            with mock.patch(
-                "x5crop.runtime.workflow.prepare_detection_workspace",
-                side_effect=AssertionError("detector must not run"),
-            ), contextlib.redirect_stdout(io.StringIO()):
-                self.assertEqual(run_options(normal_options), 0)
-            read_owned_output(production)
-            report = json.loads(
-                (production / "x5_crop_report.jsonl")
-                .read_text(encoding="utf-8")
-                .splitlines()[0]
-            )
-            self.assertIn(
-                "analysis report reused: x5_crop_report.jsonl",
-                "\n".join(report["output"]["warnings"]),
+            original_report = (production / REPORT_JSONL_NAME).read_bytes()
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(run_options(normal_options), 3)
+            self.assertEqual(
+                (production / REPORT_JSONL_NAME).read_bytes(),
+                original_report,
             )
 
 

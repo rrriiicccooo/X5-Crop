@@ -22,6 +22,9 @@ class GateGap(str, Enum):
     SHARED_STRIP_DIRECTION_NONUNIQUE = "shared_strip_direction_nonunique"
     SOURCE_SCAN_GEOMETRY_UNAVAILABLE = "source_scan_geometry_unavailable"
     PLACEMENT_UNRESOLVED = "placement_unresolved"
+    SEQUENCE_AUTHORITY_UNAVAILABLE = "sequence_authority_unavailable"
+    CROSS_AUTHORITY_UNAVAILABLE = "cross_authority_unavailable"
+    SHARED_AUTHORITY_UNAVAILABLE = "shared_authority_unavailable"
     CONTENT_VETO_REJECTED = "content_veto_rejected"
     LOCAL_ADVANCE_UNRESOLVED = "local_advance_unresolved"
     SLOT_ORDINAL_ASSIGNMENT_UNRESOLVED = "slot_ordinal_assignment_unresolved"
@@ -32,6 +35,47 @@ class GateGap(str, Enum):
     DIRECT_USE_BUDGET_EXCEEDED = "direct_use_budget_exceeded"
     DIRECT_USE_BUDGET_UNAVAILABLE = "direct_use_budget_unavailable"
     OUTPUT_TRANSFORM_UNAVAILABLE = "output_transform_unavailable"
+
+
+# A check is evaluated only after every fact it consumes is supported.  This
+# is a causal execution graph, not a list of extra reasons.  Debug views may
+# still show the underlying authority facts, but Gate reports only the first
+# physical reason that stopped the production path.
+GATE_CHECK_DEPENDENCIES: dict[str, tuple[str, ...]] = {
+    "source_scan_geometry": (
+        "scan_canvas_authority",
+        "observation_completeness",
+    ),
+    "complete_chain": (
+        "output_slot_count",
+        "observation_completeness",
+        "source_scan_geometry",
+        "producer_coverage",
+    ),
+    "content_protection": ("complete_chain",),
+    "selected_placement": (
+        "complete_chain",
+        "content_protection",
+        "local_advance_authority",
+    ),
+    "shared_strip_direction": (
+        "source_scan_geometry",
+        "selected_placement",
+    ),
+    "sequence_authority": ("selected_placement",),
+    "cross_authority": ("selected_placement",),
+    "shared_authority": ("selected_placement",),
+    "slot_ordinal_assignment": ("complete_chain",),
+    "selected_only_envelope": (
+        "selected_placement",
+        "source_lane_authority",
+    ),
+    "direct_use_budget": ("selected_only_envelope",),
+    "transform_sampling": (
+        "selected_placement",
+        "source_lane_authority",
+    ),
+}
 
 
 @dataclass(frozen=True)
@@ -53,12 +97,23 @@ class GateCheck:
     state: EvidenceState
     gap: GateGap | None = None
     final_review_reason: str | None = None
+    evaluated: bool = True
 
     def __post_init__(self) -> None:
         if not self.code:
             raise ValueError("gate check code must not be empty")
         if not isinstance(self.stage, GateStage):
             raise TypeError("gate check requires a typed stage")
+        if not self.evaluated:
+            if (
+                self.state != EvidenceState.UNAVAILABLE
+                or self.gap is not None
+                or self.final_review_reason is not None
+            ):
+                raise ValueError(
+                    "unevaluated gate checks carry no gap or final reason"
+                )
+            return
         if (self.state == EvidenceState.SUPPORTED) != (self.gap is None):
             raise ValueError("gate check state and typed gap disagree")
         if self.stage == GateStage.CANDIDATE:
@@ -73,4 +128,4 @@ class GateCheck:
 
     @property
     def blocks(self) -> bool:
-        return self.state != EvidenceState.SUPPORTED
+        return self.evaluated and self.state != EvidenceState.SUPPORTED

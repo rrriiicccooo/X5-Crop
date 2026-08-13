@@ -15,6 +15,13 @@ class SlotCountAuthority(str, Enum):
     USER_EXPLICIT_PARTIAL_COUNT = "user_explicit_partial_count"
 
 
+class HolderLayoutAuthority(str, Enum):
+    USER_CONFIRMED_FILLED_HOLDER_LAYOUT = (
+        "user_confirmed_filled_holder_layout"
+    )
+    USER_CONFIRMED_NONFILLING_LAYOUT = "user_confirmed_nonfilling_layout"
+
+
 @dataclass(frozen=True)
 class SlotCountRequest:
     strip_mode: str
@@ -40,6 +47,14 @@ class SlotCountRequest:
     ) -> "SlotCountRequest":
         return cls(strip_mode, requested_count)
 
+    @property
+    def holder_layout_authority(self) -> HolderLayoutAuthority:
+        return (
+            HolderLayoutAuthority.USER_CONFIRMED_FILLED_HOLDER_LAYOUT
+            if self.strip_mode == FULL
+            else HolderLayoutAuthority.USER_CONFIRMED_NONFILLING_LAYOUT
+        )
+
 
 @dataclass(frozen=True)
 class ResolvedSlotCount:
@@ -47,6 +62,7 @@ class ResolvedSlotCount:
     full_count: int
     output_count: int
     authority: SlotCountAuthority
+    holder_layout_authority: HolderLayoutAuthority
 
     def __post_init__(self) -> None:
         if not self.matched_holder_profile_id:
@@ -56,11 +72,21 @@ class ResolvedSlotCount:
         if self.output_count > self.full_count:
             raise ValueError("resolved output count exceeds holder full count")
         if self.authority == SlotCountAuthority.MATCHED_HOLDER_FULL_COUNT:
-            if self.output_count != self.full_count:
+            if (
+                self.output_count != self.full_count
+                or self.holder_layout_authority
+                != HolderLayoutAuthority.USER_CONFIRMED_FILLED_HOLDER_LAYOUT
+            ):
                 raise ValueError("full authority requires the holder full count")
         elif self.authority == SlotCountAuthority.USER_EXPLICIT_PARTIAL_COUNT:
-            if self.output_count >= self.full_count:
-                raise ValueError("partial authority must be below holder full count")
+            # Partial describes layout, not merely a count comparison.  A
+            # non-filling strip may contain the holder's full_count while
+            # remaining freely phased along the holder.
+            if (
+                self.holder_layout_authority
+                != HolderLayoutAuthority.USER_CONFIRMED_NONFILLING_LAYOUT
+            ):
+                raise ValueError("partial authority requires a non-filling layout")
         else:
             raise TypeError("resolved count requires typed authority")
 

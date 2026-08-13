@@ -1,22 +1,19 @@
+"""Validate an external current report at its trust boundary."""
+
 from __future__ import annotations
 
 from typing import Any
 
 from ..detection.candidate.assessment.model import CANDIDATE_GATE_CHECK_CODES
-from ..detection.photo_geometry.bounds import (
-    MAX_BANDS_PER_CORRIDOR,
-)
 from ..detection.decision.vocabulary import FINAL_REVIEW_REASONS
-from .identity import (
-    REPORT_SCHEMA_ID,
-    REPORT_SCHEMA_REVISION,
-    core_facts_sha256,
-)
+from .identity import REPORT_SCHEMA_ID, REPORT_SCHEMA_REVISION
+from .summary import AUTHORITY_PARTITION
 
 
 CURRENT_REPORT_SECTIONS = (
     "schema_id",
     "schema_revision",
+    "detail_level",
     "script_version",
     "source",
     "input",
@@ -27,8 +24,9 @@ CURRENT_REPORT_SECTIONS = (
     "decision",
     "output",
     "runtime_identity",
-    "core_facts_sha256",
+    "development",
 )
+
 
 def _validate_gate(record: dict[str, Any], stage: str) -> None:
     checks = record.get("checks")
@@ -38,6 +36,7 @@ def _validate_gate(record: dict[str, Any], stage: str) -> None:
         "state",
         "gap",
         "final_review_reason",
+        "evaluated",
         "blocks",
     }
     if (
@@ -50,82 +49,27 @@ def _validate_gate(record: dict[str, Any], stage: str) -> None:
         raise ValueError(f"{stage} Gate is incomplete or out of order")
     for item in checks:
         supported = item.get("state") == "supported"
+        evaluated = bool(item.get("evaluated"))
+        if not evaluated:
+            if (
+                stage != "decision"
+                or item.get("state") != "unavailable"
+                or item.get("gap") is not None
+                or item.get("final_review_reason") is not None
+                or bool(item.get("blocks"))
+            ):
+                raise ValueError(f"{stage} Gate unevaluated check is invalid")
+            continue
         if (
             supported != (item.get("gap") is None)
             or bool(item.get("blocks")) != (not supported)
-            or (
-                stage == "candidate"
-                and item.get("final_review_reason") is not None
-            )
+            or (stage == "candidate" and item.get("final_review_reason") is not None)
             or (
                 stage == "decision"
-                and supported
-                != (item.get("final_review_reason") is None)
+                and supported != (item.get("final_review_reason") is None)
             )
         ):
             raise ValueError(f"{stage} Gate typed gap is inconsistent")
-
-
-def _validate_measurement(record: dict[str, Any]) -> None:
-    field = record["measurement"]["field"]
-    if (
-        field.get("owner") != "PhotoBoundaryMeasurementField"
-        or not field.get("streaming_transition_records_only")
-    ):
-        raise ValueError("measurement field owner is not current")
-    for observation_set in record["measurement"]["content_occupancy"]:
-        if (
-            observation_set["long_sample_count"] > 256
-            or observation_set["cross_sample_count"] > 64
-            or observation_set["proposed_observation_count"]
-            < len(observation_set["observations"])
-            or observation_set["proposed_cell_run_count"]
-            < sum(
-                len(observation["source_cells"])
-                for observation in observation_set["observations"]
-            )
-            or len(observation_set["observations"]) > 64
-            or any(
-                set(observation)
-                != {
-                    "observation_id",
-                    "lane_id",
-                    "source_box",
-                    "source_cells",
-                    "reliability",
-                    "provenance",
-                }
-                for observation in observation_set["observations"]
-            )
-        ):
-            raise ValueError("content occupancy observations are unbounded")
-    for measurement_set in record["measurement"]["queries"]:
-        coverage = measurement_set["coverage"]
-        complete = bool(coverage["complete"])
-        if complete != (
-            coverage["registered_trace_count"]
-            == coverage["completed_trace_count"]
-            and coverage["registered_coordinate_count"]
-            == coverage["completed_coordinate_count"]
-        ):
-            raise ValueError("query coverage receipt is inconsistent")
-        if measurement_set["state"] == "supported":
-            if not complete:
-                raise ValueError("supported query lacks complete coverage")
-        elif measurement_set["transition_count"]:
-            raise ValueError("incomplete query exposed transitions")
-        transitions = measurement_set.get("transitions")
-        if (
-            not isinstance(transitions, list)
-            or len(transitions) != measurement_set["transition_count"]
-            or any(
-                not isinstance(item.get("coordinate_interval_px"), dict)
-                or item.get("polarity") not in {-1, 0, 1}
-                or not isinstance(item.get("provenance"), dict)
-                for item in transitions
-            )
-        ):
-            raise ValueError("transition safety facts are incomplete")
 
 
 def _validate_finalization(record: dict[str, Any]) -> None:
@@ -140,42 +84,37 @@ def _validate_finalization(record: dict[str, Any]) -> None:
     transforms = finalization["output_transforms"]
     output_files = record["output"]["output_files"]
     review_copy = record["output"]["review_copy"]
-    fidelity = record["output"]["tiff_fidelity"]
-    if fidelity.get("source_sample_count_per_roi") != 1:
-        raise ValueError("TIFF output must use one source sample per ROI")
+    requested = finalization["frame_export_requested"]
+    expected_tiff_validation = "header_validated" if output_files else "not_created"
+    if record["output"]["tiff_fidelity"].get("validation") != expected_tiff_validation:
+        raise ValueError("TIFF validation fact is inconsistent")
     if resolved is None:
         if count is not None or identities:
             raise ValueError("unresolved slots cannot claim identities")
-    elif (
-        count != sum(resolved["lane_output_slot_counts"])
-        or len(identities) != count
-    ):
+    elif count != sum(resolved["lane_output_slot_counts"]) or len(identities) != count:
         raise ValueError("resolved output-slot identity is inconsistent")
-    requested = finalization["frame_export_requested"]
-    if not isinstance(requested, bool):
-        raise ValueError("frame-export request must be boolean")
     if status == "approved_auto":
         if (
             not finalization["frame_export_eligible"]
             or not isinstance(count, int)
             or count <= 0
-            or len(geometries) != count
-            or len(authorities) != count
-            or len(boxes) != count
-            or len(transforms) != count
+            or any(len(values) != count for values in (
+                geometries,
+                authorities,
+                boxes,
+                transforms,
+            ))
         ):
             raise ValueError("approved output lacks complete geometry")
-        if requested:
-            if (
-                not finalization["frame_export_performed"]
-                or not finalization["official_tiff_expected"]
-                or finalization["official_tiff_count"] != count
-                or len(output_files) != count
-                or review_copy is not None
-                or not fidelity["write_readback_validated"]
-                or fidelity["success_receipt"] != "validated"
-            ):
-                raise ValueError("approved output lacks validated TIFFs")
+        if requested and (
+            not finalization["frame_export_performed"]
+            or finalization["official_tiff_count"] != count
+            or len(output_files) != count
+            or review_copy is not None
+            or record["output"]["tiff_fidelity"]["validation"]
+            != "header_validated"
+        ):
+            raise ValueError("approved output lacks validated TIFFs")
     elif status != "needs_review" or (
         finalization["frame_export_eligible"]
         or geometries
@@ -184,28 +123,97 @@ def _validate_finalization(record: dict[str, Any]) -> None:
         or transforms
     ):
         raise ValueError("review output exposed official geometry")
-    if not requested:
-        if (
-            finalization["frame_export_performed"]
-            or finalization["official_tiff_expected"]
-            or finalization["official_tiff_count"] != 0
-            or output_files
-            or review_copy is not None
-            or fidelity["write_readback_validated"]
-            or fidelity["success_receipt"] != "not_created"
-        ):
-            raise ValueError("analysis-only output created production artifacts")
-    elif status == "needs_review" and (
+    if not requested and (
         finalization["frame_export_performed"]
-        or finalization["official_tiff_expected"]
         or finalization["official_tiff_count"] != 0
         or output_files
-        or fidelity["write_readback_validated"]
-        or fidelity["success_receipt"] != "not_created"
+        or review_copy is not None
     ):
-        raise ValueError("review output exposed official TIFFs")
-    if finalization["post_decision_mutation"]:
-        raise ValueError("post-DecisionGate mutation is forbidden")
+        raise ValueError("analysis-only output created production artifacts")
+    if status == "needs_review" and requested and (
+        finalization["frame_export_performed"]
+        or finalization["official_tiff_count"] != 0
+        or output_files
+        or review_copy is None
+    ):
+        raise ValueError("review output contract is incomplete")
+
+
+def _validate_geometry(record: dict[str, Any]) -> None:
+    geometry = record["photo_geometry"]
+    if geometry.get("authority_partition") != AUTHORITY_PARTITION:
+        raise ValueError("physical authority partition is invalid")
+    resolved = geometry.get("resolved_slot_count")
+    holder = geometry.get("matched_holder")
+    if resolved is not None and (
+        holder is None
+        or resolved["matched_holder_profile_id"] != holder["profile"]["profile_id"]
+        or resolved["full_count"] != holder["full_count"]
+        or resolved["output_count"] != geometry["output_slot_count"]
+        or (
+            resolved["authority"] == "matched_holder_full_count"
+            and resolved["holder_layout_authority"]
+            != "user_confirmed_filled_holder_layout"
+        )
+        or (
+            resolved["authority"] == "user_explicit_partial_count"
+            and resolved["holder_layout_authority"]
+            != "user_confirmed_nonfilling_layout"
+        )
+    ):
+        raise ValueError("matched holder and resolved count disagree")
+    for lane in geometry["lanes"]:
+        outputs = lane["safe_crop_envelopes"]
+        budgets = lane["direct_use_budget_assessments"]
+        if {item["geometry_id"] for item in outputs} != {
+            item["geometry_id"] for item in budgets
+        }:
+            raise ValueError("budget does not cover selected output")
+        selected = lane["selected_placement_id"]
+        selected_chain = lane["selected_chain"]
+        if (selected_chain is None) != (not outputs) or (
+            selected_chain is not None
+            and (
+                selected_chain["placement_id"] != selected
+                or len(selected_chain["sampling_boxes"]) != len(outputs)
+            )
+        ):
+            raise ValueError("selected chain summary is incomplete")
+
+
+def _validate_development(record: dict[str, Any]) -> None:
+    detail = record["detail_level"]
+    development = record["development"]
+    if detail == "production":
+        if development is not None:
+            raise ValueError("production report contains development facts")
+        return
+    if detail != "development" or not isinstance(development, dict):
+        raise ValueError("development report detail is unavailable")
+    lanes = development.get("lanes")
+    if not isinstance(lanes, list):
+        raise ValueError("development lane facts are unavailable")
+    for lane in lanes:
+        chains = lane.get("complete_chains")
+        bounds = lane.get("producer_bounds")
+        if (
+            not isinstance(chains, list)
+            or not isinstance(bounds, dict)
+            or bounds.get("materialized_complete_chain_count") != len(chains)
+            or any(
+                not item.get("ledger")
+                or set(item.get("observation_dispositions", {}))
+                != {
+                    "direct_role_bound",
+                    "inferred_support",
+                    "explained_non_boundary",
+                    "contradiction",
+                    "unobservable",
+                }
+                for item in chains
+            )
+        ):
+            raise ValueError("development chain ledger is invalid")
 
 
 def validate_current_report_record(record: dict[str, Any]) -> None:
@@ -218,93 +226,11 @@ def validate_current_report_record(record: dict[str, Any]) -> None:
         != "v5_bounded_physical_chain_selection"
     ):
         raise ValueError("report does not use the current-only schema")
-    _validate_measurement(record)
-    expected_partition = {
-        "pixel_observation": (
-            "direction_free_side_regions_and_raw_top_bottom_lines"
-        ),
-        "format_physical": (
-            "fixed_frame_dimensions_shared_scale_gap_count"
-        ),
-        "canonical": "representative_only_no_safety_pruning",
-        "selection": "sampling_cluster_then_tiered_direct_dominance",
-        "safety": "selected_placement_uncertainty_only",
-        "search": "bounded_measurement_coverage_only",
-    }
-    geometry = record["photo_geometry"]
-    matched_holder = geometry.get("matched_holder")
-    resolved_count = geometry.get("resolved_slot_count")
-    if resolved_count is not None and (
-        matched_holder is None
-        or resolved_count["matched_holder_profile_id"]
-        != matched_holder["profile"]["profile_id"]
-        or resolved_count["full_count"] != matched_holder["full_count"]
-        or resolved_count["output_count"] != geometry["output_slot_count"]
-    ):
-        raise ValueError("matched holder and resolved count disagree")
-    if geometry["authority_partition"] != expected_partition:
-        raise ValueError("physical-chain authority partition is invalid")
-    for lane in geometry["lanes"]:
-        if lane["search"]["authority"] != "bounded_measurement_coverage_only":
-            raise ValueError("search proposal gained placement authority")
-        chains = lane["chains"]
-        selection = lane["selection"]
-        if (
-            chains["authority"] != "bounded_complete_chain_producer"
-            or selection["authority"]
-            != "sampling_cluster_tiered_dominance"
-            or selection["safety_rule"] != "selected_placement_only"
-        ):
-            raise ValueError("placement safety authority is invalid")
-        materialized = chains["lane_complete_proposals"]
-        ledger = chains["proposal_ledgers"]
-        bounds = chains["producer_bounds"]
-        selected_id = selection["selected_placement_id"]
-        if (
-            len(ledger) != len(materialized)
-            or bounds["materialized_complete_chain_count"] != len(materialized)
-            or bounds["proposed_complete_chain_count"] < len(materialized)
-            or any(
-                item["materialized_count"] > MAX_BANDS_PER_CORRIDOR
-                or item["proposed_count"] < item["materialized_count"]
-                for item in bounds["corridor_bands"]
-            )
-            or selected_id
-            not in ({None} | {item["placement_id"] for item in materialized})
-        ):
-            raise ValueError("bounded chain ledger is invalid")
-        outputs = selection["safe_crop_envelopes"]
-        budgets = selection["direct_use_budget_assessments"]
-        if {item["geometry_id"] for item in outputs} != {
-            item["geometry_id"] for item in budgets
-        }:
-            raise ValueError("budget does not cover every selected output")
-        if outputs and selected_id is None:
-            raise ValueError("safe envelope lacks a selected placement")
-        selected_chain = selection["source_joint_selected_chain"]
-        if (selected_chain is None) != (not outputs) or (
-            selected_chain is not None
-            and (
-                selected_chain["placement_id"] != selected_id
-                or len(selected_chain["sampling_boxes"]) != len(outputs)
-            )
-        ):
-            raise ValueError("source-joint selected chain is incomplete")
-        for item in outputs:
-            if (
-                item.get("provenance")
-                != "selected_placement_safety_footprint"
-                or item.get("mapped_output_box") is None
-                or len(item.get("placement_source_footprint", ())) < 3
-                or len(item.get("required_source_footprint", ())) < 3
-                or len(item.get("constrained_source_footprint", ())) < 3
-            ):
-                raise ValueError("continuous placement output is incomplete")
+    _validate_geometry(record)
     _validate_gate(record["candidate_gate"], "candidate")
-    decision = record["decision"]
-    _validate_gate(decision["gate"], "decision")
-    status = decision.get("status")
-    reasons = tuple(decision.get("final_review_reasons", ()))
+    _validate_gate(record["decision"]["gate"], "decision")
+    status = record["decision"].get("status")
+    reasons = tuple(record["decision"].get("final_review_reasons", ()))
     if (
         status not in {"approved_auto", "needs_review"}
         or any(reason not in FINAL_REVIEW_REASONS for reason in reasons)
@@ -312,30 +238,27 @@ def validate_current_report_record(record: dict[str, Any]) -> None:
     ):
         raise ValueError("DecisionGate status/reasons are inconsistent")
     _validate_finalization(record)
-    finalization = record["output"]["finalization"]
-    runtime_identity = record["runtime_identity"]
-    source_identity = runtime_identity.get("source", {})
+    runtime = record["runtime_identity"]
+    source = runtime.get("source", {})
     if (
-        "content_sha256" in source_identity
-        or "implementation_fingerprint" in runtime_identity
-        or not isinstance(source_identity.get("input_ordinal"), int)
-        or source_identity.get("input_ordinal", 0) <= 0
-        or not isinstance(source_identity.get("orientation"), dict)
+        "runtime_environment" in runtime
+        or not isinstance(source.get("input_ordinal"), int)
+        or source.get("input_ordinal", 0) <= 0
+        or not isinstance(source.get("orientation"), dict)
     ):
-        raise ValueError("runtime identity is not lightweight V5")
-    output_identity = runtime_identity["output_identity"]
+        raise ValueError("runtime identity is not lightweight")
+    output_identity = runtime["output_identity"]
+    finalization = record["output"]["finalization"]
     if (
-        geometry["resolved_output_slots"]
-        != finalization["resolved_output_slots"]
+        geometry := record["photo_geometry"]
+    ) and (
+        geometry["resolved_output_slots"] != finalization["resolved_output_slots"]
         or geometry["output_slot_count"] != finalization["output_slot_count"]
         or geometry["slot_identities"] != finalization["slot_identities"]
         or output_identity["resolved_output_slots"]
         != finalization["resolved_output_slots"]
-        or output_identity["output_slot_count"]
-        != finalization["output_slot_count"]
-        or output_identity["slot_identities"]
-        != finalization["slot_identities"]
+        or output_identity["output_slot_count"] != finalization["output_slot_count"]
+        or output_identity["slot_identities"] != finalization["slot_identities"]
     ):
         raise ValueError("output identities disagree")
-    if record["core_facts_sha256"] != core_facts_sha256(record):
-        raise ValueError("core facts hash does not match the record")
+    _validate_development(record)

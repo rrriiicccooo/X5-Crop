@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+import math
 
 import numpy as np
 
-from ..cache import MeasurementCache
-from ..cache.analysis import make_measurement_cache
 from ..configuration.model import (
     DetectionConfiguration,
     ResolvedSlotCount,
@@ -14,8 +13,6 @@ from ..configuration.model import (
 from ..domain import Box
 from ..geometry.layout import is_horizontal_layout, work_gray
 from ..image.gray import make_base_gray_u8
-from ..image.statistics import image_measurement_statistics
-from ..image.workspace import WorkspaceIdentity
 from ..io.model import ImageProfile
 from .evidence.scan_canvas import (
     MatchedHolder,
@@ -25,10 +22,13 @@ from .evidence.scan_canvas import (
     observe_scan_canvas,
 )
 from .evidence.content_occupancy import observe_content_occupancy
-from .photo_geometry.measurement import (
+from .evidence.content_occupancy_model import (
+    CONTENT_OCCUPANCY_MEASUREMENT_SPEC,
+)
+from .photo_geometry.registered_measurement import (
     make_photo_boundary_measurement_field,
 )
-from .photo_geometry.model import PhotoBoundaryMeasurementField
+from .photo_geometry.measurement_model import PhotoBoundaryMeasurementField
 from .source_core import (
     SourceCoreEvidence,
     SourceLaneEvidence,
@@ -39,33 +39,21 @@ from .source_core import (
 @dataclass(frozen=True)
 class DetectionWorkspace:
     source_gray: np.ndarray
-    measurement_cache: MeasurementCache
+    layout: str
     source_core: SourceCoreEvidence
     boundary_measurement_field: PhotoBoundaryMeasurementField
-    identity: WorkspaceIdentity = field(init=False)
 
     def __post_init__(self) -> None:
         if not isinstance(self.source_gray, np.ndarray) or self.source_gray.ndim != 2:
             raise ValueError("detection workspace requires source gray")
-        canonical_work = work_gray(
-            self.source_gray,
-            self.measurement_cache.layout,
-        )
-        if not np.array_equal(self.measurement_cache.gray_work, canonical_work):
-            raise ValueError("measurement cache must use canonical source gray")
         if self.boundary_measurement_field.source_gray is not self.source_gray:
             raise ValueError(
                 "photo-boundary field must own the canonical source gray"
             )
-        if self.boundary_measurement_field.layout != self.measurement_cache.layout:
+        if self.boundary_measurement_field.layout != self.layout:
             raise ValueError(
                 "photo-boundary field must use the canonical work layout"
             )
-        object.__setattr__(
-            self,
-            "identity",
-            self.measurement_cache.key.workspace_identity,
-        )
 
 
 class SourceInputContractError(ValueError):
@@ -85,12 +73,13 @@ def resolve_slot_count(
             matched_holder.full_count,
             matched_holder.full_count,
             SlotCountAuthority.MATCHED_HOLDER_FULL_COUNT,
+            request.holder_layout_authority,
         )
     assert request.user_count is not None
-    if request.user_count >= matched_holder.full_count:
+    if request.user_count > matched_holder.full_count:
         raise SourceInputContractError(
-            "partial_count_not_less_than_matched_full_count",
-            f"partial count {request.user_count} must be less than matched "
+            "partial_count_exceeds_matched_full_count",
+            f"partial count {request.user_count} must not exceed matched "
             f"holder full count {matched_holder.full_count} "
             f"({matched_holder.profile.profile_id})",
         )
@@ -99,6 +88,7 @@ def resolve_slot_count(
         matched_holder.full_count,
         request.user_count,
         SlotCountAuthority.USER_EXPLICIT_PARTIAL_COUNT,
+        request.holder_layout_authority,
     )
 
 
@@ -181,18 +171,8 @@ def prepare_detection_workspace(
         profile.photometric,
         configuration.preprocess.base_gray,
     )
-    statistics = image_measurement_statistics(
-        source_gray,
-        configuration.preprocess.image_statistics,
-    )
-    measurement_cache = make_measurement_cache(
-        source_gray,
-        layout,
-        statistics,
-        configuration.preprocess.base_gray,
-        configuration.preprocess.image_statistics,
-    )
-    gray_work = measurement_cache.gray_work
+    gray_work = work_gray(source_gray, layout)
+    gray_work.flags.writeable = False
     scan_canvas = observe_scan_canvas(
         gray_work.shape[1],
         gray_work.shape[0],
@@ -249,6 +229,29 @@ def prepare_detection_workspace(
                 lane_id=lane.domain.lane_id,
                 lane_work_box=lane.domain.work_box,
                 layout=layout,
+                long_step_px=(
+                    None
+                    if matched_holder is None
+                    else max(
+                        CONTENT_OCCUPANCY_MEASUREMENT_SPEC.internal_subcells_per_axis,
+                        math.floor(
+                            matched_holder.axis_scales.width_axis_px_per_mm.minimum
+                            * CONTENT_OCCUPANCY_MEASUREMENT_SPEC.cell_extent_mm
+                        ),
+                    )
+                ),
+                cross_step_px=(
+                    None
+                    if matched_holder is None
+                    else max(
+                        CONTENT_OCCUPANCY_MEASUREMENT_SPEC.internal_subcells_per_axis,
+                        math.floor(
+                            matched_holder.axis_scales.height_axis_px_per_mm.minimum
+                            * CONTENT_OCCUPANCY_MEASUREMENT_SPEC.cell_extent_mm
+                        ),
+                    )
+                ),
+                spec=CONTENT_OCCUPANCY_MEASUREMENT_SPEC,
             )
             for lane in lanes
         ),
@@ -261,7 +264,7 @@ def prepare_detection_workspace(
     )
     return DetectionWorkspace(
         source_gray=source_gray,
-        measurement_cache=measurement_cache,
+        layout=layout,
         source_core=source_core,
         boundary_measurement_field=boundary_measurement_field,
     )

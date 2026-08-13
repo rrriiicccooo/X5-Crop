@@ -12,6 +12,13 @@ from tempfile import TemporaryDirectory
 from typing import Iterable, Sequence
 
 from x5crop.report.validation import validate_current_report_record
+from x5crop.detection.photo_geometry.model import (
+    PHOTO_BOUNDARY_MEASUREMENT_SPEC,
+)
+from x5crop.detection.evidence.content_occupancy import (
+    CONTENT_OCCUPANCY_MEASUREMENT_SPEC,
+)
+from x5crop.formats import format_spec
 
 from .cohort_count_authority import validate_count_authority
 
@@ -114,6 +121,36 @@ def _contains_polygon(
     return all(_contains_point(outer, point) for point in inner)
 
 
+def _trimmed_edge_endpoints(
+    polygon: Sequence[Sequence[float]],
+    trim_depths_px: Sequence[float],
+) -> tuple[tuple[float, float], ...]:
+    points: list[tuple[float, float]] = []
+    for left, right, depth in zip(
+        polygon,
+        (*polygon[1:], polygon[0]),
+        trim_depths_px,
+        strict=True,
+    ):
+        length = math.hypot(right[0] - left[0], right[1] - left[1])
+        if length <= 0.0 or not 0.0 < depth < length / 2.0:
+            raise ValueError("gold edge cannot establish a physical interior")
+        fraction = depth / length
+        points.extend(
+            (
+                (
+                    left[0] + fraction * (right[0] - left[0]),
+                    left[1] + fraction * (right[1] - left[1]),
+                ),
+                (
+                    right[0] + fraction * (left[0] - right[0]),
+                    right[1] + fraction * (left[1] - right[1]),
+                ),
+            )
+        )
+    return tuple(points)
+
+
 def _unit_vector(x: float, y: float) -> tuple[float, float]:
     magnitude = math.hypot(x, y)
     if magnitude <= 0.0:
@@ -184,7 +221,10 @@ def _assert_direct_use_budget(
         gold_cross[0] - output_cross[0],
         output_cross[1] - gold_cross[1],
     )
-    pixel_allowance = 0.5
+    pixel_allowance = (
+        PHOTO_BOUNDARY_MEASUREMENT_SPEC
+        .transition_coordinate_sampling_uncertainty_px
+    )
     if (
         sequence_expansion > sequence_span * 0.05 + pixel_allowance
         or cross_expansion > cross_span * 0.03 + pixel_allowance
@@ -197,7 +237,61 @@ def _assert_direct_use_budget(
 def _ordered_gold_mapping(
     gold_frames: Sequence[dict[str, object]],
     output_geometries: Sequence[dict[str, object]],
+    strip_orientation: str,
+    format_id: str,
 ) -> tuple[int, ...]:
+    horizontal = strip_orientation == "horizontal"
+
+    def safely_covers(
+        gold: Sequence[Sequence[float]],
+        output: Sequence[Sequence[float]],
+    ) -> bool:
+        if _contains_polygon(output, gold):
+            return True
+        sequence_axis = _mean_edge_axis(
+            gold,
+            (0, 1) if horizontal else (0, 3),
+            (3, 2) if horizontal else (1, 2),
+        )
+        cross_axis = _mean_edge_axis(
+            gold,
+            (0, 3) if horizontal else (0, 1),
+            (1, 2) if horizontal else (3, 2),
+        )
+        frame = format_spec(format_id).frame
+        edge_lengths = tuple(
+            math.hypot(right[0] - left[0], right[1] - left[1])
+            for left, right in zip(gold, (*gold[1:], gold[0]), strict=True)
+        )
+        sequence_scale = (edge_lengths[0] + edge_lengths[2]) / (
+            2.0 * frame.frame_width_mm
+        )
+        cross_scale = (edge_lengths[1] + edge_lengths[3]) / (
+            2.0 * frame.frame_height_mm
+        )
+        # A user-confirmed direct-use frame may graze content only at the
+        # intersection of two adjacent boundaries.  Remove one already-owned
+        # content-measurement support depth from both ends of every edge and
+        # require the remaining edge interiors to be covered.  This is the
+        # same topological rule as the runtime content veto: it is expressed
+        # in physical units and does not permit an arbitrary number of lost
+        # pixels at a corner.
+        sequence_depth = (
+            CONTENT_OCCUPANCY_MEASUREMENT_SPEC.cell_extent_mm
+            * sequence_scale
+        )
+        cross_depth = (
+            CONTENT_OCCUPANCY_MEASUREMENT_SPEC.cell_extent_mm
+            * cross_scale
+        )
+        return all(
+            _contains_point(output, point)
+            for point in _trimmed_edge_endpoints(
+                gold,
+                (sequence_depth, cross_depth) * 2,
+            )
+        )
+
     mapping: list[int] = []
     next_output = 0
     for frame in gold_frames:
@@ -205,9 +299,9 @@ def _ordered_gold_mapping(
         matches = tuple(
             index
             for index in range(next_output, len(output_geometries))
-            if _contains_polygon(
-                output_geometries[index]["constrained_source_footprint"],
+            if safely_covers(
                 polygon,
+                output_geometries[index]["constrained_source_footprint"],
             )
         )
         if not matches:
@@ -249,7 +343,12 @@ def _validate_approved_geometry(
     gold = record["confirmed_geometry"]
     frames = gold["frames"]
     outputs = report["output"]["finalization"]["resolved_output_geometries"]
-    mapping = _ordered_gold_mapping(frames, outputs)
+    mapping = _ordered_gold_mapping(
+        frames,
+        outputs,
+        str(gold["strip_orientation"]),
+        str(record["format_id"]),
+    )
     if len(mapping) != len(frames):
         raise ValueError(f"{sample_id} approved output cuts confirmed content")
     for frame, output_index in zip(frames, mapping, strict=True):

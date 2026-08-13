@@ -15,9 +15,8 @@ from time import perf_counter
 from typing import Any, Sequence
 
 from x5crop.report.validation import validate_current_report_record
-from x5crop.runtime.identity import runtime_environment_identity
-
 from tools.install.dependency_manager import load_dependency_contract
+from .environment_identity import verification_environment_identity
 
 from .performance_identity import (
     FIXED_SOURCE_COUNT,
@@ -251,7 +250,7 @@ def _profiling_summary(profiles: Sequence[ProfiledSource]) -> dict[str, object]:
 
 def build_receipt() -> dict[str, Any]:
     commit = _clean_commit()
-    environment = runtime_environment_identity()
+    environment = verification_environment_identity()
     require_frozen_performance_environment(environment)
     # Full TIFF SHA validation deliberately completes before product timing.
     sources = load_performance_sources(verify_source_files=True)

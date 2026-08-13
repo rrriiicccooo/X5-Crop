@@ -35,6 +35,7 @@ def gate_check_read_model(check: GateCheck) -> dict[str, Any]:
         "state": check.state.value,
         "gap": None if check.gap is None else check.gap.value,
         "final_review_reason": check.final_review_reason,
+        "evaluated": bool(check.evaluated),
         "blocks": bool(check.blocks),
     }
 

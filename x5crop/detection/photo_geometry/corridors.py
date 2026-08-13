@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from hashlib import sha256
 import math
 
 from ...domain import Box, FiniteInterval, PositiveInterval
@@ -14,13 +13,18 @@ from .model import (
     BoundaryAxis,
     BoundaryRole,
     PHOTO_BOUNDARY_MEASUREMENT_SPEC,
-    PhotoBoundaryMeasurementQuery,
     PhotoBoundaryMeasurementSpec,
-    PhotoEdgeSearchCorridor,
     QueryPurpose,
+)
+from .measurement_model import PhotoBoundaryMeasurementQuery
+from .search_model import (
+    PhotoEdgeSearchCorridor,
     SequenceAnchorDiscoveryDomain,
     SequenceAnchorTile,
 )
+from .axis_layout import source_axes
+from .source_geometry import centered_short_axis_authority_px
+from ...run_local_identity import run_local_id
 
 
 @dataclass(frozen=True)
@@ -74,14 +78,6 @@ def source_lane_box(
     raise ValueError(f"unsupported source layout: {layout}")
 
 
-def _source_axes(layout: str) -> tuple[BoundaryAxis, BoundaryAxis]:
-    if layout == "horizontal":
-        return BoundaryAxis.X, BoundaryAxis.Y
-    if layout == "vertical":
-        return BoundaryAxis.Y, BoundaryAxis.X
-    raise ValueError(f"unsupported source layout: {layout}")
-
-
 def _axis_bounds(
     box: Box,
     axis: BoundaryAxis,
@@ -122,8 +118,7 @@ def _clip_interval(
 
 
 def _stable_id(prefix: str, *parts: object) -> str:
-    payload = "\x1f".join(str(part) for part in parts).encode("utf-8")
-    return f"{prefix}:{sha256(payload).hexdigest()[:24]}"
+    return run_local_id(prefix, *parts)
 
 
 def build_top_bottom_search_corridors(
@@ -136,7 +131,7 @@ def build_top_bottom_search_corridors(
     """Build computation-only short-axis corridors with complete halos."""
 
     scales = lane.scan_canvas.axis_scales
-    long_axis, short_axis = _source_axes(layout)
+    long_axis, short_axis = source_axes(layout)
     lane_box = source_lane_box(lane, layout)
     long_min, long_max = _axis_bounds(lane_box, long_axis)
     short_min, short_max = _axis_bounds(lane_box, short_axis)
@@ -150,63 +145,36 @@ def build_top_bottom_search_corridors(
         long_max,
         spacing_mm * long_scale.maximum,
     )
-    center = (short_min + short_max - 1) / 2.0
-    center_allowance = (
-        spec.center_offset_allowance_mm * short_scale.maximum
+    # Film is centred on the holder lane's short axis.  The shared H interval,
+    # source direction and measurement halo therefore define the complete
+    # search corridor; per-frame transverse translation has no authority.
+    short_authority = FiniteInterval(
+        float(short_min),
+        float(short_max - 1),
     )
-    search_deviation = (
-        spec.dimension_search_allowance_mm * short_scale.maximum
+    center = centered_short_axis_authority_px(
+        short_authority,
+        short_scale,
     )
-    halo = (
-        int(
-            math.ceil(
-                (
-                    spec.local_window_mm
-                    + spec.dimension_search_allowance_mm
-                    + spec.transition_gap_mm
-                )
-                * short_scale.maximum
-            )
-        )
-        + 1
-    )
-    u0 = (long_min + long_max - 1) / 2.0
+    height = aperture_pixels.frame_height_px
+    halo = spec.measurement_halo_px(short_scale.maximum)
     top_core: list[FiniteInterval] = []
     bottom_core: list[FiniteInterval] = []
     top_measurement: list[FiniteInterval] = []
     bottom_measurement: list[FiniteInterval] = []
-    for trace in trace_positions:
-        rotation_radius = abs(float(trace) - u0) * math.tan(
-            math.radians(spec.top_bottom_search_angle_degrees)
-        )
+    for _trace in trace_positions:
         top = _clip_interval(
             FiniteInterval(
-                center
-                - center_allowance
-                - aperture_pixels.frame_height_px.maximum / 2.0
-                - search_deviation
-                - rotation_radius,
-                center
-                + center_allowance
-                - aperture_pixels.frame_height_px.minimum / 2.0
-                + search_deviation
-                + rotation_radius,
+                center.minimum - height.maximum / 2.0,
+                center.maximum - height.minimum / 2.0,
             ),
             float(short_min),
             float(short_max - 1),
         )
         bottom = _clip_interval(
             FiniteInterval(
-                center
-                - center_allowance
-                + aperture_pixels.frame_height_px.minimum / 2.0
-                - search_deviation
-                - rotation_radius,
-                center
-                + center_allowance
-                + aperture_pixels.frame_height_px.maximum / 2.0
-                + search_deviation
-                + rotation_radius,
+                center.minimum + height.minimum / 2.0,
+                center.maximum + height.maximum / 2.0,
             ),
             float(short_min),
             float(short_max - 1),
@@ -267,30 +235,20 @@ def build_top_bottom_search_corridors(
 def _tile_domain(
     lane_id: str,
     long_extent_px: int,
-    tile_width_px: float,
-    halo_px: int,
 ) -> tuple[SequenceAnchorTile, ...]:
     if long_extent_px <= 0:
         raise ValueError("anchor domain requires positive long extent")
-    width = max(1, int(math.ceil(tile_width_px)))
-    tiles: list[SequenceAnchorTile] = []
-    start = 0
-    ordinal = 0
-    while start < long_extent_px:
-        stop = min(long_extent_px, start + width)
-        tiles.append(
-            SequenceAnchorTile(
-                tile_id=f"anchor-tile:{lane_id}:{ordinal:04d}",
-                core_px=FiniteInterval(float(start), float(stop)),
-                measurement_px=FiniteInterval(
-                    float(max(0, start - halo_px)),
-                    float(min(long_extent_px - 1, stop + halo_px)),
-                ),
-            )
-        )
-        start = stop
-        ordinal += 1
-    return tuple(tiles)
+    # The whole lane is one seamless registered discovery domain.  Local pixel
+    # measurement already processes traces independently and reports actual
+    # peak temporary memory; artificial millimetre tiles only duplicated seam
+    # work and made an engineering partition affect physical observations.
+    return (
+        SequenceAnchorTile(
+            tile_id=f"anchor-domain:{lane_id}",
+            core_px=FiniteInterval(0.0, float(long_extent_px)),
+            measurement_px=FiniteInterval(0.0, float(long_extent_px - 1)),
+        ),
+    )
 
 
 def build_sequence_anchor_discovery_domain(
@@ -299,40 +257,17 @@ def build_sequence_anchor_discovery_domain(
     layout: str,
     authoritative_sequence_length: int,
     aperture_pixels: FramePhysicalPixelIntervals,
-    spec: PhotoBoundaryMeasurementSpec = PHOTO_BOUNDARY_MEASUREMENT_SPEC,
 ) -> SequenceAnchorDiscoveryDomain:
     if authoritative_sequence_length <= 0:
         raise ValueError("anchor domain requires authoritative sequence length")
     lane_box = source_lane_box(lane, layout)
-    long_axis, short_axis = _source_axes(layout)
+    long_axis, _short_axis = source_axes(layout)
     long_min, long_max = _axis_bounds(lane_box, long_axis)
-    short_min, short_max = _axis_bounds(lane_box, short_axis)
     if long_min != 0:
         raise ValueError("current lane authority must begin at source long zero")
-    scales = lane.scan_canvas.axis_scales
-    measurement_halo = (
-        int(
-            math.ceil(
-                0.5
-                * (short_max - short_min)
-                * math.tan(
-                    math.radians(spec.top_bottom_search_angle_degrees)
-                )
-                + (
-                    spec.local_window_mm
-                    + spec.transition_gap_mm
-                )
-                * scales.width_axis_px_per_mm.maximum
-            )
-        )
-        + 1
-    )
     tiles = _tile_domain(
         lane.domain.lane_id,
         long_max - long_min,
-        spec.anchor_tile_width_mm
-        * scales.width_axis_px_per_mm.maximum,
-        measurement_halo,
     )
     query_order = tuple(tile.tile_id for tile in tiles)
     return SequenceAnchorDiscoveryDomain(
@@ -358,15 +293,16 @@ def _coarse_short_trace_positions(
     spec: PhotoBoundaryMeasurementSpec,
 ) -> tuple[int, ...]:
     lane_box = source_lane_box(lane, layout)
-    _long_axis, short_axis = _source_axes(layout)
+    _long_axis, short_axis = source_axes(layout)
     short_min, short_max = _axis_bounds(lane_box, short_axis)
     scales = lane.scan_canvas.axis_scales
     center = (short_min + short_max - 1) / 2.0
     half_height = min(
         (short_max - short_min - 2) / 2.0,
         aperture_pixels.frame_height_px.minimum / 2.0
-        - spec.local_window_mm
-        * scales.height_axis_px_per_mm.maximum,
+        - spec.measurement_halo_px(
+            scales.height_axis_px_per_mm.maximum
+        ),
     )
     inner_min = max(short_min, int(math.ceil(center - half_height)))
     inner_max = min(short_max, int(math.floor(center + half_height)) + 1)
@@ -394,7 +330,7 @@ def registered_lane_measurement_queries(
     """Pre-register complete top/bottom and seamless anchor coverage."""
 
     scales = lane.scan_canvas.axis_scales
-    source_long_axis, source_short_axis = _source_axes(layout)
+    source_long_axis, source_short_axis = source_axes(layout)
     queries: list[PhotoBoundaryMeasurementQuery] = []
     for corridor, purpose in (
         (top_corridor, QueryPurpose.TOP_CORRIDOR),

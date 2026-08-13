@@ -42,8 +42,9 @@ def build_parser() -> argparse.ArgumentParser:
         choices=STRIP_MODES,
         default="full",
         help=(
-            "Slot-count intent: full uses the matched holder's complete fixed "
-            "count; partial requires a smaller explicit count."
+            "Holder-layout intent: full confirms the complete filled layout "
+            "and uses its fixed count; partial confirms a non-filling layout "
+            "and requires an explicit count no greater than holder capacity."
         ),
     )
     parser.add_argument(
@@ -63,16 +64,8 @@ def build_parser() -> argparse.ArgumentParser:
             "Write one three-panel JPG comparing detected and selected "
             "TOP/BOTTOM, detected and selected START/END, and final safe "
             "output envelopes. This analysis-only run writes no official "
-            "TIFFs or review copies; a later normal run automatically tries "
-            "to reuse its matching report."
-        ),
-    )
-    parser.add_argument(
-        "--allow-best-effort-output",
-        action="store_true",
-        help=(
-            "Explicitly accept weaker output transaction semantics on an "
-            "unverified filesystem in non-interactive use."
+            "TIFFs or review copies. A later normal run performs fresh "
+            "detection."
         ),
     )
     parser.add_argument(
@@ -108,7 +101,6 @@ def options_from_args(args: argparse.Namespace) -> RuntimeOptions:
         strip_mode=str(args.strip),
         requested_count=(None if args.count is None else int(args.count)),
         debug_analysis=bool(args.debug_analysis),
-        allow_best_effort_output=bool(args.allow_best_effort_output),
         jobs=int(args.jobs),
     )
 

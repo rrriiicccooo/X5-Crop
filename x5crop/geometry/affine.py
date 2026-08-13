@@ -7,6 +7,10 @@ from ..domain import WorkspaceExtent
 
 
 AFFINE_INVERTIBILITY_FLOOR = 1e-12
+# Expanded rotation needs one output-raster sample cell around the mapped
+# source-centre extent.  This creates only representational background corners;
+# it never enlarges a physical crop envelope or its direct-use budget.
+AFFINE_OUTPUT_RASTER_GUARD_PX = 1.0
 
 
 @dataclass(frozen=True)
@@ -51,19 +55,13 @@ class AffineCoordinateTransform:
         width: int,
         height: int,
         angle_degrees: float,
-        *,
-        guard_px: float = 1.0,
     ) -> "AffineCoordinateTransform":
         if width <= 0 or height <= 0:
             raise ValueError("expanded rotation requires a positive source extent")
         if (
             not math.isfinite(angle_degrees)
-            or not math.isfinite(guard_px)
-            or guard_px < 1.0
         ):
-            raise ValueError(
-                "expanded rotation angle/guard must be finite and safe"
-            )
+            raise ValueError("expanded rotation angle must be finite")
         angle = math.radians(angle_degrees)
         cos_a = math.cos(angle)
         sin_a = math.sin(angle)
@@ -87,10 +85,18 @@ class AffineCoordinateTransform:
         minimum_y = min(point[1] for point in rotated)
         maximum_y = max(point[1] for point in rotated)
         output_width = int(
-            math.ceil(maximum_x - minimum_x + 2.0 * guard_px)
+            math.ceil(
+                maximum_x
+                - minimum_x
+                + 2.0 * AFFINE_OUTPUT_RASTER_GUARD_PX
+            )
         )
         output_height = int(
-            math.ceil(maximum_y - minimum_y + 2.0 * guard_px)
+            math.ceil(
+                maximum_y
+                - minimum_y
+                + 2.0 * AFFINE_OUTPUT_RASTER_GUARD_PX
+            )
         )
         output_cx = (output_width - 1) / 2.0
         output_cy = (output_height - 1) / 2.0

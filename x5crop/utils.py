@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import math
-from typing import Any, Iterable, Optional
+from typing import Any, Optional
 
 import numpy as np
 
@@ -98,14 +98,3 @@ def sampled_values_for_percentile(
         return flat
     step = max(1, int(math.ceil(flat.size / float(max_samples))))
     return flat[::step]
-
-
-def sampled_percentile(
-    values: np.ndarray,
-    percentiles: Iterable[float],
-    max_samples: int,
-) -> np.ndarray:
-    sample = sampled_values_for_percentile(values, max_samples=max_samples)
-    if sample.size == 0:
-        return np.array([0.0 for _ in percentiles], dtype=np.float64)
-    return np.percentile(sample, list(percentiles))

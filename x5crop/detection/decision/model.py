@@ -45,13 +45,5 @@ class DecisionGateAssessment:
         )
 
     @property
-    def reason_inputs(self) -> tuple[tuple[str, str], ...]:
-        return tuple(
-            (check.code, check.final_review_reason)
-            for check in self.blocking_checks
-            if check.final_review_reason is not None
-        )
-
-    @property
     def status(self) -> str:
         return "approved_auto" if self.passed else "needs_review"

@@ -7,7 +7,6 @@ from dataclasses import dataclass
 import json
 import os
 from pathlib import Path
-import platform
 import pstats
 import subprocess
 import sys
@@ -157,10 +156,12 @@ def _stage_times(profile_path: Path, wall_seconds: float) -> dict[str, float]:
     validated_write = _cumulative(
         stats, "x5crop/io/tiff.py", "write_validated_tiff"
     )
-    readback = _cumulative(stats, "x5crop/io/tiff.py", "validate_written_tiff")
+    readback = _cumulative(
+        stats, "x5crop/io/tiff.py", "validate_written_tiff_header"
+    )
     encode_write = max(0.0, validated_write - readback)
     publish = _cumulative(
-        stats, "x5crop/output/transaction.py", "publish"
+        stats, "x5crop/output/publication.py", "publish"
     )
     attributed = decode + detection + sampling + encode_write + readback + publish
     return {
@@ -177,7 +178,7 @@ def _stage_times(profile_path: Path, wall_seconds: float) -> dict[str, float]:
 def _runtime_peak_temporary(report: dict[str, Any]) -> int:
     return max(
         (
-            int(lane["work"]["peak_temporary_bytes"])
+            int(lane["peak_temporary_bytes"])
             for lane in report["photo_geometry"]["lanes"]
         ),
         default=0,

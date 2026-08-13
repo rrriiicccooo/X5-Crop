@@ -29,10 +29,7 @@ from .outcome import (
     RuntimeMetrics,
 )
 from .invocation import PlannedSource
-from .report_reuse import (
-    find_reusable_analysis_report,
-    result_from_reusable_analysis_report,
-)
+from ..run_local_identity import source_identity_scope
 
 
 def _metrics(
@@ -50,6 +47,7 @@ def _metrics(
         else tuple(
             lane.work
             for lane in detection.candidate.geometry.lane_reconstructions
+            if lane.work is not None
         )
     )
     query_sets = (
@@ -77,6 +75,9 @@ def _metrics(
             item.basic_profile_run_count for item in work
         ),
         role_proposal_count=sum(item.role_proposal_count for item in work),
+        phase_hypothesis_count=sum(
+            item.phase_hypothesis_count for item in work
+        ),
         sequence_group_count=sum(item.sequence_group_count for item in work),
         ordinal_role_lookup_count=sum(
             item.ordinal_role_lookup_count for item in work
@@ -87,7 +88,6 @@ def _metrics(
         local_relation_evaluation_count=sum(
             item.local_relation_evaluation_count for item in work
         ),
-        refinement_query_count=sum(item.refinement_query_count for item in work),
         materialized_frame_geometry_count=sum(
             item.materialized_frame_geometry_count for item in work
         ),
@@ -111,7 +111,21 @@ def process_one(
     config: RunConfig,
     configuration_bundle: DetectionConfigurationBundle,
     output_root: Path,
-    reusable_report_path: Path | None = None,
+) -> InputProcessingOutcome:
+    with source_identity_scope():
+        return _process_one_scoped(
+            source,
+            config,
+            configuration_bundle,
+            output_root,
+        )
+
+
+def _process_one_scoped(
+    source: PlannedSource,
+    config: RunConfig,
+    configuration_bundle: DetectionConfigurationBundle,
+    output_root: Path,
 ) -> InputProcessingOutcome:
     input_file = source.path
     started_at = perf_counter()
@@ -139,80 +153,6 @@ def process_one(
         configuration_detail = detection_configuration_read_model(
             initial_configuration
         )
-        reusable = None
-        if reusable_report_path is not None and not config.debug_analysis:
-            reusable, report_miss = find_reusable_analysis_report(
-                reusable_report_path,
-                source=source,
-                source_identity=source_identity,
-                configuration_detail=configuration_detail,
-                profile=profile,
-                config=config,
-            )
-            if report_miss is not None:
-                warnings.append(
-                    "analysis report not reused: "
-                    + report_miss
-                    + "; fresh detection performed"
-                )
-        if reusable is not None:
-            failure_stage = FailureStage.OUTPUT
-            warnings.append(
-                "analysis report reused: " + reusable.path.name
-            )
-            output_root.mkdir(parents=True, exist_ok=True)
-            if reusable.decision_status == "approved_auto":
-                frame_outputs = write_crops(
-                    source.portable_stem,
-                    source.input_ordinal,
-                    arr,
-                    profile,
-                    reusable.final_boxes,
-                    reusable.sampling_authority_boxes,
-                    reusable.transforms,
-                    output_root,
-                )
-                artifacts = replace(
-                    artifacts,
-                    frame_outputs=tuple(frame_outputs),
-                )
-            else:
-                review_copy = prepare_review_artifact(
-                    input_file,
-                    source.portable_stem,
-                    source.input_ordinal,
-                    output_root,
-                    reusable.final_review_reasons,
-                    warnings,
-                )
-                artifacts = replace(artifacts, review_copy=review_copy)
-
-            failure_stage = FailureStage.REPORT_VALIDATION
-            result = result_from_reusable_analysis_report(
-                reusable,
-                input_file=input_file,
-                profile=profile,
-                source_runtime_identity=source_identity,
-                config=config,
-                output_files=[
-                    Path(path).relative_to(output_root).as_posix()
-                    for path in artifacts.frame_outputs
-                ],
-                review_copy=(
-                    None
-                    if artifacts.review_copy is None
-                    else Path(artifacts.review_copy)
-                    .relative_to(output_root)
-                    .as_posix()
-                ),
-                warnings=warnings,
-            )
-            return CompletedInput(
-                result=result,
-                artifacts=artifacts,
-                metrics=RuntimeMetrics.unavailable(),
-            )
-
         failure_stage = FailureStage.DETECTION
         detection_started = perf_counter()
         lane_configuration = (
@@ -233,7 +173,7 @@ def process_one(
         candidate = choose_detection(
             workspace,
             initial_configuration,
-            lane_configuration,
+            development_detail=config.development_detail,
         )
         detection_seconds = perf_counter() - detection_started
 
@@ -246,12 +186,10 @@ def process_one(
         detection = finalize_detection(
             candidate,
             decision,
-            layout=config.layout,
         )
         runtime_identity = make_runtime_identity(
             source_identity,
             config,
-            workspace.identity,
             (
                 None
                 if not detection.source_core.lanes
@@ -320,7 +258,7 @@ def process_one(
                 debug_analysis=debug_analysis,
             )
 
-        failure_stage = FailureStage.REPORT_VALIDATION
+        failure_stage = FailureStage.REPORT_BUILD
         result = result_from_detection(
             input_file,
             detection,
@@ -341,15 +279,20 @@ def process_one(
             configuration_detail=configuration_detail,
             runtime_identity=runtime_identity,
             frame_export_requested=not config.debug_analysis,
+            development_detail=config.development_detail,
         )
         return CompletedInput(
             result=result,
             artifacts=artifacts,
-            metrics=_metrics(
-                started_at,
-                detection_seconds,
-                workspace,
-                detection,
+            metrics=(
+                _metrics(
+                    started_at,
+                    detection_seconds,
+                    workspace,
+                    detection,
+                )
+                if config.development_detail
+                else RuntimeMetrics.unavailable()
             ),
         )
     except Exception as exc:
@@ -360,11 +303,15 @@ def process_one(
             error_message=str(exc),
             artifacts=artifacts,
             traceback_text=traceback.format_exc(),
-            metrics=_metrics(
-                started_at,
-                detection_seconds,
-                workspace,
-                detection,
+            metrics=(
+                _metrics(
+                    started_at,
+                    detection_seconds,
+                    workspace,
+                    detection,
+                )
+                if config.development_detail
+                else RuntimeMetrics.unavailable()
             ),
             error_errno=(exc.errno if isinstance(exc, OSError) else None),
         )

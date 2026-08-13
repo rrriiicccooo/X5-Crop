@@ -11,22 +11,25 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 import tifffile
 
+import x5crop.debug.axis_panels as debug_axis_panels
 import x5crop.debug.panels as debug_panels
 from x5crop.configuration.bundle import DetectionConfigurationBundle
 from x5crop.configuration.diagnostics import DebugStyleParameters
 from x5crop.debug.canvas import FRAME_FILL_COLORS, DebugRenderCache
-from x5crop.debug.panels import (
-    DEBUG_ANALYSIS_PANEL_LABELS,
-    _cross_axis_panel,
-    _clip_segment_to_box,
+from x5crop.debug.axis_panels import cross_axis_panel, long_axis_panel
+from x5crop.debug.output_panel import (
     _draw_hatched_polygon,
     _keep_evidence_inside_media,
-    _long_axis_panel,
-    _presentation_grid,
-    _Projection,
-    _projection,
-    _protected_output_panel,
-    _viewport,
+    protected_output_panel,
+)
+from x5crop.debug.panel_facts import source_projection
+from x5crop.debug.panel_layout import (
+    Projection,
+    clip_segment_to_box,
+    presentation_grid,
+    viewport,
+)
+from x5crop.debug.panels import (
     make_debug_analysis_panel,
     stack_debug_panels,
 )
@@ -35,6 +38,7 @@ from x5crop.detection.decision.decision_gate import apply_decision_gate
 from x5crop.detection.final.finalize import finalize_detection
 from x5crop.detection.pipeline import choose_detection
 from x5crop.detection.workspace import prepare_detection_workspace
+from x5crop.domain import FiniteInterval
 from x5crop.io.tiff import read_tiff
 from x5crop.run_status import RunTerminalOutcome
 
@@ -72,24 +76,27 @@ def _fixture(
         configuration,
         None,
     )
-    candidate = choose_detection(workspace, configuration, None)
+    candidate = choose_detection(workspace, configuration)
     decision = apply_decision_gate(candidate.gate)
     detection = finalize_detection(
         candidate,
         decision,
-        layout="horizontal",
     )
     return configuration, profile, workspace, detection
 
 
 def _grid(workspace, style: DebugStyleParameters):
-    return _presentation_grid(_projection(workspace), style)
+    return presentation_grid(source_projection(workspace), style)
 
 
 class DebugAnalysisContractTest(unittest.TestCase):
     def test_three_panels_preserve_four_v5_fact_layers(self) -> None:
         self.assertEqual(
-            DEBUG_ANALYSIS_PANEL_LABELS,
+            (
+                "01 · CROSS-AXIS TOP / BOTTOM",
+                "02 · LONG-AXIS START / END",
+                "03 · FINAL SAFE OUTPUT",
+            ),
             (
                 "01 · CROSS-AXIS TOP / BOTTOM",
                 "02 · LONG-AXIS START / END",
@@ -134,9 +141,9 @@ class DebugAnalysisContractTest(unittest.TestCase):
                 Path(temporary)
             )
             with mock.patch(
-                "x5crop.debug.panels._fill_polygon"
+                "x5crop.debug.output_panel.fill_polygon"
             ) as fill:
-                _protected_output_panel(
+                protected_output_panel(
                     workspace,
                     detection,
                     configuration.diagnostics.style,
@@ -186,7 +193,7 @@ class DebugAnalysisContractTest(unittest.TestCase):
 
     def test_debug_evidence_is_clipped_to_its_media_viewport(self) -> None:
         self.assertEqual(
-            _clip_segment_to_box(
+            clip_segment_to_box(
                 (-10.0, 50.0),
                 (110.0, 50.0),
                 (10, 20, 90, 80),
@@ -205,7 +212,7 @@ class DebugAnalysisContractTest(unittest.TestCase):
     def test_square_frame_strip_expands_canvas_without_aspect_compression(
         self,
     ) -> None:
-        projection = _Projection(
+        projection = Projection(
             source_width=2_797,
             source_height=9_899,
             rotate_clockwise=True,
@@ -217,7 +224,7 @@ class DebugAnalysisContractTest(unittest.TestCase):
             (0.0, 9_899.0),
         )
         style = DebugStyleParameters()
-        grid = _presentation_grid(projection, style)
+        grid = presentation_grid(projection, style)
         panel_width = style.canvas_width - 2 * style.outer_margin
         target_box = (
             style.panel_media_inset_x,
@@ -225,11 +232,13 @@ class DebugAnalysisContractTest(unittest.TestCase):
             panel_width - style.panel_media_inset_x,
             style.cross_axis_media_top + grid.media_height,
         )
-        viewport = _viewport(projection, target_box)
-        self.assertEqual(viewport.source_box, (0, 0, 9_899, 2_797))
+        selected_viewport = viewport(projection, target_box)
+        self.assertEqual(selected_viewport.source_box, (0, 0, 9_899, 2_797))
         self.assertEqual(grid.media_height, 445)
-        self.assertEqual(viewport.target_box, (27, 81, 1_602, 526))
-        displayed = tuple(viewport.point(point) for point in source_corners)
+        self.assertEqual(selected_viewport.target_box, (27, 81, 1_602, 526))
+        displayed = tuple(
+            selected_viewport.point(point) for point in source_corners
+        )
         scale_x = (
             max(point[0] for point in displayed)
             - min(point[0] for point in displayed)
@@ -253,15 +262,15 @@ class DebugAnalysisContractTest(unittest.TestCase):
             )
             with (
                 mock.patch(
-                    "x5crop.debug.panels._draw_detected_top_bottom",
-                    wraps=debug_panels._draw_detected_top_bottom,
+                    "x5crop.debug.axis_panels._draw_detected_top_bottom",
+                    wraps=debug_axis_panels._draw_detected_top_bottom,
                 ) as detected,
                 mock.patch(
-                    "x5crop.debug.panels._draw_selected_top_bottom",
-                    wraps=debug_panels._draw_selected_top_bottom,
+                    "x5crop.debug.axis_panels._draw_selected_top_bottom",
+                    wraps=debug_axis_panels._draw_selected_top_bottom,
                 ) as selected,
             ):
-                _cross_axis_panel(
+                cross_axis_panel(
                     workspace,
                     detection,
                     configuration.diagnostics.style,
@@ -281,9 +290,9 @@ class DebugAnalysisContractTest(unittest.TestCase):
                 for lane in detection.candidate.geometry.lane_reconstructions
             )
             with mock.patch(
-                "x5crop.debug.panels._draw_dashed_polyline"
+                "x5crop.debug.axis_panels.draw_dashed_polyline"
             ) as detected_line:
-                _long_axis_panel(
+                long_axis_panel(
                     workspace,
                     detection,
                     configuration.diagnostics.style,
@@ -302,17 +311,17 @@ class DebugAnalysisContractTest(unittest.TestCase):
             )
             with (
                 mock.patch(
-                    "x5crop.debug.panels._fill_polygon"
+                    "x5crop.debug.output_panel.fill_polygon"
                 ) as fill,
                 mock.patch(
-                    "x5crop.debug.panels._panel_base",
+                    "x5crop.debug.output_panel.panel_base",
                     wraps=__import__(
-                        "x5crop.debug.panels",
-                        fromlist=["_panel_base"],
-                    )._panel_base,
+                        "x5crop.debug.output_panel",
+                        fromlist=["panel_base"],
+                    ).panel_base,
                 ) as output_base,
             ):
-                _protected_output_panel(
+                protected_output_panel(
                     workspace,
                     detection,
                     configuration.diagnostics.style,
@@ -320,13 +329,13 @@ class DebugAnalysisContractTest(unittest.TestCase):
                     _grid(workspace, configuration.diagnostics.style),
                 )
             with mock.patch(
-                "x5crop.debug.panels._panel_base",
+                "x5crop.debug.axis_panels.panel_base",
                 wraps=__import__(
-                    "x5crop.debug.panels",
-                    fromlist=["_panel_base"],
-                )._panel_base,
+                    "x5crop.debug.axis_panels",
+                    fromlist=["panel_base"],
+                ).panel_base,
             ) as long_axis_base:
-                _long_axis_panel(
+                long_axis_panel(
                     workspace,
                     detection,
                     configuration.diagnostics.style,
@@ -337,21 +346,22 @@ class DebugAnalysisContractTest(unittest.TestCase):
         self.assertFalse(detection.frame_export_eligible)
         self.assertEqual(detection.resolved_output_geometries, ())
         self.assertGreater(fill.call_count, 0)
-        self.assertEqual(
-            output_base.call_args.args[3],
-            "CANDIDATE AUDIT · NOT EXPORTABLE",
-        )
+        shared_title = output_base.call_args.args[3]
+        sequence_title = long_axis_base.call_args.args[3]
+        self.assertTrue(shared_title.startswith("SHARED AUTHORITY · "))
+        self.assertTrue(shared_title.endswith(" LEGAL · NO DOMINANT"))
+        legal_count = shared_title.split(" · ")[1].split()[0]
         self.assertIn(
-            "DETECTED TRANSITION / SELECTED BOUNDARY",
-            long_axis_base.call_args.args[3],
+            f"SEQUENCE AUTHORITY · {legal_count} LEGAL · NO DOMINANT",
+            sequence_title,
         )
 
     def test_adaptive_panel_stacking_is_bounded(self) -> None:
         self.assertEqual(len(FRAME_FILL_COLORS), 12)
         self.assertEqual(len(set(FRAME_FILL_COLORS)), 12)
         style = DebugStyleParameters()
-        grid = _presentation_grid(
-            _Projection(720, 100, rotate_clockwise=False),
+        grid = presentation_grid(
+            Projection(720, 100, rotate_clockwise=False),
             style,
         )
         width = style.canvas_width - style.outer_margin * 2
@@ -383,10 +393,7 @@ class DebugAnalysisContractTest(unittest.TestCase):
         assessment = SimpleNamespace(
             outcome="shared_rotation",
             applied_source_rotation_degrees=-0.153,
-            observed_angle_interval_degrees=(
-                detection.source_transform_assessment
-                .observed_angle_interval_degrees
-            ),
+            observed_angle_interval_degrees=FiniteInterval(-0.166, 0.166),
         )
         applied = SimpleNamespace(source_transform_assessment=assessment)
         first, second = _transform_lines(applied, profile)

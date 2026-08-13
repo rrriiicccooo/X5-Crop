@@ -16,22 +16,27 @@ the whole source enters `needs_review`; individual slots are never salvaged.
 The program does not claim to recover one uniquely true photo boundary and does
 not infer format or count from filenames. It independently matches the holder
 from the image before obtaining that holder contract's complete slot count.
-Full uses that count; partial means a
-smaller user-entered count, including blank exposures that remain in sequence.
-Neither mode requires the film to fill the holder or touch the canvas ends. If
-the count is complete, choose full. Holder capacity validates only the upper
-bound; it never supplies the count. Blank slots are never
-removed. For example, a complete three-slot 120-66 strip uses full even when it
-sits in the middle of the holder; only a one- or two-slot strip is partial.
+Full confirms that the film uses the matched holder's complete filled layout,
+and the program uses that holder's full count. Partial confirms that the film
+does not fill the holder and requires an explicit count, including blank
+exposures. Partial may equal `full_count`, but it receives no long-axis
+centering or even-layout authority. Thus three 120-66 exposures may be either
+full when they use the filled layout, or `partial --count 3` when they do not.
 
 Preflight rejects partial without a count, a non-positive count, or full with a
-count. If a partial count is not below the matched holder's full count, a
+count. If a partial count exceeds the matched holder's full count, a
 non-interactive batch also stops before detection with exit code `2`.
 Interactive use lists all holder/count conflicts and returns to the mode/count
 step without asking for format or Debug Analysis again; it never rewrites count
 one source at a time. Ambiguous holder matching remains `needs_review` instead
 of guessing holder identity or count. `135-dual` is full-only: 12 slots total,
 six per lane.
+
+Normal spacing is the default in both modes. A missing separator can be filled
+only after at least two compatible pitches establish `G_source`. A fully
+direct chain remains valid when `G_source` is unresolved. Full never promotes a
+format gap search prior into placement authority and never overrides direct
+contact, overlap, or wide-gap evidence.
 
 The format fixes the physical photo rectangle. Detection places those rectangles
 from strip direction, top/bottom evidence, dark separator bands, shared dimensions,
@@ -40,6 +45,13 @@ to protect visible content. Every final side must remain within 5% of format wid
 for start/end and 3% of format height for top/bottom. When photos touch or overlap,
 neighboring outputs may deliberately share source pixels; the slot count does not
 change.
+
+Content protection does not mean that no content-like pixel may ever cross a
+crop line. A tiny corner-only graze, edge alias, or dust speck remains neutral.
+Only reliable two-dimensional picture structure that leaves the corner and
+continues across the complete boundary-uncertainty interval can veto an
+automatic crop. X5 Crop does not enlarge or distort the fixed format rectangle
+to preserve an already acceptable corner trace.
 
 Complete counts are 135=6, half=12, XPan=3, 120-645=4, and 120-66=3.
 120-67 uses 3 on ordinary holders and 2 on the short holder. 135-dual uses 12
@@ -124,42 +136,35 @@ Command-line options:
 - `--layout`: `auto`, `horizontal`, or `vertical`.
 - `--strip`: `full` or `partial`.
 - `--count N`: a positive integer used only by partial and required there,
-  including intermediate blank exposures; it must be smaller than the matched
-  holder's complete count. Full rejects `--count`; use full when the count is
-  complete. `135-dual` rejects partial.
+  including intermediate blank exposures; it must not exceed the matched
+  holder's complete count. Full rejects `--count`. When count equals
+  `full_count`, choose full for a filled layout and partial for a non-filling
+  layout. `135-dual` rejects partial.
 - `--jobs N`: source concurrency; default 1, maximum 3. The default limits peak
   memory on ordinary computers; when memory is plentiful and processing a batch
   of source TIFFs, you may explicitly use `--jobs 2`. Numerical library threads
   remain fixed at 1.
 - `--debug-analysis`: run the complete detector and write a source-adaptive
-  three-panel diagnostic JPG, report, summary, and manifest, but no official
+  three-panel diagnostic JPG, development report, and summary, but no official
   TIFFs or review copy. It is off by default and preserves the full strip aspect
-  without cropping the photographs. A later matching normal run automatically
-  attempts to reuse the report.
-- `--allow-best-effort-output`: explicitly accept weaker publication semantics
-  on an unverified filesystem.
+  without cropping the photographs.
 - `--interactive`: prompt for format, mode, count, and Debug Analysis; a
   multi-file holder/count preflight covers the whole batch and returns to the
   mode/count step after listing every conflict.
 
-There is no `--overwrite`. A successful run always replaces the previous
-complete, verified V5-owned output.
+There is no `--overwrite`. The output must be a fresh path that does not exist;
+X5 Crop never takes over or deletes an older output.
 
 Debug Analysis and production cropping can be run as two steps:
 
 ```bash
-python3 X5_Crop.py /path/to/scans --format 120-66 --strip partial --count 2 --debug-analysis
-python3 X5_Crop.py /path/to/scans --format 120-66 --strip partial --count 2
+python3 X5_Crop.py /path/to/scans --format 120-66 --strip partial --count 2 --debug-analysis --output /path/to/x5_debug
+python3 X5_Crop.py /path/to/scans --format 120-66 --strip partial --count 2 --output /path/to/x5_crops
 ```
 
-The first command publishes only Debug Analysis and report files in
-`x5_crop_output/`. The second automatically reads `x5_crop_report.jsonl` and
-skips detection only when the current schema and integrity hash, program
-version, source-file identity and TIFF profile, complete detection
-configuration, and resolved layout all match. Any mismatch automatically runs
-fresh detection. Report reuse skips only detection, physical solving, and the
-Gates; official TIFFs are still written from the source and read back for
-validation.
+Debug Analysis publishes only diagnostic and development facts. A normal run
+always performs fresh measurement, physical solving, and Gates from the source
+TIFF; an older report is never executable runtime state.
 
 ## Status And Exit Codes
 
@@ -173,9 +178,10 @@ Each input has one terminal status:
 
 An unresolved holder, a producer bound being reached, no uniquely dominant
 physical placement, or reliable content vetoing every placement all remain
-`needs_review`; X5 Crop writes no guessed photo TIFFs. Debug Analysis and the
-JSONL report retain matched-holder and count authority, every bounded materialized
-chain, placement clusters, content vetoes, the safe envelope, and final reasons.
+`needs_review`; X5 Crop writes no guessed photo TIFFs. The normal JSONL report
+retains holder/count authority, final selection, safe envelopes, and root Gate
+reasons. Explicit Debug Analysis additionally retains bounded chains, placement
+clusters, content vetoes, and the evidence ledger.
 
 Exit codes:
 
@@ -183,12 +189,12 @@ Exit codes:
 - `1`: published with at least one `runtime_error`, or every input failed and
   nothing was published.
 - `2`: CLI, input-set, or preflight failure.
-- `3`: ambiguous output transaction, publication failure, or recovery failure.
+- `3`: a fresh output directory could not be published safely.
 
 If every input is `runtime_error`, X5 Crop does not publish an empty replacement;
 the previous output remains untouched.
 
-## Output And Safe Replacement
+## Output And Safe Publication
 
 Default layout:
 
@@ -200,52 +206,31 @@ x5_crop_output/
   _debug_analysis/
   x5_crop_report.jsonl
   x5_crop_summary.csv
-  x5_crop_run_manifest.jsonl
 ```
 
 Photos stay directly in the root. There are no `run-*` or per-source folders.
 `needs_review/` and `_debug_analysis/` appear only when needed. A Debug Analysis
-run publishes to the same `x5_crop_output/`, containing only diagnostic JPGs,
-reports, summary, and manifest—never official TIFFs or review copies.
+run uses its own fresh output directory, containing only diagnostic JPGs,
+report, and summary—never official TIFFs or review copies.
 
-A new run first builds a complete internal transaction directory beside the
-target. After all inputs finish, official TIFF readback succeeds, and report and
-manifest are complete, two same-parent renames publish the new result. The old
-result is then deleted. Clear process crashes or forced termination can be
-recovered. If sudden power loss leaves an ambiguous state, target, new, old, and
-journal are all preserved for manual confirmation. Recovery, rename,
-publication, or rollback failure also preserves every candidate and exits with
-code `3`; it does not promise that the old output has returned to its original
-location.
-
-Automatic replacement requires a fixed owner marker, current manifest, and an
-exact inventory match. An extra or missing file, link, junction, reparse point,
-old schema, or manually created directory stops the run; user files are never
-silently deleted.
-
-## Filesystems And Disk Space
-
-APFS, HFS+, and NTFS are local validation targets for the V5 transaction model;
-formal status still requires a receipt for the specific release and machine.
-SMB, NAS, cloud-synchronized folders, exFAT without its own receipt, and
-filesystems whose semantics cannot be established are best effort:
-
-- an interactive launch shows the risk and target and defaults to refusal;
-- non-interactive use must explicitly include `--allow-best-effort-output`.
-
-Consent cannot bypass hard lock, same-filesystem, rename, path-safety, or disk-
-space failures. Preflight budgets the complete new output, reports, optional
-Debug Analysis, transaction overhead, and a 32 MiB guard for the whole
-invocation. The old result still occupies space until publication succeeds.
+Each run first writes a temporary directory beside the target. After all inputs,
+required TIFF header checks, and reports finish, one rename publishes it. If the
+target already exists or appears during processing, X5 Crop exits with code `3`
+without traversing, replacing, taking ownership of, or deleting that directory.
+Disk-space, write, or rename failures remove only this run's unpublished staging
+and report the actual error; there is no hidden reservation ledger or recovery
+state machine.
 
 ## TIFF Fidelity And Privacy
 
 Official TIFF I/O is owned exclusively by `tifffile + imagecodecs`. Every output
-is reopened after its write handle closes and checked for 16-bit RGB, three
-channels, contiguous planar layout, shape, pixels, ICC, resolution, resolution
-unit, supported metadata, lossless compression, and `Orientation=1`.
+header is reopened after its write handle closes and checked for 16-bit RGB,
+three channels, contiguous planar layout, shape, ICC, resolution, resolution
+unit, supported metadata, lossless compression, and `Orientation=1`. Complete
+pixel rereads belong to TIFF-contract, named-TIFF, platform, end-to-end, and
+release verification rather than every normal output.
 
-Normal runs and report reuse do not calculate a content SHA for the source TIFF,
+Normal runs do not calculate a content SHA for the source TIFF,
 inspect Git or test cohorts, create performance receipts, profile, or inject
 faults. Pillow is imported lazily only for Debug Analysis.
 

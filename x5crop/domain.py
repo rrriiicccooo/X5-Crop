@@ -93,7 +93,6 @@ class EvidenceState(str, Enum):
 
 class MeasurementIdentity(str, Enum):
     BASE_GRAY = "base_gray"
-    IMAGE_MEASUREMENT_STATISTICS = "image_measurement_statistics"
     SCAN_CANVAS_GEOMETRY = "scan_canvas_geometry"
     PHOTO_BOUNDARY = "photo_boundary"
     CONTENT_OCCUPANCY = "content_occupancy"

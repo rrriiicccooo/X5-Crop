@@ -8,7 +8,6 @@ from ..output.naming import portable_source_stems
 from ..run_config import RunConfig
 from .app import run_runtime
 from .input_probe import iter_input_files
-from .identity import runtime_environment_identity
 from .invocation import PlannedSource, RuntimeInvocation
 from .limits import STANDARD_JOB_LIMIT
 from .options import RuntimeOptions
@@ -61,10 +60,11 @@ def _preflight_batch_count(
             evidence,
             configuration.physical_spec,
         )
-        if holder is not None and options.requested_count >= holder.full_count:
+        if holder is not None and options.requested_count > holder.full_count:
             conflicts.append(
                 f"{path.name}: partial count {options.requested_count} must be "
-                f"less than {holder.full_count} for {holder.profile.profile_id}"
+                f"no greater than {holder.full_count} for "
+                f"{holder.profile.profile_id}"
             )
     if conflicts:
         raise SlotCountPreflightError(
@@ -100,9 +100,11 @@ def runtime_invocation_from_options(options: RuntimeOptions) -> RuntimeInvocatio
         strip_mode=options.strip_mode,
         count_request=count_request,
         debug_analysis=options.debug_analysis,
-        allow_best_effort_output=options.allow_best_effort_output,
         jobs=max(1, min(STANDARD_JOB_LIMIT, int(options.jobs))),
         interactive=options.interactive,
+        development_detail=(
+            options.debug_analysis or options.development_detail
+        ),
     )
     return RuntimeInvocation(
         config=config,
@@ -119,5 +121,4 @@ def runtime_invocation_from_options(options: RuntimeOptions) -> RuntimeInvocatio
 
 def run_options(options: RuntimeOptions) -> int:
     invocation = runtime_invocation_from_options(options)
-    runtime_environment_identity()
     return run_runtime(invocation)

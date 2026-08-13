@@ -14,7 +14,6 @@ import sys
 from tempfile import TemporaryDirectory
 from typing import Any, Sequence
 
-from x5crop.output.ownership import read_owned_output
 from x5crop.report.validation import validate_current_report_record
 
 from .cohort_count_authority import validate_count_authority
@@ -38,11 +37,11 @@ WORK_FIELDS = (
     "basic_profile_coordinate_count",
     "basic_profile_run_count",
     "role_proposal_count",
+    "phase_hypothesis_count",
     "sequence_group_count",
     "ordinal_role_lookup_count",
     "ordinal_role_match_count",
     "local_relation_evaluation_count",
-    "refinement_query_count",
     "materialized_frame_geometry_count",
     "shared_measurement_reuse_count",
     "domain_pixels",
@@ -110,7 +109,7 @@ def _source_geometry_within_authority(
     height: int,
 ) -> bool:
     for lane in report["photo_geometry"]["lanes"]:
-        for geometry in lane["selection"]["safe_crop_envelopes"]:
+        for geometry in lane["safe_crop_envelopes"]:
             footprint = geometry["constrained_source_footprint"]
             if not footprint or not all(
                 0.0 <= float(point[0]) <= width - 1
@@ -133,7 +132,9 @@ def _bounded_work(
         if resolved is None
         else tuple(resolved["lane_output_slot_counts"])
     )
-    work_rows = tuple(lane["work"] for lane in geometry["lanes"])
+    work_rows = tuple(
+        lane["work"] for lane in report["development"]["lanes"]
+    )
     metrics = _aggregate_work(work_rows)
     aggregate_identity = all(
         int(metrics[field]) == sum(int(row[field]) for row in work_rows)
@@ -142,14 +143,12 @@ def _bounded_work(
     )
     structural_bounds = all(
         int(row["ordinal_role_lookup_count"])
-        <= int(row["sequence_group_count"]) * count * 2
+        <= int(row["phase_hypothesis_count"]) * count * 2
         and int(row["ordinal_role_match_count"])
-        <= int(row["role_proposal_count"])
+        <= int(row["phase_hypothesis_count"])
+        * int(row["role_proposal_count"])
         and int(row["local_relation_evaluation_count"])
         <= int(row["sequence_group_count"]) * max(0, count - 1)
-        and int(row["refinement_query_count"])
-        <= int(row["role_proposal_count"])
-        + int(row["sequence_group_count"]) * count * 2
         for row, count in zip(work_rows, lane_counts, strict=True)
     )
     return (
@@ -193,7 +192,8 @@ def _peak_temporary_limit_bytes(source_pixels: int) -> int:
 def _production_command(source: DiagnosticSource, output: Path) -> list[str]:
     command = [
         sys.executable,
-        str(PROJECT_ROOT / "X5_Crop.py"),
+        "-m",
+        "tools.regression.development_run",
         str(source.source_path),
         "--output",
         str(output),
@@ -201,8 +201,6 @@ def _production_command(source: DiagnosticSource, output: Path) -> list[str]:
         str(source.identity["format_id"]),
         "--strip",
         str(source.identity["strip_mode"]),
-        "--jobs",
-        "1",
     ]
     if source.identity["strip_mode"] == "partial":
         command.extend(
@@ -280,17 +278,14 @@ def run_diagnostic_source(source: DiagnosticSource) -> dict[str, Any]:
                 metrics=None,
             )
         try:
-            owned = read_owned_output(output)
             report_path = output / "x5_crop_report.jsonl"
             reports = tuple(
                 json.loads(line)
                 for line in report_path.read_text(encoding="utf-8").splitlines()
                 if line.strip()
             )
-            if len(reports) != 1 or len(owned.terminal_records) != 1:
-                raise ValueError(
-                    "production output requires one report and one terminal"
-                )
+            if len(reports) != 1:
+                raise ValueError("production output requires one report")
             report = reports[0]
             validate_current_report_record(report)
             after = source.source_path.stat()
@@ -307,9 +302,7 @@ def run_diagnostic_source(source: DiagnosticSource) -> dict[str, Any]:
             width = int(source.identity["raw_width_px"])
             height = int(source.identity["raw_height_px"])
             source_pixels = width * height
-            canonical_extent = report["measurement"]["field"][
-                "source_extent"
-            ]
+            canonical_extent = report["measurement"]["source_extent"]
             geometry_authorized = _source_geometry_within_authority(
                 report,
                 width=int(canonical_extent["width"]),
@@ -323,8 +316,7 @@ def run_diagnostic_source(source: DiagnosticSource) -> dict[str, Any]:
             review_copy = report["output"]["review_copy"]
             status = report["decision"]["status"]
             output_contract = (
-                owned.terminal_records[0]["terminal_status"] == status
-                and all((output / relative).is_file() for relative in output_files)
+                all((output / relative).is_file() for relative in output_files)
                 and (review_copy is None or (output / review_copy).is_file())
                 and (
                     (status == "approved_auto" and bool(output_files))
@@ -334,7 +326,7 @@ def run_diagnostic_source(source: DiagnosticSource) -> dict[str, Any]:
             metrics = _aggregate_work(
                 tuple(
                     lane["work"]
-                    for lane in report["photo_geometry"]["lanes"]
+                    for lane in report["development"]["lanes"]
                 )
             )
             engineering_passed = (
@@ -380,18 +372,8 @@ def run_diagnostic_source(source: DiagnosticSource) -> dict[str, Any]:
         "output_slot_count": geometry["output_slot_count"],
         "slot_identities": geometry["slot_identities"],
         "geometry_outcome": {
-            "lane_frame_specs": [
-                next(
-                    (
-                        item["frame_spec"]["frame_spec_id"]
-                        for item in lane["chains"][
-                            "lane_complete_proposals"
-                        ]
-                        if item["placement_id"]
-                        == lane["selection"]["selected_placement_id"]
-                    ),
-                    None,
-                )
+            "selected_placement_ids": [
+                lane["selection"]["selected_placement_id"]
                 for lane in geometry["lanes"]
             ],
         },

@@ -53,26 +53,6 @@ def convex_hull(points: tuple[Point, ...]) -> ConvexPolygon:
     return hull
 
 
-def axis_aligned_minkowski_guard(
-    polygon: ConvexPolygon,
-    guard_px: float,
-) -> ConvexPolygon:
-    if not math.isfinite(guard_px) or guard_px <= 0.0:
-        raise ValueError("Minkowski guard must be finite and positive")
-    return convex_hull(
-        tuple(
-            (x + offset_x, y + offset_y)
-            for x, y in polygon
-            for offset_x, offset_y in (
-                (-guard_px, -guard_px),
-                (-guard_px, guard_px),
-                (guard_px, -guard_px),
-                (guard_px, guard_px),
-            )
-        )
-    )
-
-
 def _clip_half_plane(
     polygon: ConvexPolygon,
     *,
@@ -153,26 +133,6 @@ def clip_convex_polygon_to_box(
     if len(clipped) < 3:
         raise ValueError("authority intersection is empty or degenerate")
     return convex_hull(clipped)
-
-
-def contains_point(
-    polygon: ConvexPolygon,
-    point: Point,
-    *,
-    epsilon: float = 1.0e-9,
-) -> bool:
-    if len(polygon) < 3:
-        return False
-    return all(
-        (right[0] - left[0]) * (point[1] - left[1])
-        - (right[1] - left[1]) * (point[0] - left[0])
-        >= -epsilon
-        for left, right in zip(
-            polygon,
-            polygon[1:] + polygon[:1],
-            strict=True,
-        )
-    )
 
 
 def mapped_half_open_box(

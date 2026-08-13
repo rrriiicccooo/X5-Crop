@@ -4,6 +4,9 @@ from typing import Any
 
 from ..configuration.model import DetectionConfiguration
 from ..formats import FRAME_DIMENSION_TOLERANCE_SPEC
+from ..detection.evidence.content_occupancy_model import (
+    CONTENT_OCCUPANCY_MEASUREMENT_SPEC,
+)
 from ..detection.photo_geometry.model import (
     PHOTO_BOUNDARY_MEASUREMENT_SPEC,
 )
@@ -18,6 +21,9 @@ def detection_configuration_read_model(
         "configuration_id": configuration.configuration_id,
         "format_id": spec.format_id,
         "strip_mode": configuration.strip_mode,
+        "holder_layout_authority": (
+            configuration.count_request.holder_layout_authority.value
+        ),
         "slot_count_request": typed_read_model(
             configuration.count_request
         ),
@@ -32,6 +38,9 @@ def detection_configuration_read_model(
             "scan_canvas": typed_read_model(configuration.scan_canvas),
             "photo_boundary_measurement_spec": typed_read_model(
                 PHOTO_BOUNDARY_MEASUREMENT_SPEC
+            ),
+            "content_occupancy_measurement_spec": typed_read_model(
+                CONTENT_OCCUPANCY_MEASUREMENT_SPEC
             ),
         },
         "execution": {

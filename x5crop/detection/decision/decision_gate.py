@@ -1,7 +1,13 @@
 from __future__ import annotations
 
+from ...domain import EvidenceState
 from ..candidate.assessment.model import CandidateGateAssessment
-from ..gate_checks import GateCheck, GateGap, GateStage
+from ..gate_checks import (
+    GATE_CHECK_DEPENDENCIES,
+    GateCheck,
+    GateGap,
+    GateStage,
+)
 from .model import DecisionGateAssessment
 from .vocabulary import (
     FINAL_REASON_CONTENT_PROTECTION_CONFLICT,
@@ -25,6 +31,9 @@ _REASON_BY_GAP = {
     GateGap.SHARED_STRIP_DIRECTION_NONUNIQUE: FINAL_REASON_PLACEMENT_UNRESOLVED,
     GateGap.SOURCE_SCAN_GEOMETRY_UNAVAILABLE: FINAL_REASON_NO_LEGAL_PLACEMENT,
     GateGap.PLACEMENT_UNRESOLVED: FINAL_REASON_PLACEMENT_UNRESOLVED,
+    GateGap.SEQUENCE_AUTHORITY_UNAVAILABLE: FINAL_REASON_PLACEMENT_UNRESOLVED,
+    GateGap.CROSS_AUTHORITY_UNAVAILABLE: FINAL_REASON_PLACEMENT_UNRESOLVED,
+    GateGap.SHARED_AUTHORITY_UNAVAILABLE: FINAL_REASON_PLACEMENT_UNRESOLVED,
     GateGap.CONTENT_VETO_REJECTED: FINAL_REASON_CONTENT_PROTECTION_CONFLICT,
     GateGap.LOCAL_ADVANCE_UNRESOLVED: FINAL_REASON_LOCAL_ADVANCE_UNRESOLVED,
     GateGap.SLOT_ORDINAL_ASSIGNMENT_UNRESOLVED: FINAL_REASON_NO_LEGAL_PLACEMENT,
@@ -50,9 +59,25 @@ _REASON_BY_GAP = {
 def apply_decision_gate(
     candidate_gate: CandidateGateAssessment,
 ) -> DecisionGateAssessment:
-    return DecisionGateAssessment(
-        checks=tuple(
-            GateCheck(
+    candidate_by_code = {check.code: check for check in candidate_gate.checks}
+    decision_checks: list[GateCheck] = []
+    decision_by_code: dict[str, GateCheck] = {}
+    for check in candidate_gate.checks:
+        dependencies = GATE_CHECK_DEPENDENCIES.get(check.code, ())
+        evaluated = check.evaluated and not any(
+            decision_by_code.get(code, candidate_by_code[code]).state
+            != EvidenceState.SUPPORTED
+            for code in dependencies
+        )
+        if not evaluated:
+            resolved = GateCheck(
+                code=check.code,
+                stage=GateStage.DECISION,
+                state=EvidenceState.UNAVAILABLE,
+                evaluated=False,
+            )
+        else:
+            resolved = GateCheck(
                 code=check.code,
                 stage=GateStage.DECISION,
                 state=check.state,
@@ -63,6 +88,8 @@ def apply_decision_gate(
                     else None
                 ),
             )
-            for check in candidate_gate.checks
-        )
+        decision_checks.append(resolved)
+        decision_by_code[check.code] = resolved
+    return DecisionGateAssessment(
+        checks=tuple(decision_checks)
     )

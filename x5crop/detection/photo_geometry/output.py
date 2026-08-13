@@ -1,96 +1,32 @@
 from __future__ import annotations
 
-from hashlib import sha256
-
 from ...domain import Box, EvidenceState
+from ...formats import DIRECT_USE_BUDGET_SPEC
 from ...geometry.affine import AffineCoordinateTransform
-from ...geometry.convex import (
-    ConvexPolygon,
-    clip_convex_polygon_to_box,
-    convex_hull,
-    mapped_half_open_box,
-)
+from ...geometry.convex import ConvexPolygon, clip_convex_polygon_to_box, mapped_half_open_box
 from ..source_core import SourceLaneEvidence
 from .corridors import source_lane_box
 from .boundary_geometry import canonical_boundary_line_at_position
+from .frame_footprints import (
+    format_placement_frame_footprint,
+    retained_frame_safety_footprint,
+)
 from .model import (
     AuthoritySide,
     BoundaryRole,
     ClippedRequirement,
+)
+from .output_model import (
     DirectUseBudgetAssessment,
     DirectUseBudgetEdgeAssessment,
     FootprintSaturationFact,
     SafeCropEnvelope,
 )
-from .chains import (
-    CompleteFormatChain,
-    FixedFormatFrame,
-)
-from .protection import DIRECT_USE_BUDGET_SPEC
-
+from .chains import CompleteFormatChain
+from ...run_local_identity import run_local_id
 
 def _stable_id(prefix: str, *parts: object) -> str:
-    payload = "\x1f".join(str(part) for part in parts).encode("utf-8")
-    return f"{prefix}:{sha256(payload).hexdigest()[:24]}"
-
-
-def _boundary_polygon(
-    placement: FixedFormatFrame,
-    *,
-    top_position_px: float,
-    bottom_position_px: float,
-    start_position_px: float,
-    end_position_px: float,
-) -> tuple[tuple[float, float], ...]:
-    top = canonical_boundary_line_at_position(
-        placement.top,
-        top_position_px,
-        placement.start.line,
-    )
-    bottom = canonical_boundary_line_at_position(
-        placement.bottom,
-        bottom_position_px,
-        placement.start.line,
-    )
-    start = canonical_boundary_line_at_position(
-        placement.start,
-        start_position_px,
-        placement.start.line,
-    )
-    end = canonical_boundary_line_at_position(
-        placement.end,
-        end_position_px,
-        placement.start.line,
-    )
-    return (
-        top.intersection(start),
-        top.intersection(end),
-        bottom.intersection(end),
-        bottom.intersection(start),
-    )
-
-
-def format_placement_frame_footprint(
-    placement: CompleteFormatChain,
-    lane_ordinal: int,
-) -> ConvexPolygon:
-    index = lane_ordinal - 1
-    if index < 0 or index >= placement.output_slot_count:
-        raise ValueError("complete-chain ordinal is out of range")
-    frame = placement.fixed_frames.frames[index]
-    return convex_hull(
-        _boundary_polygon(
-            frame,
-            top_position_px=placement.cross.top_full_positions_px[index].minimum,
-            bottom_position_px=placement.cross.bottom_full_positions_px[index].maximum,
-            start_position_px=placement.sequence.full_positions_px[
-                index * 2
-            ].minimum,
-            end_position_px=placement.sequence.full_positions_px[
-                index * 2 + 1
-            ].maximum,
-        )
-    )
+    return run_local_id(prefix, *parts)
 
 
 def _outside_authority_sides(
@@ -145,7 +81,7 @@ def safe_crop_envelope_from_placement(
         placement,
         lane_ordinal,
     )
-    required = placement_footprint
+    required = retained_frame_safety_footprint(placement, lane_ordinal)
     constrained = clip_convex_polygon_to_box(required, authority)
     mapped = mapped_half_open_box(constrained, transform.map_point)
     if (
@@ -174,25 +110,6 @@ def safe_crop_envelope_from_placement(
         sampling_authority_box=authority,
         authority_profile_id=lane.domain.authority_profile_id,
         mapped_output_box=mapped,
-    )
-
-
-def output_sampling_identity(
-    geometry: SafeCropEnvelope,
-    transform: AffineCoordinateTransform,
-) -> tuple[object, ...]:
-    mapped = geometry.mapped_output_box
-    if mapped is None:
-        raise ValueError("safe crop envelope has not been mapped")
-    return (
-        mapped,
-        transform.matrix,
-        transform.inverse_matrix,
-        transform.source_extent,
-        transform.output_extent,
-        geometry.lane_id,
-        geometry.authority_profile_id,
-        geometry.sampling_authority_box,
     )
 
 
@@ -247,12 +164,12 @@ def direct_use_budget_assessment(
         }
         width_budget_px = (
             placement.source_scan_geometry.width_state.retained_extent_budget_px(
-                DIRECT_USE_BUDGET_SPEC.sequence_axis_ratio_per_side
+                DIRECT_USE_BUDGET_SPEC.sequence_ratio_per_side
             ).minimum
         )
         height_budget_px = (
             placement.source_scan_geometry.height_state.retained_extent_budget_px(
-                DIRECT_USE_BUDGET_SPEC.cross_axis_ratio_per_side
+                DIRECT_USE_BUDGET_SPEC.cross_ratio_per_side
             ).minimum
         )
         width_limit = (
@@ -266,18 +183,18 @@ def direct_use_budget_assessment(
             )
         )
         for width in (placement.sequence,):
-            start_position = width.fit_positions_px[index * 2]
-            end_position = width.fit_positions_px[index * 2 + 1]
+            start_position = width.canonical_positions_px[index * 2]
+            end_position = width.canonical_positions_px[index * 2 + 1]
             for role, position, actual_offset, limit_mm in (
                 (
                     BoundaryRole.START,
-                    start_position.maximum,
+                    start_position,
                     min(actual_offsets[BoundaryRole.START]),
                     width_limit,
                 ),
                 (
                     BoundaryRole.END,
-                    end_position.minimum,
+                    end_position,
                     max(actual_offsets[BoundaryRole.END]),
                     width_limit,
                 ),
@@ -313,12 +230,12 @@ def direct_use_budget_assessment(
             for role, position, actual_offset in (
                 (
                     BoundaryRole.TOP,
-                    height.top_fit_positions_px[index].maximum,
+                    height.top_canonical_positions_px[index],
                     min(actual_offsets[BoundaryRole.TOP]),
                 ),
                 (
                     BoundaryRole.BOTTOM,
-                    height.bottom_fit_positions_px[index].minimum,
+                    height.bottom_canonical_positions_px[index],
                     max(actual_offsets[BoundaryRole.BOTTOM]),
                 ),
             ):

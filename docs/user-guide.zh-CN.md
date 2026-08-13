@@ -11,21 +11,30 @@ X5 Crop 的目标是自动产生足够安全且不切掉真实照片内容的 TI
 TIFF 写出均成立时才输出正式照片，否则整张 source 进入 `needs_review`，不做部分 slot 挽救。
 
 程序不承诺恢复唯一的真实照片边界，也不从文件名猜 format 或 count。程序先从图像独立匹配
-片夹，再取得该片夹合同的完整曝光格数。Full 使用这个完整格数；partial 表示格数更少，必须由用户输入实际 count，包括中间
-空白曝光格。两种模式都不要求胶片铺满片夹，也不要求首尾靠近画布边缘。若 count 等于完整张数，
-应选择 full。片夹容量只校验上限，不能代替 count。程序不删除空白 slot。例如 120-66 的三格完整片条使用 full；只有一格
-或两格才使用 partial。
+片夹，再取得该片夹合同的完整曝光格数。Full 表示用户确认胶片采用片夹的完整铺满布局，程序自动
+使用该格数；partial 表示没有铺满，必须输入实际 count，包括中间空白曝光格。Partial 允许与
+`full_count` 相同的照片数，但不会使用片夹长轴居中和均匀排布事实。程序不删除空白 slot。例如
+三张 120-66 既可以是铺满布局的 full，也可以是未铺满的 `partial --count 3`。
 
 语法检查会拒绝 partial 缺少 count、count 非正数或 full 携带 count。匹配片夹后，如果 partial
-count 不小于实际 `full_count`，非交互整批调用同样在 detector 前以退出码 `2` 停止；交互启动器
+count 大于实际 `full_count`，非交互整批调用同样在 detector 前以退出码 `2` 停止；交互启动器
 列出全部冲突并返回模式/count 步骤，不要求重新选择 format 或 Debug Analysis，也不会逐 source
 临时改写 count。图像不能唯一匹配片夹时保持 `needs_review`，不猜片夹或格数。`135-dual` 只允许
 full，总计 12 格、每 lane 6 格。
+
+正常间隙是两种模式共同的默认状态。只有当前片条用至少两段相容 pitch 建立了 `G_source`，程序才
+能补全看不见的 separator；若所有 adjacency 都有直接证据，`G_source` 未建立也可形成完整 chain。
+Full 不会把 format 的联网 gap 搜索值变成定位事实，也不会用铺满布局覆盖接触、叠片或大间隙的
+直接证据。
 
 Format 决定照片矩形的物理尺寸。检测只负责根据片条方向、照片上下边缘、照片间黑带、共同尺寸
 和局部卷片关系放置这些矩形，再把边缘测量所需的最小安全范围纳入输出。最终每一边都必须通过
 以 format 尺寸为基准的 5%（start/end）或 3%（top/bottom）限制。相邻照片接触或重叠时，
 相邻输出可以重复包含同一段 source pixels；这不是额外边缘，也不会改变照片数。
+
+“保护内容”不等于裁切线外绝对不能出现任何内容像素。只发生在两条相邻边交角处的极小擦边、
+锯齿或尘点保持中性；只有离开角落、连续跨过整条边界不确定区间的可靠二维画面才会否决自动裁切。
+程序不会为了保留一个已确认可接受的角点而扩大或扭曲固定 format 框。
 
 完整格数为：135=6、half=12、XPan=3、120-645=4、120-66=3；120-67 普通片夹为 3、短片夹
 为 2。135-dual 总计 12 格，每 lane 6 格。
@@ -98,18 +107,17 @@ python3 X5_Crop.py /path/to/scans \
 - `--format`：`135`、`135-dual`、`half`、`xpan`、`120-645`、`120-66`、`120-67`。
 - `--layout`：`auto`、`horizontal` 或 `vertical`。
 - `--strip`：`full` 或 `partial`。
-- `--count N`：仅 partial 使用且必填的正整数曝光格数；包括中间空白曝光格，必须少于匹配片夹
-  的完整张数。Full 不接受 `--count`；若格数完整，使用 full。`135-dual` 不接受 partial。
+- `--count N`：仅 partial 使用且必填的正整数曝光格数；包括中间空白曝光格，不能超过匹配片夹
+  的完整张数。Full 不接受 `--count`。照片数等于 `full_count` 时仍按实际布局选择模式：铺满用
+  full，未铺满用 partial。`135-dual` 不接受 partial。
 - `--jobs N`：source 并发数；默认 1，上限 3。默认值优先控制一般电脑的峰值内存；内存充足且
   一次处理多张原 TIFF 时可显式使用 `--jobs 2`。数值库内部线程固定为 1。
-- `--debug-analysis`：执行完整检测并生成自适应高度的三联诊断 JPG、报告、summary 和 manifest，
+- `--debug-analysis`：执行完整检测并生成自适应高度的三联诊断 JPG、development report 和 summary，
   但不写正式 TIFF，也不复制 `needs_review` 原图；默认关闭。完整片条保持原比例，不裁切照片。
-  之后用相同输入和检测参数做普通运行时会自动尝试复用报告。
-- `--allow-best-effort-output`：明确接受未验证文件系统的较弱发布语义。
 - `--interactive`：交互选择格式、模式、张数和 Debug Analysis；多文件的片夹/count 检查针对
   整批执行，存在冲突时列出全部冲突并返回模式/count 步骤。
 
-没有 `--overwrite`。一次成功运行总是以完整新结果替换上一套可确认归属的 V5 输出。
+没有 `--overwrite`。输出目录必须是一个尚不存在的新路径；程序不接管或删除旧输出。
 
 Debug Analysis 和正式裁切可分两步运行：
 
@@ -118,10 +126,8 @@ python3 X5_Crop.py /path/to/scans --format 120-66 --strip partial --count 2 --de
 python3 X5_Crop.py /path/to/scans --format 120-66 --strip partial --count 2
 ```
 
-第一条命令在 `x5_crop_output/` 中只发布 Debug Analysis 和报告类文件。第二条命令会自动读取
-其中的 `x5_crop_report.jsonl`；只有 current schema 与完整性哈希、程序版本、原 TIFF 的文件身份
-与 profile、完整检测配置和 resolved layout 全部匹配时才跳过检测。任一项不一致就自动重新
-检测。复用报告只省略检测、物理求解与 Gate；正式 TIFF 仍从原图写出并复读验证。
+两条命令必须使用不同的全新 `--output` 路径。Debug Analysis 只发布诊断与开发事实；普通运行始终
+从原 TIFF 重新执行测量、物理求解和 Gate，不把旧 report 当作可执行状态。
 
 ## 状态与退出码
 
@@ -133,20 +139,20 @@ python3 X5_Crop.py /path/to/scans --format 120-66 --strip partial --count 2
 - `runtime_error`：该输入失败，不写它的照片；其它输入继续处理。
 
 无法区分候选片夹、producer 上限被触发、不同最终裁切位置没有唯一物理胜出者，或可靠内容否决
-所有位置时，结果均保持 `needs_review`，不输出猜测的照片 TIFF。Debug Analysis 与 JSONL report
-会记录匹配片夹、count authority、实际物化的有界 chain、候选 cluster、内容否决、安全范围和
-最终原因。
+所有位置时，结果均保持 `needs_review`，不输出猜测的照片 TIFF。普通 JSONL report 保存匹配片夹、
+count authority、最终选择、安全范围与 Gate 根因；显式 Debug Analysis 额外保存有界 chain、候选
+cluster、内容否决和证据 ledger。
 
 退出码：
 
 - `0`：成功发布，且没有 `runtime_error`。
 - `1`：成功发布但含 `runtime_error`，或全部输入失败且未发布。
 - `2`：命令行、输入集合或运行前检查失败。
-- `3`：输出事务状态歧义、发布或恢复失败。
+- `3`：全新输出目录无法安全发布。
 
 如果全部输入均为 `runtime_error`，程序不发布空结果，上一套输出保持不动。
 
-## 输出与安全替换
+## 输出与安全发布
 
 默认结构：
 
@@ -158,42 +164,25 @@ x5_crop_output/
   _debug_analysis/
   x5_crop_report.jsonl
   x5_crop_summary.csv
-  x5_crop_run_manifest.jsonl
 ```
 
 照片直接位于根部，不建立 `run-*` 或 source 子目录。`needs_review/` 和 `_debug_analysis/` 仅在
-有内容时出现。Debug Analysis 运行发布到同一个 `x5_crop_output/`，其中只有诊断 JPG、报告、
-summary 和 manifest，没有正式 TIFF 或 review copy。
+有内容时出现。Debug Analysis 使用自己指定的全新输出目录，其中只有诊断 JPG、report 与 summary，
+没有正式 TIFF 或 review copy。
 
-新运行先在输出目录旁建立完整内部事务目录。全部输入处理结束、正式 TIFF 复读通过、报告和
-manifest 完整后，程序用两次同父目录 rename 发布新结果，再删除旧结果。程序异常或强制结束
-后会在状态明确时恢复；突然断电造成状态歧义时保留 target、new、old 和 journal，要求人工
-确认，绝不自动删除。若事务恢复、rename、发布或回滚失败，程序同样保留全部候选并以退出码
-`3` 停止；此时不承诺旧输出已经回到原位置。
-
-只有固定 owner marker、current manifest 和完整 inventory 全部匹配的旧目录才能自动替换。
-额外文件、缺失文件、链接、junction、reparse point、旧 schema 或人工目录都会使程序停止。
-
-## 文件系统与磁盘空间
-
-APFS、HFS+ 与 NTFS 是 V5 事务模型的本地验证目标；是否已正式通过由对应版本的实机 receipt
-证明，不由文件系统名称本身保证。SMB、NAS、云盘同步目录、没有自身 receipt 的 exFAT 或
-无法确认语义的文件系统属于 best effort：
-
-- 交互运行显示风险和目标路径，默认拒绝；
-- 非交互 CLI 必须明确加入 `--allow-best-effort-output`。
-
-该选择不能绕过锁、同文件系统、rename、路径安全或磁盘空间硬失败。运行前会为完整新结果、
-报告、可选 Debug Analysis、事务开销和 32 MiB guard 做 invocation-wide 预算；旧结果在发布
-成功前继续占用空间。
+每次运行先在目标同父目录建立临时目录。全部输入处理、必要 TIFF header 检查和报告写完后，程序
+用一次 rename 发布为目标目录。目标已存在或处理中出现同名目录时退出码为 `3`；程序不会遍历、
+覆盖、接管或删除其中任何内容。写盘、空间不足或 rename 失败时清理本次未发布的临时目录并报告
+实际错误，不维护隐藏的磁盘预留账本或恢复状态机。
 
 ## TIFF 保真与隐私
 
-正式 TIFF 仅由 `tifffile + imagecodecs` 读写。每张输出关闭写句柄后都会重新打开，并检查
-16-bit RGB、三通道、contiguous planar、形状、像素、ICC、resolution、resolution unit、受支持
-metadata、无损压缩与 `Orientation=1`。
+正式 TIFF 仅由 `tifffile + imagecodecs` 读写。每张输出关闭写句柄后会重新打开 header，并检查
+16-bit RGB、三通道、contiguous planar、shape、ICC、resolution、resolution unit、受支持 metadata、
+无损压缩与 `Orientation=1`。完整像素复读属于 TIFF contract、named-TIFF、platform、端到端与发布
+验证，不让普通用户每张输出重复完整解码。
 
-普通运行与报告复用都不额外计算原 TIFF 的内容 SHA，也不检查 Git、黄金样片或性能 receipt，
+普通运行不额外计算原 TIFF 的内容 SHA，也不检查 Git、黄金样片或性能 receipt，
 不启用 profiler 或故障注入。Pillow 只在用户明确启用 Debug Analysis 时延迟导入。
 
 ## 移除与许可

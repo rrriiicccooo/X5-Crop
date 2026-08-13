@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from ..domain import Box, EvidenceState
 from ..configuration.model import ResolvedSlotCount
 from .evidence.scan_canvas import MatchedHolder, ScanCanvasEvidence, ScanCanvasOutcome
-from .evidence.content_occupancy import ContentOccupancyObservationSet
+from .evidence.content_occupancy_model import ContentOccupancyObservationSet
 
 
 @dataclass(frozen=True)

@@ -12,8 +12,7 @@ import subprocess
 import sys
 from typing import Any, Sequence
 
-from x5crop.runtime.identity import runtime_environment_identity
-
+from .environment_identity import verification_environment_identity
 from .performance import (
     DEFAULT_RECEIPT_PATH,
     build_receipt,
@@ -158,7 +157,7 @@ def build_platform_receipt(
     performance_record = _load_or_build_performance(performance_receipt, commit)
     platform_io = run_platform_io_validation()
     filesystems = run_platform_filesystem_validation()
-    environment = runtime_environment_identity()
+    environment = verification_environment_identity()
     sources = load_platform_sources(verify_files=True)
     destination = (
         output.resolve()

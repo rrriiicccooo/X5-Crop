@@ -12,8 +12,10 @@ from x5crop.detection.evidence.scan_canvas import (
     ScanCanvasOutcome,
     observe_scan_canvas,
 )
-from x5crop.detection.evidence.content_occupancy import (
+from x5crop.detection.evidence.content_occupancy import observe_content_occupancy
+from x5crop.detection.evidence.content_occupancy_model import (
     ContentOccupancyObservation,
+    ContentOccupancyObservationSet,
 )
 from x5crop.detection.gate_checks import GateGap
 from x5crop.detection.pipeline import choose_detection
@@ -30,6 +32,7 @@ from x5crop.detection.source_core import (
     SourceLaneEvidence,
 )
 from x5crop.domain import (
+    Box,
     PositiveInterval,
 )
 from x5crop.formats import FRAME_DIMENSION_TOLERANCE_SPEC, format_spec
@@ -85,10 +88,11 @@ class PhysicalAuthorityContractTest(unittest.TestCase):
         self.assertAlmostEqual(intervals.frame_width_px.maximum, 400.95)
         self.assertAlmostEqual(intervals.frame_height_px.minimum, 215.136)
         self.assertAlmostEqual(intervals.frame_height_px.maximum, 240.96)
-        self.assertNotEqual(
-            PHOTO_BOUNDARY_MEASUREMENT_SPEC.dimension_search_allowance_mm,
-            aperture.frame_width_mm
-            * FRAME_DIMENSION_TOLERANCE_SPEC.frame_width_tolerance_ratio,
+        self.assertFalse(
+            hasattr(
+                PHOTO_BOUNDARY_MEASUREMENT_SPEC,
+                "dimension_search_allowance_mm",
+            )
         )
         self.assertEqual(
             PHOTO_BOUNDARY_MEASUREMENT_SPEC
@@ -186,7 +190,10 @@ class PhysicalAuthorityContractTest(unittest.TestCase):
     ) -> None:
         configuration = get_detection_configuration("135", "full")
         pixels = np.zeros((100, 720), dtype=np.uint8)
-        pixels[::2, 300:330] = 255
+        rows, columns = np.indices((60, 60))
+        pixels[20:80, 300:360] = (
+            ((rows // 3 + columns // 3) % 2) * 255
+        ).astype(np.uint8)
         profile = ImageProfile(
             shape=pixels.shape,
             dtype="uint8",
@@ -227,8 +234,60 @@ class PhysicalAuthorityContractTest(unittest.TestCase):
                 "source_box",
                 "source_cells",
                 "reliability",
-                "provenance",
             ),
+        )
+
+    def test_content_measurement_does_not_promote_a_single_edge(self) -> None:
+        pixels = np.zeros((85, 85), dtype=np.uint8)
+        pixels[:, 51:] = 200
+        observations = observe_content_occupancy(
+            pixels,
+            lane_id="lane:0",
+            lane_work_box=Box(0, 0, 85, 85),
+            layout="horizontal",
+            long_step_px=17,
+            cross_step_px=17,
+        )
+        self.assertFalse(observations.observations)
+        self.assertEqual(observations.occupied_cell_count, 0)
+        self.assertEqual(
+            tuple(item.name for item in fields(ContentOccupancyObservationSet)),
+            (
+                "lane_id",
+                "observations",
+                "long_step_px",
+                "cross_step_px",
+                "long_sample_count",
+                "cross_sample_count",
+                "occupied_cell_count",
+                "long_support_depth_px",
+                "cross_support_depth_px",
+            ),
+        )
+
+    def test_content_measurement_does_not_spread_texture_across_photo_edge(
+        self,
+    ) -> None:
+        pixels = np.zeros((102, 102), dtype=np.uint8)
+        rows, columns = np.indices((51, 102))
+        pixels[51:, :] = (
+            ((rows // 3 + columns // 3) % 2) * 255
+        ).astype(np.uint8)
+        observations = observe_content_occupancy(
+            pixels,
+            lane_id="lane:0",
+            lane_work_box=Box(0, 0, 102, 102),
+            layout="horizontal",
+            long_step_px=17,
+            cross_step_px=17,
+        )
+        self.assertTrue(observations.observations)
+        self.assertTrue(
+            all(
+                cell.top >= 51
+                for observation in observations.observations
+                for cell in observation.source_cells
+            )
         )
 
     def test_competing_holder_counts_remain_unresolved(self) -> None:
@@ -270,7 +329,7 @@ class PhysicalAuthorityContractTest(unittest.TestCase):
             "holder_full_count_unresolved",
             workspace.source_core.incomplete_reasons,
         )
-        candidate = choose_detection(workspace, configuration, None)
+        candidate = choose_detection(workspace, configuration)
         self.assertEqual(
             candidate.gate.checks[0].gap,
             GateGap.HOLDER_FULL_COUNT_UNRESOLVED,

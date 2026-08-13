@@ -17,7 +17,7 @@ DEFAULT_FIELDS = (
     "candidate_gate",
     "decision",
     "output.finalization",
-    "core_facts_sha256",
+    "development",
 )
 
 

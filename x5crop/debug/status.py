@@ -94,7 +94,8 @@ def _transform_lines(
 ) -> tuple[str, str]:
     transform = detection.source_transform_assessment
     interval = transform.observed_angle_interval_degrees
-    if interval is None:
+    applied = transform.applied_source_rotation_degrees
+    if transform.outcome == "unavailable" or applied is None:
         first = "V5 · DIRECTION UNAVAILABLE"
         second = (
             f"ORIENTATION {profile.orientation.original_tag}>CANONICAL>1"
@@ -107,11 +108,19 @@ def _transform_lines(
         )
         first = (
             f"V5 · {action} "
-            f"{transform.applied_source_rotation_degrees:+.3f}°"
+            f"{applied:+.3f}°"
+        )
+        observed = (
+            "observed interval unavailable"
+            if interval is None
+            else (
+                f"observed {interval.minimum:+.3f}°"
+                f"…{interval.maximum:+.3f}°"
+            )
         )
         second = (
-            f"observed {interval.minimum:+.3f}°…{interval.maximum:+.3f}° · "
-            f"ORIENTATION {profile.orientation.original_tag}>CANONICAL>1"
+            f"{observed} · ORIENTATION "
+            f"{profile.orientation.original_tag}>CANONICAL>1"
         )
     return first, second
 

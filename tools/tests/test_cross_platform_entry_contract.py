@@ -1,10 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-import tempfile
 import unittest
-
-from x5crop.output.transaction import OutputLock, TransactionPaths
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -41,14 +38,9 @@ class CrossPlatformEntryContractTests(unittest.TestCase):
         for duplicated_owner in ("unittest", "compileall", "diagnostic_cohort"):
             self.assertNotIn(duplicated_owner, adapter)
 
-    def test_custom_outputs_have_independent_lock_names(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            first = TransactionPaths.for_target(Path(directory) / "FirstCrops")
-            second = TransactionPaths.for_target(Path(directory) / "SecondCrops")
-            self.assertNotEqual(first.lock, second.lock)
-            with OutputLock(first.lock), OutputLock(second.lock):
-                self.assertTrue(first.lock.is_file())
-                self.assertTrue(second.lock.is_file())
+    def test_production_output_has_no_lock_or_journal_runtime(self) -> None:
+        self.assertFalse((ROOT / "x5crop/output/transaction.py").exists())
+        self.assertFalse((ROOT / "x5crop/output/ownership.py").exists())
 
 
 if __name__ == "__main__":

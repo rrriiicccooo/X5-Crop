@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-import uuid
+import shutil
+import tempfile
 
 import numpy as np
 
@@ -12,7 +13,6 @@ from ..image.transforms import photometric_background_value, sample_affine_roi
 from ..io.model import ImageProfile
 from ..io.tiff import write_validated_tiff
 from ..output.naming import portable_component
-from ..output.safe_tree import safe_remove_tree
 
 
 def write_crops(
@@ -31,10 +31,12 @@ def write_crops(
         raise ValueError("each crop requires one aligned sampling authority")
     output_files: list[str] = []
     promoted: list[Path] = []
-    source_workspace = output_dir / (
-        f".x5crop-source-{input_ordinal:04d}-{uuid.uuid4().hex}"
+    source_workspace = Path(
+        tempfile.mkdtemp(
+            prefix=f".x5crop-source-{input_ordinal:04d}-",
+            dir=output_dir,
+        )
     )
-    source_workspace.mkdir()
     try:
         background_value = photometric_background_value(
             source_arr,
@@ -81,5 +83,5 @@ def write_crops(
             if output_path.is_file() and not output_path.is_symlink():
                 output_path.unlink()
         if source_workspace.exists():
-            safe_remove_tree(source_workspace)
+            shutil.rmtree(source_workspace)
         raise

@@ -84,7 +84,7 @@ def interactive_options(
         print(f"Folder: {Path.cwd()}")
         print()
         print("This creates conservative bounded-safe frame TIFF crops.")
-        print("A complete new output replaces the prior X5 Crop-owned output.")
+        print("The output must be a fresh directory; existing output is never replaced.")
         print()
     format_id = selected_format_id or ask_format()
     partial_supported = FORMATS[format_id].partial_mode_supported
@@ -112,7 +112,7 @@ def interactive_options(
         print("analysis only: no cropped TIFF files will be written")
     else:
         print("debug analysis: off")
-        print("matching analysis report: reused automatically when valid")
+        print("fresh detection: enabled")
         print("frame TIFF export: enabled after the bounded safety Gate")
     print(f"strip mode: {strip_mode}")
     if partial:
@@ -127,7 +127,6 @@ def interactive_options(
         strip_mode=strip_mode,
         requested_count=requested_count,
         debug_analysis=debug_analysis,
-        allow_best_effort_output=False,
         jobs=STANDARD_JOB_DEFAULT,
         interactive=True,
     )

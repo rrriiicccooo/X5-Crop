@@ -209,7 +209,7 @@ class CurrentOnlyContractTest(unittest.TestCase):
             ROOT / "tools/regression/diagnostic_cohort.py"
         ).read_text(encoding="utf-8")
         verifier = (ROOT / "tools/verify").read_text(encoding="utf-8")
-        self.assertIn('str(PROJECT_ROOT / "X5_Crop.py")', diagnostic)
+        self.assertIn('"tools.regression.development_run"', diagnostic)
         self.assertIn("subprocess.run(", diagnostic)
         self.assertNotIn("runtime_invocation_from_options", diagnostic)
         self.assertNotIn("process_one", diagnostic)
@@ -295,7 +295,7 @@ class CurrentOnlyContractTest(unittest.TestCase):
                             "--strip",
                             "partial",
                             "--count",
-                            "2",
+                            "3",
                         ]
                     ),
                     2,
@@ -317,7 +317,7 @@ class CurrentOnlyContractTest(unittest.TestCase):
         self.assertNotIn("--debug-errors", option_strings)
         self.assertNotIn("--diagnostics", option_strings)
         self.assertNotIn("--overwrite", option_strings)
-        self.assertIn("--allow-best-effort-output", option_strings)
+        self.assertNotIn("--allow-best-effort-output", option_strings)
         normalized_help = " ".join(help_text.split())
         self.assertIn(
             "three-panel JPG comparing detected and selected TOP/BOTTOM, "
@@ -325,8 +325,8 @@ class CurrentOnlyContractTest(unittest.TestCase):
             normalized_help,
         )
         self.assertIn(
-            "analysis-only run writes no official TIFFs or review copies; "
-            "a later normal run automatically tries to reuse its matching report",
+            "analysis-only run writes no official TIFFs or review copies. "
+            "A later normal run performs fresh detection",
             normalized_help,
         )
         analysis_options = options_from_args(
@@ -407,7 +407,7 @@ class CurrentOnlyContractTest(unittest.TestCase):
         for format_id in ("135", "half", "xpan", "120-645", "120-66", "120-67"):
             self.assertEqual(
                 format_spec(format_id).interactive_partial_counts,
-                tuple(range(1, format_spec(format_id).maximum_full_count)),
+                tuple(range(1, format_spec(format_id).maximum_full_count + 1)),
             )
         self.assertFalse(
             format_spec("135-dual").partial_mode_supported
@@ -433,7 +433,7 @@ class CurrentOnlyContractTest(unittest.TestCase):
         self.assertEqual(REPORT_SCHEMA_ID, "x5crop_detection_report_v5")
         self.assertEqual(
             REPORT_SCHEMA_REVISION,
-            "x5crop_v5_fixed_physical_chain_1",
+            "x5crop_v5_lightweight_report_1",
         )
         candidate = candidate_gate_assessment(
             {
@@ -452,6 +452,7 @@ class CurrentOnlyContractTest(unittest.TestCase):
                 "state",
                 "gap",
                 "final_review_reason",
+                "evaluated",
                 "blocks",
             ),
         )
@@ -472,7 +473,19 @@ class CurrentOnlyContractTest(unittest.TestCase):
             EvidenceState.UNAVAILABLE,
             GateGap.DIRECT_USE_BUDGET_UNAVAILABLE,
         )
-        decision = apply_decision_gate(candidate_gate_assessment(facts))
+        candidate = candidate_gate_assessment(facts)
+        self.assertEqual(
+            tuple(check.code for check in candidate.blocking_checks),
+            ("complete_chain",),
+        )
+        self.assertFalse(
+            next(
+                check
+                for check in candidate.checks
+                if check.code == "direct_use_budget"
+            ).evaluated
+        )
+        decision = apply_decision_gate(candidate)
         self.assertEqual(decision.final_review_reasons, ("no_legal_placement",))
 
         facts["complete_chain"] = TypedAssessment(EvidenceState.SUPPORTED, None)
@@ -678,19 +691,50 @@ class CurrentOnlyContractTest(unittest.TestCase):
         sources = read_sources()
         for module in (
             "x5crop.detection.photo_geometry.detector",
-            "x5crop.detection.photo_geometry.measurement",
+            "x5crop.detection.photo_geometry.registered_measurement",
+            "x5crop.detection.photo_geometry.measurement_model",
+            "x5crop.detection.photo_geometry.search_model",
+            "x5crop.detection.photo_geometry.line_observations",
+            "x5crop.detection.photo_geometry.transition_tracking",
+            "x5crop.detection.photo_geometry.boundary_fitting",
             "x5crop.detection.photo_geometry.source_geometry",
-            "x5crop.detection.photo_geometry.bounds",
-            "x5crop.detection.photo_geometry.selection",
+            "x5crop.detection.photo_geometry.chain_records",
+            "x5crop.detection.photo_geometry.content_veto",
+            "x5crop.detection.photo_geometry.placement_clusters",
+            "x5crop.detection.photo_geometry.source_selection",
+            "x5crop.detection.photo_geometry.producer_receipts",
             "x5crop.detection.photo_geometry.observations",
+            "x5crop.detection.photo_geometry.separator_observations",
+            "x5crop.detection.photo_geometry.profile_adapters",
+            "x5crop.detection.photo_geometry.observation_types",
+            "x5crop.detection.photo_geometry.sequence_grouping",
             "x5crop.detection.photo_geometry.chains",
-            "x5crop.detection.photo_geometry.solver",
+            "x5crop.detection.photo_geometry.chain_proposals",
+            "x5crop.detection.photo_geometry.sequence_models",
+            "x5crop.detection.photo_geometry.chain_authority",
+            "x5crop.detection.photo_geometry.direction_proposals",
+            "x5crop.detection.photo_geometry.sequence_role_proposals",
+            "x5crop.detection.photo_geometry.sequence_separator_seeds",
+            "x5crop.detection.photo_geometry.sequence_outer_seeds",
+            "x5crop.detection.photo_geometry.sequence_conditioning",
+            "x5crop.detection.photo_geometry.cross_proposals",
+            "x5crop.detection.photo_geometry.cross_edge_projection",
+            "x5crop.detection.photo_geometry.cross_edge_families",
+            "x5crop.detection.photo_geometry.cross_conditioning",
+            "x5crop.detection.photo_geometry.lane_proposals",
+            "x5crop.detection.photo_geometry.chain_materialization",
+            "x5crop.detection.photo_geometry.lane_reconstruction",
+            "x5crop.detection.photo_geometry.selected_source_output",
+            "x5crop.detection.photo_geometry.reconstruction_gate_facts",
         ):
             with self.subTest(embedded=module):
                 self.assertIn(module, sources)
         for module in (
             "x5crop.detection.photo_geometry.geometry_build",
             "x5crop.detection.photo_geometry.sequence",
+            "x5crop.detection.photo_geometry.solver",
+            "x5crop.detection.photo_geometry.selection",
+            "x5crop.detection.photo_geometry.measurement",
         ):
             with self.subTest(retired=module):
                 self.assertNotIn(module, sources)

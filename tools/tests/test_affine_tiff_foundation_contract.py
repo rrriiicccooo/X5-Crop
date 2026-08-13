@@ -10,30 +10,28 @@ import numpy as np
 
 from x5crop.domain import Box
 from x5crop.domain import (
+    EvidenceState,
     FiniteInterval,
-    MeasurementIdentity,
-    MeasurementProvenance,
     ObservationId,
 )
 from x5crop.detection.output_geometry import (
+    SharedStripDirectionResolution,
+    observed_strip_angle_estimate_degrees,
     output_transform_assessment,
-    resolve_shared_strip_direction,
 )
-from x5crop.detection.photo_geometry.model import (
-    AuthoritySide,
-    BoundaryAxis,
-    BoundaryRole,
-    ClippedRequirement,
-    FootprintSaturationFact,
+from x5crop.detection.photo_geometry.line_observations import (
     PhotoBoundaryObservation,
-    SafeCropEnvelope,
+    RobustLineFitReceipt,
     SourceCoordinateLine,
 )
-from x5crop.detection.photo_geometry.output import output_sampling_identity
+from x5crop.detection.photo_geometry.model import BoundaryAxis, BoundaryRole
+from x5crop.detection.photo_geometry.output_model import SharedStripDirection
 from x5crop.export.crops import write_crops
-from x5crop.geometry.affine import AffineCoordinateTransform
+from x5crop.geometry.affine import (
+    AFFINE_OUTPUT_RASTER_GUARD_PX,
+    AffineCoordinateTransform,
+)
 from x5crop.geometry.convex import (
-    axis_aligned_minkowski_guard,
     clip_convex_polygon_to_box,
     convex_hull,
     mapped_half_open_box,
@@ -70,13 +68,16 @@ def _angle_observation(
         ),
         trace_support_count=8,
         queried_trace_count=8,
+        independent_support_region_count=3,
         continuous_support_fraction=1.0,
         transition_ids=(ObservationId(f"{identity}:transition"),),
-        provenance=MeasurementProvenance(
-            root_measurement=MeasurementIdentity.PHOTO_BOUNDARY,
-            observation_id=observation_id,
-            dependencies=(MeasurementIdentity.BASE_GRAY,),
-            description="test observed photo line",
+        fit_receipt=RobustLineFitReceipt(
+            method="scipy_least_squares_huber",
+            converged=True,
+            status=1,
+            evaluation_count=1,
+            cost=0.0,
+            optimality=0.0,
         ),
     )
 
@@ -84,8 +85,59 @@ def _angle_observation(
 def _transform_assessment(
     observations: tuple[PhotoBoundaryObservation, ...],
 ):
+    cross_observations = tuple(
+        item
+        for item in observations
+        if item.role in {BoundaryRole.TOP, BoundaryRole.BOTTOM}
+    )
+    minimum = max(
+        item.angle_interval_degrees.minimum for item in cross_observations
+    )
+    maximum = min(
+        item.angle_interval_degrees.maximum for item in cross_observations
+    )
+    if maximum < minimum:
+        resolution = SharedStripDirectionResolution(
+            direction=None,
+            state=EvidenceState.UNAVAILABLE,
+            named_gap="selected_chain_direction_unavailable",
+        )
+    else:
+        interval = FiniteInterval(
+            min(
+                item.angle_interval_degrees.minimum
+                for item in cross_observations
+            ),
+            max(
+                item.angle_interval_degrees.maximum
+                for item in cross_observations
+            ),
+        )
+        estimate = (
+            0.0
+            if all(
+                item.angle_interval_degrees.contains(0.0)
+                for item in cross_observations
+            )
+            else observed_strip_angle_estimate_degrees(cross_observations)
+        )
+        resolution = SharedStripDirectionResolution(
+            direction=SharedStripDirection(
+                direction_id="test:selected-chain-direction",
+                selected_observation_ids=tuple(
+                    item.observation_id for item in cross_observations
+                ),
+                full_angle_interval_degrees=interval,
+                canonical_angle_degrees=min(
+                    interval.maximum,
+                    max(interval.minimum, estimate),
+                ),
+            ),
+            state=EvidenceState.SUPPORTED,
+            named_gap=None,
+        )
     return output_transform_assessment(
-        resolve_shared_strip_direction(observations),
+        resolution,
         layout="horizontal",
         source_width=100,
         source_height=40,
@@ -110,12 +162,7 @@ class AffineFoundationContractTest(unittest.TestCase):
             hull,
             ((1.0, 1.0), (5.0, 1.0), (5.0, 4.0), (1.0, 4.0)),
         )
-        guarded = axis_aligned_minkowski_guard(hull, 1.0)
-        self.assertEqual(
-            guarded,
-            ((0.0, 0.0), (6.0, 0.0), (6.0, 5.0), (0.0, 5.0)),
-        )
-        clipped = clip_convex_polygon_to_box(guarded, Box(1, 1, 6, 5))
+        clipped = clip_convex_polygon_to_box(hull, Box(1, 1, 6, 5))
         self.assertEqual(
             clipped,
             ((1.0, 1.0), (5.0, 1.0), (5.0, 4.0), (1.0, 4.0)),
@@ -150,50 +197,14 @@ class AffineFoundationContractTest(unittest.TestCase):
         )
         self.assertLess(direct.width * direct.height, legacy.width * legacy.height)
 
-    def test_saturation_audit_does_not_change_sampling_equivalence(self) -> None:
-        footprint = (
-            (2.0, 2.0),
-            (8.0, 2.0),
-            (8.0, 6.0),
-            (2.0, 6.0),
-        )
-        base = SafeCropEnvelope(
-            geometry_id="geometry:test",
-            lane_id="lane:0",
-            lane_ordinal=1,
-            placement_source_footprint=footprint,
-            required_source_footprint=footprint,
-            constrained_source_footprint=footprint,
-            saturation_facts=(),
-            sampling_authority_box=Box(0, 0, 20, 10),
-            authority_profile_id="profile:test",
-            mapped_output_box=Box(2, 2, 9, 7),
-        )
-        saturated = replace(
-            base,
-            saturation_facts=(
-                FootprintSaturationFact(
-                    AuthoritySide.LEFT,
-                    (ClippedRequirement.VISIBLE_PLACEMENT,),
-                ),
-            ),
-        )
-        transform = AffineCoordinateTransform.identity(20, 10)
-        self.assertEqual(
-            output_sampling_identity(base, transform),
-            output_sampling_identity(saturated, transform),
-        )
-
     def test_expanded_rotation_has_frozen_extent_and_center_contract(self) -> None:
         width = 17
         height = 11
-        guard = 1.0
         angle_degrees = 7.0
         transform = AffineCoordinateTransform.expanded_rotation(
             width,
             height,
             angle_degrees,
-            guard_px=guard,
         )
         angle = math.radians(angle_degrees)
         source_center = ((width - 1) / 2.0, (height - 1) / 2.0)
@@ -215,12 +226,12 @@ class AffineFoundationContractTest(unittest.TestCase):
         expected_width = math.ceil(
             max(x for x, _ in rotated)
             - min(x for x, _ in rotated)
-            + 2.0 * guard
+            + 2.0 * AFFINE_OUTPUT_RASTER_GUARD_PX
         )
         expected_height = math.ceil(
             max(y for _, y in rotated)
             - min(y for _, y in rotated)
-            + 2.0 * guard
+            + 2.0 * AFFINE_OUTPUT_RASTER_GUARD_PX
         )
         self.assertEqual(transform.output_extent.width, expected_width)
         self.assertEqual(transform.output_extent.height, expected_height)
@@ -378,8 +389,8 @@ class AffineFoundationContractTest(unittest.TestCase):
         )
         self.assertEqual(assessment.outcome, "unavailable")
         self.assertEqual(
-            assessment.named_gap,
-            "shared_observed_rotation_interval_unavailable",
+        assessment.named_gap,
+            "selected_chain_direction_unavailable",
         )
 
     def test_nonzero_common_observed_angle_drives_rotation(self) -> None:
@@ -403,10 +414,16 @@ class AffineFoundationContractTest(unittest.TestCase):
         self.assertLess(assessment.applied_source_rotation_degrees, 0.0)
 
     def test_vertical_strip_uses_rotation_opposite_canonical_angle(self) -> None:
-        direction = resolve_shared_strip_direction(
-            (
-                _angle_observation("line:vertical", -1.1, -0.9),
-            )
+        observation = _angle_observation("line:vertical", -1.1, -0.9)
+        direction = SharedStripDirectionResolution(
+            direction=SharedStripDirection(
+                direction_id="test:vertical-selected-chain-direction",
+                selected_observation_ids=(observation.observation_id,),
+                full_angle_interval_degrees=FiniteInterval(-1.1, -0.9),
+                canonical_angle_degrees=-1.0,
+            ),
+            state=EvidenceState.SUPPORTED,
+            named_gap=None,
         )
         assessment = output_transform_assessment(
             direction,

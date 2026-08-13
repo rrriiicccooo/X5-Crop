@@ -1,78 +1,74 @@
 # 项目记忆
 
-更新：2026-08-10
+更新：2026-08-13
 
-这是唯一跨会话检查点。长期政策见 [AGENTS.md](../AGENTS.md)，已确认的 V5 合同见
-[ARCHITECTURE.md](ARCHITECTURE.md)，版本差异见 [CHANGELOG.md](CHANGELOG.md)。现场 Git、
-源码、原 TIFF、current report、Debug Analysis 和最新命令输出始终优先。
+这是唯一跨会话检查点。长期政策见 [AGENTS.md](../AGENTS.md)，稳定合同见
+[ARCHITECTURE.md](ARCHITECTURE.md)，版本变化见 [CHANGELOG.md](CHANGELOG.md)。现场 Git、源码、
+原 TIFF、current report、Debug Analysis 与最新命令输出始终优先。
 
 ## 当前目标
 
-把唯一 V5 current-only runtime 对齐到固定 format 框放置合同：由物理事实产生和淘汰完整 chain，
-按证据等级与独立观察选择明显胜出者，只为胜出 placement 生成最小 `SafeCropEnvelope`，再由
-两级 Gate 分别审查选择可信度与输出安全。实现、黄金 accuracy、性能和目标平台证据全部闭合前
-不发布 V5；公开稳定版仍为 `v4.2.8`。
+用九项用户确认黄金验证并调试唯一 V5 current-only fixed-format detector；nominal 必须安全
+`approved_auto`，challenge 只要求不错误自动批准。准确性闭合后再完成 111-source diagnostic、
+24-source performance 与发布前平台证据。V5 尚未发布，公开稳定版仍为 `v4.2.8`。
 
-## 当前检查点
+## 已落地结构
 
-- [ARCHITECTURE.md](ARCHITECTURE.md) 已集中保存讨论确认的 format、尺度、间隙、中心线、
-  top/bottom、separator chain、内容否决、完整链投票、`SafeCropEnvelope` 与 Gate 合同。公共文档只
-  保存用户可见行为。这些新合同尚未在源码落地，不构成实现或验证证据。
-- 用户已确认的 120-66 三格完整片条已迁至 `Test/66/full/`，两张人工标注样片也迁至对应 `full/`
-  目录。Gold、diagnostic、performance 与 platform cohort 的 120-66 路径和模式已同步；S062、
-  S091 现按 full/fixed_full 验证。`Test/` 不受 Git 跟踪，权威仍是 cohort 路径与 source SHA。
-- 最近一次 `tools/verify full` 为 171 项通过、3 项按环境跳过；九项黄金 accuracy 为 6/9 安全。
-  三个 nominal 失败是 S051/explicit、S062/fixed_full 与 S109/explicit，均落入 `needs_review`。
-  这只证明 cohort 与路径可运行，不证明新检测合同已经实现。性能验证按用户要求跳过，当前 tree
-  没有有效 performance receipt；中断前的局部计时不构成证据。
-- 现场源码仍保留可复用的 template-first、registered measurement、Grid/edge-pair 基础、两级
-  Gate、TIFF 事务和严格 Debug Analysis report reuse；新实现应在这些 current owner 上收敛，
-  不恢复历史 detector 或建立平行路径。
-- 现场搜索未发现齿孔 detector。无齿孔依赖是应保持的现状，不是新增实现任务。
+- Full 表示用户确认匹配片夹的完整铺满布局；partial 表示没有铺满并要求明确
+  `1 <= count <= full_count`。Partial 即使 count 相同也没有长轴居中权限。两种模式都默认正常
+  间隙，但缺失 separator 只有在 `G_source supported` 时才能补全。
+- Source 共享 W/H 与方向族；lane 独立拥有中心线、phase、`G_source` 与异常。Cross、sequence、
+  shared authority 分轴成立，任何一轴不能替另一轴补票；选择使用 componentwise Pareto dominance，
+  不使用总分、margin 或 top-K。
+- 原始 edge 先按 transition identity、位置/方向区间和连续支持形成物理 family。连通 family 只有
+  整体共同拟合时才合并，否则保留全部竞争观察。完整直接 separator 通过固定 W 有向邻接路径建立，
+  band 仅在左右 edge 实际绑定同一 adjacency 的 end/start 角色时获得一票。
+- 便宜的顺序、W/H、方向、authority、重复 observation 与缺失-gap 检查在完整 sampling/report 前
+  执行；明显被三轴严格支配的 placement 提前淘汰，不可比较者全部保留。
+- 双 lane 在选择前绑定共同 source W/H。选择后的 `CompleteFormatChain` 不再重新求解或重新绑定；
+  separator、ordinal、角色、方向、W/H、gap、局部 advance、cross evidence 与边界区间由完整签名
+  冻结，输出只增加 sampling 与 selected-only envelope。
+- 内容层使用 OpenCV Scharr/structure tensor 与 SciPy topology，只产生候选无关二维 observation；
+  placement 层只把可靠跨界解释为负向 veto。只在相邻两边交角发生的局部擦边、锯齿与尘点保持
+  中性；内容必须离开角落、跨过完整边界不确定区间并在内外各有连续深度才可否决。
+- SciPy `least_squares(loss="huber")` 只拟合已经形成的 edge family，并输出收敛 receipt、残差与
+  物理方向区间；优化器不拥有角色或 placement。OpenCV/SciPy 不进入 proposal 投票。
+- 旧 `solver.py`、`selection.py`、`measurement.py`、report reuse、旧 schema reader、AUTO、Grid、
+  phase-vote、first-N、retained union、minimum guard、平行 detector 与兼容 wrapper 已删除。
+  Detector、measurement、content、gap、records、selection、output 与 Debug 面板均有单向小 owner；
+  当前生产模块依赖图无循环。
+- 经验数值分为物理/产品合同、采样/统计恒等量和具名测量校准。Format gap 只保留在 catalog，
+  不再进入 `LaneGapModel`；内容与照片边界各有独立 spec，report 保存其当前值。AST 审计未发现
+  未使用生产 import 或参数。
+- 普通 runtime 不做文件哈希、依赖 provider 调查、旧 report 复用、磁盘预留或完整像素回读；普通
+  report 只保存最终选择和安全结果，完整 observations、chains、ledger 与 work receipt 只在显式
+  Debug/验证路径生成。输出只发布到全新目录，已有 target 直接拒绝，不接管或删除用户文件。
 
-## 开放实现差距
+## 当前验证事实
 
-1. Count owner 尚未符合 matching-holder 合同：full 在识别片夹前直接使用静态
-   `strip.default_count`，因此不能表达 120-67 短片夹的两格 `full_count`；`partial_count_range` 也
-   包含完整 count。`FrameCountMode.AUTO` 仍贯穿 CLI、交互启动器、runtime、Gate、report、
-   regression cohort 和 tests。Full 必须使用匹配片夹的 `full_count`，partial 只接受更少的明确
-   count；启动器对无效输入重新询问，容量只校验上限。
-   黄金 cohort 已收紧为六张 full/fixed_full 与三张 partial/explicit。Diagnostic 仍有 19/111、
-   performance 仍有 5/24 条历史 partial 记录缺少 count authority。Count/schema 改变后，旧 auto
-   report 必须失效并重新检测。
-2. Format catalog 仍包含 120 的 54 mm component、format-owned 固定 local-gap 区间以及旧 gap：
-   135 为 1.625 mm、XPan 为 2.5 mm、120 族均有固定值。合同要求只保留 56 mm 短边，135/half/
-   XPan 分别使用 2/1/2 mm 搜索先验，120 `G_format` 必须在数据合同中显式表示为 unresolved，
-   不能用零或固定局部区间代替；异常 gap 只由证据决定。
-3. `frame_height_tolerance_ratio` 当前为 2.00%，属于未获确认的 S027 调试漂移；用户确认合同为
-   0.40%。宽度 1.25% 已正确。共享 W/H、连续中心线、两段 pitch 建立 `G_source`、正常链优先和
-   negative-only content veto 仍需在同一 geometry/evidence path 落地。
-4. 当前 selection 仍保存 `CanonicalFormatPlacement`、全部 retained placements 的 safety union 与
-   format-specific minimum guard。它必须改为完整 chain 的分级独立证据投票，并只保留胜出位置
-   自身的测量不确定性。
-5. `CandidateGate`、`DecisionGate`、report 与 Debug Analysis 尚未消费新的 vote ledger、
-   observed/inferred、竞争者淘汰依据和细分 review reasons。精确全局胜出 margin 也尚未由黄金
-   样片冻结。
+- `tools/verify full` 于 2026-08-13 fresh 通过：218 项通过，2 项环境跳过；configuration
+  consistency 与 hygiene 同时通过。
+- 本轮按用户明确要求人工 override performance，未运行 24-source performance；这不是性能通过，
+  也不能生成或替代绑定当前 commit 的 performance receipt。
+- 本轮尚未运行九项黄金 accuracy 或 111-source diagnostic，因此不能声称几何准确性闭合、性能达标、
+  可发布或可创建 RC/tag/Release。
+- 旧的 S027/S094 report、S062/S091/S109 定向结果与 profiler 只作历史线索；源码结构已经变化，
+  不得作为当前行为结论。
 
-## 验证边界与风险
+## 开放风险
 
-- 文档合同不能证明当前源码已经具备新行为。Source-SHA-bound、用户确认的黄金坐标仍是 reference
-  authority；但旧 accuracy 结果、111-source 结果、performance 和平台 receipt 都不能迁移为
-  新 tree 的证据。
-- 物理关系已经明确，但真实 TIFF 能否稳定提供所需边缘、separator 与内容否决观察，仍须以
-  用户确认黄金验证；算法输出不能自动成为 baseline。
-- 111-source diagnostic 只证明工程稳定和工作量有界，不证明 chain 选择正确。
-- 不接受单一样片阈值、format 特例、whitelist、denylist 或验证专用 detector path。
+1. 黄金仍可能暴露 edge family、方向、内容 veto 或分轴 authority 的真实行为问题；必须按原 TIFF、
+   用户 baseline 与 current Debug facts 修复，不能调松 5%/3%、增加样片规则或恢复综合评分。
+2. 中心线当前默认共同直线并允许证据约束的小偏移；“重复证据支持的少量连续分段弯曲”尚未需要
+   SciPy 约束求解。只有黄金证明直线模型不足时才增加，不能为了使用优化器预先复杂化。
+3. 性能和 111-source 工程稳定性尚未在最终提交上验证；performance override 只改变本次推送停点，
+   不改变发布 Gate。
 
 ## 精确下一步
 
-1. 冻结 matching-holder `full_count` 数据合同，并为 diagnostic 剩余 19 条与 performance 剩余
-   5 条历史 partial 记录取得独立 count authority；无法确认的记录不能用于完整检测验证。
-2. 在不修改源码的前提下，把五类差距映射为 current owner、数据合同、删除项和验证项，形成一次
-   可审查的实现计划。
-3. 获得实施确认后，按 count/catalog、共享 geometry/evidence、chain selection/`SafeCropEnvelope`、
-   Gate/report/debug 四个边界批次修改；每批同步删除被替代的 API、schema、tests 和 dead code。
-4. 每批先运行对应 unit/full；检测合同完成后统一重跑九项黄金、111-source
-   diagnostic、24-source 两遍性能与全局残留审计。
-5. 只在最终 release commit 上生成 Apple Silicon、Windows x64、Intel macOS 与文件系统 receipt，
-   再决定是否制作 RC。
+1. 从 clean `main` 检查本提交与 `origin/main` 一致，随后 fresh 运行九项黄金 accuracy。
+2. 对失败项先核对 selected chain、sequence/cross/shared authority、content veto 与 selected-only
+   envelope；challenge 可正确批准或安全 review，但不得错误自动批准。
+3. 黄金闭合后 fresh 运行 111-source diagnostic 与 24-source performance；任何 tracked 修复都使
+   旧 receipt 失效并要求重跑。
+4. 全部 release receipt 绑定同一 commit 前，不创建 RC、tag、GitHub Release 或公开 ZIP。

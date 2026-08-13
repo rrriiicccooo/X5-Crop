@@ -47,6 +47,7 @@ class CanvasAxisScaleIntervals:
 class ScanCanvasProfileMatch:
     profile: ScanCanvasPhysicalSpec
     aspect_error_ratio: float
+    shared_scale_px_per_mm: PositiveInterval
 
     def __post_init__(self) -> None:
         if (
@@ -176,16 +177,46 @@ def observe_scan_canvas(
             provenance=provenance,
         )
     observed_aspect = float(work_width_px) / float(work_height_px)
+    physical_tolerance = configuration.physical_extent_tolerance_ratio
+
+    def _scale_interval(
+        observed_px: int,
+        nominal_mm: float,
+    ) -> PositiveInterval:
+        return PositiveInterval(
+            float(observed_px)
+            / (nominal_mm * (1.0 + physical_tolerance)),
+            float(observed_px)
+            / (nominal_mm * (1.0 - physical_tolerance)),
+        )
+
+    def _profile_match(
+        profile: ScanCanvasPhysicalSpec,
+    ) -> ScanCanvasProfileMatch | None:
+        long_scale = _scale_interval(
+            work_width_px,
+            profile.long_axis_mm,
+        )
+        short_scale = _scale_interval(
+            work_height_px,
+            profile.short_axis_mm,
+        )
+        minimum = max(long_scale.minimum, short_scale.minimum)
+        maximum = min(long_scale.maximum, short_scale.maximum)
+        if minimum > maximum:
+            return None
+        return ScanCanvasProfileMatch(
+            profile=profile,
+            aspect_error_ratio=(
+                abs(observed_aspect - profile.aspect) / profile.aspect
+            ),
+            shared_scale_px_per_mm=PositiveInterval(minimum, maximum),
+        )
+
     matches = tuple(
-        ScanCanvasProfileMatch(
-            profile,
-            abs(observed_aspect - profile.aspect) / profile.aspect,
-        )
+        match
         for profile in configuration.profiles
-        if (
-            abs(observed_aspect - profile.aspect) / profile.aspect
-            <= configuration.maximum_aspect_error_ratio
-        )
+        if (match := _profile_match(profile)) is not None
     )
     if not matches:
         return ScanCanvasEvidence(
@@ -208,19 +239,6 @@ def observe_scan_canvas(
             provenance=provenance,
         )
     profile = matches[0].profile
-    physical_tolerance = configuration.physical_extent_tolerance_ratio
-
-    def _scale_interval(
-        observed_px: int,
-        nominal_mm: float,
-    ) -> PositiveInterval:
-        return PositiveInterval(
-            float(observed_px)
-            / (nominal_mm * (1.0 + physical_tolerance)),
-            float(observed_px)
-            / (nominal_mm * (1.0 - physical_tolerance)),
-        )
-
     return ScanCanvasEvidence(
         outcome=ScanCanvasOutcome.SUPPORTED,
         observed_long_axis_px=work_width_px,
@@ -229,14 +247,8 @@ def observe_scan_canvas(
         selected_profile=profile,
         axis_scales=CanvasAxisScaleIntervals(
             holder_profile_id=profile.profile_id,
-            width_axis_px_per_mm=_scale_interval(
-                work_width_px,
-                profile.long_axis_mm,
-            ),
-            height_axis_px_per_mm=_scale_interval(
-                work_height_px,
-                profile.short_axis_mm,
-            ),
+            width_axis_px_per_mm=matches[0].shared_scale_px_per_mm,
+            height_axis_px_per_mm=matches[0].shared_scale_px_per_mm,
             source_width_axis="x" if is_horizontal_layout(layout) else "y",
             source_height_axis="y" if is_horizontal_layout(layout) else "x",
         ),

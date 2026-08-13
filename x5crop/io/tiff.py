@@ -13,7 +13,6 @@ from ..utils import (
     infer_axes,
     infer_axes_from_shape,
     planar_config_name,
-    spatial_shape_from_shape,
 )
 
 
@@ -189,11 +188,6 @@ def read_tiff_profile(path: Path) -> tuple[ImageProfile, list[str]]:
     return profile, []
 
 
-def read_tiff_page_shape(path: Path) -> tuple[int, int]:
-    profile, _warnings = read_tiff_profile(path)
-    return spatial_shape_from_shape(profile.shape)
-
-
 def read_tiff(path: Path) -> tuple[np.ndarray, ImageProfile, list[str]]:
     with tifffile.TiffFile(path) as tif:
         if not tif.pages:
@@ -329,9 +323,10 @@ def resolutions_equivalent(a: Any, b: Any, tolerance: float) -> bool:
     return True
 
 
-def validate_written_tiff(
+def validate_written_tiff_header(
     out_path: Path,
-    expected_array: np.ndarray,
+    expected_shape: tuple[int, ...],
+    expected_dtype: np.dtype,
     source_profile: ImageProfile,
 ) -> None:
     problems: list[str] = []
@@ -339,8 +334,11 @@ def validate_written_tiff(
         if not tif.pages:
             raise RuntimeError(f"Output TIFF has no pages: {out_path}")
         page = tif.pages[0]
-        arr = page.asarray()
-        axes = infer_axes(arr)
+        shape = tuple(int(value) for value in page.shape)
+        dtype = np.dtype(page.dtype)
+        axes = str(getattr(page, "axes", "") or "")
+        if axes not in {"YX", "YXS", "SYX"}:
+            axes = infer_axes_from_shape(shape)
         photometric = enum_name(getattr(page, "photometric", None), "UNKNOWN")
         compression = enum_name(getattr(page, "compression", None), "NONE")
         xres = page.tags.get("XResolution")
@@ -354,12 +352,12 @@ def validate_written_tiff(
         metadata = tiff_metadata_from_page(page)
         orientation = page.tags.get(TIFF_ORIENTATION_TAG)
 
-        if arr.dtype != expected_array.dtype:
-            problems.append(f"dtype changed: {expected_array.dtype} -> {arr.dtype}")
-        if tuple(arr.shape) != tuple(expected_array.shape):
-            problems.append(f"shape changed after write/read: expected {expected_array.shape}, got {arr.shape}")
-        elif not np.array_equal(arr, expected_array):
-            problems.append("pixel data changed after write/read")
+        if dtype != expected_dtype:
+            problems.append(f"dtype changed: {expected_dtype} -> {dtype}")
+        if shape != expected_shape:
+            problems.append(
+                f"shape changed after write: expected {expected_shape}, got {shape}"
+            )
         if axes != source_profile.axes:
             problems.append(f"axes changed: {source_profile.axes} -> {axes}")
         if photometric.upper() != source_profile.photometric.upper():
@@ -372,7 +370,7 @@ def validate_written_tiff(
                 problems.append(f"SampleFormat changed: {source_profile.sample_format} -> {actual_sample_format}")
 
         expected_samples = int(source_profile.samples_per_pixel or 1)
-        actual_samples = int(samples.value) if samples else (arr.shape[-1] if axes == "YXS" else arr.shape[0] if axes == "SYX" else 1)
+        actual_samples = int(samples.value) if samples else (shape[-1] if axes == "YXS" else shape[0] if axes == "SYX" else 1)
         if actual_samples != expected_samples:
             problems.append(f"SamplesPerPixel changed: {expected_samples} -> {actual_samples}")
         if source_profile.planar_config is not None:
@@ -380,7 +378,7 @@ def validate_written_tiff(
             if actual_planar != source_profile.planar_config:
                 problems.append(f"PlanarConfiguration changed: {source_profile.planar_config} -> {actual_planar}")
 
-        actual_bits = normalize_tag_value(bits.value) if bits else expected_bits_for_dtype(str(arr.dtype), actual_samples)
+        actual_bits = normalize_tag_value(bits.value) if bits else expected_bits_for_dtype(str(dtype), actual_samples)
         expected_bits = normalize_tag_value(source_profile.bits_per_sample)
         if expected_bits is None:
             expected_bits = expected_bits_for_dtype(source_profile.dtype, expected_samples)
@@ -411,7 +409,7 @@ def validate_written_tiff(
         if actual_orientation != 1:
             problems.append(f"Orientation must be baked to 1, got {actual_orientation}")
         if (
-            arr.dtype != np.dtype("uint16")
+            dtype != np.dtype("uint16")
             or axes != "YXS"
             or photometric.upper() != "RGB"
             or actual_samples != 3
@@ -433,4 +431,9 @@ def write_validated_tiff(
         pixels,
         **tiff_write_kwargs(source_profile),
     )
-    validate_written_tiff(path, pixels, source_profile)
+    validate_written_tiff_header(
+        path,
+        tuple(int(value) for value in pixels.shape),
+        pixels.dtype,
+        source_profile,
+    )

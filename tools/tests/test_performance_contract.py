@@ -3,7 +3,6 @@ from __future__ import annotations
 import os
 from pathlib import Path
 import sys
-from types import SimpleNamespace
 import unittest
 from unittest import mock
 
@@ -33,7 +32,7 @@ from x5crop.runtime.threading import (
     THREAD_ENVIRONMENT_KEYS,
     configure_numeric_threads,
 )
-from x5crop.runtime import dependency_identity as dependency_identity_module
+from tools.regression.environment_identity import verification_environment_identity
 
 
 class V5PerformanceContractTest(unittest.TestCase):
@@ -200,70 +199,14 @@ class V5PerformanceContractTest(unittest.TestCase):
             [mock.call(1), mock.call(0)],
         )
 
-    def test_runtime_dependency_identity_scans_distribution_owners_once(self) -> None:
-        modules = {}
-        owners = {}
-        distributions = {}
-        for name, module_name, distribution_name in (
-            dependency_identity_module.DEPENDENCY_MODULES
-        ):
-            module = SimpleNamespace(
-                __version__="1.0",
-                __file__=f"/external/site/{module_name}/__init__.py",
-            )
-            if name == "opencv":
-                module.getBuildInformation = lambda: "build"
-            modules[module_name] = module
-            owners[module_name.split(".", 1)[0]] = [distribution_name]
-            distributions[distribution_name] = SimpleNamespace(
-                version="1.0",
-                locate_file=lambda _relative: Path("/external/site"),
-            )
-        with (
-            mock.patch.object(
-                dependency_identity_module,
-                "import_module",
-                side_effect=lambda name: modules[name],
-            ),
-            mock.patch.object(
-                dependency_identity_module.metadata,
-                "packages_distributions",
-                return_value=owners,
-            ) as packages_distributions,
-            mock.patch.object(
-                dependency_identity_module.metadata,
-                "distribution",
-                side_effect=lambda name: distributions[name],
-            ),
-        ):
-            identity = dependency_identity_module.runtime_dependency_identity()
+    def test_dependency_provider_identity_is_verification_only(self) -> None:
+        root = Path(__file__).resolve().parents[2]
+        self.assertFalse((root / "x5crop/runtime/dependency_identity.py").exists())
+        identity = verification_environment_identity()
         self.assertEqual(
-            set(identity),
-            {item[0] for item in dependency_identity_module.DEPENDENCY_MODULES},
+            set(identity["dependencies"]),
+            {"numpy", "scipy", "opencv", "tifffile", "imagecodecs", "pillow"},
         )
-        packages_distributions.assert_called_once_with()
-
-    def test_runtime_identity_collapses_equivalent_distribution_names(self) -> None:
-        distribution_root = (Path.cwd() / "user-site").resolve()
-        distribution = SimpleNamespace(
-            version="12.3.0",
-            locate_file=lambda _relative: distribution_root,
-        )
-        with mock.patch.object(
-            dependency_identity_module.metadata,
-            "distribution",
-            return_value=distribution,
-        ) as lookup:
-            owner = dependency_identity_module._distribution_package(
-                "PIL",
-                "Pillow",
-                distribution_root / "PIL/__init__.py",
-                {"PIL": ["pillow"]},
-                {},
-            )
-
-        self.assertEqual(owner, ("Pillow", "12.3.0"))
-        lookup.assert_called_once()
 
     def test_diagnostic_memory_bound_is_ten_pixels_plus_guard(self) -> None:
         source_pixels = 115_000_000
@@ -277,14 +220,14 @@ class V5PerformanceContractTest(unittest.TestCase):
             32 * 1024 * 1024,
         )
 
-    def test_diagnostic_refinement_work_is_bounded_by_groups_times_roles(
+    def test_diagnostic_local_relations_are_bounded_by_groups_times_adjacencies(
         self,
     ) -> None:
         work = {field: 0 for field in WORK_FIELDS}
         work.update(
             role_proposal_count=5,
             sequence_group_count=4,
-            refinement_query_count=29,
+            local_relation_evaluation_count=8,
             domain_pixels=100,
         )
         report = {
@@ -292,12 +235,13 @@ class V5PerformanceContractTest(unittest.TestCase):
                 "resolved_output_slots": {
                     "lane_output_slot_counts": [3],
                 },
-                "lanes": [{"work": work}],
+                "lanes": [{}],
             }
+            ,"development": {"lanes": [{"work": work}]}
         }
 
         self.assertTrue(_bounded_work(report, source_pixels=100))
-        work["refinement_query_count"] = 30
+        work["local_relation_evaluation_count"] = 9
         self.assertFalse(_bounded_work(report, source_pixels=100))
 
 

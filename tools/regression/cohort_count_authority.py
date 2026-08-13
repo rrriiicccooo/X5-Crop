@@ -23,7 +23,15 @@ def _rows(paths: Iterable[Path]) -> tuple[dict[str, Any], ...]:
 
 
 def confirmed_slot_count(row: dict[str, Any]) -> int | None:
-    value = row.get("confirmed_slot_count")
+    confirmed = row.get("confirmed_slot_count")
+    requested = row.get("requested_count")
+    if (
+        confirmed is not None
+        and requested is not None
+        and int(confirmed) != int(requested)
+    ):
+        raise ValueError("cohort has conflicting explicit slot counts")
+    value = confirmed if confirmed is not None else requested
     return None if value is None else int(value)
 
 

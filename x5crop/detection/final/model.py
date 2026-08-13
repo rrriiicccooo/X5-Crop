@@ -6,10 +6,10 @@ from ...domain import Box
 from ...geometry.affine import AffineCoordinateTransform
 from ..decision.model import DecisionGateAssessment
 from ..output_geometry import OutputTransformAssessment
-from ..photo_geometry.model import (
+from ..photo_geometry.output_model import (
     OutputSlotIdentity,
-    ResolvedOutputGeometry,
     ResolvedOutputSlots,
+    SafeCropEnvelope,
 )
 from ..pipeline import PhotoGeometryCandidate
 from ..source_core import SourceCoreEvidence
@@ -31,7 +31,7 @@ class FinalDetection:
     output_slot_identities: tuple[OutputSlotIdentity, ...]
     source_transform_assessment: OutputTransformAssessment
     output_transforms: tuple[AffineCoordinateTransform, ...]
-    resolved_output_geometries: tuple[ResolvedOutputGeometry, ...]
+    resolved_output_geometries: tuple[SafeCropEnvelope, ...]
     sampling_authority_boxes: tuple[Box, ...]
     final_boxes: tuple[Box, ...]
 
