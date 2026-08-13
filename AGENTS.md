@@ -37,6 +37,16 @@ GitHub 是 tracked 源码与文档的权威来源。NAS 和复制目录只用于
 - 如果多个 worker 无法并行，检查 `~/.codex/config.toml` 中的
   `agents.max_concurrent_threads_per_session` 是否被设置为 `1`。
 
+## 长时间异步工作
+
+- 对长时间运行的异步任务，使用空输入轮询 `write_stdin` 时，`yield_time_ms` 必须至少为
+  `180000`；不需要中间输出时优先使用 `300000`。
+- 调用 `functions.wait` 时，`yield_time_ms` 必须至少为 `180000`。
+- 调用 `functions.exec` 包裹含等待操作的工具时，外层 `@exec yield_time_ms` 必须比内部最长的
+  工具等待时间至少多 `30000` 毫秒，避免外层代码单元先行 yield。
+- 通过非空 `write_stdin` 发送交互式输入时，不应用上述长等待要求。
+- 这些工具会在进程或代码单元完成时提前返回；不要仅为报告任务仍在运行而唤醒主模型。
+
 ## 文档职责
 
 | 文件 | 唯一职责 | 语言 |
