@@ -4,6 +4,25 @@ from tools.tests.physical_chain_support import *
 
 
 class GapModelContractTest(unittest.TestCase):
+    def test_normal_chain_without_visible_phase_is_rejected(self) -> None:
+        self.assertIsNone(
+            visible_normal_phase_authority(
+                width_authority_px=FiniteInterval(0.0, 100.0),
+                width_interval_px=FiniteInterval.exact(20.0),
+                pitch_interval_px=FiniteInterval.exact(30.0),
+                output_slot_count=6,
+            )
+        )
+        self.assertEqual(
+            visible_normal_phase_authority(
+                width_authority_px=FiniteInterval(0.0, 100.0),
+                width_interval_px=FiniteInterval.exact(20.0),
+                pitch_interval_px=FiniteInterval.exact(30.0),
+                output_slot_count=5,
+            ),
+            FiniteInterval.exact(-20.0),
+        )
+
     def test_format_gap_prior_never_changes_role_or_phase_coordinates(self) -> None:
         role = OrdinalBoundaryRole(4, 3, BoundaryRole.START)
         width_state = make_width_state()

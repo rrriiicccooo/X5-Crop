@@ -29,6 +29,25 @@ from .sequence_separator_seeds import direct_separator_groups
 from .sequence_models import SequenceDiscoveryKind
 
 
+def visible_normal_phase_authority(
+    *,
+    width_authority_px: FiniteInterval,
+    width_interval_px: FiniteInterval,
+    pitch_interval_px: FiniteInterval,
+    output_slot_count: int,
+) -> FiniteInterval | None:
+    """Return the phase range whose normal chain can intersect lane authority."""
+
+    if output_slot_count <= 0:
+        raise ValueError("visible phase authority requires a positive slot count")
+    minimum = width_authority_px.minimum - width_interval_px.maximum
+    maximum = (
+        width_authority_px.maximum
+        - (output_slot_count - 1) * pitch_interval_px.minimum
+    )
+    return None if maximum < minimum else FiniteInterval(minimum, maximum)
+
+
 def frame_spec_materialization_seeds(
     proposal: LanePhysicalProposals,
     frame_spec: FrameChainProposals,
@@ -196,11 +215,14 @@ def frame_spec_materialization_seeds(
             if observed_gap is None:
                 continue
             pitch = add(width, observed_gap)
-            visible_phase = FiniteInterval(
-                proposal.lane.width_authority_px.minimum - width.maximum,
-                proposal.lane.width_authority_px.maximum
-                - (proposal.lane.output_slot_count - 1) * pitch.minimum,
+            visible_phase = visible_normal_phase_authority(
+                width_authority_px=proposal.lane.width_authority_px,
+                width_interval_px=width,
+                pitch_interval_px=pitch,
+                output_slot_count=proposal.lane.output_slot_count,
             )
+            if visible_phase is None:
+                continue
             phase = intersect(group.phase_interval_px, visible_phase)
             if phase is not None:
                 visible_groups.append(

@@ -26,6 +26,9 @@ from x5crop.detection.photo_geometry.observation_types import (
 from x5crop.detection.photo_geometry.sequence_separator_seeds import (
     direct_separator_groups,
 )
+from x5crop.detection.photo_geometry.sequence_seed import (
+    visible_normal_phase_authority,
+)
 from x5crop.detection.photo_geometry.sequence_role_proposals import (
     build_sequence_role_proposals,
     role_canonical_relative,
