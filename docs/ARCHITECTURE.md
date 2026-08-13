@@ -411,6 +411,8 @@ platform | platform-check | platform-package | pre-push
   不产生 accuracy verdict。
 - 24-source performance 使用完整用户路径、`jobs=1`，正式 mean 上限为 5 秒；profiling 与 SHA
   在计时外。
+- Pre-commit 只检查 staged hygiene；pre-push 对纯文档运行 documentation，其余范围运行 full。
+  Performance 只属于发布验证，不阻塞日常提交或推送。
 - 九张用户确认黄金每张只运行一项；nominal 必须安全自动批准，challenge 允许安全 review。
 - 不增加样片规则、whitelist、format denylist 或验证专用 detector path。
 - `full`、diagnostic 或 performance 通过都不能替代 accuracy 与真实平台证据。

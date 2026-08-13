@@ -73,13 +73,6 @@ run_full() {
     "$PYTHON" X5_Crop.py --version
 }
 
-check_performance_receipt() {
-    candidate_commit=$(git rev-parse HEAD)
-    "$PYTHON" -m tools.regression.performance \
-        --check-receipt build/v5-performance/performance_receipt.json \
-        --expected-commit "$candidate_commit"
-}
-
 case "${1:-}" in
     staged)
         check_staged
@@ -113,7 +106,7 @@ case "${1:-}" in
             printf >&2 'Refusing push from a dirty worktree. Commit intentional changes first.\n'
             exit 1
         }
-        scope=performance
+        scope=full
         if [ -n "${2:-}" ] && [ -f "$2" ]; then
             scope=$("$PYTHON" -m tools.verification_scope --refs "$2")
         fi
@@ -122,10 +115,6 @@ case "${1:-}" in
                 check_pushed_documentation "$2"
                 ;;
             full)
-                run_full
-                ;;
-            performance)
-                check_performance_receipt
                 run_full
                 ;;
             *)

@@ -1,4 +1,4 @@
-"""Classify a push by the strongest verification its changed paths require."""
+"""Classify a push as documentation-only or full engineering verification."""
 
 from __future__ import annotations
 
@@ -12,28 +12,6 @@ from typing import Iterable, Sequence
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DOCUMENTATION_SCOPE = "documentation"
 FULL_SCOPE = "full"
-PERFORMANCE_SCOPE = "performance"
-
-_PERFORMANCE_EXACT_PATHS = frozenset(
-    {
-        "X5_Crop.py",
-        "tools/install/dependencies.toml",
-        "tools/regression/performance.py",
-        "tools/regression/performance_identity.py",
-        "tools/regression/cohorts/production_performance.jsonl",
-    }
-)
-
-# These owners only render the explicitly requested Debug Analysis artifact.
-# They never own detection, Gate, sampling, TIFF output, or publication.  Keep
-# this list deliberately small: every other x5crop path fails safe to the
-# performance scope.
-_FULL_ONLY_X5CROP_EXACT_PATHS = frozenset(
-    {
-        "x5crop/configuration/diagnostics.py",
-    }
-)
-_FULL_ONLY_X5CROP_PREFIXES = ("x5crop/debug/",)
 
 
 def _normalized_paths(paths: Iterable[str]) -> tuple[str, ...] | None:
@@ -47,26 +25,14 @@ def _normalized_paths(paths: Iterable[str]) -> tuple[str, ...] | None:
     return normalized
 
 
-def _is_performance_path(path: str) -> bool:
-    if path in _PERFORMANCE_EXACT_PATHS:
-        return True
-    if path in _FULL_ONLY_X5CROP_EXACT_PATHS:
-        return False
-    if any(path.startswith(prefix) for prefix in _FULL_ONLY_X5CROP_PREFIXES):
-        return False
-    return path.startswith("x5crop/")
-
-
 def verification_scope_for_paths(paths: Iterable[str]) -> str:
-    """Return documentation, full, or performance; invalid input fails safe."""
+    """Return documentation or full; invalid input fails safe to full."""
 
     normalized = _normalized_paths(paths)
     if normalized is None:
-        return PERFORMANCE_SCOPE
+        return FULL_SCOPE
     if all(PurePosixPath(path).suffix.lower() == ".md" for path in normalized):
         return DOCUMENTATION_SCOPE
-    if any(_is_performance_path(path) for path in normalized):
-        return PERFORMANCE_SCOPE
     return FULL_SCOPE
 
 
@@ -113,25 +79,25 @@ def verification_scope_for_push(
     *,
     project_root: Path = PROJECT_ROOT,
 ) -> str:
-    """Classify refs; unknown or new histories require performance checks."""
+    """Classify refs; unknown or new histories require full checks."""
 
     try:
         lines = refs_path.read_text(encoding="utf-8").splitlines()
     except OSError:
-        return PERFORMANCE_SCOPE
+        return FULL_SCOPE
     if not lines:
-        return PERFORMANCE_SCOPE
+        return FULL_SCOPE
     paths: list[str] = []
     for line in lines:
         fields = line.split()
         if len(fields) != 4:
-            return PERFORMANCE_SCOPE
+            return FULL_SCOPE
         _local_ref, local_revision, _remote_ref, remote_revision = fields
         if not (
             _is_commit(project_root, local_revision)
             and _is_commit(project_root, remote_revision)
         ):
-            return PERFORMANCE_SCOPE
+            return FULL_SCOPE
         paths.extend(
             _changed_paths(project_root, remote_revision, local_revision)
         )

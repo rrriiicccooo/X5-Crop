@@ -8,7 +8,6 @@ from pathlib import Path
 from tools.verification_scope import (
     DOCUMENTATION_SCOPE,
     FULL_SCOPE,
-    PERFORMANCE_SCOPE,
     verification_scope_for_paths,
     verification_scope_for_push,
 )
@@ -26,9 +25,7 @@ class VerificationScopeContractTest(unittest.TestCase):
             DOCUMENTATION_SCOPE,
         )
 
-    def test_default_runtime_and_performance_inputs_require_performance_scope(
-        self,
-    ) -> None:
+    def test_every_non_documentation_change_requires_full_scope(self) -> None:
         for path in (
             "X5_Crop.py",
             "x5crop/detection/pipeline.py",
@@ -40,7 +37,7 @@ class VerificationScopeContractTest(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertEqual(
                     verification_scope_for_paths(("README.md", path)),
-                    PERFORMANCE_SCOPE,
+                    FULL_SCOPE,
                 )
 
     def test_debug_only_owners_use_full_scope(self) -> None:
@@ -59,7 +56,7 @@ class VerificationScopeContractTest(unittest.TestCase):
                     FULL_SCOPE,
                 )
 
-    def test_mixed_debug_and_default_runtime_uses_performance_scope(self) -> None:
+    def test_mixed_debug_and_default_runtime_uses_full_scope(self) -> None:
         self.assertEqual(
             verification_scope_for_paths(
                 (
@@ -67,7 +64,7 @@ class VerificationScopeContractTest(unittest.TestCase):
                     "x5crop/runtime/workflow.py",
                 )
             ),
-            PERFORMANCE_SCOPE,
+            FULL_SCOPE,
         )
 
     def test_non_runtime_code_and_configuration_use_full_scope(self) -> None:
@@ -84,11 +81,11 @@ class VerificationScopeContractTest(unittest.TestCase):
                     FULL_SCOPE,
                 )
 
-    def test_empty_or_invalid_path_sets_fail_safe_to_performance(self) -> None:
-        self.assertEqual(verification_scope_for_paths(()), PERFORMANCE_SCOPE)
+    def test_empty_or_invalid_path_sets_fail_safe_to_full(self) -> None:
+        self.assertEqual(verification_scope_for_paths(()), FULL_SCOPE)
         self.assertEqual(
             verification_scope_for_paths(("",)),
-            PERFORMANCE_SCOPE,
+            FULL_SCOPE,
         )
 
     def test_pre_push_refs_classify_the_actual_commit_range(self) -> None:
@@ -174,7 +171,7 @@ class VerificationScopeContractTest(unittest.TestCase):
             )
             self.assertEqual(
                 verification_scope_for_push(refs, project_root=root),
-                PERFORMANCE_SCOPE,
+                FULL_SCOPE,
             )
 
     def test_hooks_and_ci_delegate_documentation_scope_once(self) -> None:
@@ -187,8 +184,9 @@ class VerificationScopeContractTest(unittest.TestCase):
         self.assertIn(
             '"$PYTHON" -m tools.verification_scope --refs', verifier
         )
-        self.assertIn("scope=performance", verifier)
-        self.assertIn("            performance)", verifier)
+        self.assertIn("scope=full", verifier)
+        self.assertNotIn("check_performance_receipt", verifier)
+        self.assertNotIn("            performance)", verifier)
         self.assertNotIn("scope=runtime", verifier)
         self.assertIn(
             '"$PYTHON" -m unittest tools.tests.test_repository_contract',

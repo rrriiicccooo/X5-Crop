@@ -41,6 +41,8 @@ report reuse 均不再支持。当前完整合同见 [ARCHITECTURE.md](ARCHITECT
   spec，不得进入 placement、投票或 Gate 成为隐藏规则。
 - `tools/verify` 是唯一入口。Cohort 使用 SHA 和明确 count authority；工具不得从文件名、片夹容量或
   当前输出推导真值。Tests、tools 与 release manifest 只引用当前模块和 schema。
+- 日常 pre-push 只区分 documentation 与 full；performance 只在准备发布时绑定最终 release commit，
+  不再阻塞普通提交和推送。
 - 九项黄金决定几何准确性：nominal 必须安全自动批准，challenge 允许安全 review；111-source
   diagnostic 只验证工程稳定性；24-source performance 的正式 mean 上限为 5 秒。
 - Full、diagnostic、performance、CI 或旧 receipt 都不能替代 accuracy 与真实平台证据。全部 release
