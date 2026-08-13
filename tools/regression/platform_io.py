@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-import hashlib
 import json
 from pathlib import Path
 import subprocess
@@ -19,25 +18,18 @@ from x5crop.io.tiff import read_tiff, read_tiff_profile, tiff_write_kwargs
 from x5crop.report.validation import validate_current_report_record
 
 from .cohort_count_authority import validate_count_authority
+from .file_identity import sha256_file
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 COHORT_PATH = Path(__file__).with_name("cohorts") / "platform_validation.jsonl"
-COHORT_SCHEMA = "x5crop_platform_validation_cohort_v1"
+COHORT_SCHEMA = "x5crop_platform_validation_cohort_v2"
 PLATFORM_IO_RESULT_SCHEMA = "x5crop_platform_io_result_v1"
 EXPECTED_SAMPLE_IDS = ("S027", "S046", "S062", "S094", "S098", "S101")
 
 
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
 def cohort_sha256() -> str:
-    return _sha256(COHORT_PATH)
+    return sha256_file(COHORT_PATH)
 
 
 @dataclass(frozen=True)
@@ -48,7 +40,7 @@ class PlatformSource:
     source_sha256: str
     format_id: str
     strip_mode: str
-    requested_count: int | None
+    confirmed_slot_count: int | None
     count_authority: str
     expected_orientation: int
     expected_compression: str
@@ -70,7 +62,7 @@ def load_platform_sources(*, verify_files: bool) -> tuple[PlatformSource, ...]:
         "source_sha256",
         "format_id",
         "strip_mode",
-        "requested_count",
+        "confirmed_slot_count",
         "count_authority",
         "expected_orientation",
         "expected_compression",
@@ -94,7 +86,10 @@ def load_platform_sources(*, verify_files: bool) -> tuple[PlatformSource, ...]:
             or len(expected_sha) != 64
             or (
                 verify_files
-                and (not source.is_file() or _sha256(source) != expected_sha)
+                and (
+                    not source.is_file()
+                    or sha256_file(source) != expected_sha
+                )
             )
         ):
             raise ValueError(f"platform source identity is invalid: {record['sample_id']}")
@@ -106,10 +101,10 @@ def load_platform_sources(*, verify_files: bool) -> tuple[PlatformSource, ...]:
                 source_sha256=expected_sha,
                 format_id=str(record["format_id"]),
                 strip_mode=str(record["strip_mode"]),
-                requested_count=(
+                confirmed_slot_count=(
                     None
-                    if record["requested_count"] is None
-                    else int(record["requested_count"])
+                    if record["confirmed_slot_count"] is None
+                    else int(record["confirmed_slot_count"])
                 ),
                 count_authority=str(record["count_authority"]),
                 expected_orientation=int(record["expected_orientation"]),
@@ -134,8 +129,8 @@ def _production_command(source: PlatformSource, path: Path, output: Path) -> lis
         "--jobs",
         "1",
     ]
-    if source.requested_count is not None:
-        command.extend(("--count", str(source.requested_count)))
+    if source.confirmed_slot_count is not None:
+        command.extend(("--count", str(source.confirmed_slot_count)))
     return command
 
 
@@ -188,7 +183,7 @@ def _validate_source_metadata(source: PlatformSource) -> dict[str, object]:
     }
 
 
-def _raw_raster_for_orientation(canonical: np.ndarray, tag: int) -> np.ndarray:
+def raw_raster_for_orientation(canonical: np.ndarray, tag: int) -> np.ndarray:
     if tag == 3:
         raw = np.flip(canonical, axis=(0, 1))
     elif tag == 8:
@@ -208,7 +203,7 @@ def _write_orientation_fixture(
     tag: int,
     path: Path,
 ) -> None:
-    raw = _raw_raster_for_orientation(canonical, tag)
+    raw = raw_raster_for_orientation(canonical, tag)
     kwargs = tiff_write_kwargs(profile)
     kwargs["extratags"] = (
         (274, "H", 1, tag, False),

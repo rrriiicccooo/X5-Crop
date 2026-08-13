@@ -9,6 +9,7 @@ from unittest import mock
 
 from tools.regression.platform_check import check_platform_receipts
 from tools.regression.platform_io import cohort_sha256, load_platform_sources
+from tools.regression.performance import PERFORMANCE_RECEIPT_SCHEMA
 from tools.regression.platform_receipt import (
     PLATFORM_RECEIPT_SCHEMA,
     TARGET_APPLE_SILICON,
@@ -89,7 +90,7 @@ def _receipt(target: str, performance_name: str, performance_sha: str) -> dict:
         "performance_receipt": {
             "file_name": performance_name,
             "sha256": performance_sha,
-            "receipt_schema": "x5crop_performance_receipt_v5_1",
+            "receipt_schema": PERFORMANCE_RECEIPT_SCHEMA,
             "git_commit": COMMIT,
         },
     }
@@ -121,7 +122,7 @@ class PlatformReceiptContractTests(unittest.TestCase):
                                 ),
                                 "identity": target,
                             },
-                            "receipt_schema": "x5crop_performance_receipt_v5_1",
+                            "receipt_schema": PERFORMANCE_RECEIPT_SCHEMA,
                         }
                     ),
                     encoding="utf-8",

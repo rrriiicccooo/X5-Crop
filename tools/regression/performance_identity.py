@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from .cohort_count_authority import validate_count_authority
+from .file_identity import sha256_file
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -33,14 +34,6 @@ class PerformanceSourceIdentity:
     @property
     def source_path(self) -> Path:
         return PROJECT_ROOT / self.source_relative_path
-
-
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def cohort_sha256() -> str:
@@ -89,7 +82,7 @@ def load_performance_sources(
                 verify_source_files
                 and (
                     not path.is_file()
-                    or _sha256(path) != source.source_sha256
+                    or sha256_file(path) != source.source_sha256
                 )
             )
         ):

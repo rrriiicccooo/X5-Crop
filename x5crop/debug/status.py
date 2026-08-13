@@ -25,7 +25,7 @@ def _text_width(
     return box[2] - box[0]
 
 
-def _fit_text(
+def fit_text(
     draw: ImageDraw.ImageDraw,
     text: str,
     font: ImageFont.ImageFont,
@@ -50,7 +50,7 @@ def _fit_text(
     return text[:low] + suffix
 
 
-def _source_header(source_name: str) -> str:
+def source_header(source_name: str) -> str:
     printable = "".join(
         character if character.isprintable() else " "
         for character in source_name
@@ -88,7 +88,7 @@ def _count_authority(detection: FinalDetection) -> str:
     )
 
 
-def _transform_lines(
+def transform_lines(
     detection: FinalDetection,
     profile: ImageProfile,
 ) -> tuple[str, str]:
@@ -197,14 +197,14 @@ def add_status_bar(
         fill=style.secondary_text_color,
         font=runtime_font,
     )
-    first, second = _transform_lines(detection, profile)
+    first, second = transform_lines(detection, profile)
     transform_right = runtime_chip[0] - 16
-    transform_lines = (
+    transform_rows = (
         (first, 16, style.text_color),
         (second, 38, style.secondary_text_color),
     )
     transform_lefts = []
-    for text, y, color in transform_lines:
+    for text, y, color in transform_rows:
         text_width = _text_width(draw, text, detail_font)
         transform_lefts.append(transform_right - text_width)
         draw.text(
@@ -215,9 +215,9 @@ def add_status_bar(
         )
     left_text_x = 178
     clearance = 24
-    source_text = _fit_text(
+    source_text = fit_text(
         draw,
-        _source_header(source_name),
+        source_header(source_name),
         detail_font,
         transform_lefts[0] - left_text_x - clearance,
     )
@@ -227,7 +227,7 @@ def add_status_bar(
         fill=style.text_color,
         font=detail_font,
     )
-    detail_text = _fit_text(
+    detail_text = fit_text(
         draw,
         f"{detail} · {context}",
         detail_font,

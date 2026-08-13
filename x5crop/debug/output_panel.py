@@ -32,7 +32,7 @@ from .panel_layout import (
 )
 
 
-def _draw_hatched_polygon(
+def draw_hatched_polygon(
     panel: Image.Image,
     polygon: tuple[tuple[float, float], ...],
     color: tuple[int, int, int],
@@ -67,7 +67,7 @@ def _draw_hatched_polygon(
     return Image.alpha_composite(panel.convert("RGBA"), hatch).convert("RGB")
 
 
-def _keep_evidence_inside_media(
+def keep_evidence_inside_media(
     base: Image.Image,
     evidence: Image.Image,
     target_box: tuple[int, int, int, int],
@@ -170,7 +170,7 @@ def protected_output_panel(
         )
         budget = budgets.get(envelope.geometry_id)
         if budget is not None and budget.state.value == "contradicted":
-            panel = _draw_hatched_polygon(
+            panel = draw_hatched_polygon(
                 panel,
                 constrained,
                 style.review_color,
@@ -206,7 +206,7 @@ def protected_output_panel(
             color,
             style,
         )
-    panel = _keep_evidence_inside_media(media_base, panel, target_box)
+    panel = keep_evidence_inside_media(media_base, panel, target_box)
     draw = ImageDraw.Draw(panel)
     budget_font = font(style.annotation_font_size)
     previous_right = target_box[0]

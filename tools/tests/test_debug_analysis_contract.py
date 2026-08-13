@@ -18,8 +18,8 @@ from x5crop.configuration.diagnostics import DebugStyleParameters
 from x5crop.debug.canvas import FRAME_FILL_COLORS, DebugRenderCache
 from x5crop.debug.axis_panels import cross_axis_panel, long_axis_panel
 from x5crop.debug.output_panel import (
-    _draw_hatched_polygon,
-    _keep_evidence_inside_media,
+    draw_hatched_polygon,
+    keep_evidence_inside_media,
     protected_output_panel,
 )
 from x5crop.debug.panel_facts import source_projection
@@ -33,7 +33,7 @@ from x5crop.debug.panels import (
     make_debug_analysis_panel,
     stack_debug_panels,
 )
-from x5crop.debug.status import _fit_text, _source_header, _transform_lines
+from x5crop.debug.status import fit_text, source_header, transform_lines
 from x5crop.detection.decision.decision_gate import apply_decision_gate
 from x5crop.detection.final.finalize import finalize_detection
 from x5crop.detection.pipeline import choose_detection
@@ -181,7 +181,7 @@ class DebugAnalysisContractTest(unittest.TestCase):
             (140.0, 140.0),
             (20.0, 140.0),
         )
-        rendered = _draw_hatched_polygon(
+        rendered = draw_hatched_polygon(
             source,
             polygon,
             DebugStyleParameters().review_color,
@@ -203,7 +203,7 @@ class DebugAnalysisContractTest(unittest.TestCase):
         base = Image.new("RGB", (100, 100), (20, 20, 20))
         evidence = Image.new("RGB", (100, 100), (200, 40, 40))
         clipped = np.asarray(
-            _keep_evidence_inside_media(base, evidence, (20, 30, 80, 70))
+            keep_evidence_inside_media(base, evidence, (20, 30, 80, 70))
         )
         self.assertTrue(np.all(clipped[:30] == 20))
         self.assertTrue(np.all(clipped[30:70, 20:80] == (200, 40, 40)))
@@ -396,24 +396,24 @@ class DebugAnalysisContractTest(unittest.TestCase):
             observed_angle_interval_degrees=FiniteInterval(-0.166, 0.166),
         )
         applied = SimpleNamespace(source_transform_assessment=assessment)
-        first, second = _transform_lines(applied, profile)
+        first, second = transform_lines(applied, profile)
         self.assertEqual(first, "V5 · DESKEW APPLIED -0.153°")
         self.assertIn("observed -0.166°…+0.166°", second)
         self.assertIn("ORIENTATION 1>CANONICAL>1", second)
 
     def test_header_displays_and_bounds_the_original_source_filename(self) -> None:
         self.assertEqual(
-            _source_header("原始扫描 01.tif"),
+            source_header("原始扫描 01.tif"),
             "SOURCE · 原始扫描 01.tif",
         )
         with self.assertRaisesRegex(ValueError, "source filename"):
-            _source_header("\n\t")
+            source_header("\n\t")
         image = Image.new("RGB", (300, 60))
         draw = ImageDraw.Draw(image)
         font = ImageFont.load_default(size=15)
-        fitted = _fit_text(
+        fitted = fit_text(
             draw,
-            _source_header("a" * 500 + ".tif"),
+            source_header("a" * 500 + ".tif"),
             font,
             180,
         )

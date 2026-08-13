@@ -5,9 +5,7 @@ from __future__ import annotations
 import argparse
 import concurrent.futures
 from dataclasses import dataclass
-import hashlib
 import json
-import math
 from pathlib import Path
 import subprocess
 import sys
@@ -17,6 +15,12 @@ from typing import Any, Sequence
 from x5crop.report.validation import validate_current_report_record
 
 from .cohort_count_authority import validate_count_authority
+from .diagnostic_contract import (
+    aggregate_work,
+    bounded_work,
+    peak_temporary_limit_bytes,
+)
+from .file_identity import sha256_file
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -28,39 +32,13 @@ COHORT_SCHEMA = "x5crop_diagnostic_unreviewed_cohort_v1"
 RECORD_SCHEMA = "x5crop_diagnostic_record_v3"
 SUMMARY_SCHEMA = "x5crop_diagnostic_summary_v3"
 EXPECTED_RECORD_COUNT = 111
-MAXIMUM_PEAK_TEMPORARY_BYTES_PER_SOURCE_PIXEL = 10
-MAXIMUM_PEAK_TEMPORARY_FIXED_ALLOWANCE_BYTES = 32 * 1024 * 1024
 DIAGNOSTIC_SOURCE_TIMEOUT_SECONDS = 600
-WORK_FIELDS = (
-    "measurement_query_count",
-    "pixel_query_count",
-    "basic_profile_coordinate_count",
-    "basic_profile_run_count",
-    "role_proposal_count",
-    "phase_hypothesis_count",
-    "sequence_group_count",
-    "ordinal_role_lookup_count",
-    "ordinal_role_match_count",
-    "local_relation_evaluation_count",
-    "materialized_frame_geometry_count",
-    "shared_measurement_reuse_count",
-    "domain_pixels",
-    "peak_temporary_bytes",
-)
 
 
 @dataclass(frozen=True)
 class DiagnosticSource:
     identity: dict[str, Any]
     source_path: Path
-
-
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def load_diagnostic_sources() -> tuple[DiagnosticSource, ...]:
@@ -92,7 +70,7 @@ def load_diagnostic_sources() -> tuple[DiagnosticSource, ...]:
             or not source_path.is_relative_to(project_root)
             or not source_path.is_file()
             or len(digest) != 64
-            or _sha256(source_path) != digest
+            or sha256_file(source_path) != digest
         ):
             raise ValueError(
                 f"diagnostic source identity is invalid: "
@@ -118,75 +96,6 @@ def _source_geometry_within_authority(
             ):
                 return False
     return True
-
-
-def _bounded_work(
-    report: dict[str, Any],
-    *,
-    source_pixels: int,
-) -> bool:
-    geometry = report["photo_geometry"]
-    resolved = geometry["resolved_output_slots"]
-    lane_counts = (
-        tuple(0 for _ in geometry["lanes"])
-        if resolved is None
-        else tuple(resolved["lane_output_slot_counts"])
-    )
-    work_rows = tuple(
-        lane["work"] for lane in report["development"]["lanes"]
-    )
-    metrics = _aggregate_work(work_rows)
-    aggregate_identity = all(
-        int(metrics[field]) == sum(int(row[field]) for row in work_rows)
-        for field in WORK_FIELDS
-        if field not in {"domain_pixels", "peak_temporary_bytes"}
-    )
-    structural_bounds = all(
-        int(row["ordinal_role_lookup_count"])
-        <= int(row["phase_hypothesis_count"]) * count * 2
-        and int(row["ordinal_role_match_count"])
-        <= int(row["phase_hypothesis_count"])
-        * int(row["role_proposal_count"])
-        and int(row["local_relation_evaluation_count"])
-        <= int(row["sequence_group_count"]) * max(0, count - 1)
-        for row, count in zip(work_rows, lane_counts, strict=True)
-    )
-    return (
-        all(
-            isinstance(metrics[key], (int, float))
-            and math.isfinite(float(metrics[key]))
-            and float(metrics[key]) >= 0.0
-            for key in metrics
-        )
-        and aggregate_identity
-        and structural_bounds
-        and metrics["pixel_query_count"] <= source_pixels * 128
-        and metrics["peak_temporary_bytes"]
-        <= _peak_temporary_limit_bytes(source_pixels)
-    )
-
-
-def _aggregate_work(
-    work_rows: Sequence[dict[str, Any]],
-) -> dict[str, int]:
-    return {
-        field: (
-            max((int(row[field]) for row in work_rows), default=0)
-            if field == "peak_temporary_bytes"
-            else sum(int(row[field]) for row in work_rows)
-        )
-        for field in WORK_FIELDS
-    }
-
-
-def _peak_temporary_limit_bytes(source_pixels: int) -> int:
-    if source_pixels <= 0:
-        raise ValueError("source memory bound requires positive pixels")
-    return (
-        source_pixels
-        * MAXIMUM_PEAK_TEMPORARY_BYTES_PER_SOURCE_PIXEL
-        + MAXIMUM_PEAK_TEMPORARY_FIXED_ALLOWANCE_BYTES
-    )
 
 
 def _production_command(source: DiagnosticSource, output: Path) -> list[str]:
@@ -308,7 +217,7 @@ def run_diagnostic_source(source: DiagnosticSource) -> dict[str, Any]:
                 width=int(canonical_extent["width"]),
                 height=int(canonical_extent["height"]),
             )
-            work_bounded = _bounded_work(
+            work_bounded = bounded_work(
                 report,
                 source_pixels=source_pixels,
             )
@@ -323,7 +232,7 @@ def run_diagnostic_source(source: DiagnosticSource) -> dict[str, Any]:
                     or (status == "needs_review" and not output_files)
                 )
             )
-            metrics = _aggregate_work(
+            metrics = aggregate_work(
                 tuple(
                     lane["work"]
                     for lane in report["development"]["lanes"]
@@ -337,7 +246,7 @@ def run_diagnostic_source(source: DiagnosticSource) -> dict[str, Any]:
                 "query_template_memory_bounded": work_bounded,
                 "production_output_contract": output_contract,
                 "peak_temporary_limit_bytes": (
-                    _peak_temporary_limit_bytes(source_pixels)
+                    peak_temporary_limit_bytes(source_pixels)
                 ),
                 "peak_temporary_bound": (
                     "10_bytes_per_source_pixel_plus_32_mib_per_input"

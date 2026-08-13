@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
-import math
 from pathlib import Path
 import subprocess
 import sys
@@ -12,29 +10,16 @@ from tempfile import TemporaryDirectory
 from typing import Iterable, Sequence
 
 from x5crop.report.validation import validate_current_report_record
-from x5crop.detection.photo_geometry.model import (
-    PHOTO_BOUNDARY_MEASUREMENT_SPEC,
-)
-from x5crop.detection.evidence.content_occupancy import (
-    CONTENT_OCCUPANCY_MEASUREMENT_SPEC,
-)
-from x5crop.formats import format_spec
 
 from .cohort_count_authority import validate_count_authority
+from .file_identity import sha256_file
+from .gold_geometry import validate_approved_geometry
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 GOLD_COHORT_PATH = Path(__file__).with_name("cohorts") / "gold_accuracy.jsonl"
 EXPECTED_SOURCE_COUNT = 9
 EXPECTED_TASK_COUNT = 9
-
-
-def _source_sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def validate_gold_source_identities() -> tuple[dict[str, object], ...]:
@@ -78,7 +63,7 @@ def validate_gold_source_identities() -> tuple[dict[str, object], ...]:
             or not source.is_relative_to(project_root)
             or not source.is_file()
             or len(expected_sha) != 64
-            or _source_sha256(source) != expected_sha
+            or sha256_file(source) != expected_sha
         ):
             raise ValueError(f"gold source identity is invalid: {sample_id or relative}")
         geometry = record.get("confirmed_geometry")
@@ -95,221 +80,6 @@ def validate_gold_source_identities() -> tuple[dict[str, object], ...]:
     if task_count != EXPECTED_TASK_COUNT:
         raise ValueError("gold accuracy cohort must contain exactly nine tasks")
     return records
-
-
-def _contains_point(
-    polygon: Sequence[Sequence[float]],
-    point: Sequence[float],
-    *,
-    epsilon: float = 1.0e-6,
-) -> bool:
-    signs: list[bool] = []
-    for left, right in zip(polygon, (*polygon[1:], polygon[0]), strict=True):
-        cross = (
-            (right[0] - left[0]) * (point[1] - left[1])
-            - (right[1] - left[1]) * (point[0] - left[0])
-        )
-        if abs(cross) > epsilon:
-            signs.append(cross > 0.0)
-    return not signs or all(signs) or not any(signs)
-
-
-def _contains_polygon(
-    outer: Sequence[Sequence[float]],
-    inner: Sequence[Sequence[float]],
-) -> bool:
-    return all(_contains_point(outer, point) for point in inner)
-
-
-def _trimmed_edge_endpoints(
-    polygon: Sequence[Sequence[float]],
-    trim_depths_px: Sequence[float],
-) -> tuple[tuple[float, float], ...]:
-    points: list[tuple[float, float]] = []
-    for left, right, depth in zip(
-        polygon,
-        (*polygon[1:], polygon[0]),
-        trim_depths_px,
-        strict=True,
-    ):
-        length = math.hypot(right[0] - left[0], right[1] - left[1])
-        if length <= 0.0 or not 0.0 < depth < length / 2.0:
-            raise ValueError("gold edge cannot establish a physical interior")
-        fraction = depth / length
-        points.extend(
-            (
-                (
-                    left[0] + fraction * (right[0] - left[0]),
-                    left[1] + fraction * (right[1] - left[1]),
-                ),
-                (
-                    right[0] + fraction * (left[0] - right[0]),
-                    right[1] + fraction * (left[1] - right[1]),
-                ),
-            )
-        )
-    return tuple(points)
-
-
-def _unit_vector(x: float, y: float) -> tuple[float, float]:
-    magnitude = math.hypot(x, y)
-    if magnitude <= 0.0:
-        raise ValueError("gold frame has a degenerate axis")
-    return x / magnitude, y / magnitude
-
-
-def _mean_edge_axis(
-    polygon: Sequence[Sequence[float]],
-    first: tuple[int, int],
-    second: tuple[int, int],
-) -> tuple[float, float]:
-    return _unit_vector(
-        (
-            polygon[first[1]][0]
-            - polygon[first[0]][0]
-            + polygon[second[1]][0]
-            - polygon[second[0]][0]
-        )
-        / 2.0,
-        (
-            polygon[first[1]][1]
-            - polygon[first[0]][1]
-            + polygon[second[1]][1]
-            - polygon[second[0]][1]
-        )
-        / 2.0,
-    )
-
-
-def _projection_bounds(
-    polygon: Sequence[Sequence[float]],
-    axis: tuple[float, float],
-) -> tuple[float, float]:
-    values = tuple(point[0] * axis[0] + point[1] * axis[1] for point in polygon)
-    return min(values), max(values)
-
-
-def _assert_direct_use_budget(
-    sample_id: str,
-    frame_index: int,
-    gold: Sequence[Sequence[float]],
-    output: Sequence[Sequence[float]],
-    strip_orientation: str,
-) -> None:
-    horizontal = strip_orientation == "horizontal"
-    sequence_axis = _mean_edge_axis(
-        gold,
-        (0, 1) if horizontal else (0, 3),
-        (3, 2) if horizontal else (1, 2),
-    )
-    cross_axis = _mean_edge_axis(
-        gold,
-        (0, 3) if horizontal else (0, 1),
-        (1, 2) if horizontal else (3, 2),
-    )
-    gold_sequence = _projection_bounds(gold, sequence_axis)
-    output_sequence = _projection_bounds(output, sequence_axis)
-    gold_cross = _projection_bounds(gold, cross_axis)
-    output_cross = _projection_bounds(output, cross_axis)
-    sequence_span = gold_sequence[1] - gold_sequence[0]
-    cross_span = gold_cross[1] - gold_cross[0]
-    sequence_expansion = max(
-        gold_sequence[0] - output_sequence[0],
-        output_sequence[1] - gold_sequence[1],
-    )
-    cross_expansion = max(
-        gold_cross[0] - output_cross[0],
-        output_cross[1] - gold_cross[1],
-    )
-    pixel_allowance = (
-        PHOTO_BOUNDARY_MEASUREMENT_SPEC
-        .transition_coordinate_sampling_uncertainty_px
-    )
-    if (
-        sequence_expansion > sequence_span * 0.05 + pixel_allowance
-        or cross_expansion > cross_span * 0.03 + pixel_allowance
-    ):
-        raise ValueError(
-            f"{sample_id} frame {frame_index} exceeds gold direct-use budget"
-        )
-
-
-def _ordered_gold_mapping(
-    gold_frames: Sequence[dict[str, object]],
-    output_geometries: Sequence[dict[str, object]],
-    strip_orientation: str,
-    format_id: str,
-) -> tuple[int, ...]:
-    horizontal = strip_orientation == "horizontal"
-
-    def safely_covers(
-        gold: Sequence[Sequence[float]],
-        output: Sequence[Sequence[float]],
-    ) -> bool:
-        if _contains_polygon(output, gold):
-            return True
-        sequence_axis = _mean_edge_axis(
-            gold,
-            (0, 1) if horizontal else (0, 3),
-            (3, 2) if horizontal else (1, 2),
-        )
-        cross_axis = _mean_edge_axis(
-            gold,
-            (0, 3) if horizontal else (0, 1),
-            (1, 2) if horizontal else (3, 2),
-        )
-        frame = format_spec(format_id).frame
-        edge_lengths = tuple(
-            math.hypot(right[0] - left[0], right[1] - left[1])
-            for left, right in zip(gold, (*gold[1:], gold[0]), strict=True)
-        )
-        sequence_scale = (edge_lengths[0] + edge_lengths[2]) / (
-            2.0 * frame.frame_width_mm
-        )
-        cross_scale = (edge_lengths[1] + edge_lengths[3]) / (
-            2.0 * frame.frame_height_mm
-        )
-        # A user-confirmed direct-use frame may graze content only at the
-        # intersection of two adjacent boundaries.  Remove one already-owned
-        # content-measurement support depth from both ends of every edge and
-        # require the remaining edge interiors to be covered.  This is the
-        # same topological rule as the runtime content veto: it is expressed
-        # in physical units and does not permit an arbitrary number of lost
-        # pixels at a corner.
-        sequence_depth = (
-            CONTENT_OCCUPANCY_MEASUREMENT_SPEC.cell_extent_mm
-            * sequence_scale
-        )
-        cross_depth = (
-            CONTENT_OCCUPANCY_MEASUREMENT_SPEC.cell_extent_mm
-            * cross_scale
-        )
-        return all(
-            _contains_point(output, point)
-            for point in _trimmed_edge_endpoints(
-                gold,
-                (sequence_depth, cross_depth) * 2,
-            )
-        )
-
-    mapping: list[int] = []
-    next_output = 0
-    for frame in gold_frames:
-        polygon = frame["polygon_source_pixel_center_coordinates"]
-        matches = tuple(
-            index
-            for index in range(next_output, len(output_geometries))
-            if safely_covers(
-                polygon,
-                output_geometries[index]["constrained_source_footprint"],
-            )
-        )
-        if not matches:
-            return ()
-        selected = matches[0]
-        mapping.append(selected)
-        next_output = selected + 1
-    return tuple(mapping)
 
 
 def _production_command(
@@ -333,49 +103,6 @@ def _production_command(
     if record["strip_mode"] == "partial":
         command.extend(("--count", str(record["confirmed_slot_count"])))
     return command
-
-
-def _validate_approved_geometry(
-    record: dict[str, object],
-    report: dict[str, object],
-) -> None:
-    sample_id = str(record["sample_id"])
-    gold = record["confirmed_geometry"]
-    frames = gold["frames"]
-    outputs = report["output"]["finalization"]["resolved_output_geometries"]
-    mapping = _ordered_gold_mapping(
-        frames,
-        outputs,
-        str(gold["strip_orientation"]),
-        str(record["format_id"]),
-    )
-    if len(mapping) != len(frames):
-        raise ValueError(f"{sample_id} approved output cuts confirmed content")
-    for frame, output_index in zip(frames, mapping, strict=True):
-        polygon = frame["polygon_source_pixel_center_coordinates"]
-        output_polygon = outputs[output_index]["constrained_source_footprint"]
-        _assert_direct_use_budget(
-            sample_id,
-            int(frame["frame_index"]),
-            polygon,
-            output_polygon,
-            str(gold["strip_orientation"]),
-        )
-    transform = report["output"]["finalization"][
-        "source_transform_assessment"
-    ]
-    observed_angle = transform["observed_angle_interval_degrees"]
-    gold_angles = tuple(
-        math.degrees(math.atan(float(edge["slope"])))
-        for edge in gold["shared_edges"]
-    )
-    if not all(
-        observed_angle["minimum"] - 1.0e-9
-        <= angle
-        <= observed_angle["maximum"] + 1.0e-9
-        for angle in gold_angles
-    ):
-        raise ValueError(f"{sample_id} deskew interval excludes confirmed edges")
 
 
 def _run_task(record: dict[str, object]) -> str:
@@ -431,7 +158,7 @@ def _run_task(record: dict[str, object]) -> str:
                 f"{record['sample_id']}/{record['strip_mode']} challenge task is {status}"
             )
         if status == "approved_auto":
-            _validate_approved_geometry(record, report)
+            validate_approved_geometry(record, report)
         return status
 
 

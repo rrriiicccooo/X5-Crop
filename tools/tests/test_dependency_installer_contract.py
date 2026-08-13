@@ -6,8 +6,9 @@ import unittest
 from unittest import mock
 
 from tools.install.dependency_manager import (
+    RECEIPT_SCHEMA,
     DependencyState,
-    _pip_package_for_record,
+    pip_package_for_record,
     build_uninstall_plan,
     check_dependencies,
     fresh_installed_versions,
@@ -21,6 +22,9 @@ CONTRACT_PATH = ROOT / "tools/install/dependencies.toml"
 
 
 class DependencyInstallerContractTest(unittest.TestCase):
+    def test_installer_receipt_revision_is_current_only(self) -> None:
+        self.assertEqual(RECEIPT_SCHEMA, "x5crop_user_dependencies_v3")
+
     @staticmethod
     def _states(
         *,
@@ -59,9 +63,6 @@ class DependencyInstallerContractTest(unittest.TestCase):
                         )
                     ),
                     package_version=version,
-                    build_information_sha256=(
-                        "1" * 64 if pin.name == "opencv" and version else None
-                    ),
                 )
             )
         return tuple(states)
@@ -278,9 +279,6 @@ class DependencyInstallerContractTest(unittest.TestCase):
                 "available": True,
                 "module_version": pin.module_version,
                 "module_origin": f"/user/site/{pin.module}/__init__.py",
-                "build_information_sha256": (
-                    "1" * 64 if pin.name == "opencv" else None
-                ),
                 "import_error": None,
                 "distributions": (
                     {
@@ -331,7 +329,7 @@ class DependencyInstallerContractTest(unittest.TestCase):
         }
 
         self.assertEqual(
-            _pip_package_for_record(pillow, record),
+            pip_package_for_record(pillow, record),
             ("Pillow", "12.3.0"),
         )
 

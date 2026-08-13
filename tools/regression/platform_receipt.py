@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 from pathlib import Path
 import platform
@@ -13,6 +12,7 @@ import sys
 from typing import Any, Sequence
 
 from .environment_identity import verification_environment_identity
+from .file_identity import sha256_file
 from .performance import (
     DEFAULT_RECEIPT_PATH,
     build_receipt,
@@ -27,7 +27,7 @@ from .platform_io import (
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-PLATFORM_RECEIPT_SCHEMA = "x5crop_platform_receipt_v2"
+PLATFORM_RECEIPT_SCHEMA = "x5crop_platform_receipt_v3"
 DEFAULT_PLATFORM_ROOT = PROJECT_ROOT / "build" / "v5-platform"
 TARGET_APPLE_SILICON = "apple_silicon_macos"
 TARGET_INTEL_MAC = "intel_macos"
@@ -64,14 +64,6 @@ def actual_target() -> str:
     if system == "Windows" and machine in {"amd64", "x86_64"}:
         return TARGET_WINDOWS_X64
     raise ValueError(f"unsupported receipt host: {system} {platform.machine()}")
-
-
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def _run_verifier(mode: str) -> dict[str, str]:
@@ -193,7 +185,7 @@ def build_platform_receipt(
         "installer_validation": _read_only_installer_check(),
         "performance_receipt": {
             "file_name": associated_performance.name,
-            "sha256": _sha256(associated_performance),
+            "sha256": sha256_file(associated_performance),
             "receipt_schema": performance_record["receipt_schema"],
             "git_commit": performance_record["git_commit"],
         },

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from tools.regression.accuracy import _ordered_gold_mapping
+from tools.regression.gold_geometry import ordered_gold_mapping
 
 
 def _frame(polygon: list[list[float]]) -> dict[str, object]:
@@ -24,7 +24,7 @@ class GoldAccuracyContractTest(unittest.TestCase):
         ]
 
         self.assertEqual(
-            _ordered_gold_mapping(
+            ordered_gold_mapping(
                 [_frame(gold)],
                 [_output(corner_local)],
                 "horizontal",
@@ -43,7 +43,7 @@ class GoldAccuracyContractTest(unittest.TestCase):
         ]
 
         self.assertEqual(
-            _ordered_gold_mapping(
+            ordered_gold_mapping(
                 [_frame(gold)],
                 [_output(bottom_inset)],
                 "horizontal",
@@ -64,7 +64,7 @@ class GoldAccuracyContractTest(unittest.TestCase):
         ]
 
         self.assertEqual(
-            _ordered_gold_mapping(
+            ordered_gold_mapping(
                 [_frame(gold)],
                 [_output(large_corner_cut)],
                 "horizontal",

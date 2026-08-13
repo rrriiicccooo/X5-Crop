@@ -28,7 +28,7 @@ from .performance_hardware import build_hardware_identity
 from .performance_profile import STAGE_NAMES, ProfiledSource, profile_source
 
 
-PERFORMANCE_RECEIPT_SCHEMA = "x5crop_performance_receipt_v5_1"
+PERFORMANCE_RECEIPT_SCHEMA = "x5crop_performance_receipt_v5_2"
 DEFAULT_RECEIPT_PATH = (
     PROJECT_ROOT / "build" / "v5-performance" / "performance_receipt.json"
 )
@@ -67,12 +67,6 @@ def _dependencies_are_frozen(dependencies: object) -> bool:
             or not str(actual.get("package_version", ""))
             or not str(actual.get("module_origin", ""))
         ):
-            return False
-        build = actual.get("build_information_sha256")
-        if name == "opencv":
-            if not isinstance(build, str) or len(build) != 64:
-                return False
-        elif build is not None:
             return False
     return True
 

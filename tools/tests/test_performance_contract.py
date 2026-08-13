@@ -21,12 +21,12 @@ from tools.regression.performance_identity import (
     cohort_sha256,
     load_performance_sources,
 )
-from tools.regression.diagnostic_cohort import (
+from tools.regression.diagnostic_contract import (
     MAXIMUM_PEAK_TEMPORARY_BYTES_PER_SOURCE_PIXEL,
     MAXIMUM_PEAK_TEMPORARY_FIXED_ALLOWANCE_BYTES,
     WORK_FIELDS,
-    _bounded_work,
-    _peak_temporary_limit_bytes,
+    bounded_work,
+    peak_temporary_limit_bytes,
 )
 from x5crop.runtime.threading import (
     THREAD_ENVIRONMENT_KEYS,
@@ -36,6 +36,12 @@ from tools.regression.environment_identity import verification_environment_ident
 
 
 class V5PerformanceContractTest(unittest.TestCase):
+    def test_receipt_revision_is_current_only(self) -> None:
+        self.assertEqual(
+            PERFORMANCE_RECEIPT_SCHEMA,
+            "x5crop_performance_receipt_v5_2",
+        )
+
     @staticmethod
     def _environment() -> dict[str, object]:
         dependencies = {
@@ -45,9 +51,6 @@ class V5PerformanceContractTest(unittest.TestCase):
                 "provider": "external",
                 "package": name,
                 "package_version": required["module_version"],
-                "build_information_sha256": (
-                    "1" * 64 if name == "opencv" else None
-                ),
             }
             for name, required in frozen_dependency_identity().items()
         }
@@ -211,7 +214,7 @@ class V5PerformanceContractTest(unittest.TestCase):
     def test_diagnostic_memory_bound_is_ten_pixels_plus_guard(self) -> None:
         source_pixels = 115_000_000
         self.assertEqual(
-            _peak_temporary_limit_bytes(source_pixels),
+            peak_temporary_limit_bytes(source_pixels),
             source_pixels * 10 + 32 * 1024 * 1024,
         )
         self.assertEqual(MAXIMUM_PEAK_TEMPORARY_BYTES_PER_SOURCE_PIXEL, 10)
@@ -240,9 +243,9 @@ class V5PerformanceContractTest(unittest.TestCase):
             ,"development": {"lanes": [{"work": work}]}
         }
 
-        self.assertTrue(_bounded_work(report, source_pixels=100))
+        self.assertTrue(bounded_work(report, source_pixels=100))
         work["local_relation_evaluation_count"] = 9
-        self.assertFalse(_bounded_work(report, source_pixels=100))
+        self.assertFalse(bounded_work(report, source_pixels=100))
 
 
 if __name__ == "__main__":

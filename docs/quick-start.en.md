@@ -31,7 +31,8 @@ python3 X5_Crop.py /path/to/scans --format 135 --strip full
 
 V5 accepts single-page, unsigned 16-bit, three-channel RGB TIFFs with contiguous
 planar layout and a supported lossless compression. Other structures fail
-safely instead of being guessed.
+safely instead of being guessed. Input Orientation 1–8 is normalized, and
+outputs are written with `Orientation=1`.
 
 ## 3. Choose Format, Mode, And Count
 

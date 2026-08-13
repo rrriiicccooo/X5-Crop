@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 from pathlib import Path
 import shutil
@@ -14,17 +13,10 @@ import zipfile
 
 from .platform_io import load_platform_sources
 from .platform_receipt import PROJECT_ROOT, clean_commit
+from .file_identity import sha256_file
 
 
 DEFAULT_OUTPUT_ROOT = PROJECT_ROOT / "build" / "v5-intel-validation"
-
-
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def build_intel_validation_package(output_root: Path) -> Path:
@@ -103,7 +95,10 @@ def build_intel_validation_package(output_root: Path) -> Path:
             )
         )
         (root / "SHA256SUMS").write_text(
-            "".join(f"{_sha256(path)}  {path.name}\n" for path in checksum_targets),
+            "".join(
+                f"{sha256_file(path)}  {path.name}\n"
+                for path in checksum_targets
+            ),
             encoding="utf-8",
         )
         with zipfile.ZipFile(

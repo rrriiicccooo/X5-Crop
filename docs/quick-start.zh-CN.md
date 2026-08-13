@@ -27,7 +27,8 @@ python3 X5_Crop.py /path/to/scans --format 135 --strip full
 ```
 
 V5 输入必须是单页、16-bit unsigned、RGB、三通道、contiguous planar 且使用受支持无损压缩的
-TIFF。其它结构会安全失败，不会猜测。
+TIFF。其它结构会安全失败，不会猜测；输入 Orientation 1–8 均会规范化，输出写为
+`Orientation=1`。
 
 ## 3. 选择格式、模式与张数
 
@@ -41,9 +42,8 @@ TIFF。其它结构会安全失败，不会猜测。
 
 程序不从文件名或像素猜 count，也不自动删除空白 slot。Partial 即使与 full_count 张数相同，也
 不会获得铺满布局的长轴居中权限。Partial 缺 count、count 非正数、full 携带 count，或匹配后
-partial count 大于完整张数，都会
-在 detector 前以退出码 `2` 停止。交互式多文件运行会检查整批片夹/count；存在冲突时列出全部
-冲突并返回模式/count 步骤。
+partial count 大于完整张数，都会在 detector 前以退出码 `2` 停止。交互式多文件运行会检查整批
+片夹/count；存在冲突时列出全部冲突并返回模式/count 步骤。
 片夹或物理位置无法唯一确定时进入 `needs_review`，不会猜测并输出 TIFF。
 
 要先看检测结果再裁切，分别指定两个全新的输出目录：

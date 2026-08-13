@@ -53,13 +53,14 @@ check_pushed_documentation() {
         git diff --check "$remote_sha" "$local_sha"
     done <"$refs"
     check_diff_hygiene
-    "$PYTHON" -m unittest tools.tests.test_current_only_contract
+    "$PYTHON" -m unittest tools.tests.test_repository_contract
 }
 
 run_full() {
     "$PYTHON" -m unittest discover -s tools/tests
     "$PYTHON" -m compileall -q X5_Crop.py x5crop tools
     "$PYTHON" -m x5crop.configuration.consistency
+    "$PYTHON" -m tools.regression.cohort_count_authority
     for script in \
         X5_Crop_Mac.command \
         tools/install/X5_Crop_Mac_install.command \

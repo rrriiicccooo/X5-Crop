@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass
-import hashlib
 from importlib import metadata
 import json
 import os
@@ -20,7 +19,7 @@ from typing import Mapping, Sequence
 
 
 CONTRACT_SCHEMA = "x5crop_dependencies_v2"
-RECEIPT_SCHEMA = "x5crop_user_dependencies_v2"
+RECEIPT_SCHEMA = "x5crop_user_dependencies_v3"
 SUPPORTED_PYTHON_MIN = (3, 12)
 SUPPORTED_PYTHON_MAX_EXCLUSIVE = (3, 15)
 REQUIREMENT_NAME_PATTERN = re.compile(
@@ -56,7 +55,6 @@ class DependencyState:
     provider: str
     package: str | None
     package_version: str | None
-    build_information_sha256: str | None
     import_error: str | None = None
 
     def satisfies(self, pin: DependencyPin) -> bool:
@@ -210,7 +208,6 @@ def _fresh_module_records(
     ]
     script = (
         "from importlib import import_module, metadata\n"
-        "import hashlib\n"
         "import json\n"
         "from pathlib import Path\n"
         "import re\n"
@@ -246,22 +243,15 @@ def _fresh_module_records(
         "            'available': False,\n"
         "            'module_version': None,\n"
         "            'module_origin': None,\n"
-        "            'build_information_sha256': None,\n"
         "            'import_error': f'{type(error).__name__}: {error}',\n"
         "            'distributions': distributions,\n"
         "        }\n"
         "        continue\n"
         "    origin = getattr(module, '__file__', None)\n"
-        "    build = None\n"
-        "    if module_name == 'cv2':\n"
-        "        build = hashlib.sha256(\n"
-        "            module.getBuildInformation().encode('utf-8')\n"
-        "        ).hexdigest()\n"
         "    records[name] = {\n"
         "        'available': True,\n"
         "        'module_version': str(getattr(module, '__version__', 'unavailable')),\n"
         "        'module_origin': None if origin is None else str(Path(origin).resolve()),\n"
-        "        'build_information_sha256': build,\n"
         "        'import_error': None,\n"
         "        'distributions': distributions,\n"
         "    }\n"
@@ -334,7 +324,7 @@ def _homebrew_package_for_origin(
     return pin.homebrew_formula, fields[1]
 
 
-def _pip_package_for_record(
+def pip_package_for_record(
     pin: DependencyPin,
     record: Mapping[str, object],
 ) -> tuple[str, str] | None:
@@ -396,7 +386,7 @@ def inspect_dependency_states(
             else str(record["module_origin"])
         )
         homebrew = _homebrew_package_for_origin(pin, origin)
-        pip_package = _pip_package_for_record(pin, record)
+        pip_package = pip_package_for_record(pin, record)
         if homebrew is not None:
             provider = "homebrew"
             package, package_version = homebrew
@@ -429,11 +419,6 @@ def inspect_dependency_states(
                 provider=provider,
                 package=package,
                 package_version=package_version,
-                build_information_sha256=(
-                    None
-                    if record.get("build_information_sha256") is None
-                    else str(record["build_information_sha256"])
-                ),
                 import_error=(
                     None
                     if record.get("import_error") is None
@@ -608,10 +593,6 @@ def _contract_path(explicit: str | None) -> Path:
     return Path(__file__).resolve().with_name("dependencies.toml")
 
 
-def _contract_sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
-
-
 def _write_json_atomic(path: Path, payload: Mapping[str, object]) -> None:
     temporary = path.with_name(f".{path.name}.tmp")
     temporary.write_text(
@@ -661,7 +642,6 @@ def _state_record(
         "provider": state.provider,
         "package": state.package,
         "package_version": state.package_version,
-        "build_information_sha256": state.build_information_sha256,
         "import_error": state.import_error,
     }
 
@@ -708,13 +688,6 @@ def install_dependencies(
             "This Release folder already has a dependency receipt for another "
             "Python interpreter. Run its uninstaller before reinstalling."
         )
-    contract_sha256 = _contract_sha256(contract_path)
-    if previous is not None and previous.get("contract_sha256") != contract_sha256:
-        raise RuntimeError(
-            "This Release folder has a receipt for another dependency contract. "
-            "Run its uninstaller before reinstalling."
-        )
-
     before_states = inspect_dependency_states(contract)
     before_by_name = {state.name: state for state in before_states}
     actions = {pin.name: "reused" for pin in contract.dependencies}
@@ -831,7 +804,6 @@ def install_dependencies(
         "python_executable": sys.executable,
         "python_version": ".".join(map(str, sys.version_info[:3])),
         "user_site": site.getusersitepackages(),
-        "contract_sha256": contract_sha256,
         "dependencies": [
             _state_record(pin, final_by_name[pin.name], actions[pin.name])
             for pin in contract.dependencies

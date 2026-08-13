@@ -27,7 +27,6 @@ def verification_environment_identity() -> dict[str, Any]:
             "provider": state.provider,
             "package": state.package,
             "package_version": state.package_version,
-            "build_information_sha256": state.build_information_sha256,
         }
         for state in states
     }

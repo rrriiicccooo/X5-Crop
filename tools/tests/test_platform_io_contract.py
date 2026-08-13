@@ -8,7 +8,7 @@ import numpy as np
 
 from tools.regression.platform_io import (
     EXPECTED_SAMPLE_IDS,
-    _raw_raster_for_orientation,
+    raw_raster_for_orientation,
     load_platform_sources,
 )
 from x5crop.output.publication import FreshOutputDirectory, FreshOutputError
@@ -23,8 +23,8 @@ class PlatformIoContractTests(unittest.TestCase):
 
     def test_orientation_3_and_8_inverse_rasters_restore_domain(self) -> None:
         canonical = np.arange(3 * 4 * 3, dtype=np.uint16).reshape(3, 4, 3)
-        self.assertEqual(_raw_raster_for_orientation(canonical, 3).shape, canonical.shape)
-        self.assertEqual(_raw_raster_for_orientation(canonical, 8).shape, (4, 3, 3))
+        self.assertEqual(raw_raster_for_orientation(canonical, 3).shape, canonical.shape)
+        self.assertEqual(raw_raster_for_orientation(canonical, 8).shape, (4, 3, 3))
 
     def test_platform_publication_refuses_existing_directory(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

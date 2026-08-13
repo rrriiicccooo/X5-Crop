@@ -418,68 +418,33 @@ platform | platform-check | platform-package | pre-push
 
 ## 14. 源码 owner
 
+下表中的 `photo_geometry/` 均指 `x5crop/detection/photo_geometry/`。
+
 | 路径 | 唯一职责 |
 |---|---|
-| `x5crop/formats/` | 单一 `FramePhysicalSpec`、W/H tolerance、gap 先验与 holder full count |
-| `x5crop/configuration/` | count request/resolution、片夹合同与 runtime configuration |
-| `x5crop/io/` | TIFF domain、Orientation、metadata 与轻量 header readback |
+| `x5crop/formats/` | 固定照片尺寸、容差、gap 搜索先验与 holder full count |
+| `x5crop/configuration/` | 用户 count、片夹与 runtime configuration |
+| `x5crop/io/`、`x5crop/export/` | TIFF domain、Orientation、metadata、sampling 与 write/readback |
 | `x5crop/detection/source_core.py` | source/lane 可见 authority |
-| `x5crop/detection/evidence/content_occupancy_model.py` | 二维内容 measurement spec 与 observation 类型 |
-| `x5crop/detection/evidence/content_occupancy.py` | OpenCV/SciPy 候选无关二维内容测量 |
-| `x5crop/detection/photo_geometry/model.py` | boundary 语义、空间重复规则与像素测量 spec |
-| `x5crop/detection/photo_geometry/measurement_model.py` | measurement field、query、transition、coverage 与 set 类型 |
-| `x5crop/detection/photo_geometry/search_model.py` | top/bottom corridor 与 sequence anchor domain 类型 |
-| `x5crop/detection/photo_geometry/line_observations.py` | source line、fit receipt 与局部 edge observation 类型 |
-| `x5crop/detection/photo_geometry/registered_transition_measurement.py` | 单 trace 的局部统计与 transition 峰测量 |
-| `x5crop/detection/photo_geometry/registered_measurement.py` | registered query 执行与 coverage receipt |
-| `x5crop/detection/photo_geometry/robust_line_fit.py` | 已绑定 transition family 的 SciPy Huber 数值拟合与收敛 receipt |
-| `x5crop/detection/photo_geometry/boundary_fitting.py` | 将已跟踪 family 绑定为 top/bottom observation，并生成物理方向区间 |
-| `x5crop/detection/photo_geometry/transition_tracking.py` | transition 到局部连续物理 edge family |
-| `x5crop/detection/photo_geometry/profile_adapters.py` | transition region 到 role-free axis profile 的适配 |
-| `x5crop/detection/photo_geometry/sequence_direction_measurement.py` | 单个 sequence edge 的候选无关方向区间 |
-| `x5crop/detection/photo_geometry/observations.py` | role-free sequence edge observation 组装 |
-| `x5crop/detection/photo_geometry/separator_observations.py` | separator band 配对与完整材料验证 |
-| `x5crop/detection/photo_geometry/source_geometry.py` | source 共享 W/H 可行几何 |
-| `x5crop/detection/photo_geometry/lane_gap_model.py` | lane 唯一 `G_source` 与 pitch authority |
-| `x5crop/detection/photo_geometry/sequence_models.py` | 正常/异常 advance 与 filled-holder authority 类型 |
-| `x5crop/detection/photo_geometry/chain_proposals.py` | lane 输入与有限 cross/sequence proposal 类型 |
-| `x5crop/detection/photo_geometry/chains.py` | materialized axis placement、固定 frame 与 `CompleteFormatChain` 类型 |
-| `x5crop/detection/photo_geometry/chain_authority.py` | 完整 chain 的 adjacency authority 判定 |
-| `x5crop/detection/photo_geometry/cross_edge_projection.py` | short-axis edge 的坐标投影与 fixed-H 条件观察 |
-| `x5crop/detection/photo_geometry/cross_edge_families.py` | 局部 short-axis 观察到有限物理 edge family 的聚合 |
-| `x5crop/detection/photo_geometry/cross_proposals.py` | edge family 到有限 top/bottom proposal 的组装 |
-| `x5crop/detection/photo_geometry/cross_conditioning.py` | shared direction、fixed H、短轴居中与 direct edge 的联合约束 |
-| `x5crop/detection/photo_geometry/sequence_*.py` | ordinal、separator、phase 与 sequence proposal/placement |
-| `x5crop/detection/photo_geometry/sequence_separator_seeds.py` | fixed-W separator 有向邻接路径与直接 sequence seed |
-| `x5crop/detection/photo_geometry/sequence_conditioning.py` | direct role 对共享 phase、W、gap 与方向不确定性的联合约束 |
-| `x5crop/detection/photo_geometry/holder_layout_authority.py` | 用户确认 full 的条件式长轴布局权限 |
-| `x5crop/detection/photo_geometry/early_physical_frontier.py` | 完整物化前的便宜物理过滤与三轴 Pareto frontier |
-| `x5crop/detection/photo_geometry/chain_materialization.py` | cross/sequence 相容联合与完整 chain 物化 |
-| `x5crop/detection/photo_geometry/chain_record_model.py` | 完整 chain 审计记录类型 |
-| `x5crop/detection/photo_geometry/chain_direction_evidence.py` | lane direction compatibility facts |
-| `x5crop/detection/photo_geometry/chain_records.py` | observation ledger 与完整 chain 记录生成 |
-| `x5crop/detection/photo_geometry/content_veto.py` | placement 相关的二维内容负向解释 |
-| `x5crop/detection/photo_geometry/placement_clusters.py` | sampling-equivalent placement cluster |
-| `x5crop/detection/photo_geometry/source_selection.py` | sequence/cross/shared 分轴支配与 source 选择 |
-| `x5crop/detection/photo_geometry/output.py` | selected-only envelope、budget 与 sampling assessment |
-| `x5crop/detection/photo_geometry/lane_reconstruction.py` | 每条 lane 的 bounded chain 记录、sampling 与 cluster 准备 |
-| `x5crop/detection/photo_geometry/shared_source_geometry.py` | 双 lane 选择前共享 W/H 绑定 |
-| `x5crop/detection/photo_geometry/chain_signature.py` | 选择前后不可变物理证据签名 |
-| `x5crop/detection/photo_geometry/selected_source_output.py` | 原样消费已审查链并生成 selected-only envelope/budget |
-| `x5crop/detection/photo_geometry/reconstruction_gate_facts.py` | source transform 与 typed Gate 事实汇总 |
-| `x5crop/detection/photo_geometry/detector.py` | 唯一顶层流程编排，不拥有几何规则 |
-| `x5crop/detection/candidate/` | `CandidateGate` typed assessments |
-| `x5crop/detection/decision/` | final status 与 reason mapping |
-| `x5crop/detection/final/` | approved geometry exposure |
-| `x5crop/export/` | lane-safe sampling、TIFF write 与 readback |
-| `x5crop/report/` | compact production report、development facts 与外部验证 read model |
-| `x5crop/runtime/` | invocation、source workflow 与 terminal outcome |
-| `x5crop/output/` | fresh-directory publication 与 portable naming |
-| `x5crop/debug/panel_layout.py` | Debug presentation 坐标与绘图 primitives |
-| `x5crop/debug/panel_facts.py` | current report/runtime facts 的只读适配 |
-| `x5crop/debug/axis_panels.py` | cross/sequence 分轴面板 |
-| `x5crop/debug/output_panel.py` | selected-only safety 面板 |
-| `x5crop/debug/panels.py` | Debug panel 编排 |
+| `x5crop/detection/evidence/` | 候选无关的 OpenCV/SciPy 二维内容测量 |
+| `photo_geometry/*model.py`、`model.py` | 物理、测量、proposal、selection 与 output 的不可变类型 |
+| `photo_geometry/registered_*.py`、`robust_line_fit.py` | registered 像素测量与 SciPy Huber 数值拟合 |
+| `photo_geometry/*observations.py`、`transition_tracking.py` | role-free edge family、separator material 与 observation |
+| `photo_geometry/source_geometry.py`、`shared_source_geometry.py` | source 共享 W/H 及双 lane 选择前交集 |
+| `photo_geometry/lane_gap_model.py`、`local_advance.py` | lane 正常间隙与有证据的局部异常 |
+| `photo_geometry/sequence_*.py` | fixed-W 有向 separator path、ordinal、phase 与 sequence placement |
+| `photo_geometry/cross_*.py` | short-axis family、fixed-H 配对、方向与中心线约束 |
+| `photo_geometry/chain_*.py`、`chains.py` | 完整链物化、authority、ledger 与不可变签名 |
+| `photo_geometry/*dominance.py`、`source_*.py` | sequence/cross/shared 分轴 Pareto 与 source 选择 |
+| `photo_geometry/content_*.py` | placement 相关的二维内容负向解释 |
+| `photo_geometry/placement_clusters.py` | 严格 sampling-equivalent placement cluster |
+| `photo_geometry/output*.py`、`selected_source_output.py` | selected-only envelope、budget、transform 与 sampling assessment |
+| `photo_geometry/lane_*.py`、`detector.py` | lane 准备、bounded reconstruction 与唯一顶层编排 |
+| `x5crop/detection/candidate/`、`decision/`、`final/` | typed facts、最终决定与 approved geometry exposure |
+| `x5crop/report/` | compact production report、development facts 与外部 read model |
+| `x5crop/runtime/`、`x5crop/output/` | invocation、source workflow、terminal outcome 与全新目录发布 |
+| `x5crop/debug/` | 只读 Debug facts、分轴面板与绘图 |
 | `tools/verify` | 唯一 tracked verifier 入口 |
-| `tools/regression/` | SHA-bound accuracy、diagnostic 与 performance |
-| `tools/release/` | standalone 与发布 manifest |
+| `tools/regression/` | SHA-bound accuracy、diagnostic、performance 与 platform 验证 |
+| `tools/install/`、`tools/release/` | standalone 依赖与发布 manifest |
+| `tools/tests/` | 按物理、运行、I/O 与工具职责拆分的 focused contracts |

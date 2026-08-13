@@ -1,147 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import replace
-import math
-import tempfile
-import unittest
-from pathlib import Path
-
-import numpy as np
-
-from x5crop.domain import Box
-from x5crop.domain import (
-    EvidenceState,
-    FiniteInterval,
-    ObservationId,
-)
-from x5crop.detection.output_geometry import (
-    SharedStripDirectionResolution,
-    observed_strip_angle_estimate_degrees,
-    output_transform_assessment,
-)
-from x5crop.detection.photo_geometry.line_observations import (
-    PhotoBoundaryObservation,
-    RobustLineFitReceipt,
-    SourceCoordinateLine,
-)
-from x5crop.detection.photo_geometry.model import BoundaryAxis, BoundaryRole
-from x5crop.detection.photo_geometry.output_model import SharedStripDirection
-from x5crop.export.crops import write_crops
-from x5crop.geometry.affine import (
-    AFFINE_OUTPUT_RASTER_GUARD_PX,
-    AffineCoordinateTransform,
-)
-from x5crop.geometry.convex import (
-    clip_convex_polygon_to_box,
-    convex_hull,
-    mapped_half_open_box,
-)
-from x5crop.image.transforms import sample_affine_roi
-from x5crop.io.model import ImageProfile, TiffExtraTag, TiffMetadata
-from x5crop.io.orientation import orientation_mapping
-from x5crop.io.tiff import read_tiff
-
-
-def _angle_observation(
-    identity: str,
-    angle_minimum: float,
-    angle_maximum: float,
-    *,
-    role: BoundaryRole = BoundaryRole.TOP,
-) -> PhotoBoundaryObservation:
-    observation_id = ObservationId(identity)
-    return PhotoBoundaryObservation(
-        observation_id=observation_id,
-        role=role,
-        line=SourceCoordinateLine(
-            normal_x=0.0,
-            normal_y=1.0,
-            offset_px=5.0,
-            support_projection_px=FiniteInterval(0.0, 20.0),
-            source_axis_long=BoundaryAxis.X,
-        ),
-        offset_interval_px=FiniteInterval(4.5, 5.5),
-        fit_residual_px=0.1,
-        angle_interval_degrees=FiniteInterval(
-            angle_minimum,
-            angle_maximum,
-        ),
-        trace_support_count=8,
-        queried_trace_count=8,
-        independent_support_region_count=3,
-        continuous_support_fraction=1.0,
-        transition_ids=(ObservationId(f"{identity}:transition"),),
-        fit_receipt=RobustLineFitReceipt(
-            method="scipy_least_squares_huber",
-            converged=True,
-            status=1,
-            evaluation_count=1,
-            cost=0.0,
-            optimality=0.0,
-        ),
-    )
-
-
-def _transform_assessment(
-    observations: tuple[PhotoBoundaryObservation, ...],
-):
-    cross_observations = tuple(
-        item
-        for item in observations
-        if item.role in {BoundaryRole.TOP, BoundaryRole.BOTTOM}
-    )
-    minimum = max(
-        item.angle_interval_degrees.minimum for item in cross_observations
-    )
-    maximum = min(
-        item.angle_interval_degrees.maximum for item in cross_observations
-    )
-    if maximum < minimum:
-        resolution = SharedStripDirectionResolution(
-            direction=None,
-            state=EvidenceState.UNAVAILABLE,
-            named_gap="selected_chain_direction_unavailable",
-        )
-    else:
-        interval = FiniteInterval(
-            min(
-                item.angle_interval_degrees.minimum
-                for item in cross_observations
-            ),
-            max(
-                item.angle_interval_degrees.maximum
-                for item in cross_observations
-            ),
-        )
-        estimate = (
-            0.0
-            if all(
-                item.angle_interval_degrees.contains(0.0)
-                for item in cross_observations
-            )
-            else observed_strip_angle_estimate_degrees(cross_observations)
-        )
-        resolution = SharedStripDirectionResolution(
-            direction=SharedStripDirection(
-                direction_id="test:selected-chain-direction",
-                selected_observation_ids=tuple(
-                    item.observation_id for item in cross_observations
-                ),
-                full_angle_interval_degrees=interval,
-                canonical_angle_degrees=min(
-                    interval.maximum,
-                    max(interval.minimum, estimate),
-                ),
-            ),
-            state=EvidenceState.SUPPORTED,
-            named_gap=None,
-        )
-    return output_transform_assessment(
-        resolution,
-        layout="horizontal",
-        source_width=100,
-        source_height=40,
-    )
+from tools.tests.affine_tiff_support import *
 
 
 class AffineFoundationContractTest(unittest.TestCase):
@@ -368,10 +227,10 @@ class AffineFoundationContractTest(unittest.TestCase):
     def test_identity_requires_zero_in_every_observed_angle_interval(
         self,
     ) -> None:
-        assessment = _transform_assessment(
+        assessment = make_transform_assessment(
             (
-                _angle_observation("line:a", -0.2, 0.1),
-                _angle_observation("line:b", -0.1, 0.3),
+                make_angle_observation("line:a", -0.2, 0.1),
+                make_angle_observation("line:b", -0.1, 0.3),
             ),
         )
         self.assertEqual(assessment.outcome, "identity")
@@ -381,10 +240,10 @@ class AffineFoundationContractTest(unittest.TestCase):
         )
 
     def test_disjoint_observed_angles_make_transform_unavailable(self) -> None:
-        assessment = _transform_assessment(
+        assessment = make_transform_assessment(
             (
-                _angle_observation("line:a", -0.2, 0.1),
-                _angle_observation("line:b", 0.2, 0.4),
+                make_angle_observation("line:a", -0.2, 0.1),
+                make_angle_observation("line:b", 0.2, 0.4),
             ),
         )
         self.assertEqual(assessment.outcome, "unavailable")
@@ -394,10 +253,10 @@ class AffineFoundationContractTest(unittest.TestCase):
         )
 
     def test_nonzero_common_observed_angle_drives_rotation(self) -> None:
-        assessment = _transform_assessment(
+        assessment = make_transform_assessment(
             (
-                _angle_observation("line:a", 0.8, 1.2),
-                _angle_observation(
+                make_angle_observation("line:a", 0.8, 1.2),
+                make_angle_observation(
                     "line:b",
                     0.9,
                     1.1,
@@ -414,7 +273,7 @@ class AffineFoundationContractTest(unittest.TestCase):
         self.assertLess(assessment.applied_source_rotation_degrees, 0.0)
 
     def test_vertical_strip_uses_rotation_opposite_canonical_angle(self) -> None:
-        observation = _angle_observation("line:vertical", -1.1, -0.9)
+        observation = make_angle_observation("line:vertical", -1.1, -0.9)
         direction = SharedStripDirectionResolution(
             direction=SharedStripDirection(
                 direction_id="test:vertical-selected-chain-direction",
@@ -439,10 +298,10 @@ class AffineFoundationContractTest(unittest.TestCase):
     def test_nonorthogonal_start_end_does_not_widen_shared_deskew(
         self,
     ) -> None:
-        assessment = _transform_assessment(
+        assessment = make_transform_assessment(
             (
-                _angle_observation("line:top", -0.1, 0.2),
-                _angle_observation(
+                make_angle_observation("line:top", -0.1, 0.2),
+                make_angle_observation(
                     "line:end",
                     2.0,
                     3.0,
@@ -455,95 +314,6 @@ class AffineFoundationContractTest(unittest.TestCase):
             assessment.observed_angle_interval_degrees,
             FiniteInterval(-0.1, 0.2),
         )
-
-
-class TiffFoundationContractTest(unittest.TestCase):
-    def test_identity_export_preserves_pixels_and_profile(self) -> None:
-        array = np.arange(10 * 14 * 3, dtype=np.uint16).reshape(10, 14, 3)
-        source_profile = ImageProfile(
-            shape=array.shape,
-            dtype=str(array.dtype),
-            axes="YXS",
-            photometric="RGB",
-            compression="NONE",
-            sample_format=None,
-            bits_per_sample=(16, 16, 16),
-            samples_per_pixel=3,
-            planar_config="CONTIG",
-            resolution=(300.0, 240.0),
-            resolution_unit=2,
-            icc_profile=b"x5crop-test-icc",
-            metadata=TiffMetadata(
-                description="source-core metadata",
-                datetime="2026:07:29 12:00:00",
-                software="X5 Crop contract",
-                extra_tags=(
-                    TiffExtraTag(
-                        code=269,
-                        dtype="s",
-                        count=0,
-                        value="source-document",
-                    ),
-                ),
-            ),
-            orientation=orientation_mapping(
-                1,
-                array.shape[1],
-                array.shape[0],
-            ),
-        )
-        box = Box(2, 1, 12, 9)
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            cases = (("LZW", "LZW"), ("NONE", "NONE"))
-            for source_compression, expected_compression in cases:
-                with self.subTest(
-                    source_compression=source_compression,
-                ):
-                    output = root / source_compression
-                    output.mkdir()
-                    written = write_crops(
-                        "source",
-                        1,
-                        array,
-                        replace(
-                            source_profile,
-                            compression=source_compression,
-                        ),
-                        (box,),
-                        (Box(0, 0, 14, 10),),
-                        (AffineCoordinateTransform.identity(14, 10),),
-                        output,
-                    )
-                    self.assertEqual(len(written), 1)
-                    actual, profile, warnings = read_tiff(Path(written[0]))
-                    self.assertEqual(warnings, [])
-                    self.assertTrue(np.array_equal(actual, array[1:9, 2:12]))
-                    self.assertEqual(profile.dtype, "uint16")
-                    self.assertEqual(profile.axes, "YXS")
-                    self.assertEqual(profile.photometric, "RGB")
-                    self.assertEqual(
-                        profile.compression.upper(),
-                        expected_compression,
-                    )
-                    self.assertEqual(profile.resolution, (300.0, 240.0))
-                    self.assertEqual(profile.icc_profile, b"x5crop-test-icc")
-                    self.assertEqual(
-                        profile.metadata.description,
-                        "source-core metadata",
-                    )
-                    self.assertEqual(
-                        profile.metadata.software,
-                        "X5 Crop contract",
-                    )
-                    self.assertEqual(
-                        profile.metadata.datetime,
-                        "2026:07:29 12:00:00",
-                    )
-                    self.assertEqual(
-                        profile.metadata.extra_tags,
-                        source_profile.metadata.extra_tags,
-                    )
 
 
 if __name__ == "__main__":

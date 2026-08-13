@@ -73,7 +73,7 @@ class VerificationScopeContractTest(unittest.TestCase):
     def test_non_runtime_code_and_configuration_use_full_scope(self) -> None:
         for path in (
             "tools/verify",
-            "tools/tests/test_current_only_contract.py",
+            "tools/tests/test_repository_contract.py",
             ".githooks/pre-push",
             ".github/workflows/verify.yml",
             "LICENSE",
@@ -191,7 +191,7 @@ class VerificationScopeContractTest(unittest.TestCase):
         self.assertIn("            performance)", verifier)
         self.assertNotIn("scope=runtime", verifier)
         self.assertIn(
-            '"$PYTHON" -m unittest tools.tests.test_current_only_contract',
+            '"$PYTHON" -m unittest tools.tests.test_repository_contract',
             verifier,
         )
         self.assertEqual(workflow.count('      - "**/*.md"'), 2)

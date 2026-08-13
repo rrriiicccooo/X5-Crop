@@ -3,25 +3,17 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 from pathlib import Path
 from typing import Any, Sequence
 
 from .performance import validate_receipt as validate_performance_receipt
+from .file_identity import sha256_file
 from .platform_receipt import (
     TARGET_APPLE_SILICON,
     TARGET_WINDOWS_X64,
     validate_platform_receipt,
 )
-
-
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def _case_map(receipt: dict[str, Any]) -> dict[str, dict[str, str]]:
@@ -48,7 +40,8 @@ def check_platform_receipts(
         performance_path = path.parent / performance_identity["file_name"]
         if (
             not performance_path.is_file()
-            or _sha256(performance_path) != performance_identity["sha256"]
+            or sha256_file(performance_path)
+            != performance_identity["sha256"]
         ):
             raise ValueError("associated performance receipt content is unavailable")
         performance = json.loads(performance_path.read_text(encoding="utf-8"))
