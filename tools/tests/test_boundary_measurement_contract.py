@@ -1,9 +1,88 @@
 from __future__ import annotations
 
 from tools.tests.photo_geometry_support import *
+from x5crop.detection.photo_geometry.sequence_direction_measurement import (
+    sequence_run_direction_measurement,
+)
 
 
 class BoundaryMeasurementContractTest(unittest.TestCase):
+    def test_sequence_direction_full_interval_contains_fit_at_angle_limit(
+        self,
+    ) -> None:
+        def transition(
+            identity: str,
+            *,
+            trace_ordinal: int,
+            trace: int,
+            coordinate: float,
+            physical: FiniteInterval,
+        ) -> PhotoBoundaryTransition:
+            return PhotoBoundaryTransition(
+                transition_id=ObservationId(identity),
+                query_id="query:angle-limit",
+                trace_ordinal=trace_ordinal,
+                trace_coordinate_px=trace,
+                canonical_coordinate_px=coordinate,
+                localization_interval_px=FiniteInterval(
+                    coordinate - 0.5,
+                    coordinate + 0.5,
+                ),
+                physical_position_interval_px=physical,
+                gradient_z=10.0,
+                tone_z=1.0,
+                texture_z=1.0,
+                left_tone_mean=10.0,
+                right_tone_mean=20.0,
+                left_texture_mean=1.0,
+                right_texture_mean=2.0,
+                polarity=-1,
+                peak_width_px=1.0,
+                prominence=10.0,
+                local_noise=0.0,
+            )
+
+        values = (
+            transition(
+                "angle-limit:left",
+                trace_ordinal=0,
+                trace=902,
+                coordinate=4195.0,
+                physical=FiniteInterval(4182.5, 4204.5),
+            ),
+            transition(
+                "angle-limit:right",
+                trace_ordinal=1,
+                trace=1056,
+                coordinate=4184.0,
+                physical=FiniteInterval(4183.5, 4205.5),
+            ),
+        )
+        run = ProfileRun(
+            run_id="angle-limit",
+            coordinate_interval_px=FiniteInterval(4165.0, 4204.0),
+            transition_ids=tuple(item.transition_id for item in values),
+            trace_coordinates_px=tuple(
+                item.trace_coordinate_px for item in values
+            ),
+            role_hint=None,
+            qualified_anchor_roles=(BoundaryRole.END,),
+            support_fraction=0.2,
+            continuous_support_fraction=0.1,
+            fit_residual_px=5.5,
+            evidence_strength=1.0,
+        )
+        result = sequence_run_direction_measurement(
+            run,
+            {str(item.transition_id): item for item in values},
+            boundary_axis_scale_px_per_mm=70.0,
+        )
+
+        self.assertIsNotNone(result)
+        _canonical, fit, full = result
+        self.assertTrue(full.contains(fit.minimum, epsilon=1.0e-9))
+        self.assertTrue(full.contains(fit.maximum, epsilon=1.0e-9))
+
     def test_duplicate_trace_fits_merge_before_role_generation(self) -> None:
         measurement = make_side_measurement_set(((100.0,),) * 4)
         transitions = {

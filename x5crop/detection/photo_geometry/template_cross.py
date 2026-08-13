@@ -22,7 +22,7 @@ from typing import Sequence
 
 from ...domain import FiniteInterval, ObservationId, PositiveInterval
 from .line_observations import PhotoBoundaryObservation
-from .model import BoundaryAxis, BoundaryRole
+from .model import BoundaryAxis, BoundaryRole, independent_spatial_support_count
 from .observation_types import ProfileRun
 from .output_model import SharedStripDirection
 from .template_model import TemplateSpec
@@ -222,6 +222,8 @@ class CrossRoleBinding:
 
         if run.role_hint not in {BoundaryRole.TOP, BoundaryRole.BOTTOM}:
             raise ValueError("cross measurement run must carry top/bottom role")
+        if getattr(observation, "role", run.role_hint) != run.role_hint:
+            raise ValueError("cross run and fitted observation roles disagree")
         coordinate = _observation_coordinate(
             observation,
             lane_reference_trace_px=lane_reference_trace_px,
@@ -359,28 +361,6 @@ class CrossSearchReceipt:
         ):
             raise ValueError("cross search receipt bounds must be positive")
 
-    # Short aliases make receipts pleasant to inspect without introducing a
-    # second schema or a compatibility wrapper.
-    @property
-    def registered_runs(self) -> int:
-        return self.registered_run_count
-
-    @property
-    def fitted_observations(self) -> int:
-        return self.fitted_observation_count
-
-    @property
-    def compatible_pairs(self) -> int:
-        return self.compatible_pair_count
-
-    @property
-    def single_side_inferences(self) -> int:
-        return self.single_side_inference_count
-
-    @property
-    def evaluated_fits(self) -> int:
-        return self.evaluated_fit_count
-
     def validate_bounds(self) -> None:
         if self.registered_run_count > self.registered_run_bound:
             raise ValueError("cross registered-run bound exceeded")
@@ -490,15 +470,6 @@ class CrossFitCompetition:
         if self.reason is not None and not self.reason:
             raise ValueError("cross competition reason cannot be empty")
 
-    @property
-    def resolved(self) -> bool:
-        return self.status == CrossFitStatus.RESOLVED
-
-    @property
-    def placement(self) -> CrossFit | None:
-        return self.best if self.resolved else None
-
-
 @dataclass(frozen=True)
 class _Candidate:
     top: CrossRoleBinding
@@ -513,7 +484,15 @@ class _Candidate:
 def _shared_trace_support(top: CrossRoleBinding, bottom: CrossRoleBinding) -> int:
     if not top.trace_coordinates_px or not bottom.trace_coordinates_px:
         return 0
-    return len(set(top.trace_coordinates_px).intersection(bottom.trace_coordinates_px))
+    common = tuple(
+        sorted(set(top.trace_coordinates_px).intersection(bottom.trace_coordinates_px))
+    )
+    if not common:
+        return 0
+    queried = tuple(
+        sorted(set(top.trace_coordinates_px) | set(bottom.trace_coordinates_px))
+    )
+    return independent_spatial_support_count(queried, common)
 
 
 def _center_compatible(

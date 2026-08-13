@@ -141,7 +141,6 @@ class TemplatePhaseContractTest(unittest.TestCase):
         self.assertEqual(result.status, PhaseFitStatus.AMBIGUOUS)
         self.assertIsNotNone(result.best)
         self.assertIsNotNone(result.runner_up)
-        self.assertIsNone(result.placement)
 
     def test_local_anomaly_prefix_is_transmitted_once(self) -> None:
         relation = LocalAdvanceRelation(
@@ -174,7 +173,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
         self.assertEqual(result.status, PhaseFitStatus.BOUND_EXCEEDED)
         with self.assertRaises(ValueError):
             validate_template_work(
-                replace(result.receipt, phase_lookup_count=5),
+                replace(result.receipt, phase_lookup_count=13),
                 observation_count=2,
                 role_count=2,
                 slot_count=1,

@@ -73,7 +73,7 @@ class TemplateCrossContractTest(unittest.TestCase):
             ObservationId("observation:top"),
             ObservationId("observation:bottom"),
         ))
-        self.assertEqual(result.receipt.compatible_pairs, 1)
+        self.assertEqual(result.receipt.compatible_pair_count, 1)
 
     def test_single_side_infers_opposite_fixed_height(self) -> None:
         result = fit_template_cross(
@@ -90,7 +90,7 @@ class TemplateCrossContractTest(unittest.TestCase):
         self.assertAlmostEqual(result.best.top_canonical_px, 100.0)
         self.assertAlmostEqual(result.best.bottom_canonical_px, 340.0)
         self.assertEqual(result.best.inferred_bindings[0].evidence, CrossEvidence.FIXED_HEIGHT_INFERRED)
-        self.assertEqual(result.receipt.single_side_inferences, 1)
+        self.assertEqual(result.receipt.single_side_inference_count, 1)
 
     def test_equally_strong_non_equivalent_fits_keep_runner_up_unresolved(self) -> None:
         result = fit_template_cross(
@@ -110,7 +110,7 @@ class TemplateCrossContractTest(unittest.TestCase):
         self.assertEqual(result.status, CrossFitStatus.UNRESOLVED)
         self.assertIsNotNone(result.best)
         self.assertIsNotNone(result.runner_up)
-        self.assertEqual(result.receipt.evaluated_fits, 2)
+        self.assertEqual(result.receipt.evaluated_fit_count, 2)
 
     def test_center_compatible_fit_beats_off_center_clutter(self) -> None:
         result = fit_template_cross(
@@ -144,7 +144,7 @@ class TemplateCrossContractTest(unittest.TestCase):
         )
         self.assertEqual(result.status, CrossFitStatus.UNRESOLVED)
         self.assertIsNone(result.best)
-        self.assertEqual(result.receipt.compatible_pairs, 0)
+        self.assertEqual(result.receipt.compatible_pair_count, 0)
 
     def test_receipt_bound_overflow_is_explicit(self) -> None:
         result = fit_template_cross(

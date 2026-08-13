@@ -142,6 +142,39 @@ class PhysicalAuthorityContractTest(unittest.TestCase):
             ("domain", "scan_canvas"),
         )
 
+    def test_scan_canvas_chooses_nearest_compatible_physical_profile(
+        self,
+    ) -> None:
+        configuration = get_detection_configuration(
+            "120-66",
+            "partial",
+            3,
+        )
+        evidence = observe_scan_canvas(
+            9899,
+            2797,
+            "vertical",
+            configuration.scan_canvas,
+        )
+
+        self.assertEqual(evidence.outcome, ScanCanvasOutcome.SUPPORTED)
+        self.assertGreater(len(evidence.matches), 1)
+        assert evidence.selected_profile is not None
+        self.assertEqual(
+            evidence.selected_profile.profile_id,
+            "120_wide_224_5",
+        )
+        self.assertEqual(
+            evidence.selected_profile.profile_id,
+            min(
+                evidence.matches,
+                key=lambda item: (
+                    item.aspect_error_ratio,
+                    item.profile.profile_id,
+                ),
+            ).profile.profile_id,
+        )
+
     def test_holder_catalog_is_not_filtered_by_requested_count(self) -> None:
         self.assertEqual(len(SCAN_CANVAS_PHYSICAL_SPECS), 7)
         self.assertIn(

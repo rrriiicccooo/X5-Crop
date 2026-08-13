@@ -30,11 +30,15 @@ class TemplateWorkBound:
 
     @property
     def phase_lookup_bound(self) -> int:
-        return self.observation_count * self.role_count
+        return self.phase_hypothesis_bound
 
     @property
     def role_binding_bound(self) -> int:
-        return self.observation_count * self.role_count
+        return self.phase_hypothesis_bound * self.role_count
+
+    @property
+    def phase_hypothesis_bound(self) -> int:
+        return self.observation_count * max(6, self.role_count)
 
     @property
     def local_relation_bound(self) -> int:
@@ -42,7 +46,7 @@ class TemplateWorkBound:
 
     @property
     def asymptotic_order(self) -> str:
-        return "O(H*R)"
+        return "O(H*R), H<=A*max(6,R)"
 
 
 def validate_template_work(
@@ -70,6 +74,7 @@ def validate_template_work(
     )
     if (
         receipt.phase_lookup_count > bound.phase_lookup_bound
+        or receipt.phase_hypothesis_count > bound.phase_hypothesis_bound
         or receipt.role_binding_count > bound.role_binding_bound
         or receipt.local_relation_evaluation_count > bound.local_relation_bound
     ):

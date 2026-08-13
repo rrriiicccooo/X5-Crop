@@ -100,12 +100,14 @@ class ScanCanvasEvidence:
             raise ValueError("scan-canvas profile matches must be unique")
         if self.outcome == ScanCanvasOutcome.SUPPORTED:
             if (
-                len(self.matches) != 1
-                or self.selected_profile != self.matches[0].profile
+                not self.matches
+                or self.selected_profile not in tuple(
+                    match.profile for match in self.matches
+                )
                 or self.axis_scales is None
             ):
                 raise ValueError(
-                    "supported scan canvas requires one profile and scale"
+                    "supported scan canvas requires a selected profile and scale"
                 )
         elif self.selected_profile is not None or self.axis_scales is not None:
             raise ValueError(
@@ -228,7 +230,25 @@ def observe_scan_canvas(
             axis_scales=None,
             provenance=provenance,
         )
-    if len(matches) > 1:
+    ordered_matches = tuple(
+        sorted(
+            matches,
+            key=lambda item: (
+                item.aspect_error_ratio,
+                item.profile.profile_id,
+            ),
+        )
+    )
+    selected = ordered_matches[0]
+    if (
+        len(ordered_matches) > 1
+        and math.isclose(
+            selected.aspect_error_ratio,
+            ordered_matches[1].aspect_error_ratio,
+            rel_tol=0.0,
+            abs_tol=1.0e-12,
+        )
+    ):
         return ScanCanvasEvidence(
             outcome=ScanCanvasOutcome.COMPETING_PROFILES_UNRESOLVED,
             observed_long_axis_px=work_width_px,
@@ -238,7 +258,7 @@ def observe_scan_canvas(
             axis_scales=None,
             provenance=provenance,
         )
-    profile = matches[0].profile
+    profile = selected.profile
     return ScanCanvasEvidence(
         outcome=ScanCanvasOutcome.SUPPORTED,
         observed_long_axis_px=work_width_px,
@@ -247,8 +267,8 @@ def observe_scan_canvas(
         selected_profile=profile,
         axis_scales=CanvasAxisScaleIntervals(
             holder_profile_id=profile.profile_id,
-            width_axis_px_per_mm=matches[0].shared_scale_px_per_mm,
-            height_axis_px_per_mm=matches[0].shared_scale_px_per_mm,
+            width_axis_px_per_mm=selected.shared_scale_px_per_mm,
+            height_axis_px_per_mm=selected.shared_scale_px_per_mm,
             source_width_axis="x" if is_horizontal_layout(layout) else "y",
             source_height_axis="y" if is_horizontal_layout(layout) else "x",
         ),
@@ -264,8 +284,17 @@ def matched_holder_from_evidence(
         evidence.outcome != ScanCanvasOutcome.SUPPORTED
         or evidence.selected_profile is None
         or evidence.axis_scales is None
-        or len(evidence.matches) != 1
     ):
+        return None
+    selected_match = next(
+        (
+            match
+            for match in evidence.matches
+            if match.profile == evidence.selected_profile
+        ),
+        None,
+    )
+    if selected_match is None:
         return None
     full_count = format_spec.holder_full_count(
         evidence.selected_profile.profile_id
@@ -275,6 +304,6 @@ def matched_holder_from_evidence(
     return MatchedHolder(
         profile=evidence.selected_profile,
         full_count=full_count,
-        aspect_error_ratio=evidence.matches[0].aspect_error_ratio,
+        aspect_error_ratio=selected_match.aspect_error_ratio,
         axis_scales=evidence.axis_scales,
     )

@@ -199,6 +199,7 @@ class PitchFit:
     frame_width_px: FiniteInterval | PositiveInterval | float
     gap_interval_px: FiniteInterval | float
     pitch_interval_px: FiniteInterval | PositiveInterval | float
+    canonical_frame_width_px: float
     canonical_pitch_px: float
     scale_px_per_mm: PositiveInterval | None = None
     observation_ids: tuple[ObservationId, ...] = ()
@@ -212,6 +213,12 @@ class PitchFit:
         object.__setattr__(self, "pitch_interval_px", pitch)
         if gap.minimum < 0.0:
             raise ValueError("pitch gap interval cannot be negative")
+        if not math.isfinite(self.canonical_frame_width_px) or not (
+            width.minimum - 1.0e-9
+            <= self.canonical_frame_width_px
+            <= width.maximum + 1.0e-9
+        ):
+            raise ValueError("canonical frame width must lie in its interval")
         if not math.isfinite(self.canonical_pitch_px) or not (
             pitch.minimum - 1.0e-9
             <= self.canonical_pitch_px
@@ -278,7 +285,9 @@ class SequenceFit:
     phase_interval_px: FiniteInterval
     canonical_phase_px: float
     pitch_fit: PitchFit
+    canonical_role_positions_px: tuple[float, ...]
     role_positions_px: tuple[FiniteInterval, ...]
+    role_observation_ids: tuple[ObservationId | None, ...]
     matched_role_indices: tuple[int, ...]
     inferred_role_indices: tuple[int, ...]
     direct_observation_ids: tuple[ObservationId, ...]
@@ -287,12 +296,27 @@ class SequenceFit:
     contradicted_observation_count: int = 0
     residual_sum_px: float = 0.0
     center_compatible: bool = True
+    direct_support_fraction: float = 0.0
+    polarity_match_count: int = 0
 
     def __post_init__(self) -> None:
         if not self.phase_interval_px.contains(self.canonical_phase_px, epsilon=1.0e-9):
             raise ValueError("sequence phase is outside its interval")
-        if len(self.role_positions_px) != 2 * self.template.count:
+        if (
+            len(self.canonical_role_positions_px) != 2 * self.template.count
+            or len(self.role_positions_px) != 2 * self.template.count
+            or len(self.role_observation_ids) != 2 * self.template.count
+        ):
             raise ValueError("sequence role position count is invalid")
+        if any(
+            not interval.contains(canonical, epsilon=1.0e-9)
+            for canonical, interval in zip(
+                self.canonical_role_positions_px,
+                self.role_positions_px,
+                strict=True,
+            )
+        ):
+            raise ValueError("canonical role position is outside its interval")
         expected_roles = set(range(2 * self.template.count))
         matched = set(self.matched_role_indices)
         inferred = set(self.inferred_role_indices)
@@ -306,6 +330,14 @@ class SequenceFit:
             raise ValueError("sequence contradiction count is invalid")
         if not isinstance(self.center_compatible, bool):
             raise TypeError("sequence center compatibility must be boolean")
+        if (
+            not math.isfinite(self.direct_support_fraction)
+            or self.direct_support_fraction < 0.0
+            or self.direct_support_fraction > self.support_count + 1.0e-9
+        ):
+            raise ValueError("sequence direct support is invalid")
+        if not 0 <= self.polarity_match_count <= self.support_count:
+            raise ValueError("sequence polarity support is invalid")
         if not math.isfinite(self.residual_sum_px) or self.residual_sum_px < 0.0:
             raise ValueError("sequence residual is invalid")
         if tuple(item.relation_ordinal for item in self.local_advance_relations) != tuple(
@@ -314,11 +346,11 @@ class SequenceFit:
             raise ValueError("local relation ordinals must be contiguous")
         if len(set(self.direct_observation_ids)) != len(self.direct_observation_ids):
             raise ValueError("sequence direct observations must be unique")
-
-    @property
-    def ambiguous(self) -> bool:
-        return False
-
+        if any(
+            identity is not None and not isinstance(identity, ObservationId)
+            for identity in self.role_observation_ids
+        ):
+            raise TypeError("sequence role observations must be typed identities")
 
 @dataclass(frozen=True)
 class TemplateSearchReceipt:
@@ -385,11 +417,11 @@ class TemplateSearchReceipt:
             raise ValueError("template work dimensions are inconsistent")
         if self.observation_count != h or self.role_count != r:
             raise ValueError("receipt dimensions do not match the requested bound")
-        max_indexed = h * r
+        max_hypotheses = h * max(6, r)
         if (
-            self.phase_lookup_count > max_indexed
-            or self.role_binding_count > max_indexed
-            or self.phase_hypothesis_count > max_indexed
+            self.phase_lookup_count > max_hypotheses
+            or self.phase_hypothesis_count > max_hypotheses
+            or self.role_binding_count > self.phase_hypothesis_count * r
             or self.local_relation_evaluation_count > max(0, slot_count - 1)
         ):
             raise ValueError("template indexed work exceeded its structural bound")

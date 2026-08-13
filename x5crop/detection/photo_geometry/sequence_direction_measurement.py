@@ -89,7 +89,15 @@ def sequence_run_direction_measurement(
         math.degrees(math.atan(-physical_slopes.minimum)),
     )
     full = FiniteInterval(
-        min(measured_full.minimum, physical_full.minimum),
-        max(measured_full.maximum, physical_full.maximum),
+        min(
+            fit.minimum,
+            measured_full.minimum,
+            physical_full.minimum,
+        ),
+        max(
+            fit.maximum,
+            measured_full.maximum,
+            physical_full.maximum,
+        ),
     )
     return canonical, fit, full
