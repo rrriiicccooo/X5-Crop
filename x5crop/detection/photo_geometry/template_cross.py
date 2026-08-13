@@ -484,15 +484,21 @@ class _Candidate:
 def _shared_trace_support(top: CrossRoleBinding, bottom: CrossRoleBinding) -> int:
     if not top.trace_coordinates_px or not bottom.trace_coordinates_px:
         return 0
-    common = tuple(
-        sorted(set(top.trace_coordinates_px).intersection(bottom.trace_coordinates_px))
-    )
-    if not common:
-        return 0
     queried = tuple(
         sorted(set(top.trace_coordinates_px) | set(bottom.trace_coordinates_px))
     )
-    return independent_spatial_support_count(queried, common)
+    common = tuple(
+        sorted(set(top.trace_coordinates_px).intersection(bottom.trace_coordinates_px))
+    )
+    if common:
+        return independent_spatial_support_count(queried, common)
+    # The registered top and bottom corridors may use staggered trace
+    # lattices.  Two independently spanning lines still co-support fixed H;
+    # exact pixel-coordinate equality is not a physical requirement.
+    return min(
+        independent_spatial_support_count(queried, top.trace_coordinates_px),
+        independent_spatial_support_count(queried, bottom.trace_coordinates_px),
+    )
 
 
 def _center_compatible(
@@ -637,18 +643,28 @@ def _fit_from_candidate(
     )
 
 
-def _candidate_key(candidate: _Candidate) -> tuple[int, int, float, float, int, tuple[str, str]]:
+def _candidate_key(candidate: _Candidate) -> tuple[int, int, int, float, float, tuple[str, str]]:
     # This is an evidence ordering, not a scalar confidence score.  Direct
-    # pair and shared support precede residual; center compatibility breaks
-    # otherwise equivalent fits and keeps the holder-centred template strong.
+    # pair and the holder-centred short-axis fact precede observation quality.
     return (
         int(candidate.direct_pair),
+        int(candidate.center_compatible),
         candidate.shared_support,
         candidate.continuous_support,
         -candidate.residual,
-        int(candidate.center_compatible),
         (str(candidate.top.observation_id), str(candidate.bottom.observation_id)),
     )
+
+
+def _sampling_equivalent(left: CrossFit, right: CrossFit) -> bool:
+    tolerance = max(
+        2.0,
+        min(left.fixed_height_px.center, right.fixed_height_px.center) * 0.03,
+    )
+    return max(
+        abs(left.top_canonical_px - right.top_canonical_px),
+        abs(left.bottom_canonical_px - right.bottom_canonical_px),
+    ) <= tolerance
 
 
 def _coerce_bindings(
@@ -935,21 +951,22 @@ def fit_template_cross(
         if runner_candidate is not None
         else None
     )
-    if runner is None:
+    if runner is None or _sampling_equivalent(best, runner):
         status = CrossFitStatus.RESOLVED
         reason = None
     else:
-        # Explicit lexicographic equality is unresolved.  A one-support
-        # advantage or a residual separation larger than one pixel is clear;
-        # otherwise retain the runner-up and refuse placement authority.
+        # Explicit lexicographic equality is unresolved.  A one-region
+        # advantage, a material direct-support advantage, or a residual
+        # separation larger than one pixel is clear; otherwise retain the
+        # runner-up and refuse placement authority.
         key_best = _candidate_key(best_candidate)
         key_runner = _candidate_key(runner_candidate)
         clearly_separated = (
             key_best[0] > key_runner[0]
             or key_best[1] > key_runner[1]
             or key_best[2] > key_runner[2]
-            or key_best[3] > key_runner[3] + 1.0
-            or key_best[4] > key_runner[4]
+            or key_best[3] >= key_runner[3] + 0.05
+            or key_best[4] > key_runner[4] + 1.0
         )
         status = CrossFitStatus.RESOLVED if clearly_separated else CrossFitStatus.UNRESOLVED
         reason = None if status == CrossFitStatus.RESOLVED else "runner-up is not clearly separated"

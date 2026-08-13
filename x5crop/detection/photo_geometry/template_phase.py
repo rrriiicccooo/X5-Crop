@@ -493,7 +493,11 @@ def _rank(value: _BoundFit) -> tuple[object, ...]:
         -fit.residual_sum_px,
     )
     if fit.template.phase_authority == PhaseAuthority.FULL_CENTERED:
-        return (int(fit.center_compatible), -value.center_error_px, *common)
+        center_bucket = int(
+            value.center_error_px
+            / max(1.0, fit.pitch_fit.canonical_frame_width_px * 0.02)
+        )
+        return (int(fit.center_compatible), -center_bucket, *common)
     return (
         int(value.residual_compatible),
         fit.direct_support_fraction,
@@ -510,8 +514,14 @@ def _clearly_better(best: _BoundFit, runner: _BoundFit) -> bool:
         return True
     if (
         left.template.phase_authority == PhaseAuthority.FULL_CENTERED
-        and runner.center_error_px
-        >= best.center_error_px + left.pitch_fit.canonical_frame_width_px * 0.01
+        and int(
+            best.center_error_px
+            / max(1.0, left.pitch_fit.canonical_frame_width_px * 0.02)
+        )
+        < int(
+            runner.center_error_px
+            / max(1.0, right.pitch_fit.canonical_frame_width_px * 0.02)
+        )
     ):
         return True
     if best.residual_compatible and not runner.residual_compatible:
@@ -527,6 +537,25 @@ def _clearly_better(best: _BoundFit, runner: _BoundFit) -> bool:
         and left.direct_support_fraction >= right.direct_support_fraction - 0.1
         and right.residual_sum_px
         >= left.residual_sum_px + max(2.0, left.pitch_fit.canonical_frame_width_px * 0.01)
+    )
+
+
+def _sampling_equivalent(left: SequenceFit, right: SequenceFit) -> bool:
+    tolerance = max(
+        2.0,
+        min(
+            left.pitch_fit.canonical_frame_width_px,
+            right.pitch_fit.canonical_frame_width_px,
+        )
+        * 0.03,
+    )
+    return all(
+        abs(left_value - right_value) <= tolerance
+        for left_value, right_value in zip(
+            left.canonical_role_positions_px,
+            right.canonical_role_positions_px,
+            strict=True,
+        )
     )
 
 
@@ -723,7 +752,11 @@ def fit_template_phase(
             receipt,
             direct_ids,
         )
-    if runner is None or _clearly_better(best, runner):
+    if (
+        runner is None
+        or _sampling_equivalent(best.fit, runner.fit)
+        or _clearly_better(best, runner)
+    ):
         status = PhaseFitStatus.RESOLVED
         reason = None
     else:

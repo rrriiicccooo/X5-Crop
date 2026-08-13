@@ -142,6 +142,29 @@ class TemplatePhaseContractTest(unittest.TestCase):
         self.assertIsNotNone(result.best)
         self.assertIsNotNone(result.runner_up)
 
+    def test_sampling_equivalent_runner_does_not_block_regular_template(self) -> None:
+        observations = tuple(
+            edge(f"edge:{index}", coordinate)
+            for index, coordinate in enumerate(
+                (40.0, 140.0, 43.0, 143.0, 160.0, 260.0)
+            )
+        )
+        result = fit_template_phase(observations, template(2))
+        self.assertEqual(result.status, PhaseFitStatus.RESOLVED)
+        self.assertIsNotNone(result.runner_up)
+        assert result.best is not None and result.runner_up is not None
+        self.assertLessEqual(
+            max(
+                abs(left - right)
+                for left, right in zip(
+                    result.best.canonical_role_positions_px,
+                    result.runner_up.canonical_role_positions_px,
+                    strict=True,
+                )
+            ),
+            3.0,
+        )
+
     def test_local_anomaly_prefix_is_transmitted_once(self) -> None:
         relation = LocalAdvanceRelation(
             relation_ordinal=1,

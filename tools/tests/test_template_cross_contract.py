@@ -112,6 +112,24 @@ class TemplateCrossContractTest(unittest.TestCase):
         self.assertIsNotNone(result.runner_up)
         self.assertEqual(result.receipt.evaluated_fit_count, 2)
 
+    def test_sampling_equivalent_runner_does_not_block_regular_template(self) -> None:
+        result = fit_template_cross(
+            TemplateCrossInput(
+                template=template(),
+                fixed_height_px=240.0,
+                top_bindings=(
+                    binding(BoundaryRole.TOP, "top-a", 100.0),
+                    binding(BoundaryRole.TOP, "top-b", 104.0),
+                ),
+                bottom_bindings=(
+                    binding(BoundaryRole.BOTTOM, "bottom-a", 340.0),
+                    binding(BoundaryRole.BOTTOM, "bottom-b", 344.0),
+                ),
+            )
+        )
+        self.assertEqual(result.status, CrossFitStatus.RESOLVED)
+        self.assertIsNotNone(result.runner_up)
+
     def test_center_compatible_fit_beats_off_center_clutter(self) -> None:
         result = fit_template_cross(
             TemplateCrossInput(
@@ -202,6 +220,23 @@ class TemplateCrossContractTest(unittest.TestCase):
             },
         )
         self.assertEqual(direction.full_angle_interval_degrees, FiniteInterval(-0.1, 0.2))
+
+    def test_staggered_trace_lattices_can_share_independent_regions(self) -> None:
+        result = fit_template_cross(
+            TemplateCrossInput(
+                template=template(),
+                fixed_height_px=240.0,
+                top_bindings=(
+                    binding(BoundaryRole.TOP, "top", 100.0, traces=(0, 50, 100)),
+                ),
+                bottom_bindings=(
+                    binding(BoundaryRole.BOTTOM, "bottom", 340.0, traces=(1, 51, 101)),
+                ),
+            )
+        )
+        self.assertEqual(result.status, CrossFitStatus.RESOLVED)
+        assert result.best is not None
+        self.assertGreaterEqual(result.best.shared_trace_support_count, 2)
 
 
 if __name__ == "__main__":
