@@ -167,8 +167,8 @@ class DebugAnalysisContractTest(unittest.TestCase):
                 else tuple(
                     frame.canonical_source_polygon
                     for lane in detection.candidate.geometry.lane_reconstructions
-                    for chain in lane.materialized_chains
-                    for frame in chain.fixed_frames.frames
+                    for placement in lane.placement_competition.placements
+                    for frame in placement.frames
                 )
             ),
         )
@@ -286,7 +286,7 @@ class DebugAnalysisContractTest(unittest.TestCase):
                 Path(temporary)
             )
             expected_transition_count = sum(
-                len(lane.side_transition_regions)
+                len(lane.prepared.side_regions)
                 for lane in detection.candidate.geometry.lane_reconstructions
             )
             with mock.patch(
@@ -348,11 +348,11 @@ class DebugAnalysisContractTest(unittest.TestCase):
         self.assertGreater(fill.call_count, 0)
         shared_title = output_base.call_args.args[3]
         sequence_title = long_axis_base.call_args.args[3]
-        self.assertTrue(shared_title.startswith("SHARED AUTHORITY · "))
-        self.assertTrue(shared_title.endswith(" LEGAL · NO DOMINANT"))
-        legal_count = shared_title.split(" · ")[1].split()[0]
+        self.assertTrue(shared_title.startswith("SOURCE FIT · "))
+        self.assertIn("PLACEMENTS · ", shared_title)
+        placement_count = shared_title.split(" · ")[1].split()[0]
         self.assertIn(
-            f"SEQUENCE AUTHORITY · {legal_count} LEGAL · NO DOMINANT",
+            f"SEQUENCE FIT · {placement_count} PLACEMENTS",
             sequence_title,
         )
 

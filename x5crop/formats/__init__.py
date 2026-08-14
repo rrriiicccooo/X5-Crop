@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from types import MappingProxyType
 
 from ..utils import require_positive
 
@@ -156,7 +157,10 @@ class FormatSpec:
 FRAME_135 = FramePhysicalSpec(36.0, 24.0, 2.0)
 
 
-FORMATS: dict[str, FormatSpec] = {
+FORMAT_CATALOG_REVISION = "x5crop_format_catalog_v2"
+
+
+_FORMAT_SPECS: dict[str, FormatSpec] = {
     "135": FormatSpec(
         "135",
         FRAME_135,
@@ -232,6 +236,7 @@ FORMATS: dict[str, FormatSpec] = {
     ),
 }
 
+FORMATS = MappingProxyType(_FORMAT_SPECS)
 FORMAT_CHOICES = tuple(FORMATS)
 
 

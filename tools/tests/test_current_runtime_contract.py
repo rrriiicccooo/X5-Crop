@@ -189,7 +189,7 @@ class CurrentRuntimeContractTest(unittest.TestCase):
         self.assertEqual(REPORT_SCHEMA_ID, "x5crop_detection_report_v5")
         self.assertEqual(
             REPORT_SCHEMA_REVISION,
-            "x5crop_v5_lightweight_report_1",
+            "x5crop_v5_template_report_1",
         )
         candidate = candidate_gate_assessment(
             {
@@ -207,6 +207,7 @@ class CurrentRuntimeContractTest(unittest.TestCase):
                 "stage",
                 "state",
                 "gap",
+                "failure",
                 "final_review_reason",
                 "evaluated",
                 "blocks",
@@ -221,9 +222,9 @@ class CurrentRuntimeContractTest(unittest.TestCase):
             code: TypedAssessment(EvidenceState.SUPPORTED, None)
             for code in CANDIDATE_GATE_CHECK_CODES
         }
-        facts["complete_chain"] = TypedAssessment(
+        facts["complete_placement"] = TypedAssessment(
             EvidenceState.UNAVAILABLE,
-            GateGap.COMPLETE_CHAIN_UNAVAILABLE,
+            GateGap.COMPLETE_PLACEMENT_UNAVAILABLE,
         )
         facts["direct_use_budget"] = TypedAssessment(
             EvidenceState.UNAVAILABLE,
@@ -232,7 +233,7 @@ class CurrentRuntimeContractTest(unittest.TestCase):
         candidate = candidate_gate_assessment(facts)
         self.assertEqual(
             tuple(check.code for check in candidate.blocking_checks),
-            ("complete_chain",),
+            ("complete_placement",),
         )
         self.assertFalse(
             next(
@@ -244,7 +245,7 @@ class CurrentRuntimeContractTest(unittest.TestCase):
         decision = apply_decision_gate(candidate)
         self.assertEqual(decision.final_review_reasons, ("no_legal_placement",))
 
-        facts["complete_chain"] = TypedAssessment(EvidenceState.SUPPORTED, None)
+        facts["complete_placement"] = TypedAssessment(EvidenceState.SUPPORTED, None)
         facts["direct_use_budget"] = TypedAssessment(
             EvidenceState.CONTRADICTED,
             GateGap.DIRECT_USE_BUDGET_EXCEEDED,

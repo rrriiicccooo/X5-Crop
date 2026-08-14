@@ -23,6 +23,30 @@ def _intersect(left: FiniteInterval, right: FiniteInterval) -> FiniteInterval:
     if minimum > maximum:
         raise ValueError("inferred boundary contradicts its template edge")
     return FiniteInterval(minimum, maximum)
+
+
+def _advance(
+    position: FiniteInterval,
+    extent: FiniteInterval,
+    direction: int,
+) -> FiniteInterval:
+    return (
+        _interval_sum(position, extent)
+        if direction > 0
+        else _interval_difference(position, extent)
+    )
+
+
+def _retreat(
+    position: FiniteInterval,
+    extent: FiniteInterval,
+    direction: int,
+) -> FiniteInterval:
+    return (
+        _interval_difference(position, extent)
+        if direction > 0
+        else _interval_sum(position, extent)
+    )
 def _oriented_width(start: FiniteInterval, end: FiniteInterval, direction: int) -> FiniteInterval:
     return _interval_difference(end, start) if direction > 0 else _interval_difference(start, end)
 def _canonical_width(sequence: SequenceFit, template: TemplateSpec) -> float:
@@ -33,6 +57,28 @@ def _canonical_width(sequence: SequenceFit, template: TemplateSpec) -> float:
 def _validate_interval_contains(interval: FiniteInterval, value: float, *, name: str) -> None:
     if not interval.contains(value, epsilon=_EPSILON):
         raise ValueError(f"{name} canonical position leaves its interval")
+
+
+def _cross_direction_compatible(
+    cross: CrossFit,
+    direction: SharedStripDirection,
+) -> bool:
+    selected = cross.selected_direction
+    if selected is None:
+        return True
+    compatibility = (
+        cross.parallel_direction_interval_degrees
+        or selected.full_angle_interval_degrees
+    )
+    return (
+        compatibility.contains(
+            direction.canonical_angle_degrees,
+            epsilon=_EPSILON,
+        )
+        and set(selected.selected_observation_ids).issubset(
+            direction.selected_observation_ids
+        )
+    )
 @dataclass(frozen=True)
 class TemplateFrame:
     """One fixed W/H frame and its four source-coordinate boundaries."""
@@ -85,10 +131,7 @@ class FormatPlacement:
             or not self.frames
             or tuple(frame.lane_ordinal for frame in self.frames)
             != tuple(range(1, self.output_slot_count + 1))
-            or (
-                self.cross_fit.selected_direction is not None
-                and self.cross_fit.selected_direction != self.direction
-            )
+            or not _cross_direction_compatible(self.cross_fit, self.direction)
         ):
             raise ValueError("format placement identity or authority is inconsistent")
         if not isinstance(self.width_authority_px, FiniteInterval) or not isinstance(
@@ -145,9 +188,10 @@ def _resolve_sequence_pair(
     start_direct = start.source == PositionSource.OBSERVED_TRANSITION
     end_direct = end.source == PositionSource.OBSERVED_TRANSITION
     if start_direct and not end_direct:
-        inferred_interval = _intersect(
-            end.full_interval,
-            _interval_sum(start.full_interval, template.frame_width_px),
+        inferred_interval = _advance(
+            start.full_interval,
+            template.frame_width_px,
+            template.direction,
         )
         inferred_canonical = start.canonical + width * template.direction
         end = _ResolvedBoundary(
@@ -159,9 +203,10 @@ def _resolve_sequence_pair(
             "end_from_observed_start_and_fixed_template_width",
         )
     elif end_direct and not start_direct:
-        inferred_interval = _intersect(
-            start.full_interval,
-            _interval_difference(end.full_interval, template.frame_width_px),
+        inferred_interval = _retreat(
+            end.full_interval,
+            template.frame_width_px,
+            template.direction,
         )
         inferred_canonical = end.canonical - width * template.direction
         start = _ResolvedBoundary(
@@ -171,6 +216,55 @@ def _resolve_sequence_pair(
             start.observation_ids,
             start.source,
             "start_from_observed_end_and_fixed_template_width",
+        )
+    elif start_direct and end_direct:
+        # Both observations bind one discrete placement, while fixed W carries
+        # the continuous model uncertainty between them.  Retain both direct
+        # identities, but propagate the same-placement W interval in both
+        # directions so SafeCrop can protect a weak transition that landed on
+        # the photo-side edge of a border.  This never mixes a runner-up phase
+        # or another role assignment into the selected envelope.
+        end_from_start = _advance(
+            start.full_interval,
+            template.frame_width_px,
+            template.direction,
+        )
+        start_from_end = _retreat(
+            end.full_interval,
+            template.frame_width_px,
+            template.direction,
+        )
+        model_budget = (
+            template.frame_width_px.maximum
+            - template.frame_width_px.minimum
+        ) / 2.0
+        start = _ResolvedBoundary(
+            start.role,
+            start.canonical,
+            FiniteInterval(
+                min(start.full_interval.minimum, start_from_end.minimum),
+                max(
+                    start.full_interval.maximum,
+                    start_from_end.maximum + model_budget,
+                ),
+            ),
+            start.observation_ids,
+            start.source,
+            start.inference,
+        )
+        end = _ResolvedBoundary(
+            end.role,
+            end.canonical,
+            FiniteInterval(
+                min(end.full_interval.minimum, end_from_start.minimum),
+                max(
+                    end.full_interval.maximum,
+                    end_from_start.maximum + model_budget,
+                ),
+            ),
+            end.observation_ids,
+            end.source,
+            end.inference,
         )
     _validate_interval_contains(start.full_interval, start.canonical, name="start")
     _validate_interval_contains(end.full_interval, end.canonical, name="end")
@@ -215,7 +309,7 @@ def _cross_boundaries(
         epsilon=_EPSILON,
     ):
         raise ValueError("cross span contradicts fixed template height")
-    if cross.selected_direction is not None and cross.selected_direction != direction:
+    if not _cross_direction_compatible(cross, direction):
         raise ValueError("cross-selected direction contradicts placement direction")
     return result[0], result[1]
 def _boundary_geometry(
@@ -263,26 +357,24 @@ def _reanchor_cross_boundary(
     height_axis: BoundaryAxis,
 ) -> _ResolvedBoundary:
     """Move a cross edge coordinate to a frame trace on its line."""
-    def at_trace(position_px: float) -> float:
-        line = canonical_boundary_line(
-            direction,
-            boundary_axis=height_axis,
-            source_axis_long=width_axis,
-            trace_coordinate_px=source_trace_px,
-            position_px=position_px,
-            support_projection_px=support_projection_px,
+    del support_projection_px, width_axis, height_axis
+
+    def at_trace(position_px: float, angle_degrees: float) -> float:
+        return position_px + math.tan(math.radians(angle_degrees)) * (
+            target_trace_px - source_trace_px
         )
-        if height_axis == BoundaryAxis.X:
-            normal, other = line.normal_x, line.normal_y
-        else:
-            normal, other = line.normal_y, line.normal_x
-        if abs(normal) <= 1.0e-12:
-            raise ValueError("cross boundary cannot be re-anchored at frame trace")
-        return (line.offset_px - other * target_trace_px) / normal
-    canonical = at_trace(resolved.canonical)
+
+    canonical = at_trace(
+        resolved.canonical,
+        direction.canonical_angle_degrees,
+    )
     endpoints = tuple(
-        at_trace(value)
+        at_trace(value, angle)
         for value in (resolved.full_interval.minimum, resolved.full_interval.maximum)
+        for angle in (
+            direction.full_angle_interval_degrees.minimum,
+            direction.full_angle_interval_degrees.maximum,
+        )
     )
     return _ResolvedBoundary(
         resolved.role,
@@ -328,9 +420,10 @@ def compose_format_placement(
         raise TypeError("lane authority must use FiniteInterval")
     selected_direction = cross_fit.selected_direction
     if selected_direction is not None:
-        if direction is not None and direction != selected_direction:
+        if direction is None:
+            direction = selected_direction
+        elif not _cross_direction_compatible(cross_fit, direction):
             raise ValueError("explicit direction contradicts cross-selected direction")
-        direction = selected_direction
     if direction is None:
         raise ValueError("format placement requires cross-selected or explicit direction")
     if not isinstance(direction, SharedStripDirection):
@@ -421,7 +514,7 @@ def compose_format_placement(
                 canonical_source_polygon=polygon,
             )
         )
-    phase = sequence_fit.canonical_phase_px.hex()
+    phase = sequence_fit.phase_lattice_fit.canonical_absolute_phase_px.hex()
     identity = placement_id or (
         f"template-placement:{lane_id}:{template.template_id}:"
         f"{source_scan_geometry.geometry_id}:{direction.direction_id}:{phase}:"

@@ -16,7 +16,7 @@ class GateGap(str, Enum):
     HOLDER_FULL_COUNT_UNRESOLVED = "holder_full_count_unresolved"
     HOLDER_IDENTITY_UNRESOLVED = "holder_identity_unresolved"
     OUTPUT_SLOT_COUNT_UNAVAILABLE = "output_slot_count_unavailable"
-    COMPLETE_CHAIN_UNAVAILABLE = "complete_chain_unavailable"
+    COMPLETE_PLACEMENT_UNAVAILABLE = "complete_placement_unavailable"
     PRODUCER_BOUND_EXCEEDED = "producer_bound_exceeded"
     SHARED_STRIP_DIRECTION_UNAVAILABLE = "shared_strip_direction_unavailable"
     SHARED_STRIP_DIRECTION_NONUNIQUE = "shared_strip_direction_nonunique"
@@ -37,6 +37,124 @@ class GateGap(str, Enum):
     OUTPUT_TRANSFORM_UNAVAILABLE = "output_transform_unavailable"
 
 
+class FailureRecovery(str, Enum):
+    USER_ACTION = "user_action"
+    REMEASURE = "remeasure"
+    UNRECOVERABLE = "unrecoverable"
+
+
+class MinimumMissingFact(str, Enum):
+    FORMAT_COMPATIBILITY = "format_compatibility"
+    COUNT_AUTHORITY = "count_authority"
+    COMPLETE_SCAN_CANVAS = "complete_scan_canvas"
+    ABSOLUTE_PHASE_ANCHOR = "absolute_phase_anchor"
+    PHASE_SUPPORT = "phase_support"
+    PITCH_CLOSURE = "pitch_closure"
+    SHARED_DIRECTION = "shared_direction"
+    CROSS_POSITION = "cross_position"
+    REGISTERED_QUERY_COVERAGE = "registered_query_coverage"
+    LOCAL_GAP_ORDINAL = "local_gap_ordinal"
+    UNIQUE_PLACEMENT = "unique_placement"
+    CONTENT_SAFE_PLACEMENT = "content_safe_placement"
+    DIRECT_USE_PRECISION = "direct_use_precision"
+    SOURCE_PHYSICAL_COMPATIBILITY = "source_physical_compatibility"
+
+
+class RecoveryAction(str, Enum):
+    CHECK_FORMAT = "check_format"
+    CHECK_PARTIAL_COUNT = "check_partial_count"
+    INCLUDE_COMPLETE_HOLDER = "include_complete_holder"
+    PROVIDE_PHASE_ANCHOR = "provide_phase_anchor"
+    RERUN_MEASUREMENT = "rerun_measurement"
+    OPEN_DEBUG_ANALYSIS = "open_debug_analysis"
+    REVIEW_PLACEMENT = "review_placement"
+    RESCAN_SOURCE = "rescan_source"
+
+
+@dataclass(frozen=True)
+class DetectionFailureFact:
+    gap: GateGap
+    recovery: FailureRecovery
+    minimum_missing_fact: MinimumMissingFact
+    recommended_action: RecoveryAction
+    detail: str
+
+    def __post_init__(self) -> None:
+        if (
+            not isinstance(self.gap, GateGap)
+            or not isinstance(self.recovery, FailureRecovery)
+            or not isinstance(self.minimum_missing_fact, MinimumMissingFact)
+            or not isinstance(self.recommended_action, RecoveryAction)
+            or not self.detail
+        ):
+            raise ValueError("detection failure fact is incomplete")
+
+
+def failure_fact(
+    gap: GateGap,
+    *,
+    detail: str | None = None,
+) -> DetectionFailureFact:
+    """Create one canonical recovery fact for a typed geometry gap."""
+
+    recovery, missing, action = {
+        GateGap.SCAN_CANVAS_AUTHORITY_UNAVAILABLE: (
+            FailureRecovery.USER_ACTION,
+            MinimumMissingFact.COMPLETE_SCAN_CANVAS,
+            RecoveryAction.INCLUDE_COMPLETE_HOLDER,
+        ),
+        GateGap.OUTPUT_SLOT_COUNT_UNAVAILABLE: (
+            FailureRecovery.USER_ACTION,
+            MinimumMissingFact.COUNT_AUTHORITY,
+            RecoveryAction.CHECK_PARTIAL_COUNT,
+        ),
+        GateGap.PRODUCER_BOUND_EXCEEDED: (
+            FailureRecovery.REMEASURE,
+            MinimumMissingFact.REGISTERED_QUERY_COVERAGE,
+            RecoveryAction.RERUN_MEASUREMENT,
+        ),
+        GateGap.SHARED_STRIP_DIRECTION_UNAVAILABLE: (
+            FailureRecovery.REMEASURE,
+            MinimumMissingFact.SHARED_DIRECTION,
+            RecoveryAction.RERUN_MEASUREMENT,
+        ),
+        GateGap.LOCAL_ADVANCE_UNRESOLVED: (
+            FailureRecovery.UNRECOVERABLE,
+            MinimumMissingFact.LOCAL_GAP_ORDINAL,
+            RecoveryAction.REVIEW_PLACEMENT,
+        ),
+        GateGap.CONTENT_VETO_REJECTED: (
+            FailureRecovery.UNRECOVERABLE,
+            MinimumMissingFact.CONTENT_SAFE_PLACEMENT,
+            RecoveryAction.REVIEW_PLACEMENT,
+        ),
+        GateGap.DIRECT_USE_BUDGET_EXCEEDED: (
+            FailureRecovery.REMEASURE,
+            MinimumMissingFact.DIRECT_USE_PRECISION,
+            RecoveryAction.RERUN_MEASUREMENT,
+        ),
+        GateGap.PLACEMENT_UNRESOLVED: (
+            FailureRecovery.UNRECOVERABLE,
+            MinimumMissingFact.UNIQUE_PLACEMENT,
+            RecoveryAction.REVIEW_PLACEMENT,
+        ),
+    }.get(
+        gap,
+        (
+            FailureRecovery.REMEASURE,
+            MinimumMissingFact.SOURCE_PHYSICAL_COMPATIBILITY,
+            RecoveryAction.OPEN_DEBUG_ANALYSIS,
+        ),
+    )
+    return DetectionFailureFact(
+        gap=gap,
+        recovery=recovery,
+        minimum_missing_fact=missing,
+        recommended_action=action,
+        detail=detail or gap.value,
+    )
+
+
 # A check is evaluated only after every fact it consumes is supported.  This
 # is a causal execution graph, not a list of extra reasons.  Debug views may
 # still show the underlying authority facts, but Gate reports only the first
@@ -46,15 +164,15 @@ GATE_CHECK_DEPENDENCIES: dict[str, tuple[str, ...]] = {
         "scan_canvas_authority",
         "observation_completeness",
     ),
-    "complete_chain": (
+    "complete_placement": (
         "output_slot_count",
         "observation_completeness",
         "source_scan_geometry",
         "producer_coverage",
     ),
-    "content_protection": ("complete_chain",),
+    "content_protection": ("complete_placement",),
     "selected_placement": (
-        "complete_chain",
+        "complete_placement",
         "content_protection",
         "local_advance_authority",
     ),
@@ -65,7 +183,7 @@ GATE_CHECK_DEPENDENCIES: dict[str, tuple[str, ...]] = {
     "sequence_authority": ("selected_placement",),
     "cross_authority": ("selected_placement",),
     "shared_authority": ("selected_placement",),
-    "slot_ordinal_assignment": ("complete_chain",),
+    "slot_ordinal_assignment": ("complete_placement",),
     "selected_only_envelope": (
         "selected_placement",
         "source_lane_authority",
@@ -82,12 +200,20 @@ GATE_CHECK_DEPENDENCIES: dict[str, tuple[str, ...]] = {
 class TypedAssessment:
     state: EvidenceState
     gap: GateGap | None
+    failure: DetectionFailureFact | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.state, EvidenceState):
             raise TypeError("typed assessment requires an evidence state")
         if (self.state == EvidenceState.SUPPORTED) != (self.gap is None):
             raise ValueError("supported assessment alone has no named gap")
+        if self.gap is None:
+            if self.failure is not None:
+                raise ValueError("supported assessment cannot carry failure")
+        elif self.failure is None:
+            object.__setattr__(self, "failure", failure_fact(self.gap))
+        elif self.failure.gap != self.gap:
+            raise ValueError("assessment failure and gap disagree")
 
 
 @dataclass(frozen=True)
@@ -98,6 +224,7 @@ class GateCheck:
     gap: GateGap | None = None
     final_review_reason: str | None = None
     evaluated: bool = True
+    failure: DetectionFailureFact | None = None
 
     def __post_init__(self) -> None:
         if not self.code:
@@ -109,6 +236,7 @@ class GateCheck:
                 self.state != EvidenceState.UNAVAILABLE
                 or self.gap is not None
                 or self.final_review_reason is not None
+                or self.failure is not None
             ):
                 raise ValueError(
                     "unevaluated gate checks carry no gap or final reason"
@@ -116,6 +244,13 @@ class GateCheck:
             return
         if (self.state == EvidenceState.SUPPORTED) != (self.gap is None):
             raise ValueError("gate check state and typed gap disagree")
+        if self.gap is None:
+            if self.failure is not None:
+                raise ValueError("supported gate check cannot carry failure")
+        elif self.failure is None:
+            object.__setattr__(self, "failure", failure_fact(self.gap))
+        elif self.failure.gap != self.gap:
+            raise ValueError("gate failure and gap disagree")
         if self.stage == GateStage.CANDIDATE:
             if self.final_review_reason is not None:
                 raise ValueError("candidate gate checks cannot own final reasons")

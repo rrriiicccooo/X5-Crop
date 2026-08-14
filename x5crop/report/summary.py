@@ -4,14 +4,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from .chain_records import selected_chain_summary
 from .read_models import typed_read_model
 
 
 AUTHORITY_PARTITION = {
     "pixel_observation": "direction_free_candidate_independent_measurement",
-    "format_physical": "fixed_frame_dimensions_shared_scale_gap_count",
-    "selection": "componentwise_sequence_cross_shared_dominance",
+    "format_physical": "fixed_template_dimensions_pitch_gap_count",
+    "selection": "bounded_phase_cross_shared_placement",
     "safety": "selected_placement_uncertainty_only",
 }
 
@@ -44,7 +43,9 @@ def photo_geometry_summary(detection: object) -> dict[str, Any]:
         "slot_identities": typed_read_model(detection.output_slot_identities),
         "source_placement_selection": {
             "state": selection.state.value,
-            "selected_combination_id": selection.selected_combination_id,
+            "failure": typed_read_model(selection.failure),
+            "selected_placement_ids": list(selection.selected_placement_ids),
+            "runner_up_placement_ids": list(selection.runner_up_placement_ids),
         },
         "source_transform_assessment": typed_read_model(
             geometry.source_transform_assessment
@@ -55,19 +56,28 @@ def photo_geometry_summary(detection: object) -> dict[str, Any]:
         "lanes": [
             {
                 "lane_id": lane.lane_id,
+                "template_id": lane.prepared.template_spec.template_id,
+                "phase_status": lane.prepared.phase_competition.status.value,
+                "cross_status": lane.prepared.cross_competition.status.value,
+                "placement_state": lane.placement_competition.state.value,
+                "placement_failure": typed_read_model(
+                    lane.placement_competition.failure
+                ),
                 "selected_placement_id": (
                     None
                     if lane.selected_placement is None
                     else lane.selected_placement.placement_id
                 ),
-                "selected_chain": (
-                    None
-                    if lane.selected_chain_record is None
-                    else selected_chain_summary(lane.selected_chain_record)
+                "runner_up_placement_id": (
+                    lane.placement_competition.runner_up_placement_id
                 ),
                 "safe_crop_envelopes": typed_read_model(lane.safe_crop_envelopes),
                 "direct_use_budget_assessments": typed_read_model(
                     lane.direct_use_budget_assessments
+                ),
+                "peak_temporary_bytes": max(
+                    lane.prepared.measurement_work.peak_temporary_bytes,
+                    lane.work.peak_temporary_bytes,
                 ),
             }
             for lane in geometry.lane_reconstructions

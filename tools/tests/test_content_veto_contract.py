@@ -1,284 +1,112 @@
 from __future__ import annotations
 
-from tools.tests.chain_selection_support import *
+from dataclasses import replace
+from types import SimpleNamespace
+import unittest
+
+from x5crop.detection.evidence.content_occupancy_model import (
+    ContentOccupancyObservation,
+    ContentOccupancyObservationSet,
+)
+from x5crop.detection.photo_geometry.boundary_geometry import (
+    outward_boundary_projection,
+)
+from x5crop.detection.photo_geometry.content_boundary_queries import (
+    separator_core_content_contradictions,
+)
+from x5crop.detection.photo_geometry.content_topology import (
+    build_content_topology_index,
+)
+from x5crop.detection.photo_geometry.content_veto import content_veto_assessment
+from x5crop.detection.photo_geometry.content_veto_model import ContentVetoReason
+from x5crop.detection.photo_geometry.line_observations import SourceCoordinateLine
+from x5crop.detection.photo_geometry.model import (
+    BoundaryAxis,
+    BoundaryRole,
+    DirectionAuthority,
+    PositionSource,
+)
+from x5crop.detection.photo_geometry.output_model import FrameBoundaryGeometry
+from x5crop.detection.photo_geometry.template_model import LocalAdvanceKind
+from x5crop.domain import Box, FiniteInterval, ObservationId
+
+
+def make_observation(box: Box) -> ContentOccupancyObservationSet:
+    identity = ObservationId(
+        f"content:{box.left}:{box.top}:{box.right}:{box.bottom}"
+    )
+    observation = ContentOccupancyObservation(
+        observation_id=identity,
+        lane_id="lane:0",
+        source_box=box,
+        source_cells=tuple(
+            Box(left, top, left + 1, top + 1)
+            for left in range(box.left, box.right)
+            for top in range(box.top, box.bottom)
+        ),
+        reliability=0.95,
+    )
+    return ContentOccupancyObservationSet(
+        lane_id="lane:0",
+        observations=(observation,),
+        long_step_px=1,
+        cross_step_px=1,
+        long_sample_count=16,
+        cross_sample_count=16,
+        occupied_cell_count=box.width * box.height,
+        long_support_depth_px=1,
+        cross_support_depth_px=1,
+    )
+
+
+def make_frame(
+    start: float,
+    end: float,
+    *,
+    direction_degrees: FiniteInterval = FiniteInterval.exact(0.0),
+):
+    def boundary(role: BoundaryRole, position: float) -> FrameBoundaryGeometry:
+        cross = role in {BoundaryRole.TOP, BoundaryRole.BOTTOM}
+        return FrameBoundaryGeometry(
+            role=role,
+            line=SourceCoordinateLine(
+                normal_x=0.0 if cross else 1.0,
+                normal_y=1.0 if cross else 0.0,
+                offset_px=position,
+                support_projection_px=FiniteInterval(0.0, 40.0),
+                source_axis_long=BoundaryAxis.X,
+            ),
+            reference_trace_px=15.0,
+            canonical_position_px=position,
+            full_position_interval_px=FiniteInterval.exact(position),
+            full_direction_interval_degrees=direction_degrees,
+            position_source=PositionSource.OBSERVED_TRANSITION,
+            position_observation_ids=(
+                ObservationId(f"boundary:{role.value}:{position}"),
+            ),
+            named_position_inference=None,
+            direction_authority=(
+                DirectionAuthority.SHARED_TOP_BOTTOM_DIRECTION
+                if cross
+                else DirectionAuthority.BOUNDED_SEQUENCE_EDGE_DIRECTION
+            ),
+            direction_reference_id="direction:test",
+        )
+
+    return SimpleNamespace(
+        lane_ordinal=1,
+        start=boundary(BoundaryRole.START, start),
+        end=boundary(BoundaryRole.END, end),
+        top=boundary(BoundaryRole.TOP, 10.0),
+        bottom=boundary(BoundaryRole.BOTTOM, 20.0),
+    )
+
+
+def make_content_placement(frames: tuple[object, ...], _relations: tuple[object, ...]):
+    return SimpleNamespace(placement_id="placement:content", frames=frames)
 
 
 class ContentVetoContractTest(unittest.TestCase):
-    def test_displaced_cross_pair_is_not_treated_as_minimum_safe_variant(self) -> None:
-        smaller = make_cluster(
-            "smaller-off-center",
-            pair_count=2,
-            direct_count=4,
-            pair_ids=("top-a", "bottom-a"),
-            direct_ids=("top-a", "bottom-a", "band-a", "band-b"),
-            separator_band_count=2,
-            cross_axis_support_regions=4,
-        )
-        larger = make_cluster(
-            "larger-centered",
-            pair_count=2,
-            direct_count=4,
-            pair_ids=("top-b", "bottom-b"),
-            direct_ids=("top-b", "bottom-b", "band-a", "band-b"),
-            separator_band_count=2,
-            cross_axis_support_regions=4,
-        )
-        smaller_combination = make_source_combination(
-            "smaller-off-center",
-            smaller,
-        )
-        larger_combination = make_source_combination(
-            "larger-centered",
-            larger,
-        )
-        placements = make_placement_map(smaller, larger)
-        placements[smaller.representative_placement_id] = make_placement(
-            "smaller-off-center",
-            cross_top=FiniteInterval.exact(0.0),
-            cross_bottom=FiniteInterval.exact(8.0),
-        )
-        placements[larger.representative_placement_id] = make_placement(
-            "larger-centered",
-            cross_top=FiniteInterval.exact(2.0),
-            cross_bottom=FiniteInterval.exact(10.0),
-        )
-        clusters = {item.cluster_id: item for item in (smaller, larger)}
-        self.assertFalse(
-            source_strictly_dominates(
-                smaller_combination,
-                larger_combination,
-                placements,
-            )
-        )
-        self.assertFalse(
-            source_strictly_dominates(
-                larger_combination,
-                smaller_combination,
-                placements,
-            )
-        )
-
-    def test_shared_raw_cross_boundary_is_not_counted_twice(self) -> None:
-        inner_top = make_cluster(
-            "inner-top-shared-bottom",
-            pair_count=2,
-            direct_count=4,
-            pair_ids=("top-inner", "bottom"),
-            direct_ids=("top-inner", "bottom", "band-a", "band-b"),
-            separator_band_count=2,
-            cross_axis_support_regions=4,
-        )
-        outer_top = make_cluster(
-            "outer-top-shared-bottom",
-            pair_count=2,
-            direct_count=4,
-            pair_ids=("top-outer", "bottom"),
-            direct_ids=("top-outer", "bottom", "band-a", "band-b"),
-            separator_band_count=2,
-            cross_axis_support_regions=5,
-        )
-        inner_combination = make_source_combination(
-            "inner-top-shared-bottom",
-            inner_top,
-            accounted_ids=("top-outer",),
-        )
-        outer_combination = make_source_combination(
-            "outer-top-shared-bottom",
-            outer_top,
-        )
-        placements = make_placement_map(inner_top, outer_top)
-        placements[inner_top.representative_placement_id] = make_placement(
-            "inner-top-shared-bottom",
-            cross_top=FiniteInterval(1.4, 2.0),
-            cross_bottom=FiniteInterval(8.0, 8.5),
-            cross_bottom_observation_id="bottom:shared",
-        )
-        placements[outer_top.representative_placement_id] = make_placement(
-            "outer-top-shared-bottom",
-            cross_top=FiniteInterval(1.0, 1.5),
-            cross_bottom=FiniteInterval(7.5, 8.0),
-            cross_bottom_observation_id="bottom:shared",
-        )
-        clusters = {
-            item.cluster_id: item for item in (inner_top, outer_top)
-        }
-        self.assertTrue(
-            minimum_safe_source_variant_strictly_dominates(
-                inner_combination,
-                outer_combination,
-                placements,
-            )
-        )
-
-    def test_same_cross_pair_does_not_revote_sequence_projection(self) -> None:
-        stronger_sequence = make_cluster(
-            "same-cross-stronger-sequence",
-            pair_count=2,
-            direct_count=5,
-            pair_ids=("top", "bottom", "band-a", "band-b"),
-            direct_ids=("top", "bottom", "outer", "band-a", "band-b"),
-            separator_band_count=2,
-            cross_axis_support_regions=4,
-        )
-        weaker_sequence = make_cluster(
-            "same-cross-weaker-sequence",
-            pair_count=2,
-            direct_count=4,
-            pair_ids=("top", "bottom", "band-a", "band-b"),
-            direct_ids=("top", "bottom", "band-a", "band-b"),
-            separator_band_count=2,
-            cross_axis_support_regions=4,
-        )
-        stronger_combination = make_source_combination(
-            "same-cross-stronger-sequence",
-            stronger_sequence,
-        )
-        weaker_combination = make_source_combination(
-            "same-cross-weaker-sequence",
-            weaker_sequence,
-        )
-        stronger_combination = replace(
-            stronger_combination,
-            sequence_authority=replace(
-                stronger_combination.sequence_authority,
-                direct_outer_boundary_count=1,
-            ),
-        )
-        weaker_combination = replace(
-            weaker_combination,
-            sequence_authority=replace(
-                weaker_combination.sequence_authority,
-                direct_outer_boundary_count=0,
-            ),
-        )
-        placements = make_placement_map(stronger_sequence, weaker_sequence)
-        placements[
-            stronger_sequence.representative_placement_id
-        ] = make_placement(
-            "same-cross-stronger-sequence",
-            cross_top=FiniteInterval(1.0, 2.0),
-            cross_bottom=FiniteInterval(8.0, 9.0),
-            cross_top_observation_id="top:shared",
-            cross_bottom_observation_id="bottom:shared",
-        )
-        placements[
-            weaker_sequence.representative_placement_id
-        ] = make_placement(
-            "same-cross-weaker-sequence",
-            cross_top=FiniteInterval(2.0, 3.0),
-            cross_bottom=FiniteInterval(7.0, 8.0),
-            cross_top_observation_id="top:shared",
-            cross_bottom_observation_id="bottom:shared",
-        )
-        clusters = {
-            item.cluster_id: item
-            for item in (stronger_sequence, weaker_sequence)
-        }
-        self.assertTrue(
-            source_strictly_dominates(
-                stronger_combination,
-                weaker_combination,
-                placements,
-            )
-        )
-
-    def test_direction_consistency_joins_cross_and_sequence_evidence(self) -> None:
-        direct = SimpleNamespace(
-            observation_id=ObservationId("cross:direct"),
-            fit_angle_interval_degrees=FiniteInterval(0.18, 0.20),
-        )
-        second = SimpleNamespace(
-            observation_id=ObservationId("cross:second"),
-            fit_angle_interval_degrees=FiniteInterval(0.16, 0.17),
-        )
-        placement = SimpleNamespace(
-            cross=SimpleNamespace(
-                evidence=(
-                    SimpleNamespace(observation=direct),
-                    SimpleNamespace(observation=second),
-                ),
-                direct_height_span_validated=False,
-            ),
-            sequence=SimpleNamespace(
-                observations=(
-                    SimpleNamespace(
-                        observation_id=ObservationId("sequence:direct"),
-                        fit_direction_interval_degrees=FiniteInterval(
-                            0.30,
-                            0.31,
-                        ),
-                        full_direction_interval_degrees=FiniteInterval(
-                            0.29,
-                            0.32,
-                        ),
-                    ),
-                    SimpleNamespace(
-                        observation_id=ObservationId("sequence:second"),
-                        fit_direction_interval_degrees=FiniteInterval(
-                            0.30,
-                            0.31,
-                        ),
-                        full_direction_interval_degrees=FiniteInterval(
-                            0.29,
-                            0.32,
-                        ),
-                    ),
-                ),
-            ),
-            lane_geometry=SimpleNamespace(
-                direction=SimpleNamespace(
-                    selected_observation_ids=(second.observation_id,)
-                )
-            ),
-        )
-        self.assertAlmostEqual(
-            lane_direction_evidence(placement)[0],
-            0.12,
-        )
-
-    def test_direction_fit_difference_cannot_create_dominance(self) -> None:
-        common = {
-            "pair_count": 2,
-            "direct_count": 4,
-            "pair_ids": ("a", "b"),
-            "direct_ids": ("a", "b", "c", "d"),
-        }
-        consistent = make_cluster(
-            "consistent-direction",
-            **common,
-            sampling_box=Box(0, 0, 12, 12),
-            direction_disagreement=0.01,
-        )
-        inconsistent = make_cluster(
-            "inconsistent-direction",
-            **common,
-            sampling_box=Box(0, 0, 12, 12),
-            direction_disagreement=0.03,
-        )
-        consistent_combination = make_source_combination(
-            "consistent-direction", consistent
-        )
-        inconsistent_combination = make_source_combination(
-            "inconsistent-direction", inconsistent
-        )
-        clusters = {
-            item.cluster_id: item for item in (consistent, inconsistent)
-        }
-        self.assertFalse(
-            source_strictly_dominates(
-                consistent_combination,
-                inconsistent_combination,
-                make_placement_map(consistent, inconsistent),
-            )
-        )
-        self.assertFalse(
-            source_strictly_dominates(
-                inconsistent_combination,
-                consistent_combination,
-                make_placement_map(consistent, inconsistent),
-            )
-        )
-
     def test_start_end_and_contact_content_are_neutral(self) -> None:
         outside_observation = make_observation(Box(0, 12, 5, 16))
         outside = content_veto_assessment(

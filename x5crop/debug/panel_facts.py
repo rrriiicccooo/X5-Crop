@@ -5,8 +5,8 @@ from __future__ import annotations
 from PIL import Image
 
 from ..detection.final.model import FinalDetection
-from ..detection.photo_geometry.chains import FixedFormatFrame
 from ..detection.photo_geometry.output_model import SafeCropEnvelope
+from ..detection.photo_geometry.template_placement import TemplateFrame
 from ..detection.workspace import DetectionWorkspace
 from .canvas import DebugRenderCache, cached_source_image
 from .panel_layout import Projection
@@ -14,29 +14,25 @@ from .panel_layout import Projection
 
 def geometry_by_identity(
     detection: FinalDetection,
-) -> tuple[tuple[int, FixedFormatFrame], ...]:
+) -> tuple[tuple[int, TemplateFrame], ...]:
     global_ordinals = {
         (item.lane_id, item.lane_ordinal): item.global_output_ordinal
         for item in detection.output_slot_identities
     }
-    values: list[tuple[int, FixedFormatFrame]] = []
+    values: list[tuple[int, TemplateFrame]] = []
     for lane in detection.candidate.geometry.lane_reconstructions:
-        placements = (
-            (lane.selected_placement,)
-            if lane.selected_placement is not None
-            else lane.materialized_chains
-        )
+        placements = lane.placement_competition.placements
         for placement in placements:
-            for geometry in placement.fixed_frames.frames:
+            for geometry in placement.frames:
                 ordinal = global_ordinals.get(
-                    (geometry.lane_id, geometry.lane_ordinal)
+                    (placement.lane_id, geometry.lane_ordinal)
                 )
                 if ordinal is not None:
                     values.append((ordinal, geometry))
     return tuple(
         sorted(
             values,
-            key=lambda item: (item[0], item[1].placement_geometry_id),
+            key=lambda item: (item[0], item[1].lane_ordinal),
         )
     )
 
@@ -49,17 +45,13 @@ def safe_crop_envelopes(
 
 def selection_summary(detection: FinalDetection) -> str:
     lanes = detection.candidate.geometry.lane_reconstructions
-    chains = sum(len(item.materialized_chains) for item in lanes)
-    clusters = sum(len(item.placement_selection.clusters) for item in lanes)
-    vetoes = sum(
-        len(assessment.facts)
-        for lane in lanes
-        for assessment in lane.placement_selection.content_veto_assessments
-    )
+    placements = sum(len(item.placement_competition.placements) for item in lanes)
+    phase = sum(item.prepared.phase_competition.receipt.phase_hypothesis_count for item in lanes)
+    vetoes = sum(len(item.content_veto_facts) for item in lanes)
     selected = sum(item.selected_placement is not None for item in lanes)
-    bounded = any(item.producer_bounds.bound_exceeded for item in lanes)
+    bounded = any(item.work.bound_exceeded for item in lanes)
     return (
-        f"CHAINS {chains} · CLUSTERS {clusters} · SELECTED {selected} · "
+        f"PHASE {phase} · PLACEMENTS {placements} · SELECTED {selected} · "
         f"VETO {vetoes} · BOUND {'EXCEEDED' if bounded else 'OK'}"
     )
 
@@ -68,47 +60,55 @@ def axis_authority_summaries(
     detection: FinalDetection,
 ) -> tuple[str, str, str]:
     selection = detection.candidate.geometry.source_placement_selection
-    selected = next(
-        (
-            item
-            for item in selection.combinations
-            if item.combination_id == selection.selected_combination_id
-        ),
-        None,
-    )
-    if selected is None:
-        unresolved = f"{len(selection.combinations)} LEGAL · NO DOMINANT"
-        return (
-            f"CROSS AUTHORITY · {unresolved}",
-            f"SEQUENCE AUTHORITY · {unresolved}",
-            f"SHARED AUTHORITY · {unresolved}",
+    if selection.state.value != "supported":
+        competitors = sum(
+            len(item.placement_competition.placements)
+            for item in detection.candidate.geometry.lane_reconstructions
         )
-    sequence = selected.sequence_authority
-    cross = selected.cross_authority
-    shared = selected.shared_authority
+        failure = selection.failure
+        detail = (
+            "PLACEMENT UNRESOLVED"
+            if failure is None
+            else failure.detail.replace("_", " ").upper()
+        )
+        unresolved = (
+            f"{competitors} PLACEMENTS · "
+            f"{detail}"
+        )
+        return (
+            f"CROSS FIT · {unresolved}",
+            f"SEQUENCE FIT · {unresolved}",
+            f"SOURCE FIT · {unresolved}",
+        )
+    lanes = detection.candidate.geometry.lane_reconstructions
+    direct_sequence = sum(
+        len(item.prepared.phase_competition.best.direct_observation_ids)
+        for item in lanes
+        if item.prepared.phase_competition.best is not None
+    )
+    inferred_sequence = sum(
+        len(item.prepared.phase_competition.best.inferred_role_indices)
+        for item in lanes
+        if item.prepared.phase_competition.best is not None
+    )
+    direct_cross = sum(
+        len(item.prepared.cross_competition.best.direct_bindings)
+        for item in lanes
+        if item.prepared.cross_competition.best is not None
+    )
+    inferred_cross = sum(
+        len(item.prepared.cross_competition.best.inferred_bindings)
+        for item in lanes
+        if item.prepared.cross_competition.best is not None
+    )
+    runners = sum(
+        item.placement_competition.runner_up_placement_id is not None
+        for item in lanes
+    )
     return (
-        (
-            "CROSS AUTHORITY · "
-            f"FRAME {cross.fixed_height_placement_authorized_count} · "
-            f"PAIR {cross.complete_top_bottom_pair_count} · "
-            f"H-SPAN {cross.direct_height_span_validated_count} · "
-            f"REGION {cross.independent_support_region_count}"
-        ),
-        (
-            "SEQUENCE AUTHORITY · "
-            f"CHAIN {sequence.complete_direct_chain_count} · "
-            f"BAND {sequence.direct_separator_band_count} · "
-            f"OUTER {sequence.direct_outer_boundary_count} · "
-            f"NORMAL {sequence.normal_completion_authorized_count} · "
-            f"FILL {sequence.filled_holder_centering_authorized_count}"
-        ),
-        (
-            "SHARED AUTHORITY · "
-            f"SCALE {int(shared.source_scale_compatible)} · "
-            f"DIR {shared.direction_bound_lane_count} · "
-            f"LANE {shared.source_lane_authority_bound_count} · "
-            f"CONTENT {shared.content_veto_passed_lane_count}"
-        ),
+        f"CROSS FIT · DIRECT {direct_cross} · INFERRED {inferred_cross}",
+        f"SEQUENCE FIT · DIRECT {direct_sequence} · INFERRED {inferred_sequence}",
+        f"SOURCE FIT · LANES {len(lanes)} · RUNNERS {runners} · GATE SUPPORTED",
     )
 
 

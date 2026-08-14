@@ -17,6 +17,8 @@ from x5crop.detection.photo_geometry.template_cross import (
 )
 from x5crop.detection.photo_geometry.template_model import (
     PhaseAuthority,
+    PhaseLatticeAuthority,
+    PhaseLatticeFit,
     PitchFit,
     SequenceFit,
     TemplateSpec,
@@ -35,14 +37,28 @@ def _template(count: int = 3) -> TemplateSpec:
         frame_height_px=240.0,
         count=count,
         phase_authority=PhaseAuthority.FULL_CENTERED,
+        phase_lattice_authority=PhaseLatticeAuthority(
+            period_px=120.0,
+            cycle_origin_px=0.0,
+            minimum_slot_offset=-1,
+            maximum_slot_offset=20,
+            phase_authority=PhaseAuthority.FULL_CENTERED,
+        ),
     )
 
 
 def _sequence(template: TemplateSpec, *, missing: tuple[int, ...] = ()) -> SequenceFit:
+    width = (
+        template.frame_width_px.minimum + template.frame_width_px.maximum
+    ) / 2.0
+    pitch = (template.pitch_px.minimum + template.pitch_px.maximum) / 2.0
     positions = tuple(
         value
         for ordinal in range(template.count)
-        for value in (100.0 + ordinal * 120.0, 200.0 + ordinal * 120.0)
+        for value in (
+            100.0 + ordinal * pitch,
+            100.0 + ordinal * pitch + width,
+        )
     )
     ids = tuple(
         None if index in missing else ObservationId(f"sequence:{index}")
@@ -51,14 +67,22 @@ def _sequence(template: TemplateSpec, *, missing: tuple[int, ...] = ()) -> Seque
     matched = tuple(index for index in range(2 * template.count) if index not in missing)
     return SequenceFit(
         template=template,
-        phase_interval_px=FiniteInterval.exact(100.0),
-        canonical_phase_px=100.0,
+        phase_lattice_fit=PhaseLatticeFit(
+            authority=template.phase_lattice_authority,
+            cycle_phase_interval_px=FiniteInterval.exact(100.0),
+            canonical_cycle_phase_px=100.0,
+            integer_slot_offset=0,
+            canonical_period_px=pitch,
+            absolute_phase_interval_px=FiniteInterval.exact(100.0),
+            canonical_absolute_phase_px=100.0,
+            direction=1,
+        ),
         pitch_fit=PitchFit(
             frame_width_px=template.frame_width_px,
-            gap_interval_px=20.0,
+            gap_interval_px=template.gap_prior_px,
             pitch_interval_px=template.pitch_px,
-            canonical_frame_width_px=100.0,
-            canonical_pitch_px=120.0,
+            canonical_frame_width_px=width,
+            canonical_pitch_px=pitch,
             observation_ids=tuple(item for item in ids if item is not None),
         ),
         canonical_role_positions_px=positions,
@@ -93,6 +117,7 @@ def _binding(role: BoundaryRole, name: str, coordinate: float) -> CrossRoleBindi
         full_interval_px=exact,
         trace_coordinates_px=(0, 50, 100),
         canonical_direction_degrees=0.0,
+        fit_direction_interval_degrees=FiniteInterval(-0.2, 0.2),
         full_direction_interval_degrees=FiniteInterval(-0.2, 0.2),
     )
 
@@ -147,6 +172,7 @@ def _compose(
     *,
     direction: SharedStripDirection | None = None,
     frame_spec: FramePhysicalSpec | None = None,
+    lane_id: str = "lane:test",
 ) -> FormatPlacement:
     spec = frame_spec or FramePhysicalSpec(36.0, 24.0, 2.0)
     source = SourceScanGeometry.create(
@@ -155,14 +181,17 @@ def _compose(
         height_scale_px_per_mm=PositiveInterval.exact(10.0),
     )
     return compose_format_placement(
-        lane_id="lane:test",
+        lane_id=lane_id,
         frame_spec=spec,
         source_scan_geometry=source,
         sequence_fit=sequence,
         cross_fit=cross,
         width_axis=BoundaryAxis.X,
         height_axis=BoundaryAxis.Y,
-        width_authority_px=FiniteInterval(0.0, 500.0),
+        width_authority_px=FiniteInterval(
+            0.0,
+            max(sequence.canonical_role_positions_px) + 100.0,
+        ),
         height_authority_px=FiniteInterval(0.0, 400.0),
         direction=direction,
     )
@@ -201,6 +230,50 @@ class TemplatePlacementContractTest(unittest.TestCase):
             self.assertAlmostEqual(frame.end.canonical_position_px - frame.start.canonical_position_px, 100.0)
             self.assertAlmostEqual(frame.bottom.canonical_position_px - frame.top.canonical_position_px, 240.0)
 
+    def test_direct_edges_consume_the_fit_uncertainty_once(self) -> None:
+        template = TemplateSpec(
+            template_id="placement-interval-test",
+            frame_width_px=FiniteInterval(96.0, 104.0),
+            pitch_px=FiniteInterval(116.0, 124.0),
+            frame_height_px=FiniteInterval(232.0, 248.0),
+            count=1,
+            phase_authority=PhaseAuthority.FULL_CENTERED,
+            phase_lattice_authority=PhaseLatticeAuthority(
+                period_px=FiniteInterval(116.0, 124.0),
+                cycle_origin_px=0.0,
+                minimum_slot_offset=-1,
+                maximum_slot_offset=20,
+                phase_authority=PhaseAuthority.FULL_CENTERED,
+            ),
+        )
+        sequence = _sequence(template)
+        top = _binding(BoundaryRole.TOP, "top", 10.0)
+        bottom = _binding(BoundaryRole.BOTTOM, "bottom", 250.0)
+        cross = CrossFit(
+            template_id=template.template_id,
+            lane_reference_trace_px=150.0,
+            fixed_height_px=FiniteInterval(232.0, 248.0),
+            top_canonical_px=10.0,
+            bottom_canonical_px=250.0,
+            top_fit_interval_px=FiniteInterval.exact(10.0),
+            bottom_fit_interval_px=FiniteInterval.exact(250.0),
+            top_full_interval_px=FiniteInterval.exact(10.0),
+            bottom_full_interval_px=FiniteInterval.exact(250.0),
+            direct_bindings=(top, bottom),
+            inferred_bindings=(),
+            selected_direction=_direction(),
+            direct_pair=True,
+            shared_trace_support_count=3,
+            continuous_support_fraction=1.0,
+            residual_sum_px=0.0,
+            center_compatible=True,
+        )
+        frame = _compose(template, sequence, cross).frames[0]
+        self.assertEqual(frame.start.full_position_interval_px, FiniteInterval(96.0, 108.0))
+        self.assertEqual(frame.end.full_position_interval_px, FiniteInterval(196.0, 208.0))
+        self.assertEqual(frame.top.full_position_interval_px, FiniteInterval.exact(10.0))
+        self.assertEqual(frame.bottom.full_position_interval_px, FiniteInterval.exact(250.0))
+
     def test_sloped_cross_line_is_reanchored_at_each_frame_trace(self) -> None:
         template = _template(1)
         placement = _compose(template, _sequence(template), _cross(template, direction=_direction(0.2), lane_reference=100.0))
@@ -213,6 +286,46 @@ class TemplatePlacementContractTest(unittest.TestCase):
         frame_trace = top.reference_trace_px
         expected = (offset - normal_x * frame_trace) / normal_y
         self.assertAlmostEqual(top.canonical_position_px, expected, places=8)
+        expected_states = tuple(
+            source_position
+            + math.tan(math.radians(state_angle))
+            * (frame_trace - source_trace)
+            for state_angle in (-0.2, 0.2)
+        )
+        self.assertAlmostEqual(
+            top.full_position_interval_px.minimum,
+            min(expected_states),
+            places=8,
+        )
+        self.assertAlmostEqual(
+            top.full_position_interval_px.maximum,
+            max(expected_states),
+            places=8,
+        )
+
+    def test_source_shared_direction_can_cover_lane_direction(self) -> None:
+        template = _template(1)
+        lane_direction = _direction(0.05)
+        shared = SharedStripDirection(
+            direction_id="direction:source-shared",
+            selected_observation_ids=(
+                *lane_direction.selected_observation_ids,
+                ObservationId("cross:other-lane"),
+            ),
+            full_angle_interval_degrees=FiniteInterval(-0.1, 0.2),
+            canonical_angle_degrees=0.08,
+        )
+        placement = _compose(
+            template,
+            _sequence(template),
+            _cross(template, direction=lane_direction),
+            direction=shared,
+        )
+        self.assertEqual(placement.direction, shared)
+        self.assertEqual(
+            placement.frames[0].top.direction_reference_id,
+            shared.direction_id,
+        )
 
     def test_no_direction_and_contradiction_are_rejected(self) -> None:
         template = _template(1)

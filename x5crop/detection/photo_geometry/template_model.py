@@ -13,6 +13,10 @@ from dataclasses import dataclass
 from enum import Enum
 import math
 from ...domain import FiniteInterval, ObservationId, PositiveInterval
+
+
+MAX_LOCAL_ADVANCE_ANOMALIES = 2
+MAX_TEMPLATE_FIT_PASSES = 5
 from .model import BoundaryRole
 
 
@@ -49,6 +53,109 @@ class PhaseAuthority(str, Enum):
     DIRECT = "direct"
     FULL_CENTERED = "full_centered"
     PARTIAL_FREE = "partial_free"
+
+
+class PhaseAnchorAuthority(str, Enum):
+    """Explicit authority behind a non-pixel phase anchor."""
+
+    USER_PROVIDED = "user_provided"
+
+
+@dataclass(frozen=True)
+class PhaseLatticeAuthority:
+    """Finite periodic phase domain compiled before pixel measurement.
+
+    ``cycle_phase`` lives in the direction-normalized interval
+    ``[0, period)``.  ``integer_slot_offset`` is a discrete template fact;
+    it must never be widened into selected-placement uncertainty.
+    """
+
+    period_px: FiniteInterval | PositiveInterval | float
+    cycle_origin_px: float
+    minimum_slot_offset: int
+    maximum_slot_offset: int
+    phase_authority: PhaseAuthority
+
+    def __post_init__(self) -> None:
+        period = _positive_interval(self.period_px)
+        object.__setattr__(self, "period_px", period)
+        if not math.isfinite(self.cycle_origin_px):
+            raise ValueError("phase lattice origin must be finite")
+        if (
+            not isinstance(self.minimum_slot_offset, int)
+            or isinstance(self.minimum_slot_offset, bool)
+            or not isinstance(self.maximum_slot_offset, int)
+            or isinstance(self.maximum_slot_offset, bool)
+            or self.minimum_slot_offset > self.maximum_slot_offset
+        ):
+            raise ValueError("phase lattice offset bounds are invalid")
+        if not isinstance(self.phase_authority, PhaseAuthority):
+            raise TypeError("phase lattice authority must be typed")
+
+    def contains_offset(self, value: int) -> bool:
+        return self.minimum_slot_offset <= value <= self.maximum_slot_offset
+
+    def with_period(
+        self,
+        period_px: FiniteInterval | PositiveInterval | float,
+    ) -> "PhaseLatticeAuthority":
+        return PhaseLatticeAuthority(
+            period_px=period_px,
+            cycle_origin_px=self.cycle_origin_px,
+            minimum_slot_offset=self.minimum_slot_offset,
+            maximum_slot_offset=self.maximum_slot_offset,
+            phase_authority=self.phase_authority,
+        )
+
+
+@dataclass(frozen=True)
+class PhaseLatticeFit:
+    """One continuous cycle alignment plus one discrete slot offset."""
+
+    authority: PhaseLatticeAuthority
+    cycle_phase_interval_px: FiniteInterval
+    canonical_cycle_phase_px: float
+    integer_slot_offset: int
+    canonical_period_px: float
+    absolute_phase_interval_px: FiniteInterval
+    canonical_absolute_phase_px: float
+    direction: int
+
+    def __post_init__(self) -> None:
+        if self.direction not in {-1, 1}:
+            raise ValueError("phase lattice direction must be -1 or +1")
+        if not self.authority.contains_offset(self.integer_slot_offset):
+            raise ValueError("phase lattice offset leaves compiled authority")
+        if not (
+            self.authority.period_px.minimum - 1.0e-9
+            <= self.canonical_period_px
+            <= self.authority.period_px.maximum + 1.0e-9
+        ):
+            raise ValueError("phase lattice period leaves compiled authority")
+        if not (
+            0.0 <= self.canonical_cycle_phase_px < self.canonical_period_px
+            and self.cycle_phase_interval_px.contains(
+                self.canonical_cycle_phase_px,
+                epsilon=1.0e-9,
+            )
+            and self.cycle_phase_interval_px.minimum >= 0.0
+            and self.cycle_phase_interval_px.maximum
+            <= self.canonical_period_px + 1.0e-9
+        ):
+            raise ValueError("phase lattice cycle phase is invalid")
+        expected = self.authority.cycle_origin_px + self.direction * (
+            self.canonical_cycle_phase_px
+            + self.integer_slot_offset * self.canonical_period_px
+        )
+        if (
+            not math.isfinite(self.canonical_absolute_phase_px)
+            or abs(expected - self.canonical_absolute_phase_px) > 1.0e-7
+            or not self.absolute_phase_interval_px.contains(
+                self.canonical_absolute_phase_px,
+                epsilon=1.0e-9,
+            )
+        ):
+            raise ValueError("phase lattice absolute projection is inconsistent")
 
 
 class LocalAdvanceKind(str, Enum):
@@ -111,6 +218,7 @@ class TemplateSpec:
     pitch_px: FiniteInterval | PositiveInterval | float
     count: int
     phase_authority: PhaseAuthority
+    phase_lattice_authority: PhaseLatticeAuthority
     frame_height_px: FiniteInterval | PositiveInterval | float | None = None
     direction: int = 1
     cross: str | None = None
@@ -131,12 +239,25 @@ class TemplateSpec:
             raise ValueError("template count must be positive")
         if not isinstance(self.phase_authority, PhaseAuthority):
             raise TypeError("template phase authority must be typed")
+        if (
+            not isinstance(self.phase_lattice_authority, PhaseLatticeAuthority)
+            or self.phase_lattice_authority.phase_authority
+            != self.phase_authority
+        ):
+            raise ValueError("template phase lattice authority disagrees")
         if self.direction not in {-1, 1}:
             raise ValueError("template direction must be -1 or +1")
         if self.cross is not None and not self.cross:
             raise ValueError("template cross identity must not be empty")
         if self.pitch_px.maximum < self.frame_width_px.minimum:
             raise ValueError("template pitch cannot be smaller than frame width")
+        if (
+            self.phase_lattice_authority.period_px.maximum
+            < self.pitch_px.minimum
+            or self.pitch_px.maximum
+            < self.phase_lattice_authority.period_px.minimum
+        ):
+            raise ValueError("template pitch and phase period are incompatible")
         if self.nominal_gap_px is not None:
             gap = _finite_interval(self.nominal_gap_px)
             if gap.minimum < 0.0:
@@ -172,24 +293,30 @@ class TemplateSpec:
 
 @dataclass(frozen=True)
 class PhaseAnchor:
-    """Typed direct anchor accepted by the pure phase solver.
+    """One user-declared absolute role, consumed by the normal phase solver.
 
-    A role may be left unbound for a raw ``BoundaryEdgeObservation``.  The
-    solver binds it against the indexed theoretical roles exactly once.
+    Pixel observations remain role-free ``BoundaryEdgeObservation`` values.
+    This separate authority prevents an automatic edge from declaring its own
+    ordinal and then using that declaration as proof of placement.
     """
 
     observation_id: ObservationId
     coordinate_interval_px: FiniteInterval
-    role: TemplateRole | None = None
-    direct: bool = True
+    role: TemplateRole
+    authority: PhaseAnchorAuthority
+    authority_id: str
 
     def __post_init__(self) -> None:
         if not isinstance(self.observation_id, ObservationId):
             raise TypeError("phase anchor identity must be ObservationId")
         if not isinstance(self.coordinate_interval_px, FiniteInterval):
             raise TypeError("phase anchor coordinate must be FiniteInterval")
-        if not isinstance(self.direct, bool):
-            raise TypeError("phase anchor direct flag must be boolean")
+        if not isinstance(self.role, TemplateRole):
+            raise TypeError("manual phase anchor requires an indexed role")
+        if self.authority != PhaseAnchorAuthority.USER_PROVIDED:
+            raise ValueError("phase anchor requires explicit user authority")
+        if not self.authority_id:
+            raise ValueError("phase anchor authority identity must not be empty")
 
 
 @dataclass(frozen=True)
@@ -234,6 +361,30 @@ class PitchFit:
             raise ValueError("pitch observations must be unique")
         if any(not isinstance(item, ObservationId) for item in self.observation_ids):
             raise TypeError("pitch observations must be typed identities")
+
+    def with_calibrated_template(self, template: TemplateSpec) -> "PitchFit":
+        """Retain pitch identity while calibrating physical W and gap."""
+
+        if not (
+            template.pitch_px.minimum - 1.0e-9
+            <= self.canonical_pitch_px
+            <= template.pitch_px.maximum + 1.0e-9
+        ):
+            raise ValueError(
+                "calibrated template excludes the selected pitch: "
+                f"{self.canonical_pitch_px} not in "
+                f"[{template.pitch_px.minimum}, {template.pitch_px.maximum}]"
+            )
+        width = (template.frame_width_px.minimum + template.frame_width_px.maximum) / 2.0
+        return PitchFit(
+            frame_width_px=template.frame_width_px,
+            gap_interval_px=template.gap_prior_px,
+            pitch_interval_px=template.pitch_px,
+            canonical_frame_width_px=width,
+            canonical_pitch_px=self.canonical_pitch_px,
+            scale_px_per_mm=self.scale_px_per_mm,
+            observation_ids=self.observation_ids,
+        )
 
 
 @dataclass(frozen=True)
@@ -282,8 +433,7 @@ class SequenceFit:
     """A fixed-count sequence placement with direct/inferred role accounting."""
 
     template: TemplateSpec
-    phase_interval_px: FiniteInterval
-    canonical_phase_px: float
+    phase_lattice_fit: PhaseLatticeFit
     pitch_fit: PitchFit
     canonical_role_positions_px: tuple[float, ...]
     role_positions_px: tuple[FiniteInterval, ...]
@@ -300,8 +450,13 @@ class SequenceFit:
     polarity_match_count: int = 0
 
     def __post_init__(self) -> None:
-        if not self.phase_interval_px.contains(self.canonical_phase_px, epsilon=1.0e-9):
-            raise ValueError("sequence phase is outside its interval")
+        if (
+            not isinstance(self.phase_lattice_fit, PhaseLatticeFit)
+            or self.phase_lattice_fit.authority
+            != self.template.phase_lattice_authority
+            or self.phase_lattice_fit.direction != self.template.direction
+        ):
+            raise ValueError("sequence phase lattice disagrees with template")
         if (
             len(self.canonical_role_positions_px) != 2 * self.template.count
             or len(self.role_positions_px) != 2 * self.template.count
@@ -344,6 +499,13 @@ class SequenceFit:
             range(1, len(self.local_advance_relations) + 1)
         ):
             raise ValueError("local relation ordinals must be contiguous")
+        if len(self.local_advance_relations) > max(0, self.template.count - 1):
+            raise ValueError("local relations exceed template adjacencies")
+        if (
+            sum(item.is_anomaly for item in self.local_advance_relations)
+            > MAX_LOCAL_ADVANCE_ANOMALIES
+        ):
+            raise ValueError("local anomaly count exceeds the bounded template model")
         if len(set(self.direct_observation_ids)) != len(self.direct_observation_ids):
             raise ValueError("sequence direct observations must be unique")
         if any(
@@ -351,6 +513,127 @@ class SequenceFit:
             for identity in self.role_observation_ids
         ):
             raise TypeError("sequence role observations must be typed identities")
+        bound_ids = tuple(
+            identity for identity in self.role_observation_ids if identity is not None
+        )
+        if len(set(bound_ids)) != len(bound_ids):
+            raise ValueError("one observation cannot bind multiple template roles")
+        if tuple(index for index, identity in enumerate(self.role_observation_ids) if identity is not None) != tuple(
+            self.matched_role_indices
+        ):
+            raise ValueError("sequence matched roles disagree with role observations")
+        if not set(bound_ids).issubset(self.direct_observation_ids):
+            raise ValueError("bound role observations must be direct observations")
+        direction = self.template.direction
+        starts = self.canonical_role_positions_px[0::2]
+        ends = self.canonical_role_positions_px[1::2]
+        widths = tuple(
+            direction * (end - start)
+            for start, end in zip(starts, ends, strict=True)
+        )
+        if any(
+            not (
+                self.template.frame_width_px.minimum - 1.0e-7
+                <= width
+                <= self.template.frame_width_px.maximum + 1.0e-7
+            )
+            for width in widths
+        ):
+            raise ValueError("sequence frame order contradicts fixed width")
+        if any(
+            direction * (right - left) < -1.0e-7
+            for left, right in zip(starts, starts[1:])
+        ):
+            raise ValueError("sequence slot starts are not monotonic")
+        if any(
+            direction * (next_start - end)
+            < -self.template.frame_width_px.maximum - 1.0e-7
+            for end, next_start in zip(ends, starts[1:])
+        ):
+            raise ValueError("sequence local overlap exceeds one frame width")
+
+    def with_calibrated_template(self, template: TemplateSpec) -> "SequenceFit":
+        """Preserve the discrete role binding while narrowing physical state."""
+
+        if (
+            template.template_id != self.template.template_id
+            or template.count != self.template.count
+            or template.direction != self.template.direction
+        ):
+            raise ValueError("calibrated template changes sequence identity")
+        width = (
+            template.frame_width_px.minimum + template.frame_width_px.maximum
+        ) / 2.0
+        period = self.pitch_fit.canonical_pitch_px
+        if not (
+            template.phase_lattice_authority.period_px.minimum - 1.0e-9
+            <= period
+            <= template.phase_lattice_authority.period_px.maximum + 1.0e-9
+        ):
+            period = template.phase_lattice_authority.period_px.center
+        lattice = self.phase_lattice_fit
+        normalized = template.direction * (
+            lattice.canonical_absolute_phase_px
+            - template.phase_lattice_authority.cycle_origin_px
+        )
+        cycle = normalized - lattice.integer_slot_offset * period
+        if not 0.0 <= cycle < period:
+            raise ValueError("calibrated period changes the discrete phase offset")
+        cycle_radius = min(
+            cycle,
+            period - cycle,
+            lattice.absolute_phase_interval_px.width / 2.0,
+        )
+        canonical_positions: list[float] = []
+        role_intervals: list[FiniteInterval] = []
+        for role, old_canonical, old_interval in zip(
+            template.roles,
+            self.canonical_role_positions_px,
+            self.role_positions_px,
+            strict=True,
+        ):
+            canonical = (
+                old_canonical
+                if role.role == BoundaryRole.START
+                else canonical_positions[-1] + template.direction * width
+            )
+            canonical_positions.append(canonical)
+            role_intervals.append(
+                FiniteInterval(
+                    min(old_interval.minimum, canonical),
+                    max(old_interval.maximum, canonical),
+                )
+            )
+        return SequenceFit(
+            template=template,
+            phase_lattice_fit=PhaseLatticeFit(
+                authority=template.phase_lattice_authority,
+                cycle_phase_interval_px=FiniteInterval(
+                    cycle - cycle_radius,
+                    cycle + cycle_radius,
+                ),
+                canonical_cycle_phase_px=cycle,
+                integer_slot_offset=lattice.integer_slot_offset,
+                canonical_period_px=period,
+                absolute_phase_interval_px=lattice.absolute_phase_interval_px,
+                canonical_absolute_phase_px=lattice.canonical_absolute_phase_px,
+                direction=template.direction,
+            ),
+            pitch_fit=self.pitch_fit.with_calibrated_template(template),
+            canonical_role_positions_px=tuple(canonical_positions),
+            role_positions_px=tuple(role_intervals),
+            role_observation_ids=self.role_observation_ids,
+            matched_role_indices=self.matched_role_indices,
+            inferred_role_indices=self.inferred_role_indices,
+            direct_observation_ids=self.direct_observation_ids,
+            local_advance_relations=self.local_advance_relations,
+            support_count=self.support_count,
+            contradicted_observation_count=self.contradicted_observation_count,
+            residual_sum_px=self.residual_sum_px,
+            center_compatible=self.center_compatible,
+            direct_support_fraction=self.direct_support_fraction,
+            polarity_match_count=self.polarity_match_count,
+        )
 
 @dataclass(frozen=True)
 class TemplateSearchReceipt:
@@ -366,9 +649,11 @@ class TemplateSearchReceipt:
     role_binding_count: int
     local_relation_evaluation_count: int
     phase_hypothesis_count: int
+    phase_offset_lookup_count: int
     direct_observation_count: int
     inferred_role_count: int
     peak_temporary_bytes: int = 0
+    fit_pass_count: int = 1
 
     def __post_init__(self) -> None:
         values = (
@@ -378,9 +663,11 @@ class TemplateSearchReceipt:
             self.role_binding_count,
             self.local_relation_evaluation_count,
             self.phase_hypothesis_count,
+            self.phase_offset_lookup_count,
             self.direct_observation_count,
             self.inferred_role_count,
             self.peak_temporary_bytes,
+            self.fit_pass_count,
         )
         if any(not isinstance(value, int) or value < 0 for value in values):
             raise ValueError("template work receipt values must be non-negative integers")
@@ -390,6 +677,10 @@ class TemplateSearchReceipt:
             raise ValueError("direct observations exceed registrations")
         if self.inferred_role_count > self.role_count:
             raise ValueError("inferred roles exceed template roles")
+        if self.fit_pass_count <= 0:
+            raise ValueError("template fit pass count must be positive")
+        if self.phase_offset_lookup_count > self.phase_hypothesis_count:
+            raise ValueError("phase offset lookups exceed phase hypotheses")
 
     def validate_bounds(
         self,
@@ -397,12 +688,15 @@ class TemplateSearchReceipt:
         observation_count: int | None = None,
         role_count: int | None = None,
         slot_count: int | None = None,
+        max_fit_passes: int = MAX_TEMPLATE_FIT_PASSES,
     ) -> None:
         """Reject any receipt that cannot come from one indexed pass.
 
         Phase lookup and role binding are each at most ``H * R``.  Local
-        relations are per adjacency (``count - 1``), never per candidate
-        chain.  The method fails explicitly; callers must not truncate work.
+        relations are per adjacency (``count - 1``) per declared numeric fit
+        pass, never per candidate chain.  Five passes cover provisional fit,
+        physical rebind, one local refit, source-pitch rebind, and its one
+        local refit.  The method fails explicitly; callers must not truncate.
         """
 
         h = self.observation_count if observation_count is None else observation_count
@@ -417,12 +711,16 @@ class TemplateSearchReceipt:
             raise ValueError("template work dimensions are inconsistent")
         if self.observation_count != h or self.role_count != r:
             raise ValueError("receipt dimensions do not match the requested bound")
-        max_hypotheses = h * max(6, r)
+        if max_fit_passes <= 0 or self.fit_pass_count > max_fit_passes:
+            raise ValueError("template fit pass bound exceeded")
+        max_hypotheses = h * max(6, r) * self.fit_pass_count
         if (
             self.phase_lookup_count > max_hypotheses
             or self.phase_hypothesis_count > max_hypotheses
             or self.role_binding_count > self.phase_hypothesis_count * r
-            or self.local_relation_evaluation_count > max(0, slot_count - 1)
+            or self.local_relation_evaluation_count
+            > max(0, slot_count - 1) * self.fit_pass_count
+            or self.phase_offset_lookup_count > max_hypotheses
         ):
             raise ValueError("template indexed work exceeded its structural bound")
 
@@ -430,8 +728,11 @@ class TemplateSearchReceipt:
 __all__ = [
     "LocalAdvanceKind",
     "LocalAdvanceRelation",
+    "MAX_TEMPLATE_FIT_PASSES",
     "PhaseAnchor",
     "PhaseAuthority",
+    "PhaseLatticeAuthority",
+    "PhaseLatticeFit",
     "PitchFit",
     "SequenceFit",
     "TemplateRole",

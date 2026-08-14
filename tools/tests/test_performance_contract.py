@@ -14,7 +14,11 @@ from tools.regression.performance import (
     performance_environment_is_frozen,
     validate_receipt,
 )
-from tools.regression.performance_profile import STAGE_NAMES
+from tools.regression.performance_profile import (
+    STAGE_NAMES,
+    _run_profiled,
+    _runtime_peak_temporary,
+)
 from tools.regression.performance_hardware import build_hardware_identity
 from tools.regression.performance_identity import (
     FIXED_SOURCE_COUNT,
@@ -223,14 +227,37 @@ class V5PerformanceContractTest(unittest.TestCase):
             32 * 1024 * 1024,
         )
 
-    def test_diagnostic_local_relations_are_bounded_by_groups_times_adjacencies(
+    def test_profiler_reads_lightweight_production_peak_temporary(self) -> None:
+        report = {
+            "photo_geometry": {
+                "lanes": [
+                    {"peak_temporary_bytes": 120},
+                    {"peak_temporary_bytes": 90},
+                ]
+            }
+        }
+        self.assertEqual(_runtime_peak_temporary(report), 120)
+
+    def test_profiler_observes_child_peak_rss_without_report_instrumentation(
+        self,
+    ) -> None:
+        _wall, peak, output, returncode = _run_profiled(
+            [sys.executable, "-c", "print('profile-child')"]
+        )
+        self.assertEqual(returncode, 0)
+        self.assertEqual(output.strip(), "profile-child")
+        self.assertGreater(peak, 0)
+
+    def test_diagnostic_local_relations_are_bounded_by_template_adjacencies(
         self,
     ) -> None:
         work = {field: 0 for field in WORK_FIELDS}
         work.update(
-            role_proposal_count=5,
-            sequence_group_count=4,
-            local_relation_evaluation_count=8,
+            phase_hypothesis_count=4,
+            phase_fit_pass_count=2,
+            phase_role_lookup_count=4,
+            phase_role_binding_count=24,
+            local_relation_evaluation_count=4,
             domain_pixels=100,
         )
         report = {
@@ -244,7 +271,7 @@ class V5PerformanceContractTest(unittest.TestCase):
         }
 
         self.assertTrue(bounded_work(report, source_pixels=100))
-        work["local_relation_evaluation_count"] = 9
+        work["local_relation_evaluation_count"] = 5
         self.assertFalse(bounded_work(report, source_pixels=100))
 
 

@@ -50,15 +50,12 @@ def _metrics(
             if lane.work is not None
         )
     )
-    query_sets = (
+    reconstructed = (
         ()
         if detection is None
-        else tuple(
-            item
-            for lane in detection.candidate.geometry.lane_reconstructions
-            for item in lane.measurement_sets
-        )
+        else detection.candidate.geometry.lane_reconstructions
     )
+    prepared = tuple(lane.prepared for lane in reconstructed)
     return RuntimeMetrics(
         processing_seconds=processing_seconds,
         detection_seconds=detection_seconds,
@@ -66,33 +63,60 @@ def _metrics(
             lane.domain.work_box.width * lane.domain.work_box.height
             for lane in workspace.source_core.lanes
         ),
-        measurement_query_count=len(query_sets),
-        pixel_query_count=sum(item.pixel_query_count for item in work),
+        measurement_query_count=sum(
+            lane.measurement_work.measurement_query_count for lane in prepared
+        ),
+        pixel_query_count=sum(
+            lane.measurement_work.pixel_query_count for lane in prepared
+        ),
         basic_profile_coordinate_count=sum(
-            item.basic_profile_coordinate_count for item in work
+            lane.sequence_profile.coordinate_count
+            + lane.cross_profile.coordinate_count
+            for lane in prepared
         ),
         basic_profile_run_count=sum(
-            item.basic_profile_run_count for item in work
+            len(lane.sequence_profile.runs) + len(lane.cross_profile.runs)
+            for lane in prepared
         ),
-        role_proposal_count=sum(item.role_proposal_count for item in work),
+        registered_sequence_observation_count=sum(
+            len(lane.sequence_edges) for lane in prepared
+        ),
         phase_hypothesis_count=sum(
-            item.phase_hypothesis_count for item in work
+            lane.phase_competition.receipt.phase_hypothesis_count
+            for lane in prepared
         ),
-        sequence_group_count=sum(item.sequence_group_count for item in work),
-        ordinal_role_lookup_count=sum(
-            item.ordinal_role_lookup_count for item in work
+        phase_fit_pass_count=sum(
+            lane.phase_competition.receipt.fit_pass_count
+            for lane in prepared
         ),
-        ordinal_role_match_count=sum(
-            item.ordinal_role_match_count for item in work
+        phase_role_lookup_count=sum(
+            lane.phase_competition.receipt.phase_lookup_count
+            for lane in prepared
+        ),
+        phase_role_binding_count=sum(
+            lane.phase_competition.receipt.role_binding_count
+            for lane in prepared
         ),
         local_relation_evaluation_count=sum(
-            item.local_relation_evaluation_count for item in work
+            lane.phase_competition.receipt.local_relation_evaluation_count
+            for lane in prepared
         ),
-        materialized_frame_geometry_count=sum(
-            item.materialized_frame_geometry_count for item in work
+        cross_registered_run_count=sum(
+            lane.cross_competition.receipt.registered_run_count
+            for lane in prepared
         ),
-        shared_measurement_reuse_count=sum(
-            item.shared_measurement_reuse_count for item in work
+        cross_fit_evaluation_count=sum(
+            lane.cross_competition.receipt.evaluated_fit_count
+            for lane in prepared
+        ),
+        placement_evaluation_count=sum(
+            item.placement_evaluation_count for item in work
+        ),
+        boundary_evaluation_count=sum(
+            item.boundary_evaluation_count for item in work
+        ),
+        content_evaluation_count=sum(
+            item.content_evaluation_count for item in work
         ),
         peak_temporary_bytes=max(
             (

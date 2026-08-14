@@ -7,9 +7,9 @@ from PIL import ImageDraw
 
 from ..configuration.diagnostics import DebugStyleParameters
 from ..detection.final.model import FinalDetection
-from ..detection.photo_geometry.chains import FixedFormatFrame
 from ..detection.photo_geometry.corridors import source_lane_box
 from ..detection.photo_geometry.model import BoundaryRole
+from ..detection.photo_geometry.template_placement import TemplateFrame
 from ..detection.workspace import DetectionWorkspace
 from .canvas import DebugRenderCache
 from .panel_facts import (
@@ -34,7 +34,7 @@ from .panel_layout import (
 
 
 def _boundary_points(
-    geometry: FixedFormatFrame,
+    geometry: TemplateFrame,
     role: BoundaryRole,
 ) -> tuple[tuple[float, float], tuple[float, float]]:
     boundary = geometry.start if role == BoundaryRole.START else geometry.end
@@ -52,7 +52,7 @@ def _boundary_points(
 
 def _draw_selected_start_end(
     draw: ImageDraw.ImageDraw,
-    geometries: tuple[tuple[int, FixedFormatFrame], ...],
+    geometries: tuple[tuple[int, TemplateFrame], ...],
     selected_viewport: Viewport,
     style: DebugStyleParameters,
 ) -> None:
@@ -135,7 +135,7 @@ def _draw_detected_top_bottom(
 ) -> set[BoundaryRole]:
     roles: set[BoundaryRole] = set()
     for lane in detection.candidate.geometry.lane_reconstructions:
-        for observation in lane.raw_top_bottom_observations:
+        for observation in lane.prepared.raw_cross_observations:
             source_points = source_line_points(observation)
             if not source_points:
                 continue
@@ -162,7 +162,7 @@ def _draw_detected_top_bottom(
 
 def _draw_selected_top_bottom(
     draw: ImageDraw.ImageDraw,
-    geometries: tuple[tuple[int, FixedFormatFrame], ...],
+    geometries: tuple[tuple[int, TemplateFrame], ...],
     selected_viewport: Viewport,
     style: DebugStyleParameters,
 ) -> set[BoundaryRole]:
@@ -269,7 +269,7 @@ def _draw_detected_start_end(
         if source_lane is None:
             continue
         lane_box = source_lane_box(source_lane, layout)
-        for region in lane.side_transition_regions:
+        for region in lane.prepared.side_regions:
             coordinate = region.proposal_position_interval_px.center
             source_points = (
                 ((coordinate, lane_box.top), (coordinate, lane_box.bottom))

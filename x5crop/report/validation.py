@@ -35,6 +35,7 @@ def _validate_gate(record: dict[str, Any], stage: str) -> None:
         "stage",
         "state",
         "gap",
+        "failure",
         "final_review_reason",
         "evaluated",
         "blocks",
@@ -52,16 +53,41 @@ def _validate_gate(record: dict[str, Any], stage: str) -> None:
         evaluated = bool(item.get("evaluated"))
         if not evaluated:
             if (
-                stage != "decision"
-                or item.get("state") != "unavailable"
+                item.get("state") != "unavailable"
                 or item.get("gap") is not None
+                or item.get("failure") is not None
                 or item.get("final_review_reason") is not None
                 or bool(item.get("blocks"))
             ):
                 raise ValueError(f"{stage} Gate unevaluated check is invalid")
             continue
+        failure = item.get("failure")
+        failure_valid = (
+            failure is None
+            if supported
+            else isinstance(failure, dict)
+            and set(failure)
+            == {
+                "gap",
+                "recovery",
+                "minimum_missing_fact",
+                "recommended_action",
+                "detail",
+            }
+            and failure.get("gap") == item.get("gap")
+            and all(
+                isinstance(failure.get(key), str) and failure.get(key)
+                for key in (
+                    "recovery",
+                    "minimum_missing_fact",
+                    "recommended_action",
+                    "detail",
+                )
+            )
+        )
         if (
             supported != (item.get("gap") is None)
+            or not failure_valid
             or bool(item.get("blocks")) != (not supported)
             or (stage == "candidate" and item.get("final_review_reason") is not None)
             or (
@@ -170,15 +196,12 @@ def _validate_geometry(record: dict[str, Any]) -> None:
         }:
             raise ValueError("budget does not cover selected output")
         selected = lane["selected_placement_id"]
-        selected_chain = lane["selected_chain"]
-        if (selected_chain is None) != (not outputs) or (
-            selected_chain is not None
-            and (
-                selected_chain["placement_id"] != selected
-                or len(selected_chain["sampling_boxes"]) != len(outputs)
-            )
-        ):
-            raise ValueError("selected chain summary is incomplete")
+        if (selected is None) != (not outputs):
+            raise ValueError("selected template output is incomplete")
+        if not isinstance(lane.get("peak_temporary_bytes"), int) or lane[
+            "peak_temporary_bytes"
+        ] < 0:
+            raise ValueError("template peak-memory fact is invalid")
 
 
 def _validate_development(record: dict[str, Any]) -> None:
@@ -194,26 +217,18 @@ def _validate_development(record: dict[str, Any]) -> None:
     if not isinstance(lanes, list):
         raise ValueError("development lane facts are unavailable")
     for lane in lanes:
-        chains = lane.get("complete_chains")
-        bounds = lane.get("producer_bounds")
+        placement = lane.get("placement_competition")
+        work = lane.get("work")
         if (
-            not isinstance(chains, list)
-            or not isinstance(bounds, dict)
-            or bounds.get("materialized_complete_chain_count") != len(chains)
-            or any(
-                not item.get("ledger")
-                or set(item.get("observation_dispositions", {}))
-                != {
-                    "direct_role_bound",
-                    "inferred_support",
-                    "explained_non_boundary",
-                    "contradiction",
-                    "unobservable",
-                }
-                for item in chains
-            )
+            not isinstance(placement, dict)
+            or not isinstance(work, dict)
+            or work.get("placement_evaluation_count")
+            != len(placement.get("placements", ()))
+            or not isinstance(lane.get("phase_competition"), dict)
+            or not isinstance(lane.get("cross_competition"), dict)
+            or not isinstance(lane.get("winner_basis"), dict)
         ):
-            raise ValueError("development chain ledger is invalid")
+            raise ValueError("development template ledger is invalid")
 
 
 def validate_current_report_record(record: dict[str, Any]) -> None:
@@ -223,7 +238,7 @@ def validate_current_report_record(record: dict[str, Any]) -> None:
         record["schema_id"] != REPORT_SCHEMA_ID
         or record["schema_revision"] != REPORT_SCHEMA_REVISION
         or record["configuration"]["execution"]["detector_kind"]
-        != "v5_bounded_physical_chain_selection"
+        != "v5_bounded_template_placement"
     ):
         raise ValueError("report does not use the current-only schema")
     _validate_geometry(record)

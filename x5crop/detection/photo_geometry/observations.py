@@ -80,6 +80,7 @@ def build_sequence_observations(
                 full_direction_interval_degrees=(
                     None if direction is None else direction[2]
                 ),
+                qualified_anchor_roles=run.qualified_anchor_roles,
             )
         )
     ordered = tuple(

@@ -1,90 +1,184 @@
-"""Registered measurement and bounded proposal preparation for one lane."""
+"""Register candidate-independent measurements for one template lane."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+import math
 
-from ...configuration.model import (
-    DetectionConfiguration,
-    HolderLayoutAuthority,
-    ResolvedSlotCount,
-)
-from ...domain import FiniteInterval
+from ...configuration.model import DetectionConfiguration, ResolvedSlotCount
+from ...domain import FiniteInterval, ObservationId
 from ..source_core import SourceLaneEvidence
-from .content_boundary_queries import separator_core_content_contradictions
-from .content_topology import build_content_topology_index
-from ..evidence.content_occupancy_model import ContentOccupancyObservationSet
 from .axis_layout import axis_interval, coordinate_count, source_axes
-from .chain_proposals import LaneObservationInput, LanePhysicalProposals
 from .corridors import (
     build_sequence_anchor_discovery_domain,
     build_top_bottom_search_corridors,
-    frame_physical_pixel_intervals,
     registered_lane_measurement_queries,
     source_lane_box,
-)
-from .lane_proposals import build_lane_physical_proposals
-from .registered_measurement import measure_registered_queries
-from .transition_tracking import track_side_transition_regions
-from .model import (
-    BoundaryAxis,
 )
 from .measurement_model import (
     PhotoBoundaryMeasurementField,
     PhotoBoundaryMeasurementSet,
     PhotoBoundaryTransition,
 )
-from .line_observations import SideTransitionRegion
-from .search_model import SequenceAnchorDiscoveryDomain
-from .output_model import ResolvedOutputSlots
-from .observation_types import BasicAxisProfile, BoundaryEdgeObservation, SeparatorBandObservation
+from .observation_types import BasicAxisProfile
 from .observations import build_sequence_observations
-from .profile_adapters import (
-    cross_profile_from_regions,
-    sequence_profile_from_regions,
-)
+from .output_model import ResolvedOutputSlots
+from .profile_adapters import cross_profile_from_regions, sequence_profile_from_regions
+from .registered_measurement import measure_registered_queries
 from .sequence_edge_families import merge_sequence_edge_families
-from .producer_receipts import CorridorEdgeFamilyCount
-from .lane_gap_model import LaneGapModel
+from .template_evidence import template_evidence_use_ledger
+from .template_runtime_model import (
+    PreparedTemplateLane,
+    RegisteredTemplateLane,
+    TemplateMeasurementWorkReceipt,
+)
+from .template_measurement_plan import compile_template_measurement_plan
+from .template_registration import (
+    register_cross_evidence,
+    short_axis_center_authority,
+    template_spec_from_physical_authority,
+)
+from .template_cross import TemplateCrossInput, fit_template_cross
+from .template_phase import (
+    PhaseFitResult,
+    account_prior_phase_fit,
+    fit_template_phase,
+    fit_template_phase_with_local_advance,
+)
+from .template_pitch import calibrate_template_source_pitch
 from .source_geometry import SourceScanGeometry
-
-@dataclass(frozen=True)
-class PreparedLane:
-    lane: SourceLaneEvidence
-    layout: str
-    output_slot_count: int
-    measurement_slot_count: int
-    width_axis: BoundaryAxis
-    height_axis: BoundaryAxis
-    width_authority_px: FiniteInterval
-    height_authority_px: FiniteInterval
-    anchor_domain: SequenceAnchorDiscoveryDomain
-    measurement_sets: tuple[PhotoBoundaryMeasurementSet, ...]
-    side_regions: tuple[SideTransitionRegion, ...]
-    top_regions: tuple[SideTransitionRegion, ...]
-    bottom_regions: tuple[SideTransitionRegion, ...]
-    transition_by_id: dict[str, PhotoBoundaryTransition]
-    sequence_profile: BasicAxisProfile
-    cross_profile: BasicAxisProfile
-    sequence_edges: tuple[BoundaryEdgeObservation, ...]
-    separator_bands: tuple[SeparatorBandObservation, ...]
-    content_contradicted_separator_count: int
-    proposal: LanePhysicalProposals
-    lane_gap_model: LaneGapModel
-    corridor_edge_family_counts: tuple[CorridorEdgeFamilyCount, ...]
+from .transition_tracking import track_side_transition_regions
 
 
-def _lane_gap_model(
-    lane_input: LaneObservationInput,
+def _canonical_height_from_shared_scale(
     source_geometry: SourceScanGeometry,
-) -> LaneGapModel:
-    # Search-time edge families have no ordinal authority.  The selected lane
-    # gap model is created only after a complete sequence binds those roles.
-    return LaneGapModel.from_ordinal_edges(
-        source_geometry.width_state,
-        lane_id=lane_input.lane_id,
-        edge_families=(),
-        direct_separator_gaps=(),
+) -> float:
+    """Project a directly calibrated source scale onto fixed format H.
+
+    Width and height retain separate tolerance intervals, but the scan has one
+    pixel/mm scale.  Once direct frame-width spans calibrate that scale, the
+    fixed template supplies the normal-path canonical height.  Cross pixels
+    still validate and locate the midpoint; they do not resize the format.
+    """
+
+    height = source_geometry.height_state.extent_projection_px()
+    observed_scale = source_geometry.width_state.observed_normalized_extent
+    if observed_scale is None:
+        return height.center
+    canonical = (
+        observed_scale.center
+        * source_geometry.frame_spec.frame_height_mm
+    )
+    return min(height.maximum, max(height.minimum, canonical))
+
+
+def _calibrated_width_geometry(
+    source_geometry: SourceScanGeometry,
+    phase: PhaseFitResult,
+    sequence_edges,
+    *,
+    holder_span_px: FiniteInterval,
+) -> SourceScanGeometry:
+    """Intersect W with one uniquely supported direct-span interval group.
+
+    Each frame contributes one physical fact regardless of how many traces
+    formed either edge.  A one-dimensional endpoint sweep finds the largest
+    mutually compatible set; a tied discrete group is ambiguity, so it cannot
+    calibrate W.  This keeps local gaps out of width calibration and prevents a
+    scalar median from allowing one interior false edge to move the template.
+    """
+
+    fit = phase.best
+    if fit is None:
+        return source_geometry
+    by_id = {item.observation_id: item for item in sequence_edges}
+    physical = source_geometry.width_state.extent_projection_px()
+    spans: list[
+        tuple[int, FiniteInterval, tuple[ObservationId, ObservationId]]
+    ] = []
+    for ordinal in range(fit.template.count):
+        start_id, end_id = fit.role_observation_ids[2 * ordinal : 2 * ordinal + 2]
+        if start_id is None or end_id is None:
+            continue
+        start = by_id[start_id].coordinate_interval_px
+        end = by_id[end_id].coordinate_interval_px
+        if fit.template.direction > 0:
+            measured = FiniteInterval(
+                end.minimum - start.maximum,
+                end.maximum - start.minimum,
+            )
+        else:
+            measured = FiniteInterval(
+                start.minimum - end.maximum,
+                start.maximum - end.minimum,
+            )
+        minimum = max(measured.minimum, physical.minimum)
+        maximum = min(measured.maximum, physical.maximum)
+        if maximum >= minimum:
+            spans.append(
+                (
+                    ordinal,
+                    FiniteInterval(minimum, maximum),
+                    (start_id, end_id),
+                )
+            )
+    if len(spans) < 2:
+        return source_geometry
+    ordinals = tuple(item[0] for item in spans)
+    if not any(right == left + 1 for left, right in zip(ordinals, ordinals[1:])):
+        return source_geometry
+    support_groups = {
+        tuple(
+            index
+            for index, (_ordinal, interval, _ids) in enumerate(spans)
+            if interval.contains(point, epsilon=1.0e-9)
+        )
+        for _ordinal, interval, _ids in spans
+        for point in (interval.minimum, interval.maximum)
+    }
+    maximum_support = max(map(len, support_groups), default=0)
+    winners = tuple(
+        group for group in support_groups if len(group) == maximum_support
+    )
+    if maximum_support < 2 or len(winners) != 1:
+        return source_geometry
+    winner = winners[0]
+    observed = FiniteInterval(
+        max(spans[index][1].minimum for index in winner),
+        min(spans[index][1].maximum for index in winner),
+    )
+    calibrated_scale = FiniteInterval(
+        observed.minimum / source_geometry.frame_spec.frame_width_mm,
+        observed.maximum / source_geometry.frame_spec.frame_width_mm,
+    )
+    gap_mm = source_geometry.frame_spec.format_gap_prior_mm
+    if gap_mm is not None:
+        gap = FiniteInterval(
+            gap_mm * calibrated_scale.minimum,
+            gap_mm * calibrated_scale.maximum,
+        )
+        full_span = FiniteInterval(
+            observed.minimum * fit.template.count
+            + gap.minimum * max(0, fit.template.count - 1),
+            observed.maximum * fit.template.count
+            + gap.maximum * max(0, fit.template.count - 1),
+        )
+        if full_span.minimum > holder_span_px.width * 1.04:
+            return source_geometry
+    identities = tuple(
+        dict.fromkeys(
+            identity
+            for index in winner
+            for identity in spans[index][2]
+        )
+    )
+    width_state = source_geometry.width_state.intersect_observed_extent(
+        observed,
+        observation_ids=identities,
+    )
+    return SourceScanGeometry.from_axis_states(
+        source_geometry.frame_spec,
+        width_state,
+        source_geometry.height_state,
     )
 
 
@@ -121,14 +215,9 @@ def resolve_output_slots(
     requested = resolved_slot_count.output_count
     if configuration.physical_spec.layout.kind == "dual_lane":
         capacity = _profile_capacity(configuration, lanes[0])
-        if (
-            requested != capacity
-            or requested % len(lanes)
-        ):
+        if requested != capacity or requested % len(lanes):
             return None
-        return ResolvedOutputSlots(
-            tuple(requested // len(lanes) for _lane in lanes)
-        )
+        return ResolvedOutputSlots(tuple(requested // len(lanes) for _lane in lanes))
     capacity = _profile_capacity(configuration, lanes[0])
     if requested <= 0 or requested > capacity:
         return None
@@ -141,11 +230,10 @@ def _physical_transition_regions(
     reference_trace_px: float,
     boundary_axis_scale_px_per_mm,
     minimum_independent_support_regions: int = 2,
-) -> tuple[tuple[SideTransitionRegion, ...], tuple[CorridorEdgeFamilyCount, ...]]:
-    retained: dict[str, SideTransitionRegion] = {}
-    counts: list[CorridorEdgeFamilyCount] = []
+):
+    retained = {}
     for measurement_set in measurement_sets:
-        proposed = track_side_transition_regions(
+        values = track_side_transition_regions(
             (measurement_set,),
             reference_trace_px=reference_trace_px,
             boundary_axis_scale_px_per_mm=boundary_axis_scale_px_per_mm,
@@ -153,99 +241,98 @@ def _physical_transition_regions(
                 minimum_independent_support_regions
             ),
         )
-        ordered = tuple(
-            sorted(
-                proposed,
-                key=lambda item: (
-                    1 if item.ambiguous else 0,
-                    -item.trace_support_count,
-                    item.proposal_position_interval_px.minimum,
-                    item.proposal_position_interval_px.maximum,
-                    item.region_id,
-                ),
-            )
+        retained.update({item.region_id: item for item in values})
+    return tuple(
+        sorted(
+            retained.values(),
+            key=lambda item: (
+                item.proposal_position_interval_px.center,
+                item.region_id,
+            ),
         )
-        counts.append(
-            CorridorEdgeFamilyCount(
-                corridor_id=measurement_set.query.query_id,
-                proposed_count=len(ordered),
-                materialized_count=len(ordered),
-            )
-        )
-        retained.update({item.region_id: item for item in ordered})
-    return (
-        tuple(
-            sorted(
-                retained.values(),
-                key=lambda item: (
-                    item.proposal_position_interval_px.minimum,
-                    item.proposal_position_interval_px.maximum,
-                    item.region_id,
-                ),
-            )
-        ),
-        tuple(counts),
     )
 
 
-def prepare_lane(
+def prepare_template_lane(
     field: PhotoBoundaryMeasurementField,
     lane: SourceLaneEvidence,
     *,
     layout: str,
     output_slot_count: int,
     measurement_slot_count: int,
-    holder_layout_authority: HolderLayoutAuthority,
     configuration: DetectionConfiguration,
-    content_observation: ContentOccupancyObservationSet,
-) -> PreparedLane:
+) -> PreparedTemplateLane:
+    """Measure every finite corridor once before fitting any template."""
+
     width_axis, height_axis = source_axes(layout)
     authority = source_lane_box(lane, layout)
     width_authority = axis_interval(authority, width_axis)
     height_authority = axis_interval(authority, height_axis)
     scales = lane.scan_canvas.axis_scales
-    frame_spec_pixels = frame_physical_pixel_intervals(
+    if scales is None:
+        raise ValueError("template registration requires scan-canvas scales")
+    source_geometry = SourceScanGeometry.create(
         configuration.physical_spec.frame,
-        scales.width_axis_px_per_mm,
-        scales.height_axis_px_per_mm,
+        width_scale_px_per_mm=scales.width_axis_px_per_mm,
+        height_scale_px_per_mm=scales.height_axis_px_per_mm,
+    )
+    holder_full_count = _profile_capacity(configuration, lane)
+    measurement_plan = compile_template_measurement_plan(
+        format_spec=configuration.physical_spec,
+        frame_spec=configuration.physical_spec.frame,
+        holder_layout_authority=configuration.count_request.holder_layout_authority,
+        count=output_slot_count,
+        full_count=measurement_slot_count,
+        holder_full_count=holder_full_count,
+        lane_authority=lane.domain,
+        layout=layout,
+        scale_authority=scales,
     )
     top_corridor, bottom_corridor = build_top_bottom_search_corridors(
         lane,
         layout=layout,
-        aperture_pixels=frame_spec_pixels,
+        measurement_plan=measurement_plan,
     )
     anchor_domain = build_sequence_anchor_discovery_domain(
         lane,
         layout=layout,
-        authoritative_sequence_length=measurement_slot_count,
-        aperture_pixels=frame_spec_pixels,
+        measurement_plan=measurement_plan,
     )
     queries = registered_lane_measurement_queries(
         lane,
         layout=layout,
-        aperture_pixels=frame_spec_pixels,
         top_corridor=top_corridor,
         bottom_corridor=bottom_corridor,
         anchor_domain=anchor_domain,
+        measurement_plan=measurement_plan,
+    )
+    measurement_plan.validate_execution(
+        registered_query_count=len(queries),
+        trace_position_count=sum(len(query.trace_positions_px) for query in queries),
+        coordinate_sample_count=sum(
+            max(1, int(math.ceil(interval.width)) + 1)
+            for query in queries
+            for interval in query.search_intervals_px
+        ),
     )
     measurement_sets = measure_registered_queries(field, queries)
-    transition_by_id = {
-        str(transition.transition_id): transition
+    transition_by_id: dict[str, PhotoBoundaryTransition] = {
+        str(item.transition_id): item
         for measurement_set in measurement_sets
-        for transition in measurement_set.transitions
+        for item in measurement_set.transitions
     }
-    side_regions, side_counts = _physical_transition_regions(
+    side_regions = _physical_transition_regions(
         measurement_sets[2:],
         reference_trace_px=height_authority.center,
         boundary_axis_scale_px_per_mm=scales.width_axis_px_per_mm,
     )
-    top_regions, top_counts = _physical_transition_regions(
+    top_regions = _physical_transition_regions(
         (measurement_sets[0],),
         reference_trace_px=width_authority.center,
         boundary_axis_scale_px_per_mm=scales.height_axis_px_per_mm,
         minimum_independent_support_regions=1,
     )
-    bottom_regions, bottom_counts = _physical_transition_regions(
+    bottom_regions = _physical_transition_regions(
         (measurement_sets[1],),
         reference_trace_px=width_authority.center,
         boundary_axis_scale_px_per_mm=scales.height_axis_px_per_mm,
@@ -275,95 +362,17 @@ def prepare_lane(
         width_axis,
         scales.width_axis_px_per_mm,
     )
-    edge_by_observation_id = {
-        edge.observation_id: edge for edge in sequence_edges
-    }
-    source_geometry = SourceScanGeometry.create(
-        configuration.physical_spec.frame,
-        width_scale_px_per_mm=scales.width_axis_px_per_mm,
-        height_scale_px_per_mm=scales.height_axis_px_per_mm,
-    )
-    minimum_height = (
-        source_geometry.height_state.extent_projection_px().minimum
-    )
-    cross_core = FiniteInterval(
-        height_authority.center - minimum_height / 2.0,
-        height_authority.center + minimum_height / 2.0,
-    )
-    content_index = build_content_topology_index(
-        content_observation,
-        layout=layout,
-    )
-    content_contradicted_separator_ids = {
-        band.observation_id
-        for band in separator_bands
-        if (
-            left := edge_by_observation_id.get(
-                band.left_edge_observation_id
-            )
-        )
-        is not None
-        and (
-            right := edge_by_observation_id.get(
-                band.right_edge_observation_id
-            )
-        )
-        is not None
-        and right.coordinate_interval_px.minimum
-        > left.coordinate_interval_px.maximum
-        and separator_core_content_contradictions(
-            content_index,
-            sequence_core=FiniteInterval(
-                left.coordinate_interval_px.maximum,
-                right.coordinate_interval_px.minimum,
-            ),
-            cross_core=cross_core,
-        )
-    }
-    lane_input = LaneObservationInput(
-        lane_id=lane.domain.lane_id,
-        output_slot_count=output_slot_count,
-        measurement_slot_count=measurement_slot_count,
-        holder_layout_authority=holder_layout_authority,
-        holder_extent_tolerance_ratio=(
-            configuration.scan_canvas.physical_extent_tolerance_ratio
+    coverage = tuple(item.coverage for item in measurement_sets)
+    work = TemplateMeasurementWorkReceipt(
+        measurement_query_count=len(coverage),
+        pixel_query_count=sum(item.pixel_query_count for item in coverage),
+        completed_query_count=sum(item.complete for item in coverage),
+        peak_temporary_bytes=max(
+            (item.peak_temporary_bytes for item in coverage), default=0
         ),
-        width_axis=width_axis,
-        height_axis=height_axis,
-        width_authority_px=width_authority,
-        height_authority_px=height_authority,
-        width_scale_px_per_mm=scales.width_axis_px_per_mm,
-        height_scale_px_per_mm=scales.height_axis_px_per_mm,
-        sequence_profile=sequence_profile,
-        cross_profile=cross_profile,
-        sequence_edges=sequence_edges,
-        separator_bands=separator_bands,
-        sequence_measurement_sets=measurement_sets[2:],
-        top_measurement_set=measurement_sets[0],
-        bottom_measurement_set=measurement_sets[1],
-        transition_by_id=transition_by_id,
+        coverage_receipts=coverage,
     )
-    proposal = build_lane_physical_proposals(
-        replace(
-            lane_input,
-            separator_bands=tuple(
-                band
-                for band in separator_bands
-                if band.observation_id
-                not in content_contradicted_separator_ids
-            ),
-        ),
-        configuration.physical_spec.frame,
-    )
-    lane_gap_model = _lane_gap_model(
-        lane_input,
-        SourceScanGeometry.create(
-            configuration.physical_spec.frame,
-            width_scale_px_per_mm=scales.width_axis_px_per_mm,
-            height_scale_px_per_mm=scales.height_axis_px_per_mm,
-        ),
-    )
-    return PreparedLane(
+    registered = RegisteredTemplateLane(
         lane=lane,
         layout=layout,
         output_slot_count=output_slot_count,
@@ -382,10 +391,154 @@ def prepare_lane(
         cross_profile=cross_profile,
         sequence_edges=sequence_edges,
         separator_bands=separator_bands,
-        content_contradicted_separator_count=len(
-            content_contradicted_separator_ids
-        ),
-        proposal=proposal,
-        lane_gap_model=lane_gap_model,
-        corridor_edge_family_counts=(*top_counts, *bottom_counts, *side_counts),
+        top_cross_bindings=(),
+        bottom_cross_bindings=(),
+        raw_cross_observations=(),
+        measurement_work=work,
+        measurement_plan=measurement_plan,
     )
+    template = measurement_plan.template_spec
+    provisional_phase = fit_template_phase(
+        sequence_edges,
+        template,
+        separator_bands=separator_bands,
+        scale_px_per_mm=scales.width_axis_px_per_mm,
+        holder_span_px=width_authority,
+    )
+    source_geometry = _calibrated_width_geometry(
+        source_geometry,
+        provisional_phase,
+        sequence_edges,
+        holder_span_px=width_authority,
+    )
+    template = template_spec_from_physical_authority(
+        frame_spec=configuration.physical_spec.frame,
+        source_geometry=source_geometry,
+        width_scale_px_per_mm=scales.width_axis_px_per_mm,
+        count=output_slot_count,
+        holder_layout_authority=configuration.count_request.holder_layout_authority,
+        phase_lattice_authority=measurement_plan.template_spec.phase_lattice_authority,
+        template_id=measurement_plan.template_spec.template_id,
+    )
+    # Width calibration changes the continuous template geometry.  Rebind the
+    # already-registered observations against that geometry instead of widening
+    # old role intervals to include a now-incompatible canonical position.
+    # This is a second bounded numeric fit over the same pixels, never a new
+    # measurement query or candidate-dependent retry.
+    phase = fit_template_phase_with_local_advance(
+        sequence_edges,
+        separator_bands,
+        template,
+        scale_px_per_mm=scales.width_axis_px_per_mm,
+        holder_span_px=width_authority,
+    )
+    source_pitch_template = calibrate_template_source_pitch(
+        template,
+        phase,
+        sequence_edges,
+    )
+    if source_pitch_template != template:
+        calibrated_phase = fit_template_phase_with_local_advance(
+            sequence_edges,
+            separator_bands,
+            source_pitch_template,
+            scale_px_per_mm=scales.width_axis_px_per_mm,
+            holder_span_px=width_authority,
+            phase_prior_px=(
+                None
+                if phase.best is None
+                else phase.best.phase_lattice_fit.absolute_phase_interval_px
+            ),
+        )
+        phase = account_prior_phase_fit(calibrated_phase, phase)
+        template = source_pitch_template
+    phase = account_prior_phase_fit(phase, provisional_phase)
+    cross = register_cross_evidence(
+        profile=cross_profile,
+        top_measurement=measurement_sets[0],
+        bottom_measurement=measurement_sets[1],
+        width_axis=width_axis,
+        height_axis=height_axis,
+        height_scale_px_per_mm=scales.height_axis_px_per_mm,
+        lane_reference_trace_px=width_authority.center,
+        maximum_runs=measurement_plan.cross_bounds.max_registered_runs,
+    )
+    cross_competition = fit_template_cross(
+        TemplateCrossInput(
+            template=template,
+            fixed_height_px=source_geometry.height_state.extent_projection_px(),
+            canonical_fixed_height_px=(
+                _canonical_height_from_shared_scale(source_geometry)
+            ),
+            holder_short_axis_center_px=short_axis_center_authority(
+                height_authority,
+                scales.height_axis_px_per_mm,
+            ),
+            lane_reference_trace_px=width_authority.center,
+            registered_trace_coordinates_px=measurement_sets[
+                0
+            ].query.trace_positions_px,
+            longitudinal_support_domains_px=(
+                ()
+                if phase.best is None
+                else tuple(
+                    sorted(
+                        (
+                            FiniteInterval(
+                                min(
+                                    phase.best.canonical_role_positions_px[index],
+                                    phase.best.canonical_role_positions_px[index + 1],
+                                ),
+                                max(
+                                    phase.best.canonical_role_positions_px[index],
+                                    phase.best.canonical_role_positions_px[index + 1],
+                                ),
+                            )
+                            for index in range(
+                                0,
+                                len(phase.best.canonical_role_positions_px),
+                                2,
+                            )
+                        ),
+                        key=lambda item: item.minimum,
+                    )
+                )
+            ),
+            top_bindings=cross.top_bindings,
+            bottom_bindings=cross.bottom_bindings,
+            boundary_axis=height_axis,
+            parallel_direction_tolerance_degrees=(
+                2.0
+                * measurement_plan.precision_budget.direction_solo_limit_degrees
+            ),
+            maximum_registered_runs=measurement_plan.cross_bounds.max_registered_runs,
+            maximum_fitted_observations=measurement_plan.cross_bounds.max_fitted_observations,
+            maximum_compatible_pairs=measurement_plan.cross_bounds.max_compatible_pairs,
+            maximum_evaluated_fits=measurement_plan.cross_bounds.max_evaluated_fits,
+        )
+    )
+    registered_values = dict(registered.__dict__)
+    registered_values["top_cross_bindings"] = cross.top_bindings
+    registered_values["bottom_cross_bindings"] = cross.bottom_bindings
+    registered_values["raw_cross_observations"] = cross.observations
+    return PreparedTemplateLane(
+        **registered_values,
+        template_spec=template,
+        source_scan_geometry=source_geometry,
+        phase_competition=phase,
+        cross_competition=cross_competition,
+        evidence_use_ledger=template_evidence_use_ledger(
+            sequence_edges,
+            separator_bands,
+            cross.observations,
+            phase,
+            cross_competition,
+        ),
+    )
+
+
+__all__ = [
+    "lane_measurement_capacity",
+    "prepare_template_lane",
+    "resolve_output_slots",
+]

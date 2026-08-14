@@ -282,7 +282,7 @@ def run_diagnostic_source(source: DiagnosticSource) -> dict[str, Any]:
         "slot_identities": geometry["slot_identities"],
         "geometry_outcome": {
             "selected_placement_ids": [
-                lane["selection"]["selected_placement_id"]
+                lane["selected_placement_id"]
                 for lane in geometry["lanes"]
             ],
         },

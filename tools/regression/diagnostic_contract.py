@@ -5,6 +5,10 @@ from __future__ import annotations
 import math
 from typing import Any, Sequence
 
+from x5crop.detection.photo_geometry.template_model import (
+    MAX_TEMPLATE_FIT_PASSES,
+)
+
 
 MAXIMUM_PEAK_TEMPORARY_BYTES_PER_SOURCE_PIXEL = 10
 MAXIMUM_PEAK_TEMPORARY_FIXED_ALLOWANCE_BYTES = 32 * 1024 * 1024
@@ -13,14 +17,17 @@ WORK_FIELDS = (
     "pixel_query_count",
     "basic_profile_coordinate_count",
     "basic_profile_run_count",
-    "role_proposal_count",
+    "registered_sequence_observation_count",
     "phase_hypothesis_count",
-    "sequence_group_count",
-    "ordinal_role_lookup_count",
-    "ordinal_role_match_count",
+    "phase_fit_pass_count",
+    "phase_role_lookup_count",
+    "phase_role_binding_count",
     "local_relation_evaluation_count",
-    "materialized_frame_geometry_count",
-    "shared_measurement_reuse_count",
+    "cross_registered_run_count",
+    "cross_fit_evaluation_count",
+    "placement_evaluation_count",
+    "boundary_evaluation_count",
+    "content_evaluation_count",
     "domain_pixels",
     "peak_temporary_bytes",
 )
@@ -68,13 +75,19 @@ def bounded_work(
         if field not in {"domain_pixels", "peak_temporary_bytes"}
     )
     structural_bounds = all(
-        int(row["ordinal_role_lookup_count"])
-        <= int(row["phase_hypothesis_count"]) * count * 2
-        and int(row["ordinal_role_match_count"])
+        1
+        <= int(row["phase_fit_pass_count"])
+        <= MAX_TEMPLATE_FIT_PASSES
+        and int(row["phase_role_lookup_count"])
         <= int(row["phase_hypothesis_count"])
-        * int(row["role_proposal_count"])
+        and int(row["phase_role_binding_count"])
+        <= int(row["phase_hypothesis_count"]) * count * 2
         and int(row["local_relation_evaluation_count"])
-        <= int(row["sequence_group_count"]) * max(0, count - 1)
+        <= max(0, count - 1) * int(row["phase_fit_pass_count"])
+        and int(row["placement_evaluation_count"]) <= 2
+        and int(row["boundary_evaluation_count"])
+        <= int(row["placement_evaluation_count"]) * count * 4
+        and int(row["content_evaluation_count"]) <= 1
         for row, count in zip(work_rows, lane_counts, strict=True)
     )
     return (

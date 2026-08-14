@@ -27,12 +27,6 @@ from x5crop.detection.photo_geometry.boundary_geometry import (
     canonical_source_cross_axis_slope,
     canonical_source_sequence_axis_slope,
 )
-from x5crop.detection.photo_geometry.direction_proposals import (
-    joint_chain_direction,
-)
-from x5crop.detection.photo_geometry.cross_conditioning import (
-    conditioned_observation_direction,
-)
 from x5crop.detection.photo_geometry.model import (
     BoundaryAxis,
     BoundaryRole,
@@ -61,9 +55,6 @@ from x5crop.detection.photo_geometry.profile_adapters import (
 from x5crop.detection.photo_geometry.separator_material import (
     repeated_dark_material_supported,
 )
-from x5crop.detection.photo_geometry.cross_pairing import (
-    pair_cross_edge_families,
-)
 from x5crop.detection.photo_geometry.separator_observations import (
     build_format_separator_bands,
 )
@@ -71,9 +62,6 @@ from x5crop.detection.photo_geometry.output_model import (
     DirectUseBudgetEdgeAssessment,
     ResolvedOutputSlots,
     SharedStripDirection,
-)
-from x5crop.detection.photo_geometry.fixed_frame_geometry import (
-    correlated_fixed_width_intervals,
 )
 from x5crop.detection.pipeline import choose_detection
 from x5crop.detection.workspace import prepare_detection_workspace

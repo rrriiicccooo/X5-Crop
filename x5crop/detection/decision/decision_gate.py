@@ -26,7 +26,7 @@ _REASON_BY_GAP = {
     GateGap.HOLDER_FULL_COUNT_UNRESOLVED: FINAL_REASON_NO_LEGAL_PLACEMENT,
     GateGap.HOLDER_IDENTITY_UNRESOLVED: FINAL_REASON_NO_LEGAL_PLACEMENT,
     GateGap.OUTPUT_SLOT_COUNT_UNAVAILABLE: FINAL_REASON_NO_LEGAL_PLACEMENT,
-    GateGap.COMPLETE_CHAIN_UNAVAILABLE: FINAL_REASON_NO_LEGAL_PLACEMENT,
+    GateGap.COMPLETE_PLACEMENT_UNAVAILABLE: FINAL_REASON_NO_LEGAL_PLACEMENT,
     GateGap.SHARED_STRIP_DIRECTION_UNAVAILABLE: FINAL_REASON_NO_LEGAL_PLACEMENT,
     GateGap.SHARED_STRIP_DIRECTION_NONUNIQUE: FINAL_REASON_PLACEMENT_UNRESOLVED,
     GateGap.SOURCE_SCAN_GEOMETRY_UNAVAILABLE: FINAL_REASON_NO_LEGAL_PLACEMENT,
@@ -82,6 +82,7 @@ def apply_decision_gate(
                 stage=GateStage.DECISION,
                 state=check.state,
                 gap=check.gap,
+                failure=check.failure,
                 final_review_reason=(
                     _REASON_BY_GAP[check.gap]
                     if check.blocks and check.gap is not None

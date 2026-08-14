@@ -22,10 +22,10 @@ count 大于实际 `full_count`，非交互整批调用同样在 detector 前以
 临时改写 count。图像不能唯一匹配片夹时保持 `needs_review`，不猜片夹或格数。`135-dual` 只允许
 full，总计 12 格、每 lane 6 格。
 
-正常间隙是两种模式共同的默认状态。只有当前片条用至少两段相容 pitch 建立了 `G_source`，程序才
-能补全看不见的 separator；若所有 adjacency 都有直接证据，`G_source` 未建立也可形成完整 chain。
-Full 不会把 format 的联网 gap 搜索值变成定位事实，也不会用铺满布局覆盖接触、叠片或大间隙的
-直接证据。
+正常间隙是两种模式共同的默认状态。程序先按 format 放下固定模板，再用至少两个独立 adjacency
+校准当前片条的 source pitch；已支持的模板可以补全看不见的 separator，并明确标记为推导位置。
+Full 不会把 format gap 搜索值变成定位事实，也不会用铺满布局覆盖接触、叠片或大间隙的直接证据。
+局部异常必须由已经绑定到具体 adjacency 的直接 separator 证明，只让后续照片整体移动一次。
 
 Format 决定照片矩形的物理尺寸。检测只负责根据片条方向、照片上下边缘、照片间黑带、共同尺寸
 和局部卷片关系放置这些矩形，再把边缘测量所需的最小安全范围纳入输出。最终每一边都必须通过
@@ -140,8 +140,8 @@ python3 X5_Crop.py /path/to/scans --format 120-66 --strip partial --count 2
 
 无法区分候选片夹、producer 上限被触发、不同最终裁切位置没有唯一物理胜出者，或可靠内容否决
 所有位置时，结果均保持 `needs_review`，不输出猜测的照片 TIFF。普通 JSONL report 保存匹配片夹、
-count authority、最终选择、安全范围与 Gate 根因；显式 Debug Analysis 额外保存有界 chain、候选
-cluster、内容否决和证据 ledger。
+count authority、最终选择、安全范围与 Gate 根因；显式 Debug Analysis 额外保存模板位置、实际
+observation、fit winner/runner、偏差与推导 ledger、内容否决和工作量 receipt。
 
 退出码：
 

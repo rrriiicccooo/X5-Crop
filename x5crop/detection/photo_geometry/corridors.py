@@ -9,21 +9,18 @@ from ...formats import (
     FramePhysicalSpec,
 )
 from ..source_core import SourceLaneEvidence
-from .model import (
-    BoundaryAxis,
-    BoundaryRole,
-    PHOTO_BOUNDARY_MEASUREMENT_SPEC,
-    PhotoBoundaryMeasurementSpec,
-    QueryPurpose,
-)
+from .model import BoundaryAxis, BoundaryRole, QueryPurpose
 from .measurement_model import PhotoBoundaryMeasurementQuery
 from .search_model import (
     PhotoEdgeSearchCorridor,
     SequenceAnchorDiscoveryDomain,
     SequenceAnchorTile,
 )
+from .template_measurement_plan import (
+    MeasurementIntentKind,
+    TemplateMeasurementPlan,
+)
 from .axis_layout import source_axes
-from .source_geometry import centered_short_axis_authority_px
 from ...run_local_identity import run_local_id
 
 
@@ -78,45 +75,6 @@ def source_lane_box(
     raise ValueError(f"unsupported source layout: {layout}")
 
 
-def _axis_bounds(
-    box: Box,
-    axis: BoundaryAxis,
-) -> tuple[int, int]:
-    return (
-        (box.left, box.right)
-        if axis == BoundaryAxis.X
-        else (box.top, box.bottom)
-    )
-
-
-def _lattice_positions(
-    minimum: int,
-    maximum: int,
-    spacing_px: float,
-) -> tuple[int, ...]:
-    if maximum <= minimum:
-        return ()
-    step = max(1, int(round(spacing_px)))
-    first = min(maximum - 1, minimum + step // 2)
-    values = list(range(first, maximum, step))
-    if not values:
-        values = [(minimum + maximum - 1) // 2]
-    if values[-1] < maximum - 1 - step // 2:
-        values.append(maximum - 1)
-    return tuple(sorted(set(values)))
-
-
-def _clip_interval(
-    interval: FiniteInterval,
-    minimum: float,
-    maximum: float,
-) -> FiniteInterval:
-    return FiniteInterval(
-        max(minimum, interval.minimum),
-        min(maximum, interval.maximum),
-    )
-
-
 def _stable_id(prefix: str, *parts: object) -> str:
     return run_local_id(prefix, *parts)
 
@@ -125,109 +83,47 @@ def build_top_bottom_search_corridors(
     lane: SourceLaneEvidence,
     *,
     layout: str,
-    aperture_pixels: FramePhysicalPixelIntervals,
-    spec: PhotoBoundaryMeasurementSpec = PHOTO_BOUNDARY_MEASUREMENT_SPEC,
+    measurement_plan: TemplateMeasurementPlan,
 ) -> tuple[PhotoEdgeSearchCorridor, PhotoEdgeSearchCorridor]:
-    """Build computation-only short-axis corridors with complete halos."""
+    """Materialize the compiler-owned short-axis query projection."""
 
-    scales = lane.scan_canvas.axis_scales
-    long_axis, short_axis = source_axes(layout)
-    lane_box = source_lane_box(lane, layout)
-    long_min, long_max = _axis_bounds(lane_box, long_axis)
-    short_min, short_max = _axis_bounds(lane_box, short_axis)
-    long_scale = scales.width_axis_px_per_mm
-    short_scale = scales.height_axis_px_per_mm
-    spacing_mm = spec.lattice_spacing_mm(
-        aperture_pixels.frame_spec.frame_width_mm
-    )
-    trace_positions = _lattice_positions(
-        long_min,
-        long_max,
-        spacing_mm * long_scale.maximum,
-    )
-    # Film is centred on the holder lane's short axis.  The shared H interval,
-    # source direction and measurement halo therefore define the complete
-    # search corridor; per-frame transverse translation has no authority.
-    short_authority = FiniteInterval(
-        float(short_min),
-        float(short_max - 1),
-    )
-    center = centered_short_axis_authority_px(
-        short_authority,
-        short_scale,
-    )
-    height = aperture_pixels.frame_height_px
-    halo = spec.measurement_halo_px(short_scale.maximum)
-    top_core: list[FiniteInterval] = []
-    bottom_core: list[FiniteInterval] = []
-    top_measurement: list[FiniteInterval] = []
-    bottom_measurement: list[FiniteInterval] = []
-    for _trace in trace_positions:
-        top = _clip_interval(
-            FiniteInterval(
-                center.minimum - height.maximum / 2.0,
-                center.maximum - height.minimum / 2.0,
-            ),
-            float(short_min),
-            float(short_max - 1),
-        )
-        bottom = _clip_interval(
-            FiniteInterval(
-                center.minimum + height.minimum / 2.0,
-                center.maximum + height.maximum / 2.0,
-            ),
-            float(short_min),
-            float(short_max - 1),
-        )
-        top_core.append(top)
-        bottom_core.append(bottom)
-        top_measurement.append(
-            _clip_interval(
-                FiniteInterval(top.minimum - halo, top.maximum + halo),
-                float(short_min),
-                float(short_max - 1),
-            )
-        )
-        bottom_measurement.append(
-            _clip_interval(
-                FiniteInterval(
-                    bottom.minimum - halo,
-                    bottom.maximum + halo,
-                ),
-                float(short_min),
-                float(short_max - 1),
-            )
-        )
+    if (
+        measurement_plan.lane_id != lane.domain.lane_id
+        or measurement_plan.layout != layout
+    ):
+        raise ValueError("corridors require the compiled lane plan")
+    _long_axis, short_axis = source_axes(layout)
+    projected = measurement_plan.projected_queries
     return (
         PhotoEdgeSearchCorridor(
             corridor_id=_stable_id(
                 "photo-edge-corridor",
                 lane.domain.lane_id,
-                aperture_pixels.frame_spec,
+                measurement_plan.plan_identity,
                 BoundaryRole.TOP.value,
             ),
             lane_id=lane.domain.lane_id,
             role=BoundaryRole.TOP,
             boundary_axis=short_axis,
-            trace_positions_px=trace_positions,
-            core_intervals_px=tuple(top_core),
-            measurement_intervals_px=tuple(top_measurement),
-            measurement_halo_px=halo,
+            trace_positions_px=projected.cross_trace_positions_px,
+            core_intervals_px=projected.top_core_intervals_px,
+            measurement_intervals_px=projected.top_measurement_intervals_px,
+            measurement_halo_px=projected.measurement_halo_px,
         ),
         PhotoEdgeSearchCorridor(
             corridor_id=_stable_id(
                 "photo-edge-corridor",
                 lane.domain.lane_id,
-                aperture_pixels.frame_spec,
+                measurement_plan.plan_identity,
                 BoundaryRole.BOTTOM.value,
             ),
             lane_id=lane.domain.lane_id,
             role=BoundaryRole.BOTTOM,
             boundary_axis=short_axis,
-            trace_positions_px=trace_positions,
-            core_intervals_px=tuple(bottom_core),
-            measurement_intervals_px=tuple(bottom_measurement),
-            measurement_halo_px=halo,
+            trace_positions_px=projected.cross_trace_positions_px,
+            core_intervals_px=projected.bottom_core_intervals_px,
+            measurement_intervals_px=projected.bottom_measurement_intervals_px,
+            measurement_halo_px=projected.measurement_halo_px,
         ),
     )
 
@@ -255,64 +151,30 @@ def build_sequence_anchor_discovery_domain(
     lane: SourceLaneEvidence,
     *,
     layout: str,
-    authoritative_sequence_length: int,
-    aperture_pixels: FramePhysicalPixelIntervals,
+    measurement_plan: TemplateMeasurementPlan,
 ) -> SequenceAnchorDiscoveryDomain:
-    if authoritative_sequence_length <= 0:
-        raise ValueError("anchor domain requires authoritative sequence length")
-    lane_box = source_lane_box(lane, layout)
-    long_axis, _short_axis = source_axes(layout)
-    long_min, long_max = _axis_bounds(lane_box, long_axis)
-    if long_min != 0:
-        raise ValueError("current lane authority must begin at source long zero")
+    if (
+        measurement_plan.lane_id != lane.domain.lane_id
+        or measurement_plan.layout != layout
+    ):
+        raise ValueError("anchor domain requires the compiled lane plan")
+    projected = measurement_plan.projected_queries
     tiles = _tile_domain(
         lane.domain.lane_id,
-        long_max - long_min,
+        projected.long_extent_px,
     )
     query_order = tuple(tile.tile_id for tile in tiles)
     return SequenceAnchorDiscoveryDomain(
         domain_id=_stable_id(
             "sequence-anchor-domain",
             lane.domain.lane_id,
-            authoritative_sequence_length,
-            aperture_pixels.frame_spec,
+            measurement_plan.plan_identity,
         ),
         lane_id=lane.domain.lane_id,
-        long_axis_extent_px=long_max - long_min,
-        authoritative_sequence_length=authoritative_sequence_length,
+        long_axis_extent_px=projected.long_extent_px,
+        authoritative_sequence_length=measurement_plan.full_count,
         tiles=tiles,
         query_execution_order=query_order,
-    )
-
-
-def _coarse_short_trace_positions(
-    lane: SourceLaneEvidence,
-    *,
-    layout: str,
-    aperture_pixels: FramePhysicalPixelIntervals,
-    spec: PhotoBoundaryMeasurementSpec,
-) -> tuple[int, ...]:
-    lane_box = source_lane_box(lane, layout)
-    _long_axis, short_axis = source_axes(layout)
-    short_min, short_max = _axis_bounds(lane_box, short_axis)
-    scales = lane.scan_canvas.axis_scales
-    center = (short_min + short_max - 1) / 2.0
-    half_height = min(
-        (short_max - short_min - 2) / 2.0,
-        aperture_pixels.frame_height_px.minimum / 2.0
-        - spec.measurement_halo_px(
-            scales.height_axis_px_per_mm.maximum
-        ),
-    )
-    inner_min = max(short_min, int(math.ceil(center - half_height)))
-    inner_max = min(short_max, int(math.floor(center + half_height)) + 1)
-    spacing_mm = spec.lattice_spacing_mm(
-        aperture_pixels.frame_spec.frame_height_mm
-    )
-    return _lattice_positions(
-        inner_min,
-        inner_max,
-        spacing_mm * scales.height_axis_px_per_mm.maximum,
     )
 
 
@@ -320,14 +182,21 @@ def registered_lane_measurement_queries(
     lane: SourceLaneEvidence,
     *,
     layout: str,
-    aperture_pixels: FramePhysicalPixelIntervals,
     top_corridor: PhotoEdgeSearchCorridor,
     bottom_corridor: PhotoEdgeSearchCorridor,
     anchor_domain: SequenceAnchorDiscoveryDomain,
+    measurement_plan: TemplateMeasurementPlan,
     registration_start: int = 0,
-    spec: PhotoBoundaryMeasurementSpec = PHOTO_BOUNDARY_MEASUREMENT_SPEC,
 ) -> tuple[PhotoBoundaryMeasurementQuery, ...]:
     """Pre-register complete top/bottom and seamless anchor coverage."""
+
+    if (
+        not isinstance(measurement_plan, TemplateMeasurementPlan)
+        or measurement_plan.lane_id != lane.domain.lane_id
+        or measurement_plan.layout != layout
+    ):
+        raise ValueError("measurement queries require the compiled lane plan")
+    intent_ids = {item.kind: item.intent_id for item in measurement_plan.query_intents}
 
     scales = lane.scan_canvas.axis_scales
     source_long_axis, source_short_axis = source_axes(layout)
@@ -338,7 +207,7 @@ def registered_lane_measurement_queries(
     ):
         queries.append(
             PhotoBoundaryMeasurementQuery(
-                query_id=f"query:{corridor.corridor_id}",
+                query_id=f"query:{measurement_plan.plan_identity}:{corridor.corridor_id}",
                 registration_index=0,
                 lane_id=lane.domain.lane_id,
                 purpose=purpose,
@@ -348,7 +217,7 @@ def registered_lane_measurement_queries(
                 transition_ownership_intervals_px=(
                     corridor.measurement_intervals_px
                 ),
-                expected_support_px=aperture_pixels.frame_width_px.maximum,
+                expected_support_px=measurement_plan.template_spec.frame_width_px.maximum,
                 boundary_axis_scale_px_per_mm=(
                     scales.height_axis_px_per_mm
                 ),
@@ -356,15 +225,17 @@ def registered_lane_measurement_queries(
                     scales.width_axis_px_per_mm
                 ),
                 measurement_halo_px=corridor.measurement_halo_px,
-                search_proposal_ids=(corridor.corridor_id,),
+                search_proposal_ids=(
+                    corridor.corridor_id,
+                    intent_ids[
+                        MeasurementIntentKind.TOP
+                        if purpose == QueryPurpose.TOP_CORRIDOR
+                        else MeasurementIntentKind.BOTTOM
+                    ],
+                ),
             )
         )
-    short_traces = _coarse_short_trace_positions(
-        lane,
-        layout=layout,
-        aperture_pixels=aperture_pixels,
-        spec=spec,
-    )
+    short_traces = measurement_plan.projected_queries.sequence_trace_positions_px
     tiles_by_id = {tile.tile_id: tile for tile in anchor_domain.tiles}
     # Every tile is pre-registered before template placement begins.
     for tile_id in anchor_domain.query_execution_order:
@@ -390,7 +261,7 @@ def registered_lane_measurement_queries(
         )
         queries.append(
             PhotoBoundaryMeasurementQuery(
-                query_id=f"query:{anchor_domain.domain_id}:{tile.tile_id}",
+                query_id=f"query:{measurement_plan.plan_identity}:{anchor_domain.domain_id}:{tile.tile_id}",
                 registration_index=0,
                 lane_id=lane.domain.lane_id,
                 purpose=QueryPurpose.SEQUENCE_ANCHOR_TILE,
@@ -402,7 +273,7 @@ def registered_lane_measurement_queries(
                 transition_ownership_intervals_px=tuple(
                     owned_interval for _trace in short_traces
                 ),
-                expected_support_px=aperture_pixels.frame_height_px.maximum,
+                expected_support_px=measurement_plan.template_spec.frame_height_px.maximum,
                 boundary_axis_scale_px_per_mm=(
                     scales.width_axis_px_per_mm
                 ),
@@ -421,6 +292,10 @@ def registered_lane_measurement_queries(
                 search_proposal_ids=(
                     anchor_domain.domain_id,
                     tile.tile_id,
+                    intent_ids[MeasurementIntentKind.OUTER_SEQUENCE_ANCHOR],
+                    intent_ids[MeasurementIntentKind.EARLY_SEQUENCE_ANCHOR],
+                    intent_ids[MeasurementIntentKind.MIDDLE_SEQUENCE_ANCHOR],
+                    intent_ids[MeasurementIntentKind.LATE_SEQUENCE_ANCHOR],
                 ),
             )
         )

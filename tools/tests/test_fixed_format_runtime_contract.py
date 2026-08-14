@@ -4,30 +4,6 @@ from tools.tests.photo_geometry_support import *
 
 
 class FixedFormatRuntimeContractTest(unittest.TestCase):
-    def test_direct_start_constrains_inferred_end_through_shared_width(self) -> None:
-        start, end = correlated_fixed_width_intervals(
-            FiniteInterval(100.0, 102.0),
-            FiniteInterval(130.0, 150.0),
-            FiniteInterval(35.0, 36.0),
-            start_direct=True,
-            end_direct=False,
-        )
-
-        self.assertEqual(start, FiniteInterval(100.0, 102.0))
-        self.assertEqual(end, FiniteInterval(135.0, 138.0))
-
-    def test_direct_end_constrains_inferred_start_through_shared_width(self) -> None:
-        start, end = correlated_fixed_width_intervals(
-            FiniteInterval(80.0, 110.0),
-            FiniteInterval(135.0, 137.0),
-            FiniteInterval(35.0, 36.0),
-            start_direct=False,
-            end_direct=True,
-        )
-
-        self.assertEqual(start, FiniteInterval(99.0, 102.0))
-        self.assertEqual(end, FiniteInterval(135.0, 137.0))
-
     def test_direct_use_limit_is_closed_and_has_no_positive_epsilon(self) -> None:
         exact = DirectUseBudgetEdgeAssessment(
             role=BoundaryRole.START,
@@ -55,12 +31,15 @@ class FixedFormatRuntimeContractTest(unittest.TestCase):
         self.assertEqual(candidate.resolved_output_slots, ResolvedOutputSlots((6,)))
         lane = candidate.geometry.lane_reconstructions[0]
         tiles = tuple(
-            sorted(lane.anchor_domain.tiles, key=lambda item: item.core_px.minimum)
+            sorted(
+                lane.prepared.anchor_domain.tiles,
+                key=lambda item: item.core_px.minimum,
+            )
         )
         self.assertEqual(tiles[0].core_px.minimum, 0.0)
         self.assertGreaterEqual(
             tiles[-1].core_px.maximum,
-            lane.anchor_domain.long_axis_extent_px,
+            lane.prepared.anchor_domain.long_axis_extent_px,
         )
         self.assertTrue(
             all(
@@ -71,7 +50,7 @@ class FixedFormatRuntimeContractTest(unittest.TestCase):
         self.assertTrue(
             all(
                 measurement.coverage.complete
-                for measurement in lane.measurement_sets
+                for measurement in lane.prepared.measurement_sets
             )
         )
         self.assertIs(
@@ -87,13 +66,7 @@ class FixedFormatRuntimeContractTest(unittest.TestCase):
         self.assertEqual(candidate.geometry.safe_crop_envelopes, ())
         self.assertTrue(
             all(
-                not lane.materialized_chains
-                for lane in candidate.geometry.lane_reconstructions
-            )
-        )
-        self.assertTrue(
-            all(
-                lane.lane_gap_model.lane_id == lane.lane_id
+                not lane.placement_competition.placements
                 for lane in candidate.geometry.lane_reconstructions
             )
         )

@@ -91,9 +91,9 @@ GitHub 是 tracked 源码与文档的权威来源。NAS 和复制目录只用于
   曝光格。Full 的布局事实只能在正常链、总跨度和片夹 authority 相容时提供大致居中与均匀排布
   权限；partial 即使 `count == full_count` 也不获得该权限。片夹容量不得猜 format、真实
   照片数或 filename count。
-- Detector 先按物理合同淘汰非法完整链，再按证据等级和独立像素观察选出明显胜出的完整链。
-  `SafeCropEnvelope` 只保护胜出 placement 自身的测量不确定性，不合并落选位置；没有明显胜出者
-  时保持 `placement unresolved`。
+- Detector 先把 format、mode、count 与片夹 authority 编译成有界固定模板，再用独立像素观察对准、
+  解释明确的局部偏差并否决非法 placement。`SafeCropEnvelope` 只保护胜出 placement 自身的测量
+  不确定性，不合并落选位置；没有明显胜出者时保持 `placement unresolved`。
 - `CandidateGate` 只记录 typed assessment；只有 `DecisionGate` 创建 final status 与 reasons。
 - 任一 slot 不安全时，整个 source `needs_review` 且不写正式照片；不做 slot salvage。
 - 不为减少 blank TIFF 牺牲内容保护或 direct-use 质量。V5 不实现 blank suppression。
@@ -106,8 +106,8 @@ GitHub 是 tracked 源码与文档的权威来源。NAS 和复制目录只用于
   assessment、selection、decision、finalization、output、report、debug 单向流动。
 - 被替代的 API、schema、flag、alias、wrapper、test 和 import 同批删除；不保留 fallback、shim、
   feature flag、dead code 或平行 runtime。
-- Producer 必须 fixed-format chain-first 且工作量有界；不恢复通用 DP、top-K、候选笛卡尔积、逐帧尺寸、
-  selected-placement 临时 query 或无界全图 evidence。
+- Producer 必须 fixed-template-first 且工作量有界；不恢复完整链 materialization/cache、通用 DP、
+  top-K、候选笛卡尔积、逐帧尺寸、selected-placement 临时 query 或无界全图 evidence。
 - `tifffile + imagecodecs` 独占正式 TIFF I/O；OpenCV 只作有界像素测量；SciPy 只作数值与
   sampling；Pillow 只在显式 Debug Analysis 时延迟导入。
 - V5 首版不加入视觉大模型、训练模型、ONNX Runtime 或 PyTorch runtime。未来 learned evidence

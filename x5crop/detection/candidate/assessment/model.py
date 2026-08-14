@@ -11,7 +11,7 @@ CANDIDATE_GATE_CHECK_CODES = (
     "observation_completeness",
     "source_scan_geometry",
     "shared_strip_direction",
-    "complete_chain",
+    "complete_placement",
     "producer_coverage",
     "sequence_authority",
     "cross_authority",

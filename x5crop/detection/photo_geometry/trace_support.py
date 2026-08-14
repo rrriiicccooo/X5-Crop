@@ -88,17 +88,28 @@ def source_spanning_continuous_trace_support(
     *,
     spec: PhotoBoundaryMeasurementSpec,
 ) -> bool:
-    """Return whether one connected edge run crosses front/middle/back.
+    """Return whether one connected edge run reaches both query-domain ends.
 
-    This is the finite physical meaning of a boundary that remains present
-    across the source.  It does not threshold a support percentage and it does
-    not add votes per pixel: one connected run either reaches all three
-    canonical spatial regions or it does not.
+    Touching the three coarse support regions is independent-support evidence;
+    it is not source-spanning authority.  A spanning line must remain one
+    connected raster run and reach both ends of the already registered trace
+    lattice, allowing only the same declared missing-lattice allowance used to
+    connect neighbouring samples.  This is an ordinal/domain fact, not a
+    support-percentage threshold.
     """
 
+    if not queried_traces:
+        return False
+    queried = tuple(sorted(queried_traces))
+    steps = np.diff(np.asarray(queried, dtype=np.float64))
+    step = float(np.median(steps)) if steps.size else PIXEL_CENTER_EXTENT_PX
+    end_allowance = (
+        step * (spec.maximum_missing_lattice_steps + 1)
+        + spec.paired_sampling_uncertainty_px
+    )
     return any(
-        independent_spatial_support_count(queried_traces, run)
-        == SPATIAL_SUPPORT_REGION_COUNT
+        run[0] <= queried[0] + end_allowance
+        and run[-1] >= queried[-1] - end_allowance
         for run in _continuous_support_runs(
             queried_traces,
             supporting_traces,

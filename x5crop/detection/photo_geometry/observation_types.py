@@ -88,6 +88,7 @@ class BoundaryEdgeObservation:
     canonical_direction_degrees: float | None
     fit_direction_interval_degrees: FiniteInterval | None
     full_direction_interval_degrees: FiniteInterval | None
+    qualified_anchor_roles: tuple[BoundaryRole, ...] = ()
     evidence_state: BoundaryEvidenceState = BoundaryEvidenceState.SUPPORT
 
     def __post_init__(self) -> None:
@@ -127,6 +128,12 @@ class BoundaryEdgeObservation:
                 )
             )
             or self.evidence_state != BoundaryEvidenceState.SUPPORT
+            or len(set(self.qualified_anchor_roles))
+            != len(self.qualified_anchor_roles)
+            or any(
+                role not in {BoundaryRole.START, BoundaryRole.END}
+                for role in self.qualified_anchor_roles
+            )
         ):
             raise ValueError("boundary edge observation is invalid")
 

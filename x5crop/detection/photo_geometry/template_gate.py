@@ -1,0 +1,246 @@
+"""Derive CandidateGate facts from bounded template reconstruction."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from ...domain import EvidenceState
+from ..gate_checks import (
+    DetectionFailureFact,
+    GateGap,
+    TypedAssessment,
+    failure_fact,
+)
+from ..output_geometry import (
+    OutputTransformAssessment,
+    SharedStripDirectionResolution,
+    output_transform_assessment,
+)
+from .measurement_model import PhotoBoundaryMeasurementField
+from .output_model import ResolvedOutputSlots
+from .template_cross import CrossFitStatus
+from .template_model import LocalAdvanceKind
+from .template_phase import PhaseFailureKind, PhaseFitStatus
+from .template_runtime_model import TemplateLaneReconstruction, TemplateSourceSelection
+
+
+def supported() -> TypedAssessment:
+    return TypedAssessment(EvidenceState.SUPPORTED, None)
+
+
+def unavailable(
+    gap: GateGap,
+    failure: DetectionFailureFact | None = None,
+) -> TypedAssessment:
+    return TypedAssessment(EvidenceState.UNAVAILABLE, gap, failure)
+
+
+def contradicted(
+    gap: GateGap,
+    failure: DetectionFailureFact | None = None,
+) -> TypedAssessment:
+    return TypedAssessment(EvidenceState.CONTRADICTED, gap, failure)
+
+
+def output_transform(
+    field: PhotoBoundaryMeasurementField,
+    layout: str,
+    selection: TemplateSourceSelection,
+) -> OutputTransformAssessment:
+    direction = selection.shared_direction
+    return output_transform_assessment(
+        SharedStripDirectionResolution(
+            direction=direction,
+            state=(
+                EvidenceState.SUPPORTED
+                if direction is not None
+                else EvidenceState.UNAVAILABLE
+            ),
+            named_gap=(
+                None
+                if direction is not None
+                else (
+                    None
+                    if selection.failure is None
+                    else selection.failure.gap.value
+                )
+            ),
+        ),
+        layout=layout,
+        source_width=field.source_extent.width,
+        source_height=field.source_extent.height,
+    )
+
+
+@dataclass(frozen=True)
+class TemplateGateResult:
+    source_transform: OutputTransformAssessment
+    facts: dict[str, TypedAssessment]
+
+
+def build_template_gate(
+    field: PhotoBoundaryMeasurementField,
+    resolved: ResolvedOutputSlots,
+    reconstructions: tuple[TemplateLaneReconstruction, ...],
+    source_selection: TemplateSourceSelection,
+    lane_transforms: tuple[OutputTransformAssessment, ...],
+    *,
+    layout: str,
+) -> TemplateGateResult:
+    if not reconstructions or len(reconstructions) != len(lane_transforms):
+        raise ValueError("template gate requires every reconstructed lane")
+    source_transform = output_transform(field, layout, source_selection)
+    measurement_complete = all(
+        lane.prepared.measurement_work.completed_query_count
+        == lane.prepared.measurement_work.measurement_query_count
+        for lane in reconstructions
+    )
+    bounds_valid = all(
+        not lane.work.bound_exceeded
+        and lane.prepared.phase_competition.status
+        != PhaseFitStatus.BOUND_EXCEEDED
+        and lane.prepared.cross_competition.status
+        != CrossFitStatus.BOUND_EXCEEDED
+        for lane in reconstructions
+    )
+    complete = all(lane.placement_competition.placements for lane in reconstructions)
+    content_rejected = any(lane.content_veto_facts for lane in reconstructions)
+    selected = source_selection.state == EvidenceState.SUPPORTED
+    local_phase_failure = next(
+        (
+            lane.prepared.phase_competition
+            for lane in reconstructions
+            if lane.prepared.phase_competition.failure_kind
+            == PhaseFailureKind.LOCAL_ADVANCE_AMBIGUOUS
+        ),
+        None,
+    )
+    local_advance_unresolved = local_phase_failure is not None or any(
+        lane.prepared.phase_competition.best is not None
+        and any(
+            relation.kind == LocalAdvanceKind.UNRESOLVED
+            for relation in lane.prepared.phase_competition.best.local_advance_relations
+        )
+        for lane in reconstructions
+    )
+    local_advance_failure = (
+        None
+        if local_phase_failure is None
+        else failure_fact(
+            GateGap.LOCAL_ADVANCE_UNRESOLVED,
+            detail=(
+                local_phase_failure.ambiguity_reason
+                or GateGap.LOCAL_ADVANCE_UNRESOLVED.value
+            ),
+        )
+    )
+    envelope_count = sum(len(lane.safe_crop_envelopes) for lane in reconstructions)
+    envelope_complete = selected and envelope_count == resolved.output_slot_count
+    budgets = tuple(
+        item
+        for lane in reconstructions
+        for item in lane.direct_use_budget_assessments
+    )
+    budget_fact = (
+        contradicted(GateGap.DIRECT_USE_BUDGET_EXCEEDED)
+        if any(item.state == EvidenceState.CONTRADICTED for item in budgets)
+        else supported()
+        if envelope_complete
+        and len(budgets) == resolved.output_slot_count
+        and all(item.state == EvidenceState.SUPPORTED for item in budgets)
+        else unavailable(GateGap.DIRECT_USE_BUDGET_UNAVAILABLE)
+    )
+    transforms_complete = (
+        source_transform.state == EvidenceState.SUPPORTED
+        and all(item.state == EvidenceState.SUPPORTED for item in lane_transforms)
+    )
+    selection_failure = source_selection.failure
+    selection_gap = (
+        selection_failure.gap
+        if selection_failure is not None
+        else GateGap.PLACEMENT_UNRESOLVED
+        if complete
+        else GateGap.COMPLETE_PLACEMENT_UNAVAILABLE
+    )
+    facts = {
+        "scan_canvas_authority": supported(),
+        "output_slot_count": supported(),
+        "observation_completeness": (
+            supported()
+            if measurement_complete and bounds_valid
+            else contradicted(GateGap.PRODUCER_BOUND_EXCEEDED)
+        ),
+        "source_scan_geometry": supported(),
+        "shared_strip_direction": (
+            supported()
+            if selected
+            else unavailable(GateGap.SHARED_STRIP_DIRECTION_UNAVAILABLE)
+        ),
+        "complete_placement": (
+            supported()
+            if complete
+            else unavailable(
+                selection_gap,
+                selection_failure,
+            )
+        ),
+        "producer_coverage": (
+            supported()
+            if bounds_valid
+            else contradicted(GateGap.PRODUCER_BOUND_EXCEEDED)
+        ),
+        "sequence_authority": (
+            supported() if selected else unavailable(GateGap.SEQUENCE_AUTHORITY_UNAVAILABLE)
+        ),
+        "cross_authority": (
+            supported() if selected else unavailable(GateGap.CROSS_AUTHORITY_UNAVAILABLE)
+        ),
+        "shared_authority": (
+            supported() if selected else unavailable(GateGap.SHARED_AUTHORITY_UNAVAILABLE)
+        ),
+        "local_advance_authority": (
+            unavailable(
+                GateGap.LOCAL_ADVANCE_UNRESOLVED,
+                local_advance_failure,
+            )
+            if local_advance_unresolved
+            else supported()
+        ),
+        "content_protection": (
+            contradicted(GateGap.CONTENT_VETO_REJECTED)
+            if content_rejected
+            else supported()
+        ),
+        "selected_placement": (
+            supported()
+            if selected
+            else unavailable(selection_gap, selection_failure)
+        ),
+        "slot_ordinal_assignment": (
+            supported()
+            if complete
+            else unavailable(GateGap.SLOT_ORDINAL_ASSIGNMENT_UNRESOLVED)
+        ),
+        "source_lane_authority": supported(),
+        "selected_only_envelope": (
+            supported()
+            if envelope_complete
+            else unavailable(GateGap.SELECTED_PLACEMENT_CONTAINMENT_UNAVAILABLE)
+        ),
+        "direct_use_budget": budget_fact,
+        "transform_sampling": (
+            supported()
+            if envelope_complete and transforms_complete
+            else unavailable(GateGap.OUTPUT_TRANSFORM_UNAVAILABLE)
+        ),
+    }
+    return TemplateGateResult(source_transform, facts)
+
+
+__all__ = [
+    "TemplateGateResult",
+    "build_template_gate",
+    "output_transform",
+    "supported",
+    "unavailable",
+]

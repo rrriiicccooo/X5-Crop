@@ -47,6 +47,9 @@ def candidate_gate_assessment(
                     else EvidenceState.UNAVAILABLE
                 ),
                 gap=facts[code].gap if is_evaluated(code) else None,
+                failure=(
+                    facts[code].failure if is_evaluated(code) else None
+                ),
                 evaluated=is_evaluated(code),
             )
             for code in CANDIDATE_GATE_CHECK_CODES

@@ -23,6 +23,9 @@ from x5crop.detection.photo_geometry.corridors import (
     build_top_bottom_search_corridors,
     frame_physical_pixel_intervals,
 )
+from x5crop.detection.photo_geometry.template_measurement_plan import (
+    compile_template_measurement_plan,
+)
 from x5crop.detection.photo_geometry.model import (
     BoundaryRole,
     PHOTO_BOUNDARY_MEASUREMENT_SPEC,
@@ -414,15 +417,23 @@ class PhysicalAuthorityContractTest(unittest.TestCase):
         scan = lane.scan_canvas
         assert scan.axis_scales is not None
         aperture = configuration.physical_spec.frame
-        physical = frame_physical_pixel_intervals(
-            aperture,
-            scan.axis_scales.width_axis_px_per_mm,
-            scan.axis_scales.height_axis_px_per_mm,
+        plan = compile_template_measurement_plan(
+            format_spec=configuration.physical_spec,
+            frame_spec=aperture,
+            holder_layout_authority=(
+                configuration.count_request.holder_layout_authority
+            ),
+            count=6,
+            full_count=6,
+            holder_full_count=6,
+            lane_authority=lane.domain,
+            layout="horizontal",
+            scale_authority=scan.axis_scales,
         )
         top, bottom = build_top_bottom_search_corridors(
             lane,
             layout="horizontal",
-            aperture_pixels=physical,
+            measurement_plan=plan,
         )
         self.assertEqual((top.role, bottom.role), (
             BoundaryRole.TOP,

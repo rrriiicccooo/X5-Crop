@@ -113,6 +113,19 @@ def _run_profiled(command: list[str]) -> tuple[float, int, str, int]:
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
     )
+    if os.name != "nt" and hasattr(os, "wait4"):
+        _pid, status, usage = os.wait4(process.pid, 0)
+        process.returncode = os.waitstatus_to_exitcode(status)
+        output, _unused = process.communicate()
+        peak = int(usage.ru_maxrss)
+        if sys.platform != "darwin":
+            peak *= 1024
+        return (
+            time.perf_counter() - started,
+            peak,
+            output,
+            int(process.returncode),
+        )
     peak = 0
     while process.poll() is None:
         peak = max(peak, _process_rss_bytes(process.pid))

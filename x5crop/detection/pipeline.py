@@ -8,7 +8,7 @@ from .candidate.assessment.candidate_gate import candidate_gate_assessment
 from .candidate.assessment.model import CandidateGateAssessment
 from .gate_checks import GateGap, TypedAssessment
 from .photo_geometry.detector import reconstruct_photo_geometry
-from .photo_geometry.reconstruction_model import PhotoGeometryDetectionResult
+from .photo_geometry.template_runtime_model import PhotoGeometryDetectionResult
 from .photo_geometry.output_model import (
     OutputSlotIdentity,
     ResolvedOutputSlots,

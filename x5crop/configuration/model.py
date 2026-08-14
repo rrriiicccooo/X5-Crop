@@ -120,7 +120,7 @@ class DetectionConfiguration:
 
     @property
     def detector_kind(self) -> str:
-        return "v5_bounded_physical_chain_selection"
+        return "v5_bounded_template_placement"
 
     @property
     def configuration_id(self) -> str:

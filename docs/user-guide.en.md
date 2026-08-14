@@ -32,11 +32,13 @@ one source at a time. Ambiguous holder matching remains `needs_review` instead
 of guessing holder identity or count. `135-dual` is full-only: 12 slots total,
 six per lane.
 
-Normal spacing is the default in both modes. A missing separator can be filled
-only after at least two compatible pitches establish `G_source`. A fully
-direct chain remains valid when `G_source` is unresolved. Full never promotes a
-format gap search prior into placement authority and never overrides direct
-contact, overlap, or wide-gap evidence.
+Normal spacing is the default in both modes. X5 Crop first places the fixed
+format template, then calibrates the current source pitch from at least two
+independent adjacencies. A supported template may infer a missing separator and
+records that role as inferred. Full never promotes the format gap search prior
+into placement authority and never overrides direct contact, overlap, or
+wide-gap evidence. A local anomaly must be directly bound to one known
+adjacency and shifts the following frames only once.
 
 The format fixes the physical photo rectangle. Detection places those rectangles
 from strip direction, top/bottom evidence, dark separator bands, shared dimensions,
@@ -180,8 +182,9 @@ An unresolved holder, a producer bound being reached, no uniquely dominant
 physical placement, or reliable content vetoing every placement all remain
 `needs_review`; X5 Crop writes no guessed photo TIFFs. The normal JSONL report
 retains holder/count authority, final selection, safe envelopes, and root Gate
-reasons. Explicit Debug Analysis additionally retains bounded chains, placement
-clusters, content vetoes, and the evidence ledger.
+reasons. Explicit Debug Analysis additionally retains the theoretical template,
+observations, fit winner and runner, deviation/inference ledger, content vetoes,
+and bounded-work receipt.
 
 Exit codes:
 
