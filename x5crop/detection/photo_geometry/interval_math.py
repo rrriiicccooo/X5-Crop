@@ -1,4 +1,4 @@
-"""Finite-interval arithmetic shared by physical-chain reconstruction."""
+"""Finite-interval arithmetic shared by template reconstruction."""
 
 from __future__ import annotations
 
@@ -34,18 +34,6 @@ def add(left: FiniteInterval, right: FiniteInterval) -> FiniteInterval:
         left.minimum + right.minimum,
         left.maximum + right.maximum,
     )
-
-
-def subtract(left: FiniteInterval, right: FiniteInterval) -> FiniteInterval:
-    return FiniteInterval(
-        left.minimum - right.maximum,
-        left.maximum - right.minimum,
-    )
-
-
-def multiply(interval: FiniteInterval, coefficient: float) -> FiniteInterval:
-    values = (interval.minimum * coefficient, interval.maximum * coefficient)
-    return FiniteInterval(min(values), max(values))
 
 
 def common(values: tuple[FiniteInterval, ...]) -> FiniteInterval | None:

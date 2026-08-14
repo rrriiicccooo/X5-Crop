@@ -1,4 +1,4 @@
-"""Readable source-run identities for physical-chain facts."""
+"""Readable source-run identities for physical observations and facts."""
 
 from __future__ import annotations
 

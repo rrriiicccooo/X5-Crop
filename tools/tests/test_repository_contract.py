@@ -263,6 +263,7 @@ class RepositoryContractTest(unittest.TestCase):
             "x5crop.detection.photo_geometry.cross_proposals",
             "x5crop.detection.photo_geometry.placement_clusters",
             "x5crop.detection.photo_geometry.source_selection",
+            "x5crop.detection.photo_geometry.selection_identity",
         ):
             with self.subTest(retired=module):
                 self.assertNotIn(module, sources)

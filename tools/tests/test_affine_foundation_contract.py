@@ -249,7 +249,7 @@ class AffineFoundationContractTest(unittest.TestCase):
         self.assertEqual(assessment.outcome, "unavailable")
         self.assertEqual(
         assessment.named_gap,
-            "selected_chain_direction_unavailable",
+            "selected_direction_unavailable",
         )
 
     def test_nonzero_common_observed_angle_drives_rotation(self) -> None:
@@ -276,7 +276,7 @@ class AffineFoundationContractTest(unittest.TestCase):
         observation = make_angle_observation("line:vertical", -1.1, -0.9)
         direction = SharedStripDirectionResolution(
             direction=SharedStripDirection(
-                direction_id="test:vertical-selected-chain-direction",
+                direction_id="test:vertical-selected-direction",
                 selected_observation_ids=(observation.observation_id,),
                 full_angle_interval_degrees=FiniteInterval(-1.1, -0.9),
                 canonical_angle_degrees=-1.0,

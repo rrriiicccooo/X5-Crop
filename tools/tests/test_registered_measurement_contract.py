@@ -46,7 +46,7 @@ class RegisteredMeasurementContractTest(unittest.TestCase):
             boundary_axis_scale_px_per_mm=PositiveInterval(1.0, 1.1),
             trace_axis_scale_px_per_mm=PositiveInterval(1.0, 1.1),
             measurement_halo_px=2,
-            search_proposal_ids=("anchor-domain:test",),
+            registration_provenance_ids=("anchor-domain:test",),
         )
         coverage = PhotoBoundaryCoverageReceipt(
             query_id=query.query_id,
@@ -95,7 +95,7 @@ class RegisteredMeasurementContractTest(unittest.TestCase):
                 search_intervals_px=(FiniteInterval(0.0, 20.0),) * 4,
                 transition_ownership_intervals_px=(FiniteInterval(0.0, 9.0),)
                 * 4,
-                search_proposal_ids=("tile:left",),
+                registration_provenance_ids=("tile:left",),
                 **common,
             ),
             PhotoBoundaryMeasurementQuery(
@@ -104,7 +104,7 @@ class RegisteredMeasurementContractTest(unittest.TestCase):
                 search_intervals_px=(FiniteInterval(9.0, 29.0),) * 4,
                 transition_ownership_intervals_px=(FiniteInterval(10.0, 29.0),)
                 * 4,
-                search_proposal_ids=("tile:right",),
+                registration_provenance_ids=("tile:right",),
                 **common,
             ),
         )
@@ -139,7 +139,7 @@ class RegisteredMeasurementContractTest(unittest.TestCase):
                 boundary_axis_scale_px_per_mm=PositiveInterval(10.0, 10.0),
                 trace_axis_scale_px_per_mm=PositiveInterval(10.0, 10.0),
                 measurement_halo_px=4,
-                search_proposal_ids=(f"corridor:{purpose.value}",),
+                registration_provenance_ids=(f"corridor:{purpose.value}",),
             )
 
         cross, sequence = measure_registered_queries(

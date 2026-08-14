@@ -44,6 +44,8 @@ report reuse 均不再支持。当前完整合同见 [ARCHITECTURE.md](ARCHITECT
 
 - OpenCV 只作有界像素测量；SciPy 只作拓扑、Huber 拟合与 affine sampling。测量校准集中在具名
   spec，不得进入 placement、投票或 Gate 成为隐藏规则。
+- 检测灰度按有界行块生成，保持原逐像素结果，不再建立整张 float RGB 副本；正式裁切仍从原始
+  16-bit RGB 采样。
 - `tools/verify` 是唯一入口。Cohort 使用 SHA 和明确 count authority；工具不得从文件名、片夹容量或
   当前输出推导真值。Tests、tools 与 release manifest 只引用当前模块和 schema。
 - 开发工具只服务正式验证、安装和发布；不保留没有消费者的 measurement replay 或自证测试。

@@ -76,7 +76,7 @@ class PhotoBoundaryMeasurementQuery:
     boundary_axis_scale_px_per_mm: PositiveInterval
     trace_axis_scale_px_per_mm: PositiveInterval
     measurement_halo_px: int
-    search_proposal_ids: tuple[str, ...]
+    registration_provenance_ids: tuple[str, ...]
 
     def __post_init__(self) -> None:
         if (
@@ -94,13 +94,13 @@ class PhotoBoundaryMeasurementQuery:
             or not math.isfinite(self.expected_support_px)
             or self.expected_support_px <= 0.0
             or self.measurement_halo_px <= 0
-            or not self.search_proposal_ids
+            or not self.registration_provenance_ids
         ):
             raise ValueError("photo-boundary query is incomplete")
-        if len(set(self.search_proposal_ids)) != len(
-            self.search_proposal_ids
+        if len(set(self.registration_provenance_ids)) != len(
+            self.registration_provenance_ids
         ):
-            raise ValueError("search proposal identities must be unique")
+            raise ValueError("registration provenance identities must be unique")
         if any(
             ownership.minimum < search.minimum
             or ownership.maximum > search.maximum

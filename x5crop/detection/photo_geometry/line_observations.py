@@ -143,10 +143,10 @@ class PhotoBoundaryObservation:
 
 @dataclass(frozen=True)
 class SideTransitionRegion:
-    """Direction-free start/end proposal from tracked transitions."""
+    """Direction-free physical region from tracked transitions."""
 
     region_id: str
-    proposal_position_interval_px: FiniteInterval
+    position_interval_px: FiniteInterval
     transition_ids: tuple[ObservationId, ...]
     trace_support_count: int
     queried_trace_count: int

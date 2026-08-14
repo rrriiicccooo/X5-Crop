@@ -126,24 +126,6 @@ def _maximum_coverage_intervals(
     return maximum, alternatives
 
 
-def median_canonical_location(values: tuple[float, ...]) -> float:
-    """Choose a robust representative inside one established placement.
-
-    This is not a fit and owns no physical interval.  The exact median is the
-    closed-form minimizer of absolute residuals, so a general optimizer,
-    evidence weights, convergence policy, and an empirical loss scale would
-    add no authority.  Competing placements are never passed to this helper.
-    """
-
-    if not values or any(not math.isfinite(value) for value in values):
-        raise ValueError("canonical scalar values must be finite and non-empty")
-    ordered = sorted(values)
-    midpoint = len(ordered) // 2
-    if len(ordered) % 2:
-        return ordered[midpoint]
-    return (ordered[midpoint - 1] + ordered[midpoint]) / 2.0
-
-
 def track_side_transition_regions(
     measurement_sets: tuple[PhotoBoundaryMeasurementSet, ...],
     *,
@@ -381,9 +363,9 @@ def track_side_transition_regions(
         if coverage < minimum_support or not alternatives:
             continue
         # Preserve every equal maximum-coverage line as a distinct physical
-        # alternative.  Later complete-chain selection may resolve it with W,
-        # H, ordinal and the other axis; lexical order may not choose one here.
-        for selected_indices, proposal in alternatives:
+        # alternative.  Template fitting may resolve it with W, H, ordinal and
+        # the other axis; lexical order may not choose one here.
+        for selected_indices, position in alternatives:
             selected = tuple(points[index] for index in sorted(selected_indices))
             selected_traces = tuple(point.trace for point in selected)
             independent_count = independent_spatial_support_count(
@@ -410,7 +392,7 @@ def track_side_transition_regions(
             )
             regions[signature] = SideTransitionRegion(
                 region_id=str(region_id),
-                proposal_position_interval_px=proposal,
+                position_interval_px=position,
                 transition_ids=transition_ids,
                 trace_support_count=len(selected),
                 queried_trace_count=len(queried_traces),
@@ -452,7 +434,7 @@ def track_side_transition_regions(
         sorted(
             regions.values(),
             key=lambda item: (
-                item.proposal_position_interval_px.center,
+                item.position_interval_px.center,
                 item.region_id,
             ),
         )

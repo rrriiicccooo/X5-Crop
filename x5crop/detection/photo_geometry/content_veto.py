@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from ...domain import FiniteInterval
+from ...run_local_identity import run_local_id
 from .content_boundary_queries import (
     content_cross_boundary_ids,
     content_sequence_boundary_ids,
@@ -15,7 +16,6 @@ from .content_veto_model import (
     ContentVetoReason,
 )
 from .model import BoundaryRole
-from .selection_identity import selection_fact_id
 from .template_placement import FormatPlacement
 
 
@@ -124,20 +124,18 @@ def content_veto_assessment(
             ),
         )
     )
-    assessment_id = selection_fact_id(
+    assessment_id = run_local_id(
         "content-veto",
-        (
-            placement.placement_id,
-            *(
-                value
-                for item in ordered
-                for value in (
-                    item.reason.value,
-                    str(item.slot_ordinal),
-                    "none" if item.boundary_role is None else item.boundary_role.value,
-                    *(str(identity) for identity in item.observation_ids),
-                )
-            ),
+        placement.placement_id,
+        *(
+            value
+            for item in ordered
+            for value in (
+                item.reason.value,
+                str(item.slot_ordinal),
+                "none" if item.boundary_role is None else item.boundary_role.value,
+                *(str(identity) for identity in item.observation_ids),
+            )
         ),
     )
     return ContentVetoAssessment(

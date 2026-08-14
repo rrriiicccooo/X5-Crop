@@ -392,12 +392,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.expected_commit is not None:
         parser.error("--expected-commit requires --check-receipt")
     record = build_receipt()
-    validate_receipt(record, expected_commit=str(record["git_commit"]))
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(
         json.dumps(record, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
+    validate_receipt(record, expected_commit=str(record["git_commit"]))
     print(f"performance receipt: {args.output}")
     return 0
 

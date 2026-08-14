@@ -154,7 +154,7 @@ Band 保留左右边、gap 区间、黑度、纹理与跨短轴连续性。一�
 否决候选。
 
 以下情况保持中性：没有检测到内容、黑片或低纹理、start/end 外侧的邻片内容、接触或叠片中的
-跨边内容、片夹遮挡外不存在像素。黑色区域不能证明大间隙；连续黑区仍须按 count、W 和物理链
+跨边内容、片夹遮挡外不存在像素。黑色区域不能证明大间隙；连续黑区仍须按 count、W 和固定模板
 保留所有空白 slot。
 
 角落局部擦边同样中性。Top/bottom 的否决内容必须离开 start/end 角落并在照片长轴内部跨过完整
@@ -330,6 +330,9 @@ canonical coordinates，正式输出写 `Orientation=1`。
 sampling，Pillow 只在 Debug Analysis 时延迟导入。普通写出关闭后只复开 header，检查可读性、
 shape、dtype、channels、ICC、resolution、受支持 metadata、压缩与 `Orientation=1`；完整像素复读
 属于 TIFF contract、named-TIFF、platform、端到端与发布验证。
+
+检测灰度图按有界行块从原始 RGB 生成，与整数组计算逐像素一致，不建立整张 float RGB 副本。
+Detector 只消费这份廉价灰度与已登记窗口；正式输出仍从原始 16-bit RGB 采样。
 
 生产默认 `--jobs 1`、上限 3；数值库内部线程固定为 1。一次运行先在 target 同父目录写完整 staging，
 全部成功后用一次 rename 发布为新的 target。Target 已存在或处理中出现同名目录时直接报错；runtime

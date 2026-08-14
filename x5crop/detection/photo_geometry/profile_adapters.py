@@ -50,7 +50,7 @@ def sequence_profile_from_regions(
             (
                 ProfileRun(
                     run_id=region.region_id,
-                    coordinate_interval_px=region.proposal_position_interval_px,
+                    coordinate_interval_px=region.position_interval_px,
                     transition_ids=region.transition_ids,
                     trace_coordinates_px=tuple(
                         sorted(
@@ -126,7 +126,7 @@ def cross_profile_from_regions(
             values.append(
                 ProfileRun(
                     run_id=f"{role.value}:{region.region_id}",
-                    coordinate_interval_px=region.proposal_position_interval_px,
+                    coordinate_interval_px=region.position_interval_px,
                     transition_ids=region.transition_ids,
                     trace_coordinates_px=traces,
                     role_hint=role,

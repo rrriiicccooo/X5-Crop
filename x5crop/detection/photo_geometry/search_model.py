@@ -20,7 +20,7 @@ class PhotoEdgeSearchCorridor:
     core_intervals_px: tuple[FiniteInterval, ...]
     measurement_intervals_px: tuple[FiniteInterval, ...]
     measurement_halo_px: int
-    provenance: str = "scan_canvas_format_search_proposal"
+    provenance: str = "compiled_template_search_corridor"
 
     def __post_init__(self) -> None:
         count = len(self.trace_positions_px)
@@ -32,7 +32,7 @@ class PhotoEdgeSearchCorridor:
             or len(self.core_intervals_px) != count
             or len(self.measurement_intervals_px) != count
             or self.measurement_halo_px <= 0
-            or self.provenance != "scan_canvas_format_search_proposal"
+            or self.provenance != "compiled_template_search_corridor"
         ):
             raise ValueError("photo-edge search corridor is invalid")
         for core, measured in zip(

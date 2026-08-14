@@ -79,6 +79,23 @@ class CurrentRuntimeContractTest(unittest.TestCase):
             "minimum_guard",
             "retained_placements",
             "placement_set_containment",
+            "OrdinalBoundaryRole",
+            "SequenceRoleProposal",
+            "SeparatorBandRoleProposal",
+            "SequenceHypothesisGroup",
+            "SequenceGroupingWork",
+            "canonical_boundary_line_at_position",
+            "median_canonical_location",
+            "observed_strip_angle_estimate_degrees",
+            "canonical_source_cross_axis_slope",
+            "canonical_source_sequence_axis_slope",
+            "shared_independent_trace_support_count",
+            "separator_core_content_contradictions",
+            "FramePhysicalPixelIntervals",
+            "frame_physical_pixel_intervals",
+            "search_proposal_ids",
+            "proposal_position_interval_px",
+            "scan_canvas_format_search_proposal",
         )
         active_paths = tuple((ROOT / "x5crop").rglob("*.py")) + tuple(
             path

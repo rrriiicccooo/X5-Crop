@@ -1,5 +1,4 @@
 """Vectorized topology queries for negative-only content interpretation."""
-
 from __future__ import annotations
 
 import numpy as np
@@ -175,18 +174,3 @@ def content_occupies_sequence_core(
     if np.unique(regions).size < MINIMUM_INDEPENDENT_SUPPORT_REGIONS:
         return ()
     return _identities(index, mask)
-
-
-def separator_core_content_contradictions(
-    content_index: ContentTopologyIndex,
-    *,
-    sequence_core: FiniteInterval,
-    cross_core: FiniteInterval,
-) -> tuple[ObservationId, ...]:
-    if sequence_core.width <= 0.0 or cross_core.width <= 0.0:
-        return ()
-    return content_occupies_sequence_core(
-        content_index,
-        sequence_core=sequence_core,
-        cross_core=cross_core,
-    )

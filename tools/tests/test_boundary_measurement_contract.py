@@ -129,7 +129,7 @@ class BoundaryMeasurementContractTest(unittest.TestCase):
         transition_id = ObservationId("cross:local")
         region = SideTransitionRegion(
             region_id="region:local",
-            proposal_position_interval_px=FiniteInterval(99.0, 101.0),
+            position_interval_px=FiniteInterval(99.0, 101.0),
             transition_ids=(transition_id,),
             trace_support_count=1,
             queried_trace_count=3,
@@ -176,25 +176,6 @@ class BoundaryMeasurementContractTest(unittest.TestCase):
             repeated_dark_material_supported(
                 (region(0, 1.0, 4.0), region(2, 1.0, 5.0))
             )
-        )
-
-    def test_direct_pair_requires_repeated_shared_trace_regions(self) -> None:
-        queried = (0, 10, 20, 30, 40, 50, 60)
-        self.assertEqual(
-            shared_independent_trace_support_count(
-                queried,
-                (0, 10, 20, 30),
-                (30, 40, 50, 60),
-            ),
-            1,
-        )
-        self.assertEqual(
-            shared_independent_trace_support_count(
-                queried,
-                (0, 10, 20, 40, 50, 60),
-                (0, 10, 20, 40, 50, 60),
-            ),
-            3,
         )
 
     def test_separator_pairing_uses_material_not_gap_width(
@@ -415,14 +396,6 @@ class BoundaryMeasurementContractTest(unittest.TestCase):
             (BoundaryAxis.Y, BoundaryAxis.X),
         ):
             with self.subTest(long_axis=long_axis):
-                self.assertAlmostEqual(
-                    canonical_source_cross_axis_slope(direction, cross_axis),
-                    expected,
-                )
-                self.assertAlmostEqual(
-                    canonical_source_sequence_axis_slope(direction, long_axis),
-                    -expected,
-                )
                 cross_line = canonical_boundary_line(
                     direction,
                     boundary_axis=cross_axis,

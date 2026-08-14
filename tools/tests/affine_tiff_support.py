@@ -16,7 +16,6 @@ from x5crop.domain import (
 )
 from x5crop.detection.output_geometry import (
     SharedStripDirectionResolution,
-    observed_strip_angle_estimate_degrees,
     output_transform_assessment,
 )
 from x5crop.detection.photo_geometry.line_observations import (
@@ -100,7 +99,7 @@ def make_transform_assessment(
         resolution = SharedStripDirectionResolution(
             direction=None,
             state=EvidenceState.UNAVAILABLE,
-            named_gap="selected_chain_direction_unavailable",
+            named_gap="selected_direction_unavailable",
         )
     else:
         interval = FiniteInterval(
@@ -113,17 +112,10 @@ def make_transform_assessment(
                 for item in cross_observations
             ),
         )
-        estimate = (
-            0.0
-            if all(
-                item.angle_interval_degrees.contains(0.0)
-                for item in cross_observations
-            )
-            else observed_strip_angle_estimate_degrees(cross_observations)
-        )
+        estimate = 0.0 if interval.contains(0.0) else interval.center
         resolution = SharedStripDirectionResolution(
             direction=SharedStripDirection(
-                direction_id="test:selected-chain-direction",
+                direction_id="test:selected-direction",
                 selected_observation_ids=tuple(
                     item.observation_id for item in cross_observations
                 ),
@@ -142,8 +134,6 @@ def make_transform_assessment(
         source_width=100,
         source_height=40,
     )
-
-
 
 # Affine and TIFF contracts share deterministic raster fixtures.
 __all__ = tuple(name for name in globals() if not name.startswith("__"))

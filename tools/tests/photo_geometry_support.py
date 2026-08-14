@@ -19,13 +19,8 @@ from x5crop.detection.photo_geometry.transition_tracking import (
 from x5crop.detection.photo_geometry.sequence_edge_families import (
     merge_sequence_edge_families,
 )
-from x5crop.detection.photo_geometry.trace_support import (
-    shared_independent_trace_support_count,
-)
 from x5crop.detection.photo_geometry.boundary_geometry import (
     canonical_boundary_line,
-    canonical_source_cross_axis_slope,
-    canonical_source_sequence_axis_slope,
 )
 from x5crop.detection.photo_geometry.model import (
     BoundaryAxis,
@@ -129,7 +124,7 @@ def make_side_measurement_set(
         boundary_axis_scale_px_per_mm=PositiveInterval(10.0, 10.0),
         trace_axis_scale_px_per_mm=PositiveInterval(10.0, 10.0),
         measurement_halo_px=2,
-        search_proposal_ids=("anchor-domain:test",),
+        registration_provenance_ids=("anchor-domain:test",),
     )
     transitions = []
     for trace_ordinal, (trace, coordinates) in enumerate(
@@ -185,8 +180,6 @@ def make_side_measurement_set(
         transitions=tuple(transitions),
         coverage=coverage,
     )
-
-
 
 # The split measurement contracts share one explicit fixture namespace.
 __all__ = tuple(name for name in globals() if not name.startswith("__"))

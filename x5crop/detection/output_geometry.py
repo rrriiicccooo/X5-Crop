@@ -1,48 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-import math
 
 from ..domain import EvidenceState, FiniteInterval
 from ..geometry.affine import AffineCoordinateTransform
-from .photo_geometry.line_observations import PhotoBoundaryObservation
 from .photo_geometry.output_model import SharedStripDirection
-
-
-def observed_strip_angle_estimate_degrees(
-    observations: tuple[PhotoBoundaryObservation, ...],
-) -> float:
-    """Return one angle inside all retained direction evidence.
-
-    Trace count and fit residual remain report evidence; they cannot pull a
-    shared physical direction toward one side.  Prefer the common robust-fit
-    interval, falling back to the common full measurement interval.  Complete
-    chain selection still owns the canonical output direction.
-    """
-
-    if not observations:
-        raise ValueError("strip-angle estimate requires observations")
-    fit_minimum = max(
-        item.fit_angle_interval_degrees.minimum for item in observations
-    )
-    fit_maximum = min(
-        item.fit_angle_interval_degrees.maximum for item in observations
-    )
-    if fit_minimum <= fit_maximum:
-        estimate = (fit_minimum + fit_maximum) / 2.0
-    else:
-        full_minimum = max(
-            item.angle_interval_degrees.minimum for item in observations
-        )
-        full_maximum = min(
-            item.angle_interval_degrees.maximum for item in observations
-        )
-        if full_minimum > full_maximum:
-            raise ValueError("strip-angle observations have no common direction")
-        estimate = (full_minimum + full_maximum) / 2.0
-    if not math.isfinite(estimate):
-        raise ValueError("strip-angle estimate is not finite")
-    return estimate
 
 
 @dataclass(frozen=True)
@@ -119,9 +81,6 @@ class OutputTransformAssessment:
             or self.authority is not None
         ):
             raise ValueError("unavailable transform assessment is inconsistent")
-
-
-
 
 def output_transform_assessment(
     direction_resolution: SharedStripDirectionResolution,

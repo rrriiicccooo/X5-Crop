@@ -1,15 +1,9 @@
 """Raster-continuity facts for registered physical edge traces."""
-
 from __future__ import annotations
 
 import numpy as np
 
-from .model import (
-    MINIMUM_INDEPENDENT_SUPPORT_REGIONS,
-    SPATIAL_SUPPORT_REGION_COUNT,
-    PhotoBoundaryMeasurementSpec,
-    independent_spatial_support_count,
-)
+from .model import PhotoBoundaryMeasurementSpec
 
 
 # Pixel coordinates name sample centres.  Half a pixel is the exact boundary
@@ -116,31 +110,3 @@ def source_spanning_continuous_trace_support(
             spec=spec,
         )
     )
-
-
-def shared_independent_trace_support_count(
-    queried_traces: tuple[int, ...],
-    *supporting_trace_sets: tuple[int | float, ...],
-) -> int:
-    """Count independent regions where every observation is directly seen.
-
-    A top/bottom height span is direct evidence only where both physical edges
-    were measured on the same registered trace.  Intersecting their canonical
-    trace coordinates prevents two disjoint local lines from gaining a direct
-    pair authority through extrapolation alone.
-    """
-
-    if not queried_traces or len(supporting_trace_sets) < 2:
-        return 0
-    common = set(supporting_trace_sets[0])
-    for supporting in supporting_trace_sets[1:]:
-        common.intersection_update(supporting)
-    if not common:
-        return 0
-    count = independent_spatial_support_count(
-        queried_traces,
-        tuple(sorted(common)),
-    )
-    if count < MINIMUM_INDEPENDENT_SUPPORT_REGIONS:
-        return count
-    return count

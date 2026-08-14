@@ -485,12 +485,14 @@ def _linear_fit(
         ],
         dtype=np.float64,
     )
+    solution = None
     if len(matches) >= 3 and np.linalg.matrix_rank(matrix) == 3:
-        phase_fit, width_fit, pitch_fit = np.linalg.lstsq(
+        solution = np.linalg.lstsq(
             matrix,
             values,
             rcond=None,
         )[0]
+        phase_fit, width_fit, pitch_fit = solution
         proposed_width = (
             float(width_fit)
             if width_authority.minimum <= width_fit <= width_authority.maximum
@@ -518,14 +520,8 @@ def _linear_fit(
         for offset, (_role, anchor) in zip(offsets, matches, strict=True)
     )
     phase = float(phase_values[len(phase_values) // 2])
-    if len(matches) >= 3 and np.linalg.matrix_rank(matrix) == 3:
-        phase_fit = float(
-            np.linalg.lstsq(
-                matrix,
-                values,
-                rcond=None,
-            )[0][0]
-        )
+    if solution is not None:
+        phase_fit = float(solution[0])
         if math.isfinite(phase_fit):
             phase = phase_fit
     return phase, width, pitch
@@ -551,7 +547,7 @@ def _fit_seed(
     prefixes = _prefixes(relations, template.count)
     matches: tuple[tuple[TemplateRole, _AnchorFact], ...] = ()
     for _iteration in range(4):
-        matches = _match_roles(
+        updated_matches = _match_roles(
             direct,
             template.roles,
             phase=phase,
@@ -561,10 +557,10 @@ def _fit_seed(
             prefixes=prefixes,
             frame_width=template.frame_width_px,
         )
-        if not matches:
+        if not updated_matches:
             return None
-        phase, width, pitch = _linear_fit(
-            matches,
+        updated = _linear_fit(
+            updated_matches,
             width=width,
             pitch=pitch,
             direction=template.direction,
@@ -573,6 +569,10 @@ def _fit_seed(
             pitch_authority=pitch_authority,
             gap_authority=template.gap_prior_px,
         )
+        if updated_matches == matches and updated == (phase, width, pitch):
+            break
+        matches = updated_matches
+        phase, width, pitch = updated
     residual_limit = max(3.0, width * 0.035)
     retained = tuple(
         (role, anchor)

@@ -103,7 +103,7 @@ GitHub 是 tracked 源码与文档的权威来源。NAS 和复制目录只用于
 
 ## 实现边界
 
-- 每个概念只有一个 canonical name、type、owner 和真相来源。权限只沿 proposal、evidence、
+- 每个概念只有一个 canonical name、type、owner 和真相来源。权限只沿 input、evidence、
   assessment、selection、decision、finalization、output、report、debug 单向流动。
 - 被替代的 API、schema、flag、alias、wrapper、test 和 import 同批删除；不保留 fallback、shim、
   feature flag、dead code 或平行 runtime。

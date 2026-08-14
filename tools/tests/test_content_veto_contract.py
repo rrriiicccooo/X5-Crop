@@ -11,9 +11,6 @@ from x5crop.detection.evidence.content_occupancy_model import (
 from x5crop.detection.photo_geometry.boundary_geometry import (
     outward_boundary_projection,
 )
-from x5crop.detection.photo_geometry.content_boundary_queries import (
-    separator_core_content_contradictions,
-)
 from x5crop.detection.photo_geometry.content_topology import (
     build_content_topology_index,
 )
@@ -154,17 +151,6 @@ class ContentVetoContractTest(unittest.TestCase):
             {item.reason for item in separator.facts},
             {ContentVetoReason.SEPARATOR_CORE_CONTENT_CROSSING},
         )
-        self.assertTrue(
-            separator_core_content_contradictions(
-                build_content_topology_index(
-                    separator_observation,
-                    layout="horizontal",
-                ),
-                sequence_core=FiniteInterval(18.0, 22.0),
-                cross_core=FiniteInterval(10.0, 20.0),
-            )
-        )
-
     def test_edge_intersection_at_slot_corner_is_not_content_veto(self) -> None:
         corner = content_veto_assessment(
             make_content_placement((make_frame(10.0, 20.0),), ()),

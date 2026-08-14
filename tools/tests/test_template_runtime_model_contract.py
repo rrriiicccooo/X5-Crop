@@ -370,7 +370,7 @@ def _measurement_set(lane_id: str) -> PhotoBoundaryMeasurementSet:
         boundary_axis_scale_px_per_mm=PositiveInterval.exact(1.0),
         trace_axis_scale_px_per_mm=PositiveInterval.exact(1.0),
         measurement_halo_px=1,
-        search_proposal_ids=(f"proposal:{lane_id}",),
+        registration_provenance_ids=(f"intent:{lane_id}",),
     )
     coverage = PhotoBoundaryCoverageReceipt(
         query_id=query.query_id,

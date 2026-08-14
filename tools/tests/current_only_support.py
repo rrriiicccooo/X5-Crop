@@ -46,7 +46,5 @@ from x5crop.runtime.options import RuntimeOptions
 
 ROOT = Path(__file__).resolve().parents[2]
 
-
-
 # Current-only contracts share repository and CLI fixtures.
 __all__ = tuple(name for name in globals() if not name.startswith("__"))

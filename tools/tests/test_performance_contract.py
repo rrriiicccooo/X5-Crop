@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 import sys
+import tempfile
 import unittest
 from unittest import mock
 
+from tools.regression import performance
 from tools.regression.performance import (
     PERFORMANCE_RECEIPT_SCHEMA,
     PRODUCTION_TIMING_BOUNDARY,
@@ -40,6 +43,19 @@ from tools.regression.environment_identity import verification_environment_ident
 
 
 class V5PerformanceContractTest(unittest.TestCase):
+    def test_failed_gate_preserves_the_measured_receipt(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / "performance_receipt.json"
+            measured = {"git_commit": "current-but-failed"}
+            with mock.patch.object(
+                performance,
+                "build_receipt",
+                return_value=measured,
+            ):
+                with self.assertRaisesRegex(ValueError, "Gate is invalid"):
+                    performance.main(("--output", str(output)))
+            self.assertEqual(json.loads(output.read_text()), measured)
+
     def test_receipt_revision_is_current_only(self) -> None:
         self.assertEqual(
             PERFORMANCE_RECEIPT_SCHEMA,

@@ -451,7 +451,7 @@ def _draw_detected_start_end(
             continue
         lane_box = source_lane_box(source_lane, layout)
         for region in lane.prepared.side_regions:
-            coordinate = region.proposal_position_interval_px.center
+            coordinate = region.position_interval_px.center
             source_points = (
                 ((coordinate, lane_box.top), (coordinate, lane_box.bottom))
                 if layout == "horizontal"

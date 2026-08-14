@@ -21,8 +21,8 @@ from x5crop.detection.gate_checks import GateGap
 from x5crop.detection.pipeline import choose_detection
 from x5crop.detection.photo_geometry.corridors import (
     build_top_bottom_search_corridors,
-    frame_physical_pixel_intervals,
 )
+from x5crop.detection.photo_geometry.source_geometry import SourceScanGeometry
 from x5crop.detection.photo_geometry.template_measurement_plan import (
     compile_template_measurement_plan,
 )
@@ -46,9 +46,50 @@ from x5crop.formats.scan_canvas import (
 )
 from x5crop.io.model import ImageProfile, TiffMetadata
 from x5crop.io.orientation import orientation_mapping
+from x5crop.image.gray import BaseGrayParameters, make_base_gray_u8
 
 
 class PhysicalAuthorityContractTest(unittest.TestCase):
+    def test_registered_gray_matches_full_array_reference(self) -> None:
+        rng = np.random.default_rng(42)
+        yxs = rng.integers(0, 65536, size=(257, 131, 3), dtype=np.uint16)
+        params = BaseGrayParameters(maximum_percentile_samples=10_000)
+
+        rgb = yxs.astype(np.float32)
+        reference = (
+            params.red_weight * rgb[..., 0]
+            + params.green_weight * rgb[..., 1]
+            + params.blue_weight * rgb[..., 2]
+        )
+        sampled = reference.reshape(-1)[::4]
+        lo, hi = np.percentile(
+            sampled,
+            [params.low_percentile, params.high_percentile],
+        )
+        expected = np.clip(
+            (reference - lo) * (255.0 / (hi - lo)),
+            0,
+            255,
+        ).astype(np.uint8)
+
+        self.assertTrue(
+            np.array_equal(
+                make_base_gray_u8(yxs, "YXS", "RGB", params),
+                expected,
+            )
+        )
+        self.assertTrue(
+            np.array_equal(
+                make_base_gray_u8(
+                    np.moveaxis(yxs, -1, 0),
+                    "SYX",
+                    "RGB",
+                    params,
+                ),
+                expected,
+            )
+        )
+
     def test_design_apertures_count_and_tolerance_are_typed(self) -> None:
         expected = {
             "135": ((36.0, 24.0), 6, True),
@@ -77,20 +118,21 @@ class PhysicalAuthorityContractTest(unittest.TestCase):
             0.0040,
         )
 
-    def test_aperture_pixel_interval_propagates_scale_and_tolerance(
+    def test_source_geometry_propagates_shared_scale_and_tolerance(
         self,
     ) -> None:
         spec = format_spec("135")
-        aperture = spec.frame
-        intervals = frame_physical_pixel_intervals(
-            aperture,
-            PositiveInterval(10.0, 11.0),
-            PositiveInterval(9.0, 10.0),
+        geometry = SourceScanGeometry.create(
+            spec.frame,
+            width_scale_px_per_mm=PositiveInterval(10.0, 11.0),
+            height_scale_px_per_mm=PositiveInterval(9.0, 10.0),
         )
-        self.assertAlmostEqual(intervals.frame_width_px.minimum, 355.5)
-        self.assertAlmostEqual(intervals.frame_width_px.maximum, 400.95)
-        self.assertAlmostEqual(intervals.frame_height_px.minimum, 215.136)
-        self.assertAlmostEqual(intervals.frame_height_px.maximum, 240.96)
+        width = geometry.width_state.extent_projection_px()
+        height = geometry.height_state.extent_projection_px()
+        self.assertAlmostEqual(width.minimum, 355.5)
+        self.assertAlmostEqual(width.maximum, 364.5)
+        self.assertAlmostEqual(height.minimum, 239.04)
+        self.assertAlmostEqual(height.maximum, 240.96)
         self.assertFalse(
             hasattr(
                 PHOTO_BOUNDARY_MEASUREMENT_SPEC,

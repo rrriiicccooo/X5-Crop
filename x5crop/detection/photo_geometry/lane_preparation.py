@@ -247,7 +247,7 @@ def _physical_transition_regions(
         sorted(
             retained.values(),
             key=lambda item: (
-                item.proposal_position_interval_px.center,
+                item.position_interval_px.center,
                 item.region_id,
             ),
         )

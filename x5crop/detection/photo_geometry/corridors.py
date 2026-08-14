@@ -1,13 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import replace
 import math
 
 from ...domain import Box, FiniteInterval, PositiveInterval
-from ...formats import (
-    FRAME_DIMENSION_TOLERANCE_SPEC,
-    FramePhysicalSpec,
-)
 from ..source_core import SourceLaneEvidence
 from .model import BoundaryAxis, BoundaryRole, QueryPurpose
 from .measurement_model import PhotoBoundaryMeasurementQuery
@@ -22,40 +18,6 @@ from .template_measurement_plan_model import (
 )
 from .axis_layout import source_axes
 from ...run_local_identity import run_local_id
-
-
-@dataclass(frozen=True)
-class FramePhysicalPixelIntervals:
-    frame_spec: FramePhysicalSpec
-    frame_width_px: PositiveInterval
-    frame_height_px: PositiveInterval
-
-
-def frame_physical_pixel_intervals(
-    frame_spec: FramePhysicalSpec,
-    width_axis_scale_px_per_mm: PositiveInterval,
-    height_axis_scale_px_per_mm: PositiveInterval,
-) -> FramePhysicalPixelIntervals:
-    tolerance = FRAME_DIMENSION_TOLERANCE_SPEC
-    return FramePhysicalPixelIntervals(
-        frame_spec=frame_spec,
-        frame_width_px=PositiveInterval(
-            frame_spec.frame_width_mm
-            * (1.0 - tolerance.frame_width_tolerance_ratio)
-            * width_axis_scale_px_per_mm.minimum,
-            frame_spec.frame_width_mm
-            * (1.0 + tolerance.frame_width_tolerance_ratio)
-            * width_axis_scale_px_per_mm.maximum,
-        ),
-        frame_height_px=PositiveInterval(
-            frame_spec.frame_height_mm
-            * (1.0 - tolerance.frame_height_tolerance_ratio)
-            * height_axis_scale_px_per_mm.minimum,
-            frame_spec.frame_height_mm
-            * (1.0 + tolerance.frame_height_tolerance_ratio)
-            * height_axis_scale_px_per_mm.maximum,
-        ),
-    )
 
 
 def source_lane_box(
@@ -85,7 +47,7 @@ def build_top_bottom_search_corridors(
     layout: str,
     measurement_plan: TemplateMeasurementPlan,
 ) -> tuple[PhotoEdgeSearchCorridor, PhotoEdgeSearchCorridor]:
-    """Materialize the compiler-owned short-axis query projection."""
+    """Project the compiler-owned short-axis query plan."""
 
     if (
         measurement_plan.lane_id != lane.domain.lane_id
@@ -225,7 +187,7 @@ def registered_lane_measurement_queries(
                     scales.width_axis_px_per_mm
                 ),
                 measurement_halo_px=corridor.measurement_halo_px,
-                search_proposal_ids=(
+                registration_provenance_ids=(
                     corridor.corridor_id,
                     intent_ids[
                         MeasurementIntentKind.TOP
@@ -289,7 +251,7 @@ def registered_lane_measurement_queries(
                         ),
                     )
                 ),
-                search_proposal_ids=(
+                registration_provenance_ids=(
                     anchor_domain.domain_id,
                     tile.tile_id,
                     intent_ids[MeasurementIntentKind.OUTER_SEQUENCE_ANCHOR],
