@@ -18,9 +18,9 @@ from ..output_geometry import (
 )
 from .measurement_model import PhotoBoundaryMeasurementField
 from .output_model import ResolvedOutputSlots
-from .template_cross import CrossFitStatus
+from .template_cross_model import CrossFitStatus
 from .template_model import LocalAdvanceKind
-from .template_phase import PhaseFailureKind, PhaseFitStatus
+from .template_phase_model import PhaseFailureKind, PhaseFitStatus
 from .template_runtime_model import TemplateLaneReconstruction, TemplateSourceSelection
 
 

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import ast
+
 from tools.tests.current_only_support import *
 
 
@@ -227,10 +229,15 @@ class RepositoryContractTest(unittest.TestCase):
             "x5crop.detection.photo_geometry.profile_adapters",
             "x5crop.detection.photo_geometry.observation_types",
             "x5crop.detection.photo_geometry.template_measurement_plan",
+            "x5crop.detection.photo_geometry.template_measurement_plan_model",
             "x5crop.detection.photo_geometry.template_registration",
             "x5crop.detection.photo_geometry.template_phase",
+            "x5crop.detection.photo_geometry.template_phase_candidates",
+            "x5crop.detection.photo_geometry.template_phase_model",
             "x5crop.detection.photo_geometry.template_residual",
             "x5crop.detection.photo_geometry.template_cross",
+            "x5crop.detection.photo_geometry.template_cross_candidates",
+            "x5crop.detection.photo_geometry.template_cross_model",
             "x5crop.detection.photo_geometry.template_direction",
             "x5crop.detection.photo_geometry.template_placement",
             "x5crop.detection.photo_geometry.template_selection",
@@ -257,6 +264,58 @@ class RepositoryContractTest(unittest.TestCase):
         ):
             with self.subTest(retired=module):
                 self.assertNotIn(module, sources)
+
+    def test_template_modules_have_one_owner_and_bounded_file_scope(self) -> None:
+        directory = ROOT / "x5crop/detection/photo_geometry"
+        modules = tuple(directory.glob("template_*.py"))
+        oversized = {
+            path.name: len(path.read_text(encoding="utf-8").splitlines())
+            for path in modules
+            if len(path.read_text(encoding="utf-8").splitlines()) > 1_000
+        }
+        self.assertEqual(oversized, {})
+
+        retired_reexports = {
+            "template_measurement_plan": {
+                "TemplateMeasurementPlan",
+                "TemplateQueryIntent",
+            },
+            "template_phase": {
+                "PhaseFailureKind",
+                "PhaseFitResult",
+                "PhaseFitStatus",
+                "PhaseWinnerBasis",
+            },
+            "template_cross": {
+                "CrossFit",
+                "CrossFitCompetition",
+                "CrossFitStatus",
+                "CrossRoleBinding",
+                "TemplateCrossInput",
+            },
+        }
+        for module, forbidden in retired_reexports.items():
+            source = (directory / f"{module}.py").read_text(encoding="utf-8")
+            tree = ast.parse(source)
+            exported = next(
+                (
+                    {
+                        item.value
+                        for item in node.value.elts
+                        if isinstance(item, ast.Constant)
+                        and isinstance(item.value, str)
+                    }
+                    for node in tree.body
+                    if isinstance(node, ast.Assign)
+                    and any(
+                        isinstance(target, ast.Name) and target.id == "__all__"
+                        for target in node.targets
+                    )
+                    and isinstance(node.value, (ast.List, ast.Tuple))
+                ),
+                set(),
+            )
+            self.assertFalse(exported & forbidden)
 
 
 if __name__ == "__main__":

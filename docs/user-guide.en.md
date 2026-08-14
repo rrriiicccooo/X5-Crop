@@ -185,6 +185,12 @@ retains holder/count authority, final selection, safe envelopes, and root Gate
 reasons. Explicit Debug Analysis additionally retains the theoretical template,
 observations, fit winner and runner, deviation/inference ledger, content vetoes,
 and bounded-work receipt.
+In the diagnostic JPG, raw observations are dashed and the winner and runner are
+drawn separately with their differing fit named. The text names the phase
+solver's actual typed winner basis, the phase/cross/content/shared-source facts,
+and the root Gate. The final-output panel
+shows only the selected placement's SafeCrop; a `needs_review` candidate is never
+presented as official output.
 
 Exit codes:
 

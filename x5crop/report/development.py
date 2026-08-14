@@ -6,7 +6,7 @@ from typing import Any
 
 from ..detection.workspace import DetectionWorkspace
 from .read_models import typed_read_model
-from ..detection.photo_geometry.template_phase import PhaseFitStatus
+from ..detection.photo_geometry.template_phase_model import PhaseFitStatus
 from ..detection.photo_geometry.template_stability import (
     leave_one_anchor_out_phase_stability,
 )
@@ -123,6 +123,11 @@ def development_report_facts(
                 ),
                 "winner_basis": {
                     "state": lane.placement_competition.state.value,
+                    "phase": (
+                        None
+                        if lane.prepared.phase_competition.winner_basis is None
+                        else lane.prepared.phase_competition.winner_basis.value
+                    ),
                     "failure": typed_read_model(
                         lane.placement_competition.failure
                     ),

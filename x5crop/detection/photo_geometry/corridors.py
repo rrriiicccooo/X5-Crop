@@ -16,7 +16,7 @@ from .search_model import (
     SequenceAnchorDiscoveryDomain,
     SequenceAnchorTile,
 )
-from .template_measurement_plan import (
+from .template_measurement_plan_model import (
     MeasurementIntentKind,
     TemplateMeasurementPlan,
 )

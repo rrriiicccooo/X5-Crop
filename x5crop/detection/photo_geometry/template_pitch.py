@@ -8,7 +8,7 @@ from typing import Sequence
 from ...domain import FiniteInterval
 from .observation_types import BoundaryEdgeObservation
 from .template_model import TemplateSpec
-from .template_phase import PhaseFitResult, PhaseFitStatus
+from .template_phase_model import PhaseFitResult, PhaseFitStatus
 
 
 def _intersect(

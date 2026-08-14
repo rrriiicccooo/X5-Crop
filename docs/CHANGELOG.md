@@ -37,6 +37,8 @@ report reuse 均不再支持。当前完整合同见 [ARCHITECTURE.md](ARCHITECT
   与 3% top/bottom 是逐边 direct-use 上限，不是 padding。
 - 普通 report 只保存最终选择、安全框、budget、Gate 根因与输出；完整 observations、fit winner/runner、ledger、
   veto 与工作量只属于 Debug Analysis 和验证工具。
+- Debug Analysis 分开绘制 observation、winner 与 runner，直接标出 runner 差异、phase 求解器记录的
+  typed winner 依据和根 DecisionGate；最终输出面板不再把 review candidate 画成正式输出。
 
 ### 工程与验证
 

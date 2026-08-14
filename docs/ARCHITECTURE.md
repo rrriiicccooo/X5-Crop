@@ -313,7 +313,12 @@ producer work 只在显式 Debug Analysis 或验证工具中生成。旧 report 
 原 TIFF 重新检测，不提供跨运行复用、旧 revision reader 或迁移器。
 
 Debug Analysis 消费同一次 runtime 的 development facts，不重算几何、不改变检测、不写正式 TIFF。
-显示层坐标归一化不能改变 source-coordinate placement、crop、budget 或 deskew。
+Phase 求解器必须以 typed `winner_basis` 记录真正使第一名胜出的物理事实；展示层只读取该事实，
+不得重新执行排名或概括成分数。分轴图必须把 role-free observation、最佳 placement 与 runner
+分开绘制，写明 runner 差异、winner 所依赖的 phase/cross/content/shared-source 事实，以及第一个
+blocking DecisionGate 或全部 Gate 已支持。
+最终输出面板只读取 selected-only `SafeCropEnvelope`；review candidate 不得填充为正式输出。显示层坐标
+归一化不能改变 source-coordinate placement、crop、budget 或 deskew。
 
 ## 12. TIFF、运行与输出发布
 
@@ -377,10 +382,10 @@ platform | platform-check | platform-package | pre-push
 | `photo_geometry/registered_measurement.py`、`robust_line_fit.py` | 一次性 registered 像素测量与 SciPy Huber 数值拟合 |
 | `photo_geometry/observations.py`、`transition_tracking.py`、`template_evidence.py` | edge/band identity、独立支持与证据职责 |
 | `photo_geometry/source_geometry.py`、`joint_axis_geometry.py` | source 共享 W/H/scale authority |
-| `photo_geometry/template_measurement_plan.py` | pixel-free 模板编译、query intents、停止条件与所有工作上界 |
+| `photo_geometry/template_measurement_plan.py`、`template_measurement_plan_model.py` | pixel-free 模板编译，以及 query intents、停止条件与工作上界的 canonical records |
 | `photo_geometry/template_model.py`、`template_registration.py` | `TemplateSpec`、phase lattice、role registration 与 canonical ledger |
-| `photo_geometry/template_phase.py`、`template_pitch.py`、`template_residual.py` | phase/source-pitch 拟合、缺边推导与有据 local step |
-| `photo_geometry/template_cross.py`、`template_direction.py` | fixed-H cross fit、role group 与 source 共同方向 |
+| `photo_geometry/template_phase.py`、`template_phase_candidates.py`、`template_phase_model.py`、`template_pitch.py`、`template_residual.py` | phase 编排、有限 role binding、fit records、source pitch 与有据 local step |
+| `photo_geometry/template_cross.py`、`template_cross_candidates.py`、`template_cross_model.py`、`template_direction.py` | fixed-H cross 编排、物理 role group、fit records 与 source 共同方向 |
 | `photo_geometry/template_placement.py`、`template_selection.py` | 一次 compose 的固定 frame placement 与 winner/runner 竞争 |
 | `photo_geometry/content_*.py` | placement 后的二维内容 negative veto |
 | `photo_geometry/template_precision.py`、`template_output.py`、`output_model.py` | selected-only uncertainty、SafeCrop、budget 与 sampling assessment |

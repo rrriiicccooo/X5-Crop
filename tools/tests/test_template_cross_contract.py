@@ -6,12 +6,12 @@ from types import SimpleNamespace
 
 from x5crop.domain import FiniteInterval, ObservationId
 from x5crop.detection.photo_geometry.model import BoundaryRole
-from x5crop.detection.photo_geometry.template_cross import (
+from x5crop.detection.photo_geometry.template_cross import fit_template_cross
+from x5crop.detection.photo_geometry.template_cross_model import (
     CrossEvidence,
     CrossFitStatus,
     CrossRoleBinding,
     TemplateCrossInput,
-    fit_template_cross,
 )
 from x5crop.detection.photo_geometry.template_model import (
     PhaseAuthority,

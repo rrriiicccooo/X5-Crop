@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from enum import Enum
 import math
 
-from .template_measurement_plan import TemplateMeasurementPlan
+from .template_measurement_plan_model import TemplateMeasurementPlan
 from .template_placement import FormatPlacement
 
 

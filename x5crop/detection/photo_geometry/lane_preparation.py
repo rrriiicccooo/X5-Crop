@@ -37,13 +37,14 @@ from .template_registration import (
     short_axis_center_authority,
     template_spec_from_physical_authority,
 )
-from .template_cross import TemplateCrossInput, fit_template_cross
+from .template_cross import fit_template_cross
+from .template_cross_model import TemplateCrossInput
 from .template_phase import (
-    PhaseFitResult,
     account_prior_phase_fit,
     fit_template_phase,
     fit_template_phase_with_local_advance,
 )
+from .template_phase_model import PhaseFitResult
 from .template_pitch import calibrate_template_source_pitch
 from .source_geometry import SourceScanGeometry
 from .transition_tracking import track_side_transition_regions

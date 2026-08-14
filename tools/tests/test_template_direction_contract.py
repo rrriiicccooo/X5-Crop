@@ -6,10 +6,10 @@ from x5crop.domain import FiniteInterval, ObservationId
 from x5crop.detection.photo_geometry.model import BoundaryRole
 from x5crop.detection.photo_geometry.observation_types import BoundaryEdgeObservation
 from x5crop.detection.photo_geometry.output_model import SharedStripDirection
-from x5crop.detection.photo_geometry.template_cross import (
+from x5crop.detection.photo_geometry.template_cross import fit_template_cross
+from x5crop.detection.photo_geometry.template_cross_model import (
     CrossRoleBinding,
     TemplateCrossInput,
-    fit_template_cross,
 )
 from x5crop.detection.photo_geometry.template_direction import (
     lane_template_direction,

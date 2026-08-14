@@ -34,9 +34,9 @@ class DebugStyleParameters:
     cross_axis_media_top: int = 81
     cross_axis_media_bottom_padding: int = 31
     long_axis_media_top: int = 76
-    long_axis_media_bottom_padding: int = 37
+    long_axis_media_bottom_padding: int = 55
     output_media_top: int = 81
-    output_media_bottom_padding: int = 44
+    output_media_bottom_padding: int = 62
     frame_fill_alpha: float = 0.20
     safe_fill_alpha: float = 0.25
     frame_line_width: int = 2
@@ -67,6 +67,7 @@ class DebugStyleParameters:
     selected_edge_color: tuple[int, int, int] = (255, 78, 66)
     detected_transition_color: tuple[int, int, int] = (205, 211, 216)
     selected_boundary_color: tuple[int, int, int] = (255, 171, 37)
+    competitor_color: tuple[int, int, int] = (197, 111, 255)
     safety_envelope_color: tuple[int, int, int] = (230, 234, 238)
     safe_output_color: tuple[int, int, int] = (30, 144, 255)
     approved_color: tuple[int, int, int] = (50, 183, 105)
@@ -127,6 +128,7 @@ class DebugStyleParameters:
             self.selected_edge_color,
             self.detected_transition_color,
             self.selected_boundary_color,
+            self.competitor_color,
             self.safety_envelope_color,
             self.safe_output_color,
             self.approved_color,
@@ -152,6 +154,7 @@ class DiagnosticsConfiguration:
             DebugLegendEntry("SELECTED TOP/BOTTOM", style.selected_edge_color, "solid"),
             DebugLegendEntry("DETECTED START/END", style.detected_transition_color, "dashed"),
             DebugLegendEntry("SELECTED START/END", style.selected_boundary_color, "solid"),
+            DebugLegendEntry("RUNNER / COMPETITOR", style.competitor_color, "dashed"),
             DebugLegendEntry("SAFETY ENVELOPE", style.safety_envelope_color, "box"),
             DebugLegendEntry("FINAL OUTPUT", style.safe_output_color, "box"),
             DebugLegendEntry("BUDGET VIOLATION", style.review_color, "hatched"),

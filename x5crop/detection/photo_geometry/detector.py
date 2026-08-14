@@ -17,7 +17,7 @@ from .lane_preparation import (
 from .measurement_model import PhotoBoundaryMeasurementField
 from .output_model import OutputSlotIdentity
 from .source_geometry import SourceScanGeometry
-from .template_cross import CrossFit, CrossFitStatus
+from .template_cross_model import CrossFit, CrossFitStatus
 from .template_direction import lane_template_direction, shared_template_direction
 from .template_gate import (
     build_template_gate,
@@ -30,7 +30,7 @@ from .template_output import (
     template_direct_use_budget_assessment,
 )
 from .template_precision import template_precision_ledger
-from .template_phase import PhaseFitStatus
+from .template_phase_model import PhaseFitStatus
 from .template_placement import FormatPlacement, compose_format_placement
 from .template_runtime_model import (
     PhotoGeometryDetectionResult,

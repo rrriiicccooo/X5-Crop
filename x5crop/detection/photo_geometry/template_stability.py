@@ -8,7 +8,8 @@ from enum import Enum
 from ...domain import ObservationId
 from .observation_types import BoundaryEdgeObservation, SeparatorBandObservation
 from .template_model import PhaseAnchor, SequenceFit, TemplateSpec
-from .template_phase import PhaseFitResult, PhaseFitStatus, fit_template_phase
+from .template_phase import fit_template_phase
+from .template_phase_model import PhaseFitResult, PhaseFitStatus
 
 
 class AnchorDependencyEffect(str, Enum):

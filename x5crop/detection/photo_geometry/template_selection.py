@@ -7,8 +7,8 @@ from ..gate_checks import DetectionFailureFact, GateGap, failure_fact
 from .content_veto_model import ContentVetoAssessment
 from .output_model import SharedStripDirection
 from .source_geometry import SourceScanGeometry
-from .template_cross import CrossFitCompetition, CrossFitStatus
-from .template_phase import PhaseFailureKind, PhaseFitResult, PhaseFitStatus
+from .template_cross_model import CrossFitCompetition, CrossFitStatus
+from .template_phase_model import PhaseFailureKind, PhaseFitResult, PhaseFitStatus
 from .template_placement import FormatPlacement
 from .template_runtime_model import (
     TemplatePlacementCompetition,

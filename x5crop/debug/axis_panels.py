@@ -14,7 +14,9 @@ from ..detection.workspace import DetectionWorkspace
 from .canvas import DebugRenderCache
 from .panel_facts import (
     axis_authority_summaries,
-    geometry_by_identity,
+    competition_summary,
+    primary_geometry_by_identity,
+    runner_geometry_by_identity,
     selection_summary,
     source_image,
 )
@@ -50,7 +52,7 @@ def _boundary_points(
     return closest[0], closest[1]
 
 
-def _draw_selected_start_end(
+def _draw_primary_start_end(
     draw: ImageDraw.ImageDraw,
     geometries: tuple[tuple[int, TemplateFrame], ...],
     selected_viewport: Viewport,
@@ -127,6 +129,37 @@ def _draw_selected_start_end(
         )
 
 
+def _draw_runner_start_end(
+    draw: ImageDraw.ImageDraw,
+    geometries: tuple[tuple[int, TemplateFrame], ...],
+    selected_viewport: Viewport,
+    style: DebugStyleParameters,
+) -> None:
+    for index, (_ordinal, geometry) in enumerate(geometries):
+        roles = (
+            ((BoundaryRole.END,) if index < len(geometries) - 1 else ())
+            + ((BoundaryRole.START,) if index > 0 else ())
+        )
+        for role in roles:
+            source_points = _boundary_points(geometry, role)
+            projected = tuple(
+                selected_viewport.point(point) for point in source_points
+            )
+            clipped = clip_segment_to_box(
+                projected[0], projected[1], selected_viewport.target_box
+            )
+            if clipped is not None:
+                draw_dashed_polyline(
+                    draw,
+                    clipped,
+                    style.competitor_color,
+                    2,
+                    style.line_dash_length,
+                    style.line_dash_gap,
+                    closed=False,
+                )
+
+
 def _draw_detected_top_bottom(
     draw: ImageDraw.ImageDraw,
     detection: FinalDetection,
@@ -160,7 +193,7 @@ def _draw_detected_top_bottom(
     return roles
 
 
-def _draw_selected_top_bottom(
+def _draw_primary_top_bottom(
     draw: ImageDraw.ImageDraw,
     geometries: tuple[tuple[int, TemplateFrame], ...],
     selected_viewport: Viewport,
@@ -186,6 +219,113 @@ def _draw_selected_top_bottom(
                 width=style.evidence_line_width,
             )
             roles.add(boundary.role)
+    return roles
+
+
+def _draw_runner_top_bottom(
+    draw: ImageDraw.ImageDraw,
+    geometries: tuple[tuple[int, TemplateFrame], ...],
+    selected_viewport: Viewport,
+    style: DebugStyleParameters,
+) -> None:
+    for _ordinal, geometry in geometries:
+        for boundary in (geometry.top, geometry.bottom):
+            source_points = source_line_points(boundary)
+            if not source_points:
+                continue
+            projected = tuple(
+                selected_viewport.point(point) for point in source_points
+            )
+            clipped = clip_segment_to_box(
+                projected[0], projected[1], selected_viewport.target_box
+            )
+            if clipped is not None:
+                draw_dashed_polyline(
+                    draw,
+                    clipped,
+                    style.competitor_color,
+                    2,
+                    style.line_dash_length,
+                    style.line_dash_gap,
+                    closed=False,
+                )
+
+
+def _draw_fit_top_bottom(
+    draw: ImageDraw.ImageDraw,
+    workspace: DetectionWorkspace,
+    detection: FinalDetection,
+    selected_viewport: Viewport,
+    style: DebugStyleParameters,
+    *,
+    runner: bool,
+) -> set[BoundaryRole]:
+    roles: set[BoundaryRole] = set()
+    source_lanes = {
+        lane.domain.lane_id: lane for lane in workspace.source_core.lanes
+    }
+    for lane in detection.candidate.geometry.lane_reconstructions:
+        fit = (
+            lane.prepared.cross_competition.runner_up
+            if runner
+            else lane.prepared.cross_competition.best
+        )
+        source_lane = source_lanes.get(lane.lane_id)
+        if fit is None or source_lane is None:
+            continue
+        lane_box = source_lane_box(source_lane, workspace.layout)
+        slope = (
+            0.0
+            if fit.selected_direction is None
+            else np.tan(np.radians(fit.selected_direction.canonical_angle_degrees))
+        )
+        for role, position in (
+            (BoundaryRole.TOP, fit.top_canonical_px),
+            (BoundaryRole.BOTTOM, fit.bottom_canonical_px),
+        ):
+            if workspace.layout == "horizontal":
+                source_points = tuple(
+                    (
+                        coordinate,
+                        position
+                        + slope * (coordinate - fit.lane_reference_trace_px),
+                    )
+                    for coordinate in (lane_box.left, lane_box.right)
+                )
+            else:
+                source_points = tuple(
+                    (
+                        position
+                        + slope * (coordinate - fit.lane_reference_trace_px),
+                        coordinate,
+                    )
+                    for coordinate in (lane_box.top, lane_box.bottom)
+                )
+            projected = tuple(
+                selected_viewport.point(point) for point in source_points
+            )
+            clipped = clip_segment_to_box(
+                projected[0], projected[1], selected_viewport.target_box
+            )
+            if clipped is None:
+                continue
+            if runner:
+                draw_dashed_polyline(
+                    draw,
+                    clipped,
+                    style.competitor_color,
+                    2,
+                    style.line_dash_length,
+                    style.line_dash_gap,
+                    closed=False,
+                )
+            else:
+                draw.line(
+                    clipped,
+                    fill=style.selected_edge_color,
+                    width=style.evidence_line_width,
+                )
+            roles.add(role)
     return roles
 
 
@@ -219,16 +359,41 @@ def cross_axis_panel(
     )
     paste_source(panel, source, selected_viewport)
     draw = ImageDraw.Draw(panel)
-    geometries = geometry_by_identity(detection)
+    primary = primary_geometry_by_identity(detection)
+    runner = runner_geometry_by_identity(detection)
     detected = _draw_detected_top_bottom(
         draw, detection, selected_viewport, style
     )
-    selected = _draw_selected_top_bottom(
-        draw, geometries, selected_viewport, style
+    selected = _draw_primary_top_bottom(
+        draw, primary, selected_viewport, style
     )
+    if not selected:
+        selected = _draw_fit_top_bottom(
+            draw,
+            workspace,
+            detection,
+            selected_viewport,
+            style,
+            runner=False,
+        )
+    _draw_runner_top_bottom(draw, runner, selected_viewport, style)
+    fit_runner = set()
+    if not runner:
+        fit_runner = _draw_fit_top_bottom(
+            draw,
+            workspace,
+            detection,
+            selected_viewport,
+            style,
+            runner=True,
+        )
     top_y = style.panel_title_height + 6
     bottom_y = grid.cross_axis_panel_height - 27
     left = selected_viewport.target_box[0]
+    supported = (
+        detection.candidate.geometry.source_placement_selection.state.value
+        == "supported"
+    )
     if BoundaryRole.TOP in detected:
         draw_label_chip(
             draw, (left, top_y), "DETECTED TOP", style.detected_edge_color,
@@ -236,18 +401,34 @@ def cross_axis_panel(
         )
     if BoundaryRole.TOP in selected:
         draw_label_chip(
-            draw, (left + 118, top_y), "SELECTED TOP",
+            draw, (left + 118, top_y),
+            "WINNER TOP" if supported else "BEST TOP",
             style.selected_edge_color, style,
         )
     if BoundaryRole.BOTTOM in selected:
         draw_label_chip(
-            draw, (left, bottom_y), "SELECTED BOTTOM",
+            draw, (left, bottom_y),
+            "WINNER BOTTOM" if supported else "BEST BOTTOM",
             style.selected_edge_color, style,
         )
     if BoundaryRole.BOTTOM in detected:
         draw_label_chip(
             draw, (left + 138, bottom_y), "DETECTED BOTTOM",
             style.detected_edge_color, style, filled=False,
+        )
+    if runner or fit_runner:
+        label = "RUNNER TOP / BOTTOM"
+        label_font = font(style.frame_label_font_size)
+        label_x = selected_viewport.target_box[2] - text_width(
+            draw, label, label_font
+        ) - 18
+        draw_label_chip(
+            draw,
+            (label_x, top_y),
+            label,
+            style.competitor_color,
+            style,
+            filled=False,
         )
     return np.asarray(panel)
 
@@ -297,6 +478,63 @@ def _draw_detected_start_end(
     return found
 
 
+def _draw_fit_start_end(
+    draw: ImageDraw.ImageDraw,
+    workspace: DetectionWorkspace,
+    detection: FinalDetection,
+    selected_viewport: Viewport,
+    style: DebugStyleParameters,
+    *,
+    runner: bool,
+) -> bool:
+    source_lanes = {
+        lane.domain.lane_id: lane for lane in workspace.source_core.lanes
+    }
+    found = False
+    for lane in detection.candidate.geometry.lane_reconstructions:
+        fit = (
+            lane.prepared.phase_competition.runner_up
+            if runner
+            else lane.prepared.phase_competition.best
+        )
+        source_lane = source_lanes.get(lane.lane_id)
+        if fit is None or source_lane is None:
+            continue
+        lane_box = source_lane_box(source_lane, workspace.layout)
+        for coordinate in fit.canonical_role_positions_px:
+            source_points = (
+                ((coordinate, lane_box.top), (coordinate, lane_box.bottom))
+                if workspace.layout == "horizontal"
+                else ((lane_box.left, coordinate), (lane_box.right, coordinate))
+            )
+            projected = tuple(
+                selected_viewport.point(point) for point in source_points
+            )
+            clipped = clip_segment_to_box(
+                projected[0], projected[1], selected_viewport.target_box
+            )
+            if clipped is None:
+                continue
+            if runner:
+                draw_dashed_polyline(
+                    draw,
+                    clipped,
+                    style.competitor_color,
+                    2,
+                    style.line_dash_length,
+                    style.line_dash_gap,
+                    closed=False,
+                )
+            else:
+                draw.line(
+                    clipped,
+                    fill=style.selected_boundary_color,
+                    width=2,
+                )
+            found = True
+    return found
+
+
 def long_axis_panel(
     workspace: DetectionWorkspace,
     detection: FinalDetection,
@@ -316,7 +554,8 @@ def long_axis_panel(
         style,
     )
     source, projection = source_image(workspace, render_cache)
-    geometries = geometry_by_identity(detection)
+    primary = primary_geometry_by_identity(detection)
+    runner = runner_geometry_by_identity(detection)
     media_left = style.panel_media_inset_x
     media_right = panel_width - style.panel_media_inset_x
     media_top = style.long_axis_media_top
@@ -329,8 +568,29 @@ def long_axis_panel(
     detected = _draw_detected_start_end(
         draw, workspace, detection, selected_viewport, style
     )
-    _draw_selected_start_end(draw, geometries, selected_viewport, style)
-    if not geometries:
+    _draw_primary_start_end(draw, primary, selected_viewport, style)
+    primary_fit = False
+    if not primary:
+        primary_fit = _draw_fit_start_end(
+            draw,
+            workspace,
+            detection,
+            selected_viewport,
+            style,
+            runner=False,
+        )
+    _draw_runner_start_end(draw, runner, selected_viewport, style)
+    runner_fit = False
+    if not runner:
+        runner_fit = _draw_fit_start_end(
+            draw,
+            workspace,
+            detection,
+            selected_viewport,
+            style,
+            runner=True,
+        )
+    if not primary and not primary_fit:
         note = "NO SELECTED START / END · CANDIDATE AUDIT ONLY"
         note_font = font(style.header_detail_font_size)
         note_width = text_width(draw, note, note_font)
@@ -349,17 +609,41 @@ def long_axis_panel(
             fill=style.review_color,
             font=note_font,
         )
-    footer_y = grid.long_axis_panel_height - 27
+    detail_y = grid.long_axis_panel_height - 45
+    footer_y = grid.long_axis_panel_height - 25
     if detected:
         draw_label_chip(
             draw, (media_left, footer_y), "RAW / DETECTED",
             style.detected_transition_color, style, filled=False,
         )
-    if geometries:
+    if primary or primary_fit:
+        supported = (
+            detection.candidate.geometry.source_placement_selection.state.value
+            == "supported"
+        )
         draw_label_chip(
-            draw, (media_left + 132, footer_y), "SELECTED START / END",
+            draw,
+            (media_left + 132, footer_y),
+            "WINNER START / END" if supported else "BEST CANDIDATE",
             style.selected_boundary_color, style, filled=False,
         )
+    if runner or runner_fit:
+        draw_label_chip(
+            draw,
+            (media_left + 320, footer_y),
+            "RUNNER",
+            style.competitor_color,
+            style,
+            filled=False,
+        )
+    detail = competition_summary(detection)
+    detail_font = font(style.annotation_font_size)
+    draw.text(
+        (media_left, detail_y),
+        detail,
+        fill=style.text_color,
+        font=detail_font,
+    )
     summary = selection_summary(detection)
     summary_font = font(style.annotation_font_size)
     draw.text(

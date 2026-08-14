@@ -12,6 +12,7 @@ from PIL import Image, ImageDraw, ImageFont
 import tifffile
 
 import x5crop.debug.axis_panels as debug_axis_panels
+import x5crop.debug.panel_facts as debug_panel_facts
 import x5crop.debug.panels as debug_panels
 from x5crop.configuration.bundle import DetectionConfigurationBundle
 from x5crop.configuration.diagnostics import DebugStyleParameters
@@ -22,7 +23,13 @@ from x5crop.debug.output_panel import (
     keep_evidence_inside_media,
     protected_output_panel,
 )
-from x5crop.debug.panel_facts import source_projection
+from x5crop.debug.panel_facts import (
+    competition_summary,
+    primary_geometry_by_identity,
+    root_gate_summary,
+    runner_geometry_by_identity,
+    source_projection,
+)
 from x5crop.debug.panel_layout import (
     Projection,
     clip_segment_to_box,
@@ -164,12 +171,7 @@ class DebugAnalysisContractTest(unittest.TestCase):
                     )
                 )
                 if safe_envelopes
-                else tuple(
-                    frame.canonical_source_polygon
-                    for lane in detection.candidate.geometry.lane_reconstructions
-                    for placement in lane.placement_competition.placements
-                    for frame in placement.frames
-                )
+                else ()
             ),
         )
 
@@ -266,9 +268,13 @@ class DebugAnalysisContractTest(unittest.TestCase):
                     wraps=debug_axis_panels._draw_detected_top_bottom,
                 ) as detected,
                 mock.patch(
-                    "x5crop.debug.axis_panels._draw_selected_top_bottom",
-                    wraps=debug_axis_panels._draw_selected_top_bottom,
-                ) as selected,
+                    "x5crop.debug.axis_panels._draw_primary_top_bottom",
+                    wraps=debug_axis_panels._draw_primary_top_bottom,
+                ) as primary,
+                mock.patch(
+                    "x5crop.debug.axis_panels._draw_runner_top_bottom",
+                    wraps=debug_axis_panels._draw_runner_top_bottom,
+                ) as runner,
             ):
                 cross_axis_panel(
                     workspace,
@@ -278,7 +284,8 @@ class DebugAnalysisContractTest(unittest.TestCase):
                     _grid(workspace, configuration.diagnostics.style),
                 )
         self.assertEqual(detected.call_count, 1)
-        self.assertEqual(selected.call_count, 1)
+        self.assertEqual(primary.call_count, 1)
+        self.assertEqual(runner.call_count, 1)
 
     def test_long_axis_panel_draws_every_detected_transition(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -290,8 +297,9 @@ class DebugAnalysisContractTest(unittest.TestCase):
                 for lane in detection.candidate.geometry.lane_reconstructions
             )
             with mock.patch(
-                "x5crop.debug.axis_panels.draw_dashed_polyline"
-            ) as detected_line:
+                "x5crop.debug.axis_panels._draw_detected_start_end",
+                wraps=debug_axis_panels._draw_detected_start_end,
+            ) as detected:
                 long_axis_panel(
                     workspace,
                     detection,
@@ -300,7 +308,7 @@ class DebugAnalysisContractTest(unittest.TestCase):
                     _grid(workspace, configuration.diagnostics.style),
                 )
         self.assertGreater(expected_transition_count, 0)
-        self.assertEqual(detected_line.call_count, expected_transition_count)
+        self.assertEqual(detected.call_count, 1)
 
     def test_review_keeps_candidate_audit_without_official_output_geometry(
         self,
@@ -345,7 +353,7 @@ class DebugAnalysisContractTest(unittest.TestCase):
         self.assertEqual(detection.decision.status, "needs_review")
         self.assertFalse(detection.frame_export_eligible)
         self.assertEqual(detection.resolved_output_geometries, ())
-        self.assertGreater(fill.call_count, 0)
+        self.assertEqual(fill.call_count, 0)
         shared_title = output_base.call_args.args[3]
         sequence_title = long_axis_base.call_args.args[3]
         self.assertTrue(shared_title.startswith("SOURCE FIT · "))
@@ -449,11 +457,77 @@ class DebugAnalysisContractTest(unittest.TestCase):
                 "SELECTED TOP/BOTTOM",
                 "DETECTED START/END",
                 "SELECTED START/END",
+                "RUNNER / COMPETITOR",
                 "SAFETY ENVELOPE",
                 "FINAL OUTPUT",
                 "BUDGET VIOLATION",
             ),
         )
+
+    def test_winner_runner_and_official_output_are_separate_facts(self) -> None:
+        winner_frame = SimpleNamespace(lane_ordinal=1)
+        runner_frame = SimpleNamespace(lane_ordinal=1)
+        winner = SimpleNamespace(
+            placement_id="winner",
+            lane_id="lane:0",
+            frames=(winner_frame,),
+            sequence_fit="phase:best",
+            cross_fit="cross:best",
+        )
+        runner = SimpleNamespace(
+            placement_id="runner",
+            lane_id="lane:0",
+            frames=(runner_frame,),
+            sequence_fit="phase:runner",
+            cross_fit="cross:best",
+        )
+        competition = SimpleNamespace(
+            placements=(winner, runner),
+            selected_placement_id="winner",
+            runner_up_placement_id="runner",
+        )
+        geometry = SimpleNamespace(
+            lane_reconstructions=(
+                SimpleNamespace(
+                    placement_competition=competition,
+                    prepared=SimpleNamespace(
+                        phase_competition=SimpleNamespace(
+                            runner_up="phase:runner",
+                            winner_basis=SimpleNamespace(value="direct_support"),
+                        ),
+                        cross_competition=SimpleNamespace(runner_up=None),
+                    ),
+                ),
+            ),
+            source_placement_selection=SimpleNamespace(
+                state=SimpleNamespace(value="supported")
+            ),
+        )
+        detection = SimpleNamespace(
+            output_slot_identities=(
+                SimpleNamespace(
+                    lane_id="lane:0",
+                    lane_ordinal=1,
+                    global_output_ordinal=1,
+                ),
+            ),
+            candidate=SimpleNamespace(geometry=geometry),
+        )
+        self.assertEqual(primary_geometry_by_identity(detection), ((1, winner_frame),))
+        self.assertEqual(runner_geometry_by_identity(detection), ((1, runner_frame),))
+        self.assertIn("PHASE DIRECT SUPPORT", competition_summary(detection))
+        self.assertIn("RUNNER DIFF PHASE", competition_summary(detection))
+        self.assertFalse(hasattr(debug_panel_facts, "geometry_by_identity"))
+
+    def test_debug_names_the_root_blocking_gate_and_recovery(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            _configuration, _profile, _workspace, detection = _fixture(
+                Path(temporary)
+            )
+        summary = root_gate_summary(detection)
+        self.assertTrue(summary.startswith("ROOT GATE · "))
+        self.assertIn("NEED ", summary)
+        self.assertIn("ACTION ", summary)
 
 
 if __name__ == "__main__":

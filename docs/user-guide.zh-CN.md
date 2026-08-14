@@ -142,6 +142,10 @@ python3 X5_Crop.py /path/to/scans --format 120-66 --strip partial --count 2
 所有位置时，结果均保持 `needs_review`，不输出猜测的照片 TIFF。普通 JSONL report 保存匹配片夹、
 count authority、最终选择、安全范围与 Gate 根因；显式 Debug Analysis 额外保存模板位置、实际
 observation、fit winner/runner、偏差与推导 ledger、内容否决和工作量 receipt。
+诊断 JPG 中原始 observation 使用虚线，winner 与 runner 分开绘制并标出差异；文字区说明 phase
+求解器实际采用的 winner 依据、winner 依赖的 phase/cross/content/shared-source 事实和根 Gate。
+最终输出面板只显示已胜出 placement 的
+SafeCrop，`needs_review` candidate 不会被画成正式输出。
 
 退出码：
 

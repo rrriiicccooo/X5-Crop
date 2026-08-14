@@ -20,7 +20,7 @@ from .observation_types import BasicAxisProfile, ProfileRun
 from .line_observations import PhotoBoundaryObservation
 from .physical_identity import physical_fact_id
 from .source_geometry import SourceScanGeometry, centered_short_axis_authority_px
-from .template_cross import CrossRoleBinding
+from .template_cross_model import CrossRoleBinding
 from .template_model import PhaseAuthority, PhaseLatticeAuthority, TemplateSpec
 from .trace_support import trace_support_is_one_connected_run
 

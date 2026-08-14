@@ -9,10 +9,12 @@ from x5crop.domain import Box, PositiveInterval
 from x5crop.formats import FORMATS, FramePhysicalSpec, format_spec
 from x5crop.detection.evidence.scan_canvas import CanvasAxisScaleIntervals
 from x5crop.detection.photo_geometry.template_measurement_plan import (
+    compile_template_measurement_plan,
+)
+from x5crop.detection.photo_geometry.template_measurement_plan_model import (
     MeasurementIntentKind,
     MeasurementUnit,
     TemplateStopFact,
-    compile_template_measurement_plan,
 )
 from x5crop.detection.source_core import SourceStripValidationDomain
 

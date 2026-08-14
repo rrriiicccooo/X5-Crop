@@ -3,9 +3,9 @@ from __future__ import annotations
 import unittest
 
 from tools.tests.test_template_phase_contract import edge, template
-from x5crop.detection.photo_geometry.template_cross import (
+from x5crop.detection.photo_geometry.template_cross import fit_template_cross
+from x5crop.detection.photo_geometry.template_cross_model import (
     TemplateCrossInput,
-    fit_template_cross,
 )
 from x5crop.detection.photo_geometry.template_evidence import (
     EvidenceUse,

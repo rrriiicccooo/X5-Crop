@@ -12,17 +12,20 @@ from .canvas import DebugRenderCache, cached_source_image
 from .panel_layout import Projection
 
 
-def geometry_by_identity(
+def _placement_geometry_by_identity(
     detection: FinalDetection,
+    placement_ids: tuple[str, ...],
 ) -> tuple[tuple[int, TemplateFrame], ...]:
     global_ordinals = {
         (item.lane_id, item.lane_ordinal): item.global_output_ordinal
         for item in detection.output_slot_identities
     }
     values: list[tuple[int, TemplateFrame]] = []
+    requested = set(placement_ids)
     for lane in detection.candidate.geometry.lane_reconstructions:
-        placements = lane.placement_competition.placements
-        for placement in placements:
+        for placement in lane.placement_competition.placements:
+            if placement.placement_id not in requested:
+                continue
             for geometry in placement.frames:
                 ordinal = global_ordinals.get(
                     (placement.lane_id, geometry.lane_ordinal)
@@ -35,6 +38,37 @@ def geometry_by_identity(
             key=lambda item: (item[0], item[1].lane_ordinal),
         )
     )
+
+
+def primary_geometry_by_identity(
+    detection: FinalDetection,
+) -> tuple[tuple[int, TemplateFrame], ...]:
+    """Return one lane-local winner, or its best candidate when withheld."""
+
+    placement_ids = tuple(
+        lane.placement_competition.selected_placement_id
+        or (
+            lane.placement_competition.placements[0].placement_id
+            if lane.placement_competition.placements
+            else ""
+        )
+        for lane in detection.candidate.geometry.lane_reconstructions
+    )
+    return _placement_geometry_by_identity(
+        detection,
+        tuple(value for value in placement_ids if value),
+    )
+
+
+def runner_geometry_by_identity(
+    detection: FinalDetection,
+) -> tuple[tuple[int, TemplateFrame], ...]:
+    placement_ids = tuple(
+        lane.placement_competition.runner_up_placement_id
+        for lane in detection.candidate.geometry.lane_reconstructions
+        if lane.placement_competition.runner_up_placement_id is not None
+    )
+    return _placement_geometry_by_identity(detection, placement_ids)
 
 
 def safe_crop_envelopes(
@@ -53,6 +87,73 @@ def selection_summary(detection: FinalDetection) -> str:
     return (
         f"PHASE {phase} · PLACEMENTS {placements} · SELECTED {selected} · "
         f"VETO {vetoes} · BOUND {'EXCEEDED' if bounded else 'OK'}"
+    )
+
+
+def competition_summary(detection: FinalDetection) -> str:
+    """Explain which physical fit differs without inventing a combined score."""
+
+    lanes = detection.candidate.geometry.lane_reconstructions
+    differences: set[str] = set()
+    phase_bases: set[str] = set()
+    for lane in lanes:
+        competition = lane.placement_competition
+        winner_basis = lane.prepared.phase_competition.winner_basis
+        if winner_basis is not None:
+            phase_bases.add(winner_basis.value.upper().replace("_", " "))
+        if lane.prepared.phase_competition.runner_up is not None:
+            differences.add("PHASE")
+        if lane.prepared.cross_competition.runner_up is not None:
+            differences.add("CROSS")
+        if not competition.placements:
+            continue
+        primary_id = competition.selected_placement_id or competition.placements[0].placement_id
+        primary = next(
+            item for item in competition.placements if item.placement_id == primary_id
+        )
+        runner = next(
+            (
+                item
+                for item in competition.placements
+                if item.placement_id == competition.runner_up_placement_id
+            ),
+            None,
+        )
+        if runner is None:
+            continue
+        if runner.sequence_fit != primary.sequence_fit:
+            differences.add("PHASE")
+        if runner.cross_fit != primary.cross_fit:
+            differences.add("CROSS")
+    selection = detection.candidate.geometry.source_placement_selection
+    if selection.state.value == "supported":
+        phase_basis = (
+            "/".join(sorted(phase_bases)) if phase_bases else "UNAVAILABLE"
+        )
+        basis = (
+            f"PHASE {phase_basis} + CROSS UNIQUE PHYSICAL GROUP + "
+            "CONTENT SAFE + SHARED SOURCE"
+        )
+        subject = "WINNER BASIS"
+    else:
+        basis = "NO UNIQUE SAFE SOURCE PLACEMENT"
+        subject = "BEST CANDIDATE ONLY"
+    runner = "NONE" if not differences else "/".join(sorted(differences))
+    return f"{subject} · {basis} · RUNNER DIFF {runner}"
+
+
+def root_gate_summary(detection: FinalDetection) -> str:
+    blocking = detection.decision.blocking_checks
+    if not blocking:
+        return "ROOT GATE · ALL REQUIRED CHECKS SUPPORTED"
+    check = blocking[0]
+    failure = check.failure
+    if failure is None:
+        return f"ROOT GATE · {check.code.upper()}"
+    return (
+        f"ROOT GATE · {check.code.upper()} → {failure.gap.value.upper()} · "
+        f"NEED {failure.minimum_missing_fact.value.upper()} · "
+        f"ACTION {failure.recommended_action.value.upper()}"
     )
 
 

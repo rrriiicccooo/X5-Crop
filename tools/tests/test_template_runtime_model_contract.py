@@ -28,9 +28,9 @@ from x5crop.detection.photo_geometry.search_model import (
     SequenceAnchorTile,
 )
 from x5crop.detection.photo_geometry.source_geometry import SourceScanGeometry
-from x5crop.detection.photo_geometry.template_cross import (
+from x5crop.detection.photo_geometry.template_cross import fit_template_cross
+from x5crop.detection.photo_geometry.template_cross_model import (
     TemplateCrossInput,
-    fit_template_cross,
 )
 from x5crop.detection.photo_geometry.template_model import (
     PhaseAuthority,

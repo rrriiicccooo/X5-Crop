@@ -10,7 +10,7 @@ from x5crop.formats import FramePhysicalSpec
 from x5crop.detection.photo_geometry.model import BoundaryAxis, BoundaryRole
 from x5crop.detection.photo_geometry.output_model import SharedStripDirection
 from x5crop.detection.photo_geometry.source_geometry import SourceScanGeometry
-from x5crop.detection.photo_geometry.template_cross import (
+from x5crop.detection.photo_geometry.template_cross_model import (
     CrossEvidence,
     CrossFit,
     CrossRoleBinding,

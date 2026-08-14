@@ -356,7 +356,7 @@ def _separator_band(value: Mapping[str, object]):
 
 def _cross_binding(value: Mapping[str, object]):
     from x5crop.detection.photo_geometry.model import BoundaryRole
-    from x5crop.detection.photo_geometry.template_cross import (
+    from x5crop.detection.photo_geometry.template_cross_model import (
         CrossEvidence,
         CrossRoleBinding,
     )
@@ -414,11 +414,11 @@ def rerun_template_fits(
     """Re-run phase and cross fit without touching source pixels."""
 
     from x5crop.detection.photo_geometry.model import BoundaryAxis, BoundaryRole
-    from x5crop.detection.photo_geometry.template_cross import (
+    from x5crop.detection.photo_geometry.template_cross import fit_template_cross
+    from x5crop.detection.photo_geometry.template_cross_model import (
         TemplateCrossInput,
-        fit_template_cross,
     )
-    from x5crop.detection.photo_geometry.template_measurement_plan import (
+    from x5crop.detection.photo_geometry.template_measurement_plan_model import (
         TemplateMeasurementPlan,
     )
     from x5crop.detection.photo_geometry.template_phase import (

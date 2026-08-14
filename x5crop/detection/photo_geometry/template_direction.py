@@ -8,7 +8,7 @@ from ...domain import FiniteInterval
 from ...run_local_identity import run_local_id
 from .observation_types import BoundaryEdgeObservation
 from .output_model import SharedStripDirection
-from .template_cross import CrossFit
+from .template_cross_model import CrossFit
 from .template_model import SequenceFit
 
 

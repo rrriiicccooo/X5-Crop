@@ -9,7 +9,7 @@ from .boundary_geometry import canonical_boundary_line
 from .model import BoundaryAxis, BoundaryRole, DirectionAuthority, PositionSource
 from .output_model import FrameBoundaryGeometry, SharedStripDirection
 from .source_geometry import SourceScanGeometry
-from .template_cross import CrossFit
+from .template_cross_model import CrossFit
 from .template_model import SequenceFit, TemplateSpec
 _ROLES = (BoundaryRole.TOP, BoundaryRole.BOTTOM, BoundaryRole.START, BoundaryRole.END)
 _EPSILON = 1.0e-8

@@ -21,10 +21,13 @@ from x5crop.detection.photo_geometry.template_model import (
     TemplateSpec,
 )
 from x5crop.detection.photo_geometry.template_phase import (
-    PhaseFailureKind,
-    PhaseFitStatus,
     fit_template_phase,
     fit_template_phase_with_local_advance,
+)
+from x5crop.detection.photo_geometry.template_phase_model import (
+    PhaseFailureKind,
+    PhaseFitStatus,
+    PhaseWinnerBasis,
 )
 from x5crop.detection.photo_geometry.template_residual import (
     derive_bounded_local_advances,
@@ -152,6 +155,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
             holder_span_px=FiniteInterval(0.0, 500.0),
         )
         self.assertEqual(result.status, PhaseFitStatus.RESOLVED)
+        self.assertIsInstance(result.winner_basis, PhaseWinnerBasis)
         self.assertIsNotNone(result.best)
         assert result.best is not None
         self.assertAlmostEqual(
@@ -495,6 +499,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
         )
         result = fit_template_phase(observations, template(2))
         self.assertEqual(result.status, PhaseFitStatus.AMBIGUOUS)
+        self.assertIsNone(result.winner_basis)
         self.assertIsNotNone(result.best)
         self.assertIsNotNone(result.runner_up)
 
@@ -507,6 +512,10 @@ class TemplatePhaseContractTest(unittest.TestCase):
         )
         result = fit_template_phase(observations, template(2))
         self.assertEqual(result.status, PhaseFitStatus.RESOLVED)
+        self.assertEqual(
+            result.winner_basis,
+            PhaseWinnerBasis.SAMPLING_EQUIVALENT_RUNNER,
+        )
         self.assertIsNotNone(result.runner_up)
         assert result.best is not None and result.runner_up is not None
         self.assertLessEqual(

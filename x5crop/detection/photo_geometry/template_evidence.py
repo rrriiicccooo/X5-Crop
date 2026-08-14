@@ -13,8 +13,8 @@ from enum import Enum
 from ...domain import ObservationId
 from .line_observations import PhotoBoundaryObservation
 from .observation_types import BoundaryEdgeObservation, SeparatorBandObservation
-from .template_cross import CrossFitCompetition
-from .template_phase import PhaseFitResult
+from .template_cross_model import CrossFitCompetition
+from .template_phase_model import PhaseFitResult
 
 
 class EvidenceUse(str, Enum):

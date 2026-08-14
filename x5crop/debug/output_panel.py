@@ -13,7 +13,7 @@ from ..detection.workspace import DetectionWorkspace
 from .canvas import DebugRenderCache
 from .panel_facts import (
     axis_authority_summaries,
-    geometry_by_identity,
+    root_gate_summary,
     safe_crop_envelopes,
     selection_summary,
     source_image,
@@ -120,15 +120,6 @@ def protected_output_panel(
     overlay_draw = ImageDraw.Draw(overlay)
     envelopes = safe_crop_envelopes(detection)
     budget_labels: list[tuple[int, str]] = []
-    if not envelopes:
-        for ordinal, geometry in geometry_by_identity(detection):
-            fill_polygon(
-                overlay_draw,
-                geometry.canonical_source_polygon,
-                frame_color(ordinal),
-                style.frame_fill_alpha,
-                selected_viewport=selected_viewport,
-            )
     for envelope in envelopes:
         identity = identities[(envelope.lane_id, envelope.lane_ordinal)]
         color = frame_color(identity.global_output_ordinal)
@@ -250,9 +241,19 @@ def protected_output_panel(
         )
     footer = f"{footer}    {selection_summary(detection)}"
     draw.text(
-        (19, grid.output_panel_height - 25),
+        (19, grid.output_panel_height - 43),
         footer,
         fill=style.text_color,
+        font=footer_font,
+    )
+    draw.text(
+        (19, grid.output_panel_height - 23),
+        root_gate_summary(detection),
+        fill=(
+            style.approved_color
+            if detection.decision.passed
+            else style.review_color
+        ),
         font=footer_font,
     )
     return np.asarray(panel)

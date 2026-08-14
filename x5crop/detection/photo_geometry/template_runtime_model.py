@@ -38,11 +38,11 @@ from .output_model import (
 )
 from .search_model import SequenceAnchorDiscoveryDomain
 from .source_geometry import SourceScanGeometry
-from .template_cross import CrossFitCompetition, CrossRoleBinding
+from .template_cross_model import CrossFitCompetition, CrossRoleBinding
 from .template_evidence import EvidenceUseFact
 from .template_model import TemplateSpec
-from .template_measurement_plan import TemplateMeasurementPlan
-from .template_phase import PhaseFitResult
+from .template_measurement_plan_model import TemplateMeasurementPlan
+from .template_phase_model import PhaseFitResult
 from .template_placement import FormatPlacement
 from .template_precision import TemplatePrecisionLedger
 
