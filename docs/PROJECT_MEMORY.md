@@ -9,28 +9,31 @@ current report、Debug Analysis 和最新命令输出优先。
 ## 当前目标
 
 保持一条简单、有界的 V5 模板对准路径：format、mode 和 count 先建立固定模板，独立像素证据只负责
-对准、解释少量物理偏差和否决危险输出。继续删除无消费者的接口与重复 owner，不以扩大搜索空间
-换取个别异常样片通过。V5 尚未发布，公开稳定版仍为 `v4.2.8`。
+对准、解释少量物理偏差和否决危险输出。本轮自动修复已经结束；下一步由用户人工检查 fresh Debug
+Analysis。V5 尚未发布，公开稳定版仍为 `v4.2.8`。
 
 ## 当前检查点
 
-- Production 已使用 `TemplateMeasurementPlan → SequenceFit/CrossFit → FormatPlacement → selected-only
-  safety`；旧 chain、proposal、materialization、cache 与兼容入口已经删除。
-- Detector 灰度图按有界行块生成，与原整数组逐像素一致，不再建立整张 float RGB 副本；正式输出
-  仍从原始 16-bit RGB 采样。测试和生产代码不保留只为退休接口服务的 helper、type 或 wrapper。
-- `tools/verify` 是唯一验证入口。Accuracy、diagnostic、performance 与 platform 各自证明不同事实；
-  receipt 只有在其中记录的 commit 与当前 release commit 相同时有效。
+- Production 使用 `TemplateMeasurementPlan → SequenceFit/CrossFit → FormatPlacement → selected-only
+  safety`。物理斜率可行性预筛只跳过不可能成立的 edge family，不改变可行候选；内容只在唯一
+  placement 后否决。
+- 当前验证边界：full 为 284 项、2 项平台 skip；九张黄金 9/9 安全，其中 7 张正确自动批准；
+  111-source diagnostic 全部工程闭合，其中 17 张批准、94 张 review；24-source 完整路径平均满足
+  5 秒上限且 RSS 非零。
+- Review 主因是 `placement_unresolved` 69 张，其次是 direct-use budget 17 张、content protection 7 张
+  和 local advance 1 张。Diagnostic 没有几何真值，这些计数只用于确定改进顺序。
 
 ## 开放风险
 
-- 24-source 性能上限仍是完整用户路径平均 5 秒；任何后续优化必须以阶段计时和非零 RSS 为依据，
-  不为速度改变物理 placement 或内容保护。
-- Diagnostic 没有几何真值；它只能证明工程闭合，不能替代黄金准确性。
-- 新物理自由度只有在常见、有界、可解释并有独立证据时才能加入。目标平台 receipt 仍须在发布
-  commit 上由真实 Intel macOS 与 Windows 文件系统生成。
+- 剩余 placement review 缺少能够安全区分离散答案的通用硬事实；不得用 support、残差、内容或
+  holder center 排名补偿。
+- 黄金不得错误自动通过，已经正确批准的样片不得降级；challenge 只有在黄金几何和安全校验都
+  通过时才可从 review 升为自动批准。
+- 目标平台 receipt 仍须在发布 commit 上由真实 Intel macOS 与 Windows 文件系统生成。
 
 ## 下一步
 
-1. 从 current report 的最小缺失事实统计中选择影响最多的正常失败类型，不为单一样片增加规则。
-2. 准备发布时冻结最终 commit，在同一 commit 上重跑 accuracy、diagnostic、performance 和目标平台
-   验证；在此之前不创建 RC、tag、Release 或公开 ZIP。
+1. 用户检查本轮 111 张 fresh Debug Analysis，确认模板位置、winner/runner、内容否决与根 Gate。
+2. 只有人工反馈揭示常见、独立、有界的物理缺失事实时才继续修改；不为单一样片增加规则。
+3. 准备发布时再补齐同一 release commit 的目标平台 receipt；在此之前不创建 RC、tag、Release
+   或公开 ZIP。
