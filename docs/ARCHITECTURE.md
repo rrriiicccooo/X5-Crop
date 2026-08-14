@@ -345,29 +345,7 @@ Scharr kernel 归一化、MAD consistency factor 是采样/统计恒等量；窗
 scale、内容 cell 与结构张量门槛是具名测量校准。校准值只能存在于对应 spec，必须带单位和合成/
 黄金边界测试，不得散落成 placement、投票或 Gate 的隐藏阈值。
 
-## 13. 验证与发布边界
-
-`tools/verify` 是唯一验证入口：
-
-```text
-staged | full | accuracy | diagnostic | performance |
-platform | platform-check | platform-package | pre-push
-```
-
-- Accuracy、diagnostic、performance 与 platform cohort 的 partial 记录必须携带明确 count；工具
-  不得从文件名、片夹容量或像素推导。
-- 111-source diagnostic 只验证 crash、hang、schema、authority、工作量、内存与 TIFF 工程合同，
-  不产生 accuracy verdict。
-- 24-source performance 使用完整用户路径、`jobs=1`，正式 mean 上限为 5 秒；profiling 与 SHA
-  在计时外。
-- Pre-commit 只检查 staged hygiene；pre-push 对纯文档运行 documentation，其余范围运行 full。
-  Performance 只属于发布验证，不阻塞日常提交或推送。
-- 九张用户确认黄金每张只运行一项；nominal 必须安全自动批准，challenge 允许安全 review。
-- 不增加样片规则、whitelist、format denylist 或验证专用 detector path。
-- `full`、diagnostic 或 performance 通过都不能替代 accuracy 与真实平台证据。
-- 只有全部 release receipt 绑定同一 commit，才可创建 RC、tag、Release 或公开 ZIP。
-
-## 14. 源码 owner
+## 13. 源码 owner
 
 下表中的 `photo_geometry/` 均指 `x5crop/detection/photo_geometry/`。
 

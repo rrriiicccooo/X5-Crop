@@ -20,6 +20,7 @@
    记忆与旧 receipt 只作线索。
 
 GitHub 是 tracked 源码与文档的权威来源。NAS 和复制目录只用于传输或测试。
+首次 clone 运行 `tools/git/install_hooks.sh`，启用仓库中的 `.githooks`。
 
 ## 子代理调度
 
