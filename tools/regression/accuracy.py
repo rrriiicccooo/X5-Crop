@@ -35,6 +35,24 @@ def validate_gold_source_identities() -> tuple[dict[str, object], ...]:
     sample_ids: set[str] = set()
     task_count = 0
     for record in records:
+        expected_keys = {
+            "cohort_schema",
+            "completion_scope",
+            "sample_id",
+            "source_relative_path",
+            "source_sha256",
+            "format_id",
+            "strip_mode",
+            "validation_role",
+            "cohort_role",
+            "geometry_oracle_schema",
+            "geometry_digest",
+            "confirmed_geometry",
+            "count_authority",
+            "confirmed_geometry_slot_count",
+        }
+        if record.get("strip_mode") == "partial":
+            expected_keys.add("confirmed_slot_count")
         sample_id = str(record.get("sample_id", ""))
         relative = Path(str(record.get("source_relative_path", "")))
         source = (PROJECT_ROOT / relative).resolve()
@@ -46,7 +64,8 @@ def validate_gold_source_identities() -> tuple[dict[str, object], ...]:
             "partial": "user_explicit_partial_count",
         }.get(strip_mode)
         if (
-            record.get("cohort_schema") != "x5crop_gold_accuracy_cohort_v4"
+            set(record) != expected_keys
+            or record.get("cohort_schema") != "x5crop_gold_accuracy_cohort_v4"
             or not sample_id
             or sample_id in sample_ids
             or record.get("validation_role") != "gold_accuracy_blocking"

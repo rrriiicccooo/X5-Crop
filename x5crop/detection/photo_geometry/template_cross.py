@@ -325,7 +325,12 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
             if item.top.source_spanning_continuous
             and item.bottom.source_spanning_continuous
         ]
-        candidates = spanning_pairs
+        authorized_spanning_pairs = [
+            item
+            for item in spanning_pairs
+            if item.top.role_authorized and item.bottom.role_authorized
+        ]
+        candidates = authorized_spanning_pairs or spanning_pairs
     elif bool(spanning_top) != bool(spanning_bottom):
         # One domain-spanning role owns the cross coordinate.  A fragmented
         # opposite observation participates only when it directly closes H,
@@ -340,6 +345,12 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
             if candidate.top.observation_id in spanning_ids
             or candidate.bottom.observation_id in spanning_ids
         ]
+        authorized_spanning_pairs = [
+            candidate
+            for candidate in spanning_pairs
+            if candidate.top.role_authorized and candidate.bottom.role_authorized
+        ]
+        spanning_pairs = authorized_spanning_pairs or spanning_pairs
         candidates = spanning_pairs or [
             candidate
             for item in spanning

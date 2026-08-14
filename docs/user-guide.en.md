@@ -52,8 +52,9 @@ Content protection does not mean that no content-like pixel may ever cross a
 crop line. A tiny corner-only graze, edge alias, or dust speck remains neutral.
 Only reliable two-dimensional picture structure that leaves the corner and
 continues across the complete boundary-uncertainty interval can veto an
-automatic crop. X5 Crop does not enlarge or distort the fixed format rectangle
-to preserve an already acceptable corner trace.
+automatic crop. Content protection runs only after the placement is unique; it
+does not choose among competing placements. X5 Crop does not enlarge or distort
+the fixed format rectangle to preserve an already acceptable corner trace.
 
 Complete counts are 135=6, half=12, XPan=3, 120-645=4, and 120-66=3.
 120-67 uses 3 on ordinary holders and 2 on the short holder. 135-dual uses 12

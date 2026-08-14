@@ -230,11 +230,13 @@ def _validate_orientation_integrations(
     original_output = root / "original-output"
     original_report = _run_cli(source, source.source_path, original_output)
     if original_report["decision"]["status"] != "approved_auto":
-        raise ValueError("S027 must remain approved for Orientation integration")
+        raise ValueError(
+            f"{source.sample_id} must be approved for Orientation integration"
+        )
     original_files = _official_outputs(original_output, original_report)
     results: list[dict[str, object]] = []
     for tag in (3, 8):
-        fixture = root / f"S027-derived-orientation-{tag}.tif"
+        fixture = root / f"{source.sample_id}-derived-orientation-{tag}.tif"
         _write_orientation_fixture(source, canonical, profile, tag, fixture)
         output = root / f"orientation-{tag}-output"
         report = _run_cli(source, fixture, output)
@@ -275,6 +277,7 @@ def _validate_orientation_integrations(
 def run_platform_io_validation() -> dict[str, Any]:
     sources = load_platform_sources(verify_files=True)
     source_results: list[dict[str, object]] = []
+    orientation_source: PlatformSource | None = None
     with TemporaryDirectory(prefix="x5crop-platform-io-") as temporary:
         root = Path(temporary)
         for source in sources:
@@ -286,9 +289,21 @@ def run_platform_io_validation() -> dict[str, Any]:
                 report["output"]["output_files"]
             )
             source_results.append(metadata)
+            if (
+                orientation_source is None
+                and source.role == "user_path"
+                and metadata["terminal_status"] == "approved_auto"
+            ):
+                orientation_source = source
             print(f"platform I/O {source.sample_id}: {metadata['terminal_status']}")
-        s027 = next(source for source in sources if source.sample_id == "S027")
-        orientation_results = _validate_orientation_integrations(s027, root)
+        if orientation_source is None:
+            raise ValueError(
+                "Orientation integration requires an approved user-path source"
+            )
+        orientation_results = _validate_orientation_integrations(
+            orientation_source,
+            root,
+        )
     return {
         "schema": PLATFORM_IO_RESULT_SCHEMA,
         "cohort_sha256": cohort_sha256(),

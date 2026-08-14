@@ -446,6 +446,73 @@ class TemplatePhaseContractTest(unittest.TestCase):
         # by pitch authority belonging to later inferred roles.
         self.assertLess(result.best.role_positions_px[0].width, 2.0)
 
+    def test_far_separated_direct_roles_narrow_continuous_pitch(self) -> None:
+        compiled = TemplateSpec(
+            template_id="far-span-pitch",
+            frame_width_px=FiniteInterval(90.0, 110.0),
+            pitch_px=FiniteInterval(108.0, 132.0),
+            count=6,
+            phase_authority=PhaseAuthority.PARTIAL_FREE,
+            phase_lattice_authority=PhaseLatticeAuthority(
+                period_px=FiniteInterval(108.0, 132.0),
+                cycle_origin_px=0.0,
+                minimum_slot_offset=-1,
+                maximum_slot_offset=20,
+                phase_authority=PhaseAuthority.PARTIAL_FREE,
+            ),
+            nominal_gap_px=FiniteInterval(18.0, 22.0),
+        )
+        anchors = tuple(
+            PhaseAnchor(
+                observation_id=ObservationId(f"far-span:{role_index}"),
+                coordinate_interval_px=FiniteInterval(
+                    coordinate - 0.2,
+                    coordinate + 0.2,
+                ),
+                role=compiled.roles[role_index],
+                authority=PhaseAnchorAuthority.USER_PROVIDED,
+                authority_id="user-anchor:far-span",
+            )
+            for role_index, coordinate in (
+                (2, 160.0),
+                (3, 260.0),
+                (10, 640.0),
+                (11, 740.0),
+            )
+        )
+        result = fit_template_phase(anchors, compiled)
+        self.assertEqual(result.status, PhaseFitStatus.RESOLVED)
+        assert result.best is not None
+        self.assertIsNone(result.runner_up)
+        self.assertEqual(
+            result.best.role_observation_ids,
+            (
+                None,
+                None,
+                ObservationId("far-span:2"),
+                ObservationId("far-span:3"),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                ObservationId("far-span:10"),
+                ObservationId("far-span:11"),
+            ),
+        )
+        self.assertEqual(result.best.phase_lattice_fit.integer_slot_offset, 0)
+        self.assertAlmostEqual(
+            result.best.phase_lattice_fit.canonical_absolute_phase_px,
+            40.0,
+        )
+        pitch_interval = result.best.pitch_fit.pitch_interval_px
+        self.assertLess(
+            pitch_interval.maximum - pitch_interval.minimum,
+            0.3,
+        )
+        self.assertLess(result.best.role_positions_px[8].width, 3.0)
+
     def test_local_advance_interval_is_applied_once_to_the_suffix(self) -> None:
         relation = LocalAdvanceRelation(
             relation_ordinal=1,

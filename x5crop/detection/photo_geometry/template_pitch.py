@@ -6,6 +6,7 @@ from dataclasses import replace
 from typing import Sequence
 
 from ...domain import FiniteInterval
+from .model import BoundaryRole
 from .observation_types import BoundaryEdgeObservation
 from .template_model import TemplateSpec
 from .template_phase_model import PhaseFitResult, PhaseFitStatus
@@ -61,6 +62,59 @@ def _unique_supported_interval(
         max(values[index].minimum for index in winner),
         min(values[index].maximum for index in winner),
     )
+
+
+def _refine_placement_pitch_interval(
+    bound_roles: Sequence[tuple[BoundaryRole, int, FiniteInterval]],
+    *,
+    canonical_pitch: float,
+    pitch_authority: FiniteInterval,
+    direction: int,
+    prefixes: tuple[FiniteInterval, ...],
+) -> FiniteInterval | None:
+    """Narrow one placement's pitch uncertainty without changing its identity.
+
+    Farthest START-to-START and END-to-END advances cancel fixed frame width.
+    At most two relations are evaluated in one O(R) pass.  A relation that
+    disagrees with the selected base pitch is left to bounded local-step
+    analysis instead of rejecting or recalibrating the placement here.
+    """
+
+    result = pitch_authority
+    for boundary_role in (BoundaryRole.START, BoundaryRole.END):
+        values = tuple(
+            (slot_index, interval)
+            for role, slot_index, interval in bound_roles
+            if role == boundary_role
+        )
+        if len(values) < 2:
+            continue
+        left_slot, left = min(values, key=lambda item: item[0])
+        right_slot, right = max(values, key=lambda item: item[0])
+        slot_advance = right_slot - left_slot
+        if slot_advance <= 0:
+            continue
+        observed = _advance_interval(left, right, direction)
+        prefix_advance = _advance_interval(
+            prefixes[left_slot],
+            prefixes[right_slot],
+            1,
+        )
+        candidate = FiniteInterval(
+            (observed.minimum - prefix_advance.maximum) / slot_advance,
+            (observed.maximum - prefix_advance.minimum) / slot_advance,
+        )
+        common = _intersect(pitch_authority, candidate)
+        if common is None or not common.contains(
+            canonical_pitch,
+            epsilon=1.0e-7,
+        ):
+            continue
+        common = _intersect(result, common)
+        if common is None:
+            return None
+        result = common
+    return result
 
 
 def calibrate_template_source_pitch(

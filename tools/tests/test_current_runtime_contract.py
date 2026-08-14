@@ -1,9 +1,19 @@
 from __future__ import annotations
 
 from tools.tests.current_only_support import *
+from tools.regression.diagnostic_cohort import (
+    EXPECTED_RECORD_COUNT,
+    load_diagnostic_sources,
+)
 
 
 class CurrentRuntimeContractTest(unittest.TestCase):
+    def test_diagnostic_cohort_schema_is_current_and_complete(self) -> None:
+        self.assertEqual(
+            len(load_diagnostic_sources(verify_source_files=False)),
+            EXPECTED_RECORD_COUNT,
+        )
+
     def test_obsolete_detector_files_are_absent(self) -> None:
         forbidden_paths = (
             "x5crop/detection/physical",
@@ -131,13 +141,16 @@ class CurrentRuntimeContractTest(unittest.TestCase):
         self.assertNotIn('["transform_assessment"]', accuracy_sources)
         self.assertIn('"source_transform_assessment"', accuracy_sources)
         self.assertIn(
-            '"$PYTHON" -m tools.regression.diagnostic_cohort\n',
+            '"$PYTHON" -m tools.regression.diagnostic_cohort "$@"\n',
             verifier,
         )
         self.assertNotIn(
             "diagnostic_cohort --identity-only",
             verifier,
         )
+        self.assertNotIn("--identity-only", diagnostic)
+        self.assertNotIn("concurrent.futures", diagnostic)
+        self.assertNotIn("--jobs", diagnostic)
 
     def test_only_current_debug_analysis_cli_and_runtime_surface_remain(
         self,

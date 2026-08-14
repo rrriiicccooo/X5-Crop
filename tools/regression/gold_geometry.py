@@ -161,6 +161,8 @@ def ordered_gold_mapping(
     strip_orientation: str,
     format_id: str,
 ) -> tuple[int, ...]:
+    if len(gold_frames) != len(output_geometries):
+        return ()
     horizontal = strip_orientation == "horizontal"
 
     def safely_covers(

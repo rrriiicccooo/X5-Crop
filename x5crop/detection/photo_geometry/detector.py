@@ -257,7 +257,11 @@ def reconstruct_photo_geometry(
         )
         content_assessment = (
             None
-            if best is None
+            if (
+                best is None
+                or lane.phase_competition.status != PhaseFitStatus.RESOLVED
+                or lane.cross_competition.status != CrossFitStatus.RESOLVED
+            )
             else content_veto_assessment(
                 best,
                 build_content_topology_index(content, layout=layout),

@@ -17,6 +17,11 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class VerificationScopeContractTest(unittest.TestCase):
+    def test_staged_hygiene_allows_the_tracked_release_tool(self) -> None:
+        verifier = (ROOT / "tools/verify").read_text(encoding="utf-8")
+        self.assertIn("|/release/*|", verifier)
+        self.assertNotIn("|*/release/*|", verifier)
+
     def test_markdown_only_changes_use_documentation_scope(self) -> None:
         self.assertEqual(
             verification_scope_for_paths(

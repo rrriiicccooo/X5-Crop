@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 import unittest
 
 from tools.tests.test_template_cross_contract import binding
@@ -12,8 +13,12 @@ from x5crop.detection.candidate.assessment.model import CANDIDATE_GATE_CHECK_COD
 from x5crop.detection.decision.decision_gate import apply_decision_gate
 from x5crop.detection.gate_checks import GateGap, TypedAssessment
 from x5crop.detection.photo_geometry.model import BoundaryRole
+from x5crop.detection.photo_geometry.content_veto_model import (
+    ContentVetoAssessment,
+)
 from x5crop.detection.photo_geometry.template_cross import fit_template_cross
 from x5crop.detection.photo_geometry.template_cross_model import (
+    CrossFitStatus,
     TemplateCrossInput,
 )
 from x5crop.detection.photo_geometry.template_phase import fit_template_phase
@@ -87,6 +92,29 @@ class TemplateSelectionContractTest(unittest.TestCase):
             competition.failure.gap,
             GateGap.SEQUENCE_AUTHORITY_UNAVAILABLE,
         )
+
+    def test_content_cannot_assess_an_unresolved_placement(self) -> None:
+        phase, cross, placement = _resolved()
+        unresolved_cross = replace(
+            cross,
+            status=CrossFitStatus.UNRESOLVED,
+            reason="non-equivalent cross fits remain",
+        )
+        assessment = ContentVetoAssessment(
+            assessment_id="content:unresolved",
+            placement_id=placement.placement_id,
+            facts=(),
+        )
+
+        with self.assertRaisesRegex(ValueError, "unique fitted placement"):
+            select_lane_template_placement(
+                lane_id="lane:0",
+                best=placement,
+                runner_up=None,
+                phase=phase,
+                cross=unresolved_cross,
+                content_assessment=assessment,
+            )
 
     def test_source_withholding_preserves_the_exact_failure_fact(self) -> None:
         phase, cross, placement = _resolved()

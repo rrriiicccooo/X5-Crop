@@ -27,12 +27,13 @@ report reuse 均不再支持。当前完整合同见 [ARCHITECTURE.md](ARCHITECT
   lattice、有限 measurement intents、工作量上界和停止条件；像素只负责对准、解释偏差和否决。
 - Role-free edge 与 separator 只绑定模板角色，不再物化完整 chain。至少两个独立 adjacency 才能
   建立当前 source pitch；缺边由已支持 lattice 推导。直接 separator 最多授权两个 ordinal 已知的
-  one-time suffix shift，不搜索异常位置。
+  one-time suffix shift，不搜索异常位置。跨多个 slot 的同角色直接观察只收窄胜出 placement 的
+  连续 pitch 不确定性，不改变 role、offset 或 runner。
 - Cross 使用 role-authorized top/bottom、固定 H 和 source-wide 支持；单侧完整支持可推导另一侧。
   局部 fragment 不得靠坐标、trace 数或残差拼成 source-wide authority。每 lane 只保留 placement
   winner 与一个真正不同的 runner，不使用 scalar score、top-K 或 Pareto 票数补偿。
-- 内容层只作负向否决。角落局部擦边、锯齿与尘点保持中性；只有离开角落并连续跨过边界不确定区间
-  的可靠二维内容才否决 placement。
+- 内容层只在 phase 与 cross 唯一后作负向否决。角落局部擦边、锯齿与尘点保持中性；只有离开角落
+  并连续跨过边界不确定区间的可靠二维内容才否决 placement。内容不重排未解析候选。
 - 选择后的 placement 不可重新绑定。`SafeCropEnvelope` 只保护胜出 placement 自身的不确定性；5% start/end
   与 3% top/bottom 是逐边 direct-use 上限，不是 padding。
 - 普通 report 只保存最终选择、安全框、budget、Gate 根因与输出；完整 observations、fit winner/runner、ledger、

@@ -24,6 +24,7 @@ from .template_model import (
     ordered_template_roles,
 )
 from .template_phase_model import PhaseWinnerBasis
+from .template_pitch import _refine_placement_pitch_interval
 
 
 @dataclass(frozen=True)
@@ -186,6 +187,8 @@ def _inferred_role_interval(
         phase.minimum - relative_maximum,
         phase.maximum - relative_minimum,
     )
+
+
 def _phase_lattice_fit(
     template: TemplateSpec,
     *,
@@ -636,6 +639,18 @@ def _fit_seed(
     uncertainty = max(1.0, min(width * 0.04, residual_mean + 1.0))
     phase_interval = FiniteInterval(phase - uncertainty, phase + uncertainty)
     prefix_intervals = _prefix_intervals(relations, template.count)
+    measured_pitch = _refine_placement_pitch_interval(
+        tuple(
+            (role.role, role.slot_index, anchor.interval_px)
+            for role, anchor in matches
+        ),
+        canonical_pitch=pitch,
+        pitch_authority=pitch_authority,
+        direction=template.direction,
+        prefixes=prefix_intervals,
+    )
+    if measured_pitch is None:
+        return None
     role_intervals: list[FiniteInterval] = []
     role_ids: list[ObservationId | None] = []
     for role, canonical in zip(roles, canonical_positions, strict=True):
@@ -650,8 +665,8 @@ def _fit_seed(
                         template.frame_width_px.maximum,
                     ),
                     pitch=FiniteInterval(
-                        pitch_authority.minimum,
-                        pitch_authority.maximum,
+                        measured_pitch.minimum,
+                        measured_pitch.maximum,
                     ),
                     direction=template.direction,
                     prefixes=prefix_intervals,
@@ -710,7 +725,7 @@ def _fit_seed(
         pitch_fit=PitchFit(
             frame_width_px=template.frame_width_px,
             gap_interval_px=template.gap_prior_px,
-            pitch_interval_px=pitch_authority,
+            pitch_interval_px=measured_pitch,
             canonical_frame_width_px=width,
             canonical_pitch_px=pitch,
             observation_ids=direct_ids,

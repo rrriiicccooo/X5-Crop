@@ -57,6 +57,18 @@ def load_performance_sources(
     project_root = PROJECT_ROOT.resolve()
     sources: list[PerformanceSourceIdentity] = []
     for row in rows:
+        expected_keys = {
+            "cohort_schema",
+            "sample_id",
+            "source_relative_path",
+            "source_sha256",
+            "format_id",
+            "strip_mode",
+            "count_authority",
+            "compression",
+        }
+        if row.get("strip_mode") == "partial":
+            expected_keys.add("confirmed_slot_count")
         source = PerformanceSourceIdentity(
             sample_id=str(row.get("sample_id", "")),
             source_relative_path=str(row.get("source_relative_path", "")),
@@ -73,7 +85,8 @@ def load_performance_sources(
         )
         path = source.source_path.resolve()
         if (
-            row.get("cohort_schema") != COHORT_SCHEMA
+            set(row) != expected_keys
+            or row.get("cohort_schema") != COHORT_SCHEMA
             or not source.sample_id
             or len(source.source_sha256) != 64
             or Path(source.source_relative_path).is_absolute()

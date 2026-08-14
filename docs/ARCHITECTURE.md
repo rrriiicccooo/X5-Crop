@@ -205,7 +205,9 @@ role_position = cycle_phase
 `G_format` 只给第一次局部搜索窗口。至少两个不同 adjacency 的相容同角色 advance 才能把当前
 `source_pitch` 从搜索先验升级为 source 证据；一个 separator 的左右 edge 仍只算一个物理位置。直接
 角色缺失时，固定 W 与已支持 lattice 可以推导该角色，并在 ledger 标记 `inferred`。直接角色的位置区间
-不会被全局残差改写；推导角色才传播 phase、pitch 与 local-prefix 不确定性。
+不会被全局残差改写；推导角色才传播 phase、pitch 与 local-prefix 不确定性。已经绑定的同角色直接
+观察若跨越多个 slot，可以收窄该 placement 的连续 pitch 不确定区间，但不能升级 source pitch
+authority、改变 role 绑定或消除离散 runner。
 
 模板放置后的残差只允许解释为：整体平移、稳定 pitch 漂移、一次或两次直接定位的 local step、孤立
 outlier，或无法解释。Local step 必须由已经绑定到同一 adjacency 的 separator 直接证明；每个 delta
@@ -233,8 +235,9 @@ source W/H/scale 与方向，不共享 phase、cross center 或 local anomaly。
 每 lane 只保留最佳 placement 与一个真正不同的 runner。选择使用 typed hard facts 与证据职责，不使用
 加权总分、top-K、Pareto 票数补偿或 format/样片专属 margin。相同答案的小 interval 属于一个 placement；
 不同坐标、offset、sampling footprint 或安全窗口属于离散竞争。不能明显区分就
-`placement_unresolved`。二维内容只对已经 compose 的 placement 做 negative veto，不能移动边界、
-平分照片或创造替代 placement。
+`placement_unresolved`。二维内容只在 phase 与 cross 已唯一解析后，对已经 compose 的 placement 做
+negative veto；未解析候选上的 content fact 不能取得 Gate 权限，也不能移动边界、重排 winner、平分
+照片或创造替代 placement。
 
 每次运行在 development receipt 中保存并由外部 verifier 检查：
 

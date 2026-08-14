@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import concurrent.futures
 from dataclasses import dataclass
 import json
 from pathlib import Path
@@ -41,7 +40,10 @@ class DiagnosticSource:
     source_path: Path
 
 
-def load_diagnostic_sources() -> tuple[DiagnosticSource, ...]:
+def load_diagnostic_sources(
+    *,
+    verify_source_files: bool = True,
+) -> tuple[DiagnosticSource, ...]:
     validate_count_authority()
     rows = tuple(
         json.loads(line)
@@ -60,17 +62,41 @@ def load_diagnostic_sources() -> tuple[DiagnosticSource, ...]:
     project_root = PROJECT_ROOT.resolve()
     sources: list[DiagnosticSource] = []
     for row in rows:
+        expected_keys = {
+            "cohort_schema",
+            "sample_id",
+            "sort_index",
+            "source_relative_path",
+            "source_sha256",
+            "format_id",
+            "strip_mode",
+            "validation_role",
+            "count_authority",
+            "raw_width_px",
+            "raw_height_px",
+            "dtype",
+            "samples_per_pixel",
+            "page_count",
+        }
+        if row.get("strip_mode") == "partial":
+            expected_keys.add("confirmed_slot_count")
         relative = Path(str(row.get("source_relative_path", "")))
         source_path = (PROJECT_ROOT / relative).resolve()
         digest = str(row.get("source_sha256", ""))
         if (
-            row.get("cohort_schema") != COHORT_SCHEMA
+            set(row) != expected_keys
+            or row.get("cohort_schema") != COHORT_SCHEMA
             or row.get("validation_role") != "diagnostic_unreviewed"
             or relative.is_absolute()
             or not source_path.is_relative_to(project_root)
-            or not source_path.is_file()
             or len(digest) != 64
-            or sha256_file(source_path) != digest
+            or (
+                verify_source_files
+                and (
+                    not source_path.is_file()
+                    or sha256_file(source_path) != digest
+                )
+            )
         ):
             raise ValueError(
                 f"diagnostic source identity is invalid: "
@@ -305,8 +331,6 @@ def run_diagnostic_source(source: DiagnosticSource) -> dict[str, Any]:
 
 def run_diagnostic_cohort(
     output_root: Path,
-    *,
-    jobs: int = 2,
 ) -> tuple[bool, dict[str, Any]]:
     if output_root.exists() and any(output_root.iterdir()):
         raise ValueError(
@@ -314,12 +338,7 @@ def run_diagnostic_cohort(
         )
     sources = load_diagnostic_sources()
     output_root.mkdir(parents=True, exist_ok=True)
-    with concurrent.futures.ThreadPoolExecutor(
-        max_workers=max(1, min(3, jobs))
-    ) as executor:
-        records = tuple(
-            executor.map(run_diagnostic_source, sources)
-        )
+    records = tuple(map(run_diagnostic_source, sources))
     records_path = output_root / "diagnostic_records.jsonl"
     records_path.write_text(
         "".join(
@@ -398,23 +417,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         description="Run the non-blocking 111-source diagnostic cohort"
     )
     parser.add_argument("--output-root", type=Path)
-    parser.add_argument("--jobs", type=int, default=2)
-    parser.add_argument("--identity-only", action="store_true")
     args = parser.parse_args(argv)
-    if args.identity_only:
-        sources = load_diagnostic_sources()
-        print(f"diagnostic source identities: {len(sources)}/{EXPECTED_RECORD_COUNT}")
-        return 0
     if args.output_root is None:
         with TemporaryDirectory(prefix="x5crop-diagnostic-results-") as temporary:
             passed, summary = run_diagnostic_cohort(
                 Path(temporary),
-                jobs=args.jobs,
             )
     else:
         passed, summary = run_diagnostic_cohort(
             args.output_root.expanduser().resolve(),
-            jobs=args.jobs,
         )
     print(
         f"diagnostic terminal records: "

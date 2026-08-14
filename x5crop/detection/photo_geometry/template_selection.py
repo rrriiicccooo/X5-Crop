@@ -44,8 +44,10 @@ def select_lane_template_placement(
         not isinstance(content_assessment, ContentVetoAssessment)
         or best is None
         or content_assessment.placement_id != best.placement_id
+        or phase.status != PhaseFitStatus.RESOLVED
+        or cross.status != CrossFitStatus.RESOLVED
     ):
-        raise ValueError("content veto must assess the fitted best placement")
+        raise ValueError("content veto requires the unique fitted placement")
 
     try:
         phase.receipt.validate_bounds(slot_count=phase.template.count)

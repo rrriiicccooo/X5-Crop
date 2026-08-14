@@ -73,6 +73,19 @@ class GoldAccuracyContractTest(unittest.TestCase):
             (),
         )
 
+    def test_extra_output_is_not_a_valid_gold_mapping(self) -> None:
+        gold = [[0.0, 0.0], [560.0, 0.0], [560.0, 560.0], [0.0, 560.0]]
+
+        self.assertEqual(
+            ordered_gold_mapping(
+                [_frame(gold)],
+                [_output(gold), _output(gold)],
+                "horizontal",
+                "120-66",
+            ),
+            (),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

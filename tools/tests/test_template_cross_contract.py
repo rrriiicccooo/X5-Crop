@@ -628,6 +628,42 @@ class TemplateCrossContractTest(unittest.TestCase):
             },
         )
 
+    def test_spanning_side_rejects_wrong_role_local_closure(self) -> None:
+        result = fit_template_cross(
+            TemplateCrossInput(
+                template=template(),
+                fixed_height_px=FiniteInterval(238.0, 242.0),
+                top_bindings=(
+                    binding(BoundaryRole.TOP, "spanning-top", 100.0),
+                ),
+                bottom_bindings=(
+                    binding(
+                        BoundaryRole.BOTTOM,
+                        "wrong-role-bottom",
+                        339.0,
+                        source_spanning=False,
+                        role_authorized=False,
+                    ),
+                    binding(
+                        BoundaryRole.BOTTOM,
+                        "authorized-bottom",
+                        340.0,
+                        source_spanning=False,
+                    ),
+                ),
+            )
+        )
+        self.assertEqual(result.status, CrossFitStatus.RESOLVED)
+        self.assertIsNone(result.runner_up)
+        assert result.best is not None
+        self.assertEqual(
+            result.best.direct_provenance_ids,
+            (
+                ObservationId("observation:spanning-top"),
+                ObservationId("observation:authorized-bottom"),
+            ),
+        )
+
     def test_template_wide_side_infers_opposite_without_local_fragment_authority(self) -> None:
         domains = (
             FiniteInterval(0.0, 20.0),

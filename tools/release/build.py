@@ -65,7 +65,7 @@ def build_release(version: str, output: Path | None = None) -> Path:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--version", required=True, help="Release version, for example v4.2.9")
+    parser.add_argument("--version", required=True, help="Release version, for example vX.Y.Z")
     parser.add_argument("--output", type=Path, help="Optional output zip path")
     return parser.parse_args()
 
