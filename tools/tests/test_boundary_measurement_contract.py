@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from unittest.mock import patch
+
 from tools.tests.photo_geometry_support import *
 from x5crop.detection.photo_geometry.sequence_direction_measurement import (
     sequence_run_direction_measurement,
@@ -7,6 +9,89 @@ from x5crop.detection.photo_geometry.sequence_direction_measurement import (
 
 
 class BoundaryMeasurementContractTest(unittest.TestCase):
+    def test_impossible_sequence_family_skips_robust_refit(self) -> None:
+        def transition(
+            identity: str,
+            *,
+            trace_ordinal: int,
+            trace: int,
+            coordinate: float,
+        ) -> PhotoBoundaryTransition:
+            return PhotoBoundaryTransition(
+                transition_id=ObservationId(identity),
+                query_id="query:impossible-family",
+                trace_ordinal=trace_ordinal,
+                trace_coordinate_px=trace,
+                canonical_coordinate_px=coordinate,
+                localization_interval_px=FiniteInterval(
+                    coordinate - 0.5,
+                    coordinate + 0.5,
+                ),
+                physical_position_interval_px=FiniteInterval(
+                    coordinate - 0.5,
+                    coordinate + 0.5,
+                ),
+                gradient_z=10.0,
+                tone_z=1.0,
+                texture_z=1.0,
+                left_tone_mean=10.0,
+                right_tone_mean=20.0,
+                left_texture_mean=1.0,
+                right_texture_mean=2.0,
+                polarity=-1,
+                peak_width_px=1.0,
+                prominence=10.0,
+                local_noise=0.0,
+            )
+
+        values = (
+            transition("family:left:0", trace_ordinal=0, trace=0, coordinate=100.0),
+            transition("family:left:1", trace_ordinal=1, trace=10, coordinate=100.0),
+            transition("family:right:0", trace_ordinal=2, trace=20, coordinate=200.0),
+            transition("family:right:1", trace_ordinal=3, trace=30, coordinate=200.0),
+        )
+        transitions = {str(item.transition_id): item for item in values}
+
+        def run(name: str, selected: tuple[int, int]) -> ProfileRun:
+            chosen = tuple(values[index] for index in selected)
+            return ProfileRun(
+                run_id=name,
+                coordinate_interval_px=FiniteInterval(
+                    min(item.coordinate_px for item in chosen) - 0.5,
+                    max(item.coordinate_px for item in chosen) + 0.5,
+                ),
+                transition_ids=tuple(item.transition_id for item in chosen),
+                trace_coordinates_px=tuple(
+                    item.trace_coordinate_px for item in chosen
+                ),
+                role_hint=None,
+                qualified_anchor_roles=(BoundaryRole.START,),
+                support_fraction=0.5,
+                continuous_support_fraction=0.5,
+                fit_residual_px=0.0,
+                evidence_strength=10.0,
+                pair_qualified=True,
+            )
+
+        profile = BasicAxisProfile(
+            "sequence",
+            300,
+            (0, 10, 20, 30),
+            (run("family:left", (0, 1)), run("family:right", (2, 3))),
+        )
+        with patch(
+            "x5crop.detection.photo_geometry.sequence_edge_families.fit_transition_line"
+        ) as robust_refit:
+            merged = merge_sequence_edge_families(
+                profile,
+                transitions,
+                reference_trace_px=15.0,
+                boundary_axis_scale_px_per_mm=PositiveInterval(10.0, 10.0),
+            )
+
+        robust_refit.assert_not_called()
+        self.assertEqual(merged.runs, profile.runs)
+
     def test_sequence_direction_full_interval_contains_fit_at_angle_limit(
         self,
     ) -> None:

@@ -19,7 +19,7 @@ from .model import (
 )
 from .measurement_model import PhotoBoundaryTransition
 from .observation_types import BasicAxisProfile, ProfileRun
-from .robust_line_fit import fit_transition_line
+from .robust_line_fit import fit_transition_line, physical_slope_interval
 from .sequence_direction_measurement import sequence_run_direction_measurement
 from .trace_support import (
     continuous_trace_support_fraction,
@@ -100,6 +100,12 @@ def merge_sequence_edge_families(
             )
             for identity in identities
         )
+        maximum_slope = math.tan(
+            math.radians(spec.maximum_measurable_line_angle_degrees)
+        )
+        if physical_slope_interval(points, maximum_slope) is None:
+            fit_cache[key] = None
+            return None
         fitted = fit_transition_line(
             points, boundary_axis_scale_px_per_mm.maximum, spec
         )
