@@ -14,6 +14,7 @@ from tools.regression.platform_receipt import (
     PLATFORM_RECEIPT_SCHEMA,
     TARGET_APPLE_SILICON,
     TARGET_WINDOWS_X64,
+    _run_verifier,
     validate_platform_receipt,
 )
 
@@ -97,6 +98,25 @@ def _receipt(target: str, performance_name: str, performance_sha: str) -> dict:
 
 
 class PlatformReceiptContractTests(unittest.TestCase):
+    def test_verifier_receipt_hashes_the_completed_output(self) -> None:
+        output = "full verifier passed\n"
+        with (
+            mock.patch(
+                "tools.regression.platform_receipt.shutil.which",
+                return_value="/bin/bash",
+            ),
+            mock.patch(
+                "tools.regression.platform_receipt.subprocess.run",
+                return_value=mock.Mock(returncode=0, stdout=output),
+            ),
+        ):
+            receipt = _run_verifier("full")
+        self.assertEqual(receipt["status"], "passed")
+        self.assertEqual(
+            receipt["output_sha256"],
+            hashlib.sha256(output.encode("utf-8")).hexdigest(),
+        )
+
     def test_receipt_target_is_derived_and_not_a_cli_argument(self) -> None:
         source = Path("tools/regression/platform_receipt.py").read_text(
             encoding="utf-8"
