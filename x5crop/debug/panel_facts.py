@@ -5,7 +5,7 @@ from __future__ import annotations
 from PIL import Image
 
 from ..detection.final.model import FinalDetection
-from ..detection.photo_geometry.output_model import SafeCropEnvelope
+from ..detection.photo_geometry.output_model import OutputFootprint
 from ..detection.photo_geometry.template_placement import TemplateFrame
 from ..detection.workspace import DetectionWorkspace
 from .canvas import DebugRenderCache, cached_source_image
@@ -71,10 +71,10 @@ def runner_geometry_by_identity(
     return _placement_geometry_by_identity(detection, placement_ids)
 
 
-def safe_crop_envelopes(
+def output_footprints(
     detection: FinalDetection,
-) -> tuple[SafeCropEnvelope, ...]:
-    return detection.candidate.geometry.safe_crop_envelopes
+) -> tuple[OutputFootprint, ...]:
+    return detection.candidate.geometry.output_footprints
 
 
 def selection_summary(detection: FinalDetection) -> str:

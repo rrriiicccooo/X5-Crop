@@ -506,10 +506,6 @@ def prepare_template_lane(
             top_bindings=cross.top_bindings,
             bottom_bindings=cross.bottom_bindings,
             boundary_axis=height_axis,
-            parallel_direction_tolerance_degrees=(
-                2.0
-                * measurement_plan.precision_budget.direction_solo_limit_degrees
-            ),
             maximum_registered_runs=measurement_plan.cross_bounds.max_registered_runs,
             maximum_fitted_observations=measurement_plan.cross_bounds.max_fitted_observations,
             maximum_compatible_pairs=measurement_plan.cross_bounds.max_compatible_pairs,

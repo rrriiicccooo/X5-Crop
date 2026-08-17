@@ -291,7 +291,7 @@ class PhysicalAuthorityContractTest(unittest.TestCase):
         assert resolved is not None
         self.assertEqual(resolved.output_count, 10)
         self.assertIn(
-            "unsupported_dual_partial_count",
+            "unsupported_dual_count",
             workspace.source_core.incomplete_reasons,
         )
         candidate = choose_detection(workspace, configuration)

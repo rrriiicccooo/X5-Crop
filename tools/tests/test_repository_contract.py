@@ -244,7 +244,6 @@ class RepositoryContractTest(unittest.TestCase):
             "x5crop.detection.photo_geometry.template_placement",
             "x5crop.detection.photo_geometry.template_selection",
             "x5crop.detection.photo_geometry.template_output",
-            "x5crop.detection.photo_geometry.template_precision",
             "x5crop.detection.photo_geometry.template_gate",
             "x5crop.detection.photo_geometry.template_runtime_model",
         ):

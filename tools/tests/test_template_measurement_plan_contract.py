@@ -168,31 +168,15 @@ class TemplateMeasurementPlanContractTest(unittest.TestCase):
         with self.assertRaises(TypeError):
             FORMATS["new-format"] = format_spec("135")  # type: ignore[index]
 
-    def test_precision_budget_is_derived_before_pixels(self) -> None:
+    def test_output_budget_is_not_a_measurement_plan_authority(self) -> None:
         plan = _plan()
-        self.assertAlmostEqual(
-            plan.precision_budget.sequence_side_limit_px,
-            plan.template_spec.frame_width_px.minimum * 0.05,
-        )
-        self.assertAlmostEqual(
-            plan.precision_budget.cross_side_limit_px,
-            plan.template_spec.frame_height_px.minimum * 0.03,
-        )
-        self.assertEqual(plan.precision_budget.maximum_pitch_steps, 5)
-        self.assertAlmostEqual(
-            plan.precision_budget.pitch_step_solo_limit_px or 0.0,
-            plan.precision_budget.sequence_side_limit_px / 5.0,
-        )
-
-    def test_more_slots_cannot_widen_pitch_precision(self) -> None:
-        six = _plan()
-        twelve = _plan("half", count=12, full_count=12)
-        assert six.precision_budget.pitch_step_solo_limit_px is not None
-        assert twelve.precision_budget.pitch_step_solo_limit_px is not None
-        self.assertLessEqual(
-            twelve.precision_budget.pitch_step_solo_limit_px,
-            six.precision_budget.pitch_step_solo_limit_px,
-        )
+        self.assertFalse(hasattr(plan, "precision_budget"))
+        source = (
+            Path(__file__).parents[2]
+            / "x5crop/detection/photo_geometry/template_measurement_plan.py"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn("OUTPUT_PROTECTION_SPEC", source)
+        self.assertNotIn("solo_limit", source)
 
     def test_scale_transform_keeps_physical_plan_but_updates_pixel_projection(self) -> None:
         base = _plan(scale=10.0, box=Box(0, 0, 3600, 2400))
@@ -208,18 +192,6 @@ class TemplateMeasurementPlanContractTest(unittest.TestCase):
         self.assertNotEqual(
             base.pixel_bounds.max_coordinate_samples,
             doubled.pixel_bounds.max_coordinate_samples,
-        )
-        self.assertAlmostEqual(
-            doubled.precision_budget.sequence_side_limit_px,
-            base.precision_budget.sequence_side_limit_px * 2.0,
-        )
-        self.assertAlmostEqual(
-            doubled.precision_budget.cross_side_limit_px,
-            base.precision_budget.cross_side_limit_px * 2.0,
-        )
-        self.assertAlmostEqual(
-            doubled.precision_budget.direction_solo_limit_degrees,
-            base.precision_budget.direction_solo_limit_degrees,
         )
 
     def test_vertical_projection_uses_canonical_work_extents_once(self) -> None:

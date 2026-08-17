@@ -12,7 +12,11 @@ from x5crop.detection.output_geometry import (
     SharedStripDirectionResolution,
     output_transform_assessment,
 )
-from x5crop.detection.photo_geometry.model import AuthoritySide, BoundaryAxis
+from x5crop.detection.photo_geometry.model import (
+    AuthoritySide,
+    BoundaryAxis,
+    BoundaryRole,
+)
 from x5crop.detection.photo_geometry.model import QueryPurpose
 from x5crop.detection.photo_geometry.measurement_model import (
     PhotoBoundaryCoverageReceipt,
@@ -20,7 +24,11 @@ from x5crop.detection.photo_geometry.measurement_model import (
     PhotoBoundaryMeasurementSet,
 )
 from x5crop.detection.photo_geometry.output_model import (
+    BoundaryProtectionFact,
     FootprintSaturationFact,
+    JointPlacementEnvelope,
+    OutputBoundaryUse,
+    OutputFootprint,
 )
 from x5crop.detection.photo_geometry.search_model import (
     SequenceAnchorDiscoveryDomain,
@@ -176,8 +184,9 @@ def _unresolved_result() -> PhotoGeometryDetectionResult:
         prepared=prepared,
         placement_competition=competition,
         selected_placement=None,
-        safe_crop_envelopes=(),
+        output_footprints=(),
         direct_use_budget_assessments=(),
+        holder_fill_assessment=None,
         content_veto_facts=(),
         work=TemplatePlacementWorkReceipt(0, 0, 0, 0),
     )
@@ -255,13 +264,13 @@ class TemplateRuntimeModelContractTest(unittest.TestCase):
 
     def test_unsupported_result_exposes_no_selected_outputs(self) -> None:
         result = _unresolved_result()
-        self.assertEqual(result.safe_crop_envelopes, ())
+        self.assertEqual(result.output_footprints, ())
         self.assertEqual(result.direct_use_budget_assessments, ())
         self.assertEqual(result.output_transforms, ())
         with self.assertRaises(TypeError):
             result.assessment_facts["new"] = object()  # type: ignore[index]
 
-    def test_safe_envelopes_are_selected_only(self) -> None:
+    def test_output_footprints_are_selected_only(self) -> None:
         prepared = _prepared()
         competition = TemplatePlacementCompetition(
             placements=(),
@@ -270,15 +279,16 @@ class TemplateRuntimeModelContractTest(unittest.TestCase):
             state=EvidenceState.UNAVAILABLE,
             failure=failure_fact(GateGap.PLACEMENT_UNRESOLVED),
         )
-        envelope = _envelope()
+        output = _output_footprint()
         with self.assertRaises(ValueError):
             TemplateLaneReconstruction(
                 lane_id="lane:0",
                 prepared=prepared,
                 placement_competition=competition,
                 selected_placement=None,
-                safe_crop_envelopes=(envelope,),
+                output_footprints=(output,),
                 direct_use_budget_assessments=(),
+                holder_fill_assessment=None,
                 content_veto_facts=(),
                 work=TemplatePlacementWorkReceipt(0, 0, 0, 0),
             )
@@ -329,25 +339,39 @@ class TemplateRuntimeModelContractTest(unittest.TestCase):
         self.assertFalse(any(any(token in name for token in forbidden) for name in names))
 
 
-def _envelope():
-    from x5crop.detection.photo_geometry.output_model import SafeCropEnvelope
-
+def _output_footprint():
     polygon = ((0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0))
     saturation = FootprintSaturationFact(
         authority_side=AuthoritySide.LEFT,
         clipped_requirements=(ClippedRequirement.VISIBLE_PLACEMENT,),
     )
-    return SafeCropEnvelope(
-        geometry_id="geometry:0",
+    envelope = JointPlacementEnvelope(
+        placement_id="placement:0",
+        projection_id="projection:0",
         lane_id="lane:0",
         lane_ordinal=1,
-        placement_source_footprint=polygon,
+        boundary_use=OutputBoundaryUse.APERTURE_PAIR,
+        canonical_source_footprint=polygon,
+        feasible_source_footprint=polygon,
+        extreme_evaluation_count=8,
+    )
+    return OutputFootprint(
+        geometry_id="geometry:0",
+        envelope=envelope,
         required_source_footprint=polygon,
-        constrained_source_footprint=polygon,
+        boundary_protections=tuple(
+            BoundaryProtectionFact(role, 0.0, 0.0, 0.0, 0.0)
+            for role in (
+                BoundaryRole.START,
+                BoundaryRole.END,
+                BoundaryRole.TOP,
+                BoundaryRole.BOTTOM,
+            )
+        ),
         saturation_facts=(saturation,),
         sampling_authority_box=Box(0, 0, 10, 10),
         authority_profile_id="135_standard",
-        mapped_output_box=Box(0, 0, 10, 10),
+        mapped_output_box=None,
     )
 
 

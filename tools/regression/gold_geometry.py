@@ -11,7 +11,7 @@ from x5crop.detection.evidence.content_occupancy import (
 from x5crop.detection.photo_geometry.model import (
     PHOTO_BOUNDARY_MEASUREMENT_SPEC,
 )
-from x5crop.formats import DIRECT_USE_BUDGET_SPEC, format_spec
+from x5crop.formats import OUTPUT_PROTECTION_SPEC, format_spec
 
 
 def _contains_point(
@@ -144,10 +144,10 @@ def _assert_direct_use_budget(
     )
     if (
         sequence_expansion
-        > sequence_span * DIRECT_USE_BUDGET_SPEC.sequence_ratio_per_side
+        > sequence_span * OUTPUT_PROTECTION_SPEC.maximum_expansion_ratio_per_side
         + pixel_allowance
         or cross_expansion
-        > cross_span * DIRECT_USE_BUDGET_SPEC.cross_ratio_per_side
+        > cross_span * OUTPUT_PROTECTION_SPEC.maximum_expansion_ratio_per_side
         + pixel_allowance
     ):
         raise ValueError(
@@ -224,7 +224,7 @@ def ordered_gold_mapping(
             for index in range(next_output, len(output_geometries))
             if safely_covers(
                 polygon,
-                output_geometries[index]["constrained_source_footprint"],
+                output_geometries[index]["required_source_footprint"],
             )
         )
         if not matches:
@@ -242,7 +242,7 @@ def validate_approved_geometry(
     sample_id = str(record["sample_id"])
     gold = record["confirmed_geometry"]
     frames = gold["frames"]
-    outputs = report["output"]["finalization"]["resolved_output_geometries"]
+    outputs = report["output"]["finalization"]["output_footprints"]
     mapping = ordered_gold_mapping(
         frames,
         outputs,
@@ -253,7 +253,7 @@ def validate_approved_geometry(
         raise ValueError(f"{sample_id} approved output cuts confirmed content")
     for frame, output_index in zip(frames, mapping, strict=True):
         polygon = frame["polygon_source_pixel_center_coordinates"]
-        output_polygon = outputs[output_index]["constrained_source_footprint"]
+        output_polygon = outputs[output_index]["required_source_footprint"]
         _assert_direct_use_budget(
             sample_id,
             int(frame["frame_index"]),

@@ -64,8 +64,8 @@ def report_record_for_final_detection(
                 "output_transforms": typed_read_model(
                     detection.output_transforms
                 ),
-                "resolved_output_geometries": typed_read_model(
-                    detection.resolved_output_geometries
+                "output_footprints": typed_read_model(
+                    detection.output_footprints
                 ),
                 "sampling_authority_boxes": typed_read_model(
                     detection.sampling_authority_boxes

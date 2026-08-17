@@ -16,7 +16,7 @@ class GateGap(str, Enum):
     HOLDER_FULL_COUNT_UNRESOLVED = "holder_full_count_unresolved"
     HOLDER_IDENTITY_UNRESOLVED = "holder_identity_unresolved"
     OUTPUT_SLOT_COUNT_UNAVAILABLE = "output_slot_count_unavailable"
-    UNSUPPORTED_DUAL_COUNT = "unsupported_dual_partial_count"
+    UNSUPPORTED_DUAL_COUNT = "unsupported_dual_count"
     COMPLETE_PLACEMENT_UNAVAILABLE = "complete_placement_unavailable"
     PRODUCER_BOUND_EXCEEDED = "producer_bound_exceeded"
     SHARED_STRIP_DIRECTION_UNAVAILABLE = "shared_strip_direction_unavailable"
@@ -29,10 +29,10 @@ class GateGap(str, Enum):
     CONTENT_VETO_REJECTED = "content_veto_rejected"
     LOCAL_ADVANCE_UNRESOLVED = "local_advance_unresolved"
     SLOT_ORDINAL_ASSIGNMENT_UNRESOLVED = "slot_ordinal_assignment_unresolved"
+    DUAL_LANE_NOT_FILLED = "dual_lane_not_filled"
+    DUAL_LANE_FILL_UNRESOLVED = "dual_lane_fill_unresolved"
     SOURCE_LANE_AUTHORITY_INVALID = "source_lane_authority_invalid"
-    SELECTED_PLACEMENT_CONTAINMENT_UNAVAILABLE = (
-        "selected_placement_containment_unavailable"
-    )
+    OUTPUT_FOOTPRINT_UNAVAILABLE = "output_footprint_unavailable"
     DIRECT_USE_BUDGET_EXCEEDED = "direct_use_budget_exceeded"
     DIRECT_USE_BUDGET_UNAVAILABLE = "direct_use_budget_unavailable"
     OUTPUT_TRANSFORM_UNAVAILABLE = "output_transform_unavailable"
@@ -59,6 +59,7 @@ class MinimumMissingFact(str, Enum):
     CONTENT_SAFE_PLACEMENT = "content_safe_placement"
     DIRECT_USE_PRECISION = "direct_use_precision"
     SOURCE_PHYSICAL_COMPATIBILITY = "source_physical_compatibility"
+    FILLED_DUAL_LAYOUT = "filled_dual_layout"
 
 
 class RecoveryAction(str, Enum):
@@ -129,6 +130,16 @@ def failure_fact(
             MinimumMissingFact.LOCAL_GAP_ORDINAL,
             RecoveryAction.REVIEW_PLACEMENT,
         ),
+        GateGap.DUAL_LANE_NOT_FILLED: (
+            FailureRecovery.UNRECOVERABLE,
+            MinimumMissingFact.FILLED_DUAL_LAYOUT,
+            RecoveryAction.REVIEW_PLACEMENT,
+        ),
+        GateGap.DUAL_LANE_FILL_UNRESOLVED: (
+            FailureRecovery.UNRECOVERABLE,
+            MinimumMissingFact.FILLED_DUAL_LAYOUT,
+            RecoveryAction.REVIEW_PLACEMENT,
+        ),
         GateGap.CONTENT_VETO_REJECTED: (
             FailureRecovery.UNRECOVERABLE,
             MinimumMissingFact.CONTENT_SAFE_PLACEMENT,
@@ -182,6 +193,7 @@ GATE_CHECK_DEPENDENCIES: dict[str, tuple[str, ...]] = {
         "content_protection",
         "local_advance_authority",
     ),
+    "dual_lane_fill": ("selected_placement",),
     "shared_strip_direction": (
         "source_scan_geometry",
         "selected_placement",
@@ -190,11 +202,12 @@ GATE_CHECK_DEPENDENCIES: dict[str, tuple[str, ...]] = {
     "cross_authority": ("selected_placement",),
     "shared_authority": ("selected_placement",),
     "slot_ordinal_assignment": ("complete_placement",),
-    "selected_only_envelope": (
+    "selected_output_footprint": (
         "selected_placement",
+        "dual_lane_fill",
         "source_lane_authority",
     ),
-    "direct_use_budget": ("selected_only_envelope",),
+    "direct_use_budget": ("selected_output_footprint",),
     "transform_sampling": (
         "selected_placement",
         "source_lane_authority",

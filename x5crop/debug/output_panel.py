@@ -14,7 +14,7 @@ from .canvas import DebugRenderCache
 from .panel_facts import (
     axis_authority_summaries,
     root_gate_summary,
-    safe_crop_envelopes,
+    output_footprints,
     selection_summary,
     source_image,
 )
@@ -118,52 +118,54 @@ def protected_output_panel(
     }
     overlay = Image.new("RGBA", panel.size, (0, 0, 0, 0))
     overlay_draw = ImageDraw.Draw(overlay)
-    envelopes = safe_crop_envelopes(detection)
+    footprints = output_footprints(detection)
     budget_labels: list[tuple[int, str]] = []
-    for envelope in envelopes:
+    for output in footprints:
+        envelope = output.envelope
         identity = identities[(envelope.lane_id, envelope.lane_ordinal)]
         color = frame_color(identity.global_output_ordinal)
         fill_polygon(
             overlay_draw,
-            envelope.placement_source_footprint,
+            envelope.canonical_source_footprint,
             color,
             style.frame_fill_alpha,
             selected_viewport=selected_viewport,
         )
         fill_polygon(
             overlay_draw,
-            envelope.constrained_source_footprint,
+            envelope.feasible_source_footprint,
             color,
             style.safe_fill_alpha,
             selected_viewport=selected_viewport,
         )
     panel = Image.alpha_composite(panel.convert("RGBA"), overlay).convert("RGB")
     draw = ImageDraw.Draw(panel)
-    for envelope in envelopes:
+    for output in footprints:
+        envelope = output.envelope
         identity = identities[(envelope.lane_id, envelope.lane_ordinal)]
         color = frame_color(identity.global_output_ordinal)
         draw_dashed_polyline(
             draw,
-            selected_viewport.polygon(envelope.required_source_footprint),
+            selected_viewport.polygon(output.required_source_footprint),
             style.safety_envelope_color,
             style.retained_line_width,
             style.line_dash_length,
             style.line_dash_gap,
             closed=True,
         )
-        constrained = selected_viewport.polygon(
-            envelope.constrained_source_footprint
+        feasible = selected_viewport.polygon(
+            envelope.feasible_source_footprint
         )
         draw.line(
-            constrained + (constrained[0],),
+            feasible + (feasible[0],),
             fill=color,
             width=style.frame_line_width,
         )
-        budget = budgets.get(envelope.geometry_id)
+        budget = budgets.get(output.geometry_id)
         if budget is not None and budget.state.value == "contradicted":
             panel = draw_hatched_polygon(
                 panel,
-                constrained,
+                feasible,
                 style.review_color,
                 style.budget_hatch_border_width,
             )
@@ -177,18 +179,18 @@ def protected_output_panel(
                 (
                     max(
                         target_box[0],
-                        int(math.floor(min(point[0] for point in constrained))),
+                        int(math.floor(min(point[0] for point in feasible))),
                     ),
                     f"F{identity.global_output_ordinal} · BUDGET {failed_roles}",
                 )
             )
         left = max(
             target_box[0] + 4,
-            int(math.floor(min(point[0] for point in constrained))) + 4,
+            int(math.floor(min(point[0] for point in feasible))) + 4,
         )
         top = max(
             target_box[1] + 4,
-            int(math.floor(min(point[1] for point in constrained))) + 4,
+            int(math.floor(min(point[1] for point in feasible))) + 4,
         )
         draw_label_chip(
             draw,
@@ -213,13 +215,13 @@ def protected_output_panel(
         )
         previous_right = x + label_width
     footer_font = font(style.annotation_font_size)
-    if envelopes:
+    if footprints:
         footer = (
-            "RETAINED / REQUIRED · SAFETY ENVELOPE    "
-            "FINAL SAFE OUTPUT · COLORED OVERLAY"
+            "PLACEMENT / REQUIRED · OUTPUT FOOTPRINT    "
+            "FINAL OUTPUT · COLORED OVERLAY"
         )
     else:
-        footer = "NO SAFETY ENVELOPE · NO OFFICIAL OUTPUT"
+        footer = "NO OUTPUT FOOTPRINT · NO OFFICIAL OUTPUT"
         note = "NO SAFE OUTPUT · SOURCE ATOMIC · 0 OFFICIAL TIFF"
         note_font = font(style.header_detail_font_size)
         note_width = text_width(draw, note, note_font)

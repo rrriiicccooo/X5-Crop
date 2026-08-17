@@ -7,9 +7,9 @@ from ...geometry.affine import AffineCoordinateTransform
 from ..decision.model import DecisionGateAssessment
 from ..output_geometry import OutputTransformAssessment
 from ..photo_geometry.output_model import (
+    OutputFootprint,
     OutputSlotIdentity,
     ResolvedOutputSlots,
-    SafeCropEnvelope,
 )
 from ..pipeline import PhotoGeometryCandidate
 from ..source_core import SourceCoreEvidence
@@ -31,7 +31,7 @@ class FinalDetection:
     output_slot_identities: tuple[OutputSlotIdentity, ...]
     source_transform_assessment: OutputTransformAssessment
     output_transforms: tuple[AffineCoordinateTransform, ...]
-    resolved_output_geometries: tuple[SafeCropEnvelope, ...]
+    output_footprints: tuple[OutputFootprint, ...]
     sampling_authority_boxes: tuple[Box, ...]
     final_boxes: tuple[Box, ...]
 
@@ -61,7 +61,7 @@ class FinalDetection:
                 or self.source_transform_assessment.transform is None
                 or len(self.output_transforms) != expected
                 or len(self.output_slot_identities) != expected
-                or len(self.resolved_output_geometries) != expected
+                or len(self.output_footprints) != expected
                 or len(self.sampling_authority_boxes) != expected
                 or len(self.final_boxes) != expected
                 or any(not box.valid() for box in self.sampling_authority_boxes)
@@ -74,7 +74,7 @@ class FinalDetection:
         elif (
             self.decision.status != "needs_review"
             or self.output_transforms
-            or self.resolved_output_geometries
+            or self.output_footprints
             or self.sampling_authority_boxes
             or self.final_boxes
         ):

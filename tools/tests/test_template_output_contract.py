@@ -15,7 +15,7 @@ from x5crop.domain import (
     ObservationId,
     PositiveInterval,
 )
-from x5crop.formats import DIRECT_USE_BUDGET_SPEC
+from x5crop.formats import OUTPUT_PROTECTION_SPEC
 from x5crop.formats.scan_canvas import ScanCanvasPhysicalSpec
 from x5crop.geometry.affine import AffineCoordinateTransform
 from x5crop.detection.evidence.scan_canvas import (
@@ -25,9 +25,17 @@ from x5crop.detection.evidence.scan_canvas import (
     ScanCanvasProfileMatch,
 )
 from x5crop.detection.photo_geometry.model import AuthoritySide, BoundaryRole
+from x5crop.detection.photo_geometry.output_model import OutputBoundaryUse
+from x5crop.detection.photo_geometry.template_cross_model import (
+    CrossFit,
+    EnclosingSupportPair,
+)
 from x5crop.detection.photo_geometry.template_output import (
-    safe_crop_envelope_from_template_placement,
+    output_footprint_from_template_placement,
     template_direct_use_budget_assessment,
+)
+from x5crop.detection.photo_geometry.template_feasible_geometry import (
+    project_selected_placement,
 )
 from x5crop.detection.source_core import (
     SourceLaneEvidence,
@@ -35,6 +43,7 @@ from x5crop.detection.source_core import (
 )
 from tools.tests.test_template_placement_contract import (
     _compose,
+    _binding,
     _cross,
     _direction,
     _sequence,
@@ -50,6 +59,44 @@ def _placement():
         _sequence(template),
         _cross(template, direction=direction),
     )
+
+
+def _enclosing_support_placement():
+    template = _template(1)
+    direction = _direction()
+    top = _binding(BoundaryRole.TOP, "support-top", 20.0)
+    bottom = _binding(BoundaryRole.BOTTOM, "support-bottom", 284.0)
+    support = EnclosingSupportPair(
+        top_canonical_px=20.0,
+        bottom_canonical_px=284.0,
+        top_full_interval_px=FiniteInterval.exact(20.0),
+        bottom_full_interval_px=FiniteInterval.exact(284.0),
+        top_provenance_ids=(top.observation_id,),
+        bottom_provenance_ids=(bottom.observation_id,),
+        observed_span_px=FiniteInterval.exact(264.0),
+    )
+    cross = CrossFit(
+        template_id=template.template_id,
+        lane_reference_trace_px=150.0,
+        fixed_height_px=FiniteInterval.exact(240.0),
+        top_canonical_px=32.0,
+        bottom_canonical_px=272.0,
+        top_fit_interval_px=FiniteInterval.exact(32.0),
+        bottom_fit_interval_px=FiniteInterval.exact(272.0),
+        top_full_interval_px=FiniteInterval.exact(32.0),
+        bottom_full_interval_px=FiniteInterval.exact(272.0),
+        direct_bindings=(top, bottom),
+        inferred_bindings=(),
+        selected_direction=direction,
+        direct_pair=True,
+        shared_trace_support_count=3,
+        continuous_support_fraction=1.0,
+        residual_sum_px=0.0,
+        center_compatible=True,
+        boundary_use=OutputBoundaryUse.ENCLOSING_SUPPORT_PAIR,
+        enclosing_support_pair=support,
+    )
+    return _compose(template, _sequence(template), cross, direction=direction)
 
 
 def _lane(lane_id: str = "lane:test") -> SourceLaneEvidence:
@@ -98,25 +145,57 @@ def _lane(lane_id: str = "lane:test") -> SourceLaneEvidence:
 
 
 class TemplateOutputContractTest(unittest.TestCase):
-    def test_selected_placement_produces_supported_safe_output(self) -> None:
+    def test_enclosing_support_uses_no_cross_bleed_and_its_own_height_limit(self) -> None:
+        placement = _enclosing_support_placement()
+        output = output_footprint_from_template_placement(
+            placement,
+            project_selected_placement(placement),
+            lane=_lane(),
+            lane_ordinal=1,
+            layout="horizontal",
+            transform=AffineCoordinateTransform.identity(500, 400),
+        )
+        self.assertEqual(
+            output.envelope.boundary_use,
+            OutputBoundaryUse.ENCLOSING_SUPPORT_PAIR,
+        )
+        cross_protections = tuple(
+            item
+            for item in output.boundary_protections
+            if item.role in {BoundaryRole.TOP, BoundaryRole.BOTTOM}
+        )
+        self.assertTrue(all(item.bleed_px == 0.0 for item in cross_protections))
+        assessment = template_direct_use_budget_assessment(placement, output)
+        self.assertEqual(assessment.state, EvidenceState.SUPPORTED)
+        self.assertAlmostEqual(assessment.enclosing_support_height_ratio, 1.1)
+        self.assertTrue(assessment.enclosing_support_within_limit)
+        self.assertTrue(
+            all(
+                not item.limit_applies
+                for item in assessment.edge_assessments
+                if item.role in {BoundaryRole.TOP, BoundaryRole.BOTTOM}
+            )
+        )
+
+    def test_selected_placement_produces_supported_output_footprint(self) -> None:
         placement = _placement()
         transform = AffineCoordinateTransform.identity(500, 400)
-        envelope = safe_crop_envelope_from_template_placement(
+        output = output_footprint_from_template_placement(
             placement,
+            project_selected_placement(placement),
             lane=_lane(),
             lane_ordinal=1,
             layout="horizontal",
             transform=transform,
         )
         self.assertEqual(
-            envelope.placement_source_footprint,
+            output.envelope.canonical_source_footprint,
             placement.frames[0].canonical_source_polygon,
         )
-        self.assertEqual(envelope.saturation_facts, ())
+        self.assertEqual(output.saturation_facts, ())
         assessment = template_direct_use_budget_assessment(
             placement,
-            envelope,
-            transform,
+            output,
         )
         self.assertEqual(assessment.state, EvidenceState.SUPPORTED)
         self.assertEqual(
@@ -139,38 +218,55 @@ class TemplateOutputContractTest(unittest.TestCase):
             )
         )
 
-    def test_lane_clipping_is_explicit_and_budget_can_contradict(self) -> None:
+    def test_lane_overflow_is_explicit_and_never_clipped(self) -> None:
         placement = _placement()
-        frame = placement.frames[0]
-        unsafe_top = replace(
-            frame.top,
-            full_position_interval_px=FiniteInterval(-20.0, 10.0),
-        )
-        placement = replace(
-            placement,
-            frames=(replace(frame, top=unsafe_top),),
+        lane = _lane()
+        lane = replace(
+            lane,
+            domain=replace(lane.domain, work_box=Box(0, 20, 500, 400)),
         )
         transform = AffineCoordinateTransform.identity(500, 400)
-        envelope = safe_crop_envelope_from_template_placement(
+        output = output_footprint_from_template_placement(
             placement,
-            lane=_lane(),
+            project_selected_placement(placement),
+            lane=lane,
             lane_ordinal=1,
             layout="horizontal",
             transform=transform,
         )
         self.assertIn(
             AuthoritySide.TOP,
-            tuple(item.authority_side for item in envelope.saturation_facts),
+            tuple(item.authority_side for item in output.saturation_facts),
         )
-        self.assertGreaterEqual(
-            min(point[1] for point in envelope.constrained_source_footprint),
-            0.0,
+        self.assertLess(
+            min(point[1] for point in output.required_source_footprint),
+            float(lane.domain.work_box.top),
         )
+        self.assertIsNone(output.mapped_output_box)
         assessment = template_direct_use_budget_assessment(
             placement,
-            envelope,
-            transform,
+            output,
         )
+        self.assertEqual(assessment.state, EvidenceState.SUPPORTED)
+        self.assertTrue(all(item.within_limit for item in assessment.edge_assessments))
+
+    def test_joint_measurement_expansion_above_five_percent_is_rejected(self) -> None:
+        placement = _placement()
+        cross = replace(
+            placement.cross_fit,
+            top_full_interval_px=FiniteInterval(-20.0, 10.0),
+            bottom_full_interval_px=FiniteInterval(220.0, 250.0),
+        )
+        placement = replace(placement, cross_fit=cross)
+        output = output_footprint_from_template_placement(
+            placement,
+            project_selected_placement(placement),
+            lane=_lane(),
+            lane_ordinal=1,
+            layout="horizontal",
+            transform=AffineCoordinateTransform.identity(500, 400),
+        )
+        assessment = template_direct_use_budget_assessment(placement, output)
         self.assertEqual(assessment.state, EvidenceState.CONTRADICTED)
         top = next(
             item
@@ -183,44 +279,47 @@ class TemplateOutputContractTest(unittest.TestCase):
         placement = _placement()
         transform = AffineCoordinateTransform.identity(500, 400)
         with self.assertRaises(ValueError):
-            safe_crop_envelope_from_template_placement(
+            output_footprint_from_template_placement(
                 placement,
+                project_selected_placement(placement),
                 lane=_lane("lane:other"),
                 lane_ordinal=1,
                 layout="horizontal",
                 transform=transform,
             )
-        envelope = safe_crop_envelope_from_template_placement(
+        output = output_footprint_from_template_placement(
             placement,
+            project_selected_placement(placement),
             lane=_lane(),
             lane_ordinal=1,
             layout="horizontal",
             transform=transform,
         )
         tampered = replace(
-            envelope,
-            required_source_footprint=envelope.placement_source_footprint,
+            output,
+            envelope=replace(output.envelope, placement_id="placement:other"),
         )
         with self.assertRaises(ValueError):
             template_direct_use_budget_assessment(
                 placement,
                 tampered,
-                transform,
             )
 
     def test_invalid_ordinal_and_output_extent_fail_without_fallback(self) -> None:
         placement = _placement()
         with self.assertRaises(ValueError):
-            safe_crop_envelope_from_template_placement(
+            output_footprint_from_template_placement(
                 placement,
+                project_selected_placement(placement),
                 lane=_lane(),
                 lane_ordinal=0,
                 layout="horizontal",
                 transform=AffineCoordinateTransform.identity(500, 400),
             )
         with self.assertRaises(ValueError):
-            safe_crop_envelope_from_template_placement(
+            output_footprint_from_template_placement(
                 placement,
+                project_selected_placement(placement),
                 lane=_lane(),
                 lane_ordinal=1,
                 layout="horizontal",
@@ -231,10 +330,17 @@ class TemplateOutputContractTest(unittest.TestCase):
         self.assertEqual(
             tuple(
                 inspect.signature(
-                    safe_crop_envelope_from_template_placement
+                    output_footprint_from_template_placement
                 ).parameters
             ),
-            ("placement", "lane", "lane_ordinal", "layout", "transform"),
+            (
+                "placement",
+                "projection",
+                "lane",
+                "lane_ordinal",
+                "layout",
+                "transform",
+            ),
         )
         self.assertEqual(
             tuple(
@@ -242,10 +348,17 @@ class TemplateOutputContractTest(unittest.TestCase):
                     template_direct_use_budget_assessment
                 ).parameters
             ),
-            ("placement", "envelope", "transform"),
+            ("placement", "output"),
         )
-        self.assertEqual(DIRECT_USE_BUDGET_SPEC.sequence_ratio_per_side, 0.05)
-        self.assertEqual(DIRECT_USE_BUDGET_SPEC.cross_ratio_per_side, 0.03)
+        self.assertEqual(
+            OUTPUT_PROTECTION_SPEC.maximum_expansion_ratio_per_side,
+            0.05,
+        )
+        self.assertEqual(OUTPUT_PROTECTION_SPEC.cross_bleed_mm, 0.25)
+        self.assertAlmostEqual(
+            OUTPUT_PROTECTION_SPEC.sequence_bleed_mm(36.0),
+            0.252,
+        )
         path = (
             Path(__file__).parents[2]
             / "x5crop/detection/photo_geometry/template_output.py"

@@ -128,7 +128,7 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
         self.assertFalse(finalization["frame_export_eligible"])
         self.assertFalse(finalization["frame_export_performed"])
         self.assertEqual(finalization["official_tiff_count"], 0)
-        self.assertEqual(finalization["resolved_output_geometries"], [])
+        self.assertEqual(finalization["output_footprints"], [])
         self.assertEqual(
             record["output"]["tiff_fidelity"]["validation"],
             "not_created",

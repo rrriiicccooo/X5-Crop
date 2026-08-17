@@ -134,7 +134,7 @@ class DebugAnalysisContractTest(unittest.TestCase):
             (grid.canvas_height, style.canvas_width, 3),
         )
 
-    def test_output_panel_reads_saved_placement_and_constrained_footprints(
+    def test_output_panel_reads_selected_joint_and_required_footprints(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -152,19 +152,19 @@ class DebugAnalysisContractTest(unittest.TestCase):
                     _grid(workspace, configuration.diagnostics.style),
                 )
         self.assertFalse(detection.frame_export_eligible)
-        safe_envelopes = detection.candidate.geometry.safe_crop_envelopes
+        outputs = detection.candidate.geometry.output_footprints
         self.assertCountEqual(
             tuple(call.args[1] for call in fill.call_args_list),
             (
                 tuple(
                     footprint
-                    for geometry in safe_envelopes
+                    for output in outputs
                     for footprint in (
-                        geometry.placement_source_footprint,
-                        geometry.constrained_source_footprint,
+                        output.envelope.canonical_source_footprint,
+                        output.envelope.feasible_source_footprint,
                     )
                 )
-                if safe_envelopes
+                if outputs
                 else ()
             ),
         )
@@ -346,7 +346,7 @@ class DebugAnalysisContractTest(unittest.TestCase):
                 )
         self.assertEqual(detection.decision.status, "needs_review")
         self.assertFalse(detection.frame_export_eligible)
-        self.assertEqual(detection.resolved_output_geometries, ())
+        self.assertEqual(detection.output_footprints, ())
         self.assertEqual(fill.call_count, 0)
         shared_title = output_base.call_args.args[3]
         sequence_title = long_axis_base.call_args.args[3]

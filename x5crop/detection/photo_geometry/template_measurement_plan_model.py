@@ -323,32 +323,6 @@ class TemplateWorkBounds:
 
 
 @dataclass(frozen=True)
-class TemplatePrecisionBudget:
-    """Output-derived solo limits; final safety remains selected-only."""
-
-    budget_id: str
-    sequence_side_limit_px: float
-    cross_side_limit_px: float
-    maximum_pitch_steps: int
-    pitch_step_solo_limit_px: float | None
-    direction_solo_limit_degrees: float
-
-    def __post_init__(self) -> None:
-        if (
-            not self.budget_id
-            or self.sequence_side_limit_px <= 0.0
-            or self.cross_side_limit_px <= 0.0
-            or self.maximum_pitch_steps < 0
-            or (
-                self.pitch_step_solo_limit_px is not None
-                and self.pitch_step_solo_limit_px <= 0.0
-            )
-            or self.direction_solo_limit_degrees <= 0.0
-        ):
-            raise ValueError("template precision budget is invalid")
-
-
-@dataclass(frozen=True)
 class TemplateNormalPathStopFacts:
     requires_direct_phase_evidence: bool
     facts: tuple[TemplateStopFact, ...]
@@ -443,7 +417,6 @@ class TemplateMeasurementPlan:
     placement_bounds: TemplatePlacementBounds
     pixel_bounds: TemplatePixelBounds
     work_bounds: TemplateWorkBounds
-    precision_budget: TemplatePrecisionBudget
     normal_path_stop_facts: TemplateNormalPathStopFacts
     physical_identity: str
     plan_identity: str
@@ -496,7 +469,6 @@ class TemplateMeasurementPlan:
             != (("x", "y") if self.layout == "horizontal" else ("y", "x"))
             or not isinstance(self.template_spec, TemplateSpec)
             or not isinstance(self.projected_queries, TemplateProjectedQueryPlan)
-            or not isinstance(self.precision_budget, TemplatePrecisionBudget)
             or self.template_spec.count != self.count
             or not self.query_intents
             or len(self.query_intents) > MAX_QUERY_INTENTS

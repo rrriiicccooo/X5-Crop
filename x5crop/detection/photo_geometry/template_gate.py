@@ -19,6 +19,7 @@ from ..output_geometry import (
 from .measurement_model import PhotoBoundaryMeasurementField
 from .output_model import ResolvedOutputSlots
 from .template_cross_model import CrossFitStatus
+from .template_holder_fill import HolderFillState
 from .template_model import LocalAdvanceKind
 from .template_phase_model import PhaseFailureKind, PhaseFitStatus
 from .template_runtime_model import TemplateLaneReconstruction, TemplateSourceSelection
@@ -106,6 +107,21 @@ def build_template_gate(
     complete = all(lane.placement_competition.placements for lane in reconstructions)
     content_rejected = any(lane.content_veto_facts for lane in reconstructions)
     selected = source_selection.state == EvidenceState.SUPPORTED
+    fill_states = tuple(
+        lane.holder_fill_assessment.state
+        for lane in reconstructions
+        if lane.holder_fill_assessment is not None
+    )
+    if not selected or len(fill_states) != len(reconstructions):
+        dual_fill_fact = unavailable(GateGap.DUAL_LANE_FILL_UNRESOLVED)
+    elif len(reconstructions) == 1:
+        dual_fill_fact = supported()
+    elif any(state == HolderFillState.NOT_FILLED for state in fill_states):
+        dual_fill_fact = contradicted(GateGap.DUAL_LANE_NOT_FILLED)
+    elif any(state == HolderFillState.UNRESOLVED for state in fill_states):
+        dual_fill_fact = unavailable(GateGap.DUAL_LANE_FILL_UNRESOLVED)
+    else:
+        dual_fill_fact = supported()
     local_phase_failure = next(
         (
             lane.prepared.phase_competition
@@ -134,8 +150,13 @@ def build_template_gate(
             ),
         )
     )
-    envelope_count = sum(len(lane.safe_crop_envelopes) for lane in reconstructions)
-    envelope_complete = selected and envelope_count == resolved.output_slot_count
+    output_count = sum(len(lane.output_footprints) for lane in reconstructions)
+    output_complete = selected and output_count == resolved.output_slot_count
+    output_safe = output_complete and all(
+        not output.saturation_facts and output.mapped_output_box is not None
+        for lane in reconstructions
+        for output in lane.output_footprints
+    )
     budgets = tuple(
         item
         for lane in reconstructions
@@ -145,7 +166,7 @@ def build_template_gate(
         contradicted(GateGap.DIRECT_USE_BUDGET_EXCEEDED)
         if any(item.state == EvidenceState.CONTRADICTED for item in budgets)
         else supported()
-        if envelope_complete
+        if output_complete
         and len(budgets) == resolved.output_slot_count
         and all(item.state == EvidenceState.SUPPORTED for item in budgets)
         else unavailable(GateGap.DIRECT_USE_BUDGET_UNAVAILABLE)
@@ -216,21 +237,24 @@ def build_template_gate(
             if selected
             else unavailable(selection_gap, selection_failure)
         ),
+        "dual_lane_fill": dual_fill_fact,
         "slot_ordinal_assignment": (
             supported()
             if complete
             else unavailable(GateGap.SLOT_ORDINAL_ASSIGNMENT_UNRESOLVED)
         ),
         "source_lane_authority": supported(),
-        "selected_only_envelope": (
+        "selected_output_footprint": (
             supported()
-            if envelope_complete
-            else unavailable(GateGap.SELECTED_PLACEMENT_CONTAINMENT_UNAVAILABLE)
+            if output_safe
+            else contradicted(GateGap.OUTPUT_FOOTPRINT_UNAVAILABLE)
+            if output_complete
+            else unavailable(GateGap.OUTPUT_FOOTPRINT_UNAVAILABLE)
         ),
         "direct_use_budget": budget_fact,
         "transform_sampling": (
             supported()
-            if envelope_complete and transforms_complete
+            if output_complete and transforms_complete
             else unavailable(GateGap.OUTPUT_TRANSFORM_UNAVAILABLE)
         ),
     }

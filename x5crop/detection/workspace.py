@@ -217,7 +217,7 @@ def prepare_detection_workspace(
     ):
         incomplete_reasons = (
             *incomplete_reasons,
-            "unsupported_dual_partial_count",
+            "unsupported_dual_count",
         )
     source_core = SourceCoreEvidence(
         scan_canvas=scan_canvas,

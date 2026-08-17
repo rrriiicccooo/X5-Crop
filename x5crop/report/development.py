@@ -139,7 +139,9 @@ def development_report_facts(
                     ),
                 },
                 "content_veto_facts": typed_read_model(lane.content_veto_facts),
-                "precision_ledger": typed_read_model(lane.precision_ledger),
+                "holder_fill_assessment": typed_read_model(
+                    lane.holder_fill_assessment
+                ),
                 "measurement_work": typed_read_model(
                     lane.prepared.measurement_work
                 ),

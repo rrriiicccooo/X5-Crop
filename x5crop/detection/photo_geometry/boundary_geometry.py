@@ -133,7 +133,7 @@ def outward_boundary_projection(
 ) -> OutwardBoundaryProjection:
     """Compile the final safe discard edge into strip-coordinate slopes.
 
-    SafeCropEnvelope retains the outward position endpoint and both retained
+    JointPlacementEnvelope retains the outward position endpoint and both retained
     direction endpoints.  The compiled projection is reused across all exact
     content cells queried for that boundary.
     """

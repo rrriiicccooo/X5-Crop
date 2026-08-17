@@ -19,9 +19,10 @@ CANDIDATE_GATE_CHECK_CODES = (
     "local_advance_authority",
     "content_protection",
     "selected_placement",
+    "dual_lane_fill",
     "slot_ordinal_assignment",
     "source_lane_authority",
-    "selected_only_envelope",
+    "selected_output_footprint",
     "direct_use_budget",
     "transform_sampling",
 )

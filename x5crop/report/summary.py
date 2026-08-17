@@ -71,7 +71,15 @@ def photo_geometry_summary(detection: object) -> dict[str, Any]:
                 "runner_up_placement_id": (
                     lane.placement_competition.runner_up_placement_id
                 ),
-                "safe_crop_envelopes": typed_read_model(lane.safe_crop_envelopes),
+                "photo_group_outer": typed_read_model(
+                    None
+                    if lane.holder_fill_assessment is None
+                    else lane.holder_fill_assessment.outer
+                ),
+                "holder_fill_assessment": typed_read_model(
+                    lane.holder_fill_assessment
+                ),
+                "output_footprints": typed_read_model(lane.output_footprints),
                 "direct_use_budget_assessments": typed_read_model(
                     lane.direct_use_budget_assessments
                 ),

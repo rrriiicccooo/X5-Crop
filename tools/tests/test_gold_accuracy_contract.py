@@ -10,7 +10,7 @@ def _frame(polygon: list[list[float]]) -> dict[str, object]:
 
 
 def _output(polygon: list[list[float]]) -> dict[str, object]:
-    return {"constrained_source_footprint": polygon}
+    return {"required_source_footprint": polygon}
 
 
 class GoldAccuracyContractTest(unittest.TestCase):

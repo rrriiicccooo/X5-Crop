@@ -59,27 +59,46 @@ FRAME_DIMENSION_TOLERANCE_SPEC = FrameDimensionToleranceSpec()
 
 
 @dataclass(frozen=True, order=True)
-class DirectUseBudgetSpec:
-    """Maximum selected-frame expansion that remains directly usable.
+class OutputProtectionSpec:
+    """One product policy for bleed and automatic-output limits.
 
-    These format-relative limits are also the physical legality window for
-    visible boundary evidence around a fixed-size frame.  They are not crop
-    padding and do not create measurement support.
+    Bleed is deterministic output geometry.  It is not measurement evidence
+    and never helps select a placement.  The five-percent limit is applied to
+    the complete selected-output requirement on each aperture side.  A
+    directly observed enclosing support pair has its own total-height limit
+    and receives no additional cross-axis bleed.
     """
 
-    sequence_ratio_per_side: float = 0.05
-    cross_ratio_per_side: float = 0.03
+    sequence_bleed_minimum_mm: float = 0.15
+    sequence_bleed_frame_ratio: float = 0.007
+    cross_bleed_mm: float = 0.25
+    maximum_expansion_ratio_per_side: float = 0.05
+    maximum_enclosing_support_height_ratio: float = 1.10
 
     def __post_init__(self) -> None:
         for name, value in (
-            ("sequence direct-use ratio", self.sequence_ratio_per_side),
-            ("cross direct-use ratio", self.cross_ratio_per_side),
+            ("sequence minimum bleed", self.sequence_bleed_minimum_mm),
+            ("cross bleed", self.cross_bleed_mm),
+        ):
+            require_positive(name, value)
+        for name, value in (
+            ("sequence bleed ratio", self.sequence_bleed_frame_ratio),
+            ("maximum per-side expansion", self.maximum_expansion_ratio_per_side),
         ):
             if not 0.0 < value < 1.0:
                 raise ValueError(f"{name} must be between zero and one")
+        if not 1.0 < self.maximum_enclosing_support_height_ratio < 2.0:
+            raise ValueError("enclosing-support height ratio must be between one and two")
+
+    def sequence_bleed_mm(self, frame_width_mm: float) -> float:
+        require_positive("frame width", frame_width_mm)
+        return max(
+            self.sequence_bleed_minimum_mm,
+            self.sequence_bleed_frame_ratio * frame_width_mm,
+        )
 
 
-DIRECT_USE_BUDGET_SPEC = DirectUseBudgetSpec()
+OUTPUT_PROTECTION_SPEC = OutputProtectionSpec()
 
 
 @dataclass(frozen=True)

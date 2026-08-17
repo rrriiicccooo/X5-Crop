@@ -10,6 +10,7 @@ class FixedFormatRuntimeContractTest(unittest.TestCase):
             expansion_px=180.0,
             expansion_mm=1.8,
             limit_mm=1.8,
+            limit_applies=True,
             within_limit=True,
             worst_placement_solution_id="placement:exact",
         )
@@ -19,6 +20,7 @@ class FixedFormatRuntimeContractTest(unittest.TestCase):
             expansion_px=180.000000001,
             expansion_mm=1.80000000001,
             limit_mm=1.8,
+            limit_applies=True,
             within_limit=False,
             worst_placement_solution_id="placement:over",
         )
@@ -67,7 +69,7 @@ class FixedFormatRuntimeContractTest(unittest.TestCase):
             np.zeros((100, 720), dtype=np.uint8)
         )
         self.assertFalse(candidate.gate.passed)
-        self.assertEqual(candidate.geometry.safe_crop_envelopes, ())
+        self.assertEqual(candidate.geometry.output_footprints, ())
         self.assertTrue(
             all(
                 not lane.placement_competition.placements

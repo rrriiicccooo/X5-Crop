@@ -104,7 +104,7 @@ def _validate_finalization(record: dict[str, Any]) -> None:
     resolved = finalization["resolved_output_slots"]
     count = finalization["output_slot_count"]
     identities = finalization["slot_identities"]
-    geometries = finalization["resolved_output_geometries"]
+    footprints = finalization["output_footprints"]
     authorities = finalization["sampling_authority_boxes"]
     boxes = finalization["final_boxes"]
     transforms = finalization["output_transforms"]
@@ -125,7 +125,7 @@ def _validate_finalization(record: dict[str, Any]) -> None:
             or not isinstance(count, int)
             or count <= 0
             or any(len(values) != count for values in (
-                geometries,
+                footprints,
                 authorities,
                 boxes,
                 transforms,
@@ -143,7 +143,7 @@ def _validate_finalization(record: dict[str, Any]) -> None:
             raise ValueError("approved output lacks validated TIFFs")
     elif status != "needs_review" or (
         finalization["frame_export_eligible"]
-        or geometries
+        or footprints
         or authorities
         or boxes
         or transforms
@@ -185,7 +185,7 @@ def _validate_geometry(record: dict[str, Any]) -> None:
     ):
         raise ValueError("matched holder and resolved count disagree")
     for lane in geometry["lanes"]:
-        outputs = lane["safe_crop_envelopes"]
+        outputs = lane["output_footprints"]
         budgets = lane["direct_use_budget_assessments"]
         if {item["geometry_id"] for item in outputs} != {
             item["geometry_id"] for item in budgets

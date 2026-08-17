@@ -10,9 +10,9 @@ from .gate_checks import GateGap, TypedAssessment
 from .photo_geometry.detector import reconstruct_photo_geometry
 from .photo_geometry.template_runtime_model import PhotoGeometryDetectionResult
 from .photo_geometry.output_model import (
+    OutputFootprint,
     OutputSlotIdentity,
     ResolvedOutputSlots,
-    SafeCropEnvelope,
 )
 from .source_core import SourceCoreEvidence
 from .workspace import DetectionWorkspace
@@ -27,7 +27,7 @@ class PhotoGeometryCandidate:
     def __post_init__(self) -> None:
         if self.gate.passed and (
             self.geometry.resolved_output_slots is None
-            or len(self.geometry.safe_crop_envelopes)
+            or len(self.geometry.output_footprints)
             != self.geometry.resolved_output_slots.output_slot_count
         ):
             raise ValueError(
@@ -43,8 +43,8 @@ class PhotoGeometryCandidate:
         return self.geometry.output_slot_identities
 
     @property
-    def safe_crop_envelopes(self) -> tuple[SafeCropEnvelope, ...]:
-        return self.geometry.safe_crop_envelopes
+    def output_footprints(self) -> tuple[OutputFootprint, ...]:
+        return self.geometry.output_footprints
 
     @property
     def source_transform_assessment(self):

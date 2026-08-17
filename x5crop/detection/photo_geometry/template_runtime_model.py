@@ -31,20 +31,20 @@ from .observation_types import (
 )
 from .output_model import (
     DirectUseBudgetAssessment,
+    OutputFootprint,
     OutputSlotIdentity,
     ResolvedOutputSlots,
-    SafeCropEnvelope,
     SharedStripDirection,
 )
 from .search_model import SequenceAnchorDiscoveryDomain
 from .source_geometry import SourceScanGeometry
 from .template_cross_model import CrossFitCompetition, CrossRoleBinding
 from .template_evidence import EvidenceUseFact
+from .template_holder_fill import HolderFillAssessment
 from .template_model import TemplateSpec
 from .template_measurement_plan_model import TemplateMeasurementPlan
 from .template_phase_model import PhaseFitResult
 from .template_placement import FormatPlacement
-from .template_precision import TemplatePrecisionLedger
 
 
 @dataclass(frozen=True)
@@ -280,11 +280,11 @@ class TemplateLaneReconstruction:
     prepared: PreparedTemplateLane
     placement_competition: TemplatePlacementCompetition
     selected_placement: FormatPlacement | None
-    safe_crop_envelopes: tuple[SafeCropEnvelope, ...]
+    output_footprints: tuple[OutputFootprint, ...]
     direct_use_budget_assessments: tuple[DirectUseBudgetAssessment, ...]
+    holder_fill_assessment: HolderFillAssessment | None
     content_veto_facts: tuple[ContentVetoFact, ...]
     work: TemplatePlacementWorkReceipt
-    precision_ledger: TemplatePrecisionLedger | None = None
 
     def __post_init__(self) -> None:
         if not self.lane_id or self.prepared.lane.domain.lane_id != self.lane_id:
@@ -297,26 +297,32 @@ class TemplateLaneReconstruction:
             raise ValueError("selected placement and competition state disagree")
         if self.selected_placement is not None and self.selected_placement.placement_id != selected_id:
             raise ValueError("selected placement is not competition winner")
-        if self.safe_crop_envelopes:
-            if self.selected_placement is None or len(self.safe_crop_envelopes) != self.selected_placement.output_slot_count:
-                raise ValueError("safe envelopes must cover the selected template slots")
-            ordinals = tuple(item.lane_ordinal for item in self.safe_crop_envelopes)
+        if (self.holder_fill_assessment is None) != (self.selected_placement is None):
+            raise ValueError("holder fill must describe exactly the selected placement")
+        if self.holder_fill_assessment is not None and (
+            self.holder_fill_assessment.outer.placement_id != selected_id
+            or self.holder_fill_assessment.outer.lane_id != self.lane_id
+        ):
+            raise ValueError("holder fill does not belong to selected placement")
+        if self.output_footprints:
+            if self.selected_placement is None or len(self.output_footprints) != self.selected_placement.output_slot_count:
+                raise ValueError("output footprints must cover the selected template slots")
+            ordinals = tuple(
+                item.envelope.lane_ordinal for item in self.output_footprints
+            )
             if ordinals != tuple(range(1, len(ordinals) + 1)):
-                raise ValueError("safe envelope ordinals must be contiguous")
-            if any(item.lane_id != self.lane_id for item in self.safe_crop_envelopes):
-                raise ValueError("safe envelope crosses lane authority")
-            if len(self.direct_use_budget_assessments) != len(self.safe_crop_envelopes):
-                raise ValueError("every selected envelope requires one direct-use assessment")
+                raise ValueError("output footprint ordinals must be contiguous")
+            if any(
+                item.envelope.lane_id != self.lane_id
+                for item in self.output_footprints
+            ):
+                raise ValueError("output footprint crosses lane authority")
+            if len(self.direct_use_budget_assessments) != len(self.output_footprints):
+                raise ValueError("every output footprint requires one direct-use assessment")
         elif self.direct_use_budget_assessments:
-            raise ValueError("direct-use assessments require selected envelopes")
+            raise ValueError("direct-use assessments require output footprints")
         if any(not isinstance(item, ContentVetoFact) for item in self.content_veto_facts):
             raise TypeError("content veto ledger requires typed facts")
-        if self.precision_ledger is not None and (
-            self.selected_placement is None
-            or self.precision_ledger.placement_id
-            != self.selected_placement.placement_id
-        ):
-            raise ValueError("precision ledger requires the selected placement")
 
 
 @dataclass(frozen=True)
@@ -428,7 +434,7 @@ class PhotoGeometryDetectionResult:
             ):
                 raise ValueError("selected lanes disagree with shared source authority")
         if self.source_placement_selection.state != EvidenceState.SUPPORTED and any(
-            item.safe_crop_envelopes or item.direct_use_budget_assessments or item.selected_placement is not None
+            item.output_footprints or item.direct_use_budget_assessments or item.selected_placement is not None
             for item in self.lane_reconstructions
         ):
             raise ValueError("unsupported source result cannot expose selected outputs")
@@ -440,11 +446,11 @@ class PhotoGeometryDetectionResult:
         object.__setattr__(self, "assessment_facts", MappingProxyType(dict(self.assessment_facts)))
 
     @property
-    def safe_crop_envelopes(self) -> tuple[SafeCropEnvelope, ...]:
+    def output_footprints(self) -> tuple[OutputFootprint, ...]:
         return tuple(
-            envelope
+            output
             for lane in self.lane_reconstructions
-            for envelope in lane.safe_crop_envelopes
+            for output in lane.output_footprints
         )
 
     @property
@@ -465,7 +471,7 @@ class PhotoGeometryDetectionResult:
         ):
             if assessment.transform is None:
                 continue
-            transforms.extend(assessment.transform for _ in lane.safe_crop_envelopes)
+            transforms.extend(assessment.transform for _ in lane.output_footprints)
         return tuple(transforms)
 
 

@@ -10,14 +10,14 @@ def finalize_detection(
     decision: DecisionGateAssessment,
 ) -> FinalDetection:
     approved = decision.status == "approved_auto"
-    geometries = candidate.safe_crop_envelopes if approved else ()
+    footprints = candidate.output_footprints if approved else ()
     authority_boxes = (
-        tuple(item.sampling_authority_box for item in geometries)
+        tuple(item.sampling_authority_box for item in footprints)
         if approved
         else ()
     )
     final_boxes = (
-        tuple(item.mapped_output_box for item in geometries)
+        tuple(item.mapped_output_box for item in footprints)
         if approved
         else ()
     )
@@ -31,7 +31,7 @@ def finalize_detection(
         output_slot_identities=candidate.output_slot_identities,
         source_transform_assessment=candidate.source_transform_assessment,
         output_transforms=(candidate.output_transforms if approved else ()),
-        resolved_output_geometries=geometries,
+        output_footprints=footprints,
         sampling_authority_boxes=authority_boxes,
         final_boxes=final_boxes,
     )

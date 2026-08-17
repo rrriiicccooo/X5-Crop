@@ -7,7 +7,6 @@ import math
 
 from ...domain import Box, FiniteInterval, PositiveInterval
 from ...formats import (
-    DIRECT_USE_BUDGET_SPEC,
     FORMAT_CATALOG_REVISION,
     FRAME_DIMENSION_TOLERANCE_SPEC,
     FormatSpec,
@@ -36,7 +35,6 @@ from .template_measurement_plan_model import (
     TemplatePhaseBounds,
     TemplatePixelBounds,
     TemplatePlacementBounds,
-    TemplatePrecisionBudget,
     TemplateProjectedQueryPlan,
     TemplateQueryIntent,
     TemplateRoleBounds,
@@ -166,40 +164,6 @@ def compile_template_measurement_plan(
         len(query_intents),
         inputs.count,
     )
-    sequence_limit = frame_width_px.minimum * (
-        DIRECT_USE_BUDGET_SPEC.sequence_ratio_per_side
-    )
-    cross_limit = frame_height_px.minimum * (
-        DIRECT_USE_BUDGET_SPEC.cross_ratio_per_side
-    )
-    long_leverage = max(1.0, float(long_extent_px))
-    short_extent_px = (
-        inputs.lane_authority.work_box.height
-        if inputs.lane_authority.source_axis_long == "x"
-        else inputs.lane_authority.work_box.width
-    )
-    short_leverage = max(1.0, float(short_extent_px))
-    precision_budget = TemplatePrecisionBudget(
-        budget_id=_stable_identity(
-            "template-precision",
-            physical_identity,
-            DIRECT_USE_BUDGET_SPEC,
-        ),
-        sequence_side_limit_px=sequence_limit,
-        cross_side_limit_px=cross_limit,
-        maximum_pitch_steps=max(0, inputs.count - 1),
-        pitch_step_solo_limit_px=(
-            None
-            if inputs.count <= 1
-            else sequence_limit / (inputs.count - 1)
-        ),
-        direction_solo_limit_degrees=math.degrees(
-            min(
-                math.atan(sequence_limit / short_leverage),
-                math.atan(cross_limit / long_leverage),
-            )
-        ),
-    )
     if 2 * inputs.count > phase_bounds.max_role_count:
         raise ValueError("template phase role bound overflow")
     facts = (
@@ -264,7 +228,6 @@ def compile_template_measurement_plan(
         placement_bounds=placement_bounds,
         pixel_bounds=pixel_bounds,
         work_bounds=work_bounds,
-        precision_budget=precision_budget,
         normal_path_stop_facts=stop_facts,
         physical_identity=physical_identity,
         plan_identity=plan_identity,

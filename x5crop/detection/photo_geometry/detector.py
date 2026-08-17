@@ -18,6 +18,7 @@ from .measurement_model import PhotoBoundaryMeasurementField
 from .output_model import OutputSlotIdentity
 from .source_geometry import SourceScanGeometry
 from .template_cross_model import CrossFit, CrossFitStatus
+from .template_feasible_geometry import project_selected_placement
 from .template_direction import lane_template_direction, shared_template_direction
 from .template_gate import (
     build_template_gate,
@@ -25,11 +26,15 @@ from .template_gate import (
     supported,
     unavailable,
 )
+from .template_holder_fill import (
+    LaneLongAxisAuthority,
+    assess_holder_fill_state,
+    photo_group_outer_from_selected_placement,
+)
 from .template_output import (
-    safe_crop_envelope_from_template_placement,
+    output_footprint_from_template_placement,
     template_direct_use_budget_assessment,
 )
-from .template_precision import template_precision_ledger
 from .template_phase_model import PhaseFitStatus
 from .template_placement import FormatPlacement, compose_format_placement
 from .template_runtime_model import (
@@ -197,13 +202,14 @@ def _empty_result(
         "local_advance_authority": unavailable(GateGap.LOCAL_ADVANCE_UNRESOLVED),
         "content_protection": supported(),
         "selected_placement": unavailable(GateGap.PLACEMENT_UNRESOLVED),
+        "dual_lane_fill": unavailable(GateGap.DUAL_LANE_FILL_UNRESOLVED),
         "slot_ordinal_assignment": unavailable(GateGap.SLOT_ORDINAL_ASSIGNMENT_UNRESOLVED),
         "source_lane_authority": (
             supported()
             if lanes_available
             else unavailable(GateGap.SOURCE_LANE_AUTHORITY_INVALID)
         ),
-        "selected_only_envelope": unavailable(GateGap.SELECTED_PLACEMENT_CONTAINMENT_UNAVAILABLE),
+        "selected_output_footprint": unavailable(GateGap.OUTPUT_FOOTPRINT_UNAVAILABLE),
         "direct_use_budget": unavailable(GateGap.DIRECT_USE_BUDGET_UNAVAILABLE),
         "transform_sampling": unavailable(GateGap.OUTPUT_TRANSFORM_UNAVAILABLE),
     }
@@ -331,12 +337,14 @@ def reconstruct_photo_geometry(
             else None
         )
         lane_transform = transform
-        envelopes = ()
+        output_footprints = ()
         if selected is not None and lane_transform.transform is not None:
+            projection = project_selected_placement(selected)
             try:
-                envelopes = tuple(
-                    safe_crop_envelope_from_template_placement(
+                output_footprints = tuple(
+                    output_footprint_from_template_placement(
                         selected,
+                        projection,
                         lane=source_lane,
                         lane_ordinal=ordinal,
                         layout=layout,
@@ -345,13 +353,25 @@ def reconstruct_photo_geometry(
                     for ordinal in range(1, selected.output_slot_count + 1)
                 )
             except ValueError:
-                envelopes = ()
+                output_footprints = ()
         budgets = tuple(
             template_direct_use_budget_assessment(
-                selected, envelope, lane_transform.transform
+                selected, output
             )
-            for envelope in envelopes
-            if selected is not None and lane_transform.transform is not None
+            for output in output_footprints
+            if selected is not None
+        )
+        holder_fill = (
+            None
+            if selected is None
+            else assess_holder_fill_state(
+                photo_group_outer_from_selected_placement(selected),
+                LaneLongAxisAuthority.from_box(
+                    selected.lane_id,
+                    selected.width_axis,
+                    source_lane.domain.work_box,
+                ),
+            )
         )
         phase_receipt = lane.phase_competition.receipt
         bound_exceeded = (
@@ -365,8 +385,9 @@ def reconstruct_photo_geometry(
                 prepared=lane,
                 placement_competition=competition,
                 selected_placement=selected,
-                safe_crop_envelopes=envelopes,
+                output_footprints=output_footprints,
                 direct_use_budget_assessments=budgets,
+                holder_fill_assessment=holder_fill,
                 content_veto_facts=(
                     () if content_assessment is None else content_assessment.facts
                 ),
@@ -381,14 +402,6 @@ def reconstruct_photo_geometry(
                         phase_receipt.peak_temporary_bytes,
                     ),
                     bound_exceeded=bound_exceeded,
-                ),
-                precision_ledger=(
-                    None
-                    if selected is None
-                    else template_precision_ledger(
-                        selected,
-                        lane.measurement_plan,
-                    )
                 ),
             )
         )

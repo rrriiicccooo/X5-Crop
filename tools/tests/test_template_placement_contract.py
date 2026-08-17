@@ -8,7 +8,10 @@ import unittest
 from x5crop.domain import FiniteInterval, ObservationId, PositiveInterval
 from x5crop.formats import FramePhysicalSpec
 from x5crop.detection.photo_geometry.model import BoundaryAxis, BoundaryRole
-from x5crop.detection.photo_geometry.output_model import SharedStripDirection
+from x5crop.detection.photo_geometry.output_model import (
+    OutputBoundaryUse,
+    SharedStripDirection,
+)
 from x5crop.detection.photo_geometry.source_geometry import SourceScanGeometry
 from x5crop.detection.photo_geometry.template_cross_model import (
     CrossEvidence,
@@ -159,6 +162,7 @@ def _cross(
         continuous_support_fraction=1.0,
         residual_sum_px=0.0,
         center_compatible=True,
+        boundary_use=OutputBoundaryUse.APERTURE_PAIR,
     )
 
 
@@ -262,6 +266,7 @@ class TemplatePlacementContractTest(unittest.TestCase):
             continuous_support_fraction=1.0,
             residual_sum_px=0.0,
             center_compatible=True,
+            boundary_use=OutputBoundaryUse.APERTURE_PAIR,
         )
         frame = _compose(template, sequence, cross).frames[0]
         self.assertEqual(frame.start.full_position_interval_px, FiniteInterval(96.0, 108.0))

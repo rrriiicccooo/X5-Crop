@@ -1,0 +1,132 @@
+from __future__ import annotations
+
+from dataclasses import replace
+import unittest
+
+from x5crop.domain import FiniteInterval
+from x5crop.detection.photo_geometry.template_feasible_geometry import (
+    project_selected_placement,
+)
+from x5crop.detection.photo_geometry.template_model import (
+    PhaseLatticeFit,
+    PitchFit,
+)
+from tools.tests.test_template_placement_contract import (
+    _compose,
+    _cross,
+    _direction,
+    _sequence,
+    _template,
+)
+
+
+class TemplateFeasibleGeometryContractTest(unittest.TestCase):
+    def test_phase_and_pitch_extremes_remain_correlated(self) -> None:
+        template = _template(2)
+        sequence = _sequence(template)
+        sequence = replace(
+            sequence,
+            phase_lattice_fit=PhaseLatticeFit(
+                authority=template.phase_lattice_authority,
+                cycle_phase_interval_px=FiniteInterval(95.0, 105.0),
+                canonical_cycle_phase_px=100.0,
+                integer_slot_offset=0,
+                canonical_period_px=120.0,
+                absolute_phase_interval_px=FiniteInterval(95.0, 105.0),
+                canonical_absolute_phase_px=100.0,
+                direction=1,
+            ),
+            pitch_fit=PitchFit(
+                frame_width_px=FiniteInterval.exact(100.0),
+                gap_interval_px=FiniteInterval(15.0, 25.0),
+                pitch_interval_px=FiniteInterval(115.0, 125.0),
+                canonical_frame_width_px=100.0,
+                canonical_pitch_px=120.0,
+                observation_ids=sequence.pitch_fit.observation_ids,
+            ),
+            role_positions_px=(
+                FiniteInterval(95.0, 105.0),
+                FiniteInterval(195.0, 205.0),
+                FiniteInterval.exact(220.0),
+                FiniteInterval.exact(320.0),
+            ),
+        )
+        placement = _compose(
+            template,
+            sequence,
+            _cross(template, direction=_direction()),
+        )
+        projection = project_selected_placement(placement)
+        self.assertEqual(
+            projection.sequence_role_intervals_px[2],
+            FiniteInterval.exact(220.0),
+        )
+        self.assertEqual(
+            projection.sequence_role_intervals_px[3],
+            FiniteInterval.exact(320.0),
+        )
+        self.assertEqual(projection.extreme_evaluation_count, 12)
+
+    def test_fixed_height_keeps_top_and_bottom_correlated(self) -> None:
+        template = _template(1)
+        cross = replace(
+            _cross(template, direction=_direction()),
+            top_canonical_px=7.5,
+            bottom_canonical_px=247.5,
+            top_fit_interval_px=FiniteInterval.exact(7.5),
+            bottom_fit_interval_px=FiniteInterval.exact(247.5),
+            top_full_interval_px=FiniteInterval(0.0, 20.0),
+            bottom_full_interval_px=FiniteInterval(245.0, 250.0),
+        )
+        placement = _compose(template, _sequence(template), cross)
+        projection = project_selected_placement(placement)
+        self.assertEqual(
+            projection.top_at_lane_reference_px,
+            FiniteInterval(5.0, 10.0),
+        )
+        self.assertEqual(
+            projection.bottom_at_lane_reference_px,
+            FiniteInterval(245.0, 250.0),
+        )
+
+    def test_narrower_joint_constraints_never_widen_projection(self) -> None:
+        template = _template(1)
+        broad = _compose(
+            template,
+            _sequence(template),
+            replace(
+                _cross(template, direction=_direction()),
+                top_full_interval_px=FiniteInterval(5.0, 15.0),
+                bottom_full_interval_px=FiniteInterval(245.0, 255.0),
+            ),
+        )
+        narrow = replace(
+            broad,
+            cross_fit=replace(
+                broad.cross_fit,
+                top_full_interval_px=FiniteInterval(8.0, 12.0),
+                bottom_full_interval_px=FiniteInterval(248.0, 252.0),
+            ),
+        )
+        broad_projection = project_selected_placement(broad)
+        narrow_projection = project_selected_placement(narrow)
+        self.assertGreaterEqual(
+            narrow_projection.top_at_lane_reference_px.minimum,
+            broad_projection.top_at_lane_reference_px.minimum,
+        )
+        self.assertLessEqual(
+            narrow_projection.top_at_lane_reference_px.maximum,
+            broad_projection.top_at_lane_reference_px.maximum,
+        )
+        self.assertGreaterEqual(
+            narrow_projection.bottom_at_lane_reference_px.minimum,
+            broad_projection.bottom_at_lane_reference_px.minimum,
+        )
+        self.assertLessEqual(
+            narrow_projection.bottom_at_lane_reference_px.maximum,
+            broad_projection.bottom_at_lane_reference_px.maximum,
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()
