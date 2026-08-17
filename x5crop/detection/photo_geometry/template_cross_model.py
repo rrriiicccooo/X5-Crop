@@ -15,7 +15,7 @@ from .model import (
     SPATIAL_SUPPORT_REGION_COUNT,
 )
 from .observation_types import ProfileRun
-from .output_model import SharedStripDirection
+from .output_model import OutputBoundaryUse, SharedStripDirection
 from .template_model import TemplateSpec
 
 def _interval(value: FiniteInterval | PositiveInterval | float | int) -> FiniteInterval:
@@ -111,6 +111,58 @@ class CrossEvidence(str, Enum):
 
     DIRECT = "direct"
     FIXED_HEIGHT_INFERRED = "fixed_height_inferred"
+
+
+@dataclass(frozen=True)
+class EnclosingSupportPair:
+    """Direct, larger support envelope kept outside the fixed-H aperture."""
+
+    top_canonical_px: float
+    bottom_canonical_px: float
+    top_full_interval_px: FiniteInterval
+    bottom_full_interval_px: FiniteInterval
+    top_provenance_ids: tuple[ObservationId, ...]
+    bottom_provenance_ids: tuple[ObservationId, ...]
+    observed_span_px: FiniteInterval
+
+    def __post_init__(self) -> None:
+        if not all(
+            math.isfinite(float(value))
+            for value in (self.top_canonical_px, self.bottom_canonical_px)
+        ):
+            raise ValueError("support boundary canonical positions must be finite")
+        if self.bottom_canonical_px <= self.top_canonical_px:
+            raise ValueError("support boundary order is invalid")
+        if not isinstance(self.top_full_interval_px, FiniteInterval) or not isinstance(
+            self.bottom_full_interval_px, FiniteInterval
+        ):
+            raise TypeError("support boundary intervals must be FiniteInterval")
+        if not isinstance(self.observed_span_px, FiniteInterval):
+            raise TypeError("support observed span must be FiniteInterval")
+        if not self.top_full_interval_px.contains(self.top_canonical_px, epsilon=1.0e-9):
+            raise ValueError("support top leaves its direct interval")
+        if not self.bottom_full_interval_px.contains(self.bottom_canonical_px, epsilon=1.0e-9):
+            raise ValueError("support bottom leaves its direct interval")
+        expected_span = _subtract(
+            self.bottom_full_interval_px,
+            self.top_full_interval_px,
+        )
+        if self.observed_span_px != expected_span or self.observed_span_px.minimum <= 0.0:
+            raise ValueError("support span must come from direct boundaries")
+        top_ids = tuple(
+            item if isinstance(item, ObservationId) else ObservationId(str(item))
+            for item in self.top_provenance_ids
+        )
+        bottom_ids = tuple(
+            item if isinstance(item, ObservationId) else ObservationId(str(item))
+            for item in self.bottom_provenance_ids
+        )
+        if not top_ids or not bottom_ids:
+            raise ValueError("support boundary provenance is required")
+        if len(set(top_ids)) != len(top_ids) or len(set(bottom_ids)) != len(bottom_ids):
+            raise ValueError("support boundary provenance must be unique")
+        object.__setattr__(self, "top_provenance_ids", top_ids)
+        object.__setattr__(self, "bottom_provenance_ids", bottom_ids)
 
 
 @dataclass(frozen=True)
@@ -459,6 +511,8 @@ class CrossFit:
     continuous_support_fraction: float
     residual_sum_px: float
     center_compatible: bool
+    boundary_use: OutputBoundaryUse
+    enclosing_support_pair: EnclosingSupportPair | None = None
     height_compatibility_px: FiniteInterval | None = None
     shift_interval_px: FiniteInterval | None = None
     center_interval_px: FiniteInterval | None = None
@@ -473,11 +527,13 @@ class CrossFit:
     def __post_init__(self) -> None:
         if not self.template_id:
             raise ValueError("cross fit requires a template identity")
+        if not isinstance(self.boundary_use, OutputBoundaryUse):
+            raise TypeError("cross fit requires a typed boundary use")
         if not self.fixed_height_px.contains(
             self.bottom_canonical_px - self.top_canonical_px,
             epsilon=max(self.fixed_height_px.width, 1.0e-8),
-        ) and self.direct_pair:
-            raise ValueError("direct cross fit does not preserve fixed height")
+        ):
+            raise ValueError("cross aperture does not preserve fixed height")
         if not self.top_full_interval_px.contains(self.top_canonical_px, epsilon=1.0e-9) or not self.bottom_full_interval_px.contains(self.bottom_canonical_px, epsilon=1.0e-9):
             raise ValueError("cross canonical positions must be inside full intervals")
         if (
@@ -495,6 +551,37 @@ class CrossFit:
             raise ValueError("direct ledger contains inferred binding")
         if any(item.evidence != CrossEvidence.FIXED_HEIGHT_INFERRED for item in self.inferred_bindings):
             raise ValueError("inferred ledger contains direct binding")
+        if self.boundary_use == OutputBoundaryUse.APERTURE_PAIR:
+            if self.enclosing_support_pair is not None:
+                raise ValueError("aperture fit cannot carry support output")
+        elif self.boundary_use == OutputBoundaryUse.ENCLOSING_SUPPORT_PAIR:
+            support = self.enclosing_support_pair
+            if not self.direct_pair or len(self.direct_bindings) != 2 or self.inferred_bindings:
+                raise ValueError("enclosing support requires two-sided direct bindings")
+            if not isinstance(support, EnclosingSupportPair):
+                raise TypeError("enclosing support output must be typed")
+            if self.selected_direction is None:
+                raise ValueError("enclosing support requires shared direction")
+            top_binding, bottom_binding = self.direct_bindings
+            if (
+                top_binding.role != BoundaryRole.TOP
+                or bottom_binding.role != BoundaryRole.BOTTOM
+                or support.top_full_interval_px != top_binding.full_interval_px
+                or support.bottom_full_interval_px != bottom_binding.full_interval_px
+                or support.top_provenance_ids != (top_binding.observation_id,)
+                or support.bottom_provenance_ids != (bottom_binding.observation_id,)
+            ):
+                raise ValueError("support output must preserve direct bindings")
+            span = support.observed_span_px
+            if span.minimum <= self.fixed_height_px.maximum:
+                raise ValueError("support span is not universally greater than H")
+            if span.maximum > 1.1 * float(self.fixed_height_px.minimum) + 1.0e-9:
+                raise ValueError("support span exceeds universal 1.1H bound")
+            if (
+                support.top_full_interval_px.minimum > self.top_canonical_px + 1.0e-9
+                or support.bottom_full_interval_px.maximum < self.bottom_canonical_px - 1.0e-9
+            ):
+                raise ValueError("support does not contain fixed-H aperture")
         if self.shared_trace_support_count < 0:
             raise ValueError("cross shared support count is invalid")
         if not 0 <= self.independent_support_region_count <= 3:

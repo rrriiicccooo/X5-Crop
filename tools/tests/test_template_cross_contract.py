@@ -13,6 +13,7 @@ from x5crop.detection.photo_geometry.template_cross_model import (
     CrossRoleBinding,
     TemplateCrossInput,
 )
+from x5crop.detection.photo_geometry.output_model import OutputBoundaryUse
 from x5crop.detection.photo_geometry.template_model import (
     PhaseLatticeAuthority,
     TemplateSpec,
@@ -139,6 +140,7 @@ class TemplateCrossContractTest(unittest.TestCase):
         self.assertIsNotNone(result.best)
         assert result.best is not None
         self.assertTrue(result.best.direct_pair)
+        self.assertEqual(result.best.boundary_use, OutputBoundaryUse.APERTURE_PAIR)
         self.assertEqual(result.best.direct_observation_ids, (
             ObservationId("observation:top"),
             ObservationId("observation:bottom"),
@@ -284,7 +286,7 @@ class TemplateCrossContractTest(unittest.TestCase):
             2,
         )
 
-    def test_local_pair_validates_template_height_but_spanning_pair_measures_it(self) -> None:
+    def test_local_and_spanning_pairs_keep_canonical_fixed_height(self) -> None:
         fixed_template = replace(
             template(count=2),
             frame_height_px=FiniteInterval(230.0, 250.0),
@@ -340,7 +342,7 @@ class TemplateCrossContractTest(unittest.TestCase):
         assert spanning.best is not None
         self.assertAlmostEqual(
             spanning.best.bottom_canonical_px - spanning.best.top_canonical_px,
-            238.0,
+            245.0,
         )
 
     def test_single_side_infers_opposite_fixed_height(self) -> None:
@@ -383,8 +385,8 @@ class TemplateCrossContractTest(unittest.TestCase):
         )
         self.assertEqual(result.status, CrossFitStatus.RESOLVED)
         assert result.best is not None
-        self.assertAlmostEqual(result.best.top_canonical_px, 100.0)
-        self.assertAlmostEqual(result.best.bottom_canonical_px, 340.0)
+        self.assertAlmostEqual(result.best.top_canonical_px, 105.0)
+        self.assertAlmostEqual(result.best.bottom_canonical_px, 345.0)
         self.assertEqual(
             result.best.height_compatibility_px,
             FiniteInterval(238.0, 242.0),
@@ -395,11 +397,11 @@ class TemplateCrossContractTest(unittest.TestCase):
         )
         self.assertEqual(
             result.best.top_full_interval_px,
-            FiniteInterval(99.0, 105.0),
+            FiniteInterval.exact(105.0),
         )
         self.assertEqual(
             result.best.bottom_full_interval_px,
-            FiniteInterval(339.0, 341.0),
+            FiniteInterval(343.0, 347.0),
         )
 
     def test_two_region_fragment_cannot_supply_single_side_direction(self) -> None:
@@ -447,11 +449,10 @@ class TemplateCrossContractTest(unittest.TestCase):
         self.assertEqual(result.status, CrossFitStatus.UNRESOLVED)
         self.assertIsNotNone(result.runner_up)
         assert result.best is not None
-        # Holder centre and fixed H own the same canonical rectangle.  The two
-        # local measurements remain discrete safety interpretations, not
-        # competing translation authorities.
-        self.assertAlmostEqual(result.best.top_canonical_px, 100.0)
-        self.assertAlmostEqual(result.runner_up.top_canonical_px, 100.0)
+        # Holder centre compatibility is not output uncertainty; the local
+        # direct measurements remain discrete placement interpretations.
+        self.assertAlmostEqual(result.best.top_canonical_px, 96.0)
+        self.assertAlmostEqual(result.runner_up.top_canonical_px, 104.0)
         self.assertAlmostEqual(
             result.best.bottom_canonical_px - result.best.top_canonical_px,
             240.0,
@@ -811,18 +812,39 @@ class TemplateCrossContractTest(unittest.TestCase):
                 template=template(),
                 fixed_height_px=240.0,
                 top_bindings=(
-                    binding(BoundaryRole.TOP, "top-a", 100.0),
-                    binding(BoundaryRole.TOP, "top-b", 104.0),
+                    binding(BoundaryRole.TOP, "top-a", 100.0, role_authorized=False),
+                    binding(BoundaryRole.TOP, "top-b", 104.0, role_authorized=False),
                 ),
                 bottom_bindings=(
-                    binding(BoundaryRole.BOTTOM, "bottom-a", 340.0),
-                    binding(BoundaryRole.BOTTOM, "bottom-b", 344.0),
+                    binding(BoundaryRole.BOTTOM, "bottom-a", 340.0, role_authorized=False),
+                    binding(BoundaryRole.BOTTOM, "bottom-b", 344.0, role_authorized=False),
                 ),
             )
         )
-        self.assertEqual(result.status, CrossFitStatus.UNRESOLVED)
-        self.assertIsNotNone(result.best)
+        # The fixed-H direct search is unresolved, but one unique enclosing
+        # support pair is a separate, directly observed output.
+        self.assertEqual(result.status, CrossFitStatus.RESOLVED)
+        self.assertIsNone(result.runner_up)
         assert result.best is not None
+        self.assertEqual(
+            result.best.boundary_use,
+            OutputBoundaryUse.ENCLOSING_SUPPORT_PAIR,
+        )
+        support = result.best.enclosing_support_pair
+        self.assertIsNotNone(support)
+        assert support is not None
+        self.assertGreater(
+            support.observed_span_px.minimum,
+            result.best.fixed_height_px.maximum,
+        )
+        self.assertLessEqual(
+            support.observed_span_px.maximum,
+            1.1 * result.best.fixed_height_px.minimum,
+        )
+        self.assertNotEqual(
+            support.top_full_interval_px,
+            result.best.top_full_interval_px,
+        )
         self.assertTrue(
             result.best.top_full_interval_px.contains(result.best.top_canonical_px)
         )

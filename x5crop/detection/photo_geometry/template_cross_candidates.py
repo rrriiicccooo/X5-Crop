@@ -13,7 +13,7 @@ from .model import (
     SPATIAL_SUPPORT_REGION_COUNT,
     independent_spatial_support_count,
 )
-from .output_model import SharedStripDirection
+from .output_model import OutputBoundaryUse, SharedStripDirection
 from .template_cross_model import (
     CrossEvidence,
     CrossFit,
@@ -173,12 +173,6 @@ def _direct_candidate(
         return None
     midpoint = _midpoint_interval(top.full_interval_px, bottom.full_interval_px)
     center_interval = _intersect(midpoint, center) if center is not None else midpoint
-    selected_canonical_height = (
-        height.center
-        if top.source_spanning_continuous
-        or bottom.source_spanning_continuous
-        else canonical_height_px
-    )
     return _Candidate(
         top=top,
         bottom=bottom,
@@ -188,7 +182,7 @@ def _direct_candidate(
         residual=top.fit_residual_px + bottom.fit_residual_px,
         center_compatible=center_interval is not None,
         height_compatibility=height,
-        canonical_height_px=selected_canonical_height,
+        canonical_height_px=canonical_height_px,
         shift_interval=shift,
         center_interval=center_interval,
         direction_interval=direction,
@@ -225,33 +219,20 @@ def _single_candidate(
         )
         if _intersect(binding.full_interval_px, expected_side) is None:
             return None
-        # Format H and holder centre own the canonical placement.  Their broad
-        # compatibility intervals answer only whether this model is legal;
-        # they are not selected-placement measurement uncertainty.  Safety
-        # starts at the canonical fixed rectangle and expands only toward the
-        # directly observed side.
-        canonical_center = center.center
-        canonical_top = canonical_center - canonical_height_px / 2.0
-        canonical_bottom = canonical_center + canonical_height_px / 2.0
-        # Holder-centre uncertainty is only a compatibility fact.  The fixed
-        # physical H interval, however, is genuine selected-template
-        # uncertainty: keeping the canonical centre fixed moves the two sides
-        # symmetrically.  This is later checked against the sole 3% direct-use
-        # budget and never becomes a competing placement.
-        top_full = FiniteInterval(
-            canonical_center - fixed_height.maximum / 2.0,
-            canonical_center - fixed_height.minimum / 2.0,
-        )
-        bottom_full = FiniteInterval(
-            canonical_center + fixed_height.minimum / 2.0,
-            canonical_center + fixed_height.maximum / 2.0,
-        )
+        # Holder centre is compatibility only.  Keep the direct side as the
+        # measured interval and propagate the opposite side from that edge
+        # with the fixed physical H interval.
+        direct_center = binding.full_interval_px.center
         if binding.role == BoundaryRole.TOP:
-            top_full = _hull_intervals((top_full, binding.full_interval_px))
+            canonical_top = direct_center
+            canonical_bottom = direct_center + canonical_height_px
+            top_full = binding.full_interval_px
+            bottom_full = _add(binding.full_interval_px, fixed_height)
         else:
-            bottom_full = _hull_intervals(
-                (bottom_full, binding.full_interval_px)
-            )
+            canonical_bottom = direct_center
+            canonical_top = direct_center - canonical_height_px
+            bottom_full = binding.full_interval_px
+            top_full = _subtract(binding.full_interval_px, fixed_height)
         return _Candidate(
             top=binding,
             bottom=binding,
@@ -546,6 +527,7 @@ def _fit_from_candidate(
         continuous_support_fraction=candidate.continuous_support,
         residual_sum_px=candidate.residual,
         center_compatible=candidate.center_compatible,
+        boundary_use=OutputBoundaryUse.APERTURE_PAIR,
         height_compatibility_px=candidate.height_compatibility,
         shift_interval_px=candidate.shift_interval,
         center_interval_px=candidate.center_interval,
