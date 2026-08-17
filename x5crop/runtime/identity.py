@@ -37,11 +37,9 @@ def runtime_configuration_identity(config: RunConfig) -> dict[str, Any]:
     return {
         "format_id": config.format_id,
         "layout": config.layout,
-        "strip_mode": config.strip_mode,
         "output_slot_policy": {
-            "intent": request.strip_mode,
             "user_count": request.user_count,
-            "holder_layout_authority": request.holder_layout_authority.value,
+            "authority": request.authority.value,
         },
         "debug_analysis": config.debug_analysis,
     }

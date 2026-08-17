@@ -13,7 +13,7 @@ from typing import Any, Sequence
 
 from x5crop.report.validation import validate_current_report_record
 
-from .cohort_count_authority import validate_count_authority
+from .cohort_count import validate_cohort_counts
 from .diagnostic_contract import (
     aggregate_work,
     bounded_work,
@@ -27,7 +27,7 @@ DIAGNOSTIC_COHORT_PATH = (
     Path(__file__).with_name("cohorts")
     / "diagnostic_unreviewed.jsonl"
 )
-COHORT_SCHEMA = "x5crop_diagnostic_unreviewed_cohort_v1"
+COHORT_SCHEMA = "x5crop_diagnostic_unreviewed_cohort_v2"
 RECORD_SCHEMA = "x5crop_diagnostic_record_v3"
 SUMMARY_SCHEMA = "x5crop_diagnostic_summary_v3"
 EXPECTED_RECORD_COUNT = 111
@@ -44,7 +44,7 @@ def load_diagnostic_sources(
     *,
     verify_source_files: bool = True,
 ) -> tuple[DiagnosticSource, ...]:
-    validate_count_authority()
+    validate_cohort_counts()
     rows = tuple(
         json.loads(line)
         for line in DIAGNOSTIC_COHORT_PATH.read_text(
@@ -69,17 +69,14 @@ def load_diagnostic_sources(
             "source_relative_path",
             "source_sha256",
             "format_id",
-            "strip_mode",
+            "count",
             "validation_role",
-            "count_authority",
             "raw_width_px",
             "raw_height_px",
             "dtype",
             "samples_per_pixel",
             "page_count",
         }
-        if row.get("strip_mode") == "partial":
-            expected_keys.add("confirmed_slot_count")
         relative = Path(str(row.get("source_relative_path", "")))
         source_path = (PROJECT_ROOT / relative).resolve()
         digest = str(row.get("source_sha256", ""))
@@ -134,13 +131,9 @@ def _production_command(source: DiagnosticSource, output: Path) -> list[str]:
         str(output),
         "--format",
         str(source.identity["format_id"]),
-        "--strip",
-        str(source.identity["strip_mode"]),
+        "--count",
+        str(source.identity["count"]),
     ]
-    if source.identity["strip_mode"] == "partial":
-        command.extend(
-            ("--count", str(source.identity["confirmed_slot_count"]))
-        )
     return command
 
 
@@ -158,7 +151,7 @@ def _failure_record(
         "sample_id": source.identity["sample_id"],
         "source_sha256": source.identity["source_sha256"],
         "format_id": source.identity["format_id"],
-        "strip_mode": source.identity["strip_mode"],
+        "count": source.identity["count"],
         "terminal_outcome": "runtime_error",
         "decision_status": None,
         "final_review_reasons": [],
@@ -294,7 +287,7 @@ def run_diagnostic_source(source: DiagnosticSource) -> dict[str, Any]:
         "sample_id": source.identity["sample_id"],
         "source_sha256": source.identity["source_sha256"],
         "format_id": source.identity["format_id"],
-        "strip_mode": source.identity["strip_mode"],
+        "count": source.identity["count"],
         "terminal_outcome": "completed",
         "decision_status": decision["status"],
         "final_review_reasons": list(

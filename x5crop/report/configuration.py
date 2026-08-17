@@ -20,10 +20,6 @@ def detection_configuration_read_model(
     return {
         "configuration_id": configuration.configuration_id,
         "format_id": spec.format_id,
-        "strip_mode": configuration.strip_mode,
-        "holder_layout_authority": (
-            configuration.count_request.holder_layout_authority.value
-        ),
         "slot_count_request": typed_read_model(
             configuration.count_request
         ),
@@ -31,7 +27,6 @@ def detection_configuration_read_model(
         "frame_dimension_tolerance": typed_read_model(
             FRAME_DIMENSION_TOLERANCE_SPEC
         ),
-        "partial_mode_supported": spec.partial_mode_supported,
         "scan_layout": typed_read_model(spec.layout),
         "measurement": {
             "preprocess": typed_read_model(configuration.preprocess),

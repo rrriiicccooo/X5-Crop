@@ -90,13 +90,12 @@ def make_profile(shape: tuple[int, int]) -> ImageProfile:
 
 
 def make_candidate(pixels: np.ndarray):
-    configuration = get_detection_configuration("135", "full", None)
+    configuration = get_detection_configuration("135")
     workspace = prepare_detection_workspace(
         pixels,
         make_profile(tuple(int(value) for value in pixels.shape)),
         "horizontal",
         configuration,
-        None,
     )
     return workspace, configuration, choose_detection(
         workspace,

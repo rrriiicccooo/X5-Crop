@@ -22,10 +22,10 @@ def print_run_header(invocation: RuntimeInvocation, output_root: Path) -> None:
     print(f"input: {config.input_path}")
     print(f"files: {len(invocation.sources)}")
     layout_label = "auto" if config.layout_auto else config.layout
-    parts = [f"layout: {layout_label}", f"strip: {config.strip_mode}"]
+    parts = [f"layout: {layout_label}"]
     parts.append(
         "configuration: "
-        + invocation.configuration_bundle.initial_configuration.configuration_id
+        + invocation.configuration.configuration_id
     )
     if config.count_request.user_count is not None:
         parts.append(f"count: {config.count_request.user_count}")
@@ -56,7 +56,7 @@ def _process_source(
     return process_one(
         source,
         invocation.config,
-        invocation.configuration_bundle,
+        invocation.configuration,
         output_root,
     )
 

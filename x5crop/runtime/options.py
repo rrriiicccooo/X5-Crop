@@ -12,7 +12,6 @@ class RuntimeOptions:
     output_dir: Path | None
     format_id: str
     layout: str
-    strip_mode: str
     requested_count: int | None
     debug_analysis: bool
     jobs: int

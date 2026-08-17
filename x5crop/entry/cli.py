@@ -9,7 +9,6 @@ from ..formats import FORMAT_CHOICES
 from ..runtime.bootstrap import run_options
 from ..runtime.limits import STANDARD_JOB_DEFAULT
 from ..runtime.options import LAYOUT_CHOICES, RuntimeOptions
-from ..strip_modes import STRIP_MODES
 from .text_output import configure_entry_text_output
 
 
@@ -38,23 +37,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--format", choices=FORMAT_CHOICES, help="Film format. Required unless --interactive is used.")
     parser.add_argument("--layout", choices=LAYOUT_CHOICES, default="auto", help="auto/horizontal/vertical single-strip layout.")
     parser.add_argument(
-        "--strip",
-        choices=STRIP_MODES,
-        default="full",
-        help=(
-            "Holder-layout intent: full confirms the complete filled layout "
-            "and uses its fixed count; partial confirms a non-filling layout "
-            "and requires an explicit count no greater than holder capacity."
-        ),
-    )
-    parser.add_argument(
         "-n",
         "--count",
         type=parse_count_argument,
         default=None,
         help=(
-            "Required positive exposure-slot count for partial mode, including "
-            "blank slots. Full mode must omit --count."
+            "Positive exposure-slot count, including blank slots. Omit it to "
+            "confirm the matched holder's default count."
         ),
     )
     parser.add_argument(
@@ -76,7 +65,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Parallel TIFF workers. Default 1; capped at 3."
         ),
     )
-    parser.add_argument("--interactive", action="store_true", help="Prompt for format, mode, and Debug Analysis options.")
+    parser.add_argument("--interactive", action="store_true", help="Prompt for format, count, and Debug Analysis options.")
     parser.add_argument("--version", action="version", version=f"{SCRIPT_NAME} {VERSION}")
     return parser
 
@@ -86,19 +75,14 @@ def options_from_args(args: argparse.Namespace) -> RuntimeOptions:
         raise ValueError("--format is required unless --interactive is used")
     if int(args.jobs) < 1:
         raise ValueError("--jobs must be 1 or greater")
-    if str(args.strip) == "partial" and args.count is None:
-        raise ValueError("partial mode requires --count")
-    if str(args.strip) == "full" and args.count is not None:
-        raise ValueError("full mode must not carry --count")
     if args.count is not None and int(args.count) <= 0:
-        raise ValueError("partial --count must be a positive integer")
+        raise ValueError("--count must be a positive integer")
 
     return RuntimeOptions(
         input_path=Path(args.input).expanduser().resolve(),
         output_dir=Path(args.output).expanduser().resolve() if args.output else None,
         format_id=str(args.format),
         layout=str(args.layout),
-        strip_mode=str(args.strip),
         requested_count=(None if args.count is None else int(args.count)),
         debug_analysis=bool(args.debug_analysis),
         jobs=int(args.jobs),

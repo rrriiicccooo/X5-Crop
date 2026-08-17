@@ -5,12 +5,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 
-from ...configuration.model import HolderLayoutAuthority
 from ...domain import FiniteInterval
 from ...formats import FormatSpec, FramePhysicalSpec
 from ..evidence.scan_canvas import CanvasAxisScaleIntervals
 from ..source_core import SourceStripValidationDomain
-from .template_model import PhaseAuthority, TemplateSpec
+from .template_model import TemplateSpec
 
 
 
@@ -44,8 +43,6 @@ class MeasurementIntentKind(str, Enum):
 
 class TemplateStopFact(str, Enum):
     FIXED_FORMAT_TEMPLATE = "fixed_format_template"
-    FULL_CENTERED_PHASE_AUTHORITY = "full_centered_phase_authority"
-    PARTIAL_FREE_PHASE_AUTHORITY = "partial_free_phase_authority"
     DIRECT_PHASE_EVIDENCE_REQUIRED = "direct_phase_evidence_required"
     REGISTERED_QUERY_SET_COMPLETE = "registered_query_set_complete"
     NO_PIXEL_ACCESS_DURING_COMPILE = "no_pixel_access_during_compile"
@@ -57,7 +54,6 @@ class TemplateMeasurementInputs:
 
     format_spec: FormatSpec
     frame_spec: FramePhysicalSpec
-    holder_layout_authority: HolderLayoutAuthority
     count: int
     full_count: int
     holder_full_count: int
@@ -72,11 +68,6 @@ class TemplateMeasurementInputs:
             raise TypeError("measurement inputs require a frame physical spec")
         if self.frame_spec != self.format_spec.frame:
             raise ValueError("format and frame physical authority disagree")
-        if not isinstance(
-            self.holder_layout_authority,
-            HolderLayoutAuthority,
-        ):
-            raise TypeError("measurement inputs require holder layout authority")
         if not isinstance(self.count, int) or isinstance(self.count, bool):
             raise TypeError("measurement count must be an integer")
         if (
@@ -93,11 +84,6 @@ class TemplateMeasurementInputs:
             or self.count > self.full_count
         ):
             raise ValueError("measurement count is outside holder authority")
-        if self.holder_layout_authority == HolderLayoutAuthority.USER_CONFIRMED_FILLED_HOLDER_LAYOUT:
-            if self.count != self.full_count:
-                raise ValueError("filled-holder layout requires the full count")
-        elif self.holder_layout_authority != HolderLayoutAuthority.USER_CONFIRMED_NONFILLING_LAYOUT:
-            raise TypeError("measurement inputs require a canonical layout authority")
         if self.layout not in {"horizontal", "vertical"}:
             raise ValueError("measurement layout must be horizontal or vertical")
         if not isinstance(self.lane_authority, SourceStripValidationDomain):
@@ -364,26 +350,16 @@ class TemplatePrecisionBudget:
 
 @dataclass(frozen=True)
 class TemplateNormalPathStopFacts:
-    phase_authority: PhaseAuthority
     requires_direct_phase_evidence: bool
     facts: tuple[TemplateStopFact, ...]
 
     def __post_init__(self) -> None:
-        if not isinstance(self.phase_authority, PhaseAuthority):
-            raise TypeError("normal-path facts require phase authority")
         if not isinstance(self.requires_direct_phase_evidence, bool):
             raise TypeError("normal-path direct-evidence flag must be boolean")
         if not self.facts or len(set(self.facts)) != len(self.facts):
             raise ValueError("normal-path facts must be unique and non-empty")
         if TemplateStopFact.DIRECT_PHASE_EVIDENCE_REQUIRED not in self.facts:
             raise ValueError("normal path must retain direct phase authority")
-        expected = (
-            TemplateStopFact.FULL_CENTERED_PHASE_AUTHORITY
-            if self.phase_authority == PhaseAuthority.FULL_CENTERED
-            else TemplateStopFact.PARTIAL_FREE_PHASE_AUTHORITY
-        )
-        if expected not in self.facts:
-            raise ValueError("normal-path phase authority fact is missing")
 
 
 @dataclass(frozen=True)
@@ -451,7 +427,6 @@ class TemplateMeasurementPlan:
 
     format_spec: FormatSpec
     frame_spec: FramePhysicalSpec
-    holder_layout_authority: HolderLayoutAuthority
     count: int
     full_count: int
     holder_full_count: int
@@ -479,8 +454,6 @@ class TemplateMeasurementPlan:
             raise TypeError("template plan requires source/lane authority")
         if not isinstance(self.scale_authority, CanvasAxisScaleIntervals):
             raise TypeError("template plan requires scale authority")
-        if not isinstance(self.holder_layout_authority, HolderLayoutAuthority):
-            raise TypeError("template plan requires holder layout authority")
         if not isinstance(self.count, int) or isinstance(self.count, bool):
             raise TypeError("template plan count must be an integer")
         if (
@@ -498,7 +471,6 @@ class TemplateMeasurementPlan:
             not isinstance(self.format_spec, FormatSpec)
             or not isinstance(self.frame_spec, FramePhysicalSpec)
             or self.frame_spec != self.format_spec.frame
-            or not isinstance(self.holder_layout_authority, HolderLayoutAuthority)
             or self.count <= 0
             or self.full_count <= 0
             or self.count > self.full_count
@@ -515,11 +487,6 @@ class TemplateMeasurementPlan:
             or self.holder_full_count % self.format_spec.layout.lane_count
             or self.full_count
             != self.holder_full_count // self.format_spec.layout.lane_count
-            or (
-                self.holder_layout_authority
-                == HolderLayoutAuthority.USER_CONFIRMED_FILLED_HOLDER_LAYOUT
-                and self.count != self.full_count
-            )
             or self.scale_authority.holder_profile_id
             != self.lane_authority.authority_profile_id
             or (
@@ -553,10 +520,6 @@ class TemplateMeasurementPlan:
             pixel=self.pixel_bounds,
             work=self.work_bounds,
         )
-
-    @property
-    def phase_authority(self) -> PhaseAuthority:
-        return self.template_spec.phase_authority
 
     def validate_execution(
         self,

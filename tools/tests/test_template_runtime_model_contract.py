@@ -6,7 +6,6 @@ from pathlib import Path
 import unittest
 
 from x5crop.configuration.registry import get_detection_configuration
-from x5crop.configuration.model import HolderLayoutAuthority
 from x5crop.detection.evidence.scan_canvas import observe_scan_canvas
 from x5crop.detection.gate_checks import GateGap, TypedAssessment, failure_fact
 from x5crop.detection.output_geometry import (
@@ -33,7 +32,6 @@ from x5crop.detection.photo_geometry.template_cross_model import (
     TemplateCrossInput,
 )
 from x5crop.detection.photo_geometry.template_model import (
-    PhaseAuthority,
     PhaseLatticeAuthority,
     TemplateSpec,
 )
@@ -58,7 +56,7 @@ from x5crop.formats import FramePhysicalSpec
 
 
 def _lane() -> SourceLaneEvidence:
-    configuration = get_detection_configuration("135", "full", None)
+    configuration = get_detection_configuration("135")
     canvas = observe_scan_canvas(2320, 322, "horizontal", configuration.scan_canvas)
     return SourceLaneEvidence(
         SourceStripValidationDomain(
@@ -73,13 +71,12 @@ def _lane() -> SourceLaneEvidence:
 
 def _prepared() -> PreparedTemplateLane:
     lane = _lane()
-    configuration = get_detection_configuration("135", "full", None)
+    configuration = get_detection_configuration("135")
     scales = lane.scan_canvas.axis_scales
     assert scales is not None
     plan = compile_template_measurement_plan(
         format_spec=configuration.physical_spec,
         frame_spec=configuration.physical_spec.frame,
-        holder_layout_authority=HolderLayoutAuthority.USER_CONFIRMED_NONFILLING_LAYOUT,
         count=1,
         full_count=6,
         lane_authority=lane.domain,
@@ -224,13 +221,11 @@ class TemplateRuntimeModelContractTest(unittest.TestCase):
                         pitch_px=120.0,
                         frame_height_px=240.0,
                         count=1,
-                        phase_authority=PhaseAuthority.PARTIAL_FREE,
                         phase_lattice_authority=PhaseLatticeAuthority(
                             period_px=120.0,
                             cycle_origin_px=0.0,
                             minimum_slot_offset=-1,
                             maximum_slot_offset=20,
-                            phase_authority=PhaseAuthority.PARTIAL_FREE,
                         ),
                         nominal_gap_px=20.0,
                     ),

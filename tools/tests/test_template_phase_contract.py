@@ -15,7 +15,6 @@ from x5crop.detection.photo_geometry.template_model import (
     LocalAdvanceRelation,
     PhaseAnchor,
     PhaseAnchorAuthority,
-    PhaseAuthority,
     PhaseLatticeAuthority,
     TemplateSearchReceipt,
     TemplateSpec,
@@ -63,22 +62,17 @@ def edge(
     )
 
 
-def template(
-    count: int,
-    authority: PhaseAuthority = PhaseAuthority.PARTIAL_FREE,
-) -> TemplateSpec:
+def template(count: int) -> TemplateSpec:
     return TemplateSpec(
         template_id="test-template",
         frame_width_px=100.0,
         pitch_px=120.0,
         count=count,
-        phase_authority=authority,
         phase_lattice_authority=PhaseLatticeAuthority(
             period_px=120.0,
             cycle_origin_px=0.0,
             minimum_slot_offset=-1,
             maximum_slot_offset=20,
-            phase_authority=authority,
         ),
         nominal_gap_px=20.0,
     )
@@ -144,14 +138,14 @@ class TemplatePhaseContractTest(unittest.TestCase):
                 ),
             )
 
-    def test_full_centered_regular_sequence(self) -> None:
+    def test_regular_sequence_uses_direct_phase(self) -> None:
         observations = tuple(
             edge(f"edge:{index}", coordinate)
             for index, coordinate in enumerate((80.0, 180.0, 200.0, 300.0, 320.0, 420.0))
         )
         result = fit_template_phase(
             observations,
-            template(3, PhaseAuthority.FULL_CENTERED),
+            template(3),
             holder_span_px=FiniteInterval(0.0, 500.0),
         )
         self.assertEqual(result.status, PhaseFitStatus.RESOLVED)
@@ -165,7 +159,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
         self.assertEqual(result.best.support_count, 6)
         self.assertEqual(result.best.inferred_role_indices, ())
 
-    def test_partial_free_phase_does_not_consume_centered_authority(self) -> None:
+    def test_phase_is_derived_from_direct_observations(self) -> None:
         observations = tuple(
             edge(f"edge:{index}", coordinate)
             for index, coordinate in enumerate((35.0, 135.0, 155.0, 255.0, 275.0, 375.0))
@@ -240,7 +234,6 @@ class TemplatePhaseContractTest(unittest.TestCase):
                 cycle_origin_px=0.0,
                 minimum_slot_offset=0,
                 maximum_slot_offset=0,
-                phase_authority=PhaseAuthority.PARTIAL_FREE,
             ),
         )
         result = fit_template_phase(
@@ -300,13 +293,11 @@ class TemplatePhaseContractTest(unittest.TestCase):
             frame_width_px=FiniteInterval(98.0, 102.0),
             pitch_px=FiniteInterval(118.0, 122.0),
             count=2,
-            phase_authority=PhaseAuthority.PARTIAL_FREE,
             phase_lattice_authority=PhaseLatticeAuthority(
                 period_px=FiniteInterval(118.0, 122.0),
                 cycle_origin_px=0.0,
                 minimum_slot_offset=-1,
                 maximum_slot_offset=20,
-                phase_authority=PhaseAuthority.PARTIAL_FREE,
             ),
             nominal_gap_px=FiniteInterval(18.0, 22.0),
         )
@@ -372,7 +363,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
         )
         result = fit_template_phase(
             observations,
-            template(1, PhaseAuthority.FULL_CENTERED),
+            template(1),
             holder_span_px=FiniteInterval(0.0, 110.0),
         )
         self.assertEqual(result.status, PhaseFitStatus.RESOLVED)
@@ -420,13 +411,11 @@ class TemplatePhaseContractTest(unittest.TestCase):
             frame_width_px=FiniteInterval(98.0, 102.0),
             pitch_px=FiniteInterval(118.0, 122.0),
             count=4,
-            phase_authority=PhaseAuthority.PARTIAL_FREE,
             phase_lattice_authority=PhaseLatticeAuthority(
                 period_px=FiniteInterval(118.0, 122.0),
                 cycle_origin_px=0.0,
                 minimum_slot_offset=-1,
                 maximum_slot_offset=20,
-                phase_authority=PhaseAuthority.PARTIAL_FREE,
             ),
             nominal_gap_px=FiniteInterval(18.0, 22.0),
         )
@@ -452,13 +441,11 @@ class TemplatePhaseContractTest(unittest.TestCase):
             frame_width_px=FiniteInterval(90.0, 110.0),
             pitch_px=FiniteInterval(108.0, 132.0),
             count=6,
-            phase_authority=PhaseAuthority.PARTIAL_FREE,
             phase_lattice_authority=PhaseLatticeAuthority(
                 period_px=FiniteInterval(108.0, 132.0),
                 cycle_origin_px=0.0,
                 minimum_slot_offset=-1,
                 maximum_slot_offset=20,
-                phase_authority=PhaseAuthority.PARTIAL_FREE,
             ),
             nominal_gap_px=FiniteInterval(18.0, 22.0),
         )
@@ -688,7 +675,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
             tuple(item.observation_id for item in observations),
         )
 
-    def test_two_direct_gap_anomalies_compose_two_bounded_suffix_shifts(self) -> None:
+    def test_two_direct_gap_anomalies_are_unresolved_without_search(self) -> None:
         nominal_edges = tuple(
             edge(f"edge:{index}", coordinate)
             for index, coordinate in enumerate(
@@ -716,52 +703,10 @@ class TemplatePhaseContractTest(unittest.TestCase):
             nominal_edges,
             bands,
         )
-        self.assertEqual(analysis.anomaly_ordinals, (1, 2))
-        self.assertEqual(
-            tuple(item.relation_ordinal for item in analysis.relations),
-            (1, 2),
-        )
-        self.assertIsNone(analysis.unresolved_reason)
+        self.assertEqual(analysis.anomaly_ordinals, ())
+        self.assertEqual(analysis.relations, ())
+        self.assertIn("exceed", analysis.unresolved_reason or "")
         self.assertEqual(analysis.evaluated_adjacency_count, 2)
-
-        shifted_edges = tuple(
-            edge(f"shifted-edge:{index}", coordinate)
-            for index, coordinate in enumerate(
-                (10.0, 110.0, 133.0, 233.0, 256.0, 356.0)
-            )
-        )
-        shifted_bands = (
-            separator(
-                "shifted-separator:first",
-                shifted_edges[1],
-                shifted_edges[2],
-                FiniteInterval(22.8, 23.2),
-            ),
-            separator(
-                "shifted-separator:second",
-                shifted_edges[3],
-                shifted_edges[4],
-                FiniteInterval(22.8, 23.2),
-            ),
-        )
-        result = fit_template_phase(
-            shifted_edges,
-            template(3, PhaseAuthority.FULL_CENTERED),
-            separator_bands=shifted_bands,
-            holder_span_px=FiniteInterval(0.0, 366.0),
-            local_advance_relations=analysis.relations,
-        )
-        self.assertEqual(result.status, PhaseFitStatus.RESOLVED)
-        assert result.best is not None
-        self.assertEqual(
-            tuple(
-                item.relation_ordinal
-                for item in result.best.local_advance_relations
-                if item.is_anomaly
-            ),
-            (1, 2),
-        )
-        self.assertEqual(result.receipt.fit_pass_count, 1)
 
     def test_three_direct_gap_anomalies_are_unresolved_without_search(self) -> None:
         regular = tuple(

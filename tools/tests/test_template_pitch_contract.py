@@ -5,7 +5,6 @@ import unittest
 from x5crop.detection.photo_geometry.observation_types import BoundaryEdgeObservation
 from x5crop.detection.photo_geometry.model import BoundaryRole
 from x5crop.detection.photo_geometry.template_model import (
-    PhaseAuthority,
     PhaseLatticeAuthority,
     TemplateSpec,
 )
@@ -41,13 +40,11 @@ def template() -> TemplateSpec:
         pitch_px=FiniteInterval(118.0, 126.0),
         nominal_gap_px=FiniteInterval(18.0, 24.0),
         count=3,
-        phase_authority=PhaseAuthority.PARTIAL_FREE,
         phase_lattice_authority=PhaseLatticeAuthority(
             period_px=FiniteInterval(118.0, 126.0),
             cycle_origin_px=0.0,
             minimum_slot_offset=-1,
             maximum_slot_offset=20,
-            phase_authority=PhaseAuthority.PARTIAL_FREE,
         ),
     )
 

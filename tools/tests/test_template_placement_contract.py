@@ -16,7 +16,6 @@ from x5crop.detection.photo_geometry.template_cross_model import (
     CrossRoleBinding,
 )
 from x5crop.detection.photo_geometry.template_model import (
-    PhaseAuthority,
     PhaseLatticeAuthority,
     PhaseLatticeFit,
     PitchFit,
@@ -36,13 +35,11 @@ def _template(count: int = 3) -> TemplateSpec:
         pitch_px=120.0,
         frame_height_px=240.0,
         count=count,
-        phase_authority=PhaseAuthority.FULL_CENTERED,
         phase_lattice_authority=PhaseLatticeAuthority(
             period_px=120.0,
             cycle_origin_px=0.0,
             minimum_slot_offset=-1,
             maximum_slot_offset=20,
-            phase_authority=PhaseAuthority.FULL_CENTERED,
         ),
     )
 
@@ -237,13 +234,11 @@ class TemplatePlacementContractTest(unittest.TestCase):
             pitch_px=FiniteInterval(116.0, 124.0),
             frame_height_px=FiniteInterval(232.0, 248.0),
             count=1,
-            phase_authority=PhaseAuthority.FULL_CENTERED,
             phase_lattice_authority=PhaseLatticeAuthority(
                 period_px=FiniteInterval(116.0, 124.0),
                 cycle_origin_px=0.0,
                 minimum_slot_offset=-1,
                 maximum_slot_offset=20,
-                phase_authority=PhaseAuthority.FULL_CENTERED,
             ),
         )
         sequence = _sequence(template)

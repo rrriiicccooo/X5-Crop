@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from .cohort_count_authority import validate_count_authority
+from .cohort_count import validate_cohort_counts
 from .file_identity import sha256_file
 
 
@@ -16,7 +16,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 PERFORMANCE_COHORT_PATH = (
     Path(__file__).with_name("cohorts") / "production_performance.jsonl"
 )
-COHORT_SCHEMA = "x5crop_performance_cohort_v1"
+COHORT_SCHEMA = "x5crop_performance_cohort_v2"
 FIXED_SOURCE_COUNT = 24
 
 
@@ -26,9 +26,7 @@ class PerformanceSourceIdentity:
     source_relative_path: str
     source_sha256: str
     format_id: str
-    strip_mode: str
-    confirmed_slot_count: int | None
-    count_authority: str
+    count: int
     compression: str
 
     @property
@@ -44,7 +42,7 @@ def load_performance_sources(
     *,
     verify_source_files: bool = True,
 ) -> tuple[PerformanceSourceIdentity, ...]:
-    validate_count_authority()
+    validate_cohort_counts()
     rows: tuple[dict[str, Any], ...] = tuple(
         json.loads(line)
         for line in PERFORMANCE_COHORT_PATH.read_text(
@@ -63,24 +61,15 @@ def load_performance_sources(
             "source_relative_path",
             "source_sha256",
             "format_id",
-            "strip_mode",
-            "count_authority",
+            "count",
             "compression",
         }
-        if row.get("strip_mode") == "partial":
-            expected_keys.add("confirmed_slot_count")
         source = PerformanceSourceIdentity(
             sample_id=str(row.get("sample_id", "")),
             source_relative_path=str(row.get("source_relative_path", "")),
             source_sha256=str(row.get("source_sha256", "")).lower(),
             format_id=str(row.get("format_id", "")),
-            strip_mode=str(row.get("strip_mode", "")),
-            confirmed_slot_count=(
-                None
-                if row.get("confirmed_slot_count") is None
-                else int(row["confirmed_slot_count"])
-            ),
-            count_authority=str(row.get("count_authority", "")),
+            count=int(row.get("count", 0)),
             compression=str(row.get("compression", "")),
         )
         path = source.source_path.resolve()

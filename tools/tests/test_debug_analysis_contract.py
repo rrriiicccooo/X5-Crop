@@ -14,7 +14,7 @@ import tifffile
 import x5crop.debug.axis_panels as debug_axis_panels
 import x5crop.debug.panel_facts as debug_panel_facts
 import x5crop.debug.panels as debug_panels
-from x5crop.configuration.bundle import DetectionConfigurationBundle
+from x5crop.configuration.registry import get_detection_configuration
 from x5crop.configuration.diagnostics import DebugStyleParameters
 from x5crop.debug.canvas import FRAME_FILL_COLORS, DebugRenderCache
 from x5crop.debug.axis_panels import cross_axis_panel, long_axis_panel
@@ -70,18 +70,12 @@ def _fixture(
         planarconfig="contig",
     )
     array, profile, _warnings = read_tiff(source)
-    bundle = DetectionConfigurationBundle.for_format_mode(
-        "135",
-        "partial",
-        3,
-    )
-    configuration = bundle.initial_configuration
+    configuration = get_detection_configuration("135", 3)
     workspace = prepare_detection_workspace(
         array,
         profile,
         "horizontal",
         configuration,
-        None,
     )
     candidate = choose_detection(workspace, configuration)
     decision = apply_decision_gate(candidate.gate)

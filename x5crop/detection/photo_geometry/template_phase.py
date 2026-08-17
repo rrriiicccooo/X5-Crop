@@ -20,7 +20,6 @@ from .template_phase_candidates import (
     _clear_winner_basis,
     _facts,
     _fit_seed,
-    _holder_center,
     _holder_limits,
     _positive,
     _prefixes,
@@ -195,8 +194,6 @@ def fit_template_phase(
                 roles,
                 template,
                 relations,
-                _holder_center(holder_span_px),
-                phase_prior_px,
                 pitch_authority,
             )
             for seed_phase, seed_pitch in sorted(seed_values)

@@ -172,10 +172,11 @@ def _empty_result(
     *,
     layout: str,
     lanes_available: bool,
+    output_slot_gap: GateGap = GateGap.OUTPUT_SLOT_COUNT_UNAVAILABLE,
 ) -> PhotoGeometryDetectionResult:
     selection = TemplateSourceSelection(
         (), (), None, None, EvidenceState.UNAVAILABLE,
-        failure_fact(GateGap.OUTPUT_SLOT_COUNT_UNAVAILABLE),
+        failure_fact(output_slot_gap),
     )
     transform = output_transform(field, layout, selection)
     facts = {
@@ -184,7 +185,7 @@ def _empty_result(
             if lanes_available
             else unavailable(GateGap.SCAN_CANVAS_AUTHORITY_UNAVAILABLE)
         ),
-        "output_slot_count": unavailable(GateGap.OUTPUT_SLOT_COUNT_UNAVAILABLE),
+        "output_slot_count": unavailable(output_slot_gap),
         "observation_completeness": unavailable(GateGap.PRODUCER_BOUND_EXCEEDED),
         "source_scan_geometry": unavailable(GateGap.SOURCE_SCAN_GEOMETRY_UNAVAILABLE),
         "shared_strip_direction": unavailable(GateGap.SHARED_STRIP_DIRECTION_UNAVAILABLE),
@@ -225,7 +226,22 @@ def reconstruct_photo_geometry(
         raise ValueError("content observations must cover source lanes")
     resolved = resolve_output_slots(configuration, lanes, resolved_slot_count)
     if resolved is None:
-        return _empty_result(field, layout=layout, lanes_available=bool(lanes))
+        unsupported_dual_count = (
+            configuration.physical_spec.layout.kind == "dual_lane"
+            and resolved_slot_count is not None
+            and resolved_slot_count.output_count
+            != resolved_slot_count.holder_full_count
+        )
+        return _empty_result(
+            field,
+            layout=layout,
+            lanes_available=bool(lanes),
+            output_slot_gap=(
+                GateGap.UNSUPPORTED_DUAL_COUNT
+                if unsupported_dual_count
+                else GateGap.OUTPUT_SLOT_COUNT_UNAVAILABLE
+            ),
+        )
 
     prepared = tuple(
         prepare_template_lane(

@@ -215,15 +215,11 @@ def profile_source(source) -> ProfiledSource:
             str(output),
             "--format",
             source.format_id,
-            "--strip",
-            source.strip_mode,
+            "--count",
+            str(source.count),
             "--jobs",
             "1",
         ]
-        if source.strip_mode == "partial":
-            if source.confirmed_slot_count is None:
-                raise ValueError(f"{source.sample_id} lacks explicit partial count")
-            command.extend(("--count", str(source.confirmed_slot_count)))
         wall, peak_rss, process_output, returncode = _run_profiled(command)
         if returncode != 0:
             raise ValueError(

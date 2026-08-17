@@ -281,7 +281,6 @@ def prepare_template_lane(
     measurement_plan = compile_template_measurement_plan(
         format_spec=configuration.physical_spec,
         frame_spec=configuration.physical_spec.frame,
-        holder_layout_authority=configuration.count_request.holder_layout_authority,
         count=output_slot_count,
         full_count=measurement_slot_count,
         holder_full_count=holder_full_count,
@@ -417,7 +416,6 @@ def prepare_template_lane(
         source_geometry=source_geometry,
         width_scale_px_per_mm=scales.width_axis_px_per_mm,
         count=output_slot_count,
-        holder_layout_authority=configuration.count_request.holder_layout_authority,
         phase_lattice_authority=measurement_plan.template_spec.phase_lattice_authority,
         template_id=measurement_plan.template_spec.template_id,
     )

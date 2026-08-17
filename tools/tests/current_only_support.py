@@ -11,9 +11,9 @@ from unittest import mock
 
 from tools.release.manifest import RELEASE_FILES, RELEASE_PATHS
 from tools.release.standalone import read_sources
-from tools.regression.cohort_count_authority import (
-    confirmed_slot_count,
-    validate_count_authority,
+from tools.regression.cohort_count import (
+    cohort_slot_count,
+    validate_cohort_counts,
 )
 from x5crop.configuration.model import (
     SlotCountRequest,

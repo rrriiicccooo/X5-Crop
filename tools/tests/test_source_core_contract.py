@@ -92,22 +92,22 @@ class PhysicalAuthorityContractTest(unittest.TestCase):
 
     def test_design_apertures_count_and_tolerance_are_typed(self) -> None:
         expected = {
-            "135": ((36.0, 24.0), 6, True),
-            "135-dual": ((36.0, 24.0), 12, False),
-            "half": ((18.0, 24.0), 12, True),
-            "xpan": ((65.0, 24.0), 3, True),
-            "120-645": ((42.0, 56.0), 4, True),
-            "120-66": ((56.0, 56.0), 3, True),
-            "120-67": ((70.0, 56.0), 3, True),
+            "135": ((36.0, 24.0), 6),
+            "135-dual": ((36.0, 24.0), 12),
+            "half": ((18.0, 24.0), 12),
+            "xpan": ((65.0, 24.0), 3),
+            "120-645": ((42.0, 56.0), 4),
+            "120-66": ((56.0, 56.0), 3),
+            "120-67": ((70.0, 56.0), 3),
         }
         for format_id, values in expected.items():
             spec = format_spec(format_id)
             self.assertEqual(
                 ((spec.frame.frame_width_mm, spec.frame.frame_height_mm),),
-                values[:-2],
+                values[:-1],
             )
-            self.assertEqual(spec.maximum_full_count, values[-2])
-            self.assertEqual(spec.partial_mode_supported, values[-1])
+            self.assertEqual(spec.maximum_full_count, values[-1])
+            self.assertFalse(hasattr(spec, "partial_mode_supported"))
             self.assertFalse(hasattr(spec, "aperture_tolerance"))
         self.assertEqual(
             FRAME_DIMENSION_TOLERANCE_SPEC.frame_width_tolerance_ratio,
@@ -192,7 +192,6 @@ class PhysicalAuthorityContractTest(unittest.TestCase):
     ) -> None:
         configuration = get_detection_configuration(
             "120-66",
-            "partial",
             3,
         )
         evidence = observe_scan_canvas(
@@ -231,7 +230,7 @@ class PhysicalAuthorityContractTest(unittest.TestCase):
         )
 
     def test_holder_match_precedes_full_count_resolution(self) -> None:
-        configuration = get_detection_configuration("120-67", "full")
+        configuration = get_detection_configuration("120-67")
         pixels = np.zeros((1000, 2972), dtype=np.uint8)
         workspace = prepare_detection_workspace(
             pixels,
@@ -253,7 +252,6 @@ class PhysicalAuthorityContractTest(unittest.TestCase):
             ),
             "horizontal",
             configuration,
-            None,
         )
         holder = workspace.source_core.matched_holder
         resolved = workspace.source_core.resolved_slot_count
@@ -261,12 +259,55 @@ class PhysicalAuthorityContractTest(unittest.TestCase):
         self.assertEqual(holder.profile.profile_id, "120_wide_188_5")
         self.assertEqual(holder.full_count, 2)
         self.assertEqual(resolved.output_count, 2)
-        self.assertEqual(resolved.authority.value, "matched_holder_full_count")
+        self.assertEqual(resolved.authority.value, "matched_holder_default_count")
+
+    def test_dual_explicit_nondefault_count_is_typed_review_without_lane_guess(
+        self,
+    ) -> None:
+        configuration = get_detection_configuration("135-dual", 10)
+        pixels = np.zeros((634, 2320), dtype=np.uint8)
+        workspace = prepare_detection_workspace(
+            pixels,
+            ImageProfile(
+                shape=pixels.shape,
+                dtype="uint8",
+                axes="YX",
+                photometric="MINISBLACK",
+                compression="NONE",
+                sample_format=None,
+                bits_per_sample=(8,),
+                samples_per_pixel=1,
+                planar_config=None,
+                resolution=None,
+                resolution_unit=None,
+                icc_profile=None,
+                metadata=TiffMetadata(None, None, None, ()),
+                orientation=orientation_mapping(1, 2320, 634),
+            ),
+            "horizontal",
+            configuration,
+        )
+        resolved = workspace.source_core.resolved_slot_count
+        assert resolved is not None
+        self.assertEqual(resolved.output_count, 10)
+        self.assertIn(
+            "unsupported_dual_partial_count",
+            workspace.source_core.incomplete_reasons,
+        )
+        candidate = choose_detection(workspace, configuration)
+        output_slot_check = next(
+            item
+            for item in candidate.gate.checks
+            if item.code == "output_slot_count"
+        )
+        self.assertEqual(output_slot_check.gap, GateGap.UNSUPPORTED_DUAL_COUNT)
+        self.assertIsNone(candidate.geometry.resolved_output_slots)
+        self.assertEqual(candidate.geometry.lane_reconstructions, ())
 
     def test_content_occupancy_is_candidate_independent_and_deterministic(
         self,
     ) -> None:
-        configuration = get_detection_configuration("135", "full")
+        configuration = get_detection_configuration("135")
         pixels = np.zeros((100, 720), dtype=np.uint8)
         rows, columns = np.indices((60, 60))
         pixels[20:80, 300:360] = (
@@ -293,14 +334,12 @@ class PhysicalAuthorityContractTest(unittest.TestCase):
             profile,
             "horizontal",
             configuration,
-            None,
         ).source_core.content_occupancy[0]
         second = prepare_detection_workspace(
             pixels,
             profile,
             "horizontal",
             configuration,
-            None,
         ).source_core.content_occupancy[0]
         self.assertTrue(first.observations)
         self.assertEqual(first, second)
@@ -369,7 +408,7 @@ class PhysicalAuthorityContractTest(unittest.TestCase):
         )
 
     def test_competing_holder_counts_remain_unresolved(self) -> None:
-        configuration = get_detection_configuration("120-67", "full")
+        configuration = get_detection_configuration("120-67")
         same_aspect_profiles = (
             ScanCanvasPhysicalSpec("120_standard", 60.0, 180.0),
             ScanCanvasPhysicalSpec("120_wide_188_5", 60.0, 180.0),
@@ -399,7 +438,6 @@ class PhysicalAuthorityContractTest(unittest.TestCase):
             ),
             "horizontal",
             configuration,
-            None,
         )
         self.assertIsNone(workspace.source_core.matched_holder)
         self.assertIsNone(workspace.source_core.resolved_slot_count)
@@ -412,8 +450,7 @@ class PhysicalAuthorityContractTest(unittest.TestCase):
             candidate.gate.checks[0].gap,
             GateGap.HOLDER_FULL_COUNT_UNRESOLVED,
         )
-        explicit = get_detection_configuration("120-67", "partial", 2)
-        self.assertEqual(explicit.count_request.strip_mode, "partial")
+        explicit = get_detection_configuration("120-67", 2)
         self.assertEqual(explicit.count_request.user_count, 2)
         self.assertIn(
             "120_wide_188_5",
@@ -425,8 +462,6 @@ class PhysicalAuthorityContractTest(unittest.TestCase):
     ) -> None:
         configuration = get_detection_configuration(
             "135",
-            "full",
-            None,
         )
         pixels = np.zeros((100, 720), dtype=np.uint8)
         workspace = prepare_detection_workspace(
@@ -453,7 +488,6 @@ class PhysicalAuthorityContractTest(unittest.TestCase):
             ),
             "horizontal",
             configuration,
-            None,
         )
         lane = workspace.source_core.lanes[0]
         scan = lane.scan_canvas
@@ -462,9 +496,6 @@ class PhysicalAuthorityContractTest(unittest.TestCase):
         plan = compile_template_measurement_plan(
             format_spec=configuration.physical_spec,
             frame_spec=aperture,
-            holder_layout_authority=(
-                configuration.count_request.holder_layout_authority
-            ),
             count=6,
             full_count=6,
             holder_full_count=6,

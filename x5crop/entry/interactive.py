@@ -57,21 +57,20 @@ def ask_format() -> str:
         print("use return/135, dual, xpan, half, 645, 66, or 67.")
 
 
-def ask_partial_count(format_id: str) -> int:
-    partial_count_range = FORMATS[format_id].interactive_partial_counts
-    allowed_text = " ".join(str(count) for count in partial_count_range)
+def ask_count(format_id: str) -> int | None:
+    maximum = FORMATS[format_id].maximum_full_count
     while True:
-        print("partial output slots:")
-        print(f"  explicit slots: {allowed_text}")
-        answer = normalized_input(input("count: "))
+        answer = normalized_input(input(f"count [default {maximum}]: "))
+        if not answer:
+            return None
         try:
             count = int(answer)
         except ValueError:
             count = -1
-        if count in partial_count_range:
+        if 1 <= count <= maximum:
             return count
         print(f"unknown count: {answer}")
-        print(f"use one of: {allowed_text}")
+        print(f"use 1-{maximum}, or press return for the matched-holder default.")
 
 
 def interactive_options(
@@ -87,16 +86,7 @@ def interactive_options(
         print("The output must be a fresh directory; existing output is never replaced.")
         print()
     format_id = selected_format_id or ask_format()
-    partial_supported = FORMATS[format_id].partial_mode_supported
-    partial = (
-        ask_yes_no("partial mode? [y/n, return=no]: ", default=False)
-        if partial_supported
-        else False
-    )
-    if not partial_supported:
-        print(f"{format_id} supports full mode only.")
-    strip_mode = "partial" if partial else "full"
-    requested_count = ask_partial_count(format_id) if partial else None
+    requested_count = ask_count(format_id)
     debug_analysis = (
         ask_yes_no(
             "debug analysis? [y/n, return=no]: ",
@@ -114,9 +104,11 @@ def interactive_options(
         print("debug analysis: off")
         print("fresh detection: enabled")
         print("frame TIFF export: enabled after the bounded safety Gate")
-    print(f"strip mode: {strip_mode}")
-    if partial:
-        print(f"count: {requested_count}")
+    print(
+        "count: matched-holder default"
+        if requested_count is None
+        else f"count: {requested_count}"
+    )
     print()
 
     return RuntimeOptions(
@@ -124,7 +116,6 @@ def interactive_options(
         output_dir=None,
         format_id=format_id,
         layout="auto",
-        strip_mode=strip_mode,
         requested_count=requested_count,
         debug_analysis=debug_analysis,
         jobs=STANDARD_JOB_DEFAULT,
@@ -140,7 +131,7 @@ def run_interactive() -> int:
         except SlotCountPreflightError as exc:
             print()
             print(str(exc))
-            print("re-enter mode and count for this batch.")
+            print("re-enter count for this batch.")
             options = interactive_options(
                 selected_format_id=options.format_id,
                 selected_debug_analysis=options.debug_analysis,

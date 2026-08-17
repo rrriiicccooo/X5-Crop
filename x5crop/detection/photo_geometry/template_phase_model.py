@@ -27,8 +27,6 @@ class PhaseFailureKind(str, Enum):
 class PhaseWinnerBasis(str, Enum):
     ONLY_PHYSICAL_FIT = "only_physical_fit"
     SAMPLING_EQUIVALENT_RUNNER = "sampling_equivalent_runner"
-    HOLDER_CENTER_COMPATIBILITY = "holder_center_compatibility"
-    HOLDER_CENTER_BUCKET = "holder_center_bucket"
     RESIDUAL_COMPATIBILITY = "residual_compatibility"
     POLARITY_SUPPORT = "polarity_support"
     DIRECT_SUPPORT = "direct_support"

@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import math
 
-from ...configuration.model import HolderLayoutAuthority
 from ...domain import Box, FiniteInterval, PositiveInterval
 from ...formats import (
     DIRECT_USE_BUDGET_SPEC,
@@ -44,13 +43,12 @@ from .template_measurement_plan_model import (
     TemplateStopFact,
     TemplateWorkBounds,
 )
-from .template_model import PhaseAuthority, PhaseLatticeAuthority, TemplateSpec
+from .template_model import PhaseLatticeAuthority, TemplateSpec
 
 def compile_template_measurement_plan(
     *,
     format_spec: FormatSpec,
     frame_spec: FramePhysicalSpec,
-    holder_layout_authority: HolderLayoutAuthority,
     count: int,
     full_count: int,
     holder_full_count: int | None = None,
@@ -65,7 +63,6 @@ def compile_template_measurement_plan(
     inputs = TemplateMeasurementInputs(
         format_spec=format_spec,
         frame_spec=frame_spec,
-        holder_layout_authority=holder_layout_authority,
         count=count,
         full_count=full_count,
         holder_full_count=holder_full_count,
@@ -78,7 +75,6 @@ def compile_template_measurement_plan(
         FORMAT_CATALOG_REVISION,
         inputs.format_spec.format_id,
         inputs.frame_spec.identity_fields,
-        inputs.holder_layout_authority.value,
         inputs.count,
         inputs.full_count,
         inputs.holder_full_count,
@@ -86,12 +82,6 @@ def compile_template_measurement_plan(
         inputs.lane_authority.source_axis_long,
         inputs.lane_authority.authority_profile_id,
         inputs.layout,
-    )
-    phase_authority = (
-        PhaseAuthority.FULL_CENTERED
-        if inputs.holder_layout_authority
-        == HolderLayoutAuthority.USER_CONFIRMED_FILLED_HOLDER_LAYOUT
-        else PhaseAuthority.PARTIAL_FREE
     )
     frame_width_px = _scaled_extent(
         inputs.frame_spec.frame_width_mm,
@@ -125,7 +115,6 @@ def compile_template_measurement_plan(
             inputs.full_count,
             int(math.ceil(long_extent_px / pitch_px.minimum)) + 1,
         ),
-        phase_authority=phase_authority,
     )
     template_spec = TemplateSpec(
         template_id=f"{physical_identity}:spec",
@@ -134,7 +123,6 @@ def compile_template_measurement_plan(
         pitch_px=pitch_px,
         nominal_gap_px=gap_px,
         count=inputs.count,
-        phase_authority=phase_authority,
         phase_lattice_authority=phase_lattice,
     )
     query_intents = _query_intents(
@@ -216,17 +204,11 @@ def compile_template_measurement_plan(
         raise ValueError("template phase role bound overflow")
     facts = (
         TemplateStopFact.FIXED_FORMAT_TEMPLATE,
-        (
-            TemplateStopFact.FULL_CENTERED_PHASE_AUTHORITY
-            if phase_authority == PhaseAuthority.FULL_CENTERED
-            else TemplateStopFact.PARTIAL_FREE_PHASE_AUTHORITY
-        ),
         TemplateStopFact.DIRECT_PHASE_EVIDENCE_REQUIRED,
         TemplateStopFact.REGISTERED_QUERY_SET_COMPLETE,
         TemplateStopFact.NO_PIXEL_ACCESS_DURING_COMPILE,
     )
     stop_facts = TemplateNormalPathStopFacts(
-        phase_authority=phase_authority,
         requires_direct_phase_evidence=True,
         facts=facts,
     )
@@ -266,7 +248,6 @@ def compile_template_measurement_plan(
     return TemplateMeasurementPlan(
         format_spec=inputs.format_spec,
         frame_spec=inputs.frame_spec,
-        holder_layout_authority=inputs.holder_layout_authority,
         count=inputs.count,
         full_count=inputs.full_count,
         holder_full_count=inputs.holder_full_count,

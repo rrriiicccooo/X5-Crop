@@ -4,8 +4,8 @@ This module does not search pixels or placements.  It inspects the already
 selected sequence-role bindings and registered separator bands once.  A local
 advance is authorized only when one physical separator directly binds one
 known adjacency and its measured gap is disjoint from the nominal gap.  The
-product model permits at most two such observed adjacencies; their suffix
-adjustments are composed once in ordinal order without searching their places.
+product model permits one such observed adjacency; its suffix adjustment is
+applied once without searching its position.
 """
 
 from __future__ import annotations
@@ -74,7 +74,7 @@ def derive_bounded_local_advances(
     sequence_edges: tuple[BoundaryEdgeObservation, ...],
     separator_bands: tuple[SeparatorBandObservation, ...],
 ) -> LocalAdvanceAnalysis:
-    """Return at most two directly proved, one-time suffix adjustments.
+    """Return at most one directly proved, one-time suffix adjustment.
 
     Each adjacency is evaluated once.  Missing separator evidence means that
     the nominal template remains in force; it does not create an anomaly.

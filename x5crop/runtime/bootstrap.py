@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ..configuration.bundle import DetectionConfigurationBundle
+from ..configuration.model import DetectionConfiguration
+from ..configuration.registry import get_detection_configuration
 from ..configuration.model import SlotCountRequest
 from ..output.naming import portable_source_stems
 from ..run_config import RunConfig
@@ -27,12 +28,10 @@ class SlotCountPreflightError(ValueError):
 def _preflight_batch_count(
     files: list[Path],
     options: RuntimeOptions,
-    configuration_bundle: DetectionConfigurationBundle,
+    configuration: DetectionConfiguration,
 ) -> None:
-    if options.strip_mode != "partial":
+    if options.requested_count is None:
         return
-    configuration = configuration_bundle.initial_configuration
-    assert options.requested_count is not None
     conflicts: list[str] = []
     for path in files:
         try:
@@ -62,7 +61,7 @@ def _preflight_batch_count(
         )
         if holder is not None and options.requested_count > holder.full_count:
             conflicts.append(
-                f"{path.name}: partial count {options.requested_count} must be "
+                f"{path.name}: count {options.requested_count} must be "
                 f"no greater than {holder.full_count} for "
                 f"{holder.profile.profile_id}"
             )
@@ -78,15 +77,13 @@ def runtime_invocation_from_options(options: RuntimeOptions) -> RuntimeInvocatio
     if not files:
         raise ValueError(f"No TIFF files found: {options.input_path}")
     count_request = SlotCountRequest.from_user_input(
-        options.strip_mode,
         options.requested_count,
     )
-    configuration_bundle = DetectionConfigurationBundle.for_format_mode(
+    configuration = get_detection_configuration(
         options.format_id,
-        options.strip_mode,
         options.requested_count,
     )
-    _preflight_batch_count(files, options, configuration_bundle)
+    _preflight_batch_count(files, options, configuration)
 
     layout_auto = options.layout == "auto"
     layout = options.layout
@@ -97,7 +94,6 @@ def runtime_invocation_from_options(options: RuntimeOptions) -> RuntimeInvocatio
         format_id=options.format_id,
         layout_auto=layout_auto,
         layout=layout,
-        strip_mode=options.strip_mode,
         count_request=count_request,
         debug_analysis=options.debug_analysis,
         jobs=max(1, min(STANDARD_JOB_LIMIT, int(options.jobs))),
@@ -115,7 +111,7 @@ def runtime_invocation_from_options(options: RuntimeOptions) -> RuntimeInvocatio
                 1,
             )
         ),
-        configuration_bundle=configuration_bundle,
+        configuration=configuration,
     )
 
 

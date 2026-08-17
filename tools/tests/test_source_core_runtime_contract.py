@@ -12,7 +12,6 @@ import numpy as np
 import tifffile
 
 from x5crop.app_info import REPORT_JSONL_NAME
-from x5crop.configuration.bundle import DetectionConfigurationBundle
 from x5crop.configuration.registry import get_detection_configuration
 from x5crop.detection.candidate.assessment.model import (
     CANDIDATE_GATE_CHECK_CODES,
@@ -34,14 +33,12 @@ def _run_config(
     source: Path,
     output: Path,
     format_id: str = "135",
-    strip_mode: str = "partial",
     requested_count: int | None = 3,
     *,
     debug_analysis: bool = False,
 ) -> RunConfig:
     configuration = get_detection_configuration(
         format_id,
-        strip_mode,
         requested_count,
     )
     return RunConfig(
@@ -50,7 +47,6 @@ def _run_config(
         format_id=format_id,
         layout_auto=False,
         layout="horizontal",
-        strip_mode=strip_mode,
         count_request=configuration.count_request,
         debug_analysis=debug_analysis,
         jobs=2,
@@ -69,7 +65,6 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
         root: Path,
         pixels: np.ndarray,
         format_id: str = "135",
-        strip_mode: str = "partial",
         requested_count: int | None = 3,
     ):
         root.mkdir(parents=True, exist_ok=True)
@@ -81,21 +76,16 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
             planarconfig="contig",
         )
         output = root / "output"
-        bundle = DetectionConfigurationBundle.for_format_mode(
-            format_id,
-            strip_mode,
-            requested_count,
-        )
+        configuration = get_detection_configuration(format_id, requested_count)
         return process_one(
             PlannedSource(1, source, source.stem),
             _run_config(
                 source,
                 output,
                 format_id,
-                strip_mode,
                 requested_count,
             ),
-            bundle,
+            configuration,
             output,
         )
 
@@ -144,12 +134,11 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
             "not_created",
         )
 
-    def test_fixed_full_without_photo_geometry_is_review(self) -> None:
+    def test_default_count_without_photo_geometry_is_review(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             outcome = self._process_pixels(
                 Path(temporary),
                 np.zeros((100, 720), dtype=np.uint16),
-                strip_mode="full",
                 requested_count=None,
             )
         self.assertIsInstance(outcome, CompletedInput)
@@ -157,7 +146,7 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
         self.assertEqual(outcome.result.record["decision"]["status"], "needs_review")
         self.assertEqual(outcome.artifacts.frame_outputs, ())
 
-    def test_partial_count_equal_to_holder_count_keeps_partial_layout_authority(
+    def test_explicit_count_equal_to_holder_count_has_no_center_authority(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -165,22 +154,18 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
                 Path(temporary),
                 np.zeros((1000, 2972), dtype=np.uint16),
                 format_id="120-67",
-                strip_mode="partial",
                 requested_count=2,
             )
         self.assertIsInstance(outcome, CompletedInput)
         assert isinstance(outcome, CompletedInput)
         resolved = outcome.result.record["photo_geometry"]["resolved_slot_count"]
         self.assertEqual(resolved["output_count"], 2)
-        self.assertEqual(resolved["full_count"], 2)
+        self.assertEqual(resolved["holder_full_count"], 2)
         self.assertEqual(
             resolved["authority"],
-            "user_explicit_partial_count",
+            "user_explicit_count",
         )
-        self.assertEqual(
-            resolved["holder_layout_authority"],
-            "user_confirmed_nonfilling_layout",
-        )
+        self.assertNotIn("holder_layout_authority", resolved)
         self.assertEqual(outcome.artifacts.frame_outputs, ())
 
     def test_current_report_rejects_false_tiff_readback_receipt(self) -> None:
@@ -234,13 +219,11 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
             source = (root / "gray.tif").resolve()
             tifffile.imwrite(source, np.zeros((100, 720), dtype=np.uint8))
             output = root / "output"
-            bundle = DetectionConfigurationBundle.for_format_mode(
-                "135", "partial", 3
-            )
+            configuration = get_detection_configuration("135", 3)
             outcome = process_one(
                 PlannedSource(1, source, "gray"),
                 _run_config(source, output),
-                bundle,
+                configuration,
                 output,
             )
         self.assertIsInstance(outcome, FailedInput)
@@ -259,9 +242,7 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
                 photometric="rgb",
                 planarconfig="contig",
             )
-            bundle = DetectionConfigurationBundle.for_format_mode(
-                "135", "partial", 3
-            )
+            configuration = get_detection_configuration("135", 3)
             planned = PlannedSource(1, source, source.stem)
             analysis_output = root / "analysis"
             analysis_outcome = process_one(
@@ -271,7 +252,7 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
                     analysis_output,
                     debug_analysis=True,
                 ),
-                bundle,
+                configuration,
                 analysis_output,
             )
             self.assertIsInstance(analysis_outcome, CompletedInput)
@@ -293,7 +274,7 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
                 normal_outcome = process_one(
                     planned,
                     _run_config(source, normal_output),
-                    bundle,
+                    configuration,
                     normal_output,
                 )
             self.assertTrue(detector.called)
@@ -317,9 +298,7 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
                 photometric="rgb",
                 planarconfig="contig",
             )
-            bundle = DetectionConfigurationBundle.for_format_mode(
-                "135", "partial", 3
-            )
+            configuration = get_detection_configuration("135", 3)
             planned = PlannedSource(1, source, source.stem)
             analysis_output = root / "analysis"
             analysis_outcome = process_one(
@@ -329,7 +308,7 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
                     analysis_output,
                     debug_analysis=True,
                 ),
-                bundle,
+                configuration,
                 analysis_output,
             )
             self.assertIsInstance(analysis_outcome, CompletedInput)
@@ -338,7 +317,7 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
             outcome = process_one(
                 planned,
                 _run_config(source, normal_output),
-                bundle,
+                configuration,
                 normal_output,
             )
             self.assertIsInstance(outcome, CompletedInput)
@@ -379,7 +358,6 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
                 output_dir=production,
                 format_id="135",
                 layout="horizontal",
-                strip_mode="partial",
                 requested_count=3,
                 debug_analysis=True,
                 jobs=1,
@@ -396,7 +374,6 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
                 output_dir=production,
                 format_id="135",
                 layout="horizontal",
-                strip_mode="partial",
                 requested_count=3,
                 debug_analysis=False,
                 jobs=1,

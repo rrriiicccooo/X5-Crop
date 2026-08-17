@@ -12,7 +12,6 @@ class RunConfig:
     format_id: str
     layout_auto: bool
     layout: str
-    strip_mode: str
     count_request: SlotCountRequest
     debug_analysis: bool
     jobs: int

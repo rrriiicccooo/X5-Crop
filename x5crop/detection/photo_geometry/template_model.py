@@ -15,7 +15,7 @@ import math
 from ...domain import FiniteInterval, ObservationId, PositiveInterval
 
 
-MAX_LOCAL_ADVANCE_ANOMALIES = 2
+MAX_LOCAL_ADVANCE_ANOMALIES = 1
 MAX_TEMPLATE_FIT_PASSES = 5
 from .model import BoundaryRole
 
@@ -47,14 +47,6 @@ def _positive_interval(
     return PositiveInterval(interval.minimum, interval.maximum)
 
 
-class PhaseAuthority(str, Enum):
-    """How much placement authority a template may consume."""
-
-    DIRECT = "direct"
-    FULL_CENTERED = "full_centered"
-    PARTIAL_FREE = "partial_free"
-
-
 class PhaseAnchorAuthority(str, Enum):
     """Explicit authority behind a non-pixel phase anchor."""
 
@@ -74,7 +66,6 @@ class PhaseLatticeAuthority:
     cycle_origin_px: float
     minimum_slot_offset: int
     maximum_slot_offset: int
-    phase_authority: PhaseAuthority
 
     def __post_init__(self) -> None:
         period = _positive_interval(self.period_px)
@@ -89,9 +80,6 @@ class PhaseLatticeAuthority:
             or self.minimum_slot_offset > self.maximum_slot_offset
         ):
             raise ValueError("phase lattice offset bounds are invalid")
-        if not isinstance(self.phase_authority, PhaseAuthority):
-            raise TypeError("phase lattice authority must be typed")
-
     def contains_offset(self, value: int) -> bool:
         return self.minimum_slot_offset <= value <= self.maximum_slot_offset
 
@@ -104,7 +92,6 @@ class PhaseLatticeAuthority:
             cycle_origin_px=self.cycle_origin_px,
             minimum_slot_offset=self.minimum_slot_offset,
             maximum_slot_offset=self.maximum_slot_offset,
-            phase_authority=self.phase_authority,
         )
 
 
@@ -217,7 +204,6 @@ class TemplateSpec:
     frame_width_px: FiniteInterval | PositiveInterval | float
     pitch_px: FiniteInterval | PositiveInterval | float
     count: int
-    phase_authority: PhaseAuthority
     phase_lattice_authority: PhaseLatticeAuthority
     frame_height_px: FiniteInterval | PositiveInterval | float | None = None
     direction: int = 1
@@ -237,14 +223,8 @@ class TemplateSpec:
             )
         if self.count <= 0:
             raise ValueError("template count must be positive")
-        if not isinstance(self.phase_authority, PhaseAuthority):
-            raise TypeError("template phase authority must be typed")
-        if (
-            not isinstance(self.phase_lattice_authority, PhaseLatticeAuthority)
-            or self.phase_lattice_authority.phase_authority
-            != self.phase_authority
-        ):
-            raise ValueError("template phase lattice authority disagrees")
+        if not isinstance(self.phase_lattice_authority, PhaseLatticeAuthority):
+            raise TypeError("template phase lattice authority must be typed")
         if self.direction not in {-1, 1}:
             raise ValueError("template direction must be -1 or +1")
         if self.cross is not None and not self.cross:
@@ -445,7 +425,6 @@ class SequenceFit:
     support_count: int = 0
     contradicted_observation_count: int = 0
     residual_sum_px: float = 0.0
-    center_compatible: bool = True
     direct_support_fraction: float = 0.0
     polarity_match_count: int = 0
 
@@ -483,8 +462,6 @@ class SequenceFit:
             raise ValueError("sequence support count is inconsistent")
         if self.contradicted_observation_count < 0:
             raise ValueError("sequence contradiction count is invalid")
-        if not isinstance(self.center_compatible, bool):
-            raise TypeError("sequence center compatibility must be boolean")
         if (
             not math.isfinite(self.direct_support_fraction)
             or self.direct_support_fraction < 0.0
@@ -630,7 +607,6 @@ class SequenceFit:
             support_count=self.support_count,
             contradicted_observation_count=self.contradicted_observation_count,
             residual_sum_px=self.residual_sum_px,
-            center_compatible=self.center_compatible,
             direct_support_fraction=self.direct_support_fraction,
             polarity_match_count=self.polarity_match_count,
         )
@@ -730,7 +706,6 @@ __all__ = [
     "LocalAdvanceRelation",
     "MAX_TEMPLATE_FIT_PASSES",
     "PhaseAnchor",
-    "PhaseAuthority",
     "PhaseLatticeAuthority",
     "PhaseLatticeFit",
     "PitchFit",

@@ -16,6 +16,7 @@ class GateGap(str, Enum):
     HOLDER_FULL_COUNT_UNRESOLVED = "holder_full_count_unresolved"
     HOLDER_IDENTITY_UNRESOLVED = "holder_identity_unresolved"
     OUTPUT_SLOT_COUNT_UNAVAILABLE = "output_slot_count_unavailable"
+    UNSUPPORTED_DUAL_COUNT = "unsupported_dual_partial_count"
     COMPLETE_PLACEMENT_UNAVAILABLE = "complete_placement_unavailable"
     PRODUCER_BOUND_EXCEEDED = "producer_bound_exceeded"
     SHARED_STRIP_DIRECTION_UNAVAILABLE = "shared_strip_direction_unavailable"
@@ -62,7 +63,7 @@ class MinimumMissingFact(str, Enum):
 
 class RecoveryAction(str, Enum):
     CHECK_FORMAT = "check_format"
-    CHECK_PARTIAL_COUNT = "check_partial_count"
+    CHECK_COUNT = "check_count"
     INCLUDE_COMPLETE_HOLDER = "include_complete_holder"
     PROVIDE_PHASE_ANCHOR = "provide_phase_anchor"
     RERUN_MEASUREMENT = "rerun_measurement"
@@ -106,7 +107,12 @@ def failure_fact(
         GateGap.OUTPUT_SLOT_COUNT_UNAVAILABLE: (
             FailureRecovery.USER_ACTION,
             MinimumMissingFact.COUNT_AUTHORITY,
-            RecoveryAction.CHECK_PARTIAL_COUNT,
+            RecoveryAction.CHECK_COUNT,
+        ),
+        GateGap.UNSUPPORTED_DUAL_COUNT: (
+            FailureRecovery.USER_ACTION,
+            MinimumMissingFact.COUNT_AUTHORITY,
+            RecoveryAction.CHECK_COUNT,
         ),
         GateGap.PRODUCER_BOUND_EXCEEDED: (
             FailureRecovery.REMEASURE,

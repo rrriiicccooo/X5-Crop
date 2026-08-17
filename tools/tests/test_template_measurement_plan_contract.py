@@ -4,7 +4,6 @@ import ast
 from pathlib import Path
 import unittest
 
-from x5crop.configuration.model import HolderLayoutAuthority
 from x5crop.domain import Box, PositiveInterval
 from x5crop.formats import FORMATS, FramePhysicalSpec, format_spec
 from x5crop.detection.evidence.scan_canvas import CanvasAxisScaleIntervals
@@ -49,7 +48,6 @@ def _plan(
     *,
     count: int = 6,
     full_count: int = 6,
-    authority: HolderLayoutAuthority = HolderLayoutAuthority.USER_CONFIRMED_FILLED_HOLDER_LAYOUT,
     scale: float = 10.0,
     box: Box = Box(0, 0, 3600, 2400),
 ):
@@ -62,7 +60,6 @@ def _plan(
     return compile_template_measurement_plan(
         format_spec=spec,
         frame_spec=frame,
-        holder_layout_authority=authority,
         count=count,
         full_count=full_count,
         lane_authority=domain,
@@ -96,21 +93,16 @@ class TemplateMeasurementPlanContractTest(unittest.TestCase):
         self.assertEqual(len(half.query_intents), 6)
         self.assertEqual(len(one_twenty.query_intents), 6)
 
-    def test_partial_equal_to_full_count_stays_free_phase(self) -> None:
-        plan = _plan(
-            authority=HolderLayoutAuthority.USER_CONFIRMED_NONFILLING_LAYOUT,
-        )
-        self.assertEqual(plan.phase_authority.value, "partial_free")
+    def test_explicit_count_never_adds_center_phase_authority(self) -> None:
+        plan = _plan()
+        self.assertFalse(hasattr(plan, "phase_authority"))
         self.assertIn(
-            TemplateStopFact.PARTIAL_FREE_PHASE_AUTHORITY,
+            TemplateStopFact.DIRECT_PHASE_EVIDENCE_REQUIRED,
             plan.normal_path_stop_facts.facts,
         )
-        with self.assertRaises(ValueError):
-            _plan(
-                count=5,
-                full_count=6,
-                authority=HolderLayoutAuthority.USER_CONFIRMED_FILLED_HOLDER_LAYOUT,
-            )
+        shorter = _plan(count=5, full_count=6)
+        self.assertEqual(shorter.template_spec.count, 5)
+        self.assertEqual(shorter.normal_path_stop_facts, plan.normal_path_stop_facts)
 
     def test_query_intents_are_complete_and_pre_registered(self) -> None:
         plan = _plan()
@@ -249,9 +241,6 @@ class TemplateMeasurementPlanContractTest(unittest.TestCase):
         plan = compile_template_measurement_plan(
             format_spec=spec,
             frame_spec=spec.frame,
-            holder_layout_authority=(
-                HolderLayoutAuthority.USER_CONFIRMED_NONFILLING_LAYOUT
-            ),
             count=3,
             full_count=3,
             lane_authority=domain,
@@ -277,7 +266,6 @@ class TemplateMeasurementPlanContractTest(unittest.TestCase):
             compile_template_measurement_plan(
                 format_spec=format_spec("135"),
                 frame_spec=foreign_frame,
-                holder_layout_authority=HolderLayoutAuthority.USER_CONFIRMED_FILLED_HOLDER_LAYOUT,
                 count=6,
                 full_count=6,
                 lane_authority=domain,
@@ -295,7 +283,6 @@ class TemplateMeasurementPlanContractTest(unittest.TestCase):
             compile_template_measurement_plan(
                 format_spec=format_spec("135"),
                 frame_spec=frame,
-                holder_layout_authority=HolderLayoutAuthority.USER_CONFIRMED_FILLED_HOLDER_LAYOUT,
                 count=6,
                 full_count=6,
                 lane_authority=domain,
@@ -309,7 +296,6 @@ class TemplateMeasurementPlanContractTest(unittest.TestCase):
         plan = compile_template_measurement_plan(
             format_spec=spec,
             frame_spec=frame,
-            holder_layout_authority=HolderLayoutAuthority.USER_CONFIRMED_FILLED_HOLDER_LAYOUT,
             count=6,
             full_count=6,
             holder_full_count=12,

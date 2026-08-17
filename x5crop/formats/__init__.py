@@ -117,18 +117,12 @@ class ScanCanvasFit:
 class FormatSpec:
     format_id: str
     frame: FramePhysicalSpec
-    partial_mode_supported: bool
     layout: ScanLayoutSpec
     scan_canvas_fits: tuple[ScanCanvasFit, ...]
 
     def __post_init__(self) -> None:
         if not self.format_id:
             raise ValueError("format identity must not be empty")
-        if (
-            self.layout.kind == "dual_lane"
-            and self.partial_mode_supported
-        ):
-            raise ValueError("dual-lane format is full-only")
         profile_ids = tuple(item.profile_id for item in self.scan_canvas_fits)
         if not profile_ids or len(set(profile_ids)) != len(profile_ids):
             raise ValueError("format scan-canvas fits must be non-empty and unique")
@@ -147,13 +141,6 @@ class FormatSpec:
     def maximum_full_count(self) -> int:
         return max(item.full_count for item in self.scan_canvas_fits)
 
-    @property
-    def interactive_partial_counts(self) -> tuple[int, ...]:
-        if not self.partial_mode_supported:
-            return ()
-        return tuple(range(1, self.maximum_full_count + 1))
-
-
 FRAME_135 = FramePhysicalSpec(36.0, 24.0, 2.0)
 
 
@@ -164,7 +151,6 @@ _FORMAT_SPECS: dict[str, FormatSpec] = {
     "135": FormatSpec(
         "135",
         FRAME_135,
-        True,
         ScanLayoutSpec(),
         (
             ScanCanvasFit("135_standard", 6),
@@ -174,14 +160,12 @@ _FORMAT_SPECS: dict[str, FormatSpec] = {
     "135-dual": FormatSpec(
         "135-dual",
         FRAME_135,
-        False,
         ScanLayoutSpec("dual_lane", 2, "135"),
         (ScanCanvasFit("135_dual", 12),),
     ),
     "half": FormatSpec(
         "half",
         FramePhysicalSpec(18.0, 24.0, 1.0),
-        True,
         ScanLayoutSpec(),
         (
             ScanCanvasFit("135_standard", 12),
@@ -191,7 +175,6 @@ _FORMAT_SPECS: dict[str, FormatSpec] = {
     "xpan": FormatSpec(
         "xpan",
         FramePhysicalSpec(65.0, 24.0, 2.0),
-        True,
         ScanLayoutSpec(),
         (
             ScanCanvasFit("135_standard", 3),
@@ -201,7 +184,6 @@ _FORMAT_SPECS: dict[str, FormatSpec] = {
     "120-645": FormatSpec(
         "120-645",
         FramePhysicalSpec(42.0, 56.0, None),
-        True,
         ScanLayoutSpec(),
         (
             ScanCanvasFit("120_standard", 4),
@@ -213,7 +195,6 @@ _FORMAT_SPECS: dict[str, FormatSpec] = {
     "120-66": FormatSpec(
         "120-66",
         FramePhysicalSpec(56.0, 56.0, None),
-        True,
         ScanLayoutSpec(),
         (
             ScanCanvasFit("120_standard", 3),
@@ -225,7 +206,6 @@ _FORMAT_SPECS: dict[str, FormatSpec] = {
     "120-67": FormatSpec(
         "120-67",
         FramePhysicalSpec(70.0, 56.0, None),
-        True,
         ScanLayoutSpec(),
         (
             ScanCanvasFit("120_standard", 3),

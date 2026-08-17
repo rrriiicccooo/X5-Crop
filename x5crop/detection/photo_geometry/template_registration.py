@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from itertools import combinations
 
-from ...configuration.model import HolderLayoutAuthority
 from ...domain import FiniteInterval, PositiveInterval
 from ...formats import FramePhysicalSpec
 from .boundary_fitting import fit_format_bound_boundary_observation
@@ -21,7 +20,7 @@ from .line_observations import PhotoBoundaryObservation
 from .physical_identity import physical_fact_id
 from .source_geometry import SourceScanGeometry, centered_short_axis_authority_px
 from .template_cross_model import CrossRoleBinding
-from .template_model import PhaseAuthority, PhaseLatticeAuthority, TemplateSpec
+from .template_model import PhaseLatticeAuthority, TemplateSpec
 from .trace_support import trace_support_is_one_connected_run
 
 
@@ -38,7 +37,6 @@ def template_spec_from_physical_authority(
     source_geometry: SourceScanGeometry,
     width_scale_px_per_mm: PositiveInterval,
     count: int,
-    holder_layout_authority: HolderLayoutAuthority,
     phase_lattice_authority: PhaseLatticeAuthority,
     template_id: str | None = None,
 ) -> TemplateSpec:
@@ -54,23 +52,16 @@ def template_spec_from_physical_authority(
             frame_spec.format_gap_prior_mm * calibrated_scale.minimum,
             frame_spec.format_gap_prior_mm * calibrated_scale.maximum,
         )
-    authority = (
-        PhaseAuthority.FULL_CENTERED
-        if holder_layout_authority
-        == HolderLayoutAuthority.USER_CONFIRMED_FILLED_HOLDER_LAYOUT
-        else PhaseAuthority.PARTIAL_FREE
-    )
     return TemplateSpec(
         template_id=(
             template_id
-            or f"template:{frame_spec.frame_spec_id}:{authority.value}:{count}"
+            or f"template:{frame_spec.frame_spec_id}:direct:{count}"
         ),
         frame_width_px=width,
         frame_height_px=height,
         pitch_px=_add(width, gap),
         nominal_gap_px=gap,
         count=count,
-        phase_authority=authority,
         phase_lattice_authority=phase_lattice_authority.with_period(
             _add(width, gap)
         ),

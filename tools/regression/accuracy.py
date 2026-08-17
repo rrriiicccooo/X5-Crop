@@ -11,7 +11,7 @@ from typing import Iterable, Sequence
 
 from x5crop.report.validation import validate_current_report_record
 
-from .cohort_count_authority import validate_count_authority
+from .cohort_count import validate_cohort_counts
 from .file_identity import sha256_file
 from .gold_geometry import validate_approved_geometry
 
@@ -23,7 +23,7 @@ EXPECTED_TASK_COUNT = 9
 
 
 def validate_gold_source_identities() -> tuple[dict[str, object], ...]:
-    validate_count_authority()
+    validate_cohort_counts()
     records = tuple(
         json.loads(line)
         for line in GOLD_COHORT_PATH.read_text(encoding="utf-8").splitlines()
@@ -42,42 +42,29 @@ def validate_gold_source_identities() -> tuple[dict[str, object], ...]:
             "source_relative_path",
             "source_sha256",
             "format_id",
-            "strip_mode",
+            "count",
             "validation_role",
             "cohort_role",
             "geometry_oracle_schema",
             "geometry_digest",
             "confirmed_geometry",
-            "count_authority",
             "confirmed_geometry_slot_count",
         }
-        if record.get("strip_mode") == "partial":
-            expected_keys.add("confirmed_slot_count")
         sample_id = str(record.get("sample_id", ""))
         relative = Path(str(record.get("source_relative_path", "")))
         source = (PROJECT_ROOT / relative).resolve()
         expected_sha = str(record.get("source_sha256", "")).lower()
-        strip_mode = str(record.get("strip_mode", ""))
-        partial_count = record.get("confirmed_slot_count")
-        expected_authority = {
-            "full": "matched_holder_full_count",
-            "partial": "user_explicit_partial_count",
-        }.get(strip_mode)
+        count = record.get("count")
         if (
             set(record) != expected_keys
-            or record.get("cohort_schema") != "x5crop_gold_accuracy_cohort_v4"
+            or record.get("cohort_schema") != "x5crop_gold_accuracy_cohort_v5"
             or not sample_id
             or sample_id in sample_ids
             or record.get("validation_role") != "gold_accuracy_blocking"
             or record.get("cohort_role") not in {"nominal", "challenge"}
-            or record.get("count_authority") != expected_authority
-            or (
-                strip_mode == "full" and partial_count is not None
-            )
-            or (
-                strip_mode == "partial"
-                and (not isinstance(partial_count, int) or partial_count <= 0)
-            )
+            or not isinstance(count, int)
+            or isinstance(count, bool)
+            or count <= 0
             or relative.is_absolute()
             or not source.is_relative_to(project_root)
             or not source.is_file()
@@ -114,13 +101,11 @@ def _production_command(
         str(output),
         "--format",
         str(record["format_id"]),
-        "--strip",
-        str(record["strip_mode"]),
+        "--count",
+        str(record["count"]),
         "--jobs",
         "1",
     ]
-    if record["strip_mode"] == "partial":
-        command.extend(("--count", str(record["confirmed_slot_count"])))
     return command
 
 
@@ -139,7 +124,7 @@ def _run_task(record: dict[str, object]) -> str:
         )
         if completed.returncode != 0:
             raise ValueError(
-                f"{record['sample_id']}/{record['strip_mode']} production CLI failed:\n"
+                f"{record['sample_id']} production CLI failed:\n"
                 + completed.stdout[-4000:]
             )
         report_path = output / "x5_crop_report.jsonl"
@@ -167,14 +152,14 @@ def _run_task(record: dict[str, object]) -> str:
         role = str(record["cohort_role"])
         if role == "nominal" and status != "approved_auto":
             raise ValueError(
-                f"{record['sample_id']}/{record['strip_mode']} nominal task is {status}"
+                f"{record['sample_id']} nominal task is {status}"
             )
         if role == "challenge" and status not in {
             "approved_auto",
             "needs_review",
         }:
             raise ValueError(
-                f"{record['sample_id']}/{record['strip_mode']} challenge task is {status}"
+                f"{record['sample_id']} challenge task is {status}"
             )
         if status == "approved_auto":
             validate_approved_geometry(record, report)
@@ -186,7 +171,7 @@ def run_accuracy(records: Iterable[dict[str, object]]) -> tuple[int, int]:
     approved = 0
     failures: list[str] = []
     for record in records:
-        identity = f"{record['sample_id']}/{record['strip_mode']}"
+        identity = str(record["sample_id"])
         try:
             status = _run_task(record)
         except Exception as exc:

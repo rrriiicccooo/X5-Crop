@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from ..configuration.bundle import DetectionConfigurationBundle
+from ..configuration.model import DetectionConfiguration
 from ..run_config import RunConfig
 
 
@@ -22,4 +22,4 @@ class PlannedSource:
 class RuntimeInvocation:
     config: RunConfig
     sources: tuple[PlannedSource, ...]
-    configuration_bundle: DetectionConfigurationBundle
+    configuration: DetectionConfiguration

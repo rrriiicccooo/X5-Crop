@@ -17,13 +17,13 @@ from x5crop.io.orientation import canonicalize_orientation
 from x5crop.io.tiff import read_tiff, read_tiff_profile, tiff_write_kwargs
 from x5crop.report.validation import validate_current_report_record
 
-from .cohort_count_authority import validate_count_authority
+from .cohort_count import validate_cohort_counts
 from .file_identity import sha256_file
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 COHORT_PATH = Path(__file__).with_name("cohorts") / "platform_validation.jsonl"
-COHORT_SCHEMA = "x5crop_platform_validation_cohort_v2"
+COHORT_SCHEMA = "x5crop_platform_validation_cohort_v3"
 PLATFORM_IO_RESULT_SCHEMA = "x5crop_platform_io_result_v1"
 EXPECTED_SAMPLE_IDS = ("S027", "S046", "S062", "S094", "S098", "S101")
 
@@ -39,16 +39,14 @@ class PlatformSource:
     source_path: Path
     source_sha256: str
     format_id: str
-    strip_mode: str
-    confirmed_slot_count: int | None
-    count_authority: str
+    count: int
     expected_orientation: int
     expected_compression: str
     expected_icc_bytes: int
 
 
 def load_platform_sources(*, verify_files: bool) -> tuple[PlatformSource, ...]:
-    validate_count_authority()
+    validate_cohort_counts()
     records = tuple(
         json.loads(line)
         for line in COHORT_PATH.read_text(encoding="utf-8").splitlines()
@@ -61,9 +59,7 @@ def load_platform_sources(*, verify_files: bool) -> tuple[PlatformSource, ...]:
         "source_relative_path",
         "source_sha256",
         "format_id",
-        "strip_mode",
-        "confirmed_slot_count",
-        "count_authority",
+        "count",
         "expected_orientation",
         "expected_compression",
         "expected_icc_bytes",
@@ -100,13 +96,7 @@ def load_platform_sources(*, verify_files: bool) -> tuple[PlatformSource, ...]:
                 source_path=source,
                 source_sha256=expected_sha,
                 format_id=str(record["format_id"]),
-                strip_mode=str(record["strip_mode"]),
-                confirmed_slot_count=(
-                    None
-                    if record["confirmed_slot_count"] is None
-                    else int(record["confirmed_slot_count"])
-                ),
-                count_authority=str(record["count_authority"]),
+                count=int(record["count"]),
                 expected_orientation=int(record["expected_orientation"]),
                 expected_compression=str(record["expected_compression"]),
                 expected_icc_bytes=int(record["expected_icc_bytes"]),
@@ -124,13 +114,11 @@ def _production_command(source: PlatformSource, path: Path, output: Path) -> lis
         str(output),
         "--format",
         source.format_id,
-        "--strip",
-        source.strip_mode,
+        "--count",
+        str(source.count),
         "--jobs",
         "1",
     ]
-    if source.confirmed_slot_count is not None:
-        command.extend(("--count", str(source.confirmed_slot_count)))
     return command
 
 

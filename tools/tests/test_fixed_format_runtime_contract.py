@@ -24,10 +24,14 @@ class FixedFormatRuntimeContractTest(unittest.TestCase):
         )
         self.assertFalse(over.within_limit)
 
-    def test_matched_holder_full_count_keeps_complete_query_coverage(self) -> None:
+    def test_matched_holder_default_count_keeps_complete_query_coverage(self) -> None:
         pixels = np.zeros((100, 720), dtype=np.uint8)
         workspace, configuration, candidate = make_candidate(pixels)
-        self.assertEqual(configuration.count_request.strip_mode, "full")
+        self.assertIsNone(configuration.count_request.user_count)
+        self.assertEqual(
+            configuration.count_request.authority.value,
+            "matched_holder_default_count",
+        )
         self.assertEqual(candidate.resolved_output_slots, ResolvedOutputSlots((6,)))
         lane = candidate.geometry.lane_reconstructions[0]
         tiles = tuple(

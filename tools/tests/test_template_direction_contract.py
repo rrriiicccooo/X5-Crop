@@ -16,7 +16,6 @@ from x5crop.detection.photo_geometry.template_direction import (
     shared_template_direction,
 )
 from x5crop.detection.photo_geometry.template_model import (
-    PhaseAuthority,
     PhaseLatticeAuthority,
     TemplateSpec,
 )
@@ -39,13 +38,11 @@ def _template() -> TemplateSpec:
         pitch_px=120.0,
         frame_height_px=240.0,
         count=3,
-        phase_authority=PhaseAuthority.PARTIAL_FREE,
         phase_lattice_authority=PhaseLatticeAuthority(
             period_px=120.0,
             cycle_origin_px=0.0,
             minimum_slot_offset=-1,
             maximum_slot_offset=4,
-            phase_authority=PhaseAuthority.PARTIAL_FREE,
         ),
         nominal_gap_px=20.0,
     )

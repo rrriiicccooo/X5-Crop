@@ -15,7 +15,6 @@ from .observation_types import BoundaryEdgeObservation, SeparatorBandObservation
 from .template_model import (
     LocalAdvanceRelation,
     PhaseAnchor,
-    PhaseAuthority,
     PhaseLatticeFit,
     PitchFit,
     SequenceFit,
@@ -46,7 +45,6 @@ class _AnchorFact:
 class _BoundFit:
     fit: SequenceFit
     residual_compatible: bool
-    center_error_px: float
 
 
 def _interval(value: FiniteInterval | PositiveInterval | float | int) -> FiniteInterval:
@@ -230,18 +228,6 @@ def _phase_lattice_fit(
         canonical_absolute_phase_px=absolute_phase_px,
         direction=template.direction,
     )
-
-
-def _holder_center(
-    span: FiniteInterval | None,
-) -> float | None:
-    if span is None:
-        return None
-    if span.width == 0.0 and span.minimum > 0.0:
-        return span.minimum / 2.0
-    if span.width <= 0.0:
-        raise ValueError("holder span must have a positive extent")
-    return span.center
 
 
 def _holder_limits(span: FiniteInterval | None) -> tuple[float, float] | None:
@@ -537,8 +523,6 @@ def _fit_seed(
     roles: tuple[TemplateRole, ...],
     template: TemplateSpec,
     relations: tuple[LocalAdvanceRelation, ...],
-    holder_center: float | None,
-    phase_prior: FiniteInterval | None,
     pitch_authority: FiniteInterval,
 ) -> _BoundFit | None:
     width = (
@@ -681,25 +665,6 @@ def _fit_seed(
                 )
             )
             role_ids.append(observed.observation_id)
-    span_midpoint = (canonical_positions[0] + canonical_positions[-1]) / 2.0
-    requested_center = (
-        phase_prior.center
-        + (
-            canonical_positions[-1]
-            - canonical_positions[0]
-        )
-        / 2.0
-        if phase_prior is not None
-        else holder_center
-    )
-    center_error = (
-        0.0 if requested_center is None else abs(span_midpoint - requested_center)
-    )
-    center_compatible = (
-        template.phase_authority != PhaseAuthority.FULL_CENTERED
-        or requested_center is not None
-        and center_error <= 0.08 * width
-    )
     matched = tuple(sorted(by_role))
     inferred = tuple(index for index in range(len(roles)) if index not in by_role)
     direct_ids = tuple(
@@ -740,28 +705,14 @@ def _fit_seed(
         support_count=len(matched),
         contradicted_observation_count=max(0, len(direct) - len(matched)),
         residual_sum_px=residual_sum,
-        center_compatible=center_compatible,
         direct_support_fraction=direct_support,
         polarity_match_count=polarity_matches,
     )
-    return _BoundFit(fit, residual_compatible, center_error)
+    return _BoundFit(fit, residual_compatible)
 
 
 def _rank(value: _BoundFit) -> tuple[object, ...]:
     fit = value.fit
-    common = (
-        int(value.residual_compatible),
-        fit.polarity_match_count,
-        fit.direct_support_fraction,
-        fit.support_count,
-        -fit.residual_sum_px,
-    )
-    if fit.template.phase_authority == PhaseAuthority.FULL_CENTERED:
-        center_bucket = int(
-            value.center_error_px
-            / max(1.0, fit.pitch_fit.canonical_frame_width_px * 0.02)
-        )
-        return (int(fit.center_compatible), -center_bucket, *common)
     return (
         int(value.residual_compatible),
         fit.direct_support_fraction,
@@ -777,20 +728,6 @@ def _clear_winner_basis(
 ) -> PhaseWinnerBasis | None:
     left = best.fit
     right = runner.fit
-    if left.center_compatible and not right.center_compatible:
-        return PhaseWinnerBasis.HOLDER_CENTER_COMPATIBILITY
-    if (
-        left.template.phase_authority == PhaseAuthority.FULL_CENTERED
-        and int(
-            best.center_error_px
-            / max(1.0, left.pitch_fit.canonical_frame_width_px * 0.02)
-        )
-        < int(
-            runner.center_error_px
-            / max(1.0, right.pitch_fit.canonical_frame_width_px * 0.02)
-        )
-    ):
-        return PhaseWinnerBasis.HOLDER_CENTER_BUCKET
     if best.residual_compatible and not runner.residual_compatible:
         return PhaseWinnerBasis.RESIDUAL_COMPATIBILITY
     if left.polarity_match_count >= right.polarity_match_count + 2:

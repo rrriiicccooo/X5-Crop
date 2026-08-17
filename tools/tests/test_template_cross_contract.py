@@ -14,7 +14,6 @@ from x5crop.detection.photo_geometry.template_cross_model import (
     TemplateCrossInput,
 )
 from x5crop.detection.photo_geometry.template_model import (
-    PhaseAuthority,
     PhaseLatticeAuthority,
     TemplateSpec,
 )
@@ -31,13 +30,11 @@ def template(count: int = 1) -> TemplateSpec:
         pitch_px=120.0,
         frame_height_px=240.0,
         count=count,
-        phase_authority=PhaseAuthority.FULL_CENTERED,
         phase_lattice_authority=PhaseLatticeAuthority(
             period_px=120.0,
             cycle_origin_px=0.0,
             minimum_slot_offset=-1,
             maximum_slot_offset=20,
-            phase_authority=PhaseAuthority.FULL_CENTERED,
         ),
     )
 

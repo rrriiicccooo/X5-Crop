@@ -174,18 +174,14 @@ def _validate_geometry(record: dict[str, Any]) -> None:
     if resolved is not None and (
         holder is None
         or resolved["matched_holder_profile_id"] != holder["profile"]["profile_id"]
-        or resolved["full_count"] != holder["full_count"]
+        or resolved["holder_full_count"] != holder["full_count"]
         or resolved["output_count"] != geometry["output_slot_count"]
         or (
-            resolved["authority"] == "matched_holder_full_count"
-            and resolved["holder_layout_authority"]
-            != "user_confirmed_filled_holder_layout"
+            resolved["authority"] == "matched_holder_default_count"
+            and resolved["output_count"] != resolved["holder_full_count"]
         )
-        or (
-            resolved["authority"] == "user_explicit_partial_count"
-            and resolved["holder_layout_authority"]
-            != "user_confirmed_nonfilling_layout"
-        )
+        or resolved["authority"]
+        not in {"matched_holder_default_count", "user_explicit_count"}
     ):
         raise ValueError("matched holder and resolved count disagree")
     for lane in geometry["lanes"]:

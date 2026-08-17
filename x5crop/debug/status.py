@@ -84,7 +84,7 @@ def _count_authority(detection: FinalDetection) -> str:
         return "unresolved"
     return (
         f"{resolved.authority.value}:"
-        f"{resolved.output_count}/{resolved.full_count}"
+        f"{resolved.output_count}/{resolved.holder_full_count}"
     )
 
 
@@ -173,7 +173,7 @@ def add_status_bar(
         else detection.source_core.matched_holder.profile.profile_id
     )
     context = (
-        f"{configuration.physical_spec.format_id}/{configuration.strip_mode} · "
+        f"{configuration.physical_spec.format_id} · "
         f"holder={holder_id} · "
         f"count={_count_authority(detection)} · "
         f"slots={detection.output_slot_count or 0}"

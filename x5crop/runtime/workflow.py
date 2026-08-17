@@ -6,7 +6,7 @@ from time import perf_counter
 import traceback
 
 from .identity import make_runtime_identity, source_runtime_identity
-from ..configuration.bundle import DetectionConfigurationBundle
+from ..configuration.model import DetectionConfiguration
 from ..detection.decision.decision_gate import apply_decision_gate
 from ..detection.final.finalize import finalize_detection
 from ..detection.pipeline import choose_detection
@@ -133,14 +133,14 @@ def _metrics(
 def process_one(
     source: PlannedSource,
     config: RunConfig,
-    configuration_bundle: DetectionConfigurationBundle,
+    configuration: DetectionConfiguration,
     output_root: Path,
 ) -> InputProcessingOutcome:
     with source_identity_scope():
         return _process_one_scoped(
             source,
             config,
-            configuration_bundle,
+            configuration,
             output_root,
         )
 
@@ -148,7 +148,7 @@ def process_one(
 def _process_one_scoped(
     source: PlannedSource,
     config: RunConfig,
-    configuration_bundle: DetectionConfigurationBundle,
+    configuration: DetectionConfiguration,
     output_root: Path,
 ) -> InputProcessingOutcome:
     input_file = source.path
@@ -165,8 +165,6 @@ def _process_one_scoped(
         height, width = spatial_shape_from_shape(profile.shape)
         layout = infer_layout(width, height) if config.layout_auto else config.layout
         config = replace(config, layout=layout)
-        initial_configuration = configuration_bundle.initial_configuration
-
         failure_stage = FailureStage.IMAGE_READ
         arr, profile, page_warnings = read_tiff(input_file)
         for warning in page_warnings:
@@ -175,28 +173,19 @@ def _process_one_scoped(
         source_identity = source_runtime_identity(source, profile)
 
         configuration_detail = detection_configuration_read_model(
-            initial_configuration
+            configuration
         )
         failure_stage = FailureStage.DETECTION
         detection_started = perf_counter()
-        lane_configuration = (
-            None
-            if initial_configuration.physical_spec.layout.lane_format_id is None
-            else configuration_bundle.configuration_for(
-                initial_configuration.physical_spec.layout.lane_format_id,
-                "full",
-            )
-        )
         workspace = prepare_detection_workspace(
             arr,
             profile,
             config.layout,
-            initial_configuration,
-            lane_configuration,
+            configuration,
         )
         candidate = choose_detection(
             workspace,
-            initial_configuration,
+            configuration,
             development_detail=config.development_detail,
         )
         detection_seconds = perf_counter() - detection_started
@@ -264,13 +253,13 @@ def _process_one_scoped(
             debug_analysis = write_debug_analysis(
                 workspace,
                 detection,
-                initial_configuration,
+                configuration,
                 profile,
                 input_file.name,
                 output_root,
                 source.portable_stem,
                 source.input_ordinal,
-                initial_configuration.diagnostics,
+                configuration.diagnostics,
                 RunTerminalOutcome(detection.decision.status),
             )
             warnings.append(

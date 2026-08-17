@@ -4,14 +4,10 @@ import ast
 from pathlib import Path
 import unittest
 
-from x5crop.configuration.model import HolderLayoutAuthority
 from x5crop.domain import FiniteInterval, ObservationId, PositiveInterval
 from x5crop.formats import FramePhysicalSpec
 from x5crop.detection.photo_geometry.source_geometry import SourceScanGeometry
-from x5crop.detection.photo_geometry.template_model import (
-    PhaseAuthority,
-    PhaseLatticeAuthority,
-)
+from x5crop.detection.photo_geometry.template_model import PhaseLatticeAuthority
 from x5crop.detection.photo_geometry.template_registration import (
     template_spec_from_physical_authority,
 )
@@ -25,13 +21,12 @@ def _source(frame: FramePhysicalSpec) -> SourceScanGeometry:
     )
 
 
-def _lattice(authority: PhaseAuthority) -> PhaseLatticeAuthority:
+def _lattice() -> PhaseLatticeAuthority:
     return PhaseLatticeAuthority(
         period_px=380.0,
         cycle_origin_px=0.0,
         minimum_slot_offset=-1,
         maximum_slot_offset=20,
-        phase_authority=authority,
     )
 
 
@@ -89,36 +84,30 @@ class TemplateRegistrationContractTest(unittest.TestCase):
             geometry.width_state.extent_projection_px(),
         )
 
-    def test_full_layout_owns_centered_phase_and_format_gap(self) -> None:
+    def test_registration_uses_direct_phase_and_format_gap(self) -> None:
         frame = FramePhysicalSpec(36.0, 24.0, 2.0)
         template = template_spec_from_physical_authority(
             frame_spec=frame,
             source_geometry=_source(frame),
             width_scale_px_per_mm=PositiveInterval.exact(10.0),
             count=6,
-            holder_layout_authority=(
-                HolderLayoutAuthority.USER_CONFIRMED_FILLED_HOLDER_LAYOUT
-            ),
-            phase_lattice_authority=_lattice(PhaseAuthority.FULL_CENTERED),
+            phase_lattice_authority=_lattice(),
         )
-        self.assertEqual(template.phase_authority, PhaseAuthority.FULL_CENTERED)
+        self.assertFalse(hasattr(template, "phase_authority"))
         self.assertEqual(template.count, 6)
         self.assertEqual(template.nominal_gap_px.minimum, 20.0)
         self.assertEqual(template.nominal_gap_px.maximum, 20.0)
 
-    def test_partial_equal_to_full_count_remains_free_phase(self) -> None:
+    def test_explicit_count_equal_to_capacity_gets_no_center_authority(self) -> None:
         frame = FramePhysicalSpec(36.0, 24.0, 2.0)
         template = template_spec_from_physical_authority(
             frame_spec=frame,
             source_geometry=_source(frame),
             width_scale_px_per_mm=PositiveInterval.exact(10.0),
             count=6,
-            holder_layout_authority=(
-                HolderLayoutAuthority.USER_CONFIRMED_NONFILLING_LAYOUT
-            ),
-            phase_lattice_authority=_lattice(PhaseAuthority.PARTIAL_FREE),
+            phase_lattice_authority=_lattice(),
         )
-        self.assertEqual(template.phase_authority, PhaseAuthority.PARTIAL_FREE)
+        self.assertFalse(hasattr(template, "phase_authority"))
         self.assertEqual(template.count, 6)
 
     def test_registration_does_not_import_retired_candidate_modules(self) -> None:
