@@ -12,8 +12,7 @@ Extract the release archive and run the platform installer:
 - Windows: `install/X5_Crop_win_install.bat`
 
 Setup finds Python 3.12–3.14, reuses suitable dependencies, and installs only
-missing items. Unknown or unsafe ownership stops before any change. Homebrew is
-not required, and no private environment is created.
+missing items. Homebrew is not required, and no private environment is created.
 
 ## 2. Add TIFFs And Launch
 
@@ -25,41 +24,41 @@ Put supported X5 scan TIFFs beside the launcher:
 Or use the command line:
 
 ```bash
-python3 X5_Crop.py /path/to/scans --format 135 --strip full
+python3 X5_Crop.py /path/to/scans --format 135
 ```
 
-V5 accepts single-page 16-bit RGB TIFFs with supported lossless compression.
-See the [English User Guide](user-guide.en.md) for the complete input contract.
-
-## 3. Choose Format, Mode, And Count
-
-- `full` uses the matched holder's complete filled layout and slot count.
-- `partial --count N` is for a non-filling strip; `N` includes intermediate
-  blank exposures.
-- `135-dual` is full-only: 12 slots total, six per lane.
-- `--layout auto` selects horizontal or vertical from the scan; either may be
-  specified explicitly.
-- `--debug-analysis` writes diagnostic JPGs and reports, but no official TIFFs
-  or review copy.
-
-The program does not infer count from filenames or pixels and does not suppress
-blank slots. Partial receives no filled-layout centering authority even when its
-count equals the complete count. An unresolved holder or placement enters
-`needs_review` rather than producing guessed TIFFs.
-
-To inspect detection before cropping, use two different fresh output paths:
+Omitting `--count` confirms the matched holder's default slot count. Supply a
+different count explicitly:
 
 ```bash
-python3 X5_Crop.py /path/to/scans --format 135 --strip full --debug-analysis --output /path/to/x5_debug
-python3 X5_Crop.py /path/to/scans --format 135 --strip full --output /path/to/x5_crops
+python3 X5_Crop.py /path/to/scans --format 120-66 --count 2
 ```
 
-The normal run always detects from the source TIFF and never reuses the Debug
-report. Each output path must not exist before the run.
+Count includes intermediate blank exposures. X5 Crop never infers it from a
+filename or picture content and never removes blank slots. `135-dual` defaults
+to 12, six per lane. Any explicit different count enters review; lane counts
+are never guessed.
+
+`--layout auto` chooses horizontal or vertical from the scan, or either may be
+specified. V5 accepts single-page 16-bit RGB TIFFs with supported lossless
+compression. See the [English User Guide](user-guide.en.md) for the complete
+input contract.
+
+## 3. Inspect Debug Analysis First
+
+Use two different fresh output paths when inspecting detection before a normal
+crop:
+
+```bash
+python3 X5_Crop.py /path/to/scans --format 135 --debug-analysis --output /path/to/x5_debug
+python3 X5_Crop.py /path/to/scans --format 135 --output /path/to/x5_crops
+```
+
+Debug Analysis writes diagnostic JPGs and reports, but no official TIFFs or
+review copy. A normal run always detects again from the source TIFF and never
+reuses the Debug report.
 
 ## 4. Read The Result
-
-Photos are written directly in the output root:
 
 ```text
 x5_crop_output/
@@ -71,7 +70,6 @@ x5_crop_output/
   x5_crop_summary.csv
 ```
 
-`needs_review/` and `_debug_analysis/` are created only when needed. If the
-target already exists, X5 Crop stops and never replaces or deletes it.
-
-See the [English User Guide](user-guide.en.md) for full details.
+Approval is source-wide: if any slot is unsafe, the complete source enters
+`needs_review`. If the target already exists, X5 Crop stops and never replaces
+or deletes it. See the [English User Guide](user-guide.en.md) for full details.

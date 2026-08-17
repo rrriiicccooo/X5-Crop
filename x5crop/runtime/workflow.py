@@ -85,6 +85,10 @@ def _metrics(
             lane.phase_competition.receipt.phase_hypothesis_count
             for lane in prepared
         ),
+        separator_lattice_hypothesis_count=sum(
+            lane.phase_competition.receipt.separator_lattice_hypothesis_count
+            for lane in prepared
+        ),
         phase_fit_pass_count=sum(
             lane.phase_competition.receipt.fit_pass_count
             for lane in prepared

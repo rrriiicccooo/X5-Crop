@@ -17,7 +17,25 @@ from ...domain import FiniteInterval, ObservationId, PositiveInterval
 
 MAX_LOCAL_ADVANCE_ANOMALIES = 1
 MAX_TEMPLATE_FIT_PASSES = 5
+TEMPLATE_ROLE_REFINEMENT_RADIUS_RATIO = 0.11
+MIN_TEMPLATE_ROLE_REFINEMENT_RADIUS_PX = 3.0
 from .model import BoundaryRole
+
+
+def template_role_refinement_radius_px(pitch_px: float) -> float:
+    """Return the one canonical bounded local role-search radius.
+
+    The ratio scales with scan resolution; the small pixel floor only covers
+    raster quantisation at very low resolutions.  This is a refinement window,
+    never placement authority.
+    """
+
+    if not math.isfinite(pitch_px) or pitch_px <= 0.0:
+        raise ValueError("template role refinement requires a positive pitch")
+    return max(
+        MIN_TEMPLATE_ROLE_REFINEMENT_RADIUS_PX,
+        pitch_px * TEMPLATE_ROLE_REFINEMENT_RADIUS_RATIO,
+    )
 
 
 def _finite_interval(value: FiniteInterval | PositiveInterval | float | int) -> FiniteInterval:
@@ -417,16 +435,21 @@ class SequenceFit:
     pitch_fit: PitchFit
     canonical_role_positions_px: tuple[float, ...]
     role_positions_px: tuple[FiniteInterval, ...]
+    role_full_position_intervals_px: tuple[FiniteInterval, ...]
     role_observation_ids: tuple[ObservationId | None, ...]
     matched_role_indices: tuple[int, ...]
     inferred_role_indices: tuple[int, ...]
     direct_observation_ids: tuple[ObservationId, ...]
+    independent_support_ids: tuple[ObservationId, ...]
     local_advance_relations: tuple[LocalAdvanceRelation, ...] = ()
-    support_count: int = 0
     contradicted_observation_count: int = 0
     residual_sum_px: float = 0.0
-    direct_support_fraction: float = 0.0
-    polarity_match_count: int = 0
+    independent_support_coverage: float = 0.0
+    independent_polarity_support_count: int = 0
+
+    @property
+    def independent_support_count(self) -> int:
+        return len(self.independent_support_ids)
 
     def __post_init__(self) -> None:
         if (
@@ -439,6 +462,8 @@ class SequenceFit:
         if (
             len(self.canonical_role_positions_px) != 2 * self.template.count
             or len(self.role_positions_px) != 2 * self.template.count
+            or len(self.role_full_position_intervals_px)
+            != 2 * self.template.count
             or len(self.role_observation_ids) != 2 * self.template.count
         ):
             raise ValueError("sequence role position count is invalid")
@@ -451,6 +476,16 @@ class SequenceFit:
             )
         ):
             raise ValueError("canonical role position is outside its interval")
+        if any(
+            not full.contains(fit.minimum, epsilon=1.0e-9)
+            or not full.contains(fit.maximum, epsilon=1.0e-9)
+            for fit, full in zip(
+                self.role_positions_px,
+                self.role_full_position_intervals_px,
+                strict=True,
+            )
+        ):
+            raise ValueError("sequence full role interval excludes fit interval")
         expected_roles = set(range(2 * self.template.count))
         matched = set(self.matched_role_indices)
         inferred = set(self.inferred_role_indices)
@@ -458,18 +493,32 @@ class SequenceFit:
             raise ValueError("sequence role binding index is invalid")
         if matched & inferred or len(matched) + len(inferred) > len(expected_roles):
             raise ValueError("sequence role binding is not disjoint")
-        if self.support_count < 0 or self.support_count != len(matched):
-            raise ValueError("sequence support count is inconsistent")
+        if (
+            not self.independent_support_ids
+            or len(set(self.independent_support_ids))
+            != len(self.independent_support_ids)
+            or any(
+                not isinstance(identity, ObservationId)
+                for identity in self.independent_support_ids
+            )
+            or self.independent_support_count > len(matched)
+        ):
+            raise ValueError("sequence independent support ledger is invalid")
         if self.contradicted_observation_count < 0:
             raise ValueError("sequence contradiction count is invalid")
         if (
-            not math.isfinite(self.direct_support_fraction)
-            or self.direct_support_fraction < 0.0
-            or self.direct_support_fraction > self.support_count + 1.0e-9
+            not math.isfinite(self.independent_support_coverage)
+            or not 0.0
+            <= self.independent_support_coverage
+            <= self.independent_support_count + 1.0e-9
         ):
-            raise ValueError("sequence direct support is invalid")
-        if not 0 <= self.polarity_match_count <= self.support_count:
-            raise ValueError("sequence polarity support is invalid")
+            raise ValueError("sequence independent support coverage is invalid")
+        if not (
+            0
+            <= self.independent_polarity_support_count
+            <= self.independent_support_count
+        ):
+            raise ValueError("sequence independent polarity support is invalid")
         if not math.isfinite(self.residual_sum_px) or self.residual_sum_px < 0.0:
             raise ValueError("sequence residual is invalid")
         if tuple(item.relation_ordinal for item in self.local_advance_relations) != tuple(
@@ -563,15 +612,18 @@ class SequenceFit:
         )
         canonical_positions: list[float] = []
         role_intervals: list[FiniteInterval] = []
-        for role, old_canonical, old_interval in zip(
+        role_full_intervals: list[FiniteInterval] = []
+        for role, old_canonical, old_interval, old_full_interval, observation_id in zip(
             template.roles,
             self.canonical_role_positions_px,
             self.role_positions_px,
+            self.role_full_position_intervals_px,
+            self.role_observation_ids,
             strict=True,
         ):
             canonical = (
                 old_canonical
-                if role.role == BoundaryRole.START
+                if role.role == BoundaryRole.START or observation_id is not None
                 else canonical_positions[-1] + template.direction * width
             )
             canonical_positions.append(canonical)
@@ -579,6 +631,12 @@ class SequenceFit:
                 FiniteInterval(
                     min(old_interval.minimum, canonical),
                     max(old_interval.maximum, canonical),
+                )
+            )
+            role_full_intervals.append(
+                FiniteInterval(
+                    min(old_full_interval.minimum, canonical),
+                    max(old_full_interval.maximum, canonical),
                 )
             )
         return SequenceFit(
@@ -599,16 +657,19 @@ class SequenceFit:
             pitch_fit=self.pitch_fit.with_calibrated_template(template),
             canonical_role_positions_px=tuple(canonical_positions),
             role_positions_px=tuple(role_intervals),
+            role_full_position_intervals_px=tuple(role_full_intervals),
             role_observation_ids=self.role_observation_ids,
             matched_role_indices=self.matched_role_indices,
             inferred_role_indices=self.inferred_role_indices,
             direct_observation_ids=self.direct_observation_ids,
+            independent_support_ids=self.independent_support_ids,
             local_advance_relations=self.local_advance_relations,
-            support_count=self.support_count,
             contradicted_observation_count=self.contradicted_observation_count,
             residual_sum_px=self.residual_sum_px,
-            direct_support_fraction=self.direct_support_fraction,
-            polarity_match_count=self.polarity_match_count,
+            independent_support_coverage=self.independent_support_coverage,
+            independent_polarity_support_count=(
+                self.independent_polarity_support_count
+            ),
         )
 
 @dataclass(frozen=True)
@@ -630,6 +691,7 @@ class TemplateSearchReceipt:
     inferred_role_count: int
     peak_temporary_bytes: int = 0
     fit_pass_count: int = 1
+    separator_lattice_hypothesis_count: int = 0
 
     def __post_init__(self) -> None:
         values = (
@@ -644,6 +706,7 @@ class TemplateSearchReceipt:
             self.inferred_role_count,
             self.peak_temporary_bytes,
             self.fit_pass_count,
+            self.separator_lattice_hypothesis_count,
         )
         if any(not isinstance(value, int) or value < 0 for value in values):
             raise ValueError("template work receipt values must be non-negative integers")
@@ -697,6 +760,7 @@ class TemplateSearchReceipt:
             or self.local_relation_evaluation_count
             > max(0, slot_count - 1) * self.fit_pass_count
             or self.phase_offset_lookup_count > max_hypotheses
+            or self.separator_lattice_hypothesis_count > max_hypotheses
         ):
             raise ValueError("template indexed work exceeded its structural bound")
 
@@ -714,4 +778,5 @@ __all__ = [
     "TemplateSearchReceipt",
     "TemplateSpec",
     "ordered_template_roles",
+    "template_role_refinement_radius_px",
 ]

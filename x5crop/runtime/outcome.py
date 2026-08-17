@@ -33,6 +33,7 @@ class RuntimeMetrics:
     basic_profile_run_count: int | None
     registered_sequence_observation_count: int | None
     phase_hypothesis_count: int | None
+    separator_lattice_hypothesis_count: int | None
     phase_fit_pass_count: int | None
     phase_role_lookup_count: int | None
     phase_role_binding_count: int | None

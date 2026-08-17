@@ -66,15 +66,20 @@ def _cross_direction_compatible(
     selected = cross.selected_direction
     if selected is None:
         return True
-    compatibility = (
-        cross.parallel_direction_interval_degrees
-        or selected.full_angle_interval_degrees
-    )
+    # The pair's narrow parallel intersection proves that its two local
+    # fragments can belong to one strip. It does not own the source-wide
+    # deskew angle. Placement therefore checks the selected cross fragments'
+    # full physical direction authority against the source-wide direction.
+    compatibility = selected.full_angle_interval_degrees
     return (
-        compatibility.contains(
-            direction.canonical_angle_degrees,
-            epsilon=_EPSILON,
+        max(
+            compatibility.minimum,
+            direction.full_angle_interval_degrees.minimum,
         )
+        <= min(
+            compatibility.maximum,
+            direction.full_angle_interval_degrees.maximum,
+        ) + _EPSILON
         and set(selected.selected_observation_ids).issubset(
             direction.selected_observation_ids
         )
@@ -156,7 +161,7 @@ def _sequence_boundary(
     role_index: int,
 ) -> _ResolvedBoundary:
     role = template.roles[role_index]
-    interval = sequence.role_positions_px[role_index]
+    interval = sequence.role_full_position_intervals_px[role_index]
     canonical = float(sequence.canonical_role_positions_px[role_index])
     identity = sequence.role_observation_ids[role_index]
     direct = role_index in sequence.matched_role_indices
@@ -217,55 +222,11 @@ def _resolve_sequence_pair(
             start.source,
             "start_from_observed_end_and_fixed_template_width",
         )
-    elif start_direct and end_direct:
-        # Both observations bind one discrete placement, while fixed W carries
-        # the continuous model uncertainty between them.  Retain both direct
-        # identities, but propagate the same-placement W interval in both
-        # directions so SafeCrop can protect a weak transition that landed on
-        # the photo-side edge of a border.  This never mixes a runner-up phase
-        # or another role assignment into the selected envelope.
-        end_from_start = _advance(
-            start.full_interval,
-            template.frame_width_px,
-            template.direction,
-        )
-        start_from_end = _retreat(
-            end.full_interval,
-            template.frame_width_px,
-            template.direction,
-        )
-        model_budget = (
-            template.frame_width_px.maximum
-            - template.frame_width_px.minimum
-        ) / 2.0
-        start = _ResolvedBoundary(
-            start.role,
-            start.canonical,
-            FiniteInterval(
-                min(start.full_interval.minimum, start_from_end.minimum),
-                max(
-                    start.full_interval.maximum,
-                    start_from_end.maximum + model_budget,
-                ),
-            ),
-            start.observation_ids,
-            start.source,
-            start.inference,
-        )
-        end = _ResolvedBoundary(
-            end.role,
-            end.canonical,
-            FiniteInterval(
-                min(end.full_interval.minimum, end_from_start.minimum),
-                max(
-                    end.full_interval.maximum,
-                    end_from_start.maximum + model_budget,
-                ),
-            ),
-            end.observation_ids,
-            end.source,
-            end.inference,
-        )
+    # When both sides are direct, each keeps its own measured physical
+    # interval.  Fixed W is already enforced by the selected placement's
+    # joint feasible set; hulling a direct END with START + the independent
+    # source-scale extrema would manufacture a state that no observation and
+    # no joint solution supports.
     _validate_interval_contains(start.full_interval, start.canonical, name="start")
     _validate_interval_contains(end.full_interval, end.canonical, name="end")
     oriented = _oriented_width(start.full_interval, end.full_interval, template.direction)

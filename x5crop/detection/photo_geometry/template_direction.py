@@ -7,9 +7,10 @@ from statistics import median
 from ...domain import FiniteInterval
 from ...run_local_identity import run_local_id
 from .observation_types import BoundaryEdgeObservation
-from .output_model import SharedStripDirection
-from .template_cross_model import CrossFit
+from .output_model import OutputBoundaryUse, SharedStripDirection
+from .template_cross_model import CrossEvidence, CrossFit
 from .template_model import SequenceFit
+from .model import SPATIAL_SUPPORT_REGION_COUNT
 
 
 def _intersect(left: FiniteInterval, right: FiniteInterval) -> FiniteInterval | None:
@@ -85,6 +86,46 @@ def lane_template_direction(
     cross_direction = cross_fit.selected_direction
     if cross_direction is None:
         raise ValueError("lane direction requires direct cross evidence")
+    local_refinements = tuple(
+        item
+        for item in cross_fit.direct_bindings
+        if item.evidence == CrossEvidence.TEMPLATE_LOCAL_REFINEMENT
+    )
+    direction_anchors = tuple(
+        item
+        for item in cross_fit.direct_bindings
+        if item.evidence != CrossEvidence.TEMPLATE_LOCAL_REFINEMENT
+        and item.canonical_direction_degrees is not None
+        and item.full_direction_interval_degrees is not None
+    )
+    if len(local_refinements) == 1 and len(direction_anchors) == 1:
+        # Whole-to-local refinement has asymmetric authority.  The source-wide
+        # direct side owns deskew; the template-projected local opposite side
+        # only closes cross offset and fixed H.  Letting the local fit move or
+        # narrow source direction would extrapolate a local fragment over the
+        # complete strip and can cut the far-end corner.
+        anchor = direction_anchors[0]
+        assert anchor.full_direction_interval_degrees is not None
+        assert anchor.canonical_direction_degrees is not None
+        return SharedStripDirection(
+            direction_id=run_local_id(
+                "template-lane-direction",
+                str(anchor.observation_id),
+                "source-wide-anchor",
+            ),
+            # Keep the local observation in the provenance closure because it
+            # directly proved compatibility, while the interval and canonical
+            # value remain owned solely by the source-wide anchor.
+            selected_observation_ids=(
+                cross_direction.selected_observation_ids
+            ),
+            full_angle_interval_degrees=(
+                anchor.full_direction_interval_degrees
+            ),
+            canonical_angle_degrees=float(
+                anchor.canonical_direction_degrees
+            ),
+        )
     direct_fit_intervals = tuple(
         item.fit_direction_interval_degrees
         for item in cross_fit.direct_bindings
@@ -98,10 +139,51 @@ def lane_template_direction(
             if direct_fit_common is None:
                 break
     if any(
-        item.source_spanning_continuous
+        item.source_spanning_continuous and item.role_authorized
         for item in cross_fit.direct_bindings
     ):
         return cross_direction
+    # Two role-authorized sides that close the fixed aperture across every
+    # independent longitudinal region already form a source-wide direction
+    # observation.  Separator directions are then validation only: a dark or
+    # locally irregular divider must not overturn the directly observed outer
+    # pair.  This is the bounded whole-strip path used before local refinement.
+    if (
+        cross_fit.direct_pair
+        and cross_fit.independent_support_region_count
+        == SPATIAL_SUPPORT_REGION_COUNT
+    ):
+        # An enclosing pair is itself the selected output support.  Its full
+        # directly measured direction interval therefore belongs to safety;
+        # reducing it to the statistical fit hull can cut a support-aligned
+        # corner.  Aperture pairs keep the narrower local-fit hull below.
+        if cross_fit.boundary_use == OutputBoundaryUse.ENCLOSING_SUPPORT_PAIR:
+            return cross_direction
+        if len(direct_fit_intervals) != 2:
+            return cross_direction
+        straight_residual = FiniteInterval(
+            min(item.minimum for item in direct_fit_intervals),
+            max(item.maximum for item in direct_fit_intervals),
+        )
+        canonical = min(
+            straight_residual.maximum,
+            max(
+                straight_residual.minimum,
+                cross_direction.canonical_angle_degrees,
+            ),
+        )
+        return SharedStripDirection(
+            direction_id=run_local_id(
+                "template-lane-direction",
+                cross_direction.direction_id,
+                "three-region-straight-residual",
+            ),
+            selected_observation_ids=(
+                cross_direction.selected_observation_ids
+            ),
+            full_angle_interval_degrees=straight_residual,
+            canonical_angle_degrees=canonical,
+        )
     if len(cross_fit.direct_bindings) != 2:
         return cross_direction
     groups = _sequence_direction_groups(sequence_fit, sequence_observations)
@@ -113,10 +195,6 @@ def lane_template_direction(
     )
     sequence_identities = tuple(
         identity for item in groups for identity in item[2]
-    )
-    compatibility = (
-        cross_fit.parallel_direction_interval_degrees
-        or cross_direction.full_angle_interval_degrees
     )
     if direct_fit_common is not None:
         # Two role-authorized local sides establish one common direction, and
@@ -130,9 +208,11 @@ def lane_template_direction(
             min(item.minimum for item in direct_fit_intervals),
             max(item.maximum for item in direct_fit_intervals),
         )
-        common = _intersect(fit_hull, compatibility)
-        if common is None:
-            return cross_direction
+        # The common interval proved that one shared straight direction is
+        # feasible.  For selected-output safety retain the complete statistical
+        # fit hull of both directly observed sides; intersecting it back down
+        # to the common sliver would discard the measured end-to-end departure.
+        common = fit_hull
         canonical = min(
             common.maximum,
             max(common.minimum, cross_direction.canonical_angle_degrees),
@@ -159,10 +239,22 @@ def lane_template_direction(
         sequence_interval,
         cross_direction.full_angle_interval_degrees,
     ) is None:
-        return cross_direction
-    common = _intersect(sequence_interval, compatibility)
-    if common is None:
         raise ValueError("sequence and cross direction evidence are incompatible")
+    # Cross fragments locate top/bottom. When their statistical fits do not
+    # share a direction, the independent source-wide sequence positions own
+    # the canonical deskew. Preserve the continuous hull between that global
+    # direction and the compatible local fragments as straight-model residual;
+    # narrowing to their overlap sliver would discard measured end-to-end bend.
+    common = FiniteInterval(
+        min(
+            sequence_interval.minimum,
+            cross_direction.full_angle_interval_degrees.minimum,
+        ),
+        max(
+            sequence_interval.maximum,
+            cross_direction.full_angle_interval_degrees.maximum,
+        ),
+    )
     canonical = min(
         common.maximum,
         max(common.minimum, float(median(item[0] for item in groups))),

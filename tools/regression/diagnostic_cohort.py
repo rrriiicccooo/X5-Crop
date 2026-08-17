@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from collections import Counter
 from dataclasses import dataclass
 import json
 from pathlib import Path
@@ -28,8 +29,8 @@ DIAGNOSTIC_COHORT_PATH = (
     / "diagnostic_unreviewed.jsonl"
 )
 COHORT_SCHEMA = "x5crop_diagnostic_unreviewed_cohort_v2"
-RECORD_SCHEMA = "x5crop_diagnostic_record_v3"
-SUMMARY_SCHEMA = "x5crop_diagnostic_summary_v3"
+RECORD_SCHEMA = "x5crop_diagnostic_record_v4"
+SUMMARY_SCHEMA = "x5crop_diagnostic_summary_v4"
 EXPECTED_RECORD_COUNT = 111
 DIAGNOSTIC_SOURCE_TIMEOUT_SECONDS = 600
 
@@ -103,19 +104,30 @@ def load_diagnostic_sources(
     return tuple(sources)
 
 
-def _source_geometry_within_authority(
-    report: dict[str, Any],
-    *,
-    width: int,
-    height: int,
-) -> bool:
+def _source_geometry_authority_is_explicit(report: dict[str, Any]) -> bool:
+    """Validate current selected-output overflow facts without clipping."""
+
     for lane in report["photo_geometry"]["lanes"]:
-        for geometry in lane["safe_crop_envelopes"]:
-            footprint = geometry["constrained_source_footprint"]
-            if not footprint or not all(
-                0.0 <= float(point[0]) <= width - 1
-                and 0.0 <= float(point[1]) <= height - 1
-                for point in footprint
+        for output in lane["output_footprints"]:
+            footprint = output["required_source_footprint"]
+            authority = output["sampling_authority_box"]
+            if not footprint:
+                return False
+            expected_sides = set()
+            if min(float(point[0]) for point in footprint) < authority["left"]:
+                expected_sides.add("left")
+            if min(float(point[1]) for point in footprint) < authority["top"]:
+                expected_sides.add("top")
+            if max(float(point[0]) for point in footprint) > authority["right"] - 1:
+                expected_sides.add("right")
+            if max(float(point[1]) for point in footprint) > authority["bottom"] - 1:
+                expected_sides.add("bottom")
+            recorded_sides = {
+                fact["authority_side"] for fact in output["saturation_facts"]
+            }
+            if (
+                recorded_sides != expected_sides
+                or (output["mapped_output_box"] is None) != bool(expected_sides)
             ):
                 return False
     return True
@@ -227,15 +239,11 @@ def run_diagnostic_source(source: DiagnosticSource) -> dict[str, Any]:
                 or source_identity["mtime_ns"] != before.st_mtime_ns
             ):
                 raise ValueError("source stat identity changed across production run")
-            width = int(source.identity["raw_width_px"])
-            height = int(source.identity["raw_height_px"])
-            source_pixels = width * height
-            canonical_extent = report["measurement"]["source_extent"]
-            geometry_authorized = _source_geometry_within_authority(
-                report,
-                width=int(canonical_extent["width"]),
-                height=int(canonical_extent["height"]),
+            source_pixels = (
+                int(source.identity["raw_width_px"])
+                * int(source.identity["raw_height_px"])
             )
+            geometry_authorized = _source_geometry_authority_is_explicit(report)
             work_bounded = bounded_work(
                 report,
                 source_pixels=source_pixels,
@@ -261,7 +269,7 @@ def run_diagnostic_source(source: DiagnosticSource) -> dict[str, Any]:
                 geometry_authorized and work_bounded and output_contract
             )
             engineering_checks = {
-                "source_lane_authority_bounded": geometry_authorized,
+                "source_lane_authority_explicit": geometry_authorized,
                 "query_template_memory_bounded": work_bounded,
                 "production_output_contract": output_contract,
                 "peak_temporary_limit_bytes": (
@@ -302,6 +310,20 @@ def run_diagnostic_source(source: DiagnosticSource) -> dict[str, Any]:
         "geometry_outcome": {
             "selected_placement_ids": [
                 lane["selected_placement_id"]
+                for lane in geometry["lanes"]
+            ],
+            "phase_statuses": [
+                lane["phase_status"] for lane in geometry["lanes"]
+            ],
+            "cross_statuses": [
+                lane["cross_status"] for lane in geometry["lanes"]
+            ],
+            "alignment_patterns": [
+                lane["template_alignment"]["pattern"]
+                for lane in geometry["lanes"]
+            ],
+            "selected_cross_boundary_uses": [
+                lane["selected_cross_boundary_use"]
                 for lane in geometry["lanes"]
             ],
         },
@@ -348,6 +370,41 @@ def run_diagnostic_cohort(
         record["engineering_contract_passed"]
         for record in records
     )
+    completed = tuple(
+        record for record in records if record["terminal_outcome"] == "completed"
+    )
+    review_reason_counts = Counter(
+        reason
+        for record in completed
+        for reason in record["final_review_reasons"]
+    )
+    gate_gap_counts = Counter(
+        check["gap"]
+        for record in completed
+        for check in record["candidate_gate"]["checks"]
+        if check["blocks"] and check["gap"] is not None
+    )
+    phase_status_counts = Counter(
+        status
+        for record in completed
+        for status in record["geometry_outcome"]["phase_statuses"]
+    )
+    cross_status_counts = Counter(
+        status
+        for record in completed
+        for status in record["geometry_outcome"]["cross_statuses"]
+    )
+    alignment_pattern_counts = Counter(
+        pattern
+        for record in completed
+        for pattern in record["geometry_outcome"]["alignment_patterns"]
+    )
+    boundary_use_counts = Counter(
+        use
+        for record in completed
+        for use in record["geometry_outcome"]["selected_cross_boundary_uses"]
+        if use is not None
+    )
     summary = {
         "summary_schema": SUMMARY_SCHEMA,
         "validation_role": "diagnostic_unreviewed",
@@ -366,7 +423,7 @@ def run_diagnostic_cohort(
             "source_lane_authority": sum(
                 record["engineering_checks"] is not None
                 and not record["engineering_checks"][
-                    "source_lane_authority_bounded"
+                    "source_lane_authority_explicit"
                 ]
                 for record in records
             ),
@@ -392,6 +449,16 @@ def run_diagnostic_cohort(
         "needs_review_count": sum(
             record["decision_status"] == "needs_review"
             for record in records
+        ),
+        "review_reason_counts": dict(sorted(review_reason_counts.items())),
+        "blocking_gate_gap_counts": dict(sorted(gate_gap_counts.items())),
+        "phase_status_counts": dict(sorted(phase_status_counts.items())),
+        "cross_status_counts": dict(sorted(cross_status_counts.items())),
+        "alignment_pattern_counts": dict(
+            sorted(alignment_pattern_counts.items())
+        ),
+        "selected_cross_boundary_use_counts": dict(
+            sorted(boundary_use_counts.items())
         ),
         "recognition_accuracy_verdict": "not_assessed",
         "filename_status_expectations_consumed": False,
@@ -434,6 +501,23 @@ def main(argv: Sequence[str] | None = None) -> int:
         f"{'passed' if summary['engineering_contract_passed'] else 'failed'}; "
         f"failures={summary['engineering_contract_failure_count']}"
     )
+    print(
+        "terminal decisions: "
+        f"approved_auto={summary['approved_auto_count']} "
+        f"needs_review={summary['needs_review_count']}"
+    )
+    for field in (
+        "review_reason_counts",
+        "blocking_gate_gap_counts",
+        "phase_status_counts",
+        "cross_status_counts",
+        "alignment_pattern_counts",
+        "selected_cross_boundary_use_counts",
+    ):
+        print(
+            f"{field}: "
+            + json.dumps(summary[field], ensure_ascii=False, sort_keys=True)
+        )
     return 0 if passed else 1
 
 

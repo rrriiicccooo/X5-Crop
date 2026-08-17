@@ -6,6 +6,9 @@ from typing import Any
 
 from ..detection.workspace import DetectionWorkspace
 from .read_models import typed_read_model
+from ..detection.photo_geometry.template_alignment_diagnostic import (
+    template_alignment_diagnostic,
+)
 from ..detection.photo_geometry.template_phase_model import PhaseFitStatus
 from ..detection.photo_geometry.template_stability import (
     leave_one_anchor_out_phase_stability,
@@ -28,8 +31,14 @@ def development_report_facts(
 ) -> dict[str, Any]:
     geometry = detection.candidate.geometry
     stability_by_lane = {}
+    alignment_by_lane = {}
     for lane in geometry.lane_reconstructions:
         phase = lane.prepared.phase_competition
+        alignment_by_lane[lane.lane_id] = template_alignment_diagnostic(
+            phase,
+            lane.prepared.sequence_edges,
+            lane.prepared.separator_bands,
+        )
         stability_by_lane[lane.lane_id] = (
             None
             if phase.status != PhaseFitStatus.RESOLVED or phase.best is None
@@ -109,6 +118,9 @@ def development_report_facts(
                 "evidence_use_ledger": typed_read_model(
                     lane.prepared.evidence_use_ledger
                 ),
+                "template_alignment": typed_read_model(
+                    alignment_by_lane[lane.lane_id]
+                ),
                 "phase_competition": typed_read_model(
                     lane.prepared.phase_competition
                 ),
@@ -166,6 +178,10 @@ def development_report_facts(
                     "phase_hypothesis_count": (
                         lane.prepared.phase_competition.receipt
                         .phase_hypothesis_count
+                    ),
+                    "separator_lattice_hypothesis_count": (
+                        lane.prepared.phase_competition.receipt
+                        .separator_lattice_hypothesis_count
                     ),
                     "phase_fit_pass_count": (
                         lane.prepared.phase_competition.receipt.fit_pass_count

@@ -1,76 +1,144 @@
 # X5 Crop 用户手册
 
-- 当前公开稳定版本：v4.2.8
+- 当前公开稳定版：v4.2.8
 - 仓库当前源码：V5 current-only，尚未公开发布
-- 输入定位：用户已经知道 format、片条模式及必要 count 的 Hasselblad / Imacon X5 片夹扫描
+- 适用对象：用户已经知道胶片格式和照片格数的 Hasselblad / Imacon X5 片夹扫描
 
 ## 产品行为
 
-X5 Crop 的目标是自动产生足够安全且不切掉真实照片内容的 TIFF。用户提供胶片格式；程序使用
-扫描像素、固定物理尺寸、片夹画布、张数与顺序共同判断。只有内容保护、多余边缘限制、变换和
-TIFF 写出均成立时才输出正式照片，否则整张 source 进入 `needs_review`，不做部分 slot 挽救。
+X5 Crop 把输入看成“已知格式模板的自动对准”，而不是通用照片边界识别。用户提供 format 和
+照片格数；程序使用固定物理宽高、整条片带的方向、照片组 outer、separator 和二维内容保护来
+放置模板。只有整张 source 的全部 slot 都能安全输出时才写正式照片，否则整张进入
+`needs_review`，不做局部挽救。
 
-程序不承诺恢复唯一的真实照片边界，也不从文件名猜 format 或 count。程序先从图像独立匹配
-片夹，再取得该片夹合同的完整曝光格数。Full 表示用户确认胶片采用片夹的完整铺满布局，程序自动
-使用该格数；partial 表示没有铺满，必须输入实际 count，包括中间空白曝光格。Partial 允许与
-`full_count` 相同的照片数，但不会使用片夹长轴居中和均匀排布事实。程序不删除空白 slot。例如
-三张 120-66 既可以是铺满布局的 full，也可以是未铺满的 `partial --count 3`。
+程序不从文件名、画面内容或片夹容量猜 format 或真实照片数。Count 包括中间空白曝光格；空白格
+不会被删除、合并或改变顺序。
 
-语法检查会拒绝 partial 缺少 count、count 非正数或 full 携带 count。匹配片夹后，如果 partial
-count 大于实际 `full_count`，非交互整批调用同样在 detector 前以退出码 `2` 停止；交互启动器
-列出全部冲突并返回模式/count 步骤，不要求重新选择 format 或 Debug Analysis，也不会逐 source
-临时改写 count。图像不能唯一匹配片夹时保持 `needs_review`，不猜片夹或格数。`135-dual` 只允许
-full，总计 12 格、每 lane 6 格。
+### Format 与 count
 
-正常间隙是两种模式共同的默认状态。程序先按 format 放下固定模板，再用至少两个独立 adjacency
-校准当前片条的 source pitch；已支持的模板可以补全看不见的 separator，并明确标记为推导位置。
-Full 不会把 format gap 搜索值变成定位事实，也不会用铺满布局覆盖接触、叠片或大间隙的直接证据。
-局部异常必须由已经绑定到具体 adjacency 的直接 separator 证明，只让后续照片整体移动一次。
+命令行只有 format 和可选 count，没有 full/partial 模式：
 
-Format 决定照片矩形的物理尺寸。检测只负责根据片条方向、照片上下边缘、照片间黑带、共同尺寸
-和局部卷片关系放置这些矩形，再把边缘测量所需的最小安全范围纳入输出。最终每一边都必须通过
-以 format 尺寸为基准的 5%（start/end）或 3%（top/bottom）限制。相邻照片接触或重叠时，
-相邻输出可以重复包含同一段 source pixels；这不是额外边缘，也不会改变照片数。
-
-“保护内容”不等于裁切线外绝对不能出现任何内容像素。只发生在两条相邻边交角处的极小擦边、
-锯齿或尘点保持中性；只有离开角落、连续跨过整条边界不确定区间的可靠二维画面才会否决自动裁切。
-内容检查只在照片位置已经唯一确定后执行，不负责在多个位置之间选 winner。程序不会为了保留一个
-已确认可接受的角点而扩大或扭曲固定 format 框。
+- 省略 `--count`：用户确认使用匹配片夹的默认完整格数；
+- 明确 `--count N`：用户确认实际有 N 个 slot；
+- 明确 count 必须为正整数，并且不能超过匹配片夹的容量；
+- `135-dual` 的默认值是 12，每 lane 6；明确输入其它值会进入
+  `needs_review`，程序不猜两条 lane 的分配。
 
 完整格数为：135=6、half=12、XPan=3、120-645=4、120-66=3；120-67 普通片夹为 3、短片夹
-为 2。135-dual 总计 12 格，每 lane 6 格。
+为 2。135-dual 总计 12。
+
+程序在 placement 已经选定后才判断照片组是否铺满片夹：只检查真实 outer 外侧是否还能放下一个
+format 宽度 W，不附加 gap。这个事实不用于搜索，也不提供长轴居中权限。单 lane 不要求居中；
+135-dual 只有两条 lane 都确认铺满时才允许自动输出。
+
+## 检测主线
+
+### 从整体到局部
+
+V5 继承 v4.2.8 最有效的行为，但不复制旧实现：
+
+1. 先从片夹、胶片材料边或长距离稳定结构得到粗位置和共同方向；
+2. 按 format、count 和尺度放下固定 W/H 模板；
+3. 先识别 separator material band 和 outer 所在的有限区域；
+4. 只在理论边界附近做一次有界局部精测；
+5. 用实际观察相对理论模板的偏差解释整体平移、pitch 微调或一次局部位移；
+6. 位置唯一且安全事实齐全后立即停止，不继续寻找更多候选。
+
+粗支撑只回答“片带大概在哪里、朝哪个方向”，不能单独宣布照片边界。局部观察在绑定模板以前也
+没有第几格、start/end 或 top/bottom 身份。同一个 separator 的两条边、band 和多条 trace 仍只算
+一个物理结构，不会重复投票。
+
+First/last 看不清时并不必然失败。只要内部 separator 或其它独立观察已经确定 phase、pitch 和
+ordinal，模板可以推导缺失端点。没有任何直接 phase anchor 时，模板不能自己证明自己。
+
+### 固定尺寸、separator 与局部异常
+
+同一片条的全部照片共享 format W/H、扫描尺度和 deskew 方向。每格不会因像素噪声改变尺寸；
+间隙只改变位置。
+
+正常片条使用共同 pitch。某一 adjacency 有直接证据表明宽缝或窄缝时，程序最多允许一次局部
+advance：异常点以后的照片整体移动一次，后续仍恢复共同 pitch。异常位置不明确、需要两次以上
+位移、接触或 overlap 时保持 `needs_review`。当前没有用户确认的 overlap 黄金，因此 V5 不自动
+批准叠片，也不启用特殊 overlap bleed。
+
+### Deskew 与轻微弯曲
+
+Deskew 同时参与检测和输出。程序用整条片带共享的直线方向计算理论边界，避免斜片条在首尾产生
+明显位置误差；正式输出再从原始 16-bit TIFF 按同一几何采样。
+
+轻微弯曲不建立曲线模型。它被视为“共同直线 + 小残差”，残差只进入胜出 placement 的安全范围。
+若直线模型所需保护超出预算，整张 source 进入人工检查。每张照片不会拥有独立旋转或自由四边形。
+
+## Top/bottom 与可接受 outer
+
+程序不需要区分一条外侧支撑究竟是片夹边还是胶片材料边，但会区分两种最终用途：
+
+### 照片 aperture
+
+有资格代表照片真实 top/bottom 的局部观察必须同时满足有限位置、共同方向、正确内外关系和固定
+H 闭环。可以使用：
+
+- 直接 top 与 bottom；
+- 一条 source-wide 的直接边，加固定 H 推导另一侧；
+- 同侧多个相距较远、能够证明属于同一直线的 fragment。
+
+短小照片内部黑线、只因坐标接近而拼接的 fragment、两个不同合法位置都不能决定 outer。存在两个
+不同答案时不会平均或按梯度强弱硬选。
+
+### 包住照片的外侧支撑
+
+如果找不到可靠 aperture，但存在一对直接、连续且共同方向的外侧支撑，它们完整包住固定 H，且
+总高度不超过 `1.1 × H`，程序可以直接把这对支撑作为输出 top/bottom。这允许使用片夹边或胶片
+材料边裁切，并保留少量可接受黑边。
+
+两侧必须来自同一种用途：不能一侧按 aperture、另一侧按外侧支撑。两侧直接闭环且唯一的
+aperture 优先；如果 aperture 只有单侧直接观察、另一侧依赖固定 H 推导，或者 aperture 存在多个
+不同答案，一对唯一且直接证明的外侧支撑可以成为更强的输出边界。外侧支撑不是放宽后的猜测，
+而是另一种有直接连续性证明的完整输出边界。
+
+## Bleed、联合安全范围与 5% 预算
+
+Bleed 是固定的产品边距，不是测量置信度，也不参与选择 placement。
+
+使用照片 aperture 时：
+
+```text
+start/end bleed = max(0.15 mm, 0.7% W)
+top/bottom bleed = 0.25 mm
+```
+
+程序先保留同一个胜出 placement 的所有联合可行状态，包括 phase、pitch、direction、cross、
+一次局部位移和直线残差，再加入 bleed。它不会把互相不能同时发生的各项最大误差简单相加，也
+不会合并 runner-up。
+
+使用 aperture 的自动输出上限是四边各自最多扩张 format 对应尺寸的 5%。这 5% 包含测量不确定性、
+直线残差和 bleed；四边不能互借额度。以 36 mm 宽的 135 为例，正常 start/end bleed 是
+0.252 mm，占单边 1.8 mm 上限的 14%；0.25 mm 的 cross bleed 占 24 mm 单边 1.2 mm 上限的约
+20.8%。
+
+使用外侧支撑时，top/bottom 不再加 0.25 mm bleed，也不套用 aperture 的单边 5%：它使用
+“直接支撑总高度不超过 1.1H”这个独立合同。Start/end 仍使用正常 bleed 和单边 5%。
+
+最终所需 footprint 不会被静默裁到 source 或 lane 范围内。只要超出可采样范围，或者任一边超过
+对应预算，整张 source 就进入 `needs_review`。
+
+二维内容只回答“当前输出会不会明显切进真实照片内容”。它不能移动边界、平分照片、创造
+placement 或替某个候选加分。角落极小擦边、锯齿和尘点保持中性；连续跨过完整边界的不安全内容
+才会否决自动输出。
 
 ## 安装
 
 从 [GitHub Releases](https://github.com/rrriiicccooo/X5-Crop/releases) 下载
-`X5-Crop-vX.X.zip`。不要使用 GitHub 自动生成的 Source code 压缩包。
+`X5-Crop-vX.X.zip`，不要使用 GitHub 自动生成的 Source code 压缩包。
 
-发布包支持 Python 3.12–3.14，并固定以下可导入模块版本：
-
-```text
-numpy       2.5.1
-scipy       1.18.0
-cv2         5.0.0
-tifffile    2026.7.31
-imagecodecs 2026.6.26
-PIL         12.3.0
-```
-
-运行平台安装器：
+发布包支持 Python 3.12–3.14，并固定所需模块版本。运行：
 
 - macOS：`install/X5_Crop_Mac_install.command`
 - Windows：`install/X5_Crop_win_install.bat`
 
-安装器先选择一份受支持的全局 Python，再逐项检查实际可导入模块、版本和来源。版本已经满足时
-直接复用，不因模块来自 Homebrew、pip 或其它来源而重复安装。缺失模块才使用该 Python 的用户级
-pip 安装最小的冻结 binary wheel；已有版本不符时，能够确认 Homebrew 或 pip ownership 才沿用
-原 package manager 更新。来源无法安全确认时会在改动前停止，不用第二份包遮盖未知环境。
-
-Homebrew 不是前置条件，安装器不会为了 OpenCV 强制安装 Homebrew。缺少 `cv2` 时，默认用户级
-fallback 是 `opencv-python-headless==5.0.0.93`；已经可用的 Homebrew `opencv`、pip OpenCV 或
-其它 provider 都保持原样。用户级 site 不建立私有 `.venv`，因此同一 Python 可在任意文件夹
-运行独立的 `X5_Crop.py`。卸载器只删除收据确认由 X5 Crop 新增且未被其它包使用的用户级包，
-不会回滚已有包或 Homebrew 更新。
+安装器复用合格的全局 Python 和现有依赖，只安装缺失项。来源无法安全确认时会在改动前停止。
+Homebrew 不是前置条件，也不会建立私有 `.venv`。卸载器只删除收据证明由 X5 Crop 新增且未被
+其它包使用的依赖。
 
 ## 输入合同
 
@@ -82,82 +150,46 @@ V5 正式输入域为：
 - `NONE`、`LZW`、`DEFLATE` / `ADOBE_DEFLATE` 或 `ZSTD` 无损压缩；
 - TIFF Orientation 1–8。
 
-不满足冻结域的文件会记录为 `runtime_error`，不会静默转换或猜测。Orientation 在读取边界转换
-为正确视觉方向；检测、排序与裁切都在该方向工作，输出像素写为 `Orientation=1`。
+不满足冻结域的文件会记录为 `runtime_error`，不会静默转换。Orientation 在读取时规范化，输出
+写为 `Orientation=1`。
 
 ## 运行
 
 图形化启动：
 
-- macOS：将 TIFF 放到启动器目录，双击 `X5_Crop_Mac.command`。
+- macOS：将 TIFF 放到启动器目录，双击 `X5_Crop_Mac.command`；
 - Windows：将 TIFF 放到启动器目录，双击 `X5_Crop_win.bat`。
 
 命令行示例：
 
 ```bash
-python3 X5_Crop.py /path/to/scans \
-  --format 120-66 \
-  --strip partial \
-  --count 2
+python3 X5_Crop.py /path/to/scans --format 120-66 --count 2
 ```
 
-命令行参数：
+主要参数：
 
-- `input`：一个 TIFF 或包含 TIFF 的目录；省略时为当前目录。
-- `--output PATH`：输出目录；默认是输入旁的 `x5_crop_output`。
-- `--format`：`135`、`135-dual`、`half`、`xpan`、`120-645`、`120-66`、`120-67`。
-- `--layout`：`auto`、`horizontal` 或 `vertical`。
-- `--strip`：`full` 或 `partial`。
-- `--count N`：仅 partial 使用且必填的正整数曝光格数；包括中间空白曝光格，不能超过匹配片夹
-  的完整张数。Full 不接受 `--count`。照片数等于 `full_count` 时仍按实际布局选择模式：铺满用
-  full，未铺满用 partial。`135-dual` 不接受 partial。
-- `--jobs N`：source 并发数；默认 1，上限 3。默认值优先控制一般电脑的峰值内存；内存充足且
-  一次处理多张原 TIFF 时可显式使用 `--jobs 2`。数值库内部线程固定为 1。
-- `--debug-analysis`：执行完整检测并生成自适应高度的三联诊断 JPG、development report 和 summary，
-  但不写正式 TIFF，也不复制 `needs_review` 原图；默认关闭。完整片条保持原比例，不裁切照片。
-- `--interactive`：交互选择格式、模式、张数和 Debug Analysis；多文件的片夹/count 检查针对
-  整批执行，存在冲突时列出全部冲突并返回模式/count 步骤。
+- `input`：一个 TIFF 或包含 TIFF 的目录；省略时为当前目录；
+- `--output PATH`：全新输出目录；
+- `--format`：`135`、`135-dual`、`half`、`xpan`、`120-645`、`120-66` 或 `120-67`；
+- `-n, --count N`：可选的正整数 slot 数；省略表示确认匹配片夹默认值；
+- `--layout`：`auto`、`horizontal` 或 `vertical`；
+- `--jobs N`：source 并发数，默认 1，上限 3；
+- `--debug-analysis`：只写诊断 JPG、development report 和 summary，不写正式 TIFF 或 review copy；
+- `--interactive`：交互选择 format、count 和 Debug Analysis。
 
-没有 `--overwrite`。输出目录必须是一个尚不存在的新路径；程序不接管或删除旧输出。
+没有 `--overwrite`。输出目录必须尚不存在，程序不接管或删除旧输出。Debug Analysis 与正式
+裁切应使用不同的新目录；正式运行始终重新读取原 TIFF。
 
-Debug Analysis 和正式裁切可分两步运行：
-
-```bash
-python3 X5_Crop.py /path/to/scans --format 120-66 --strip partial --count 2 --debug-analysis
-python3 X5_Crop.py /path/to/scans --format 120-66 --strip partial --count 2
-```
-
-两条命令必须使用不同的全新 `--output` 路径。Debug Analysis 只发布诊断与开发事实；普通运行始终
-从原 TIFF 重新执行测量、物理求解和 Gate，不把旧 report 当作可执行状态。
-
-## 状态与退出码
+## 状态、输出与退出码
 
 每个输入只有一个终态：
 
-- `approved_auto`：普通运行写出完整正式照片 TIFF；Debug Analysis 运行只记录 Gate 已通过。
-- `needs_review`：普通运行不写正式照片，将原扫描件复制到 `needs_review/`；Debug Analysis 运行
-  只记录原因。
-- `runtime_error`：该输入失败，不写它的照片；其它输入继续处理。
+- `approved_auto`：写出完整的一组正式 TIFF；
+- `needs_review`：不写照片，只保留原扫描件和明确原因供检查；
+- `runtime_error`：该输入失败，其它输入继续。
 
-无法区分候选片夹、producer 上限被触发、不同最终裁切位置没有唯一物理胜出者，或可靠内容否决
-所有位置时，结果均保持 `needs_review`，不输出猜测的照片 TIFF。普通 JSONL report 保存匹配片夹、
-count authority、最终选择、安全范围与 Gate 根因；显式 Debug Analysis 额外保存模板位置、实际
-observation、fit winner/runner、偏差与推导 ledger、内容否决和工作量 receipt。
-诊断 JPG 中原始 observation 使用虚线，winner 与 runner 分开绘制并标出差异；文字区说明 phase
-求解器实际采用的 winner 依据、winner 依赖的 phase/cross/content/shared-source 事实和根 Gate。
-最终输出面板只显示已胜出 placement 的
-SafeCrop，`needs_review` candidate 不会被画成正式输出。
-
-退出码：
-
-- `0`：成功发布，且没有 `runtime_error`。
-- `1`：成功发布但含 `runtime_error`，或全部输入失败且未发布。
-- `2`：命令行、输入集合或运行前检查失败。
-- `3`：全新输出目录无法安全发布。
-
-如果全部输入均为 `runtime_error`，程序不发布空结果，上一套输出保持不动。
-
-## 输出与安全发布
+Debug Analysis 展示理论模板、实际观察、偏差形状、直接与推导边界、winner/runner 差异、最终
+输出 footprint、预算使用和第一个阻止自动输出的原因。它只读取同一次检测事实，不重新求解。
 
 默认结构：
 
@@ -171,32 +203,15 @@ x5_crop_output/
   x5_crop_summary.csv
 ```
 
-照片直接位于根部，不建立 `run-*` 或 source 子目录。`needs_review/` 和 `_debug_analysis/` 仅在
-有内容时出现。Debug Analysis 使用自己指定的全新输出目录，其中只有诊断 JPG、report 与 summary，
-没有正式 TIFF 或 review copy。
+退出码：
 
-每次运行先在目标同父目录建立临时目录。全部输入处理、必要 TIFF header 检查和报告写完后，程序
-用一次 rename 发布为目标目录。目标已存在或处理中出现同名目录时退出码为 `3`；程序不会遍历、
-覆盖、接管或删除其中任何内容。写盘、空间不足或 rename 失败时清理本次未发布的临时目录并报告
-实际错误，不维护隐藏的磁盘预留账本或恢复状态机。
+- `0`：成功发布且没有 `runtime_error`；
+- `1`：已发布但含 `runtime_error`，或全部输入失败；
+- `2`：命令行、输入集合或运行前检查失败；
+- `3`：全新输出目录无法安全发布。
 
-## TIFF 保真与隐私
-
-正式 TIFF 仅由 `tifffile + imagecodecs` 读写。每张输出关闭写句柄后会重新打开 header，并检查
-16-bit RGB、三通道、contiguous planar、shape、ICC、resolution、resolution unit、受支持 metadata、
-无损压缩与 `Orientation=1`。完整像素复读属于 TIFF contract、named-TIFF、platform、端到端与发布
-验证，不让普通用户每张输出重复完整解码。
-
-普通运行不额外计算原 TIFF 的内容 SHA，也不检查 Git、黄金样片或性能 receipt，
-不启用 profiler 或故障注入。Pillow 只在用户明确启用 Debug Analysis 时延迟导入。
-
-## 移除与许可
-
-卸载依赖：
-
-- macOS：`install/X5_Crop_Mac_uninstall.command`
-- Windows：`install/X5_Crop_win_uninstall.bat`
-
-卸载器只删除由 X5 Crop 引入、版本未变化且不再被其它 package 需要的依赖。
+正式 TIFF 只由 `tifffile + imagecodecs` 读写，并保真检查位深、通道、ICC、resolution、受支持
+metadata、无损压缩与 `Orientation=1`。程序先写 staging，全部完成后一次 rename 发布；已有目标
+不会被遍历、覆盖或删除。
 
 License: MIT — [LICENSE](../LICENSE)

@@ -24,9 +24,11 @@ from x5crop.debug.output_panel import (
     protected_output_panel,
 )
 from x5crop.debug.panel_facts import (
+    alignment_summary,
     competition_summary,
     primary_geometry_by_identity,
     root_gate_summary,
+    selected_output_safety_summary,
     runner_geometry_by_identity,
     source_projection,
 )
@@ -522,6 +524,18 @@ class DebugAnalysisContractTest(unittest.TestCase):
         self.assertTrue(summary.startswith("ROOT GATE · "))
         self.assertIn("NEED ", summary)
         self.assertIn("ACTION ", summary)
+
+    def test_debug_names_alignment_pattern_and_selected_output_safety(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            _configuration, _profile, _workspace, detection = _fixture(
+                Path(temporary)
+            )
+        self.assertTrue(alignment_summary(detection).startswith("ALIGNMENT · "))
+        self.assertTrue(
+            selected_output_safety_summary(detection).startswith(
+                "SELECTED OUTPUT SAFETY · "
+            )
+        )
 
 
 if __name__ == "__main__":

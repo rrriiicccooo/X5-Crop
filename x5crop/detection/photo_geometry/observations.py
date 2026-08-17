@@ -16,7 +16,7 @@ from .observation_types import (
     SeparatorBandObservation,
 )
 from .separator_observations import build_format_separator_bands
-from .sequence_direction_measurement import sequence_run_direction_measurement
+from .sequence_direction_measurement import sequence_run_line_measurement
 
 
 def _dominant_polarity(
@@ -35,6 +35,8 @@ def build_sequence_observations(
     field: PhotoBoundaryMeasurementField,
     boundary_axis: BoundaryAxis,
     boundary_axis_scale_px_per_mm: PositiveInterval,
+    *,
+    reference_trace_px: float,
 ) -> tuple[
     tuple[BoundaryEdgeObservation, ...],
     tuple[SeparatorBandObservation, ...],
@@ -53,32 +55,37 @@ def build_sequence_observations(
                 polarity,
             )
         )
-        direction = sequence_run_direction_measurement(
+        line = sequence_run_line_measurement(
             run,
             transitions,
+            reference_trace_px=reference_trace_px,
             boundary_axis_scale_px_per_mm=(
                 boundary_axis_scale_px_per_mm.maximum
             ),
         )
+        if line is None:
+            continue
         edges.append(
             BoundaryEdgeObservation(
                 observation_id=identity,
                 run_id=run.run_id,
-                coordinate_interval_px=run.coordinate_interval_px,
+                discovery_interval_px=run.coordinate_interval_px,
+                reference_trace_px=line.reference_trace_px,
+                canonical_position_px=line.canonical_position_px,
+                fit_position_interval_px=line.fit_position_interval_px,
+                full_position_interval_px=line.full_position_interval_px,
                 transition_ids=run.transition_ids,
                 trace_coordinates_px=run.trace_coordinates_px,
                 polarity=polarity,
                 support_fraction=run.support_fraction,
                 continuous_support_fraction=run.continuous_support_fraction,
                 fit_residual_px=run.fit_residual_px,
-                canonical_direction_degrees=(
-                    None if direction is None else direction[0]
-                ),
+                canonical_direction_degrees=line.canonical_direction_degrees,
                 fit_direction_interval_degrees=(
-                    None if direction is None else direction[1]
+                    line.fit_direction_interval_degrees
                 ),
                 full_direction_interval_degrees=(
-                    None if direction is None else direction[2]
+                    line.full_direction_interval_degrees
                 ),
                 qualified_anchor_roles=run.qualified_anchor_roles,
             )
@@ -87,7 +94,7 @@ def build_sequence_observations(
         sorted(
             edges,
             key=lambda item: (
-                item.coordinate_interval_px.center,
+                item.fit_position_interval_px.center,
                 str(item.observation_id),
             ),
         )

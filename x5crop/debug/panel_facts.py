@@ -6,6 +6,9 @@ from PIL import Image
 
 from ..detection.final.model import FinalDetection
 from ..detection.photo_geometry.output_model import OutputFootprint
+from ..detection.photo_geometry.template_alignment_diagnostic import (
+    template_alignment_diagnostic,
+)
 from ..detection.photo_geometry.template_placement import TemplateFrame
 from ..detection.workspace import DetectionWorkspace
 from .canvas import DebugRenderCache, cached_source_image
@@ -142,6 +145,57 @@ def competition_summary(detection: FinalDetection) -> str:
     return f"{subject} · {basis} · RUNNER DIFF {runner}"
 
 
+def alignment_summary(detection: FinalDetection) -> str:
+    """Summarize actual-versus-template deviation without a score."""
+
+    values: list[str] = []
+    for lane in detection.candidate.geometry.lane_reconstructions:
+        diagnostic = template_alignment_diagnostic(
+            lane.prepared.phase_competition,
+            lane.prepared.sequence_edges,
+            lane.prepared.separator_bands,
+        )
+        label = diagnostic.pattern.value.upper().replace("_", " ")
+        if diagnostic.pattern.value == "unresolved":
+            values.append(f"{lane.lane_id} {label}")
+            continue
+        pitch_delta = float(
+            diagnostic.pitch_delta_from_compiled_center_px or 0.0
+        )
+        residual = diagnostic.maximum_absolute_role_residual_px
+        values.append(
+            f"{lane.lane_id} {label} · PITCH Δ {pitch_delta:+.2f}px · "
+            f"ROLE RESIDUAL {'N/A' if residual is None else f'{residual:.2f}px'}"
+        )
+    return "ALIGNMENT · " + " | ".join(values)
+
+
+def selected_output_safety_summary(detection: FinalDetection) -> str:
+    """Name boundary ownership and the largest final per-side budget use."""
+
+    geometry = detection.candidate.geometry
+    outputs = geometry.output_footprints
+    budgets = geometry.direct_use_budget_assessments
+    if not outputs or not budgets:
+        return "SELECTED OUTPUT SAFETY · NOT EVALUATED"
+    uses = "/".join(
+        sorted(
+            {
+                output.envelope.boundary_use.value.upper().replace("_", " ")
+                for output in outputs
+            }
+        )
+    )
+    ratios = tuple(
+        edge.expansion_mm / edge.limit_mm
+        for budget in budgets
+        for edge in budget.edge_assessments
+        if edge.limit_applies and edge.limit_mm > 0.0
+    )
+    maximum = "N/A" if not ratios else f"{100.0 * max(ratios):.1f}%"
+    return f"SELECTED OUTPUT SAFETY · {uses} · MAX 5% BUDGET USE {maximum}"
+
+
 def root_gate_summary(detection: FinalDetection) -> str:
     blocking = detection.decision.blocking_checks
     if not blocking:
@@ -207,7 +261,19 @@ def axis_authority_summaries(
         for item in lanes
     )
     return (
-        f"CROSS FIT · DIRECT {direct_cross} · INFERRED {inferred_cross}",
+        "CROSS FIT · "
+        + "/".join(
+            sorted(
+                {
+                    lane.prepared.cross_competition.best.boundary_use.value
+                    .upper()
+                    .replace("_", " ")
+                    for lane in lanes
+                    if lane.prepared.cross_competition.best is not None
+                }
+            )
+        )
+        + f" · DIRECT {direct_cross} · INFERRED {inferred_cross}",
         f"SEQUENCE FIT · DIRECT {direct_sequence} · INFERRED {inferred_sequence}",
         f"SOURCE FIT · LANES {len(lanes)} · RUNNERS {runners} · GATE SUPPORTED",
     )

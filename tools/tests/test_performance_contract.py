@@ -59,7 +59,21 @@ class V5PerformanceContractTest(unittest.TestCase):
     def test_receipt_revision_is_current_only(self) -> None:
         self.assertEqual(
             PERFORMANCE_RECEIPT_SCHEMA,
-            "x5crop_performance_receipt_v5_2",
+            "x5crop_performance_receipt_v5_3",
+        )
+        self.assertEqual(
+            STAGE_NAMES,
+            (
+                "startup_import_unattributed",
+                "decode",
+                "gray_and_coarse_support",
+                "registered_measurement",
+                "template_alignment_decision",
+                "sampling",
+                "encode_write",
+                "readback",
+                "publish",
+            ),
         )
 
     @staticmethod

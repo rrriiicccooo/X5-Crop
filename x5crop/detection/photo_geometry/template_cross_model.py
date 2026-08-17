@@ -7,6 +7,7 @@ from enum import Enum
 import math
 
 from ...domain import FiniteInterval, ObservationId, PositiveInterval
+from ...formats import OUTPUT_PROTECTION_SPEC
 from .line_observations import PhotoBoundaryObservation
 from .model import (
     BoundaryAxis,
@@ -110,6 +111,7 @@ class CrossEvidence(str, Enum):
     """Role-ledger provenance for one short-axis edge."""
 
     DIRECT = "direct"
+    TEMPLATE_LOCAL_REFINEMENT = "template_local_refinement"
     FIXED_HEIGHT_INFERRED = "fixed_height_inferred"
 
 
@@ -272,7 +274,10 @@ class CrossRoleBinding:
             item if isinstance(item, ObservationId) else ObservationId(str(item))
             for item in self.source_observation_ids
         )
-        if self.evidence == CrossEvidence.DIRECT:
+        if self.evidence in {
+            CrossEvidence.DIRECT,
+            CrossEvidence.TEMPLATE_LOCAL_REFINEMENT,
+        }:
             source = (identity,)
         elif not source:
             raise ValueError("inferred cross binding needs source observations")
@@ -366,7 +371,6 @@ class TemplateCrossInput:
     maximum_compatible_pairs: int = 4096
     maximum_evaluated_fits: int = 4096
     minimum_shared_trace_support: int = 2
-    parallel_direction_tolerance_degrees: float = 0.0
 
     def __post_init__(self) -> None:
         if not isinstance(self.template, TemplateSpec):
@@ -427,11 +431,6 @@ class TemplateCrossInput:
             raise ValueError("cross work bounds must be positive integers")
         if not isinstance(self.minimum_shared_trace_support, int) or self.minimum_shared_trace_support < 0:
             raise ValueError("cross shared-support minimum cannot be negative")
-        if (
-            not math.isfinite(self.parallel_direction_tolerance_degrees)
-            or self.parallel_direction_tolerance_degrees < 0.0
-        ):
-            raise ValueError("cross parallel-direction tolerance is invalid")
 
 
 @dataclass(frozen=True)
@@ -547,7 +546,14 @@ class CrossFit:
             raise ValueError("direct cross fit requires two direct bindings")
         if not self.direct_pair and len(self.direct_bindings) != 1:
             raise ValueError("single-side cross fit requires one direct binding")
-        if any(item.evidence != CrossEvidence.DIRECT for item in self.direct_bindings):
+        if any(
+            item.evidence
+            not in {
+                CrossEvidence.DIRECT,
+                CrossEvidence.TEMPLATE_LOCAL_REFINEMENT,
+            }
+            for item in self.direct_bindings
+        ):
             raise ValueError("direct ledger contains inferred binding")
         if any(item.evidence != CrossEvidence.FIXED_HEIGHT_INFERRED for item in self.inferred_bindings):
             raise ValueError("inferred ledger contains direct binding")
@@ -573,9 +579,15 @@ class CrossFit:
             ):
                 raise ValueError("support output must preserve direct bindings")
             span = support.observed_span_px
-            if span.minimum <= self.fixed_height_px.maximum:
-                raise ValueError("support span is not universally greater than H")
-            if span.maximum > 1.1 * float(self.fixed_height_px.minimum) + 1.0e-9:
+            aperture_height = self.bottom_canonical_px - self.top_canonical_px
+            if span.minimum <= aperture_height:
+                raise ValueError("support span does not enclose canonical H")
+            if (
+                span.maximum
+                > OUTPUT_PROTECTION_SPEC.maximum_enclosing_support_height_ratio
+                * aperture_height
+                + 1.0e-9
+            ):
                 raise ValueError("support span exceeds universal 1.1H bound")
             if (
                 support.top_full_interval_px.minimum > self.top_canonical_px + 1.0e-9

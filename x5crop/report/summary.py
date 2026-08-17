@@ -4,11 +4,14 @@ from __future__ import annotations
 
 from typing import Any
 
+from ..detection.photo_geometry.template_alignment_diagnostic import (
+    template_alignment_diagnostic,
+)
 from .read_models import typed_read_model
 
 
 AUTHORITY_PARTITION = {
-    "pixel_observation": "direction_free_candidate_independent_measurement",
+    "pixel_observation": "role_free_candidate_independent_measurement",
     "format_physical": "fixed_template_dimensions_pitch_gap_count",
     "selection": "bounded_phase_cross_shared_placement",
     "safety": "selected_placement_uncertainty_only",
@@ -33,6 +36,14 @@ def photo_geometry_summary(detection: object) -> dict[str, Any]:
         None if core.matched_holder is None else core.matched_holder.profile.profile_id
     )
     selection = geometry.source_placement_selection
+    alignments = {
+        lane.lane_id: template_alignment_diagnostic(
+            lane.prepared.phase_competition,
+            lane.prepared.sequence_edges,
+            lane.prepared.separator_bands,
+        )
+        for lane in geometry.lane_reconstructions
+    }
     return {
         "authority_partition": dict(AUTHORITY_PARTITION),
         "selected_scan_canvas_profile_id": selected_profile_id,
@@ -62,6 +73,39 @@ def photo_geometry_summary(detection: object) -> dict[str, Any]:
                 "placement_state": lane.placement_competition.state.value,
                 "placement_failure": typed_read_model(
                     lane.placement_competition.failure
+                ),
+                "template_alignment": {
+                    "pattern": alignments[lane.lane_id].pattern.value,
+                    "absolute_phase_px": (
+                        alignments[lane.lane_id].absolute_phase_px
+                    ),
+                    "canonical_pitch_px": (
+                        alignments[lane.lane_id].canonical_pitch_px
+                    ),
+                    "pitch_delta_from_compiled_center_px": (
+                        alignments[lane.lane_id]
+                        .pitch_delta_from_compiled_center_px
+                    ),
+                    "maximum_absolute_role_residual_px": (
+                        alignments[lane.lane_id]
+                        .maximum_absolute_role_residual_px
+                    ),
+                    "local_advance_relations": typed_read_model(
+                        alignments[lane.lane_id].local_advance_relations
+                    ),
+                    "unbound_direct_observation_count": len(
+                        alignments[lane.lane_id]
+                        .unbound_direct_observation_ids
+                    ),
+                    "unresolved_reason": (
+                        alignments[lane.lane_id].unresolved_reason
+                    ),
+                },
+                "selected_cross_boundary_use": (
+                    None
+                    if lane.selected_placement is None
+                    or lane.prepared.cross_competition.best is None
+                    else lane.prepared.cross_competition.best.boundary_use.value
                 ),
                 "selected_placement_id": (
                     None

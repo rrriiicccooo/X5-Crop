@@ -18,6 +18,7 @@ class PhaseFitStatus(str, Enum):
 
 class PhaseFailureKind(str, Enum):
     OBSERVATION_BOUND_EXCEEDED = "observation_bound_exceeded"
+    HYPOTHESIS_BOUND_EXCEEDED = "hypothesis_bound_exceeded"
     DIRECT_PHASE_ANCHOR_UNAVAILABLE = "direct_phase_anchor_unavailable"
     FIXED_TEMPLATE_MISMATCH = "fixed_template_mismatch"
     DISCRETE_PHASE_AMBIGUOUS = "discrete_phase_ambiguous"
@@ -28,9 +29,9 @@ class PhaseWinnerBasis(str, Enum):
     ONLY_PHYSICAL_FIT = "only_physical_fit"
     SAMPLING_EQUIVALENT_RUNNER = "sampling_equivalent_runner"
     RESIDUAL_COMPATIBILITY = "residual_compatibility"
-    POLARITY_SUPPORT = "polarity_support"
-    DIRECT_SUPPORT = "direct_support"
-    ROLE_SUPPORT = "role_support"
+    INDEPENDENT_SUPPORT = "independent_support"
+    INDEPENDENT_COVERAGE = "independent_coverage"
+    INDEPENDENT_POLARITY_SUPPORT = "independent_polarity_support"
     RESIDUAL_SEPARATION = "residual_separation"
     CALIBRATED_RUNNER_REJECTED = "calibrated_runner_rejected"
 

@@ -187,6 +187,27 @@ def _validate_geometry(record: dict[str, Any]) -> None:
     for lane in geometry["lanes"]:
         outputs = lane["output_footprints"]
         budgets = lane["direct_use_budget_assessments"]
+        alignment = lane.get("template_alignment")
+        if (
+            not isinstance(alignment, dict)
+            or set(alignment)
+            != {
+                "pattern",
+                "absolute_phase_px",
+                "canonical_pitch_px",
+                "pitch_delta_from_compiled_center_px",
+                "maximum_absolute_role_residual_px",
+                "local_advance_relations",
+                "unbound_direct_observation_count",
+                "unresolved_reason",
+            }
+            or alignment["pattern"] not in {"normal", "local_step", "unresolved"}
+            or (alignment["pattern"] == "unresolved")
+            != (alignment["unresolved_reason"] is not None)
+            or lane.get("selected_cross_boundary_use")
+            not in {None, "aperture_pair", "enclosing_support_pair"}
+        ):
+            raise ValueError("template alignment summary is invalid")
         if {item["geometry_id"] for item in outputs} != {
             item["geometry_id"] for item in budgets
         }:
@@ -222,6 +243,7 @@ def _validate_development(record: dict[str, Any]) -> None:
             != len(placement.get("placements", ()))
             or not isinstance(lane.get("phase_competition"), dict)
             or not isinstance(lane.get("cross_competition"), dict)
+            or not isinstance(lane.get("template_alignment"), dict)
             or not isinstance(lane.get("winner_basis"), dict)
         ):
             raise ValueError("development template ledger is invalid")

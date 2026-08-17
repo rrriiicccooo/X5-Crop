@@ -27,14 +27,6 @@ from .template_cross_model import (
 from .template_model import TemplateSpec
 
 
-# Only overlapping measurement/model intervals describe one continuous
-# answer.  The selected-output 3% budget is an acceptance limit, not authority
-# to merge distinct observed edges into one placement.
-_CONTINUOUS_SHIFT_RATIO = 0.0
-_CONTINUOUS_HEIGHT_RATIO = 0.0
-_CONTINUOUS_DIRECTION_DEGREES = 0.0
-
-
 def _hull_intervals(
     intervals: Sequence[FiniteInterval],
 ) -> FiniteInterval:
@@ -99,31 +91,30 @@ def _median_trace_step(values: Sequence[int]) -> float:
 def _direction_closure(
     top: CrossRoleBinding,
     bottom: CrossRoleBinding,
-    *,
-    parallel_tolerance_degrees: float,
 ) -> tuple[FiniteInterval | None, bool, bool]:
     """Return (parallel interval, direction-ready, contradiction)."""
 
-    # Statistical fit intervals decide whether two fragments can be the same
-    # parallel physical edge family.  The wider full intervals are retained
-    # for selected-output safety; using them here lets an isolated noisy line
-    # become a competing placement merely because its uncertainty is broad.
+    # Statistical fit intervals are the first closure.  When two local fits
+    # disagree, their measured full intervals may still prove that one
+    # straight direction is feasible for a mildly bent strip.  This fallback
+    # never joins observation identities or selects between placements.
     top_interval = top.fit_direction_interval_degrees
     bottom_interval = bottom.fit_direction_interval_degrees
     if top_interval is not None and bottom_interval is not None:
-        per_edge = parallel_tolerance_degrees / 2.0
-        common = _intersect(
-            FiniteInterval(
-                top_interval.minimum - per_edge,
-                top_interval.maximum + per_edge,
-            ),
-            FiniteInterval(
-                bottom_interval.minimum - per_edge,
-                bottom_interval.maximum + per_edge,
-            ),
-        )
+        common = _intersect(top_interval, bottom_interval)
         if common is None:
-            return None, False, True
+            top_full = top.full_direction_interval_degrees
+            bottom_full = bottom.full_direction_interval_degrees
+            if top_full is None or bottom_full is None:
+                return None, False, True
+            # Statistical line fits may disagree when two local fragments see
+            # the same slightly bent strip at different longitudinal spans.
+            # Their measured physical intervals are the authority for whether
+            # one straight strip direction remains feasible.  This is an
+            # interval closure, not an output-budget tolerance or score.
+            common = _intersect(top_full, bottom_full)
+            if common is None:
+                return None, False, True
         ready = (
             top.canonical_direction_degrees is not None
             and bottom.canonical_direction_degrees is not None
@@ -152,8 +143,12 @@ def _direct_candidate(
     canonical_height_px: float,
     center: FiniteInterval | None,
     minimum_shared_trace_support: int,
-    parallel_direction_tolerance_degrees: float,
 ) -> _Candidate | None:
+    # Aperture coordinates require photo-boundary role authority on both
+    # sides. Role-unknown material/holder lines belong to the separate
+    # enclosing-support owner even when their span happens to match H.
+    if not top.role_authorized or not bottom.role_authorized:
+        return None
     expected_bottom = _add(top.full_interval_px, fixed_height)
     if _intersect(bottom.full_interval_px, expected_bottom) is None:
         return None
@@ -164,11 +159,7 @@ def _direct_candidate(
     support_traces = _shared_trace_coordinates(top, bottom)
     if not support_traces:
         return None
-    direction, direction_ready, contradiction = _direction_closure(
-        top,
-        bottom,
-        parallel_tolerance_degrees=parallel_direction_tolerance_degrees,
-    )
+    direction, direction_ready, contradiction = _direction_closure(top, bottom)
     if contradiction:
         return None
     midpoint = _midpoint_interval(top.full_interval_px, bottom.full_interval_px)
@@ -202,7 +193,8 @@ def _single_candidate(
     # Without holder-centre authority it must additionally span the complete
     # registered domain before its coordinate can own placement.
     if (
-        binding.independent_support_region_count
+        not binding.role_authorized
+        or binding.independent_support_region_count
         < SPATIAL_SUPPORT_REGION_COUNT
         or not _single_direction_ready(binding)
         or (center is None and not binding.source_spanning_continuous)
@@ -255,38 +247,12 @@ def _single_candidate(
         top = binding
         bottom = binding
         top_full = binding.full_interval_px
-        height = fixed_height
-        if center is not None:
-            height = _intersect(
-                height,
-                _scale_interval(_subtract(center, top_full), 2.0),
-            )
-            if height is None:
-                return None
-        bottom_full = _add(top_full, height)
+        bottom_full = _add(top_full, fixed_height)
     else:
         top = binding
         bottom = binding
         bottom_full = binding.full_interval_px
-        height = fixed_height
-        if center is not None:
-            height = _intersect(
-                height,
-                _scale_interval(_subtract(bottom_full, center), 2.0),
-            )
-            if height is None:
-                return None
-        top_full = _subtract(bottom_full, height)
-    if center is not None:
-        # The holder-centre interval and fixed-H relation jointly locate the
-        # inferred side.  Intersect both equivalent expressions so uncertainty
-        # is not counted independently a second time.
-        centered_top = _subtract(_scale_interval(center, 2.0), bottom_full)
-        centered_bottom = _subtract(_scale_interval(center, 2.0), top_full)
-        top_full = _intersect(top_full, centered_top)
-        bottom_full = _intersect(bottom_full, centered_bottom)
-        if top_full is None or bottom_full is None:
-            return None
+        top_full = _subtract(bottom_full, fixed_height)
     shift = top_full
     midpoint = _midpoint_interval(top_full, bottom_full)
     center_interval = _intersect(midpoint, center) if center is not None else midpoint
@@ -298,7 +264,7 @@ def _single_candidate(
         continuous_support=binding.continuous_support_fraction,
         residual=binding.fit_residual_px,
         center_compatible=center_interval is not None,
-        height_compatibility=height,
+        height_compatibility=fixed_height,
         canonical_height_px=canonical_height_px,
         shift_interval=shift,
         center_interval=center_interval,
@@ -307,6 +273,95 @@ def _single_candidate(
         support_trace_coordinates_px=binding.trace_coordinates_px,
         top_full_override=top_full,
         bottom_full_override=bottom_full,
+    )
+
+
+def _template_local_refinement_candidates(
+    anchor: CrossRoleBinding,
+    opposite_bindings: Sequence[CrossRoleBinding],
+    *,
+    fixed_height: FiniteInterval,
+    canonical_height_px: float,
+    center: FiniteInterval | None,
+    minimum_shared_trace_support: int,
+    longitudinal_support_domains_px: tuple[FiniteInterval, ...],
+) -> tuple[_Candidate, ...]:
+    """Refine one template-projected opposite side with the nearest raw line.
+
+    The source-wide, role-authorized anchor already owns the cross offset.
+    Fixed H only predicts a bounded local corridor; it does not create the
+    missing side.  A real opposite observation inside that corridor can refine
+    H when its physical position is uniquely nearest.  Equal nearest lines
+    remain discrete candidates and therefore unresolved downstream.
+    """
+
+    if not anchor.role_authorized or not _single_direction_ready(anchor):
+        return ()
+    if len(longitudinal_support_domains_px) < SPATIAL_SUPPORT_REGION_COUNT:
+        return ()
+    expected = (
+        anchor.full_interval_px.center + canonical_height_px
+        if anchor.role == BoundaryRole.TOP
+        else anchor.full_interval_px.center - canonical_height_px
+    )
+
+    def distance(interval: FiniteInterval) -> float:
+        if interval.contains(expected):
+            return 0.0
+        return min(
+            abs(expected - interval.minimum),
+            abs(expected - interval.maximum),
+        )
+
+    compatible: list[tuple[float, _Candidate]] = []
+    for opposite in opposite_bindings:
+        if (
+            opposite.role == anchor.role
+            or opposite.role_authorized
+            or opposite.independent_support_region_count
+            < MINIMUM_INDEPENDENT_SUPPORT_REGIONS
+            or not _single_direction_ready(opposite)
+            or _longitudinal_domain_count(
+                opposite.trace_coordinates_px,
+                longitudinal_support_domains_px,
+            )
+            < MINIMUM_INDEPENDENT_SUPPORT_REGIONS
+        ):
+            continue
+        localized = replace(
+            opposite,
+            evidence=CrossEvidence.TEMPLATE_LOCAL_REFINEMENT,
+            role_authorized=True,
+        )
+        top, bottom = (
+            (anchor, localized)
+            if anchor.role == BoundaryRole.TOP
+            else (localized, anchor)
+        )
+        candidate = _direct_candidate(
+            top,
+            bottom,
+            fixed_height=fixed_height,
+            canonical_height_px=canonical_height_px,
+            center=center,
+            minimum_shared_trace_support=minimum_shared_trace_support,
+        )
+        if candidate is None:
+            continue
+        # This direct pair is the only authority allowed to narrow the source
+        # H state.  It remains one shared height for every frame.
+        candidate = replace(
+            candidate,
+            canonical_height_px=candidate.height_compatibility.center,
+        )
+        compatible.append((distance(localized.full_interval_px), candidate))
+    if not compatible:
+        return ()
+    nearest = min(item[0] for item in compatible)
+    return tuple(
+        candidate
+        for value, candidate in compatible
+        if abs(value - nearest) <= 1.0e-9
     )
 
 
@@ -420,7 +475,7 @@ def _fit_from_candidate(
         direct = (top, bottom)
         inferred: tuple[CrossRoleBinding, ...] = ()
     elif top.role == BoundaryRole.TOP:
-        inferred_height = candidate.height_compatibility
+        inferred_height = FiniteInterval.exact(candidate.canonical_height_px)
         top_full = candidate.top_full_override or top.full_interval_px
         bottom_full = (
             candidate.bottom_full_override
@@ -460,7 +515,7 @@ def _fit_from_candidate(
             ),
         )
     else:
-        inferred_height = candidate.height_compatibility
+        inferred_height = FiniteInterval.exact(candidate.canonical_height_px)
         bottom_full = (
             candidate.bottom_full_override
             if candidate.bottom_full_override is not None
@@ -538,19 +593,6 @@ def _fit_from_candidate(
     )
 
 
-def _close_intervals(
-    left: FiniteInterval,
-    right: FiniteInterval,
-    *,
-    tolerance: float,
-) -> bool:
-    if _intersect(left, right) is not None:
-        return True
-    if left.maximum < right.minimum:
-        return right.minimum - left.maximum <= tolerance
-    return left.minimum - right.maximum <= tolerance
-
-
 def _same_physical_group(left: _Candidate, right: _Candidate) -> bool:
     if left.direct_pair != right.direct_pair:
         return False
@@ -562,44 +604,23 @@ def _same_physical_group(left: _Candidate, right: _Candidate) -> bool:
         # anchor.  Spatial region coverage alone cannot create that missing
         # relationship.
         return False
-    shift_tolerance = min(
-        left.height_compatibility.center,
-        right.height_compatibility.center,
-    ) * _CONTINUOUS_SHIFT_RATIO
-    if not _close_intervals(
-        left.shift_interval,
-        right.shift_interval,
-        tolerance=shift_tolerance,
-    ):
+    if _intersect(left.shift_interval, right.shift_interval) is None:
         return False
-    height_tolerance = min(
-        left.height_compatibility.center,
-        right.height_compatibility.center,
-    ) * _CONTINUOUS_HEIGHT_RATIO
-    if not _close_intervals(
+    if _intersect(
         left.height_compatibility,
         right.height_compatibility,
-        tolerance=height_tolerance,
-    ):
+    ) is None:
         return False
     if left.center_compatible != right.center_compatible:
         return False
     if left.center_interval is None or right.center_interval is None:
         if left.center_interval is not None or right.center_interval is not None:
             return False
-    elif not _close_intervals(
-        left.center_interval,
-        right.center_interval,
-        tolerance=shift_tolerance,
-    ):
+    elif _intersect(left.center_interval, right.center_interval) is None:
         return False
     if left.direction_interval is None or right.direction_interval is None:
         return left.direction_interval is None and right.direction_interval is None
-    return _close_intervals(
-        left.direction_interval,
-        right.direction_interval,
-        tolerance=_CONTINUOUS_DIRECTION_DEGREES,
-    )
+    return _intersect(left.direction_interval, right.direction_interval) is not None
 
 
 def _common_interval(
@@ -617,8 +638,6 @@ def _common_interval(
 
 def _merge_group_interval(
     intervals: Sequence[FiniteInterval],
-    *,
-    tolerance: float,
 ) -> FiniteInterval | None:
     common = _common_interval(intervals)
     if common is not None:
@@ -629,7 +648,7 @@ def _merge_group_interval(
     maximum = max(item.maximum for item in intervals)
     ordered = sorted(intervals, key=lambda item: item.minimum)
     if any(
-        right.minimum - left.maximum > tolerance
+        right.minimum > left.maximum
         for left, right in zip(ordered, ordered[1:])
     ):
         return None
@@ -656,10 +675,7 @@ def _group_candidates(candidates: Sequence[_Candidate]) -> tuple[tuple[_Candidat
             if candidate.direction_interval is not None:
                 directions.append(candidate.direction_interval)
             common_direction = (
-                _merge_group_interval(
-                    directions,
-                    tolerance=_CONTINUOUS_DIRECTION_DEGREES,
-                )
+                _merge_group_interval(directions)
                 if directions
                 else None
             )
@@ -712,8 +728,7 @@ def _group_direction(
             candidate.direction_interval
             for candidate in group
             if candidate.direction_interval is not None
-        ),
-        tolerance=_CONTINUOUS_DIRECTION_DEGREES,
+        )
     )
     if common is None:
         return None
@@ -863,9 +878,6 @@ def _fit_from_group(
             for item in group
         )
     )
-    shift_tolerance = min(
-        item.height_compatibility.center for item in group
-    ) * _CONTINUOUS_SHIFT_RATIO
     shift = _hull_intervals(tuple(item.shift_interval for item in group))
     height_values = tuple(item.height_compatibility for item in group)
     height = _hull_intervals(height_values)

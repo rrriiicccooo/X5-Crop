@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from bisect import bisect_left
+from dataclasses import replace
 import math
 from typing import Sequence
 
@@ -24,6 +25,7 @@ from .template_cross_candidates import (
     _group_candidates,
     _longitudinal_domain_count,
     _single_candidate,
+    _template_local_refinement_candidates,
 )
 from .template_cross_model import (
     CrossFit,
@@ -242,28 +244,43 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
         )
     )
 
-    support_fallback: CrossFit | None = None
+    enclosing_support_fit: CrossFit | None = None
+    support_competition = None
     support_checked = False
+    support_receipt_accounted = False
 
-    def unique_support_fallback() -> CrossFit | None:
-        nonlocal support_fallback, support_checked
+    def unique_enclosing_support() -> CrossFit | None:
+        nonlocal enclosing_support_fit, support_competition, support_checked
         if support_checked:
-            return support_fallback
+            return enclosing_support_fit
         support_checked = True
+        # A unique aperture closed directly on both sides remains preferred.
+        # When aperture closure is absent, one-sided, or discretely ambiguous,
+        # only non-aperture outer supports may form one uniform enclosing pair.
+        # The two boundary meanings are never mixed within one output.
+        support_top = (
+            tuple(item for item in top if not item.role_authorized)
+            if direct_candidates
+            else top
+        )
+        support_bottom = (
+            tuple(item for item in bottom if not item.role_authorized)
+            if direct_candidates
+            else bottom
+        )
         competition = fit_enclosing_support(
             template=inputs.template,
             fixed_height=fixed_height,
             canonical_height_px=float(inputs.canonical_fixed_height_px),
             holder_center=inputs.holder_short_axis_center_px,
-            top_bindings=top,
-            bottom_bindings=bottom,
+            top_bindings=support_top,
+            bottom_bindings=support_bottom,
             registered_trace_coordinates_px=registered_trace_coordinates,
             longitudinal_support_domains_px=inputs.longitudinal_support_domains_px,
             minimum_shared_trace_support=inputs.minimum_shared_trace_support,
-            parallel_direction_tolerance_degrees=(
-                inputs.parallel_direction_tolerance_degrees
-            ),
+            maximum_evaluated_candidates=inputs.maximum_evaluated_fits,
         )
+        support_competition = competition
         if competition.status != SupportFitStatus.RESOLVED or competition.best is None:
             return None
         candidate = competition.best
@@ -291,7 +308,7 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
             center + fixed_height.maximum / 2.0,
         )
         direction = candidate.selected_direction
-        support_fallback = CrossFit(
+        enclosing_support_fit = CrossFit(
             template_id=inputs.template.template_id,
             lane_reference_trace_px=inputs.lane_reference_trace_px,
             fixed_height_px=fixed_height,
@@ -335,23 +352,56 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
                 candidate.longitudinal_support_domain_count
             ),
         )
-        return support_fallback
+        return enclosing_support_fit
 
-    def support_resolution(receipt: CrossSearchReceipt) -> CrossFitCompetition | None:
-        fallback = unique_support_fallback()
-        if fallback is None:
-            return None
-        return CrossFitCompetition(
-            template_id=inputs.template.template_id,
-            best=fallback,
-            runner_up=None,
-            status=CrossFitStatus.RESOLVED,
-            reason=None,
-            receipt=receipt,
+    def support_resolution(
+        receipt: CrossSearchReceipt,
+    ) -> tuple[CrossFitCompetition | None, CrossSearchReceipt]:
+        nonlocal support_receipt_accounted
+        support_fit = unique_enclosing_support()
+        evaluated = (
+            0
+            if support_competition is None or support_receipt_accounted
+            else support_competition.evaluated_candidate_count
+        )
+        support_receipt_accounted = True
+        receipt = replace(
+            receipt,
+            evaluated_fit_count=receipt.evaluated_fit_count + evaluated,
+        )
+        if (
+            support_competition is not None
+            and support_competition.status == SupportFitStatus.BOUND_EXCEEDED
+        ) or receipt.evaluated_fit_count > receipt.evaluated_fit_bound:
+            return (
+                CrossFitCompetition(
+                    template_id=inputs.template.template_id,
+                    best=None,
+                    runner_up=None,
+                    status=CrossFitStatus.BOUND_EXCEEDED,
+                    reason="cross evaluated-fit bound exceeded",
+                    receipt=receipt,
+                ),
+                receipt,
+            )
+        receipt.validate_bounds()
+        if support_fit is None:
+            return None, receipt
+        return (
+            CrossFitCompetition(
+                template_id=inputs.template.template_id,
+                best=support_fit,
+                runner_up=None,
+                status=CrossFitStatus.RESOLVED,
+                reason=None,
+                receipt=receipt,
+            ),
+            receipt,
         )
 
     required_support_regions = inputs.minimum_shared_trace_support
     direct_candidates: list[_Candidate] = []
+    candidates: list[_Candidate] = []
     compatible_pairs = 0
     # Sorted starts plus prefix maxima enumerate every interval overlap.  No
     # nearest-neighbour or used-bottom shortcut may discard a valid answer.
@@ -377,9 +427,6 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
                     canonical_height_px=float(inputs.canonical_fixed_height_px),
                     center=inputs.holder_short_axis_center_px,
                     minimum_shared_trace_support=inputs.minimum_shared_trace_support,
-                    parallel_direction_tolerance_degrees=(
-                        inputs.parallel_direction_tolerance_degrees
-                    ),
                 )
                 if candidate is not None:
                     compatible_pairs += 1
@@ -420,6 +467,50 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
             inputs.longitudinal_support_domains_px,
         )
     )
+    if not direct_candidates:
+        anchors = tuple(
+            item
+            for item in (*template_spanning_top, *template_spanning_bottom)
+            if _single_candidate(
+                item,
+                fixed_height=fixed_height,
+                canonical_height_px=float(inputs.canonical_fixed_height_px),
+                center=inputs.holder_short_axis_center_px,
+            )
+            is not None
+        )
+        for anchor in anchors:
+            opposites = bottom if anchor.role == BoundaryRole.TOP else top
+            localized = _template_local_refinement_candidates(
+                anchor,
+                opposites,
+                fixed_height=fixed_height,
+                canonical_height_px=float(inputs.canonical_fixed_height_px),
+                center=inputs.holder_short_axis_center_px,
+                minimum_shared_trace_support=inputs.minimum_shared_trace_support,
+                longitudinal_support_domains_px=(
+                    inputs.longitudinal_support_domains_px
+                ),
+            )
+            compatible_pairs += len(localized)
+            direct_candidates.extend(localized)
+            if compatible_pairs > inputs.maximum_compatible_pairs:
+                receipt = _receipt(
+                    inputs=inputs,
+                    registered_runs=registered_runs,
+                    fitted_observations=fitted_observations,
+                    compatible_pairs=compatible_pairs,
+                    single_side_inferences=0,
+                    evaluated_fits=0,
+                )
+                return CrossFitCompetition(
+                    template_id=inputs.template.template_id,
+                    best=None,
+                    runner_up=None,
+                    status=CrossFitStatus.BOUND_EXCEEDED,
+                    reason="cross compatible-pair bound exceeded",
+                    receipt=receipt,
+                )
     role_authorized_direct_pairs = tuple(
         candidate
         for candidate in direct_candidates
@@ -441,12 +532,7 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
             if item.top.source_spanning_continuous
             and item.bottom.source_spanning_continuous
         ]
-        authorized_spanning_pairs = [
-            item
-            for item in spanning_pairs
-            if item.top.role_authorized and item.bottom.role_authorized
-        ]
-        candidates = authorized_spanning_pairs or spanning_pairs
+        candidates = spanning_pairs
     elif bool(spanning_top) != bool(spanning_bottom):
         # One domain-spanning role owns the cross coordinate.  A fragmented
         # opposite observation participates only when it directly closes H,
@@ -461,12 +547,6 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
             if candidate.top.observation_id in spanning_ids
             or candidate.bottom.observation_id in spanning_ids
         ]
-        authorized_spanning_pairs = [
-            candidate
-            for candidate in spanning_pairs
-            if candidate.top.role_authorized and candidate.bottom.role_authorized
-        ]
-        spanning_pairs = authorized_spanning_pairs or spanning_pairs
         candidates = spanning_pairs or [
             candidate
             for item in spanning
@@ -564,9 +644,9 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
         )
     receipt.validate_bounds()
     if not candidates:
-        fallback_result = support_resolution(receipt)
-        if fallback_result is not None:
-            return fallback_result
+        support_result, receipt = support_resolution(receipt)
+        if support_result is not None:
+            return support_result
         reason = (
             "direct top/bottom evidence contradicts fixed height"
             if top and bottom
@@ -581,6 +661,14 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
             receipt=receipt,
         )
 
+    # A unique two-sided enclosing support is stronger output authority than
+    # a one-sided aperture whose opposite edge is only format-inferred. The
+    # two boundary uses remain distinct and are never mixed.
+    if all(not item.direct_pair for item in candidates):
+        support_result, receipt = support_resolution(receipt)
+        if support_result is not None:
+            return support_result
+
     # Holder center is a hard closure.  If a direct candidate exists but all
     # are off-center, do not let support or residual clutter replace it.
     if inputs.holder_short_axis_center_px is not None:
@@ -588,9 +676,9 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
         if centered:
             candidates = list(centered)
         else:
-            fallback_result = support_resolution(receipt)
-            if fallback_result is not None:
-                return fallback_result
+            support_result, receipt = support_resolution(receipt)
+            if support_result is not None:
+                return support_result
             fits = tuple(
                 _fit_from_candidate(
                     item,
@@ -663,9 +751,9 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
     best = ordered_fits[0] if ordered_fits else None
     runner = ordered_fits[1] if len(ordered_fits) > 1 else None
     if best is None:
-        fallback_result = support_resolution(receipt)
-        if fallback_result is not None:
-            return fallback_result
+        support_result, receipt = support_resolution(receipt)
+        if support_result is not None:
+            return support_result
         return CrossFitCompetition(
             template_id=inputs.template.template_id,
             best=None,
@@ -675,9 +763,9 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
             receipt=receipt,
         )
     if len(authoritative) > 1 or (not authoritative and len(groups) > 1):
-        fallback_result = support_resolution(receipt)
-        if fallback_result is not None:
-            return fallback_result
+        support_result, receipt = support_resolution(receipt)
+        if support_result is not None:
+            return support_result
         return CrossFitCompetition(
             template_id=inputs.template.template_id,
             best=best,
@@ -687,9 +775,9 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
             receipt=receipt,
         )
     if not authoritative:
-        fallback_result = support_resolution(receipt)
-        if fallback_result is not None:
-            return fallback_result
+        support_result, receipt = support_resolution(receipt)
+        if support_result is not None:
+            return support_result
         return CrossFitCompetition(
             template_id=inputs.template.template_id,
             best=best,
@@ -699,9 +787,9 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
             receipt=receipt,
         )
     if best.selected_direction is None:
-        fallback_result = support_resolution(receipt)
-        if fallback_result is not None:
-            return fallback_result
+        support_result, receipt = support_resolution(receipt)
+        if support_result is not None:
+            return support_result
         return CrossFitCompetition(
             template_id=inputs.template.template_id,
             best=best,

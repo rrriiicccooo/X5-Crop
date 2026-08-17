@@ -50,6 +50,12 @@ class TemplateFeasibleGeometryContractTest(unittest.TestCase):
                 FiniteInterval.exact(220.0),
                 FiniteInterval.exact(320.0),
             ),
+            role_full_position_intervals_px=(
+                FiniteInterval(95.0, 105.0),
+                FiniteInterval(195.0, 205.0),
+                FiniteInterval.exact(220.0),
+                FiniteInterval.exact(320.0),
+            ),
         )
         placement = _compose(
             template,

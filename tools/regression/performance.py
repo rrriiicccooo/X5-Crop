@@ -28,7 +28,7 @@ from .performance_hardware import build_hardware_identity
 from .performance_profile import STAGE_NAMES, ProfiledSource, profile_source
 
 
-PERFORMANCE_RECEIPT_SCHEMA = "x5crop_performance_receipt_v5_2"
+PERFORMANCE_RECEIPT_SCHEMA = "x5crop_performance_receipt_v5_3"
 DEFAULT_RECEIPT_PATH = (
     PROJECT_ROOT / "build" / "v5-performance" / "performance_receipt.json"
 )

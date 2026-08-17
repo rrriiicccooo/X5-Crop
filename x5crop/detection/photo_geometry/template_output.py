@@ -12,7 +12,12 @@ from ...run_local_identity import run_local_id
 from ..source_core import SourceLaneEvidence
 from .boundary_geometry import boundary_line_at_state
 from .template_feasible_geometry import FeasiblePlacementProjection
-from .model import AuthoritySide, BoundaryRole, ClippedRequirement
+from .model import (
+    AuthoritySide,
+    BoundaryRole,
+    ClippedRequirement,
+    PositionSource,
+)
 from .output_model import (
     BoundaryProtectionFact,
     DirectUseBudgetAssessment,
@@ -68,6 +73,7 @@ def _footprint(
     frame: TemplateFrame,
     projection: FeasiblePlacementProjection,
     *,
+    frame_sequence_intervals_px: tuple[FiniteInterval, FiniteInterval] | None = None,
     sequence_bleed_px: float = 0.0,
     cross_bleed_px: float = 0.0,
 ) -> ConvexPolygon:
@@ -77,8 +83,11 @@ def _footprint(
     if projection.placement_id != placement.placement_id:
         raise ValueError("joint projection belongs to another placement")
     role_index = 2 * (frame.lane_ordinal - 1)
-    start = projection.sequence_role_intervals_px[role_index]
-    end = projection.sequence_role_intervals_px[role_index + 1]
+    if frame_sequence_intervals_px is None:
+        start = projection.sequence_role_intervals_px[role_index]
+        end = projection.sequence_role_intervals_px[role_index + 1]
+    else:
+        start, end = frame_sequence_intervals_px
     points: list[tuple[float, float]] = []
     for angle in _angles(placement):
         cross_shift = math.tan(math.radians(angle)) * (
@@ -153,6 +162,39 @@ def _canonical_boundaries(
     }
 
 
+def _retained_sequence_intervals(
+    frame: TemplateFrame,
+    projection: FeasiblePlacementProjection,
+) -> tuple[FiniteInterval, FiniteInterval]:
+    """Hull one placement's joint lattice with its local frame evidence.
+
+    The projection keeps phase, W, pitch, and local advance correlated across
+    the strip. A frame boundary can additionally retain a local direct-edge or
+    fixed-W consequence belonging to the same role binding. This hull never
+    consumes another placement or a runner-up.
+    """
+
+    role_index = 2 * (frame.lane_ordinal - 1)
+    projected = projection.sequence_role_intervals_px[role_index : role_index + 2]
+    boundaries = (frame.start, frame.end)
+    retained: list[FiniteInterval] = []
+    for joint, boundary in zip(projected, boundaries, strict=True):
+        if boundary.position_source == PositionSource.OBSERVED_TRANSITION:
+            retained.append(
+                FiniteInterval(
+                    min(joint.minimum, boundary.full_position_interval_px.minimum),
+                    max(joint.maximum, boundary.full_position_interval_px.maximum),
+                )
+            )
+        else:
+            # An inferred edge has no independent local observation. Its full
+            # physical state is exactly the selected placement's correlated
+            # projection; reintroducing the unconstrained W endpoint here
+            # would double-count source-scale uncertainty.
+            retained.append(joint)
+    return retained[0], retained[1]
+
+
 def joint_placement_envelope(
     placement: FormatPlacement,
     projection: FeasiblePlacementProjection,
@@ -161,6 +203,7 @@ def joint_placement_envelope(
     """Retain continuous uncertainty from one selected placement only."""
 
     frame = _frame(placement, lane_ordinal)
+    sequence_intervals = _retained_sequence_intervals(frame, projection)
     return JointPlacementEnvelope(
         placement_id=placement.placement_id,
         projection_id=projection.projection_id,
@@ -168,7 +211,12 @@ def joint_placement_envelope(
         lane_ordinal=lane_ordinal,
         boundary_use=placement.cross_fit.boundary_use,
         canonical_source_footprint=convex_hull(frame.canonical_source_polygon),
-        feasible_source_footprint=_footprint(placement, frame, projection),
+        feasible_source_footprint=_footprint(
+            placement,
+            frame,
+            projection,
+            frame_sequence_intervals_px=sequence_intervals,
+        ),
         extreme_evaluation_count=projection.extreme_evaluation_count,
     )
 
@@ -284,11 +332,14 @@ def output_footprint_from_template_placement(
     if lane.domain.lane_id != placement.lane_id:
         raise ValueError("source-lane authority disagrees with placement")
     envelope = joint_placement_envelope(placement, projection, lane_ordinal)
+    parameter_footprint = _footprint(placement, frame, projection)
+    sequence_intervals = _retained_sequence_intervals(frame, projection)
     sequence_bleed, cross_bleed = _bleed_px(placement, envelope.boundary_use)
     required = _footprint(
         placement,
         frame,
         projection,
+        frame_sequence_intervals_px=sequence_intervals,
         sequence_bleed_px=sequence_bleed,
         cross_bleed_px=cross_bleed,
     )
@@ -306,10 +357,17 @@ def output_footprint_from_template_placement(
             role=role,
             measurement_expansion_px=_expansion_px(
                 boundaries[role],
-                envelope.feasible_source_footprint,
+                parameter_footprint,
             ),
             bleed_px=bleed_by_role[role],
-            straight_residual_px=0.0,
+            local_boundary_residual_px=max(
+                0.0,
+                _expansion_px(
+                    boundaries[role],
+                    envelope.feasible_source_footprint,
+                )
+                - _expansion_px(boundaries[role], parameter_footprint),
+            ),
             joint_expansion_px=_expansion_px(boundaries[role], required),
         )
         for role in _ROLES

@@ -82,19 +82,22 @@ GitHub 是 tracked 源码与文档的权威来源。NAS 和复制目录只用于
 - 仓库只有一条 V5 current-only production path；公开稳定版仍是 `v4.2.8`，V5 尚未发布。
 - V5 直接在 `main` 开发，不创建 V5 分支。历史实现只保存在 Git history 与 tags。
 - 只处理 standalone X5 Crop workflow；除非用户明确恢复，不开发旧 app 或 native packaging。
-- 输入是用户已提供 format、mode 和必要 count 的 Hasselblad / Imacon X5 片夹扫描。正式 TIFF
+- 输入是用户已提供 format 和可选 count 的 Hasselblad / Imacon X5 片夹扫描。正式 TIFF
   域、物理模型、Gate、输出事务和源码 owner 以 `docs/ARCHITECTURE.md` 为唯一说明。
 
 以下产品语义不可被便利性优化绕过：
 
-- 用户 format 始终是 authority。Full 表示用户确认片条采用匹配片夹的完整铺满布局，slot 数自动
-  使用 `full_count`；partial 表示没有铺满，必须提供 `1 <= count <= full_count`，并包含中间空白
-  曝光格。Full 的布局事实只能在正常链、总跨度和片夹 authority 相容时提供大致居中与均匀排布
-  权限；partial 即使 `count == full_count` 也不获得该权限。片夹容量不得猜 format、真实
-  照片数或 filename count。
-- Detector 先把 format、mode、count 与片夹 authority 编译成有界固定模板，再用独立像素观察对准、
-  解释明确的局部偏差并否决非法 placement。`SafeCropEnvelope` 只保护胜出 placement 自身的测量
-  不确定性，不合并落选位置；没有明显胜出者时保持 `placement unresolved`。
+- 用户 format 始终是 authority。省略 count 表示用户确认匹配片夹的默认完整格数；明确 count 表示
+  用户确认实际 slot 数，并包含中间空白曝光格。片夹容量不得猜 format、真实照片数或 filename
+  count。Runtime 不保留 full/partial mode，也不使用长轴居中；是否铺满只在 selection 后按 outer
+  外侧能否再容纳一个 W 判断。`135-dual` 只有 12=6+6 可自动处理，其它 count 直接 review。
+- Detector 先从整条片带建立 coarse support 和共同方向，再把 format、count 与片夹 authority 编译成
+  有界固定模板，只在理论 outer、separator 和 top/bottom 附近精修。独立像素观察负责对准、解释
+  最多一次直接 local advance 并否决非法 placement；不得用模板投影创造自己的 phase authority。
+- 安全层只处理唯一胜出 placement 的联合可行状态，不合并落选位置、不分别相加不能同时发生的
+  最大误差、不静默裁掉越界 footprint。Aperture 四边使用单边 5% 上限；直接 enclosing-support
+  top/bottom 使用总高度 1.1H 的独立合同。
+- Contact 与 overlap 在没有用户确认黄金以前一律 review，不建立第二套 detector 或特殊自动 bleed。
 - `CandidateGate` 只记录 typed assessment；只有 `DecisionGate` 创建 final status 与 reasons。
 - 任一 slot 不安全时，整个 source `needs_review` 且不写正式照片；不做 slot salvage。
 - 不为减少 blank TIFF 牺牲内容保护或 direct-use 质量。V5 不实现 blank suppression。
@@ -137,12 +140,11 @@ platform | platform-check | platform-package | pre-push
 - `Test/` 不受 Git 跟踪，目录布局不是源码合同；工具以 cohort 中的相对路径和 source SHA 绑定
   样片。不得把 TIFF、生成输出或 receipt 提交到 Git。
 - Accuracy 只有 `gold_accuracy_blocking` 与 `diagnostic_unreviewed` 两种角色。九张黄金各运行一项，
-  共九项：full 使用固定 count，partial 使用 cohort 中明确确认的 count；不保留 auto 重复任务。
+  共九项，并逐项携带用户确认 count；不保留 auto 重复任务。
   Nominal 必须安全自动批准，challenge 允许安全 `needs_review`。不得新增样片规则、whitelist、
   格式 denylist 或根据当前输出自动晋升黄金。
-- Accuracy、diagnostic、performance 与 platform cohort 的 partial 记录必须携带明确 count；工具
-  不得从片夹容量、文件名或像素推导。Cohort 的 full/partial 标签必须由用户确认的铺满/非铺满
-  布局语义决定，不能仅按 count、目录名或历史标签迁移。
+- Accuracy、diagnostic、performance 与 platform cohort 的每条记录都必须携带明确 count；工具不得
+  从片夹容量、文件名、目录中的历史 full/partial 标签或像素推导。
 - 111-source diagnostic 只判断 crash、hang、terminal/schema 完整性、authority、query/template、
   内存和 TIFF 工程合同，不产生 accuracy verdict。
 - 性能 Gate 使用 24-source 完整用户路径，正式 mean 上限为 5 秒；SHA、profiling 和 Debug

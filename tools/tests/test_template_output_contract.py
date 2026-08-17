@@ -275,6 +275,105 @@ class TemplateOutputContractTest(unittest.TestCase):
         )
         self.assertFalse(top.within_limit)
 
+    def test_selected_frame_residual_is_retained_before_bleed(self) -> None:
+        placement = _placement()
+        frame = placement.frames[0]
+        placement = replace(
+            placement,
+            frames=(
+                replace(
+                    frame,
+                    end=replace(
+                        frame.end,
+                        full_position_interval_px=FiniteInterval(200.0, 210.0),
+                    ),
+                ),
+            ),
+        )
+        output = output_footprint_from_template_placement(
+            placement,
+            project_selected_placement(placement),
+            lane=_lane(),
+            lane_ordinal=1,
+            layout="horizontal",
+            transform=AffineCoordinateTransform.identity(500, 400),
+        )
+        end = next(
+            item
+            for item in output.boundary_protections
+            if item.role == BoundaryRole.END
+        )
+        self.assertGreaterEqual(end.local_boundary_residual_px, 9.9)
+        self.assertGreater(end.joint_expansion_px, end.local_boundary_residual_px)
+        self.assertEqual(
+            template_direct_use_budget_assessment(placement, output).state,
+            EvidenceState.SUPPORTED,
+        )
+
+    def test_inferred_edge_uses_only_the_joint_width_projection(self) -> None:
+        template = replace(
+            _template(1),
+            frame_width_px=FiniteInterval(96.0, 104.0),
+        )
+        placement = _compose(
+            template,
+            _sequence(template, missing=(1,)),
+            _cross(template, direction=_direction()),
+        )
+        self.assertEqual(
+            placement.frames[0].end.position_source.value,
+            "inferred_sequence",
+        )
+        self.assertEqual(
+            placement.frames[0].end.full_position_interval_px,
+            FiniteInterval(196.0, 204.0),
+        )
+        output = output_footprint_from_template_placement(
+            placement,
+            project_selected_placement(placement),
+            lane=_lane(),
+            lane_ordinal=1,
+            layout="horizontal",
+            transform=AffineCoordinateTransform.identity(500, 400),
+        )
+        end = next(
+            item
+            for item in output.boundary_protections
+            if item.role == BoundaryRole.END
+        )
+        self.assertLess(end.local_boundary_residual_px, 1.0e-8)
+
+    def test_selected_frame_residual_still_obeys_five_percent_limit(self) -> None:
+        placement = _placement()
+        frame = placement.frames[0]
+        placement = replace(
+            placement,
+            frames=(
+                replace(
+                    frame,
+                    end=replace(
+                        frame.end,
+                        full_position_interval_px=FiniteInterval(200.0, 230.0),
+                    ),
+                ),
+            ),
+        )
+        output = output_footprint_from_template_placement(
+            placement,
+            project_selected_placement(placement),
+            lane=_lane(),
+            lane_ordinal=1,
+            layout="horizontal",
+            transform=AffineCoordinateTransform.identity(500, 400),
+        )
+        assessment = template_direct_use_budget_assessment(placement, output)
+        self.assertEqual(assessment.state, EvidenceState.CONTRADICTED)
+        end = next(
+            item for item in assessment.edge_assessments
+            if item.role == BoundaryRole.END
+        )
+        self.assertFalse(end.within_limit)
+
     def test_mismatched_lane_and_nonselected_geometry_are_rejected(self) -> None:
         placement = _placement()
         transform = AffineCoordinateTransform.identity(500, 400)

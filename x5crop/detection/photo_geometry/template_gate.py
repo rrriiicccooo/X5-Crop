@@ -134,7 +134,12 @@ def build_template_gate(
     local_advance_unresolved = local_phase_failure is not None or any(
         lane.prepared.phase_competition.best is not None
         and any(
-            relation.kind == LocalAdvanceKind.UNRESOLVED
+            relation.kind
+            in {
+                LocalAdvanceKind.CONTACT,
+                LocalAdvanceKind.OVERLAP,
+                LocalAdvanceKind.UNRESOLVED,
+            }
             for relation in lane.prepared.phase_competition.best.local_advance_relations
         )
         for lane in reconstructions

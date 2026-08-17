@@ -7,6 +7,7 @@ from dataclasses import replace
 from typing import Sequence
 
 from ...domain import FiniteInterval, ObservationId, PositiveInterval
+from .model import PHOTO_BOUNDARY_MEASUREMENT_SPEC
 from .observation_types import BoundaryEdgeObservation, SeparatorBandObservation
 from .template_model import (
     LocalAdvanceRelation,
@@ -26,8 +27,10 @@ from .template_phase_candidates import (
     _rank,
     _relations,
     _sampling_equivalent,
+    _separator_phase_seeds,
     _with_separator_role_authority,
 )
+from .template_evidence import separator_support_authority
 from .template_phase_model import (
     PhaseFailureKind,
     PhaseFitResult,
@@ -43,7 +46,7 @@ def fit_template_phase(
     separator_bands: Sequence[SeparatorBandObservation] = (),
     scale_px_per_mm: PositiveInterval | float | None = None,
     holder_span_px: FiniteInterval | None = None,
-    phase_prior_px: FiniteInterval | None = None,
+    phase_authority_px: FiniteInterval | None = None,
     local_advance_relations: Sequence[LocalAdvanceRelation] = (),
     max_observations: int = 512,
 ) -> PhaseFitResult:
@@ -51,11 +54,17 @@ def fit_template_phase(
 
     if max_observations <= 0:
         raise ValueError("phase observation bound must be positive")
+    separator_support_ids = separator_support_authority(
+        tuple(separator_bands)
+    )
     observations = _with_separator_role_authority(
         observations,
         separator_bands,
     )
-    facts = _facts(observations)
+    facts = _facts(
+        observations,
+        separator_support_ids=separator_support_ids,
+    )
     direct = tuple(item for item in facts if item.direct)
     roles = ordered_template_roles(template.count)
     relations = _relations(local_advance_relations, template.count)
@@ -93,8 +102,16 @@ def fit_template_phase(
             direct_ids,
             PhaseFailureKind.DIRECT_PHASE_ANCHOR_UNAVAILABLE,
         )
-    if scale_px_per_mm is not None:
-        _positive(scale_px_per_mm)
+    measurement_scale = (
+        None if scale_px_per_mm is None else _positive(scale_px_per_mm)
+    )
+    fit_residual_limit_px = (
+        None
+        if measurement_scale is None
+        else PHOTO_BOUNDARY_MEASUREMENT_SPEC.line_connection_allowance_px(
+            measurement_scale.maximum
+        )
+    )
     width = FiniteInterval(
         template.frame_width_px.minimum,
         template.frame_width_px.maximum,
@@ -123,6 +140,17 @@ def fit_template_phase(
     )
     span_window = max(3.0, pitch0 * 0.35)
     seed_values: set[tuple[float, float]] = set()
+    seed_values.update(
+        _separator_phase_seeds(
+            separator_bands,
+            direct,
+            roles,
+            template,
+            width=width0,
+            pitch=pitch0,
+            prefixes=prefixes,
+        )
+    )
     if template.direction > 0:
         for first in direct:
             target = first.coordinate_px + nominal_span
@@ -178,11 +206,35 @@ def fit_template_phase(
                 round(anchor.coordinate_px - template.direction * nominal_span, 9),
                 round(pitch0, 9),
             ))
-    if phase_prior_px is not None:
+    if phase_authority_px is not None:
         seed_values.add((
-            round(phase_prior_px.center, 9),
+            round(phase_authority_px.center, 9),
             round(pitch0, 9),
         ))
+    maximum_hypotheses = len(facts) * max(6, len(roles))
+    if len(seed_values) > maximum_hypotheses:
+        receipt = TemplateSearchReceipt(
+            observation_count=len(facts),
+            role_count=len(roles),
+            phase_lookup_count=len(seed_values),
+            role_binding_count=0,
+            local_relation_evaluation_count=len(relations),
+            phase_hypothesis_count=len(seed_values),
+            phase_offset_lookup_count=len(seed_values),
+            direct_observation_count=len(direct),
+            inferred_role_count=0,
+            peak_temporary_bytes=len(seed_values) * len(roles) * 32,
+        )
+        return PhaseFitResult(
+            template,
+            None,
+            None,
+            PhaseFitStatus.BOUND_EXCEEDED,
+            "phase hypothesis bound exceeded",
+            receipt,
+            direct_ids,
+            PhaseFailureKind.HYPOTHESIS_BOUND_EXCEEDED,
+        )
     holder_limits = _holder_limits(holder_span_px)
     candidates = tuple(
         value
@@ -195,6 +247,7 @@ def fit_template_phase(
                 template,
                 relations,
                 pitch_authority,
+                fit_residual_limit_px,
             )
             for seed_phase, seed_pitch in sorted(seed_values)
         )
@@ -206,6 +259,15 @@ def fit_template_phase(
                 >= holder_limits[0] - width0 * 0.04
                 and max(value.fit.canonical_role_positions_px)
                 <= holder_limits[1] + width0 * 0.04
+            )
+        )
+        and (
+            phase_authority_px is None
+            or not (
+                value.fit.phase_lattice_fit.absolute_phase_interval_px.maximum
+                < phase_authority_px.minimum
+                or phase_authority_px.maximum
+                < value.fit.phase_lattice_fit.absolute_phase_interval_px.minimum
             )
         )
     )
@@ -302,6 +364,9 @@ def _aggregate_phase_work(
             item.peak_temporary_bytes for item in receipts
         ),
         fit_pass_count=sum(item.fit_pass_count for item in receipts),
+        separator_lattice_hypothesis_count=sum(
+            item.separator_lattice_hypothesis_count for item in receipts
+        ),
     )
     receipt.validate_bounds()
     return replace(result, receipt=receipt)
@@ -314,7 +379,7 @@ def fit_template_phase_with_local_advance(
     *,
     scale_px_per_mm: PositiveInterval | float | None = None,
     holder_span_px: FiniteInterval | None = None,
-    phase_prior_px: FiniteInterval | None = None,
+    phase_authority_px: FiniteInterval | None = None,
     max_observations: int = 512,
 ) -> PhaseFitResult:
     """Fit the normal template, then allow one directly proved suffix shift."""
@@ -325,7 +390,7 @@ def fit_template_phase_with_local_advance(
         separator_bands=separator_bands,
         scale_px_per_mm=scale_px_per_mm,
         holder_span_px=holder_span_px,
-        phase_prior_px=phase_prior_px,
+        phase_authority_px=phase_authority_px,
         max_observations=max_observations,
     )
     if normal.status != PhaseFitStatus.RESOLVED or normal.best is None:
@@ -371,7 +436,7 @@ def fit_template_phase_with_local_advance(
         separator_bands=separator_bands,
         scale_px_per_mm=scale_px_per_mm,
         holder_span_px=holder_span_px,
-        phase_prior_px=phase_prior_px,
+        phase_authority_px=phase_authority_px,
         local_advance_relations=analysis.relations,
         max_observations=max_observations,
     )

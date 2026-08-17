@@ -147,6 +147,9 @@ class RepositoryContractTest(unittest.TestCase):
             "0fdb90dc",
             "dirty tree",
             "dirty 开发树",
+            "--strip",
+            "5%（start/end）或 3%",
+            "5% of format width for start/end and 3%",
         )
         for path in public_docs:
             text = path.read_text(encoding="utf-8")
@@ -163,6 +166,9 @@ class RepositoryContractTest(unittest.TestCase):
             "lane-local ordered DP",
             "source_coordinate_photo_geometry",
             "non-detection",
+            "template_precision.py",
+            "至多两个由直接",
+            "5%/3%",
         ):
             with self.subTest(retired_architecture=retired):
                 self.assertNotIn(retired, architecture)
@@ -237,12 +243,17 @@ class RepositoryContractTest(unittest.TestCase):
             "x5crop.detection.photo_geometry.template_phase_candidates",
             "x5crop.detection.photo_geometry.template_phase_model",
             "x5crop.detection.photo_geometry.template_residual",
+            "x5crop.detection.photo_geometry.template_pitch",
+            "x5crop.detection.photo_geometry.template_alignment_diagnostic",
             "x5crop.detection.photo_geometry.template_cross",
             "x5crop.detection.photo_geometry.template_cross_candidates",
             "x5crop.detection.photo_geometry.template_cross_model",
+            "x5crop.detection.photo_geometry.template_cross_support",
             "x5crop.detection.photo_geometry.template_direction",
             "x5crop.detection.photo_geometry.template_placement",
             "x5crop.detection.photo_geometry.template_selection",
+            "x5crop.detection.photo_geometry.template_holder_fill",
+            "x5crop.detection.photo_geometry.template_feasible_geometry",
             "x5crop.detection.photo_geometry.template_output",
             "x5crop.detection.photo_geometry.template_gate",
             "x5crop.detection.photo_geometry.template_runtime_model",

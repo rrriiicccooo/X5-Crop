@@ -147,7 +147,7 @@ class TemplateCrossContractTest(unittest.TestCase):
         ))
         self.assertEqual(result.receipt.compatible_pair_count, 1)
 
-    def test_output_budget_bounds_parallel_fit_interval_closure(self) -> None:
+    def test_physical_direction_intervals_close_disjoint_local_fits(self) -> None:
         top = binding(
             BoundaryRole.TOP,
             "budget-top",
@@ -164,7 +164,7 @@ class TemplateCrossContractTest(unittest.TestCase):
             angle_interval=FiniteInterval(0.02, 0.08),
             full_angle_interval=FiniteInterval(-0.2, 0.2),
         )
-        strict = fit_template_cross(
+        result = fit_template_cross(
             TemplateCrossInput(
                 template=template(),
                 fixed_height_px=240.0,
@@ -172,22 +172,11 @@ class TemplateCrossContractTest(unittest.TestCase):
                 bottom_bindings=(bottom,),
             )
         )
-        self.assertEqual(strict.status, CrossFitStatus.UNRESOLVED)
-
-        bounded = fit_template_cross(
-            TemplateCrossInput(
-                template=template(),
-                fixed_height_px=240.0,
-                top_bindings=(top,),
-                bottom_bindings=(bottom,),
-                parallel_direction_tolerance_degrees=0.2,
-            )
-        )
-        self.assertEqual(bounded.status, CrossFitStatus.RESOLVED)
-        assert bounded.best is not None
-        assert bounded.best.selected_direction is not None
+        self.assertEqual(result.status, CrossFitStatus.RESOLVED)
+        assert result.best is not None
+        assert result.best.selected_direction is not None
         self.assertEqual(
-            bounded.best.selected_direction.full_angle_interval_degrees,
+            result.best.selected_direction.full_angle_interval_degrees,
             FiniteInterval(-0.3, 0.2),
         )
 
@@ -688,7 +677,7 @@ class TemplateCrossContractTest(unittest.TestCase):
                         BoundaryRole.BOTTOM,
                         "wrong-role-bottom-a",
                         340.0,
-                        traces=(10, 50),
+                        traces=(10,),
                         source_spanning=False,
                         role_authorized=False,
                     ),
@@ -696,7 +685,7 @@ class TemplateCrossContractTest(unittest.TestCase):
                         BoundaryRole.BOTTOM,
                         "wrong-role-bottom-b",
                         341.0,
-                        traces=(50, 90),
+                        traces=(90,),
                         source_spanning=False,
                         role_authorized=False,
                     ),
@@ -710,6 +699,108 @@ class TemplateCrossContractTest(unittest.TestCase):
             result.best.direct_provenance_ids,
             (ObservationId("observation:template-wide-top"),),
         )
+
+    def test_template_wide_anchor_refines_the_nearest_opposite_line(self) -> None:
+        domains = (
+            FiniteInterval(0.0, 20.0),
+            FiniteInterval(40.0, 60.0),
+            FiniteInterval(80.0, 100.0),
+        )
+        result = fit_template_cross(
+            TemplateCrossInput(
+                template=template(count=3),
+                fixed_height_px=FiniteInterval(230.0, 250.0),
+                canonical_fixed_height_px=240.0,
+                holder_short_axis_center_px=FiniteInterval(215.0, 225.0),
+                longitudinal_support_domains_px=domains,
+                top_bindings=(
+                    binding(
+                        BoundaryRole.TOP,
+                        "template-refine-top",
+                        100.0,
+                        traces=(10, 50, 90),
+                        source_spanning=False,
+                    ),
+                ),
+                bottom_bindings=(
+                    binding(
+                        BoundaryRole.BOTTOM,
+                        "near-bottom",
+                        342.0,
+                        traces=(10, 50),
+                        source_spanning=False,
+                        role_authorized=False,
+                        independent_regions=2,
+                    ),
+                    binding(
+                        BoundaryRole.BOTTOM,
+                        "far-bottom",
+                        347.0,
+                        traces=(10, 50),
+                        source_spanning=False,
+                        role_authorized=False,
+                        independent_regions=2,
+                    ),
+                ),
+            )
+        )
+        self.assertEqual(result.status, CrossFitStatus.RESOLVED)
+        assert result.best is not None
+        self.assertTrue(result.best.direct_pair)
+        self.assertAlmostEqual(result.best.top_canonical_px, 100.0)
+        self.assertAlmostEqual(result.best.bottom_canonical_px, 342.0)
+        self.assertEqual(
+            result.best.direct_bindings[1].evidence,
+            CrossEvidence.TEMPLATE_LOCAL_REFINEMENT,
+        )
+
+    def test_equal_nearest_local_outer_lines_remain_unresolved(self) -> None:
+        domains = (
+            FiniteInterval(0.0, 20.0),
+            FiniteInterval(40.0, 60.0),
+            FiniteInterval(80.0, 100.0),
+        )
+        result = fit_template_cross(
+            TemplateCrossInput(
+                template=template(count=3),
+                fixed_height_px=FiniteInterval(230.0, 250.0),
+                canonical_fixed_height_px=240.0,
+                holder_short_axis_center_px=FiniteInterval(215.0, 225.0),
+                longitudinal_support_domains_px=domains,
+                top_bindings=(
+                    binding(
+                        BoundaryRole.TOP,
+                        "ambiguous-refine-top",
+                        100.0,
+                        traces=(10, 50, 90),
+                        source_spanning=False,
+                    ),
+                ),
+                bottom_bindings=(
+                    binding(
+                        BoundaryRole.BOTTOM,
+                        "lower-near",
+                        338.0,
+                        traces=(10, 50),
+                        source_spanning=False,
+                        role_authorized=False,
+                        independent_regions=2,
+                    ),
+                    binding(
+                        BoundaryRole.BOTTOM,
+                        "upper-near",
+                        342.0,
+                        traces=(10, 50),
+                        source_spanning=False,
+                        role_authorized=False,
+                        independent_regions=2,
+                    ),
+                ),
+            )
+        )
+        self.assertEqual(result.status, CrossFitStatus.UNRESOLVED)
+        self.assertIsNotNone(result.best)
+        self.assertIsNotNone(result.runner_up)
 
     def test_role_authorized_direct_pair_precedes_single_side_inference(self) -> None:
         domains = (
@@ -850,6 +941,123 @@ class TemplateCrossContractTest(unittest.TestCase):
         )
         self.assertTrue(
             result.best.bottom_full_interval_px.contains(result.best.bottom_canonical_px)
+        )
+
+    def test_role_authorized_line_can_join_one_uniform_enclosing_pair(self) -> None:
+        result = fit_template_cross(
+            TemplateCrossInput(
+                template=template(),
+                fixed_height_px=FiniteInterval(238.0, 242.0),
+                canonical_fixed_height_px=240.0,
+                holder_short_axis_center_px=FiniteInterval(224.0, 226.0),
+                top_bindings=(
+                    binding(BoundaryRole.TOP, "aperture-or-support-top", 100.0),
+                ),
+                bottom_bindings=(
+                    binding(BoundaryRole.BOTTOM, "support-bottom", 350.0),
+                ),
+            )
+        )
+        self.assertEqual(result.status, CrossFitStatus.RESOLVED)
+        assert result.best is not None
+        self.assertEqual(
+            result.best.boundary_use,
+            OutputBoundaryUse.ENCLOSING_SUPPORT_PAIR,
+        )
+        self.assertIsNotNone(result.best.enclosing_support_pair)
+        self.assertFalse(result.best.single_side_inferred)
+
+    def test_enclosing_support_evaluations_share_the_cross_fit_bound(self) -> None:
+        result = fit_template_cross(
+            TemplateCrossInput(
+                template=template(),
+                fixed_height_px=240.0,
+                maximum_evaluated_fits=1,
+                top_bindings=(
+                    binding(
+                        BoundaryRole.TOP,
+                        "support-top-a",
+                        100.0,
+                        role_authorized=False,
+                    ),
+                    binding(
+                        BoundaryRole.TOP,
+                        "support-top-b",
+                        101.0,
+                        role_authorized=False,
+                    ),
+                ),
+                bottom_bindings=(
+                    binding(
+                        BoundaryRole.BOTTOM,
+                        "support-bottom-a",
+                        345.0,
+                        role_authorized=False,
+                    ),
+                    binding(
+                        BoundaryRole.BOTTOM,
+                        "support-bottom-b",
+                        346.0,
+                        role_authorized=False,
+                    ),
+                ),
+            )
+        )
+        self.assertEqual(result.status, CrossFitStatus.BOUND_EXCEEDED)
+        self.assertEqual(result.receipt.evaluated_fit_count, 2)
+        self.assertEqual(result.receipt.evaluated_fit_bound, 1)
+
+    def test_local_role_line_cannot_compete_with_source_wide_support(self) -> None:
+        result = fit_template_cross(
+            TemplateCrossInput(
+                template=template(count=3),
+                fixed_height_px=FiniteInterval(235.0, 245.0),
+                canonical_fixed_height_px=240.0,
+                holder_short_axis_center_px=FiniteInterval(200.0, 210.0),
+                registered_trace_coordinates_px=(0, 50, 100),
+                longitudinal_support_domains_px=(
+                    FiniteInterval(-1.0, 1.0),
+                    FiniteInterval(49.0, 51.0),
+                    FiniteInterval(99.0, 101.0),
+                ),
+                top_bindings=(
+                    binding(
+                        BoundaryRole.TOP,
+                        "local-role-top",
+                        75.0,
+                        traces=(0, 50),
+                        independent_regions=2,
+                        source_spanning=False,
+                    ),
+                    binding(
+                        BoundaryRole.TOP,
+                        "whole-support-top",
+                        80.0,
+                        source_spanning=False,
+                        role_authorized=False,
+                    ),
+                ),
+                bottom_bindings=(
+                    binding(
+                        BoundaryRole.BOTTOM,
+                        "whole-support-bottom",
+                        330.0,
+                        source_spanning=False,
+                        role_authorized=False,
+                    ),
+                ),
+            )
+        )
+        self.assertEqual(result.status, CrossFitStatus.RESOLVED)
+        assert result.best is not None
+        self.assertEqual(
+            result.best.boundary_use,
+            OutputBoundaryUse.ENCLOSING_SUPPORT_PAIR,
+        )
+        assert result.best.enclosing_support_pair is not None
+        self.assertEqual(
+            result.best.enclosing_support_pair.top_provenance_ids,
+            (ObservationId("observation:whole-support-top"),),
         )
 
     def test_distinct_exact_bindings_are_not_hulled_into_uncertainty(self) -> None:

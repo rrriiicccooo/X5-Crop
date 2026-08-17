@@ -87,8 +87,8 @@ def _separator_band_from_edges(
     """Build one directly observed band from two physical edge families."""
 
     if (
-        left.coordinate_interval_px.center
-        >= right.coordinate_interval_px.center
+        left.fit_position_interval_px.center
+        >= right.fit_position_interval_px.center
         or left.polarity != -1
         or right.polarity != 1
     ):
@@ -105,13 +105,13 @@ def _separator_band_from_edges(
     gap = FiniteInterval(
         max(
             0.0,
-            right.coordinate_interval_px.minimum
-            - left.coordinate_interval_px.maximum,
+            right.fit_position_interval_px.minimum
+            - left.fit_position_interval_px.maximum,
         ),
         max(
             0.0,
-            right.coordinate_interval_px.maximum
-            - left.coordinate_interval_px.minimum,
+            right.fit_position_interval_px.maximum
+            - left.fit_position_interval_px.minimum,
         ),
     )
     left_run = runs_by_id[left.run_id]
@@ -251,18 +251,21 @@ def build_format_separator_bands(
     field: PhotoBoundaryMeasurementField,
     boundary_axis: BoundaryAxis,
 ) -> tuple[SeparatorBandObservation, ...]:
-    """Pair every physical dark-valley edge family and verify its material.
+    """Verify adjacent dark-valley edge families as separator material.
 
     Format gap priors never filter observations.  A normal, very wide or
     otherwise abnormal directly visible black band enters the same material
     measurement; placement authority is assigned only after role binding.
+    The two edges must be neighbours on a trace. Skipping over another
+    transition would turn photo content or several structures into one false
+    separator and creates quadratic work.
     """
 
     ordered = tuple(
         sorted(
             edges,
             key=lambda item: (
-                item.coordinate_interval_px.center,
+                item.fit_position_interval_px.center,
                 str(item.observation_id),
             ),
         )
@@ -278,17 +281,12 @@ def build_format_separator_bands(
             for run in profile.runs_at_trace(trace)
             if run.run_id in edges_by_run_id
         )
-        for left_index, left_run in enumerate(trace_runs[:-1]):
+        for left_run, right_run in zip(trace_runs, trace_runs[1:]):
             left = edges_by_run_id[left_run.run_id]
             if left.polarity != -1:
                 continue
-            for right_index, right_run in enumerate(
-                trace_runs[left_index + 1 :],
-                start=left_index + 1,
-            ):
-                right = edges_by_run_id[right_run.run_id]
-                if right.polarity != 1:
-                    continue
+            right = edges_by_run_id[right_run.run_id]
+            if right.polarity == 1:
                 candidate_pairs.add((left.run_id, right.run_id))
 
     values: dict[str, SeparatorBandObservation] = {}

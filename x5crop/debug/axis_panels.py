@@ -13,6 +13,7 @@ from ..detection.photo_geometry.template_placement import TemplateFrame
 from ..detection.workspace import DetectionWorkspace
 from .canvas import DebugRenderCache
 from .panel_facts import (
+    alignment_summary,
     axis_authority_summaries,
     competition_summary,
     primary_geometry_by_identity,
@@ -610,6 +611,7 @@ def long_axis_panel(
             font=note_font,
         )
     detail_y = grid.long_axis_panel_height - 45
+    alignment_y = grid.long_axis_panel_height - 65
     footer_y = grid.long_axis_panel_height - 25
     if detected:
         draw_label_chip(
@@ -638,6 +640,12 @@ def long_axis_panel(
         )
     detail = competition_summary(detection)
     detail_font = font(style.annotation_font_size)
+    draw.text(
+        (media_left, alignment_y),
+        alignment_summary(detection),
+        fill=style.text_color,
+        font=detail_font,
+    )
     draw.text(
         (media_left, detail_y),
         detail,

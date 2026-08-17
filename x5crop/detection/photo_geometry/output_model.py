@@ -177,7 +177,7 @@ class BoundaryProtectionFact:
     role: BoundaryRole
     measurement_expansion_px: float
     bleed_px: float
-    straight_residual_px: float
+    local_boundary_residual_px: float
     joint_expansion_px: float
 
     def __post_init__(self) -> None:
@@ -191,7 +191,7 @@ class BoundaryProtectionFact:
         values = (
             self.measurement_expansion_px,
             self.bleed_px,
-            self.straight_residual_px,
+            self.local_boundary_residual_px,
             self.joint_expansion_px,
         )
         if any(not math.isfinite(value) or value < 0.0 for value in values):

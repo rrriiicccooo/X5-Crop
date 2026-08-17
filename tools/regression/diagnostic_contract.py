@@ -8,6 +8,9 @@ from typing import Any, Sequence
 from x5crop.detection.photo_geometry.template_model import (
     MAX_TEMPLATE_FIT_PASSES,
 )
+from x5crop.detection.photo_geometry.template_measurement_plan_model import (
+    MAX_PHASE_OBSERVATIONS,
+)
 
 
 MAXIMUM_PEAK_TEMPORARY_BYTES_PER_SOURCE_PIXEL = 10
@@ -19,6 +22,7 @@ WORK_FIELDS = (
     "basic_profile_run_count",
     "registered_sequence_observation_count",
     "phase_hypothesis_count",
+    "separator_lattice_hypothesis_count",
     "phase_fit_pass_count",
     "phase_role_lookup_count",
     "phase_role_binding_count",
@@ -82,6 +86,8 @@ def bounded_work(
         <= int(row["phase_hypothesis_count"])
         and int(row["phase_role_binding_count"])
         <= int(row["phase_hypothesis_count"]) * count * 2
+        and int(row["separator_lattice_hypothesis_count"])
+        <= MAX_PHASE_OBSERVATIONS * max(6, count * 2) * 2
         and int(row["local_relation_evaluation_count"])
         <= max(0, count - 1) * int(row["phase_fit_pass_count"])
         and int(row["placement_evaluation_count"]) <= 2

@@ -9,6 +9,7 @@ import math
 from typing import Sequence
 
 from ...domain import FiniteInterval
+from ...formats import OUTPUT_PROTECTION_SPEC
 from .model import (
     BoundaryRole,
     MINIMUM_INDEPENDENT_SUPPORT_REGIONS,
@@ -34,6 +35,7 @@ from .template_model import TemplateSpec
 class SupportFitStatus(str, Enum):
     RESOLVED = "resolved"
     UNRESOLVED = "unresolved"
+    BOUND_EXCEEDED = "bound_exceeded"
 
 
 @dataclass(frozen=True)
@@ -53,6 +55,22 @@ class SupportFitCompetition:
     runner_up: EnclosingSupportCandidate | None
     status: SupportFitStatus
     reason: str | None
+    evaluated_candidate_count: int
+
+    def __post_init__(self) -> None:
+        if (
+            self.evaluated_candidate_count < 0
+            or (
+                self.status == SupportFitStatus.RESOLVED
+                and (self.best is None or self.runner_up is not None)
+            )
+            or (
+                self.status == SupportFitStatus.BOUND_EXCEEDED
+                and (self.best is not None or self.runner_up is not None)
+            )
+            or (self.reason is not None and not self.reason)
+        ):
+            raise ValueError("enclosing-support competition is invalid")
 
 
 def _candidate(
@@ -65,18 +83,21 @@ def _candidate(
     holder_center: FiniteInterval | None,
     registered_traces: tuple[int, ...],
     minimum_shared_trace_support: int,
-    parallel_direction_tolerance_degrees: float,
     longitudinal_support_domains_px: tuple[FiniteInterval, ...],
 ) -> EnclosingSupportCandidate | None:
     if top.role != BoundaryRole.TOP or bottom.role != BoundaryRole.BOTTOM:
         return None
+    # Boundary use belongs to the selected pair, not permanently to either
+    # raw line.  A line that can authorize an aperture may also serve as one
+    # side of a directly observed enclosing rectangle.  When this path wins,
+    # both sides are uniformly ENCLOSING_SUPPORT_PAIR (zero aperture bleed);
+    # no output ever mixes aperture and support semantics edge by edge.
     traces = _shared_trace_coordinates(top, bottom)
     if len(traces) < minimum_shared_trace_support:
         return None
     direction_interval, direction_ready, contradiction = _direction_closure(
         top,
         bottom,
-        parallel_tolerance_degrees=parallel_direction_tolerance_degrees,
     )
     if contradiction or not direction_ready:
         return None
@@ -99,8 +120,8 @@ def _candidate(
     )
     source_spanning = top.source_spanning_continuous and bottom.source_spanning_continuous
     connected = (
-        independent_regions >= MINIMUM_INDEPENDENT_SUPPORT_REGIONS
-        and domains >= min(MINIMUM_INDEPENDENT_SUPPORT_REGIONS, template.count)
+        independent_regions >= SPATIAL_SUPPORT_REGION_COUNT
+        and domains >= min(SPATIAL_SUPPORT_REGION_COUNT, template.count)
     )
     if not source_spanning and not connected:
         return None
@@ -113,7 +134,15 @@ def _candidate(
     if center_interval is None:
         return None
     span = _subtract(bottom.full_interval_px, top.full_interval_px)
-    if span.minimum <= fixed_height.maximum or span.maximum > 1.1 * fixed_height.minimum:
+    # The broad physical-H interval is search compatibility, not the
+    # aperture/support classifier. A role-unknown pair is usable only when it
+    # directly contains canonical H and stays within the explicit 1.1H limit.
+    if (
+        span.minimum <= canonical_height_px
+        or span.maximum
+        > OUTPUT_PROTECTION_SPEC.maximum_enclosing_support_height_ratio
+        * canonical_height_px
+    ):
         return None
     aperture_center = center_interval.center
     aperture_top = aperture_center - canonical_height_px / 2.0
@@ -154,12 +183,20 @@ def fit_enclosing_support(
     registered_trace_coordinates_px: tuple[int, ...],
     longitudinal_support_domains_px: tuple[FiniteInterval, ...],
     minimum_shared_trace_support: int,
-    parallel_direction_tolerance_degrees: float,
+    maximum_evaluated_candidates: int,
 ) -> SupportFitCompetition:
     """Run a bounded support-pair sweep and retain discrete alternatives."""
 
+    if maximum_evaluated_candidates < 0:
+        raise ValueError("enclosing-support evaluation bound cannot be negative")
     if not top_bindings or not bottom_bindings:
-        return SupportFitCompetition(None, None, SupportFitStatus.UNRESOLVED, "no two-sided support")
+        return SupportFitCompetition(
+            None,
+            None,
+            SupportFitStatus.UNRESOLVED,
+            "no two-sided support",
+            0,
+        )
     ordered_top = tuple(sorted(top_bindings, key=lambda item: (item.full_interval_px.minimum, str(item.observation_id))))
     ordered_bottom = tuple(sorted(bottom_bindings, key=lambda item: (item.full_interval_px.minimum, str(item.observation_id))))
     starts = tuple(item.full_interval_px.minimum for item in ordered_bottom)
@@ -168,10 +205,13 @@ def fit_enclosing_support(
     for item in ordered_bottom:
         running = max(running, item.full_interval_px.maximum)
         prefix_max.append(running)
-    support_bound = 1.1 * fixed_height.minimum
+    support_bound = (
+        OUTPUT_PROTECTION_SPEC.maximum_enclosing_support_height_ratio
+        * canonical_height_px
+    )
     candidates: list[EnclosingSupportCandidate] = []
     for top in ordered_top:
-        lower = top.full_interval_px.maximum + fixed_height.maximum
+        lower = top.full_interval_px.maximum + canonical_height_px
         upper = top.full_interval_px.minimum + support_bound
         if lower > upper:
             continue
@@ -186,11 +226,18 @@ def fit_enclosing_support(
                 holder_center=holder_center,
                 registered_traces=registered_trace_coordinates_px,
                 minimum_shared_trace_support=minimum_shared_trace_support,
-                parallel_direction_tolerance_degrees=parallel_direction_tolerance_degrees,
                 longitudinal_support_domains_px=longitudinal_support_domains_px,
             )
             if candidate is not None:
                 candidates.append(candidate)
+                if len(candidates) > maximum_evaluated_candidates:
+                    return SupportFitCompetition(
+                        None,
+                        None,
+                        SupportFitStatus.BOUND_EXCEEDED,
+                        "enclosing-support evaluated-fit bound exceeded",
+                        len(candidates),
+                    )
             index += 1
     ordered = tuple(
         sorted(
@@ -203,15 +250,28 @@ def fit_enclosing_support(
         )
     )
     if len(ordered) == 1:
-        return SupportFitCompetition(ordered[0], None, SupportFitStatus.RESOLVED, None)
+        return SupportFitCompetition(
+            ordered[0],
+            None,
+            SupportFitStatus.RESOLVED,
+            None,
+            len(ordered),
+        )
     if ordered:
         return SupportFitCompetition(
             ordered[0],
             ordered[1] if len(ordered) > 1 else None,
             SupportFitStatus.UNRESOLVED,
             "multiple enclosing support pairs remain",
+            len(ordered),
         )
-    return SupportFitCompetition(None, None, SupportFitStatus.UNRESOLVED, "no enclosing support pair")
+    return SupportFitCompetition(
+        None,
+        None,
+        SupportFitStatus.UNRESOLVED,
+        "no enclosing support pair",
+        0,
+    )
 
 
 __all__ = [

@@ -15,6 +15,7 @@ from .panel_facts import (
     axis_authority_summaries,
     root_gate_summary,
     output_footprints,
+    selected_output_safety_summary,
     selection_summary,
     source_image,
 )
@@ -241,7 +242,10 @@ def protected_output_panel(
             fill=style.review_color,
             font=note_font,
         )
-    footer = f"{footer}    {selection_summary(detection)}"
+    footer = (
+        f"{footer}    {selection_summary(detection)}    "
+        f"{selected_output_safety_summary(detection)}"
+    )
     draw.text(
         (19, grid.output_panel_height - 43),
         footer,

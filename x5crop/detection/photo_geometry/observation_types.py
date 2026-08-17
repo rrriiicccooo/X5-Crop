@@ -72,7 +72,11 @@ class ProfileRun:
 class BoundaryEdgeObservation:
     observation_id: ObservationId
     run_id: str
-    coordinate_interval_px: FiniteInterval
+    discovery_interval_px: FiniteInterval
+    reference_trace_px: float
+    canonical_position_px: float
+    fit_position_interval_px: FiniteInterval
+    full_position_interval_px: FiniteInterval
     transition_ids: tuple[ObservationId, ...]
     trace_coordinates_px: tuple[int, ...]
     polarity: int
@@ -88,9 +92,24 @@ class BoundaryEdgeObservation:
     def __post_init__(self) -> None:
         if (
             not self.run_id
+            or not isinstance(self.discovery_interval_px, FiniteInterval)
             or not self.transition_ids
             or self.polarity not in {-1, 0, 1}
             or not self.trace_coordinates_px
+            or not math.isfinite(self.reference_trace_px)
+            or not math.isfinite(self.canonical_position_px)
+            or not self.fit_position_interval_px.contains(
+                self.canonical_position_px,
+                epsilon=1.0e-9,
+            )
+            or not self.full_position_interval_px.contains(
+                self.fit_position_interval_px.minimum,
+                epsilon=1.0e-9,
+            )
+            or not self.full_position_interval_px.contains(
+                self.fit_position_interval_px.maximum,
+                epsilon=1.0e-9,
+            )
             or not 0.0 <= self.support_fraction <= 1.0
             or not 0.0 <= self.continuous_support_fraction <= 1.0
             or not math.isfinite(self.fit_residual_px)

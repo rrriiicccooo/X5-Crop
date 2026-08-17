@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 import math
 
 from ...configuration.model import DetectionConfiguration, ResolvedSlotCount
@@ -26,6 +27,7 @@ from .profile_adapters import cross_profile_from_regions, sequence_profile_from_
 from .registered_measurement import measure_registered_queries
 from .sequence_edge_families import merge_sequence_edge_families
 from .template_evidence import template_evidence_use_ledger
+from .template_alignment_diagnostic import enforce_template_alignment
 from .template_runtime_model import (
     PreparedTemplateLane,
     RegisteredTemplateLane,
@@ -34,6 +36,7 @@ from .template_runtime_model import (
 from .template_measurement_plan import compile_template_measurement_plan
 from .template_registration import (
     register_cross_evidence,
+    register_template_local_cross_refinements,
     short_axis_center_authority,
     template_spec_from_physical_authority,
 )
@@ -44,7 +47,11 @@ from .template_phase import (
     fit_template_phase,
     fit_template_phase_with_local_advance,
 )
-from .template_phase_model import PhaseFitResult
+from .template_phase_model import (
+    PhaseFailureKind,
+    PhaseFitResult,
+    PhaseFitStatus,
+)
 from .template_pitch import calibrate_template_source_pitch
 from .source_geometry import SourceScanGeometry
 from .transition_tracking import track_side_transition_regions
@@ -79,17 +86,17 @@ def _calibrated_width_geometry(
     *,
     holder_span_px: FiniteInterval,
 ) -> SourceScanGeometry:
-    """Intersect W with one uniquely supported direct-span interval group.
+    """Conservatively narrow W after one unique placement is established.
 
-    Each frame contributes one physical fact regardless of how many traces
-    formed either edge.  A one-dimensional endpoint sweep finds the largest
-    mutually compatible set; a tied discrete group is ambiguity, so it cannot
-    calibrate W.  This keeps local gaps out of width calibration and prevents a
-    scalar median from allowing one interior false edge to move the template.
+    Each directly bound frame contributes one physical span.  Real scans and
+    straight-line annotation can differ slightly across the strip, so all
+    compatible spans are retained in one hull; they are never averaged or
+    reduced to the prettiest intersecting subset.  W calibration therefore
+    cannot discard a direct endpoint or select between placements.
     """
 
     fit = phase.best
-    if fit is None:
+    if phase.status != PhaseFitStatus.RESOLVED or fit is None:
         return source_geometry
     by_id = {item.observation_id: item for item in sequence_edges}
     physical = source_geometry.width_state.extent_projection_px()
@@ -100,8 +107,8 @@ def _calibrated_width_geometry(
         start_id, end_id = fit.role_observation_ids[2 * ordinal : 2 * ordinal + 2]
         if start_id is None or end_id is None:
             continue
-        start = by_id[start_id].coordinate_interval_px
-        end = by_id[end_id].coordinate_interval_px
+        start = by_id[start_id].fit_position_interval_px
+        end = by_id[end_id].fit_position_interval_px
         if fit.template.direction > 0:
             measured = FiniteInterval(
                 end.minimum - start.maximum,
@@ -127,49 +134,22 @@ def _calibrated_width_geometry(
     ordinals = tuple(item[0] for item in spans)
     if not any(right == left + 1 for left, right in zip(ordinals, ordinals[1:])):
         return source_geometry
-    support_groups = {
-        tuple(
-            index
-            for index, (_ordinal, interval, _ids) in enumerate(spans)
-            if interval.contains(point, epsilon=1.0e-9)
-        )
-        for _ordinal, interval, _ids in spans
-        for point in (interval.minimum, interval.maximum)
-    }
-    maximum_support = max(map(len, support_groups), default=0)
-    winners = tuple(
-        group for group in support_groups if len(group) == maximum_support
-    )
-    if maximum_support < 2 or len(winners) != 1:
-        return source_geometry
-    winner = winners[0]
     observed = FiniteInterval(
-        max(spans[index][1].minimum for index in winner),
-        min(spans[index][1].maximum for index in winner),
+        min(item[1].minimum for item in spans),
+        max(item[1].maximum for item in spans),
     )
-    calibrated_scale = FiniteInterval(
-        observed.minimum / source_geometry.frame_spec.frame_width_mm,
-        observed.maximum / source_geometry.frame_spec.frame_width_mm,
+    full_span_minimum = (
+        observed.minimum
+        + fit.pitch_fit.pitch_interval_px.minimum
+        * max(0, fit.template.count - 1)
     )
-    gap_mm = source_geometry.frame_spec.format_gap_prior_mm
-    if gap_mm is not None:
-        gap = FiniteInterval(
-            gap_mm * calibrated_scale.minimum,
-            gap_mm * calibrated_scale.maximum,
-        )
-        full_span = FiniteInterval(
-            observed.minimum * fit.template.count
-            + gap.minimum * max(0, fit.template.count - 1),
-            observed.maximum * fit.template.count
-            + gap.maximum * max(0, fit.template.count - 1),
-        )
-        if full_span.minimum > holder_span_px.width * 1.04:
-            return source_geometry
+    if full_span_minimum > holder_span_px.width * 1.04:
+        return source_geometry
     identities = tuple(
         dict.fromkeys(
             identity
-            for index in winner
-            for identity in spans[index][2]
+            for _ordinal, _interval, pair in spans
+            for identity in pair
         )
     )
     width_state = source_geometry.width_state.intersect_observed_extent(
@@ -361,6 +341,7 @@ def prepare_template_lane(
         field,
         width_axis,
         scales.width_axis_px_per_mm,
+        reference_trace_px=height_authority.center,
     )
     coverage = tuple(item.coverage for item in measurement_sets)
     work = TemplateMeasurementWorkReceipt(
@@ -405,9 +386,36 @@ def prepare_template_lane(
         scale_px_per_mm=scales.width_axis_px_per_mm,
         holder_span_px=width_authority,
     )
+    # The broad provisional template only brings direct material bands into a
+    # finite neighbourhood. Once two independent separator locations establish
+    # one source pitch, that measured pitch must replace the format gap seed
+    # before the narrowed-W template is rebound. Requiring the nominal gap to
+    # survive first would make the template prove the measurement it is meant
+    # only to locate.
+    pitch_calibration = calibrate_template_source_pitch(
+        template,
+        provisional_phase,
+        sequence_edges,
+        separator_bands,
+        holder_span_px=width_authority,
+        max_lattice_hypotheses=measurement_plan.phase_bounds.max_hypotheses,
+    )
+    pitch_lattice_hypothesis_count = (
+        pitch_calibration.lattice_hypothesis_count
+    )
+    pitch_lattice_bound_exceeded = pitch_calibration.bound_exceeded
+    template = pitch_calibration.template
+    base_phase = fit_template_phase(
+        sequence_edges,
+        template,
+        separator_bands=separator_bands,
+        scale_px_per_mm=scales.width_axis_px_per_mm,
+        holder_span_px=width_authority,
+        phase_authority_px=pitch_calibration.phase_authority_px,
+    )
     source_geometry = _calibrated_width_geometry(
         source_geometry,
-        provisional_phase,
+        base_phase,
         sequence_edges,
         holder_span_px=width_authority,
     )
@@ -416,42 +424,95 @@ def prepare_template_lane(
         source_geometry=source_geometry,
         width_scale_px_per_mm=scales.width_axis_px_per_mm,
         count=output_slot_count,
-        phase_lattice_authority=measurement_plan.template_spec.phase_lattice_authority,
+        phase_lattice_authority=template.phase_lattice_authority,
         template_id=measurement_plan.template_spec.template_id,
     )
-    # Width calibration changes the continuous template geometry.  Rebind the
-    # already-registered observations against that geometry instead of widening
-    # old role intervals to include a now-incompatible canonical position.
-    # This is a second bounded numeric fit over the same pixels, never a new
-    # measurement query or candidate-dependent retry.
+    pitch_calibration = calibrate_template_source_pitch(
+        template,
+        base_phase,
+        sequence_edges,
+        separator_bands,
+        holder_span_px=width_authority,
+        refine_from_bound_roles=True,
+        max_lattice_hypotheses=measurement_plan.phase_bounds.max_hypotheses,
+    )
+    pitch_lattice_hypothesis_count += (
+        pitch_calibration.lattice_hypothesis_count
+    )
+    pitch_lattice_bound_exceeded = (
+        pitch_lattice_bound_exceeded or pitch_calibration.bound_exceeded
+    )
+    template = pitch_calibration.template
+    # Rebind the already-registered observations once, then interpret local
+    # residuals. No selected-placement query or new pixel read is introduced.
     phase = fit_template_phase_with_local_advance(
         sequence_edges,
         separator_bands,
         template,
         scale_px_per_mm=scales.width_axis_px_per_mm,
         holder_span_px=width_authority,
+        phase_authority_px=(
+            None
+            if (
+                base_phase.status != PhaseFitStatus.RESOLVED
+                or base_phase.best is None
+            )
+            else base_phase.best.phase_lattice_fit.absolute_phase_interval_px
+        ),
     )
-    source_pitch_template = calibrate_template_source_pitch(
-        template,
+    phase = account_prior_phase_fit(phase, base_phase)
+    phase = account_prior_phase_fit(phase, provisional_phase)
+    phase = replace(
         phase,
-        sequence_edges,
+        receipt=replace(
+            phase.receipt,
+            separator_lattice_hypothesis_count=(
+                pitch_lattice_hypothesis_count
+            ),
+        ),
     )
-    if source_pitch_template != template:
-        calibrated_phase = fit_template_phase_with_local_advance(
+    if pitch_lattice_bound_exceeded:
+        phase = replace(
+            phase,
+            best=None,
+            runner_up=None,
+            status=PhaseFitStatus.BOUND_EXCEEDED,
+            ambiguity_reason="separator lattice hypothesis bound exceeded",
+            failure_kind=PhaseFailureKind.HYPOTHESIS_BOUND_EXCEEDED,
+            winner_basis=None,
+        )
+    else:
+        phase = enforce_template_alignment(
+            phase,
             sequence_edges,
             separator_bands,
-            source_pitch_template,
-            scale_px_per_mm=scales.width_axis_px_per_mm,
-            holder_span_px=width_authority,
-            phase_prior_px=(
-                None
-                if phase.best is None
-                else phase.best.phase_lattice_fit.absolute_phase_interval_px
-            ),
         )
-        phase = account_prior_phase_fit(calibrated_phase, phase)
-        template = source_pitch_template
-    phase = account_prior_phase_fit(phase, provisional_phase)
+    longitudinal_support_domains_px = (
+        ()
+        if phase.best is None
+        else tuple(
+            sorted(
+                (
+                    FiniteInterval(
+                        min(
+                            phase.best.canonical_role_positions_px[index],
+                            phase.best.canonical_role_positions_px[index + 1],
+                        ),
+                        max(
+                            phase.best.canonical_role_positions_px[index],
+                            phase.best.canonical_role_positions_px[index + 1],
+                        ),
+                    )
+                    for index in range(
+                        0,
+                        len(phase.best.canonical_role_positions_px),
+                        2,
+                    )
+                ),
+                key=lambda item: item.minimum,
+            )
+        )
+    )
     cross = register_cross_evidence(
         profile=cross_profile,
         top_measurement=measurement_sets[0],
@@ -461,6 +522,19 @@ def prepare_template_lane(
         height_scale_px_per_mm=scales.height_axis_px_per_mm,
         lane_reference_trace_px=width_authority.center,
         maximum_runs=measurement_plan.cross_bounds.max_registered_runs,
+    )
+    cross = register_template_local_cross_refinements(
+        cross,
+        top_measurement=measurement_sets[0],
+        bottom_measurement=measurement_sets[1],
+        width_axis=width_axis,
+        height_axis=height_axis,
+        height_scale_px_per_mm=scales.height_axis_px_per_mm,
+        lane_reference_trace_px=width_authority.center,
+        fixed_height_px=source_geometry.height_state.extent_projection_px(),
+        canonical_height_px=_canonical_height_from_shared_scale(source_geometry),
+        longitudinal_support_domains_px=longitudinal_support_domains_px,
+        maximum_bindings=measurement_plan.cross_bounds.max_fitted_observations,
     )
     cross_competition = fit_template_cross(
         TemplateCrossInput(
@@ -477,32 +551,7 @@ def prepare_template_lane(
             registered_trace_coordinates_px=measurement_sets[
                 0
             ].query.trace_positions_px,
-            longitudinal_support_domains_px=(
-                ()
-                if phase.best is None
-                else tuple(
-                    sorted(
-                        (
-                            FiniteInterval(
-                                min(
-                                    phase.best.canonical_role_positions_px[index],
-                                    phase.best.canonical_role_positions_px[index + 1],
-                                ),
-                                max(
-                                    phase.best.canonical_role_positions_px[index],
-                                    phase.best.canonical_role_positions_px[index + 1],
-                                ),
-                            )
-                            for index in range(
-                                0,
-                                len(phase.best.canonical_role_positions_px),
-                                2,
-                            )
-                        ),
-                        key=lambda item: item.minimum,
-                    )
-                )
-            ),
+            longitudinal_support_domains_px=longitudinal_support_domains_px,
             top_bindings=cross.top_bindings,
             bottom_bindings=cross.bottom_bindings,
             boundary_axis=height_axis,

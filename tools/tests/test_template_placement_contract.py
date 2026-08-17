@@ -87,13 +87,18 @@ def _sequence(template: TemplateSpec, *, missing: tuple[int, ...] = ()) -> Seque
         ),
         canonical_role_positions_px=positions,
         role_positions_px=tuple(FiniteInterval.exact(value) for value in positions),
+        role_full_position_intervals_px=tuple(
+            FiniteInterval.exact(value) for value in positions
+        ),
         role_observation_ids=ids,
         matched_role_indices=matched,
         inferred_role_indices=tuple(missing),
         direct_observation_ids=tuple(item for item in ids if item is not None),
-        support_count=len(matched),
-        direct_support_fraction=float(len(matched)),
-        polarity_match_count=len(matched),
+        independent_support_ids=tuple(
+            item for item in ids if item is not None
+        ),
+        independent_support_coverage=float(len(matched)),
+        independent_polarity_support_count=len(matched),
     )
 
 
@@ -269,8 +274,8 @@ class TemplatePlacementContractTest(unittest.TestCase):
             boundary_use=OutputBoundaryUse.APERTURE_PAIR,
         )
         frame = _compose(template, sequence, cross).frames[0]
-        self.assertEqual(frame.start.full_position_interval_px, FiniteInterval(96.0, 108.0))
-        self.assertEqual(frame.end.full_position_interval_px, FiniteInterval(196.0, 208.0))
+        self.assertEqual(frame.start.full_position_interval_px, FiniteInterval.exact(100.0))
+        self.assertEqual(frame.end.full_position_interval_px, FiniteInterval.exact(200.0))
         self.assertEqual(frame.top.full_position_interval_px, FiniteInterval.exact(10.0))
         self.assertEqual(frame.bottom.full_position_interval_px, FiniteInterval.exact(250.0))
 

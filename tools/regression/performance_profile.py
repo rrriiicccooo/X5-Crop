@@ -21,7 +21,9 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 STAGE_NAMES = (
     "startup_import_unattributed",
     "decode",
-    "detection_decision",
+    "gray_and_coarse_support",
+    "registered_measurement",
+    "template_alignment_decision",
     "sampling",
     "encode_write",
     "readback",
@@ -150,9 +152,21 @@ def _stage_times(profile_path: Path, wall_seconds: float) -> dict[str, float]:
     decode = _cumulative(stats, "x5crop/io/tiff.py", "read_tiff_profile") + _cumulative(
         stats, "x5crop/io/tiff.py", "read_tiff"
     )
-    detection = sum(
+    workspace = _cumulative(
+        stats,
+        "x5crop/detection/workspace.py",
+        "prepare_detection_workspace",
+    )
+    measurement = _cumulative(
+        stats,
+        "x5crop/detection/photo_geometry/registered_measurement.py",
+        "measure_registered_queries",
+    )
+    choose = _cumulative(
+        stats, "x5crop/detection/pipeline.py", "choose_detection"
+    )
+    template_alignment = max(0.0, choose - measurement) + sum(
         (
-            _cumulative(stats, "x5crop/detection/pipeline.py", "choose_detection"),
             _cumulative(
                 stats,
                 "x5crop/detection/decision/decision_gate.py",
@@ -176,11 +190,22 @@ def _stage_times(profile_path: Path, wall_seconds: float) -> dict[str, float]:
     publish = _cumulative(
         stats, "x5crop/output/publication.py", "publish"
     )
-    attributed = decode + detection + sampling + encode_write + readback + publish
+    attributed = (
+        decode
+        + workspace
+        + measurement
+        + template_alignment
+        + sampling
+        + encode_write
+        + readback
+        + publish
+    )
     return {
         "startup_import_unattributed": max(0.0, wall_seconds - attributed),
         "decode": decode,
-        "detection_decision": detection,
+        "gray_and_coarse_support": workspace,
+        "registered_measurement": measurement,
+        "template_alignment_decision": template_alignment,
         "sampling": sampling,
         "encode_write": encode_write,
         "readback": readback,

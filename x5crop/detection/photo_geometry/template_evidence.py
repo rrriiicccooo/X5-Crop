@@ -45,6 +45,38 @@ class EvidenceUseFact:
             raise ValueError("template evidence-use fact is invalid")
 
 
+def separator_support_authority(
+    separator_bands: tuple[SeparatorBandObservation, ...],
+) -> dict[ObservationId, ObservationId]:
+    """Map every connected separator family to one physical support fact."""
+
+    parent: dict[ObservationId, ObservationId] = {}
+    band_ids: dict[ObservationId, set[ObservationId]] = {}
+
+    def find(identity: ObservationId) -> ObservationId:
+        parent.setdefault(identity, identity)
+        while parent[identity] != identity:
+            parent[identity] = parent[parent[identity]]
+            identity = parent[identity]
+        return identity
+
+    def union(left: ObservationId, right: ObservationId) -> None:
+        left_root = find(left)
+        right_root = find(right)
+        if left_root != right_root:
+            parent[max(left_root, right_root)] = min(left_root, right_root)
+
+    for band in separator_bands:
+        union(band.left_edge_observation_id, band.right_edge_observation_id)
+    for band in separator_bands:
+        root = find(band.left_edge_observation_id)
+        band_ids.setdefault(root, set()).add(band.observation_id)
+    return {
+        identity: min(band_ids[find(identity)])
+        for identity in parent
+    }
+
+
 def template_evidence_use_ledger(
     sequence_edges: tuple[BoundaryEdgeObservation, ...],
     separator_bands: tuple[SeparatorBandObservation, ...],
@@ -137,5 +169,6 @@ __all__ = [
     "EvidenceUse",
     "EvidenceUseFact",
     "PhysicalUnknown",
+    "separator_support_authority",
     "template_evidence_use_ledger",
 ]

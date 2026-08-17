@@ -10,7 +10,7 @@ from typing import Sequence
 import numpy as np
 
 from ...domain import FiniteInterval, ObservationId, PositiveInterval
-from .model import BoundaryRole
+from .model import BoundaryRole, SPATIAL_SUPPORT_REGION_COUNT
 from .observation_types import BoundaryEdgeObservation, SeparatorBandObservation
 from .template_model import (
     LocalAdvanceRelation,
@@ -21,18 +21,23 @@ from .template_model import (
     TemplateRole,
     TemplateSpec,
     ordered_template_roles,
+    template_role_refinement_radius_px,
 )
 from .template_phase_model import PhaseWinnerBasis
 from .template_pitch import _refine_placement_pitch_interval
+from .template_evidence import separator_support_authority
 
 
 @dataclass(frozen=True)
 class _AnchorFact:
     observation_id: ObservationId
+    independent_support_id: ObservationId
     interval_px: FiniteInterval
+    full_interval_px: FiniteInterval
     role_index: int | None
     direct: bool
     support_fraction: float
+    fit_residual_px: float
     polarity: int
     qualified_anchor_roles: tuple[BoundaryRole, ...]
 
@@ -66,17 +71,23 @@ def _positive(value: PositiveInterval | FiniteInterval | float | int) -> Positiv
 
 def _facts(
     observations: Sequence[BoundaryEdgeObservation | PhaseAnchor],
+    *,
+    separator_support_ids: dict[ObservationId, ObservationId] | None = None,
 ) -> tuple[_AnchorFact, ...]:
+    separator_support_ids = separator_support_ids or {}
     result: list[_AnchorFact] = []
     for observation in observations:
         if isinstance(observation, PhaseAnchor):
             result.append(
                 _AnchorFact(
                     observation.observation_id,
+                    observation.observation_id,
+                    observation.coordinate_interval_px,
                     observation.coordinate_interval_px,
                     observation.role.role_index,
                     True,
                     1.0,
+                    0.0,
                     0,
                     (observation.role.role,),
                 )
@@ -87,11 +98,20 @@ def _facts(
         result.append(
             _AnchorFact(
                 observation.observation_id,
-                observation.coordinate_interval_px,
+                separator_support_ids.get(
+                    observation.observation_id,
+                    observation.observation_id,
+                ),
+                observation.fit_position_interval_px,
+                observation.full_position_interval_px,
                 None,
-                observation.support_fraction >= 0.35
+                (
+                    observation.support_fraction >= 0.35
+                    or observation.observation_id in separator_support_ids
+                )
                 and bool(observation.qualified_anchor_roles),
                 observation.support_fraction,
+                observation.fit_residual_px,
                 observation.polarity,
                 observation.qualified_anchor_roles,
             )
@@ -245,6 +265,7 @@ def _expected_polarity(role: TemplateRole) -> int:
 
 
 def _separator_role_authority(
+    observations: Sequence[BoundaryEdgeObservation | PhaseAnchor],
     separator_bands: Sequence[SeparatorBandObservation],
 ) -> dict[ObservationId, frozenset[BoundaryRole]]:
     """Return role facts proved by directly observed separator material.
@@ -256,14 +277,60 @@ def _separator_role_authority(
     side relation and are never counted as extra votes.
     """
 
-    roles: dict[ObservationId, set[BoundaryRole]] = {}
+    by_id = {
+        observation.observation_id: observation
+        for observation in observations
+        if isinstance(observation, BoundaryEdgeObservation)
+    }
+    support_ids = separator_support_authority(tuple(separator_bands))
+    components: dict[ObservationId, list[SeparatorBandObservation]] = {}
     for band in separator_bands:
-        roles.setdefault(band.left_edge_observation_id, set()).add(
-            BoundaryRole.END
+        support_id = support_ids.get(band.left_edge_observation_id)
+        if support_id is None:
+            raise ValueError("separator band has no physical support identity")
+        components.setdefault(support_id, []).append(band)
+
+    roles: dict[ObservationId, set[BoundaryRole]] = {}
+    for component in components.values():
+        source_wide = tuple(
+            band
+            for band in component
+            if band.independent_support_region_count
+            >= SPATIAL_SUPPORT_REGION_COUNT
         )
-        roles.setdefault(band.right_edge_observation_id, set()).add(
-            BoundaryRole.START
-        )
+        if source_wide:
+            selected = source_wide
+        else:
+            pairs = {
+                (
+                    band.left_edge_observation_id,
+                    band.right_edge_observation_id,
+                )
+                for band in component
+            }
+            if len(pairs) != 1:
+                # Several local interpretations of one material region are
+                # discrete alternatives.  A short fragment cannot choose one
+                # of them merely through strength or proximity.
+                continue
+            left_id, right_id = next(iter(pairs))
+            left = by_id.get(left_id)
+            right = by_id.get(right_id)
+            if left is None or right is None:
+                raise ValueError("separator band references an unregistered edge")
+            if left.polarity != -1 or right.polarity != 1:
+                # A local fragment gains role authority only when its measured
+                # transition order independently closes END -> band -> START.
+                continue
+            selected = tuple(component)
+
+        for band in selected:
+            roles.setdefault(band.left_edge_observation_id, set()).add(
+                BoundaryRole.END
+            )
+            roles.setdefault(band.right_edge_observation_id, set()).add(
+                BoundaryRole.START
+            )
     return {identity: frozenset(value) for identity, value in roles.items()}
 
 
@@ -271,7 +338,7 @@ def _with_separator_role_authority(
     observations: Sequence[BoundaryEdgeObservation | PhaseAnchor],
     separator_bands: Sequence[SeparatorBandObservation],
 ) -> tuple[BoundaryEdgeObservation | PhaseAnchor, ...]:
-    authority = _separator_role_authority(separator_bands)
+    authority = _separator_role_authority(observations, separator_bands)
     if not authority:
         return tuple(observations)
     values: list[BoundaryEdgeObservation | PhaseAnchor] = []
@@ -291,6 +358,49 @@ def _with_separator_role_authority(
     return tuple(values)
 
 
+def _separator_phase_seeds(
+    separator_bands: Sequence[SeparatorBandObservation],
+    direct: tuple[_AnchorFact, ...],
+    roles: tuple[TemplateRole, ...],
+    template: TemplateSpec,
+    *,
+    width: float,
+    pitch: float,
+    prefixes: tuple[float, ...],
+) -> set[tuple[float, float]]:
+    """Project each direct material band onto every legal adjacency once.
+
+    A separator proves END -> material -> START, but it does not know its
+    ordinal. Each legal ordinal is therefore one bounded phase hypothesis.
+    The template only projects that direct evidence; it never creates a phase
+    from its own grid.
+    """
+
+    by_id = {item.observation_id: item for item in direct}
+    seeds: set[tuple[float, float]] = set()
+    for band in separator_bands:
+        left = by_id.get(band.left_edge_observation_id)
+        right = by_id.get(band.right_edge_observation_id)
+        if (
+            left is None
+            or right is None
+            or BoundaryRole.END not in left.qualified_anchor_roles
+            or BoundaryRole.START not in right.qualified_anchor_roles
+        ):
+            continue
+        for adjacency_index in range(template.count - 1):
+            for role, anchor in (
+                (roles[2 * adjacency_index + 1], left),
+                (roles[2 * (adjacency_index + 1)], right),
+            ):
+                relative = role.slot_index * pitch + prefixes[role.slot_index]
+                if role.role == BoundaryRole.END:
+                    relative += width
+                phase = anchor.coordinate_px - template.direction * relative
+                seeds.add((round(phase, 9), round(pitch, 9)))
+    return seeds
+
+
 def _match_roles(
     direct: tuple[_AnchorFact, ...],
     roles: tuple[TemplateRole, ...],
@@ -301,11 +411,12 @@ def _match_roles(
     direction: int,
     prefixes: tuple[float, ...],
     frame_width: PositiveInterval,
+    fit_residual_limit_px: float | None,
 ) -> tuple[tuple[TemplateRole, _AnchorFact], ...]:
     centers = tuple(item.coordinate_px for item in direct)
     used: set[ObservationId] = set()
     selected: list[tuple[TemplateRole, _AnchorFact]] = []
-    corridor = max(3.0, pitch * 0.11)
+    corridor = template_role_refinement_radius_px(pitch)
     has_both_polarities = {item.polarity for item in direct} >= {-1, 1}
 
     def candidates(
@@ -318,6 +429,10 @@ def _match_roles(
             item
             for item in direct[begin:end]
             if item.observation_id not in used
+            and (
+                fit_residual_limit_px is None
+                or item.fit_residual_px <= fit_residual_limit_px
+            )
             and (item.role_index is None or item.role_index == role.role_index)
             and (
                 not item.qualified_anchor_roles
@@ -524,6 +639,7 @@ def _fit_seed(
     template: TemplateSpec,
     relations: tuple[LocalAdvanceRelation, ...],
     pitch_authority: FiniteInterval,
+    fit_residual_limit_px: float | None,
 ) -> _BoundFit | None:
     width = (
         template.frame_width_px.minimum
@@ -543,6 +659,7 @@ def _fit_seed(
             direction=template.direction,
             prefixes=prefixes,
             frame_width=template.frame_width_px,
+            fit_residual_limit_px=fit_residual_limit_px,
         )
         if not updated_matches:
             return None
@@ -636,12 +753,12 @@ def _fit_seed(
     if measured_pitch is None:
         return None
     role_intervals: list[FiniteInterval] = []
+    role_full_intervals: list[FiniteInterval] = []
     role_ids: list[ObservationId | None] = []
     for role, canonical in zip(roles, canonical_positions, strict=True):
         observed = by_role.get(role.role_index)
         if observed is None:
-            role_intervals.append(
-                _inferred_role_interval(
+            inferred_interval = _inferred_role_interval(
                     role,
                     phase=phase_interval,
                     width=FiniteInterval(
@@ -655,7 +772,8 @@ def _fit_seed(
                     direction=template.direction,
                     prefixes=prefix_intervals,
                 )
-            )
+            role_intervals.append(inferred_interval)
+            role_full_intervals.append(inferred_interval)
             role_ids.append(None)
         else:
             role_intervals.append(
@@ -664,17 +782,38 @@ def _fit_seed(
                     max(canonical, observed.interval_px.maximum),
                 )
             )
+            role_full_intervals.append(
+                FiniteInterval(
+                    min(canonical, observed.full_interval_px.minimum),
+                    max(canonical, observed.full_interval_px.maximum),
+                )
+            )
             role_ids.append(observed.observation_id)
     matched = tuple(sorted(by_role))
     inferred = tuple(index for index in range(len(roles)) if index not in by_role)
     direct_ids = tuple(
         identity for identity in role_ids if identity is not None
     )
-    polarity_matches = sum(
-        anchor.polarity in {0, _expected_polarity(role)}
-        for role, anchor in matches
+    support_groups: dict[
+        ObservationId,
+        list[tuple[TemplateRole, _AnchorFact]],
+    ] = {}
+    for role, anchor in matches:
+        support_groups.setdefault(anchor.independent_support_id, []).append(
+            (role, anchor)
+        )
+    independent_support_ids = tuple(sorted(support_groups))
+    independent_support_coverage = sum(
+        max(anchor.support_fraction for _role, anchor in group)
+        for group in support_groups.values()
     )
-    direct_support = sum(anchor.support_fraction for _role, anchor in matches)
+    independent_polarity_matches = sum(
+        all(
+            anchor.polarity in {0, _expected_polarity(role)}
+            for role, anchor in group
+        )
+        for group in support_groups.values()
+    )
     phase_uncertainty = uncertainty
     lattice_fit = _phase_lattice_fit(
         template,
@@ -697,16 +836,17 @@ def _fit_seed(
         ),
         canonical_role_positions_px=canonical_positions,
         role_positions_px=tuple(role_intervals),
+        role_full_position_intervals_px=tuple(role_full_intervals),
         role_observation_ids=tuple(role_ids),
         matched_role_indices=matched,
         inferred_role_indices=inferred,
         direct_observation_ids=direct_ids,
+        independent_support_ids=independent_support_ids,
         local_advance_relations=relations,
-        support_count=len(matched),
         contradicted_observation_count=max(0, len(direct) - len(matched)),
         residual_sum_px=residual_sum,
-        direct_support_fraction=direct_support,
-        polarity_match_count=polarity_matches,
+        independent_support_coverage=independent_support_coverage,
+        independent_polarity_support_count=independent_polarity_matches,
     )
     return _BoundFit(fit, residual_compatible)
 
@@ -715,9 +855,9 @@ def _rank(value: _BoundFit) -> tuple[object, ...]:
     fit = value.fit
     return (
         int(value.residual_compatible),
-        fit.direct_support_fraction,
-        fit.polarity_match_count,
-        fit.support_count,
+        fit.independent_support_count,
+        fit.independent_support_coverage,
+        fit.independent_polarity_support_count,
         -fit.residual_sum_px,
     )
 
@@ -730,15 +870,26 @@ def _clear_winner_basis(
     right = runner.fit
     if best.residual_compatible and not runner.residual_compatible:
         return PhaseWinnerBasis.RESIDUAL_COMPATIBILITY
-    if left.polarity_match_count >= right.polarity_match_count + 2:
-        return PhaseWinnerBasis.POLARITY_SUPPORT
-    if left.direct_support_fraction >= right.direct_support_fraction + 0.35:
-        return PhaseWinnerBasis.DIRECT_SUPPORT
-    if left.support_count >= right.support_count + 2:
-        return PhaseWinnerBasis.ROLE_SUPPORT
+    if left.independent_support_count >= right.independent_support_count + 1:
+        return PhaseWinnerBasis.INDEPENDENT_SUPPORT
     if (
-        left.support_count == right.support_count
-        and left.direct_support_fraction >= right.direct_support_fraction - 0.1
+        left.independent_support_count == right.independent_support_count
+        and left.independent_support_coverage
+        >= right.independent_support_coverage + 0.35
+    ):
+        return PhaseWinnerBasis.INDEPENDENT_COVERAGE
+    if (
+        left.independent_support_count == right.independent_support_count
+        and left.independent_polarity_support_count
+        >= right.independent_polarity_support_count + 1
+    ):
+        return PhaseWinnerBasis.INDEPENDENT_POLARITY_SUPPORT
+    if (
+        left.independent_support_count == right.independent_support_count
+        and left.independent_support_coverage
+        >= right.independent_support_coverage - 0.1
+        and left.independent_polarity_support_count
+        == right.independent_polarity_support_count
         and right.residual_sum_px
         >= left.residual_sum_px + max(2.0, left.pitch_fit.canonical_frame_width_px * 0.01)
     ):

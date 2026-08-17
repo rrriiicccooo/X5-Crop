@@ -3,16 +3,43 @@ from __future__ import annotations
 from tools.tests.current_only_support import *
 from tools.regression.diagnostic_cohort import (
     EXPECTED_RECORD_COUNT,
+    RECORD_SCHEMA,
+    SUMMARY_SCHEMA,
+    _source_geometry_authority_is_explicit,
     load_diagnostic_sources,
 )
 
 
 class CurrentRuntimeContractTest(unittest.TestCase):
     def test_diagnostic_cohort_schema_is_current_and_complete(self) -> None:
+        self.assertEqual(RECORD_SCHEMA, "x5crop_diagnostic_record_v4")
+        self.assertEqual(SUMMARY_SCHEMA, "x5crop_diagnostic_summary_v4")
         self.assertEqual(
             len(load_diagnostic_sources(verify_source_files=False)),
             EXPECTED_RECORD_COUNT,
         )
+
+    def test_diagnostic_validates_current_output_footprint_overflow_facts(self) -> None:
+        output = {
+            "required_source_footprint": [
+                [-2.0, 10.0],
+                [80.0, 10.0],
+                [80.0, 90.0],
+                [-2.0, 90.0],
+            ],
+            "sampling_authority_box": {
+                "left": 0,
+                "top": 0,
+                "right": 100,
+                "bottom": 100,
+            },
+            "saturation_facts": [{"authority_side": "left"}],
+            "mapped_output_box": None,
+        }
+        report = {"photo_geometry": {"lanes": [{"output_footprints": [output]}]}}
+        self.assertTrue(_source_geometry_authority_is_explicit(report))
+        output["saturation_facts"] = []
+        self.assertFalse(_source_geometry_authority_is_explicit(report))
 
     def test_obsolete_detector_files_are_absent(self) -> None:
         forbidden_paths = (
@@ -106,6 +133,7 @@ class CurrentRuntimeContractTest(unittest.TestCase):
             "search_proposal_ids",
             "proposal_position_interval_px",
             "scan_canvas_format_search_proposal",
+            "TemplateAlignmentPattern",
         )
         active_paths = tuple((ROOT / "x5crop").rglob("*.py")) + tuple(
             path
@@ -219,7 +247,7 @@ class CurrentRuntimeContractTest(unittest.TestCase):
         self.assertEqual(REPORT_SCHEMA_ID, "x5crop_detection_report_v5")
         self.assertEqual(
             REPORT_SCHEMA_REVISION,
-            "x5crop_v5_template_report_3",
+            "x5crop_v5_template_report_5",
         )
         candidate = candidate_gate_assessment(
             {

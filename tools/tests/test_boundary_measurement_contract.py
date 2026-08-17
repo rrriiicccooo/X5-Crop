@@ -293,10 +293,15 @@ class BoundaryMeasurementContractTest(unittest.TestCase):
         )
 
         def edge(run: ProfileRun, polarity: int) -> BoundaryEdgeObservation:
+            interval = run.coordinate_interval_px
             return BoundaryEdgeObservation(
                 observation_id=ObservationId(f"edge:{run.run_id}"),
                 run_id=run.run_id,
-                coordinate_interval_px=run.coordinate_interval_px,
+                discovery_interval_px=interval,
+                reference_trace_px=50.0,
+                canonical_position_px=interval.center,
+                fit_position_interval_px=interval,
+                full_position_interval_px=interval,
                 transition_ids=run.transition_ids,
                 trace_coordinates_px=traces,
                 polarity=polarity,
@@ -332,7 +337,7 @@ class BoundaryMeasurementContractTest(unittest.TestCase):
 
         run = ProfileRun(
             run_id="mixed-polarity-edge",
-            coordinate_interval_px=FiniteInterval.exact(100.0),
+            coordinate_interval_px=FiniteInterval(80.0, 120.0),
             transition_ids=(ObservationId("negative"), ObservationId("positive")),
             trace_coordinates_px=(0, 100),
             role_hint=None,
@@ -374,13 +379,25 @@ class BoundaryMeasurementContractTest(unittest.TestCase):
             mock.Mock(),
             BoundaryAxis.X,
             PositiveInterval(10.0, 10.0),
+            reference_trace_px=50.0,
         )
 
         self.assertEqual(len(edges), 1)
         self.assertEqual(edges[0].polarity, 0)
+        self.assertEqual(edges[0].discovery_interval_px, FiniteInterval(80.0, 120.0))
+        self.assertLess(edges[0].fit_position_interval_px.width, 2.0)
+        self.assertLess(
+            edges[0].full_position_interval_px.width,
+            edges[0].discovery_interval_px.width,
+        )
+        self.assertTrue(
+            edges[0].full_position_interval_px.contains(
+                edges[0].fit_position_interval_px.minimum
+            )
+        )
         self.assertEqual(bands, ())
 
-    def test_separator_material_can_span_an_internal_transition_peak(self) -> None:
+    def test_separator_material_cannot_skip_an_internal_transition(self) -> None:
         traces = (0, 50, 100)
 
         def run(name: str, coordinate: float) -> ProfileRun:
@@ -407,10 +424,15 @@ class BoundaryMeasurementContractTest(unittest.TestCase):
         profile = BasicAxisProfile("sequence", 300, traces, runs)
 
         def edge(value: ProfileRun, polarity: int) -> BoundaryEdgeObservation:
+            interval = value.coordinate_interval_px
             return BoundaryEdgeObservation(
                 observation_id=ObservationId(f"edge:{value.run_id}"),
                 run_id=value.run_id,
-                coordinate_interval_px=value.coordinate_interval_px,
+                discovery_interval_px=interval,
+                reference_trace_px=50.0,
+                canonical_position_px=interval.center,
+                fit_position_interval_px=interval,
+                full_position_interval_px=interval,
                 transition_ids=value.transition_ids,
                 trace_coordinates_px=traces,
                 polarity=polarity,
@@ -461,10 +483,17 @@ class BoundaryMeasurementContractTest(unittest.TestCase):
                 BoundaryAxis.X,
             )
 
-        self.assertIn(("outer-left", "outer-right"), markers)
-        self.assertIn(
-            markers[("outer-left", "outer-right")],
-            result,
+        self.assertNotIn(("outer-left", "outer-right"), markers)
+        self.assertEqual(
+            set(markers),
+            {
+                ("outer-left", "inner-right"),
+                ("inner-left", "outer-right"),
+            },
+        )
+        self.assertEqual(
+            {item.observation_id for item in result},
+            {item.observation_id for item in markers.values()},
         )
 
     def test_canonical_direction_keeps_rotation_equivalent_slope_sign(self) -> None:
