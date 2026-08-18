@@ -13,7 +13,7 @@ from .template_model import TemplateSpec
 
 
 
-MAX_QUERY_INTENTS = 6
+MAX_QUERY_INTENTS = 8
 MAX_REGISTERED_QUERIES = 64
 MAX_PHASE_OBSERVATIONS = 512
 MAX_CROSS_PAIRS = 4096
@@ -33,19 +33,14 @@ class MeasurementAxis(str, Enum):
 
 
 class MeasurementIntentKind(str, Enum):
+    COARSE_LONG_SUPPORT = "coarse_long_support"
+    COARSE_SHORT_SUPPORT = "coarse_short_support"
     OUTER_SEQUENCE_ANCHOR = "outer_sequence_anchor"
     EARLY_SEQUENCE_ANCHOR = "early_sequence_anchor"
     MIDDLE_SEQUENCE_ANCHOR = "middle_sequence_anchor"
     LATE_SEQUENCE_ANCHOR = "late_sequence_anchor"
     TOP = "top"
     BOTTOM = "bottom"
-
-
-class TemplateStopFact(str, Enum):
-    FIXED_FORMAT_TEMPLATE = "fixed_format_template"
-    DIRECT_PHASE_EVIDENCE_REQUIRED = "direct_phase_evidence_required"
-    REGISTERED_QUERY_SET_COMPLETE = "registered_query_set_complete"
-    NO_PIXEL_ACCESS_DURING_COMPILE = "no_pixel_access_during_compile"
 
 
 @dataclass(frozen=True)
@@ -150,13 +145,28 @@ class TemplateQueryIntent:
             raise ValueError("template coordinate positions must be ordered")
         if tuple(sorted(self.trace_positions)) != self.trace_positions:
             raise ValueError("template trace positions must be ordered")
+        coarse_kind = self.kind in {
+            MeasurementIntentKind.COARSE_LONG_SUPPORT,
+            MeasurementIntentKind.COARSE_SHORT_SUPPORT,
+        }
         sequence_kind = self.kind in {
             MeasurementIntentKind.OUTER_SEQUENCE_ANCHOR,
             MeasurementIntentKind.EARLY_SEQUENCE_ANCHOR,
             MeasurementIntentKind.MIDDLE_SEQUENCE_ANCHOR,
             MeasurementIntentKind.LATE_SEQUENCE_ANCHOR,
         }
-        if sequence_kind:
+        if coarse_kind:
+            expected_axis = (
+                MeasurementAxis.LONG
+                if self.kind == MeasurementIntentKind.COARSE_LONG_SUPPORT
+                else MeasurementAxis.SHORT
+            )
+            if (
+                self.axis != expected_axis
+                or self.coordinate_unit != MeasurementUnit.LANE_RATIO
+            ):
+                raise ValueError("coarse support must cover one lane axis")
+        elif sequence_kind:
             if self.axis != MeasurementAxis.LONG:
                 raise ValueError("sequence anchors use the long axis")
             if self.coordinate_unit != MeasurementUnit.LANE_RATIO:
@@ -300,6 +310,7 @@ class TemplatePixelBounds:
     max_registered_queries: int
     max_trace_positions: int
     max_coordinate_samples: int
+    max_pixel_queries: int
     max_peak_temporary_bytes: int
 
     def __post_init__(self) -> None:
@@ -307,6 +318,7 @@ class TemplatePixelBounds:
             self.max_registered_queries,
             self.max_trace_positions,
             self.max_coordinate_samples,
+            self.max_pixel_queries,
             self.max_peak_temporary_bytes,
         ) <= 0:
             raise ValueError("pixel bounds must be positive")
@@ -320,20 +332,6 @@ class TemplateWorkBounds:
     def __post_init__(self) -> None:
         if min(self.max_query_intents, self.max_work_units) <= 0:
             raise ValueError("work bounds must be positive")
-
-
-@dataclass(frozen=True)
-class TemplateNormalPathStopFacts:
-    requires_direct_phase_evidence: bool
-    facts: tuple[TemplateStopFact, ...]
-
-    def __post_init__(self) -> None:
-        if not isinstance(self.requires_direct_phase_evidence, bool):
-            raise TypeError("normal-path direct-evidence flag must be boolean")
-        if not self.facts or len(set(self.facts)) != len(self.facts):
-            raise ValueError("normal-path facts must be unique and non-empty")
-        if TemplateStopFact.DIRECT_PHASE_EVIDENCE_REQUIRED not in self.facts:
-            raise ValueError("normal path must retain direct phase authority")
 
 
 @dataclass(frozen=True)
@@ -417,7 +415,6 @@ class TemplateMeasurementPlan:
     placement_bounds: TemplatePlacementBounds
     pixel_bounds: TemplatePixelBounds
     work_bounds: TemplateWorkBounds
-    normal_path_stop_facts: TemplateNormalPathStopFacts
     physical_identity: str
     plan_identity: str
     compile_receipt: TemplateCompileReceipt
@@ -436,8 +433,6 @@ class TemplateMeasurementPlan:
             or isinstance(self.holder_full_count, bool)
         ):
             raise TypeError("template plan full counts must be integers")
-        if not isinstance(self.normal_path_stop_facts, TemplateNormalPathStopFacts):
-            raise TypeError("template plan requires stop facts")
         if not isinstance(self.compile_receipt, TemplateCompileReceipt):
             raise TypeError("template plan requires compile receipt")
         if (
@@ -521,3 +516,17 @@ class TemplateMeasurementPlan:
             raise ValueError("template trace-position bound exceeded")
         if coordinate_sample_count > self.pixel_bounds.max_coordinate_samples:
             raise ValueError("template coordinate-sample bound exceeded")
+
+    def validate_measurement_receipt(
+        self,
+        *,
+        pixel_query_count: int,
+        peak_temporary_bytes: int,
+    ) -> None:
+        values = (pixel_query_count, peak_temporary_bytes)
+        if any(not isinstance(value, int) or value < 0 for value in values):
+            raise ValueError("template measurement receipt is invalid")
+        if pixel_query_count > self.pixel_bounds.max_pixel_queries:
+            raise ValueError("template pixel-query bound exceeded")
+        if peak_temporary_bytes > self.pixel_bounds.max_peak_temporary_bytes:
+            raise ValueError("template temporary-memory bound exceeded")

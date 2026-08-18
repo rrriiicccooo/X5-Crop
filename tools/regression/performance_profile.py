@@ -21,7 +21,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 STAGE_NAMES = (
     "startup_import_unattributed",
     "decode",
-    "gray_and_coarse_support",
+    "workspace_gray",
+    "coarse_support",
     "registered_measurement",
     "template_alignment_decision",
     "sampling",
@@ -157,6 +158,11 @@ def _stage_times(profile_path: Path, wall_seconds: float) -> dict[str, float]:
         "x5crop/detection/workspace.py",
         "prepare_detection_workspace",
     )
+    coarse_support = _cumulative(
+        stats,
+        "x5crop/detection/photo_geometry/coarse_strip_support.py",
+        "observe_coarse_strip_support",
+    )
     measurement = _cumulative(
         stats,
         "x5crop/detection/photo_geometry/registered_measurement.py",
@@ -165,7 +171,7 @@ def _stage_times(profile_path: Path, wall_seconds: float) -> dict[str, float]:
     choose = _cumulative(
         stats, "x5crop/detection/pipeline.py", "choose_detection"
     )
-    template_alignment = max(0.0, choose - measurement) + sum(
+    template_alignment = max(0.0, choose - measurement - coarse_support) + sum(
         (
             _cumulative(
                 stats,
@@ -193,6 +199,7 @@ def _stage_times(profile_path: Path, wall_seconds: float) -> dict[str, float]:
     attributed = (
         decode
         + workspace
+        + coarse_support
         + measurement
         + template_alignment
         + sampling
@@ -203,7 +210,8 @@ def _stage_times(profile_path: Path, wall_seconds: float) -> dict[str, float]:
     return {
         "startup_import_unattributed": max(0.0, wall_seconds - attributed),
         "decode": decode,
-        "gray_and_coarse_support": workspace,
+        "workspace_gray": workspace,
+        "coarse_support": coarse_support,
         "registered_measurement": measurement,
         "template_alignment_decision": template_alignment,
         "sampling": sampling,

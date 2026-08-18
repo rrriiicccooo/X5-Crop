@@ -1,7 +1,7 @@
-# X5 Crop 用户手册
+# X5 Crop V5 用户手册（开发预览）
 
-- 当前公开稳定版：v4.2.8
-- 仓库当前源码：V5 current-only，尚未公开发布
+- 本文对象：仓库 `main` 的 V5 current-only 开发源码，尚未公开发布
+- 当前公开稳定版：v4.2.8；其命令和行为不同，请使用 Release 包内随附文档
 - 适用对象：用户已经知道胶片格式和照片格数的 Hasselblad / Imacon X5 片夹扫描
 
 ## 产品行为
@@ -126,12 +126,13 @@ top/bottom bleed = 0.25 mm
 placement 或替某个候选加分。角落极小擦边、锯齿和尘点保持中性；连续跨过完整边界的不安全内容
 才会否决自动输出。
 
-## 安装
+## 安装开发源码
 
-从 [GitHub Releases](https://github.com/rrriiicccooo/X5-Crop/releases) 下载
-`X5-Crop-vX.X.zip`，不要使用 GitHub 自动生成的 Source code 压缩包。
+取得完整仓库 checkout；不要只复制 `X5_Crop.py`，也不要把 GitHub 自动生成的 Source code
+压缩包当成稳定发布包。普通用户应从
+[GitHub Releases](https://github.com/rrriiicccooo/X5-Crop/releases) 下载 v4.2.8，并阅读包内文档。
 
-发布包支持 Python 3.12–3.14，并固定所需模块版本。运行：
+V5 开发源码支持 Python 3.12–3.14，并固定所需模块版本。在仓库根目录运行：
 
 - macOS：`install/X5_Crop_Mac_install.command`
 - Windows：`install/X5_Crop_win_install.bat`
@@ -177,6 +178,9 @@ python3 X5_Crop.py /path/to/scans --format 120-66 --count 2
 - `--debug-analysis`：只写诊断 JPG、development report 和 summary，不写正式 TIFF 或 review copy；
 - `--interactive`：交互选择 format、count 和 Debug Analysis。
 
+交互模式对每个 format 都显示 count。直接回车表示确认匹配片夹的默认完整格数；输入其它合法
+数字表示用户明确确认该 count。`135-dual` 的交互相同，但除 12 外都会进入人工检查。
+
 没有 `--overwrite`。输出目录必须尚不存在，程序不接管或删除旧输出。Debug Analysis 与正式
 裁切应使用不同的新目录；正式运行始终重新读取原 TIFF。
 
@@ -185,11 +189,12 @@ python3 X5_Crop.py /path/to/scans --format 120-66 --count 2
 每个输入只有一个终态：
 
 - `approved_auto`：写出完整的一组正式 TIFF；
-- `needs_review`：不写照片，只保留原扫描件和明确原因供检查；
+- `needs_review`：不写照片，只保留原扫描件、最小缺失事实和建议操作供检查；
 - `runtime_error`：该输入失败，其它输入继续。
 
 Debug Analysis 展示理论模板、实际观察、偏差形状、直接与推导边界、winner/runner 差异、最终
-输出 footprint、预算使用和第一个阻止自动输出的原因。它只读取同一次检测事实，不重新求解。
+输出 footprint、预算使用和第一个阻止自动输出的原因。失败会区分用户可修正输入、重新测量可
+恢复和系统不应自动猜测三类。Debug 只读取同一次检测事实，不重新求解。
 
 默认结构：
 

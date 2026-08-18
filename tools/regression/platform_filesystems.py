@@ -45,6 +45,18 @@ def _record(case: str, identity: object) -> dict[str, str]:
     }
 
 
+def _unverified_exfat_record() -> dict[str, str]:
+    """Keep exFAT visible without pretending this host verified it."""
+
+    return {
+        "case": "exfat",
+        "status": "unverified",
+        "filesystem_kind": "exfat",
+        "support_level": OutputSupportLevel.BEST_EFFORT_UNVERIFIED.value,
+        "reason": "no independent exFAT volume was supplied on this host",
+    }
+
+
 def _darwin_hfs_case() -> dict[str, str]:
     with TemporaryDirectory(prefix="x5crop-hfs-contract-") as temporary:
         image = Path(temporary) / "x5crop-hfs.dmg"
@@ -98,6 +110,7 @@ def run_platform_filesystem_validation() -> dict[str, Any]:
         cases.append(_record(expected, identity))
     if system == "Darwin":
         cases.append(_darwin_hfs_case())
+    cases.append(_unverified_exfat_record())
     return {
         "schema": FILESYSTEM_RESULT_SCHEMA,
         "platform_system": system,

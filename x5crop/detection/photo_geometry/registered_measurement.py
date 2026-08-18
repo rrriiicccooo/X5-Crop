@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 import math
 
 import numpy as np
@@ -21,6 +22,7 @@ from .model import (
     QueryPurpose,
 )
 from .registered_transition_measurement import (
+    TraceMeasurement,
     measure_trace,
     measured_transition_peaks,
 )
@@ -38,6 +40,8 @@ def _measure_query(
     field: PhotoBoundaryMeasurementField,
     query: PhotoBoundaryMeasurementQuery,
     spec: PhotoBoundaryMeasurementSpec,
+    *,
+    premeasured: tuple[TraceMeasurement, ...] | None = None,
 ) -> PhotoBoundaryMeasurementSet:
     registered_coordinate_count = sum(
         max(
@@ -83,12 +87,15 @@ def _measure_query(
                 or interval.maximum > axis_extent - 1
             ):
                 raise ValueError("registered query exceeds source authority")
-            values = (
-                field.source_gray[trace, :]
-                if query.boundary_axis == BoundaryAxis.X
-                else field.source_gray[:, trace]
-            )
-            measured = measure_trace(values, interval, scale, spec)
+            if premeasured is None:
+                values = (
+                    field.source_gray[trace, :]
+                    if query.boundary_axis == BoundaryAxis.X
+                    else field.source_gray[:, trace]
+                )
+                measured = measure_trace(values, interval, scale, spec)
+            else:
+                measured = premeasured[trace_ordinal]
             coordinate_count = max(
                 0,
                 int(math.floor(interval.maximum))
@@ -97,12 +104,20 @@ def _measure_query(
             )
             completed_coordinates += coordinate_count
             completed_traces += 1
-            pixel_query_count += coordinate_count * (2 * local_radius + 2)
+            pixel_query_count += coordinate_count * (
+                2 * local_radius + 2
+                if premeasured is None
+                or query.purpose == QueryPurpose.SEQUENCE_BASELINE
+                else 1
+            )
             peak_temporary = max(
                 peak_temporary,
                 measured.temporary_bytes,
             )
-            for peak in measured_transition_peaks(
+            peaks = (
+                ()
+                if query.purpose == QueryPurpose.SEQUENCE_BASELINE
+                else measured_transition_peaks(
                 measured,
                 spec,
                 split_gradient_reversals=query.purpose
@@ -110,7 +125,9 @@ def _measure_query(
                     QueryPurpose.TOP_CORRIDOR,
                     QueryPurpose.BOTTOM_CORRIDOR,
                 },
-            ):
+                )
+            )
+            for peak in peaks:
                 if not ownership.contains(
                     float(measured.coordinates[peak.coordinate_index]),
                     epsilon=1.0e-12,
@@ -184,6 +201,74 @@ def _measure_query(
     )
 
 
+def _slice_trace_measurement(
+    measured: TraceMeasurement,
+    interval,
+) -> TraceMeasurement:
+    retained = (
+        (measured.coordinates >= int(math.ceil(interval.minimum)))
+        & (measured.coordinates <= int(math.floor(interval.maximum)))
+    )
+    return replace(
+        measured,
+        coordinates=measured.coordinates[retained],
+        gradient_z=measured.gradient_z[retained],
+        tone_z=measured.tone_z[retained],
+        texture_z=measured.texture_z[retained],
+        signed_gradient=measured.signed_gradient[retained],
+        left_tone=measured.left_tone[retained],
+        right_tone=measured.right_tone[retained],
+        left_texture=measured.left_texture[retained],
+        right_texture=measured.right_texture[retained],
+    )
+
+
+def _premeasure_sequence_windows(
+    field: PhotoBoundaryMeasurementField,
+    baseline: PhotoBoundaryMeasurementQuery,
+    windows: tuple[PhotoBoundaryMeasurementQuery, ...],
+    spec: PhotoBoundaryMeasurementSpec,
+) -> dict[str, tuple[TraceMeasurement, ...]]:
+    queries = (baseline, *windows)
+    first = baseline
+    if any(
+        query.boundary_axis != first.boundary_axis
+        or query.trace_positions_px != first.trace_positions_px
+        or query.boundary_axis_scale_px_per_mm
+        != first.boundary_axis_scale_px_per_mm
+        for query in queries[1:]
+    ):
+        raise ValueError("sequence baseline and windows must share one trace lattice")
+    values_by_query: dict[str, list[TraceMeasurement]] = {
+        query.query_id: [] for query in queries
+    }
+    scale = first.boundary_axis_scale_px_per_mm.maximum
+    for trace_ordinal, trace in enumerate(first.trace_positions_px):
+        values = (
+            field.source_gray[trace, :]
+            if first.boundary_axis == BoundaryAxis.X
+            else field.source_gray[:, trace]
+        )
+        measured = measure_trace(
+            values,
+            baseline.search_intervals_px[trace_ordinal],
+            scale,
+            spec,
+        )
+        values_by_query[baseline.query_id].append(measured)
+        for query in windows:
+            values_by_query[query.query_id].append(
+                _slice_trace_measurement(
+                    measured,
+                    query.search_intervals_px[trace_ordinal],
+                )
+            )
+    return {
+        identity: tuple(values)
+        for identity, values in values_by_query.items()
+    }
+
+
 def _coverage_receipt(
     query: PhotoBoundaryMeasurementQuery,
     spec: PhotoBoundaryMeasurementSpec,
@@ -224,14 +309,48 @@ def measure_registered_queries(
     field: PhotoBoundaryMeasurementField,
     queries: tuple[PhotoBoundaryMeasurementQuery, ...],
     spec: PhotoBoundaryMeasurementSpec = PHOTO_BOUNDARY_MEASUREMENT_SPEC,
+    *,
+    registration_start: int = 0,
 ) -> tuple[PhotoBoundaryMeasurementSet, ...]:
     """Execute the complete pre-registered query lattice deterministically."""
 
+    if registration_start < 0:
+        raise ValueError("measurement registration start cannot be negative")
     identities = tuple(query.query_id for query in queries)
     if len(set(identities)) != len(identities):
         raise ValueError("registered measurement queries must be unique")
     if tuple(query.registration_index for query in queries) != tuple(
-        range(len(queries))
+        range(registration_start, registration_start + len(queries))
     ):
         raise ValueError("measurement queries must be completely pre-registered")
-    return tuple(_measure_query(field, query, spec) for query in queries)
+    sequence_baselines = tuple(
+        query
+        for query in queries
+        if query.purpose == QueryPurpose.SEQUENCE_BASELINE
+    )
+    sequence_windows = tuple(
+        query
+        for query in queries
+        if query.purpose == QueryPurpose.SEQUENCE_ANCHOR_WINDOW
+    )
+    if len(sequence_baselines) != (1 if sequence_windows else 0):
+        raise ValueError("sequence windows require one registered baseline")
+    premeasured = (
+        {}
+        if not sequence_windows
+        else _premeasure_sequence_windows(
+            field,
+            sequence_baselines[0],
+            sequence_windows,
+            spec,
+        )
+    )
+    return tuple(
+        _measure_query(
+            field,
+            query,
+            spec,
+            premeasured=premeasured.get(query.query_id),
+        )
+        for query in queries
+    )

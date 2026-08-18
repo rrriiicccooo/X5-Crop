@@ -65,12 +65,6 @@ def _positive_interval(
     return PositiveInterval(interval.minimum, interval.maximum)
 
 
-class PhaseAnchorAuthority(str, Enum):
-    """Explicit authority behind a non-pixel phase anchor."""
-
-    USER_PROVIDED = "user_provided"
-
-
 @dataclass(frozen=True)
 class PhaseLatticeAuthority:
     """Finite periodic phase domain compiled before pixel measurement.
@@ -287,34 +281,6 @@ class TemplateSpec:
             if self.nominal_gap_px is not None
             else self.derived_gap_px
         )
-
-
-@dataclass(frozen=True)
-class PhaseAnchor:
-    """One user-declared absolute role, consumed by the normal phase solver.
-
-    Pixel observations remain role-free ``BoundaryEdgeObservation`` values.
-    This separate authority prevents an automatic edge from declaring its own
-    ordinal and then using that declaration as proof of placement.
-    """
-
-    observation_id: ObservationId
-    coordinate_interval_px: FiniteInterval
-    role: TemplateRole
-    authority: PhaseAnchorAuthority
-    authority_id: str
-
-    def __post_init__(self) -> None:
-        if not isinstance(self.observation_id, ObservationId):
-            raise TypeError("phase anchor identity must be ObservationId")
-        if not isinstance(self.coordinate_interval_px, FiniteInterval):
-            raise TypeError("phase anchor coordinate must be FiniteInterval")
-        if not isinstance(self.role, TemplateRole):
-            raise TypeError("manual phase anchor requires an indexed role")
-        if self.authority != PhaseAnchorAuthority.USER_PROVIDED:
-            raise ValueError("phase anchor requires explicit user authority")
-        if not self.authority_id:
-            raise ValueError("phase anchor authority identity must not be empty")
 
 
 @dataclass(frozen=True)
@@ -769,7 +735,6 @@ __all__ = [
     "LocalAdvanceKind",
     "LocalAdvanceRelation",
     "MAX_TEMPLATE_FIT_PASSES",
-    "PhaseAnchor",
     "PhaseLatticeAuthority",
     "PhaseLatticeFit",
     "PitchFit",

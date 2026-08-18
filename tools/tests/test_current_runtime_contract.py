@@ -12,8 +12,8 @@ from tools.regression.diagnostic_cohort import (
 
 class CurrentRuntimeContractTest(unittest.TestCase):
     def test_diagnostic_cohort_schema_is_current_and_complete(self) -> None:
-        self.assertEqual(RECORD_SCHEMA, "x5crop_diagnostic_record_v4")
-        self.assertEqual(SUMMARY_SCHEMA, "x5crop_diagnostic_summary_v4")
+        self.assertEqual(RECORD_SCHEMA, "x5crop_diagnostic_record_v5")
+        self.assertEqual(SUMMARY_SCHEMA, "x5crop_diagnostic_summary_v5")
         self.assertEqual(
             len(load_diagnostic_sources(verify_source_files=False)),
             EXPECTED_RECORD_COUNT,
@@ -247,7 +247,7 @@ class CurrentRuntimeContractTest(unittest.TestCase):
         self.assertEqual(REPORT_SCHEMA_ID, "x5crop_detection_report_v5")
         self.assertEqual(
             REPORT_SCHEMA_REVISION,
-            "x5crop_v5_template_report_5",
+            "x5crop_v5_template_report_6",
         )
         candidate = candidate_gate_assessment(
             {

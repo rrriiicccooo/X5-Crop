@@ -36,22 +36,18 @@ class FixedFormatRuntimeContractTest(unittest.TestCase):
         )
         self.assertEqual(candidate.resolved_output_slots, ResolvedOutputSlots((6,)))
         lane = candidate.geometry.lane_reconstructions[0]
-        tiles = tuple(
+        windows = tuple(
             sorted(
-                lane.prepared.anchor_domain.tiles,
+                lane.prepared.anchor_domain.windows,
                 key=lambda item: item.core_px.minimum,
             )
         )
-        self.assertEqual(tiles[0].core_px.minimum, 0.0)
+        self.assertEqual(len(windows), 1)
+        self.assertEqual(windows[0].window_id, "anchor-window:lane:0:conservative")
+        self.assertEqual(windows[0].core_px.minimum, 0.0)
         self.assertGreaterEqual(
-            tiles[-1].core_px.maximum,
+            windows[0].core_px.maximum,
             lane.prepared.anchor_domain.long_axis_extent_px,
-        )
-        self.assertTrue(
-            all(
-                left.core_px.maximum == right.core_px.minimum
-                for left, right in zip(tiles, tiles[1:])
-            )
         )
         self.assertTrue(
             all(

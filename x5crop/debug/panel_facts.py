@@ -192,8 +192,41 @@ def selected_output_safety_summary(detection: FinalDetection) -> str:
         for edge in budget.edge_assessments
         if edge.limit_applies and edge.limit_mm > 0.0
     )
+    protections = tuple(
+        protection
+        for output in outputs
+        for protection in output.boundary_protections
+    )
+    measurement = max(
+        (item.measurement_expansion_px for item in protections),
+        default=0.0,
+    )
+    residual = max(
+        (item.local_boundary_residual_px for item in protections),
+        default=0.0,
+    )
+    sequence_bleed = max(
+        (
+            item.bleed_px
+            for item in protections
+            if item.role.value in {"start", "end"}
+        ),
+        default=0.0,
+    )
+    cross_bleed = max(
+        (
+            item.bleed_px
+            for item in protections
+            if item.role.value in {"top", "bottom"}
+        ),
+        default=0.0,
+    )
     maximum = "N/A" if not ratios else f"{100.0 * max(ratios):.1f}%"
-    return f"SELECTED OUTPUT SAFETY · {uses} · MAX 5% BUDGET USE {maximum}"
+    return (
+        f"SELECTED OUTPUT SAFETY · {uses} · JOINT {measurement:.1f}px · "
+        f"RESIDUAL {residual:.1f}px · BLEED S{sequence_bleed:.1f}/"
+        f"C{cross_bleed:.1f}px · MAX 5% BUDGET USE {maximum}"
+    )
 
 
 def root_gate_summary(detection: FinalDetection) -> str:
@@ -236,6 +269,26 @@ def axis_authority_summaries(
             f"SOURCE FIT · {unresolved}",
         )
     lanes = detection.candidate.geometry.lane_reconstructions
+    coarse_long = "/".join(
+        sorted(
+            {
+                lane.prepared.coarse_support.long_axis.authority.value
+                .upper()
+                .replace("_", " ")
+                for lane in lanes
+            }
+        )
+    )
+    coarse_short = "/".join(
+        sorted(
+            {
+                lane.prepared.coarse_support.short_axis.authority.value
+                .upper()
+                .replace("_", " ")
+                for lane in lanes
+            }
+        )
+    )
     direct_sequence = sum(
         len(item.prepared.phase_competition.best.direct_observation_ids)
         for item in lanes
@@ -261,7 +314,7 @@ def axis_authority_summaries(
         for item in lanes
     )
     return (
-        "CROSS FIT · "
+        f"CROSS FIT · COARSE {coarse_short} → "
         + "/".join(
             sorted(
                 {
@@ -274,7 +327,8 @@ def axis_authority_summaries(
             )
         )
         + f" · DIRECT {direct_cross} · INFERRED {inferred_cross}",
-        f"SEQUENCE FIT · DIRECT {direct_sequence} · INFERRED {inferred_sequence}",
+        f"SEQUENCE FIT · COARSE {coarse_long} → DIRECT {direct_sequence} · "
+        f"INFERRED {inferred_sequence}",
         f"SOURCE FIT · LANES {len(lanes)} · RUNNERS {runners} · GATE SUPPORTED",
     )
 

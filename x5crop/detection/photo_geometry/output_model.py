@@ -19,11 +19,19 @@ from .model import (
 
 @dataclass(frozen=True)
 class SharedStripDirection:
-    """The sole canonical direction plus all retained angle uncertainty."""
+    """One straight deskew state and the wider directly observed angle span.
+
+    ``full_angle_interval_degrees`` is the low-dimensional feasible interval
+    used by placement and output sampling.  Local edge departures, including
+    slight film bend, live in ``observed_angle_interval_degrees`` and in each
+    boundary's residual interval; they must not masquerade as a possible
+    rotation of the complete strip.
+    """
 
     direction_id: str
     selected_observation_ids: tuple[ObservationId, ...]
     full_angle_interval_degrees: FiniteInterval
+    observed_angle_interval_degrees: FiniteInterval
     canonical_angle_degrees: float
 
     def __post_init__(self) -> None:
@@ -34,6 +42,14 @@ class SharedStripDirection:
             != len(self.selected_observation_ids)
             or not self.full_angle_interval_degrees.contains(
                 self.canonical_angle_degrees,
+                epsilon=1.0e-12,
+            )
+            or not self.observed_angle_interval_degrees.contains(
+                self.full_angle_interval_degrees.minimum,
+                epsilon=1.0e-12,
+            )
+            or not self.observed_angle_interval_degrees.contains(
+                self.full_angle_interval_degrees.maximum,
                 epsilon=1.0e-12,
             )
             or not math.isfinite(self.canonical_angle_degrees)

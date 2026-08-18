@@ -37,6 +37,7 @@ def build_sequence_observations(
     boundary_axis_scale_px_per_mm: PositiveInterval,
     *,
     reference_trace_px: float,
+    frame_width_px: PositiveInterval,
 ) -> tuple[
     tuple[BoundaryEdgeObservation, ...],
     tuple[SeparatorBandObservation, ...],
@@ -105,5 +106,6 @@ def build_sequence_observations(
         transitions,
         field,
         boundary_axis,
+        frame_width_px,
     )
     return ordered, bands

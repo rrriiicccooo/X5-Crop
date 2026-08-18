@@ -22,6 +22,12 @@ from x5crop.detection.pipeline import choose_detection
 from x5crop.detection.photo_geometry.corridors import (
     build_top_bottom_search_corridors,
 )
+from x5crop.detection.photo_geometry.coarse_strip_support import (
+    CoarseAxisSupport,
+    CoarseStripSupport,
+    CoarseStripSupportReceipt,
+    CoarseSupportAuthority,
+)
 from x5crop.detection.photo_geometry.source_geometry import SourceScanGeometry
 from x5crop.detection.photo_geometry.template_measurement_plan import (
     compile_template_measurement_plan,
@@ -36,6 +42,7 @@ from x5crop.detection.source_core import (
 )
 from x5crop.domain import (
     Box,
+    FiniteInterval,
     PositiveInterval,
 )
 from x5crop.formats import FRAME_DIMENSION_TOLERANCE_SPEC, format_spec
@@ -507,6 +514,22 @@ class PhysicalAuthorityContractTest(unittest.TestCase):
             lane,
             layout="horizontal",
             measurement_plan=plan,
+            coarse_support=CoarseStripSupport(
+                lane.domain.lane_id,
+                CoarseAxisSupport(
+                    FiniteInterval(0.0, 719.0),
+                    None,
+                    CoarseSupportAuthority.HOLDER_CONSERVATIVE,
+                    (),
+                ),
+                CoarseAxisSupport(
+                    FiniteInterval(0.0, 99.0),
+                    None,
+                    CoarseSupportAuthority.HOLDER_CONSERVATIVE,
+                    (),
+                ),
+                CoarseStripSupportReceipt(2, 0, 0, 0, 0, 2, 0),
+            ),
         )
         self.assertEqual((top.role, bottom.role), (
             BoundaryRole.TOP,

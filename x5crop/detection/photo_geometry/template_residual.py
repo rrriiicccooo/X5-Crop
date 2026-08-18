@@ -2,9 +2,9 @@
 
 The normal fit is the default answer. This module never searches pixels,
 ordinals, or placements. It walks the already-bound roles once and asks one
-physical question: do adjacent same-role advances form one continuous base
-pitch family, or is exactly one directly observed adjacency a discrete step?
-Separator width alone cannot authorize an anomaly.
+physical question: does a directly observed END -> material band -> START
+adjacency depart from the format gap authority?  Only that exact material
+relation can authorize one suffix shift.
 """
 
 from __future__ import annotations
@@ -33,27 +33,35 @@ class ResidualPattern(str, Enum):
     UNRESOLVED = "unresolved"
 
 
+class LocalAdvanceFailureKind(str, Enum):
+    """Typed reason why no bounded local relation can be authorized."""
+
+    MULTIPLE_BANDS = "multiple_bands"
+    TOPOLOGY_CONTRADICTION = "topology_contradiction"
+    TOO_MANY_ANOMALIES = "too_many_anomalies"
+
+
 @dataclass(frozen=True)
-class AdjacencyAdvanceFact:
-    """One ordinal's directly measured START/END-to-START/END advance."""
+class AdjacencyGapFact:
+    """One ordinal's directly measured END -> material -> START gap."""
 
     relation_ordinal: int
-    advance_interval_px: FiniteInterval
-    canonical_advance_px: float
+    gap_interval_px: FiniteInterval
+    canonical_gap_px: float
     observation_ids: tuple[ObservationId, ...]
     separator_band_id: ObservationId | None
 
     def __post_init__(self) -> None:
         if (
             self.relation_ordinal <= 0
-            or not self.advance_interval_px.contains(
-                self.canonical_advance_px,
+            or not self.gap_interval_px.contains(
+                self.canonical_gap_px,
                 epsilon=1.0e-9,
             )
             or not self.observation_ids
             or len(set(self.observation_ids)) != len(self.observation_ids)
         ):
-            raise ValueError("adjacency advance fact is invalid")
+            raise ValueError("adjacency gap fact is invalid")
 
 
 @dataclass(frozen=True)
@@ -62,9 +70,10 @@ class LocalAdvanceAnalysis:
 
     pattern: ResidualPattern
     relations: tuple[LocalAdvanceRelation, ...]
-    adjacency_facts: tuple[AdjacencyAdvanceFact, ...]
+    adjacency_facts: tuple[AdjacencyGapFact, ...]
     evaluated_adjacency_count: int
     anomaly_ordinals: tuple[int, ...] = ()
+    failure_kind: LocalAdvanceFailureKind | None = None
     unresolved_reason: str | None = None
 
     def __post_init__(self) -> None:
@@ -84,7 +93,9 @@ class LocalAdvanceAnalysis:
         ):
             raise ValueError("adjacency facts must retain template order")
         unresolved = self.pattern == ResidualPattern.UNRESOLVED
-        if unresolved != (self.unresolved_reason is not None):
+        if unresolved != (self.unresolved_reason is not None) or unresolved != (
+            self.failure_kind is not None
+        ):
             raise ValueError("residual failure reason disagrees with its pattern")
         if unresolved and self.relations:
             raise ValueError("unresolved residual topology cannot authorize relations")
@@ -101,39 +112,6 @@ def _difference(left: FiniteInterval, right: FiniteInterval) -> FiniteInterval:
         left.minimum - right.maximum,
         left.maximum - right.minimum,
     )
-
-
-def _advance(
-    left: FiniteInterval,
-    right: FiniteInterval,
-    direction: int,
-) -> FiniteInterval:
-    if direction > 0:
-        return FiniteInterval(
-            right.minimum - left.maximum,
-            right.maximum - left.minimum,
-        )
-    return FiniteInterval(
-        left.minimum - right.maximum,
-        left.maximum - right.minimum,
-    )
-
-
-def _connected(values: tuple[AdjacencyAdvanceFact, ...]) -> bool:
-    """Return whether interval union is one continuous pitch family."""
-
-    if not values:
-        return True
-    ordered = sorted(
-        (item.advance_interval_px for item in values),
-        key=lambda item: (item.minimum, item.maximum),
-    )
-    maximum = ordered[0].maximum
-    for interval in ordered[1:]:
-        if interval.minimum > maximum + _NUMERIC_EPSILON_PX:
-            return False
-        maximum = max(maximum, interval.maximum)
-    return True
 
 
 def _nominal_relation(ordinal: int) -> LocalAdvanceRelation:
@@ -176,62 +154,32 @@ def derive_bounded_local_advances(
     if len(by_id) != len(sequence_edges):
         raise ValueError("sequence edge identities must be unique")
     bands_by_pair = _bands_by_bound_pair(separator_bands, set(by_id))
-    facts: list[AdjacencyAdvanceFact] = []
+    facts: list[AdjacencyGapFact] = []
     for adjacency_index in range(evaluated):
-        advances: list[FiniteInterval] = []
-        provenance: list[ObservationId] = []
-        for role_offset in (0, 1):
-            left_id = fit.role_observation_ids[2 * adjacency_index + role_offset]
-            right_id = fit.role_observation_ids[
-                2 * (adjacency_index + 1) + role_offset
-            ]
-            if left_id is None or right_id is None:
-                continue
-            left = by_id.get(left_id)
-            right = by_id.get(right_id)
-            if left is None or right is None:
-                raise ValueError("bound advance observation is not registered")
-            advances.append(
-                _advance(
-                    left.full_position_interval_px,
-                    right.full_position_interval_px,
-                    fit.template.direction,
-                )
-            )
-            provenance.extend((left_id, right_id))
-        if not advances:
-            continue
-        observed = advances[0]
-        for other in advances[1:]:
-            # START-to-START and END-to-END describe the same physical
-            # advance through two different frame-edge families.  Their hull
-            # is one conservative adjacency fact; intersecting the two would
-            # mistake small fixed-frame residuals for another discrete gap.
-            observed = FiniteInterval(
-                min(observed.minimum, other.minimum),
-                max(observed.maximum, other.maximum),
-            )
         end_id = fit.role_observation_ids[2 * adjacency_index + 1]
         next_start_id = fit.role_observation_ids[2 * adjacency_index + 2]
-        exact_bands = ()
-        if end_id is not None and next_start_id is not None:
-            exact_bands = bands_by_pair.get(
-                frozenset((end_id, next_start_id)),
-                (),
-            )
+        if end_id is None or next_start_id is None:
+            continue
+        end = by_id.get(end_id)
+        next_start = by_id.get(next_start_id)
+        if end is None or next_start is None:
+            raise ValueError("bound adjacency observation is not registered")
+        exact_bands = bands_by_pair.get(
+            frozenset((end_id, next_start_id)),
+            (),
+        )
         if len(exact_bands) > 1:
             return LocalAdvanceAnalysis(
                 ResidualPattern.UNRESOLVED,
                 (),
                 tuple(facts),
                 evaluated,
+                failure_kind=LocalAdvanceFailureKind.MULTIPLE_BANDS,
                 unresolved_reason=(
                     "multiple separator observations bind one adjacency"
                 ),
             )
-        if end_id is not None and next_start_id is not None and not exact_bands:
-            end = by_id[end_id]
-            next_start = by_id[next_start_id]
+        if not exact_bands:
             canonical_gap = fit.template.direction * (
                 next_start.canonical_position_px - end.canonical_position_px
             )
@@ -247,25 +195,52 @@ def derive_bounded_local_advances(
                     (),
                     tuple(facts),
                     evaluated,
+                    failure_kind=LocalAdvanceFailureKind.TOPOLOGY_CONTRADICTION,
                     unresolved_reason=(
                         "direct adjacency does not preserve end-then-start "
                         "order and has no separator material"
                     ),
                 )
-        band_id = None if not exact_bands else exact_bands[0].observation_id
-        identities = tuple(dict.fromkeys(provenance))
+            # A missing band cannot authorize an exceptional gap.  The normal
+            # template may still infer this adjacency from other direct phase
+            # evidence, but no local degree of freedom is opened here.
+            continue
+        band = exact_bands[0]
+        if (
+            band.left_edge_observation_id != end_id
+            or band.right_edge_observation_id != next_start_id
+        ):
+            return LocalAdvanceAnalysis(
+                ResidualPattern.UNRESOLVED,
+                (),
+                tuple(facts),
+                evaluated,
+                failure_kind=LocalAdvanceFailureKind.TOPOLOGY_CONTRADICTION,
+                unresolved_reason=(
+                    "separator material contradicts bound END-then-START roles"
+                ),
+            )
         facts.append(
-            AdjacencyAdvanceFact(
+            AdjacencyGapFact(
                 relation_ordinal=adjacency_index + 1,
-                advance_interval_px=observed,
-                canonical_advance_px=observed.center,
-                observation_ids=identities,
-                separator_band_id=band_id,
+                gap_interval_px=band.gap_interval_px,
+                canonical_gap_px=band.gap_interval_px.center,
+                observation_ids=(end_id, next_start_id),
+                separator_band_id=band.observation_id,
             )
         )
 
     ordered_facts = tuple(facts)
-    if len(ordered_facts) < 2 or _connected(ordered_facts):
+    gap_prior = fit.template.gap_prior_px
+    anomalies = tuple(
+        fact
+        for fact in ordered_facts
+        if (
+            fact.gap_interval_px.maximum < gap_prior.minimum
+            or gap_prior.maximum < fact.gap_interval_px.minimum
+        )
+    )
+    if not anomalies:
         return LocalAdvanceAnalysis(
             ResidualPattern.NORMAL,
             (),
@@ -273,38 +248,21 @@ def derive_bounded_local_advances(
             evaluated,
         )
 
-    candidates: list[
-        tuple[AdjacencyAdvanceFact, tuple[AdjacencyAdvanceFact, ...]]
-    ] = []
-    for fact in ordered_facts:
-        remainder = tuple(item for item in ordered_facts if item != fact)
-        if fact.separator_band_id is not None and _connected(remainder):
-            candidates.append((fact, remainder))
-    if len(ordered_facts) == 2 and len(candidates) == 2:
-        # Two directly observed advances describe the same geometry whichever
-        # one is called the base. Canonicalize from the first physical
-        # adjacency so the later departure is the one-time suffix shift.
-        candidates = [max(candidates, key=lambda item: item[0].relation_ordinal)]
-    if len(candidates) != 1:
+    if len(anomalies) > MAX_LOCAL_ADVANCE_ANOMALIES:
         return LocalAdvanceAnalysis(
             ResidualPattern.UNRESOLVED,
             (),
             ordered_facts,
             evaluated,
+            failure_kind=LocalAdvanceFailureKind.TOO_MANY_ANOMALIES,
             unresolved_reason=(
-                "residual advances do not identify one direct local step"
+                "direct local gap anomalies exceed bounded model"
             ),
         )
 
-    anomaly, base_facts = candidates[0]
-    base = FiniteInterval(
-        min(item.advance_interval_px.minimum for item in base_facts),
-        max(item.advance_interval_px.maximum for item in base_facts),
-    )
-    delta = _difference(anomaly.advance_interval_px, base)
-    canonical_delta = anomaly.canonical_advance_px - (
-        sum(item.canonical_advance_px for item in base_facts) / len(base_facts)
-    )
+    anomaly = anomalies[0]
+    delta = _difference(anomaly.gap_interval_px, gap_prior)
+    canonical_delta = anomaly.canonical_gap_px - gap_prior.center
     if delta.contains(0.0):
         return LocalAdvanceAnalysis(
             ResidualPattern.NORMAL,
@@ -321,18 +279,9 @@ def derive_bounded_local_advances(
         _nominal_relation(ordinal)
         for ordinal in range(1, anomaly.relation_ordinal)
     ]
-    relation_ids = tuple(
-        dict.fromkeys(
-            (
-                anomaly.separator_band_id,
-                *anomaly.observation_ids,
-                *(
-                    identity
-                    for item in base_facts
-                    for identity in item.observation_ids
-                ),
-            )
-        )
+    relation_ids = (
+        anomaly.separator_band_id,
+        *anomaly.observation_ids,
     )
     relations.append(
         LocalAdvanceRelation(
@@ -355,7 +304,8 @@ def derive_bounded_local_advances(
 
 
 __all__ = [
-    "AdjacencyAdvanceFact",
+    "AdjacencyGapFact",
+    "LocalAdvanceFailureKind",
     "LocalAdvanceAnalysis",
     "ResidualPattern",
     "derive_bounded_local_advances",

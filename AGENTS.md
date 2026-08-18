@@ -53,10 +53,10 @@ GitHub 是 tracked 源码与文档的权威来源。NAS 和复制目录只用于
 | 文件 | 唯一职责 | 语言 |
 |---|---|---|
 | `README.md` | GitHub 简短入口与语言选择 | 精简中英双语 |
-| `docs/user-guide.zh-CN.md` | 中文完整用户手册 | 中文 |
-| `docs/user-guide.en.md` | English user guide | English |
-| `docs/quick-start.zh-CN.md` | 中文发布版快速启动 | 中文 |
-| `docs/quick-start.en.md` | English release quick start | English |
+| `docs/user-guide.zh-CN.md` | V5 中文完整手册（发布前为开发预览） | 中文 |
+| `docs/user-guide.en.md` | V5 English user guide (development preview before release) | English |
+| `docs/quick-start.zh-CN.md` | V5 中文快速启动（发布前为开发预览） | 中文 |
+| `docs/quick-start.en.md` | V5 English quick start (development preview before release) | English |
 | `docs/ARCHITECTURE.md` | 已确认的 V5 合同、运行流、数值合同与源码 owner | 中文 |
 | `docs/CHANGELOG.md` | 版本级行为与验证边界 | 中文 |
 | `docs/PROJECT_MEMORY.md` | 当前目标、证据边界、风险与下一步 | 中文 |
@@ -95,9 +95,8 @@ GitHub 是 tracked 源码与文档的权威来源。NAS 和复制目录只用于
   有界固定模板，只在理论 outer、separator 和 top/bottom 附近精修。独立像素观察负责对准、解释
   最多一次直接 local advance 并否决非法 placement；不得用模板投影创造自己的 phase authority。
 - 安全层只处理唯一胜出 placement 的联合可行状态，不合并落选位置、不分别相加不能同时发生的
-  最大误差、不静默裁掉越界 footprint。Aperture 四边使用单边 5% 上限；直接 enclosing-support
-  top/bottom 使用总高度 1.1H 的独立合同。
-- Contact 与 overlap 在没有用户确认黄金以前一律 review，不建立第二套 detector 或特殊自动 bleed。
+  最大误差、不静默裁掉越界 footprint。具体 bleed 和预算只由 `docs/ARCHITECTURE.md` 定义。
+- Contact 与 overlap 在获得用户确认黄金以前一律 review，不建立第二套 detector 或特殊自动 bleed。
 - `CandidateGate` 只记录 typed assessment；只有 `DecisionGate` 创建 final status 与 reasons。
 - 任一 slot 不安全时，整个 source `needs_review` 且不写正式照片；不做 slot salvage。
 - 不为减少 blank TIFF 牺牲内容保护或 direct-use 质量。V5 不实现 blank suppression。
@@ -112,6 +111,14 @@ GitHub 是 tracked 源码与文档的权威来源。NAS 和复制目录只用于
   feature flag、dead code 或平行 runtime。
 - Producer 必须 fixed-template-first 且工作量有界；不恢复完整链 materialization/cache、通用 DP、
   top-K、候选笛卡尔积、逐帧尺寸、selected-placement 临时 query 或无界全图 evidence。
+- 新增自由度必须说明它减少的物理未知量、唯一 owner、启用与禁止条件、工作上界、反例、Debug、
+  Gate 失败表达，并证明普通黄金不变；不能完成这些合同的能力不进入 production。
+- 连续几何保留到最终 sampling；不得逐格取整并累计坐标误差。不同 placement 保持竞争，同一
+  placement 的连续误差才进入联合安全范围。
+- 性能优化只能复用 candidate-independent 计算或完全相同的状态。除非用户明确批准行为变化，优化
+  前后 registered observations、合法 placements、winner/runner 与 provenance 必须相同。
+- Measurement replay 仅是绑定 source SHA、configuration、measurement revision 和 plan identity 的
+  开发工具；不得携带真值、进入 production、充当 fallback 或提供更容易通过的 detector path。
 - `tifffile + imagecodecs` 独占正式 TIFF I/O；OpenCV 只作有界像素测量；SciPy 只作数值与
   sampling；Pillow 只在显式 Debug Analysis 时延迟导入。
 - V5 首版不加入视觉大模型、训练模型、ONNX Runtime 或 PyTorch runtime。未来 learned evidence

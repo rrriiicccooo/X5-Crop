@@ -17,13 +17,14 @@ from ..gate_checks import DetectionFailureFact, TypedAssessment
 from ..output_geometry import OutputTransformAssessment
 from ..source_core import SourceLaneEvidence
 from .content_veto_model import ContentVetoFact
+from .coarse_strip_support import CoarseStripSupport
 from .line_observations import PhotoBoundaryObservation, SideTransitionRegion
 from .measurement_model import (
     PhotoBoundaryCoverageReceipt,
     PhotoBoundaryMeasurementSet,
     PhotoBoundaryTransition,
 )
-from .model import BoundaryAxis
+from .model import BoundaryAxis, QueryPurpose
 from .observation_types import (
     BasicAxisProfile,
     BoundaryEdgeObservation,
@@ -38,12 +39,16 @@ from .output_model import (
 )
 from .search_model import SequenceAnchorDiscoveryDomain
 from .source_geometry import SourceScanGeometry
-from .template_cross_model import CrossFitCompetition, CrossRoleBinding
+from .template_cross_model import (
+    CrossFitCompetition,
+    CrossRoleBinding,
+    TemplateCrossInput,
+)
 from .template_evidence import EvidenceUseFact
 from .template_holder_fill import HolderFillAssessment
 from .template_model import TemplateSpec
 from .template_measurement_plan_model import TemplateMeasurementPlan
-from .template_phase_model import PhaseFitResult
+from .template_phase_model import PhaseFitResult, TemplatePhaseInput
 from .template_placement import FormatPlacement
 
 
@@ -96,6 +101,7 @@ class RegisteredTemplateLane:
     height_axis: BoundaryAxis
     width_authority_px: FiniteInterval
     height_authority_px: FiniteInterval
+    coarse_support: CoarseStripSupport
     anchor_domain: SequenceAnchorDiscoveryDomain
     measurement_sets: tuple[PhotoBoundaryMeasurementSet, ...]
     side_regions: tuple[SideTransitionRegion, ...]
@@ -117,6 +123,11 @@ class RegisteredTemplateLane:
             raise TypeError("registered template lane requires source authority")
         if not isinstance(self.measurement_plan, TemplateMeasurementPlan):
             raise TypeError("registered template lane requires a compiled plan")
+        if (
+            not isinstance(self.coarse_support, CoarseStripSupport)
+            or self.coarse_support.lane_id != self.lane.domain.lane_id
+        ):
+            raise TypeError("registered template lane requires lane-local coarse support")
         if self.layout not in {"horizontal", "vertical"}:
             raise ValueError("registered template lane layout is invalid")
         if self.output_slot_count <= 0 or self.measurement_slot_count < self.output_slot_count:
@@ -138,11 +149,36 @@ class RegisteredTemplateLane:
         if self.anchor_domain.lane_id != lane_id:
             raise ValueError("anchor domain belongs to another lane")
         queries = tuple(item.query for item in self.measurement_sets)
+        if (
+            len(queries) < 2
+            or queries[0].purpose != QueryPurpose.COARSE_STRIP_LONG
+            or queries[1].purpose != QueryPurpose.COARSE_STRIP_SHORT
+        ):
+            raise ValueError("measurement ledger must begin with both coarse axes")
         query_ids = tuple(item.query_id for item in queries)
         if len(set(query_ids)) != len(query_ids) or any(
             item.lane_id != lane_id for item in queries
         ):
             raise ValueError("measurement queries must be unique and lane-local")
+        if tuple(item.registration_index for item in queries) != tuple(
+            range(len(queries))
+        ):
+            raise ValueError("measurement queries must retain global registration order")
+        coarse_coverage = tuple(
+            item.coverage for item in self.measurement_sets[:2]
+        )
+        if (
+            self.coarse_support.receipt.registered_query_count != 2
+            or self.coarse_support.receipt.trace_position_count
+            != sum(item.registered_trace_count for item in coarse_coverage)
+            or self.coarse_support.receipt.coordinate_sample_count
+            != sum(item.registered_coordinate_count for item in coarse_coverage)
+            or self.coarse_support.receipt.pixel_query_count
+            != sum(item.pixel_query_count for item in coarse_coverage)
+            or self.coarse_support.receipt.peak_temporary_bytes
+            != max(item.peak_temporary_bytes for item in coarse_coverage)
+        ):
+            raise ValueError("coarse support receipt disagrees with measurement ledger")
         receipt_ids = tuple(item.query_id for item in self.measurement_work.coverage_receipts)
         if receipt_ids != query_ids:
             raise ValueError("measurement receipts must cover registered queries once")
@@ -190,6 +226,8 @@ class PreparedTemplateLane(RegisteredTemplateLane):
 
     template_spec: TemplateSpec
     source_scan_geometry: SourceScanGeometry
+    phase_input: TemplatePhaseInput
+    cross_input: TemplateCrossInput
     phase_competition: PhaseFitResult
     cross_competition: CrossFitCompetition
     evidence_use_ledger: tuple[EvidenceUseFact, ...] = ()
@@ -204,6 +242,19 @@ class PreparedTemplateLane(RegisteredTemplateLane):
             raise ValueError("prepared template must retain compiled identity")
         if not isinstance(self.source_scan_geometry, SourceScanGeometry):
             raise TypeError("prepared template lane requires source geometry")
+        if not isinstance(self.phase_input, TemplatePhaseInput):
+            raise TypeError("prepared template lane requires its exact phase input")
+        if not isinstance(self.cross_input, TemplateCrossInput):
+            raise TypeError("prepared template lane requires its exact cross input")
+        if (
+            self.phase_input.template != self.template_spec
+            or self.phase_input.observations != self.sequence_edges
+            or self.phase_input.separator_bands != self.separator_bands
+            or self.cross_input.template != self.template_spec
+            or self.cross_input.top_bindings != self.top_cross_bindings
+            or self.cross_input.bottom_bindings != self.bottom_cross_bindings
+        ):
+            raise ValueError("prepared solver inputs disagree with registered evidence")
         if not isinstance(self.phase_competition, PhaseFitResult):
             raise TypeError("phase competition must be the canonical phase fit")
         if self.phase_competition.template != self.template_spec:

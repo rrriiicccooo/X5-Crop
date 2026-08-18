@@ -11,7 +11,11 @@ from x5crop.detection.candidate.assessment.candidate_gate import (
 )
 from x5crop.detection.candidate.assessment.model import CANDIDATE_GATE_CHECK_CODES
 from x5crop.detection.decision.decision_gate import apply_decision_gate
-from x5crop.detection.gate_checks import GateGap, TypedAssessment
+from x5crop.detection.gate_checks import (
+    GateGap,
+    MinimumMissingFact,
+    TypedAssessment,
+)
 from x5crop.detection.photo_geometry.model import BoundaryRole
 from x5crop.detection.photo_geometry.content_veto_model import (
     ContentVetoAssessment,
@@ -27,7 +31,7 @@ from x5crop.detection.photo_geometry.template_selection import (
     select_template_source,
     withhold_lane_winner,
 )
-from x5crop.domain import EvidenceState
+from x5crop.domain import EvidenceState, FiniteInterval
 
 
 def _resolved():
@@ -90,7 +94,62 @@ class TemplateSelectionContractTest(unittest.TestCase):
 
         self.assertEqual(
             competition.failure.gap,
-            GateGap.SEQUENCE_AUTHORITY_UNAVAILABLE,
+            GateGap.PHASE_ANCHOR_UNAVAILABLE,
+        )
+        self.assertEqual(
+            competition.failure.minimum_missing_fact,
+            MinimumMissingFact.ABSOLUTE_PHASE_ANCHOR,
+        )
+
+    def test_phase_mismatch_reports_pitch_closure_as_the_missing_fact(self) -> None:
+        _phase, cross, _placement = _resolved()
+        mismatch = fit_template_phase(
+            (edge("outside-holder", 1000.0),),
+            template(1),
+            holder_span_px=FiniteInterval(0.0, 400.0),
+        )
+
+        competition = select_lane_template_placement(
+            lane_id="lane:0",
+            best=None,
+            runner_up=None,
+            phase=mismatch,
+            cross=cross,
+            content_assessment=None,
+        )
+
+        self.assertEqual(competition.failure.gap, GateGap.PHASE_TEMPLATE_MISMATCH)
+        self.assertEqual(
+            competition.failure.minimum_missing_fact,
+            MinimumMissingFact.PITCH_CLOSURE,
+        )
+
+    def test_discrete_phase_runner_reports_unique_placement(self) -> None:
+        _phase, cross, _placement = _resolved()
+        ambiguous = fit_template_phase(
+            tuple(
+                edge(f"ambiguous:{index}", coordinate)
+                for index, coordinate in enumerate((40.0, 140.0, 200.0, 300.0))
+            ),
+            template(2),
+        )
+
+        competition = select_lane_template_placement(
+            lane_id="lane:0",
+            best=None,
+            runner_up=None,
+            phase=ambiguous,
+            cross=cross,
+            content_assessment=None,
+        )
+
+        self.assertEqual(
+            competition.failure.gap,
+            GateGap.PHASE_PLACEMENT_AMBIGUOUS,
+        )
+        self.assertEqual(
+            competition.failure.minimum_missing_fact,
+            MinimumMissingFact.UNIQUE_PLACEMENT,
         )
 
     def test_content_cannot_assess_an_unresolved_placement(self) -> None:

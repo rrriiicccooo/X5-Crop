@@ -47,14 +47,12 @@ class RepositoryContractTest(unittest.TestCase):
             "tools/regression/contracts/non_detection_freeze_v1.json",
             "tools/regression/contracts/non_detection_protected_paths_v1.txt",
             "tools/regression/compare.py",
-            "tools/regression/template_measurement_replay.py",
             "tools/tests/test_bounded_grid_contract.py",
             "tools/tests/test_affine_tiff_foundation_contract.py",
             "tools/tests/test_chain_selection_contract.py",
             "tools/tests/test_current_only_contract.py",
             "tools/tests/test_non_detection_freeze_contract.py",
             "tools/tests/test_photo_geometry_contract.py",
-            "tools/tests/test_template_measurement_replay_contract.py",
             "tools/tests/test_physical_chain_architecture_contract.py",
             "tools/tests/transaction_crash_worker.py",
         ):
@@ -80,9 +78,13 @@ class RepositoryContractTest(unittest.TestCase):
             "tools/tests/test_template_cross_contract.py",
             "tools/tests/test_template_placement_contract.py",
             "tools/tests/test_template_runtime_model_contract.py",
+            "tools/tests/test_template_measurement_replay_contract.py",
+            "tools/tests/test_v4_gold_comparison_contract.py",
             "tools/regression/gold_geometry.py",
             "tools/regression/diagnostic_contract.py",
             "tools/regression/file_identity.py",
+            "tools/regression/template_measurement_replay.py",
+            "tools/regression/v4_gold_comparison.py",
         ):
             with self.subTest(present=relative):
                 self.assertTrue((ROOT / relative).is_file())

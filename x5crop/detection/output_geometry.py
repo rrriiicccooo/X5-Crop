@@ -107,7 +107,7 @@ def output_transform_assessment(
             authority=None,
         )
     canonical_angle = direction.canonical_angle_degrees
-    common = direction.full_angle_interval_degrees
+    observed = direction.observed_angle_interval_degrees
     if canonical_angle == 0.0:
         return OutputTransformAssessment(
             transform=AffineCoordinateTransform.identity(
@@ -117,7 +117,7 @@ def output_transform_assessment(
             outcome="identity",
             state=EvidenceState.SUPPORTED,
             named_gap=None,
-            observed_angle_interval_degrees=common,
+            observed_angle_interval_degrees=observed,
             applied_source_rotation_degrees=0.0,
             authority="shared_strip_direction",
         )
@@ -131,7 +131,7 @@ def output_transform_assessment(
         outcome="shared_rotation",
         state=EvidenceState.SUPPORTED,
         named_gap=None,
-        observed_angle_interval_degrees=common,
+        observed_angle_interval_degrees=observed,
         applied_source_rotation_degrees=source_rotation,
         authority="shared_strip_direction",
     )

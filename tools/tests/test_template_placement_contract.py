@@ -107,6 +107,7 @@ def _direction(angle: float = 0.0) -> SharedStripDirection:
         direction_id="direction:test",
         selected_observation_ids=(ObservationId("cross:top"), ObservationId("cross:bottom")),
         full_angle_interval_degrees=FiniteInterval(-0.2, 0.2),
+        observed_angle_interval_degrees=FiniteInterval(-0.2, 0.2),
         canonical_angle_degrees=angle,
     )
 
@@ -318,6 +319,7 @@ class TemplatePlacementContractTest(unittest.TestCase):
                 ObservationId("cross:other-lane"),
             ),
             full_angle_interval_degrees=FiniteInterval(-0.1, 0.2),
+            observed_angle_interval_degrees=FiniteInterval(-0.1, 0.2),
             canonical_angle_degrees=0.08,
         )
         placement = _compose(

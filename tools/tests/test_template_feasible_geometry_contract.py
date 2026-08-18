@@ -21,6 +21,30 @@ from tools.tests.test_template_placement_contract import (
 
 
 class TemplateFeasibleGeometryContractTest(unittest.TestCase):
+    @staticmethod
+    def _sequence_interval(projection, frame_index: int, edge: int) -> FiniteInterval:
+        values = tuple(
+            (
+                state.sequence_start_px
+                if edge == 0
+                else state.sequence_end_px
+            )
+            for state in projection.frame_states[frame_index]
+        )
+        return FiniteInterval(min(values), max(values))
+
+    @staticmethod
+    def _cross_interval(projection, edge: int) -> FiniteInterval:
+        values = tuple(
+            (
+                state.top_at_lane_reference_px
+                if edge == 0
+                else state.bottom_at_lane_reference_px
+            )
+            for state in projection.frame_states[0]
+        )
+        return FiniteInterval(min(values), max(values))
+
     def test_phase_and_pitch_extremes_remain_correlated(self) -> None:
         template = _template(2)
         sequence = _sequence(template)
@@ -64,14 +88,21 @@ class TemplateFeasibleGeometryContractTest(unittest.TestCase):
         )
         projection = project_selected_placement(placement)
         self.assertEqual(
-            projection.sequence_role_intervals_px[2],
+            self._sequence_interval(projection, 1, 0),
             FiniteInterval.exact(220.0),
         )
         self.assertEqual(
-            projection.sequence_role_intervals_px[3],
+            self._sequence_interval(projection, 1, 1),
             FiniteInterval.exact(320.0),
         )
-        self.assertEqual(projection.extreme_evaluation_count, 12)
+        self.assertLessEqual(projection.extreme_evaluation_count, 64 * 3)
+        self.assertNotIn(
+            (215.0, 315.0),
+            {
+                (state.sequence_start_px, state.sequence_end_px)
+                for state in projection.frame_states[1]
+            },
+        )
 
     def test_fixed_height_keeps_top_and_bottom_correlated(self) -> None:
         template = _template(1)
@@ -87,12 +118,20 @@ class TemplateFeasibleGeometryContractTest(unittest.TestCase):
         placement = _compose(template, _sequence(template), cross)
         projection = project_selected_placement(placement)
         self.assertEqual(
-            projection.top_at_lane_reference_px,
+            self._cross_interval(projection, 0),
             FiniteInterval(5.0, 10.0),
         )
         self.assertEqual(
-            projection.bottom_at_lane_reference_px,
+            self._cross_interval(projection, 1),
             FiniteInterval(245.0, 250.0),
+        )
+        self.assertTrue(
+            all(
+                state.bottom_at_lane_reference_px
+                - state.top_at_lane_reference_px
+                == 240.0
+                for state in projection.frame_states[0]
+            )
         )
 
     def test_narrower_joint_constraints_never_widen_projection(self) -> None:
@@ -117,20 +156,20 @@ class TemplateFeasibleGeometryContractTest(unittest.TestCase):
         broad_projection = project_selected_placement(broad)
         narrow_projection = project_selected_placement(narrow)
         self.assertGreaterEqual(
-            narrow_projection.top_at_lane_reference_px.minimum,
-            broad_projection.top_at_lane_reference_px.minimum,
+            self._cross_interval(narrow_projection, 0).minimum,
+            self._cross_interval(broad_projection, 0).minimum,
         )
         self.assertLessEqual(
-            narrow_projection.top_at_lane_reference_px.maximum,
-            broad_projection.top_at_lane_reference_px.maximum,
+            self._cross_interval(narrow_projection, 0).maximum,
+            self._cross_interval(broad_projection, 0).maximum,
         )
         self.assertGreaterEqual(
-            narrow_projection.bottom_at_lane_reference_px.minimum,
-            broad_projection.bottom_at_lane_reference_px.minimum,
+            self._cross_interval(narrow_projection, 1).minimum,
+            self._cross_interval(broad_projection, 1).minimum,
         )
         self.assertLessEqual(
-            narrow_projection.bottom_at_lane_reference_px.maximum,
-            broad_projection.bottom_at_lane_reference_px.maximum,
+            self._cross_interval(narrow_projection, 1).maximum,
+            self._cross_interval(broad_projection, 1).maximum,
         )
 
 

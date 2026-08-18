@@ -44,10 +44,7 @@ def development_report_facts(
             if phase.status != PhaseFitStatus.RESOLVED or phase.best is None
             else leave_one_anchor_out_phase_stability(
                 phase,
-                lane.prepared.sequence_edges,
-                lane.prepared.separator_bands,
-                lane.prepared.template_spec,
-                holder_span_px=lane.prepared.width_authority_px,
+                lane.prepared.phase_input,
             )
         )
     return {
@@ -89,6 +86,9 @@ def development_report_facts(
                 "lane_id": lane.lane_id,
                 "template_spec": typed_read_model(lane.prepared.template_spec),
                 "search": {
+                    "coarse_strip_support": typed_read_model(
+                        lane.prepared.coarse_support
+                    ),
                     "anchor_domain": typed_read_model(lane.prepared.anchor_domain),
                     "sequence_profile": typed_read_model(
                         lane.prepared.sequence_profile
@@ -123,6 +123,16 @@ def development_report_facts(
                 ),
                 "phase_competition": typed_read_model(
                     lane.prepared.phase_competition
+                ),
+                "alignment_path": (
+                    None
+                    if lane.prepared.phase_competition.best is None
+                    else "local_advance"
+                    if any(
+                        relation.kind.value != "nominal"
+                        for relation in lane.prepared.phase_competition.best.local_advance_relations
+                    )
+                    else "normal"
                 ),
                 "phase_stability": typed_read_model(
                     stability_by_lane[lane.lane_id]

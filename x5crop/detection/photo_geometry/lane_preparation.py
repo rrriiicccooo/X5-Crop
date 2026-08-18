@@ -15,6 +15,7 @@ from .corridors import (
     registered_lane_measurement_queries,
     source_lane_box,
 )
+from .coarse_strip_support import observe_coarse_strip_support
 from .measurement_model import (
     PhotoBoundaryMeasurementField,
     PhotoBoundaryMeasurementSet,
@@ -51,6 +52,7 @@ from .template_phase_model import (
     PhaseFailureKind,
     PhaseFitResult,
     PhaseFitStatus,
+    TemplatePhaseInput,
 )
 from .template_pitch import calibrate_template_source_pitch
 from .source_geometry import SourceScanGeometry
@@ -268,15 +270,23 @@ def prepare_template_lane(
         layout=layout,
         scale_authority=scales,
     )
+    coarse_support, coarse_measurement_sets = observe_coarse_strip_support(
+        field,
+        lane,
+        layout=layout,
+        measurement_plan=measurement_plan,
+    )
     top_corridor, bottom_corridor = build_top_bottom_search_corridors(
         lane,
         layout=layout,
         measurement_plan=measurement_plan,
+        coarse_support=coarse_support,
     )
     anchor_domain = build_sequence_anchor_discovery_domain(
         lane,
         layout=layout,
         measurement_plan=measurement_plan,
+        coarse_support=coarse_support,
     )
     queries = registered_lane_measurement_queries(
         lane,
@@ -285,35 +295,46 @@ def prepare_template_lane(
         bottom_corridor=bottom_corridor,
         anchor_domain=anchor_domain,
         measurement_plan=measurement_plan,
+        registration_start=len(coarse_measurement_sets),
     )
+    all_queries = tuple(
+        item.query for item in coarse_measurement_sets
+    ) + queries
     measurement_plan.validate_execution(
-        registered_query_count=len(queries),
-        trace_position_count=sum(len(query.trace_positions_px) for query in queries),
+        registered_query_count=len(all_queries),
+        trace_position_count=sum(
+            len(query.trace_positions_px) for query in all_queries
+        ),
         coordinate_sample_count=sum(
             max(1, int(math.ceil(interval.width)) + 1)
-            for query in queries
+            for query in all_queries
             for interval in query.search_intervals_px
         ),
     )
-    measurement_sets = measure_registered_queries(field, queries)
+    precision_measurement_sets = measure_registered_queries(
+        field,
+        queries,
+        registration_start=len(coarse_measurement_sets),
+    )
+    measurement_sets = (*coarse_measurement_sets, *precision_measurement_sets)
     transition_by_id: dict[str, PhotoBoundaryTransition] = {
         str(item.transition_id): item
         for measurement_set in measurement_sets
         for item in measurement_set.transitions
     }
     side_regions = _physical_transition_regions(
-        measurement_sets[2:],
+        precision_measurement_sets[2:],
         reference_trace_px=height_authority.center,
         boundary_axis_scale_px_per_mm=scales.width_axis_px_per_mm,
     )
     top_regions = _physical_transition_regions(
-        (measurement_sets[0],),
+        (precision_measurement_sets[0],),
         reference_trace_px=width_authority.center,
         boundary_axis_scale_px_per_mm=scales.height_axis_px_per_mm,
         minimum_independent_support_regions=1,
     )
     bottom_regions = _physical_transition_regions(
-        (measurement_sets[1],),
+        (precision_measurement_sets[1],),
         reference_trace_px=width_authority.center,
         boundary_axis_scale_px_per_mm=scales.height_axis_px_per_mm,
         minimum_independent_support_regions=1,
@@ -342,6 +363,7 @@ def prepare_template_lane(
         width_axis,
         scales.width_axis_px_per_mm,
         reference_trace_px=height_authority.center,
+        frame_width_px=measurement_plan.template_spec.frame_width_px,
     )
     coverage = tuple(item.coverage for item in measurement_sets)
     work = TemplateMeasurementWorkReceipt(
@@ -353,6 +375,10 @@ def prepare_template_lane(
         ),
         coverage_receipts=coverage,
     )
+    measurement_plan.validate_measurement_receipt(
+        pixel_query_count=work.pixel_query_count,
+        peak_temporary_bytes=work.peak_temporary_bytes,
+    )
     registered = RegisteredTemplateLane(
         lane=lane,
         layout=layout,
@@ -362,6 +388,7 @@ def prepare_template_lane(
         height_axis=height_axis,
         width_authority_px=width_authority,
         height_authority_px=height_authority,
+        coarse_support=coarse_support,
         anchor_domain=anchor_domain,
         measurement_sets=measurement_sets,
         side_regions=side_regions,
@@ -385,6 +412,7 @@ def prepare_template_lane(
         separator_bands=separator_bands,
         scale_px_per_mm=scales.width_axis_px_per_mm,
         holder_span_px=width_authority,
+        coarse_outer_interval_px=coarse_support.long_axis.direct_interval_px,
     )
     # The broad provisional template only brings direct material bands into a
     # finite neighbourhood. Once two independent separator locations establish
@@ -412,6 +440,7 @@ def prepare_template_lane(
         scale_px_per_mm=scales.width_axis_px_per_mm,
         holder_span_px=width_authority,
         phase_authority_px=pitch_calibration.phase_authority_px,
+        coarse_outer_interval_px=coarse_support.long_axis.direct_interval_px,
     )
     source_geometry = _calibrated_width_geometry(
         source_geometry,
@@ -445,21 +474,24 @@ def prepare_template_lane(
     template = pitch_calibration.template
     # Rebind the already-registered observations once, then interpret local
     # residuals. No selected-placement query or new pixel read is introduced.
-    phase = fit_template_phase_with_local_advance(
-        sequence_edges,
-        separator_bands,
-        template,
+    phase_search_authority = (
+        None
+        if (
+            base_phase.status != PhaseFitStatus.RESOLVED
+            or base_phase.best is None
+        )
+        else base_phase.best.phase_lattice_fit.absolute_phase_interval_px
+    )
+    phase_input = TemplatePhaseInput(
+        observations=sequence_edges,
+        separator_bands=separator_bands,
+        template=template,
         scale_px_per_mm=scales.width_axis_px_per_mm,
         holder_span_px=width_authority,
-        phase_authority_px=(
-            None
-            if (
-                base_phase.status != PhaseFitStatus.RESOLVED
-                or base_phase.best is None
-            )
-            else base_phase.best.phase_lattice_fit.absolute_phase_interval_px
-        ),
+        phase_authority_px=phase_search_authority,
+        coarse_outer_interval_px=coarse_support.long_axis.direct_interval_px,
     )
+    phase = fit_template_phase_with_local_advance(phase_input)
     phase = account_prior_phase_fit(phase, base_phase)
     phase = account_prior_phase_fit(phase, provisional_phase)
     phase = replace(
@@ -515,8 +547,8 @@ def prepare_template_lane(
     )
     cross = register_cross_evidence(
         profile=cross_profile,
-        top_measurement=measurement_sets[0],
-        bottom_measurement=measurement_sets[1],
+        top_measurement=precision_measurement_sets[0],
+        bottom_measurement=precision_measurement_sets[1],
         width_axis=width_axis,
         height_axis=height_axis,
         height_scale_px_per_mm=scales.height_axis_px_per_mm,
@@ -525,8 +557,8 @@ def prepare_template_lane(
     )
     cross = register_template_local_cross_refinements(
         cross,
-        top_measurement=measurement_sets[0],
-        bottom_measurement=measurement_sets[1],
+        top_measurement=precision_measurement_sets[0],
+        bottom_measurement=precision_measurement_sets[1],
         width_axis=width_axis,
         height_axis=height_axis,
         height_scale_px_per_mm=scales.height_axis_px_per_mm,
@@ -536,31 +568,33 @@ def prepare_template_lane(
         longitudinal_support_domains_px=longitudinal_support_domains_px,
         maximum_bindings=measurement_plan.cross_bounds.max_fitted_observations,
     )
-    cross_competition = fit_template_cross(
-        TemplateCrossInput(
-            template=template,
-            fixed_height_px=source_geometry.height_state.extent_projection_px(),
-            canonical_fixed_height_px=(
-                _canonical_height_from_shared_scale(source_geometry)
-            ),
-            holder_short_axis_center_px=short_axis_center_authority(
-                height_authority,
-                scales.height_axis_px_per_mm,
-            ),
-            lane_reference_trace_px=width_authority.center,
-            registered_trace_coordinates_px=measurement_sets[
-                0
-            ].query.trace_positions_px,
-            longitudinal_support_domains_px=longitudinal_support_domains_px,
-            top_bindings=cross.top_bindings,
-            bottom_bindings=cross.bottom_bindings,
-            boundary_axis=height_axis,
-            maximum_registered_runs=measurement_plan.cross_bounds.max_registered_runs,
-            maximum_fitted_observations=measurement_plan.cross_bounds.max_fitted_observations,
-            maximum_compatible_pairs=measurement_plan.cross_bounds.max_compatible_pairs,
-            maximum_evaluated_fits=measurement_plan.cross_bounds.max_evaluated_fits,
-        )
+    cross_input = TemplateCrossInput(
+        template=template,
+        fixed_height_px=source_geometry.height_state.extent_projection_px(),
+        canonical_fixed_height_px=(
+            _canonical_height_from_shared_scale(source_geometry)
+        ),
+        holder_short_axis_center_px=short_axis_center_authority(
+            height_authority,
+            scales.height_axis_px_per_mm,
+        ),
+        coarse_outer_interval_px=(
+            coarse_support.short_axis.direct_interval_px
+        ),
+        lane_reference_trace_px=width_authority.center,
+        registered_trace_coordinates_px=precision_measurement_sets[
+            0
+        ].query.trace_positions_px,
+        longitudinal_support_domains_px=longitudinal_support_domains_px,
+        top_bindings=cross.top_bindings,
+        bottom_bindings=cross.bottom_bindings,
+        boundary_axis=height_axis,
+        maximum_registered_runs=measurement_plan.cross_bounds.max_registered_runs,
+        maximum_fitted_observations=measurement_plan.cross_bounds.max_fitted_observations,
+        maximum_compatible_pairs=measurement_plan.cross_bounds.max_compatible_pairs,
+        maximum_evaluated_fits=measurement_plan.cross_bounds.max_evaluated_fits,
     )
+    cross_competition = fit_template_cross(cross_input)
     registered_values = dict(registered.__dict__)
     registered_values["top_cross_bindings"] = cross.top_bindings
     registered_values["bottom_cross_bindings"] = cross.bottom_bindings
@@ -569,6 +603,8 @@ def prepare_template_lane(
         **registered_values,
         template_spec=template,
         source_scan_geometry=source_geometry,
+        phase_input=phase_input,
+        cross_input=cross_input,
         phase_competition=phase,
         cross_competition=cross_competition,
         evidence_use_ledger=template_evidence_use_ledger(

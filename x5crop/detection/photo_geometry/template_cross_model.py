@@ -52,6 +52,55 @@ def _midpoint_interval(left: FiniteInterval, right: FiniteInterval) -> FiniteInt
     )
 
 
+def _localization_distance(
+    observed: FiniteInterval,
+    target_px: float,
+) -> float:
+    """Distance from one direct interval to a coarse target coordinate."""
+
+    if observed.contains(target_px):
+        return 0.0
+    return min(
+        abs(observed.minimum - target_px),
+        abs(observed.maximum - target_px),
+    )
+
+
+def _coarse_localization_frontier_indices(
+    interval_pairs: tuple[tuple[FiniteInterval, FiniteInterval], ...],
+    coarse_outer: FiniteInterval | None,
+) -> tuple[int, ...]:
+    """Keep the non-dominated whole-to-local refinements.
+
+    The coarse pass only identifies two physical neighbourhoods.  Direct
+    observations still own both final coordinates.  Component-wise dominance
+    deliberately avoids a scalar score: equal or crossed alternatives remain
+    discrete answers.
+    """
+
+    if coarse_outer is None or len(interval_pairs) < 2:
+        return tuple(range(len(interval_pairs)))
+    distances = tuple(
+        (
+            _localization_distance(top, coarse_outer.minimum),
+            _localization_distance(bottom, coarse_outer.maximum),
+        )
+        for top, bottom in interval_pairs
+    )
+    retained = []
+    for index, value in enumerate(distances):
+        dominated = any(
+            other_index != index
+            and other[0] <= value[0]
+            and other[1] <= value[1]
+            and other != value
+            for other_index, other in enumerate(distances)
+        )
+        if not dominated:
+            retained.append(index)
+    return tuple(retained)
+
+
 def _scale_interval(interval: FiniteInterval, factor: float) -> FiniteInterval:
     values = (interval.minimum * factor, interval.maximum * factor)
     return FiniteInterval(min(values), max(values))
@@ -356,13 +405,10 @@ class TemplateCrossInput:
     fixed_height_px: FiniteInterval | PositiveInterval | float | None = None
     canonical_fixed_height_px: float | None = None
     holder_short_axis_center_px: FiniteInterval | float | None = None
+    coarse_outer_interval_px: FiniteInterval | None = None
     lane_reference_trace_px: float = 0.0
     top_bindings: tuple[CrossRoleBinding, ...] = ()
     bottom_bindings: tuple[CrossRoleBinding, ...] = ()
-    top_runs: tuple[ProfileRun, ...] = ()
-    bottom_runs: tuple[ProfileRun, ...] = ()
-    top_observations: tuple[PhotoBoundaryObservation, ...] = ()
-    bottom_observations: tuple[PhotoBoundaryObservation, ...] = ()
     registered_trace_coordinates_px: tuple[int, ...] = ()
     longitudinal_support_domains_px: tuple[FiniteInterval, ...] = ()
     boundary_axis: BoundaryAxis = BoundaryAxis.Y
@@ -401,6 +447,12 @@ class TemplateCrossInput:
                 raise ValueError("fixed height contradicts template frame height")
         if self.holder_short_axis_center_px is not None:
             object.__setattr__(self, "holder_short_axis_center_px", _interval(self.holder_short_axis_center_px))
+        if self.coarse_outer_interval_px is not None:
+            if (
+                not isinstance(self.coarse_outer_interval_px, FiniteInterval)
+                or self.coarse_outer_interval_px.width <= 0.0
+            ):
+                raise ValueError("cross coarse localization is invalid")
         if not math.isfinite(float(self.lane_reference_trace_px)):
             raise ValueError("lane reference trace must be finite")
         if self.boundary_axis not in {BoundaryAxis.X, BoundaryAxis.Y}:

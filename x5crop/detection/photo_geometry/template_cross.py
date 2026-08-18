@@ -5,10 +5,7 @@ from __future__ import annotations
 from bisect import bisect_left
 from dataclasses import replace
 import math
-from typing import Sequence
-
-from ...domain import FiniteInterval, ObservationId
-from .line_observations import PhotoBoundaryObservation
+from ...domain import FiniteInterval
 from .model import (
     BoundaryAxis,
     BoundaryRole,
@@ -16,7 +13,6 @@ from .model import (
     SPATIAL_SUPPORT_REGION_COUNT,
 )
 from .output_model import OutputBoundaryUse
-from .observation_types import ProfileRun
 from .template_cross_candidates import (
     _covers_template_domains,
     _direct_candidate,
@@ -35,116 +31,14 @@ from .template_cross_model import (
     CrossSearchReceipt,
     TemplateCrossInput,
     _add,
+    _coarse_localization_frontier_indices,
     _intersect,
     _midpoint_interval,
-    _observation_coordinate,
-    _observation_direction,
 )
 from .template_cross_support import (
     SupportFitStatus,
     fit_enclosing_support,
 )
-
-
-def _coerce_bindings(
-    direct: Sequence[CrossRoleBinding],
-    runs: Sequence[ProfileRun],
-    observations: Sequence[PhotoBoundaryObservation],
-    *,
-    lane_reference_trace_px: float,
-    boundary_axis: BoundaryAxis,
-) -> tuple[CrossRoleBinding, ...]:
-    values = list(direct)
-    used: set[ObservationId] = {item.observation_id for item in values}
-    if runs:
-        for run in runs:
-            if any(item.run_id == run.run_id for item in values):
-                continue
-            matches = tuple(
-                observation
-                for observation in observations
-                if observation.observation_id not in used
-                and (
-                    observation.observation_id == ObservationId(run.run_id)
-                    or set(map(str, run.transition_ids)).intersection(
-                        map(str, observation.transition_ids)
-                    )
-                )
-            )
-            if not matches and len(observations) == 1:
-                matches = observations
-            if len(matches) != 1:
-                continue
-            observation = matches[0]
-            values.append(
-                CrossRoleBinding.from_measurement(
-                    run,
-                    observation,
-                    lane_reference_trace_px=lane_reference_trace_px,
-                    boundary_axis=boundary_axis,
-                )
-            )
-            used.add(observation.observation_id)
-    if observations and not runs:
-        for observation in observations:
-            if observation.observation_id in used:
-                continue
-            role = getattr(observation, "role", None)
-            if role not in {BoundaryRole.TOP, BoundaryRole.BOTTOM}:
-                continue
-            canonical, direction = _observation_direction(observation)
-            values.append(
-                CrossRoleBinding(
-                    role=role,
-                    run_id=f"observation:{observation.observation_id}",
-                    observation_id=observation.observation_id,
-                    coordinate_interval_px=_observation_coordinate(
-                        observation,
-                        lane_reference_trace_px=lane_reference_trace_px,
-                        boundary_axis=boundary_axis,
-                    ),
-                    fit_residual_px=float(observation.fit_residual_px),
-                    canonical_direction_degrees=canonical,
-                    fit_direction_interval_degrees=getattr(
-                        observation,
-                        "fit_angle_interval_degrees",
-                        None,
-                    ),
-                    full_direction_interval_degrees=direction,
-                    independent_support_region_count=int(
-                        getattr(observation, "independent_support_region_count", 0)
-                    ),
-                    source_spanning_continuous=bool(
-                        getattr(observation, "source_spanning_continuous", False)
-                    ),
-                    role_authorized=(
-                        float(
-                            getattr(
-                                observation,
-                                (
-                                    "left_background_preference_fraction"
-                                    if role == BoundaryRole.TOP
-                                    else "right_background_preference_fraction"
-                                ),
-                                0.0,
-                            )
-                        )
-                        > 0.5
-                    ),
-                )
-            )
-            used.add(observation.observation_id)
-    by_identity: dict[ObservationId, CrossRoleBinding] = {}
-    for item in values:
-        if item.observation_id in by_identity:
-            raise ValueError("cross observation registered more than once")
-        by_identity[item.observation_id] = item
-    return tuple(
-        sorted(
-            by_identity.values(),
-            key=lambda item: (item.coordinate_interval_px.center, str(item.observation_id)),
-        )
-    )
 
 
 def _receipt(
@@ -174,20 +68,8 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
 
     if not isinstance(inputs, TemplateCrossInput):
         raise TypeError("fit_template_cross requires TemplateCrossInput")
-    top = _coerce_bindings(
-        inputs.top_bindings,
-        inputs.top_runs,
-        inputs.top_observations,
-        lane_reference_trace_px=inputs.lane_reference_trace_px,
-        boundary_axis=inputs.boundary_axis,
-    )
-    bottom = _coerce_bindings(
-        inputs.bottom_bindings,
-        inputs.bottom_runs,
-        inputs.bottom_observations,
-        lane_reference_trace_px=inputs.lane_reference_trace_px,
-        boundary_axis=inputs.boundary_axis,
-    )
+    top = inputs.top_bindings
+    bottom = inputs.bottom_bindings
     if any(item.role != BoundaryRole.TOP for item in top):
         raise ValueError("top registration contains a non-top role")
     if any(item.role != BoundaryRole.BOTTOM for item in bottom):
@@ -195,12 +77,7 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
     all_ids = tuple(item.observation_id for item in (*top, *bottom))
     if len(set(all_ids)) != len(all_ids):
         raise ValueError("cross observation registered more than once")
-    registered_run_ids = {
-        *(run.run_id for run in inputs.top_runs),
-        *(run.run_id for run in inputs.bottom_runs),
-        *(item.run_id for item in top),
-        *(item.run_id for item in bottom),
-    }
+    registered_run_ids = {item.run_id for item in (*top, *bottom)}
     registered_runs = len(registered_run_ids)
     fitted_observations = len(all_ids)
     empty_receipt = lambda: _receipt(
@@ -258,15 +135,22 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
         # When aperture closure is absent, one-sided, or discretely ambiguous,
         # only non-aperture outer supports may form one uniform enclosing pair.
         # The two boundary meanings are never mixed within one output.
+        # Boundary meaning belongs to the selected pair, not to a raw line.
+        # A photo-authorized edge may also be one side of a larger, directly
+        # observed support rectangle, but only after aperture fitting has
+        # reduced to one-sided inference.  While two-sided aperture answers
+        # still compete, reinterpreting their outermost edges as one support
+        # pair would silently hull distinct placements.
+        allow_photo_lines = not any(item.direct_pair for item in candidates)
         support_top = (
-            tuple(item for item in top if not item.role_authorized)
-            if direct_candidates
-            else top
+            top
+            if allow_photo_lines
+            else tuple(item for item in top if not item.role_authorized)
         )
         support_bottom = (
-            tuple(item for item in bottom if not item.role_authorized)
-            if direct_candidates
-            else bottom
+            bottom
+            if allow_photo_lines
+            else tuple(item for item in bottom if not item.role_authorized)
         )
         competition = fit_enclosing_support(
             template=inputs.template,
@@ -279,6 +163,7 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
             longitudinal_support_domains_px=inputs.longitudinal_support_domains_px,
             minimum_shared_trace_support=inputs.minimum_shared_trace_support,
             maximum_evaluated_candidates=inputs.maximum_evaluated_fits,
+            coarse_outer_interval_px=inputs.coarse_outer_interval_px,
         )
         support_competition = competition
         if competition.status != SupportFitStatus.RESOLVED or competition.best is None:
@@ -707,6 +592,17 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
     direct_candidates_for_selection = tuple(item for item in candidates if item.direct_pair)
     if direct_candidates_for_selection:
         candidates = list(direct_candidates_for_selection)
+    localized_indices = _coarse_localization_frontier_indices(
+        tuple(
+            (
+                item.top_full_override or item.top.full_interval_px,
+                item.bottom_full_override or item.bottom.full_interval_px,
+            )
+            for item in candidates
+        ),
+        inputs.coarse_outer_interval_px,
+    )
+    candidates = [candidates[index] for index in localized_indices]
     groups = _group_candidates(candidates)
     representative_fits = tuple(
         _fit_from_group(
@@ -734,12 +630,36 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
             for binding in item.direct_bindings
         )
 
+    def has_coarse_localized_direct_pair(item: CrossFit) -> bool:
+        """Whole-strip localization plus direct local refinement is authority.
+
+        The aggregate coarse observation does not supply either final edge.
+        It only proves which physical neighbourhood the two role-authorized
+        local lines refine.  Both lines still need independent local support
+        and a directly compatible pair.  Crossed or equal Pareto alternatives
+        were retained above and therefore remain unresolved here.
+        """
+
+        return (
+            inputs.coarse_outer_interval_px is not None
+            and item.direct_pair
+            and item.shared_trace_support_count
+            >= inputs.minimum_shared_trace_support
+            and all(
+                binding.role_authorized
+                and binding.independent_support_region_count
+                >= MINIMUM_INDEPENDENT_SUPPORT_REGIONS
+                for binding in item.direct_bindings
+            )
+        )
+
     authoritative = tuple(
         item
         for item in representative_fits
         if (
             has_role_authorized_pair(item)
             or has_source_spanning_direct_side(item)
+            or has_coarse_localized_direct_pair(item)
             or (
                 not item.direct_pair
                 and item.independent_support_region_count

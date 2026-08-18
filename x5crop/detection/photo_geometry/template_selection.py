@@ -67,14 +67,26 @@ def select_lane_template_placement(
             failure_fact(GateGap.PRODUCER_BOUND_EXCEEDED),
         )
     if phase.status != PhaseFitStatus.RESOLVED or phase.best is None:
+        phase_gap = {
+            PhaseFailureKind.DIRECT_PHASE_ANCHOR_UNAVAILABLE: (
+                GateGap.PHASE_ANCHOR_UNAVAILABLE
+            ),
+            PhaseFailureKind.FIXED_TEMPLATE_MISMATCH: (
+                GateGap.PHASE_TEMPLATE_MISMATCH
+            ),
+            PhaseFailureKind.DISCRETE_PHASE_AMBIGUOUS: (
+                GateGap.PHASE_PLACEMENT_AMBIGUOUS
+            ),
+            PhaseFailureKind.LOCAL_ADVANCE_AMBIGUOUS: (
+                GateGap.LOCAL_ADVANCE_UNRESOLVED
+            ),
+        }.get(phase.failure_kind, GateGap.PHASE_TEMPLATE_MISMATCH)
         return TemplatePlacementCompetition(
             placements, None,
             None if runner_up is None else runner_up.placement_id,
             EvidenceState.UNAVAILABLE,
             failure_fact(
-                GateGap.LOCAL_ADVANCE_UNRESOLVED
-                if phase.failure_kind == PhaseFailureKind.LOCAL_ADVANCE_AMBIGUOUS
-                else GateGap.SEQUENCE_AUTHORITY_UNAVAILABLE,
+                phase_gap,
                 detail=phase.ambiguity_reason,
             ),
         )

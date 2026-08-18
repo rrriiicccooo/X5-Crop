@@ -120,6 +120,7 @@ def make_transform_assessment(
                     item.observation_id for item in cross_observations
                 ),
                 full_angle_interval_degrees=interval,
+                observed_angle_interval_degrees=interval,
                 canonical_angle_degrees=min(
                     interval.maximum,
                     max(interval.minimum, estimate),

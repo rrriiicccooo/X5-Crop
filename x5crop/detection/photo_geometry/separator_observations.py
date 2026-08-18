@@ -6,7 +6,7 @@ import math
 
 import numpy as np
 
-from ...domain import FiniteInterval, ObservationId
+from ...domain import FiniteInterval, ObservationId, PositiveInterval
 from ...run_local_identity import run_local_id
 from .model import (
     BoundaryAxis,
@@ -83,6 +83,7 @@ def _separator_band_from_edges(
     transitions: dict[str, PhotoBoundaryTransition],
     field: PhotoBoundaryMeasurementField,
     boundary_axis: BoundaryAxis,
+    frame_width_px: PositiveInterval,
 ) -> SeparatorBandObservation | None:
     """Build one directly observed band from two physical edge families."""
 
@@ -114,6 +115,11 @@ def _separator_band_from_edges(
             - left.fit_position_interval_px.minimum,
         ),
     )
+    if gap.maximum >= frame_width_px.minimum:
+        # A region that can contain a complete format frame is not one
+        # adjacency's separator material.  It may be coarse support or an
+        # unresolved missing-frame region, but it cannot bind END -> START.
+        return None
     left_run = runs_by_id[left.run_id]
     right_run = runs_by_id[right.run_id]
     material = _separator_core_material(
@@ -250,12 +256,15 @@ def build_format_separator_bands(
     transitions: dict[str, PhotoBoundaryTransition],
     field: PhotoBoundaryMeasurementField,
     boundary_axis: BoundaryAxis,
+    frame_width_px: PositiveInterval,
 ) -> tuple[SeparatorBandObservation, ...]:
     """Verify adjacent dark-valley edge families as separator material.
 
     Format gap priors never filter observations.  A normal, very wide or
     otherwise abnormal directly visible black band enters the same material
-    measurement; placement authority is assigned only after role binding.
+    measurement while it remains narrower than one complete format frame.
+    A region wide enough to contain a frame cannot prove one adjacency.
+    Placement authority is assigned only after role binding.
     The two edges must be neighbours on a trace. Skipping over another
     transition would turn photo content or several structures into one false
     separator and creates quadratic work.
@@ -272,6 +281,8 @@ def build_format_separator_bands(
     )
     if len(ordered) < 2:
         return ()
+    if not isinstance(frame_width_px, PositiveInterval):
+        raise TypeError("separator frame-width authority must be positive")
     runs_by_id = {run.run_id: run for run in profile.runs}
     edges_by_run_id = {edge.run_id: edge for edge in ordered}
     candidate_pairs: set[tuple[str, str]] = set()
@@ -291,14 +302,24 @@ def build_format_separator_bands(
 
     values: dict[str, SeparatorBandObservation] = {}
     for left_run_id, right_run_id in sorted(candidate_pairs):
+        left_edge = edges_by_run_id[left_run_id]
+        right_edge = edges_by_run_id[right_run_id]
+        maximum_gap = max(
+            0.0,
+            right_edge.fit_position_interval_px.maximum
+            - left_edge.fit_position_interval_px.minimum,
+        )
+        if maximum_gap >= frame_width_px.minimum:
+            continue
         candidate = _separator_band_from_edges(
-            edges_by_run_id[left_run_id],
-            edges_by_run_id[right_run_id],
+            left_edge,
+            right_edge,
             profile=profile,
             runs_by_id=runs_by_id,
             transitions=transitions,
             field=field,
             boundary_axis=boundary_axis,
+            frame_width_px=frame_width_px,
         )
         if candidate is not None:
             values[str(candidate.observation_id)] = candidate

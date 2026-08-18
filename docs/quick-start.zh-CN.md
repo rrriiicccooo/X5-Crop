@@ -1,11 +1,11 @@
-# X5 Crop 快速启动
+# X5 Crop V5 快速启动（开发预览）
 
-当前公开稳定版是 v4.2.8；本仓库中的 V5 尚未发布。请从 GitHub Releases 下载
-`X5-Crop-vX.X.zip`，不要使用自动生成的 Source code 压缩包。
+本文只适用于仓库 `main` 的未发布 V5 开发源码。当前公开稳定版仍是 v4.2.8；普通用户请下载
+Release 包并阅读包内随附的 v4.2.8 文档，不要把本文中的 V5 命令用于稳定版。
 
 ## 1. 安装
 
-解压发布包后运行对应安装器：
+取得完整仓库源码后，在仓库根目录运行对应安装器：
 
 - macOS：`install/X5_Crop_Mac_install.command`
 - Windows：`install/X5_Crop_win_install.bat`
@@ -15,7 +15,7 @@
 
 ## 2. 放入 TIFF 并启动
 
-把受支持的 X5 扫描 TIFF 与启动器放在同一文件夹：
+把受支持的 X5 扫描 TIFF 与 V5 启动器放在同一文件夹：
 
 - macOS：双击 `X5_Crop_Mac.command`
 - Windows：双击 `X5_Crop_win.bat`
@@ -34,6 +34,9 @@ python3 X5_Crop.py /path/to/scans --format 120-66 --count 2
 
 Count 包括中间空白曝光格。程序不从文件名或画面猜张数，也不删除空白格。`135-dual` 的默认值是
 12（每 lane 6）；明确输入其它值会进入人工检查，不猜两条 lane 的分配。
+
+交互模式对所有 format 都会询问 count。直接回车表示确认匹配片夹的默认值；`135-dual` 也允许
+输入其它数字，但除 12 外都会安全进入人工检查。
 
 `--layout auto` 会判断水平或垂直扫描，也可明确指定。V5 接受受支持无损压缩的单页 16-bit RGB
 TIFF；完整输入合同见[中文用户手册](user-guide.zh-CN.md)。

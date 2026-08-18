@@ -72,10 +72,9 @@ holder extent：物理名义范围 ±3.5%
 - `PhotoGroupOuter`：从已选 placement 的 first start 与 last end 推导的长轴范围；不反向参与选位。
 - `OutputFootprint`：联合不确定性、直线残差和产品 bleed 后真正需要从原图采样的区域。
 
-这些是物理词汇，不额外建立平行 runtime type：`CoarseStripSupport` 由 source/lane authority 与
-scan-canvas facts 表达，role-free `OuterBoundaryObservation` 使用 `BoundaryEdgeObservation`，
-模板绑定后的 `PhotoBoundaryAnchor` 保存在 sequence/cross provenance，`CanonicalPlacement` 使用
-`FormatPlacement`。
+这些词汇只映射到一套 current type：`CoarseStripSupport` 保存 role-free aggregate observation，
+`OuterBoundaryObservation` 使用 `BoundaryEdgeObservation`，模板绑定后的 `PhotoBoundaryAnchor` 保存在
+sequence/cross provenance，`CanonicalPlacement` 使用 `FormatPlacement`。不再建立同义 wrapper。
 
 项目无需把非照片外侧支撑继续分类为 holder edge 或 film edge；两者都只能提供 coarse support，
 或在满足完整 enclosing 合同时成为输出边界。同一 raw observation 可以承担多个职责，但 identity
@@ -98,11 +97,11 @@ scan-canvas facts 表达，role-free `OuterBoundaryObservation` 使用 `Boundary
 V5 吸收 v4.2.8 的有效行为，不复制其代码、分数、Grid fallback 或 content equal-split：
 
 ```text
-CoarseStripSupport
-→ format/count/holder 编译固定模板和有限查询
-→ region/band-first 粗定位
-→ 理论 outer/separator corridor
-→ 已注册像素上的一次有界局部精修
+format/count/holder 编译固定模板、coarse intents 与工作上界
+→ 两个 role-free 全片 aggregate query 建立 CoarseStripSupport
+→ coarse support 与固定 lattice 生成有限理论窗口
+→ 全部精测窗口一次登记、一次读取
+→ region/band-first observation 与局部边界拟合
 → residual pattern
 → placement closure
 ```
@@ -114,12 +113,19 @@ CoarseStripSupport
 - phase、role、cross、placement、像素与内存上界；
 - 正常快车道停止条件。
 
-所有可能被选中位置使用的像素查询必须提前登记。局部 refinement 只能读取同一批 registered
-measurement 中理论边界附近的窗口；不能为某个 candidate 重读 TIFF、扩张全图搜索或 winner-specific
-requery。
+Coarse pass 对每个 lane 只执行一个长轴和一个短轴 aggregate query，输出保守 interval 和 receipt；
+它没有角色、ordinal 或 geometry authority。Long-axis precision 使用固定 lattice 在两个有限 origin
+上生成互不重叠的理论窗口；没有 direct coarse observation 时才退回一个保守全长窗口。所有可能被
+选中位置使用的精测查询随后一次登记、一次读取；不能为某个 candidate 重读 TIFF、扩张全图搜索或
+winner-specific requery。
+
+同一 trace lattice 只建立一次全局 normalization baseline，再由理论窗口切出局部测量。Baseline
+不产生 transition 或 placement evidence；其像素和临时内存仍完整计入 receipt，不能伪装成免费工作。
 
 正常片条在 outer、direction、phase/pitch、separator topology、闭环、content 和输出预算均唯一且
-相容时立即停止。继续寻找更多弱边只会增加内部内容线、灰尘和片夹纹理。
+相容时停止。Registered measurement 仍保持 candidate-independent；“停止”表示不再开放 local
+advance、额外 fit pass 或新 hypothesis，不是按 winner 临时少登记查询。普通 gap residual 已由正常
+bleed 覆盖时只保留诊断事实，不增加自由度。
 
 ## 6. Observation 与独立证据
 
@@ -231,9 +237,10 @@ SharedStripDirection` 编译为全部固定 frame。之后检查：
 - first/last、separator、top/bottom 和总跨度闭环；
 - 双 lane 的共享尺度、方向与 slot identity 相容。
 
-选择只使用 typed hard facts 和证据职责，不使用加权总分、confidence 补偿、top-K、Pareto 票数或
-样片/format 特判。同一答案的小区间是一份 placement；不同坐标、ordinal、boundary use 或
-sampling footprint 是离散竞争。不能明显分胜负就 review。
+选择只使用 typed hard facts 和证据职责，不使用加权总分、confidence 补偿、top-K、投票或
+样片/format 特判。同一 template identity、integer offset、local topology 与独立物理 support 下，
+相交的 role interval 是一个连续 placement；不同坐标、ordinal、非等价 observation binding、
+boundary use 或 sampling footprint 是离散竞争。不能明显分胜负就 review。
 
 `PhotoGroupOuter` 只在 selection 后生成。`HolderFillAssessment` 逐侧计算 outer 与 lane authority
 之间的空余，并仅用 W 判断：
@@ -300,8 +307,9 @@ deskew、transform 和 sampling。它不选择 geometry，也不创建最终文�
 - `transform_sampling_unavailable`
 
 普通 report 只保存输入、holder/count authority、最终选择、OutputFootprint、预算、根因、输出文件
-和必要 TIFF 事实。完整 observations、alignment residual、winner/runner、direct/inferred ledger、
-content veto 和工作量只属于显式 Debug Analysis 或 verifier。
+和必要 TIFF 事实。每个阻止事实同时给出最小缺失事实、恢复类别和建议操作。完整 observations、
+alignment residual、winner/runner、direct/inferred ledger、content veto 和工作量只属于显式 Debug
+Analysis 或 verifier。
 
 Debug Analysis 只读取同一次 runtime facts，不重算几何、不改变决定、不写正式 TIFF。它必须展示：
 
@@ -340,8 +348,14 @@ startup/import → TIFF decode → gray/coarse support
 → sampling → TIFF encode/write → readback → publish
 ```
 
-检测灰度按有界块从原始 RGB 生成；正式输出仍从原始 16-bit RGB 采样。是否优化 detector、sampling
-或 I/O 只由这份阶段证据决定。
+Detector 只消费 8-bit gray、稀疏 aggregate profile 与有界局部窗口；正式输出仍从已验证的原始
+16-bit RGB 通过每-frame 反向 affine ROI 采样，不先旋转整张大图。是否继续拆分 decode、优化
+detector、sampling 或 I/O 只由阶段证据决定。
+
+开发用 measurement replay 只保存 source SHA、format/count/holder、measurement revision、物理与
+plan identity、精确 phase/cross 输入及 coverage receipt。它可以在不重读 TIFF 的情况下复跑纯 solver
+并比较答案与 provenance；不能携带 reference、进入 production 或成为 fallback。v4.2.8 对照工具
+同样只比较行为，九张用户确认黄金始终是唯一 reference。
 
 正式输入限于单页 unsigned 16-bit、RGB 三通道、contiguous TIFF；压缩接受 `NONE`、`LZW`、
 `DEFLATE` / `ADOBE_DEFLATE` 或 `ZSTD`。Orientation 1–8 在 decode boundary 规范化，输出写
@@ -361,7 +375,8 @@ Pillow 只在 Debug Analysis 时延迟导入。生产默认 `--jobs 1`、上限 
 |---|---|
 | `x5crop/formats/` | 固定 W/H、容差、gap 搜索先验、holder count 与输出保护常量 |
 | `x5crop/configuration/`、`x5crop/runtime/` | format/count 输入、matched-holder resolution 与 source workflow |
-| `x5crop/detection/source_core.py`、`evidence/scan_canvas.py` | source/lane authority 与 coarse support |
+| `x5crop/detection/source_core.py`、`evidence/scan_canvas.py` | source/lane 与 matched-holder authority |
+| `photo_geometry/coarse_strip_support.py` | 两个 role-free aggregate query、粗片带 interval 与 receipt |
 | `photo_geometry/template_measurement_plan*.py` | pixel-free 模板、有限 query intents、停止与工作上界 |
 | `photo_geometry/registered_*.py`、`observations.py`、`separator_*.py` | 一次性 measurement、role-free edge 与 material band |
 | `photo_geometry/source_geometry.py`、`joint_axis_geometry.py` | source 共享 W/H/scale authority |
@@ -386,6 +401,7 @@ Pillow 只在 Debug Analysis 时延迟导入。生产默认 `--jobs 1`、上限 
   challenge 从安全 review 变为正确批准是改进。
 - 111-source diagnostic 只证明不崩溃、工作量有界、报告闭合和 TIFF 工程合同，不证明几何正确。
 - 24-source performance 只证明其绑定 commit、依赖和机器上的完整路径时间与资源。
-- 合成和变形合同覆盖平移、缩放、旋转、亮度、轻微弯曲、缺边、单次 gap、强内部假边、填充状态、
-  dual lane、联合安全预算和 source-wide 事务。
+- 合成和变形合同覆盖 coarse support 的统一边框、翻转、横竖转置和亮度/对比度，phase 的平移、缩放
+  与 fractional pitch，deskew 的横竖方向，轻微直线 residual、缺边、wide/narrow 单次 gap、contact
+  review、强内部假边、填充状态、dual lane、联合安全预算和 source-wide 事务。
 - 全部 release receipt 必须绑定同一最终 commit；否则 V5 不创建 RC、tag、Release 或公开 ZIP。

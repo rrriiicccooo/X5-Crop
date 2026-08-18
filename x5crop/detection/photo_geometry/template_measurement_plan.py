@@ -11,6 +11,7 @@ from ...formats import (
     FRAME_DIMENSION_TOLERANCE_SPEC,
     FormatSpec,
     FramePhysicalSpec,
+    OUTPUT_PROTECTION_SPEC,
 )
 from ..evidence.scan_canvas import CanvasAxisScaleIntervals
 from ..source_core import SourceStripValidationDomain
@@ -31,14 +32,12 @@ from .template_measurement_plan_model import (
     TemplateCrossBounds,
     TemplateMeasurementInputs,
     TemplateMeasurementPlan,
-    TemplateNormalPathStopFacts,
     TemplatePhaseBounds,
     TemplatePixelBounds,
     TemplatePlacementBounds,
     TemplateProjectedQueryPlan,
     TemplateQueryIntent,
     TemplateRoleBounds,
-    TemplateStopFact,
     TemplateWorkBounds,
 )
 from .template_model import PhaseLatticeAuthority, TemplateSpec
@@ -49,15 +48,13 @@ def compile_template_measurement_plan(
     frame_spec: FramePhysicalSpec,
     count: int,
     full_count: int,
-    holder_full_count: int | None = None,
+    holder_full_count: int,
     lane_authority: SourceStripValidationDomain,
     layout: str,
     scale_authority: CanvasAxisScaleIntervals,
 ) -> TemplateMeasurementPlan:
     """Compile one fixed-format plan without touching pixels."""
 
-    if holder_full_count is None:
-        holder_full_count = full_count
     inputs = TemplateMeasurementInputs(
         format_spec=format_spec,
         frame_spec=frame_spec,
@@ -166,16 +163,6 @@ def compile_template_measurement_plan(
     )
     if 2 * inputs.count > phase_bounds.max_role_count:
         raise ValueError("template phase role bound overflow")
-    facts = (
-        TemplateStopFact.FIXED_FORMAT_TEMPLATE,
-        TemplateStopFact.DIRECT_PHASE_EVIDENCE_REQUIRED,
-        TemplateStopFact.REGISTERED_QUERY_SET_COMPLETE,
-        TemplateStopFact.NO_PIXEL_ACCESS_DURING_COMPILE,
-    )
-    stop_facts = TemplateNormalPathStopFacts(
-        requires_direct_phase_evidence=True,
-        facts=facts,
-    )
     plan_identity = _stable_identity(
         "template-plan",
         physical_identity,
@@ -228,7 +215,6 @@ def compile_template_measurement_plan(
         placement_bounds=placement_bounds,
         pixel_bounds=pixel_bounds,
         work_bounds=work_bounds,
-        normal_path_stop_facts=stop_facts,
         physical_identity=physical_identity,
         plan_identity=plan_identity,
         compile_receipt=receipt,
@@ -317,6 +303,9 @@ def _project_queries(
     short_authority = FiniteInterval(float(short_min), float(short_max - 1))
     center = centered_short_axis_authority_px(short_authority, short_scale)
     halo = spec.measurement_halo_px(short_scale.maximum)
+    enclosing_extra = (
+        OUTPUT_PROTECTION_SPEC.maximum_enclosing_support_height_ratio - 1.0
+    ) * frame_height_px.maximum / 2.0
     top = _clip_interval(
         FiniteInterval(
             center.minimum - frame_height_px.maximum / 2.0,
@@ -334,12 +323,18 @@ def _project_queries(
         float(short_max - 1),
     )
     top_measured = _clip_interval(
-        FiniteInterval(top.minimum - halo, top.maximum + halo),
+        FiniteInterval(
+            top.minimum - halo - enclosing_extra,
+            top.maximum + halo,
+        ),
         float(short_min),
         float(short_max - 1),
     )
     bottom_measured = _clip_interval(
-        FiniteInterval(bottom.minimum - halo, bottom.maximum + halo),
+        FiniteInterval(
+            bottom.minimum - halo,
+            bottom.maximum + halo + enclosing_extra,
+        ),
         float(short_min),
         float(short_max - 1),
     )
@@ -391,6 +386,34 @@ def _query_intents(
         max(0.10, min(frame_spec.frame_width_mm, frame_spec.frame_height_mm) * 0.02),
     )
     intents: list[TemplateQueryIntent] = []
+    for kind, axis in (
+        (MeasurementIntentKind.COARSE_LONG_SUPPORT, MeasurementAxis.LONG),
+        (MeasurementIntentKind.COARSE_SHORT_SUPPORT, MeasurementAxis.SHORT),
+    ):
+        intents.append(
+            TemplateQueryIntent(
+                intent_id=f"{physical_identity}:{kind.value}",
+                kind=kind,
+                axis=axis,
+                coordinate_unit=MeasurementUnit.LANE_RATIO,
+                coordinate_positions=(FiniteInterval(0.0, 1.0),),
+                trace_unit=MeasurementUnit.LANE_RATIO,
+                trace_positions=(
+                    FiniteInterval.exact(0.1),
+                    FiniteInterval.exact(0.3),
+                    FiniteInterval.exact(0.5),
+                    FiniteInterval.exact(0.7),
+                    FiniteInterval.exact(0.9),
+                ),
+                search_margin_mm=margin,
+                expected_span_mm=FiniteInterval.exact(
+                    frame_spec.frame_width_mm
+                    if axis == MeasurementAxis.LONG
+                    else frame_spec.frame_height_mm
+                ),
+                registration_index=len(intents),
+            )
+        )
     for kind, positions in sequence_positions:
         intents.append(
             TemplateQueryIntent(
@@ -436,7 +459,8 @@ def _bounds_for_lane(
     # Current measurement can use many lattice traces under the six compiled
     # intents, but it must still remain bounded by source dimensions before
     # any candidate exists.
-    coordinate_upper_bound = work_box.width * work_box.height * 16
+    source_pixels = work_box.width * work_box.height
+    coordinate_upper_bound = source_pixels * 16
     if coordinate_upper_bound <= 0 or coordinate_upper_bound > MAX_PIXEL_COORDINATES:
         raise ValueError("template pixel work bound exceeded")
     work_units = (
@@ -453,7 +477,8 @@ def _bounds_for_lane(
         max_registered_queries=MAX_REGISTERED_QUERIES,
         max_trace_positions=2 * (work_box.width + work_box.height),
         max_coordinate_samples=coordinate_upper_bound,
-        max_peak_temporary_bytes=coordinate_upper_bound * 10 + 32 * 1024 * 1024,
+        max_pixel_queries=source_pixels * 128,
+        max_peak_temporary_bytes=source_pixels * 10 + 32 * 1024 * 1024,
     )
     return pixel, TemplateWorkBounds(
         max_query_intents=query_count,

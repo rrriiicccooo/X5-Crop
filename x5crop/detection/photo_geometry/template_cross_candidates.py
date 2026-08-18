@@ -157,7 +157,7 @@ def _direct_candidate(
     if height is None or shift is None:
         return None
     support_traces = _shared_trace_coordinates(top, bottom)
-    if not support_traces:
+    if len(support_traces) < minimum_shared_trace_support:
         return None
     direction, direction_ready, contradiction = _direction_closure(top, bottom)
     if contradiction:
@@ -211,20 +211,27 @@ def _single_candidate(
         )
         if _intersect(binding.full_interval_px, expected_side) is None:
             return None
-        # Holder centre is compatibility only.  Keep the direct side as the
-        # measured interval and propagate the opposite side from that edge
-        # with the fixed physical H interval.
+        # Holder centre and the complete physical H interval are compatibility
+        # facts only.  Once this placement is selected, the fixed canonical H
+        # owns the inferred side; propagating the complete search interval into
+        # output safety would manufacture placements that were never selected.
         direct_center = binding.full_interval_px.center
         if binding.role == BoundaryRole.TOP:
             canonical_top = direct_center
             canonical_bottom = direct_center + canonical_height_px
             top_full = binding.full_interval_px
-            bottom_full = _add(binding.full_interval_px, fixed_height)
+            bottom_full = _add(
+                binding.full_interval_px,
+                FiniteInterval.exact(canonical_height_px),
+            )
         else:
             canonical_bottom = direct_center
             canonical_top = direct_center - canonical_height_px
             bottom_full = binding.full_interval_px
-            top_full = _subtract(binding.full_interval_px, fixed_height)
+            top_full = _subtract(
+                binding.full_interval_px,
+                FiniteInterval.exact(canonical_height_px),
+            )
         return _Candidate(
             top=binding,
             bottom=binding,
@@ -247,12 +254,18 @@ def _single_candidate(
         top = binding
         bottom = binding
         top_full = binding.full_interval_px
-        bottom_full = _add(top_full, fixed_height)
+        bottom_full = _add(
+            top_full,
+            FiniteInterval.exact(canonical_height_px),
+        )
     else:
         top = binding
         bottom = binding
         bottom_full = binding.full_interval_px
-        top_full = _subtract(bottom_full, fixed_height)
+        top_full = _subtract(
+            bottom_full,
+            FiniteInterval.exact(canonical_height_px),
+        )
     shift = top_full
     midpoint = _midpoint_interval(top_full, bottom_full)
     center_interval = _intersect(midpoint, center) if center is not None else midpoint
@@ -444,6 +457,10 @@ def _direction_for(
         # be extrapolated over the complete source.  When both physical sides
         # span the domain, both intervals remain in the safety hull.
         full_angle_interval_degrees=safety,
+        observed_angle_interval_degrees=FiniteInterval(
+            min(item.minimum for item in full_intervals if item is not None),
+            max(item.maximum for item in full_intervals if item is not None),
+        ),
         canonical_angle_degrees=canonical,
     )
 
@@ -758,6 +775,10 @@ def _group_direction(
         direction_id="template-cross-direction:" + ":".join(map(str, identities)),
         selected_observation_ids=identities,
         full_angle_interval_degrees=safety,
+        observed_angle_interval_degrees=FiniteInterval(
+            min(interval.minimum for interval in full_intervals),
+            max(interval.maximum for interval in full_intervals),
+        ),
         canonical_angle_degrees=canonical,
     )
 

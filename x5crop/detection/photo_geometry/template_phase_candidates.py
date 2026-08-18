@@ -14,7 +14,6 @@ from .model import BoundaryRole, SPATIAL_SUPPORT_REGION_COUNT
 from .observation_types import BoundaryEdgeObservation, SeparatorBandObservation
 from .template_model import (
     LocalAdvanceRelation,
-    PhaseAnchor,
     PhaseLatticeFit,
     PitchFit,
     SequenceFit,
@@ -70,29 +69,13 @@ def _positive(value: PositiveInterval | FiniteInterval | float | int) -> Positiv
 
 
 def _facts(
-    observations: Sequence[BoundaryEdgeObservation | PhaseAnchor],
+    observations: Sequence[BoundaryEdgeObservation],
     *,
     separator_support_ids: dict[ObservationId, ObservationId] | None = None,
 ) -> tuple[_AnchorFact, ...]:
     separator_support_ids = separator_support_ids or {}
     result: list[_AnchorFact] = []
     for observation in observations:
-        if isinstance(observation, PhaseAnchor):
-            result.append(
-                _AnchorFact(
-                    observation.observation_id,
-                    observation.observation_id,
-                    observation.coordinate_interval_px,
-                    observation.coordinate_interval_px,
-                    observation.role.role_index,
-                    True,
-                    1.0,
-                    0.0,
-                    0,
-                    (observation.role.role,),
-                )
-            )
-            continue
         if not isinstance(observation, BoundaryEdgeObservation):
             raise TypeError("phase input requires typed boundary observations")
         result.append(
@@ -265,7 +248,7 @@ def _expected_polarity(role: TemplateRole) -> int:
 
 
 def _separator_role_authority(
-    observations: Sequence[BoundaryEdgeObservation | PhaseAnchor],
+    observations: Sequence[BoundaryEdgeObservation],
     separator_bands: Sequence[SeparatorBandObservation],
 ) -> dict[ObservationId, frozenset[BoundaryRole]]:
     """Return role facts proved by directly observed separator material.
@@ -335,13 +318,13 @@ def _separator_role_authority(
 
 
 def _with_separator_role_authority(
-    observations: Sequence[BoundaryEdgeObservation | PhaseAnchor],
+    observations: Sequence[BoundaryEdgeObservation],
     separator_bands: Sequence[SeparatorBandObservation],
-) -> tuple[BoundaryEdgeObservation | PhaseAnchor, ...]:
+) -> tuple[BoundaryEdgeObservation, ...]:
     authority = _separator_role_authority(observations, separator_bands)
     if not authority:
         return tuple(observations)
-    values: list[BoundaryEdgeObservation | PhaseAnchor] = []
+    values: list[BoundaryEdgeObservation] = []
     for observation in observations:
         if isinstance(observation, BoundaryEdgeObservation):
             roles = authority.get(observation.observation_id)
@@ -440,11 +423,11 @@ def _match_roles(
             )
         )
 
-    def choice_key(
+    def compatibility_axes(
         role: TemplateRole,
         expected: float,
         item: _AnchorFact,
-    ) -> tuple[object, ...]:
+    ) -> tuple[int, float]:
         return (
             int(
                 not item.qualified_anchor_roles
@@ -452,9 +435,27 @@ def _match_roles(
                 and item.polarity not in {0, _expected_polarity(role)}
             ),
             abs(item.coordinate_px - expected),
-            -item.support_fraction,
-            str(item.observation_id),
         )
+
+    def unique_dominant(
+        values: Sequence[object],
+        axes,
+    ) -> object | None:
+        """Return one physically dominant value, never an ID/strength tie-break."""
+
+        frontier = []
+        for candidate in values:
+            candidate_axes = axes(candidate)
+            dominated = any(
+                all(left <= right + 1.0e-9 for left, right in zip(other_axes, candidate_axes, strict=True))
+                and any(left < right - 1.0e-9 for left, right in zip(other_axes, candidate_axes, strict=True))
+                for other in values
+                if other is not candidate
+                for other_axes in (axes(other),)
+            )
+            if not dominated:
+                frontier.append(candidate)
+        return frontier[0] if len(frontier) == 1 else None
 
     def width_compatible(start: _AnchorFact, end: _AnchorFact) -> bool:
         values = tuple(
@@ -522,13 +523,18 @@ def _match_roles(
                 ):
                     pairs.append((start, end))
         if pairs:
-            start, end = min(
+            selected_pair = unique_dominant(
                 pairs,
-                key=lambda pair: (
-                    choice_key(start_role, start_expected, pair[0]),
-                    choice_key(end_role, end_expected, pair[1]),
+                lambda pair: (
+                    *compatibility_axes(start_role, start_expected, pair[0]),
+                    *compatibility_axes(end_role, end_expected, pair[1]),
                 ),
             )
+            if selected_pair is None:
+                # Two fixed-W interpretations are discrete placements.  This
+                # seed cannot erase one by support, array order, or identity.
+                continue
+            start, end = selected_pair
             used.update((start.observation_id, end.observation_id))
             selected.extend(((start_role, start), (end_role, end)))
             continue
@@ -542,10 +548,12 @@ def _match_roles(
             )
             if not compatible:
                 continue
-            chosen = min(
+            chosen = unique_dominant(
                 compatible,
-                key=lambda item: choice_key(role, expected, item),
+                lambda item: compatibility_axes(role, expected, item),
             )
+            if chosen is None:
+                continue
             if (
                 not chosen.qualified_anchor_roles
                 and has_both_polarities
@@ -862,6 +870,47 @@ def _rank(value: _BoundFit) -> tuple[object, ...]:
     )
 
 
+def _coarse_localization_frontier_indices(
+    candidates: tuple[_BoundFit, ...],
+    coarse_outer: FiniteInterval | None,
+) -> tuple[int, ...]:
+    """Keep phase fits not dominated at both whole-strip outer ends.
+
+    The role-free coarse pass only identifies two neighbourhoods. Every
+    retained coordinate still comes from the fixed-template fit and its
+    directly bound observations. Equal or crossed endpoint alternatives
+    remain discrete placements; no scalar distance or averaging is used.
+    """
+
+    if coarse_outer is None or len(candidates) < 2:
+        return tuple(range(len(candidates)))
+    distances = tuple(
+        (
+            abs(
+                min(item.fit.canonical_role_positions_px)
+                - coarse_outer.minimum
+            ),
+            abs(
+                max(item.fit.canonical_role_positions_px)
+                - coarse_outer.maximum
+            ),
+        )
+        for item in candidates
+    )
+    retained = []
+    for index, value in enumerate(distances):
+        dominated = any(
+            other_index != index
+            and other[0] <= value[0]
+            and other[1] <= value[1]
+            and other != value
+            for other_index, other in enumerate(distances)
+        )
+        if not dominated:
+            retained.append(index)
+    return tuple(retained)
+
+
 def _clear_winner_basis(
     best: _BoundFit,
     runner: _BoundFit,
@@ -895,27 +944,3 @@ def _clear_winner_basis(
     ):
         return PhaseWinnerBasis.RESIDUAL_SEPARATION
     return None
-
-
-def _sampling_equivalent(left: SequenceFit, right: SequenceFit) -> bool:
-    if (
-        left.phase_lattice_fit.integer_slot_offset
-        != right.phase_lattice_fit.integer_slot_offset
-    ):
-        return False
-    tolerance = max(
-        2.0,
-        min(
-            left.pitch_fit.canonical_frame_width_px,
-            right.pitch_fit.canonical_frame_width_px,
-        )
-        * 0.03,
-    )
-    return all(
-        abs(left_value - right_value) <= tolerance
-        for left_value, right_value in zip(
-            left.canonical_role_positions_px,
-            right.canonical_role_positions_px,
-            strict=True,
-        )
-    )

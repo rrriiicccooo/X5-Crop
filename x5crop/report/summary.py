@@ -14,7 +14,7 @@ AUTHORITY_PARTITION = {
     "pixel_observation": "role_free_candidate_independent_measurement",
     "format_physical": "fixed_template_dimensions_pitch_gap_count",
     "selection": "bounded_phase_cross_shared_placement",
-    "safety": "selected_placement_uncertainty_only",
+    "safety": "selected_joint_feasible_states_then_bleed_and_footprint",
 }
 
 
@@ -68,6 +68,20 @@ def photo_geometry_summary(detection: object) -> dict[str, Any]:
             {
                 "lane_id": lane.lane_id,
                 "template_id": lane.prepared.template_spec.template_id,
+                "coarse_strip_support": {
+                    "long_authority": (
+                        lane.prepared.coarse_support.long_axis.authority.value
+                    ),
+                    "short_authority": (
+                        lane.prepared.coarse_support.short_axis.authority.value
+                    ),
+                    "long_interval_px": typed_read_model(
+                        lane.prepared.coarse_support.long_axis.interval_px
+                    ),
+                    "short_interval_px": typed_read_model(
+                        lane.prepared.coarse_support.short_axis.interval_px
+                    ),
+                },
                 "phase_status": lane.prepared.phase_competition.status.value,
                 "cross_status": lane.prepared.cross_competition.status.value,
                 "placement_state": lane.placement_competition.state.value,
@@ -75,6 +89,20 @@ def photo_geometry_summary(detection: object) -> dict[str, Any]:
                     lane.placement_competition.failure
                 ),
                 "template_alignment": {
+                    "path": (
+                        None
+                        if (
+                            lane.prepared.phase_competition.best is None
+                            or alignments[lane.lane_id].pattern.value
+                            == "unresolved"
+                        )
+                        else "local_advance"
+                        if any(
+                            relation.kind.value != "nominal"
+                            for relation in lane.prepared.phase_competition.best.local_advance_relations
+                        )
+                        else "normal"
+                    ),
                     "pattern": alignments[lane.lane_id].pattern.value,
                     "absolute_phase_px": (
                         alignments[lane.lane_id].absolute_phase_px

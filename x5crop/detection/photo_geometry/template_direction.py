@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from statistics import median
 
 from ...domain import FiniteInterval
@@ -11,6 +12,7 @@ from .output_model import OutputBoundaryUse, SharedStripDirection
 from .template_cross_model import CrossEvidence, CrossFit
 from .template_model import SequenceFit
 from .model import SPATIAL_SUPPORT_REGION_COUNT
+from .trace_support import PIXEL_CENTER_HALF_EXTENT_PX
 
 
 def _intersect(left: FiniteInterval, right: FiniteInterval) -> FiniteInterval | None:
@@ -19,11 +21,20 @@ def _intersect(left: FiniteInterval, right: FiniteInterval) -> FiniteInterval | 
     return None if minimum > maximum else FiniteInterval(minimum, maximum)
 
 
+def _hull(*intervals: FiniteInterval) -> FiniteInterval:
+    if not intervals:
+        raise ValueError("direction hull requires at least one interval")
+    return FiniteInterval(
+        min(item.minimum for item in intervals),
+        max(item.maximum for item in intervals),
+    )
+
+
 def _sequence_direction_groups(
     sequence_fit: SequenceFit,
     observations: tuple[BoundaryEdgeObservation, ...],
 ) -> tuple[
-    tuple[float, FiniteInterval, tuple],
+    tuple[float, FiniteInterval, FiniteInterval, tuple],
     ...,
 ]:
     """Return one direction fact per independent physical sequence position.
@@ -61,10 +72,27 @@ def _sequence_direction_groups(
             min(item.fit_direction_interval_degrees.minimum for item in values),
             max(item.fit_direction_interval_degrees.maximum for item in values),
         )
+        quantization = max(
+            math.degrees(
+                math.atan(
+                    PIXEL_CENTER_HALF_EXTENT_PX
+                    / max(
+                        1,
+                        item.trace_coordinates_px[-1]
+                        - item.trace_coordinates_px[0],
+                    )
+                )
+            )
+            for item in values
+        )
         result.append(
             (
                 canonical,
                 fit_interval,
+                FiniteInterval(
+                    fit_interval.minimum - quantization,
+                    fit_interval.maximum + quantization,
+                ),
                 tuple(item.observation_id for item in values),
             )
         )
@@ -122,6 +150,14 @@ def lane_template_direction(
             full_angle_interval_degrees=(
                 anchor.full_direction_interval_degrees
             ),
+            observed_angle_interval_degrees=_hull(
+                anchor.full_direction_interval_degrees,
+                *(
+                    item.full_direction_interval_degrees
+                    for item in cross_fit.direct_bindings
+                    if item.full_direction_interval_degrees is not None
+                ),
+            ),
             canonical_angle_degrees=float(
                 anchor.canonical_direction_degrees
             ),
@@ -138,6 +174,22 @@ def lane_template_direction(
             direct_fit_common = _intersect(direct_fit_common, interval)
             if direct_fit_common is None:
                 break
+    groups = _sequence_direction_groups(sequence_fit, sequence_observations)
+    sequence_interval = None
+    sequence_observed_interval = None
+    sequence_identities: tuple = ()
+    if len(groups) >= 2:
+        sequence_interval = FiniteInterval(
+            float(median(item[1].minimum for item in groups)),
+            float(median(item[1].maximum for item in groups)),
+        )
+        sequence_observed_interval = FiniteInterval(
+            float(median(item[2].minimum for item in groups)),
+            float(median(item[2].maximum for item in groups)),
+        )
+        sequence_identities = tuple(
+            identity for item in groups for identity in item[3]
+        )
     if any(
         item.source_spanning_continuous and item.role_authorized
         for item in cross_fit.direct_bindings
@@ -158,7 +210,34 @@ def lane_template_direction(
         # reducing it to the statistical fit hull can cut a support-aligned
         # corner.  Aperture pairs keep the narrower local-fit hull below.
         if cross_fit.boundary_use == OutputBoundaryUse.ENCLOSING_SUPPORT_PAIR:
-            return cross_direction
+            if sequence_observed_interval is None:
+                return cross_direction
+            identities = tuple(
+                dict.fromkeys(
+                    (
+                        *cross_direction.selected_observation_ids,
+                        *sequence_identities,
+                    )
+                )
+            )
+            return SharedStripDirection(
+                direction_id=run_local_id(
+                    "template-lane-direction",
+                    cross_direction.direction_id,
+                    *(str(identity) for identity in identities),
+                ),
+                selected_observation_ids=identities,
+                full_angle_interval_degrees=(
+                    cross_direction.full_angle_interval_degrees
+                ),
+                observed_angle_interval_degrees=_hull(
+                    cross_direction.observed_angle_interval_degrees,
+                    sequence_observed_interval,
+                ),
+                canonical_angle_degrees=(
+                    cross_direction.canonical_angle_degrees
+                ),
+            )
         if len(direct_fit_intervals) != 2:
             return cross_direction
         straight_residual = FiniteInterval(
@@ -182,20 +261,16 @@ def lane_template_direction(
                 cross_direction.selected_observation_ids
             ),
             full_angle_interval_degrees=straight_residual,
+            observed_angle_interval_degrees=_hull(
+                cross_direction.observed_angle_interval_degrees,
+                straight_residual,
+            ),
             canonical_angle_degrees=canonical,
         )
     if len(cross_fit.direct_bindings) != 2:
         return cross_direction
-    groups = _sequence_direction_groups(sequence_fit, sequence_observations)
-    if len(groups) < 2:
+    if sequence_interval is None or sequence_observed_interval is None:
         return cross_direction
-    sequence_interval = FiniteInterval(
-        float(median(item[1].minimum for item in groups)),
-        float(median(item[1].maximum for item in groups)),
-    )
-    sequence_identities = tuple(
-        identity for item in groups for identity in item[2]
-    )
     if direct_fit_common is not None:
         # Two role-authorized local sides establish one common direction, and
         # independent sequence positions prove that this local closure belongs
@@ -233,6 +308,11 @@ def lane_template_direction(
             ),
             selected_observation_ids=identities,
             full_angle_interval_degrees=common,
+            observed_angle_interval_degrees=_hull(
+                cross_direction.observed_angle_interval_degrees,
+                sequence_observed_interval,
+                common,
+            ),
             canonical_angle_degrees=canonical,
         )
     if _intersect(
@@ -240,21 +320,12 @@ def lane_template_direction(
         cross_direction.full_angle_interval_degrees,
     ) is None:
         raise ValueError("sequence and cross direction evidence are incompatible")
-    # Cross fragments locate top/bottom. When their statistical fits do not
-    # share a direction, the independent source-wide sequence positions own
-    # the canonical deskew. Preserve the continuous hull between that global
-    # direction and the compatible local fragments as straight-model residual;
-    # narrowing to their overlap sliver would discard measured end-to-end bend.
-    common = FiniteInterval(
-        min(
-            sequence_interval.minimum,
-            cross_direction.full_angle_interval_degrees.minimum,
-        ),
-        max(
-            sequence_interval.maximum,
-            cross_direction.full_angle_interval_degrees.maximum,
-        ),
-    )
+    # Cross fragments locate top/bottom.  When their local statistical fits do
+    # not share a direction, independent sequence positions own the one global
+    # deskew interval.  Cross departures remain observed residuals; turning
+    # their hull into a possible rotation of the complete source creates
+    # impossible far-end corners and oversized output envelopes.
+    common = sequence_interval
     canonical = min(
         common.maximum,
         max(common.minimum, float(median(item[0] for item in groups))),
@@ -275,6 +346,11 @@ def lane_template_direction(
         ),
         selected_observation_ids=identities,
         full_angle_interval_degrees=common,
+        observed_angle_interval_degrees=_hull(
+            cross_direction.observed_angle_interval_degrees,
+            sequence_observed_interval,
+            common,
+        ),
         canonical_angle_degrees=canonical,
     )
 
@@ -314,6 +390,9 @@ def shared_template_direction(
         ),
         selected_observation_ids=identities,
         full_angle_interval_degrees=FiniteInterval(minimum, maximum),
+        observed_angle_interval_degrees=_hull(
+            *(item.observed_angle_interval_degrees for item in directions)
+        ),
         canonical_angle_degrees=canonical,
     )
 

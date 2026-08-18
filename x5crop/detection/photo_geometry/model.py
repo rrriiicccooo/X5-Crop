@@ -7,6 +7,9 @@ from enum import Enum
 import math
 
 
+PHOTO_BOUNDARY_MEASUREMENT_REVISION = "x5crop_photo_boundary_measurement_v1"
+
+
 class BoundaryAxis(str, Enum):
     X = "x"
     Y = "y"
@@ -49,9 +52,12 @@ class ClippedRequirement(str, Enum):
 
 
 class QueryPurpose(str, Enum):
+    COARSE_STRIP_LONG = "coarse_strip_long"
+    COARSE_STRIP_SHORT = "coarse_strip_short"
     TOP_CORRIDOR = "top_corridor"
     BOTTOM_CORRIDOR = "bottom_corridor"
-    SEQUENCE_ANCHOR_TILE = "sequence_anchor_tile"
+    SEQUENCE_BASELINE = "sequence_baseline"
+    SEQUENCE_ANCHOR_WINDOW = "sequence_anchor_window"
 
 
 @dataclass(frozen=True)

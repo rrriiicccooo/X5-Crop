@@ -279,6 +279,7 @@ class AffineFoundationContractTest(unittest.TestCase):
                 direction_id="test:vertical-selected-direction",
                 selected_observation_ids=(observation.observation_id,),
                 full_angle_interval_degrees=FiniteInterval(-1.1, -0.9),
+                observed_angle_interval_degrees=FiniteInterval(-1.1, -0.9),
                 canonical_angle_degrees=-1.0,
             ),
             state=EvidenceState.SUPPORTED,

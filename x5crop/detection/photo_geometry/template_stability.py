@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import Enum
 
 from ...domain import ObservationId
-from .observation_types import BoundaryEdgeObservation, SeparatorBandObservation
-from .template_model import PhaseAnchor, SequenceFit, TemplateSpec
-from .template_phase import fit_template_phase
-from .template_phase_model import PhaseFitResult, PhaseFitStatus
+from .template_model import SequenceFit
+from .template_phase import fit_template_phase_with_local_advance
+from .template_phase_model import (
+    PhaseFitResult,
+    PhaseFitStatus,
+    TemplatePhaseInput,
+)
+from .template_evidence import separator_support_authority
 
 
 class AnchorDependencyEffect(str, Enum):
@@ -21,7 +25,8 @@ class AnchorDependencyEffect(str, Enum):
 
 @dataclass(frozen=True)
 class AnchorDependencyFact:
-    observation_id: ObservationId
+    support_atom_id: ObservationId
+    observation_ids: tuple[ObservationId, ...]
     effect: AnchorDependencyEffect
     absolute_phase_shift_px: float | None
     integer_slot_offset_change: int | None
@@ -58,17 +63,17 @@ def _signature(fit: SequenceFit) -> tuple[int, tuple[ObservationId | None, ...]]
 
 def leave_one_anchor_out_phase_stability(
     result: PhaseFitResult,
-    observations: tuple[BoundaryEdgeObservation | PhaseAnchor, ...],
-    separator_bands: tuple[SeparatorBandObservation, ...],
-    template: TemplateSpec,
-    *,
-    holder_span_px=None,
+    phase_input: TemplatePhaseInput,
 ) -> TemplateStabilityAnalysis:
     """Refit once per winner-bound independent anchor, never per raw pixel."""
 
     if result.status != PhaseFitStatus.RESOLVED or result.best is None:
         raise ValueError("stability analysis requires a resolved phase fit")
+    if not isinstance(phase_input, TemplatePhaseInput):
+        raise TypeError("stability analysis requires the exact phase input")
     baseline = result.best
+    observations = phase_input.observations
+    separator_bands = phase_input.separator_bands
     ids = tuple(
         sorted(
             {item for item in baseline.role_observation_ids if item is not None},
@@ -78,30 +83,57 @@ def leave_one_anchor_out_phase_stability(
     by_id = {item.observation_id: item for item in observations}
     if not set(ids).issubset(by_id):
         raise ValueError("stability inputs do not cover winner anchors")
-    dependencies: list[AnchorDependencyFact] = []
-    for identity in ids:
-        reduced = tuple(
-            item for item in observations if item.observation_id != identity
-        )
-        reduced_bands = tuple(
-            band
-            for band in separator_bands
-            if identity
-            not in (
+    separator_atoms = separator_support_authority(separator_bands)
+    separator_members: dict[ObservationId, set[ObservationId]] = {}
+    for band in separator_bands:
+        atom = separator_atoms[band.left_edge_observation_id]
+        separator_members.setdefault(atom, set()).update(
+            (
                 band.left_edge_observation_id,
                 band.right_edge_observation_id,
             )
         )
-        refit = fit_template_phase(
-            reduced,
-            template,
-            separator_bands=reduced_bands,
-            holder_span_px=holder_span_px,
+    grouped: dict[ObservationId, list[ObservationId]] = {}
+    for identity in ids:
+        atom = separator_atoms.get(identity, identity)
+        members = separator_members.get(atom, {identity})
+        grouped.setdefault(atom, []).extend(members)
+    atoms = tuple(
+        (atom, tuple(sorted(set(values), key=str)))
+        for atom, values in sorted(grouped.items(), key=lambda item: str(item[0]))
+    )
+    dependencies: list[AnchorDependencyFact] = []
+    for atom_id, atom_ids in atoms:
+        removed = set(atom_ids)
+        reduced = tuple(
+            item for item in observations if item.observation_id not in removed
+        )
+        reduced_bands = tuple(
+            band
+            for band in separator_bands
+            if not removed.intersection(
+                (
+                band.left_edge_observation_id,
+                band.right_edge_observation_id,
+                )
+            )
+        )
+        refit = fit_template_phase_with_local_advance(
+            replace(
+                phase_input,
+                observations=reduced,
+                separator_bands=reduced_bands,
+                # The final search authority may itself have been estimated
+                # from the removed atom.  Reusing it would make the
+                # leave-one-out check circular.
+                phase_authority_px=None,
+            )
         )
         if refit.status != PhaseFitStatus.RESOLVED or refit.best is None:
             dependencies.append(
                 AnchorDependencyFact(
-                    identity,
+                    atom_id,
+                    atom_ids,
                     AnchorDependencyEffect.UNRESOLVED_WITHOUT_ANCHOR,
                     None,
                     None,
@@ -124,9 +156,19 @@ def leave_one_anchor_out_phase_stability(
             else AnchorDependencyEffect.CONTINUOUS_SHIFT
         )
         dependencies.append(
-            AnchorDependencyFact(identity, effect, shift, offset_change)
+            AnchorDependencyFact(
+                atom_id,
+                atom_ids,
+                effect,
+                shift,
+                offset_change,
+            )
         )
-    receipt = TemplateStabilityReceipt(len(ids), len(ids), 2 * template.count)
+    receipt = TemplateStabilityReceipt(
+        len(atoms),
+        len(atoms),
+        2 * phase_input.template.count,
+    )
     return TemplateStabilityAnalysis(
         baseline_placement_signature=_signature(baseline),
         dependencies=tuple(dependencies),

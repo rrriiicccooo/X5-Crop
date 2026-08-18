@@ -175,6 +175,20 @@ class PlatformReceiptContractTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "identity is invalid"):
             validate_platform_receipt(record, expected_commit=COMMIT)
 
+    def test_platform_validator_rejects_a_missing_exfat_fact(self) -> None:
+        record = _receipt(
+            TARGET_APPLE_SILICON,
+            "apple.performance_receipt.json",
+            "a" * 64,
+        )
+        record["filesystems"]["cases"] = [
+            item
+            for item in record["filesystems"]["cases"]
+            if item["case"] != "exfat"
+        ]
+        with self.assertRaisesRegex(ValueError, "identity is invalid"):
+            validate_platform_receipt(record, expected_commit=COMMIT)
+
 
 if __name__ == "__main__":
     unittest.main()

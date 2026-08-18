@@ -196,7 +196,7 @@ def _empty_result(
         "shared_strip_direction": unavailable(GateGap.SHARED_STRIP_DIRECTION_UNAVAILABLE),
         "complete_placement": unavailable(GateGap.COMPLETE_PLACEMENT_UNAVAILABLE),
         "producer_coverage": unavailable(GateGap.PRODUCER_BOUND_EXCEEDED),
-        "sequence_authority": unavailable(GateGap.SEQUENCE_AUTHORITY_UNAVAILABLE),
+        "sequence_authority": unavailable(GateGap.PHASE_ANCHOR_UNAVAILABLE),
         "cross_authority": unavailable(GateGap.CROSS_AUTHORITY_UNAVAILABLE),
         "shared_authority": unavailable(GateGap.SHARED_AUTHORITY_UNAVAILABLE),
         "local_advance_authority": unavailable(GateGap.LOCAL_ADVANCE_UNRESOLVED),
@@ -224,9 +224,7 @@ def reconstruct_photo_geometry(
     layout: str,
     configuration: DetectionConfiguration,
     resolved_slot_count: ResolvedSlotCount | None,
-    development_detail: bool = False,
 ) -> PhotoGeometryDetectionResult:
-    del development_detail
     lane_ids = tuple(lane.domain.lane_id for lane in lanes)
     if tuple(item.lane_id for item in content_observations) != lane_ids:
         raise ValueError("content observations must cover source lanes")

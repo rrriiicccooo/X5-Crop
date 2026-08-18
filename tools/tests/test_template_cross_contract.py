@@ -390,7 +390,7 @@ class TemplateCrossContractTest(unittest.TestCase):
         )
         self.assertEqual(
             result.best.bottom_full_interval_px,
-            FiniteInterval(343.0, 347.0),
+            FiniteInterval.exact(345.0),
         )
 
     def test_two_region_fragment_cannot_supply_single_side_direction(self) -> None:

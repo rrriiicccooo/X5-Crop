@@ -18,6 +18,12 @@ from x5crop.detection.photo_geometry.model import (
     BoundaryRole,
 )
 from x5crop.detection.photo_geometry.model import QueryPurpose
+from x5crop.detection.photo_geometry.coarse_strip_support import (
+    CoarseAxisSupport,
+    CoarseStripSupport,
+    CoarseStripSupportReceipt,
+    CoarseSupportAuthority,
+)
 from x5crop.detection.photo_geometry.measurement_model import (
     PhotoBoundaryCoverageReceipt,
     PhotoBoundaryMeasurementQuery,
@@ -32,7 +38,7 @@ from x5crop.detection.photo_geometry.output_model import (
 )
 from x5crop.detection.photo_geometry.search_model import (
     SequenceAnchorDiscoveryDomain,
-    SequenceAnchorTile,
+    SequenceAnchorWindow,
 )
 from x5crop.detection.photo_geometry.source_geometry import SourceScanGeometry
 from x5crop.detection.photo_geometry.template_cross import fit_template_cross
@@ -47,6 +53,7 @@ from x5crop.detection.photo_geometry.template_measurement_plan import (
     compile_template_measurement_plan,
 )
 from x5crop.detection.photo_geometry.template_phase import fit_template_phase
+from x5crop.detection.photo_geometry.template_phase_model import TemplatePhaseInput
 from x5crop.detection.photo_geometry.template_runtime_model import (
     PhotoGeometryDetectionResult,
     PreparedTemplateLane,
@@ -87,11 +94,22 @@ def _prepared() -> PreparedTemplateLane:
         frame_spec=configuration.physical_spec.frame,
         count=1,
         full_count=6,
+        holder_full_count=6,
         lane_authority=lane.domain,
         layout="horizontal",
         scale_authority=scales,
     )
     template = plan.template_spec
+    coarse_long = _measurement_set(
+        "lane:0",
+        registration_index=0,
+        purpose=QueryPurpose.COARSE_STRIP_LONG,
+    )
+    coarse_short = _measurement_set(
+        "lane:0",
+        registration_index=1,
+        purpose=QueryPurpose.COARSE_STRIP_SHORT,
+    )
     registered = RegisteredTemplateLane(
         lane=lane,
         layout="horizontal",
@@ -101,21 +119,38 @@ def _prepared() -> PreparedTemplateLane:
         height_axis=BoundaryAxis.Y,
         width_authority_px=FiniteInterval(0.0, 2320.0),
         height_authority_px=FiniteInterval(0.0, 322.0),
+        coarse_support=CoarseStripSupport(
+            "lane:0",
+            CoarseAxisSupport(
+                FiniteInterval(0.0, 2319.0),
+                None,
+                CoarseSupportAuthority.HOLDER_CONSERVATIVE,
+                (),
+            ),
+            CoarseAxisSupport(
+                FiniteInterval(0.0, 321.0),
+                None,
+                CoarseSupportAuthority.HOLDER_CONSERVATIVE,
+                (),
+            ),
+        CoarseStripSupportReceipt(2, 2, 2, 2, 8, 2, 2),
+        ),
         anchor_domain=SequenceAnchorDiscoveryDomain(
             domain_id="domain:runtime",
             lane_id="lane:0",
             long_axis_extent_px=2320,
+            support_interval_px=FiniteInterval(0.0, 2319.0),
             authoritative_sequence_length=6,
-            tiles=(
-                SequenceAnchorTile(
-                    tile_id="tile:runtime",
+            windows=(
+                SequenceAnchorWindow(
+                    window_id="anchor-window:lane:0:conservative",
                     core_px=FiniteInterval(0.0, 2320.0),
-                    measurement_px=FiniteInterval(0.0, 2320.0),
+                    measurement_px=FiniteInterval(0.0, 2319.0),
                 ),
             ),
-            query_execution_order=("tile:runtime",),
+            query_execution_order=("anchor-window:lane:0:conservative",),
         ),
-        measurement_sets=(),
+        measurement_sets=(coarse_long, coarse_short),
         side_regions=(),
         top_regions=(),
         bottom_regions=(),
@@ -127,7 +162,13 @@ def _prepared() -> PreparedTemplateLane:
         top_cross_bindings=(),
         bottom_cross_bindings=(),
         raw_cross_observations=(),
-        measurement_work=TemplateMeasurementWorkReceipt(0, 0, 0, 0, ()),
+        measurement_work=TemplateMeasurementWorkReceipt(
+            2,
+            2,
+            2,
+            8,
+            (coarse_long.coverage, coarse_short.coverage),
+        ),
         measurement_plan=plan,
     )
     source = SourceScanGeometry.create(
@@ -135,14 +176,23 @@ def _prepared() -> PreparedTemplateLane:
         width_scale_px_per_mm=PositiveInterval.exact(10.0),
         height_scale_px_per_mm=PositiveInterval.exact(10.0),
     )
+    phase_input = TemplatePhaseInput(
+        observations=(),
+        separator_bands=(),
+        template=template,
+        scale_px_per_mm=None,
+        holder_span_px=None,
+        phase_authority_px=None,
+    )
+    cross_input = TemplateCrossInput(template=template, fixed_height_px=240.0)
     return PreparedTemplateLane(
         **registered.__dict__,
         template_spec=template,
         source_scan_geometry=source,
+        phase_input=phase_input,
+        cross_input=cross_input,
         phase_competition=fit_template_phase((), template),
-        cross_competition=fit_template_cross(
-            TemplateCrossInput(template=template, fixed_height_px=240.0)
-        ),
+        cross_competition=fit_template_cross(cross_input),
     )
 
 
@@ -177,7 +227,7 @@ def _unresolved_result() -> PhotoGeometryDetectionResult:
         selected_placement_id=None,
         runner_up_placement_id=None,
         state=EvidenceState.UNAVAILABLE,
-        failure=failure_fact(GateGap.SEQUENCE_AUTHORITY_UNAVAILABLE),
+        failure=failure_fact(GateGap.PHASE_ANCHOR_UNAVAILABLE),
     )
     reconstruction = TemplateLaneReconstruction(
         lane_id="lane:0",
@@ -243,22 +293,34 @@ class TemplateRuntimeModelContractTest(unittest.TestCase):
 
     def test_measurement_queries_are_lane_local(self) -> None:
         prepared = _prepared()
-        measurement = _measurement_set("lane:0")
+        measurement = _measurement_set("lane:0", registration_index=2)
+        measurements = (*prepared.measurement_sets, measurement)
         valid = replace(
             prepared,
-            measurement_sets=(measurement,),
+            measurement_sets=measurements,
             measurement_work=TemplateMeasurementWorkReceipt(
-                1, 1, 1, 8, (measurement.coverage,)
+                3,
+                3,
+                3,
+                8,
+                tuple(item.coverage for item in measurements),
             ),
         )
-        self.assertEqual(valid.measurement_sets[0].query.lane_id, "lane:0")
-        foreign = _measurement_set("lane:foreign")
+        self.assertEqual(valid.measurement_sets[-1].query.lane_id, "lane:0")
+        foreign = _measurement_set("lane:foreign", registration_index=2)
         with self.assertRaises(ValueError):
             replace(
                 prepared,
-                measurement_sets=(foreign,),
+                measurement_sets=(*prepared.measurement_sets, foreign),
                 measurement_work=TemplateMeasurementWorkReceipt(
-                    1, 1, 1, 8, (foreign.coverage,)
+                    3,
+                    3,
+                    3,
+                    8,
+                    tuple(
+                        item.coverage
+                        for item in (*prepared.measurement_sets, foreign)
+                    ),
                 ),
             )
 
@@ -375,12 +437,17 @@ def _output_footprint():
     )
 
 
-def _measurement_set(lane_id: str) -> PhotoBoundaryMeasurementSet:
+def _measurement_set(
+    lane_id: str,
+    *,
+    registration_index: int,
+    purpose: QueryPurpose = QueryPurpose.SEQUENCE_ANCHOR_WINDOW,
+) -> PhotoBoundaryMeasurementSet:
     query = PhotoBoundaryMeasurementQuery(
-        query_id=f"query:{lane_id}",
-        registration_index=0,
+        query_id=f"query:{lane_id}:{registration_index}:{purpose.value}",
+        registration_index=registration_index,
         lane_id=lane_id,
-        purpose=QueryPurpose.SEQUENCE_ANCHOR_TILE,
+        purpose=purpose,
         boundary_axis=BoundaryAxis.X,
         trace_positions_px=(0,),
         search_intervals_px=(FiniteInterval(0.0, 10.0),),

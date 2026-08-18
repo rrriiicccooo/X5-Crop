@@ -188,10 +188,24 @@ def _validate_geometry(record: dict[str, Any]) -> None:
         outputs = lane["output_footprints"]
         budgets = lane["direct_use_budget_assessments"]
         alignment = lane.get("template_alignment")
+        coarse = lane.get("coarse_strip_support")
         if (
-            not isinstance(alignment, dict)
+            not isinstance(coarse, dict)
+            or set(coarse)
+            != {
+                "long_authority",
+                "short_authority",
+                "long_interval_px",
+                "short_interval_px",
+            }
+            or coarse["long_authority"]
+            not in {"pixel_observed", "holder_conservative"}
+            or coarse["short_authority"]
+            not in {"pixel_observed", "holder_conservative"}
+            or not isinstance(alignment, dict)
             or set(alignment)
             != {
+                "path",
                 "pattern",
                 "absolute_phase_px",
                 "canonical_pitch_px",
@@ -202,6 +216,12 @@ def _validate_geometry(record: dict[str, Any]) -> None:
                 "unresolved_reason",
             }
             or alignment["pattern"] not in {"normal", "local_step", "unresolved"}
+            or alignment["path"]
+            != {
+                "normal": "normal",
+                "local_step": "local_advance",
+                "unresolved": None,
+            }[alignment["pattern"]]
             or (alignment["pattern"] == "unresolved")
             != (alignment["unresolved_reason"] is not None)
             or lane.get("selected_cross_boundary_use")

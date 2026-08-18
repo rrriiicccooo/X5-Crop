@@ -7,18 +7,21 @@ from dataclasses import replace
 from typing import Sequence
 
 from ...domain import FiniteInterval, ObservationId, PositiveInterval
+from ...formats import OUTPUT_PROTECTION_SPEC
 from .model import PHOTO_BOUNDARY_MEASUREMENT_SPEC
 from .observation_types import BoundaryEdgeObservation, SeparatorBandObservation
 from .template_model import (
     LocalAdvanceRelation,
-    PhaseAnchor,
+    SequenceFit,
     TemplateSearchReceipt,
     TemplateSpec,
     ordered_template_roles,
 )
 from .template_phase_candidates import (
+    _AnchorFact,
     _BoundFit,
     _clear_winner_basis,
+    _coarse_localization_frontier_indices,
     _facts,
     _fit_seed,
     _holder_limits,
@@ -26,7 +29,6 @@ from .template_phase_candidates import (
     _prefixes,
     _rank,
     _relations,
-    _sampling_equivalent,
     _separator_phase_seeds,
     _with_separator_role_authority,
 )
@@ -36,17 +38,111 @@ from .template_phase_model import (
     PhaseFitResult,
     PhaseFitStatus,
     PhaseWinnerBasis,
+    TemplatePhaseInput,
 )
 
 
+def _intervals_overlap(left: FiniteInterval, right: FiniteInterval) -> bool:
+    return not (
+        left.maximum < right.minimum or right.maximum < left.minimum
+    )
+
+
+def _same_continuous_placement(left: SequenceFit, right: SequenceFit) -> bool:
+    """Distinguish one joint feasible placement from a discrete runner."""
+
+    return (
+        left.template == right.template
+        and left.phase_lattice_fit.integer_slot_offset
+        == right.phase_lattice_fit.integer_slot_offset
+        and left.local_advance_relations == right.local_advance_relations
+        and left.independent_support_ids == right.independent_support_ids
+        and _intervals_overlap(
+            left.phase_lattice_fit.absolute_phase_interval_px,
+            right.phase_lattice_fit.absolute_phase_interval_px,
+        )
+        and all(
+            _intervals_overlap(left_interval, right_interval)
+            for left_interval, right_interval in zip(
+                left.role_full_position_intervals_px,
+                right.role_full_position_intervals_px,
+                strict=True,
+            )
+        )
+    )
+
+
+def _interval_hull(left: FiniteInterval, right: FiniteInterval) -> FiniteInterval:
+    return FiniteInterval(
+        min(left.minimum, right.minimum),
+        max(left.maximum, right.maximum),
+    )
+
+
+def _merge_continuous_placement(
+    selected: _BoundFit,
+    alternative: _BoundFit,
+) -> _BoundFit:
+    """Retain the selected canonical state and expose the full joint hull."""
+
+    left = selected.fit
+    right = alternative.fit
+    if not _same_continuous_placement(left, right):
+        raise ValueError("cannot merge discrete phase placements")
+    cycle_interval = _interval_hull(
+        left.phase_lattice_fit.cycle_phase_interval_px,
+        right.phase_lattice_fit.cycle_phase_interval_px,
+    )
+    if cycle_interval.maximum > left.phase_lattice_fit.canonical_period_px:
+        raise ValueError("continuous phase hull crosses a lattice period")
+    merged = replace(
+        left,
+        phase_lattice_fit=replace(
+            left.phase_lattice_fit,
+            cycle_phase_interval_px=cycle_interval,
+            absolute_phase_interval_px=_interval_hull(
+                left.phase_lattice_fit.absolute_phase_interval_px,
+                right.phase_lattice_fit.absolute_phase_interval_px,
+            ),
+        ),
+        role_positions_px=tuple(
+            _interval_hull(left_interval, right_interval)
+            for left_interval, right_interval in zip(
+                left.role_positions_px,
+                right.role_positions_px,
+                strict=True,
+            )
+        ),
+        role_full_position_intervals_px=tuple(
+            _interval_hull(left_interval, right_interval)
+            for left_interval, right_interval in zip(
+                left.role_full_position_intervals_px,
+                right.role_full_position_intervals_px,
+                strict=True,
+            )
+        ),
+        direct_observation_ids=tuple(
+            sorted(
+                set(left.direct_observation_ids)
+                | set(right.direct_observation_ids)
+            )
+        ),
+    )
+    return _BoundFit(
+        merged,
+        selected.residual_compatible and alternative.residual_compatible,
+    )
+
+
 def fit_template_phase(
-    observations: Sequence[BoundaryEdgeObservation | PhaseAnchor],
+    observations: Sequence[BoundaryEdgeObservation],
     template: TemplateSpec,
     *,
     separator_bands: Sequence[SeparatorBandObservation] = (),
     scale_px_per_mm: PositiveInterval | float | None = None,
     holder_span_px: FiniteInterval | None = None,
     phase_authority_px: FiniteInterval | None = None,
+    coarse_outer_interval_px: FiniteInterval | None = None,
     local_advance_relations: Sequence[LocalAdvanceRelation] = (),
     max_observations: int = 512,
 ) -> PhaseFitResult:
@@ -54,6 +150,11 @@ def fit_template_phase(
 
     if max_observations <= 0:
         raise ValueError("phase observation bound must be positive")
+    if coarse_outer_interval_px is not None and (
+        not isinstance(coarse_outer_interval_px, FiniteInterval)
+        or coarse_outer_interval_px.width <= 0.0
+    ):
+        raise ValueError("phase coarse localization is invalid")
     separator_support_ids = separator_support_authority(
         tuple(separator_bands)
     )
@@ -281,8 +382,30 @@ def fit_template_phase(
         if current is None or _rank(candidate) > _rank(current):
             by_binding[key] = candidate
     ordered = tuple(sorted(by_binding.values(), key=_rank, reverse=True))
-    best = ordered[0] if ordered else None
-    runner = ordered[1] if len(ordered) > 1 else None
+    localized_indices = _coarse_localization_frontier_indices(
+        ordered,
+        coarse_outer_interval_px,
+    )
+    localized = tuple(ordered[index] for index in localized_indices)
+    best = localized[0] if localized else None
+    coarse_unique = (
+        coarse_outer_interval_px is not None
+        and len(ordered) > 1
+        and len(localized) == 1
+    )
+    if len(localized) > 1:
+        discrete: list[_BoundFit] = []
+        original_best = localized[0]
+        for candidate in localized[1:]:
+            if _same_continuous_placement(original_best.fit, candidate.fit):
+                best = _merge_continuous_placement(best, candidate)
+            else:
+                discrete.append(candidate)
+        runner = discrete[0] if discrete else None
+    elif coarse_unique:
+        runner = next(item for item in ordered if item is not best)
+    else:
+        runner = None
     receipt = TemplateSearchReceipt(
         observation_count=len(facts),
         role_count=len(roles),
@@ -307,10 +430,10 @@ def fit_template_phase(
             direct_ids,
             PhaseFailureKind.FIXED_TEMPLATE_MISMATCH,
         )
-    if runner is None:
+    if coarse_unique:
+        winner_basis = PhaseWinnerBasis.COARSE_LOCAL_REFINEMENT
+    elif runner is None:
         winner_basis = PhaseWinnerBasis.ONLY_PHYSICAL_FIT
-    elif _sampling_equivalent(best.fit, runner.fit):
-        winner_basis = PhaseWinnerBasis.SAMPLING_EQUIVALENT_RUNNER
     else:
         winner_basis = _clear_winner_basis(best, runner)
     if winner_basis is not None:
@@ -373,16 +496,20 @@ def _aggregate_phase_work(
 
 
 def fit_template_phase_with_local_advance(
-    observations: Sequence[BoundaryEdgeObservation | PhaseAnchor],
-    separator_bands: tuple[SeparatorBandObservation, ...],
-    template: TemplateSpec,
-    *,
-    scale_px_per_mm: PositiveInterval | float | None = None,
-    holder_span_px: FiniteInterval | None = None,
-    phase_authority_px: FiniteInterval | None = None,
-    max_observations: int = 512,
+    phase_input: TemplatePhaseInput,
 ) -> PhaseFitResult:
     """Fit the normal template, then allow one directly proved suffix shift."""
+
+    if not isinstance(phase_input, TemplatePhaseInput):
+        raise TypeError("local-advance phase fit requires TemplatePhaseInput")
+    observations = phase_input.observations
+    separator_bands = phase_input.separator_bands
+    template = phase_input.template
+    scale_px_per_mm = phase_input.scale_px_per_mm
+    holder_span_px = phase_input.holder_span_px
+    phase_authority_px = phase_input.phase_authority_px
+    coarse_outer_interval_px = phase_input.coarse_outer_interval_px
+    max_observations = phase_input.max_observations
 
     normal = fit_template_phase(
         observations,
@@ -391,13 +518,18 @@ def fit_template_phase_with_local_advance(
         scale_px_per_mm=scale_px_per_mm,
         holder_span_px=holder_span_px,
         phase_authority_px=phase_authority_px,
+        coarse_outer_interval_px=coarse_outer_interval_px,
         max_observations=max_observations,
     )
     if normal.status != PhaseFitStatus.RESOLVED or normal.best is None:
         return normal
     # Import here keeps the residual owner dependent on the canonical phase
     # types without creating a module import cycle.
-    from .template_residual import derive_bounded_local_advances
+    from .template_residual import (
+        LocalAdvanceFailureKind,
+        ResidualPattern,
+        derive_bounded_local_advances,
+    )
 
     analysis = derive_bounded_local_advances(
         normal.best,
@@ -406,6 +538,60 @@ def fit_template_phase_with_local_advance(
         ),
         separator_bands,
     )
+    scale = (
+        0.0
+        if scale_px_per_mm is None
+        else scale_px_per_mm.maximum
+        if isinstance(scale_px_per_mm, PositiveInterval)
+        else float(scale_px_per_mm)
+    )
+    normal_bleed_px = max(
+        OUTPUT_PROTECTION_SPEC.sequence_bleed_frame_ratio
+        * normal.best.pitch_fit.canonical_frame_width_px,
+        OUTPUT_PROTECTION_SPEC.sequence_bleed_minimum_mm * scale,
+    )
+    direct_by_id = {
+        item.observation_id: item
+        for item in observations
+        if isinstance(item, BoundaryEdgeObservation)
+    }
+    direct_role_misses = tuple(
+        0.0
+        if direct_by_id[identity].full_position_interval_px.contains(
+            position,
+            epsilon=1.0e-9,
+        )
+        else direct_by_id[identity].full_position_interval_px.minimum - position
+        if position < direct_by_id[identity].full_position_interval_px.minimum
+        else position - direct_by_id[identity].full_position_interval_px.maximum
+        for position, identity in zip(
+            normal.best.canonical_role_positions_px,
+            normal.best.role_observation_ids,
+            strict=True,
+        )
+        if identity is not None
+    )
+    normal_output_covers_direct_residuals = (
+        not direct_role_misses
+        or max(direct_role_misses) <= normal_bleed_px + 1.0e-7
+    )
+    if normal_output_covers_direct_residuals and (
+        analysis.pattern == ResidualPattern.LOCAL_STEP
+        or analysis.failure_kind == LocalAdvanceFailureKind.TOO_MANY_ANOMALIES
+    ):
+        # The normal placement is already unique, and its ordinary deterministic
+        # bleed covers every direct sequence residual.  Small gap variation is
+        # a validation fact, not permission to open another degree of freedom.
+        # Contact/overlap and topology contradictions never use this stop.
+        return replace(
+            normal,
+            receipt=replace(
+                normal.receipt,
+                local_relation_evaluation_count=(
+                    analysis.evaluated_adjacency_count
+                ),
+            ),
+        )
     if analysis.unresolved_reason is not None:
         return replace(
             normal,
@@ -437,6 +623,7 @@ def fit_template_phase_with_local_advance(
         scale_px_per_mm=scale_px_per_mm,
         holder_span_px=holder_span_px,
         phase_authority_px=phase_authority_px,
+        coarse_outer_interval_px=coarse_outer_interval_px,
         local_advance_relations=analysis.relations,
         max_observations=max_observations,
     )

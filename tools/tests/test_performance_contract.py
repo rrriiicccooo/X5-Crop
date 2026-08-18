@@ -66,7 +66,8 @@ class V5PerformanceContractTest(unittest.TestCase):
             (
                 "startup_import_unattributed",
                 "decode",
-                "gray_and_coarse_support",
+                "workspace_gray",
+                "coarse_support",
                 "registered_measurement",
                 "template_alignment_decision",
                 "sampling",

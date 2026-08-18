@@ -152,6 +152,7 @@ class _ResolvedBoundary:
     role: BoundaryRole
     canonical: float
     full_interval: FiniteInterval
+    observed_direction_interval: FiniteInterval | None
     observation_ids: tuple[ObservationId, ...]
     source: PositionSource
     inference: str | None
@@ -179,7 +180,15 @@ def _sequence_boundary(
             raise ValueError("template-inferred sequence edge lacks direct authority")
         source = PositionSource.INFERRED_SEQUENCE
         inference = f"{role.role.value}_from_template_fixed_width"
-    return _ResolvedBoundary(role.role, canonical, interval, ids, source, inference)
+    return _ResolvedBoundary(
+        role.role,
+        canonical,
+        interval,
+        None,
+        ids,
+        source,
+        inference,
+    )
 def _resolve_sequence_pair(
     sequence: SequenceFit,
     template: TemplateSpec,
@@ -203,6 +212,7 @@ def _resolve_sequence_pair(
             end.role,
             inferred_canonical,
             inferred_interval,
+            end.observed_direction_interval,
             end.observation_ids,
             end.source,
             "end_from_observed_start_and_fixed_template_width",
@@ -218,6 +228,7 @@ def _resolve_sequence_pair(
             start.role,
             inferred_canonical,
             inferred_interval,
+            start.observed_direction_interval,
             start.observation_ids,
             start.source,
             "start_from_observed_end_and_fixed_template_width",
@@ -262,7 +273,17 @@ def _cross_boundaries(
             opposite = "top" if role == BoundaryRole.BOTTOM else "bottom"
             inference = f"{role.value}_from_observed_{opposite}_and_fixed_template_height"
         _validate_interval_contains(full_interval, canonical, name=role.value)
-        result.append(_ResolvedBoundary(role, canonical, full_interval, ids, source, inference))
+        result.append(
+            _ResolvedBoundary(
+                role,
+                canonical,
+                full_interval,
+                binding.full_direction_interval_degrees,
+                ids,
+                source,
+                inference,
+            )
+        )
     if cross.bottom_canonical_px <= cross.top_canonical_px:
         raise ValueError("cross top/bottom order contradicts source coordinates")
     if not cross.fixed_height_px.contains(
@@ -296,7 +317,11 @@ def _boundary_geometry(
         reference_trace_px=reference_trace_px,
         canonical_position_px=resolved.canonical,
         full_position_interval_px=resolved.full_interval,
-        full_direction_interval_degrees=direction.full_angle_interval_degrees,
+        full_direction_interval_degrees=(
+            direction.full_angle_interval_degrees
+            if resolved.observed_direction_interval is None
+            else resolved.observed_direction_interval
+        ),
         position_source=resolved.source,
         position_observation_ids=resolved.observation_ids,
         named_position_inference=resolved.inference,
@@ -329,18 +354,33 @@ def _reanchor_cross_boundary(
         resolved.canonical,
         direction.canonical_angle_degrees,
     )
+    projection_angles = (
+        direction.full_angle_interval_degrees
+        if resolved.observed_direction_interval is None
+        else FiniteInterval(
+            min(
+                direction.full_angle_interval_degrees.minimum,
+                resolved.observed_direction_interval.minimum,
+            ),
+            max(
+                direction.full_angle_interval_degrees.maximum,
+                resolved.observed_direction_interval.maximum,
+            ),
+        )
+    )
     endpoints = tuple(
         at_trace(value, angle)
         for value in (resolved.full_interval.minimum, resolved.full_interval.maximum)
         for angle in (
-            direction.full_angle_interval_degrees.minimum,
-            direction.full_angle_interval_degrees.maximum,
+            projection_angles.minimum,
+            projection_angles.maximum,
         )
     )
     return _ResolvedBoundary(
         resolved.role,
         canonical,
         FiniteInterval(min(endpoints), max(endpoints)),
+        resolved.observed_direction_interval,
         resolved.observation_ids,
         resolved.source,
         resolved.inference,

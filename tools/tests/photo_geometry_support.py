@@ -113,7 +113,7 @@ def make_side_measurement_set(
         query_id="query:side-tracking",
         registration_index=0,
         lane_id="lane:0",
-        purpose=QueryPurpose.SEQUENCE_ANCHOR_TILE,
+        purpose=QueryPurpose.SEQUENCE_ANCHOR_WINDOW,
         boundary_axis=BoundaryAxis.X,
         trace_positions_px=traces,
         search_intervals_px=(FiniteInterval(0.0, 200.0),) * len(traces),

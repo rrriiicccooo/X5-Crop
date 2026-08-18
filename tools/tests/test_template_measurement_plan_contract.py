@@ -13,7 +13,6 @@ from x5crop.detection.photo_geometry.template_measurement_plan import (
 from x5crop.detection.photo_geometry.template_measurement_plan_model import (
     MeasurementIntentKind,
     MeasurementUnit,
-    TemplateStopFact,
 )
 from x5crop.detection.source_core import SourceStripValidationDomain
 
@@ -62,6 +61,7 @@ def _plan(
         frame_spec=frame,
         count=count,
         full_count=full_count,
+        holder_full_count=full_count,
         lane_authority=domain,
         layout="horizontal",
         scale_authority=scales,
@@ -89,30 +89,28 @@ class TemplateMeasurementPlanContractTest(unittest.TestCase):
             half.template_spec.frame_height_px,
             one_twenty.template_spec.frame_height_px,
         )
-        self.assertEqual(len(one_thirty_five.query_intents), 6)
-        self.assertEqual(len(half.query_intents), 6)
-        self.assertEqual(len(one_twenty.query_intents), 6)
+        self.assertEqual(len(one_thirty_five.query_intents), 8)
+        self.assertEqual(len(half.query_intents), 8)
+        self.assertEqual(len(one_twenty.query_intents), 8)
 
     def test_explicit_count_never_adds_center_phase_authority(self) -> None:
         plan = _plan()
         self.assertFalse(hasattr(plan, "phase_authority"))
-        self.assertIn(
-            TemplateStopFact.DIRECT_PHASE_EVIDENCE_REQUIRED,
-            plan.normal_path_stop_facts.facts,
-        )
+        self.assertFalse(hasattr(plan, "normal_path_stop_facts"))
         shorter = _plan(count=5, full_count=6)
         self.assertEqual(shorter.template_spec.count, 5)
-        self.assertEqual(shorter.normal_path_stop_facts, plan.normal_path_stop_facts)
 
     def test_query_intents_are_complete_and_pre_registered(self) -> None:
         plan = _plan()
         self.assertEqual(
             tuple(item.registration_index for item in plan.query_intents),
-            tuple(range(6)),
+            tuple(range(8)),
         )
         self.assertEqual(
             tuple(item.kind for item in plan.query_intents),
             (
+                MeasurementIntentKind.COARSE_LONG_SUPPORT,
+                MeasurementIntentKind.COARSE_SHORT_SUPPORT,
                 MeasurementIntentKind.OUTER_SEQUENCE_ANCHOR,
                 MeasurementIntentKind.EARLY_SEQUENCE_ANCHOR,
                 MeasurementIntentKind.MIDDLE_SEQUENCE_ANCHOR,
@@ -168,15 +166,13 @@ class TemplateMeasurementPlanContractTest(unittest.TestCase):
         with self.assertRaises(TypeError):
             FORMATS["new-format"] = format_spec("135")  # type: ignore[index]
 
-    def test_output_budget_is_not_a_measurement_plan_authority(self) -> None:
+    def test_output_precision_budget_is_not_a_measurement_authority(self) -> None:
         plan = _plan()
         self.assertFalse(hasattr(plan, "precision_budget"))
-        source = (
-            Path(__file__).parents[2]
-            / "x5crop/detection/photo_geometry/template_measurement_plan.py"
-        ).read_text(encoding="utf-8")
-        self.assertNotIn("OUTPUT_PROTECTION_SPEC", source)
-        self.assertNotIn("solo_limit", source)
+        self.assertNotEqual(
+            plan.projected_queries.top_core_intervals_px,
+            plan.projected_queries.top_measurement_intervals_px,
+        )
 
     def test_scale_transform_keeps_physical_plan_but_updates_pixel_projection(self) -> None:
         base = _plan(scale=10.0, box=Box(0, 0, 3600, 2400))
@@ -215,6 +211,7 @@ class TemplateMeasurementPlanContractTest(unittest.TestCase):
             frame_spec=spec.frame,
             count=3,
             full_count=3,
+            holder_full_count=3,
             lane_authority=domain,
             layout="vertical",
             scale_authority=scales,
@@ -240,6 +237,7 @@ class TemplateMeasurementPlanContractTest(unittest.TestCase):
                 frame_spec=foreign_frame,
                 count=6,
                 full_count=6,
+                holder_full_count=6,
                 lane_authority=domain,
                 layout="horizontal",
                 scale_authority=scales,
@@ -257,6 +255,7 @@ class TemplateMeasurementPlanContractTest(unittest.TestCase):
                 frame_spec=frame,
                 count=6,
                 full_count=6,
+                holder_full_count=6,
                 lane_authority=domain,
                 layout="horizontal",
                 scale_authority=foreign_scales,

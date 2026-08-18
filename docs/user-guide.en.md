@@ -1,7 +1,8 @@
-# X5 Crop User Guide
+# X5 Crop V5 User Guide (Development Preview)
 
-- Latest public stable release: v4.2.8
-- Current repository source: current-only V5, not publicly released
+- Scope: unreleased current-only V5 source on repository `main`
+- Latest public stable release: v4.2.8. Its commands and behavior differ; use
+  the documentation bundled with that release
 - Intended input: Hasselblad / Imacon X5 holder scans whose film format and
   exposure-slot count are already known
 
@@ -160,13 +161,16 @@ placement, or score a competitor. Tiny corner grazes, aliasing, and dust remain
 neutral; only reliable content continuing across a complete boundary can veto
 automatic output.
 
-## Install
+## Install The Development Source
 
-Download `X5-Crop-vX.X.zip` from
-[GitHub Releases](https://github.com/rrriiicccooo/X5-Crop/releases), not
-GitHub's generated Source code archive.
+Obtain a complete repository checkout. Do not copy only `X5_Crop.py`, and do
+not treat GitHub's generated Source code archive as a stable release package.
+Regular users should download v4.2.8 from
+[GitHub Releases](https://github.com/rrriiicccooo/X5-Crop/releases) and follow
+its bundled documentation.
 
-The release supports Python 3.12–3.14. Run:
+The V5 development source supports Python 3.12–3.14. From the repository root,
+run:
 
 - macOS: `install/X5_Crop_Mac_install.command`
 - Windows: `install/X5_Crop_win_install.bat`
@@ -215,6 +219,11 @@ Main options:
   but no official TIFF or review copy;
 - `--interactive`: prompt for format, count, and Debug Analysis.
 
+Interactive mode displays count for every format. Press Return to confirm the
+matched-holder complete count, or type another valid count to confirm it
+explicitly. `135-dual` uses the same interaction, but any value other than 12
+enters review.
+
 There is no `--overwrite`. The target must not exist. Use different fresh
 paths for Debug Analysis and normal cropping; a normal run always reads the
 source TIFF again.
@@ -224,13 +233,16 @@ source TIFF again.
 Each input has one terminal status:
 
 - `approved_auto`: writes the complete official TIFF set;
-- `needs_review`: writes no photos and retains the source with an actionable reason;
+- `needs_review`: writes no photos and retains the source with the minimum
+  missing fact and a suggested action;
 - `runtime_error`: this input failed while others continue.
 
 Debug Analysis shows the theoretical template, observations, residual pattern,
 direct and inferred boundaries, winner/runner difference, final output
-footprint, budget use, and first blocking reason. It reads the same detection
-facts and never solves geometry again.
+footprint, budget use, and first blocking reason. Failures distinguish
+user-correctable input, remeasurement-recoverable evidence, and cases the
+system must not guess. Debug reads the same detection facts and never solves
+geometry again.
 
 Default layout:
 

@@ -263,7 +263,7 @@ class BoundaryMeasurementContractTest(unittest.TestCase):
             )
         )
 
-    def test_separator_pairing_uses_material_not_gap_width(
+    def test_separator_pairing_accepts_direct_wide_material_below_one_frame(
         self,
     ) -> None:
         traces = (0, 50, 100)
@@ -325,10 +325,77 @@ class BoundaryMeasurementContractTest(unittest.TestCase):
                 {},
                 mock.Mock(),
                 BoundaryAxis.X,
+                PositiveInterval(900.0, 920.0),
             )
 
         self.assertEqual(result, (marker,))
         builder.assert_called_once()
+
+    def test_separator_pairing_rejects_material_wide_enough_for_a_frame(
+        self,
+    ) -> None:
+        traces = (0, 50, 100)
+
+        def run(name: str, coordinate: float) -> ProfileRun:
+            identity = ObservationId(f"transition:{name}")
+            return ProfileRun(
+                run_id=name,
+                coordinate_interval_px=FiniteInterval.exact(coordinate),
+                transition_ids=(identity,),
+                trace_coordinates_px=traces,
+                role_hint=None,
+                qualified_anchor_roles=(),
+                support_fraction=1.0,
+                continuous_support_fraction=1.0,
+                fit_residual_px=0.0,
+                evidence_strength=1.0,
+            )
+
+        left_run = run("left", 100.0)
+        right_run = run("right", 900.0)
+        profile = BasicAxisProfile(
+            "sequence",
+            1000,
+            traces,
+            (left_run, right_run),
+        )
+
+        def edge(value: ProfileRun, polarity: int) -> BoundaryEdgeObservation:
+            interval = value.coordinate_interval_px
+            return BoundaryEdgeObservation(
+                observation_id=ObservationId(f"edge:{value.run_id}"),
+                run_id=value.run_id,
+                discovery_interval_px=interval,
+                reference_trace_px=50.0,
+                canonical_position_px=interval.center,
+                fit_position_interval_px=interval,
+                full_position_interval_px=interval,
+                transition_ids=value.transition_ids,
+                trace_coordinates_px=traces,
+                polarity=polarity,
+                support_fraction=1.0,
+                continuous_support_fraction=1.0,
+                fit_residual_px=0.0,
+                canonical_direction_degrees=None,
+                fit_direction_interval_degrees=None,
+                full_direction_interval_degrees=None,
+            )
+
+        with mock.patch(
+            "x5crop.detection.photo_geometry.separator_observations._separator_band_from_edges",
+            return_value=mock.Mock(),
+        ) as builder:
+            result = build_format_separator_bands(
+                profile,
+                (edge(left_run, -1), edge(right_run, 1)),
+                {},
+                mock.Mock(),
+                BoundaryAxis.X,
+                PositiveInterval(700.0, 720.0),
+            )
+
+        self.assertEqual(result, ())
+        builder.assert_not_called()
 
     def test_polarity_ambiguous_edge_remains_an_observation(self) -> None:
         from x5crop.detection.photo_geometry.observations import (
@@ -380,6 +447,7 @@ class BoundaryMeasurementContractTest(unittest.TestCase):
             BoundaryAxis.X,
             PositiveInterval(10.0, 10.0),
             reference_trace_px=50.0,
+            frame_width_px=PositiveInterval(90.0, 110.0),
         )
 
         self.assertEqual(len(edges), 1)
@@ -481,6 +549,7 @@ class BoundaryMeasurementContractTest(unittest.TestCase):
                 {},
                 mock.Mock(),
                 BoundaryAxis.X,
+                PositiveInterval(250.0, 260.0),
             )
 
         self.assertNotIn(("outer-left", "outer-right"), markers)
@@ -501,6 +570,7 @@ class BoundaryMeasurementContractTest(unittest.TestCase):
             direction_id="direction:slope-sign",
             selected_observation_ids=(ObservationId("observation:slope-sign"),),
             full_angle_interval_degrees=FiniteInterval(-0.3, -0.2),
+            observed_angle_interval_degrees=FiniteInterval(-0.3, -0.2),
             canonical_angle_degrees=-0.25,
         )
         expected = np.tan(np.deg2rad(-0.25))

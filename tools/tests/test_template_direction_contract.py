@@ -28,6 +28,7 @@ def _direction(name: str, minimum: float, maximum: float, value: float):
         direction_id=f"direction:{name}",
         selected_observation_ids=(ObservationId(f"observation:{name}"),),
         full_angle_interval_degrees=FiniteInterval(minimum, maximum),
+        observed_angle_interval_degrees=FiniteInterval(minimum, maximum),
         canonical_angle_degrees=value,
     )
 
@@ -183,7 +184,7 @@ class TemplateDirectionContractTest(unittest.TestCase):
             ),
         )
 
-    def test_independent_sequence_positions_close_one_lane_direction(self) -> None:
+    def test_independent_sequence_positions_own_global_direction_not_local_hull(self) -> None:
         template = _template()
         observations = _sequence_observations()
         phase = fit_template_phase(observations, template)
@@ -224,11 +225,21 @@ class TemplateDirectionContractTest(unittest.TestCase):
         )
         self.assertAlmostEqual(
             result.full_angle_interval_degrees.minimum,
-            -0.1,
+            0.17,
         )
         self.assertAlmostEqual(
             result.full_angle_interval_degrees.maximum,
-            0.3,
+            0.24,
+        )
+        self.assertTrue(
+            result.observed_angle_interval_degrees.contains(-0.1)
+        )
+        self.assertTrue(
+            result.observed_angle_interval_degrees.contains(0.3)
+        )
+        self.assertGreater(
+            result.observed_angle_interval_degrees.width,
+            result.full_angle_interval_degrees.width,
         )
         self.assertAlmostEqual(result.canonical_angle_degrees, 0.21)
         self.assertEqual(

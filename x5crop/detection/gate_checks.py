@@ -23,7 +23,9 @@ class GateGap(str, Enum):
     SHARED_STRIP_DIRECTION_NONUNIQUE = "shared_strip_direction_nonunique"
     SOURCE_SCAN_GEOMETRY_UNAVAILABLE = "source_scan_geometry_unavailable"
     PLACEMENT_UNRESOLVED = "placement_unresolved"
-    SEQUENCE_AUTHORITY_UNAVAILABLE = "sequence_authority_unavailable"
+    PHASE_ANCHOR_UNAVAILABLE = "phase_anchor_unavailable"
+    PHASE_TEMPLATE_MISMATCH = "phase_template_mismatch"
+    PHASE_PLACEMENT_AMBIGUOUS = "phase_placement_ambiguous"
     CROSS_AUTHORITY_UNAVAILABLE = "cross_authority_unavailable"
     SHARED_AUTHORITY_UNAVAILABLE = "shared_authority_unavailable"
     CONTENT_VETO_REJECTED = "content_veto_rejected"
@@ -66,7 +68,6 @@ class RecoveryAction(str, Enum):
     CHECK_FORMAT = "check_format"
     CHECK_COUNT = "check_count"
     INCLUDE_COMPLETE_HOLDER = "include_complete_holder"
-    PROVIDE_PHASE_ANCHOR = "provide_phase_anchor"
     RERUN_MEASUREMENT = "rerun_measurement"
     OPEN_DEBUG_ANALYSIS = "open_debug_analysis"
     REVIEW_PLACEMENT = "review_placement"
@@ -105,6 +106,16 @@ def failure_fact(
             MinimumMissingFact.COMPLETE_SCAN_CANVAS,
             RecoveryAction.INCLUDE_COMPLETE_HOLDER,
         ),
+        GateGap.HOLDER_FULL_COUNT_UNRESOLVED: (
+            FailureRecovery.USER_ACTION,
+            MinimumMissingFact.FORMAT_COMPATIBILITY,
+            RecoveryAction.CHECK_FORMAT,
+        ),
+        GateGap.HOLDER_IDENTITY_UNRESOLVED: (
+            FailureRecovery.USER_ACTION,
+            MinimumMissingFact.COMPLETE_SCAN_CANVAS,
+            RecoveryAction.INCLUDE_COMPLETE_HOLDER,
+        ),
         GateGap.OUTPUT_SLOT_COUNT_UNAVAILABLE: (
             FailureRecovery.USER_ACTION,
             MinimumMissingFact.COUNT_AUTHORITY,
@@ -120,10 +131,50 @@ def failure_fact(
             MinimumMissingFact.REGISTERED_QUERY_COVERAGE,
             RecoveryAction.RERUN_MEASUREMENT,
         ),
+        GateGap.COMPLETE_PLACEMENT_UNAVAILABLE: (
+            FailureRecovery.REMEASURE,
+            MinimumMissingFact.UNIQUE_PLACEMENT,
+            RecoveryAction.OPEN_DEBUG_ANALYSIS,
+        ),
         GateGap.SHARED_STRIP_DIRECTION_UNAVAILABLE: (
             FailureRecovery.REMEASURE,
             MinimumMissingFact.SHARED_DIRECTION,
             RecoveryAction.RERUN_MEASUREMENT,
+        ),
+        GateGap.SHARED_STRIP_DIRECTION_NONUNIQUE: (
+            FailureRecovery.UNRECOVERABLE,
+            MinimumMissingFact.SHARED_DIRECTION,
+            RecoveryAction.REVIEW_PLACEMENT,
+        ),
+        GateGap.SOURCE_SCAN_GEOMETRY_UNAVAILABLE: (
+            FailureRecovery.REMEASURE,
+            MinimumMissingFact.SOURCE_PHYSICAL_COMPATIBILITY,
+            RecoveryAction.RERUN_MEASUREMENT,
+        ),
+        GateGap.PHASE_ANCHOR_UNAVAILABLE: (
+            FailureRecovery.REMEASURE,
+            MinimumMissingFact.ABSOLUTE_PHASE_ANCHOR,
+            RecoveryAction.RERUN_MEASUREMENT,
+        ),
+        GateGap.PHASE_TEMPLATE_MISMATCH: (
+            FailureRecovery.REMEASURE,
+            MinimumMissingFact.PITCH_CLOSURE,
+            RecoveryAction.OPEN_DEBUG_ANALYSIS,
+        ),
+        GateGap.PHASE_PLACEMENT_AMBIGUOUS: (
+            FailureRecovery.UNRECOVERABLE,
+            MinimumMissingFact.UNIQUE_PLACEMENT,
+            RecoveryAction.REVIEW_PLACEMENT,
+        ),
+        GateGap.CROSS_AUTHORITY_UNAVAILABLE: (
+            FailureRecovery.REMEASURE,
+            MinimumMissingFact.CROSS_POSITION,
+            RecoveryAction.RERUN_MEASUREMENT,
+        ),
+        GateGap.SHARED_AUTHORITY_UNAVAILABLE: (
+            FailureRecovery.UNRECOVERABLE,
+            MinimumMissingFact.SOURCE_PHYSICAL_COMPATIBILITY,
+            RecoveryAction.REVIEW_PLACEMENT,
         ),
         GateGap.LOCAL_ADVANCE_UNRESOLVED: (
             FailureRecovery.UNRECOVERABLE,
@@ -155,14 +206,32 @@ def failure_fact(
             MinimumMissingFact.UNIQUE_PLACEMENT,
             RecoveryAction.REVIEW_PLACEMENT,
         ),
-    }.get(
-        gap,
-        (
-            FailureRecovery.REMEASURE,
-            MinimumMissingFact.SOURCE_PHYSICAL_COMPATIBILITY,
-            RecoveryAction.OPEN_DEBUG_ANALYSIS,
+        GateGap.SLOT_ORDINAL_ASSIGNMENT_UNRESOLVED: (
+            FailureRecovery.UNRECOVERABLE,
+            MinimumMissingFact.PHASE_SUPPORT,
+            RecoveryAction.REVIEW_PLACEMENT,
         ),
-    )
+        GateGap.SOURCE_LANE_AUTHORITY_INVALID: (
+            FailureRecovery.USER_ACTION,
+            MinimumMissingFact.COMPLETE_SCAN_CANVAS,
+            RecoveryAction.INCLUDE_COMPLETE_HOLDER,
+        ),
+        GateGap.OUTPUT_FOOTPRINT_UNAVAILABLE: (
+            FailureRecovery.UNRECOVERABLE,
+            MinimumMissingFact.DIRECT_USE_PRECISION,
+            RecoveryAction.REVIEW_PLACEMENT,
+        ),
+        GateGap.DIRECT_USE_BUDGET_UNAVAILABLE: (
+            FailureRecovery.REMEASURE,
+            MinimumMissingFact.DIRECT_USE_PRECISION,
+            RecoveryAction.RERUN_MEASUREMENT,
+        ),
+        GateGap.OUTPUT_TRANSFORM_UNAVAILABLE: (
+            FailureRecovery.REMEASURE,
+            MinimumMissingFact.SHARED_DIRECTION,
+            RecoveryAction.RERUN_MEASUREMENT,
+        ),
+    }[gap]
     return DetectionFailureFact(
         gap=gap,
         recovery=recovery,

@@ -216,7 +216,9 @@ def build_template_gate(
             else contradicted(GateGap.PRODUCER_BOUND_EXCEEDED)
         ),
         "sequence_authority": (
-            supported() if selected else unavailable(GateGap.SEQUENCE_AUTHORITY_UNAVAILABLE)
+            supported()
+            if selected
+            else unavailable(selection_gap, selection_failure)
         ),
         "cross_authority": (
             supported() if selected else unavailable(GateGap.CROSS_AUTHORITY_UNAVAILABLE)

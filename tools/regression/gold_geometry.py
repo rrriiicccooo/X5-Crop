@@ -112,6 +112,7 @@ def _assert_direct_use_budget(
     gold: Sequence[Sequence[float]],
     output: Sequence[Sequence[float]],
     strip_orientation: str,
+    boundary_use: str,
 ) -> None:
     horizontal = strip_orientation == "horizontal"
     sequence_axis = _mean_edge_axis(
@@ -142,14 +143,29 @@ def _assert_direct_use_budget(
         PHOTO_BOUNDARY_MEASUREMENT_SPEC
         .transition_coordinate_sampling_uncertainty_px
     )
-    if (
+    sequence_exceeded = (
         sequence_expansion
         > sequence_span * OUTPUT_PROTECTION_SPEC.maximum_expansion_ratio_per_side
         + pixel_allowance
-        or cross_expansion
-        > cross_span * OUTPUT_PROTECTION_SPEC.maximum_expansion_ratio_per_side
-        + pixel_allowance
-    ):
+    )
+    if boundary_use == "enclosing_support_pair":
+        output_cross_span = output_cross[1] - output_cross[0]
+        cross_exceeded = (
+            output_cross_span
+            > cross_span
+            * OUTPUT_PROTECTION_SPEC.maximum_enclosing_support_height_ratio
+            + 2.0 * pixel_allowance
+        )
+    elif boundary_use == "aperture_pair":
+        cross_exceeded = (
+            cross_expansion
+            > cross_span
+            * OUTPUT_PROTECTION_SPEC.maximum_expansion_ratio_per_side
+            + pixel_allowance
+        )
+    else:
+        raise ValueError("gold output has an unknown cross-boundary use")
+    if sequence_exceeded or cross_exceeded:
         raise ValueError(
             f"{sample_id} frame {frame_index} exceeds gold direct-use budget"
         )
@@ -260,6 +276,7 @@ def validate_approved_geometry(
             polygon,
             output_polygon,
             str(gold["strip_orientation"]),
+            str(outputs[output_index]["envelope"]["boundary_use"]),
         )
     transform = report["output"]["finalization"][
         "source_transform_assessment"

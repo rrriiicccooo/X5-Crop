@@ -29,8 +29,8 @@ DIAGNOSTIC_COHORT_PATH = (
     / "diagnostic_unreviewed.jsonl"
 )
 COHORT_SCHEMA = "x5crop_diagnostic_unreviewed_cohort_v2"
-RECORD_SCHEMA = "x5crop_diagnostic_record_v4"
-SUMMARY_SCHEMA = "x5crop_diagnostic_summary_v4"
+RECORD_SCHEMA = "x5crop_diagnostic_record_v5"
+SUMMARY_SCHEMA = "x5crop_diagnostic_summary_v5"
 EXPECTED_RECORD_COUNT = 111
 DIAGNOSTIC_SOURCE_TIMEOUT_SECONDS = 600
 
@@ -167,6 +167,7 @@ def _failure_record(
         "terminal_outcome": "runtime_error",
         "decision_status": None,
         "final_review_reasons": [],
+        "blocking_failure_facts": [],
         "candidate_gate": None,
         "scan_canvas_profile_id": None,
         "output_slot_count": None,
@@ -289,6 +290,11 @@ def run_diagnostic_source(source: DiagnosticSource) -> dict[str, Any]:
             )
     decision = report["decision"]
     geometry = report["photo_geometry"]
+    blocking_failure_facts = [
+        check["failure"]
+        for check in report["candidate_gate"]["checks"]
+        if check["blocks"] and check["failure"] is not None
+    ]
     return {
         "record_schema": RECORD_SCHEMA,
         "validation_role": "diagnostic_unreviewed",
@@ -301,6 +307,7 @@ def run_diagnostic_source(source: DiagnosticSource) -> dict[str, Any]:
         "final_review_reasons": list(
             decision["final_review_reasons"]
         ),
+        "blocking_failure_facts": blocking_failure_facts,
         "candidate_gate": report["candidate_gate"],
         "scan_canvas_profile_id": geometry[
             "selected_scan_canvas_profile_id"
@@ -384,6 +391,21 @@ def run_diagnostic_cohort(
         for check in record["candidate_gate"]["checks"]
         if check["blocks"] and check["gap"] is not None
     )
+    minimum_missing_fact_counts = Counter(
+        fact["minimum_missing_fact"]
+        for record in completed
+        for fact in record["blocking_failure_facts"]
+    )
+    recovery_counts = Counter(
+        fact["recovery"]
+        for record in completed
+        for fact in record["blocking_failure_facts"]
+    )
+    recommended_action_counts = Counter(
+        fact["recommended_action"]
+        for record in completed
+        for fact in record["blocking_failure_facts"]
+    )
     phase_status_counts = Counter(
         status
         for record in completed
@@ -452,6 +474,13 @@ def run_diagnostic_cohort(
         ),
         "review_reason_counts": dict(sorted(review_reason_counts.items())),
         "blocking_gate_gap_counts": dict(sorted(gate_gap_counts.items())),
+        "minimum_missing_fact_counts": dict(
+            sorted(minimum_missing_fact_counts.items())
+        ),
+        "failure_recovery_counts": dict(sorted(recovery_counts.items())),
+        "recommended_action_counts": dict(
+            sorted(recommended_action_counts.items())
+        ),
         "phase_status_counts": dict(sorted(phase_status_counts.items())),
         "cross_status_counts": dict(sorted(cross_status_counts.items())),
         "alignment_pattern_counts": dict(
@@ -509,6 +538,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     for field in (
         "review_reason_counts",
         "blocking_gate_gap_counts",
+        "minimum_missing_fact_counts",
+        "failure_recovery_counts",
+        "recommended_action_counts",
         "phase_status_counts",
         "cross_status_counts",
         "alignment_pattern_counts",

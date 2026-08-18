@@ -34,7 +34,7 @@ class RegisteredMeasurementContractTest(unittest.TestCase):
             query_id="query:test",
             registration_index=0,
             lane_id="lane:0",
-            purpose=QueryPurpose.SEQUENCE_ANCHOR_TILE,
+            purpose=QueryPurpose.SEQUENCE_ANCHOR_WINDOW,
             boundary_axis=BoundaryAxis.X,
             trace_positions_px=(2, 4, 6, 8),
             search_intervals_px=(FiniteInterval(0.0, 29.0),) * 4,
@@ -80,7 +80,7 @@ class RegisteredMeasurementContractTest(unittest.TestCase):
         field = PhotoBoundaryMeasurementField(gray, "horizontal")
         common = dict(
             lane_id="lane:0",
-            purpose=QueryPurpose.SEQUENCE_ANCHOR_TILE,
+            purpose=QueryPurpose.SEQUENCE_ANCHOR_WINDOW,
             boundary_axis=BoundaryAxis.X,
             trace_positions_px=(0, 1, 2, 3),
             expected_support_px=20.0,
@@ -90,8 +90,22 @@ class RegisteredMeasurementContractTest(unittest.TestCase):
         )
         queries = (
             PhotoBoundaryMeasurementQuery(
-                query_id="query:left",
+                query_id="query:baseline",
                 registration_index=0,
+                search_intervals_px=(FiniteInterval(0.0, 29.0),) * 4,
+                transition_ownership_intervals_px=(FiniteInterval(0.0, 29.0),)
+                * 4,
+                registration_provenance_ids=("baseline",),
+                purpose=QueryPurpose.SEQUENCE_BASELINE,
+                **{
+                    key: value
+                    for key, value in common.items()
+                    if key != "purpose"
+                },
+            ),
+            PhotoBoundaryMeasurementQuery(
+                query_id="query:left",
+                registration_index=1,
                 search_intervals_px=(FiniteInterval(0.0, 20.0),) * 4,
                 transition_ownership_intervals_px=(FiniteInterval(0.0, 9.0),)
                 * 4,
@@ -100,7 +114,7 @@ class RegisteredMeasurementContractTest(unittest.TestCase):
             ),
             PhotoBoundaryMeasurementQuery(
                 query_id="query:right",
-                registration_index=1,
+                registration_index=2,
                 search_intervals_px=(FiniteInterval(9.0, 29.0),) * 4,
                 transition_ownership_intervals_px=(FiniteInterval(10.0, 29.0),)
                 * 4,
@@ -108,10 +122,11 @@ class RegisteredMeasurementContractTest(unittest.TestCase):
                 **common,
             ),
         )
-        measured = measure_registered_queries(field, queries)
-        self.assertEqual(measured[0].transitions, ())
+        baseline, left, right = measure_registered_queries(field, queries)
+        self.assertEqual(baseline.transitions, ())
+        self.assertEqual(left.transitions, ())
         self.assertEqual(
-            {item.query_id for item in measured[1].transitions},
+            {item.query_id for item in right.transitions},
             {"query:right"},
         )
 
@@ -142,13 +157,15 @@ class RegisteredMeasurementContractTest(unittest.TestCase):
                 registration_provenance_ids=(f"corridor:{purpose.value}",),
             )
 
-        cross, sequence = measure_registered_queries(
+        cross, baseline, sequence = measure_registered_queries(
             field,
             (
                 query(QueryPurpose.TOP_CORRIDOR, 0),
-                query(QueryPurpose.SEQUENCE_ANCHOR_TILE, 1),
+                query(QueryPurpose.SEQUENCE_BASELINE, 1),
+                query(QueryPurpose.SEQUENCE_ANCHOR_WINDOW, 2),
             ),
         )
+        self.assertEqual(baseline.transitions, ())
 
         cross_by_trace = {
             trace: tuple(

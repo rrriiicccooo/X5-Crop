@@ -190,7 +190,6 @@ def _process_one_scoped(
         candidate = choose_detection(
             workspace,
             configuration,
-            development_detail=config.development_detail,
         )
         detection_seconds = perf_counter() - detection_started
 

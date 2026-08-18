@@ -1,12 +1,13 @@
-# X5 Crop Quick Start
+# X5 Crop V5 Quick Start (Development Preview)
 
-The latest public stable release is v4.2.8. V5 in this repository has not been
-released. Download `X5-Crop-vX.X.zip` from GitHub Releases, not GitHub's
-generated Source code archive.
+This guide applies only to the unreleased V5 source on repository `main`. The
+latest public stable release remains v4.2.8. Regular users should download its
+release package and follow the bundled v4.2.8 documentation; its command line
+is different from this V5 preview.
 
 ## 1. Install
 
-Extract the release archive and run the platform installer:
+Obtain the complete repository checkout, then run its platform installer:
 
 - macOS: `install/X5_Crop_Mac_install.command`
 - Windows: `install/X5_Crop_win_install.bat`
@@ -16,7 +17,7 @@ missing items. Homebrew is not required, and no private environment is created.
 
 ## 2. Add TIFFs And Launch
 
-Put supported X5 scan TIFFs beside the launcher:
+Put supported X5 scan TIFFs beside the V5 launcher:
 
 - macOS: double-click `X5_Crop_Mac.command`
 - Windows: double-click `X5_Crop_win.bat`
@@ -38,6 +39,10 @@ Count includes intermediate blank exposures. X5 Crop never infers it from a
 filename or picture content and never removes blank slots. `135-dual` defaults
 to 12, six per lane. Any explicit different count enters review; lane counts
 are never guessed.
+
+Interactive mode asks for count for every format. Press Return to confirm the
+matched-holder default. `135-dual` accepts another typed number consistently,
+but every value other than 12 safely enters review.
 
 `--layout auto` chooses horizontal or vertical from the scan, or either may be
 specified. V5 accepts single-page 16-bit RGB TIFFs with supported lossless

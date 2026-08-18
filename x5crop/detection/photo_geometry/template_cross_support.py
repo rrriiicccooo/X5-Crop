@@ -26,6 +26,7 @@ from .template_cross_model import (
     CrossRoleBinding,
     EnclosingSupportPair,
     _intersect,
+    _coarse_localization_frontier_indices,
     _midpoint_interval,
     _subtract,
 )
@@ -119,8 +120,17 @@ def _candidate(
         ),
     )
     source_spanning = top.source_spanning_continuous and bottom.source_spanning_continuous
+    # A material/holder support may become the output boundary itself, so a
+    # two-region local fragment cannot be extrapolated across the strip merely
+    # because its trace coordinates happen to touch three template domains.
+    directly_continuous = (
+        top.independent_support_region_count >= SPATIAL_SUPPORT_REGION_COUNT
+        and bottom.independent_support_region_count
+        >= SPATIAL_SUPPORT_REGION_COUNT
+    )
     connected = (
-        independent_regions >= SPATIAL_SUPPORT_REGION_COUNT
+        directly_continuous
+        and independent_regions >= SPATIAL_SUPPORT_REGION_COUNT
         and domains >= min(SPATIAL_SUPPORT_REGION_COUNT, template.count)
     )
     if not source_spanning and not connected:
@@ -184,6 +194,7 @@ def fit_enclosing_support(
     longitudinal_support_domains_px: tuple[FiniteInterval, ...],
     minimum_shared_trace_support: int,
     maximum_evaluated_candidates: int,
+    coarse_outer_interval_px: FiniteInterval | None = None,
 ) -> SupportFitCompetition:
     """Run a bounded support-pair sweep and retain discrete alternatives."""
 
@@ -249,6 +260,17 @@ def fit_enclosing_support(
             ),
         )
     )
+    localized_indices = _coarse_localization_frontier_indices(
+        tuple(
+            (
+                item.top_binding.full_interval_px,
+                item.bottom_binding.full_interval_px,
+            )
+            for item in ordered
+        ),
+        coarse_outer_interval_px,
+    )
+    ordered = tuple(ordered[index] for index in localized_indices)
     if len(ordered) == 1:
         return SupportFitCompetition(
             ordered[0],

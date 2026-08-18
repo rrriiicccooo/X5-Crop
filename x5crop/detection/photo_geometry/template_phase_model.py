@@ -5,8 +5,56 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 
-from ...domain import ObservationId
-from .template_model import SequenceFit, TemplateSearchReceipt, TemplateSpec
+from ...domain import FiniteInterval, ObservationId, PositiveInterval
+from .observation_types import BoundaryEdgeObservation, SeparatorBandObservation
+from .template_model import (
+    SequenceFit,
+    TemplateSearchReceipt,
+    TemplateSpec,
+)
+
+
+@dataclass(frozen=True)
+class TemplatePhaseInput:
+    """Exact registered input to the normal-plus-one-local-step solver."""
+
+    observations: tuple[BoundaryEdgeObservation, ...]
+    separator_bands: tuple[SeparatorBandObservation, ...]
+    template: TemplateSpec
+    scale_px_per_mm: PositiveInterval | None
+    holder_span_px: FiniteInterval | None
+    phase_authority_px: FiniteInterval | None
+    coarse_outer_interval_px: FiniteInterval | None = None
+    max_observations: int = 512
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.template, TemplateSpec):
+            raise TypeError("phase input requires a fixed template")
+        if self.scale_px_per_mm is not None and not isinstance(
+            self.scale_px_per_mm,
+            PositiveInterval,
+        ):
+            raise TypeError("phase input scale must be a positive interval")
+        for value, name in (
+            (self.holder_span_px, "holder span"),
+            (self.phase_authority_px, "phase authority"),
+        ):
+            if value is not None and not isinstance(value, FiniteInterval):
+                raise TypeError(f"phase input {name} must be a finite interval")
+        if self.coarse_outer_interval_px is not None and (
+            not isinstance(self.coarse_outer_interval_px, FiniteInterval)
+            or self.coarse_outer_interval_px.width <= 0.0
+        ):
+            raise ValueError("phase coarse localization is invalid")
+        identities = tuple(item.observation_id for item in self.observations)
+        band_ids = tuple(item.observation_id for item in self.separator_bands)
+        if (
+            len(set(identities)) != len(identities)
+            or len(set(band_ids)) != len(band_ids)
+            or not isinstance(self.max_observations, int)
+            or self.max_observations <= 0
+        ):
+            raise ValueError("phase input identities or bound are invalid")
 
 
 class PhaseFitStatus(str, Enum):
@@ -27,7 +75,7 @@ class PhaseFailureKind(str, Enum):
 
 class PhaseWinnerBasis(str, Enum):
     ONLY_PHYSICAL_FIT = "only_physical_fit"
-    SAMPLING_EQUIVALENT_RUNNER = "sampling_equivalent_runner"
+    COARSE_LOCAL_REFINEMENT = "coarse_local_refinement"
     RESIDUAL_COMPATIBILITY = "residual_compatibility"
     INDEPENDENT_SUPPORT = "independent_support"
     INDEPENDENT_COVERAGE = "independent_coverage"

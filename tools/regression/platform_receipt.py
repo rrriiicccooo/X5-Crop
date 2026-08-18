@@ -233,6 +233,18 @@ def validate_platform_receipt(
     system, machines = expected_platform[target]
     verification = record.get("verification", {})
     performance = record.get("performance_receipt", {})
+    filesystem_record = record.get("filesystems", {})
+    filesystem_cases = {
+        str(item.get("case")): item
+        for item in filesystem_record.get("cases", ())
+        if isinstance(item, dict)
+    }
+    required_filesystems = (
+        ("apfs", "hfs_plus", "exfat")
+        if target == TARGET_APPLE_SILICON
+        else ("ntfs", "exfat")
+    )
+    verified_filesystems = required_filesystems[:-1]
     if (
         set(record) != expected_keys
         or record.get("receipt_schema") != PLATFORM_RECEIPT_SCHEMA
@@ -251,7 +263,17 @@ def validate_platform_receipt(
         or record.get("platform_io", {}).get("accuracy_verdict") != "not_assessed"
         or record.get("platform_io", {}).get("cohort_sha256")
         != platform_cohort_sha256()
-        or record.get("filesystems", {}).get("platform_system") != system
+        or filesystem_record.get("platform_system") != system
+        or set(filesystem_cases) != set(required_filesystems)
+        or any(
+            filesystem_cases[case].get("status") != "passed"
+            or filesystem_cases[case].get("support_level")
+            != "verified_local"
+            for case in verified_filesystems
+        )
+        or filesystem_cases.get("exfat", {}).get("status") != "unverified"
+        or filesystem_cases.get("exfat", {}).get("support_level")
+        != "best_effort_unverified"
         or record.get("installer_validation", {}).get(
             "read_only_dependency_check"
         )
