@@ -8,9 +8,10 @@
 
 ## 当前目标
 
-完成从上次推送以来全部讨论的一次 current-only 收口：把 v4.2.8 的 whole-to-local 优势与 V5 的固定
-模板、独立证据、共享 deskew、单次局部位移、两种 cross boundary use、联合输出保护、typed Gate、
-诊断和完整路径性能工具合成一条主线；验证后提交并推送 `main`。V5 尚未发布。
+从上次推送以来全部讨论的 current-only 收口已经验证并推送 `main`：v4.2.8 的 whole-to-local 优势
+已经与 V5 的固定模板、独立证据、共享 deskew、单次局部位移、两种 cross boundary use、联合输出
+保护、typed Gate、诊断和完整路径性能工具合成一条主线。当前目标是在不回退九张黄金的前提下，
+按 diagnostic 根因改善最常见的正常片条 review。V5 尚未发布。
 
 ## 当前事实
 
