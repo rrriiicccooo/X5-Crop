@@ -215,8 +215,9 @@ Main options:
   matched-holder default;
 - `--layout`: `auto`, `horizontal`, or `vertical`;
 - `--jobs N`: source concurrency, default 1 and maximum 3;
-- `--debug-analysis`: write diagnostic JPGs, development report, and summary,
-  but no official TIFF or review copy;
+- `--debug-analysis`: write 1,800 px wide, height-adaptive three-panel
+  diagnostic JPGs, development report, and summary, but no official TIFF or
+  review copy;
 - `--interactive`: prompt for format, count, and Debug Analysis.
 
 Interactive mode displays count for every format. Press Return to confirm the

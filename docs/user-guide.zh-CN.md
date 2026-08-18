@@ -175,7 +175,8 @@ python3 X5_Crop.py /path/to/scans --format 120-66 --count 2
 - `-n, --count N`：可选的正整数 slot 数；省略表示确认匹配片夹默认值；
 - `--layout`：`auto`、`horizontal` 或 `vertical`；
 - `--jobs N`：source 并发数，默认 1，上限 3；
-- `--debug-analysis`：只写诊断 JPG、development report 和 summary，不写正式 TIFF 或 review copy；
+- `--debug-analysis`：只写 1800 px 宽、自适应高度的三联诊断 JPG、development report 和
+  summary，不写正式 TIFF 或 review copy；
 - `--interactive`：交互选择 format、count 和 Debug Analysis。
 
 交互模式对每个 format 都显示 count。直接回车表示确认匹配片夹的默认完整格数；输入其它合法

@@ -24,7 +24,7 @@ class DebugLegendEntry:
 class DebugStyleParameters:
     """The adaptive V5 Debug Analysis presentation grid and visual tokens."""
 
-    canvas_width: int = 1653
+    canvas_width: int = 1800
     status_bar_height: int = 70
     outer_margin: int = 12
     panel_gap: int = 10

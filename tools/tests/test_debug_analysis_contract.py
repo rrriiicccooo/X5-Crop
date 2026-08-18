@@ -222,6 +222,7 @@ class DebugAnalysisContractTest(unittest.TestCase):
             (0.0, 9_899.0),
         )
         style = DebugStyleParameters()
+        self.assertEqual(style.canvas_width, 1_800)
         grid = presentation_grid(projection, style)
         panel_width = style.canvas_width - 2 * style.outer_margin
         target_box = (
@@ -232,8 +233,8 @@ class DebugAnalysisContractTest(unittest.TestCase):
         )
         selected_viewport = viewport(projection, target_box)
         self.assertEqual(selected_viewport.source_box, (0, 0, 9_899, 2_797))
-        self.assertEqual(grid.media_height, 445)
-        self.assertEqual(selected_viewport.target_box, (27, 81, 1_602, 526))
+        self.assertEqual(grid.media_height, 487)
+        self.assertEqual(selected_viewport.target_box, (27, 81, 1_749, 568))
         displayed = tuple(
             selected_viewport.point(point) for point in source_corners
         )

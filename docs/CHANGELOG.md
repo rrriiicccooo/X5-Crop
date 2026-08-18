@@ -45,8 +45,9 @@ materialization、平行 detector 和 report reuse 均不再支持。
 
 ### 报告、工具与性能
 
-- Debug Analysis 展示理论模板、实际观察、逐 role residual、direct/inferred ledger、best/runner、
-  boundary use、最终 footprint、预算使用和根阻止事实；展示层不重算几何。
+- Debug Analysis 使用 1800 px 宽、自适应高度的三联图，展示理论模板、实际观察、逐 role
+  residual、direct/inferred ledger、best/runner、boundary use、最终 footprint、预算使用和根阻止
+  事实；展示层不重算几何。
 - Diagnostic summary 按根 review reason、blocking gap、phase/cross 状态、alignment pattern 和
   boundary use 聚合，并统计最小缺失事实、恢复类别和建议操作；仍不产生 accuracy verdict。
 - 新增绑定 source SHA、configuration、measurement revision 与 plan identity 的开发 replay；它只复跑
