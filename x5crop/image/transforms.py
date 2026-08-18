@@ -5,53 +5,22 @@ from scipy.ndimage import map_coordinates
 
 from ..domain import Box
 from ..geometry.affine import AffineCoordinateTransform
-from ..utils import spatial_shape
 
 
 AFFINE_ROW_CHUNK_SIZE = 256
 
 
-def _dtype_limits(dtype: np.dtype) -> tuple[int, int] | None:
-    if np.issubdtype(dtype, np.bool_):
-        return (0, 1)
-    if np.issubdtype(dtype, np.integer):
-        info = np.iinfo(dtype)
-        return int(info.min), int(info.max)
-    return None
-
-
-def photometric_background_value(
-    arr: np.ndarray,
-    photometric: str,
-) -> int | float:
-    limits = _dtype_limits(arr.dtype)
-    minimum_is_white = photometric.upper() == "MINISWHITE"
-    if limits is not None:
-        return limits[0] if minimum_is_white else limits[1]
-    finite = arr[np.isfinite(arr)]
-    if not finite.size:
-        raise ValueError("affine background requires finite image samples")
-    return float(finite.min() if minimum_is_white else finite.max())
-
-
-def _cast_interpolated(value: np.ndarray, dtype: np.dtype) -> np.ndarray:
-    limits = _dtype_limits(dtype)
-    if limits is not None:
-        value = np.clip(value, limits[0], limits[1])
-    return value.astype(dtype)
-
-
 def sample_affine_roi(
     arr: np.ndarray,
-    axes: str,
     transform: AffineCoordinateTransform,
     box: Box,
     *,
-    background_value: int | float,
     sampling_authority_box: Box,
 ) -> np.ndarray:
     """Sample one half-open output ROI through the supplied affine transform."""
-    source_height, source_width = spatial_shape(arr)
+    if arr.dtype != np.dtype("uint16") or arr.ndim != 3 or arr.shape[2] != 3:
+        raise ValueError("affine sampling requires uint16 RGB YXS input")
+    source_height, source_width = arr.shape[:2]
     if (source_width, source_height) != (
         transform.source_extent.width,
         transform.source_extent.height,
@@ -73,24 +42,6 @@ def sample_affine_roi(
         or sampling_authority_box.bottom > source_height
     ):
         raise ValueError("sampling authority must lie inside the source extent")
-    if axes == "SYX":
-        sampled = sample_affine_roi(
-            np.moveaxis(arr, 0, -1),
-            "YXS",
-            transform,
-            box,
-            background_value=background_value,
-            sampling_authority_box=sampling_authority_box,
-        )
-        return np.moveaxis(sampled, -1, 0)
-    if arr.ndim == 2:
-        if axes != "YX":
-            raise ValueError(f"Unsupported axes for grayscale affine sampling: {axes}")
-    elif arr.ndim == 3:
-        if axes != "YXS":
-            raise ValueError(f"Unsupported axes for image affine sampling: {axes}")
-    else:
-        raise ValueError("affine sampling requires a 2D or 3D image")
     if (
         transform.is_identity
         and sampling_authority_box.left <= box.left
@@ -100,8 +51,18 @@ def sample_affine_roi(
     ):
         return arr[box.top : box.bottom, box.left : box.right]
     output_shape = (box.height, box.width) + tuple(arr.shape[2:])
+    background_value = int(np.iinfo(arr.dtype).max)
     output = np.full(output_shape, background_value, dtype=arr.dtype)
     inverse = transform.inverse_matrix
+    authority = arr[
+        sampling_authority_box.top : sampling_authority_box.bottom,
+        sampling_authority_box.left : sampling_authority_box.right,
+    ]
+    expanded_x = np.arange(
+        box.left,
+        box.right,
+        dtype=np.float64,
+    )[None, :]
     for output_row in range(0, box.height, AFFINE_ROW_CHUNK_SIZE):
         row_end = min(box.height, output_row + AFFINE_ROW_CHUNK_SIZE)
         expanded_y = np.arange(
@@ -109,11 +70,6 @@ def sample_affine_roi(
             box.top + row_end,
             dtype=np.float64,
         )[:, None]
-        expanded_x = np.arange(
-            box.left,
-            box.right,
-            dtype=np.float64,
-        )[None, :]
         source_x = (
             inverse[0][0] * expanded_x
             + inverse[0][1] * expanded_y
@@ -124,10 +80,6 @@ def sample_affine_roi(
             + inverse[1][1] * expanded_y
             + inverse[1][2]
         )
-        authority = arr[
-            sampling_authority_box.top : sampling_authority_box.bottom,
-            sampling_authority_box.left : sampling_authority_box.right,
-        ]
         coordinates = np.asarray(
             (
                 source_y - sampling_authority_box.top,
@@ -135,27 +87,17 @@ def sample_affine_roi(
             ),
             dtype=np.float64,
         )
-        if arr.ndim == 2:
-            value = map_coordinates(
-                authority,
+        value = np.empty(source_x.shape, dtype=np.float64)
+        for channel in range(arr.shape[2]):
+            map_coordinates(
+                authority[..., channel],
                 coordinates,
                 order=1,
                 mode="grid-constant",
                 cval=float(background_value),
                 prefilter=False,
-                output=np.float64,
+                output=value,
             )
-        else:
-            value = np.empty(source_x.shape + (arr.shape[2],), dtype=np.float64)
-            for channel in range(arr.shape[2]):
-                value[..., channel] = map_coordinates(
-                    authority[..., channel],
-                    coordinates,
-                    order=1,
-                    mode="grid-constant",
-                    cval=float(background_value),
-                    prefilter=False,
-                    output=np.float64,
-                )
-        output[output_row:row_end] = _cast_interpolated(value, arr.dtype)
+            np.clip(value, 0, background_value, out=value)
+            output[output_row:row_end, :, channel] = value.astype(arr.dtype)
     return output

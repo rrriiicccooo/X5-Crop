@@ -56,46 +56,54 @@ from x5crop.io.orientation import orientation_mapping
 from x5crop.image.gray import BaseGrayParameters, make_base_gray_u8
 
 
+def product_rgb_input(gray: np.ndarray) -> tuple[np.ndarray, ImageProfile]:
+    pixels = np.repeat(gray[..., None], 3, axis=2).astype(np.uint16) * 257
+    return pixels, ImageProfile(
+        shape=pixels.shape,
+        dtype="uint16",
+        axes="YXS",
+        photometric="RGB",
+        compression="NONE",
+        sample_format=None,
+        bits_per_sample=(16, 16, 16),
+        samples_per_pixel=3,
+        planar_config="CONTIG",
+        resolution=None,
+        resolution_unit=None,
+        icc_profile=None,
+        metadata=TiffMetadata(None, None, None, ()),
+        orientation=orientation_mapping(1, gray.shape[1], gray.shape[0]),
+    )
+
+
 class PhysicalAuthorityContractTest(unittest.TestCase):
     def test_registered_gray_matches_full_array_reference(self) -> None:
         rng = np.random.default_rng(42)
         yxs = rng.integers(0, 65536, size=(257, 131, 3), dtype=np.uint16)
         params = BaseGrayParameters(maximum_percentile_samples=10_000)
 
-        rgb = yxs.astype(np.float32)
-        reference = (
-            params.red_weight * rgb[..., 0]
-            + params.green_weight * rgb[..., 1]
-            + params.blue_weight * rgb[..., 2]
-        )
-        sampled = reference.reshape(-1)[::4]
-        lo, hi = np.percentile(
-            sampled,
-            [params.low_percentile, params.high_percentile],
-        )
-        expected = np.clip(
-            (reference - lo) * (255.0 / (hi - lo)),
-            0,
-            255,
-        ).astype(np.uint8)
+        for source in (yxs, yxs[::-1, ::-1]):
+            with self.subTest(contiguous=source.flags.c_contiguous):
+                rgb = source.astype(np.float32)
+                reference = (
+                    params.red_weight * rgb[..., 0]
+                    + params.green_weight * rgb[..., 1]
+                    + params.blue_weight * rgb[..., 2]
+                )
+                sampled = reference.reshape(-1)[::4]
+                lo, hi = np.percentile(
+                    sampled,
+                    [params.low_percentile, params.high_percentile],
+                )
+                expected = np.clip(
+                    (reference - lo) * (255.0 / (hi - lo)),
+                    0,
+                    255,
+                ).astype(np.uint8)
 
-        self.assertTrue(
-            np.array_equal(
-                make_base_gray_u8(yxs, "YXS", "RGB", params),
-                expected,
-            )
-        )
-        self.assertTrue(
-            np.array_equal(
-                make_base_gray_u8(
-                    np.moveaxis(yxs, -1, 0),
-                    "SYX",
-                    "RGB",
-                    params,
-                ),
-                expected,
-            )
-        )
+                self.assertTrue(
+                    np.array_equal(make_base_gray_u8(source, params), expected)
+                )
 
     def test_design_apertures_count_and_tolerance_are_typed(self) -> None:
         expected = {
@@ -238,25 +246,12 @@ class PhysicalAuthorityContractTest(unittest.TestCase):
 
     def test_holder_match_precedes_full_count_resolution(self) -> None:
         configuration = get_detection_configuration("120-67")
-        pixels = np.zeros((1000, 2972), dtype=np.uint8)
+        pixels, profile = product_rgb_input(
+            np.zeros((1000, 2972), dtype=np.uint8)
+        )
         workspace = prepare_detection_workspace(
             pixels,
-            ImageProfile(
-                shape=pixels.shape,
-                dtype="uint8",
-                axes="YX",
-                photometric="MINISBLACK",
-                compression="NONE",
-                sample_format=None,
-                bits_per_sample=(8,),
-                samples_per_pixel=1,
-                planar_config=None,
-                resolution=None,
-                resolution_unit=None,
-                icc_profile=None,
-                metadata=TiffMetadata(None, None, None, ()),
-                orientation=orientation_mapping(1, 2972, 1000),
-            ),
+            profile,
             "horizontal",
             configuration,
         )
@@ -272,25 +267,12 @@ class PhysicalAuthorityContractTest(unittest.TestCase):
         self,
     ) -> None:
         configuration = get_detection_configuration("135-dual", 10)
-        pixels = np.zeros((634, 2320), dtype=np.uint8)
+        pixels, profile = product_rgb_input(
+            np.zeros((634, 2320), dtype=np.uint8)
+        )
         workspace = prepare_detection_workspace(
             pixels,
-            ImageProfile(
-                shape=pixels.shape,
-                dtype="uint8",
-                axes="YX",
-                photometric="MINISBLACK",
-                compression="NONE",
-                sample_format=None,
-                bits_per_sample=(8,),
-                samples_per_pixel=1,
-                planar_config=None,
-                resolution=None,
-                resolution_unit=None,
-                icc_profile=None,
-                metadata=TiffMetadata(None, None, None, ()),
-                orientation=orientation_mapping(1, 2320, 634),
-            ),
+            profile,
             "horizontal",
             configuration,
         )
@@ -315,27 +297,12 @@ class PhysicalAuthorityContractTest(unittest.TestCase):
         self,
     ) -> None:
         configuration = get_detection_configuration("135")
-        pixels = np.zeros((100, 720), dtype=np.uint8)
+        gray = np.zeros((100, 720), dtype=np.uint8)
         rows, columns = np.indices((60, 60))
-        pixels[20:80, 300:360] = (
+        gray[20:80, 300:360] = (
             ((rows // 3 + columns // 3) % 2) * 255
         ).astype(np.uint8)
-        profile = ImageProfile(
-            shape=pixels.shape,
-            dtype="uint8",
-            axes="YX",
-            photometric="MINISBLACK",
-            compression="NONE",
-            sample_format=None,
-            bits_per_sample=(8,),
-            samples_per_pixel=1,
-            planar_config=None,
-            resolution=None,
-            resolution_unit=None,
-            icc_profile=None,
-            metadata=TiffMetadata(None, None, None, ()),
-            orientation=orientation_mapping(1, 720, 100),
-        )
+        pixels, profile = product_rgb_input(gray)
         first = prepare_detection_workspace(
             pixels,
             profile,
@@ -424,25 +391,12 @@ class PhysicalAuthorityContractTest(unittest.TestCase):
             configuration,
             scan_canvas=ScanCanvasDetectionConfiguration(same_aspect_profiles),
         )
-        pixels = np.zeros((100, 300), dtype=np.uint8)
+        pixels, profile = product_rgb_input(
+            np.zeros((100, 300), dtype=np.uint8)
+        )
         workspace = prepare_detection_workspace(
             pixels,
-            ImageProfile(
-                shape=pixels.shape,
-                dtype="uint8",
-                axes="YX",
-                photometric="MINISBLACK",
-                compression="NONE",
-                sample_format=None,
-                bits_per_sample=(8,),
-                samples_per_pixel=1,
-                planar_config=None,
-                resolution=None,
-                resolution_unit=None,
-                icc_profile=None,
-                metadata=TiffMetadata(None, None, None, ()),
-                orientation=orientation_mapping(1, 300, 100),
-            ),
+            profile,
             "horizontal",
             configuration,
         )
@@ -470,29 +424,12 @@ class PhysicalAuthorityContractTest(unittest.TestCase):
         configuration = get_detection_configuration(
             "135",
         )
-        pixels = np.zeros((100, 720), dtype=np.uint8)
+        pixels, profile = product_rgb_input(
+            np.zeros((100, 720), dtype=np.uint8)
+        )
         workspace = prepare_detection_workspace(
             pixels,
-            ImageProfile(
-                shape=pixels.shape,
-                dtype="uint8",
-                axes="YX",
-                photometric="MINISBLACK",
-                compression="NONE",
-                sample_format=None,
-                bits_per_sample=(8,),
-                samples_per_pixel=1,
-                planar_config=None,
-                resolution=None,
-                resolution_unit=None,
-                icc_profile=None,
-                metadata=TiffMetadata(None, None, None, ()),
-                orientation=orientation_mapping(
-                    1,
-                    pixels.shape[1],
-                    pixels.shape[0],
-                ),
-            ),
+            profile,
             "horizontal",
             configuration,
         )

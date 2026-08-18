@@ -9,7 +9,7 @@ import numpy as np
 
 from ..domain import Box
 from ..geometry.affine import AffineCoordinateTransform
-from ..image.transforms import photometric_background_value, sample_affine_roi
+from ..image.transforms import sample_affine_roi
 from ..io.model import ImageProfile
 from ..io.tiff import write_validated_tiff
 from ..output.naming import portable_component
@@ -38,10 +38,6 @@ def write_crops(
         )
     )
     try:
-        background_value = photometric_background_value(
-            source_arr,
-            profile.photometric,
-        )
         for i, (box, sampling_authority_box, transform) in enumerate(
             zip(frames, sampling_authority_boxes, transforms, strict=True),
             1,
@@ -59,10 +55,8 @@ def write_crops(
             cropped = np.ascontiguousarray(
                 sample_affine_roi(
                     source_arr,
-                    profile.axes,
                     transform,
                     box,
-                    background_value=background_value,
                     sampling_authority_box=sampling_authority_box,
                 )
             )

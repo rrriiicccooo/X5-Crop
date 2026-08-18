@@ -159,8 +159,6 @@ def prepare_detection_workspace(
 ) -> DetectionWorkspace:
     source_gray = make_base_gray_u8(
         arr,
-        profile.axes,
-        profile.photometric,
         configuration.preprocess.base_gray,
     )
     gray_work = work_gray(source_gray, layout)

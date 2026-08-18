@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 
 import numpy as np
 
@@ -10,7 +11,6 @@ from ..utils import (
     require_nonnegative,
     require_percentile,
     require_positive,
-    sampled_values_for_percentile,
 )
 
 
@@ -53,61 +53,59 @@ class BaseGrayParameters:
 
 def make_base_gray_u8(
     arr: np.ndarray,
-    axes: str,
-    photometric: str,
     params: BaseGrayParameters,
 ) -> np.ndarray:
-    if axes == "YX":
-        gray = arr
-    elif axes in {"YXS", "SYX"}:
-        rgb_source = (
-            arr[..., :RGB_CHANNEL_COUNT]
-            if axes == "YXS"
-            else np.moveaxis(arr[:RGB_CHANNEL_COUNT, ...], 0, -1)
-        )
-        gray = np.empty(rgb_source.shape[:2], dtype=np.float32)
-        for start in range(0, gray.shape[0], GRAY_ROW_CHUNK_SIZE):
-            stop = min(gray.shape[0], start + GRAY_ROW_CHUNK_SIZE)
-            rgb = rgb_source[start:stop].astype(np.float32)
-            gray[start:stop] = (
-                params.red_weight * rgb[..., 0]
-                + params.green_weight * rgb[..., 1]
-                + params.blue_weight * rgb[..., 2]
-            )
-    else:
-        raise ValueError(f"Unsupported axes: {axes}")
+    if (
+        arr.dtype != np.dtype("uint16")
+        or arr.ndim != 3
+        or arr.shape[2] != RGB_CHANNEL_COUNT
+    ):
+        raise ValueError("registered gray requires uint16 RGB YXS input")
 
-    gray = gray.astype(np.float32, copy=False)
-    if np.issubdtype(arr.dtype, np.integer):
-        finite_values = sampled_values_for_percentile(
-            gray,
-            params.maximum_percentile_samples,
-        )
+    height, width = arr.shape[:2]
+    sample_step = max(
+        1,
+        math.ceil(
+            height * width / params.maximum_percentile_samples
+        ),
+    )
+    if arr.flags.c_contiguous:
+        sampled_rgb = arr.reshape(-1, RGB_CHANNEL_COUNT)[::sample_step]
     else:
-        finite = np.isfinite(gray)
-        if not finite.any():
-            return np.zeros(gray.shape, dtype=np.uint8)
-        finite_values = sampled_values_for_percentile(
-            gray[finite],
-            params.maximum_percentile_samples,
+        positions = np.arange(
+            0,
+            height * width,
+            sample_step,
+            dtype=np.int64,
         )
+        rows, columns = np.divmod(positions, width)
+        sampled_rgb = arr[rows, columns]
+    sampled_rgb = sampled_rgb.astype(np.float32)
+    finite_values = (
+        params.red_weight * sampled_rgb[:, 0]
+        + params.green_weight * sampled_rgb[:, 1]
+        + params.blue_weight * sampled_rgb[:, 2]
+    )
     lo, hi = np.percentile(finite_values, [params.low_percentile, params.high_percentile])
     if hi <= lo:
         hi = float(finite_values.max())
         lo = float(finite_values.min())
     if hi <= lo:
-        out = np.zeros(gray.shape, dtype=np.uint8)
+        out = np.zeros((height, width), dtype=np.uint8)
     else:
-        out = np.empty(gray.shape, dtype=np.uint8)
+        out = np.empty((height, width), dtype=np.uint8)
         scale = UINT8_MAX_VALUE / (hi - lo)
-        for start in range(0, gray.shape[0], GRAY_ROW_CHUNK_SIZE):
-            stop = min(gray.shape[0], start + GRAY_ROW_CHUNK_SIZE)
-            values = gray[start:stop]
+        for start in range(0, height, GRAY_ROW_CHUNK_SIZE):
+            stop = min(height, start + GRAY_ROW_CHUNK_SIZE)
+            rgb = arr[start:stop].astype(np.float32)
+            values = (
+                params.red_weight * rgb[..., 0]
+                + params.green_weight * rgb[..., 1]
+                + params.blue_weight * rgb[..., 2]
+            )
             out[start:stop] = np.clip(
                 (values - lo) * scale,
                 0,
                 UINT8_MAX_VALUE,
             ).astype(np.uint8)
-    if photometric.upper() == "MINISWHITE":
-        out = int(UINT8_MAX_VALUE) - out
     return out

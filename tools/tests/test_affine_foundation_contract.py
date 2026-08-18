@@ -125,16 +125,15 @@ class AffineFoundationContractTest(unittest.TestCase):
         box = Box(3, 2, 11, 9)
         sampled = sample_affine_roi(
             array,
-            "YXS",
             AffineCoordinateTransform.identity(15, 12),
             box,
-            background_value=0,
             sampling_authority_box=Box(0, 0, 15, 12),
         )
         self.assertTrue(np.array_equal(sampled, array[2:9, 3:11]))
 
     def test_roi_equals_slice_of_test_owned_full_rotation(self) -> None:
-        array = np.arange(9 * 13, dtype=np.uint16).reshape(9, 13)
+        plane = np.arange(9 * 13, dtype=np.uint16).reshape(9, 13)
+        array = np.repeat(plane[..., None], 3, axis=2)
         transform = AffineCoordinateTransform.expanded_rotation(13, 9, 7.0)
         full_box = Box(
             0,
@@ -144,19 +143,15 @@ class AffineFoundationContractTest(unittest.TestCase):
         )
         full = sample_affine_roi(
             array,
-            "YX",
             transform,
             full_box,
-            background_value=65535,
             sampling_authority_box=Box(0, 0, 13, 9),
         )
         roi = Box(2, 1, transform.output_extent.width - 2, 7)
         direct = sample_affine_roi(
             array,
-            "YX",
             transform,
             roi,
-            background_value=65535,
             sampling_authority_box=Box(0, 0, 13, 9),
         )
         self.assertTrue(
@@ -169,11 +164,10 @@ class AffineFoundationContractTest(unittest.TestCase):
     def test_expanded_canvas_preserves_bilinear_support_at_source_corners(
         self,
     ) -> None:
-        array = np.ones((13, 21), dtype=np.uint16)
+        array = np.zeros((13, 21, 3), dtype=np.uint16)
         transform = AffineCoordinateTransform.expanded_rotation(21, 13, 2.0)
         full = sample_affine_roi(
             array,
-            "YX",
             transform,
             Box(
                 0,
@@ -181,7 +175,6 @@ class AffineFoundationContractTest(unittest.TestCase):
                 transform.output_extent.width,
                 transform.output_extent.height,
             ),
-            background_value=0,
             sampling_authority_box=Box(0, 0, 21, 13),
         )
         for source_corner in (
@@ -196,12 +189,12 @@ class AffineFoundationContractTest(unittest.TestCase):
                 x1 = min(full.shape[1], math.ceil(mapped_x) + 2)
                 y0 = max(0, math.floor(mapped_y) - 1)
                 y1 = min(full.shape[0], math.ceil(mapped_y) + 2)
-                self.assertTrue(np.any(full[y0:y1, x0:x1] > 0))
+                self.assertTrue(np.any(full[y0:y1, x0:x1] < 65535))
 
     def test_bilinear_taps_outside_lane_use_background_without_edge_clip(
         self,
     ) -> None:
-        source = np.zeros((4, 8), dtype=np.uint8)
+        source = np.zeros((4, 8, 3), dtype=np.uint16)
         source[:, :4] = 20
         source[:, 4:] = 240
         transform = AffineCoordinateTransform(
@@ -215,13 +208,11 @@ class AffineFoundationContractTest(unittest.TestCase):
         )
         sampled = sample_affine_roi(
             source,
-            "YX",
             transform,
             Box(3, 1, 5, 3),
-            background_value=100,
             sampling_authority_box=Box(0, 0, 4, 4),
         )
-        self.assertEqual(int(sampled[0, 1]), 60)
+        self.assertEqual(int(sampled[0, 1, 0]), 32777)
         self.assertNotIn(240, sampled)
 
     def test_identity_requires_zero_in_every_observed_angle_interval(

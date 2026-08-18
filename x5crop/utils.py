@@ -48,18 +48,6 @@ def planar_config_name(value: Any) -> Optional[str]:
     return upper or None
 
 
-def spatial_shape(arr: np.ndarray) -> tuple[int, int]:
-    if arr.ndim < 2:
-        raise ValueError(f"Unsupported image shape: {arr.shape}")
-    if (
-        arr.ndim == 3
-        and arr.shape[0] in SUPPORTED_COLOR_CHANNEL_COUNTS
-        and arr.shape[-1] not in SUPPORTED_COLOR_CHANNEL_COUNTS
-    ):
-        return int(arr.shape[1]), int(arr.shape[2])
-    return int(arr.shape[0]), int(arr.shape[1])
-
-
 def infer_axes(arr: np.ndarray) -> str:
     if arr.ndim == 2:
         return "YX"
@@ -85,16 +73,3 @@ def spatial_shape_from_shape(shape: tuple[int, ...]) -> tuple[int, int]:
     if axes == "SYX":
         return int(shape[1]), int(shape[2])
     return int(shape[0]), int(shape[1])
-
-
-def sampled_values_for_percentile(
-    values: np.ndarray,
-    max_samples: int,
-) -> np.ndarray:
-    if max_samples <= 0:
-        raise ValueError("percentile sample count must be positive")
-    flat = values.reshape(-1)
-    if flat.size <= max_samples:
-        return flat
-    step = max(1, int(math.ceil(flat.size / float(max_samples))))
-    return flat[::step]

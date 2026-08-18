@@ -70,17 +70,17 @@ from x5crop.io.model import ImageProfile, TiffMetadata
 from x5crop.io.orientation import orientation_mapping
 
 
-def make_profile(shape: tuple[int, int]) -> ImageProfile:
+def make_profile(shape: tuple[int, int, int]) -> ImageProfile:
     return ImageProfile(
         shape=shape,
-        dtype="uint8",
-        axes="YX",
-        photometric="MINISBLACK",
+        dtype="uint16",
+        axes="YXS",
+        photometric="RGB",
         compression="NONE",
         sample_format=None,
-        bits_per_sample=(8,),
-        samples_per_pixel=1,
-        planar_config=None,
+        bits_per_sample=(16, 16, 16),
+        samples_per_pixel=3,
+        planar_config="CONTIG",
         resolution=None,
         resolution_unit=None,
         icc_profile=None,
@@ -90,10 +90,13 @@ def make_profile(shape: tuple[int, int]) -> ImageProfile:
 
 
 def make_candidate(pixels: np.ndarray):
+    product_pixels = (
+        np.repeat(pixels[..., None], 3, axis=2).astype(np.uint16) * 257
+    )
     configuration = get_detection_configuration("135")
     workspace = prepare_detection_workspace(
-        pixels,
-        make_profile(tuple(int(value) for value in pixels.shape)),
+        product_pixels,
+        make_profile(tuple(int(value) for value in product_pixels.shape)),
         "horizontal",
         configuration,
     )

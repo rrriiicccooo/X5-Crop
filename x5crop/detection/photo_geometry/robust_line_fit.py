@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import lru_cache
 import math
 
 import numpy as np
@@ -54,12 +55,13 @@ def physical_slope_interval(
     return FiniteInterval(minimum, maximum)
 
 
+@lru_cache(maxsize=1024)
 def fit_transition_line(
     points: tuple[TransitionPoint, ...],
     boundary_scale_px_per_mm: float,
     spec: PhotoBoundaryMeasurementSpec,
 ) -> TransitionLineFit:
-    """Fit one candidate-independent family with bounded Huber loss."""
+    """Fit one exact candidate-independent family with bounded Huber loss."""
 
     traces = np.asarray([point.trace for point in points], dtype=np.float64)
     coordinates = np.asarray(
@@ -95,6 +97,7 @@ def fit_transition_line(
     slope = float(result.x[0])
     intercept = float(result.x[1] - slope * trace_reference)
     residuals = coordinates - (slope * traces + intercept)
+    residuals.flags.writeable = False
 
     selected: list[TransitionPoint] = []
     for trace in sorted(set(point.trace for point in points)):

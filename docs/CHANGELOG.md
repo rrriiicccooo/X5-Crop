@@ -58,6 +58,9 @@ materialization、平行 detector 和 report reuse 均不再支持。
   silent first-N。
 - Performance profiler 覆盖完整用户路径，并拆分 startup/import、decode、gray/coarse support、
   registered measurement、template alignment/decision、sampling、encode/write、readback 和 publish。
+- Registered gray 直接从原始 16-bit RGB 分块生成，不保留整张 float32 中间图；输出只对
+  各 frame 做反向 affine ROI 采样，三通道复用一个有界缓冲。完全相同的 robust-line 输入才可复用
+  精确结果，不剪枝、不改 observation 或 provenance。
 - 工具、tests、report 和 release manifest 只引用 current 模块与 schema；`tools/verify` 是唯一验证入口。
 - 变形合同覆盖 coarse support 的边框平移、翻转、横竖转置与亮度/对比度，以及 phase 的平移、缩放
   和 fractional pitch；性能改动必须保持 solver 答案与 provenance。

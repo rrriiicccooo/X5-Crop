@@ -110,8 +110,7 @@ format/count/holder 编译固定模板、coarse intents 与工作上界
 
 - `TemplateSpec` 与物理单位；
 - sequence、separator、top、bottom 和 content query intents；
-- phase、role、cross、placement、像素与内存上界；
-- 正常快车道停止条件。
+- phase、role、cross、placement、像素与内存上界。
 
 Coarse pass 对每个 lane 只执行一个长轴和一个短轴 aggregate query，输出保守 interval 和 receipt；
 它没有角色、ordinal 或 geometry authority。Long-axis precision 使用固定 lattice 在两个有限 origin
@@ -123,7 +122,8 @@ winner-specific requery。
 不产生 transition 或 placement evidence；其像素和临时内存仍完整计入 receipt，不能伪装成免费工作。
 
 正常片条在 outer、direction、phase/pitch、separator topology、闭环、content 和输出预算均唯一且
-相容时停止。Registered measurement 仍保持 candidate-independent；“停止”表示不再开放 local
+相容时，运行时根据已测 residual 停止。Registered measurement 仍保持
+candidate-independent；“停止”表示不再开放 local
 advance、额外 fit pass 或新 hypothesis，不是按 winner 临时少登记查询。普通 gap residual 已由正常
 bleed 覆盖时只保留诊断事实，不增加自由度。
 

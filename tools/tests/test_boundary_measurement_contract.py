@@ -415,28 +415,46 @@ class BoundaryMeasurementContractTest(unittest.TestCase):
             evidence_strength=10.0,
         )
         profile = BasicAxisProfile("sequence", 200, (0, 100), (run,))
+        def transition(
+            identity: str,
+            *,
+            trace_ordinal: int,
+            trace_coordinate_px: int,
+            polarity: int,
+        ) -> PhotoBoundaryTransition:
+            return PhotoBoundaryTransition(
+                transition_id=ObservationId(identity),
+                query_id="query:mixed-polarity",
+                trace_ordinal=trace_ordinal,
+                trace_coordinate_px=trace_coordinate_px,
+                canonical_coordinate_px=100.0,
+                localization_interval_px=FiniteInterval(99.0, 101.0),
+                physical_position_interval_px=FiniteInterval(99.0, 101.0),
+                gradient_z=4.0,
+                tone_z=4.0,
+                texture_z=4.0,
+                left_tone_mean=1.0,
+                right_tone_mean=1.0,
+                left_texture_mean=1.0,
+                right_texture_mean=1.0,
+                polarity=polarity,
+                peak_width_px=1.0,
+                prominence=4.0,
+                local_noise=0.0,
+            )
+
         transitions = {
-            "negative": SimpleNamespace(
-                polarity=-1,
-                transition_id=ObservationId("negative"),
+            "negative": transition(
+                "negative",
+                trace_ordinal=0,
                 trace_coordinate_px=0,
-                coordinate_px=100.0,
-                localization_interval_px=FiniteInterval(99.0, 101.0),
-                physical_position_interval_px=FiniteInterval(99.0, 101.0),
-                gradient_z=4.0,
-                tone_z=4.0,
-                texture_z=4.0,
+                polarity=-1,
             ),
-            "positive": SimpleNamespace(
-                polarity=1,
-                transition_id=ObservationId("positive"),
+            "positive": transition(
+                "positive",
+                trace_ordinal=1,
                 trace_coordinate_px=100,
-                coordinate_px=100.0,
-                localization_interval_px=FiniteInterval(99.0, 101.0),
-                physical_position_interval_px=FiniteInterval(99.0, 101.0),
-                gradient_z=4.0,
-                tone_z=4.0,
-                texture_z=4.0,
+                polarity=1,
             ),
         }
 
