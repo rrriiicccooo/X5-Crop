@@ -52,55 +52,6 @@ def _midpoint_interval(left: FiniteInterval, right: FiniteInterval) -> FiniteInt
     )
 
 
-def _localization_distance(
-    observed: FiniteInterval,
-    target_px: float,
-) -> float:
-    """Distance from one direct interval to a coarse target coordinate."""
-
-    if observed.contains(target_px):
-        return 0.0
-    return min(
-        abs(observed.minimum - target_px),
-        abs(observed.maximum - target_px),
-    )
-
-
-def _coarse_localization_frontier_indices(
-    interval_pairs: tuple[tuple[FiniteInterval, FiniteInterval], ...],
-    coarse_outer: FiniteInterval | None,
-) -> tuple[int, ...]:
-    """Keep the non-dominated whole-to-local refinements.
-
-    The coarse pass only identifies two physical neighbourhoods.  Direct
-    observations still own both final coordinates.  Component-wise dominance
-    deliberately avoids a scalar score: equal or crossed alternatives remain
-    discrete answers.
-    """
-
-    if coarse_outer is None or len(interval_pairs) < 2:
-        return tuple(range(len(interval_pairs)))
-    distances = tuple(
-        (
-            _localization_distance(top, coarse_outer.minimum),
-            _localization_distance(bottom, coarse_outer.maximum),
-        )
-        for top, bottom in interval_pairs
-    )
-    retained = []
-    for index, value in enumerate(distances):
-        dominated = any(
-            other_index != index
-            and other[0] <= value[0]
-            and other[1] <= value[1]
-            and other != value
-            for other_index, other in enumerate(distances)
-        )
-        if not dominated:
-            retained.append(index)
-    return tuple(retained)
-
-
 def _scale_interval(interval: FiniteInterval, factor: float) -> FiniteInterval:
     values = (interval.minimum * factor, interval.maximum * factor)
     return FiniteInterval(min(values), max(values))
@@ -175,11 +126,21 @@ class EnclosingSupportPair:
     top_provenance_ids: tuple[ObservationId, ...]
     bottom_provenance_ids: tuple[ObservationId, ...]
     observed_span_px: FiniteInterval
+    reference_trace_px: float
+    trace_coordinates_px: tuple[int, ...]
+    top_trace_intervals_px: tuple[FiniteInterval, ...]
+    bottom_trace_intervals_px: tuple[FiniteInterval, ...]
+    top_straight_model_residual_px: float = 0.0
+    bottom_straight_model_residual_px: float = 0.0
 
     def __post_init__(self) -> None:
         if not all(
             math.isfinite(float(value))
-            for value in (self.top_canonical_px, self.bottom_canonical_px)
+            for value in (
+                self.top_canonical_px,
+                self.bottom_canonical_px,
+                self.reference_trace_px,
+            )
         ):
             raise ValueError("support boundary canonical positions must be finite")
         if self.bottom_canonical_px <= self.top_canonical_px:
@@ -200,6 +161,27 @@ class EnclosingSupportPair:
         )
         if self.observed_span_px != expected_span or self.observed_span_px.minimum <= 0.0:
             raise ValueError("support span must come from direct boundaries")
+        if (
+            tuple(sorted(set(self.trace_coordinates_px)))
+            != self.trace_coordinates_px
+            or len(self.trace_coordinates_px) < 2
+            or len(self.top_trace_intervals_px)
+            != len(self.trace_coordinates_px)
+            or len(self.bottom_trace_intervals_px)
+            != len(self.trace_coordinates_px)
+            or any(
+                not isinstance(item, FiniteInterval)
+                for item in (
+                    *self.top_trace_intervals_px,
+                    *self.bottom_trace_intervals_px,
+                )
+            )
+            or not math.isfinite(self.top_straight_model_residual_px)
+            or not math.isfinite(self.bottom_straight_model_residual_px)
+            or self.top_straight_model_residual_px < 0.0
+            or self.bottom_straight_model_residual_px < 0.0
+        ):
+            raise ValueError("support pair requires aligned direct trace intervals")
         top_ids = tuple(
             item if isinstance(item, ObservationId) else ObservationId(str(item))
             for item in self.top_provenance_ids
@@ -244,6 +226,9 @@ class CrossRoleBinding:
     independent_support_region_count: int = 0
     source_spanning_continuous: bool = False
     role_authorized: bool = True
+    enclosing_pair_id: str | None = None
+    trace_position_intervals_px: tuple[FiniteInterval, ...] = ()
+    observed_direction_interval_degrees: FiniteInterval | None = None
 
     def __post_init__(self) -> None:
         if self.role not in {BoundaryRole.TOP, BoundaryRole.BOTTOM}:
@@ -275,6 +260,15 @@ class CrossRoleBinding:
             raise ValueError("cross fit interval must remain inside full interval")
         if tuple(sorted(set(self.trace_coordinates_px))) != self.trace_coordinates_px:
             raise ValueError("cross trace coordinates must be sorted and unique")
+        if self.trace_position_intervals_px and len(
+            self.trace_position_intervals_px
+        ) != len(self.trace_coordinates_px):
+            raise ValueError("cross trace intervals disagree with trace coordinates")
+        if any(
+            not isinstance(item, FiniteInterval)
+            for item in self.trace_position_intervals_px
+        ):
+            raise TypeError("cross trace positions must use finite intervals")
         if not 0.0 <= self.support_fraction <= 1.0:
             raise ValueError("cross support fraction is invalid")
         if not 0.0 <= self.continuous_support_fraction <= 1.0:
@@ -288,6 +282,10 @@ class CrossRoleBinding:
             or self.independent_support_region_count < 0
             or not isinstance(self.source_spanning_continuous, bool)
             or not isinstance(self.role_authorized, bool)
+            or (
+                self.enclosing_pair_id is not None
+                and not self.enclosing_pair_id
+            )
         ):
             raise ValueError("cross support provenance is invalid")
         if self.full_direction_interval_degrees is not None and not isinstance(
@@ -298,6 +296,33 @@ class CrossRoleBinding:
             self.fit_direction_interval_degrees, FiniteInterval
         ):
             raise TypeError("cross fit direction interval must be FiniteInterval")
+        if self.observed_direction_interval_degrees is None:
+            object.__setattr__(
+                self,
+                "observed_direction_interval_degrees",
+                self.full_direction_interval_degrees,
+            )
+        elif not isinstance(
+            self.observed_direction_interval_degrees,
+            FiniteInterval,
+        ):
+            raise TypeError("cross observed direction must be FiniteInterval")
+        observed_direction = self.observed_direction_interval_degrees
+        if (
+            self.full_direction_interval_degrees is not None
+            and observed_direction is not None
+            and (
+                not observed_direction.contains(
+                    self.full_direction_interval_degrees.minimum,
+                    epsilon=1.0e-9,
+                )
+                or not observed_direction.contains(
+                    self.full_direction_interval_degrees.maximum,
+                    epsilon=1.0e-9,
+                )
+            )
+        ):
+            raise ValueError("cross observed direction lost feasible direction")
         if self.canonical_direction_degrees is not None:
             if (
                 self.fit_direction_interval_degrees is None
@@ -358,12 +383,22 @@ class CrossRoleBinding:
         if not isinstance(fit, FiniteInterval):
             fit = coordinate
         canonical, direction = _observation_direction(observation)
+        observed_traces = tuple(
+            getattr(observation, "trace_coordinates_px", ())
+        )
+        trace_intervals = tuple(
+            getattr(observation, "trace_position_intervals_px", ())
+        )
         return cls(
             role=run.role_hint,
             run_id=run.run_id,
             observation_id=observation.observation_id,
             coordinate_interval_px=coordinate,
-            trace_coordinates_px=tuple(run.trace_coordinates_px),
+            trace_coordinates_px=(
+                observed_traces
+                if observed_traces
+                else tuple(run.trace_coordinates_px)
+            ),
             support_fraction=float(run.support_fraction),
             continuous_support_fraction=float(run.continuous_support_fraction),
             fit_residual_px=float(observation.fit_residual_px),
@@ -374,6 +409,14 @@ class CrossRoleBinding:
                 observation.fit_angle_interval_degrees
             ),
             full_direction_interval_degrees=direction,
+            observed_direction_interval_degrees=(
+                getattr(
+                    observation,
+                    "angle_interval_degrees",
+                    direction,
+                )
+            ),
+            trace_position_intervals_px=trace_intervals,
             independent_support_region_count=int(
                 getattr(observation, "independent_support_region_count", 0)
             ),
@@ -405,8 +448,8 @@ class TemplateCrossInput:
     fixed_height_px: FiniteInterval | PositiveInterval | float | None = None
     canonical_fixed_height_px: float | None = None
     holder_short_axis_center_px: FiniteInterval | float | None = None
-    coarse_outer_interval_px: FiniteInterval | None = None
     lane_reference_trace_px: float = 0.0
+    source_direction: SharedStripDirection | None = None
     top_bindings: tuple[CrossRoleBinding, ...] = ()
     bottom_bindings: tuple[CrossRoleBinding, ...] = ()
     registered_trace_coordinates_px: tuple[int, ...] = ()
@@ -421,6 +464,11 @@ class TemplateCrossInput:
     def __post_init__(self) -> None:
         if not isinstance(self.template, TemplateSpec):
             raise TypeError("template cross input requires TemplateSpec")
+        if self.source_direction is not None and not isinstance(
+            self.source_direction,
+            SharedStripDirection,
+        ):
+            raise TypeError("cross source direction must be shared and typed")
         if self.fixed_height_px is None:
             if self.template.frame_height_px is None:
                 raise ValueError("fixed template height is required")
@@ -447,12 +495,6 @@ class TemplateCrossInput:
                 raise ValueError("fixed height contradicts template frame height")
         if self.holder_short_axis_center_px is not None:
             object.__setattr__(self, "holder_short_axis_center_px", _interval(self.holder_short_axis_center_px))
-        if self.coarse_outer_interval_px is not None:
-            if (
-                not isinstance(self.coarse_outer_interval_px, FiniteInterval)
-                or self.coarse_outer_interval_px.width <= 0.0
-            ):
-                raise ValueError("cross coarse localization is invalid")
         if not math.isfinite(float(self.lane_reference_trace_px)):
             raise ValueError("lane reference trace must be finite")
         if self.boundary_axis not in {BoundaryAxis.X, BoundaryAxis.Y}:

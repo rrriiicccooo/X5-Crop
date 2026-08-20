@@ -213,9 +213,22 @@ class RegisteredTemplateLane:
             self.raw_cross_observations
         ):
             raise ValueError("cross observations must be registered once")
-        if set(binding_ids) != {
+        enclosing = self.coarse_support.enclosing_support
+        coarse_ids = (
+            set()
+            if enclosing is None
+            else {
+                enclosing.minimum_track.observation_id,
+                enclosing.maximum_track.observation_id,
+            }
+        )
+        bound_ids = set(binding_ids)
+        uses_enclosing = bool(bound_ids.intersection(coarse_ids))
+        if uses_enclosing and not coarse_ids.issubset(bound_ids):
+            raise ValueError("coarse enclosing pair must be registered together")
+        if bound_ids != {
             item.observation_id for item in self.raw_cross_observations
-        }:
+        }.union(coarse_ids if uses_enclosing else set()):
             raise ValueError("cross bindings and observations must share identity")
         object.__setattr__(self, "transition_by_id", MappingProxyType(dict(self.transition_by_id)))
 

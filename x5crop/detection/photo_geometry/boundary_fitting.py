@@ -332,4 +332,12 @@ def fit_format_bound_boundary_observation(
                 spec=spec,
             )
         ),
+        trace_coordinates_px=tuple(
+            int(point.transition.trace_coordinate_px)
+            for point in sorted(inliers, key=lambda item: item.trace)
+        ),
+        trace_position_intervals_px=tuple(
+            point.transition.physical_position_interval_px
+            for point in sorted(inliers, key=lambda item: item.trace)
+        ),
     )

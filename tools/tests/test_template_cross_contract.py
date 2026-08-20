@@ -55,6 +55,7 @@ def binding(
     independent_regions: int = 3,
     source_spanning: bool = True,
     role_authorized: bool = True,
+    enclosing_pair_id: str | None = None,
 ) -> CrossRoleBinding:
     coordinate_interval = FiniteInterval.exact(coordinate)
     return CrossRoleBinding(
@@ -78,6 +79,12 @@ def binding(
         independent_support_region_count=independent_regions,
         source_spanning_continuous=source_spanning,
         role_authorized=role_authorized,
+        enclosing_pair_id=enclosing_pair_id,
+        trace_position_intervals_px=(
+            tuple(FiniteInterval.exact(coordinate) for _ in traces)
+            if enclosing_pair_id is not None
+            else ()
+        ),
     )
 
 
@@ -912,35 +919,10 @@ class TemplateCrossContractTest(unittest.TestCase):
                 ),
             )
         )
-        # The fixed-H direct search is unresolved, but one unique enclosing
-        # support pair is a separate, directly observed output.
-        self.assertEqual(result.status, CrossFitStatus.RESOLVED)
-        self.assertIsNone(result.runner_up)
-        assert result.best is not None
-        self.assertEqual(
-            result.best.boundary_use,
-            OutputBoundaryUse.ENCLOSING_SUPPORT_PAIR,
-        )
-        support = result.best.enclosing_support_pair
-        self.assertIsNotNone(support)
-        assert support is not None
-        self.assertGreater(
-            support.observed_span_px.minimum,
-            result.best.fixed_height_px.maximum,
-        )
-        self.assertLessEqual(
-            support.observed_span_px.maximum,
-            1.1 * result.best.fixed_height_px.minimum,
-        )
-        self.assertNotEqual(
-            support.top_full_interval_px,
-            result.best.top_full_interval_px,
-        )
+        self.assertEqual(result.status, CrossFitStatus.UNRESOLVED)
         self.assertTrue(
-            result.best.top_full_interval_px.contains(result.best.top_canonical_px)
-        )
-        self.assertTrue(
-            result.best.bottom_full_interval_px.contains(result.best.bottom_canonical_px)
+            result.best is None
+            or result.best.boundary_use != OutputBoundaryUse.ENCLOSING_SUPPORT_PAIR
         )
 
     def test_role_authorized_line_can_join_one_uniform_enclosing_pair(self) -> None:
@@ -951,10 +933,20 @@ class TemplateCrossContractTest(unittest.TestCase):
                 canonical_fixed_height_px=240.0,
                 holder_short_axis_center_px=FiniteInterval(224.0, 226.0),
                 top_bindings=(
-                    binding(BoundaryRole.TOP, "aperture-or-support-top", 100.0),
+                    binding(
+                        BoundaryRole.TOP,
+                        "aperture-or-support-top",
+                        100.0,
+                        enclosing_pair_id="support:one",
+                    ),
                 ),
                 bottom_bindings=(
-                    binding(BoundaryRole.BOTTOM, "support-bottom", 350.0),
+                    binding(
+                        BoundaryRole.BOTTOM,
+                        "support-bottom",
+                        350.0,
+                        enclosing_pair_id="support:one",
+                    ),
                 ),
             )
         )
@@ -979,12 +971,14 @@ class TemplateCrossContractTest(unittest.TestCase):
                         "support-top-a",
                         100.0,
                         role_authorized=False,
+                        enclosing_pair_id="support:a",
                     ),
                     binding(
                         BoundaryRole.TOP,
                         "support-top-b",
                         101.0,
                         role_authorized=False,
+                        enclosing_pair_id="support:b",
                     ),
                 ),
                 bottom_bindings=(
@@ -993,12 +987,14 @@ class TemplateCrossContractTest(unittest.TestCase):
                         "support-bottom-a",
                         345.0,
                         role_authorized=False,
+                        enclosing_pair_id="support:a",
                     ),
                     binding(
                         BoundaryRole.BOTTOM,
                         "support-bottom-b",
                         346.0,
                         role_authorized=False,
+                        enclosing_pair_id="support:b",
                     ),
                 ),
             )
@@ -1006,6 +1002,102 @@ class TemplateCrossContractTest(unittest.TestCase):
         self.assertEqual(result.status, CrossFitStatus.BOUND_EXCEEDED)
         self.assertEqual(result.receipt.evaluated_fit_count, 2)
         self.assertEqual(result.receipt.evaluated_fit_bound, 1)
+
+    def test_preclosed_enclosing_pair_cannot_detach_and_recombine(self) -> None:
+        result = fit_template_cross(
+            TemplateCrossInput(
+                template=template(),
+                fixed_height_px=240.0,
+                canonical_fixed_height_px=240.0,
+                top_bindings=(
+                    binding(
+                        BoundaryRole.TOP,
+                        "support-top-a",
+                        100.0,
+                        role_authorized=False,
+                        enclosing_pair_id="support:a",
+                    ),
+                ),
+                bottom_bindings=(
+                    binding(
+                        BoundaryRole.BOTTOM,
+                        "support-bottom-a",
+                        350.0,
+                        role_authorized=False,
+                        enclosing_pair_id="support:a",
+                    ),
+                    binding(
+                        BoundaryRole.BOTTOM,
+                        "support-bottom-b",
+                        349.0,
+                        role_authorized=False,
+                        enclosing_pair_id="support:b",
+                    ),
+                ),
+            )
+        )
+
+        self.assertEqual(result.status, CrossFitStatus.RESOLVED)
+        assert result.best is not None
+        self.assertEqual(
+            result.best.direct_provenance_ids,
+            (
+                ObservationId("observation:support-top-a"),
+                ObservationId("observation:support-bottom-a"),
+            ),
+        )
+        self.assertEqual(result.receipt.evaluated_fit_count, 1)
+
+    def test_enclosing_support_records_straight_model_residual(self) -> None:
+        top = replace(
+            binding(
+                BoundaryRole.TOP,
+                "bent-support-top",
+                100.0,
+                role_authorized=False,
+                enclosing_pair_id="support:bent",
+            ),
+            trace_position_intervals_px=(
+                FiniteInterval.exact(100.0),
+                FiniteInterval.exact(104.0),
+                FiniteInterval.exact(100.0),
+            ),
+        )
+        bottom = replace(
+            binding(
+                BoundaryRole.BOTTOM,
+                "bent-support-bottom",
+                350.0,
+                role_authorized=False,
+                enclosing_pair_id="support:bent",
+            ),
+            trace_position_intervals_px=(
+                FiniteInterval.exact(350.0),
+                FiniteInterval.exact(346.0),
+                FiniteInterval.exact(350.0),
+            ),
+        )
+        result = fit_template_cross(
+            TemplateCrossInput(
+                template=template(),
+                fixed_height_px=240.0,
+                canonical_fixed_height_px=240.0,
+                top_bindings=(top,),
+                bottom_bindings=(bottom,),
+            )
+        )
+
+        self.assertEqual(result.status, CrossFitStatus.RESOLVED)
+        assert result.best is not None
+        assert result.best.enclosing_support_pair is not None
+        self.assertEqual(
+            result.best.enclosing_support_pair.top_straight_model_residual_px,
+            4.0,
+        )
+        self.assertEqual(
+            result.best.enclosing_support_pair.bottom_straight_model_residual_px,
+            4.0,
+        )
 
     def test_local_role_line_cannot_compete_with_source_wide_support(self) -> None:
         result = fit_template_cross(
@@ -1035,6 +1127,7 @@ class TemplateCrossContractTest(unittest.TestCase):
                         80.0,
                         source_spanning=False,
                         role_authorized=False,
+                        enclosing_pair_id="support:whole",
                     ),
                 ),
                 bottom_bindings=(
@@ -1044,6 +1137,7 @@ class TemplateCrossContractTest(unittest.TestCase):
                         330.0,
                         source_spanning=False,
                         role_authorized=False,
+                        enclosing_pair_id="support:whole",
                     ),
                 ),
             )

@@ -133,7 +133,9 @@ def _prepared() -> PreparedTemplateLane:
                 CoarseSupportAuthority.HOLDER_CONSERVATIVE,
                 (),
             ),
-        CoarseStripSupportReceipt(2, 2, 2, 2, 8, 2, 2),
+            None,
+            None,
+            CoarseStripSupportReceipt(2, 2, 2, 2, 8, 2, 2),
         ),
         anchor_domain=SequenceAnchorDiscoveryDomain(
             domain_id="domain:runtime",

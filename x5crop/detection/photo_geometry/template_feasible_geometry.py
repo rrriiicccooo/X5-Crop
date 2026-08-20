@@ -39,6 +39,8 @@ class JointFrameState:
     top_at_lane_reference_px: float
     bottom_at_lane_reference_px: float
     angle_degrees: float
+    sequence_start_model_residual_px: float
+    sequence_end_model_residual_px: float
 
     def __post_init__(self) -> None:
         values = (
@@ -47,8 +49,16 @@ class JointFrameState:
             self.top_at_lane_reference_px,
             self.bottom_at_lane_reference_px,
             self.angle_degrees,
+            self.sequence_start_model_residual_px,
+            self.sequence_end_model_residual_px,
         )
-        if any(not math.isfinite(value) for value in values):
+        if any(not math.isfinite(value) for value in values) or any(
+            value < 0.0
+            for value in (
+                self.sequence_start_model_residual_px,
+                self.sequence_end_model_residual_px,
+            )
+        ):
             raise ValueError("joint frame state must be finite")
 
 
@@ -69,7 +79,11 @@ class FeasiblePlacementProjection:
             or any(not states for states in self.frame_states)
             or self.extreme_evaluation_count <= 0
             or self.extreme_evaluation_count
-            > _MAX_SUPPORT_EVALUATIONS * (len(self.frame_states) + 1)
+            > (
+                (2 * _MAX_SUPPORT_EVALUATIONS + 2)
+                * len(self.frame_states)
+                + _MAX_SUPPORT_EVALUATIONS
+            )
         ):
             raise ValueError("feasible placement projection is invalid")
 
@@ -161,6 +175,29 @@ def _support_point(
     return first.value(solution), second.value(solution)
 
 
+def _support_solution(
+    system: _FeasibleSystem,
+    first: _LinearExpression,
+    second: _LinearExpression,
+    direction: tuple[float, float],
+) -> tuple[tuple[float, float], np.ndarray]:
+    objective = -(
+        direction[0] * first.coefficients
+        + direction[1] * second.coefficients
+    )
+    result = linprog(
+        objective,
+        A_ub=system.inequalities[0],
+        b_ub=system.inequalities[1],
+        bounds=system.bounds,
+        method="highs",
+    )
+    if not result.success or result.x is None:
+        raise ValueError("selected placement has no joint feasible state")
+    solution = np.asarray(result.x, dtype=np.float64)
+    return (first.value(solution), second.value(solution)), solution
+
+
 def _project_pair_vertices(
     system: _FeasibleSystem,
     first: _LinearExpression,
@@ -208,6 +245,139 @@ def _project_pair_vertices(
                     )
         if not added:
             return _ordered_hull(tuple(points.values())), evaluations
+
+
+def _project_pair_solutions(
+    system: _FeasibleSystem,
+    first: _LinearExpression,
+    second: _LinearExpression,
+) -> tuple[tuple[np.ndarray, ...], int]:
+    """Retain the shared parameter solution behind every projected vertex."""
+
+    solutions: dict[tuple[int, int], np.ndarray] = {}
+    points: dict[tuple[int, int], tuple[float, float]] = {}
+    evaluations = 0
+
+    def query(direction: tuple[float, float]) -> None:
+        nonlocal evaluations
+        if evaluations >= _MAX_SUPPORT_EVALUATIONS:
+            raise ValueError("joint feasible projection exceeded its work bound")
+        point, solution = _support_solution(system, first, second, direction)
+        key = _point_key(point)
+        points[key] = point
+        solutions[key] = solution
+        evaluations += 1
+
+    for direction in _INITIAL_SUPPORT_DIRECTIONS:
+        query(direction)
+    while True:
+        hull = _ordered_hull(tuple(points.values()))
+        if len(hull) <= 2:
+            keys = tuple(_point_key(point) for point in hull)
+            return tuple(solutions[key] for key in keys), evaluations
+        added = False
+        for left, right in zip(hull, (*hull[1:], hull[0]), strict=True):
+            if evaluations >= _MAX_SUPPORT_EVALUATIONS:
+                raise ValueError("joint feasible projection exceeded its work bound")
+            edge_x = right[0] - left[0]
+            edge_y = right[1] - left[1]
+            norm = math.hypot(edge_x, edge_y)
+            if norm <= _GEOMETRY_EPSILON:
+                continue
+            outward = (edge_y / norm, -edge_x / norm)
+            candidate, solution = _support_solution(
+                system,
+                first,
+                second,
+                outward,
+            )
+            evaluations += 1
+            edge_support = outward[0] * left[0] + outward[1] * left[1]
+            candidate_support = (
+                outward[0] * candidate[0] + outward[1] * candidate[1]
+            )
+            if candidate_support > edge_support + _GEOMETRY_EPSILON:
+                key = _point_key(candidate)
+                points[key] = candidate
+                solutions[key] = solution
+                added = True
+                if len(points) > _MAX_PROJECTED_VERTICES:
+                    raise ValueError(
+                        "joint feasible projection exceeded its vertex bound"
+                    )
+        if not added:
+            keys = tuple(_point_key(point) for point in _ordered_hull(tuple(points.values())))
+            return tuple(solutions[key] for key in keys), evaluations
+
+
+def _sequence_model_residuals(
+    placement: FormatPlacement,
+    roles: tuple[_LinearExpression, ...],
+    solution: np.ndarray,
+    frame_index: int,
+) -> tuple[float, float]:
+    """Measure local direct residuals and bounded inferred-edge inheritance."""
+
+    direction = placement.sequence_fit.template.direction
+    by_role: dict[BoundaryRole, list[tuple[int, float]]] = {
+        BoundaryRole.START: [],
+        BoundaryRole.END: [],
+    }
+    for index, (expression, interval, observation_id) in enumerate(
+        zip(
+            roles,
+            placement.sequence_fit.role_full_position_intervals_px,
+            placement.sequence_fit.role_observation_ids,
+            strict=True,
+        )
+    ):
+        if observation_id is None:
+            continue
+        predicted = expression.value(solution)
+        if index % 2 == 0:
+            role = BoundaryRole.START
+            outward = interval.minimum if direction > 0 else interval.maximum
+            residual = (
+                predicted - outward
+                if direction > 0
+                else outward - predicted
+            )
+        else:
+            role = BoundaryRole.END
+            outward = interval.maximum if direction > 0 else interval.minimum
+            residual = (
+                outward - predicted
+                if direction > 0
+                else predicted - outward
+            )
+        by_role[role].append((index, max(0.0, residual)))
+
+    def selected(role: BoundaryRole, role_index: int) -> float:
+        direct = dict(by_role[role])
+        if role_index in direct:
+            return direct[role_index]
+        # A missing edge still represents one fixed-format frame. Its local
+        # straight-model departure is bounded by the nearest direct occurrence
+        # of the same physical role on either side; a remote outlier elsewhere
+        # on the strip is not copied into this frame. Width already varies in
+        # this joint solution and must not be added again as an independent
+        # maximum.
+        left = tuple(
+            value for index, value in direct.items() if index < role_index
+        )
+        right = tuple(
+            value for index, value in direct.items() if index > role_index
+        )
+        neighbours = (
+            *((left[-1],) if left else ()),
+            *((right[0],) if right else ()),
+        )
+        return max(neighbours, default=0.0)
+
+    return (
+        selected(BoundaryRole.START, 2 * frame_index),
+        selected(BoundaryRole.END, 2 * frame_index + 1),
+    )
 
 
 def _sequence_system(
@@ -262,7 +432,7 @@ def _sequence_system(
         (expression, interval)
         for expression, interval in zip(
             roles,
-            sequence.role_full_position_intervals_px,
+            sequence.role_positions_px,
             strict=True,
         )
     ) + (
@@ -275,49 +445,147 @@ def _sequence_system(
     return _FeasibleSystem(bounds, _constraints(constraints)), roles
 
 
-def _cross_vertices(
+def _aperture_cross_vertices(
     placement: FormatPlacement,
 ) -> tuple[tuple[tuple[float, float], ...], int]:
     cross = placement.cross_fit
     top = _LinearExpression(np.asarray((1.0, 0.0)), 0.0)
     bottom = _LinearExpression(np.asarray((1.0, 1.0)), 0.0)
-    if cross.boundary_use == OutputBoundaryUse.ENCLOSING_SUPPORT_PAIR:
-        support = cross.enclosing_support_pair
-        if support is None:
-            raise ValueError("enclosing output requires its direct support pair")
-        bounds = (
-            (
-                support.top_full_interval_px.minimum,
-                support.top_full_interval_px.maximum,
-            ),
-            (
-                support.observed_span_px.minimum,
-                support.observed_span_px.maximum,
-            ),
-        )
-        intervals = (
-            (top, support.top_full_interval_px),
-            (bottom, support.bottom_full_interval_px),
-        )
-    else:
-        bounds = (
-            (
-                cross.top_full_interval_px.minimum,
-                cross.top_full_interval_px.maximum,
-            ),
-            (
-                cross.fixed_height_px.minimum,
-                cross.fixed_height_px.maximum,
-            ),
-        )
-        intervals = (
-            (top, cross.top_full_interval_px),
-            (bottom, cross.bottom_full_interval_px),
-        )
+    if cross.boundary_use != OutputBoundaryUse.APERTURE_PAIR:
+        raise ValueError("aperture projection cannot consume support geometry")
+    bounds = (
+        (
+            cross.top_full_interval_px.minimum,
+            cross.top_full_interval_px.maximum,
+        ),
+        (
+            cross.fixed_height_px.minimum,
+            cross.fixed_height_px.maximum,
+        ),
+    )
+    intervals = (
+        (top, cross.top_full_interval_px),
+        (bottom, cross.bottom_full_interval_px),
+    )
     return _project_pair_vertices(
         _FeasibleSystem(bounds, _constraints(intervals)),
         top,
         bottom,
+    )
+
+
+def _support_system(
+    placement: FormatPlacement,
+) -> _FeasibleSystem:
+    support = placement.cross_fit.enclosing_support_pair
+    if support is None:
+        raise ValueError("enclosing output requires its direct support pair")
+    direction = placement.direction.full_angle_interval_degrees
+    bounds = (
+        (
+            support.top_full_interval_px.minimum,
+            support.top_full_interval_px.maximum,
+        ),
+        (
+            support.bottom_full_interval_px.minimum,
+            support.bottom_full_interval_px.maximum,
+        ),
+        (
+            math.tan(math.radians(direction.minimum)),
+            math.tan(math.radians(direction.maximum)),
+        ),
+    )
+    top_reference = _LinearExpression(np.asarray((1.0, 0.0, 0.0)), 0.0)
+    bottom_reference = _LinearExpression(np.asarray((0.0, 1.0, 0.0)), 0.0)
+    span = _LinearExpression(np.asarray((-1.0, 1.0, 0.0)), 0.0)
+    constraints: list[tuple[_LinearExpression, FiniteInterval]] = [
+        (top_reference, support.top_full_interval_px),
+        (bottom_reference, support.bottom_full_interval_px),
+        (span, support.observed_span_px),
+    ]
+    for trace, top_interval, bottom_interval in zip(
+        support.trace_coordinates_px,
+        support.top_trace_intervals_px,
+        support.bottom_trace_intervals_px,
+        strict=True,
+    ):
+        distance = float(trace) - support.reference_trace_px
+        top_feasible = FiniteInterval(
+            top_interval.minimum
+            - support.top_straight_model_residual_px,
+            top_interval.maximum
+            + support.top_straight_model_residual_px,
+        )
+        bottom_feasible = FiniteInterval(
+            bottom_interval.minimum
+            - support.bottom_straight_model_residual_px,
+            bottom_interval.maximum
+            + support.bottom_straight_model_residual_px,
+        )
+        constraints.extend(
+            (
+                (
+                    _LinearExpression(
+                        np.asarray((1.0, 0.0, distance)),
+                        0.0,
+                    ),
+                    top_feasible,
+                ),
+                (
+                    _LinearExpression(
+                        np.asarray((0.0, 1.0, distance)),
+                        0.0,
+                    ),
+                    bottom_feasible,
+                ),
+            )
+        )
+    return _FeasibleSystem(bounds, _constraints(tuple(constraints)))
+
+
+def _support_cross_states(
+    placement: FormatPlacement,
+    system: _FeasibleSystem,
+    target_trace_px: float,
+) -> tuple[tuple[tuple[float, float, float], ...], int]:
+    support = placement.cross_fit.enclosing_support_pair
+    if support is None:
+        raise ValueError("support projection lost its direct authority")
+    distance = target_trace_px - support.reference_trace_px
+    top_at_target = _LinearExpression(
+        np.asarray((1.0, 0.0, distance)),
+        0.0,
+    )
+    bottom_at_target = _LinearExpression(
+        np.asarray((0.0, 1.0, distance)),
+        0.0,
+    )
+    solutions, evaluations = _project_pair_solutions(
+        system,
+        top_at_target,
+        bottom_at_target,
+    )
+    slope = _LinearExpression(np.asarray((0.0, 0.0, 1.0)), 0.0)
+    zero = _LinearExpression(np.zeros(3, dtype=np.float64), 0.0)
+    slope_solutions = tuple(
+        _support_solution(system, slope, zero, direction)[1]
+        for direction in ((1.0, 0.0), (-1.0, 0.0))
+    )
+    evaluations += len(slope_solutions)
+    unique = {
+        tuple(round(float(value), 12) for value in solution): solution
+        for solution in (*solutions, *slope_solutions)
+    }
+    return (
+        tuple(
+            (
+                float(solution[0]),
+                float(solution[1]),
+                math.degrees(math.atan(float(solution[2]))),
+            )
+            for solution in unique.values()
+        ),
+        evaluations,
     )
 
 
@@ -329,33 +597,73 @@ def project_selected_placement(
     if not isinstance(placement, FormatPlacement):
         raise TypeError("joint projection requires a selected placement")
     sequence_system, roles = _sequence_system(placement)
-    cross_vertices, evaluation_count = _cross_vertices(placement)
-    angles = tuple(
-        dict.fromkeys(
-            (
-                placement.direction.full_angle_interval_degrees.minimum,
-                placement.direction.canonical_angle_degrees,
-                placement.direction.full_angle_interval_degrees.maximum,
+    support_system = (
+        _support_system(placement)
+        if placement.cross_fit.boundary_use
+        == OutputBoundaryUse.ENCLOSING_SUPPORT_PAIR
+        else None
+    )
+    if support_system is None:
+        cross_vertices, evaluation_count = _aperture_cross_vertices(placement)
+        angles = tuple(
+            dict.fromkeys(
+                (
+                    placement.direction.full_angle_interval_degrees.minimum,
+                    placement.direction.canonical_angle_degrees,
+                    placement.direction.full_angle_interval_degrees.maximum,
+                )
             )
         )
-    )
+        aperture_states = tuple(
+            (top, bottom, angle)
+            for top, bottom in cross_vertices
+            for angle in angles
+        )
+    else:
+        evaluation_count = 0
+        aperture_states = ()
     frames: list[tuple[JointFrameState, ...]] = []
     for ordinal in range(placement.output_slot_count):
-        sequence_vertices, evaluations = _project_pair_vertices(
+        sequence_solutions, evaluations = _project_pair_solutions(
             sequence_system,
             roles[2 * ordinal],
             roles[2 * ordinal + 1],
         )
         evaluation_count += evaluations
-        states = tuple(
-            JointFrameState(start, end, top, bottom, angle)
-            for start, end in sequence_vertices
-            for top, bottom in cross_vertices
-            for angle in angles
-        )
+        if support_system is None:
+            cross_states = aperture_states
+        else:
+            cross_states, evaluations = _support_cross_states(
+                placement,
+                support_system,
+                placement.frames[ordinal].top.reference_trace_px,
+            )
+            evaluation_count += evaluations
+        states = []
+        for solution in sequence_solutions:
+            start = roles[2 * ordinal].value(solution)
+            end = roles[2 * ordinal + 1].value(solution)
+            start_residual, end_residual = _sequence_model_residuals(
+                placement,
+                roles,
+                solution,
+                ordinal,
+            )
+            states.extend(
+                JointFrameState(
+                    start,
+                    end,
+                    top,
+                    bottom,
+                    angle,
+                    start_residual,
+                    end_residual,
+                )
+                for top, bottom, angle in cross_states
+            )
         if not states:
             raise ValueError("selected placement projected no feasible frame state")
-        frames.append(states)
+        frames.append(tuple(states))
     return FeasiblePlacementProjection(
         projection_id=run_local_id(
             "joint-placement-projection",

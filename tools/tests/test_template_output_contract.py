@@ -77,6 +77,14 @@ def _enclosing_support_placement(*, support_span_px: float = 250.0):
         top_provenance_ids=(top.observation_id,),
         bottom_provenance_ids=(bottom.observation_id,),
         observed_span_px=FiniteInterval.exact(support_span_px),
+        reference_trace_px=150.0,
+        trace_coordinates_px=(0, 150, 300),
+        top_trace_intervals_px=tuple(
+            FiniteInterval.exact(support_top) for _ in range(3)
+        ),
+        bottom_trace_intervals_px=tuple(
+            FiniteInterval.exact(support_bottom) for _ in range(3)
+        ),
     )
     cross = CrossFit(
         template_id=template.template_id,
@@ -183,7 +191,7 @@ class TemplateOutputContractTest(unittest.TestCase):
             )
         )
 
-    def test_enclosing_support_limit_applies_to_final_output_footprint(self) -> None:
+    def test_enclosing_support_at_exact_height_limit_remains_supported(self) -> None:
         placement = _enclosing_support_placement(support_span_px=264.0)
         output = output_footprint_from_template_placement(
             placement,
@@ -196,12 +204,12 @@ class TemplateOutputContractTest(unittest.TestCase):
 
         assessment = template_direct_use_budget_assessment(placement, output)
 
-        self.assertEqual(assessment.state, EvidenceState.CONTRADICTED)
-        self.assertGreater(
+        self.assertEqual(assessment.state, EvidenceState.SUPPORTED)
+        self.assertLessEqual(
             assessment.enclosing_support_height_ratio,
             OUTPUT_PROTECTION_SPEC.maximum_enclosing_support_height_ratio,
         )
-        self.assertFalse(assessment.enclosing_support_within_limit)
+        self.assertTrue(assessment.enclosing_support_within_limit)
 
     def test_selected_placement_produces_supported_output_footprint(self) -> None:
         placement = _placement()
@@ -335,29 +343,36 @@ class TemplateOutputContractTest(unittest.TestCase):
             EvidenceState.SUPPORTED,
         )
 
-    def test_inferred_edge_uses_only_the_joint_width_projection(self) -> None:
+    def test_inferred_edge_retains_same_role_selected_fit_residual(self) -> None:
         template = replace(
-            _template(1),
+            _template(2),
             frame_width_px=FiniteInterval(96.0, 104.0),
+        )
+        sequence = _sequence(template, missing=(3,))
+        intervals = list(sequence.role_full_position_intervals_px)
+        intervals[1] = FiniteInterval(200.0, 210.0)
+        sequence = replace(
+            sequence,
+            role_full_position_intervals_px=tuple(intervals),
         )
         placement = _compose(
             template,
-            _sequence(template, missing=(1,)),
+            sequence,
             _cross(template, direction=_direction()),
         )
         self.assertEqual(
-            placement.frames[0].end.position_source.value,
+            placement.frames[1].end.position_source.value,
             "inferred_sequence",
         )
         self.assertEqual(
-            placement.frames[0].end.full_position_interval_px,
-            FiniteInterval(196.0, 204.0),
+            placement.frames[1].end.full_position_interval_px,
+            FiniteInterval(316.0, 324.0),
         )
         output = output_footprint_from_template_placement(
             placement,
             project_selected_placement(placement),
             lane=_lane(),
-            lane_ordinal=1,
+            lane_ordinal=2,
             layout="horizontal",
             transform=AffineCoordinateTransform.identity(500, 400),
         )
@@ -366,7 +381,50 @@ class TemplateOutputContractTest(unittest.TestCase):
             for item in output.boundary_protections
             if item.role == BoundaryRole.END
         )
-        self.assertLess(end.local_boundary_residual_px, 1.0e-8)
+        self.assertGreaterEqual(end.local_boundary_residual_px, 9.9)
+
+    def test_inferred_frame_does_not_add_width_twice(self) -> None:
+        template = replace(
+            _template(4),
+            frame_width_px=FiniteInterval(96.0, 104.0),
+        )
+        sequence = _sequence(template, missing=(4, 5))
+        intervals = list(sequence.role_full_position_intervals_px)
+        # A remote first-frame outlier must not be copied into frame 3.  The
+        # nearest direct START/END facts on both sides bound the local straight
+        # residual. W already belongs to the joint state and is not added again.
+        intervals[0] = FiniteInterval(70.0, 100.0)
+        intervals[2] = FiniteInterval(215.0, 220.0)
+        intervals[3] = FiniteInterval(320.0, 325.0)
+        intervals[6] = FiniteInterval(454.0, 460.0)
+        intervals[7] = FiniteInterval(560.0, 566.0)
+        sequence = replace(
+            sequence,
+            role_full_position_intervals_px=tuple(intervals),
+        )
+        placement = _compose(
+            template,
+            sequence,
+            _cross(template, direction=_direction()),
+        )
+        output = output_footprint_from_template_placement(
+            placement,
+            project_selected_placement(placement),
+            lane=_lane(),
+            lane_ordinal=3,
+            layout="horizontal",
+            transform=AffineCoordinateTransform.identity(700, 400),
+        )
+        protections = {item.role: item for item in output.boundary_protections}
+
+        self.assertLess(
+            protections[BoundaryRole.START].local_boundary_residual_px,
+            10.0,
+        )
+        self.assertAlmostEqual(
+            protections[BoundaryRole.END].local_boundary_residual_px,
+            6.0,
+        )
 
     def test_selected_frame_residual_still_obeys_five_percent_limit(self) -> None:
         template = _template(1)

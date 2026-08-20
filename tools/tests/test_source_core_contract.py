@@ -465,6 +465,8 @@ class PhysicalAuthorityContractTest(unittest.TestCase):
                     CoarseSupportAuthority.HOLDER_CONSERVATIVE,
                     (),
                 ),
+                None,
+                None,
                 CoarseStripSupportReceipt(2, 0, 0, 0, 0, 2, 0),
             ),
         )

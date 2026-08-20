@@ -5,7 +5,6 @@ import unittest
 
 from x5crop.domain import FiniteInterval, ObservationId
 from x5crop.detection.photo_geometry.template_alignment_diagnostic import (
-    enforce_template_alignment,
     template_alignment_diagnostic,
 )
 from x5crop.detection.photo_geometry.template_model import (
@@ -108,7 +107,7 @@ class TemplateAlignmentDiagnosticContractTest(unittest.TestCase):
         )
         self.assertIsNone(diagnostic.absolute_phase_px)
 
-    def test_repeated_separator_shape_conflicts_veto_a_resolved_fit(self) -> None:
+    def test_repeated_separator_shape_conflicts_remain_diagnostic_only(self) -> None:
         observations = tuple(
             edge(name, coordinate)
             for name, coordinate in (
@@ -154,12 +153,8 @@ class TemplateAlignmentDiagnosticContractTest(unittest.TestCase):
             ResidualPattern.UNRESOLVED,
         )
         self.assertEqual(len(diagnostic.incompatible_separator_support_ids), 2)
-        rejected = enforce_template_alignment(phase, shifted, bands)
-        self.assertEqual(rejected.status, PhaseFitStatus.UNRESOLVED)
-        self.assertEqual(
-            rejected.failure_kind,
-            PhaseFailureKind.FIXED_TEMPLATE_MISMATCH,
-        )
+        self.assertEqual(phase.status, PhaseFitStatus.RESOLVED)
+        self.assertIsNotNone(phase.best)
 
     def test_one_separator_width_departure_does_not_invent_a_local_step(self) -> None:
         observations = tuple(
@@ -195,10 +190,7 @@ class TemplateAlignmentDiagnosticContractTest(unittest.TestCase):
             diagnostic.incompatible_separator_support_ids,
             (band.observation_id,),
         )
-        self.assertEqual(
-            enforce_template_alignment(phase, shifted, (band,)).status,
-            PhaseFitStatus.RESOLVED,
-        )
+        self.assertEqual(phase.status, PhaseFitStatus.RESOLVED)
 
 
 if __name__ == "__main__":

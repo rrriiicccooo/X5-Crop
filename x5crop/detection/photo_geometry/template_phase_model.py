@@ -24,7 +24,6 @@ class TemplatePhaseInput:
     scale_px_per_mm: PositiveInterval | None
     holder_span_px: FiniteInterval | None
     phase_authority_px: FiniteInterval | None
-    coarse_outer_interval_px: FiniteInterval | None = None
     max_observations: int = 512
 
     def __post_init__(self) -> None:
@@ -41,11 +40,6 @@ class TemplatePhaseInput:
         ):
             if value is not None and not isinstance(value, FiniteInterval):
                 raise TypeError(f"phase input {name} must be a finite interval")
-        if self.coarse_outer_interval_px is not None and (
-            not isinstance(self.coarse_outer_interval_px, FiniteInterval)
-            or self.coarse_outer_interval_px.width <= 0.0
-        ):
-            raise ValueError("phase coarse localization is invalid")
         identities = tuple(item.observation_id for item in self.observations)
         band_ids = tuple(item.observation_id for item in self.separator_bands)
         if (
@@ -75,7 +69,6 @@ class PhaseFailureKind(str, Enum):
 
 class PhaseWinnerBasis(str, Enum):
     ONLY_PHYSICAL_FIT = "only_physical_fit"
-    COARSE_LOCAL_REFINEMENT = "coarse_local_refinement"
     RESIDUAL_COMPATIBILITY = "residual_compatibility"
     INDEPENDENT_SUPPORT = "independent_support"
     INDEPENDENT_COVERAGE = "independent_coverage"

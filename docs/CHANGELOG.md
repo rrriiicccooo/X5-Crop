@@ -37,6 +37,9 @@ materialization、平行 detector 和 report reuse 均不再支持。
 - Top/bottom 支持两种互斥用途：固定 H 的 `APERTURE_PAIR`，以及直接连续、完整包住 H 且总高度
   不超过 1.1H 的 `ENCLOSING_SUPPORT_PAIR`。后者可来自片夹或胶片材料支撑，但两侧不得与 aperture
   混用。
+- 短轴 coarse query 的 aggregate interval 仍只定位局部测量；同一批已注册 trace 若直接形成
+  source-wide 双侧 track，可以独立提供共同方向和 enclosing support。Aggregate interval 不能因此
+  获得照片边界权限。
 - Aperture 正常 bleed 为 `max(0.15 mm, 0.7% W)` 和 cross 0.25 mm；四边完整 expansion 统一使用
   单边 5% 上限。Enclosing support 不加 cross bleed，使用总高度 1.1H 的独立合同。
 - 安全计算改为 selected-only 联合可行集合。Phase、pitch、direction、cross、local advance 和直线
@@ -45,6 +48,8 @@ materialization、平行 detector 和 report reuse 均不再支持。
 
 ### 报告、工具与性能
 
+- 冻结依赖同步到已验证环境：NumPy 2.5.2、tifffile 2026.8.16、imagecodecs 2026.8.16；安装器
+  仍沿已确认 provider 只处理缺失或版本不符项，不建立第二套环境。
 - Debug Analysis 使用 1800 px 宽、自适应高度的三联图，展示理论模板、实际观察、逐 role
   residual、direct/inferred ledger、best/runner、boundary use、最终 footprint、预算使用和根阻止
   事实；展示层不重算几何。
@@ -61,6 +66,8 @@ materialization、平行 detector 和 report reuse 均不再支持。
 - Registered gray 直接从原始 16-bit RGB 分块生成，不保留整张 float32 中间图；输出只对
   各 frame 做反向 affine ROI 采样，三通道复用一个有界缓冲。完全相同的 robust-line 输入才可复用
   精确结果，不剪枝、不改 observation 或 provenance。
+- Affine ROI 在 lane authority 外只写黑色无数据像素，插值结果仍按完整 uint16 范围保留；测试同时
+  覆盖非零照片像素、边界插值和 authority 外背景，避免几何通过但正式 TIFF 被写成全黑。
 - 工具、tests、report 和 release manifest 只引用 current 模块与 schema；`tools/verify` 是唯一验证入口。
 - 变形合同覆盖 coarse support 的边框平移、翻转、横竖转置与亮度/对比度，以及 phase 的平移、缩放
   和 fractional pitch；性能改动必须保持 solver 答案与 provenance。

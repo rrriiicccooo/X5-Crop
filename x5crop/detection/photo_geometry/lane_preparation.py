@@ -7,6 +7,7 @@ import math
 
 from ...configuration.model import DetectionConfiguration, ResolvedSlotCount
 from ...domain import FiniteInterval, ObservationId
+from ...formats import OUTPUT_PROTECTION_SPEC
 from ..source_core import SourceLaneEvidence
 from .axis_layout import axis_interval, coordinate_count, source_axes
 from .corridors import (
@@ -16,19 +17,23 @@ from .corridors import (
     source_lane_box,
 )
 from .coarse_strip_support import observe_coarse_strip_support
+from .coarse_enclosing_model import (
+    CoarseEnclosingTrack,
+    CoarseSharedDirection,
+)
 from .measurement_model import (
     PhotoBoundaryMeasurementField,
     PhotoBoundaryMeasurementSet,
     PhotoBoundaryTransition,
 )
 from .observation_types import BasicAxisProfile
+from .model import BoundaryRole
 from .observations import build_sequence_observations
-from .output_model import ResolvedOutputSlots
+from .output_model import ResolvedOutputSlots, SharedStripDirection
 from .profile_adapters import cross_profile_from_regions, sequence_profile_from_regions
 from .registered_measurement import measure_registered_queries
 from .sequence_edge_families import merge_sequence_edge_families
 from .template_evidence import template_evidence_use_ledger
-from .template_alignment_diagnostic import enforce_template_alignment
 from .template_runtime_model import (
     PreparedTemplateLane,
     RegisteredTemplateLane,
@@ -42,7 +47,7 @@ from .template_registration import (
     template_spec_from_physical_authority,
 )
 from .template_cross import fit_template_cross
-from .template_cross_model import TemplateCrossInput
+from .template_cross_model import CrossRoleBinding, TemplateCrossInput
 from .template_phase import (
     account_prior_phase_fit,
     fit_template_phase,
@@ -79,6 +84,86 @@ def _canonical_height_from_shared_scale(
         * source_geometry.frame_spec.frame_height_mm
     )
     return min(height.maximum, max(height.minimum, canonical))
+
+
+def _coarse_enclosing_binding(
+    track: CoarseEnclosingTrack,
+    role: BoundaryRole,
+    *,
+    pair_id: str,
+) -> CrossRoleBinding:
+    """Expose a geometric support side without granting aperture authority."""
+
+    return CrossRoleBinding(
+        role=role,
+        run_id=f"coarse-enclosing:{track.observation_id}",
+        observation_id=track.observation_id,
+        coordinate_interval_px=track.full_position_interval_px,
+        trace_coordinates_px=track.trace_coordinates_px,
+        support_fraction=1.0,
+        continuous_support_fraction=1.0,
+        fit_residual_px=track.fit_residual_px,
+        fit_interval_px=track.fit_position_interval_px,
+        full_interval_px=track.full_position_interval_px,
+        canonical_direction_degrees=track.canonical_direction_degrees,
+        fit_direction_interval_degrees=(
+            track.fit_direction_interval_degrees
+        ),
+        full_direction_interval_degrees=(
+            track.full_direction_interval_degrees
+        ),
+        observed_direction_interval_degrees=(
+            track.observed_direction_interval_degrees
+        ),
+        trace_position_intervals_px=track.trace_position_intervals_px,
+        independent_support_region_count=(
+            track.independent_support_region_count
+        ),
+        source_spanning_continuous=track.source_spanning_continuous,
+        role_authorized=False,
+        enclosing_pair_id=pair_id,
+    )
+
+
+def _shared_direction_from_coarse(
+    direction: CoarseSharedDirection | None,
+) -> SharedStripDirection | None:
+    if direction is None:
+        return None
+    return SharedStripDirection(
+        direction_id=direction.direction_id,
+        selected_observation_ids=direction.observation_ids,
+        full_angle_interval_degrees=(
+            direction.full_direction_interval_degrees
+        ),
+        observed_angle_interval_degrees=(
+            direction.observed_direction_interval_degrees
+        ),
+        canonical_angle_degrees=direction.canonical_direction_degrees,
+    )
+
+
+def _enclosing_support_for_canonical_height(
+    enclosing,
+    canonical_height_px: float,
+):
+    """Keep coarse output support only when final fixed H authorizes it."""
+
+    if not math.isfinite(canonical_height_px) or canonical_height_px <= 0.0:
+        raise ValueError("canonical fixed height must be positive")
+    if enclosing is None:
+        return None
+    span = enclosing.observed_span_px
+    if (
+        span.minimum <= canonical_height_px
+        or span.maximum
+        > (
+            OUTPUT_PROTECTION_SPEC.maximum_enclosing_support_height_ratio
+            * canonical_height_px
+        )
+    ):
+        return None
+    return enclosing
 
 
 def _calibrated_width_geometry(
@@ -412,7 +497,6 @@ def prepare_template_lane(
         separator_bands=separator_bands,
         scale_px_per_mm=scales.width_axis_px_per_mm,
         holder_span_px=width_authority,
-        coarse_outer_interval_px=coarse_support.long_axis.direct_interval_px,
     )
     # The broad provisional template only brings direct material bands into a
     # finite neighbourhood. Once two independent separator locations establish
@@ -440,7 +524,6 @@ def prepare_template_lane(
         scale_px_per_mm=scales.width_axis_px_per_mm,
         holder_span_px=width_authority,
         phase_authority_px=pitch_calibration.phase_authority_px,
-        coarse_outer_interval_px=coarse_support.long_axis.direct_interval_px,
     )
     source_geometry = _calibrated_width_geometry(
         source_geometry,
@@ -474,14 +557,11 @@ def prepare_template_lane(
     template = pitch_calibration.template
     # Rebind the already-registered observations once, then interpret local
     # residuals. No selected-placement query or new pixel read is introduced.
-    phase_search_authority = (
-        None
-        if (
-            base_phase.status != PhaseFitStatus.RESOLVED
-            or base_phase.best is None
-        )
-        else base_phase.best.phase_lattice_fit.absolute_phase_interval_px
-    )
+    # A provisional role binding may calibrate continuous W/pitch, but it
+    # cannot authorize its own ordinal mapping.  Only a direct separator
+    # lattice may restrict the final absolute phase; otherwise all bounded
+    # role-compatible mappings must remain in competition.
+    phase_search_authority = pitch_calibration.phase_authority_px
     phase_input = TemplatePhaseInput(
         observations=sequence_edges,
         separator_bands=separator_bands,
@@ -489,7 +569,6 @@ def prepare_template_lane(
         scale_px_per_mm=scales.width_axis_px_per_mm,
         holder_span_px=width_authority,
         phase_authority_px=phase_search_authority,
-        coarse_outer_interval_px=coarse_support.long_axis.direct_interval_px,
     )
     phase = fit_template_phase_with_local_advance(phase_input)
     phase = account_prior_phase_fit(phase, base_phase)
@@ -512,12 +591,6 @@ def prepare_template_lane(
             ambiguity_reason="separator lattice hypothesis bound exceeded",
             failure_kind=PhaseFailureKind.HYPOTHESIS_BOUND_EXCEEDED,
             winner_basis=None,
-        )
-    else:
-        phase = enforce_template_alignment(
-            phase,
-            sequence_edges,
-            separator_bands,
         )
     longitudinal_support_domains_px = (
         ()
@@ -568,26 +641,65 @@ def prepare_template_lane(
         longitudinal_support_domains_px=longitudinal_support_domains_px,
         maximum_bindings=measurement_plan.cross_bounds.max_fitted_observations,
     )
+    canonical_height = _canonical_height_from_shared_scale(source_geometry)
+    # Coarse measurement happens before sequence scale calibration. Direction
+    # remains direct evidence, but boundary use is classified against final H.
+    enclosing = _enclosing_support_for_canonical_height(
+        coarse_support.enclosing_support,
+        canonical_height,
+    )
+    enclosing_pair_id = (
+        ""
+        if enclosing is None
+        else (
+            "coarse-enclosing-pair:"
+            f"{enclosing.minimum_track.observation_id}:"
+            f"{enclosing.maximum_track.observation_id}"
+        )
+    )
+    coarse_top = (
+        ()
+        if enclosing is None
+        else (
+            _coarse_enclosing_binding(
+                enclosing.minimum_track,
+                BoundaryRole.TOP,
+                pair_id=enclosing_pair_id,
+            ),
+        )
+    )
+    coarse_bottom = (
+        ()
+        if enclosing is None
+        else (
+            _coarse_enclosing_binding(
+                enclosing.maximum_track,
+                BoundaryRole.BOTTOM,
+                pair_id=enclosing_pair_id,
+            ),
+        )
+    )
+    top_bindings = (*cross.top_bindings, *coarse_top)
+    bottom_bindings = (*cross.bottom_bindings, *coarse_bottom)
+    source_direction = _shared_direction_from_coarse(
+        coarse_support.shared_direction
+    )
     cross_input = TemplateCrossInput(
         template=template,
         fixed_height_px=source_geometry.height_state.extent_projection_px(),
-        canonical_fixed_height_px=(
-            _canonical_height_from_shared_scale(source_geometry)
-        ),
+        canonical_fixed_height_px=canonical_height,
         holder_short_axis_center_px=short_axis_center_authority(
             height_authority,
             scales.height_axis_px_per_mm,
         ),
-        coarse_outer_interval_px=(
-            coarse_support.short_axis.direct_interval_px
-        ),
         lane_reference_trace_px=width_authority.center,
+        source_direction=source_direction,
         registered_trace_coordinates_px=precision_measurement_sets[
             0
         ].query.trace_positions_px,
         longitudinal_support_domains_px=longitudinal_support_domains_px,
-        top_bindings=cross.top_bindings,
-        bottom_bindings=cross.bottom_bindings,
+        top_bindings=top_bindings,
+        bottom_bindings=bottom_bindings,
         boundary_axis=height_axis,
         maximum_registered_runs=measurement_plan.cross_bounds.max_registered_runs,
         maximum_fitted_observations=measurement_plan.cross_bounds.max_fitted_observations,
@@ -596,8 +708,8 @@ def prepare_template_lane(
     )
     cross_competition = fit_template_cross(cross_input)
     registered_values = dict(registered.__dict__)
-    registered_values["top_cross_bindings"] = cross.top_bindings
-    registered_values["bottom_cross_bindings"] = cross.bottom_bindings
+    registered_values["top_cross_bindings"] = top_bindings
+    registered_values["bottom_cross_bindings"] = bottom_bindings
     registered_values["raw_cross_observations"] = cross.observations
     return PreparedTemplateLane(
         **registered_values,

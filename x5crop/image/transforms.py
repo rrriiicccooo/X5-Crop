@@ -8,6 +8,11 @@ from ..geometry.affine import AffineCoordinateTransform
 
 
 AFFINE_ROW_CHUNK_SIZE = 256
+AFFINE_SAMPLE_MAX_VALUE = int(np.iinfo(np.uint16).max)
+# A deskewed rectangular TIFF can contain corner samples outside the lane
+# authority. Film border is black; using black keeps those no-source-data
+# pixels visibly distinct instead of manufacturing image content.
+AFFINE_BACKGROUND_VALUE = 0
 
 
 def sample_affine_roi(
@@ -51,7 +56,7 @@ def sample_affine_roi(
     ):
         return arr[box.top : box.bottom, box.left : box.right]
     output_shape = (box.height, box.width) + tuple(arr.shape[2:])
-    background_value = int(np.iinfo(arr.dtype).max)
+    background_value = AFFINE_BACKGROUND_VALUE
     output = np.full(output_shape, background_value, dtype=arr.dtype)
     inverse = transform.inverse_matrix
     authority = arr[
@@ -98,6 +103,6 @@ def sample_affine_roi(
                 prefilter=False,
                 output=value,
             )
-            np.clip(value, 0, background_value, out=value)
+            np.clip(value, 0, AFFINE_SAMPLE_MAX_VALUE, out=value)
             output[output_row:row_end, :, channel] = value.astype(arr.dtype)
     return output

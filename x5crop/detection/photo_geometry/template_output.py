@@ -74,33 +74,48 @@ def _footprint(
     frame: TemplateFrame,
     projection: FeasiblePlacementProjection,
     *,
-    outward_expansion_px: dict[BoundaryRole, float] | None = None,
+    apply_bleed_and_residual: bool = False,
 ) -> ConvexPolygon:
     """Materialize only same-state boundary intersections."""
 
     _validate_shared_direction(placement, frame)
     if projection.placement_id != placement.placement_id:
         raise ValueError("joint projection belongs to another placement")
-    expansions = outward_expansion_px or {role: 0.0 for role in _ROLES}
-    if set(expansions) != set(_ROLES) or any(
-        not math.isfinite(value) or value < 0.0
-        for value in expansions.values()
-    ):
-        raise ValueError("joint footprint requires four non-negative expansions")
     states = projection.frame_states[frame.lane_ordinal - 1]
     boundaries = _canonical_boundaries(frame)
     points: list[tuple[float, float]] = []
     for state in states:
+        if apply_bleed_and_residual:
+            residuals = _state_boundary_residuals(
+                placement,
+                frame,
+                state,
+            )
+            bleeds = _state_bleed_px(
+                placement,
+                state,
+                placement.cross_fit.boundary_use,
+            )
+            expansions = {
+                role: residuals[role] + bleeds[role]
+                for role in _ROLES
+            }
+        else:
+            expansions = {role: 0.0 for role in _ROLES}
         cross_shift = math.tan(math.radians(state.angle_degrees)) * (
             frame.top.reference_trace_px
             - placement.cross_fit.lane_reference_trace_px
         )
         positions = {
             BoundaryRole.START: (
-                state.sequence_start_px - expansions[BoundaryRole.START]
+                state.sequence_start_px
+                - placement.sequence_fit.template.direction
+                * expansions[BoundaryRole.START]
             ),
             BoundaryRole.END: (
-                state.sequence_end_px + expansions[BoundaryRole.END]
+                state.sequence_end_px
+                + placement.sequence_fit.template.direction
+                * expansions[BoundaryRole.END]
             ),
             BoundaryRole.TOP: (
                 state.top_at_lane_reference_px
@@ -144,12 +159,12 @@ def _canonical_boundaries(
     }
 
 
-def _local_boundary_residuals(
+def _state_boundary_residuals(
     placement: FormatPlacement,
     frame: TemplateFrame,
-    projection: FeasiblePlacementProjection,
+    state,
 ) -> dict[BoundaryRole, float]:
-    """Return outward direct-observation residuals after joint projection.
+    """Return outward residuals for one joint placement state.
 
     A local top/bottom fragment may prove the aperture offset without owning
     the source-wide deskew angle.  Its measured slope is therefore evaluated
@@ -158,101 +173,129 @@ def _local_boundary_residuals(
     an unobserved curved strip and can make protection grow with distance.
     """
 
-    states = projection.frame_states[frame.lane_ordinal - 1]
-    role_positions: dict[BoundaryRole, tuple[float, ...]] = {
-        BoundaryRole.START: tuple(state.sequence_start_px for state in states),
-        BoundaryRole.END: tuple(state.sequence_end_px for state in states),
-        BoundaryRole.TOP: tuple(
-            state.top_at_lane_reference_px
-            + math.tan(math.radians(state.angle_degrees))
-            * (
-                frame.top.reference_trace_px
-                - placement.cross_fit.lane_reference_trace_px
-            )
-            for state in states
-        ),
-        BoundaryRole.BOTTOM: tuple(
-            state.bottom_at_lane_reference_px
-            + math.tan(math.radians(state.angle_degrees))
-            * (
-                frame.bottom.reference_trace_px
-                - placement.cross_fit.lane_reference_trace_px
-            )
-            for state in states
-        ),
+    result: dict[BoundaryRole, float] = {
+        BoundaryRole.START: state.sequence_start_model_residual_px,
+        BoundaryRole.END: state.sequence_end_model_residual_px,
+        BoundaryRole.TOP: 0.0,
+        BoundaryRole.BOTTOM: 0.0,
     }
-    result: dict[BoundaryRole, float] = {}
+    if (
+        placement.cross_fit.boundary_use
+        == OutputBoundaryUse.ENCLOSING_SUPPORT_PAIR
+    ):
+        # The support pair's trace intervals and common slope are already one
+        # joint feasible system.  Adding the same per-side line uncertainty a
+        # second time would manufacture an outer boundary wider than any
+        # directly observed support state.
+        return result
     cross_bindings = {
         item.observation_id: item
         for item in placement.cross_fit.direct_bindings
     }
-    for role, boundary in _canonical_boundaries(frame).items():
+    for role, boundary in (
+        (BoundaryRole.TOP, frame.top),
+        (BoundaryRole.BOTTOM, frame.bottom),
+    ):
         if boundary.position_source != PositionSource.OBSERVED_TRANSITION:
-            result[role] = 0.0
             continue
-        positions = role_positions[role]
-        if role in {BoundaryRole.TOP, BoundaryRole.BOTTOM}:
-            binding = cross_bindings.get(boundary.position_observation_ids[0])
-            if (
-                binding is None
-                or binding.full_direction_interval_degrees is None
-                or not binding.trace_coordinates_px
-            ):
-                raise ValueError(
-                    "observed cross boundary lacks direct residual authority"
-                )
-            outward = 0.0
-            observed_angles = (
-                binding.full_direction_interval_degrees.minimum,
-                binding.full_direction_interval_degrees.maximum,
+        binding = cross_bindings.get(boundary.position_observation_ids[0])
+        if (
+            binding is None
+            or binding.full_direction_interval_degrees is None
+            or not binding.trace_coordinates_px
+        ):
+            raise ValueError(
+                "observed cross boundary lacks direct residual authority"
             )
-            observed_positions = (
+        outward = 0.0
+        global_slope = math.tan(math.radians(state.angle_degrees))
+        for trace in (
+            float(binding.trace_coordinates_px[0]),
+            float(binding.trace_coordinates_px[-1]),
+        ):
+            distance = trace - placement.cross_fit.lane_reference_trace_px
+            global_at_trace = (
+                (
+                    state.top_at_lane_reference_px
+                    if role == BoundaryRole.TOP
+                    else state.bottom_at_lane_reference_px
+                )
+                + global_slope * distance
+            )
+            for observed_position in (
                 binding.full_interval_px.minimum,
                 binding.full_interval_px.maximum,
-            )
-            for state in states:
-                global_slope = math.tan(math.radians(state.angle_degrees))
-                for trace in (
-                    float(binding.trace_coordinates_px[0]),
-                    float(binding.trace_coordinates_px[-1]),
+            ):
+                for observed_angle in (
+                    binding.full_direction_interval_degrees.minimum,
+                    binding.full_direction_interval_degrees.maximum,
                 ):
-                    distance = trace - placement.cross_fit.lane_reference_trace_px
-                    global_at_trace = (
-                        (
-                            state.top_at_lane_reference_px
-                            if role == BoundaryRole.TOP
-                            else state.bottom_at_lane_reference_px
-                        )
-                        + global_slope * distance
+                    observed_at_trace = (
+                        observed_position
+                        + math.tan(math.radians(observed_angle)) * distance
                     )
-                    for observed_position in observed_positions:
-                        for observed_angle in observed_angles:
-                            observed_at_trace = (
-                                observed_position
-                                + math.tan(math.radians(observed_angle))
-                                * distance
-                            )
-                            delta = (
-                                global_at_trace - observed_at_trace
-                                if role == BoundaryRole.TOP
-                                else observed_at_trace - global_at_trace
-                            )
-                            outward = max(outward, delta)
-            result[role] = max(0.0, outward)
-            continue
-        outward = (
-            max(
-                0.0,
-                min(positions) - boundary.full_position_interval_px.minimum,
-            )
-            if role == BoundaryRole.START
-            else max(
-                0.0,
-                boundary.full_position_interval_px.maximum - max(positions),
-            )
-        )
+                    delta = (
+                        global_at_trace - observed_at_trace
+                        if role == BoundaryRole.TOP
+                        else observed_at_trace - global_at_trace
+                    )
+                    outward = max(outward, delta)
         result[role] = max(0.0, outward)
     return result
+
+
+def _state_bleed_px(
+    placement: FormatPlacement,
+    state,
+    use: OutputBoundaryUse,
+) -> dict[BoundaryRole, float]:
+    """Convert physical bleed with the same W/H state it protects."""
+
+    sequence_scale = (
+        abs(state.sequence_end_px - state.sequence_start_px)
+        / placement.frame_spec.frame_width_mm
+    )
+    cross_scale = (
+        abs(
+            state.bottom_at_lane_reference_px
+            - state.top_at_lane_reference_px
+        )
+        / placement.frame_spec.frame_height_mm
+    )
+    sequence = OUTPUT_PROTECTION_SPEC.sequence_bleed_mm(
+        placement.frame_spec.frame_width_mm
+    ) * sequence_scale
+    cross = (
+        0.0
+        if use == OutputBoundaryUse.ENCLOSING_SUPPORT_PAIR
+        else OUTPUT_PROTECTION_SPEC.cross_bleed_mm * cross_scale
+    )
+    return {
+        BoundaryRole.START: sequence,
+        BoundaryRole.END: sequence,
+        BoundaryRole.TOP: cross,
+        BoundaryRole.BOTTOM: cross,
+    }
+
+
+def _maximum_state_components(
+    placement: FormatPlacement,
+    frame: TemplateFrame,
+    projection: FeasiblePlacementProjection,
+) -> tuple[dict[BoundaryRole, float], dict[BoundaryRole, float]]:
+    residuals = {role: 0.0 for role in _ROLES}
+    bleeds = {role: 0.0 for role in _ROLES}
+    for state in projection.frame_states[frame.lane_ordinal - 1]:
+        state_residuals = _state_boundary_residuals(placement, frame, state)
+        state_bleeds = _state_bleed_px(
+            placement,
+            state,
+            placement.cross_fit.boundary_use,
+        )
+        for role in _ROLES:
+            residuals[role] = max(residuals[role], state_residuals[role])
+            bleeds[role] = max(bleeds[role], state_bleeds[role])
+    return residuals, bleeds
 
 
 def joint_placement_envelope(
@@ -277,27 +320,6 @@ def joint_placement_envelope(
         ),
         extreme_evaluation_count=projection.extreme_evaluation_count,
     )
-
-
-def _bleed_px(
-    placement: FormatPlacement,
-    use: OutputBoundaryUse,
-) -> tuple[float, float]:
-    width_scale = (
-        placement.source_scan_geometry.width_state.feasible_scale_interval().maximum
-    )
-    height_scale = (
-        placement.source_scan_geometry.height_state.feasible_scale_interval().maximum
-    )
-    sequence = OUTPUT_PROTECTION_SPEC.sequence_bleed_mm(
-        placement.frame_spec.frame_width_mm
-    ) * width_scale
-    cross = (
-        0.0
-        if use == OutputBoundaryUse.ENCLOSING_SUPPORT_PAIR
-        else OUTPUT_PROTECTION_SPEC.cross_bleed_mm * height_scale
-    )
-    return sequence, cross
 
 
 def _outside_authority_sides(
@@ -391,23 +413,16 @@ def output_footprint_from_template_placement(
         raise ValueError("source-lane authority disagrees with placement")
     envelope = joint_placement_envelope(placement, projection, lane_ordinal)
     parameter_footprint = _footprint(placement, frame, projection)
-    local_residuals = _local_boundary_residuals(placement, frame, projection)
-    sequence_bleed, cross_bleed = _bleed_px(placement, envelope.boundary_use)
-    bleed_by_role = {
-        BoundaryRole.START: sequence_bleed,
-        BoundaryRole.END: sequence_bleed,
-        BoundaryRole.TOP: cross_bleed,
-        BoundaryRole.BOTTOM: cross_bleed,
-    }
-    outward_expansions = {
-        role: local_residuals[role] + bleed_by_role[role]
-        for role in _ROLES
-    }
+    local_residuals, bleed_by_role = _maximum_state_components(
+        placement,
+        frame,
+        projection,
+    )
     required = _footprint(
         placement,
         frame,
         projection,
-        outward_expansion_px=outward_expansions,
+        apply_bleed_and_residual=True,
     )
     authority = _source_lane_authority(lane, layout)
     saturation = _saturation_facts(required, authority)

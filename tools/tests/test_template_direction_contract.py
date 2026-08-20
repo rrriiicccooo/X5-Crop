@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import unittest
 
 from x5crop.domain import FiniteInterval, ObservationId
@@ -94,12 +95,20 @@ def _cross_binding(
     evidence: CrossEvidence = CrossEvidence.DIRECT,
 ):
     exact = FiniteInterval.exact(coordinate)
+    trace_positions = tuple(
+        FiniteInterval.exact(
+            coordinate
+            + math.tan(math.radians(angle)) * (trace - 50.0)
+        )
+        for trace in traces
+    )
     return CrossRoleBinding(
         role=role,
         run_id=f"cross-run:{name}",
         observation_id=ObservationId(f"cross:{name}"),
         coordinate_interval_px=exact,
         trace_coordinates_px=traces,
+        trace_position_intervals_px=trace_positions,
         support_fraction=1.0,
         continuous_support_fraction=1.0,
         fit_residual_px=0.0,

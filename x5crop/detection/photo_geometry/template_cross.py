@@ -31,7 +31,6 @@ from .template_cross_model import (
     CrossSearchReceipt,
     TemplateCrossInput,
     _add,
-    _coarse_localization_frontier_indices,
     _intersect,
     _midpoint_interval,
 )
@@ -61,6 +60,63 @@ def _receipt(
         compatible_pair_bound=inputs.maximum_compatible_pairs,
         evaluated_fit_bound=inputs.maximum_evaluated_fits,
     )
+
+
+def _remove_contained_local_side_tracks(
+    candidates,
+    longitudinal_domains: tuple[FiniteInterval, ...],
+):
+    """Remove a local side fragment contained by a broader direct track.
+
+    This is set dominance, not a score: the two candidates must share the
+    opposite direct boundary, the broader same-role observation must contain
+    every trace of the fragment, and it must reach a strictly larger set of
+    already fixed template-frame domains.  Disjoint tracks and equal-domain
+    alternatives remain competing placements.
+    """
+
+    if not longitudinal_domains:
+        return list(candidates)
+
+    def dominates(broader, fragment) -> bool:
+        if not broader.direct_pair or not fragment.direct_pair:
+            return False
+        if broader.top.observation_id == fragment.top.observation_id:
+            broad_side, local_side = broader.bottom, fragment.bottom
+        elif broader.bottom.observation_id == fragment.bottom.observation_id:
+            broad_side, local_side = broader.top, fragment.top
+        else:
+            return False
+        if (
+            broad_side.observation_id == local_side.observation_id
+            or broad_side.role != local_side.role
+            or not broad_side.role_authorized
+            or not local_side.role_authorized
+        ):
+            return False
+        broad_traces = set(broad_side.trace_coordinates_px)
+        local_traces = set(local_side.trace_coordinates_px)
+        return (
+            bool(local_traces)
+            and local_traces < broad_traces
+            and _longitudinal_domain_count(
+                broad_side.trace_coordinates_px,
+                longitudinal_domains,
+            )
+            > _longitudinal_domain_count(
+                local_side.trace_coordinates_px,
+                longitudinal_domains,
+            )
+        )
+
+    return [
+        candidate
+        for candidate in candidates
+        if not any(
+            other is not candidate and dominates(other, candidate)
+            for other in candidates
+        )
+    ]
 
 
 def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
@@ -131,31 +187,31 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
         if support_checked:
             return enclosing_support_fit
         support_checked = True
-        # A unique aperture closed directly on both sides remains preferred.
-        # When aperture closure is absent, one-sided, or discretely ambiguous,
-        # only non-aperture outer supports may form one uniform enclosing pair.
-        # The two boundary meanings are never mixed within one output.
-        # Boundary meaning belongs to the selected pair, not to a raw line.
-        # A photo-authorized edge may also be one side of a larger, directly
-        # observed support rectangle, but only after aperture fitting has
-        # reduced to one-sided inference.  While two-sided aperture answers
-        # still compete, reinterpreting their outermost edges as one support
-        # pair would silently hull distinct placements.
-        allow_photo_lines = not any(item.direct_pair for item in candidates)
-        support_top = (
-            top
-            if allow_photo_lines
-            else tuple(item for item in top if not item.role_authorized)
-        )
-        support_bottom = (
-            bottom
-            if allow_photo_lines
-            else tuple(item for item in bottom if not item.role_authorized)
-        )
+        # Prefer one already closed coarse pair.  If none was compiled, only
+        # role-unknown source support lines may form an enclosing output pair;
+        # photo-aperture roles are never reinterpreted here.
+        explicit_pair_ids = {
+            item.enclosing_pair_id
+            for item in (*top, *bottom)
+            if item.enclosing_pair_id is not None
+        }
+        if explicit_pair_ids:
+            support_top = tuple(
+                item for item in top if item.enclosing_pair_id is not None
+            )
+            support_bottom = tuple(
+                item for item in bottom if item.enclosing_pair_id is not None
+            )
+        else:
+            support_top = tuple(item for item in top if not item.role_authorized)
+            support_bottom = tuple(
+                item for item in bottom if not item.role_authorized
+            )
         competition = fit_enclosing_support(
             template=inputs.template,
             fixed_height=fixed_height,
             canonical_height_px=float(inputs.canonical_fixed_height_px),
+            reference_trace_px=inputs.lane_reference_trace_px,
             holder_center=inputs.holder_short_axis_center_px,
             top_bindings=support_top,
             bottom_bindings=support_bottom,
@@ -163,7 +219,6 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
             longitudinal_support_domains_px=inputs.longitudinal_support_domains_px,
             minimum_shared_trace_support=inputs.minimum_shared_trace_support,
             maximum_evaluated_candidates=inputs.maximum_evaluated_fits,
-            coarse_outer_interval_px=inputs.coarse_outer_interval_px,
         )
         support_competition = competition
         if competition.status != SupportFitStatus.RESOLVED or competition.best is None:
@@ -312,6 +367,7 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
                     canonical_height_px=float(inputs.canonical_fixed_height_px),
                     center=inputs.holder_short_axis_center_px,
                     minimum_shared_trace_support=inputs.minimum_shared_trace_support,
+                    source_direction=inputs.source_direction,
                 )
                 if candidate is not None:
                     compatible_pairs += 1
@@ -334,12 +390,21 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
                             receipt=receipt,
                         )
                 index += 1
-    spanning_top = tuple(item for item in top if item.source_spanning_continuous)
-    spanning_bottom = tuple(item for item in bottom if item.source_spanning_continuous)
+    spanning_top = tuple(
+        item
+        for item in top
+        if item.role_authorized and item.source_spanning_continuous
+    )
+    spanning_bottom = tuple(
+        item
+        for item in bottom
+        if item.role_authorized and item.source_spanning_continuous
+    )
     template_spanning_top = tuple(
         item
         for item in top
-        if _covers_template_domains(
+        if item.role_authorized
+        and _covers_template_domains(
             item,
             inputs.longitudinal_support_domains_px,
         )
@@ -347,7 +412,8 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
     template_spanning_bottom = tuple(
         item
         for item in bottom
-        if _covers_template_domains(
+        if item.role_authorized
+        and _covers_template_domains(
             item,
             inputs.longitudinal_support_domains_px,
         )
@@ -361,6 +427,7 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
                 fixed_height=fixed_height,
                 canonical_height_px=float(inputs.canonical_fixed_height_px),
                 center=inputs.holder_short_axis_center_px,
+                source_direction=inputs.source_direction,
             )
             is not None
         )
@@ -376,6 +443,7 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
                 longitudinal_support_domains_px=(
                     inputs.longitudinal_support_domains_px
                 ),
+                source_direction=inputs.source_direction,
             )
             compatible_pairs += len(localized)
             direct_candidates.extend(localized)
@@ -440,6 +508,7 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
                 fixed_height=fixed_height,
                 canonical_height_px=float(inputs.canonical_fixed_height_px),
                 center=inputs.holder_short_axis_center_px,
+                source_direction=inputs.source_direction,
             )) is not None
         ]
     elif role_authorized_direct_pairs:
@@ -473,6 +542,7 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
                     fixed_height=fixed_height,
                     canonical_height_px=float(inputs.canonical_fixed_height_px),
                     center=inputs.holder_short_axis_center_px,
+                    source_direction=inputs.source_direction,
                 )) is not None
             ]
     elif inputs.holder_short_axis_center_px is not None:
@@ -492,6 +562,7 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
                     fixed_height=fixed_height,
                     canonical_height_px=float(inputs.canonical_fixed_height_px),
                     center=inputs.holder_short_axis_center_px,
+                    source_direction=inputs.source_direction,
                 )) is not None
             ]
     elif direct_candidates:
@@ -506,9 +577,19 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
                 fixed_height=fixed_height,
                 canonical_height_px=float(inputs.canonical_fixed_height_px),
                 center=inputs.holder_short_axis_center_px,
+                source_direction=inputs.source_direction,
             ))
             is not None
         ]
+    candidate_count_before_track_dominance = len(candidates)
+    candidates = _remove_contained_local_side_tracks(
+        candidates,
+        inputs.longitudinal_support_domains_px,
+    )
+    contained_side_track_basis = (
+        len(candidates) == 1
+        and candidate_count_before_track_dominance > len(candidates)
+    )
     single_count = sum(not item.direct_pair for item in candidates)
     receipt = _receipt(
         inputs=inputs,
@@ -592,17 +673,6 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
     direct_candidates_for_selection = tuple(item for item in candidates if item.direct_pair)
     if direct_candidates_for_selection:
         candidates = list(direct_candidates_for_selection)
-    localized_indices = _coarse_localization_frontier_indices(
-        tuple(
-            (
-                item.top_full_override or item.top.full_interval_px,
-                item.bottom_full_override or item.bottom.full_interval_px,
-            )
-            for item in candidates
-        ),
-        inputs.coarse_outer_interval_px,
-    )
-    candidates = [candidates[index] for index in localized_indices]
     groups = _group_candidates(candidates)
     representative_fits = tuple(
         _fit_from_group(
@@ -630,36 +700,13 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
             for binding in item.direct_bindings
         )
 
-    def has_coarse_localized_direct_pair(item: CrossFit) -> bool:
-        """Whole-strip localization plus direct local refinement is authority.
-
-        The aggregate coarse observation does not supply either final edge.
-        It only proves which physical neighbourhood the two role-authorized
-        local lines refine.  Both lines still need independent local support
-        and a directly compatible pair.  Crossed or equal Pareto alternatives
-        were retained above and therefore remain unresolved here.
-        """
-
-        return (
-            inputs.coarse_outer_interval_px is not None
-            and item.direct_pair
-            and item.shared_trace_support_count
-            >= inputs.minimum_shared_trace_support
-            and all(
-                binding.role_authorized
-                and binding.independent_support_region_count
-                >= MINIMUM_INDEPENDENT_SUPPORT_REGIONS
-                for binding in item.direct_bindings
-            )
-        )
-
     authoritative = tuple(
         item
         for item in representative_fits
         if (
             has_role_authorized_pair(item)
             or has_source_spanning_direct_side(item)
-            or has_coarse_localized_direct_pair(item)
+            or (contained_side_track_basis and item.direct_pair)
             or (
                 not item.direct_pair
                 and item.independent_support_region_count

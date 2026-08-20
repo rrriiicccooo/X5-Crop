@@ -247,28 +247,8 @@ def root_gate_summary(detection: FinalDetection) -> str:
 def axis_authority_summaries(
     detection: FinalDetection,
 ) -> tuple[str, str, str]:
-    selection = detection.candidate.geometry.source_placement_selection
-    if selection.state.value != "supported":
-        competitors = sum(
-            len(item.placement_competition.placements)
-            for item in detection.candidate.geometry.lane_reconstructions
-        )
-        failure = selection.failure
-        detail = (
-            "PLACEMENT UNRESOLVED"
-            if failure is None
-            else failure.detail.replace("_", " ").upper()
-        )
-        unresolved = (
-            f"{competitors} PLACEMENTS · "
-            f"{detail}"
-        )
-        return (
-            f"CROSS FIT · {unresolved}",
-            f"SEQUENCE FIT · {unresolved}",
-            f"SOURCE FIT · {unresolved}",
-        )
     lanes = detection.candidate.geometry.lane_reconstructions
+    selection = detection.candidate.geometry.source_placement_selection
     coarse_long = "/".join(
         sorted(
             {
@@ -289,6 +269,68 @@ def axis_authority_summaries(
             }
         )
     )
+    direction_values = tuple(
+        lane.prepared.coarse_support.shared_direction
+        for lane in lanes
+        if lane.prepared.coarse_support.shared_direction is not None
+    )
+    direction = (
+        "UNAVAILABLE"
+        if not direction_values
+        else "/".join(
+            sorted(
+                {
+                    f"{value.canonical_direction_degrees:+.3f}deg"
+                    for value in direction_values
+                }
+            )
+        )
+    )
+    enclosing = sum(
+        lane.prepared.coarse_support.enclosing_support is not None
+        for lane in lanes
+    )
+    phase_status = "/".join(
+        sorted(
+            {
+                lane.prepared.phase_competition.status.value.upper()
+                for lane in lanes
+            }
+        )
+    )
+    cross_status = "/".join(
+        sorted(
+            {
+                lane.prepared.cross_competition.status.value.upper()
+                for lane in lanes
+            }
+        )
+    )
+    phase_runners = sum(
+        lane.prepared.phase_competition.runner_up is not None
+        for lane in lanes
+    )
+    cross_runners = sum(
+        lane.prepared.cross_competition.runner_up is not None
+        for lane in lanes
+    )
+    if selection.state.value != "supported":
+        competitors = sum(
+            len(item.placement_competition.placements) for item in lanes
+        )
+        failure = selection.failure
+        detail = (
+            "PLACEMENT UNRESOLVED"
+            if failure is None
+            else failure.detail.replace("_", " ").upper()
+        )
+        return (
+            f"CROSS FIT · {cross_status} · COARSE {coarse_short} · "
+            f"DIR {direction} · ENCLOSING {enclosing} · RUNNER {cross_runners}",
+            f"SEQUENCE FIT · {phase_status} · COARSE {coarse_long} · "
+            f"RUNNER {phase_runners}",
+            f"SOURCE FIT · {competitors} PLACEMENTS · {detail}",
+        )
     direct_sequence = sum(
         len(item.prepared.phase_competition.best.direct_observation_ids)
         for item in lanes
@@ -314,7 +356,8 @@ def axis_authority_summaries(
         for item in lanes
     )
     return (
-        f"CROSS FIT · COARSE {coarse_short} → "
+        f"CROSS FIT · {cross_status} · COARSE {coarse_short} · "
+        f"DIR {direction} · ENCLOSING {enclosing} → "
         + "/".join(
             sorted(
                 {
@@ -327,8 +370,8 @@ def axis_authority_summaries(
             )
         )
         + f" · DIRECT {direct_cross} · INFERRED {inferred_cross}",
-        f"SEQUENCE FIT · COARSE {coarse_long} → DIRECT {direct_sequence} · "
-        f"INFERRED {inferred_sequence}",
+        f"SEQUENCE FIT · {phase_status} · COARSE {coarse_long} → "
+        f"DIRECT {direct_sequence} · INFERRED {inferred_sequence}",
         f"SOURCE FIT · LANES {len(lanes)} · RUNNERS {runners} · GATE SUPPORTED",
     )
 

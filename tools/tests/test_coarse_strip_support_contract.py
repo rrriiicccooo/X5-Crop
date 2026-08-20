@@ -20,6 +20,10 @@ from x5crop.detection.photo_geometry.corridors import (
     build_sequence_anchor_discovery_domain,
     build_top_bottom_search_corridors,
 )
+from x5crop.detection.photo_geometry.lane_preparation import (
+    _enclosing_support_for_canonical_height,
+    _shared_direction_from_coarse,
+)
 from x5crop.detection.photo_geometry.model import BoundaryAxis, QueryPurpose
 from x5crop.detection.photo_geometry.registered_measurement import (
     make_photo_boundary_measurement_field,
@@ -158,6 +162,8 @@ class CoarseStripSupportContractTest(unittest.TestCase):
                 CoarseSupportAuthority.HOLDER_CONSERVATIVE,
                 (),
             ),
+            None,
+            None,
             CoarseStripSupportReceipt(2, 2, 2, 2, 1, 2, 2),
         )
 
@@ -211,6 +217,64 @@ class CoarseStripSupportContractTest(unittest.TestCase):
         self.assertLess(
             support.receipt.pixel_query_count,
             pixels.size,
+        )
+
+    def test_coarse_short_axis_compiles_one_direct_enclosing_track(self) -> None:
+        pixels = np.full((322, 2320), 255, dtype=np.uint8)
+        pixels[35:290, 260:2060] = 80
+
+        support = self._observed_support(pixels)
+
+        self.assertIsNotNone(support.shared_direction)
+        self.assertIsNotNone(support.enclosing_support)
+        assert support.enclosing_support is not None
+        self.assertEqual(
+            support.enclosing_support.minimum_track.trace_coordinates_px,
+            (573, 1162, 1751),
+        )
+        self.assertEqual(
+            support.enclosing_support.minimum_track.trace_coordinates_px,
+            support.enclosing_support.maximum_track.trace_coordinates_px,
+        )
+
+    def test_isolated_trace_outlier_cannot_move_the_source_wide_track(self) -> None:
+        pixels = np.full((322, 2320), 255, dtype=np.uint8)
+        pixels[35:290, 260:2060] = 80
+        outlier = pixels.copy()
+        outlier[5:290, 0:40] = 80
+
+        original = self._observed_support(pixels)
+        changed = self._observed_support(outlier)
+
+        assert original.enclosing_support is not None
+        assert changed.enclosing_support is not None
+        self.assertEqual(
+            changed.enclosing_support.minimum_track.canonical_position_px,
+            original.enclosing_support.minimum_track.canonical_position_px,
+        )
+        self.assertEqual(
+            changed.enclosing_support.minimum_track.trace_coordinates_px,
+            original.enclosing_support.minimum_track.trace_coordinates_px,
+        )
+
+    def test_final_fixed_height_can_drop_support_without_losing_direction(self) -> None:
+        pixels = np.full((322, 2320), 255, dtype=np.uint8)
+        pixels[35:290, 260:2060] = 80
+        support = self._observed_support(pixels)
+        assert support.enclosing_support is not None
+        assert support.shared_direction is not None
+
+        self.assertIsNone(
+            _enclosing_support_for_canonical_height(
+                support.enclosing_support,
+                250.0,
+            )
+        )
+        converted = _shared_direction_from_coarse(support.shared_direction)
+        assert converted is not None
+        self.assertEqual(
+            converted.direction_id,
+            support.shared_direction.direction_id,
         )
 
     def test_brightness_and_contrast_do_not_move_coarse_support(self) -> None:

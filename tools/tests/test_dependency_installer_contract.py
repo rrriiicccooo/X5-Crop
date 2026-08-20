@@ -82,7 +82,7 @@ class DependencyInstallerContractTest(unittest.TestCase):
                 for pin in contract.dependencies
             ),
             (
-                ("numpy", "numpy", "2.5.1", "numpy", "2.5.1", "numpy"),
+                ("numpy", "numpy", "2.5.2", "numpy", "2.5.2", "numpy"),
                 ("scipy", "scipy", "1.18.0", "scipy", "1.18.0", "scipy"),
                 (
                     "opencv",
@@ -95,17 +95,17 @@ class DependencyInstallerContractTest(unittest.TestCase):
                 (
                     "tifffile",
                     "tifffile",
-                    "2026.7.31",
+                    "2026.8.16",
                     "tifffile",
-                    "2026.7.31",
+                    "2026.8.16",
                     None,
                 ),
                 (
                     "imagecodecs",
                     "imagecodecs",
-                    "2026.6.26",
+                    "2026.8.16",
                     "imagecodecs",
-                    "2026.6.26",
+                    "2026.8.16",
                     None,
                 ),
                 ("pillow", "PIL", "12.3.0", "Pillow", "12.3.0", "pillow"),
@@ -339,13 +339,13 @@ class DependencyInstallerContractTest(unittest.TestCase):
                 "distribution": "numpy",
                 "canonical_name": "numpy",
                 "preexisting_version": "2.4.0",
-                "installed_version": "2.5.1",
+                "installed_version": "2.5.2",
             },
             {
                 "distribution": "imagecodecs",
                 "canonical_name": "imagecodecs",
                 "preexisting_version": None,
-                "installed_version": "2026.6.26",
+                "installed_version": "2026.8.16",
             },
             {
                 "distribution": "Pillow",
@@ -357,7 +357,7 @@ class DependencyInstallerContractTest(unittest.TestCase):
         plan = build_uninstall_plan(
             receipt,
             {
-                "numpy": "2.5.1",
+                "numpy": "2.5.2",
                 "imagecodecs": "2027.1.1",
                 "pillow": "12.3.0",
             },
@@ -378,17 +378,17 @@ class DependencyInstallerContractTest(unittest.TestCase):
                 "installed_version": version,
             }
             for distribution, canonical, version in (
-                ("numpy", "numpy", "2.5.1"),
+                ("numpy", "numpy", "2.5.2"),
                 ("scipy", "scipy", "1.18.0"),
-                ("imagecodecs", "imagecodecs", "2026.6.26"),
+                ("imagecodecs", "imagecodecs", "2026.8.16"),
             )
         )
         plan = build_uninstall_plan(
             receipt,
             {
-                "numpy": "2.5.1",
+                "numpy": "2.5.2",
                 "scipy": "1.18.0",
-                "imagecodecs": "2026.6.26",
+                "imagecodecs": "2026.8.16",
             },
             {
                 "scipy": {"another-photo-app"},

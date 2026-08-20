@@ -113,7 +113,9 @@ format/count/holder 编译固定模板、coarse intents 与工作上界
 - phase、role、cross、placement、像素与内存上界。
 
 Coarse pass 对每个 lane 只执行一个长轴和一个短轴 aggregate query，输出保守 interval 和 receipt；
-它没有角色、ordinal 或 geometry authority。Long-axis precision 使用固定 lattice 在两个有限 origin
+aggregate interval 本身没有角色、ordinal 或 geometry authority。短轴 query 的各条已注册 trace 若能
+直接闭合为 source-wide 双侧 track，可以另外建立共同方向，并在满足第 8.2 节全部条件时建立
+enclosing support；这份 authority 来自逐 trace 直接观察，不来自 aggregate interval。Long-axis precision 使用固定 lattice 在两个有限 origin
 上生成互不重叠的理论窗口；没有 direct coarse observation 时才退回一个保守全长窗口。所有可能被
 选中位置使用的精测查询随后一次登记、一次读取；不能为某个 candidate 重读 TIFF、扩张全图搜索或
 winner-specific requery。
@@ -376,13 +378,13 @@ Pillow 只在 Debug Analysis 时延迟导入。生产默认 `--jobs 1`、上限 
 | `x5crop/formats/` | 固定 W/H、容差、gap 搜索先验、holder count 与输出保护常量 |
 | `x5crop/configuration/`、`x5crop/runtime/` | format/count 输入、matched-holder resolution 与 source workflow |
 | `x5crop/detection/source_core.py`、`evidence/scan_canvas.py` | source/lane 与 matched-holder authority |
-| `photo_geometry/coarse_strip_support.py` | 两个 role-free aggregate query、粗片带 interval 与 receipt |
+| `photo_geometry/coarse_strip_support.py`、`coarse_enclosing_model.py`、`coarse_enclosing_support.py` | 两个 role-free aggregate query、粗片带 interval、source-wide 双侧 track 与 receipt |
 | `photo_geometry/template_measurement_plan*.py` | pixel-free 模板、有限 query intents、停止与工作上界 |
 | `photo_geometry/registered_*.py`、`observations.py`、`separator_*.py` | 一次性 measurement、role-free edge 与 material band |
 | `photo_geometry/source_geometry.py`、`joint_axis_geometry.py` | source 共享 W/H/scale authority |
 | `photo_geometry/template_phase*.py`、`template_pitch.py`、`template_residual.py` | phase、ordinal、source pitch 与最多一次 direct local advance |
 | `photo_geometry/template_alignment_diagnostic.py` | theoretical-vs-observed residual 的只读诊断 |
-| `photo_geometry/template_cross*.py`、`template_direction.py`、`template_cross_support.py` | fixed-H aperture、共同方向与 enclosing support |
+| `photo_geometry/template_cross*.py`、`template_direction.py`、`template_cross_support.py` | fixed-H aperture、共同方向与 enclosing support；`template_cross_geometry.py` 只保存共享区间运算 |
 | `photo_geometry/template_placement.py`、`template_selection.py` | 一次 compose 与离散 winner/runner |
 | `photo_geometry/template_holder_fill.py` | selected PhotoGroupOuter 与 W-only fill assessment |
 | `photo_geometry/content_*.py` | placement 后的二维 negative veto |

@@ -25,6 +25,13 @@ from ...formats import OUTPUT_PROTECTION_SPEC
 from ..source_core import SourceLaneEvidence
 from .axis_layout import axis_interval, source_axes
 from .corridors import source_lane_box
+from .coarse_enclosing_model import (
+    CoarseEnclosingSupport,
+    CoarseSharedDirection,
+)
+from .coarse_enclosing_support import (
+    observe_coarse_short_axis_tracks,
+)
 from .measurement_model import (
     PhotoBoundaryCoverageReceipt,
     PhotoBoundaryMeasurementField,
@@ -108,6 +115,8 @@ class CoarseStripSupport:
     lane_id: str
     long_axis: CoarseAxisSupport
     short_axis: CoarseAxisSupport
+    shared_direction: CoarseSharedDirection | None
+    enclosing_support: CoarseEnclosingSupport | None
     receipt: CoarseStripSupportReceipt
 
     def __post_init__(self) -> None:
@@ -115,6 +124,20 @@ class CoarseStripSupport:
             not self.lane_id
             or not isinstance(self.long_axis, CoarseAxisSupport)
             or not isinstance(self.short_axis, CoarseAxisSupport)
+            or (
+                self.shared_direction is not None
+                and not isinstance(
+                    self.shared_direction,
+                    CoarseSharedDirection,
+                )
+            )
+            or (
+                self.enclosing_support is not None
+                and not isinstance(
+                    self.enclosing_support,
+                    CoarseEnclosingSupport,
+                )
+            )
             or not isinstance(self.receipt, CoarseStripSupportReceipt)
         ):
             raise ValueError("coarse strip support is invalid")
@@ -554,6 +577,13 @@ def observe_coarse_strip_support(
         ),
     )
     template = measurement_plan.template_spec
+    shared_direction, enclosing_support = observe_coarse_short_axis_tracks(
+        field,
+        measurements[1].query,
+        aggregate_interval_px=direct_short,
+        expected_height_px=template.frame_height_px,
+        reference_trace_px=long_authority.center,
+    )
     group_span = (
         template.frame_width_px.maximum
         + max(0, template.count - 1) * template.pitch_px.maximum
@@ -601,6 +631,8 @@ def observe_coarse_strip_support(
             lane.domain.lane_id,
             long_support,
             short_support,
+            shared_direction,
+            enclosing_support,
             receipt,
         ),
         measurements,

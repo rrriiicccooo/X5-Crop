@@ -8,7 +8,7 @@ from typing import Sequence
 
 from ...domain import FiniteInterval, ObservationId, PositiveInterval
 from ...formats import OUTPUT_PROTECTION_SPEC
-from .model import PHOTO_BOUNDARY_MEASUREMENT_SPEC
+from .model import BoundaryRole, PHOTO_BOUNDARY_MEASUREMENT_SPEC
 from .observation_types import BoundaryEdgeObservation, SeparatorBandObservation
 from .template_model import (
     LocalAdvanceRelation,
@@ -21,7 +21,6 @@ from .template_phase_candidates import (
     _AnchorFact,
     _BoundFit,
     _clear_winner_basis,
-    _coarse_localization_frontier_indices,
     _facts,
     _fit_seed,
     _holder_limits,
@@ -48,8 +47,33 @@ def _intervals_overlap(left: FiniteInterval, right: FiniteInterval) -> bool:
     )
 
 
-def _same_continuous_placement(left: SequenceFit, right: SequenceFit) -> bool:
+def _same_continuous_placement(
+    left: SequenceFit,
+    right: SequenceFit,
+    separator_support_ids: dict[ObservationId, ObservationId],
+) -> bool:
     """Distinguish one joint feasible placement from a discrete runner."""
+
+    def same_role_state(
+        left_interval: FiniteInterval,
+        right_interval: FiniteInterval,
+        left_id: ObservationId | None,
+        right_id: ObservationId | None,
+    ) -> bool:
+        if _intervals_overlap(left_interval, right_interval):
+            return True
+        if left_id is None or right_id is None:
+            return False
+        # Several measured edges can describe the two sides or texture inside
+        # one directly observed separator.  Once the ordinal lattice is the
+        # same, those alternatives are uncertainty about one role position,
+        # not two photo placements.  The connected material identity is the
+        # authority for that statement; proximity or edge strength is not.
+        left_support = separator_support_ids.get(left_id)
+        return (
+            left_support is not None
+            and left_support == separator_support_ids.get(right_id)
+        )
 
     return (
         left.template == right.template
@@ -62,10 +86,17 @@ def _same_continuous_placement(left: SequenceFit, right: SequenceFit) -> bool:
             right.phase_lattice_fit.absolute_phase_interval_px,
         )
         and all(
-            _intervals_overlap(left_interval, right_interval)
-            for left_interval, right_interval in zip(
+            same_role_state(
+                left_interval,
+                right_interval,
+                left_id,
+                right_id,
+            )
+            for left_interval, right_interval, left_id, right_id in zip(
                 left.role_full_position_intervals_px,
                 right.role_full_position_intervals_px,
+                left.role_observation_ids,
+                right.role_observation_ids,
                 strict=True,
             )
         )
@@ -82,12 +113,17 @@ def _interval_hull(left: FiniteInterval, right: FiniteInterval) -> FiniteInterva
 def _merge_continuous_placement(
     selected: _BoundFit,
     alternative: _BoundFit,
+    separator_support_ids: dict[ObservationId, ObservationId],
 ) -> _BoundFit:
     """Retain the selected canonical state and expose the full joint hull."""
 
     left = selected.fit
     right = alternative.fit
-    if not _same_continuous_placement(left, right):
+    if not _same_continuous_placement(
+        left,
+        right,
+        separator_support_ids,
+    ):
         raise ValueError("cannot merge discrete phase placements")
     cycle_interval = _interval_hull(
         left.phase_lattice_fit.cycle_phase_interval_px,
@@ -142,7 +178,6 @@ def fit_template_phase(
     scale_px_per_mm: PositiveInterval | float | None = None,
     holder_span_px: FiniteInterval | None = None,
     phase_authority_px: FiniteInterval | None = None,
-    coarse_outer_interval_px: FiniteInterval | None = None,
     local_advance_relations: Sequence[LocalAdvanceRelation] = (),
     max_observations: int = 512,
 ) -> PhaseFitResult:
@@ -150,17 +185,13 @@ def fit_template_phase(
 
     if max_observations <= 0:
         raise ValueError("phase observation bound must be positive")
-    if coarse_outer_interval_px is not None and (
-        not isinstance(coarse_outer_interval_px, FiniteInterval)
-        or coarse_outer_interval_px.width <= 0.0
-    ):
-        raise ValueError("phase coarse localization is invalid")
     separator_support_ids = separator_support_authority(
         tuple(separator_bands)
     )
     observations = _with_separator_role_authority(
         observations,
         separator_bands,
+        maximum_material_gap_px=template.gap_prior_px.maximum,
     )
     facts = _facts(
         observations,
@@ -296,17 +327,33 @@ def fit_template_phase(
                 else:
                     derived_pitch = pitch0
                 seed_values.add((round(first.coordinate_px, 9), round(derived_pitch, 9)))
-    # Missing outer evidence is common.  Each registered edge may therefore
-    # bind only to one of the two outer roles as a bounded fallback; it is not
-    # expanded over all internal ordinals.
+    # Missing or dark outer frames are common.  A direct role-qualified edge
+    # therefore seeds every compatible indexed role.  The pixel observation
+    # remains the phase authority; the template contributes only the finite
+    # ordinal alternatives.  Different ordinal mappings survive as discrete
+    # placements and can never be averaged or selected by coarse support.
     for anchor in direct:
-        if anchor.role_index in {None, 0}:
-            seed_values.add((round(anchor.coordinate_px, 9), round(pitch0, 9)))
-        if anchor.role_index in {None, len(roles) - 1}:
-            seed_values.add((
-                round(anchor.coordinate_px - template.direction * nominal_span, 9),
-                round(pitch0, 9),
-            ))
+        for role in roles:
+            if anchor.role_index is not None and anchor.role_index != role.role_index:
+                continue
+            if (
+                anchor.qualified_anchor_roles
+                and role.role not in anchor.qualified_anchor_roles
+            ):
+                continue
+            relative = role.slot_index * pitch0 + prefixes[role.slot_index]
+            if role.role == BoundaryRole.END:
+                relative += width0
+            seed_values.add(
+                (
+                    round(
+                        anchor.coordinate_px
+                        - template.direction * relative,
+                        9,
+                    ),
+                    round(pitch0, 9),
+                )
+            )
     if phase_authority_px is not None:
         seed_values.add((
             round(phase_authority_px.center, 9),
@@ -382,28 +429,24 @@ def fit_template_phase(
         if current is None or _rank(candidate) > _rank(current):
             by_binding[key] = candidate
     ordered = tuple(sorted(by_binding.values(), key=_rank, reverse=True))
-    localized_indices = _coarse_localization_frontier_indices(
-        ordered,
-        coarse_outer_interval_px,
-    )
-    localized = tuple(ordered[index] for index in localized_indices)
-    best = localized[0] if localized else None
-    coarse_unique = (
-        coarse_outer_interval_px is not None
-        and len(ordered) > 1
-        and len(localized) == 1
-    )
-    if len(localized) > 1:
+    best = ordered[0] if ordered else None
+    if len(ordered) > 1:
         discrete: list[_BoundFit] = []
-        original_best = localized[0]
-        for candidate in localized[1:]:
-            if _same_continuous_placement(original_best.fit, candidate.fit):
-                best = _merge_continuous_placement(best, candidate)
+        original_best = ordered[0]
+        for candidate in ordered[1:]:
+            if _same_continuous_placement(
+                original_best.fit,
+                candidate.fit,
+                separator_support_ids,
+            ):
+                best = _merge_continuous_placement(
+                    best,
+                    candidate,
+                    separator_support_ids,
+                )
             else:
                 discrete.append(candidate)
         runner = discrete[0] if discrete else None
-    elif coarse_unique:
-        runner = next(item for item in ordered if item is not best)
     else:
         runner = None
     receipt = TemplateSearchReceipt(
@@ -430,9 +473,7 @@ def fit_template_phase(
             direct_ids,
             PhaseFailureKind.FIXED_TEMPLATE_MISMATCH,
         )
-    if coarse_unique:
-        winner_basis = PhaseWinnerBasis.COARSE_LOCAL_REFINEMENT
-    elif runner is None:
+    if runner is None:
         winner_basis = PhaseWinnerBasis.ONLY_PHYSICAL_FIT
     else:
         winner_basis = _clear_winner_basis(best, runner)
@@ -508,7 +549,6 @@ def fit_template_phase_with_local_advance(
     scale_px_per_mm = phase_input.scale_px_per_mm
     holder_span_px = phase_input.holder_span_px
     phase_authority_px = phase_input.phase_authority_px
-    coarse_outer_interval_px = phase_input.coarse_outer_interval_px
     max_observations = phase_input.max_observations
 
     normal = fit_template_phase(
@@ -518,7 +558,6 @@ def fit_template_phase_with_local_advance(
         scale_px_per_mm=scale_px_per_mm,
         holder_span_px=holder_span_px,
         phase_authority_px=phase_authority_px,
-        coarse_outer_interval_px=coarse_outer_interval_px,
         max_observations=max_observations,
     )
     if normal.status != PhaseFitStatus.RESOLVED or normal.best is None:
@@ -623,7 +662,6 @@ def fit_template_phase_with_local_advance(
         scale_px_per_mm=scale_px_per_mm,
         holder_span_px=holder_span_px,
         phase_authority_px=phase_authority_px,
-        coarse_outer_interval_px=coarse_outer_interval_px,
         local_advance_relations=analysis.relations,
         max_observations=max_observations,
     )

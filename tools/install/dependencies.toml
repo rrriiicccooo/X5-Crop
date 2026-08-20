@@ -3,9 +3,9 @@ schema = "x5crop_dependencies_v2"
 [[dependencies]]
 name = "numpy"
 module = "numpy"
-module_version = "2.5.1"
+module_version = "2.5.2"
 pip_distribution = "numpy"
-pip_version = "2.5.1"
+pip_version = "2.5.2"
 homebrew_formula = "numpy"
 
 [[dependencies]]
@@ -27,16 +27,16 @@ homebrew_formula = "opencv"
 [[dependencies]]
 name = "tifffile"
 module = "tifffile"
-module_version = "2026.7.31"
+module_version = "2026.8.16"
 pip_distribution = "tifffile"
-pip_version = "2026.7.31"
+pip_version = "2026.8.16"
 
 [[dependencies]]
 name = "imagecodecs"
 module = "imagecodecs"
-module_version = "2026.6.26"
+module_version = "2026.8.16"
 pip_distribution = "imagecodecs"
-pip_version = "2026.6.26"
+pip_version = "2026.8.16"
 
 [[dependencies]]
 name = "pillow"

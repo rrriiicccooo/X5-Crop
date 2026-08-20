@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-import math
 from typing import Sequence
 
 from ...domain import FiniteInterval
@@ -14,6 +13,12 @@ from .model import (
     independent_spatial_support_count,
 )
 from .output_model import OutputBoundaryUse, SharedStripDirection
+from .template_cross_geometry import (
+    direction_closure as _direction_closure,
+    hull_intervals as _hull_intervals,
+    shared_trace_coordinates as _shared_trace_coordinates,
+    single_direction_ready as _single_direction_ready,
+)
 from .template_cross_model import (
     CrossEvidence,
     CrossFit,
@@ -27,15 +32,6 @@ from .template_cross_model import (
 from .template_model import TemplateSpec
 
 
-def _hull_intervals(
-    intervals: Sequence[FiniteInterval],
-) -> FiniteInterval:
-    if not intervals:
-        raise ValueError("cannot hull an empty interval set")
-    return FiniteInterval(
-        min(interval.minimum for interval in intervals),
-        max(interval.maximum for interval in intervals),
-    )
 @dataclass(frozen=True)
 class _Candidate:
     top: CrossRoleBinding
@@ -54,85 +50,7 @@ class _Candidate:
     support_trace_coordinates_px: tuple[int, ...]
     top_full_override: FiniteInterval | None = None
     bottom_full_override: FiniteInterval | None = None
-
-
-def _shared_trace_coordinates(
-    top: CrossRoleBinding,
-    bottom: CrossRoleBinding,
-) -> tuple[int, ...]:
-    if not top.trace_coordinates_px or not bottom.trace_coordinates_px:
-        return ()
-    common = tuple(sorted(set(top.trace_coordinates_px).intersection(bottom.trace_coordinates_px)))
-    if common:
-        return common
-    # Registered corridors can use staggered lattices.  Independent regions
-    # on both lines still provide one local direct relation without inventing
-    # common pixels.  Their midpoint names that shared physical support.
-    maximum_distance = max(1.0, _median_trace_step((*top.trace_coordinates_px, *bottom.trace_coordinates_px)))
-    return tuple(
-        sorted(
-            {
-                int(round((left + right) / 2.0))
-                for left in top.trace_coordinates_px
-                for right in bottom.trace_coordinates_px
-                if abs(left - right) <= maximum_distance
-            }
-        )
-    )
-
-def _median_trace_step(values: Sequence[int]) -> float:
-    ordered = tuple(sorted(set(values)))
-    if len(ordered) < 2:
-        return 1.0
-    steps = tuple(right - left for left, right in zip(ordered, ordered[1:]))
-    return float(sorted(steps)[len(steps) // 2])
-
-
-def _direction_closure(
-    top: CrossRoleBinding,
-    bottom: CrossRoleBinding,
-) -> tuple[FiniteInterval | None, bool, bool]:
-    """Return (parallel interval, direction-ready, contradiction)."""
-
-    # Statistical fit intervals are the first closure.  When two local fits
-    # disagree, their measured full intervals may still prove that one
-    # straight direction is feasible for a mildly bent strip.  This fallback
-    # never joins observation identities or selects between placements.
-    top_interval = top.fit_direction_interval_degrees
-    bottom_interval = bottom.fit_direction_interval_degrees
-    if top_interval is not None and bottom_interval is not None:
-        common = _intersect(top_interval, bottom_interval)
-        if common is None:
-            top_full = top.full_direction_interval_degrees
-            bottom_full = bottom.full_direction_interval_degrees
-            if top_full is None or bottom_full is None:
-                return None, False, True
-            # Statistical line fits may disagree when two local fragments see
-            # the same slightly bent strip at different longitudinal spans.
-            # Their measured physical intervals are the authority for whether
-            # one straight strip direction remains feasible.  This is an
-            # interval closure, not an output-budget tolerance or score.
-            common = _intersect(top_full, bottom_full)
-            if common is None:
-                return None, False, True
-        ready = (
-            top.canonical_direction_degrees is not None
-            and bottom.canonical_direction_degrees is not None
-        )
-        return common, ready, False
-    if top_interval is not None:
-        return top_interval, top.canonical_direction_degrees is not None, False
-    if bottom_interval is not None:
-        return bottom_interval, bottom.canonical_direction_degrees is not None, False
-    return None, False, False
-
-
-def _single_direction_ready(binding: CrossRoleBinding) -> bool:
-    return (
-        binding.fit_direction_interval_degrees is not None
-        and binding.full_direction_interval_degrees is not None
-        and binding.canonical_direction_degrees is not None
-    )
+    source_direction: SharedStripDirection | None = None
 
 
 def _direct_candidate(
@@ -143,6 +61,7 @@ def _direct_candidate(
     canonical_height_px: float,
     center: FiniteInterval | None,
     minimum_shared_trace_support: int,
+    source_direction: SharedStripDirection | None = None,
 ) -> _Candidate | None:
     # Aperture coordinates require photo-boundary role authority on both
     # sides. Role-unknown material/holder lines belong to the separate
@@ -159,9 +78,30 @@ def _direct_candidate(
     support_traces = _shared_trace_coordinates(top, bottom)
     if len(support_traces) < minimum_shared_trace_support:
         return None
-    direction, direction_ready, contradiction = _direction_closure(top, bottom)
-    if contradiction:
-        return None
+    if source_direction is None:
+        direction, direction_ready, contradiction = _direction_closure(
+            top,
+            bottom,
+        )
+        if contradiction:
+            return None
+    else:
+        if any(
+            item.observed_direction_interval_degrees is None
+            or _intersect(
+                item.observed_direction_interval_degrees,
+                source_direction.observed_angle_interval_degrees,
+            )
+            is None
+            for item in (top, bottom)
+        ):
+            return None
+        # The whole-strip observation validates that both local fragments
+        # belong to the same strip.  Their measured direction still owns the
+        # final deskew; small local departures remain a straight-model
+        # residual rather than being forced into the coarse statistical fit.
+        direction = source_direction.observed_angle_interval_degrees
+        direction_ready = True
     midpoint = _midpoint_interval(top.full_interval_px, bottom.full_interval_px)
     center_interval = _intersect(midpoint, center) if center is not None else midpoint
     return _Candidate(
@@ -179,6 +119,7 @@ def _direct_candidate(
         direction_interval=direction,
         direction_ready=direction_ready,
         support_trace_coordinates_px=support_traces,
+        source_direction=None,
     )
 
 
@@ -188,6 +129,7 @@ def _single_candidate(
     fixed_height: FiniteInterval,
     canonical_height_px: float,
     center: FiniteInterval | None,
+    source_direction: SharedStripDirection | None = None,
 ) -> _Candidate | None:
     # A single edge needs independent spatial support and direct direction.
     # Without holder-centre authority it must additionally span the complete
@@ -196,7 +138,10 @@ def _single_candidate(
         not binding.role_authorized
         or binding.independent_support_region_count
         < SPATIAL_SUPPORT_REGION_COUNT
-        or not _single_direction_ready(binding)
+        or (
+            source_direction is None
+            and not _single_direction_ready(binding)
+        )
         or (center is None and not binding.source_spanning_continuous)
     ):
         return None
@@ -244,11 +189,16 @@ def _single_candidate(
             canonical_height_px=canonical_height_px,
             shift_interval=FiniteInterval.exact(canonical_top),
             center_interval=center,
-            direction_interval=binding.full_direction_interval_degrees,
+            direction_interval=(
+                source_direction.full_angle_interval_degrees
+                if source_direction is not None
+                else binding.full_direction_interval_degrees
+            ),
             direction_ready=True,
             support_trace_coordinates_px=binding.trace_coordinates_px,
             top_full_override=top_full,
             bottom_full_override=bottom_full,
+            source_direction=source_direction,
         )
     if binding.role == BoundaryRole.TOP:
         top = binding
@@ -281,11 +231,16 @@ def _single_candidate(
         canonical_height_px=canonical_height_px,
         shift_interval=shift,
         center_interval=center_interval,
-        direction_interval=binding.full_direction_interval_degrees,
+        direction_interval=(
+            source_direction.full_angle_interval_degrees
+            if source_direction is not None
+            else binding.full_direction_interval_degrees
+        ),
         direction_ready=True,
         support_trace_coordinates_px=binding.trace_coordinates_px,
         top_full_override=top_full,
         bottom_full_override=bottom_full,
+        source_direction=source_direction,
     )
 
 
@@ -298,6 +253,7 @@ def _template_local_refinement_candidates(
     center: FiniteInterval | None,
     minimum_shared_trace_support: int,
     longitudinal_support_domains_px: tuple[FiniteInterval, ...],
+    source_direction: SharedStripDirection | None = None,
 ) -> tuple[_Candidate, ...]:
     """Refine one template-projected opposite side with the nearest raw line.
 
@@ -308,7 +264,9 @@ def _template_local_refinement_candidates(
     remain discrete candidates and therefore unresolved downstream.
     """
 
-    if not anchor.role_authorized or not _single_direction_ready(anchor):
+    if not anchor.role_authorized or (
+        source_direction is None and not _single_direction_ready(anchor)
+    ):
         return ()
     if len(longitudinal_support_domains_px) < SPATIAL_SUPPORT_REGION_COUNT:
         return ()
@@ -333,7 +291,10 @@ def _template_local_refinement_candidates(
             or opposite.role_authorized
             or opposite.independent_support_region_count
             < MINIMUM_INDEPENDENT_SUPPORT_REGIONS
-            or not _single_direction_ready(opposite)
+            or (
+                source_direction is None
+                and not _single_direction_ready(opposite)
+            )
             or _longitudinal_domain_count(
                 opposite.trace_coordinates_px,
                 longitudinal_support_domains_px,
@@ -358,6 +319,7 @@ def _template_local_refinement_candidates(
             canonical_height_px=canonical_height_px,
             center=center,
             minimum_shared_trace_support=minimum_shared_trace_support,
+            source_direction=source_direction,
         )
         if candidate is None:
             continue
@@ -414,6 +376,9 @@ def _direction_for(
         return None
     fit_intervals = tuple(item.fit_direction_interval_degrees for item in direct)
     full_intervals = tuple(item.full_direction_interval_degrees for item in direct)
+    observed_intervals = tuple(
+        item.observed_direction_interval_degrees for item in direct
+    )
     assert all(item is not None for item in fit_intervals)
     assert all(item is not None for item in full_intervals)
     common = parallel_interval
@@ -458,8 +423,8 @@ def _direction_for(
         # span the domain, both intervals remain in the safety hull.
         full_angle_interval_degrees=safety,
         observed_angle_interval_degrees=FiniteInterval(
-            min(item.minimum for item in full_intervals if item is not None),
-            max(item.maximum for item in full_intervals if item is not None),
+            min(item.minimum for item in observed_intervals if item is not None),
+            max(item.maximum for item in observed_intervals if item is not None),
         ),
         canonical_angle_degrees=canonical,
     )
@@ -577,7 +542,7 @@ def _fit_from_candidate(
     if not candidate.direct_pair:
         top_canonical = candidate.shift_interval.center
         bottom_canonical = top_canonical + candidate.canonical_height_px
-    selected_direction = _direction_for(
+    selected_direction = candidate.source_direction or _direction_for(
         direct,
         parallel_interval=candidate.direction_interval,
     )
@@ -722,6 +687,19 @@ def _group_candidates(candidates: Sequence[_Candidate]) -> tuple[tuple[_Candidat
 def _group_direction(
     group: Sequence[_Candidate],
 ) -> SharedStripDirection | None:
+    source_directions = tuple(
+        candidate.source_direction
+        for candidate in group
+        if candidate.source_direction is not None
+    )
+    if source_directions:
+        identity = source_directions[0].direction_id
+        if (
+            len(source_directions) != len(group)
+            or any(item.direction_id != identity for item in source_directions)
+        ):
+            return None
+        return source_directions[0]
     bindings: list[CrossRoleBinding] = []
     seen: set[ObservationId] = set()
     for candidate in group:

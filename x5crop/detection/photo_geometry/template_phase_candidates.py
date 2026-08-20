@@ -320,15 +320,87 @@ def _separator_role_authority(
 def _with_separator_role_authority(
     observations: Sequence[BoundaryEdgeObservation],
     separator_bands: Sequence[SeparatorBandObservation],
+    *,
+    maximum_material_gap_px: float,
 ) -> tuple[BoundaryEdgeObservation, ...]:
     authority = _separator_role_authority(observations, separator_bands)
     if not authority:
         return tuple(observations)
+    by_id = {
+        observation.observation_id: observation
+        for observation in observations
+        if isinstance(observation, BoundaryEdgeObservation)
+    }
+    support_ids = separator_support_authority(tuple(separator_bands))
+    components: dict[ObservationId, list[SeparatorBandObservation]] = {}
+    for band in separator_bands:
+        support_id = support_ids.get(band.left_edge_observation_id)
+        if support_id is None:
+            raise ValueError("separator band has no physical support identity")
+        components.setdefault(support_id, []).append(band)
+    material_intervals: dict[ObservationId, FiniteInterval] = {}
+    for component in components.values():
+        pairs = {
+            (
+                band.left_edge_observation_id,
+                band.right_edge_observation_id,
+            )
+            for band in component
+        }
+        # Only one locally observed END -> material -> START relation needs
+        # the material center retained as output protection. Source-wide bands
+        # already localize their edges directly; alternative pairings remain
+        # discrete evidence and must not be hulled into a huge interval.
+        if (
+            any(
+                band.independent_support_region_count
+                >= SPATIAL_SUPPORT_REGION_COUNT
+                for band in component
+            )
+            or len(pairs) != 1
+            or any(
+                band.gap_interval_px.maximum > maximum_material_gap_px
+                for band in component
+            )
+        ):
+            continue
+        left_id, right_id = next(iter(pairs))
+        left = by_id.get(left_id)
+        right = by_id.get(right_id)
+        if left is None or right is None:
+            raise ValueError("separator band references an unregistered edge")
+        center = FiniteInterval(
+            (
+                left.fit_position_interval_px.minimum
+                + right.fit_position_interval_px.minimum
+            )
+            / 2.0,
+            (
+                left.fit_position_interval_px.maximum
+                + right.fit_position_interval_px.maximum
+            )
+            / 2.0,
+        )
+        for identity in (left_id, right_id):
+            observation = by_id[identity]
+            # A strict trace majority already localizes that edge directly.
+            # The material center is retained only for the weak side of an
+            # otherwise unique local band, where it is output protection and
+            # never additional phase authority.
+            if observation.support_fraction <= 0.5:
+                material_intervals[identity] = center
     values: list[BoundaryEdgeObservation] = []
     for observation in observations:
         if isinstance(observation, BoundaryEdgeObservation):
             roles = authority.get(observation.observation_id)
             if roles:
+                material = material_intervals.get(observation.observation_id)
+                full = observation.full_position_interval_px
+                if material is not None:
+                    full = FiniteInterval(
+                        min(full.minimum, material.minimum),
+                        max(full.maximum, material.maximum),
+                    )
                 observation = replace(
                     observation,
                     qualified_anchor_roles=tuple(
@@ -336,6 +408,7 @@ def _with_separator_role_authority(
                         for role in (BoundaryRole.START, BoundaryRole.END)
                         if role in roles
                     ),
+                    full_position_interval_px=full,
                 )
         values.append(observation)
     return tuple(values)
@@ -868,47 +941,6 @@ def _rank(value: _BoundFit) -> tuple[object, ...]:
         fit.independent_polarity_support_count,
         -fit.residual_sum_px,
     )
-
-
-def _coarse_localization_frontier_indices(
-    candidates: tuple[_BoundFit, ...],
-    coarse_outer: FiniteInterval | None,
-) -> tuple[int, ...]:
-    """Keep phase fits not dominated at both whole-strip outer ends.
-
-    The role-free coarse pass only identifies two neighbourhoods. Every
-    retained coordinate still comes from the fixed-template fit and its
-    directly bound observations. Equal or crossed endpoint alternatives
-    remain discrete placements; no scalar distance or averaging is used.
-    """
-
-    if coarse_outer is None or len(candidates) < 2:
-        return tuple(range(len(candidates)))
-    distances = tuple(
-        (
-            abs(
-                min(item.fit.canonical_role_positions_px)
-                - coarse_outer.minimum
-            ),
-            abs(
-                max(item.fit.canonical_role_positions_px)
-                - coarse_outer.maximum
-            ),
-        )
-        for item in candidates
-    )
-    retained = []
-    for index, value in enumerate(distances):
-        dominated = any(
-            other_index != index
-            and other[0] <= value[0]
-            and other[1] <= value[1]
-            and other != value
-            for other_index, other in enumerate(distances)
-        )
-        if not dominated:
-            retained.append(index)
-    return tuple(retained)
 
 
 def _clear_winner_basis(

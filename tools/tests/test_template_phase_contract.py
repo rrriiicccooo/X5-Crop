@@ -18,6 +18,7 @@ from x5crop.detection.photo_geometry.template_model import (
     TemplateSpec,
 )
 from x5crop.detection.photo_geometry.template_phase import (
+    _same_continuous_placement,
     fit_template_phase,
     fit_template_phase_with_local_advance,
 )
@@ -711,6 +712,41 @@ class TemplatePhaseContractTest(unittest.TestCase):
         )
         self.assertAlmostEqual(result.best.independent_support_coverage, 0.2)
 
+    def test_internal_edges_preserve_discrete_ordinal_mappings(self) -> None:
+        observations = tuple(
+            replace(
+                edge(f"internal-end:{index}", coordinate),
+                qualified_anchor_roles=(BoundaryRole.END,),
+                polarity=-1,
+            )
+            for index, coordinate in enumerate((260.0, 380.0, 500.0))
+        )
+
+        result = fit_template_phase(
+            observations,
+            template(4),
+            holder_span_px=FiniteInterval(0.0, 620.0),
+        )
+
+        self.assertEqual(result.status, PhaseFitStatus.AMBIGUOUS)
+        self.assertIsNotNone(result.best)
+        self.assertIsNotNone(result.runner_up)
+        assert result.best is not None and result.runner_up is not None
+        self.assertEqual(
+            {
+                round(result.best.phase_lattice_fit.canonical_absolute_phase_px),
+                round(result.runner_up.phase_lattice_fit.canonical_absolute_phase_px),
+            },
+            {40, 160},
+        )
+        self.assertEqual(
+            {
+                result.best.phase_lattice_fit.integer_slot_offset,
+                result.runner_up.phase_lattice_fit.integer_slot_offset,
+            },
+            {0, 1},
+        )
+
     def test_inferred_role_propagates_pitch_authority_by_slot(self) -> None:
         compiled = TemplateSpec(
             template_id="interval-propagation",
@@ -728,6 +764,7 @@ class TemplatePhaseContractTest(unittest.TestCase):
         result = fit_template_phase(
             (edge("first-start", 40.0), edge("first-end", 140.0)),
             compiled,
+            holder_span_px=FiniteInterval(0.0, 500.0),
         )
         self.assertEqual(result.status, PhaseFitStatus.RESOLVED)
         assert result.best is not None
@@ -771,7 +808,16 @@ class TemplatePhaseContractTest(unittest.TestCase):
         )
         self.assertEqual(result.status, PhaseFitStatus.RESOLVED)
         assert result.best is not None
-        self.assertIsNone(result.runner_up)
+        self.assertIsNotNone(result.runner_up)
+        assert result.runner_up is not None
+        self.assertGreater(
+            result.best.independent_support_count,
+            result.runner_up.independent_support_count,
+        )
+        self.assertEqual(
+            result.winner_basis,
+            PhaseWinnerBasis.INDEPENDENT_SUPPORT,
+        )
         self.assertEqual(
             result.best.role_observation_ids,
             (
@@ -976,66 +1022,17 @@ class TemplatePhaseContractTest(unittest.TestCase):
         self.assertIsNotNone(result.best)
         self.assertIsNotNone(result.runner_up)
 
-    def test_coarse_outer_localizes_one_direct_template_fit(self) -> None:
-        observations = tuple(
-            edge(f"edge:{index}", coordinate)
-            for index, coordinate in enumerate((40.0, 140.0, 200.0, 300.0))
-        )
+    def test_role_free_coarse_support_cannot_select_phase(self) -> None:
+        import inspect
 
-        result = fit_template_phase(
-            observations,
-            template(2),
-            coarse_outer_interval_px=FiniteInterval(40.0, 260.0),
+        self.assertNotIn(
+            "coarse_outer_interval_px",
+            inspect.signature(fit_template_phase).parameters,
         )
-
-        self.assertEqual(result.status, PhaseFitStatus.RESOLVED)
-        self.assertEqual(
-            result.winner_basis,
-            PhaseWinnerBasis.COARSE_LOCAL_REFINEMENT,
+        self.assertNotIn(
+            "coarse_outer_interval_px",
+            TemplatePhaseInput.__dataclass_fields__,
         )
-        assert result.best is not None and result.runner_up is not None
-        self.assertEqual(
-            result.best.canonical_role_positions_px,
-            (40.0, 140.0, 160.0, 260.0),
-        )
-        self.assertNotEqual(
-            result.best.role_observation_ids,
-            result.runner_up.role_observation_ids,
-        )
-
-    def test_crossed_coarse_endpoint_distances_remain_ambiguous(self) -> None:
-        observations = tuple(
-            edge(f"edge:{index}", coordinate)
-            for index, coordinate in enumerate((40.0, 140.0, 200.0, 300.0))
-        )
-
-        result = fit_template_phase(
-            observations,
-            template(2),
-            coarse_outer_interval_px=FiniteInterval(-80.0, 260.0),
-        )
-
-        self.assertEqual(result.status, PhaseFitStatus.AMBIGUOUS)
-        self.assertIsNone(result.winner_basis)
-        self.assertIsNotNone(result.runner_up)
-
-    def test_phase_coarse_localization_requires_two_endpoints(self) -> None:
-        with self.assertRaisesRegex(ValueError, "coarse localization"):
-            fit_template_phase(
-                (edge("phase", 40.0),),
-                template(1),
-                coarse_outer_interval_px=FiniteInterval.exact(40.0),
-            )
-        with self.assertRaisesRegex(ValueError, "coarse localization"):
-            TemplatePhaseInput(
-                observations=(edge("phase-input", 40.0),),
-                separator_bands=(),
-                template=template(1),
-                scale_px_per_mm=None,
-                holder_span_px=None,
-                phase_authority_px=None,
-                coarse_outer_interval_px=object(),  # type: ignore[arg-type]
-            )
 
     def test_distinct_close_runner_remains_ambiguous(self) -> None:
         observations = tuple(
@@ -1060,6 +1057,56 @@ class TemplatePhaseContractTest(unittest.TestCase):
             ),
             0.51,
         )
+
+    def test_one_connected_separator_keeps_role_alternatives_continuous(self) -> None:
+        observations = tuple(
+            edge(f"connected:{index}", coordinate)
+            for index, coordinate in enumerate((10.0, 110.0, 130.0, 230.0))
+        )
+        fit = fit_template_phase(observations, template(2)).best
+        assert fit is not None
+        positions = list(fit.canonical_role_positions_px)
+        positions[2] += 2.0
+        positions[3] += 2.0
+        role_intervals = list(fit.role_positions_px)
+        full_intervals = list(fit.role_full_position_intervals_px)
+        for index in (2, 3):
+            role_intervals[index] = FiniteInterval.exact(positions[index])
+            full_intervals[index] = FiniteInterval.exact(positions[index])
+        alternative_ids = (
+            ObservationId("connected:alternate:start"),
+            ObservationId("connected:alternate:end"),
+        )
+        role_ids = list(fit.role_observation_ids)
+        original_ids = (role_ids[2], role_ids[3])
+        role_ids[2:4] = alternative_ids
+        direct_ids = tuple(
+            alternative_ids[0]
+            if identity == original_ids[0]
+            else alternative_ids[1]
+            if identity == original_ids[1]
+            else identity
+            for identity in fit.direct_observation_ids
+        )
+        alternative = replace(
+            fit,
+            canonical_role_positions_px=tuple(positions),
+            role_positions_px=tuple(role_intervals),
+            role_full_position_intervals_px=tuple(full_intervals),
+            role_observation_ids=tuple(role_ids),
+            direct_observation_ids=direct_ids,
+        )
+        first_support = ObservationId("separator-support:first")
+        second_support = ObservationId("separator-support:second")
+        connected = {
+            original_ids[0]: first_support,
+            alternative_ids[0]: first_support,
+            original_ids[1]: second_support,
+            alternative_ids[1]: second_support,
+        }
+
+        self.assertTrue(_same_continuous_placement(fit, alternative, connected))
+        self.assertFalse(_same_continuous_placement(fit, alternative, {}))
 
     def test_local_anomaly_prefix_is_transmitted_once(self) -> None:
         relation = LocalAdvanceRelation(
@@ -1248,6 +1295,53 @@ class TemplatePhaseContractTest(unittest.TestCase):
             frozenset((BoundaryRole.START,)),
         )
         self.assertNotIn(observations[3].observation_id, authority)
+
+    def test_local_separator_center_protects_only_its_weak_edge(self) -> None:
+        observations = (
+            replace(
+                edge("material:outer-start", 10.0),
+                qualified_anchor_roles=(BoundaryRole.START,),
+            ),
+            replace(
+                edge("material:strong-end", 110.0),
+                polarity=-1,
+                qualified_anchor_roles=(BoundaryRole.END,),
+            ),
+            replace(
+                edge("material:weak-start", 130.0, support_fraction=0.4),
+                polarity=1,
+                qualified_anchor_roles=(BoundaryRole.START,),
+            ),
+            replace(
+                edge("material:outer-end", 230.0),
+                polarity=-1,
+                qualified_anchor_roles=(BoundaryRole.END,),
+            ),
+        )
+        result = fit_template_phase(
+            observations,
+            template(2),
+            separator_bands=(
+                separator(
+                    "material:local-band",
+                    observations[1],
+                    observations[2],
+                    FiniteInterval(19.8, 20.0),
+                    region_count=2,
+                ),
+            ),
+        )
+
+        self.assertEqual(result.status, PhaseFitStatus.RESOLVED)
+        assert result.best is not None
+        self.assertEqual(
+            result.best.role_full_position_intervals_px[1],
+            observations[1].full_position_interval_px,
+        )
+        self.assertLess(
+            result.best.role_full_position_intervals_px[2].minimum,
+            observations[2].full_position_interval_px.minimum,
+        )
 
     def test_two_direct_gap_anomalies_exceed_the_bounded_model(self) -> None:
         nominal_edges = tuple(

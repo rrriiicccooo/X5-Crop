@@ -98,6 +98,8 @@ class PhotoBoundaryObservation:
     right_background_preference_fraction: float = 0.0
     fit_angle_interval_degrees: FiniteInterval | None = None
     source_spanning_continuous: bool = False
+    trace_coordinates_px: tuple[int, ...] = ()
+    trace_position_intervals_px: tuple[FiniteInterval, ...] = ()
 
     def __post_init__(self) -> None:
         if self.fit_angle_interval_degrees is None:
@@ -128,6 +130,23 @@ class PhotoBoundaryObservation:
             <= self.right_background_preference_fraction
             <= 1.0
             or not self.transition_ids
+            or (
+                bool(self.trace_coordinates_px)
+                != bool(self.trace_position_intervals_px)
+            )
+            or (
+                self.trace_coordinates_px
+                and (
+                    tuple(sorted(set(self.trace_coordinates_px)))
+                    != self.trace_coordinates_px
+                    or len(self.trace_coordinates_px)
+                    != len(self.trace_position_intervals_px)
+                    or any(
+                        not isinstance(item, FiniteInterval)
+                        for item in self.trace_position_intervals_px
+                    )
+                )
+            )
             or not self.angle_interval_degrees.contains(
                 fit_angle.minimum,
                 epsilon=1.0e-9,

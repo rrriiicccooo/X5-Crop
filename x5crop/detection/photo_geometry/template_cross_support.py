@@ -17,16 +17,15 @@ from .model import (
     independent_spatial_support_count,
 )
 from .output_model import SharedStripDirection
-from .template_cross_candidates import (
-    _direction_closure,
-    _direction_for,
-    _shared_trace_coordinates,
+from .template_cross_candidates import _direction_for
+from .template_cross_geometry import (
+    direction_closure as _direction_closure,
+    shared_trace_coordinates as _shared_trace_coordinates,
 )
 from .template_cross_model import (
     CrossRoleBinding,
     EnclosingSupportPair,
     _intersect,
-    _coarse_localization_frontier_indices,
     _midpoint_interval,
     _subtract,
 )
@@ -81,6 +80,7 @@ def _candidate(
     template: TemplateSpec,
     fixed_height: FiniteInterval,
     canonical_height_px: float,
+    reference_trace_px: float,
     holder_center: FiniteInterval | None,
     registered_traces: tuple[int, ...],
     minimum_shared_trace_support: int,
@@ -88,12 +88,43 @@ def _candidate(
 ) -> EnclosingSupportCandidate | None:
     if top.role != BoundaryRole.TOP or bottom.role != BoundaryRole.BOTTOM:
         return None
+    # A pre-closed coarse pair cannot be detached.  Otherwise both sides must
+    # remain role-unknown support observations; photo-aperture roles are never
+    # reinterpreted after fitting.
+    if (top.enclosing_pair_id is None) != (bottom.enclosing_pair_id is None):
+        return None
+    if (
+        top.enclosing_pair_id is not None
+        and top.enclosing_pair_id != bottom.enclosing_pair_id
+    ):
+        return None
+    if (
+        top.enclosing_pair_id is None
+        and (top.role_authorized or bottom.role_authorized)
+    ):
+        return None
+    if not top.trace_position_intervals_px or not bottom.trace_position_intervals_px:
+        return None
     # Boundary use belongs to the selected pair, not permanently to either
     # raw line.  A line that can authorize an aperture may also serve as one
     # side of a directly observed enclosing rectangle.  When this path wins,
     # both sides are uniformly ENCLOSING_SUPPORT_PAIR (zero aperture bleed);
     # no output ever mixes aperture and support semantics edge by edge.
-    traces = _shared_trace_coordinates(top, bottom)
+    top_by_trace = dict(
+        zip(
+            top.trace_coordinates_px,
+            top.trace_position_intervals_px,
+            strict=True,
+        )
+    )
+    bottom_by_trace = dict(
+        zip(
+            bottom.trace_coordinates_px,
+            bottom.trace_position_intervals_px,
+            strict=True,
+        )
+    )
+    traces = tuple(sorted(set(top_by_trace).intersection(bottom_by_trace)))
     if len(traces) < minimum_shared_trace_support:
         return None
     direction_interval, direction_ready, contradiction = _direction_closure(
@@ -162,6 +193,35 @@ def _candidate(
         or bottom.full_interval_px.maximum < aperture_bottom - 1.0e-9
     ):
         return None
+
+    def straight_residual(
+        binding: CrossRoleBinding,
+        intervals: dict[int, FiniteInterval],
+    ) -> float:
+        slope = math.tan(
+            math.radians(direction.canonical_angle_degrees)
+        )
+        reference = binding.full_interval_px.center
+        return max(
+            (
+                max(
+                    interval.minimum
+                    - (
+                        reference
+                        + slope * (float(trace) - reference_trace_px)
+                    ),
+                    0.0,
+                    (
+                        reference
+                        + slope * (float(trace) - reference_trace_px)
+                    )
+                    - interval.maximum,
+                )
+                for trace, interval in intervals.items()
+            ),
+            default=0.0,
+        )
+
     pair = EnclosingSupportPair(
         top_canonical_px=top.full_interval_px.center,
         bottom_canonical_px=bottom.full_interval_px.center,
@@ -170,6 +230,20 @@ def _candidate(
         top_provenance_ids=(top.observation_id,),
         bottom_provenance_ids=(bottom.observation_id,),
         observed_span_px=span,
+        reference_trace_px=reference_trace_px,
+        trace_coordinates_px=traces,
+        top_trace_intervals_px=tuple(top_by_trace[trace] for trace in traces),
+        bottom_trace_intervals_px=tuple(
+            bottom_by_trace[trace] for trace in traces
+        ),
+        top_straight_model_residual_px=straight_residual(
+            top,
+            {trace: top_by_trace[trace] for trace in traces},
+        ),
+        bottom_straight_model_residual_px=straight_residual(
+            bottom,
+            {trace: bottom_by_trace[trace] for trace in traces},
+        ),
     )
     return EnclosingSupportCandidate(
         top_binding=top,
@@ -187,6 +261,7 @@ def fit_enclosing_support(
     template: TemplateSpec,
     fixed_height: FiniteInterval,
     canonical_height_px: float,
+    reference_trace_px: float,
     holder_center: FiniteInterval | None,
     top_bindings: Sequence[CrossRoleBinding],
     bottom_bindings: Sequence[CrossRoleBinding],
@@ -194,7 +269,6 @@ def fit_enclosing_support(
     longitudinal_support_domains_px: tuple[FiniteInterval, ...],
     minimum_shared_trace_support: int,
     maximum_evaluated_candidates: int,
-    coarse_outer_interval_px: FiniteInterval | None = None,
 ) -> SupportFitCompetition:
     """Run a bounded support-pair sweep and retain discrete alternatives."""
 
@@ -234,6 +308,7 @@ def fit_enclosing_support(
                 template=template,
                 fixed_height=fixed_height,
                 canonical_height_px=canonical_height_px,
+                reference_trace_px=reference_trace_px,
                 holder_center=holder_center,
                 registered_traces=registered_trace_coordinates_px,
                 minimum_shared_trace_support=minimum_shared_trace_support,
@@ -260,17 +335,6 @@ def fit_enclosing_support(
             ),
         )
     )
-    localized_indices = _coarse_localization_frontier_indices(
-        tuple(
-            (
-                item.top_binding.full_interval_px,
-                item.bottom_binding.full_interval_px,
-            )
-            for item in ordered
-        ),
-        coarse_outer_interval_px,
-    )
-    ordered = tuple(ordered[index] for index in localized_indices)
     if len(ordered) == 1:
         return SupportFitCompetition(
             ordered[0],

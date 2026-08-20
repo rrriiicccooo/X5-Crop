@@ -164,7 +164,7 @@ class AffineFoundationContractTest(unittest.TestCase):
     def test_expanded_canvas_preserves_bilinear_support_at_source_corners(
         self,
     ) -> None:
-        array = np.zeros((13, 21, 3), dtype=np.uint16)
+        array = np.full((13, 21, 3), 1200, dtype=np.uint16)
         transform = AffineCoordinateTransform.expanded_rotation(21, 13, 2.0)
         full = sample_affine_roi(
             array,
@@ -189,7 +189,8 @@ class AffineFoundationContractTest(unittest.TestCase):
                 x1 = min(full.shape[1], math.ceil(mapped_x) + 2)
                 y0 = max(0, math.floor(mapped_y) - 1)
                 y1 = min(full.shape[0], math.ceil(mapped_y) + 2)
-                self.assertTrue(np.any(full[y0:y1, x0:x1] < 65535))
+                self.assertTrue(np.any(full[y0:y1, x0:x1] > 0))
+        self.assertEqual(int(full[0, 0, 0]), 0)
 
     def test_bilinear_taps_outside_lane_use_background_without_edge_clip(
         self,
@@ -212,7 +213,8 @@ class AffineFoundationContractTest(unittest.TestCase):
             Box(3, 1, 5, 3),
             sampling_authority_box=Box(0, 0, 4, 4),
         )
-        self.assertEqual(int(sampled[0, 1, 0]), 32777)
+        self.assertEqual(int(sampled[0, 0, 0]), 20)
+        self.assertEqual(int(sampled[0, 1, 0]), 10)
         self.assertNotIn(240, sampled)
 
     def test_identity_requires_zero_in_every_observed_angle_interval(

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 import math
 
 from ...domain import FiniteInterval, ObservationId
@@ -14,11 +14,7 @@ from .template_model import (
     LocalAdvanceRelation,
     SequenceFit,
 )
-from .template_phase_model import (
-    PhaseFailureKind,
-    PhaseFitResult,
-    PhaseFitStatus,
-)
+from .template_phase_model import PhaseFitResult, PhaseFitStatus
 from .template_residual import ResidualPattern
 
 
@@ -294,35 +290,8 @@ def template_alignment_diagnostic(
     )
 
 
-def enforce_template_alignment(
-    phase: PhaseFitResult,
-    observations: tuple[BoundaryEdgeObservation, ...],
-    separator_bands: tuple[SeparatorBandObservation, ...],
-) -> PhaseFitResult:
-    """Apply only the negative residual-shape verdict to a finished fit."""
-
-    diagnostic = template_alignment_diagnostic(
-        phase,
-        observations,
-        separator_bands,
-    )
-    if (
-        phase.status != PhaseFitStatus.RESOLVED
-        or diagnostic.pattern != ResidualPattern.UNRESOLVED
-    ):
-        return phase
-    return replace(
-        phase,
-        status=PhaseFitStatus.UNRESOLVED,
-        ambiguity_reason=diagnostic.unresolved_reason,
-        failure_kind=PhaseFailureKind.FIXED_TEMPLATE_MISMATCH,
-        winner_basis=None,
-    )
-
-
 __all__ = [
     "TemplateAlignmentDiagnostic",
     "TemplateRoleResidual",
-    "enforce_template_alignment",
     "template_alignment_diagnostic",
 ]

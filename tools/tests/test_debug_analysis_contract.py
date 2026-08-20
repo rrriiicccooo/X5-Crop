@@ -25,6 +25,7 @@ from x5crop.debug.output_panel import (
 )
 from x5crop.debug.panel_facts import (
     alignment_summary,
+    axis_authority_summaries,
     competition_summary,
     primary_geometry_by_identity,
     root_gate_summary,
@@ -93,6 +94,18 @@ def _grid(workspace, style: DebugStyleParameters):
 
 
 class DebugAnalysisContractTest(unittest.TestCase):
+    def test_review_titles_preserve_each_axis_minimum_missing_fact(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            _configuration, _profile, _workspace, detection = _fixture(
+                Path(temporary)
+            )
+        cross, sequence, source = axis_authority_summaries(detection)
+        self.assertIn("CROSS FIT ·", cross)
+        self.assertIn("DIR ", cross)
+        self.assertIn("ENCLOSING ", cross)
+        self.assertIn("SEQUENCE FIT ·", sequence)
+        self.assertIn("SOURCE FIT ·", source)
+
     def test_three_panels_preserve_four_v5_fact_layers(self) -> None:
         self.assertEqual(
             (
@@ -355,11 +368,9 @@ class DebugAnalysisContractTest(unittest.TestCase):
         sequence_title = long_axis_base.call_args.args[3]
         self.assertTrue(shared_title.startswith("SOURCE FIT · "))
         self.assertIn("PLACEMENTS · ", shared_title)
-        placement_count = shared_title.split(" · ")[1].split()[0]
-        self.assertIn(
-            f"SEQUENCE FIT · {placement_count} PLACEMENTS",
-            sequence_title,
-        )
+        self.assertTrue(sequence_title.startswith("SEQUENCE FIT · "))
+        self.assertIn("COARSE ", sequence_title)
+        self.assertIn("RUNNER ", sequence_title)
 
     def test_adaptive_panel_stacking_is_bounded(self) -> None:
         self.assertEqual(len(FRAME_FILL_COLORS), 12)
