@@ -8,6 +8,7 @@ from tools.regression.diagnostic_cohort import (
     _source_geometry_authority_is_explicit,
     load_diagnostic_sources,
 )
+from x5crop.report.validation import validate_output_footprint_authority
 
 
 class CurrentRuntimeContractTest(unittest.TestCase):
@@ -27,19 +28,116 @@ class CurrentRuntimeContractTest(unittest.TestCase):
                 [80.0, 90.0],
                 [-2.0, 90.0],
             ],
+            "sampling_source_footprint": None,
             "sampling_authority_box": {
                 "left": 0,
                 "top": 0,
                 "right": 100,
                 "bottom": 100,
             },
-            "saturation_facts": [{"authority_side": "left"}],
+            "saturation_facts": [
+                {
+                    "authority_side": "left",
+                    "clipped_requirements": ["visible_placement"],
+                }
+            ],
             "mapped_output_box": None,
         }
         report = {"photo_geometry": {"lanes": [{"output_footprints": [output]}]}}
         self.assertTrue(_source_geometry_authority_is_explicit(report))
         output["saturation_facts"] = []
         self.assertFalse(_source_geometry_authority_is_explicit(report))
+
+    def test_diagnostic_validates_sampling_rectangle_overflow_facts(self) -> None:
+        output = {
+            "required_source_footprint": [
+                [10.0, 10.0],
+                [80.0, 10.0],
+                [80.0, 90.0],
+                [10.0, 90.0],
+            ],
+            "sampling_source_footprint": [
+                [-2.0, 8.0],
+                [82.0, 8.0],
+                [82.0, 92.0],
+                [-2.0, 92.0],
+            ],
+            "sampling_authority_box": {
+                "left": 0,
+                "top": 0,
+                "right": 100,
+                "bottom": 100,
+            },
+            "saturation_facts": [
+                {
+                    "authority_side": "left",
+                    "clipped_requirements": ["sampling_rectangle"],
+                }
+            ],
+            "mapped_output_box": None,
+        }
+        report = {"photo_geometry": {"lanes": [{"output_footprints": [output]}]}}
+        self.assertTrue(_source_geometry_authority_is_explicit(report))
+        output["saturation_facts"] = []
+        self.assertFalse(_source_geometry_authority_is_explicit(report))
+
+    def test_current_report_rejects_duplicate_footprint_authority_sides(self) -> None:
+        output = {
+            "required_source_footprint": [
+                [-2.0, 10.0],
+                [80.0, 10.0],
+                [80.0, 90.0],
+                [-2.0, 90.0],
+            ],
+            "sampling_source_footprint": None,
+            "sampling_authority_box": {
+                "left": 0,
+                "top": 0,
+                "right": 100,
+                "bottom": 100,
+            },
+            "saturation_facts": [
+                {
+                    "authority_side": "left",
+                    "clipped_requirements": ["visible_placement"],
+                },
+                {
+                    "authority_side": "left",
+                    "clipped_requirements": ["visible_placement"],
+                },
+            ],
+            "mapped_output_box": None,
+        }
+
+        with self.assertRaisesRegex(ValueError, "authority side"):
+            validate_output_footprint_authority(output)
+
+    def test_current_report_requires_sampling_footprint_for_mapped_output(self) -> None:
+        output = {
+            "required_source_footprint": [
+                [10.0, 10.0],
+                [80.0, 10.0],
+                [80.0, 90.0],
+                [10.0, 90.0],
+            ],
+            "sampling_source_footprint": None,
+            "sampling_authority_box": {
+                "left": 0,
+                "top": 0,
+                "right": 100,
+                "bottom": 100,
+            },
+            "saturation_facts": [],
+            "mapped_output_box": {
+                "left": 10,
+                "top": 10,
+                "right": 81,
+                "bottom": 91,
+            },
+        }
+
+        with self.assertRaisesRegex(ValueError, "sampling footprint"):
+            validate_output_footprint_authority(output)
 
     def test_obsolete_detector_files_are_absent(self) -> None:
         forbidden_paths = (
@@ -247,7 +345,7 @@ class CurrentRuntimeContractTest(unittest.TestCase):
         self.assertEqual(REPORT_SCHEMA_ID, "x5crop_detection_report_v5")
         self.assertEqual(
             REPORT_SCHEMA_REVISION,
-            "x5crop_v5_template_report_6",
+            "x5crop_v5_template_report_7",
         )
         candidate = candidate_gate_assessment(
             {

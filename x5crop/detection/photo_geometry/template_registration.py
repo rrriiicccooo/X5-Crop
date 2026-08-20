@@ -458,6 +458,48 @@ def register_template_local_cross_refinements(
     if not anchors:
         return registered
 
+    def has_direct_opposite_closure(anchor: CrossRoleBinding) -> bool:
+        opposites = (
+            registered.bottom_bindings
+            if anchor.role == BoundaryRole.TOP
+            else registered.top_bindings
+        )
+        expected = (
+            _add(anchor.full_interval_px, fixed_height_px)
+            if anchor.role == BoundaryRole.TOP
+            else FiniteInterval(
+                anchor.full_interval_px.minimum - fixed_height_px.maximum,
+                anchor.full_interval_px.maximum - fixed_height_px.minimum,
+            )
+        )
+        for opposite in opposites:
+            if (
+                opposite.evidence != CrossEvidence.DIRECT
+                or not opposite.role_authorized
+                or len(
+                    set(anchor.trace_coordinates_px).intersection(
+                        opposite.trace_coordinates_px
+                    )
+                )
+                < MINIMUM_INDEPENDENT_SUPPORT_REGIONS
+                or expected.maximum < opposite.full_interval_px.minimum
+                or opposite.full_interval_px.maximum < expected.minimum
+            ):
+                continue
+            anchor_direction = anchor.full_direction_interval_degrees
+            opposite_direction = opposite.full_direction_interval_degrees
+            if (
+                anchor_direction is not None
+                and opposite_direction is not None
+                and (
+                    anchor_direction.maximum < opposite_direction.minimum
+                    or opposite_direction.maximum < anchor_direction.minimum
+                )
+            ):
+                continue
+            return True
+        return False
+
     height_radius_px = max(
         canonical_height_px - fixed_height_px.minimum,
         fixed_height_px.maximum - canonical_height_px,
@@ -477,6 +519,12 @@ def register_template_local_cross_refinements(
     fit_attempt_count = registered.fit_attempt_count
 
     for anchor in anchors:
+        # This pass only fills a physically missing opposite side.  Re-fitting
+        # transitions after a direct top+bottom closure already exists would
+        # duplicate the same structure under a new observation identity and
+        # manufacture a discrete runner-up from non-independent evidence.
+        if has_direct_opposite_closure(anchor):
+            continue
         opposite_role = (
             BoundaryRole.BOTTOM
             if anchor.role == BoundaryRole.TOP

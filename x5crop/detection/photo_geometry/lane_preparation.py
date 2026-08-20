@@ -59,7 +59,10 @@ from .template_phase_model import (
     PhaseFitStatus,
     TemplatePhaseInput,
 )
-from .template_pitch import calibrate_template_source_pitch
+from .template_pitch import (
+    calibrate_template_source_pitch,
+    close_separator_phase_hypothesis,
+)
 from .source_geometry import SourceScanGeometry
 from .transition_tracking import track_side_transition_regions
 
@@ -517,14 +520,41 @@ def prepare_template_lane(
     )
     pitch_lattice_bound_exceeded = pitch_calibration.bound_exceeded
     template = pitch_calibration.template
-    base_phase = fit_template_phase(
-        sequence_edges,
-        template,
-        separator_bands=separator_bands,
-        scale_px_per_mm=scales.width_axis_px_per_mm,
-        holder_span_px=width_authority,
-        phase_authority_px=pitch_calibration.phase_authority_px,
+    base_phase_hypothesis = pitch_calibration.phase_hypothesis_px
+    proposed_base_phase = (
+        None
+        if base_phase_hypothesis is None
+        else fit_template_phase(
+            sequence_edges,
+            template,
+            separator_bands=separator_bands,
+            scale_px_per_mm=scales.width_axis_px_per_mm,
+            holder_span_px=width_authority,
+            phase_authority_px=base_phase_hypothesis,
+        )
     )
+    base_phase_authority = pitch_calibration.phase_authority_px
+    if proposed_base_phase is not None:
+        base_phase_authority = close_separator_phase_hypothesis(
+            pitch_calibration,
+            proposed_base_phase,
+        )
+    if proposed_base_phase is not None and base_phase_authority is not None:
+        base_phase = proposed_base_phase
+    else:
+        base_phase = fit_template_phase(
+            sequence_edges,
+            template,
+            separator_bands=separator_bands,
+            scale_px_per_mm=scales.width_axis_px_per_mm,
+            holder_span_px=width_authority,
+            phase_authority_px=base_phase_authority,
+        )
+        if proposed_base_phase is not None:
+            base_phase = account_prior_phase_fit(
+                base_phase,
+                proposed_base_phase,
+            )
     source_geometry = _calibrated_width_geometry(
         source_geometry,
         base_phase,
@@ -558,10 +588,14 @@ def prepare_template_lane(
     # Rebind the already-registered observations once, then interpret local
     # residuals. No selected-placement query or new pixel read is introduced.
     # A provisional role binding may calibrate continuous W/pitch, but it
-    # cannot authorize its own ordinal mapping.  Only a direct separator
-    # lattice may restrict the final absolute phase; otherwise all bounded
-    # role-compatible mappings must remain in competition.
-    phase_search_authority = pitch_calibration.phase_authority_px
+    # cannot authorize its own ordinal mapping.  A two-band separator phase
+    # hypothesis becomes authority only after a complete legal fit binds
+    # another independent direct support; otherwise all bounded role-compatible
+    # mappings remain in competition.
+    phase_search_authority = close_separator_phase_hypothesis(
+        pitch_calibration,
+        base_phase,
+    )
     phase_input = TemplatePhaseInput(
         observations=sequence_edges,
         separator_bands=separator_bands,

@@ -12,7 +12,10 @@ import sys
 from tempfile import TemporaryDirectory
 from typing import Any, Sequence
 
-from x5crop.report.validation import validate_current_report_record
+from x5crop.report.validation import (
+    validate_current_report_record,
+    validate_output_footprint_authority,
+)
 
 from .cohort_count import validate_cohort_counts
 from .diagnostic_contract import (
@@ -107,29 +110,12 @@ def load_diagnostic_sources(
 def _source_geometry_authority_is_explicit(report: dict[str, Any]) -> bool:
     """Validate current selected-output overflow facts without clipping."""
 
-    for lane in report["photo_geometry"]["lanes"]:
-        for output in lane["output_footprints"]:
-            footprint = output["required_source_footprint"]
-            authority = output["sampling_authority_box"]
-            if not footprint:
-                return False
-            expected_sides = set()
-            if min(float(point[0]) for point in footprint) < authority["left"]:
-                expected_sides.add("left")
-            if min(float(point[1]) for point in footprint) < authority["top"]:
-                expected_sides.add("top")
-            if max(float(point[0]) for point in footprint) > authority["right"] - 1:
-                expected_sides.add("right")
-            if max(float(point[1]) for point in footprint) > authority["bottom"] - 1:
-                expected_sides.add("bottom")
-            recorded_sides = {
-                fact["authority_side"] for fact in output["saturation_facts"]
-            }
-            if (
-                recorded_sides != expected_sides
-                or (output["mapped_output_box"] is None) != bool(expected_sides)
-            ):
-                return False
+    try:
+        for lane in report["photo_geometry"]["lanes"]:
+            for output in lane["output_footprints"]:
+                validate_output_footprint_authority(output)
+    except (KeyError, TypeError, ValueError):
+        return False
     return True
 
 

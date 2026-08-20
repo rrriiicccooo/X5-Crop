@@ -129,6 +129,53 @@ class TemplateRegistrationContractTest(unittest.TestCase):
         self.assertEqual(refined.bottom_bindings, ())
         self.assertEqual(refined.fit_attempt_count, 0)
 
+    def test_template_local_cross_does_not_duplicate_direct_closure(self) -> None:
+        top = self._top_anchor()
+        bottom = CrossRoleBinding(
+            role=BoundaryRole.BOTTOM,
+            run_id="bottom:direct",
+            observation_id=ObservationId("bottom:direct"),
+            coordinate_interval_px=FiniteInterval(99.5, 100.5),
+            trace_coordinates_px=(0, 10, 20, 30, 40, 50),
+            support_fraction=1.0,
+            continuous_support_fraction=1.0,
+            canonical_direction_degrees=0.0,
+            fit_direction_interval_degrees=FiniteInterval(-0.05, 0.05),
+            full_direction_interval_degrees=FiniteInterval(-0.1, 0.1),
+            independent_support_region_count=3,
+            source_spanning_continuous=True,
+            role_authorized=True,
+        )
+        measurement = self._bottom_measurement(((100.0,),) * 6)
+
+        refined = register_template_local_cross_refinements(
+            RegisteredCrossEvidence(
+                top_bindings=(top,),
+                bottom_bindings=(bottom,),
+                observations=(),
+                fit_attempt_count=0,
+            ),
+            top_measurement=measurement,
+            bottom_measurement=measurement,
+            width_axis=BoundaryAxis.Y,
+            height_axis=BoundaryAxis.X,
+            height_scale_px_per_mm=PositiveInterval.exact(10.0),
+            lane_reference_trace_px=25.0,
+            fixed_height_px=FiniteInterval(79.0, 81.0),
+            canonical_height_px=80.0,
+            longitudinal_support_domains_px=(
+                FiniteInterval(0.0, 15.0),
+                FiniteInterval(15.1, 35.0),
+                FiniteInterval(35.1, 50.0),
+            ),
+            maximum_bindings=8,
+        )
+
+        self.assertEqual(refined.top_bindings, (top,))
+        self.assertEqual(refined.bottom_bindings, (bottom,))
+        self.assertEqual(refined.fit_attempt_count, 0)
+        self.assertEqual(refined.observations, ())
+
     def test_source_scale_evidence_intersects_without_lane_identity(self) -> None:
         frame = FramePhysicalSpec(36.0, 24.0, 2.0)
         first = SourceScanGeometry.create(

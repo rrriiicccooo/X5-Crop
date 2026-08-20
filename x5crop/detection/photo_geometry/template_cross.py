@@ -635,33 +635,12 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
         if support_result is not None:
             return support_result
 
-    # Holder center is a hard closure.  If a direct candidate exists but all
-    # are off-center, do not let support or residual clutter replace it.
-    if inputs.holder_short_axis_center_px is not None:
-        centered = tuple(item for item in candidates if item.center_compatible)
-        if centered:
-            candidates = list(centered)
-        else:
-            support_result, receipt = support_resolution(receipt)
-            if support_result is not None:
-                return support_result
-            fits = tuple(
-                _fit_from_candidate(
-                    item,
-                    template=inputs.template,
-                    fixed_height=fixed_height,
-                    lane_reference_trace_px=inputs.lane_reference_trace_px,
-                )
-                for item in candidates
-            )
-            return CrossFitCompetition(
-                template_id=inputs.template.template_id,
-                best=None,
-                runner_up=fits[0] if fits else None,
-                status=CrossFitStatus.UNRESOLVED,
-                reason="cross holder center contradicts direct evidence",
-                receipt=receipt,
-            )
+    # The holder centre is not photo-boundary authority.  It may establish a
+    # bounded opposite side for a single direct anchor and it remains a hard
+    # compatibility fact for enclosing support, but it cannot select between
+    # or veto complete role-authorized aperture pairs.  A unique direct pair
+    # owns its measured cross offset; multiple legal pairs remain discrete
+    # placements below.
 
     # Direction is never inferred from the template.  A complete directional
     # candidate wins over a candidate whose direction interval is unavailable;

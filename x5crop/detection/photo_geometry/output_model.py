@@ -218,14 +218,16 @@ class BoundaryProtectionFact:
 class OutputFootprint:
     """Final selected-frame sampling requirement, including product bleed.
 
-    The required polygon is never clipped to source authority.  When any part
-    lies outside the lane, ``saturation_facts`` records the contradiction and
-    ``mapped_output_box`` remains unavailable so the Gate must request review.
+    The required polygon and the final axis-aligned sampling rectangle are
+    never clipped to source authority.  When either lies outside the lane,
+    ``saturation_facts`` records the contradiction and ``mapped_output_box``
+    remains unavailable so the Gate must request review.
     """
 
     geometry_id: str
     envelope: JointPlacementEnvelope
     required_source_footprint: ConvexPolygon
+    sampling_source_footprint: ConvexPolygon | None
     boundary_protections: tuple[BoundaryProtectionFact, ...]
     saturation_facts: tuple[FootprintSaturationFact, ...]
     sampling_authority_box: Box
@@ -248,6 +250,11 @@ class OutputFootprint:
             self.required_source_footprint,
             "required source footprint",
         )
+        if self.sampling_source_footprint is not None:
+            _validate_continuous_footprint(
+                self.sampling_source_footprint,
+                "sampling source footprint",
+            )
         if tuple(item.role for item in self.boundary_protections) != (
             BoundaryRole.START,
             BoundaryRole.END,
@@ -261,6 +268,15 @@ class OutputFootprint:
             raise ValueError("saturation facts require one fact per authority side")
         if bool(self.saturation_facts) == (self.mapped_output_box is not None):
             raise ValueError("saturated output cannot expose a mapped output box")
+        sampling_saturated = any(
+            ClippedRequirement.SAMPLING_RECTANGLE in fact.clipped_requirements
+            for fact in self.saturation_facts
+        )
+        if (
+            (self.mapped_output_box is not None or sampling_saturated)
+            and self.sampling_source_footprint is None
+        ):
+            raise ValueError("mapped output requires its source sampling footprint")
 
 
 

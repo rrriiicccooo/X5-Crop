@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 from ..detection.candidate.assessment.model import CANDIDATE_GATE_CHECK_CODES
@@ -26,6 +27,125 @@ CURRENT_REPORT_SECTIONS = (
     "runtime_identity",
     "development",
 )
+
+_AUTHORITY_SIDES = ("left", "top", "right", "bottom")
+_CLIPPED_REQUIREMENTS = ("visible_placement", "sampling_rectangle")
+
+
+def _finite_number(value: object) -> bool:
+    return (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and math.isfinite(float(value))
+    )
+
+
+def _validate_polygon(value: object, label: str) -> list[list[float]]:
+    if (
+        not isinstance(value, list)
+        or len(value) < 3
+        or any(
+            not isinstance(point, list)
+            or len(point) != 2
+            or any(not _finite_number(coordinate) for coordinate in point)
+            for point in value
+        )
+    ):
+        raise ValueError(f"{label} is invalid")
+    return value
+
+
+def _validate_box(value: object, label: str) -> dict[str, float]:
+    if (
+        not isinstance(value, dict)
+        or tuple(value) != _AUTHORITY_SIDES
+        or any(not _finite_number(value.get(side)) for side in _AUTHORITY_SIDES)
+        or float(value["right"]) <= float(value["left"])
+        or float(value["bottom"]) <= float(value["top"])
+    ):
+        raise ValueError(f"{label} is invalid")
+    return value
+
+
+def _outside_authority_sides(
+    footprint: list[list[float]],
+    authority: dict[str, float],
+) -> tuple[str, ...]:
+    result = []
+    if min(float(point[0]) for point in footprint) < authority["left"]:
+        result.append("left")
+    if min(float(point[1]) for point in footprint) < authority["top"]:
+        result.append("top")
+    if max(float(point[0]) for point in footprint) > authority["right"] - 1:
+        result.append("right")
+    if max(float(point[1]) for point in footprint) > authority["bottom"] - 1:
+        result.append("bottom")
+    return tuple(result)
+
+
+def validate_output_footprint_authority(output: dict[str, Any]) -> None:
+    """Validate one serialized output footprint without silent clipping."""
+
+    if not isinstance(output, dict):
+        raise ValueError("output footprint is invalid")
+    required = _validate_polygon(
+        output.get("required_source_footprint"),
+        "required source footprint",
+    )
+    sampling_value = output.get("sampling_source_footprint")
+    sampling = (
+        None
+        if sampling_value is None
+        else _validate_polygon(sampling_value, "sampling source footprint")
+    )
+    authority = _validate_box(
+        output.get("sampling_authority_box"),
+        "sampling authority box",
+    )
+    expected: dict[str, set[str]] = {}
+    for side in _outside_authority_sides(required, authority):
+        expected.setdefault(side, set()).add("visible_placement")
+    if sampling is not None:
+        for side in _outside_authority_sides(sampling, authority):
+            expected.setdefault(side, set()).add("sampling_rectangle")
+
+    facts = output.get("saturation_facts")
+    if not isinstance(facts, list):
+        raise ValueError("footprint saturation facts are invalid")
+    recorded: dict[str, set[str]] = {}
+    for fact in facts:
+        if (
+            not isinstance(fact, dict)
+            or set(fact) != {"authority_side", "clipped_requirements"}
+        ):
+            raise ValueError("footprint saturation fact is invalid")
+        side = fact["authority_side"]
+        requirements = fact["clipped_requirements"]
+        if (
+            side not in _AUTHORITY_SIDES
+            or side in recorded
+            or not isinstance(requirements, list)
+            or not requirements
+            or len(set(requirements)) != len(requirements)
+            or any(value not in _CLIPPED_REQUIREMENTS for value in requirements)
+        ):
+            raise ValueError("footprint authority side is invalid")
+        recorded[side] = set(requirements)
+    if recorded != expected:
+        raise ValueError("footprint saturation facts disagree with authority")
+
+    mapped_value = output.get("mapped_output_box")
+    if mapped_value is None:
+        if not expected:
+            raise ValueError("unsaturated output lacks a mapped output box")
+    else:
+        _validate_box(mapped_value, "mapped output box")
+        if expected:
+            raise ValueError("saturated output exposed a mapped output box")
+        if sampling is None:
+            raise ValueError("mapped output lacks a sampling footprint")
+    if sampling is None and not expected:
+        raise ValueError("unsaturated output lacks a sampling footprint")
 
 
 def _validate_gate(record: dict[str, Any], stage: str) -> None:
@@ -232,6 +352,8 @@ def _validate_geometry(record: dict[str, Any]) -> None:
             item["geometry_id"] for item in budgets
         }:
             raise ValueError("budget does not cover selected output")
+        for output in outputs:
+            validate_output_footprint_authority(output)
         selected = lane["selected_placement_id"]
         if (selected is None) != (not outputs):
             raise ValueError("selected template output is incomplete")

@@ -121,7 +121,14 @@ def output_transform_assessment(
             applied_source_rotation_degrees=0.0,
             authority="shared_strip_direction",
         )
-    source_rotation = -canonical_angle
+    # ``SharedStripDirection`` is expressed in canonical strip coordinates.
+    # For a horizontal strip its line angle has the source-raster sign, while
+    # the vertical-layout canonicalization swaps axes and reverses that sign.
+    # Undo the observed raster tilt in both layouts instead of applying the
+    # horizontal convention to a vertical source.
+    source_rotation = (
+        -canonical_angle if layout == "horizontal" else canonical_angle
+    )
     return OutputTransformAssessment(
         transform=AffineCoordinateTransform.expanded_rotation(
             source_width,

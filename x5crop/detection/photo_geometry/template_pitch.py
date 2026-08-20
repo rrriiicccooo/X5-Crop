@@ -18,10 +18,11 @@ from .template_phase_model import PhaseFitResult, PhaseFitStatus
 
 @dataclass(frozen=True)
 class TemplatePitchCalibration:
-    """One bounded source-pitch result and its direct phase authority."""
+    """One bounded source-pitch result and typed separator phase evidence."""
 
     template: TemplateSpec
     phase_authority_px: FiniteInterval | None
+    phase_hypothesis_px: FiniteInterval | None
     direct_separator_ids: tuple[ObservationId, ...]
     lattice_hypothesis_count: int
     bound_exceeded: bool
@@ -35,12 +36,33 @@ class TemplatePitchCalibration:
             self.direct_separator_ids
         ):
             raise ValueError("separator calibration identities must be unique")
+        for value, name in (
+            (self.phase_authority_px, "phase authority"),
+            (self.phase_hypothesis_px, "phase hypothesis"),
+        ):
+            if value is not None and not isinstance(value, FiniteInterval):
+                raise TypeError(f"separator {name} must be a finite interval")
+        if (
+            self.phase_authority_px is not None
+            and self.phase_hypothesis_px is not None
+        ):
+            raise ValueError("separator phase evidence must have one authority level")
         if self.phase_authority_px is not None and len(
             self.direct_separator_ids
-        ) < 2:
-            raise ValueError("separator phase authority needs two direct bands")
+        ) < 3:
+            raise ValueError("separator phase authority needs three direct bands")
+        if self.phase_hypothesis_px is not None and len(
+            self.direct_separator_ids
+        ) != 2:
+            raise ValueError("separator phase hypothesis needs two direct bands")
+        if (self.phase_authority_px is None and self.phase_hypothesis_px is None) != (
+            not self.direct_separator_ids
+        ):
+            raise ValueError("separator phase identities require typed phase evidence")
         if self.bound_exceeded and (
-            self.phase_authority_px is not None or self.direct_separator_ids
+            self.phase_authority_px is not None
+            or self.phase_hypothesis_px is not None
+            or self.direct_separator_ids
         ):
             raise ValueError("bounded-out pitch calibration cannot carry authority")
 
@@ -61,6 +83,43 @@ def _intersect(
     if maximum < minimum:
         return None
     return FiniteInterval(minimum, maximum)
+
+
+def close_separator_phase_hypothesis(
+    calibration: TemplatePitchCalibration,
+    phase: PhaseFitResult,
+) -> FiniteInterval | None:
+    """Promote a two-band phase hypothesis only after independent closure.
+
+    The two separator locations may own pitch, but their projected absolute
+    phase is not self-authorizing.  It becomes authority only when a complete
+    legal fit inside that interval binds another independent direct support.
+    Three or more lattice locations already form their own closed authority.
+    """
+
+    if not isinstance(calibration, TemplatePitchCalibration):
+        raise TypeError("separator phase closure requires pitch calibration")
+    if not isinstance(phase, PhaseFitResult):
+        raise TypeError("separator phase closure requires a phase fit")
+    if calibration.phase_authority_px is not None:
+        return calibration.phase_authority_px
+    hypothesis = calibration.phase_hypothesis_px
+    fit = phase.best
+    if (
+        hypothesis is None
+        or phase.status != PhaseFitStatus.RESOLVED
+        or fit is None
+        or _intersect(
+            hypothesis,
+            fit.phase_lattice_fit.absolute_phase_interval_px,
+        )
+        is None
+        or not set(fit.independent_support_ids).difference(
+            calibration.direct_separator_ids
+        )
+    ):
+        return None
+    return hypothesis
 
 
 def _advance_interval(
@@ -473,11 +532,12 @@ def calibrate_template_source_pitch(
     )
     if bound_exceeded:
         return TemplatePitchCalibration(
-            template,
-            None,
-            (),
-            lattice_hypothesis_count,
-            True,
+            template=template,
+            phase_authority_px=None,
+            phase_hypothesis_px=None,
+            direct_separator_ids=(),
+            lattice_hypothesis_count=lattice_hypothesis_count,
+            bound_exceeded=True,
         )
     band_pitch = (
         None if separator_lattice is None else separator_lattice.pitch_px
@@ -556,11 +616,12 @@ def calibrate_template_source_pitch(
         )
     if measured_pitch is None:
         return TemplatePitchCalibration(
-            template,
-            None,
-            (),
-            lattice_hypothesis_count,
-            False,
+            template=template,
+            phase_authority_px=None,
+            phase_hypothesis_px=None,
+            direct_separator_ids=(),
+            lattice_hypothesis_count=lattice_hypothesis_count,
+            bound_exceeded=False,
         )
     width = FiniteInterval(
         template.frame_width_px.minimum,
@@ -572,11 +633,12 @@ def calibrate_template_source_pitch(
     )
     if gap.maximum <= 0.0:
         return TemplatePitchCalibration(
-            template,
-            None,
-            (),
-            lattice_hypothesis_count,
-            False,
+            template=template,
+            phase_authority_px=None,
+            phase_hypothesis_px=None,
+            direct_separator_ids=(),
+            lattice_hypothesis_count=lattice_hypothesis_count,
+            bound_exceeded=False,
         )
     calibrated = replace(
         template,
@@ -586,21 +648,48 @@ def calibrate_template_source_pitch(
             template.phase_lattice_authority.with_period(measured_pitch)
         ),
     )
+    # Two separator locations can own one bounded pitch lattice.  In a short
+    # strip they also produce one finite phase hypothesis, but it remains
+    # non-authoritative until another independent direct support closes a full
+    # legal fit.  Three independent material locations form the first lattice
+    # that may restrict absolute phase on its own.
+    separator_owns_absolute_phase = (
+        separator_lattice is not None
+        and len(separator_lattice.direct_separator_ids) >= 3
+    )
+    separator_proposes_absolute_phase = (
+        separator_lattice is not None
+        and template.count <= 3
+        and len(separator_lattice.direct_separator_ids) == 2
+    )
+    separator_phase = (
+        None
+        if separator_lattice is None
+        else _axis_interval(separator_lattice.phase_px, template.direction)
+    )
     return TemplatePitchCalibration(
-        calibrated,
-        (
-            None
-            if separator_lattice is None
-            else _axis_interval(separator_lattice.phase_px, template.direction)
+        template=calibrated,
+        phase_authority_px=(
+            separator_phase if separator_owns_absolute_phase else None
         ),
-        (
+        phase_hypothesis_px=(
+            separator_phase if separator_proposes_absolute_phase else None
+        ),
+        direct_separator_ids=(
             ()
-            if separator_lattice is None
+            if not (
+                separator_owns_absolute_phase
+                or separator_proposes_absolute_phase
+            )
             else separator_lattice.direct_separator_ids
         ),
-        lattice_hypothesis_count,
-        False,
+        lattice_hypothesis_count=lattice_hypothesis_count,
+        bound_exceeded=False,
     )
 
 
-__all__ = ["TemplatePitchCalibration", "calibrate_template_source_pitch"]
+__all__ = [
+    "TemplatePitchCalibration",
+    "calibrate_template_source_pitch",
+    "close_separator_phase_hypothesis",
+]

@@ -1235,7 +1235,7 @@ class TemplateCrossContractTest(unittest.TestCase):
             FiniteInterval.exact(500.0),
         )
 
-    def test_center_compatible_fit_beats_off_center_clutter(self) -> None:
+    def test_holder_center_cannot_select_between_direct_aperture_pairs(self) -> None:
         result = fit_template_cross(
             TemplateCrossInput(
                 template=template(),
@@ -1251,10 +1251,33 @@ class TemplateCrossContractTest(unittest.TestCase):
                 ),
             )
         )
-        self.assertEqual(result.status, CrossFitStatus.RESOLVED)
+        self.assertEqual(result.status, CrossFitStatus.UNRESOLVED)
         assert result.best is not None
+        assert result.runner_up is not None
         self.assertEqual(result.best.direct_observation_ids[0], ObservationId("observation:normal-top"))
         self.assertTrue(result.best.center_compatible)
+        self.assertEqual(
+            result.runner_up.direct_observation_ids[0],
+            ObservationId("observation:clutter-top"),
+        )
+        self.assertFalse(result.runner_up.center_compatible)
+
+    def test_unique_direct_aperture_pair_owns_offset_outside_holder_center(self) -> None:
+        result = fit_template_cross(
+            TemplateCrossInput(
+                template=template(),
+                fixed_height_px=240.0,
+                holder_short_axis_center_px=220.0,
+                top_bindings=(binding(BoundaryRole.TOP, "top", 300.0),),
+                bottom_bindings=(
+                    binding(BoundaryRole.BOTTOM, "bottom", 540.0),
+                ),
+            )
+        )
+        self.assertEqual(result.status, CrossFitStatus.RESOLVED)
+        self.assertIsNone(result.runner_up)
+        assert result.best is not None
+        self.assertFalse(result.best.center_compatible)
 
     def test_direct_height_contradiction_does_not_recalibrate_or_resolve(self) -> None:
         result = fit_template_cross(

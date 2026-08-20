@@ -9,9 +9,10 @@ from ..geometry.affine import AffineCoordinateTransform
 
 AFFINE_ROW_CHUNK_SIZE = 256
 AFFINE_SAMPLE_MAX_VALUE = int(np.iinfo(np.uint16).max)
-# A deskewed rectangular TIFF can contain corner samples outside the lane
-# authority. Film border is black; using black keeps those no-source-data
-# pixels visibly distinct instead of manufacturing image content.
+# Black remains the sampling primitive's explicit no-source-data value.  The
+# production Gate separately requires every official output sample centre to
+# inverse-map inside lane authority, so this fallback cannot silently create
+# black corners in an automatically approved TIFF.
 AFFINE_BACKGROUND_VALUE = 0
 
 

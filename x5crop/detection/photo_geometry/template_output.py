@@ -341,12 +341,14 @@ def _outside_authority_sides(
 def _saturation_facts(
     required: ConvexPolygon,
     authority: Box,
+    *,
+    requirement: ClippedRequirement = ClippedRequirement.VISIBLE_PLACEMENT,
 ) -> tuple[FootprintSaturationFact, ...]:
     outside = set(_outside_authority_sides(required, authority))
     return tuple(
         FootprintSaturationFact(
             authority_side=side,
-            clipped_requirements=(ClippedRequirement.VISIBLE_PLACEMENT,),
+            clipped_requirements=(requirement,),
         )
         for side in AuthoritySide
         if side in outside
@@ -368,6 +370,31 @@ def _mapped_box(
     ):
         raise ValueError("mapped template footprint exceeds output authority")
     return mapped
+
+
+def _sampling_rectangle_source_footprint(
+    mapped: Box,
+    transform: AffineCoordinateTransform,
+) -> ConvexPolygon:
+    """Inverse-map the exact output sample-centre rectangle.
+
+    A mapped polygon can fit inside source authority while its axis-aligned
+    output raster still adds corners outside that authority.  Affine maps
+    preserve convexity, so the four sample-centre corners own the complete
+    rectangle check.
+    """
+
+    return convex_hull(
+        tuple(
+            transform.inverse_map_point(x, y)
+            for x, y in (
+                (mapped.left, mapped.top),
+                (mapped.right - 1, mapped.top),
+                (mapped.right - 1, mapped.bottom - 1),
+                (mapped.left, mapped.bottom - 1),
+            )
+        )
+    )
 
 
 def _source_lane_authority(
@@ -426,6 +453,21 @@ def output_footprint_from_template_placement(
     )
     authority = _source_lane_authority(lane, layout)
     saturation = _saturation_facts(required, authority)
+    mapped: Box | None = None
+    sampling_source_footprint: ConvexPolygon | None = None
+    if not saturation:
+        candidate_mapped = _mapped_box(required, transform)
+        sampling_source_footprint = _sampling_rectangle_source_footprint(
+            candidate_mapped,
+            transform,
+        )
+        saturation = _saturation_facts(
+            sampling_source_footprint,
+            authority,
+            requirement=ClippedRequirement.SAMPLING_RECTANGLE,
+        )
+        if not saturation:
+            mapped = candidate_mapped
     boundaries = _canonical_boundaries(frame)
     protections = tuple(
         BoundaryProtectionFact(
@@ -448,13 +490,12 @@ def output_footprint_from_template_placement(
         ),
         envelope=envelope,
         required_source_footprint=required,
+        sampling_source_footprint=sampling_source_footprint,
         boundary_protections=protections,
         saturation_facts=saturation,
         sampling_authority_box=authority,
         authority_profile_id=lane.domain.authority_profile_id,
-        mapped_output_box=(
-            None if saturation else _mapped_box(required, transform)
-        ),
+        mapped_output_box=mapped,
     )
 
 

@@ -16,6 +16,7 @@ from x5crop.detection.photo_geometry.template_model import (
 from x5crop.detection.photo_geometry.template_phase import fit_template_phase
 from x5crop.detection.photo_geometry.template_pitch import (
     calibrate_template_source_pitch,
+    close_separator_phase_hypothesis,
 )
 from x5crop.domain import FiniteInterval, ObservationId
 
@@ -128,7 +129,7 @@ class TemplatePitchContractTest(unittest.TestCase):
             compiled,
         )
 
-    def test_two_direct_separator_locations_calibrate_missing_later_roles(self) -> None:
+    def test_two_separator_locations_narrow_pitch_without_owning_phase(self) -> None:
         compiled = template()
         phase_edges = (edge("phase:1", 40.0), edge("phase:2", 160.0))
         phase = fit_template_phase(phase_edges, compiled)
@@ -154,11 +155,121 @@ class TemplatePitchContractTest(unittest.TestCase):
             calibrated.template.gap_prior_px,
             FiniteInterval(12.0, 20.0),
         )
-        self.assertIsNotNone(calibrated.phase_authority_px)
+        self.assertIsNone(calibrated.phase_authority_px)
+        self.assertIsNotNone(calibrated.phase_hypothesis_px)
         self.assertEqual(
             calibrated.direct_separator_ids,
             (ObservationId("separator:1"), ObservationId("separator:2")),
         )
+        assert calibrated.phase_hypothesis_px is not None
+        independently_closed = fit_template_phase(
+            (phase_edges[0], *band_edges),
+            calibrated.template,
+            separator_bands=bands,
+            phase_authority_px=calibrated.phase_hypothesis_px,
+        )
+        self.assertEqual(
+            close_separator_phase_hypothesis(
+                calibrated,
+                independently_closed,
+            ),
+            calibrated.phase_hypothesis_px,
+        )
+        lattice_self_fit = fit_template_phase(
+            band_edges,
+            calibrated.template,
+            separator_bands=bands,
+            phase_authority_px=calibrated.phase_hypothesis_px,
+        )
+        self.assertIsNone(
+            close_separator_phase_hypothesis(calibrated, lattice_self_fit)
+        )
+        incompatible = replace(
+            calibrated,
+            phase_hypothesis_px=FiniteInterval(1_000.0, 1_010.0),
+        )
+        independently_resolved = fit_template_phase(
+            (phase_edges[0], *band_edges),
+            calibrated.template,
+            separator_bands=bands,
+        )
+        self.assertIsNone(
+            close_separator_phase_hypothesis(
+                incompatible,
+                independently_resolved,
+            )
+        )
+
+    def test_three_separator_locations_close_absolute_phase(self) -> None:
+        compiled = replace(template(), count=4)
+        phase_edges = (edge("phase:1", 40.0), edge("phase:2", 160.0))
+        phase = fit_template_phase(phase_edges, compiled)
+        band_edges = (
+            edge("band:1:left", 144.0),
+            edge("band:1:right", 156.0),
+            edge("band:2:left", 264.0),
+            edge("band:2:right", 276.0),
+            edge("band:3:left", 384.0),
+            edge("band:3:right", 396.0),
+        )
+        bands = (
+            separator("separator:1", band_edges[0], band_edges[1]),
+            separator("separator:2", band_edges[2], band_edges[3]),
+            separator("separator:3", band_edges[4], band_edges[5]),
+        )
+
+        calibrated = calibrate_template_source_pitch(
+            compiled,
+            phase,
+            (*phase_edges, *band_edges),
+            bands,
+            holder_span_px=FiniteInterval(0.0, 520.0),
+        )
+
+        self.assertIsNotNone(calibrated.phase_authority_px)
+        self.assertIsNone(calibrated.phase_hypothesis_px)
+        self.assertEqual(
+            calibrated.direct_separator_ids,
+            (
+                ObservationId("separator:1"),
+                ObservationId("separator:2"),
+                ObservationId("separator:3"),
+            ),
+        )
+
+    def test_two_distant_separators_in_long_strip_do_not_own_absolute_phase(
+        self,
+    ) -> None:
+        compiled = replace(template(), count=6)
+        phase_edges = (
+            edge("long:phase:start", 40.0),
+            edge("long:phase:end", 640.0),
+        )
+        phase = fit_template_phase(phase_edges, compiled)
+        band_edges = (
+            edge("long:band:1:left", 144.0),
+            edge("long:band:1:right", 156.0),
+            edge("long:band:4:left", 510.0),
+            edge("long:band:4:right", 522.0),
+        )
+        bands = (
+            separator("long:separator:1", band_edges[0], band_edges[1]),
+            separator("long:separator:4", band_edges[2], band_edges[3]),
+        )
+
+        calibrated = calibrate_template_source_pitch(
+            compiled,
+            phase,
+            (*phase_edges, *band_edges),
+            bands,
+            holder_span_px=FiniteInterval(0.0, 800.0),
+        )
+
+        self.assertFalse(calibrated.bound_exceeded)
+        self.assertIsNone(calibrated.phase_authority_px)
+        self.assertIsNone(calibrated.phase_hypothesis_px)
+        self.assertEqual(calibrated.direct_separator_ids, ())
+        self.assertGreater(calibrated.lattice_hypothesis_count, 0)
 
     def test_separator_pitch_ignores_off_corridor_material(self) -> None:
         compiled = template()
@@ -226,6 +337,7 @@ class TemplatePitchContractTest(unittest.TestCase):
         )
         self.assertIs(ambiguous.template, compiled)
         self.assertIsNone(ambiguous.phase_authority_px)
+        self.assertIsNone(ambiguous.phase_hypothesis_px)
 
         calibrated = calibrate_template_source_pitch(
             compiled,
@@ -236,9 +348,8 @@ class TemplatePitchContractTest(unittest.TestCase):
         )
         self.assertEqual(calibrated.template.pitch_px.minimum, 118.0)
         self.assertEqual(calibrated.template.pitch_px.maximum, 122.0)
-        self.assertIsNotNone(calibrated.phase_authority_px)
-        assert calibrated.phase_authority_px is not None
-        self.assertTrue(calibrated.phase_authority_px.contains(40.0))
+        self.assertIsNone(calibrated.phase_authority_px)
+        self.assertIsNotNone(calibrated.phase_hypothesis_px)
         self.assertEqual(
             calibrated.direct_separator_ids,
             (
@@ -246,6 +357,13 @@ class TemplatePitchContractTest(unittest.TestCase):
                 ObservationId("separator:holder:true:2"),
             ),
         )
+        rebound = fit_template_phase(
+            (*phase_edges, *band_edges),
+            calibrated.template,
+            separator_bands=bands,
+            holder_span_px=FiniteInterval(0.0, 400.0),
+        )
+        self.assertIsNotNone(rebound.best)
 
     def test_one_or_discretely_ambiguous_separator_does_not_calibrate(self) -> None:
         compiled = template()

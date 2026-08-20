@@ -87,7 +87,9 @@ sequence/cross provenance，`CanonicalPlacement` 使用 `FormatPlacement`。不�
 
 所有 frame 使用相同 W/H 和同一个 `SharedStripDirection`。Deskew 不是输出阶段的装饰：理论角色
 位置、outer、separator、四角 footprint 和最终 affine sampling 都使用这条方向。斜片条首尾的坐标
-变化必须在检测时已经表达。
+变化必须在检测时已经表达。横向片条以 canonical angle 的反号消除原图倾斜；纵向 canonicalization
+已经交换坐标轴，因此以 canonical angle 同号消除原图倾斜。两种 layout 都必须把对应的理论直线
+映射为水平/垂直线，不能只按一个 layout 的符号约定实现。
 
 首版不拟合弯曲曲线。轻微弯曲表示为共同直线加 selected-placement residual；残差进入联合输出
 保护。超过预算就 review，不建立逐帧角度、自由四边形或曲线 detector。
@@ -178,6 +180,11 @@ role = phase
 - 已绑定的直接角色保留自己的 observation interval；模板只传播 inferred role。
 - Source pitch 必须由至少两个不同直接 separator 位置或独立同角色 advance 支持。一个 separator
   只能证明自己所在 adjacency。
+- 两个 separator 可以收紧 pitch，但不能用同一对事实自证 absolute phase。短片条中的两点投影
+  只是一项 phase hypothesis；只有该区间内的完整合法 fit 还绑定了不属于这两个 separator 的独立
+  direct support，才可晋升为 phase authority。长片条中的两点还可能跨过一次 direct local advance，
+  只能缩小 pitch 搜索。至少三个独立 material 位置形成周期闭环后，separator lattice 才能自行收紧
+  absolute phase；不同解释仍保留为离散 placement。
 - 未标 ordinal 的 separator lattice 只枚举 `直接 band 对 × 有限 ordinal distance`，并在循环前
   检查编译上界；超界直接产生 `producer_bound_exceeded`，不截断候选。
 
@@ -198,8 +205,9 @@ role = phase
 
 ## 8. Cross、outer 与固定 H
 
-Cross 先使用 source-wide direction，再寻找能够确定短轴 offset 的直接证据。片夹短轴中心只作宽松
-compatibility，不是边界位置 authority。
+Cross 先使用 source-wide direction，再寻找能够确定短轴 offset 的直接证据。片夹短轴中心只帮助
+单侧 anchor 推导 opposite，并验证 enclosing support；它不能选择或否决一对角色正确、固定 H 闭环
+的直接 aperture，也不是边界位置 authority。
 
 ### 8.1 `APERTURE_PAIR`
 
@@ -211,7 +219,8 @@ Photo aperture 的候选必须有正确 top/bottom 角色、外侧背景、有�
 - 同侧多个相距较远且物理相连的 fragments。
 
 一条短局部线不能外推整条片带。两个不同合法 side tracks 是两个 placements；不按梯度、support
-数量或 residual 标量硬选。
+数量或 residual 标量硬选。已有 direct top+bottom 闭环时，不再执行“缺失 opposite”的局部精修；
+同一批 raw transitions 的重复拟合不能成为第二个 placement。
 
 ### 8.2 `ENCLOSING_SUPPORT_PAIR`
 
@@ -287,9 +296,10 @@ format 尺寸的 5%。四边不能借额度；刚好达到上限通过。
 aperture 单边 5%；它只接受上节的总 span `<= 1.1H`。Start/end 仍使用正常 sequence bleed 和
 单边 5%。
 
-`OutputFootprint` 不得与 source/lane authority 相交后静默缩小。任何所需区域越界都保存 saturation
-fact，禁止暴露正式 mapped box，并进入 review。Affine kernel support 由 sampling 层验证，不反向
-扩大 placement。
+`OutputFootprint` 不得与 source/lane authority 相交后静默缩小。联合多边形以及最终轴对齐采样矩形
+的四个 sample-center 角逆映射后都必须位于 source/lane authority 内；任一所需区域越界都保存
+saturation fact，禁止暴露正式 mapped box，并进入 review。Affine kernel support 由 sampling 层验证，
+不反向扩大 placement，也不允许用黑色 no-data 填角后自动批准。
 
 ## 11. Gate、report 与 Debug Analysis
 

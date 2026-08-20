@@ -264,8 +264,16 @@ class AffineFoundationContractTest(unittest.TestCase):
         )
         assert assessment.applied_source_rotation_degrees is not None
         self.assertLess(assessment.applied_source_rotation_degrees, 0.0)
+        assert assessment.transform is not None
+        angle = math.radians(1.0)
+        first = assessment.transform.map_point(0.0, 20.0)
+        second = assessment.transform.map_point(
+            50.0,
+            20.0 + math.tan(angle) * 50.0,
+        )
+        self.assertAlmostEqual(first[1], second[1], places=10)
 
-    def test_vertical_strip_uses_rotation_opposite_canonical_angle(self) -> None:
+    def test_vertical_strip_uses_canonical_sign_to_remove_raster_tilt(self) -> None:
         observation = make_angle_observation("line:vertical", -1.1, -0.9)
         direction = SharedStripDirectionResolution(
             direction=SharedStripDirection(
@@ -287,7 +295,15 @@ class AffineFoundationContractTest(unittest.TestCase):
 
         self.assertEqual(assessment.outcome, "shared_rotation")
         assert assessment.applied_source_rotation_degrees is not None
-        self.assertGreater(assessment.applied_source_rotation_degrees, 0.0)
+        self.assertLess(assessment.applied_source_rotation_degrees, 0.0)
+        assert assessment.transform is not None
+        angle = math.radians(1.0)
+        first = assessment.transform.map_point(0.0, 20.0)
+        second = assessment.transform.map_point(
+            50.0,
+            20.0 + math.tan(angle) * 50.0,
+        )
+        self.assertAlmostEqual(first[1], second[1], places=10)
 
     def test_nonorthogonal_start_end_does_not_widen_shared_deskew(
         self,

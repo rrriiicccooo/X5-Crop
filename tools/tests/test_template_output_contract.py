@@ -24,7 +24,11 @@ from x5crop.detection.evidence.scan_canvas import (
     ScanCanvasOutcome,
     ScanCanvasProfileMatch,
 )
-from x5crop.detection.photo_geometry.model import AuthoritySide, BoundaryRole
+from x5crop.detection.photo_geometry.model import (
+    AuthoritySide,
+    BoundaryRole,
+    ClippedRequirement,
+)
 from x5crop.detection.photo_geometry.output_model import OutputBoundaryUse
 from x5crop.detection.photo_geometry.template_cross_model import (
     CrossFit,
@@ -283,6 +287,49 @@ class TemplateOutputContractTest(unittest.TestCase):
         )
         self.assertEqual(assessment.state, EvidenceState.SUPPORTED)
         self.assertTrue(all(item.within_limit for item in assessment.edge_assessments))
+
+    def test_sampling_rectangle_outside_lane_is_explicit_and_never_black_filled(
+        self,
+    ) -> None:
+        placement = _placement()
+        lane = _lane()
+        lane = replace(
+            lane,
+            domain=replace(
+                lane.domain,
+                work_box=Box(90, 0, 210, 260),
+            ),
+        )
+        output = output_footprint_from_template_placement(
+            placement,
+            project_selected_placement(placement),
+            lane=lane,
+            lane_ordinal=1,
+            layout="horizontal",
+            transform=AffineCoordinateTransform.expanded_rotation(
+                500,
+                400,
+                5.0,
+            ),
+        )
+
+        self.assertTrue(
+            all(
+                lane.domain.work_box.left <= point[0] <= lane.domain.work_box.right - 1
+                and lane.domain.work_box.top <= point[1] <= lane.domain.work_box.bottom - 1
+                for point in output.required_source_footprint
+            )
+        )
+        self.assertIsNone(output.mapped_output_box)
+        self.assertIsNotNone(output.sampling_source_footprint)
+        self.assertTrue(output.saturation_facts)
+        self.assertTrue(
+            all(
+                fact.clipped_requirements
+                == (ClippedRequirement.SAMPLING_RECTANGLE,)
+                for fact in output.saturation_facts
+            )
+        )
 
     def test_joint_measurement_expansion_above_five_percent_is_rejected(self) -> None:
         placement = _placement()

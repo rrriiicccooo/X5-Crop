@@ -423,6 +423,7 @@ def _output_footprint():
         geometry_id="geometry:0",
         envelope=envelope,
         required_source_footprint=polygon,
+        sampling_source_footprint=None,
         boundary_protections=tuple(
             BoundaryProtectionFact(role, 0.0, 0.0, 0.0, 0.0)
             for role in (

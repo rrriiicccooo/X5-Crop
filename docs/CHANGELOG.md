@@ -25,6 +25,8 @@ materialization、平行 detector 和 report reuse 均不再支持。
   separator 的 edge、band 和多条 trace 不重复投票。
 - Source pitch 由至少两个独立直接位置建立。缺失 first/last 可由已经获得 authority 的 phase、
   pitch 和 ordinal 投影；模板不能创造自己的 phase anchor。
+- 两个 separator 的投影 phase 只有在另一份独立 direct support 闭合完整合法 fit 后才可晋升为
+  authority；没有闭合时只保留其 pitch，不得把其它合法 placement 全部过滤。
 - 未标 ordinal 的 separator 使用有界 lattice 对齐：source-wide material support 优先；否则只有
   唯一且极性闭合的局部 band 可提供 END→START 角色。Band 宽度本身不创造 local step。
 - 偏差诊断明确区分 normal、一次 direct local step 与 unresolved。Wide/narrow 最多产生一次
