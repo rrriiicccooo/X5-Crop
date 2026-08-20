@@ -36,6 +36,28 @@ def add(left: FiniteInterval, right: FiniteInterval) -> FiniteInterval:
     )
 
 
+def subtract(left: FiniteInterval, right: FiniteInterval) -> FiniteInterval:
+    return FiniteInterval(
+        left.minimum - right.maximum,
+        left.maximum - right.minimum,
+    )
+
+
+def scale(value: FiniteInterval, factor: float) -> FiniteInterval:
+    bounds = (value.minimum * factor, value.maximum * factor)
+    return FiniteInterval(min(bounds), max(bounds))
+
+
+def midpoint(
+    left: FiniteInterval,
+    right: FiniteInterval,
+) -> FiniteInterval:
+    return FiniteInterval(
+        (left.minimum + right.minimum) / 2.0,
+        (left.maximum + right.maximum) / 2.0,
+    )
+
+
 def common(values: tuple[FiniteInterval, ...]) -> FiniteInterval | None:
     if not values:
         return None

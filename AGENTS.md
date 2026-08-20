@@ -136,7 +136,7 @@ GitHub 是 tracked 源码与文档的权威来源。NAS 和复制目录只用于
 - V5 首版不加入视觉大模型、训练模型、ONNX Runtime 或 PyTorch runtime。未来 learned evidence
   仍须经过同一物理求解、安全 Gate 与黄金验证。
 - X5 Crop 是唯一并发 owner。生产默认 `--jobs 1`、上限 3；OpenCV、BLAS、OpenMP 与 SciPy
-  内部线程固定为 1，除非双平台冻结基准证明改变更快且内存有界。
+  内部线程固定为 1，除非三目标平台冻结基准证明改变更快且内存有界。
 - 安装器按模块能力复用现有全局 Python 环境。缺失项才最小安装；版本不符只沿已确认的原
   pip distribution 或 Homebrew formula 更新；未知 ownership 在写入前停止。不创建 `.venv`，
   不叠加第二个 provider，不把 Homebrew 设为前置条件。
@@ -166,8 +166,9 @@ platform | platform-check | platform-package | pre-push
   从片夹容量、文件名、目录中的历史 full/partial 标签或像素推导。
 - 111-source diagnostic 只判断 crash、hang、terminal/schema 完整性、authority、query/template、
   内存和 TIFF 工程合同，不产生 accuracy verdict。
-- 性能 Gate 使用 24-source 完整用户路径，正式 mean 上限为 5 秒；SHA、profiling 和 Debug
-  Analysis 在计时外。Receipt 只证明其中记录的 commit、依赖、工作量和命名机器。
+- 性能 Gate 使用 24-source 完整用户路径，正式 mean 上限为 5 秒；3 秒 mean 只作不阻断的
+  challenge。SHA、profiling 和 Debug Analysis 在计时外；未插桩 production RSS 与 cProfile RSS
+  必须分开记录。Receipt 只证明其中记录的 commit、依赖、工作量和命名机器。
 - Named-TIFF 与端到端验证必须调用正式 CLI 和完整 detection flow；测试工具不得提供更容易
   通过的 detector path。
 
@@ -182,5 +183,6 @@ platform | platform-check | platform-package | pre-push
 - `tools/release/manifest.py` 是发布内容唯一 owner。用户包不包含 modular source、tests、tools、
   fixtures、内部文档、开发依赖或生成输出。
 - 构建命令为 `python3 -m tools.release.build --version <version>`。只有 accuracy、性能、依赖、
-  TIFF、中文路径、文件系统恢复和目标平台实机 receipt 全部绑定同一 release commit 后，才可
-  创建 RC、tag、GitHub Release 或公开 ZIP。
+  TIFF、中文路径、文件系统恢复，以及 Apple Silicon macOS、Intel macOS、Windows x64 三目标
+  实机 receipt 全部绑定同一 release commit 后，才可创建 RC、tag、GitHub Release 或公开 ZIP；
+  未提供独立卷时 exFAT 必须保持显式 best-effort 未验证。

@@ -241,7 +241,7 @@ def validate_platform_receipt(
     }
     required_filesystems = (
         ("apfs", "hfs_plus", "exfat")
-        if target == TARGET_APPLE_SILICON
+        if system == "Darwin"
         else ("ntfs", "exfat")
     )
     verified_filesystems = required_filesystems[:-1]

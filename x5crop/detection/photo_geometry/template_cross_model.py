@@ -2,18 +2,17 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from enum import Enum
 import math
 
 from ...domain import FiniteInterval, ObservationId, PositiveInterval
 from ...formats import OUTPUT_PROTECTION_SPEC
 from .line_observations import PhotoBoundaryObservation
+from .interval_math import intersect, subtract
 from .model import (
     BoundaryAxis,
     BoundaryRole,
-    MINIMUM_INDEPENDENT_SUPPORT_REGIONS,
-    SPATIAL_SUPPORT_REGION_COUNT,
 )
 from .observation_types import ProfileRun
 from .output_model import OutputBoundaryUse, SharedStripDirection
@@ -27,34 +26,6 @@ def _interval(value: FiniteInterval | PositiveInterval | float | int) -> FiniteI
     if isinstance(value, (int, float)) and not isinstance(value, bool):
         return FiniteInterval.exact(float(value))
     raise TypeError("cross interval must be finite interval or number")
-
-
-def _add(left: FiniteInterval, right: FiniteInterval) -> FiniteInterval:
-    return FiniteInterval(left.minimum + right.minimum, left.maximum + right.maximum)
-
-
-def _subtract(left: FiniteInterval, right: FiniteInterval) -> FiniteInterval:
-    return FiniteInterval(left.minimum - right.maximum, left.maximum - right.minimum)
-
-
-def _intersect(left: FiniteInterval, right: FiniteInterval) -> FiniteInterval | None:
-    minimum = max(left.minimum, right.minimum)
-    maximum = min(left.maximum, right.maximum)
-    if minimum > maximum:
-        return None
-    return FiniteInterval(minimum, maximum)
-
-
-def _midpoint_interval(left: FiniteInterval, right: FiniteInterval) -> FiniteInterval:
-    return FiniteInterval(
-        (left.minimum + right.minimum) / 2.0,
-        (left.maximum + right.maximum) / 2.0,
-    )
-
-
-def _scale_interval(interval: FiniteInterval, factor: float) -> FiniteInterval:
-    values = (interval.minimum * factor, interval.maximum * factor)
-    return FiniteInterval(min(values), max(values))
 
 
 def _observation_coordinate(
@@ -155,7 +126,7 @@ class EnclosingSupportPair:
             raise ValueError("support top leaves its direct interval")
         if not self.bottom_full_interval_px.contains(self.bottom_canonical_px, epsilon=1.0e-9):
             raise ValueError("support bottom leaves its direct interval")
-        expected_span = _subtract(
+        expected_span = subtract(
             self.bottom_full_interval_px,
             self.top_full_interval_px,
         )
@@ -491,7 +462,7 @@ class TemplateCrossInput:
         object.__setattr__(self, "canonical_fixed_height_px", canonical_height)
         if self.template.frame_height_px is not None:
             template_height = _interval(self.template.frame_height_px)
-            if _intersect(height, template_height) is None:
+            if intersect(height, template_height) is None:
                 raise ValueError("fixed height contradicts template frame height")
         if self.holder_short_axis_center_px is not None:
             object.__setattr__(self, "holder_short_axis_center_px", _interval(self.holder_short_axis_center_px))

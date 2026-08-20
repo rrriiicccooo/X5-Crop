@@ -8,59 +8,42 @@
 
 ## 当前目标
 
-V5 已收口为一条 current-only 模板对准主线：吸收 v4.2.8 从整条片带到理论位置附近精修的行为，
-同时使用固定 W/H、独立证据、共享 deskew、最多一次 local advance、outer 权限分层、联合输出保护
-和 typed Gate。下一阶段只按真实根因提高正常片条通过率；不得降低黄金通过率、产生黄金错误自动
-批准，或用 111 张无真值样片反向调出特殊规则。V5 尚未发布。
+V5 保持一条 current-only fixed-template-first production path，尚未发布。本轮已把性能、RSS、核心
+helper owner、测试工具、平台 receipt 与全部文档做有限收束：不改变几何、Gate 或黄金真值合同，
+5 秒 mean 继续作为正式性能 Gate，3 秒 mean 只作为 non-blocking challenge。后续能力改进只按
+真实未闭物理事实推进，不从 111 张无真值样片反向调特殊规则。
 
-## 已冻结事实
+## 当前证据
 
-- 输入只有 format + 可选 count，没有 full/partial mode 或长轴居中。是否铺满在 selection 后仅以
-  outer 外侧能否再容纳一个 W 判断；`135-dual` 只有 12=6+6 可自动处理。
-- Coarse aggregate 只定位有限精测区域。已注册的短轴 trace 若直接形成 source-wide 双侧 track，
-  可以独立提供共同方向；只有完整包含 H 且总 span 不超过 `1.1H` 的唯一 pair 才能成为 enclosing
-  输出边界。
-- Region/band 负责物理拓扑，edge 负责局部定位。Band center 可帮助 phase/pitch；band width 只属于
-  material gap、局部拓扑和输出保护，不能否决全局 phase。
-- 两个 separator 可以收紧 pitch，但不能用同一对事实自证 absolute phase。短片条中的两点 phase
-  hypothesis 只有在完整合法 fit 还绑定另一份独立 direct support 后才可晋升为 authority；至少三个
-  独立 material 位置形成周期闭环后才能自行关闭 phase。
-- Aperture bleed 为 sequence `max(0.15 mm, 0.7% W)`、cross `0.25 mm`，四边单边自动保护上限
-  均为 5%。Enclosing top/bottom 不加 cross bleed，使用总 span `<=1.1H` 的独立合同。
-- 安全层只消费唯一 placement 的联合可行状态，不合并 runner-up、不分别相加不能同时发生的最大
-  误差、不重复计算固定 W，也不静默裁小越界 footprint。最终轴对齐 sampling rectangle 的四个
-  sample-center 角逆映射后也必须全部位于 source/lane authority 内。
-- Holder 短轴中心可以帮助单侧 cross anchor 推导 opposite，并验证 enclosing support；它不能选择
-  或否决完整的 direct aperture pair。已有 direct top+bottom 闭环时不重复执行 opposite refinement。
-- Deskew 同时属于检测与输出。轻微弯曲只作为共同直线 residual 进入安全范围；首版不拟合曲线。
-- Contact 与 overlap 没有用户确认黄金；S098 不属于 overlap。当前只诊断 signed local delta 并
-  review，不建第二套 detector 或特殊 bleed。
-- Detector 使用原图生成的有界 8-bit gray；正式输出从原始 uint16 RGB 做 per-frame 反向 affine
-  采样。Lane authority 外写黑色无数据像素，不能把插值上限误当背景值而写出全黑 TIFF。
-
-## 当前证据边界
-
-- Fresh `tools/verify full`：374 tests 通过，skip 2；compile、configuration、cohort、shell 与 version
-  contract 通过。
-- Fresh 九张黄金：七张正确 `approved_auto`；S055、S098 两张 challenge 安全 `needs_review`；
-  9/9 安全，没有 nominal 通过率回退或错误自动批准。
-- Fresh 111-source diagnostic：111/111 terminal、工程合同 0 失败，46 张自动批准、65 张 review；
-  recognition accuracy 仍为 `not_assessed`。Review 根因是 placement unresolved 22、direct-use
-  budget 11、sampling footprint 11、content veto 9、local advance 6 和无完整 placement 6。
-  Phase 为 resolved 98、ambiguous 5、unresolved 8；`phase_template_mismatch` 只剩 S053、S107 两张。
-- S073、S079 已从 `phase_template_mismatch` 恢复为完整 placement，并因 content veto 安全 review；
-  S051 黄金仍使用额外独立 direct support 关闭两点 phase hypothesis，三格输出覆盖用户确认几何。
-- 冻结依赖仍为 NumPy 2.5.2、tifffile 2026.8.16 和 imagecodecs 2026.8.16。既有 24-source
-  performance receipt 不绑定当前源码变化，现阶段不能作为发布性能证据；最终 release commit 必须
-  重新运行 performance 与目标平台验证。
+- Fresh `tools/verify full`：386 tests 通过、skip 2；compile、configuration、cohort、shell、release
+  standalone smoke 与 version contract 全部通过。
+- Fresh `tools/verify accuracy`：九张 user-confirmed gold 全部为 nominal，9/9 `approved_auto`；S055、
+  S098 已纳入正常能力，不再属于 challenge。
+- Fresh `tools/verify diagnostic`：111/111 terminal、工程合同失败 0，49 张 `approved_auto`、62 张
+  `needs_review`，recognition accuracy 为 `not_assessed`。Review 根因是 placement unresolved 22、
+  transform sampling 11、content veto 9、direct-use budget 8、no legal placement 7、local advance 5。
+  Phase 为 resolved 99、ambiguous 5、unresolved 7；cross 为 resolved 94、unresolved 17；
+  `phase_template_mismatch` 仍只有 S053、S107。
+- 改动前 clean commit `90192291` 的 24-source baseline mean 为 4.071 秒/张。首个代码提交
+  `286cf91c` 的 v5_4 clean-path measurement 为 3.688 秒/张，5 秒 Gate 通过，3 秒 challenge 未达到；
+  这次首次把未插桩 production peak RSS 与 cProfile 分开，production RSS mean 约 879 MB、max 约
+  1.269 GB，cProfile RSS mean 约 887 MB、max 约 1.276 GB，detector 临时缓冲 mean 约 0.92 MB、
+  max 约 1.49 MB。后续 receipt 必须重新绑定实际 release commit；不同测量方式之间不作虚假趋势
+  对照。
+- Affine sampling 已用跨 256 行 chunk 的随机 uint16 fixture 逐像素对照旧实现；合成基准约减少
+  5.7% sampling 时间。坐标/值缓冲只分配一次，不预清零必定覆盖的输出，不创建额外 uint16 chunk。
+- `interval_math.py` 是 template interval 算术 owner；direct cross direction closure 属于
+  `template_cross_geometry.py`。模板测试 fixture 已迁到独立 support owner，测试不再互相导入私有
+  helper。v4/V5 对照只接受正式九张黄金；release test 会真实构建 ZIP 并启动 standalone。
 
 ## 开放风险与下一步
 
-1. 111 张中最大的剩余缺口是 phase/placement 唯一性。S053 只有一个有效 separator，S107 只有
-   单侧 direct edge，当前都缺少独立闭合；保持 review。其它 placement unresolved/ambiguous 必须先用
-   Debug、measurement replay 和必要的人工复核区分错误候选与真实多解，不得用 coarse 距离、强度
-   分数或 holder 长轴中心替 placement 选答案。
-2. Output footprint 与 direct-use budget 失败必须继续区分真实 source 越界、联合几何过宽和测量
-   residual；不能靠放宽 5% 或 1.1H 提高通过率。
-3. Release 前在同一最终 commit 上重建 accuracy、performance 和目标平台 receipt，并补齐 Windows
-   x64、Intel macOS 与 exFAT 实机证据；在此以前不创建 RC、tag、Release 或公开 ZIP。
+1. 3 秒 challenge 仍未达到，但不阻断。每个候选 release commit 都须重建 24-source performance
+   receipt；只有 5 秒 mean 是阻断条件。若没有明确且可复现的高收益，不再为追 3 秒扩大内存、
+   改变像素值、放宽几何或引入持久 runtime。
+2. 62 张 review 不是准确率失败。S053 缺 phase/pitch closure，S107 缺 cross authority，其它样片也
+   必须先区分真实多解与错误候选；保持 review，不能用 coarse 距离、强度分数或 holder 长轴中心
+   替 placement 选答案。
+3. Release 前须在同一最终 commit 上取得 Apple Silicon macOS、Intel macOS 与 Windows x64 三份
+   实机 receipt。APFS/HFS+、NTFS 分别验证；没有独立卷时 exFAT 保持
+   `best_effort_unverified`，不得伪装成实机已验证。在此以前不创建 RC、tag、Release 或公开 ZIP。

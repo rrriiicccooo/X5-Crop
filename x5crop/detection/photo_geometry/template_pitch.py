@@ -6,10 +6,13 @@ from dataclasses import dataclass, replace
 from typing import Sequence
 
 from ...domain import FiniteInterval, ObservationId
+from .interval_math import (
+    intersect as _intersect,
+    subtract as _subtract_interval,
+)
 from .model import BoundaryRole, SPATIAL_SUPPORT_REGION_COUNT
 from .observation_types import BoundaryEdgeObservation, SeparatorBandObservation
 from .template_model import (
-    SequenceFit,
     TemplateSpec,
     template_role_refinement_radius_px,
 )
@@ -72,17 +75,6 @@ class _SeparatorLatticeFit:
     pitch_px: FiniteInterval
     phase_px: FiniteInterval
     direct_separator_ids: tuple[ObservationId, ...]
-
-
-def _intersect(
-    left: FiniteInterval,
-    right: FiniteInterval,
-) -> FiniteInterval | None:
-    minimum = max(left.minimum, right.minimum)
-    maximum = min(left.maximum, right.maximum)
-    if maximum < minimum:
-        return None
-    return FiniteInterval(minimum, maximum)
 
 
 def close_separator_phase_hypothesis(
@@ -158,16 +150,6 @@ def _axis_interval(interval: FiniteInterval, direction: int) -> FiniteInterval:
     if direction > 0:
         return interval
     return FiniteInterval(-interval.maximum, -interval.minimum)
-
-
-def _subtract_interval(
-    left: FiniteInterval,
-    right: FiniteInterval,
-) -> FiniteInterval:
-    return FiniteInterval(
-        left.minimum - right.maximum,
-        left.maximum - right.minimum,
-    )
 
 
 def _scaled_interval(interval: FiniteInterval, factor: float) -> FiniteInterval:
@@ -440,7 +422,7 @@ def _unique_supported_interval(
     )
 
 
-def _refine_placement_pitch_interval(
+def refine_placement_pitch_interval(
     bound_roles: Sequence[tuple[BoundaryRole, int, FiniteInterval]],
     *,
     canonical_pitch: float,
@@ -692,4 +674,5 @@ __all__ = [
     "TemplatePitchCalibration",
     "calibrate_template_source_pitch",
     "close_separator_phase_hypothesis",
+    "refine_placement_pitch_interval",
 ]

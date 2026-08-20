@@ -161,6 +161,89 @@ class AffineFoundationContractTest(unittest.TestCase):
             )
         )
 
+    def test_chunk_reuse_preserves_frozen_uint16_sampling(self) -> None:
+        from scipy.ndimage import map_coordinates
+
+        rng = np.random.default_rng(20260820)
+        source = rng.integers(
+            0,
+            np.iinfo(np.uint16).max + 1,
+            size=(281, 337, 3),
+            dtype=np.uint16,
+        )
+        transform = AffineCoordinateTransform.expanded_rotation(
+            source.shape[1],
+            source.shape[0],
+            1.7,
+        )
+        box = Box(11, 9, 330, 279)
+        authority_box = Box(7, 5, 331, 277)
+        expected = np.full(
+            (box.height, box.width, 3),
+            0,
+            dtype=np.uint16,
+        )
+        inverse = transform.inverse_matrix
+        authority = source[
+            authority_box.top : authority_box.bottom,
+            authority_box.left : authority_box.right,
+        ]
+        expanded_x = np.arange(box.left, box.right, dtype=np.float64)[
+            None, :
+        ]
+        for output_row in range(0, box.height, 256):
+            row_end = min(box.height, output_row + 256)
+            expanded_y = np.arange(
+                box.top + output_row,
+                box.top + row_end,
+                dtype=np.float64,
+            )[:, None]
+            source_x = (
+                inverse[0][0] * expanded_x
+                + inverse[0][1] * expanded_y
+                + inverse[0][2]
+            )
+            source_y = (
+                inverse[1][0] * expanded_x
+                + inverse[1][1] * expanded_y
+                + inverse[1][2]
+            )
+            coordinates = np.asarray(
+                (
+                    source_y - authority_box.top,
+                    source_x - authority_box.left,
+                ),
+                dtype=np.float64,
+            )
+            values = np.empty(source_x.shape, dtype=np.float64)
+            for channel in range(3):
+                map_coordinates(
+                    authority[..., channel],
+                    coordinates,
+                    order=1,
+                    mode="grid-constant",
+                    cval=0.0,
+                    prefilter=False,
+                    output=values,
+                )
+                np.clip(
+                    values,
+                    0,
+                    np.iinfo(np.uint16).max,
+                    out=values,
+                )
+                expected[output_row:row_end, :, channel] = values.astype(
+                    np.uint16
+                )
+
+        actual = sample_affine_roi(
+            source,
+            transform,
+            box,
+            sampling_authority_box=authority_box,
+        )
+        self.assertTrue(np.array_equal(actual, expected))
+
     def test_expanded_canvas_preserves_bilinear_support_at_source_corners(
         self,
     ) -> None:

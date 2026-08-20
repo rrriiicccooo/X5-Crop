@@ -4,6 +4,10 @@ from dataclasses import replace
 import unittest
 from types import SimpleNamespace
 
+from tools.tests.template_test_support import (
+    cross_binding as binding,
+    cross_template as template,
+)
 from x5crop.domain import FiniteInterval, ObservationId
 from x5crop.detection.photo_geometry.model import BoundaryRole
 from x5crop.detection.photo_geometry.template_cross import fit_template_cross
@@ -14,80 +18,10 @@ from x5crop.detection.photo_geometry.template_cross_model import (
     TemplateCrossInput,
 )
 from x5crop.detection.photo_geometry.output_model import OutputBoundaryUse
-from x5crop.detection.photo_geometry.template_model import (
-    PhaseLatticeAuthority,
-    TemplateSpec,
-)
 from x5crop.detection.photo_geometry.model import PHOTO_BOUNDARY_MEASUREMENT_SPEC
 from x5crop.detection.photo_geometry.trace_support import (
     source_spanning_continuous_trace_support,
 )
-
-
-def template(count: int = 1) -> TemplateSpec:
-    return TemplateSpec(
-        template_id="cross-test",
-        frame_width_px=100.0,
-        pitch_px=120.0,
-        frame_height_px=240.0,
-        count=count,
-        phase_lattice_authority=PhaseLatticeAuthority(
-            period_px=120.0,
-            cycle_origin_px=0.0,
-            minimum_slot_offset=-1,
-            maximum_slot_offset=20,
-        ),
-    )
-
-
-def binding(
-    role: BoundaryRole,
-    name: str,
-    coordinate: float,
-    *,
-    traces: tuple[int, ...] = (0, 50, 100),
-    residual: float = 0.0,
-    support: float = 1.0,
-    continuous: float = 1.0,
-    angle: float | None = 0.0,
-    angle_interval: FiniteInterval | None = FiniteInterval(-0.2, 0.2),
-    full_angle_interval: FiniteInterval | None = None,
-    independent_regions: int = 3,
-    source_spanning: bool = True,
-    role_authorized: bool = True,
-    enclosing_pair_id: str | None = None,
-) -> CrossRoleBinding:
-    coordinate_interval = FiniteInterval.exact(coordinate)
-    return CrossRoleBinding(
-        role=role,
-        run_id=f"run:{name}",
-        observation_id=ObservationId(f"observation:{name}"),
-        coordinate_interval_px=coordinate_interval,
-        trace_coordinates_px=traces,
-        support_fraction=support,
-        continuous_support_fraction=continuous,
-        fit_residual_px=residual,
-        fit_interval_px=coordinate_interval,
-        full_interval_px=coordinate_interval,
-        canonical_direction_degrees=angle,
-        fit_direction_interval_degrees=angle_interval,
-        full_direction_interval_degrees=(
-            angle_interval
-            if full_angle_interval is None
-            else full_angle_interval
-        ),
-        independent_support_region_count=independent_regions,
-        source_spanning_continuous=source_spanning,
-        role_authorized=role_authorized,
-        enclosing_pair_id=enclosing_pair_id,
-        trace_position_intervals_px=(
-            tuple(FiniteInterval.exact(coordinate) for _ in traces)
-            if enclosing_pair_id is not None
-            else ()
-        ),
-    )
-
-
 class TemplateCrossContractTest(unittest.TestCase):
     def test_source_spanning_reaches_both_registered_domain_ends(self) -> None:
         queried = tuple(range(0, 101, 10))

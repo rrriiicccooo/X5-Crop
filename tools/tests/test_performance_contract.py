@@ -11,7 +11,10 @@ from unittest import mock
 from tools.regression import performance
 from tools.regression.performance import (
     PERFORMANCE_RECEIPT_SCHEMA,
+    PROFILING_METHOD,
+    PRODUCTION_RSS_METHOD,
     PRODUCTION_TIMING_BOUNDARY,
+    SECONDS_PER_INPUT_CHALLENGE,
     SECONDS_PER_INPUT_LIMIT,
     frozen_dependency_identity,
     performance_environment_is_frozen,
@@ -19,8 +22,8 @@ from tools.regression.performance import (
 )
 from tools.regression.performance_profile import (
     STAGE_NAMES,
-    _run_profiled,
     _runtime_peak_temporary,
+    run_with_peak_rss,
 )
 from tools.regression.performance_hardware import build_hardware_identity
 from tools.regression.performance_identity import (
@@ -59,7 +62,7 @@ class V5PerformanceContractTest(unittest.TestCase):
     def test_receipt_revision_is_current_only(self) -> None:
         self.assertEqual(
             PERFORMANCE_RECEIPT_SCHEMA,
-            "x5crop_performance_receipt_v5_3",
+            "x5crop_performance_receipt_v5_4",
         )
         self.assertEqual(
             STAGE_NAMES,
@@ -137,41 +140,66 @@ class V5PerformanceContractTest(unittest.TestCase):
             },
             "production_gate": {
                 "timing_boundary": PRODUCTION_TIMING_BOUNDARY,
+                "rss_method": PRODUCTION_RSS_METHOD,
                 "sha_validation_in_timing": False,
                 "debug_analysis_in_timing": False,
                 "summary": {
                     "mean_seconds_per_input": 4.9,
-                    "p50_seconds": 4.8,
-                    "p95_seconds": 5.2,
-                    "slowest_source": sources[-1].sample_id,
-                    "slowest_seconds": 5.4,
+                    "p50_seconds": 4.9,
+                    "p95_seconds": 4.9,
+                    "slowest_source": sources[0].sample_id,
+                    "slowest_seconds": 4.9,
                     "seconds_per_input_limit": SECONDS_PER_INPUT_LIMIT,
                     "passed": True,
+                    "process_peak_rss_bytes": {
+                        "mean": 1024.0,
+                        "maximum": 1024.0,
+                        "maximum_source": sources[0].sample_id,
+                    },
+                },
+                "nonblocking_challenge": {
+                    "seconds_per_input": SECONDS_PER_INPUT_CHALLENGE,
+                    "achieved": False,
+                    "participates_in_gate": False,
                 },
                 "sources": [
                     {
                         "sample_id": item.sample_id,
                         "wall_seconds": 4.9,
+                        "process_peak_rss_bytes": 1024,
                         "status": "needs_review",
-                        "output_tiff_count": 0,
-                        "output_bytes": 0,
+                        "output_tiff_count": 1,
+                        "output_bytes": 1024,
                     }
                     for item in sources
                 ],
             },
             "profiling": {
-                "method": "external_cprofile_subprocess_and_rss_polling",
+                "method": PROFILING_METHOD,
                 "participates_in_speed_gate": False,
                 "stage_names": list(STAGE_NAMES),
                 "summary": {
                     "wall_p50_seconds": 5.0,
-                    "wall_p95_seconds": 5.5,
-                    "slowest_source": sources[-1].sample_id,
-                    "slowest_seconds": 5.5,
-                    "process_peak_rss_bytes": {},
-                    "runtime_peak_temporary_bytes": {},
+                    "wall_p95_seconds": 5.0,
+                    "slowest_source": sources[0].sample_id,
+                    "slowest_seconds": 5.0,
+                    "process_peak_rss_bytes": {
+                        "mean": 1024.0,
+                        "maximum": 1024.0,
+                        "maximum_source": sources[0].sample_id,
+                    },
+                    "runtime_peak_temporary_bytes": {
+                        "mean": 512.0,
+                        "maximum": 512.0,
+                        "maximum_source": sources[0].sample_id,
+                    },
                     "stages": {
-                        name: {} for name in (*STAGE_NAMES, "io_total")
+                        name: {
+                            "mean": 0.4 if name == "io_total" else 0.1,
+                            "maximum": 0.4 if name == "io_total" else 0.1,
+                            "maximum_source": sources[0].sample_id,
+                        }
+                        for name in (*STAGE_NAMES, "io_total")
                     },
                 },
                 "sources": [
@@ -188,6 +216,22 @@ class V5PerformanceContractTest(unittest.TestCase):
             },
         }
         validate_receipt(receipt, expected_commit=commit)
+        receipt["production_gate"]["sources"][0]["output_tiff_count"] = 0
+        with self.assertRaises(ValueError):
+            validate_receipt(receipt, expected_commit=commit)
+        receipt["production_gate"]["sources"][0]["output_tiff_count"] = 1
+        receipt["production_gate"]["sources"][0].update(
+            status="approved_auto",
+            output_tiff_count=sources[0].count,
+        )
+        validate_receipt(receipt, expected_commit=commit)
+        receipt["production_gate"]["sources"][0]["output_tiff_count"] -= 1
+        with self.assertRaises(ValueError):
+            validate_receipt(receipt, expected_commit=commit)
+        receipt["production_gate"]["sources"][0].update(
+            status="needs_review",
+            output_tiff_count=1,
+        )
         receipt["production_gate"]["sha_validation_in_timing"] = True
         with self.assertRaises(ValueError):
             validate_receipt(receipt, expected_commit=commit)
@@ -272,7 +316,7 @@ class V5PerformanceContractTest(unittest.TestCase):
     def test_profiler_observes_child_peak_rss_without_report_instrumentation(
         self,
     ) -> None:
-        _wall, peak, output, returncode = _run_profiled(
+        _wall, peak, output, returncode = run_with_peak_rss(
             [sys.executable, "-c", "print('profile-child')"]
         )
         self.assertEqual(returncode, 0)

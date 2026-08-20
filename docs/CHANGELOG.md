@@ -72,12 +72,20 @@ materialization、平行 detector 和 report reuse 均不再支持。
   silent first-N。
 - Performance profiler 覆盖完整用户路径，并拆分 startup/import、decode、gray/coarse support、
   registered measurement、template alignment/decision、sampling、encode/write、readback 和 publish。
+- Performance receipt 在未插桩正式子进程中直接记录 peak RSS，并与 cProfile RSS、detector
+  临时缓冲分开；5 秒均值仍是正式 Gate，3 秒均值新增为不阻断的 challenge。
 - Registered gray 直接从原始 16-bit RGB 分块生成，不保留整张 float32 中间图；输出只对
-  各 frame 做反向 affine ROI 采样，三通道复用一个有界缓冲。完全相同的 robust-line 输入才可复用
-  精确结果，不剪枝、不改 observation 或 provenance。
+  各 frame 做反向 affine ROI 采样，三通道复用预分配的坐标和值缓冲，不预先清零随后必定覆盖的
+  输出，也不创建额外 uint16 分块；逐像素值与原采样合同一致。完全相同的 robust-line 输入才可
+  复用精确结果，不剪枝、不改 observation 或 provenance。
 - Affine ROI 在 lane authority 外只写黑色无数据像素，插值结果仍按完整 uint16 范围保留；测试同时
   覆盖非零照片像素、边界插值和 authority 外背景，避免几何通过但正式 TIFF 被写成全黑。
 - 工具、tests、report 和 release manifest 只引用 current 模块与 schema；`tools/verify` 是唯一验证入口。
+- Release contract 会实际构建临时 ZIP，校验路径唯一、排除 modular source/tests/tools、standalone
+  与当前模块源码一致，并启动生成的 `X5_Crop.py --version`。
+- v4/V5 黄金对照只接受正式九张 user-confirmed gold cohort；自定义 geometry 不得被标成黄金
+  authority。Platform 聚合统一要求 Apple Silicon、Intel macOS 与 Windows x64 三份同 commit
+  receipt，exFAT 无独立卷时保持显式 best-effort 未验证。
 - 变形合同覆盖 coarse support 的边框平移、翻转、横竖转置与亮度/对比度，以及 phase 的平移、缩放
   和 fractional pitch；性能改动必须保持 solver 答案与 provenance。
 
@@ -86,7 +94,8 @@ materialization、平行 detector 和 report reuse 均不再支持。
 - 九张用户确认黄金决定几何准确性，当前九项均为 nominal，必须安全自动批准。任何黄金不得错误
   自动通过；未来 challenge 从安全 review 变为正确批准是允许的改进。
 - 111-source diagnostic 只证明工程稳定、工作量、终态和 TIFF 合同。
-- 24-source performance 的完整路径平均上限为 5 秒；receipt 只证明绑定的 commit、依赖和机器。
+- 24-source performance 的完整路径平均上限为 5 秒，3 秒为非阻断 challenge；receipt 只证明
+  绑定的 commit、依赖和机器。
 - 全部 release receipt 绑定同一 commit 以前，V5 不创建 RC、tag、Release 或公开 ZIP。
 
 ## V4.9（架构实验，不发布）

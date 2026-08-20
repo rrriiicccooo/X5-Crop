@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import unittest
 
-from tools.tests.test_template_phase_contract import edge, template
+from tools.tests.template_test_support import (
+    phase_edge as edge,
+    phase_template as template,
+)
 from x5crop.detection.photo_geometry.template_cross import fit_template_cross
 from x5crop.detection.photo_geometry.template_cross_model import (
     TemplateCrossInput,

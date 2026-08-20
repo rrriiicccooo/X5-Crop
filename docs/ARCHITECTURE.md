@@ -359,7 +359,10 @@ domain pixels / peak temporary bytes
 beam、Grid、phase vote、候选笛卡尔积、完整链 materialization/cache、逐帧尺寸、candidate-dependent
 query 或 content-driven placement。
 
-性能合同是 24-source 完整用户路径平均不超过 5 秒。Profiler 将完整路径拆成：
+性能合同是 24-source 完整用户路径平均不超过 5 秒；同一均值不超过 3 秒是明确记录但不阻断
+提交、发布或平台 receipt 的 challenge。正式计时子进程同时由外部观察未插桩 peak RSS；该值与
+带 cProfile 的阶段归因 RSS 分开记录。`runtime_peak_temporary_bytes` 只描述 detector 自报的有界
+临时测量缓冲，不代表进程 RSS。Profiler 将完整路径拆成：
 
 ```text
 startup/import → TIFF decode → gray/coarse support
@@ -401,7 +404,7 @@ Pillow 只在 Debug Analysis 时延迟导入。生产默认 `--jobs 1`、上限 
 | `photo_geometry/source_geometry.py`、`joint_axis_geometry.py` | source 共享 W/H/scale authority |
 | `photo_geometry/template_phase*.py`、`template_pitch.py`、`template_residual.py` | phase、ordinal、source pitch 与最多一次 direct local advance |
 | `photo_geometry/template_alignment_diagnostic.py` | theoretical-vs-observed residual 的只读诊断 |
-| `photo_geometry/template_cross*.py`、`template_direction.py`、`template_cross_support.py` | fixed-H aperture、共同方向与 enclosing support；`template_cross_geometry.py` 只保存共享区间运算 |
+| `photo_geometry/interval_math.py`、`template_cross*.py`、`template_direction.py`、`template_cross_support.py` | 共享 interval 运算、fixed-H aperture、共同方向与 enclosing support；direct cross direction closure 只属于 `template_cross_geometry.py` |
 | `photo_geometry/template_placement.py`、`template_selection.py` | 一次 compose 与离散 winner/runner |
 | `photo_geometry/template_holder_fill.py` | selected PhotoGroupOuter 与 W-only fill assessment |
 | `photo_geometry/content_*.py` | placement 后的二维 negative veto |
@@ -421,7 +424,11 @@ Pillow 只在 Debug Analysis 时延迟导入。生产默认 `--jobs 1`、上限 
   candidate 的安全 review 不产生几何 verdict，`approved_auto` 仍须另外验证正式输出的覆盖、预算
   与 deskew。任何黄金不得错误自动通过；未来 challenge 从安全 review 变为正确批准是改进。
 - 111-source diagnostic 只证明不崩溃、工作量有界、报告闭合和 TIFF 工程合同，不证明几何正确。
-- 24-source performance 只证明其绑定 commit、依赖和机器上的完整路径时间与资源。
+- 24-source performance 只证明其绑定 commit、依赖和机器上的完整路径时间与资源；5 秒均值是
+  blocking Gate，3 秒均值只是 non-blocking challenge。
+- Platform 聚合必须同时收到同一 commit 的 Apple Silicon macOS、Intel macOS 与 Windows x64
+  三份实机 receipt。APFS/HFS+ 与 NTFS 分别本机验证；没有独立卷时 exFAT 必须保持
+  `best_effort_unverified`，不得静默升级为已验证。
 - 合成和变形合同覆盖 coarse support 的统一边框、翻转、横竖转置和亮度/对比度，phase 的平移、缩放
   与 fractional pitch，deskew 的横竖方向，轻微直线 residual、缺边、wide/narrow 单次 gap、contact
   review、强内部假边、填充状态、dual lane、联合安全预算和 source-wide 事务。

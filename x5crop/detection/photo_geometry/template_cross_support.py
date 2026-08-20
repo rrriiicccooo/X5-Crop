@@ -10,24 +10,24 @@ from typing import Sequence
 
 from ...domain import FiniteInterval
 from ...formats import OUTPUT_PROTECTION_SPEC
+from .interval_math import (
+    intersect as _intersect,
+    midpoint as _midpoint_interval,
+    subtract as _subtract,
+)
 from .model import (
     BoundaryRole,
-    MINIMUM_INDEPENDENT_SUPPORT_REGIONS,
     SPATIAL_SUPPORT_REGION_COUNT,
     independent_spatial_support_count,
 )
 from .output_model import SharedStripDirection
-from .template_cross_candidates import _direction_for
 from .template_cross_geometry import (
     direction_closure as _direction_closure,
-    shared_trace_coordinates as _shared_trace_coordinates,
+    shared_direction_for as _direction_for,
 )
 from .template_cross_model import (
     CrossRoleBinding,
     EnclosingSupportPair,
-    _intersect,
-    _midpoint_interval,
-    _subtract,
 )
 from .template_model import TemplateSpec
 

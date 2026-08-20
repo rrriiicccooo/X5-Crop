@@ -13,6 +13,7 @@ from tools.regression.performance import PERFORMANCE_RECEIPT_SCHEMA
 from tools.regression.platform_receipt import (
     PLATFORM_RECEIPT_SCHEMA,
     TARGET_APPLE_SILICON,
+    TARGET_INTEL_MAC,
     TARGET_WINDOWS_X64,
     _run_verifier,
     validate_platform_receipt,
@@ -23,8 +24,12 @@ COMMIT = "1" * 40
 
 
 def _receipt(target: str, performance_name: str, performance_sha: str) -> dict:
-    system = "Darwin" if target == TARGET_APPLE_SILICON else "Windows"
-    machine = "arm64" if target == TARGET_APPLE_SILICON else "AMD64"
+    system = "Windows" if target == TARGET_WINDOWS_X64 else "Darwin"
+    machine = {
+        TARGET_APPLE_SILICON: "arm64",
+        TARGET_INTEL_MAC: "x86_64",
+        TARGET_WINDOWS_X64: "AMD64",
+    }[target]
     local_cases = (
         [
             {
@@ -42,7 +47,7 @@ def _receipt(target: str, performance_name: str, performance_sha: str) -> dict:
                 "reason": "verified",
             },
         ]
-        if target == TARGET_APPLE_SILICON
+        if system == "Darwin"
         else [
             {
                 "case": "ntfs",
@@ -129,7 +134,11 @@ class PlatformReceiptContractTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             records = []
-            for target in (TARGET_APPLE_SILICON, TARGET_WINDOWS_X64):
+            for target in (
+                TARGET_APPLE_SILICON,
+                TARGET_INTEL_MAC,
+                TARGET_WINDOWS_X64,
+            ):
                 performance = root / f"{target}.performance_receipt.json"
                 performance.write_text(
                     json.dumps(
@@ -137,7 +146,7 @@ class PlatformReceiptContractTests(unittest.TestCase):
                             "environment": {
                                 "platform_system": (
                                     "Darwin"
-                                    if target == TARGET_APPLE_SILICON
+                                    if target != TARGET_WINDOWS_X64
                                     else "Windows"
                                 ),
                                 "identity": target,
@@ -158,16 +167,25 @@ class PlatformReceiptContractTests(unittest.TestCase):
                 "tools.regression.platform_check.validate_performance_receipt"
             ) as validate_performance:
                 result = check_platform_receipts(records, expected_commit=COMMIT)
-            self.assertEqual(len(result), 2)
-            self.assertEqual(validate_performance.call_count, 2)
+            self.assertEqual(len(result), 3)
+            self.assertEqual(validate_performance.call_count, 3)
 
-            duplicate = [records[0], root / "duplicate.json"]
-            duplicate[1].write_text(records[0].read_text(), encoding="utf-8")
+            duplicate_path = root / "duplicate.json"
+            duplicate_path.write_text(records[0].read_text(), encoding="utf-8")
+            duplicate = [records[0], duplicate_path, records[2]]
             with mock.patch(
                 "tools.regression.platform_check.validate_performance_receipt"
             ):
-                with self.assertRaisesRegex(ValueError, "Apple Silicon and Windows"):
+                with self.assertRaisesRegex(ValueError, "Apple Silicon, Intel macOS"):
                     check_platform_receipts(duplicate, expected_commit=COMMIT)
+
+    def test_intel_receipt_uses_macos_filesystem_contract(self) -> None:
+        record = _receipt(
+            TARGET_INTEL_MAC,
+            "intel.performance_receipt.json",
+            "a" * 64,
+        )
+        validate_platform_receipt(record, expected_commit=COMMIT)
 
     def test_platform_validator_rejects_a_forged_machine(self) -> None:
         record = _receipt(TARGET_WINDOWS_X64, "windows.performance_receipt.json", "a" * 64)

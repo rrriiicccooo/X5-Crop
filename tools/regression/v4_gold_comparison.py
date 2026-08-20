@@ -12,8 +12,7 @@ import json
 from pathlib import Path
 from typing import Iterable, Mapping, Sequence
 
-from .accuracy import GOLD_COHORT_PATH, PROJECT_ROOT
-from .cohort_count import validate_cohort_counts
+from .accuracy import PROJECT_ROOT, validate_gold_source_identities
 from .file_identity import sha256_file
 
 
@@ -299,9 +298,20 @@ def build_comparison_record(
 ) -> dict[str, object]:
     sample_id = str(cohort["sample_id"])
     geometry = cohort["confirmed_geometry"]
-    if not isinstance(geometry, Mapping):
-        raise ValueError("gold geometry is invalid")
     source_sha = str(cohort["source_sha256"])
+    if (
+        cohort.get("cohort_schema") != "x5crop_gold_accuracy_cohort_v5"
+        or cohort.get("validation_role") != "gold_accuracy_blocking"
+        or cohort.get("geometry_oracle_schema")
+        != "x5crop_user_confirmed_golden_baseline_v1"
+        or len(str(cohort.get("geometry_digest", ""))) != 64
+        or not isinstance(geometry, Mapping)
+        or geometry.get("status") != "user_confirmed"
+        or geometry.get("source_sha256") != source_sha
+        or len(geometry.get("frames", ()))
+        != int(cohort.get("confirmed_geometry_slot_count", 0))
+    ):
+        raise ValueError("gold comparison requires user-confirmed geometry")
     v5_source = v5_report["runtime_identity"]["source"]
     expected_name = Path(str(cohort["source_relative_path"])).name
     expected_shape = [
@@ -401,14 +411,9 @@ def build_comparison_record(
 
 
 def compare_gold_reports(
-    *, cohort_path: Path, v4_root: Path, v5_root: Path
+    *, v4_root: Path, v5_root: Path
 ) -> tuple[dict[str, object], ...]:
-    validate_cohort_counts((cohort_path,))
-    records = [
-        json.loads(line)
-        for line in cohort_path.read_text(encoding="utf-8").splitlines()
-        if line.strip()
-    ]
+    records = validate_gold_source_identities()
     output = []
     for cohort in records:
         sample_id = str(cohort["sample_id"])
@@ -436,10 +441,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--v4-root", type=Path, required=True)
     parser.add_argument("--v5-root", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--cohort", type=Path, default=GOLD_COHORT_PATH)
     args = parser.parse_args(argv)
     records = compare_gold_reports(
-        cohort_path=args.cohort,
         v4_root=args.v4_root,
         v5_root=args.v5_root,
     )

@@ -6,6 +6,13 @@ from dataclasses import dataclass, replace
 from typing import Sequence
 
 from ...domain import FiniteInterval
+from .interval_math import (
+    add as _add,
+    intersect as _intersect,
+    midpoint as _midpoint_interval,
+    scale as _scale_interval,
+    subtract as _subtract,
+)
 from .model import (
     BoundaryRole,
     MINIMUM_INDEPENDENT_SUPPORT_REGIONS,
@@ -16,6 +23,7 @@ from .output_model import OutputBoundaryUse, SharedStripDirection
 from .template_cross_geometry import (
     direction_closure as _direction_closure,
     hull_intervals as _hull_intervals,
+    shared_direction_for as _direction_for,
     shared_trace_coordinates as _shared_trace_coordinates,
     single_direction_ready as _single_direction_ready,
 )
@@ -23,11 +31,6 @@ from .template_cross_model import (
     CrossEvidence,
     CrossFit,
     CrossRoleBinding,
-    _add,
-    _intersect,
-    _midpoint_interval,
-    _scale_interval,
-    _subtract,
 )
 from .template_model import TemplateSpec
 
@@ -359,74 +362,6 @@ def _longitudinal_domain_count(
     return sum(
         any(domain.contains(float(trace), epsilon=0.5) for trace in traces)
         for domain in domains
-    )
-
-
-def _direction_for(
-    direct: tuple[CrossRoleBinding, ...],
-    *,
-    parallel_interval: FiniteInterval | None = None,
-) -> SharedStripDirection | None:
-    if not direct or any(
-        item.fit_direction_interval_degrees is None
-        or item.full_direction_interval_degrees is None
-        or item.canonical_direction_degrees is None
-        for item in direct
-    ):
-        return None
-    fit_intervals = tuple(item.fit_direction_interval_degrees for item in direct)
-    full_intervals = tuple(item.full_direction_interval_degrees for item in direct)
-    observed_intervals = tuple(
-        item.observed_direction_interval_degrees for item in direct
-    )
-    assert all(item is not None for item in fit_intervals)
-    assert all(item is not None for item in full_intervals)
-    common = parallel_interval
-    if common is None:
-        common = fit_intervals[0]
-        assert common is not None
-        for item in direct[1:]:
-            interval = item.fit_direction_interval_degrees
-            assert interval is not None
-            common = _intersect(common, interval)
-            if common is None:
-                return None
-    canonical_values = tuple(
-        float(item.canonical_direction_degrees) for item in direct
-    )
-    identities = tuple(item.observation_id for item in direct)
-    spanning_intervals = tuple(
-        item.full_direction_interval_degrees
-        for item in direct
-        if item.source_spanning_continuous
-    )
-    safety_intervals = spanning_intervals or full_intervals
-    safety = FiniteInterval(
-        min(item.minimum for item in safety_intervals if item is not None),
-        max(item.maximum for item in safety_intervals if item is not None),
-    )
-    common = _intersect(common, safety)
-    if common is None:
-        return None
-    canonical = min(
-        common.maximum,
-        max(common.minimum, sum(canonical_values) / len(canonical_values)),
-    )
-    return SharedStripDirection(
-        direction_id="template-cross-direction:" + ":".join(map(str, identities)),
-        selected_observation_ids=identities,
-        # The intersection above proves that one shared canonical direction
-        # exists.  Safety must still retain the complete directly measured
-        # source-spanning variation.  A local opposite fragment may validate H
-        # and direction compatibility, but its local angle uncertainty cannot
-        # be extrapolated over the complete source.  When both physical sides
-        # span the domain, both intervals remain in the safety hull.
-        full_angle_interval_degrees=safety,
-        observed_angle_interval_degrees=FiniteInterval(
-            min(item.minimum for item in observed_intervals if item is not None),
-            max(item.maximum for item in observed_intervals if item is not None),
-        ),
-        canonical_angle_degrees=canonical,
     )
 
 

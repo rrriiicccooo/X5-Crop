@@ -17,7 +17,11 @@ from x5crop.detection.photo_geometry.template_phase_model import (
     PhaseFitStatus,
 )
 from x5crop.detection.photo_geometry.template_residual import ResidualPattern
-from tools.tests.test_template_phase_contract import edge, separator, template
+from tools.tests.template_test_support import (
+    phase_edge as edge,
+    phase_separator as separator,
+    phase_template as template,
+)
 
 
 class TemplateAlignmentDiagnosticContractTest(unittest.TestCase):

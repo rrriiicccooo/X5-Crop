@@ -107,7 +107,9 @@ def _process_rss_bytes(pid: int) -> int:
         return 0
 
 
-def _run_profiled(command: list[str]) -> tuple[float, int, str, int]:
+def run_with_peak_rss(command: list[str]) -> tuple[float, int, str, int]:
+    """Run one CLI subprocess and observe wall time plus process peak RSS."""
+
     started = time.perf_counter()
     process = subprocess.Popen(
         command,
@@ -253,7 +255,7 @@ def profile_source(source) -> ProfiledSource:
             "--jobs",
             "1",
         ]
-        wall, peak_rss, process_output, returncode = _run_profiled(command)
+        wall, peak_rss, process_output, returncode = run_with_peak_rss(command)
         if returncode != 0:
             raise ValueError(
                 f"{source.sample_id} profiling pass failed:\n{process_output[-4000:]}"

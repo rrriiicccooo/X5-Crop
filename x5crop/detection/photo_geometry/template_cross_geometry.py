@@ -5,7 +5,9 @@ from __future__ import annotations
 from typing import Sequence
 
 from ...domain import FiniteInterval
-from .template_cross_model import CrossRoleBinding, _intersect
+from .interval_math import intersect as _intersect
+from .output_model import SharedStripDirection
+from .template_cross_model import CrossRoleBinding
 
 
 def hull_intervals(
@@ -16,6 +18,71 @@ def hull_intervals(
     return FiniteInterval(
         min(interval.minimum for interval in intervals),
         max(interval.maximum for interval in intervals),
+    )
+
+
+def shared_direction_for(
+    direct: tuple[CrossRoleBinding, ...],
+    *,
+    parallel_interval: FiniteInterval | None = None,
+) -> SharedStripDirection | None:
+    """Close one shared direction from directly measured cross bindings."""
+
+    if not direct or any(
+        item.fit_direction_interval_degrees is None
+        or item.full_direction_interval_degrees is None
+        or item.canonical_direction_degrees is None
+        for item in direct
+    ):
+        return None
+    fit_intervals = tuple(item.fit_direction_interval_degrees for item in direct)
+    full_intervals = tuple(item.full_direction_interval_degrees for item in direct)
+    observed_intervals = tuple(
+        item.observed_direction_interval_degrees for item in direct
+    )
+    assert all(item is not None for item in fit_intervals)
+    assert all(item is not None for item in full_intervals)
+    common = parallel_interval
+    if common is None:
+        common = fit_intervals[0]
+        assert common is not None
+        for item in direct[1:]:
+            interval = item.fit_direction_interval_degrees
+            assert interval is not None
+            common = _intersect(common, interval)
+            if common is None:
+                return None
+    canonical_values = tuple(
+        float(item.canonical_direction_degrees) for item in direct
+    )
+    identities = tuple(item.observation_id for item in direct)
+    spanning_intervals = tuple(
+        item.full_direction_interval_degrees
+        for item in direct
+        if item.source_spanning_continuous
+    )
+    safety_intervals = spanning_intervals or full_intervals
+    safety = hull_intervals(
+        tuple(item for item in safety_intervals if item is not None)
+    )
+    common = _intersect(common, safety)
+    if common is None:
+        return None
+    canonical = min(
+        common.maximum,
+        max(common.minimum, sum(canonical_values) / len(canonical_values)),
+    )
+    return SharedStripDirection(
+        direction_id="template-cross-direction:" + ":".join(map(str, identities)),
+        selected_observation_ids=identities,
+        # Compatibility closes one canonical direction. Safety retains all
+        # directly measured source-spanning variation; a local opposite side
+        # may validate H without exporting its uncertainty across the source.
+        full_angle_interval_degrees=safety,
+        observed_angle_interval_degrees=hull_intervals(
+            tuple(item for item in observed_intervals if item is not None)
+        ),
+        canonical_angle_degrees=canonical,
     )
 
 
@@ -107,6 +174,7 @@ def single_direction_ready(binding: CrossRoleBinding) -> bool:
 __all__ = [
     "direction_closure",
     "hull_intervals",
+    "shared_direction_for",
     "shared_trace_coordinates",
     "single_direction_ready",
 ]

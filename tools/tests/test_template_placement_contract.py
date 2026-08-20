@@ -5,6 +5,14 @@ import math
 from pathlib import Path
 import unittest
 
+from tools.tests.template_test_support import (
+    placement_binding as _binding,
+    placement_compose as _compose,
+    placement_cross as _cross,
+    placement_direction as _direction,
+    placement_sequence as _sequence,
+    placement_template as _template,
+)
 from x5crop.domain import FiniteInterval, ObservationId, PositiveInterval
 from x5crop.formats import FramePhysicalSpec
 from x5crop.detection.photo_geometry.model import BoundaryAxis, BoundaryRole
@@ -14,194 +22,15 @@ from x5crop.detection.photo_geometry.output_model import (
 )
 from x5crop.detection.photo_geometry.source_geometry import SourceScanGeometry
 from x5crop.detection.photo_geometry.template_cross_model import (
-    CrossEvidence,
     CrossFit,
-    CrossRoleBinding,
 )
 from x5crop.detection.photo_geometry.template_model import (
     PhaseLatticeAuthority,
-    PhaseLatticeFit,
-    PitchFit,
-    SequenceFit,
     TemplateSpec,
 )
 from x5crop.detection.photo_geometry.template_placement import (
-    FormatPlacement,
     compose_format_placement,
 )
-
-
-def _template(count: int = 3) -> TemplateSpec:
-    return TemplateSpec(
-        template_id="placement-test",
-        frame_width_px=100.0,
-        pitch_px=120.0,
-        frame_height_px=240.0,
-        count=count,
-        phase_lattice_authority=PhaseLatticeAuthority(
-            period_px=120.0,
-            cycle_origin_px=0.0,
-            minimum_slot_offset=-1,
-            maximum_slot_offset=20,
-        ),
-    )
-
-
-def _sequence(template: TemplateSpec, *, missing: tuple[int, ...] = ()) -> SequenceFit:
-    width = (
-        template.frame_width_px.minimum + template.frame_width_px.maximum
-    ) / 2.0
-    pitch = (template.pitch_px.minimum + template.pitch_px.maximum) / 2.0
-    positions = tuple(
-        value
-        for ordinal in range(template.count)
-        for value in (
-            100.0 + ordinal * pitch,
-            100.0 + ordinal * pitch + width,
-        )
-    )
-    ids = tuple(
-        None if index in missing else ObservationId(f"sequence:{index}")
-        for index in range(2 * template.count)
-    )
-    matched = tuple(index for index in range(2 * template.count) if index not in missing)
-    return SequenceFit(
-        template=template,
-        phase_lattice_fit=PhaseLatticeFit(
-            authority=template.phase_lattice_authority,
-            cycle_phase_interval_px=FiniteInterval.exact(100.0),
-            canonical_cycle_phase_px=100.0,
-            integer_slot_offset=0,
-            canonical_period_px=pitch,
-            absolute_phase_interval_px=FiniteInterval.exact(100.0),
-            canonical_absolute_phase_px=100.0,
-            direction=1,
-        ),
-        pitch_fit=PitchFit(
-            frame_width_px=template.frame_width_px,
-            gap_interval_px=template.gap_prior_px,
-            pitch_interval_px=template.pitch_px,
-            canonical_frame_width_px=width,
-            canonical_pitch_px=pitch,
-            observation_ids=tuple(item for item in ids if item is not None),
-        ),
-        canonical_role_positions_px=positions,
-        role_positions_px=tuple(FiniteInterval.exact(value) for value in positions),
-        role_full_position_intervals_px=tuple(
-            FiniteInterval.exact(value) for value in positions
-        ),
-        role_observation_ids=ids,
-        matched_role_indices=matched,
-        inferred_role_indices=tuple(missing),
-        direct_observation_ids=tuple(item for item in ids if item is not None),
-        independent_support_ids=tuple(
-            item for item in ids if item is not None
-        ),
-        independent_support_coverage=float(len(matched)),
-        independent_polarity_support_count=len(matched),
-    )
-
-
-def _direction(angle: float = 0.0) -> SharedStripDirection:
-    return SharedStripDirection(
-        direction_id="direction:test",
-        selected_observation_ids=(ObservationId("cross:top"), ObservationId("cross:bottom")),
-        full_angle_interval_degrees=FiniteInterval(-0.2, 0.2),
-        observed_angle_interval_degrees=FiniteInterval(-0.2, 0.2),
-        canonical_angle_degrees=angle,
-    )
-
-
-def _binding(role: BoundaryRole, name: str, coordinate: float) -> CrossRoleBinding:
-    exact = FiniteInterval.exact(coordinate)
-    return CrossRoleBinding(
-        role=role,
-        run_id=f"run:{name}",
-        observation_id=ObservationId(f"cross:{name}"),
-        coordinate_interval_px=exact,
-        fit_interval_px=exact,
-        full_interval_px=exact,
-        trace_coordinates_px=(0, 50, 100),
-        canonical_direction_degrees=0.0,
-        fit_direction_interval_degrees=FiniteInterval(-0.2, 0.2),
-        full_direction_interval_degrees=FiniteInterval(-0.2, 0.2),
-    )
-
-
-def _cross(
-    template: TemplateSpec,
-    *,
-    one_sided: bool = False,
-    direction: SharedStripDirection | None = None,
-    lane_reference: float = 150.0,
-) -> CrossFit:
-    top = _binding(BoundaryRole.TOP, "top", 10.0)
-    bottom = _binding(BoundaryRole.BOTTOM, "bottom", 250.0)
-    inferred = (
-        CrossRoleBinding(
-            role=BoundaryRole.BOTTOM,
-            run_id="inferred:top:bottom",
-            observation_id=top.observation_id,
-            coordinate_interval_px=FiniteInterval.exact(250.0),
-            fit_interval_px=FiniteInterval.exact(250.0),
-            full_interval_px=FiniteInterval.exact(250.0),
-            trace_coordinates_px=top.trace_coordinates_px,
-            evidence=CrossEvidence.FIXED_HEIGHT_INFERRED,
-            source_observation_ids=(top.observation_id,),
-        ),
-    ) if one_sided else ()
-    return CrossFit(
-        template_id=template.template_id,
-        lane_reference_trace_px=lane_reference,
-        fixed_height_px=FiniteInterval.exact(240.0),
-        top_canonical_px=10.0,
-        bottom_canonical_px=250.0,
-        top_fit_interval_px=FiniteInterval.exact(10.0),
-        bottom_fit_interval_px=FiniteInterval.exact(250.0),
-        top_full_interval_px=FiniteInterval.exact(10.0),
-        bottom_full_interval_px=FiniteInterval.exact(250.0),
-        direct_bindings=(top,) if one_sided else (top, bottom),
-        inferred_bindings=inferred,
-        selected_direction=direction,
-        direct_pair=not one_sided,
-        shared_trace_support_count=3,
-        continuous_support_fraction=1.0,
-        residual_sum_px=0.0,
-        center_compatible=True,
-        boundary_use=OutputBoundaryUse.APERTURE_PAIR,
-    )
-
-
-def _compose(
-    template: TemplateSpec,
-    sequence: SequenceFit,
-    cross: CrossFit,
-    *,
-    direction: SharedStripDirection | None = None,
-    frame_spec: FramePhysicalSpec | None = None,
-    lane_id: str = "lane:test",
-) -> FormatPlacement:
-    spec = frame_spec or FramePhysicalSpec(36.0, 24.0, 2.0)
-    source = SourceScanGeometry.create(
-        spec,
-        width_scale_px_per_mm=PositiveInterval.exact(10.0),
-        height_scale_px_per_mm=PositiveInterval.exact(10.0),
-    )
-    return compose_format_placement(
-        lane_id=lane_id,
-        frame_spec=spec,
-        source_scan_geometry=source,
-        sequence_fit=sequence,
-        cross_fit=cross,
-        width_axis=BoundaryAxis.X,
-        height_axis=BoundaryAxis.Y,
-        width_authority_px=FiniteInterval(
-            0.0,
-            max(sequence.canonical_role_positions_px) + 100.0,
-        ),
-        height_authority_px=FiniteInterval(0.0, 400.0),
-        direction=direction,
-    )
 
 
 class TemplatePlacementContractTest(unittest.TestCase):

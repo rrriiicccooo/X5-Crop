@@ -14,12 +14,12 @@ from x5crop.detection.photo_geometry.template_holder_fill import (
     assess_holder_fill_state,
     photo_group_outer_from_selected_placement,
 )
-from tools.tests.test_template_placement_contract import (
-    _compose,
-    _cross,
-    _direction,
-    _sequence,
-    _template,
+from tools.tests.template_test_support import (
+    placement_compose as _compose,
+    placement_cross as _cross,
+    placement_direction as _direction,
+    placement_sequence as _sequence,
+    placement_template as _template,
 )
 
 

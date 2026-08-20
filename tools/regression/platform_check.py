@@ -1,4 +1,4 @@
-"""Validate one Apple Silicon and one Windows receipt for the same commit."""
+"""Validate Apple Silicon, Intel macOS, and Windows receipts for one commit."""
 
 from __future__ import annotations
 
@@ -11,6 +11,7 @@ from .performance import validate_receipt as validate_performance_receipt
 from .file_identity import sha256_file
 from .platform_receipt import (
     TARGET_APPLE_SILICON,
+    TARGET_INTEL_MAC,
     TARGET_WINDOWS_X64,
     validate_platform_receipt,
 )
@@ -28,8 +29,8 @@ def check_platform_receipts(
     *,
     expected_commit: str,
 ) -> tuple[dict[str, Any], ...]:
-    if len(paths) != 2 or len(set(path.resolve() for path in paths)) != 2:
-        raise ValueError("platform-check requires exactly two distinct receipts")
+    if len(paths) != 3 or len(set(path.resolve() for path in paths)) != 3:
+        raise ValueError("platform-check requires exactly three distinct receipts")
     receipts: list[dict[str, Any]] = []
     for path in paths:
         record = validate_platform_receipt(
@@ -54,13 +55,19 @@ def check_platform_receipts(
             raise ValueError("platform and performance environments differ")
         receipts.append(record)
     targets = {record["target"] for record in receipts}
-    if targets != {TARGET_APPLE_SILICON, TARGET_WINDOWS_X64}:
-        raise ValueError("platform-check requires Apple Silicon and Windows x64")
+    if targets != {
+        TARGET_APPLE_SILICON,
+        TARGET_INTEL_MAC,
+        TARGET_WINDOWS_X64,
+    }:
+        raise ValueError(
+            "platform-check requires Apple Silicon, Intel macOS, and Windows x64"
+        )
     for record in receipts:
         cases = _case_map(record)
         required = (
             ("apfs", "hfs_plus", "exfat")
-            if record["target"] == TARGET_APPLE_SILICON
+            if record["target"] in {TARGET_APPLE_SILICON, TARGET_INTEL_MAC}
             else ("ntfs", "exfat")
         )
         if any(case not in cases for case in required):

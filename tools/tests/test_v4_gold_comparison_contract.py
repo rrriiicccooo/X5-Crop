@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest import mock
 
 from tools.regression.file_identity import sha256_file
 from tools.regression.v4_gold_comparison import (
@@ -19,10 +20,17 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def cohort() -> dict[str, object]:
     return {
+        "cohort_schema": "x5crop_gold_accuracy_cohort_v5",
         "sample_id": "S001",
         "source_relative_path": "Test/135/example.tif",
         "source_sha256": "a" * 64,
+        "validation_role": "gold_accuracy_blocking",
+        "geometry_oracle_schema": "x5crop_user_confirmed_golden_baseline_v1",
+        "geometry_digest": "b" * 64,
+        "confirmed_geometry_slot_count": 1,
         "confirmed_geometry": {
+            "status": "user_confirmed",
+            "source_sha256": "a" * 64,
             "strip_orientation": "horizontal",
             "raw_width_px": 100,
             "raw_height_px": 80,
@@ -172,6 +180,12 @@ class V4GoldComparisonContractTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "source identity"):
             build_comparison_record(cohort(), v4_report(), report)
 
+    def test_rejects_geometry_without_confirmed_gold_authority(self) -> None:
+        record = cohort()
+        record["confirmed_geometry"]["status"] = "proposal"
+        with self.assertRaisesRegex(ValueError, "user-confirmed geometry"):
+            build_comparison_record(record, v4_report(), v5_report())
+
     def test_comparison_entrypoint_rehashes_the_golden_source(self) -> None:
         record = cohort()
         record.update(
@@ -182,14 +196,15 @@ class V4GoldComparisonContractTest(unittest.TestCase):
                 "count": 1,
             }
         )
+        record["confirmed_geometry"]["source_sha256"] = record[
+            "source_sha256"
+        ]
         historical = v4_report()
         historical["source"] = "/tmp/README.md"
         current = v5_report()
         current["runtime_identity"]["source"]["name"] = "README.md"
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            cohort_path = root / "cohort.jsonl"
-            cohort_path.write_text(json.dumps(record) + "\n", encoding="utf-8")
             for report_root, name, payload in (
                 (root / "v4", "split_report.jsonl", historical),
                 (root / "v5", "x5_crop_report.jsonl", current),
@@ -200,24 +215,29 @@ class V4GoldComparisonContractTest(unittest.TestCase):
                     json.dumps(payload) + "\n",
                     encoding="utf-8",
                 )
-            self.assertEqual(
-                len(
+            with mock.patch(
+                "tools.regression.v4_gold_comparison.validate_gold_source_identities",
+                return_value=(record,),
+            ):
+                self.assertEqual(
+                    len(
+                        compare_gold_reports(
+                            v4_root=root / "v4",
+                            v5_root=root / "v5",
+                        )
+                    ),
+                    1,
+                )
+            record["source_sha256"] = "0" * 64
+            with mock.patch(
+                "tools.regression.v4_gold_comparison.validate_gold_source_identities",
+                return_value=(record,),
+            ):
+                with self.assertRaisesRegex(ValueError, "golden source identity"):
                     compare_gold_reports(
-                        cohort_path=cohort_path,
                         v4_root=root / "v4",
                         v5_root=root / "v5",
                     )
-                ),
-                1,
-            )
-            record["source_sha256"] = "0" * 64
-            cohort_path.write_text(json.dumps(record) + "\n", encoding="utf-8")
-            with self.assertRaisesRegex(ValueError, "golden source identity"):
-                compare_gold_reports(
-                    cohort_path=cohort_path,
-                    v4_root=root / "v4",
-                    v5_root=root / "v5",
-                )
 
 
 if __name__ == "__main__":

@@ -4,11 +4,15 @@ from dataclasses import replace
 import math
 import unittest
 
+from tools.tests.template_test_support import (
+    phase_edge as edge,
+    phase_separator as separator,
+    phase_template as template,
+    transformed_phase_edge as transformed_edge,
+)
 from x5crop.detection.photo_geometry.model import BoundaryRole
 from x5crop.detection.photo_geometry.observation_types import (
     BoundaryEdgeObservation,
-    SeparatorBandObservation,
-    SeparatorMaterialRegionObservation,
 )
 from x5crop.detection.photo_geometry.template_model import (
     LocalAdvanceKind,
@@ -30,7 +34,6 @@ from x5crop.detection.photo_geometry.template_phase_candidates import (
     _separator_role_authority,
 )
 from x5crop.detection.photo_geometry.template_phase_model import (
-    PhaseFailureKind,
     PhaseFitStatus,
     PhaseWinnerBasis,
     TemplatePhaseInput,
@@ -44,122 +47,6 @@ from x5crop.detection.photo_geometry.template_stability import (
     leave_one_anchor_out_phase_stability,
 )
 from x5crop.domain import FiniteInterval, ObservationId
-
-
-def edge(
-    name: str,
-    coordinate: float,
-    *,
-    support_fraction: float = 1.0,
-) -> BoundaryEdgeObservation:
-    identity = ObservationId(name)
-    interval = FiniteInterval(coordinate - 0.2, coordinate + 0.2)
-    return BoundaryEdgeObservation(
-        observation_id=identity,
-        run_id=f"run:{name}",
-        discovery_interval_px=interval,
-        reference_trace_px=10.0,
-        canonical_position_px=coordinate,
-        fit_position_interval_px=interval,
-        full_position_interval_px=interval,
-        transition_ids=(ObservationId(f"transition:{name}"),),
-        trace_coordinates_px=(0, 10, 20),
-        polarity=1,
-        support_fraction=support_fraction,
-        continuous_support_fraction=support_fraction,
-        fit_residual_px=0.0,
-        canonical_direction_degrees=None,
-        fit_direction_interval_degrees=None,
-        full_direction_interval_degrees=None,
-        qualified_anchor_roles=(BoundaryRole.START, BoundaryRole.END),
-    )
-
-
-def transformed_edge(
-    observation: BoundaryEdgeObservation,
-    *,
-    scale: float = 1.0,
-    offset: float = 0.0,
-) -> BoundaryEdgeObservation:
-    def interval(value: FiniteInterval) -> FiniteInterval:
-        return FiniteInterval(
-            value.minimum * scale + offset,
-            value.maximum * scale + offset,
-        )
-
-    return replace(
-        observation,
-        discovery_interval_px=interval(observation.discovery_interval_px),
-        reference_trace_px=observation.reference_trace_px * scale,
-        canonical_position_px=(
-            observation.canonical_position_px * scale + offset
-        ),
-        fit_position_interval_px=interval(
-            observation.fit_position_interval_px
-        ),
-        full_position_interval_px=interval(
-            observation.full_position_interval_px
-        ),
-        trace_coordinates_px=tuple(
-            int(round(value * scale))
-            for value in observation.trace_coordinates_px
-        ),
-        fit_residual_px=observation.fit_residual_px * scale,
-    )
-
-
-def template(count: int) -> TemplateSpec:
-    return TemplateSpec(
-        template_id="test-template",
-        frame_width_px=100.0,
-        pitch_px=120.0,
-        count=count,
-        phase_lattice_authority=PhaseLatticeAuthority(
-            period_px=120.0,
-            cycle_origin_px=0.0,
-            minimum_slot_offset=-1,
-            maximum_slot_offset=20,
-        ),
-        nominal_gap_px=20.0,
-    )
-
-
-def separator(
-    name: str,
-    left: BoundaryEdgeObservation,
-    right: BoundaryEdgeObservation,
-    gap: FiniteInterval,
-    *,
-    region_count: int = 3,
-) -> SeparatorBandObservation:
-    material = tuple(
-        SeparatorMaterialRegionObservation(
-            region_index=index,
-            sample_count=3,
-            darkness_contrast_interval=FiniteInterval(1.0, 2.0),
-            texture_contrast_interval=FiniteInterval(0.5, 1.0),
-        )
-        for index in range(region_count)
-    )
-    return SeparatorBandObservation(
-        observation_id=ObservationId(name),
-        left_edge_observation_id=left.observation_id,
-        right_edge_observation_id=right.observation_id,
-        left_run_id=left.run_id,
-        right_run_id=right.run_id,
-        gap_interval_px=gap,
-        transition_ids=(
-            ObservationId(f"transition:{name}:left"),
-            ObservationId(f"transition:{name}:right"),
-        ),
-        independent_support_region_count=region_count,
-        continuous_support_fraction=1.0,
-        darkness_contrast=1.5,
-        darkness_contrast_interval=FiniteInterval(1.0, 2.0),
-        texture_contrast=0.75,
-        texture_contrast_interval=FiniteInterval(0.5, 1.0),
-        material_regions=material,
-    )
 
 
 class TemplatePhaseContractTest(unittest.TestCase):

@@ -14,7 +14,9 @@ from tools.regression.template_measurement_replay import (
     load_file,
     load_jsonl,
 )
-from tools.tests.test_template_runtime_model_contract import _prepared
+from tools.tests.template_runtime_test_support import (
+    prepared_template_lane as _prepared,
+)
 
 
 ROOT = Path(__file__).resolve().parents[2]

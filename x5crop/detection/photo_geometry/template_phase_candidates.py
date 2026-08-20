@@ -19,11 +19,10 @@ from .template_model import (
     SequenceFit,
     TemplateRole,
     TemplateSpec,
-    ordered_template_roles,
     template_role_refinement_radius_px,
 )
 from .template_phase_model import PhaseWinnerBasis
-from .template_pitch import _refine_placement_pitch_interval
+from .template_pitch import refine_placement_pitch_interval
 from .template_evidence import separator_support_authority
 
 
@@ -842,7 +841,7 @@ def _fit_seed(
     uncertainty = max(1.0, min(width * 0.04, residual_mean + 1.0))
     phase_interval = FiniteInterval(phase - uncertainty, phase + uncertainty)
     prefix_intervals = _prefix_intervals(relations, template.count)
-    measured_pitch = _refine_placement_pitch_interval(
+    measured_pitch = refine_placement_pitch_interval(
         tuple(
             (role.role, role.slot_index, anchor.interval_px)
             for role, anchor in matches

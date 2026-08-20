@@ -1,14 +1,12 @@
 from __future__ import annotations
 
 import numpy as np
-from scipy.ndimage import map_coordinates
 
 from ..domain import Box
 from ..geometry.affine import AffineCoordinateTransform
 
 
 AFFINE_ROW_CHUNK_SIZE = 256
-AFFINE_SAMPLE_MAX_VALUE = int(np.iinfo(np.uint16).max)
 # Black remains the sampling primitive's explicit no-source-data value.  The
 # production Gate separately requires every official output sample centre to
 # inverse-map inside lane authority, so this fallback cannot silently create
@@ -56,9 +54,15 @@ def sample_affine_roi(
         and sampling_authority_box.bottom >= box.bottom
     ):
         return arr[box.top : box.bottom, box.left : box.right]
+    # Keep SciPy out of the exact-slice path.  Review-only sources never reach
+    # affine sampling, and an identity crop should not pay for ndimage import.
+    from scipy.ndimage import map_coordinates
+
     output_shape = (box.height, box.width) + tuple(arr.shape[2:])
     background_value = AFFINE_BACKGROUND_VALUE
-    output = np.full(output_shape, background_value, dtype=arr.dtype)
+    # Every channel of every output row is filled below.  Initializing the
+    # complete crop first only adds one full-memory write before sampling.
+    output = np.empty(output_shape, dtype=arr.dtype)
     inverse = transform.inverse_matrix
     authority = arr[
         sampling_authority_box.top : sampling_authority_box.bottom,
@@ -69,41 +73,51 @@ def sample_affine_roi(
         box.right,
         dtype=np.float64,
     )[None, :]
+    maximum_chunk_rows = min(AFFINE_ROW_CHUNK_SIZE, box.height)
+    coordinates = np.empty(
+        (2, maximum_chunk_rows, box.width),
+        dtype=np.float64,
+    )
+    value = np.empty((maximum_chunk_rows, box.width), dtype=np.float64)
     for output_row in range(0, box.height, AFFINE_ROW_CHUNK_SIZE):
         row_end = min(box.height, output_row + AFFINE_ROW_CHUNK_SIZE)
+        row_count = row_end - output_row
         expanded_y = np.arange(
             box.top + output_row,
             box.top + row_end,
             dtype=np.float64,
         )[:, None]
-        source_x = (
-            inverse[0][0] * expanded_x
-            + inverse[0][1] * expanded_y
-            + inverse[0][2]
+        chunk_coordinates = coordinates[:, :row_count]
+        np.multiply(
+            expanded_x,
+            inverse[1][0],
+            out=chunk_coordinates[0],
         )
-        source_y = (
-            inverse[1][0] * expanded_x
-            + inverse[1][1] * expanded_y
-            + inverse[1][2]
+        chunk_coordinates[0] += inverse[1][1] * expanded_y
+        chunk_coordinates[0] += inverse[1][2]
+        chunk_coordinates[0] -= sampling_authority_box.top
+        np.multiply(
+            expanded_x,
+            inverse[0][0],
+            out=chunk_coordinates[1],
         )
-        coordinates = np.asarray(
-            (
-                source_y - sampling_authority_box.top,
-                source_x - sampling_authority_box.left,
-            ),
-            dtype=np.float64,
-        )
-        value = np.empty(source_x.shape, dtype=np.float64)
+        chunk_coordinates[1] += inverse[0][1] * expanded_y
+        chunk_coordinates[1] += inverse[0][2]
+        chunk_coordinates[1] -= sampling_authority_box.left
+        chunk_value = value[:row_count]
         for channel in range(arr.shape[2]):
             map_coordinates(
                 authority[..., channel],
-                coordinates,
+                chunk_coordinates,
                 order=1,
                 mode="grid-constant",
                 cval=float(background_value),
                 prefilter=False,
-                output=value,
+                output=chunk_value,
             )
-            np.clip(value, 0, AFFINE_SAMPLE_MAX_VALUE, out=value)
-            output[output_row:row_end, :, channel] = value.astype(arr.dtype)
+            # Order-1 interpolation is a convex combination of uint16 source
+            # values and the zero background, so it already lies in the uint16
+            # range.  NumPy assignment preserves the former truncation rule
+            # without allocating a second uint16 chunk.
+            output[output_row:row_end, :, channel] = chunk_value
     return output

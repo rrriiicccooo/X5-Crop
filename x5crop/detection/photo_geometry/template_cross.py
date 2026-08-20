@@ -6,8 +6,12 @@ from bisect import bisect_left
 from dataclasses import replace
 import math
 from ...domain import FiniteInterval
+from .interval_math import (
+    add as _add,
+    intersect as _intersect,
+    midpoint as _midpoint_interval,
+)
 from .model import (
-    BoundaryAxis,
     BoundaryRole,
     MINIMUM_INDEPENDENT_SUPPORT_REGIONS,
     SPATIAL_SUPPORT_REGION_COUNT,
@@ -16,7 +20,6 @@ from .output_model import OutputBoundaryUse
 from .template_cross_candidates import (
     _covers_template_domains,
     _direct_candidate,
-    _fit_from_candidate,
     _fit_from_group,
     _group_candidates,
     _longitudinal_domain_count,
@@ -27,12 +30,8 @@ from .template_cross_model import (
     CrossFit,
     CrossFitCompetition,
     CrossFitStatus,
-    CrossRoleBinding,
     CrossSearchReceipt,
     TemplateCrossInput,
-    _add,
-    _intersect,
-    _midpoint_interval,
 )
 from .template_cross_support import (
     SupportFitStatus,

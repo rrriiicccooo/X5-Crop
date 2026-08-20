@@ -6,6 +6,11 @@ from ...domain import FiniteInterval, ObservationId
 from ...formats import FramePhysicalSpec
 from ...geometry.convex import ConvexPolygon, signed_area
 from .boundary_geometry import canonical_boundary_line
+from .interval_math import (
+    add as _interval_sum,
+    intersect as _intersect,
+    subtract as _interval_difference,
+)
 from .model import BoundaryAxis, BoundaryRole, DirectionAuthority, PositionSource
 from .output_model import FrameBoundaryGeometry, SharedStripDirection
 from .source_geometry import SourceScanGeometry
@@ -13,16 +18,6 @@ from .template_cross_model import CrossFit
 from .template_model import SequenceFit, TemplateSpec
 _ROLES = (BoundaryRole.TOP, BoundaryRole.BOTTOM, BoundaryRole.START, BoundaryRole.END)
 _EPSILON = 1.0e-8
-def _interval_difference(left: FiniteInterval, right: FiniteInterval) -> FiniteInterval:
-    return FiniteInterval(left.minimum - right.maximum, left.maximum - right.minimum)
-def _interval_sum(left: FiniteInterval, right: FiniteInterval) -> FiniteInterval:
-    return FiniteInterval(left.minimum + right.minimum, left.maximum + right.maximum)
-def _intersect(left: FiniteInterval, right: FiniteInterval) -> FiniteInterval:
-    minimum = max(left.minimum, right.minimum)
-    maximum = min(left.maximum, right.maximum)
-    if minimum > maximum:
-        raise ValueError("inferred boundary contradicts its template edge")
-    return FiniteInterval(minimum, maximum)
 
 
 def _advance(

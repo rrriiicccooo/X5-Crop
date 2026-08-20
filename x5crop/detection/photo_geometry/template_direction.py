@@ -7,27 +7,13 @@ from statistics import median
 
 from ...domain import FiniteInterval
 from ...run_local_identity import run_local_id
+from .interval_math import hull, intersect as _intersect
 from .observation_types import BoundaryEdgeObservation
 from .output_model import OutputBoundaryUse, SharedStripDirection
 from .template_cross_model import CrossEvidence, CrossFit
 from .template_model import SequenceFit
 from .model import SPATIAL_SUPPORT_REGION_COUNT
 from .trace_support import PIXEL_CENTER_HALF_EXTENT_PX
-
-
-def _intersect(left: FiniteInterval, right: FiniteInterval) -> FiniteInterval | None:
-    minimum = max(left.minimum, right.minimum)
-    maximum = min(left.maximum, right.maximum)
-    return None if minimum > maximum else FiniteInterval(minimum, maximum)
-
-
-def _hull(*intervals: FiniteInterval) -> FiniteInterval:
-    if not intervals:
-        raise ValueError("direction hull requires at least one interval")
-    return FiniteInterval(
-        min(item.minimum for item in intervals),
-        max(item.maximum for item in intervals),
-    )
 
 
 def _sequence_direction_groups(
@@ -150,12 +136,14 @@ def lane_template_direction(
             full_angle_interval_degrees=(
                 anchor.full_direction_interval_degrees
             ),
-            observed_angle_interval_degrees=_hull(
-                anchor.full_direction_interval_degrees,
-                *(
-                    item.full_direction_interval_degrees
-                    for item in cross_fit.direct_bindings
-                    if item.full_direction_interval_degrees is not None
+            observed_angle_interval_degrees=hull(
+                (
+                    anchor.full_direction_interval_degrees,
+                    *(
+                        item.full_direction_interval_degrees
+                        for item in cross_fit.direct_bindings
+                        if item.full_direction_interval_degrees is not None
+                    ),
                 ),
             ),
             canonical_angle_degrees=float(
@@ -230,9 +218,11 @@ def lane_template_direction(
                 full_angle_interval_degrees=(
                     cross_direction.full_angle_interval_degrees
                 ),
-                observed_angle_interval_degrees=_hull(
-                    cross_direction.observed_angle_interval_degrees,
-                    sequence_observed_interval,
+                observed_angle_interval_degrees=hull(
+                    (
+                        cross_direction.observed_angle_interval_degrees,
+                        sequence_observed_interval,
+                    )
                 ),
                 canonical_angle_degrees=(
                     cross_direction.canonical_angle_degrees
@@ -261,9 +251,11 @@ def lane_template_direction(
                 cross_direction.selected_observation_ids
             ),
             full_angle_interval_degrees=straight_residual,
-            observed_angle_interval_degrees=_hull(
-                cross_direction.observed_angle_interval_degrees,
-                straight_residual,
+            observed_angle_interval_degrees=hull(
+                (
+                    cross_direction.observed_angle_interval_degrees,
+                    straight_residual,
+                )
             ),
             canonical_angle_degrees=canonical,
         )
@@ -308,10 +300,12 @@ def lane_template_direction(
             ),
             selected_observation_ids=identities,
             full_angle_interval_degrees=common,
-            observed_angle_interval_degrees=_hull(
-                cross_direction.observed_angle_interval_degrees,
-                sequence_observed_interval,
-                common,
+            observed_angle_interval_degrees=hull(
+                (
+                    cross_direction.observed_angle_interval_degrees,
+                    sequence_observed_interval,
+                    common,
+                )
             ),
             canonical_angle_degrees=canonical,
         )
@@ -346,10 +340,12 @@ def lane_template_direction(
         ),
         selected_observation_ids=identities,
         full_angle_interval_degrees=common,
-        observed_angle_interval_degrees=_hull(
-            cross_direction.observed_angle_interval_degrees,
-            sequence_observed_interval,
-            common,
+        observed_angle_interval_degrees=hull(
+            (
+                cross_direction.observed_angle_interval_degrees,
+                sequence_observed_interval,
+                common,
+            )
         ),
         canonical_angle_degrees=canonical,
     )
@@ -390,8 +386,8 @@ def shared_template_direction(
         ),
         selected_observation_ids=identities,
         full_angle_interval_degrees=FiniteInterval(minimum, maximum),
-        observed_angle_interval_degrees=_hull(
-            *(item.observed_angle_interval_degrees for item in directions)
+        observed_angle_interval_degrees=hull(
+            tuple(item.observed_angle_interval_degrees for item in directions)
         ),
         canonical_angle_degrees=canonical,
     )

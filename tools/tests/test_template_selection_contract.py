@@ -3,9 +3,12 @@ from __future__ import annotations
 from dataclasses import replace
 import unittest
 
-from tools.tests.test_template_cross_contract import binding
-from tools.tests.test_template_phase_contract import edge, template
-from tools.tests.test_template_placement_contract import _compose
+from tools.tests.template_test_support import (
+    cross_binding as binding,
+    phase_edge as edge,
+    phase_template as template,
+    placement_compose as _compose,
+)
 from x5crop.detection.candidate.assessment.candidate_gate import (
     candidate_gate_assessment,
 )
