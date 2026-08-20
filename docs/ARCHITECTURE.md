@@ -92,7 +92,10 @@ sequence/cross provenance，`CanonicalPlacement` 使用 `FormatPlacement`。不�
 映射为水平/垂直线，不能只按一个 layout 的符号约定实现。
 
 首版不拟合弯曲曲线。轻微弯曲表示为共同直线加 selected-placement residual；残差进入联合输出
-保护。超过预算就 review，不建立逐帧角度、自由四边形或曲线 detector。
+保护。只有已经获得角色资格、直接像素连续覆盖 source，并且在有界异常点剔除后每条保留 trace
+仍一致证明同一内外关系的 sequence track，才能保留为局部位置 observation；它不提供 source-wide
+direction，也不能在已有足够 straight anchor 闭合全秩解时重标定 phase、W 或 pitch。超过预算就
+review，不建立逐帧角度、自由四边形或曲线 detector。
 
 ## 5. 从整体到局部的模板编译
 
@@ -237,6 +240,10 @@ Photo aperture 的候选必须有正确 top/bottom 角色、外侧背景、有�
 若 aperture 只有单侧 direct anchor、另一侧依赖固定 H 推导，或者仍有多个离散 aperture 解，则
 唯一且直接证明的 enclosing pair 可以成为更强的输出 authority。Enclosing pair 不声称自己是
 照片 aperture，只证明它完整包住可接受的照片区域。
+
+这里的 `support_span` 只由这对直接 observation 的 `observed_span.maximum` 拥有。输出 footprint
+是同一 placement 多个联合可行状态的并集，不能把不同状态的 top 与 bottom 组合成新的高度，因而
+不能用其包围盒反向计算 enclosing budget。
 
 ## 9. Compose、竞争、闭环与 holder fill
 
@@ -409,8 +416,10 @@ Pillow 只在 Debug Analysis 时延迟导入。生产默认 `--jobs 1`、上限 
 
 ## 14. 验证边界
 
-- 九张用户确认黄金判断几何准确性：nominal 不得降低正确自动通过率，任何黄金不得错误自动通过；
-  challenge 从安全 review 变为正确批准是改进。
+- 九张用户确认黄金判断几何准确性，当前九项均为 nominal，必须安全自动批准。Accuracy 对任何
+  已选 candidate 的 footprint 先做与 final status 无关的黄金覆盖检查；只有不存在 selected
+  candidate 的安全 review 不产生几何 verdict，`approved_auto` 仍须另外验证正式输出的覆盖、预算
+  与 deskew。任何黄金不得错误自动通过；未来 challenge 从安全 review 变为正确批准是改进。
 - 111-source diagnostic 只证明不崩溃、工作量有界、报告闭合和 TIFF 工程合同，不证明几何正确。
 - 24-source performance 只证明其绑定 commit、依赖和机器上的完整路径时间与资源。
 - 合成和变形合同覆盖 coarse support 的统一边框、翻转、横竖转置和亮度/对比度，phase 的平移、缩放

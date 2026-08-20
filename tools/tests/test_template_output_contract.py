@@ -65,29 +65,63 @@ def _placement():
     )
 
 
-def _enclosing_support_placement(*, support_span_px: float = 250.0):
-    template = _template(1)
+def _enclosing_support_placement(
+    *,
+    frame_count: int = 1,
+    support_span_px: float = 250.0,
+    support_position_uncertainty_px: float = 0.0,
+):
+    template = _template(frame_count)
     direction = _direction()
     support_center = 152.0
     support_top = support_center - support_span_px / 2.0
     support_bottom = support_center + support_span_px / 2.0
-    top = _binding(BoundaryRole.TOP, "support-top", support_top)
-    bottom = _binding(BoundaryRole.BOTTOM, "support-bottom", support_bottom)
+    top = replace(
+        _binding(BoundaryRole.TOP, "support-top", support_top),
+        full_interval_px=FiniteInterval(
+            support_top - support_position_uncertainty_px,
+            support_top + support_position_uncertainty_px,
+        ),
+    )
+    bottom = replace(
+        _binding(BoundaryRole.BOTTOM, "support-bottom", support_bottom),
+        full_interval_px=FiniteInterval(
+            support_bottom - support_position_uncertainty_px,
+            support_bottom + support_position_uncertainty_px,
+        ),
+    )
     support = EnclosingSupportPair(
         top_canonical_px=support_top,
         bottom_canonical_px=support_bottom,
-        top_full_interval_px=FiniteInterval.exact(support_top),
-        bottom_full_interval_px=FiniteInterval.exact(support_bottom),
+        top_full_interval_px=FiniteInterval(
+            support_top - support_position_uncertainty_px,
+            support_top + support_position_uncertainty_px,
+        ),
+        bottom_full_interval_px=FiniteInterval(
+            support_bottom - support_position_uncertainty_px,
+            support_bottom + support_position_uncertainty_px,
+        ),
         top_provenance_ids=(top.observation_id,),
         bottom_provenance_ids=(bottom.observation_id,),
-        observed_span_px=FiniteInterval.exact(support_span_px),
+        observed_span_px=FiniteInterval(
+            support_span_px - 2.0 * support_position_uncertainty_px,
+            support_span_px + 2.0 * support_position_uncertainty_px,
+        ),
         reference_trace_px=150.0,
         trace_coordinates_px=(0, 150, 300),
         top_trace_intervals_px=tuple(
-            FiniteInterval.exact(support_top) for _ in range(3)
+            FiniteInterval(
+                support_top - support_position_uncertainty_px,
+                support_top + support_position_uncertainty_px,
+            )
+            for _ in range(3)
         ),
         bottom_trace_intervals_px=tuple(
-            FiniteInterval.exact(support_bottom) for _ in range(3)
+            FiniteInterval(
+                support_bottom - support_position_uncertainty_px,
+                support_bottom + support_position_uncertainty_px,
+            )
+            for _ in range(3)
         ),
     )
     cross = CrossFit(
@@ -210,6 +244,32 @@ class TemplateOutputContractTest(unittest.TestCase):
 
         self.assertEqual(assessment.state, EvidenceState.SUPPORTED)
         self.assertLessEqual(
+            assessment.enclosing_support_height_ratio,
+            OUTPUT_PROTECTION_SPEC.maximum_enclosing_support_height_ratio,
+        )
+        self.assertTrue(assessment.enclosing_support_within_limit)
+
+    def test_enclosing_height_budget_does_not_mix_alternative_support_positions(
+        self,
+    ) -> None:
+        placement = _enclosing_support_placement(
+            frame_count=2,
+            support_span_px=259.0,
+            support_position_uncertainty_px=2.5,
+        )
+        output = output_footprint_from_template_placement(
+            placement,
+            project_selected_placement(placement),
+            lane=_lane(),
+            lane_ordinal=2,
+            layout="horizontal",
+            transform=AffineCoordinateTransform.identity(500, 400),
+        )
+
+        assessment = template_direct_use_budget_assessment(placement, output)
+
+        self.assertEqual(assessment.state, EvidenceState.SUPPORTED)
+        self.assertAlmostEqual(
             assessment.enclosing_support_height_ratio,
             OUTPUT_PROTECTION_SPEC.maximum_enclosing_support_height_ratio,
         )

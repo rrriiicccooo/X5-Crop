@@ -31,8 +31,10 @@ materialization、平行 detector 和 report reuse 均不再支持。
   唯一且极性闭合的局部 band 可提供 END→START 角色。Band 宽度本身不创造 local step。
 - 偏差诊断明确区分 normal、一次 direct local step 与 unresolved。Wide/narrow 最多产生一次
   suffix shift；contact、overlap、多异常或 ordinal 不明保持 review。
-- 全部 frame 共享 straight deskew direction。轻微弯曲进入 selected-placement residual，不建立
-  曲线或逐帧方向。
+- 全部 frame 共享 straight deskew direction。角色资格、source-wide 连续性和逐 trace 内外关系均
+  闭合的轻微弯曲 sequence edge 可在有界异常点剔除后保留局部位置，但不提供全片方向，也不在
+  straight anchor 已闭合全秩解时重标定 phase、W 或 pitch；残差进入 selected-placement safety，
+  不建立曲线或逐帧方向。
 
 ### Cross 与输出保护
 
@@ -44,6 +46,8 @@ materialization、平行 detector 和 report reuse 均不再支持。
   获得照片边界权限。
 - Aperture 正常 bleed 为 `max(0.15 mm, 0.7% W)` 和 cross 0.25 mm；四边完整 expansion 统一使用
   单边 5% 上限。Enclosing support 不加 cross bleed，使用总高度 1.1H 的独立合同。
+- Enclosing support 的 1.1H 预算只读取直接 observation 的最坏 `observed_span`；不把不同联合可行
+  状态的 top/bottom footprint 极值拼成并不存在的物理高度。
 - 安全计算改为 selected-only 联合可行集合。Phase、pitch、direction、cross、local advance 和直线
   residual 的相关性一起传播，不把独立最大值相加，不合并 runner-up，不把越界 footprint 静默裁小。
 - 二维内容只在 placement 唯一后作 negative veto，不能选位、移动边界或创造照片。
@@ -61,6 +65,9 @@ materialization、平行 detector 和 report reuse 均不再支持。
   同一 phase/cross solver 输入，不携带真值，也不进入 production。
 - 新增九张黄金的 v4.2.8 / V5 / 人工边界对照工具。它用于分清 coarse outer、最终 crop 与 bleed 的
   行为，不把历史版本当 reference，也不复制旧 Grid、score 或 fallback。
+- Accuracy 在判断 nominal/challenge 与 final status 之前，先验证所有已选 candidate footprint
+  是否覆盖用户确认边界；review 不再因正式输出被隐藏而跳过候选几何错误。批准结果仍另外验证
+  正式输出的覆盖、直接使用预算与 deskew。
 - Separator lattice hypothesis 是显式 receipt 工作量；编译上界不足时停止并进入 review，不做
   silent first-N。
 - Performance profiler 覆盖完整用户路径，并拆分 startup/import、decode、gray/coarse support、
@@ -76,8 +83,8 @@ materialization、平行 detector 和 report reuse 均不再支持。
 
 ### 验证边界
 
-- 九张用户确认黄金决定几何准确性。Nominal 不得降低正确自动通过率，任何黄金不得错误自动通过；
-  challenge 从安全 review 变为正确批准是允许的改进。
+- 九张用户确认黄金决定几何准确性，当前九项均为 nominal，必须安全自动批准。任何黄金不得错误
+  自动通过；未来 challenge 从安全 review 变为正确批准是允许的改进。
 - 111-source diagnostic 只证明工程稳定、工作量、终态和 TIFF 合同。
 - 24-source performance 的完整路径平均上限为 5 秒；receipt 只证明绑定的 commit、依赖和机器。
 - 全部 release receipt 绑定同一 commit 以前，V5 不创建 RC、tag、Release 或公开 ZIP。

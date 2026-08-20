@@ -574,19 +574,11 @@ def template_direct_use_budget_assessment(
         support = placement.cross_fit.enclosing_support_pair
         if support is None:
             raise ValueError("enclosing output lost its support authority")
-        frame = _frame(placement, output.envelope.lane_ordinal)
-        normal_x = frame.top.line.normal_x
-        normal_y = frame.top.line.normal_y
-        normal_length = math.hypot(normal_x, normal_y)
-        if normal_length <= 0.0:
-            raise ValueError("enclosing output has a degenerate cross axis")
-        projections = tuple(
-            (point[0] * normal_x + point[1] * normal_y) / normal_length
-            for point in output.required_source_footprint
-        )
-        support_ratio = (
-            max(projections) - min(projections)
-        ) / (
+        # The enclosing contract belongs to the directly observed support
+        # span.  The output footprint is the union of alternative joint states;
+        # measuring its hull would combine a translated top from one state with
+        # a translated bottom from another and falsely enlarge physical height.
+        support_ratio = support.observed_span_px.maximum / (
             placement.cross_fit.bottom_canonical_px
             - placement.cross_fit.top_canonical_px
         )

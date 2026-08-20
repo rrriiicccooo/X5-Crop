@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from unittest.mock import patch
 
 from tools.tests.photo_geometry_support import *
@@ -9,6 +10,167 @@ from x5crop.detection.photo_geometry.sequence_direction_measurement import (
 
 
 class BoundaryMeasurementContractTest(unittest.TestCase):
+    def test_role_qualified_continuous_bend_requires_unanimous_role_relation(
+        self,
+    ) -> None:
+        from x5crop.detection.photo_geometry.observations import (
+            build_sequence_observations,
+        )
+
+        traces = (0, 100, 200, 300, 400)
+        coordinates = (100.0, 101.0, 100.0, 101.0, 114.0)
+
+        def transition(index: int) -> PhotoBoundaryTransition:
+            coordinate = coordinates[index]
+            return PhotoBoundaryTransition(
+                transition_id=ObservationId(f"continuous-bend:{index}"),
+                query_id="query:continuous-bend",
+                trace_ordinal=index,
+                trace_coordinate_px=traces[index],
+                canonical_coordinate_px=coordinate,
+                localization_interval_px=FiniteInterval(
+                    coordinate - 0.1,
+                    coordinate + 0.1,
+                ),
+                physical_position_interval_px=FiniteInterval(
+                    coordinate - 0.1,
+                    coordinate + 0.1,
+                ),
+                gradient_z=10.0,
+                tone_z=10.0,
+                texture_z=1.0,
+                left_tone_mean=1.0,
+                right_tone_mean=20.0,
+                left_texture_mean=1.0,
+                right_texture_mean=4.0,
+                polarity=1,
+                peak_width_px=1.0,
+                prominence=10.0,
+                local_noise=0.0,
+            )
+
+        values = tuple(transition(index) for index in range(len(traces)))
+        run = ProfileRun(
+            run_id="continuous-bend",
+            coordinate_interval_px=FiniteInterval(99.0, 115.0),
+            transition_ids=tuple(item.transition_id for item in values),
+            trace_coordinates_px=traces,
+            role_hint=None,
+            qualified_anchor_roles=(BoundaryRole.START,),
+            support_fraction=1.0,
+            continuous_support_fraction=1.0,
+            fit_residual_px=1.0,
+            evidence_strength=20.0,
+            pair_qualified=True,
+        )
+        profile = BasicAxisProfile("sequence", 300, traces, (run,))
+
+        edges, bands = build_sequence_observations(
+            profile,
+            {str(item.transition_id): item for item in values},
+            mock.Mock(),
+            BoundaryAxis.X,
+            PositiveInterval(10.0, 10.0),
+            reference_trace_px=200.0,
+            frame_width_px=PositiveInterval(90.0, 110.0),
+        )
+
+        self.assertEqual(len(edges), 1)
+        self.assertEqual(bands, ())
+        self.assertEqual(
+            edges[0].transition_ids,
+            tuple(item.transition_id for item in values[:-1]),
+        )
+        self.assertEqual(edges[0].trace_coordinates_px, traces[:-1])
+        self.assertIsNone(edges[0].canonical_direction_degrees)
+        self.assertIsNone(edges[0].fit_direction_interval_degrees)
+        self.assertIsNone(edges[0].full_direction_interval_degrees)
+
+        inconsistent = (
+            replace(
+                values[0],
+                left_texture_mean=4.0,
+                right_texture_mean=1.0,
+            ),
+            *values[1:],
+        )
+        edges, bands = build_sequence_observations(
+            profile,
+            {str(item.transition_id): item for item in inconsistent},
+            mock.Mock(),
+            BoundaryAxis.X,
+            PositiveInterval(10.0, 10.0),
+            reference_trace_px=200.0,
+            frame_width_px=PositiveInterval(90.0, 110.0),
+        )
+
+        self.assertEqual(edges, ())
+        self.assertEqual(bands, ())
+
+    def test_unqualified_bend_does_not_create_sequence_authority(self) -> None:
+        from x5crop.detection.photo_geometry.observations import (
+            build_sequence_observations,
+        )
+
+        traces = (0, 100, 200, 300)
+        values = tuple(
+            PhotoBoundaryTransition(
+                transition_id=ObservationId(f"unqualified-bend:{index}"),
+                query_id="query:unqualified-bend",
+                trace_ordinal=index,
+                trace_coordinate_px=trace,
+                canonical_coordinate_px=coordinate,
+                localization_interval_px=FiniteInterval(
+                    coordinate - 0.1,
+                    coordinate + 0.1,
+                ),
+                physical_position_interval_px=FiniteInterval(
+                    coordinate - 0.1,
+                    coordinate + 0.1,
+                ),
+                gradient_z=10.0,
+                tone_z=10.0,
+                texture_z=1.0,
+                left_tone_mean=1.0,
+                right_tone_mean=20.0,
+                left_texture_mean=1.0,
+                right_texture_mean=4.0,
+                polarity=1,
+                peak_width_px=1.0,
+                prominence=10.0,
+                local_noise=0.0,
+            )
+            for index, (trace, coordinate) in enumerate(
+                zip(traces, (100.0, 101.0, 100.0, 101.0), strict=True)
+            )
+        )
+        run = ProfileRun(
+            run_id="unqualified-bend",
+            coordinate_interval_px=FiniteInterval(99.0, 102.0),
+            transition_ids=tuple(item.transition_id for item in values),
+            trace_coordinates_px=traces,
+            role_hint=None,
+            qualified_anchor_roles=(),
+            support_fraction=1.0,
+            continuous_support_fraction=1.0,
+            fit_residual_px=1.0,
+            evidence_strength=20.0,
+            pair_qualified=False,
+        )
+
+        edges, bands = build_sequence_observations(
+            BasicAxisProfile("sequence", 300, traces, (run,)),
+            {str(item.transition_id): item for item in values},
+            mock.Mock(),
+            BoundaryAxis.X,
+            PositiveInterval(10.0, 10.0),
+            reference_trace_px=150.0,
+            frame_width_px=PositiveInterval(90.0, 110.0),
+        )
+
+        self.assertEqual(edges, ())
+        self.assertEqual(bands, ())
+
     def test_impossible_sequence_family_skips_robust_refit(self) -> None:
         def transition(
             identity: str,
@@ -160,6 +322,7 @@ class BoundaryMeasurementContractTest(unittest.TestCase):
         result = sequence_run_direction_measurement(
             run,
             {str(item.transition_id): item for item in values},
+            queried_trace_coordinates_px=(902, 1056),
             boundary_axis_scale_px_per_mm=70.0,
         )
 

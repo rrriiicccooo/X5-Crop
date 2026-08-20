@@ -83,8 +83,12 @@ direction predicts boundaries correctly from the beginning to the end of a
 slanted scan. Official outputs are then sampled from the original 16-bit TIFF
 with that same geometry.
 
-A mild bend does not create a curve model. It is represented as a shared
-straight line plus a small residual belonging to the selected placement. If
+A mild bend does not create a curve model. Only a role-qualified boundary with
+direct, continuous strip-wide pixel support may retain a local position after
+bounded outlier removal, and every retained trace must still agree on the same
+inside/outside relation. It cannot redefine the shared strip direction or
+recalibrate the global template when enough straight boundaries already close
+that solution. The bend residual belongs only to selected-placement safety. If
 the required protection exceeds the output budget, the whole source enters
 review. Frames do not receive independent rotations or free quadrilaterals.
 
@@ -114,6 +118,10 @@ When aperture evidence is unavailable, a directly observed, continuous pair of
 outer supports may own top and bottom if it fully encloses fixed H and its total
 height is no more than `1.1 × H`. This permits a holder or film-material edge
 to define the output while retaining an acceptable small dark border.
+
+That height is the worst directly observed span of the support pair. X5 Crop
+does not combine top and bottom extremes from different feasible states of the
+same placement into a larger height that was never physically observed.
 
 Both sides must use the same meaning: one aperture side can never be mixed with
 one enclosing-support side. A unique aperture closed by direct observations on

@@ -20,11 +20,11 @@ from .sequence_direction_measurement import sequence_run_line_measurement
 
 
 def _dominant_polarity(
-    run: ProfileRun,
+    transition_ids: tuple[ObservationId, ...],
     transitions: dict[str, PhotoBoundaryTransition],
 ) -> int:
     value = sum(
-        transitions[str(identity)].polarity for identity in run.transition_ids
+        transitions[str(identity)].polarity for identity in transition_ids
     )
     return 1 if value > 0 else -1 if value < 0 else 0
 
@@ -44,7 +44,7 @@ def build_sequence_observations(
 ]:
     edges: list[BoundaryEdgeObservation] = []
     for run in profile.runs:
-        polarity = _dominant_polarity(run, transitions)
+        polarity = _dominant_polarity(run.transition_ids, transitions)
         if polarity == 0 and not run.qualified_anchor_roles:
             continue
         identity = ObservationId(
@@ -60,6 +60,7 @@ def build_sequence_observations(
             run,
             transitions,
             reference_trace_px=reference_trace_px,
+            queried_trace_coordinates_px=profile.trace_coordinates_px,
             boundary_axis_scale_px_per_mm=(
                 boundary_axis_scale_px_per_mm.maximum
             ),
@@ -75,12 +76,14 @@ def build_sequence_observations(
                 canonical_position_px=line.canonical_position_px,
                 fit_position_interval_px=line.fit_position_interval_px,
                 full_position_interval_px=line.full_position_interval_px,
-                transition_ids=run.transition_ids,
-                trace_coordinates_px=run.trace_coordinates_px,
-                polarity=polarity,
-                support_fraction=run.support_fraction,
-                continuous_support_fraction=run.continuous_support_fraction,
-                fit_residual_px=run.fit_residual_px,
+                transition_ids=line.transition_ids,
+                trace_coordinates_px=line.trace_coordinates_px,
+                polarity=_dominant_polarity(line.transition_ids, transitions),
+                support_fraction=line.support_fraction,
+                continuous_support_fraction=(
+                    line.continuous_support_fraction
+                ),
+                fit_residual_px=line.fit_residual_px,
                 canonical_direction_degrees=line.canonical_direction_degrees,
                 fit_direction_interval_degrees=(
                     line.fit_direction_interval_degrees

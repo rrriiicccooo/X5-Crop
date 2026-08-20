@@ -163,6 +163,49 @@ def separator(
 
 
 class TemplatePhaseContractTest(unittest.TestCase):
+    def test_local_bend_binds_role_without_recalibrating_global_template(
+        self,
+    ) -> None:
+        def straight(
+            observation: BoundaryEdgeObservation,
+            role: BoundaryRole,
+        ) -> BoundaryEdgeObservation:
+            direction = FiniteInterval.exact(0.0)
+            return replace(
+                observation,
+                qualified_anchor_roles=(role,),
+                canonical_direction_degrees=0.0,
+                fit_direction_interval_degrees=direction,
+                full_direction_interval_degrees=direction,
+            )
+
+        observations = (
+            straight(edge("straight:start:1", 100.0), BoundaryRole.START),
+            straight(edge("straight:end:1", 200.0), BoundaryRole.END),
+            straight(edge("straight:start:2", 220.0), BoundaryRole.START),
+            straight(edge("straight:end:2", 320.0), BoundaryRole.END),
+            straight(edge("straight:start:3", 340.0), BoundaryRole.START),
+            replace(
+                edge("bend:end:3", 442.0),
+                qualified_anchor_roles=(BoundaryRole.END,),
+            ),
+        )
+
+        result = fit_template_phase(observations, template(3))
+
+        self.assertEqual(result.status, PhaseFitStatus.RESOLVED)
+        self.assertIsNotNone(result.best)
+        for actual, expected in zip(
+            result.best.canonical_role_positions_px,
+            (100.0, 200.0, 220.0, 320.0, 340.0, 440.0),
+            strict=True,
+        ):
+            self.assertAlmostEqual(actual, expected)
+        self.assertEqual(
+            result.best.role_observation_ids[-1],
+            ObservationId("bend:end:3"),
+        )
+
     def test_equal_physical_role_alternatives_are_not_broken_by_identity(self) -> None:
         observations = (
             replace(

@@ -37,6 +37,7 @@ class _AnchorFact:
     direct: bool
     support_fraction: float
     fit_residual_px: float
+    straight_line_fit_authority: bool
     polarity: int
     qualified_anchor_roles: tuple[BoundaryRole, ...]
 
@@ -95,6 +96,7 @@ def _facts(
                 and bool(observation.qualified_anchor_roles),
                 observation.support_fraction,
                 observation.fit_residual_px,
+                observation.canonical_direction_degrees is not None,
                 observation.polarity,
                 observation.qualified_anchor_roles,
             )
@@ -652,6 +654,25 @@ def _linear_fit(
 ) -> tuple[float, float, float]:
     if not matches:
         raise ValueError("global template fit requires direct matches")
+    straight = tuple(
+        item for item in matches if item[1].straight_line_fit_authority
+    )
+    straight_matrix = np.asarray(
+        [
+            (
+                1.0,
+                float(direction if role.role == BoundaryRole.END else 0),
+                float(direction * role.slot_index),
+            )
+            for role, _anchor in straight
+        ],
+        dtype=np.float64,
+    )
+    fit_matches = (
+        straight
+        if len(straight) >= 3 and np.linalg.matrix_rank(straight_matrix) == 3
+        else matches
+    )
     matrix = np.asarray(
         [
             (
@@ -659,19 +680,19 @@ def _linear_fit(
                 float(direction if role.role == BoundaryRole.END else 0),
                 float(direction * role.slot_index),
             )
-            for role, _anchor in matches
+            for role, _anchor in fit_matches
         ],
         dtype=np.float64,
     )
     values = np.asarray(
         [
             anchor.coordinate_px - direction * prefixes[role.slot_index]
-            for role, anchor in matches
+            for role, anchor in fit_matches
         ],
         dtype=np.float64,
     )
     solution = None
-    if len(matches) >= 3 and np.linalg.matrix_rank(matrix) == 3:
+    if len(fit_matches) >= 3 and np.linalg.matrix_rank(matrix) == 3:
         solution = np.linalg.lstsq(
             matrix,
             values,
@@ -698,11 +719,11 @@ def _linear_fit(
             + prefixes[role.slot_index]
             + (width if role.role == BoundaryRole.END else 0.0)
         )
-        for role, _anchor in matches
+        for role, _anchor in fit_matches
     )
     phase_values = sorted(
         anchor.coordinate_px - offset
-        for offset, (_role, anchor) in zip(offsets, matches, strict=True)
+        for offset, (_role, anchor) in zip(offsets, fit_matches, strict=True)
     )
     phase = float(phase_values[len(phase_values) // 2])
     if solution is not None:

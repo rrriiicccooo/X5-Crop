@@ -251,6 +251,33 @@ def ordered_gold_mapping(
     return tuple(mapping)
 
 
+def validate_selected_candidate_coverage(
+    record: dict[str, object],
+    report: dict[str, object],
+) -> bool:
+    """Check selected pre-decision geometry without requiring official output."""
+
+    outputs = tuple(
+        output
+        for lane in report["photo_geometry"]["lanes"]
+        for output in lane["output_footprints"]
+    )
+    if not outputs:
+        return False
+    sample_id = str(record["sample_id"])
+    gold = record["confirmed_geometry"]
+    frames = gold["frames"]
+    mapping = ordered_gold_mapping(
+        frames,
+        outputs,
+        str(gold["strip_orientation"]),
+        str(record["format_id"]),
+    )
+    if len(mapping) != len(frames):
+        raise ValueError(f"{sample_id} candidate cuts confirmed content")
+    return True
+
+
 def validate_approved_geometry(
     record: dict[str, object],
     report: dict[str, object],

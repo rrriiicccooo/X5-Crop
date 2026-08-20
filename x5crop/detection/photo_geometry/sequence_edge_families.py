@@ -215,6 +215,7 @@ def merge_sequence_edge_families(
         sequence_run_direction_measurement(
             run,
             transitions,
+            queried_trace_coordinates_px=profile.trace_coordinates_px,
             boundary_axis_scale_px_per_mm=(
                 boundary_axis_scale_px_per_mm.maximum
             ),

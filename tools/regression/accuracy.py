@@ -13,7 +13,10 @@ from x5crop.report.validation import validate_current_report_record
 
 from .cohort_count import validate_cohort_counts
 from .file_identity import sha256_file
-from .gold_geometry import validate_approved_geometry
+from .gold_geometry import (
+    validate_approved_geometry,
+    validate_selected_candidate_coverage,
+)
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -109,6 +112,25 @@ def _production_command(
     return command
 
 
+def _validate_task_result(
+    record: dict[str, object],
+    report: dict[str, object],
+) -> str:
+    validate_selected_candidate_coverage(record, report)
+    status = str(report["decision"]["status"])
+    role = str(record["cohort_role"])
+    if role == "nominal" and status != "approved_auto":
+        raise ValueError(f"{record['sample_id']} nominal task is {status}")
+    if role == "challenge" and status not in {
+        "approved_auto",
+        "needs_review",
+    }:
+        raise ValueError(f"{record['sample_id']} challenge task is {status}")
+    if status == "approved_auto":
+        validate_approved_geometry(record, report)
+    return status
+
+
 def _run_task(record: dict[str, object]) -> str:
     source = (PROJECT_ROOT / str(record["source_relative_path"])).resolve()
     before = source.stat()
@@ -148,22 +170,7 @@ def _run_task(record: dict[str, object]) -> str:
             or identity["mtime_ns"] != before.st_mtime_ns
         ):
             raise ValueError("source stat identity changed across accuracy task")
-        status = str(report["decision"]["status"])
-        role = str(record["cohort_role"])
-        if role == "nominal" and status != "approved_auto":
-            raise ValueError(
-                f"{record['sample_id']} nominal task is {status}"
-            )
-        if role == "challenge" and status not in {
-            "approved_auto",
-            "needs_review",
-        }:
-            raise ValueError(
-                f"{record['sample_id']} challenge task is {status}"
-            )
-        if status == "approved_auto":
-            validate_approved_geometry(record, report)
-        return status
+        return _validate_task_result(record, report)
 
 
 def run_accuracy(records: Iterable[dict[str, object]]) -> tuple[int, int]:
