@@ -3,6 +3,7 @@ from __future__ import annotations
 import ast
 from dataclasses import replace
 import inspect
+import math
 from pathlib import Path
 import unittest
 
@@ -33,10 +34,12 @@ from x5crop.detection.photo_geometry.template_cross_model import (
     EnclosingSupportPair,
 )
 from x5crop.detection.photo_geometry.template_output import (
+    _state_boundary_residuals,
     output_footprint_from_template_placement,
     template_direct_use_budget_assessment,
 )
 from x5crop.detection.photo_geometry.template_feasible_geometry import (
+    JointFrameState,
     project_selected_placement,
 )
 from x5crop.detection.source_core import (
@@ -61,6 +64,41 @@ def _placement():
         _sequence(template),
         _cross(template, direction=direction),
     )
+
+
+def _paired_trace_residual_placement(
+    *,
+    top_intervals: tuple[FiniteInterval, ...],
+    bottom_intervals: tuple[FiniteInterval, ...],
+    full_interval: FiniteInterval = FiniteInterval(9.0, 11.0),
+    bottom_full_interval: FiniteInterval = FiniteInterval(249.0, 251.0),
+    direction_interval: FiniteInterval = FiniteInterval(-0.2, 0.2),
+):
+    template = _template(1)
+    cross = _cross(template, direction=_direction())
+    top = _binding(
+        BoundaryRole.TOP,
+        "paired-top",
+        10.0,
+        full_interval=full_interval,
+        trace_position_intervals=top_intervals,
+        direction_interval=direction_interval,
+    )
+    bottom = _binding(
+        BoundaryRole.BOTTOM,
+        "paired-bottom",
+        250.0,
+        full_interval=bottom_full_interval,
+        trace_position_intervals=bottom_intervals,
+        direction_interval=direction_interval,
+    )
+    cross = replace(
+        cross,
+        direct_bindings=(top, bottom),
+        top_full_interval_px=full_interval,
+        bottom_full_interval_px=bottom_full_interval,
+    )
+    return _compose(template, _sequence(template), cross)
 
 
 def _enclosing_support_placement(
@@ -192,6 +230,98 @@ def _lane(lane_id: str = "lane:test") -> SourceLaneEvidence:
 
 
 class TemplateOutputContractTest(unittest.TestCase):
+    def test_aperture_residual_uses_paired_trace_state_not_marginal_extrema(self) -> None:
+        angle = 0.2
+        slope = math.tan(math.radians(angle))
+        traces = (0, 50, 100)
+        top_intervals = tuple(
+            FiniteInterval.exact(10.0 + slope * (trace - 150.0))
+            for trace in traces
+        )
+        bottom_intervals = tuple(
+            FiniteInterval.exact(250.0 + slope * (trace - 150.0))
+            for trace in traces
+        )
+        placement = _paired_trace_residual_placement(
+            top_intervals=top_intervals,
+            bottom_intervals=bottom_intervals,
+        )
+        state = JointFrameState(
+            sequence_start_px=100.0,
+            sequence_end_px=200.0,
+            top_at_lane_reference_px=10.0,
+            bottom_at_lane_reference_px=250.0,
+            angle_degrees=angle,
+            sequence_start_model_residual_px=0.0,
+            sequence_end_model_residual_px=0.0,
+        )
+
+        residuals = _state_boundary_residuals(
+            placement,
+            placement.frames[0],
+            state,
+        )
+
+        self.assertEqual(residuals[BoundaryRole.TOP], 0.0)
+        self.assertEqual(residuals[BoundaryRole.BOTTOM], 0.0)
+
+    def test_aperture_residual_keeps_middle_trace_outward_departure(self) -> None:
+        placement = _paired_trace_residual_placement(
+            top_intervals=(
+                FiniteInterval.exact(10.0),
+                FiniteInterval.exact(9.0),
+                FiniteInterval.exact(10.0),
+            ),
+            bottom_intervals=(
+                FiniteInterval.exact(250.0),
+                FiniteInterval.exact(250.0),
+                FiniteInterval.exact(250.0),
+            ),
+            full_interval=FiniteInterval.exact(10.0),
+            bottom_full_interval=FiniteInterval.exact(250.0),
+            direction_interval=FiniteInterval.exact(0.0),
+        )
+        state = JointFrameState(
+            sequence_start_px=100.0,
+            sequence_end_px=200.0,
+            top_at_lane_reference_px=10.0,
+            bottom_at_lane_reference_px=250.0,
+            angle_degrees=0.0,
+            sequence_start_model_residual_px=0.0,
+            sequence_end_model_residual_px=0.0,
+        )
+
+        residuals = _state_boundary_residuals(
+            placement,
+            placement.frames[0],
+            state,
+        )
+
+        self.assertEqual(residuals[BoundaryRole.TOP], 1.0)
+        self.assertEqual(residuals[BoundaryRole.BOTTOM], 0.0)
+
+    def test_aperture_residual_requires_paired_trace_intervals(self) -> None:
+        placement = _paired_trace_residual_placement(
+            top_intervals=(),
+            bottom_intervals=(
+                FiniteInterval.exact(250.0),
+                FiniteInterval.exact(250.0),
+                FiniteInterval.exact(250.0),
+            ),
+        )
+        state = JointFrameState(
+            sequence_start_px=100.0,
+            sequence_end_px=200.0,
+            top_at_lane_reference_px=10.0,
+            bottom_at_lane_reference_px=250.0,
+            angle_degrees=0.0,
+            sequence_start_model_residual_px=0.0,
+            sequence_end_model_residual_px=0.0,
+        )
+
+        with self.assertRaisesRegex(ValueError, "paired trace residual authority"):
+            _state_boundary_residuals(placement, placement.frames[0], state)
+
     def test_enclosing_support_uses_no_cross_bleed_and_its_own_height_limit(self) -> None:
         placement = _enclosing_support_placement()
         output = output_footprint_from_template_placement(

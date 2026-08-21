@@ -309,19 +309,31 @@ def placement_binding(
     role: BoundaryRole,
     name: str,
     coordinate: float,
+    *,
+    full_interval: FiniteInterval | None = None,
+    trace_position_intervals: tuple[FiniteInterval, ...] | None = None,
+    direction_interval: FiniteInterval = FiniteInterval(-0.2, 0.2),
 ) -> CrossRoleBinding:
     exact = FiniteInterval.exact(coordinate)
+    full = exact if full_interval is None else full_interval
+    traces = (0, 50, 100)
+    paired_intervals = (
+        tuple(FiniteInterval.exact(coordinate) for _ in traces)
+        if trace_position_intervals is None
+        else trace_position_intervals
+    )
     return CrossRoleBinding(
         role=role,
         run_id=f"run:{name}",
         observation_id=ObservationId(f"cross:{name}"),
         coordinate_interval_px=exact,
         fit_interval_px=exact,
-        full_interval_px=exact,
-        trace_coordinates_px=(0, 50, 100),
+        full_interval_px=full,
+        trace_coordinates_px=traces,
         canonical_direction_degrees=0.0,
-        fit_direction_interval_degrees=FiniteInterval(-0.2, 0.2),
-        full_direction_interval_degrees=FiniteInterval(-0.2, 0.2),
+        fit_direction_interval_degrees=direction_interval,
+        full_direction_interval_degrees=direction_interval,
+        trace_position_intervals_px=paired_intervals,
     )
 
 

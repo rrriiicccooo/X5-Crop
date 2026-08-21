@@ -200,17 +200,18 @@ def _state_boundary_residuals(
         binding = cross_bindings.get(boundary.position_observation_ids[0])
         if (
             binding is None
-            or binding.full_direction_interval_degrees is None
             or not binding.trace_coordinates_px
+            or not binding.trace_position_intervals_px
         ):
             raise ValueError(
-                "observed cross boundary lacks direct residual authority"
+                "observed cross boundary lacks paired trace residual authority"
             )
         outward = 0.0
         global_slope = math.tan(math.radians(state.angle_degrees))
-        for trace in (
-            float(binding.trace_coordinates_px[0]),
-            float(binding.trace_coordinates_px[-1]),
+        for trace, observed_interval in zip(
+            binding.trace_coordinates_px,
+            binding.trace_position_intervals_px,
+            strict=True,
         ):
             distance = trace - placement.cross_fit.lane_reference_trace_px
             global_at_trace = (
@@ -221,24 +222,12 @@ def _state_boundary_residuals(
                 )
                 + global_slope * distance
             )
-            for observed_position in (
-                binding.full_interval_px.minimum,
-                binding.full_interval_px.maximum,
-            ):
-                for observed_angle in (
-                    binding.full_direction_interval_degrees.minimum,
-                    binding.full_direction_interval_degrees.maximum,
-                ):
-                    observed_at_trace = (
-                        observed_position
-                        + math.tan(math.radians(observed_angle)) * distance
-                    )
-                    delta = (
-                        global_at_trace - observed_at_trace
-                        if role == BoundaryRole.TOP
-                        else observed_at_trace - global_at_trace
-                    )
-                    outward = max(outward, delta)
+            delta = (
+                global_at_trace - observed_interval.minimum
+                if role == BoundaryRole.TOP
+                else observed_interval.maximum - global_at_trace
+            )
+            outward = max(outward, delta)
         result[role] = max(0.0, outward)
     return result
 
