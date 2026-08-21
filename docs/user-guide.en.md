@@ -92,6 +92,15 @@ that solution. The bend residual belongs only to selected-placement safety. If
 the required protection exceeds the output budget, the whole source enters
 review. Frames do not receive independent rotations or free quadrilaterals.
 
+When photo top and bottom are only two local direct edges, do not span the
+source, and have neither three-region nor enclosing-support authority, at least
+two independent separator/outer positions may close the strip-wide direction.
+Those sequence positions then own global deskew. Local top/bottom still own
+fixed H and short-axis position, while their directional departure remains in
+output protection and the 5% budget; a local slope is never extrapolated into a
+possible rotation of the whole strip. Protection or sampling overflow still
+produces `needs_review`.
+
 ## Top/Bottom And Acceptable Outer
 
 X5 Crop need not distinguish whether an outer support is a holder edge or film

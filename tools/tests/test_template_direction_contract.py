@@ -135,6 +135,37 @@ def _sequence_observations() -> tuple[BoundaryEdgeObservation, ...]:
     )
 
 
+def _local_disjoint_cross(template: TemplateSpec):
+    return fit_template_cross(
+        TemplateCrossInput(
+            template=template,
+            fixed_height_px=240.0,
+            top_bindings=(
+                _cross_binding(
+                    BoundaryRole.TOP,
+                    "disjoint-local-top",
+                    100.0,
+                    angle=-0.16,
+                    fit_interval=FiniteInterval(-0.18, -0.14),
+                    full_interval=FiniteInterval(-0.24, -0.08),
+                    traces=(0, 25),
+                ),
+            ),
+            bottom_bindings=(
+                _cross_binding(
+                    BoundaryRole.BOTTOM,
+                    "disjoint-local-bottom",
+                    340.0,
+                    angle=-0.04,
+                    fit_interval=FiniteInterval(-0.06, -0.02),
+                    full_interval=FiniteInterval(-0.12, 0.04),
+                    traces=(0, 25),
+                ),
+            ),
+        )
+    )
+
+
 class TemplateDirectionContractTest(unittest.TestCase):
     def test_template_local_opposite_cannot_move_source_wide_deskew(self) -> None:
         template = _template()
@@ -255,6 +286,72 @@ class TemplateDirectionContractTest(unittest.TestCase):
             len(result.selected_observation_ids),
             8,
         )
+
+    def test_sequence_owns_global_direction_when_local_cross_full_is_disjoint(self) -> None:
+        template = _template()
+        observations = _sequence_observations()
+        phase = fit_template_phase(observations, template)
+        cross = _local_disjoint_cross(template)
+        assert phase.best is not None and cross.best is not None
+        assert cross.best.selected_direction is not None
+        self.assertEqual(cross.best.independent_support_region_count, 2)
+        self.assertFalse(
+            any(
+                item.source_spanning_continuous
+                for item in cross.best.direct_bindings
+            )
+        )
+
+        result = lane_template_direction(phase.best, observations, cross.best)
+
+        self.assertAlmostEqual(
+            result.full_angle_interval_degrees.minimum,
+            0.17,
+        )
+        self.assertAlmostEqual(
+            result.full_angle_interval_degrees.maximum,
+            0.24,
+        )
+        self.assertAlmostEqual(result.canonical_angle_degrees, 0.21)
+        self.assertTrue(
+            set(cross.best.selected_direction.selected_observation_ids)
+            .issubset(result.selected_observation_ids)
+        )
+        self.assertGreaterEqual(
+            len(
+                set(result.selected_observation_ids)
+                - set(cross.best.selected_direction.selected_observation_ids)
+            ),
+            2,
+        )
+        for binding in cross.best.direct_bindings:
+            assert binding.observed_direction_interval_degrees is not None
+            self.assertTrue(
+                result.observed_angle_interval_degrees.contains(
+                    binding.observed_direction_interval_degrees.minimum
+                )
+            )
+            self.assertTrue(
+                result.observed_angle_interval_degrees.contains(
+                    binding.observed_direction_interval_degrees.maximum
+                )
+            )
+
+    def test_one_sequence_position_cannot_override_disjoint_local_cross(self) -> None:
+        template = _template()
+        observations = _sequence_observations()
+        phase = fit_template_phase(observations, template)
+        cross = _local_disjoint_cross(template)
+        assert phase.best is not None and cross.best is not None
+        assert cross.best.selected_direction is not None
+
+        result = lane_template_direction(
+            phase.best,
+            (observations[0],),
+            cross.best,
+        )
+
+        self.assertEqual(result, cross.best.selected_direction)
 
     def test_source_spanning_cross_owns_canonical_lane_direction(self) -> None:
         template = _template()

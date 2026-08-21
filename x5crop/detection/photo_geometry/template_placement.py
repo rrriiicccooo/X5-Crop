@@ -15,6 +15,10 @@ from .model import BoundaryAxis, BoundaryRole, DirectionAuthority, PositionSourc
 from .output_model import FrameBoundaryGeometry, SharedStripDirection
 from .source_geometry import SourceScanGeometry
 from .template_cross_model import CrossFit
+from .template_direction import (
+    local_cross_requires_sequence_direction,
+    sequence_direction_provenance_groups,
+)
 from .template_model import SequenceFit, TemplateSpec
 _ROLES = (BoundaryRole.TOP, BoundaryRole.BOTTOM, BoundaryRole.START, BoundaryRole.END)
 _EPSILON = 1.0e-8
@@ -57,6 +61,7 @@ def _validate_interval_contains(interval: FiniteInterval, value: float, *, name:
 def _cross_direction_compatible(
     cross: CrossFit,
     direction: SharedStripDirection,
+    sequence: SequenceFit,
 ) -> bool:
     selected = cross.selected_direction
     if selected is None:
@@ -66,18 +71,44 @@ def _cross_direction_compatible(
     # deskew angle. Placement therefore checks the selected cross fragments'
     # full physical direction authority against the source-wide direction.
     compatibility = selected.full_angle_interval_degrees
-    return (
-        max(
-            compatibility.minimum,
-            direction.full_angle_interval_degrees.minimum,
+    provenance_closed = set(selected.selected_observation_ids).issubset(
+        direction.selected_observation_ids
+    )
+    if not provenance_closed:
+        return False
+    overlaps = max(
+        compatibility.minimum,
+        direction.full_angle_interval_degrees.minimum,
+    ) <= min(
+        compatibility.maximum,
+        direction.full_angle_interval_degrees.maximum,
+    ) + _EPSILON
+    if overlaps:
+        return True
+    if (
+        not local_cross_requires_sequence_direction(cross)
+        or len(
+            sequence_direction_provenance_groups(
+                sequence,
+                direction.selected_observation_ids,
+            )
         )
-        <= min(
-            compatibility.maximum,
-            direction.full_angle_interval_degrees.maximum,
-        ) + _EPSILON
-        and set(selected.selected_observation_ids).issubset(
-            direction.selected_observation_ids
-        )
+        < 2
+    ):
+        return False
+    observed = direction.observed_angle_interval_degrees
+    local_intervals = (
+        selected.observed_angle_interval_degrees,
+        *(
+            item.observed_direction_interval_degrees
+            for item in cross.direct_bindings
+            if item.observed_direction_interval_degrees is not None
+        ),
+    )
+    return all(
+        observed.contains(interval.minimum, epsilon=_EPSILON)
+        and observed.contains(interval.maximum, epsilon=_EPSILON)
+        for interval in local_intervals
     )
 @dataclass(frozen=True)
 class TemplateFrame:
@@ -131,7 +162,11 @@ class FormatPlacement:
             or not self.frames
             or tuple(frame.lane_ordinal for frame in self.frames)
             != tuple(range(1, self.output_slot_count + 1))
-            or not _cross_direction_compatible(self.cross_fit, self.direction)
+            or not _cross_direction_compatible(
+                self.cross_fit,
+                self.direction,
+                self.sequence_fit,
+            )
         ):
             raise ValueError("format placement identity or authority is inconsistent")
         if not isinstance(self.width_authority_px, FiniteInterval) or not isinstance(
@@ -244,6 +279,7 @@ def _resolve_sequence_pair(
 def _cross_boundaries(
     cross: CrossFit,
     direction: SharedStripDirection,
+    sequence: SequenceFit,
 ) -> tuple[_ResolvedBoundary, _ResolvedBoundary]:
     direct = {item.role: item for item in cross.direct_bindings}
     inferred = {item.role: item for item in cross.inferred_bindings}
@@ -286,7 +322,7 @@ def _cross_boundaries(
         epsilon=_EPSILON,
     ):
         raise ValueError("cross span contradicts fixed template height")
-    if not _cross_direction_compatible(cross, direction):
+    if not _cross_direction_compatible(cross, direction, sequence):
         raise ValueError("cross-selected direction contradicts placement direction")
     return result[0], result[1]
 def _boundary_geometry(
@@ -418,7 +454,11 @@ def compose_format_placement(
     if selected_direction is not None:
         if direction is None:
             direction = selected_direction
-        elif not _cross_direction_compatible(cross_fit, direction):
+        elif not _cross_direction_compatible(
+            cross_fit,
+            direction,
+            sequence_fit,
+        ):
             raise ValueError("explicit direction contradicts cross-selected direction")
     if direction is None:
         raise ValueError("format placement requires cross-selected or explicit direction")
@@ -433,7 +473,11 @@ def compose_format_placement(
         template.frame_height_px, cross_fit.fixed_height_px
     ):
         raise ValueError("cross fixed height contradicts template frame height")
-    cross_top, cross_bottom = _cross_boundaries(cross_fit, direction)
+    cross_top, cross_bottom = _cross_boundaries(
+        cross_fit,
+        direction,
+        sequence_fit,
+    )
     frames: list[TemplateFrame] = []
     for ordinal in range(template.count):
         start, end = _resolve_sequence_pair(sequence_fit, template, ordinal, width)

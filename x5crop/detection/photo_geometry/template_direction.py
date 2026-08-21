@@ -16,6 +16,17 @@ from .model import SPATIAL_SUPPORT_REGION_COUNT
 from .trace_support import PIXEL_CENTER_HALF_EXTENT_PX
 
 
+def _sequence_role_groups(role_count: int) -> tuple[tuple[int, ...], ...]:
+    groups: list[tuple[int, ...]] = [(0,)]
+    groups.extend(
+        (end_index, end_index + 1)
+        for end_index in range(1, role_count - 1, 2)
+    )
+    if role_count > 1:
+        groups.append((role_count - 1,))
+    return tuple(groups)
+
+
 def _sequence_direction_groups(
     sequence_fit: SequenceFit,
     observations: tuple[BoundaryEdgeObservation, ...],
@@ -32,15 +43,8 @@ def _sequence_direction_groups(
 
     by_id = {item.observation_id: item for item in observations}
     role_ids = sequence_fit.role_observation_ids
-    role_groups = [(0,)]
-    role_groups.extend(
-        (end_index, end_index + 1)
-        for end_index in range(1, len(role_ids) - 1, 2)
-    )
-    if len(role_ids) > 1:
-        role_groups.append((len(role_ids) - 1,))
     result = []
-    for indices in role_groups:
+    for indices in _sequence_role_groups(len(role_ids)):
         values = tuple(
             by_id[role_ids[index]]
             for index in indices
@@ -82,6 +86,53 @@ def _sequence_direction_groups(
                 tuple(item.observation_id for item in values),
             )
         )
+    return tuple(result)
+
+
+def local_cross_requires_sequence_direction(cross_fit: CrossFit) -> bool:
+    """Return whether only sequence positions can own source-wide direction."""
+
+    bindings = cross_fit.direct_bindings
+    fit_intervals = tuple(
+        item.fit_direction_interval_degrees for item in bindings
+    )
+    return (
+        cross_fit.boundary_use == OutputBoundaryUse.APERTURE_PAIR
+        and cross_fit.direct_pair
+        and len(bindings) == 2
+        and cross_fit.independent_support_region_count
+        < SPATIAL_SUPPORT_REGION_COUNT
+        and cross_fit.enclosing_support_pair is None
+        and all(
+            item.evidence == CrossEvidence.DIRECT
+            and item.role_authorized
+            and not item.source_spanning_continuous
+            and item.fit_direction_interval_degrees is not None
+            and item.full_direction_interval_degrees is not None
+            and item.observed_direction_interval_degrees is not None
+            for item in bindings
+        )
+        and _intersect(fit_intervals[0], fit_intervals[1]) is None
+    )
+
+
+def sequence_direction_provenance_groups(
+    sequence_fit: SequenceFit,
+    selected_observation_ids: tuple,
+) -> tuple[tuple, ...]:
+    """Recover independent sequence positions represented in provenance."""
+
+    selected = set(selected_observation_ids)
+    role_ids = sequence_fit.role_observation_ids
+    result = []
+    for indices in _sequence_role_groups(len(role_ids)):
+        identities = tuple(
+            role_ids[index]
+            for index in indices
+            if role_ids[index] is not None and role_ids[index] in selected
+        )
+        if identities:
+            result.append(identities)
     return tuple(result)
 
 
@@ -309,10 +360,14 @@ def lane_template_direction(
             ),
             canonical_angle_degrees=canonical,
         )
-    if _intersect(
+    sequence_cross_common = _intersect(
         sequence_interval,
         cross_direction.full_angle_interval_degrees,
-    ) is None:
+    )
+    if (
+        sequence_cross_common is None
+        and not local_cross_requires_sequence_direction(cross_fit)
+    ):
         raise ValueError("sequence and cross direction evidence are incompatible")
     # Cross fragments locate top/bottom.  When their local statistical fits do
     # not share a direction, independent sequence positions own the one global
@@ -343,6 +398,11 @@ def lane_template_direction(
         observed_angle_interval_degrees=hull(
             (
                 cross_direction.observed_angle_interval_degrees,
+                *(
+                    item.observed_direction_interval_degrees
+                    for item in cross_fit.direct_bindings
+                    if item.observed_direction_interval_degrees is not None
+                ),
                 sequence_observed_interval,
                 common,
             )
@@ -393,4 +453,9 @@ def shared_template_direction(
     )
 
 
-__all__ = ["lane_template_direction", "shared_template_direction"]
+__all__ = [
+    "lane_template_direction",
+    "local_cross_requires_sequence_direction",
+    "sequence_direction_provenance_groups",
+    "shared_template_direction",
+]

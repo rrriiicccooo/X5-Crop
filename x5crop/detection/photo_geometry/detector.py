@@ -5,7 +5,7 @@ from __future__ import annotations
 from ...configuration.model import DetectionConfiguration, ResolvedSlotCount
 from ...domain import EvidenceState
 from ..evidence.content_occupancy_model import ContentOccupancyObservationSet
-from ..gate_checks import GateGap, failure_fact
+from ..gate_checks import DetectionFailureFact, GateGap, failure_fact
 from ..source_core import SourceLaneEvidence
 from .content_topology import build_content_topology_index
 from .content_veto import content_veto_assessment
@@ -15,7 +15,7 @@ from .lane_preparation import (
     resolve_output_slots,
 )
 from .measurement_model import PhotoBoundaryMeasurementField
-from .output_model import OutputSlotIdentity
+from .output_model import OutputSlotIdentity, SharedStripDirection
 from .source_geometry import SourceScanGeometry
 from .template_cross_model import CrossFit, CrossFitStatus
 from .template_feasible_geometry import project_selected_placement
@@ -87,23 +87,45 @@ def _fit_direction(lane: PreparedTemplateLane):
     phase = lane.phase_competition.best
     cross = lane.cross_competition.best
     if phase is None or cross is None:
-        return None
+        return None, None
     try:
-        return lane_template_direction(phase, lane.sequence_edges, cross)
-    except ValueError:
-        return None
+        return lane_template_direction(phase, lane.sequence_edges, cross), None
+    except ValueError as exc:
+        return None, failure_fact(
+            GateGap.SHARED_STRIP_DIRECTION_UNAVAILABLE,
+            detail=str(exc),
+        )
 
 
-def _shared_direction(prepared: tuple[PreparedTemplateLane, ...]):
-    values = tuple(
-        _fit_direction(lane) for lane in prepared
+def _shared_direction(
+    lane_resolutions: tuple[
+        tuple[SharedStripDirection | None, DetectionFailureFact | None],
+        ...,
+    ],
+) -> tuple[SharedStripDirection | None, DetectionFailureFact | None]:
+    if not lane_resolutions:
+        return None, None
+    failure = next(
+        (item[1] for item in lane_resolutions if item[1] is not None),
+        None,
     )
-    if not values or any(item is None for item in values):
-        return None
+    if failure is not None:
+        return None, failure
+    values = tuple(item[0] for item in lane_resolutions)
+    if any(item is None for item in values):
+        return None, None
     try:
-        return shared_template_direction(tuple(item for item in values if item is not None))
-    except ValueError:
-        return None
+        return (
+            shared_template_direction(
+                tuple(item for item in values if item is not None)
+            ),
+            None,
+        )
+    except ValueError as exc:
+        return None, failure_fact(
+            GateGap.SHARED_STRIP_DIRECTION_NONUNIQUE,
+            detail=str(exc),
+        )
 
 
 def _compose(
@@ -263,13 +285,28 @@ def reconstruct_photo_geometry(
         )
     )
     shared_geometry = _shared_geometry(prepared)
-    shared_direction = _shared_direction(prepared)
+    lane_direction_resolutions = tuple(
+        _fit_direction(lane) for lane in prepared
+    )
+    shared_direction, direction_failure = _shared_direction(
+        lane_direction_resolutions
+    )
     provisional: list[
         tuple[FormatPlacement | None, FormatPlacement | None, object, TemplatePlacementCompetition]
     ] = []
-    for lane, content in zip(prepared, content_observations, strict=True):
+    for lane, content, lane_direction_resolution in zip(
+        prepared,
+        content_observations,
+        lane_direction_resolutions,
+        strict=True,
+    ):
         geometry = shared_geometry or lane.source_scan_geometry
-        direction = shared_direction or _fit_direction(lane)
+        lane_direction, lane_direction_failure = lane_direction_resolution
+        direction = (
+            None
+            if direction_failure is not None
+            else shared_direction or lane_direction
+        )
         best, runner = _placements(
             lane,
             source_geometry=geometry,
@@ -294,6 +331,9 @@ def reconstruct_photo_geometry(
             phase=lane.phase_competition,
             cross=lane.cross_competition,
             content_assessment=content_assessment,
+            direction_failure=(
+                direction_failure or lane_direction_failure
+            ),
         )
         provisional.append((best, runner, content_assessment, competition))
 

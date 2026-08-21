@@ -24,6 +24,7 @@ def select_lane_template_placement(
     phase: PhaseFitResult,
     cross: CrossFitCompetition,
     content_assessment: ContentVetoAssessment | None,
+    direction_failure: DetectionFailureFact | None = None,
 ) -> TemplatePlacementCompetition:
     """Publish the fit owners' winner while retaining one bounded runner."""
 
@@ -48,6 +49,12 @@ def select_lane_template_placement(
         or cross.status != CrossFitStatus.RESOLVED
     ):
         raise ValueError("content veto requires the unique fitted placement")
+    if direction_failure is not None and not isinstance(
+        direction_failure, DetectionFailureFact
+    ):
+        raise TypeError("direction failure must be typed")
+    if direction_failure is not None and best is not None:
+        raise ValueError("resolved placement cannot retain a direction failure")
 
     try:
         phase.receipt.validate_bounds(slot_count=phase.template.count)
@@ -107,7 +114,8 @@ def select_lane_template_placement(
             placements, None,
             None if runner_up is None else runner_up.placement_id,
             EvidenceState.UNAVAILABLE,
-            failure_fact(GateGap.COMPLETE_PLACEMENT_UNAVAILABLE),
+            direction_failure
+            or failure_fact(GateGap.COMPLETE_PLACEMENT_UNAVAILABLE),
         )
     if best.sequence_fit != phase.best or best.cross_fit != cross.best:
         raise ValueError("template placement does not use the selected fits")

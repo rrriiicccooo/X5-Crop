@@ -416,6 +416,92 @@ class TemplateOutputContractTest(unittest.TestCase):
         )
         self.assertFalse(top.within_limit)
 
+    def test_sequence_owned_direction_retains_local_cross_departure_in_budget(self) -> None:
+        template = _template(1)
+        sequence = _sequence(template)
+        cross = _cross(template, direction=_direction())
+        top, bottom = cross.direct_bindings
+        top = replace(
+            top,
+            canonical_direction_degrees=-0.15,
+            fit_direction_interval_degrees=FiniteInterval(-0.18, -0.12),
+            full_direction_interval_degrees=FiniteInterval(-0.20, -0.10),
+            observed_direction_interval_degrees=FiniteInterval(-0.20, -0.10),
+        )
+        bottom = replace(
+            bottom,
+            canonical_direction_degrees=0.05,
+            fit_direction_interval_degrees=FiniteInterval(0.02, 0.08),
+            full_direction_interval_degrees=FiniteInterval(0.00, 0.10),
+            observed_direction_interval_degrees=FiniteInterval(0.00, 0.10),
+        )
+        local_direction = replace(
+            _direction(),
+            direction_id="direction:local-cross-departure",
+            selected_observation_ids=(top.observation_id, bottom.observation_id),
+            full_angle_interval_degrees=FiniteInterval(-0.20, 0.10),
+            observed_angle_interval_degrees=FiniteInterval(-0.20, 0.10),
+            canonical_angle_degrees=-0.05,
+        )
+        cross = replace(
+            cross,
+            direct_bindings=(top, bottom),
+            selected_direction=local_direction,
+            independent_support_region_count=2,
+            longitudinal_support_domain_count=2,
+            role_authorized_pair_support_domain_count=2,
+        )
+        direction = replace(
+            _direction(),
+            direction_id="direction:sequence-owned-departure",
+            selected_observation_ids=(
+                top.observation_id,
+                bottom.observation_id,
+                ObservationId("sequence:0"),
+                ObservationId("sequence:1"),
+            ),
+            full_angle_interval_degrees=FiniteInterval(0.40, 0.50),
+            observed_angle_interval_degrees=FiniteInterval(-0.20, 0.50),
+            canonical_angle_degrees=0.45,
+        )
+        placement = _compose(
+            template,
+            sequence,
+            cross,
+            direction=direction,
+        )
+        output = output_footprint_from_template_placement(
+            placement,
+            project_selected_placement(placement),
+            lane=_lane(),
+            lane_ordinal=1,
+            layout="horizontal",
+            transform=AffineCoordinateTransform.identity(500, 400),
+        )
+
+        protections = {
+            item.role: item for item in output.boundary_protections
+        }
+        self.assertGreater(
+            max(
+                protections[BoundaryRole.TOP].local_boundary_residual_px,
+                protections[BoundaryRole.BOTTOM].local_boundary_residual_px,
+            ),
+            0.0,
+        )
+        assessment = template_direct_use_budget_assessment(placement, output)
+        budget = {item.role: item for item in assessment.edge_assessments}
+        self.assertGreaterEqual(
+            max(
+                budget[BoundaryRole.TOP].expansion_px,
+                budget[BoundaryRole.BOTTOM].expansion_px,
+            ),
+            max(
+                protections[BoundaryRole.TOP].local_boundary_residual_px,
+                protections[BoundaryRole.BOTTOM].local_boundary_residual_px,
+            ),
+        )
+
     def test_selected_frame_residual_is_retained_before_bleed(self) -> None:
         template = _template(1)
         sequence = _sequence(template)

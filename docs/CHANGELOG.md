@@ -35,6 +35,10 @@ materialization、平行 detector 和 report reuse 均不再支持。
   闭合的轻微弯曲 sequence edge 可在有界异常点剔除后保留局部位置，但不提供全片方向，也不在
   straight anchor 已闭合全秩解时重标定 phase、W 或 pitch；残差进入 selected-placement safety，
   不建立曲线或逐帧方向。
+- Local direct aperture 的两侧 fit 无共同方向、pair-level 支持少于 3 个区域且均非 source-spanning
+  时，至少两个独立 sequence physical positions 可以独占 source-wide deskew。Global full interval
+  只来自 sequence；local cross departure 保留在 observed provenance 和输出预算。Source-spanning、
+  3-region 与 enclosing-support authority 不受影响。
 
 ### Cross 与输出保护
 

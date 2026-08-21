@@ -97,6 +97,13 @@ sequence/cross provenance，`CanonicalPlacement` 使用 `FormatPlacement`。不�
 direction，也不能在已有足够 straight anchor 闭合全秩解时重标定 phase、W 或 pitch。超过预算就
 review，不建立逐帧角度、自由四边形或曲线 detector。
 
+当 selected cross 只是两条局部、非 source-spanning 的直接 `APERTURE_PAIR`，pair-level 支持少于
+3 个独立区域、没有 selected enclosing support，且两侧 local fit 本身没有共同方向时，它只拥有
+top/bottom offset，不拥有 source-wide deskew。至少两个独立 sequence 物理位置可以闭合全局方向；
+此时 `SharedStripDirection.full` 只取 sequence 可行区间，cross 与 sequence observation ID 一起进入
+provenance，local cross departure 只保存在 observed interval 和 selected-placement residual。局部
+cross full interval 与全局方向不相交本身不是矛盾，也不得把二者的 hull 当成整条 source 的旋转范围。
+
 ## 5. 从整体到局部的模板编译
 
 V5 吸收 v4.2.8 的有效行为，不复制其代码、分数、Grid fallback 或 content equal-split：
@@ -228,6 +235,11 @@ Photo aperture 的候选必须有正确 top/bottom 角色、外侧背景、有�
 一条短局部线不能外推整条片带。两个不同合法 side tracks 是两个 placements；不按梯度、support
 数量或 residual 标量硬选。已有 direct top+bottom 闭环时，不再执行“缺失 opposite”的局部精修；
 同一批 raw transitions 的重复拟合不能成为第二个 placement。
+
+上述 direct top+bottom 若仅为 local two-region aperture、两侧 fit 无共同方向，而至少两个独立
+sequence positions 已闭合 source-wide direction，则 sequence direction 负责全局 deskew，cross
+仍只负责固定 H 与短轴位置。Source-spanning binding、pair-level 3-region authority、selected
+`ENCLOSING_SUPPORT_PAIR` 或不足两个 sequence physical positions 均不适用该权限。
 
 Broader same-role track 只有与 local competitor 共享同一个 opposite binding、双方 role-authorized，
 且全部 supporting traces 都属于显式 registered trace lattice 时，才可能产生集合支配。存在两种

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+from dataclasses import replace
 import math
 from pathlib import Path
 import unittest
@@ -162,6 +163,82 @@ class TemplatePlacementContractTest(unittest.TestCase):
             placement.frames[0].top.direction_reference_id,
             shared.direction_id,
         )
+
+    def test_sequence_owned_direction_can_cover_disjoint_local_cross(self) -> None:
+        template = _template(1)
+        sequence = _sequence(template)
+        cross = _cross(template, direction=_direction())
+        top, bottom = cross.direct_bindings
+        top = replace(
+            top,
+            canonical_direction_degrees=-0.15,
+            fit_direction_interval_degrees=FiniteInterval(-0.18, -0.12),
+            full_direction_interval_degrees=FiniteInterval(-0.20, -0.10),
+            observed_direction_interval_degrees=FiniteInterval(-0.20, -0.10),
+        )
+        bottom = replace(
+            bottom,
+            canonical_direction_degrees=0.05,
+            fit_direction_interval_degrees=FiniteInterval(0.02, 0.08),
+            full_direction_interval_degrees=FiniteInterval(0.00, 0.10),
+            observed_direction_interval_degrees=FiniteInterval(0.00, 0.10),
+        )
+        local_direction = SharedStripDirection(
+            direction_id="direction:local-cross",
+            selected_observation_ids=(top.observation_id, bottom.observation_id),
+            full_angle_interval_degrees=FiniteInterval(-0.20, 0.10),
+            observed_angle_interval_degrees=FiniteInterval(-0.20, 0.10),
+            canonical_angle_degrees=-0.05,
+        )
+        cross = replace(
+            cross,
+            direct_bindings=(top, bottom),
+            selected_direction=local_direction,
+            independent_support_region_count=2,
+            longitudinal_support_domain_count=2,
+            role_authorized_pair_support_domain_count=2,
+        )
+        sequence_direction = SharedStripDirection(
+            direction_id="direction:sequence-owned",
+            selected_observation_ids=(
+                top.observation_id,
+                bottom.observation_id,
+                ObservationId("sequence:0"),
+                ObservationId("sequence:1"),
+            ),
+            full_angle_interval_degrees=FiniteInterval(0.40, 0.50),
+            observed_angle_interval_degrees=FiniteInterval(-0.20, 0.50),
+            canonical_angle_degrees=0.45,
+        )
+
+        placement = _compose(
+            template,
+            sequence,
+            cross,
+            direction=sequence_direction,
+        )
+
+        self.assertEqual(placement.direction, sequence_direction)
+
+        forged = replace(
+            sequence_direction,
+            direction_id="direction:forged-provenance",
+            selected_observation_ids=(
+                top.observation_id,
+                bottom.observation_id,
+                ObservationId("sequence:0"),
+            ),
+        )
+        with self.assertRaisesRegex(ValueError, "cross-selected direction"):
+            _compose(template, sequence, cross, direction=forged)
+
+        clipped_observed = replace(
+            sequence_direction,
+            direction_id="direction:forged-observed",
+            observed_angle_interval_degrees=FiniteInterval(0.40, 0.50),
+        )
+        with self.assertRaisesRegex(ValueError, "cross-selected direction"):
+            _compose(template, sequence, cross, direction=clipped_observed)
 
     def test_no_direction_and_contradiction_are_rejected(self) -> None:
         template = _template(1)
