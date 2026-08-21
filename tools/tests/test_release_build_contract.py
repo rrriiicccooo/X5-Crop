@@ -5,11 +5,13 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 from zipfile import ZipFile
 
 from tools.release.build import build_release
 from tools.release.manifest import RELEASE_PATHS
 from tools.release.standalone import (
+    build_standalone_bytes,
     build_standalone_text,
     package_names,
     read_sources,
@@ -18,6 +20,34 @@ from x5crop.app_info import VERSION
 
 
 class ReleaseBuildContractTest(unittest.TestCase):
+    def test_generated_standalone_bytes_ignore_host_newline_translation(
+        self,
+    ) -> None:
+        def windows_write_text(
+            path: Path,
+            data: str,
+            encoding: str | None = None,
+            errors: str | None = None,
+            newline: str | None = None,
+        ) -> int:
+            del errors, newline
+            payload = data.replace("\n", "\r\n").encode(encoding or "utf-8")
+            return path.write_bytes(payload)
+
+        with tempfile.TemporaryDirectory() as directory:
+            archive_path = Path(directory) / "release.zip"
+            with patch.object(Path, "write_text", windows_write_text):
+                archive = build_release("v5-contract", archive_path)
+            with ZipFile(archive) as package:
+                standalone = package.read("X5_Crop.py")
+
+        expected = build_standalone_bytes(
+            read_sources(),
+            package_names(),
+        )
+        self.assertEqual(standalone, expected)
+        self.assertNotIn(b"\r\n", standalone)
+
     def test_archive_is_unique_current_and_standalone_starts(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

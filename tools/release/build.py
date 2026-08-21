@@ -12,7 +12,7 @@ from zipfile import ZIP_DEFLATED, ZipFile
 
 from tools.release.manifest import RELEASE_FILES
 from tools.release.standalone import (
-    build_standalone_text,
+    build_standalone_bytes,
     package_names,
     read_sources,
 )
@@ -35,9 +35,8 @@ def _write_staging_file(staging: Path, archive_path: str, source_path: str | Non
     destination = staging / archive_path
     destination.parent.mkdir(parents=True, exist_ok=True)
     if source_path is None:
-        destination.write_text(
-            build_standalone_text(read_sources(), package_names()),
-            encoding="utf-8",
+        destination.write_bytes(
+            build_standalone_bytes(read_sources(), package_names()),
         )
     else:
         source = ROOT / source_path

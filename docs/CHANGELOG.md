@@ -110,7 +110,8 @@ materialization、平行 detector 和 report reuse 均不再支持。
   几何通过但正式 TIFF 被写成全黑或切掉已确认内容。
 - 工具、tests、report 和 release manifest 只引用 current 模块与 schema；`tools/verify` 是唯一验证入口。
 - Release contract 会实际构建临时 ZIP，校验路径唯一、排除 modular source/tests/tools、standalone
-  与当前模块源码一致，并启动生成的 `X5_Crop.py --version`。
+  与当前模块源码一致，并启动生成的 `X5_Crop.py --version`。Standalone text 只由一个 UTF-8 bytes
+  owner 写入，固定使用 LF，不再受 Windows text-mode newline translation 影响。
 - v4/V5 黄金对照只接受正式九张 user-confirmed gold cohort；自定义 geometry 不得被标成黄金
   authority。Platform 聚合统一要求 Apple Silicon、Intel macOS 与 Windows x64 三份同 commit
   receipt，exFAT 无独立卷时保持显式 best-effort 未验证。

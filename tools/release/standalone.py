@@ -104,6 +104,15 @@ if __name__ == "__main__":
 '''
 
 
+def build_standalone_bytes(
+    sources: dict[str, str],
+    packages: set[str],
+) -> bytes:
+    """Encode the standalone artifact without host newline translation."""
+
+    return build_standalone_text(sources, packages).encode("utf-8")
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Build a standalone X5_Crop.py from the modular source tree."
@@ -121,7 +130,7 @@ def main() -> int:
     args = parse_args()
     output = args.output.resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(build_standalone_text(read_sources(), package_names()), encoding="utf-8")
+    output.write_bytes(build_standalone_bytes(read_sources(), package_names()))
     output.chmod(0o755)
     print(output)
     return 0
