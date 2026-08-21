@@ -30,7 +30,22 @@ CURRENT_REPORT_SECTIONS = (
 )
 
 _AUTHORITY_SIDES = ("left", "top", "right", "bottom")
-_CLIPPED_REQUIREMENTS = ("visible_placement",)
+_DIRECT_USE_BUDGET_FIELDS = {
+    "geometry_id",
+    "boundary_use",
+    "edge_assessments",
+    "enclosing_support_height_ratio",
+    "enclosing_support_within_limit",
+    "state",
+}
+_DIRECT_USE_EDGE_FIELDS = {
+    "role",
+    "expansion_px",
+    "expansion_mm",
+    "limit_mm",
+    "limit_applies",
+    "within_limit",
+}
 _DESKEW_SKIP_REASONS = tuple(item.value for item in DeskewSkipReason)
 
 
@@ -98,31 +113,24 @@ def validate_output_footprint_authority(output: dict[str, Any]) -> None:
         output.get("sampling_authority_box"),
         "sampling authority box",
     )
-    expected: dict[str, set[str]] = {}
-    for side in _outside_authority_sides(required, authority):
-        expected.setdefault(side, set()).add("visible_placement")
+    expected = set(_outside_authority_sides(required, authority))
     facts = output.get("saturation_facts")
     if not isinstance(facts, list):
         raise ValueError("footprint saturation facts are invalid")
-    recorded: dict[str, set[str]] = {}
+    recorded: set[str] = set()
     for fact in facts:
         if (
             not isinstance(fact, dict)
-            or set(fact) != {"authority_side", "clipped_requirements"}
+            or set(fact) != {"authority_side"}
         ):
             raise ValueError("footprint saturation fact is invalid")
         side = fact["authority_side"]
-        requirements = fact["clipped_requirements"]
         if (
             side not in _AUTHORITY_SIDES
             or side in recorded
-            or not isinstance(requirements, list)
-            or not requirements
-            or len(set(requirements)) != len(requirements)
-            or any(value not in _CLIPPED_REQUIREMENTS for value in requirements)
         ):
             raise ValueError("footprint authority side is invalid")
-        recorded[side] = set(requirements)
+        recorded.add(side)
     if recorded != expected:
         raise ValueError("footprint saturation facts disagree with authority")
 
@@ -432,6 +440,27 @@ def _validate_geometry(record: dict[str, Any]) -> None:
             item["geometry_id"] for item in budgets
         }:
             raise ValueError("budget does not cover selected output")
+        for budget in budgets:
+            if (
+                not isinstance(budget, dict)
+                or set(budget) != _DIRECT_USE_BUDGET_FIELDS
+            ):
+                raise ValueError("direct-use budget summary is invalid")
+            edges = budget.get("edge_assessments")
+            if (
+                budget.get("boundary_use")
+                not in {"aperture_pair", "enclosing_support_pair"}
+                or budget.get("state") not in {"supported", "contradicted"}
+                or not isinstance(edges, list)
+                or any(
+                    not isinstance(edge, dict)
+                    or set(edge) != _DIRECT_USE_EDGE_FIELDS
+                    for edge in edges
+                )
+                or tuple(edge["role"] for edge in edges)
+                != ("start", "end", "top", "bottom")
+            ):
+                raise ValueError("direct-use budget summary is invalid")
         for output in outputs:
             validate_output_footprint_authority(output)
         selected = lane["selected_placement_id"]

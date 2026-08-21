@@ -12,7 +12,6 @@ class FixedFormatRuntimeContractTest(unittest.TestCase):
             limit_mm=1.8,
             limit_applies=True,
             within_limit=True,
-            worst_placement_solution_id="placement:exact",
         )
         self.assertTrue(exact.within_limit)
         over = DirectUseBudgetEdgeAssessment(
@@ -22,7 +21,6 @@ class FixedFormatRuntimeContractTest(unittest.TestCase):
             limit_mm=1.8,
             limit_applies=True,
             within_limit=False,
-            worst_placement_solution_id="placement:over",
         )
         self.assertFalse(over.within_limit)
 

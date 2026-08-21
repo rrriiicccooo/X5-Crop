@@ -35,8 +35,6 @@ from x5crop.detection.photo_geometry.template_runtime_model import (
     TemplateSourceSelection,
 )
 from x5crop.domain import Box, EvidenceState
-from x5crop.detection.photo_geometry.model import ClippedRequirement
-
 def _unresolved_result() -> PhotoGeometryDetectionResult:
     prepared = _prepared()
     competition = TemplatePlacementCompetition(
@@ -216,7 +214,6 @@ def _output_footprint():
     polygon = ((0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0))
     saturation = FootprintSaturationFact(
         authority_side=AuthoritySide.LEFT,
-        clipped_requirements=(ClippedRequirement.VISIBLE_PLACEMENT,),
     )
     envelope = JointPlacementEnvelope(
         placement_id="placement:0",

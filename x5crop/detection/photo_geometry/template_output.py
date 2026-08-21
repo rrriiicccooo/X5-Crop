@@ -14,7 +14,6 @@ from .template_feasible_geometry import FeasiblePlacementProjection
 from .model import (
     AuthoritySide,
     BoundaryRole,
-    ClippedRequirement,
     PositionSource,
 )
 from .output_model import (
@@ -340,14 +339,11 @@ def _outside_authority_sides(
 def _saturation_facts(
     required: ConvexPolygon,
     authority: Box,
-    *,
-    requirement: ClippedRequirement = ClippedRequirement.VISIBLE_PLACEMENT,
 ) -> tuple[FootprintSaturationFact, ...]:
     outside = set(_outside_authority_sides(required, authority))
     return tuple(
         FootprintSaturationFact(
             authority_side=side,
-            clipped_requirements=(requirement,),
         )
         for side in AuthoritySide
         if side in outside
@@ -503,7 +499,6 @@ def template_direct_use_budget_assessment(
                 )
                 <= limit_mm[role]
             ),
-            worst_placement_solution_id=placement.placement_id,
         )
         for role in _ROLES
     )
@@ -530,13 +525,11 @@ def template_direct_use_budget_assessment(
     )
     return DirectUseBudgetAssessment(
         geometry_id=output.geometry_id,
-        placement_solution_ids=(placement.placement_id,),
         boundary_use=output.envelope.boundary_use,
         edge_assessments=edge_assessments,
         enclosing_support_height_ratio=support_ratio,
         enclosing_support_within_limit=support_within_limit,
         state=(EvidenceState.SUPPORTED if supported else EvidenceState.CONTRADICTED),
-        named_gap=None,
     )
 
 

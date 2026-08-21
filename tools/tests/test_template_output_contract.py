@@ -298,16 +298,7 @@ class TemplateOutputContractTest(unittest.TestCase):
                 BoundaryRole.BOTTOM,
             ),
         )
-        self.assertEqual(
-            assessment.placement_solution_ids,
-            (placement.placement_id,),
-        )
-        self.assertTrue(
-            all(
-                item.worst_placement_solution_id == placement.placement_id
-                for item in assessment.edge_assessments
-            )
-        )
+        self.assertEqual(assessment.geometry_id, output.geometry_id)
 
     def test_lane_overflow_is_explicit_and_never_clipped(self) -> None:
         placement = _placement()

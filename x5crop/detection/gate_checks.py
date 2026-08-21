@@ -28,7 +28,6 @@ class GateGap(str, Enum):
     SHARED_AUTHORITY_UNAVAILABLE = "shared_authority_unavailable"
     CONTENT_VETO_REJECTED = "content_veto_rejected"
     LOCAL_ADVANCE_UNRESOLVED = "local_advance_unresolved"
-    SLOT_ORDINAL_ASSIGNMENT_UNRESOLVED = "slot_ordinal_assignment_unresolved"
     DUAL_LANE_NOT_FILLED = "dual_lane_not_filled"
     DUAL_LANE_FILL_UNRESOLVED = "dual_lane_fill_unresolved"
     SOURCE_LANE_AUTHORITY_INVALID = "source_lane_authority_invalid"
@@ -48,7 +47,6 @@ class MinimumMissingFact(str, Enum):
     COUNT_AUTHORITY = "count_authority"
     COMPLETE_SCAN_CANVAS = "complete_scan_canvas"
     ABSOLUTE_PHASE_ANCHOR = "absolute_phase_anchor"
-    PHASE_SUPPORT = "phase_support"
     PITCH_CLOSURE = "pitch_closure"
     CROSS_POSITION = "cross_position"
     REGISTERED_QUERY_COVERAGE = "registered_query_coverage"
@@ -192,11 +190,6 @@ def failure_fact(
             MinimumMissingFact.UNIQUE_PLACEMENT,
             RecoveryAction.REVIEW_PLACEMENT,
         ),
-        GateGap.SLOT_ORDINAL_ASSIGNMENT_UNRESOLVED: (
-            FailureRecovery.UNRECOVERABLE,
-            MinimumMissingFact.PHASE_SUPPORT,
-            RecoveryAction.REVIEW_PLACEMENT,
-        ),
         GateGap.SOURCE_LANE_AUTHORITY_INVALID: (
             FailureRecovery.USER_ACTION,
             MinimumMissingFact.COMPLETE_SCAN_CANVAS,
@@ -244,10 +237,6 @@ GATE_CHECK_DEPENDENCIES: dict[str, tuple[str, ...]] = {
         "local_advance_authority",
     ),
     "dual_lane_fill": ("selected_placement",),
-    "sequence_authority": ("selected_placement",),
-    "cross_authority": ("selected_placement",),
-    "shared_authority": ("selected_placement",),
-    "slot_ordinal_assignment": ("complete_placement",),
     "selected_output_footprint": (
         "selected_placement",
         "dual_lane_fill",

@@ -37,7 +37,6 @@ class CurrentRuntimeContractTest(unittest.TestCase):
             "saturation_facts": [
                 {
                     "authority_side": "left",
-                    "clipped_requirements": ["visible_placement"],
                 }
             ],
         }
@@ -46,7 +45,7 @@ class CurrentRuntimeContractTest(unittest.TestCase):
         output["saturation_facts"] = []
         self.assertFalse(_source_geometry_authority_is_explicit(report))
 
-    def test_current_report_rejects_sampling_rectangle_as_gate_authority(
+    def test_current_report_rejects_retired_clipped_requirement_field(
         self,
     ) -> None:
         output = {
@@ -70,7 +69,7 @@ class CurrentRuntimeContractTest(unittest.TestCase):
             ],
         }
 
-        with self.assertRaisesRegex(ValueError, "authority side"):
+        with self.assertRaisesRegex(ValueError, "saturation fact"):
             validate_output_footprint_authority(output)
 
     def test_current_report_rejects_duplicate_footprint_authority_sides(self) -> None:
@@ -90,11 +89,9 @@ class CurrentRuntimeContractTest(unittest.TestCase):
             "saturation_facts": [
                 {
                     "authority_side": "left",
-                    "clipped_requirements": ["visible_placement"],
                 },
                 {
                     "authority_side": "left",
-                    "clipped_requirements": ["visible_placement"],
                 },
             ],
         }
@@ -214,6 +211,12 @@ class CurrentRuntimeContractTest(unittest.TestCase):
             "proposal_position_interval_px",
             "scan_canvas_format_search_proposal",
             "TemplateAlignmentPattern",
+            "ClippedRequirement",
+            "clipped_requirements",
+            "placement_solution_ids",
+            "worst_placement_solution_id",
+            "named_gap",
+            "slot_ordinal_assignment",
         )
         active_paths = tuple((ROOT / "x5crop").rglob("*.py")) + tuple(
             path
@@ -329,7 +332,7 @@ class CurrentRuntimeContractTest(unittest.TestCase):
         self.assertEqual(REPORT_SCHEMA_ID, "x5crop_detection_report_v5")
         self.assertEqual(
             REPORT_SCHEMA_REVISION,
-            "x5crop_v5_template_report_8",
+            "x5crop_v5_template_report_9",
         )
         candidate = candidate_gate_assessment(
             {

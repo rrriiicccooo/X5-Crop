@@ -338,7 +338,8 @@ aperture 单边 5%；它只接受上节的总 span `<= 1.1H`。Start/end 仍使�
 单边 5%。
 
 `OutputFootprint` 不得与 source/lane authority 相交后静默缩小。Decision 前只验证联合 source-space
-polygon 完整位于 lane authority；任一真正所需区域越界都保存 saturation fact 并进入 review。
+polygon 完整位于 lane authority；任一真正所需区域越界都按 authority side 保存一个 saturation fact
+并进入 review。
 
 Decision 后 finalization 才评估 lightweight deskew。Observation 不可用时使用 identity 且不降级；
 有效角度在 source pixel-center 长轴上的端点位移小于 3 px 时也使用 identity，并记录
@@ -352,9 +353,11 @@ polygon 的精确半开 AABB 得到，不能先把 polygon 扩成 source AABB，
 
 ## 11. Gate、report 与 Debug Analysis
 
-`CandidateGate` 只汇总 typed facts：输入 authority、measurement completeness、phase/cross、
-producer bounds、local advance、唯一 placement、content、holder fill、source-space 联合 footprint
-和 budget。它不读取 deskew observation，不选择 geometry，也不创建最终文案。
+`CandidateGate` 只汇总 typed facts：输入 authority、measurement completeness、producer bounds、
+local advance、唯一 placement、content、holder fill、source-space 联合 footprint 和 budget。Phase、
+cross、shared direction 与 ordinal 的真实失败作为 placement 的 typed root failure 传递，不在已有
+complete/selected placement 后重复建立同义 Gate fact。它不读取 deskew observation，不选择 geometry，
+也不创建最终文案。
 
 `DecisionGate` 独占 `approved_auto`、`needs_review` 和 final reasons。常见根因包括：
 
@@ -367,7 +370,9 @@ producer bounds、local advance、唯一 placement、content、holder fill、sou
 - `source_lane_authority_unavailable`
 
 普通 report 只保存输入、holder/count authority、最终选择、OutputFootprint、预算、根因、输出文件
-和必要 TIFF 事实，并始终保存 `deskew_assessment`：是否应用、观测角、实际旋转或 typed skip reason。
+和必要 TIFF 事实。Saturation 只记录越界 `authority_side`；每项预算只按 output `geometry_id` 关联，
+不保留不可达的多 placement 或 named-gap 容器。Report 始终保存 `deskew_assessment`：是否应用、观测角、
+实际旋转或 typed skip reason。
 `needs_review` 仍不暴露 official footprints、transforms 或 final boxes。每个阻止事实同时给出最小缺失事实、恢复类别和建议操作。完整 observations、
 alignment residual、winner/runner、direct/inferred ledger、content veto 和工作量只属于显式 Debug
 Analysis 或 verifier。

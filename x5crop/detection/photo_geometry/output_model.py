@@ -12,7 +12,6 @@ from .line_observations import SourceCoordinateLine
 from .model import (
     AuthoritySide,
     BoundaryRole,
-    ClippedRequirement,
     DirectionAuthority,
     PositionSource,
 )
@@ -112,15 +111,10 @@ class FrameBoundaryGeometry:
 @dataclass(frozen=True)
 class FootprintSaturationFact:
     authority_side: AuthoritySide
-    clipped_requirements: tuple[ClippedRequirement, ...]
 
     def __post_init__(self) -> None:
-        if (
-            not self.clipped_requirements
-            or len(set(self.clipped_requirements))
-            != len(self.clipped_requirements)
-        ):
-            raise ValueError("saturation fact requires unique clipped facts")
+        if not isinstance(self.authority_side, AuthoritySide):
+            raise TypeError("saturation fact requires a typed authority side")
 
 
 def _validate_continuous_footprint(
@@ -256,9 +250,6 @@ class OutputFootprint:
         ):
             raise ValueError("saturation facts require one fact per authority side")
 
-
-
-
 @dataclass(frozen=True)
 class DirectUseBudgetEdgeAssessment:
     role: BoundaryRole
@@ -267,7 +258,6 @@ class DirectUseBudgetEdgeAssessment:
     limit_mm: float
     limit_applies: bool
     within_limit: bool
-    worst_placement_solution_id: str
 
     def __post_init__(self) -> None:
         if (
@@ -293,7 +283,6 @@ class DirectUseBudgetEdgeAssessment:
                 if self.limit_applies
                 else True
             )
-            or not self.worst_placement_solution_id
         ):
             raise ValueError("direct-use edge assessment is invalid")
 
@@ -301,46 +290,31 @@ class DirectUseBudgetEdgeAssessment:
 @dataclass(frozen=True)
 class DirectUseBudgetAssessment:
     geometry_id: str
-    placement_solution_ids: tuple[str, ...]
     boundary_use: OutputBoundaryUse
     edge_assessments: tuple[DirectUseBudgetEdgeAssessment, ...]
     enclosing_support_height_ratio: float | None
     enclosing_support_within_limit: bool | None
     state: EvidenceState
-    named_gap: str | None
 
     def __post_init__(self) -> None:
-        available = self.state != EvidenceState.UNAVAILABLE
+        supported = all(item.within_limit for item in self.edge_assessments) and (
+            self.enclosing_support_within_limit is not False
+        )
         if (
             not self.geometry_id
             or not isinstance(self.boundary_use, OutputBoundaryUse)
-            or available != bool(self.placement_solution_ids)
-            or len(set(self.placement_solution_ids))
-            != len(self.placement_solution_ids)
-            or available != bool(self.edge_assessments)
-            or (
-                available
-                and tuple(item.role for item in self.edge_assessments)
-                != (
-                    BoundaryRole.START,
-                    BoundaryRole.END,
-                    BoundaryRole.TOP,
-                    BoundaryRole.BOTTOM,
-                )
+            or self.state not in {
+                EvidenceState.SUPPORTED,
+                EvidenceState.CONTRADICTED,
+            }
+            or tuple(item.role for item in self.edge_assessments)
+            != (
+                BoundaryRole.START,
+                BoundaryRole.END,
+                BoundaryRole.TOP,
+                BoundaryRole.BOTTOM,
             )
-            or (
-                self.state == EvidenceState.SUPPORTED
-                and not (
-                    all(item.within_limit for item in self.edge_assessments)
-                    and self.enclosing_support_within_limit is not False
-                )
-            )
-            or (
-                self.state == EvidenceState.CONTRADICTED
-                and all(item.within_limit for item in self.edge_assessments)
-                and self.enclosing_support_within_limit is not False
-            )
-            or (available == (self.named_gap is not None))
+            or (self.state == EvidenceState.SUPPORTED) != supported
         ):
             raise ValueError("direct-use budget assessment is invalid")
         support = self.boundary_use == OutputBoundaryUse.ENCLOSING_SUPPORT_PAIR

@@ -47,10 +47,6 @@ class AuthoritySide(str, Enum):
     BOTTOM = "bottom"
 
 
-class ClippedRequirement(str, Enum):
-    VISIBLE_PLACEMENT = "visible_placement"
-
-
 class QueryPurpose(str, Enum):
     COARSE_STRIP_LONG = "coarse_strip_long"
     COARSE_STRIP_SHORT = "coarse_strip_short"

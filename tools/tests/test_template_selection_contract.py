@@ -88,10 +88,6 @@ class TemplateSelectionContractTest(unittest.TestCase):
                     "local_advance_authority",
                 ),
                 "dual_lane_fill": ("selected_placement",),
-                "sequence_authority": ("selected_placement",),
-                "cross_authority": ("selected_placement",),
-                "shared_authority": ("selected_placement",),
-                "slot_ordinal_assignment": ("complete_placement",),
                 "selected_output_footprint": (
                     "selected_placement",
                     "dual_lane_fill",

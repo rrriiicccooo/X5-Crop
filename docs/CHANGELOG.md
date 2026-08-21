@@ -80,6 +80,10 @@ materialization、平行 detector 和 report reuse 均不再支持。
 
 ### 报告、工具与性能
 
+- Current report 升级为 `x5crop_v5_template_report_9`：`CandidateGate` 删除四个由 complete/selected
+  placement 重复推出的 sequence/cross/shared/ordinal facts；saturation 每个越界 side 只保留
+  `authority_side`；direct-use budget 删除未启用的多 placement、worst-placement 和 named-gap 字段。
+  真实 phase/cross/shared 失败仍由 placement selection 的 typed root failure 表达。
 - 冻结依赖同步到已验证环境：NumPy 2.5.2、tifffile 2026.8.16、imagecodecs 2026.8.16；安装器
   仍沿已确认 provider 只处理缺失或版本不符项，不建立第二套环境。
 - Debug Analysis 使用 1800 px 宽、自适应高度的三联图，展示理论模板、实际观察、逐 role

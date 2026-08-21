@@ -164,17 +164,6 @@ def build_template_gate(
             if bounds_valid
             else contradicted(GateGap.PRODUCER_BOUND_EXCEEDED)
         ),
-        "sequence_authority": (
-            supported()
-            if selected
-            else unavailable(selection_gap, selection_failure)
-        ),
-        "cross_authority": (
-            supported() if selected else unavailable(GateGap.CROSS_AUTHORITY_UNAVAILABLE)
-        ),
-        "shared_authority": (
-            supported() if selected else unavailable(GateGap.SHARED_AUTHORITY_UNAVAILABLE)
-        ),
         "local_advance_authority": (
             unavailable(
                 GateGap.LOCAL_ADVANCE_UNRESOLVED,
@@ -194,11 +183,6 @@ def build_template_gate(
             else unavailable(selection_gap, selection_failure)
         ),
         "dual_lane_fill": dual_fill_fact,
-        "slot_ordinal_assignment": (
-            supported()
-            if complete
-            else unavailable(GateGap.SLOT_ORDINAL_ASSIGNMENT_UNRESOLVED)
-        ),
         "source_lane_authority": supported(),
         "selected_output_footprint": (
             supported()

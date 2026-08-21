@@ -293,8 +293,11 @@ footprint, budget use, first blocking reason, and either `DESKEW APPLIED`,
 `ROTATION NOT NEEDED`, or typed `DESKEW SKIPPED`. Reports also record
 `deskew_applied`, observed angle, applied rotation, and skip reason. Failures
 distinguish user-correctable input, remeasurement-recoverable evidence, and
-cases the system must not guess. Debug reads the same detection facts and never
-solves geometry again.
+cases the system must not guess. In the current report, each saturated side is
+recorded only by `authority_side`, and each budget is linked only by its output
+`geometry_id`; candidate identities already fixed by the unique placement are
+not repeated. Debug reads the same detection facts and never solves geometry
+again.
 
 Default layout:
 

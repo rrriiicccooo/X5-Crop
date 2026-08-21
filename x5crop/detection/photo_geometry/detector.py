@@ -160,14 +160,10 @@ def _empty_result(
         "source_scan_geometry": unavailable(GateGap.SOURCE_SCAN_GEOMETRY_UNAVAILABLE),
         "complete_placement": unavailable(GateGap.COMPLETE_PLACEMENT_UNAVAILABLE),
         "producer_coverage": unavailable(GateGap.PRODUCER_BOUND_EXCEEDED),
-        "sequence_authority": unavailable(GateGap.PHASE_ANCHOR_UNAVAILABLE),
-        "cross_authority": unavailable(GateGap.CROSS_AUTHORITY_UNAVAILABLE),
-        "shared_authority": unavailable(GateGap.SHARED_AUTHORITY_UNAVAILABLE),
         "local_advance_authority": unavailable(GateGap.LOCAL_ADVANCE_UNRESOLVED),
         "content_protection": supported(),
         "selected_placement": unavailable(GateGap.PLACEMENT_UNRESOLVED),
         "dual_lane_fill": unavailable(GateGap.DUAL_LANE_FILL_UNRESOLVED),
-        "slot_ordinal_assignment": unavailable(GateGap.SLOT_ORDINAL_ASSIGNMENT_UNRESOLVED),
         "source_lane_authority": (
             supported()
             if lanes_available
