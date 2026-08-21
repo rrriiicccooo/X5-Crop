@@ -60,6 +60,17 @@ GitHub 是 tracked 源码与文档的权威来源。NAS 和复制目录只用于
   减少图像数量或尺寸后再试，并记录发生时间；同时将代理、睡眠、网络切换等问题与 X5-Crop
   运行逻辑分开排查。
 
+## 用户可见交付物
+
+- 面向用户的 UI、PDF、PPT、报告、截图与导出文件必须直接服务产品或业务目标，并呈现为可直接
+  使用的产品内容。
+- 用户可见文案采用直接、肯定的产品语言，说明用户动作、系统状态与结果。“我将”“我们可以”
+  “本页面用于展示”“这里会”“用于说明”“实现了”等 Agent 过程叙述，只在它们构成真实的
+  产品帮助文本或空状态时出现。
+- Agent 的思考过程、实现理由、设计推理、调试过程、验证方式、限制、取舍与下一步计划写入
+  聊天回复、代码注释、PR/MR 描述、现有职责对应的内部文档，或用户明确要求的计划文件。
+- 用户明确要求在交付物中展示设计说明、方法论、实现过程或工作记录时，按该交付目标组织内容。
+
 ## 文档职责
 
 | 文件 | 唯一职责 | 语言 |
@@ -119,8 +130,9 @@ GitHub 是 tracked 源码与文档的权威来源。NAS 和复制目录只用于
 
 - 每个概念只有一个 canonical name、type、owner 和真相来源。权限只沿 input、evidence、
   assessment、selection、decision、finalization、output、report、debug 单向流动。
-- 被替代的 API、schema、flag、alias、wrapper、test 和 import 同批删除；不保留 fallback、shim、
-  feature flag、dead code 或平行 runtime。
+- 问题修复必须消除根因，以唯一 canonical 逻辑直接定义正确行为；被替代的 API、schema、flag、
+  alias、wrapper、test、import、错误路径、临时补丁、绕行分支、fallback、shim、feature flag、
+  dead code 与平行 runtime 同批删除，production 只保留当前路径。
 - Producer 必须 fixed-template-first 且工作量有界；不恢复完整链 materialization/cache、通用 DP、
   top-K、候选笛卡尔积、逐帧尺寸、selected-placement 临时 query 或无界全图 evidence。
 - 新增自由度必须说明它减少的物理未知量、唯一 owner、启用与禁止条件、工作上界、反例、Debug、
