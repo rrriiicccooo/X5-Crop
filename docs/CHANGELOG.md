@@ -41,6 +41,10 @@ materialization、平行 detector 和 report reuse 均不再支持。
 - Top/bottom 支持两种互斥用途：固定 H 的 `APERTURE_PAIR`，以及直接连续、完整包住 H 且总高度
   不超过 1.1H 的 `ENCLOSING_SUPPORT_PAIR`。后者可来自片夹或胶片材料支撑，但两侧不得与 aperture
   混用。
+- Cross 单侧 aperture 现在允许一个 role-authorized direct binding 在 selected frame domains
+  （数量至少为 3）中逐一拥有 direct trace，即使它的 aggregate independent support 只有两个
+  区域；该权限不降低普通局部 two-region threshold，不拼接不连通 fragments，也不改变方向、
+  role、fixed-H 或 output budget 约束。
 - 短轴 coarse query 的 aggregate interval 仍只定位局部测量；同一批已注册 trace 若直接形成
   source-wide 双侧 track，可以独立提供共同方向和 enclosing support。Aggregate interval 不能因此
   获得照片边界权限。

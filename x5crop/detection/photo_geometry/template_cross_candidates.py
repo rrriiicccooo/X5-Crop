@@ -133,19 +133,33 @@ def _single_candidate(
     canonical_height_px: float,
     center: FiniteInterval | None,
     source_direction: SharedStripDirection | None = None,
+    template_domain_complete: bool = False,
 ) -> _Candidate | None:
     # A single edge needs independent spatial support and direct direction.
     # Without holder-centre authority it must additionally span the complete
-    # registered domain before its coordinate can own placement.
+    # registered domain before its coordinate can own placement.  A direct,
+    # role-authorized binding with a direct trace in every selected frame
+    # domain (and at least three selected domains) is a separate bounded
+    # authority: it may own fixed-H placement even when its aggregate support
+    # ledger reports only two independent regions. The caller must establish
+    # this per-domain direct-trace fact from the registered lattice; this flag
+    # never lowers the general support requirement for local edges.
     if (
         not binding.role_authorized
-        or binding.independent_support_region_count
-        < SPATIAL_SUPPORT_REGION_COUNT
+        or (
+            binding.independent_support_region_count
+            < SPATIAL_SUPPORT_REGION_COUNT
+            and not template_domain_complete
+        )
         or (
             source_direction is None
             and not _single_direction_ready(binding)
         )
-        or (center is None and not binding.source_spanning_continuous)
+        or (
+            center is None
+            and not binding.source_spanning_continuous
+            and not template_domain_complete
+        )
     ):
         return None
     if center is not None:

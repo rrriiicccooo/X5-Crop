@@ -105,12 +105,21 @@ agree. Valid evidence can be:
 
 - direct top and bottom;
 - one source-wide direct side with the opposite side inferred by fixed H;
+- one role-authorized direct side with a direct trace in each selected frame
+  domain (with at least three selected domains); it may own fixed-H single-side
+  placement even when its independent-support ledger reports only two regions;
 - multiple well-separated fragments on one side that demonstrably belong to
   the same line.
 
 A short internal picture line, fragments joined merely because coordinates are
 close, or two different legal outer positions cannot determine the crop. Two
-discrete answers are never averaged or resolved only by stronger gradient.
+discrete answers are never averaged or resolved only by stronger gradient. The
+single-side exception still requires complete direction and one binding with a
+direct trace in each selected domain; fewer than three selected domains, a
+missing domain, two disconnected fragments whose union covers the domains,
+unauthorized role, or incomplete direction remains review. Holder short-axis
+center is only a compatibility fact, not a required authority; fixed H still
+infers the opposite side and local departure remains in the output budget.
 
 ### Enclosing Support
 

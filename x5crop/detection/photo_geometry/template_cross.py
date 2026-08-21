@@ -427,6 +427,14 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
                 canonical_height_px=float(inputs.canonical_fixed_height_px),
                 center=inputs.holder_short_axis_center_px,
                 source_direction=inputs.source_direction,
+                template_domain_complete=(
+                    len(inputs.longitudinal_support_domains_px)
+                    >= SPATIAL_SUPPORT_REGION_COUNT
+                    and _covers_template_domains(
+                        item,
+                        inputs.longitudinal_support_domains_px,
+                    )
+                ),
             )
             is not None
         )
@@ -513,12 +521,17 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
     elif role_authorized_direct_pairs:
         candidates = list(role_authorized_direct_pairs)
     elif template_spanning_top or template_spanning_bottom:
-        # A role-authorized side observed inside every template frame domain
-        # owns one source-wide side track even when it does not reach the raw
-        # lane-domain endpoints.  Opposite local fragments can validate a
-        # direct closure, but cannot create competing placements.  If both
-        # roles cover the complete template, retain only their direct pairs;
-        # otherwise fixed H infers the missing side.
+        # A role-authorized side with a direct trace in every selected frame
+        # domain owns one template-wide side track even when it does not reach
+        # the raw lane-domain endpoints.  When at least three selected domains
+        # are present, this per-domain registered-lattice fact can authorize
+        # fixed-H inference even when the aggregate support ledger reports only
+        # two regions; ordinary local two-region fragments still use the
+        # generic threshold.
+        # Opposite local fragments can validate a direct closure, but cannot
+        # create competing placements.  If both roles cover the complete
+        # template, retain only their direct pairs; otherwise fixed H infers
+        # the missing side.
         owner_ids = {
             item.observation_id
             for item in (*template_spanning_top, *template_spanning_bottom)
@@ -542,6 +555,14 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
                     canonical_height_px=float(inputs.canonical_fixed_height_px),
                     center=inputs.holder_short_axis_center_px,
                     source_direction=inputs.source_direction,
+                    template_domain_complete=(
+                        len(inputs.longitudinal_support_domains_px)
+                        >= SPATIAL_SUPPORT_REGION_COUNT
+                        and _covers_template_domains(
+                            item,
+                            inputs.longitudinal_support_domains_px,
+                        )
+                    ),
                 )) is not None
             ]
     elif inputs.holder_short_axis_center_px is not None:

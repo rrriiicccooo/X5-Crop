@@ -82,10 +82,15 @@ H 闭环。可以使用：
 
 - 直接 top 与 bottom；
 - 一条 source-wide 的直接边，加固定 H 推导另一侧；
+- 一个有明确 role authority 的直接边，只要在 selected frame domains（数量至少为 3）中
+  逐一有 direct trace，即使独立支持记录为 2 个区域，也可作为固定 H 的单侧 anchor；
 - 同侧多个相距较远、能够证明属于同一直线的 fragment。
 
 短小照片内部黑线、只因坐标接近而拼接的 fragment、两个不同合法位置都不能决定 outer。存在两个
-不同答案时不会平均或按梯度强弱硬选。
+不同答案时不会平均或按梯度强弱硬选。上述单侧例外仍要求完整方向和同一个 binding 在每个
+selected domain 中分别有 direct trace；selected domain 少于 3 个、缺少一个 domain、两个不连通
+fragment 合计覆盖、role 未授权或方向不完整时，程序继续人工检查。片夹短轴中心只作兼容事实，
+不是该 authority 的必要条件；另一侧仍只由固定 H 推导，局部 departure 继续进入输出预算。
 
 ### 包住照片的外侧支撑
 

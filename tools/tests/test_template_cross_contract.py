@@ -641,6 +641,223 @@ class TemplateCrossContractTest(unittest.TestCase):
             (ObservationId("observation:template-wide-top"),),
         )
 
+    def test_domain_complete_role_anchor_resolves_with_two_regions(self) -> None:
+        domains = (
+            FiniteInterval(0.0, 20.0),
+            FiniteInterval(40.0, 60.0),
+            FiniteInterval(80.0, 100.0),
+        )
+        result = fit_template_cross(
+            TemplateCrossInput(
+                template=template(count=3),
+                fixed_height_px=240.0,
+                holder_short_axis_center_px=220.0,
+                registered_trace_coordinates_px=(10, 50, 90),
+                longitudinal_support_domains_px=domains,
+                top_bindings=(
+                    binding(
+                        BoundaryRole.TOP,
+                        "domain-complete-two-region-top",
+                        100.0,
+                        traces=(10, 50, 90),
+                        independent_regions=2,
+                        source_spanning=False,
+                    ),
+                ),
+            )
+        )
+        self.assertEqual(result.status, CrossFitStatus.RESOLVED)
+        self.assertIsNone(result.runner_up)
+        assert result.best is not None
+        self.assertFalse(result.best.direct_pair)
+        self.assertEqual(
+            result.best.direct_provenance_ids,
+            (ObservationId("observation:domain-complete-two-region-top"),),
+        )
+        self.assertAlmostEqual(result.best.top_canonical_px, 100.0)
+        self.assertAlmostEqual(result.best.bottom_canonical_px, 340.0)
+
+    def test_domain_complete_role_anchor_does_not_require_holder_center(self) -> None:
+        domains = (
+            FiniteInterval(0.0, 20.0),
+            FiniteInterval(40.0, 60.0),
+            FiniteInterval(80.0, 100.0),
+        )
+        result = fit_template_cross(
+            TemplateCrossInput(
+                template=template(count=3),
+                fixed_height_px=240.0,
+                registered_trace_coordinates_px=(10, 50, 90),
+                longitudinal_support_domains_px=domains,
+                top_bindings=(
+                    binding(
+                        BoundaryRole.TOP,
+                        "domain-complete-no-center-top",
+                        100.0,
+                        traces=(10, 50, 90),
+                        independent_regions=2,
+                        source_spanning=False,
+                    ),
+                ),
+            )
+        )
+        self.assertEqual(result.status, CrossFitStatus.RESOLVED)
+        assert result.best is not None
+        self.assertFalse(result.best.direct_pair)
+        self.assertAlmostEqual(result.best.top_canonical_px, 100.0)
+        self.assertAlmostEqual(result.best.bottom_canonical_px, 340.0)
+
+    def test_domain_complete_anchor_requires_at_least_three_domains(self) -> None:
+        domains = (
+            FiniteInterval(0.0, 20.0),
+            FiniteInterval(40.0, 60.0),
+        )
+        result = fit_template_cross(
+            TemplateCrossInput(
+                template=template(count=2),
+                fixed_height_px=240.0,
+                holder_short_axis_center_px=220.0,
+                registered_trace_coordinates_px=(10, 50),
+                longitudinal_support_domains_px=domains,
+                top_bindings=(
+                    binding(
+                        BoundaryRole.TOP,
+                        "domain-complete-two-domain-top",
+                        100.0,
+                        traces=(10, 50),
+                        independent_regions=2,
+                        source_spanning=False,
+                    ),
+                ),
+            )
+        )
+        self.assertEqual(result.status, CrossFitStatus.UNRESOLVED)
+        self.assertIsNone(result.best)
+
+    def test_domain_complete_anchor_requires_every_frame_domain(self) -> None:
+        domains = (
+            FiniteInterval(0.0, 20.0),
+            FiniteInterval(40.0, 60.0),
+            FiniteInterval(80.0, 100.0),
+        )
+        result = fit_template_cross(
+            TemplateCrossInput(
+                template=template(count=3),
+                fixed_height_px=240.0,
+                holder_short_axis_center_px=220.0,
+                registered_trace_coordinates_px=(10, 50, 90),
+                longitudinal_support_domains_px=domains,
+                top_bindings=(
+                    binding(
+                        BoundaryRole.TOP,
+                        "domain-incomplete-top",
+                        100.0,
+                        traces=(10, 50),
+                        independent_regions=2,
+                        source_spanning=False,
+                    ),
+                ),
+            )
+        )
+        self.assertEqual(result.status, CrossFitStatus.UNRESOLVED)
+        self.assertIsNone(result.best)
+
+    def test_domain_complete_anchor_requires_complete_direction(self) -> None:
+        domains = (
+            FiniteInterval(0.0, 20.0),
+            FiniteInterval(40.0, 60.0),
+            FiniteInterval(80.0, 100.0),
+        )
+        result = fit_template_cross(
+            TemplateCrossInput(
+                template=template(count=3),
+                fixed_height_px=240.0,
+                holder_short_axis_center_px=220.0,
+                registered_trace_coordinates_px=(10, 50, 90),
+                longitudinal_support_domains_px=domains,
+                top_bindings=(
+                    binding(
+                        BoundaryRole.TOP,
+                        "domain-no-direction-top",
+                        100.0,
+                        traces=(10, 50, 90),
+                        independent_regions=2,
+                        source_spanning=False,
+                        angle=None,
+                        angle_interval=None,
+                        full_angle_interval=None,
+                    ),
+                ),
+            )
+        )
+        self.assertEqual(result.status, CrossFitStatus.UNRESOLVED)
+        self.assertIsNone(result.best)
+
+    def test_domain_complete_anchor_requires_role_authority(self) -> None:
+        domains = (
+            FiniteInterval(0.0, 20.0),
+            FiniteInterval(40.0, 60.0),
+            FiniteInterval(80.0, 100.0),
+        )
+        result = fit_template_cross(
+            TemplateCrossInput(
+                template=template(count=3),
+                fixed_height_px=240.0,
+                holder_short_axis_center_px=220.0,
+                registered_trace_coordinates_px=(10, 50, 90),
+                longitudinal_support_domains_px=domains,
+                top_bindings=(
+                    binding(
+                        BoundaryRole.TOP,
+                        "domain-unauthorized-top",
+                        100.0,
+                        traces=(10, 50, 90),
+                        independent_regions=2,
+                        source_spanning=False,
+                        role_authorized=False,
+                    ),
+                ),
+            )
+        )
+        self.assertEqual(result.status, CrossFitStatus.UNRESOLVED)
+        self.assertIsNone(result.best)
+
+    def test_disconnected_fragments_cannot_combine_domain_coverage(self) -> None:
+        domains = (
+            FiniteInterval(0.0, 20.0),
+            FiniteInterval(40.0, 60.0),
+            FiniteInterval(80.0, 100.0),
+        )
+        result = fit_template_cross(
+            TemplateCrossInput(
+                template=template(count=3),
+                fixed_height_px=240.0,
+                holder_short_axis_center_px=220.0,
+                registered_trace_coordinates_px=(10, 50, 90),
+                longitudinal_support_domains_px=domains,
+                top_bindings=(
+                    binding(
+                        BoundaryRole.TOP,
+                        "domain-fragment-front",
+                        100.0,
+                        traces=(10, 50),
+                        independent_regions=2,
+                        source_spanning=False,
+                    ),
+                    binding(
+                        BoundaryRole.TOP,
+                        "domain-fragment-back",
+                        100.0,
+                        traces=(50, 90),
+                        independent_regions=2,
+                        source_spanning=False,
+                    ),
+                ),
+            )
+        )
+        self.assertEqual(result.status, CrossFitStatus.UNRESOLVED)
+        self.assertIsNone(result.best)
+
     def test_template_wide_anchor_refines_the_nearest_opposite_line(self) -> None:
         domains = (
             FiniteInterval(0.0, 20.0),

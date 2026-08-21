@@ -219,11 +219,22 @@ Photo aperture 的候选必须有正确 top/bottom 角色、外侧背景、有�
 
 - 直接 top + bottom；
 - source-wide 单侧 direct anchor + 固定 H 推导 opposite；
+- 一个 role-authorized direct binding 在 selected frame domains（数量至少为 3）中逐一有
+  direct trace 时，即使 aggregate independent support 只有 2 个区域，也可以作为固定 H 的
+  单侧 anchor；这只适用于同一个 binding 的 template-wide domain coverage，不降低普通局部
+  two-region edge 的要求；
 - 同侧多个相距较远且物理相连的 fragments。
 
 一条短局部线不能外推整条片带。两个不同合法 side tracks 是两个 placements；不按梯度、support
 数量或 residual 标量硬选。已有 direct top+bottom 闭环时，不再执行“缺失 opposite”的局部精修；
 同一批 raw transitions 的重复拟合不能成为第二个 placement。
+
+上述 domain-complete anchor 仍必须有完整方向、明确 role authority，并由同一个 direct binding
+在每个 selected frame domain 中分别命中 direct trace；selected domain 少于 3 个、缺少一个
+domain、把两个不连通 fragments 合计覆盖、role 未授权或方向不完整时，不能拼接或推导 placement，
+继续 review。Holder short-axis center
+只作兼容事实，不是这一 authority 的必要条件；opposite 仍只由 fixed H 推导，局部 departure
+继续进入 selected placement 的 output budget。
 
 ### 8.2 `ENCLOSING_SUPPORT_PAIR`
 
