@@ -121,6 +121,20 @@ unauthorized role, or incomplete direction remains review. Holder short-axis
 center is only a compatibility fact, not a required authority; fixed H still
 infers the opposite side and local departure remains in the output budget.
 
+A broader same-role track and a local competitor must share the same opposite
+binding, both be role-authorized, and have every supporting trace on the
+explicit registered lattice. If the local trace set is a strict proper subset
+of the broader set and the broader track covers strictly more registered frame
+domains, exact registered-sample containment removes the local track directly;
+this proof needs no additional direction-overlap, allowed-gap-connectivity, or
+three-region requirement. For staggered sampling, both tracks must instead be
+connected allowed-gap runs whose observed and full direction intervals overlap.
+The broader track must have three independent regions, cover at least three and
+strictly more registered frame domains, and strictly contain the local extent;
+the local track still needs two independent regions. An incomplete proof
+remains review. This is physical set containment, not a support or residual
+score.
+
 ### Enclosing Support
 
 When aperture evidence is unavailable, a directly observed, continuous pair of

@@ -14,6 +14,7 @@ from .interval_math import (
 from .model import (
     BoundaryRole,
     MINIMUM_INDEPENDENT_SUPPORT_REGIONS,
+    PHOTO_BOUNDARY_MEASUREMENT_SPEC,
     SPATIAL_SUPPORT_REGION_COUNT,
 )
 from .output_model import OutputBoundaryUse
@@ -37,6 +38,7 @@ from .template_cross_support import (
     SupportFitStatus,
     fit_enclosing_support,
 )
+from .trace_support import trace_support_is_one_connected_run
 
 
 def _receipt(
@@ -63,19 +65,58 @@ def _receipt(
 
 def _remove_contained_local_side_tracks(
     candidates,
+    registered_traces: tuple[int, ...],
     longitudinal_domains: tuple[FiniteInterval, ...],
 ):
     """Remove a local side fragment contained by a broader direct track.
 
     This is set dominance, not a score: the two candidates must share the
-    opposite direct boundary, the broader same-role observation must contain
-    every trace of the fragment, and it must reach a strictly larger set of
-    already fixed template-frame domains.  Disjoint tracks and equal-domain
-    alternatives remain competing placements.
+    opposite direct boundary and all supporting traces must belong to the
+    explicit registered lattice. Exact registered-sample strict containment
+    proves dominance directly when the broader side covers strictly more frame
+    domains. Staggered samples instead require connected allowed-gap runs,
+    compatible measured directions, three-region/three-domain broader support,
+    two-region local support, and strict longitudinal extent containment.
+    Disjoint tracks, equal-domain alternatives, and under-supported staggered
+    evidence remain competing placements.
     """
 
-    if not longitudinal_domains:
+    if not registered_traces or not longitudinal_domains:
         return list(candidates)
+    registered_ordinal = {
+        trace: ordinal for ordinal, trace in enumerate(registered_traces)
+    }
+
+    def registered_trace_set(binding):
+        traces = frozenset(binding.trace_coordinates_px)
+        if not traces or any(trace not in registered_ordinal for trace in traces):
+            return None
+        return traces
+
+    def connected_extent(binding, traces):
+        if not trace_support_is_one_connected_run(
+            registered_traces,
+            binding.trace_coordinates_px,
+            spec=PHOTO_BOUNDARY_MEASUREMENT_SPEC,
+        ):
+            return None
+        ordinals = tuple(registered_ordinal[trace] for trace in traces)
+        return min(ordinals), max(ordinals)
+
+    def directions_overlap(broader, fragment) -> bool:
+        for attribute in (
+            "observed_direction_interval_degrees",
+            "full_direction_interval_degrees",
+        ):
+            broad_interval = getattr(broader, attribute)
+            local_interval = getattr(fragment, attribute)
+            if (
+                broad_interval is None
+                or local_interval is None
+                or _intersect(broad_interval, local_interval) is None
+            ):
+                return False
+        return True
 
     def dominates(broader, fragment) -> bool:
         if not broader.direct_pair or not fragment.direct_pair:
@@ -93,19 +134,41 @@ def _remove_contained_local_side_tracks(
             or not local_side.role_authorized
         ):
             return False
-        broad_traces = set(broad_side.trace_coordinates_px)
-        local_traces = set(local_side.trace_coordinates_px)
+        broad_traces = registered_trace_set(broad_side)
+        local_traces = registered_trace_set(local_side)
+        if broad_traces is None or local_traces is None:
+            return False
+        broad_domain_count = _longitudinal_domain_count(
+            broad_side.trace_coordinates_px,
+            longitudinal_domains,
+        )
+        local_domain_count = _longitudinal_domain_count(
+            local_side.trace_coordinates_px,
+            longitudinal_domains,
+        )
+        if (
+            local_traces < broad_traces
+            and broad_domain_count > local_domain_count
+        ):
+            return True
+        broad_extent = connected_extent(broad_side, broad_traces)
+        local_extent = connected_extent(local_side, local_traces)
+        if (
+            broad_extent is None
+            or local_extent is None
+            or broad_extent[0] > local_extent[0]
+            or broad_extent[1] < local_extent[1]
+            or broad_extent == local_extent
+            or not directions_overlap(broad_side, local_side)
+        ):
+            return False
         return (
-            bool(local_traces)
-            and local_traces < broad_traces
-            and _longitudinal_domain_count(
-                broad_side.trace_coordinates_px,
-                longitudinal_domains,
-            )
-            > _longitudinal_domain_count(
-                local_side.trace_coordinates_px,
-                longitudinal_domains,
-            )
+            broad_side.independent_support_region_count
+            >= SPATIAL_SUPPORT_REGION_COUNT
+            and broad_domain_count >= SPATIAL_SUPPORT_REGION_COUNT
+            and local_side.independent_support_region_count
+            >= MINIMUM_INDEPENDENT_SUPPORT_REGIONS
+            and broad_domain_count > local_domain_count
         )
 
     return [
@@ -604,6 +667,7 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
     candidate_count_before_track_dominance = len(candidates)
     candidates = _remove_contained_local_side_tracks(
         candidates,
+        inputs.registered_trace_coordinates_px,
         inputs.longitudinal_support_domains_px,
     )
     contained_side_track_basis = (

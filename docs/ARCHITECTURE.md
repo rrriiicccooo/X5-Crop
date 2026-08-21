@@ -229,6 +229,18 @@ Photo aperture 的候选必须有正确 top/bottom 角色、外侧背景、有�
 数量或 residual 标量硬选。已有 direct top+bottom 闭环时，不再执行“缺失 opposite”的局部精修；
 同一批 raw transitions 的重复拟合不能成为第二个 placement。
 
+Broader same-role track 只有与 local competitor 共享同一个 opposite binding、双方 role-authorized，
+且全部 supporting traces 都属于显式 registered trace lattice 时，才可能产生集合支配。存在两种
+直接物理证明：若 local 的 registered trace set 是 broader 的严格真子集，且 broader 直接覆盖严格
+更多 registered frame domains，则 exact registered-sample containment 已经成立；这条证明不再要求
+方向区间相交、allowed-gap 连通或额外的三区域支持。若采样 staggered、local 含有 broader 未命中的
+registered trace，则双方必须各自在同一 lattice 上形成单一 connected allowed-gap run，observed/full
+direction intervals 直接相交，broader 以至少 3 个独立区域覆盖至少 3 个且严格更多 registered frame
+domains，并在长轴上严格包含 local；local 仍须有至少 2 个独立支持区域。Lattice 缺失、trace 未注册、
+domain 相等、opposite 不同，或 staggered proof 的 extent 相等/分离、方向不交、任一侧不连通或支持
+不足时，runner 必须保留。这不是 fragment 合并、坐标邻近、support/residual 打分或 holder center
+选位。
+
 上述 domain-complete anchor 仍必须有完整方向、明确 role authority，并由同一个 direct binding
 在每个 selected frame domain 中分别命中 direct trace；selected domain 少于 3 个、缺少一个
 domain、把两个不连通 fragments 合计覆盖、role 未授权或方向不完整时，不能拼接或推导 placement，

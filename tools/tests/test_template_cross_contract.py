@@ -22,6 +22,8 @@ from x5crop.detection.photo_geometry.model import PHOTO_BOUNDARY_MEASUREMENT_SPE
 from x5crop.detection.photo_geometry.trace_support import (
     source_spanning_continuous_trace_support,
 )
+
+
 class TemplateCrossContractTest(unittest.TestCase):
     def test_source_spanning_reaches_both_registered_domain_ends(self) -> None:
         queried = tuple(range(0, 101, 10))
@@ -465,6 +467,627 @@ class TemplateCrossContractTest(unittest.TestCase):
         self.assertTrue(result.best.direct_pair)
         self.assertEqual(result.best.independent_support_region_count, 3)
         self.assertEqual(len(result.best.direct_provenance_ids), 3)
+
+    def test_exact_registered_trace_subset_dominates_despite_disjoint_direction(self) -> None:
+        registered = tuple(range(0, 101, 10))
+        result = fit_template_cross(
+            TemplateCrossInput(
+                template=template(count=3),
+                fixed_height_px=FiniteInterval(236.0, 240.0),
+                registered_trace_coordinates_px=registered,
+                longitudinal_support_domains_px=(
+                    FiniteInterval(-1.0, 21.0),
+                    FiniteInterval(39.0, 61.0),
+                    FiniteInterval(79.0, 101.0),
+                ),
+                top_bindings=(
+                    binding(
+                        BoundaryRole.TOP,
+                        "exact-broader-top",
+                        100.0,
+                        traces=(0, 20, 40, 60, 80, 100),
+                        independent_regions=2,
+                        source_spanning=False,
+                        angle=-0.2,
+                        angle_interval=FiniteInterval(-0.3, -0.1),
+                    ),
+                    binding(
+                        BoundaryRole.TOP,
+                        "exact-local-top",
+                        104.0,
+                        traces=(40, 60, 80),
+                        independent_regions=2,
+                        source_spanning=False,
+                        angle=0.2,
+                        angle_interval=FiniteInterval(0.1, 0.3),
+                    ),
+                ),
+                bottom_bindings=(
+                    binding(
+                        BoundaryRole.BOTTOM,
+                        "exact-shared-bottom",
+                        340.0,
+                        traces=registered,
+                        independent_regions=3,
+                        source_spanning=False,
+                        angle=0.0,
+                        angle_interval=FiniteInterval(-0.4, 0.4),
+                    ),
+                ),
+            )
+        )
+
+        self.assertEqual(result.status, CrossFitStatus.RESOLVED)
+        assert result.best is not None
+        self.assertIsNone(result.runner_up)
+        self.assertEqual(
+            result.best.direct_observation_ids,
+            (
+                ObservationId("observation:exact-broader-top"),
+                ObservationId("observation:exact-shared-bottom"),
+            ),
+        )
+
+    def test_connected_broader_side_dominates_staggered_local_fragment(self) -> None:
+        domains = (
+            FiniteInterval(-1.0, 21.0),
+            FiniteInterval(39.0, 61.0),
+            FiniteInterval(79.0, 101.0),
+        )
+        registered = tuple(range(0, 101, 10))
+        result = fit_template_cross(
+            TemplateCrossInput(
+                template=template(count=3),
+                fixed_height_px=FiniteInterval(236.0, 240.0),
+                registered_trace_coordinates_px=registered,
+                longitudinal_support_domains_px=domains,
+                top_bindings=(
+                    binding(
+                        BoundaryRole.TOP,
+                        "broader-top",
+                        100.0,
+                        traces=(0, 20, 40, 60, 80, 100),
+                        independent_regions=3,
+                        source_spanning=False,
+                    ),
+                    binding(
+                        BoundaryRole.TOP,
+                        "staggered-local-top",
+                        104.0,
+                        traces=(50, 70, 90),
+                        independent_regions=2,
+                        source_spanning=False,
+                    ),
+                ),
+                bottom_bindings=(
+                    binding(
+                        BoundaryRole.BOTTOM,
+                        "shared-bottom",
+                        340.0,
+                        traces=registered,
+                        independent_regions=3,
+                        source_spanning=False,
+                    ),
+                ),
+            )
+        )
+
+        self.assertEqual(result.status, CrossFitStatus.RESOLVED)
+        assert result.best is not None
+        self.assertIsNone(result.runner_up)
+        self.assertEqual(
+            result.best.direct_observation_ids,
+            (
+                ObservationId("observation:broader-top"),
+                ObservationId("observation:shared-bottom"),
+            ),
+        )
+        self.assertEqual(result.receipt.compatible_pair_count, 2)
+        self.assertEqual(result.receipt.evaluated_fit_count, 1)
+
+    def test_equal_domain_side_tracks_remain_discrete(self) -> None:
+        registered = tuple(range(0, 101, 10))
+        result = fit_template_cross(
+            TemplateCrossInput(
+                template=template(count=3),
+                fixed_height_px=FiniteInterval(236.0, 240.0),
+                registered_trace_coordinates_px=registered,
+                longitudinal_support_domains_px=(
+                    FiniteInterval(-1.0, 21.0),
+                    FiniteInterval(39.0, 61.0),
+                    FiniteInterval(79.0, 101.0),
+                ),
+                top_bindings=(
+                    binding(
+                        BoundaryRole.TOP,
+                        "equal-domain-broader-top",
+                        100.0,
+                        traces=(0, 20, 40, 60, 80, 100),
+                        independent_regions=3,
+                        source_spanning=False,
+                    ),
+                    binding(
+                        BoundaryRole.TOP,
+                        "equal-domain-local-top",
+                        104.0,
+                        traces=(10, 30, 50, 70, 90),
+                        independent_regions=3,
+                        source_spanning=False,
+                    ),
+                ),
+                bottom_bindings=(
+                    binding(
+                        BoundaryRole.BOTTOM,
+                        "equal-domain-shared-bottom",
+                        340.0,
+                        traces=registered,
+                        independent_regions=3,
+                        source_spanning=False,
+                    ),
+                ),
+            )
+        )
+
+        self.assertEqual(result.status, CrossFitStatus.UNRESOLVED)
+        self.assertIsNotNone(result.best)
+        self.assertIsNotNone(result.runner_up)
+
+    def test_disjoint_side_track_extents_remain_discrete(self) -> None:
+        registered = tuple(range(0, 111, 10))
+        result = fit_template_cross(
+            TemplateCrossInput(
+                template=template(count=4),
+                fixed_height_px=FiniteInterval(236.0, 240.0),
+                registered_trace_coordinates_px=registered,
+                longitudinal_support_domains_px=(
+                    FiniteInterval(-1.0, 21.0),
+                    FiniteInterval(29.0, 51.0),
+                    FiniteInterval(59.0, 81.0),
+                    FiniteInterval(89.0, 111.0),
+                ),
+                top_bindings=(
+                    binding(
+                        BoundaryRole.TOP,
+                        "disjoint-broader-top",
+                        100.0,
+                        traces=(0, 20, 40, 60, 70),
+                        independent_regions=3,
+                        source_spanning=False,
+                    ),
+                    binding(
+                        BoundaryRole.TOP,
+                        "disjoint-local-top",
+                        104.0,
+                        traces=(80, 90, 100, 110),
+                        independent_regions=2,
+                        source_spanning=False,
+                    ),
+                ),
+                bottom_bindings=(
+                    binding(
+                        BoundaryRole.BOTTOM,
+                        "disjoint-shared-bottom",
+                        340.0,
+                        traces=registered,
+                        independent_regions=3,
+                        source_spanning=False,
+                    ),
+                ),
+            )
+        )
+
+        self.assertEqual(result.status, CrossFitStatus.UNRESOLVED)
+        self.assertIsNotNone(result.best)
+        self.assertIsNotNone(result.runner_up)
+
+    def test_disconnected_broader_side_track_cannot_dominate(self) -> None:
+        registered = tuple(range(0, 101, 10))
+        result = fit_template_cross(
+            TemplateCrossInput(
+                template=template(count=3),
+                fixed_height_px=FiniteInterval(236.0, 240.0),
+                registered_trace_coordinates_px=registered,
+                longitudinal_support_domains_px=(
+                    FiniteInterval(-1.0, 21.0),
+                    FiniteInterval(39.0, 61.0),
+                    FiniteInterval(79.0, 101.0),
+                ),
+                top_bindings=(
+                    binding(
+                        BoundaryRole.TOP,
+                        "disconnected-broader-top",
+                        100.0,
+                        traces=(0, 50, 100),
+                        independent_regions=3,
+                        source_spanning=False,
+                    ),
+                    binding(
+                        BoundaryRole.TOP,
+                        "inside-connected-local-top",
+                        104.0,
+                        traces=(30, 50, 70, 90),
+                        independent_regions=2,
+                        source_spanning=False,
+                    ),
+                ),
+                bottom_bindings=(
+                    binding(
+                        BoundaryRole.BOTTOM,
+                        "disconnected-broader-shared-bottom",
+                        340.0,
+                        traces=registered,
+                        independent_regions=3,
+                        source_spanning=False,
+                    ),
+                ),
+            )
+        )
+
+        self.assertEqual(result.status, CrossFitStatus.UNRESOLVED)
+        self.assertIsNotNone(result.runner_up)
+
+    def test_disconnected_local_side_track_cannot_be_discarded(self) -> None:
+        registered = tuple(range(0, 101, 10))
+        result = fit_template_cross(
+            TemplateCrossInput(
+                template=template(count=3),
+                fixed_height_px=FiniteInterval(236.0, 240.0),
+                registered_trace_coordinates_px=registered,
+                longitudinal_support_domains_px=(
+                    FiniteInterval(-1.0, 21.0),
+                    FiniteInterval(39.0, 61.0),
+                    FiniteInterval(79.0, 101.0),
+                ),
+                top_bindings=(
+                    binding(
+                        BoundaryRole.TOP,
+                        "connected-broader-top",
+                        100.0,
+                        traces=(0, 20, 40, 60, 80, 100),
+                        independent_regions=3,
+                        source_spanning=False,
+                    ),
+                    binding(
+                        BoundaryRole.TOP,
+                        "disconnected-inside-local-top",
+                        104.0,
+                        traces=(10, 90),
+                        independent_regions=2,
+                        source_spanning=False,
+                    ),
+                ),
+                bottom_bindings=(
+                    binding(
+                        BoundaryRole.BOTTOM,
+                        "disconnected-local-shared-bottom",
+                        340.0,
+                        traces=registered,
+                        independent_regions=3,
+                        source_spanning=False,
+                    ),
+                ),
+            )
+        )
+
+        self.assertEqual(result.status, CrossFitStatus.UNRESOLVED)
+        self.assertIsNotNone(result.runner_up)
+
+    def test_different_opposite_bindings_remain_discrete(self) -> None:
+        registered = tuple(range(0, 101, 10))
+        result = fit_template_cross(
+            TemplateCrossInput(
+                template=template(count=3),
+                fixed_height_px=240.0,
+                registered_trace_coordinates_px=registered,
+                longitudinal_support_domains_px=(
+                    FiniteInterval(-1.0, 21.0),
+                    FiniteInterval(39.0, 61.0),
+                    FiniteInterval(79.0, 101.0),
+                ),
+                top_bindings=(
+                    binding(
+                        BoundaryRole.TOP,
+                        "different-opposite-broader-top",
+                        100.0,
+                        traces=(0, 20, 40, 60, 80, 100),
+                        independent_regions=3,
+                        source_spanning=False,
+                    ),
+                    binding(
+                        BoundaryRole.TOP,
+                        "different-opposite-local-top",
+                        104.0,
+                        traces=(50, 70, 90),
+                        independent_regions=2,
+                        source_spanning=False,
+                    ),
+                ),
+                bottom_bindings=(
+                    binding(
+                        BoundaryRole.BOTTOM,
+                        "different-opposite-broad-bottom",
+                        340.0,
+                        traces=registered,
+                        independent_regions=3,
+                        source_spanning=False,
+                    ),
+                    binding(
+                        BoundaryRole.BOTTOM,
+                        "different-opposite-local-bottom",
+                        344.0,
+                        traces=registered,
+                        independent_regions=3,
+                        source_spanning=False,
+                    ),
+                ),
+            )
+        )
+
+        self.assertEqual(result.status, CrossFitStatus.UNRESOLVED)
+        self.assertIsNotNone(result.best)
+        self.assertIsNotNone(result.runner_up)
+
+    def test_direction_disjoint_side_tracks_remain_discrete(self) -> None:
+        registered = tuple(range(0, 101, 10))
+        result = fit_template_cross(
+            TemplateCrossInput(
+                template=template(count=3),
+                fixed_height_px=FiniteInterval(236.0, 240.0),
+                registered_trace_coordinates_px=registered,
+                longitudinal_support_domains_px=(
+                    FiniteInterval(-1.0, 21.0),
+                    FiniteInterval(39.0, 61.0),
+                    FiniteInterval(79.0, 101.0),
+                ),
+                top_bindings=(
+                    binding(
+                        BoundaryRole.TOP,
+                        "direction-broader-top",
+                        100.0,
+                        traces=(0, 20, 40, 60, 80, 100),
+                        independent_regions=3,
+                        source_spanning=False,
+                        angle=-0.2,
+                        angle_interval=FiniteInterval(-0.3, -0.1),
+                    ),
+                    binding(
+                        BoundaryRole.TOP,
+                        "direction-local-top",
+                        104.0,
+                        traces=(50, 70, 90),
+                        independent_regions=2,
+                        source_spanning=False,
+                        angle=0.2,
+                        angle_interval=FiniteInterval(0.1, 0.3),
+                    ),
+                ),
+                bottom_bindings=(
+                    binding(
+                        BoundaryRole.BOTTOM,
+                        "direction-shared-bottom",
+                        340.0,
+                        traces=registered,
+                        independent_regions=3,
+                        source_spanning=False,
+                        angle=0.0,
+                        angle_interval=FiniteInterval(-0.4, 0.4),
+                    ),
+                ),
+            )
+        )
+
+        self.assertEqual(result.status, CrossFitStatus.UNRESOLVED)
+        self.assertIsNotNone(result.runner_up)
+
+    def test_two_domain_side_cannot_gain_global_dominance(self) -> None:
+        registered = tuple(range(0, 101, 10))
+        result = fit_template_cross(
+            TemplateCrossInput(
+                template=template(count=3),
+                fixed_height_px=FiniteInterval(236.0, 240.0),
+                holder_short_axis_center_px=FiniteInterval(215.0, 225.0),
+                registered_trace_coordinates_px=registered,
+                longitudinal_support_domains_px=(
+                    FiniteInterval(-1.0, 21.0),
+                    FiniteInterval(39.0, 61.0),
+                    FiniteInterval(79.0, 101.0),
+                ),
+                top_bindings=(
+                    binding(
+                        BoundaryRole.TOP,
+                        "two-domain-broader-top",
+                        100.0,
+                        traces=(0, 20, 40, 60),
+                        independent_regions=2,
+                        source_spanning=False,
+                    ),
+                    binding(
+                        BoundaryRole.TOP,
+                        "one-domain-local-top",
+                        104.0,
+                        traces=(30, 50),
+                        independent_regions=1,
+                        source_spanning=False,
+                    ),
+                ),
+                bottom_bindings=(
+                    binding(
+                        BoundaryRole.BOTTOM,
+                        "two-domain-shared-bottom",
+                        340.0,
+                        traces=(0, 20, 30, 50),
+                        independent_regions=2,
+                        source_spanning=False,
+                    ),
+                ),
+            )
+        )
+
+        self.assertEqual(result.status, CrossFitStatus.UNRESOLVED)
+        self.assertIsNotNone(result.best)
+        self.assertIsNotNone(result.runner_up)
+
+    def test_under_supported_local_side_cannot_be_discarded(self) -> None:
+        registered = tuple(range(0, 101, 10))
+        domains = (
+            FiniteInterval(-1.0, 21.0),
+            FiniteInterval(39.0, 61.0),
+            FiniteInterval(79.0, 101.0),
+            FiniteInterval(109.0, 131.0),
+        )
+        local_cases = (
+            ("one-region-ledger", (50, 70, 90), 1, (0, 20, 50, 70)),
+        )
+        for name, local_traces, local_regions, bottom_traces in local_cases:
+            with self.subTest(name=name):
+                result = fit_template_cross(
+                    TemplateCrossInput(
+                        template=template(count=4),
+                        fixed_height_px=FiniteInterval(236.0, 240.0),
+                        holder_short_axis_center_px=FiniteInterval(215.0, 225.0),
+                        registered_trace_coordinates_px=registered,
+                        longitudinal_support_domains_px=domains,
+                        top_bindings=(
+                            binding(
+                                BoundaryRole.TOP,
+                                f"{name}-broader-top",
+                                100.0,
+                                traces=(0, 20, 40, 60, 80, 100),
+                                independent_regions=3,
+                                source_spanning=False,
+                            ),
+                            binding(
+                                BoundaryRole.TOP,
+                                f"{name}-local-top",
+                                104.0,
+                                traces=local_traces,
+                                independent_regions=local_regions,
+                                source_spanning=False,
+                            ),
+                        ),
+                        bottom_bindings=(
+                            binding(
+                                BoundaryRole.BOTTOM,
+                                f"{name}-shared-bottom",
+                                340.0,
+                                traces=bottom_traces,
+                                independent_regions=2,
+                                source_spanning=False,
+                            ),
+                        ),
+                    )
+                )
+
+                self.assertEqual(result.status, CrossFitStatus.UNRESOLVED)
+                self.assertIsNotNone(result.best)
+                self.assertIsNotNone(result.runner_up)
+
+    def test_broader_side_dominates_one_domain_supported_fragment(self) -> None:
+        result = fit_template_cross(
+            TemplateCrossInput(
+                template=template(count=4),
+                fixed_height_px=FiniteInterval(236.0, 240.0),
+                holder_short_axis_center_px=FiniteInterval(215.0, 225.0),
+                registered_trace_coordinates_px=tuple(range(0, 101, 10)),
+                longitudinal_support_domains_px=(
+                    FiniteInterval(-1.0, 21.0),
+                    FiniteInterval(39.0, 61.0),
+                    FiniteInterval(79.0, 101.0),
+                    FiniteInterval(109.0, 131.0),
+                ),
+                top_bindings=(
+                    binding(
+                        BoundaryRole.TOP,
+                        "one-domain-broader-top",
+                        100.0,
+                        traces=(0, 20, 40, 60, 80, 100),
+                        independent_regions=3,
+                        source_spanning=False,
+                    ),
+                    binding(
+                        BoundaryRole.TOP,
+                        "one-domain-local-top",
+                        104.0,
+                        traces=(30, 50),
+                        independent_regions=2,
+                        source_spanning=False,
+                    ),
+                ),
+                bottom_bindings=(
+                    binding(
+                        BoundaryRole.BOTTOM,
+                        "one-domain-shared-bottom",
+                        340.0,
+                        traces=(0, 20, 30, 50),
+                        independent_regions=2,
+                        source_spanning=False,
+                    ),
+                ),
+            )
+        )
+
+        self.assertEqual(result.status, CrossFitStatus.RESOLVED)
+        assert result.best is not None
+        self.assertIsNone(result.runner_up)
+        self.assertEqual(
+            result.best.direct_observation_ids,
+            (
+                ObservationId("observation:one-domain-broader-top"),
+                ObservationId("observation:one-domain-shared-bottom"),
+            ),
+        )
+
+    def test_missing_or_unregistered_lattice_cannot_authorize_dominance(self) -> None:
+        domains = (
+            FiniteInterval(-1.0, 21.0),
+            FiniteInterval(39.0, 61.0),
+            FiniteInterval(79.0, 101.0),
+        )
+        for name, registered in (
+            ("missing", ()),
+            ("local-off-lattice", (0, 20, 40, 60, 80, 100)),
+        ):
+            with self.subTest(name=name):
+                result = fit_template_cross(
+                    TemplateCrossInput(
+                        template=template(count=3),
+                        fixed_height_px=FiniteInterval(236.0, 240.0),
+                        registered_trace_coordinates_px=registered,
+                        longitudinal_support_domains_px=domains,
+                        top_bindings=(
+                            binding(
+                                BoundaryRole.TOP,
+                                f"{name}-broader-top",
+                                100.0,
+                                traces=(0, 20, 40, 60, 80, 100),
+                                independent_regions=3,
+                                source_spanning=False,
+                            ),
+                            binding(
+                                BoundaryRole.TOP,
+                                f"{name}-local-top",
+                                104.0,
+                                traces=(50, 70, 90),
+                                independent_regions=2,
+                                source_spanning=False,
+                            ),
+                        ),
+                        bottom_bindings=(
+                            binding(
+                                BoundaryRole.BOTTOM,
+                                f"{name}-shared-bottom",
+                                340.0,
+                                traces=tuple(range(0, 101, 10)),
+                                independent_regions=3,
+                                source_spanning=False,
+                            ),
+                        ),
+                    )
+                )
+
+                self.assertEqual(result.status, CrossFitStatus.UNRESOLVED)
+                self.assertIsNotNone(result.best)
+                self.assertIsNotNone(result.runner_up)
 
     def test_disconnected_local_pairs_remain_discrete_answers(self) -> None:
         result = fit_template_cross(

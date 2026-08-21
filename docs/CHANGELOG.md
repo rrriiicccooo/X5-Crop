@@ -45,6 +45,12 @@ materialization、平行 detector 和 report reuse 均不再支持。
   （数量至少为 3）中逐一拥有 direct trace，即使它的 aggregate independent support 只有两个
   区域；该权限不降低普通局部 two-region threshold，不拼接不连通 fragments，也不改变方向、
   role、fixed-H 或 output budget 约束。
+- Cross local competitor 的消去改为显式 registered-lattice 物理 containment，并保留两个直接证明
+  基础：exact registered-sample strict subset 加严格更多 frame domains 可直接支配；staggered
+  sampling 则不再要求 trace ID 精确子集，但双方必须各自连通、observed/full 方向区间相交，broader
+  有 3 个独立区域并覆盖至少 3 个且严格更多 registered frame domains，local 有 2 个独立区域，且
+  broader 长轴 extent 严格包含 local。两条证明都要求同一 opposite、同 role authority、lattice
+  明确且全部 trace 已注册；不按 support、residual 或 holder center 选位。
 - 短轴 coarse query 的 aggregate interval 仍只定位局部测量；同一批已注册 trace 若直接形成
   source-wide 双侧 track，可以独立提供共同方向和 enclosing support。Aggregate interval 不能因此
   获得照片边界权限。
