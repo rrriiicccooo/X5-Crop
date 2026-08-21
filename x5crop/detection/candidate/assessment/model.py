@@ -10,7 +10,6 @@ CANDIDATE_GATE_CHECK_CODES = (
     "output_slot_count",
     "observation_completeness",
     "source_scan_geometry",
-    "shared_strip_direction",
     "complete_placement",
     "producer_coverage",
     "sequence_authority",
@@ -24,7 +23,6 @@ CANDIDATE_GATE_CHECK_CODES = (
     "source_lane_authority",
     "selected_output_footprint",
     "direct_use_budget",
-    "transform_sampling",
 )
 
 

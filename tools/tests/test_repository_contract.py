@@ -251,7 +251,7 @@ class RepositoryContractTest(unittest.TestCase):
             "x5crop.detection.photo_geometry.template_cross_candidates",
             "x5crop.detection.photo_geometry.template_cross_model",
             "x5crop.detection.photo_geometry.template_cross_support",
-            "x5crop.detection.photo_geometry.template_direction",
+            "x5crop.detection.photo_geometry.template_frame_axis",
             "x5crop.detection.photo_geometry.template_placement",
             "x5crop.detection.photo_geometry.template_selection",
             "x5crop.detection.photo_geometry.template_holder_fill",

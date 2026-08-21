@@ -12,9 +12,7 @@ from dataclasses import dataclass
 from types import MappingProxyType
 
 from ...domain import EvidenceState, FiniteInterval
-from ...geometry.affine import AffineCoordinateTransform
 from ..gate_checks import DetectionFailureFact, TypedAssessment
-from ..output_geometry import OutputTransformAssessment
 from ..source_core import SourceLaneEvidence
 from .content_veto_model import ContentVetoFact
 from .coarse_strip_support import CoarseStripSupport
@@ -35,7 +33,6 @@ from .output_model import (
     OutputFootprint,
     OutputSlotIdentity,
     ResolvedOutputSlots,
-    SharedStripDirection,
 )
 from .search_model import SequenceAnchorDiscoveryDomain
 from .source_geometry import SourceScanGeometry
@@ -391,12 +388,11 @@ class TemplateLaneReconstruction:
 
 @dataclass(frozen=True)
 class TemplateSourceSelection:
-    """Source-level winner, shared geometry, direction, and runner metadata."""
+    """Source-level winner, shared W/H geometry, and runner metadata."""
 
     lane_ids: tuple[str, ...]
     selected_placement_ids: tuple[str | None, ...]
     shared_scan_geometry: SourceScanGeometry | None
-    shared_direction: SharedStripDirection | None
     state: EvidenceState
     failure: DetectionFailureFact | None
     runner_up_placement_ids: tuple[str | None, ...] = ()
@@ -412,7 +408,6 @@ class TemplateSourceSelection:
                 or self.selected_placement_ids
                 or self.runner_up_placement_ids
                 or self.shared_scan_geometry is not None
-                or self.shared_direction is not None
                 or not isinstance(self.failure, DetectionFailureFact)
             ):
                 raise ValueError("empty source selection can only be unresolved")
@@ -431,7 +426,7 @@ class TemplateSourceSelection:
             raise ValueError("source winner and runner must differ")
         supported = self.state == EvidenceState.SUPPORTED
         complete = all(value is not None for value in self.selected_placement_ids)
-        if supported != (complete and self.shared_scan_geometry is not None and self.shared_direction is not None):
+        if supported != (complete and self.shared_scan_geometry is not None):
             raise ValueError("source selection authority is incomplete")
         if supported:
             if self.failure is not None:
@@ -448,8 +443,6 @@ class PhotoGeometryDetectionResult:
     lane_reconstructions: tuple[TemplateLaneReconstruction, ...]
     source_placement_selection: TemplateSourceSelection
     output_slot_identities: tuple[OutputSlotIdentity, ...]
-    source_transform_assessment: OutputTransformAssessment
-    lane_transform_assessments: tuple[OutputTransformAssessment, ...]
     assessment_facts: Mapping[str, TypedAssessment]
 
     def __post_init__(self) -> None:
@@ -468,8 +461,6 @@ class PhotoGeometryDetectionResult:
                 raise ValueError("output identities disagree with lane slot counts")
         elif self.output_slot_identities:
             raise ValueError("unresolved output slots cannot have identities")
-        if len(self.lane_transform_assessments) != len(self.lane_reconstructions):
-            raise ValueError("each template lane requires one transform assessment")
         if self.source_placement_selection.lane_ids != lane_ids:
             raise ValueError("source selection lane order disagrees with result")
         selected_ids = tuple(
@@ -488,12 +479,10 @@ class PhotoGeometryDetectionResult:
             raise ValueError("source and lane placement states disagree")
         if self.source_placement_selection.state == EvidenceState.SUPPORTED:
             shared = self.source_placement_selection.shared_scan_geometry
-            direction = self.source_placement_selection.shared_direction
-            assert shared is not None and direction is not None
+            assert shared is not None
             if any(
                 item.selected_placement is None
                 or item.selected_placement.source_scan_geometry != shared
-                or item.selected_placement.direction != direction
                 for item in self.lane_reconstructions
             ):
                 raise ValueError("selected lanes disagree with shared source authority")
@@ -524,20 +513,6 @@ class PhotoGeometryDetectionResult:
             for lane in self.lane_reconstructions
             for assessment in lane.direct_use_budget_assessments
         )
-
-    @property
-    def output_transforms(self) -> tuple[AffineCoordinateTransform, ...]:
-        transforms: list[AffineCoordinateTransform] = []
-        for lane, assessment in zip(
-            self.lane_reconstructions,
-            self.lane_transform_assessments,
-            strict=True,
-        ):
-            if assessment.transform is None:
-                continue
-            transforms.extend(assessment.transform for _ in lane.output_footprints)
-        return tuple(transforms)
-
 
 __all__ = [
     "PhotoGeometryDetectionResult",

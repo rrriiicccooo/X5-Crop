@@ -7,10 +7,9 @@ from ..geometry.affine import AffineCoordinateTransform
 
 
 AFFINE_ROW_CHUNK_SIZE = 256
-# Black remains the sampling primitive's explicit no-source-data value.  The
-# production Gate separately requires every official output sample centre to
-# inverse-map inside lane authority, so this fallback cannot silently create
-# black corners in an automatically approved TIFF.
+# Black is the sampling primitive's explicit no-source-data value.  It appears
+# only in the representational corners of the axis-aligned envelope around a
+# rotated, already-safe source polygon; deskew never changes crop authority.
 AFFINE_BACKGROUND_VALUE = 0
 
 

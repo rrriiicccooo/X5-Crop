@@ -10,10 +10,6 @@ from tools.tests.template_runtime_test_support import (
     runtime_measurement_set as _measurement_set,
 )
 from x5crop.detection.gate_checks import GateGap, TypedAssessment, failure_fact
-from x5crop.detection.output_geometry import (
-    SharedStripDirectionResolution,
-    output_transform_assessment,
-)
 from x5crop.detection.photo_geometry.model import (
     AuthoritySide,
     BoundaryRole,
@@ -41,20 +37,6 @@ from x5crop.detection.photo_geometry.template_runtime_model import (
 from x5crop.domain import Box, EvidenceState
 from x5crop.detection.photo_geometry.model import ClippedRequirement
 
-
-def _unavailable_transform():
-    return output_transform_assessment(
-        SharedStripDirectionResolution(
-            direction=None,
-            state=EvidenceState.UNAVAILABLE,
-            named_gap="placement_unresolved",
-        ),
-        layout="horizontal",
-        source_width=2320,
-        source_height=322,
-    )
-
-
 def _unresolved_result() -> PhotoGeometryDetectionResult:
     prepared = _prepared()
     competition = TemplatePlacementCompetition(
@@ -79,7 +61,6 @@ def _unresolved_result() -> PhotoGeometryDetectionResult:
         lane_ids=("lane:0",),
         selected_placement_ids=(None,),
         shared_scan_geometry=None,
-        shared_direction=None,
         state=EvidenceState.UNAVAILABLE,
         failure=failure_fact(GateGap.PLACEMENT_UNRESOLVED),
         runner_up_placement_ids=(None,),
@@ -89,8 +70,6 @@ def _unresolved_result() -> PhotoGeometryDetectionResult:
         lane_reconstructions=(reconstruction,),
         source_placement_selection=selection,
         output_slot_identities=(),
-        source_transform_assessment=_unavailable_transform(),
-        lane_transform_assessments=(_unavailable_transform(),),
         assessment_facts={
             "selected_placement": TypedAssessment(
                 EvidenceState.UNAVAILABLE, GateGap.PLACEMENT_UNRESOLVED
@@ -163,7 +142,6 @@ class TemplateRuntimeModelContractTest(unittest.TestCase):
         result = _unresolved_result()
         self.assertEqual(result.output_footprints, ())
         self.assertEqual(result.direct_use_budget_assessments, ())
-        self.assertEqual(result.output_transforms, ())
         with self.assertRaises(TypeError):
             result.assessment_facts["new"] = object()  # type: ignore[index]
 
@@ -196,7 +174,6 @@ class TemplateRuntimeModelContractTest(unittest.TestCase):
                 lane_ids=("lane:0",),
                 selected_placement_ids=("placement:0",),
                 shared_scan_geometry=None,
-                shared_direction=None,
                 state=EvidenceState.SUPPORTED,
                 failure=None,
             )
@@ -206,7 +183,6 @@ class TemplateRuntimeModelContractTest(unittest.TestCase):
             lane_ids=(),
             selected_placement_ids=(),
             shared_scan_geometry=None,
-            shared_direction=None,
             state=EvidenceState.UNAVAILABLE,
             failure=failure_fact(GateGap.OUTPUT_SLOT_COUNT_UNAVAILABLE),
         )
@@ -256,7 +232,6 @@ def _output_footprint():
         geometry_id="geometry:0",
         envelope=envelope,
         required_source_footprint=polygon,
-        sampling_source_footprint=None,
         boundary_protections=tuple(
             BoundaryProtectionFact(role, 0.0, 0.0, 0.0, 0.0)
             for role in (
@@ -269,7 +244,6 @@ def _output_footprint():
         saturation_facts=(saturation,),
         sampling_authority_box=Box(0, 0, 10, 10),
         authority_profile_id="135_standard",
-        mapped_output_box=None,
     )
 
 

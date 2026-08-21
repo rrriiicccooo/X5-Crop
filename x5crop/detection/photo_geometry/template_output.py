@@ -6,8 +6,7 @@ import math
 
 from ...domain import Box, EvidenceState
 from ...formats import OUTPUT_PROTECTION_SPEC
-from ...geometry.affine import AffineCoordinateTransform
-from ...geometry.convex import ConvexPolygon, convex_hull, mapped_half_open_box
+from ...geometry.convex import ConvexPolygon, convex_hull
 from ...run_local_identity import run_local_id
 from ..source_core import SourceLaneEvidence
 from .boundary_geometry import boundary_line_at_state
@@ -167,7 +166,7 @@ def _state_boundary_residuals(
     """Return outward residuals for one joint placement state.
 
     A local top/bottom fragment may prove the aperture offset without owning
-    the source-wide deskew angle.  Its measured slope is therefore evaluated
+    the complete placement frame axis. Its measured slope is therefore evaluated
     only on the traces where that fragment was directly observed.  Extending
     a short fragment's direction interval to every frame corner would invent
     an unobserved curved strip and can make protection grow with distance.
@@ -355,48 +354,6 @@ def _saturation_facts(
     )
 
 
-def _mapped_box(
-    polygon: ConvexPolygon,
-    transform: AffineCoordinateTransform,
-) -> Box:
-    if not isinstance(transform, AffineCoordinateTransform):
-        raise TypeError("template output requires an affine transform")
-    mapped = mapped_half_open_box(polygon, transform.map_point)
-    if (
-        mapped.left < 0
-        or mapped.top < 0
-        or mapped.right > transform.output_extent.width
-        or mapped.bottom > transform.output_extent.height
-    ):
-        raise ValueError("mapped template footprint exceeds output authority")
-    return mapped
-
-
-def _sampling_rectangle_source_footprint(
-    mapped: Box,
-    transform: AffineCoordinateTransform,
-) -> ConvexPolygon:
-    """Inverse-map the exact output sample-centre rectangle.
-
-    A mapped polygon can fit inside source authority while its axis-aligned
-    output raster still adds corners outside that authority.  Affine maps
-    preserve convexity, so the four sample-centre corners own the complete
-    rectangle check.
-    """
-
-    return convex_hull(
-        tuple(
-            transform.inverse_map_point(x, y)
-            for x, y in (
-                (mapped.left, mapped.top),
-                (mapped.right - 1, mapped.top),
-                (mapped.right - 1, mapped.bottom - 1),
-                (mapped.left, mapped.bottom - 1),
-            )
-        )
-    )
-
-
 def _source_lane_authority(
     lane: SourceLaneEvidence,
     layout: str,
@@ -429,9 +386,8 @@ def output_footprint_from_template_placement(
     lane: SourceLaneEvidence,
     lane_ordinal: int,
     layout: str,
-    transform: AffineCoordinateTransform,
 ) -> OutputFootprint:
-    """Add deterministic bleed to one selected joint placement envelope."""
+    """Add deterministic bleed to one selected source-coordinate envelope."""
 
     frame = _frame(placement, lane_ordinal)
     if not isinstance(lane, SourceLaneEvidence):
@@ -453,21 +409,6 @@ def output_footprint_from_template_placement(
     )
     authority = _source_lane_authority(lane, layout)
     saturation = _saturation_facts(required, authority)
-    mapped: Box | None = None
-    sampling_source_footprint: ConvexPolygon | None = None
-    if not saturation:
-        candidate_mapped = _mapped_box(required, transform)
-        sampling_source_footprint = _sampling_rectangle_source_footprint(
-            candidate_mapped,
-            transform,
-        )
-        saturation = _saturation_facts(
-            sampling_source_footprint,
-            authority,
-            requirement=ClippedRequirement.SAMPLING_RECTANGLE,
-        )
-        if not saturation:
-            mapped = candidate_mapped
     boundaries = _canonical_boundaries(frame)
     protections = tuple(
         BoundaryProtectionFact(
@@ -490,12 +431,10 @@ def output_footprint_from_template_placement(
         ),
         envelope=envelope,
         required_source_footprint=required,
-        sampling_source_footprint=sampling_source_footprint,
         boundary_protections=protections,
         saturation_facts=saturation,
         sampling_authority_box=authority,
         authority_profile_id=lane.domain.authority_profile_id,
-        mapped_output_box=mapped,
     )
 
 

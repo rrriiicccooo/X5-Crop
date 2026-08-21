@@ -49,7 +49,6 @@ class AuthoritySide(str, Enum):
 
 class ClippedRequirement(str, Enum):
     VISIBLE_PLACEMENT = "visible_placement"
-    SAMPLING_RECTANGLE = "sampling_rectangle"
 
 
 class QueryPurpose(str, Enum):

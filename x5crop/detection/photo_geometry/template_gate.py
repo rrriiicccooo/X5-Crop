@@ -11,12 +11,6 @@ from ..gate_checks import (
     TypedAssessment,
     failure_fact,
 )
-from ..output_geometry import (
-    OutputTransformAssessment,
-    SharedStripDirectionResolution,
-    output_transform_assessment,
-)
-from .measurement_model import PhotoBoundaryMeasurementField
 from .output_model import ResolvedOutputSlots
 from .template_cross_model import CrossFitStatus
 from .template_holder_fill import HolderFillState
@@ -43,54 +37,18 @@ def contradicted(
     return TypedAssessment(EvidenceState.CONTRADICTED, gap, failure)
 
 
-def output_transform(
-    field: PhotoBoundaryMeasurementField,
-    layout: str,
-    selection: TemplateSourceSelection,
-) -> OutputTransformAssessment:
-    direction = selection.shared_direction
-    return output_transform_assessment(
-        SharedStripDirectionResolution(
-            direction=direction,
-            state=(
-                EvidenceState.SUPPORTED
-                if direction is not None
-                else EvidenceState.UNAVAILABLE
-            ),
-            named_gap=(
-                None
-                if direction is not None
-                else (
-                    None
-                    if selection.failure is None
-                    else selection.failure.gap.value
-                )
-            ),
-        ),
-        layout=layout,
-        source_width=field.source_extent.width,
-        source_height=field.source_extent.height,
-    )
-
-
 @dataclass(frozen=True)
 class TemplateGateResult:
-    source_transform: OutputTransformAssessment
     facts: dict[str, TypedAssessment]
 
 
 def build_template_gate(
-    field: PhotoBoundaryMeasurementField,
     resolved: ResolvedOutputSlots,
     reconstructions: tuple[TemplateLaneReconstruction, ...],
     source_selection: TemplateSourceSelection,
-    lane_transforms: tuple[OutputTransformAssessment, ...],
-    *,
-    layout: str,
 ) -> TemplateGateResult:
-    if not reconstructions or len(reconstructions) != len(lane_transforms):
+    if not reconstructions:
         raise ValueError("template gate requires every reconstructed lane")
-    source_transform = output_transform(field, layout, source_selection)
     measurement_complete = all(
         lane.prepared.measurement_work.completed_query_count
         == lane.prepared.measurement_work.measurement_query_count
@@ -158,7 +116,7 @@ def build_template_gate(
     output_count = sum(len(lane.output_footprints) for lane in reconstructions)
     output_complete = selected and output_count == resolved.output_slot_count
     output_safe = output_complete and all(
-        not output.saturation_facts and output.mapped_output_box is not None
+        not output.saturation_facts
         for lane in reconstructions
         for output in lane.output_footprints
     )
@@ -175,10 +133,6 @@ def build_template_gate(
         and len(budgets) == resolved.output_slot_count
         and all(item.state == EvidenceState.SUPPORTED for item in budgets)
         else unavailable(GateGap.DIRECT_USE_BUDGET_UNAVAILABLE)
-    )
-    transforms_complete = (
-        source_transform.state == EvidenceState.SUPPORTED
-        and all(item.state == EvidenceState.SUPPORTED for item in lane_transforms)
     )
     selection_failure = source_selection.failure
     selection_gap = (
@@ -197,11 +151,6 @@ def build_template_gate(
             else contradicted(GateGap.PRODUCER_BOUND_EXCEEDED)
         ),
         "source_scan_geometry": supported(),
-        "shared_strip_direction": (
-            supported()
-            if selected
-            else unavailable(GateGap.SHARED_STRIP_DIRECTION_UNAVAILABLE)
-        ),
         "complete_placement": (
             supported()
             if complete
@@ -259,19 +208,13 @@ def build_template_gate(
             else unavailable(GateGap.OUTPUT_FOOTPRINT_UNAVAILABLE)
         ),
         "direct_use_budget": budget_fact,
-        "transform_sampling": (
-            supported()
-            if output_complete and transforms_complete
-            else unavailable(GateGap.OUTPUT_TRANSFORM_UNAVAILABLE)
-        ),
     }
-    return TemplateGateResult(source_transform, facts)
+    return TemplateGateResult(facts)
 
 
 __all__ = [
     "TemplateGateResult",
     "build_template_gate",
-    "output_transform",
     "supported",
     "unavailable",
 ]

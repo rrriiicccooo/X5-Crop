@@ -12,13 +12,11 @@ from .interval_math import (
     subtract as _interval_difference,
 )
 from .model import BoundaryAxis, BoundaryRole, DirectionAuthority, PositionSource
+from .observation_types import BoundaryEdgeObservation
 from .output_model import FrameBoundaryGeometry, SharedStripDirection
 from .source_geometry import SourceScanGeometry
 from .template_cross_model import CrossFit
-from .template_direction import (
-    local_cross_requires_sequence_direction,
-    sequence_direction_provenance_groups,
-)
+from .template_frame_axis import placement_frame_axis
 from .template_model import SequenceFit, TemplateSpec
 _ROLES = (BoundaryRole.TOP, BoundaryRole.BOTTOM, BoundaryRole.START, BoundaryRole.END)
 _EPSILON = 1.0e-8
@@ -58,58 +56,6 @@ def _validate_interval_contains(interval: FiniteInterval, value: float, *, name:
         raise ValueError(f"{name} canonical position leaves its interval")
 
 
-def _cross_direction_compatible(
-    cross: CrossFit,
-    direction: SharedStripDirection,
-    sequence: SequenceFit,
-) -> bool:
-    selected = cross.selected_direction
-    if selected is None:
-        return True
-    # The pair's narrow parallel intersection proves that its two local
-    # fragments can belong to one strip. It does not own the source-wide
-    # deskew angle. Placement therefore checks the selected cross fragments'
-    # full physical direction authority against the source-wide direction.
-    compatibility = selected.full_angle_interval_degrees
-    provenance_closed = set(selected.selected_observation_ids).issubset(
-        direction.selected_observation_ids
-    )
-    if not provenance_closed:
-        return False
-    overlaps = max(
-        compatibility.minimum,
-        direction.full_angle_interval_degrees.minimum,
-    ) <= min(
-        compatibility.maximum,
-        direction.full_angle_interval_degrees.maximum,
-    ) + _EPSILON
-    if overlaps:
-        return True
-    if (
-        not local_cross_requires_sequence_direction(cross)
-        or len(
-            sequence_direction_provenance_groups(
-                sequence,
-                direction.selected_observation_ids,
-            )
-        )
-        < 2
-    ):
-        return False
-    observed = direction.observed_angle_interval_degrees
-    local_intervals = (
-        selected.observed_angle_interval_degrees,
-        *(
-            item.observed_direction_interval_degrees
-            for item in cross.direct_bindings
-            if item.observed_direction_interval_degrees is not None
-        ),
-    )
-    return all(
-        observed.contains(interval.minimum, epsilon=_EPSILON)
-        and observed.contains(interval.maximum, epsilon=_EPSILON)
-        for interval in local_intervals
-    )
 @dataclass(frozen=True)
 class TemplateFrame:
     """One fixed W/H frame and its four source-coordinate boundaries."""
@@ -162,10 +108,17 @@ class FormatPlacement:
             or not self.frames
             or tuple(frame.lane_ordinal for frame in self.frames)
             != tuple(range(1, self.output_slot_count + 1))
-            or not _cross_direction_compatible(
-                self.cross_fit,
-                self.direction,
-                self.sequence_fit,
+            or self.cross_fit.selected_direction is None
+            or not set(
+                self.cross_fit.selected_direction.selected_observation_ids
+            ).issubset(self.direction.selected_observation_ids)
+            or not self.direction.observed_angle_interval_degrees.contains(
+                self.cross_fit.selected_direction.observed_angle_interval_degrees.minimum,
+                epsilon=1.0e-12,
+            )
+            or not self.direction.observed_angle_interval_degrees.contains(
+                self.cross_fit.selected_direction.observed_angle_interval_degrees.maximum,
+                epsilon=1.0e-12,
             )
         ):
             raise ValueError("format placement identity or authority is inconsistent")
@@ -279,7 +232,6 @@ def _resolve_sequence_pair(
 def _cross_boundaries(
     cross: CrossFit,
     direction: SharedStripDirection,
-    sequence: SequenceFit,
 ) -> tuple[_ResolvedBoundary, _ResolvedBoundary]:
     direct = {item.role: item for item in cross.direct_bindings}
     inferred = {item.role: item for item in cross.inferred_bindings}
@@ -322,8 +274,6 @@ def _cross_boundaries(
         epsilon=_EPSILON,
     ):
         raise ValueError("cross span contradicts fixed template height")
-    if not _cross_direction_compatible(cross, direction, sequence):
-        raise ValueError("cross-selected direction contradicts placement direction")
     return result[0], result[1]
 def _boundary_geometry(
     resolved: _ResolvedBoundary,
@@ -427,8 +377,8 @@ def compose_format_placement(
     height_axis: BoundaryAxis,
     width_authority_px: FiniteInterval,
     height_authority_px: FiniteInterval,
+    sequence_observations: tuple[BoundaryEdgeObservation, ...] = (),
     template: TemplateSpec | None = None,
-    direction: SharedStripDirection | None = None,
     placement_id: str | None = None,
 ) -> FormatPlacement:
     """Compose fixed-size frames once from one sequence/cross fit pair."""
@@ -450,18 +400,11 @@ def compose_format_placement(
         raise ValueError("placement source axes must be distinct typed axes")
     if not isinstance(width_authority_px, FiniteInterval) or not isinstance(height_authority_px, FiniteInterval):
         raise TypeError("lane authority must use FiniteInterval")
-    selected_direction = cross_fit.selected_direction
-    if selected_direction is not None:
-        if direction is None:
-            direction = selected_direction
-        elif not _cross_direction_compatible(
-            cross_fit,
-            direction,
-            sequence_fit,
-        ):
-            raise ValueError("explicit direction contradicts cross-selected direction")
-    if direction is None:
-        raise ValueError("format placement requires cross-selected or explicit direction")
+    direction = placement_frame_axis(
+        sequence_fit,
+        sequence_observations,
+        cross_fit,
+    )
     if not isinstance(direction, SharedStripDirection):
         raise TypeError("placement direction must be SharedStripDirection")
     if not math.isfinite(cross_fit.lane_reference_trace_px):
@@ -476,7 +419,6 @@ def compose_format_placement(
     cross_top, cross_bottom = _cross_boundaries(
         cross_fit,
         direction,
-        sequence_fit,
     )
     frames: list[TemplateFrame] = []
     for ordinal in range(template.count):

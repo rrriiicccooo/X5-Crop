@@ -28,6 +28,10 @@ from .photo_geometry.registered_measurement import (
     make_photo_boundary_measurement_field,
 )
 from .photo_geometry.measurement_model import PhotoBoundaryMeasurementField
+from .output_deskew import (
+    LightweightDeskewObservation,
+    observe_lightweight_deskew,
+)
 from .source_core import (
     SourceCoreEvidence,
     SourceLaneEvidence,
@@ -41,6 +45,7 @@ class DetectionWorkspace:
     layout: str
     source_core: SourceCoreEvidence
     boundary_measurement_field: PhotoBoundaryMeasurementField
+    deskew_observation: LightweightDeskewObservation
 
     def __post_init__(self) -> None:
         if not isinstance(self.source_gray, np.ndarray) or self.source_gray.ndim != 2:
@@ -53,6 +58,11 @@ class DetectionWorkspace:
             raise ValueError(
                 "photo-boundary field must use the canonical work layout"
             )
+        if not isinstance(
+            self.deskew_observation,
+            LightweightDeskewObservation,
+        ):
+            raise TypeError("workspace requires its optional deskew observation")
 
 
 class SourceInputContractError(ValueError):
@@ -161,6 +171,9 @@ def prepare_detection_workspace(
         arr,
         configuration.preprocess.base_gray,
     )
+    # Observe before allocating the canonical vertical work copy so a vertical
+    # source never retains two full-size transposes at the same time.
+    deskew_observation = observe_lightweight_deskew(source_gray, layout)
     gray_work = work_gray(source_gray, layout)
     gray_work.flags.writeable = False
     scan_canvas = observe_scan_canvas(
@@ -265,4 +278,5 @@ def prepare_detection_workspace(
         layout=layout,
         source_core=source_core,
         boundary_measurement_field=boundary_measurement_field,
+        deskew_observation=deskew_observation,
     )

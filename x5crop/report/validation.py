@@ -7,6 +7,7 @@ from typing import Any
 
 from ..detection.candidate.assessment.model import CANDIDATE_GATE_CHECK_CODES
 from ..detection.decision.vocabulary import FINAL_REVIEW_REASONS
+from ..detection.output_deskew import DeskewSkipReason
 from .identity import REPORT_SCHEMA_ID, REPORT_SCHEMA_REVISION
 from .summary import AUTHORITY_PARTITION
 
@@ -29,7 +30,8 @@ CURRENT_REPORT_SECTIONS = (
 )
 
 _AUTHORITY_SIDES = ("left", "top", "right", "bottom")
-_CLIPPED_REQUIREMENTS = ("visible_placement", "sampling_rectangle")
+_CLIPPED_REQUIREMENTS = ("visible_placement",)
+_DESKEW_SKIP_REASONS = tuple(item.value for item in DeskewSkipReason)
 
 
 def _finite_number(value: object) -> bool:
@@ -92,12 +94,6 @@ def validate_output_footprint_authority(output: dict[str, Any]) -> None:
         output.get("required_source_footprint"),
         "required source footprint",
     )
-    sampling_value = output.get("sampling_source_footprint")
-    sampling = (
-        None
-        if sampling_value is None
-        else _validate_polygon(sampling_value, "sampling source footprint")
-    )
     authority = _validate_box(
         output.get("sampling_authority_box"),
         "sampling authority box",
@@ -105,10 +101,6 @@ def validate_output_footprint_authority(output: dict[str, Any]) -> None:
     expected: dict[str, set[str]] = {}
     for side in _outside_authority_sides(required, authority):
         expected.setdefault(side, set()).add("visible_placement")
-    if sampling is not None:
-        for side in _outside_authority_sides(sampling, authority):
-            expected.setdefault(side, set()).add("sampling_rectangle")
-
     facts = output.get("saturation_facts")
     if not isinstance(facts, list):
         raise ValueError("footprint saturation facts are invalid")
@@ -134,18 +126,94 @@ def validate_output_footprint_authority(output: dict[str, Any]) -> None:
     if recorded != expected:
         raise ValueError("footprint saturation facts disagree with authority")
 
-    mapped_value = output.get("mapped_output_box")
-    if mapped_value is None:
-        if not expected:
-            raise ValueError("unsaturated output lacks a mapped output box")
-    else:
-        _validate_box(mapped_value, "mapped output box")
-        if expected:
-            raise ValueError("saturated output exposed a mapped output box")
-        if sampling is None:
-            raise ValueError("mapped output lacks a sampling footprint")
-    if sampling is None and not expected:
-        raise ValueError("unsaturated output lacks a sampling footprint")
+
+def _validate_transform(value: object) -> bool:
+    if not isinstance(value, dict) or set(value) != {
+        "matrix",
+        "source_extent",
+        "output_extent",
+    }:
+        raise ValueError("deskew transform is invalid")
+    matrix = value["matrix"]
+    if (
+        not isinstance(matrix, list)
+        or len(matrix) != 3
+        or any(
+            not isinstance(row, list)
+            or len(row) != 3
+            or any(not _finite_number(item) for item in row)
+            for row in matrix
+        )
+        or tuple(float(item) for item in matrix[2]) != (0.0, 0.0, 1.0)
+    ):
+        raise ValueError("deskew affine matrix is invalid")
+    determinant = (
+        float(matrix[0][0]) * float(matrix[1][1])
+        - float(matrix[0][1]) * float(matrix[1][0])
+    )
+    if abs(determinant) < 1.0e-12:
+        raise ValueError("deskew affine matrix is singular")
+    extents = []
+    for name in ("source_extent", "output_extent"):
+        extent = value[name]
+        if (
+            not isinstance(extent, dict)
+            or set(extent) != {"width", "height"}
+            or type(extent["width"]) is not int
+            or type(extent["height"]) is not int
+            or min(extent["width"], extent["height"]) <= 0
+        ):
+            raise ValueError(f"deskew {name} is invalid")
+        extents.append(extent)
+    identity_matrix = matrix == [
+        [1.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0],
+        [0.0, 0.0, 1.0],
+    ]
+    return identity_matrix and extents[0] == extents[1]
+
+
+def _validate_deskew_assessment(value: object) -> dict[str, Any]:
+    if not isinstance(value, dict) or set(value) != {
+        "deskew_applied",
+        "observed_angle_degrees",
+        "applied_source_rotation_degrees",
+        "skip_reason",
+        "transform",
+    }:
+        raise ValueError("deskew assessment is invalid")
+    applied = value["deskew_applied"]
+    observed = value["observed_angle_degrees"]
+    rotation = value["applied_source_rotation_degrees"]
+    reason = value["skip_reason"]
+    identity = _validate_transform(value["transform"])
+    if type(applied) is not bool:
+        raise ValueError("deskew applied fact is invalid")
+    if applied:
+        if (
+            not _finite_number(observed)
+            or not _finite_number(rotation)
+            or float(rotation) == 0.0
+            or reason is not None
+            or identity
+        ):
+            raise ValueError("applied deskew assessment is inconsistent")
+    elif observed is None:
+        if (
+            rotation is not None
+            or reason not in _DESKEW_SKIP_REASONS
+            or reason == DeskewSkipReason.ROTATION_NOT_NEEDED.value
+            or not identity
+        ):
+            raise ValueError("unavailable deskew assessment is inconsistent")
+    elif (
+        not _finite_number(observed)
+        or rotation != 0.0
+        or reason != DeskewSkipReason.ROTATION_NOT_NEEDED.value
+        or not identity
+    ):
+        raise ValueError("unneeded deskew assessment is inconsistent")
+    return value
 
 
 def _validate_gate(record: dict[str, Any], stage: str) -> None:
@@ -228,6 +296,7 @@ def _validate_finalization(record: dict[str, Any]) -> None:
     authorities = finalization["sampling_authority_boxes"]
     boxes = finalization["final_boxes"]
     transforms = finalization["output_transforms"]
+    deskew = _validate_deskew_assessment(finalization["deskew_assessment"])
     output_files = record["output"]["output_files"]
     review_copy = record["output"]["review_copy"]
     requested = finalization["frame_export_requested"]
@@ -250,8 +319,19 @@ def _validate_finalization(record: dict[str, Any]) -> None:
                 boxes,
                 transforms,
             ))
+            or any(transform != deskew["transform"] for transform in transforms)
         ):
             raise ValueError("approved output lacks complete geometry")
+        output_extent = deskew["transform"]["output_extent"]
+        for box_value in boxes:
+            box = _validate_box(box_value, "final output box")
+            if (
+                box["left"] < 0
+                or box["top"] < 0
+                or box["right"] > output_extent["width"]
+                or box["bottom"] > output_extent["height"]
+            ):
+                raise ValueError("final output box exceeds deskew extent")
         if requested and (
             not finalization["frame_export_performed"]
             or finalization["official_tiff_count"] != count

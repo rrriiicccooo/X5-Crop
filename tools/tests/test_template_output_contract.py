@@ -17,7 +17,6 @@ from x5crop.domain import (
 )
 from x5crop.formats import OUTPUT_PROTECTION_SPEC
 from x5crop.formats.scan_canvas import ScanCanvasPhysicalSpec
-from x5crop.geometry.affine import AffineCoordinateTransform
 from x5crop.detection.evidence.scan_canvas import (
     CanvasAxisScaleIntervals,
     ScanCanvasEvidence,
@@ -27,7 +26,6 @@ from x5crop.detection.evidence.scan_canvas import (
 from x5crop.detection.photo_geometry.model import (
     AuthoritySide,
     BoundaryRole,
-    ClippedRequirement,
 )
 from x5crop.detection.photo_geometry.output_model import OutputBoundaryUse
 from x5crop.detection.photo_geometry.template_cross_model import (
@@ -145,7 +143,7 @@ def _enclosing_support_placement(
         boundary_use=OutputBoundaryUse.ENCLOSING_SUPPORT_PAIR,
         enclosing_support_pair=support,
     )
-    return _compose(template, _sequence(template), cross, direction=direction)
+    return _compose(template, _sequence(template), cross)
 
 
 def _lane(lane_id: str = "lane:test") -> SourceLaneEvidence:
@@ -202,7 +200,6 @@ class TemplateOutputContractTest(unittest.TestCase):
             lane=_lane(),
             lane_ordinal=1,
             layout="horizontal",
-            transform=AffineCoordinateTransform.identity(500, 400),
         )
         self.assertEqual(
             output.envelope.boundary_use,
@@ -237,7 +234,6 @@ class TemplateOutputContractTest(unittest.TestCase):
             lane=_lane(),
             lane_ordinal=1,
             layout="horizontal",
-            transform=AffineCoordinateTransform.identity(500, 400),
         )
 
         assessment = template_direct_use_budget_assessment(placement, output)
@@ -263,7 +259,6 @@ class TemplateOutputContractTest(unittest.TestCase):
             lane=_lane(),
             lane_ordinal=2,
             layout="horizontal",
-            transform=AffineCoordinateTransform.identity(500, 400),
         )
 
         assessment = template_direct_use_budget_assessment(placement, output)
@@ -277,14 +272,12 @@ class TemplateOutputContractTest(unittest.TestCase):
 
     def test_selected_placement_produces_supported_output_footprint(self) -> None:
         placement = _placement()
-        transform = AffineCoordinateTransform.identity(500, 400)
         output = output_footprint_from_template_placement(
             placement,
             project_selected_placement(placement),
             lane=_lane(),
             lane_ordinal=1,
             layout="horizontal",
-            transform=transform,
         )
         self.assertEqual(
             output.envelope.canonical_source_footprint,
@@ -323,14 +316,12 @@ class TemplateOutputContractTest(unittest.TestCase):
             lane,
             domain=replace(lane.domain, work_box=Box(0, 20, 500, 400)),
         )
-        transform = AffineCoordinateTransform.identity(500, 400)
         output = output_footprint_from_template_placement(
             placement,
             project_selected_placement(placement),
             lane=lane,
             lane_ordinal=1,
             layout="horizontal",
-            transform=transform,
         )
         self.assertIn(
             AuthoritySide.TOP,
@@ -340,7 +331,7 @@ class TemplateOutputContractTest(unittest.TestCase):
             min(point[1] for point in output.required_source_footprint),
             float(lane.domain.work_box.top),
         )
-        self.assertIsNone(output.mapped_output_box)
+        self.assertFalse(hasattr(output, "mapped_output_box"))
         assessment = template_direct_use_budget_assessment(
             placement,
             output,
@@ -348,48 +339,19 @@ class TemplateOutputContractTest(unittest.TestCase):
         self.assertEqual(assessment.state, EvidenceState.SUPPORTED)
         self.assertTrue(all(item.within_limit for item in assessment.edge_assessments))
 
-    def test_sampling_rectangle_outside_lane_is_explicit_and_never_black_filled(
-        self,
-    ) -> None:
+    def test_source_footprint_is_safe_without_output_transform(self) -> None:
         placement = _placement()
-        lane = _lane()
-        lane = replace(
-            lane,
-            domain=replace(
-                lane.domain,
-                work_box=Box(90, 0, 210, 260),
-            ),
-        )
         output = output_footprint_from_template_placement(
             placement,
             project_selected_placement(placement),
-            lane=lane,
+            lane=_lane(),
             lane_ordinal=1,
             layout="horizontal",
-            transform=AffineCoordinateTransform.expanded_rotation(
-                500,
-                400,
-                5.0,
-            ),
         )
 
-        self.assertTrue(
-            all(
-                lane.domain.work_box.left <= point[0] <= lane.domain.work_box.right - 1
-                and lane.domain.work_box.top <= point[1] <= lane.domain.work_box.bottom - 1
-                for point in output.required_source_footprint
-            )
-        )
-        self.assertIsNone(output.mapped_output_box)
-        self.assertIsNotNone(output.sampling_source_footprint)
-        self.assertTrue(output.saturation_facts)
-        self.assertTrue(
-            all(
-                fact.clipped_requirements
-                == (ClippedRequirement.SAMPLING_RECTANGLE,)
-                for fact in output.saturation_facts
-            )
-        )
+        self.assertEqual(output.saturation_facts, ())
+        self.assertFalse(hasattr(output, "sampling_source_footprint"))
+        self.assertFalse(hasattr(output, "mapped_output_box"))
 
     def test_joint_measurement_expansion_above_five_percent_is_rejected(self) -> None:
         placement = _placement()
@@ -405,7 +367,6 @@ class TemplateOutputContractTest(unittest.TestCase):
             lane=_lane(),
             lane_ordinal=1,
             layout="horizontal",
-            transform=AffineCoordinateTransform.identity(500, 400),
         )
         assessment = template_direct_use_budget_assessment(placement, output)
         self.assertEqual(assessment.state, EvidenceState.CONTRADICTED)
@@ -416,7 +377,7 @@ class TemplateOutputContractTest(unittest.TestCase):
         )
         self.assertFalse(top.within_limit)
 
-    def test_sequence_owned_direction_retains_local_cross_departure_in_budget(self) -> None:
+    def test_local_cross_departure_is_retained_in_output_budget(self) -> None:
         template = _template(1)
         sequence = _sequence(template)
         cross = _cross(template, direction=_direction())
@@ -451,24 +412,10 @@ class TemplateOutputContractTest(unittest.TestCase):
             longitudinal_support_domain_count=2,
             role_authorized_pair_support_domain_count=2,
         )
-        direction = replace(
-            _direction(),
-            direction_id="direction:sequence-owned-departure",
-            selected_observation_ids=(
-                top.observation_id,
-                bottom.observation_id,
-                ObservationId("sequence:0"),
-                ObservationId("sequence:1"),
-            ),
-            full_angle_interval_degrees=FiniteInterval(0.40, 0.50),
-            observed_angle_interval_degrees=FiniteInterval(-0.20, 0.50),
-            canonical_angle_degrees=0.45,
-        )
         placement = _compose(
             template,
             sequence,
             cross,
-            direction=direction,
         )
         output = output_footprint_from_template_placement(
             placement,
@@ -476,7 +423,6 @@ class TemplateOutputContractTest(unittest.TestCase):
             lane=_lane(),
             lane_ordinal=1,
             layout="horizontal",
-            transform=AffineCoordinateTransform.identity(500, 400),
         )
 
         protections = {
@@ -522,7 +468,6 @@ class TemplateOutputContractTest(unittest.TestCase):
             lane=_lane(),
             lane_ordinal=1,
             layout="horizontal",
-            transform=AffineCoordinateTransform.identity(500, 400),
         )
         end = next(
             item
@@ -567,7 +512,6 @@ class TemplateOutputContractTest(unittest.TestCase):
             lane=_lane(),
             lane_ordinal=2,
             layout="horizontal",
-            transform=AffineCoordinateTransform.identity(500, 400),
         )
         end = next(
             item
@@ -606,7 +550,6 @@ class TemplateOutputContractTest(unittest.TestCase):
             lane=_lane(),
             lane_ordinal=3,
             layout="horizontal",
-            transform=AffineCoordinateTransform.identity(700, 400),
         )
         protections = {item.role: item for item in output.boundary_protections}
 
@@ -639,7 +582,6 @@ class TemplateOutputContractTest(unittest.TestCase):
             lane=_lane(),
             lane_ordinal=1,
             layout="horizontal",
-            transform=AffineCoordinateTransform.identity(500, 400),
         )
         assessment = template_direct_use_budget_assessment(placement, output)
         self.assertEqual(assessment.state, EvidenceState.CONTRADICTED)
@@ -651,7 +593,6 @@ class TemplateOutputContractTest(unittest.TestCase):
 
     def test_mismatched_lane_and_nonselected_geometry_are_rejected(self) -> None:
         placement = _placement()
-        transform = AffineCoordinateTransform.identity(500, 400)
         with self.assertRaises(ValueError):
             output_footprint_from_template_placement(
                 placement,
@@ -659,7 +600,6 @@ class TemplateOutputContractTest(unittest.TestCase):
                 lane=_lane("lane:other"),
                 lane_ordinal=1,
                 layout="horizontal",
-                transform=transform,
             )
         output = output_footprint_from_template_placement(
             placement,
@@ -667,7 +607,6 @@ class TemplateOutputContractTest(unittest.TestCase):
             lane=_lane(),
             lane_ordinal=1,
             layout="horizontal",
-            transform=transform,
         )
         tampered = replace(
             output,
@@ -679,7 +618,7 @@ class TemplateOutputContractTest(unittest.TestCase):
                 tampered,
             )
 
-    def test_invalid_ordinal_and_output_extent_fail_without_fallback(self) -> None:
+    def test_invalid_ordinal_fails_without_fallback(self) -> None:
         placement = _placement()
         with self.assertRaises(ValueError):
             output_footprint_from_template_placement(
@@ -688,16 +627,6 @@ class TemplateOutputContractTest(unittest.TestCase):
                 lane=_lane(),
                 lane_ordinal=0,
                 layout="horizontal",
-                transform=AffineCoordinateTransform.identity(500, 400),
-            )
-        with self.assertRaises(ValueError):
-            output_footprint_from_template_placement(
-                placement,
-                project_selected_placement(placement),
-                lane=_lane(),
-                lane_ordinal=1,
-                layout="horizontal",
-                transform=AffineCoordinateTransform.identity(150, 150),
             )
 
     def test_api_is_current_only_and_ratios_are_frozen(self) -> None:
@@ -713,7 +642,6 @@ class TemplateOutputContractTest(unittest.TestCase):
                 "lane",
                 "lane_ordinal",
                 "layout",
-                "transform",
             ),
         )
         self.assertEqual(

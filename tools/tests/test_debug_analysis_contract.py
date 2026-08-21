@@ -85,6 +85,10 @@ def _fixture(
     detection = finalize_detection(
         candidate,
         decision,
+        workspace.deskew_observation,
+        layout=workspace.layout,
+        source_width=workspace.source_gray.shape[1],
+        source_height=workspace.source_gray.shape[0],
     )
     return configuration, profile, workspace, detection
 
@@ -407,15 +411,49 @@ class DebugAnalysisContractTest(unittest.TestCase):
                 Path(temporary)
             )
         assessment = SimpleNamespace(
-            outcome="shared_rotation",
+            deskew_applied=True,
             applied_source_rotation_degrees=-0.153,
-            observed_angle_interval_degrees=FiniteInterval(-0.166, 0.166),
+            observed_angle_degrees=0.153,
+            skip_reason=None,
         )
-        applied = SimpleNamespace(source_transform_assessment=assessment)
+        applied = SimpleNamespace(deskew_assessment=assessment)
         first, second = transform_lines(applied, profile)
         self.assertEqual(first, "V5 · DESKEW APPLIED -0.153°")
-        self.assertIn("observed -0.166°…+0.166°", second)
+        self.assertIn("observed +0.153°", second)
         self.assertIn("ORIENTATION 1>CANONICAL>1", second)
+
+    def test_header_distinguishes_rotation_not_needed_from_measurement_skip(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            _configuration, profile, _workspace, _detection = _fixture(
+                Path(temporary)
+            )
+        not_needed = SimpleNamespace(
+            deskew_assessment=SimpleNamespace(
+                deskew_applied=False,
+                applied_source_rotation_degrees=0.0,
+                observed_angle_degrees=0.0,
+                skip_reason=SimpleNamespace(value="rotation_not_needed"),
+            )
+        )
+        skipped = SimpleNamespace(
+            deskew_assessment=SimpleNamespace(
+                deskew_applied=False,
+                applied_source_rotation_degrees=None,
+                observed_angle_degrees=None,
+                skip_reason=SimpleNamespace(value="edge_slope_conflict"),
+            )
+        )
+
+        self.assertEqual(
+            transform_lines(not_needed, profile)[0],
+            "V5 · ROTATION NOT NEEDED +0.000°",
+        )
+        self.assertEqual(
+            transform_lines(skipped, profile)[0],
+            "V5 · DESKEW SKIPPED · edge_slope_conflict",
+        )
 
     def test_header_displays_and_bounds_the_original_source_filename(self) -> None:
         self.assertEqual(

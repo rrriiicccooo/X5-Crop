@@ -12,7 +12,9 @@ X5 Crop 是已知胶片模板的自动对准器，不是通用照片边界检测
 → 固定 W/H 模板
 → 从整条片带到局部边界的有界对准
 → 唯一 placement
-→ selected-only 输出保护
+→ selected-only source-space 安全 polygon
+→ CandidateGate / DecisionGate
+→ 可选 lightweight deskew
 → 整张 source 自动输出或人工检查
 ```
 
@@ -63,14 +65,14 @@ holder extent：物理名义范围 ±3.5%
 
 “outer”不能再表示多个不同对象：
 
-- `CoarseStripSupport`：片带大致位置、搜索 corridor 和 source-wide 方向。它可以来自片夹边、
-  胶片材料边、照片边或其它长距离稳定结构，但不能直接决定 crop。
+- `CoarseStripSupport`：片带大致位置、搜索 corridor 和局部测量所需的粗方向。它可以来自片夹边、
+  胶片材料边、照片边或其它长距离稳定结构，但不能直接决定 crop 或输出 deskew。
 - `OuterBoundaryObservation` / `PhotoBoundaryAnchor`：role-free 像素观察与模板绑定后，才可能
   获得 first、last、top 或 bottom 的照片边界权限。
-- `CanonicalPlacement`：format、count、phase、pitch、direction、cross 和至多一次 local advance
+- `CanonicalPlacement`：format、count、phase、pitch、局部 frame axis、cross 和至多一次 local advance
   共同决定的固定矩形集合。
 - `PhotoGroupOuter`：从已选 placement 的 first start 与 last end 推导的长轴范围；不反向参与选位。
-- `OutputFootprint`：联合不确定性、直线残差和产品 bleed 后真正需要从原图采样的区域。
+- `OutputFootprint`：联合不确定性、直线残差和产品 bleed 后，在 source 坐标中已经确认安全的区域。
 
 这些词汇只映射到一套 current type：`CoarseStripSupport` 保存 role-free aggregate observation，
 `OuterBoundaryObservation` 使用 `BoundaryEdgeObservation`，模板绑定后的 `PhotoBoundaryAnchor` 保存在
@@ -80,29 +82,26 @@ sequence/cross provenance，`CanonicalPlacement` 使用 `FormatPlacement`。不�
 或在满足完整 enclosing 合同时成为输出边界。同一 raw observation 可以承担多个职责，但 identity
 只有一个，不能重复计为独立证据。
 
-## 4. 共享物理模型与 deskew
+## 4. 局部 frame axis 与可选 deskew
 
-同一 source 共享 W/H、px/mm 和 source-wide 方向；每个 lane 独立拥有 phase、pitch、cross center
-和 local advance。双 lane 只共享相容的尺度与方向，不共享 ordinal、gap 或异常。
+同一 source 只共享 W/H 与 px/mm；每个 lane 独立拥有 phase、pitch、cross center、局部 frame axis
+和 local advance。双 lane 只共享相容的尺度，不再要求共享输出旋转方向。
 
-所有 frame 使用相同 W/H 和同一个 `SharedStripDirection`。Deskew 不是输出阶段的装饰：理论角色
-位置、outer、separator、四角 footprint 和最终 affine sampling 都使用这条方向。斜片条首尾的坐标
-变化必须在检测时已经表达。横向片条以 canonical angle 的反号消除原图倾斜；纵向 canonicalization
-已经交换坐标轴，因此以 canonical angle 同号消除原图倾斜。两种 layout 都必须把对应的理论直线
-映射为水平/垂直线，不能只按一个 layout 的符号约定实现。
+检测中的方向只回答“source 坐标中的安全矩形怎样倾斜”。`SharedStripDirection` 这一内部类型表示
+同一 placement 的 top/bottom 所共享的局部 frame axis，不拥有 source-wide deskew，也不能选择或
+否决 placement、跨 lane 合并 authority，或进入输出旋转。三区域或 source-spanning direct cross
+可以收窄该 axis；单侧 direct anchor 可以独占局部 axis；局部两侧方向互斥时，至少两个独立
+sequence 物理位置只能约束 polygon 的保守方向范围。证据不足时保留 cross 的完整范围，让既有
+selected-only budget 决定是否安全，而不是制造新的方向失败。
 
-首版不拟合弯曲曲线。轻微弯曲表示为共同直线加 selected-placement residual；残差进入联合输出
-保护。只有已经获得角色资格、直接像素连续覆盖 source，并且在有界异常点剔除后每条保留 trace
-仍一致证明同一内外关系的 sequence track，才能保留为局部位置 observation；它不提供 source-wide
-direction，也不能在已有足够 straight anchor 闭合全秩解时重标定 phase、W 或 pitch。超过预算就
-review，不建立逐帧角度、自由四边形或曲线 detector。
+首版不拟合弯曲曲线。轻微弯曲表示为 selected-placement 的局部直线 residual，并进入联合输出
+保护。Sequence 不能拥有输出 deskew，也不能在已有足够 direct anchor 闭合全秩解时重标定 phase、
+W 或 pitch。超过预算就 review，不建立逐帧角度、自由四边形或曲线 detector。
 
-当 selected cross 只是两条局部、非 source-spanning 的直接 `APERTURE_PAIR`，pair-level 支持少于
-3 个独立区域、没有 selected enclosing support，且两侧 local fit 本身没有共同方向时，它只拥有
-top/bottom offset，不拥有 source-wide deskew。至少两个独立 sequence 物理位置可以闭合全局方向；
-此时 `SharedStripDirection.full` 只取 sequence 可行区间，cross 与 sequence observation ID 一起进入
-provenance，local cross departure 只保存在 observed interval 和 selected-placement residual。局部
-cross full interval 与全局方向不相交本身不是矛盾，也不得把二者的 hull 当成整条 source 的旋转范围。
+输出 deskew 是与模板无关的 role-free 旁路 observation：在整条片带的 6–24 个有界稀疏位置读取
+最外侧暗边，两侧分别稳健拟合，只有两侧 slope 相容、residual 合格且角度在产品范围内时才产生
+一个角度。它不识别 holder、film 或 photo edge，不可用或矛盾时返回 typed skip reason 和 `None`，
+绝不伪造 `0°`。这份 observation 只在 `DecisionGate` 之后由 finalization 消费。
 
 ## 5. 从整体到局部的模板编译
 
@@ -125,9 +124,9 @@ format/count/holder 编译固定模板、coarse intents 与工作上界
 - phase、role、cross、placement、像素与内存上界。
 
 Coarse pass 对每个 lane 只执行一个长轴和一个短轴 aggregate query，输出保守 interval 和 receipt；
-aggregate interval 本身没有角色、ordinal 或 geometry authority。短轴 query 的各条已注册 trace 若能
-直接闭合为 source-wide 双侧 track，可以另外建立共同方向，并在满足第 8.2 节全部条件时建立
-enclosing support；这份 authority 来自逐 trace 直接观察，不来自 aggregate interval。Long-axis precision 使用固定 lattice 在两个有限 origin
+aggregate interval 本身没有角色、ordinal、placement 或输出 deskew authority。短轴 query 的各条
+已注册 trace 若能直接闭合为双侧 track，可以在满足第 8.2 节全部条件时建立 enclosing support；
+这份 authority 来自逐 trace 直接观察，不来自 aggregate interval。Long-axis precision 使用固定 lattice 在两个有限 origin
 上生成互不重叠的理论窗口；没有 direct coarse observation 时才退回一个保守全长窗口。所有可能被
 选中位置使用的精测查询随后一次登记、一次读取；不能为某个 candidate 重读 TIFF、扩张全图搜索或
 winner-specific requery。
@@ -135,7 +134,7 @@ winner-specific requery。
 同一 trace lattice 只建立一次全局 normalization baseline，再由理论窗口切出局部测量。Baseline
 不产生 transition 或 placement evidence；其像素和临时内存仍完整计入 receipt，不能伪装成免费工作。
 
-正常片条在 outer、direction、phase/pitch、separator topology、闭环、content 和输出预算均唯一且
+正常片条在 outer、局部 frame axis、phase/pitch、separator topology、闭环、content 和输出预算均唯一且
 相容时，运行时根据已测 residual 停止。Registered measurement 仍保持
 candidate-independent；“停止”表示不再开放 local
 advance、额外 fit pass 或新 hypothesis，不是按 winner 临时少登记查询。普通 gap residual 已由正常
@@ -215,13 +214,13 @@ role = phase
 
 ## 8. Cross、outer 与固定 H
 
-Cross 先使用 source-wide direction，再寻找能够确定短轴 offset 的直接证据。片夹短轴中心只帮助
-单侧 anchor 推导 opposite，并验证 enclosing support；它不能选择或否决一对角色正确、固定 H 闭环
-的直接 aperture，也不是边界位置 authority。
+Cross 寻找能够确定短轴 offset、fixed H 和局部 frame axis 的直接证据。片夹短轴中心只帮助单侧
+anchor 推导 opposite，并验证 enclosing support；它不能选择或否决一对角色正确、固定 H 闭环的
+直接 aperture，也不是边界位置或输出 deskew authority。
 
 ### 8.1 `APERTURE_PAIR`
 
-Photo aperture 的候选必须有正确 top/bottom 角色、外侧背景、有限位置、共同方向和固定 H 闭环。
+Photo aperture 的候选必须有正确 top/bottom 角色、外侧背景、有限位置、局部共同方向和固定 H 闭环。
 允许：
 
 - 直接 top + bottom；
@@ -236,10 +235,10 @@ Photo aperture 的候选必须有正确 top/bottom 角色、外侧背景、有�
 数量或 residual 标量硬选。已有 direct top+bottom 闭环时，不再执行“缺失 opposite”的局部精修；
 同一批 raw transitions 的重复拟合不能成为第二个 placement。
 
-上述 direct top+bottom 若仅为 local two-region aperture、两侧 fit 无共同方向，而至少两个独立
-sequence positions 已闭合 source-wide direction，则 sequence direction 负责全局 deskew，cross
-仍只负责固定 H 与短轴位置。Source-spanning binding、pair-level 3-region authority、selected
-`ENCLOSING_SUPPORT_PAIR` 或不足两个 sequence physical positions 均不适用该权限。
+上述 direct top+bottom 若仅为 local two-region aperture 且两侧 fit 无共同方向，至少两个独立
+sequence positions 可以约束这一 placement 的局部 frame axis，使 source-space polygon 保持原有
+保守范围；它们仍不拥有输出 deskew。Source-spanning binding、pair-level 3-region authority 和
+selected `ENCLOSING_SUPPORT_PAIR` 直接保留 cross 的局部 axis。
 
 Broader same-role track 只有与 local competitor 共享同一个 opposite binding、双方 role-authorized，
 且全部 supporting traces 都属于显式 registered trace lattice 时，才可能产生集合支配。存在两种
@@ -264,7 +263,7 @@ domain、把两个不连通 fragments 合计覆盖、role 未授权或方向不�
 
 当 aperture 未唯一成立时，可以使用一对直接外侧支撑作为完整输出 top/bottom，但必须同时满足：
 
-- 两侧共享直接 trace 和相容的 source-wide direction；
+- 两侧共享直接 trace 和相容的局部 frame-axis geometry；
 - 两侧均 source-spanning，或覆盖 3 个独立支持区域和 `min(3, count)` 个长轴 frame domain；
 - 直接 span 完整包含 canonical fixed H；
 - `H < support_span <= 1.1H`；
@@ -282,18 +281,18 @@ domain、把两个不连通 fragments 合计覆盖、role 未授权或方向不�
 
 ## 9. Compose、竞争、闭环与 holder fill
 
-`compose_format_placement` 一次把 `TemplateSpec + SequenceFit + CrossFit +
-SharedStripDirection` 编译为全部固定 frame。之后检查：
+`compose_format_placement` 一次把 `TemplateSpec + SequenceFit + CrossFit` 编译为全部固定 frame，
+并由唯一 `template_frame_axis.py` owner 绑定 source-space 局部 axis。之后检查：
 
-- W/H、pitch、direction 与 format/source authority 相容；
+- W/H、pitch、局部 frame axis 与 format/source authority 相容；
 - ordinal 单调、frame 不交叉；
 - first/last、separator、top/bottom 和总跨度闭环；
-- 双 lane 的共享尺度、方向与 slot identity 相容。
+- 双 lane 的共享尺度与 slot identity 相容；局部 axis 可以不同。
 
 选择只使用 typed hard facts 和证据职责，不使用加权总分、confidence 补偿、top-K、投票或
 样片/format 特判。同一 template identity、integer offset、local topology 与独立物理 support 下，
 相交的 role interval 是一个连续 placement；不同坐标、ordinal、非等价 observation binding、
-boundary use 或 sampling footprint 是离散竞争。不能明显分胜负就 review。
+boundary use 或 required source footprint 是离散竞争。不能明显分胜负就 review。
 
 `PhotoGroupOuter` 只在 selection 后生成。`HolderFillAssessment` 逐侧计算 outer 与 lane authority
 之间的空余，并仅用 W 判断：
@@ -338,16 +337,24 @@ format 尺寸的 5%。四边不能借额度；刚好达到上限通过。
 aperture 单边 5%；它只接受上节的总 span `<= 1.1H`。Start/end 仍使用正常 sequence bleed 和
 单边 5%。
 
-`OutputFootprint` 不得与 source/lane authority 相交后静默缩小。联合多边形以及最终轴对齐采样矩形
-的四个 sample-center 角逆映射后都必须位于 source/lane authority 内；任一所需区域越界都保存
-saturation fact，禁止暴露正式 mapped box，并进入 review。Affine kernel support 由 sampling 层验证，
-不反向扩大 placement，也不允许用黑色 no-data 填角后自动批准。
+`OutputFootprint` 不得与 source/lane authority 相交后静默缩小。Decision 前只验证联合 source-space
+polygon 完整位于 lane authority；任一真正所需区域越界都保存 saturation fact 并进入 review。
+
+Decision 后 finalization 才评估 lightweight deskew。Observation 不可用时使用 identity 且不降级；
+有效角度在 source pixel-center 长轴上的端点位移小于 3 px 时也使用 identity，并记录
+`rotation_not_needed`。其余情况横向 layout 使用观测角的反号、纵向 layout 使用同号构造 expanded
+rotation。每个已经确认安全的 polygon 与 source 使用同一 affine transform，正式轴对齐 box 由旋转后
+polygon 的精确半开 AABB 得到，不能先把 polygon 扩成 source AABB，也不能继续裁固定 W×H。
+
+旋转后 AABB 的角落可以位于安全 polygon 之外；这些表示性角落允许写黑色 no-data，不是检测缺口，
+不得回流 `CandidateGate`。Sampling 仍必须保证 polygon 内的已确认区域完整、输出 extent 有界、
+16-bit/ICC/resolution/metadata 保真。
 
 ## 11. Gate、report 与 Debug Analysis
 
 `CandidateGate` 只汇总 typed facts：输入 authority、measurement completeness、phase/cross、
-producer bounds、local advance、唯一 placement、content、holder fill、联合 footprint、budget、
-deskew、transform 和 sampling。它不选择 geometry，也不创建最终文案。
+producer bounds、local advance、唯一 placement、content、holder fill、source-space 联合 footprint
+和 budget。它不读取 deskew observation，不选择 geometry，也不创建最终文案。
 
 `DecisionGate` 独占 `approved_auto`、`needs_review` 和 final reasons。常见根因包括：
 
@@ -358,10 +365,10 @@ deskew、transform 和 sampling。它不选择 geometry，也不创建最终文�
 - `producer_bound_exceeded`
 - `direct_use_budget_exceeded`
 - `source_lane_authority_unavailable`
-- `transform_sampling_unavailable`
 
 普通 report 只保存输入、holder/count authority、最终选择、OutputFootprint、预算、根因、输出文件
-和必要 TIFF 事实。每个阻止事实同时给出最小缺失事实、恢复类别和建议操作。完整 observations、
+和必要 TIFF 事实，并始终保存 `deskew_assessment`：是否应用、观测角、实际旋转或 typed skip reason。
+`needs_review` 仍不暴露 official footprints、transforms 或 final boxes。每个阻止事实同时给出最小缺失事实、恢复类别和建议操作。完整 observations、
 alignment residual、winner/runner、direct/inferred ledger、content veto 和工作量只属于显式 Debug
 Analysis 或 verifier。
 
@@ -373,6 +380,7 @@ Debug Analysis 只读取同一次 runtime facts，不重算几何、不改变决
 - best、runner 及真正不同之处；
 - `APERTURE_PAIR` 或 `ENCLOSING_SUPPORT_PAIR`；
 - selected-only OutputFootprint、四边 bleed/联合 expansion/预算；
+- `DESKEW APPLIED`、`ROTATION NOT NEEDED` 或 typed `DESKEW SKIPPED`；
 - 第一个 blocking Gate gap，或全部事实已支持。
 
 ## 12. 工作量、性能与 TIFF
@@ -439,14 +447,16 @@ Pillow 只在 Debug Analysis 时延迟导入。生产默认 `--jobs 1`、上限 
 | `photo_geometry/source_geometry.py`、`joint_axis_geometry.py` | source 共享 W/H/scale authority |
 | `photo_geometry/template_phase*.py`、`template_pitch.py`、`template_residual.py` | phase、ordinal、source pitch 与最多一次 direct local advance |
 | `photo_geometry/template_alignment_diagnostic.py` | theoretical-vs-observed residual 的只读诊断 |
-| `photo_geometry/interval_math.py`、`template_cross*.py`、`template_direction.py`、`template_cross_support.py` | 共享 interval 运算、fixed-H aperture、共同方向与 enclosing support；direct cross direction closure 只属于 `template_cross_geometry.py` |
+| `photo_geometry/interval_math.py`、`template_cross*.py`、`template_cross_support.py` | 共享 interval 运算、fixed-H aperture、局部 top/bottom 方向闭合与 enclosing support |
+| `photo_geometry/template_frame_axis.py` | 只为一个 placement 约束 source-space frame axis；不拥有输出 deskew 或 selection authority |
 | `photo_geometry/template_placement.py`、`template_selection.py` | 一次 compose 与离散 winner/runner |
 | `photo_geometry/template_holder_fill.py` | selected PhotoGroupOuter 与 W-only fill assessment |
 | `photo_geometry/content_*.py` | placement 后的二维 negative veto |
 | `photo_geometry/template_feasible_geometry.py` | selected placement 的低维联合可行集合 |
 | `photo_geometry/template_output.py`、`output_model.py` | JointPlacementEnvelope、bleed、OutputFootprint 与 budget |
 | `photo_geometry/template_runtime_model.py`、`template_gate.py`、`detector.py` | current-only handoff、CandidateGate facts 与顶层编排 |
-| `x5crop/detection/decision/`、`final/` | 最终决定与 approved geometry exposure |
+| `x5crop/detection/output_deskew.py` | 6–24 trace、role-free、candidate-independent 的可选输出角度 observation |
+| `x5crop/detection/decision/`、`final/` | 最终决定、Decision 后 deskew assessment 与 approved geometry exposure |
 | `x5crop/report/` | compact production report 与 development facts |
 | `x5crop/debug/` | 只读诊断 facts 与面板 |
 | `x5crop/io/`、`export/`、`output/` | TIFF domain、affine sampling、metadata 与原子发布 |
@@ -456,8 +466,9 @@ Pillow 只在 Debug Analysis 时延迟导入。生产默认 `--jobs 1`、上限 
 
 - 九张用户确认黄金判断几何准确性，当前九项均为 nominal，必须安全自动批准。Accuracy 对任何
   已选 candidate 的 footprint 先做与 final status 无关的黄金覆盖检查；只有不存在 selected
-  candidate 的安全 review 不产生几何 verdict，`approved_auto` 仍须另外验证正式输出的覆盖、预算
-  与 deskew。任何黄金不得错误自动通过；未来 challenge 从安全 review 变为正确批准是改进。
+  candidate 的安全 review 不产生几何 verdict，`approved_auto` 仍须另外验证正式输出的覆盖与预算。
+  Cosmetic deskew 精度不再是黄金阻断条件，但 affine polygon envelope 与 TIFF 安全合同仍阻断。
+  任何黄金不得错误自动通过；未来 challenge 从安全 review 变为正确批准是改进。
 - 111-source diagnostic 只证明不崩溃、工作量有界、报告闭合和 TIFF 工程合同，不证明几何正确。
 - 24-source performance 只证明其绑定 commit、依赖和机器上的完整路径时间与资源；5 秒均值是
   blocking Gate，3 秒均值只是 non-blocking challenge。
@@ -465,6 +476,7 @@ Pillow 只在 Debug Analysis 时延迟导入。生产默认 `--jobs 1`、上限 
   三份实机 receipt。APFS/HFS+ 与 NTFS 分别本机验证；没有独立卷时 exFAT 必须保持
   `best_effort_unverified`，不得静默升级为已验证。
 - 合成和变形合同覆盖 coarse support 的统一边框、翻转、横竖转置和亮度/对比度，phase 的平移、缩放
-  与 fractional pitch，deskew 的横竖方向，轻微直线 residual、缺边、wide/narrow 单次 gap、contact
+  与 fractional pitch，cosmetic deskew 的可用/跳过及横竖旋转符号，轻微直线 residual、缺边、
+  wide/narrow 单次 gap、contact
   review、强内部假边、填充状态、dual lane、联合安全预算和 source-wide 事务。
 - 全部 release receipt 必须绑定同一最终 commit；否则 V5 不创建 RC、tag、Release 或公开 ZIP。

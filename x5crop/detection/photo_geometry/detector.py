@@ -5,7 +5,7 @@ from __future__ import annotations
 from ...configuration.model import DetectionConfiguration, ResolvedSlotCount
 from ...domain import EvidenceState
 from ..evidence.content_occupancy_model import ContentOccupancyObservationSet
-from ..gate_checks import DetectionFailureFact, GateGap, failure_fact
+from ..gate_checks import GateGap, failure_fact
 from ..source_core import SourceLaneEvidence
 from .content_topology import build_content_topology_index
 from .content_veto import content_veto_assessment
@@ -15,14 +15,12 @@ from .lane_preparation import (
     resolve_output_slots,
 )
 from .measurement_model import PhotoBoundaryMeasurementField
-from .output_model import OutputSlotIdentity, SharedStripDirection
+from .output_model import OutputSlotIdentity
 from .source_geometry import SourceScanGeometry
 from .template_cross_model import CrossFit, CrossFitStatus
 from .template_feasible_geometry import project_selected_placement
-from .template_direction import lane_template_direction, shared_template_direction
 from .template_gate import (
     build_template_gate,
-    output_transform,
     supported,
     unavailable,
 )
@@ -83,60 +81,14 @@ def _shared_geometry(
     return result
 
 
-def _fit_direction(lane: PreparedTemplateLane):
-    phase = lane.phase_competition.best
-    cross = lane.cross_competition.best
-    if phase is None or cross is None:
-        return None, None
-    try:
-        return lane_template_direction(phase, lane.sequence_edges, cross), None
-    except ValueError as exc:
-        return None, failure_fact(
-            GateGap.SHARED_STRIP_DIRECTION_UNAVAILABLE,
-            detail=str(exc),
-        )
-
-
-def _shared_direction(
-    lane_resolutions: tuple[
-        tuple[SharedStripDirection | None, DetectionFailureFact | None],
-        ...,
-    ],
-) -> tuple[SharedStripDirection | None, DetectionFailureFact | None]:
-    if not lane_resolutions:
-        return None, None
-    failure = next(
-        (item[1] for item in lane_resolutions if item[1] is not None),
-        None,
-    )
-    if failure is not None:
-        return None, failure
-    values = tuple(item[0] for item in lane_resolutions)
-    if any(item is None for item in values):
-        return None, None
-    try:
-        return (
-            shared_template_direction(
-                tuple(item for item in values if item is not None)
-            ),
-            None,
-        )
-    except ValueError as exc:
-        return None, failure_fact(
-            GateGap.SHARED_STRIP_DIRECTION_NONUNIQUE,
-            detail=str(exc),
-        )
-
-
 def _compose(
     prepared: PreparedTemplateLane,
     *,
     sequence_fit,
     cross_fit,
     source_geometry,
-    direction,
 ) -> FormatPlacement | None:
-    if sequence_fit is None or cross_fit is None or direction is None:
+    if sequence_fit is None or cross_fit is None:
         return None
     try:
         return compose_format_placement(
@@ -149,8 +101,8 @@ def _compose(
             height_axis=prepared.height_axis,
             width_authority_px=prepared.width_authority_px,
             height_authority_px=prepared.height_authority_px,
+            sequence_observations=prepared.sequence_edges,
             template=prepared.template_spec,
-            direction=direction,
         )
     except ValueError:
         return None
@@ -160,7 +112,6 @@ def _placements(
     prepared: PreparedTemplateLane,
     *,
     source_geometry: SourceScanGeometry,
-    direction,
 ) -> tuple[FormatPlacement | None, FormatPlacement | None]:
     phase = prepared.phase_competition
     cross = prepared.cross_competition
@@ -169,7 +120,6 @@ def _placements(
         sequence_fit=phase.best,
         cross_fit=cross.best,
         source_geometry=source_geometry,
-        direction=direction,
     )
     runner = None
     if phase.runner_up is not None:
@@ -178,16 +128,13 @@ def _placements(
             sequence_fit=phase.runner_up,
             cross_fit=cross.best,
             source_geometry=source_geometry,
-            direction=direction,
         )
     elif cross.runner_up is not None:
-        runner_direction = cross.runner_up.selected_direction or direction
         runner = _compose(
             prepared,
             sequence_fit=phase.best,
             cross_fit=cross.runner_up,
             source_geometry=source_geometry,
-            direction=runner_direction,
         )
     if best is not None and runner is not None and best.placement_id == runner.placement_id:
         runner = None
@@ -195,17 +142,13 @@ def _placements(
 
 
 def _empty_result(
-    field: PhotoBoundaryMeasurementField,
     *,
-    layout: str,
     lanes_available: bool,
     output_slot_gap: GateGap = GateGap.OUTPUT_SLOT_COUNT_UNAVAILABLE,
 ) -> PhotoGeometryDetectionResult:
     selection = TemplateSourceSelection(
-        (), (), None, None, EvidenceState.UNAVAILABLE,
-        failure_fact(output_slot_gap),
+        (), (), None, EvidenceState.UNAVAILABLE, failure_fact(output_slot_gap)
     )
-    transform = output_transform(field, layout, selection)
     facts = {
         "scan_canvas_authority": (
             supported()
@@ -215,7 +158,6 @@ def _empty_result(
         "output_slot_count": unavailable(output_slot_gap),
         "observation_completeness": unavailable(GateGap.PRODUCER_BOUND_EXCEEDED),
         "source_scan_geometry": unavailable(GateGap.SOURCE_SCAN_GEOMETRY_UNAVAILABLE),
-        "shared_strip_direction": unavailable(GateGap.SHARED_STRIP_DIRECTION_UNAVAILABLE),
         "complete_placement": unavailable(GateGap.COMPLETE_PLACEMENT_UNAVAILABLE),
         "producer_coverage": unavailable(GateGap.PRODUCER_BOUND_EXCEEDED),
         "sequence_authority": unavailable(GateGap.PHASE_ANCHOR_UNAVAILABLE),
@@ -233,9 +175,8 @@ def _empty_result(
         ),
         "selected_output_footprint": unavailable(GateGap.OUTPUT_FOOTPRINT_UNAVAILABLE),
         "direct_use_budget": unavailable(GateGap.DIRECT_USE_BUDGET_UNAVAILABLE),
-        "transform_sampling": unavailable(GateGap.OUTPUT_TRANSFORM_UNAVAILABLE),
     }
-    return PhotoGeometryDetectionResult(None, (), selection, (), transform, (), facts)
+    return PhotoGeometryDetectionResult(None, (), selection, (), facts)
 
 
 def reconstruct_photo_geometry(
@@ -259,8 +200,6 @@ def reconstruct_photo_geometry(
             != resolved_slot_count.holder_full_count
         )
         return _empty_result(
-            field,
-            layout=layout,
             lanes_available=bool(lanes),
             output_slot_gap=(
                 GateGap.UNSUPPORTED_DUAL_COUNT
@@ -285,32 +224,18 @@ def reconstruct_photo_geometry(
         )
     )
     shared_geometry = _shared_geometry(prepared)
-    lane_direction_resolutions = tuple(
-        _fit_direction(lane) for lane in prepared
-    )
-    shared_direction, direction_failure = _shared_direction(
-        lane_direction_resolutions
-    )
     provisional: list[
         tuple[FormatPlacement | None, FormatPlacement | None, object, TemplatePlacementCompetition]
     ] = []
-    for lane, content, lane_direction_resolution in zip(
+    for lane, content in zip(
         prepared,
         content_observations,
-        lane_direction_resolutions,
         strict=True,
     ):
         geometry = shared_geometry or lane.source_scan_geometry
-        lane_direction, lane_direction_failure = lane_direction_resolution
-        direction = (
-            None
-            if direction_failure is not None
-            else shared_direction or lane_direction
-        )
         best, runner = _placements(
             lane,
             source_geometry=geometry,
-            direction=direction,
         )
         content_assessment = (
             None
@@ -331,9 +256,6 @@ def reconstruct_photo_geometry(
             phase=lane.phase_competition,
             cross=lane.cross_competition,
             content_assessment=content_assessment,
-            direction_failure=(
-                direction_failure or lane_direction_failure
-            ),
         )
         provisional.append((best, runner, content_assessment, competition))
 
@@ -341,7 +263,6 @@ def reconstruct_photo_geometry(
         tuple(item[3] for item in provisional),
         lane_ids=lane_ids,
         shared_scan_geometry=shared_geometry,
-        shared_direction=shared_direction,
     )
     if source_selection.state != EvidenceState.SUPPORTED:
         failure = source_selection.failure
@@ -355,7 +276,6 @@ def reconstruct_photo_geometry(
             lane_ids,
             tuple(None for _lane in lanes),
             None,
-            None,
             EvidenceState.UNAVAILABLE,
             failure,
             tuple(item.runner_up_placement_id for item in competitions),
@@ -363,9 +283,7 @@ def reconstruct_photo_geometry(
     else:
         competitions = tuple(item[3] for item in provisional)
 
-    transform = output_transform(field, layout, source_selection)
     reconstructions: list[TemplateLaneReconstruction] = []
-    lane_transforms = []
     for lane, source_lane, values, competition in zip(
         prepared, lanes, provisional, competitions, strict=True
     ):
@@ -374,9 +292,8 @@ def reconstruct_photo_geometry(
             if source_selection.state == EvidenceState.SUPPORTED
             else None
         )
-        lane_transform = transform
         output_footprints = ()
-        if selected is not None and lane_transform.transform is not None:
+        if selected is not None:
             projection = project_selected_placement(selected)
             try:
                 output_footprints = tuple(
@@ -386,7 +303,6 @@ def reconstruct_photo_geometry(
                         lane=source_lane,
                         lane_ordinal=ordinal,
                         layout=layout,
-                        transform=lane_transform.transform,
                     )
                     for ordinal in range(1, selected.output_slot_count + 1)
                 )
@@ -443,15 +359,11 @@ def reconstruct_photo_geometry(
                 ),
             )
         )
-        lane_transforms.append(lane_transform)
     reconstructed = tuple(reconstructions)
     gate = build_template_gate(
-        field,
         resolved,
         reconstructed,
         source_selection,
-        tuple(lane_transforms),
-        layout=layout,
     )
     return PhotoGeometryDetectionResult(
         resolved_output_slots=resolved,
@@ -460,8 +372,6 @@ def reconstruct_photo_geometry(
         output_slot_identities=_output_identities(
             lanes, resolved.lane_output_slot_counts
         ),
-        source_transform_assessment=gate.source_transform,
-        lane_transform_assessments=tuple(lane_transforms),
         assessment_facts=gate.facts,
     )
 

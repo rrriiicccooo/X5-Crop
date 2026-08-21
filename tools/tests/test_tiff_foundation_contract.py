@@ -91,6 +91,65 @@ class TiffFoundationContractTest(unittest.TestCase):
                         source_profile.metadata.extra_tags,
                     )
 
+    def test_rotated_polygon_envelope_preserves_tiff_profile_and_black_corners(
+        self,
+    ) -> None:
+        array = (
+            np.arange(30 * 40 * 3, dtype=np.uint16).reshape(30, 40, 3)
+            + 1000
+        )
+        profile = ImageProfile(
+            shape=array.shape,
+            dtype="uint16",
+            axes="YXS",
+            photometric="RGB",
+            compression="NONE",
+            sample_format=None,
+            bits_per_sample=(16, 16, 16),
+            samples_per_pixel=3,
+            planar_config="CONTIG",
+            resolution=(400.0, 400.0),
+            resolution_unit=2,
+            icc_profile=b"x5crop-rotated-icc",
+            metadata=TiffMetadata(
+                description="rotated polygon output",
+                datetime="2026:08:21 12:00:00",
+                software="X5 Crop contract",
+                extra_tags=(),
+            ),
+            orientation=orientation_mapping(1, 40, 30),
+        )
+        transform = AffineCoordinateTransform.expanded_rotation(40, 30, -2.0)
+        polygon = ((4.0, 3.0), (35.0, 3.0), (35.0, 26.0), (4.0, 26.0))
+        box = mapped_half_open_box(polygon, transform.map_point)
+
+        with tempfile.TemporaryDirectory() as temporary:
+            written = write_crops(
+                "rotated",
+                1,
+                array,
+                profile,
+                (box,),
+                (Box(4, 3, 36, 27),),
+                (transform,),
+                Path(temporary),
+            )
+            actual, actual_profile, warnings = read_tiff(Path(written[0]))
+
+        self.assertEqual(warnings, [])
+        self.assertEqual(actual.shape, (box.height, box.width, 3))
+        self.assertEqual(actual.dtype, np.dtype("uint16"))
+        self.assertTrue(np.any(actual == 0))
+        self.assertTrue(np.any(actual > 0))
+        self.assertEqual(actual_profile.photometric, "RGB")
+        self.assertEqual(actual_profile.resolution, (400.0, 400.0))
+        self.assertEqual(actual_profile.icc_profile, b"x5crop-rotated-icc")
+        self.assertEqual(
+            actual_profile.metadata.description,
+            "rotated polygon output",
+        )
+        self.assertEqual(actual_profile.orientation.original_tag, 1)
+
 
 if __name__ == "__main__":
     unittest.main()

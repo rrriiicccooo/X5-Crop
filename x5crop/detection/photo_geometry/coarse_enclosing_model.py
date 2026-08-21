@@ -1,4 +1,8 @@
-"""Canonical source-wide direction and enclosing-support records."""
+"""Role-free source-wide track geometry and enclosing-support records.
+
+These records may bound a placement-local frame axis but never own cosmetic
+output deskew.
+"""
 
 from __future__ import annotations
 
@@ -17,7 +21,7 @@ class CoarseSupportSide(str, Enum):
 
 @dataclass(frozen=True)
 class CoarseSharedDirection:
-    """Source-wide straight direction from paired role-free endpoints."""
+    """Source-wide track direction from paired role-free endpoints."""
 
     direction_id: str
     observation_ids: tuple[ObservationId, ...]

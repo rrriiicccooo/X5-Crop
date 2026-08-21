@@ -19,13 +19,13 @@ from .model import (
 
 @dataclass(frozen=True)
 class SharedStripDirection:
-    """One straight deskew state and the wider directly observed angle span.
+    """One placement-local frame axis and its observed angle span.
 
     ``full_angle_interval_degrees`` is the low-dimensional feasible interval
-    used by placement and output sampling.  Local edge departures, including
-    slight film bend, live in ``observed_angle_interval_degrees`` and in each
-    boundary's residual interval; they must not masquerade as a possible
-    rotation of the complete strip.
+    used only to bound source-space placement geometry. Local edge departures,
+    including slight film bend, live in ``observed_angle_interval_degrees``
+    and in each boundary's residual interval. This type never owns cosmetic
+    output deskew.
     """
 
     direction_id: str
@@ -54,7 +54,7 @@ class SharedStripDirection:
             )
             or not math.isfinite(self.canonical_angle_degrees)
         ):
-            raise ValueError("shared strip direction is invalid")
+            raise ValueError("placement frame axis is invalid")
 
 
 @dataclass(frozen=True)
@@ -216,23 +216,21 @@ class BoundaryProtectionFact:
 
 @dataclass(frozen=True)
 class OutputFootprint:
-    """Final selected-frame sampling requirement, including product bleed.
+    """Final selected-frame source requirement, including product bleed.
 
-    The required polygon and the final axis-aligned sampling rectangle are
-    never clipped to source authority.  When either lies outside the lane,
-    ``saturation_facts`` records the contradiction and ``mapped_output_box``
-    remains unavailable so the Gate must request review.
+    The required polygon is never clipped to source authority.  When it lies
+    outside the lane, ``saturation_facts`` records the contradiction so the
+    Gate must request review.  Cosmetic deskew and its output-raster envelope
+    are deliberately absent: finalization owns them only after DecisionGate.
     """
 
     geometry_id: str
     envelope: JointPlacementEnvelope
     required_source_footprint: ConvexPolygon
-    sampling_source_footprint: ConvexPolygon | None
     boundary_protections: tuple[BoundaryProtectionFact, ...]
     saturation_facts: tuple[FootprintSaturationFact, ...]
     sampling_authority_box: Box
     authority_profile_id: str
-    mapped_output_box: Box | None
 
     def __post_init__(self) -> None:
         if (
@@ -240,21 +238,12 @@ class OutputFootprint:
             or not isinstance(self.envelope, JointPlacementEnvelope)
             or not self.sampling_authority_box.valid()
             or not self.authority_profile_id
-            or (
-                self.mapped_output_box is not None
-                and not self.mapped_output_box.valid()
-            )
         ):
             raise ValueError("output footprint is invalid")
         _validate_continuous_footprint(
             self.required_source_footprint,
             "required source footprint",
         )
-        if self.sampling_source_footprint is not None:
-            _validate_continuous_footprint(
-                self.sampling_source_footprint,
-                "sampling source footprint",
-            )
         if tuple(item.role for item in self.boundary_protections) != (
             BoundaryRole.START,
             BoundaryRole.END,
@@ -266,17 +255,6 @@ class OutputFootprint:
             self.saturation_facts
         ):
             raise ValueError("saturation facts require one fact per authority side")
-        if bool(self.saturation_facts) == (self.mapped_output_box is not None):
-            raise ValueError("saturated output cannot expose a mapped output box")
-        sampling_saturated = any(
-            ClippedRequirement.SAMPLING_RECTANGLE in fact.clipped_requirements
-            for fact in self.saturation_facts
-        )
-        if (
-            (self.mapped_output_box is not None or sampling_saturated)
-            and self.sampling_source_footprint is None
-        ):
-            raise ValueError("mapped output requires its source sampling footprint")
 
 
 

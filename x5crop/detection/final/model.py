@@ -5,7 +5,6 @@ from dataclasses import dataclass
 from ...domain import Box
 from ...geometry.affine import AffineCoordinateTransform
 from ..decision.model import DecisionGateAssessment
-from ..output_geometry import OutputTransformAssessment
 from ..photo_geometry.output_model import (
     OutputFootprint,
     OutputSlotIdentity,
@@ -13,6 +12,7 @@ from ..photo_geometry.output_model import (
 )
 from ..pipeline import PhotoGeometryCandidate
 from ..source_core import SourceCoreEvidence
+from .deskew import OutputDeskewAssessment
 
 
 @dataclass(frozen=True)
@@ -29,7 +29,7 @@ class FinalDetection:
     source_core: SourceCoreEvidence
     resolved_output_slots: ResolvedOutputSlots | None
     output_slot_identities: tuple[OutputSlotIdentity, ...]
-    source_transform_assessment: OutputTransformAssessment
+    deskew_assessment: OutputDeskewAssessment
     output_transforms: tuple[AffineCoordinateTransform, ...]
     output_footprints: tuple[OutputFootprint, ...]
     sampling_authority_boxes: tuple[Box, ...]
@@ -38,11 +38,6 @@ class FinalDetection:
     def __post_init__(self) -> None:
         if self.candidate.source_core is not self.source_core:
             raise ValueError("final detection must preserve source-core identity")
-        if (
-            self.source_transform_assessment
-            is not self.candidate.source_transform_assessment
-        ):
-            raise ValueError("finalization cannot replace the selected transform")
         if self.resolved_output_slots is not self.candidate.resolved_output_slots:
             raise ValueError(
                 "finalization cannot replace resolved output slots"
@@ -58,7 +53,6 @@ class FinalDetection:
             )
             if (
                 expected is None
-                or self.source_transform_assessment.transform is None
                 or len(self.output_transforms) != expected
                 or len(self.output_slot_identities) != expected
                 or len(self.output_footprints) != expected
@@ -66,6 +60,10 @@ class FinalDetection:
                 or len(self.final_boxes) != expected
                 or any(not box.valid() for box in self.sampling_authority_boxes)
                 or any(not box.valid() for box in self.final_boxes)
+                or any(
+                    transform is not self.deskew_assessment.transform
+                    for transform in self.output_transforms
+                )
             ):
                 raise ValueError(
                     "approved finalization requires one resolved geometry "

@@ -77,4 +77,7 @@ x5_crop_output/
 
 Approval is source-wide: if any slot is unsafe, the complete source enters
 `needs_review`. If the target already exists, X5 Crop stops and never replaces
-or deletes it. See the [English User Guide](user-guide.en.md) for full details.
+or deletes it. Deskew is optional cleanup after the safety decision; when its
+measurement is unavailable, safe photos are still written with their original
+tilt. Rotated envelopes may have black corners. See the
+[English User Guide](user-guide.en.md) for full details.

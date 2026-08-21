@@ -10,8 +10,8 @@
 
 X5 Crop treats detection as alignment of a known format template, not as
 general-purpose photo-boundary recognition. You provide format and count. The
-program places fixed physical rectangles using the whole strip direction,
-photo-group outer, separator bands, and two-dimensional content protection. It
+program places fixed physical rectangles using photo-group outer, separator
+bands, local frame geometry, and two-dimensional content protection. It
 writes official photos only when every slot of the source is safe. Otherwise
 the complete source enters `needs_review`; individual slots are never salvaged.
 
@@ -44,8 +44,8 @@ confirmed filled before automatic output.
 
 V5 inherits the useful behavior of v4.2.8 without copying its old solver:
 
-1. obtain a coarse strip region and shared direction from the holder, film
-   material edge, or another stable long structure;
+1. obtain a coarse strip region and local measurement direction from the
+   holder, film material edge, or another stable long structure;
 2. place a fixed W/H template from format, count, and scale;
 3. locate separator material bands and outer inside finite expected corridors;
 4. refine only around theoretical boundaries with one bounded local pass;
@@ -53,11 +53,11 @@ V5 inherits the useful behavior of v4.2.8 without copying its old solver:
    correction, or one local advance;
 6. stop as soon as placement is unique and all safety facts are complete.
 
-Coarse support answers only where the strip roughly lies and points. It cannot
-declare a photo boundary by itself. A local pixel observation has no slot,
-start/end, or top/bottom role until it is bound to the template. Two edges, a
-band, and many traces from one separator remain one physical structure rather
-than many votes.
+Coarse support answers only where the strip roughly lies and how local queries
+should be oriented. It cannot declare a photo boundary or output deskew by
+itself. A local pixel observation has no slot, start/end, or top/bottom role
+until it is bound to the template. Two edges, a band, and many traces from one
+separator remain one physical structure rather than many votes.
 
 An invisible first or last boundary is not automatically a failure. Once
 independent internal separator evidence establishes phase, pitch, and ordinal,
@@ -66,8 +66,8 @@ template cannot prove itself.
 
 ### Fixed Size, Separators, And Local Exceptions
 
-All frames on one strip share format W/H, source scale, and deskew direction.
-Pixel noise does not change frame size; a gap changes only position.
+All frames on one strip share format W/H and source scale. Pixel noise does not
+change frame size; a gap changes only position.
 
 Normal strips use one shared pitch. A directly proven wide or narrow adjacency
 may authorize at most one local advance: every later frame moves once and then
@@ -76,30 +76,37 @@ shift, contact, or overlap remains `needs_review`. V5 has no user-confirmed
 overlap golden sample, so it does not automatically approve overlap or enable
 special overlap bleed.
 
-### Deskew And Mild Bend
+### Local Geometry, Mild Bend, And Optional Deskew
 
-Deskew affects detection as well as appearance. One strip-wide straight
-direction predicts boundaries correctly from the beginning to the end of a
-slanted scan. Official outputs are then sampled from the original 16-bit TIFF
-with that same geometry.
+Direction inside detection only bounds the selected placement's safe frame
+polygon in source coordinates. Local top/bottom own fixed H, short-axis
+position, and this local frame axis. Sequence evidence may only constrain the
+polygon's conservative direction range; it cannot decide output rotation. Two
+lanes may retain different local directions.
 
 A mild bend does not create a curve model. Only a role-qualified boundary with
 direct, continuous strip-wide pixel support may retain a local position after
 bounded outlier removal, and every retained trace must still agree on the same
-inside/outside relation. It cannot redefine the shared strip direction or
-recalibrate the global template when enough straight boundaries already close
-that solution. The bend residual belongs only to selected-placement safety. If
-the required protection exceeds the output budget, the whole source enters
-review. Frames do not receive independent rotations or free quadrilaterals.
+inside/outside relation. It cannot recalibrate the global template when enough
+straight boundaries already close that solution. The bend residual belongs
+only to selected-placement safety. If required protection exceeds the output
+budget, the whole source enters review. Frames do not receive independent
+detection angles or free quadrilaterals.
 
-When photo top and bottom are only two local direct edges, do not span the
-source, and have neither three-region nor enclosing-support authority, at least
-two independent separator/outer positions may close the strip-wide direction.
-Those sequence positions then own global deskew. Local top/bottom still own
-fixed H and short-axis position, while their directional departure remains in
-output protection and the 5% budget; a local slope is never extrapolated into a
-possible rotation of the whole strip. Protection or sampling overflow still
-produces `needs_review`.
+Deskew is optional cleanup after the safety decision. X5 Crop reads the
+outermost dark edges at 6–24 sparse positions along the strip and robustly fits
+each side. It rotates only when both sides agree and both fits are stable. It
+does not classify the observed edge as holder, film, or photo. Missing,
+conflicting, or out-of-range evidence skips deskew without fabricating `0°`
+and without downgrading an otherwise safe source. A valid angle is also left
+unchanged when its end-to-end displacement is less than 3 px.
+
+When deskew is applied, the image and every already-safe frame polygon receive
+the same rotation. The output box is the axis-aligned envelope of that rotated
+polygon, never a fixed W×H crop. A small angle error can therefore leave slight
+tilt or extra border but cannot cut confirmed content. Envelope corners outside
+the polygon may be black; these are representational corners, not detection
+failures.
 
 ## Top/Bottom And Acceptable Outer
 
@@ -109,7 +116,7 @@ material edge, but it distinguishes two final uses.
 ### Photo Aperture
 
 A local observation may represent the real photo top or bottom only when its
-finite position, shared direction, inside/outside relation, and fixed-H closure
+finite position, locally shared direction, inside/outside relation, and fixed-H closure
 agree. Valid evidence can be:
 
 - direct top and bottom;
@@ -191,9 +198,11 @@ aperture's cross-side 5% test. Its independent rule is that the directly
 observed total height must not exceed 1.1H. Start/end still use normal bleed and
 the 5% per-side limit.
 
-The required footprint is never silently clipped to source or lane bounds. Any
-unsampleable area or exceeded limit sends the complete source to
-`needs_review`.
+Before the safety decision, the required source-space footprint is never silently
+clipped to source or lane bounds. Any truly required polygon area outside
+authority, or any exceeded limit, sends the complete source to `needs_review`.
+Representational envelope corners introduced by post-decision deskew do not
+change that safety result.
 
 Two-dimensional content answers only whether the current output clearly cuts
 real picture structure. It cannot move boundaries, split frames, create a
@@ -280,10 +289,12 @@ Each input has one terminal status:
 
 Debug Analysis shows the theoretical template, observations, residual pattern,
 direct and inferred boundaries, winner/runner difference, final output
-footprint, budget use, and first blocking reason. Failures distinguish
-user-correctable input, remeasurement-recoverable evidence, and cases the
-system must not guess. Debug reads the same detection facts and never solves
-geometry again.
+footprint, budget use, first blocking reason, and either `DESKEW APPLIED`,
+`ROTATION NOT NEEDED`, or typed `DESKEW SKIPPED`. Reports also record
+`deskew_applied`, observed angle, applied rotation, and skip reason. Failures
+distinguish user-correctable input, remeasurement-recoverable evidence, and
+cases the system must not guess. Debug reads the same detection facts and never
+solves geometry again.
 
 Default layout:
 

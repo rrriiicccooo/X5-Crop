@@ -305,18 +305,3 @@ def validate_approved_geometry(
             str(gold["strip_orientation"]),
             str(outputs[output_index]["envelope"]["boundary_use"]),
         )
-    transform = report["output"]["finalization"][
-        "source_transform_assessment"
-    ]
-    observed_angle = transform["observed_angle_interval_degrees"]
-    gold_angles = tuple(
-        math.degrees(math.atan(float(edge["slope"])))
-        for edge in gold["shared_edges"]
-    )
-    if not all(
-        observed_angle["minimum"] - 1.0e-9
-        <= angle
-        <= observed_angle["maximum"] + 1.0e-9
-        for angle in gold_angles
-    ):
-        raise ValueError(f"{sample_id} deskew interval excludes confirmed edges")

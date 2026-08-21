@@ -19,8 +19,8 @@ materialization、平行 detector 和 report reuse 均不再支持。
 
 ### 模板对准
 
-- Detector 改为有界模板编译器，并吸收 v4.2.8 的 whole-to-local 行为：先确定粗片带区域和共同
-  方向，再在理论 outer、separator 和 top/bottom 附近做一次有界局部精修。
+- Detector 改为有界模板编译器，并吸收 v4.2.8 的 whole-to-local 行为：先确定粗片带区域和局部
+  测量方向，再在理论 outer、separator 和 top/bottom 附近做一次有界局部精修。
 - Format 固定全部 frame 的 W/H。Role-free observation 只在模板提出理论角色后绑定；同一物理
   separator 的 edge、band 和多条 trace 不重复投票。
 - Source pitch 由至少两个独立直接位置建立。缺失 first/last 可由已经获得 authority 的 phase、
@@ -31,14 +31,12 @@ materialization、平行 detector 和 report reuse 均不再支持。
   唯一且极性闭合的局部 band 可提供 END→START 角色。Band 宽度本身不创造 local step。
 - 偏差诊断明确区分 normal、一次 direct local step 与 unresolved。Wide/narrow 最多产生一次
   suffix shift；contact、overlap、多异常或 ordinal 不明保持 review。
-- 全部 frame 共享 straight deskew direction。角色资格、source-wide 连续性和逐 trace 内外关系均
-  闭合的轻微弯曲 sequence edge 可在有界异常点剔除后保留局部位置，但不提供全片方向，也不在
-  straight anchor 已闭合全秩解时重标定 phase、W 或 pitch；残差进入 selected-placement safety，
-  不建立曲线或逐帧方向。
-- Local direct aperture 的两侧 fit 无共同方向、pair-level 支持少于 3 个区域且均非 source-spanning
-  时，至少两个独立 sequence physical positions 可以独占 source-wide deskew。Global full interval
-  只来自 sequence；local cross departure 保留在 observed provenance 和输出预算。Source-spanning、
-  3-region 与 enclosing-support authority 不受影响。
+- 检测不再建立 source-wide deskew authority。Cross 只拥有短轴 offset、fixed H 和一个 placement
+  的 source-space 局部 frame axis；sequence 最多约束该 polygon 的保守方向范围，不能拥有输出旋转。
+  双 lane 只共享 W/H 与尺度，不再因局部方向不同而失败。
+- 角色资格、source-wide 连续性和逐 trace 内外关系均闭合的轻微弯曲 observation 可以保留局部
+  位置，但不在 direct anchor 已闭合全秩解时重标定 phase、W 或 pitch；残差进入
+  selected-placement safety，不建立曲线或逐帧方向。
 
 ### Cross 与输出保护
 
@@ -56,8 +54,8 @@ materialization、平行 detector 和 report reuse 均不再支持。
   broader 长轴 extent 严格包含 local。两条证明都要求同一 opposite、同 role authority、lattice
   明确且全部 trace 已注册；不按 support、residual 或 holder center 选位。
 - 短轴 coarse query 的 aggregate interval 仍只定位局部测量；同一批已注册 trace 若直接形成
-  source-wide 双侧 track，可以独立提供共同方向和 enclosing support。Aggregate interval 不能因此
-  获得照片边界权限。
+  source-wide 双侧 track，可以独立提供局部 top/bottom 方向闭合和 enclosing support。Aggregate
+  interval 不能因此获得照片边界或输出 deskew 权限。
 - Aperture 正常 bleed 为 `max(0.15 mm, 0.7% W)` 和 cross 0.25 mm；四边完整 expansion 统一使用
   单边 5% 上限。Enclosing support 不加 cross bleed，使用总高度 1.1H 的独立合同。
 - Enclosing support 的 1.1H 预算只读取直接 observation 的最坏 `observed_span`；不把不同联合可行
@@ -65,6 +63,20 @@ materialization、平行 detector 和 report reuse 均不再支持。
 - 安全计算改为 selected-only 联合可行集合。Phase、pitch、direction、cross、local advance 和直线
   residual 的相关性一起传播，不把独立最大值相加，不合并 runner-up，不把越界 footprint 静默裁小。
 - 二维内容只在 placement 唯一后作 negative veto，不能选位、移动边界或创造照片。
+
+### 可选输出 deskew
+
+- 新增唯一 role-free lightweight observation：在整条片带 6–24 个有界稀疏位置读取最外侧暗边，
+  两侧分别稳健拟合；只有 slope、residual 和角度范围全部相容时才产生角度。它不识别 holder、film
+  或 photo edge，不可用时返回 typed skip reason 和 `None`，不伪造 `0°`。
+- `CandidateGate` 与 `DecisionGate` 不读取 deskew。安全 placement 即使无法 deskew 仍保持
+  `approved_auto`；有效角度造成的端点位移小于 3 px 时记录 `rotation_not_needed`，其余情况才在
+  Decision 后应用 expanded rotation。
+- Finalization 用同一 affine transform 映射 source 与已确认安全的 frame polygon，再取旋转后
+  polygon 的精确半开 AABB。AABB 在 polygon 外的表示性角落允许为黑色 no-data；不得旋转后继续
+  裁固定 W×H，也不得让这些角落回流检测 Gate。
+- 删除旧 source/lane transform assessment、shared-direction Gate、transform-sampling Gate、
+  `template_direction.py` 和 detection-time mapped sampling rectangle。一次 direct local advance 保留。
 
 ### 报告、工具与性能
 
@@ -81,7 +93,8 @@ materialization、平行 detector 和 report reuse 均不再支持。
   行为，不把历史版本当 reference，也不复制旧 Grid、score 或 fallback。
 - Accuracy 在判断 nominal/challenge 与 final status 之前，先验证所有已选 candidate footprint
   是否覆盖用户确认边界；review 不再因正式输出被隐藏而跳过候选几何错误。批准结果仍另外验证
-  正式输出的覆盖、直接使用预算与 deskew。
+  正式输出的覆盖与直接使用预算。Cosmetic deskew 精度不再是黄金阻断条件；affine polygon envelope
+  与 TIFF 安全合同仍阻断。
 - Separator lattice hypothesis 是显式 receipt 工作量；编译上界不足时停止并进入 review，不做
   silent first-N。
 - Performance profiler 覆盖完整用户路径，并拆分 startup/import、decode、gray/coarse support、
@@ -92,8 +105,9 @@ materialization、平行 detector 和 report reuse 均不再支持。
   各 frame 做反向 affine ROI 采样，三通道复用预分配的坐标和值缓冲，不预先清零随后必定覆盖的
   输出，也不创建额外 uint16 分块；逐像素值与原采样合同一致。完全相同的 robust-line 输入才可
   复用精确结果，不剪枝、不改 observation 或 provenance。
-- Affine ROI 在 lane authority 外只写黑色无数据像素，插值结果仍按完整 uint16 范围保留；测试同时
-  覆盖非零照片像素、边界插值和 authority 外背景，避免几何通过但正式 TIFF 被写成全黑。
+- Affine ROI 在安全 polygon 的轴对齐包络角落允许写黑色无数据像素，插值结果仍按完整 uint16
+  范围保留；测试同时覆盖 polygon 内非零照片像素、边界插值、表示性黑角和 TIFF metadata，避免
+  几何通过但正式 TIFF 被写成全黑或切掉已确认内容。
 - 工具、tests、report 和 release manifest 只引用 current 模块与 schema；`tools/verify` 是唯一验证入口。
 - Release contract 会实际构建临时 ZIP，校验路径唯一、排除 modular source/tests/tools、standalone
   与当前模块源码一致，并启动生成的 `X5_Crop.py --version`。

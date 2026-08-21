@@ -202,6 +202,10 @@ def _process_one_scoped(
         detection = finalize_detection(
             candidate,
             decision,
+            workspace.deskew_observation,
+            layout=workspace.layout,
+            source_width=workspace.source_gray.shape[1],
+            source_height=workspace.source_gray.shape[0],
         )
         runtime_identity = make_runtime_identity(
             source_identity,

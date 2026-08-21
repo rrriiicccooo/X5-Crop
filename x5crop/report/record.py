@@ -58,8 +58,8 @@ def report_record_for_final_detection(
                 "slot_identities": typed_read_model(
                     detection.output_slot_identities
                 ),
-                "source_transform_assessment": typed_read_model(
-                    detection.source_transform_assessment
+                "deskew_assessment": typed_read_model(
+                    detection.deskew_assessment
                 ),
                 "output_transforms": typed_read_model(
                     detection.output_transforms

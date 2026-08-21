@@ -13,8 +13,9 @@ from .read_models import typed_read_model
 AUTHORITY_PARTITION = {
     "pixel_observation": "role_free_candidate_independent_measurement",
     "format_physical": "fixed_template_dimensions_pitch_gap_count",
-    "selection": "bounded_phase_cross_shared_placement",
+    "selection": "bounded_phase_cross_placement",
     "safety": "selected_joint_feasible_states_then_bleed_and_footprint",
+    "output_deskew": "role_free_optional_measurement_finalization_only",
 }
 
 
@@ -26,6 +27,9 @@ def measurement_summary(detection: object, workspace: object) -> dict[str, Any]:
         "layout": field.layout,
         "scan_canvas_state": detection.source_core.scan_canvas_state.value,
         "incomplete_reasons": list(detection.source_core.incomplete_reasons),
+        "output_deskew_observation": typed_read_model(
+            workspace.deskew_observation
+        ),
     }
 
 
@@ -58,12 +62,6 @@ def photo_geometry_summary(detection: object) -> dict[str, Any]:
             "selected_placement_ids": list(selection.selected_placement_ids),
             "runner_up_placement_ids": list(selection.runner_up_placement_ids),
         },
-        "source_transform_assessment": typed_read_model(
-            geometry.source_transform_assessment
-        ),
-        "lane_transform_assessments": typed_read_model(
-            geometry.lane_transform_assessments
-        ),
         "lanes": [
             {
                 "lane_id": lane.lane_id,

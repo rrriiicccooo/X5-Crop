@@ -159,7 +159,7 @@ def _failure_record(
         "output_slot_count": None,
         "slot_identities": [],
         "geometry_outcome": None,
-        "transform_outcome": None,
+        "deskew_outcome": None,
         "metrics": metrics,
         "structured_exception": {
             "failure_stage": failure_stage,
@@ -320,11 +320,10 @@ def run_diagnostic_source(source: DiagnosticSource) -> dict[str, Any]:
                 for lane in geometry["lanes"]
             ],
         },
-        "transform_outcome": {
-            "source": report["output"]["finalization"][
-                "source_transform_assessment"
+        "deskew_outcome": {
+            "assessment": report["output"]["finalization"][
+                "deskew_assessment"
             ],
-            "lanes": geometry["lane_transform_assessments"],
             "output_transforms": report["output"]["finalization"][
                 "output_transforms"
             ],

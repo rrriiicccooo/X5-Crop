@@ -21,7 +21,6 @@ from x5crop.detection.gate_checks import (
     TypedAssessment,
     failure_fact,
 )
-from x5crop.detection.photo_geometry.detector import _shared_direction
 from x5crop.detection.photo_geometry.model import BoundaryRole
 from x5crop.detection.photo_geometry.content_veto_model import (
     ContentVetoAssessment,
@@ -62,7 +61,6 @@ def _resolved():
         spec,
         phase.best,
         cross.best,
-        direction=direction,
         lane_id="lane:0",
     )
     return phase, cross, placement
@@ -90,10 +88,6 @@ class TemplateSelectionContractTest(unittest.TestCase):
                     "local_advance_authority",
                 ),
                 "dual_lane_fill": ("selected_placement",),
-                "shared_strip_direction": (
-                    "source_scan_geometry",
-                    "selected_placement",
-                ),
                 "sequence_authority": ("selected_placement",),
                 "cross_authority": ("selected_placement",),
                 "shared_authority": ("selected_placement",),
@@ -104,10 +98,6 @@ class TemplateSelectionContractTest(unittest.TestCase):
                     "source_lane_authority",
                 ),
                 "direct_use_budget": ("selected_output_footprint",),
-                "transform_sampling": (
-                    "selected_placement",
-                    "source_lane_authority",
-                ),
             },
         )
 
@@ -237,7 +227,6 @@ class TemplateSelectionContractTest(unittest.TestCase):
             (competition,),
             lane_ids=("lane:0",),
             shared_scan_geometry=None,
-            shared_direction=None,
         )
         assert source.failure is not None
 
@@ -263,7 +252,6 @@ class TemplateSelectionContractTest(unittest.TestCase):
             ),
             lane_ids=("lane:0",),
             shared_scan_geometry=None,
-            shared_direction=None,
         ).failure
         assert failure is not None
         facts = {
@@ -290,85 +278,53 @@ class TemplateSelectionContractTest(unittest.TestCase):
         self.assertIsNone(candidate_fact.final_review_reason)
         self.assertIsNotNone(decision_fact.final_review_reason)
 
-    def test_direction_failure_is_preserved_before_generic_placement(self) -> None:
-        phase, cross, _placement = _resolved()
-        failure = failure_fact(
-            GateGap.SHARED_STRIP_DIRECTION_UNAVAILABLE,
-            detail="sequence and cross direction evidence are incompatible",
-        )
-
-        competition = select_lane_template_placement(
-            lane_id="lane:0",
-            best=None,
-            runner_up=None,
-            phase=phase,
-            cross=cross,
-            content_assessment=None,
-            direction_failure=failure,
-        )
-
-        self.assertIs(competition.failure, failure)
-        self.assertEqual(
-            competition.failure.gap,
-            GateGap.SHARED_STRIP_DIRECTION_UNAVAILABLE,
-        )
-        source = select_template_source(
-            (competition,),
-            lane_ids=("lane:0",),
-            shared_scan_geometry=None,
-            shared_direction=None,
-        )
-        self.assertIs(source.failure, failure)
-        facts = {
-            code: TypedAssessment(EvidenceState.SUPPORTED, None)
-            for code in CANDIDATE_GATE_CHECK_CODES
-        }
-        facts["complete_placement"] = TypedAssessment(
-            EvidenceState.UNAVAILABLE,
-            failure.gap,
-            source.failure,
-        )
-
-        candidate = candidate_gate_assessment(facts)
-        complete = next(
-            item
-            for item in candidate.checks
-            if item.code == "complete_placement"
-        )
-
-        self.assertTrue(complete.evaluated)
-        self.assertIs(complete.failure, failure)
-        self.assertEqual(
-            complete.gap,
-            GateGap.SHARED_STRIP_DIRECTION_UNAVAILABLE,
-        )
-
-    def test_disjoint_lane_directions_have_typed_nonunique_failure(self) -> None:
-        _phase, _cross, placement = _resolved()
-        left = replace(
-            placement.direction,
-            direction_id="direction:left",
-            full_angle_interval_degrees=FiniteInterval(-0.2, -0.1),
-            observed_angle_interval_degrees=FiniteInterval(-0.2, -0.1),
-            canonical_angle_degrees=-0.15,
-        )
-        right = replace(
-            placement.direction,
+    def test_source_selection_allows_lane_local_directions_to_differ(self) -> None:
+        phase, cross, left_placement = _resolved()
+        right_direction = replace(
+            left_placement.direction,
             direction_id="direction:right",
             full_angle_interval_degrees=FiniteInterval(0.1, 0.2),
             observed_angle_interval_degrees=FiniteInterval(0.1, 0.2),
             canonical_angle_degrees=0.15,
         )
-
-        direction, failure = _shared_direction(
-            ((left, None), (right, None))
+        assert cross.best is not None and phase.best is not None
+        right_cross_fit = replace(
+            cross.best,
+            selected_direction=right_direction,
+        )
+        right_cross = replace(cross, best=right_cross_fit)
+        right_placement = _compose(
+            phase.template,
+            phase.best,
+            right_cross_fit,
+            lane_id="lane:1",
+        )
+        left = select_lane_template_placement(
+            lane_id="lane:0",
+            best=left_placement,
+            runner_up=None,
+            phase=phase,
+            cross=cross,
+            content_assessment=None,
+        )
+        right = select_lane_template_placement(
+            lane_id="lane:1",
+            best=right_placement,
+            runner_up=None,
+            phase=phase,
+            cross=right_cross,
+            content_assessment=None,
+        )
+        source = select_template_source(
+            (left, right),
+            lane_ids=("lane:0", "lane:1"),
+            shared_scan_geometry=left_placement.source_scan_geometry,
         )
 
-        self.assertIsNone(direction)
-        assert failure is not None
+        self.assertEqual(source.state, EvidenceState.SUPPORTED)
         self.assertEqual(
-            failure.gap,
-            GateGap.SHARED_STRIP_DIRECTION_NONUNIQUE,
+            source.selected_placement_ids,
+            (left_placement.placement_id, right_placement.placement_id),
         )
 
 if __name__ == "__main__":

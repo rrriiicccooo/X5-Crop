@@ -30,7 +30,6 @@ def _placement():
         template,
         _sequence(template),
         _cross(template, direction=direction),
-        direction=direction,
         lane_id="lane:fill",
     )
 

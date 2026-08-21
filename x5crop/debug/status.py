@@ -92,36 +92,27 @@ def transform_lines(
     detection: FinalDetection,
     profile: ImageProfile,
 ) -> tuple[str, str]:
-    transform = detection.source_transform_assessment
-    interval = transform.observed_angle_interval_degrees
-    applied = transform.applied_source_rotation_degrees
-    if transform.outcome == "unavailable" or applied is None:
-        first = "V5 · DIRECTION UNAVAILABLE"
-        second = (
-            f"ORIENTATION {profile.orientation.original_tag}>CANONICAL>1"
-        )
+    assessment = detection.deskew_assessment
+    observed = assessment.observed_angle_degrees
+    applied = assessment.applied_source_rotation_degrees
+    if assessment.deskew_applied:
+        first = f"V5 · DESKEW APPLIED {applied:+.3f}°"
+        detail = f"observed {observed:+.3f}°"
+    elif observed is not None:
+        first = f"V5 · ROTATION NOT NEEDED {observed:+.3f}°"
+        detail = "endpoint displacement <3px"
     else:
-        action = (
-            "TRANSFORM IDENTITY"
-            if transform.outcome == "identity"
-            else "DESKEW APPLIED"
+        reason = (
+            "unavailable"
+            if assessment.skip_reason is None
+            else assessment.skip_reason.value
         )
-        first = (
-            f"V5 · {action} "
-            f"{applied:+.3f}°"
-        )
-        observed = (
-            "observed interval unavailable"
-            if interval is None
-            else (
-                f"observed {interval.minimum:+.3f}°"
-                f"…{interval.maximum:+.3f}°"
-            )
-        )
-        second = (
-            f"{observed} · ORIENTATION "
-            f"{profile.orientation.original_tag}>CANONICAL>1"
-        )
+        first = f"V5 · DESKEW SKIPPED · {reason}"
+        detail = "observed angle unavailable"
+    second = (
+        f"{detail} · ORIENTATION "
+        f"{profile.orientation.original_tag}>CANONICAL>1"
+    )
     return first, second
 
 

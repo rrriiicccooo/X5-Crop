@@ -19,8 +19,6 @@ class GateGap(str, Enum):
     UNSUPPORTED_DUAL_COUNT = "unsupported_dual_count"
     COMPLETE_PLACEMENT_UNAVAILABLE = "complete_placement_unavailable"
     PRODUCER_BOUND_EXCEEDED = "producer_bound_exceeded"
-    SHARED_STRIP_DIRECTION_UNAVAILABLE = "shared_strip_direction_unavailable"
-    SHARED_STRIP_DIRECTION_NONUNIQUE = "shared_strip_direction_nonunique"
     SOURCE_SCAN_GEOMETRY_UNAVAILABLE = "source_scan_geometry_unavailable"
     PLACEMENT_UNRESOLVED = "placement_unresolved"
     PHASE_ANCHOR_UNAVAILABLE = "phase_anchor_unavailable"
@@ -37,7 +35,6 @@ class GateGap(str, Enum):
     OUTPUT_FOOTPRINT_UNAVAILABLE = "output_footprint_unavailable"
     DIRECT_USE_BUDGET_EXCEEDED = "direct_use_budget_exceeded"
     DIRECT_USE_BUDGET_UNAVAILABLE = "direct_use_budget_unavailable"
-    OUTPUT_TRANSFORM_UNAVAILABLE = "output_transform_unavailable"
 
 
 class FailureRecovery(str, Enum):
@@ -53,7 +50,6 @@ class MinimumMissingFact(str, Enum):
     ABSOLUTE_PHASE_ANCHOR = "absolute_phase_anchor"
     PHASE_SUPPORT = "phase_support"
     PITCH_CLOSURE = "pitch_closure"
-    SHARED_DIRECTION = "shared_direction"
     CROSS_POSITION = "cross_position"
     REGISTERED_QUERY_COVERAGE = "registered_query_coverage"
     LOCAL_GAP_ORDINAL = "local_gap_ordinal"
@@ -136,16 +132,6 @@ def failure_fact(
             MinimumMissingFact.UNIQUE_PLACEMENT,
             RecoveryAction.OPEN_DEBUG_ANALYSIS,
         ),
-        GateGap.SHARED_STRIP_DIRECTION_UNAVAILABLE: (
-            FailureRecovery.REMEASURE,
-            MinimumMissingFact.SHARED_DIRECTION,
-            RecoveryAction.RERUN_MEASUREMENT,
-        ),
-        GateGap.SHARED_STRIP_DIRECTION_NONUNIQUE: (
-            FailureRecovery.UNRECOVERABLE,
-            MinimumMissingFact.SHARED_DIRECTION,
-            RecoveryAction.REVIEW_PLACEMENT,
-        ),
         GateGap.SOURCE_SCAN_GEOMETRY_UNAVAILABLE: (
             FailureRecovery.REMEASURE,
             MinimumMissingFact.SOURCE_PHYSICAL_COMPATIBILITY,
@@ -226,11 +212,6 @@ def failure_fact(
             MinimumMissingFact.DIRECT_USE_PRECISION,
             RecoveryAction.RERUN_MEASUREMENT,
         ),
-        GateGap.OUTPUT_TRANSFORM_UNAVAILABLE: (
-            FailureRecovery.REMEASURE,
-            MinimumMissingFact.SHARED_DIRECTION,
-            RecoveryAction.RERUN_MEASUREMENT,
-        ),
     }[gap]
     return DetectionFailureFact(
         gap=gap,
@@ -263,10 +244,6 @@ GATE_CHECK_DEPENDENCIES: dict[str, tuple[str, ...]] = {
         "local_advance_authority",
     ),
     "dual_lane_fill": ("selected_placement",),
-    "shared_strip_direction": (
-        "source_scan_geometry",
-        "selected_placement",
-    ),
     "sequence_authority": ("selected_placement",),
     "cross_authority": ("selected_placement",),
     "shared_authority": ("selected_placement",),
@@ -277,10 +254,6 @@ GATE_CHECK_DEPENDENCIES: dict[str, tuple[str, ...]] = {
         "source_lane_authority",
     ),
     "direct_use_budget": ("selected_output_footprint",),
-    "transform_sampling": (
-        "selected_placement",
-        "source_lane_authority",
-    ),
 }
 
 

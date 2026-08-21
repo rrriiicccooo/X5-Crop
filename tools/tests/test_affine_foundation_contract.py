@@ -300,54 +300,15 @@ class AffineFoundationContractTest(unittest.TestCase):
         self.assertEqual(int(sampled[0, 1, 0]), 10)
         self.assertNotIn(240, sampled)
 
-    def test_identity_requires_zero_in_every_observed_angle_interval(
-        self,
-    ) -> None:
-        assessment = make_transform_assessment(
-            (
-                make_angle_observation("line:a", -0.2, 0.1),
-                make_angle_observation("line:b", -0.1, 0.3),
-            ),
+    def test_nonzero_cosmetic_observation_drives_rotation(self) -> None:
+        assessment = assess_output_deskew(
+            make_deskew_observation(1.0),
+            layout="horizontal",
+            source_width=1000,
+            source_height=400,
         )
-        self.assertEqual(assessment.outcome, "identity")
-        self.assertEqual(
-            assessment.observed_angle_interval_degrees,
-            FiniteInterval(-0.2, 0.3),
-        )
-
-    def test_disjoint_observed_angles_make_transform_unavailable(self) -> None:
-        assessment = make_transform_assessment(
-            (
-                make_angle_observation("line:a", -0.2, 0.1),
-                make_angle_observation("line:b", 0.2, 0.4),
-            ),
-        )
-        self.assertEqual(assessment.outcome, "unavailable")
-        self.assertEqual(
-        assessment.named_gap,
-            "selected_direction_unavailable",
-        )
-
-    def test_nonzero_common_observed_angle_drives_rotation(self) -> None:
-        assessment = make_transform_assessment(
-            (
-                make_angle_observation("line:a", 0.8, 1.2),
-                make_angle_observation(
-                    "line:b",
-                    0.9,
-                    1.1,
-                    role=BoundaryRole.BOTTOM,
-                ),
-            ),
-        )
-        self.assertEqual(assessment.outcome, "shared_rotation")
-        self.assertEqual(
-            assessment.observed_angle_interval_degrees,
-            FiniteInterval(0.8, 1.2),
-        )
-        assert assessment.applied_source_rotation_degrees is not None
+        self.assertTrue(assessment.deskew_applied)
         self.assertLess(assessment.applied_source_rotation_degrees, 0.0)
-        assert assessment.transform is not None
         angle = math.radians(1.0)
         first = assessment.transform.map_point(0.0, 20.0)
         second = assessment.transform.map_point(
@@ -357,29 +318,15 @@ class AffineFoundationContractTest(unittest.TestCase):
         self.assertAlmostEqual(first[1], second[1], places=10)
 
     def test_vertical_strip_uses_canonical_sign_to_remove_raster_tilt(self) -> None:
-        observation = make_angle_observation("line:vertical", -1.1, -0.9)
-        direction = SharedStripDirectionResolution(
-            direction=SharedStripDirection(
-                direction_id="test:vertical-selected-direction",
-                selected_observation_ids=(observation.observation_id,),
-                full_angle_interval_degrees=FiniteInterval(-1.1, -0.9),
-                observed_angle_interval_degrees=FiniteInterval(-1.1, -0.9),
-                canonical_angle_degrees=-1.0,
-            ),
-            state=EvidenceState.SUPPORTED,
-            named_gap=None,
-        )
-        assessment = output_transform_assessment(
-            direction,
+        assessment = assess_output_deskew(
+            make_deskew_observation(-1.0, fit_angle_degrees=1.0),
             layout="vertical",
             source_width=100,
-            source_height=200,
+            source_height=1000,
         )
 
-        self.assertEqual(assessment.outcome, "shared_rotation")
-        assert assessment.applied_source_rotation_degrees is not None
+        self.assertTrue(assessment.deskew_applied)
         self.assertLess(assessment.applied_source_rotation_degrees, 0.0)
-        assert assessment.transform is not None
         angle = math.radians(1.0)
         first = assessment.transform.map_point(0.0, 20.0)
         second = assessment.transform.map_point(
@@ -387,27 +334,6 @@ class AffineFoundationContractTest(unittest.TestCase):
             20.0 + math.tan(angle) * 50.0,
         )
         self.assertAlmostEqual(first[1], second[1], places=10)
-
-    def test_nonorthogonal_start_end_does_not_widen_shared_deskew(
-        self,
-    ) -> None:
-        assessment = make_transform_assessment(
-            (
-                make_angle_observation("line:top", -0.1, 0.2),
-                make_angle_observation(
-                    "line:end",
-                    2.0,
-                    3.0,
-                    role=BoundaryRole.END,
-                ),
-            ),
-        )
-        self.assertEqual(assessment.outcome, "identity")
-        self.assertEqual(
-            assessment.observed_angle_interval_degrees,
-            FiniteInterval(-0.1, 0.2),
-        )
-
 
 if __name__ == "__main__":
     unittest.main()
