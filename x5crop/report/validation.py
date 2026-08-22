@@ -47,6 +47,10 @@ _DIRECT_USE_EDGE_FIELDS = {
     "within_limit",
 }
 _DESKEW_SKIP_REASONS = tuple(item.value for item in DeskewSkipReason)
+_OBSERVED_DESKEW_SKIP_REASONS = {
+    DeskewSkipReason.ROTATION_NOT_NEEDED.value,
+    DeskewSkipReason.ROTATION_EXCEEDS_CLEANUP_LIMIT.value,
+}
 
 
 def _finite_number(value: object) -> bool:
@@ -210,17 +214,17 @@ def _validate_deskew_assessment(value: object) -> dict[str, Any]:
         if (
             rotation is not None
             or reason not in _DESKEW_SKIP_REASONS
-            or reason == DeskewSkipReason.ROTATION_NOT_NEEDED.value
+            or reason in _OBSERVED_DESKEW_SKIP_REASONS
             or not identity
         ):
             raise ValueError("unavailable deskew assessment is inconsistent")
     elif (
         not _finite_number(observed)
         or rotation != 0.0
-        or reason != DeskewSkipReason.ROTATION_NOT_NEEDED.value
+        or reason not in _OBSERVED_DESKEW_SKIP_REASONS
         or not identity
     ):
-        raise ValueError("unneeded deskew assessment is inconsistent")
+        raise ValueError("observed deskew skip is inconsistent")
     return value
 
 

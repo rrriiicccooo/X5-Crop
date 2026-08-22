@@ -36,7 +36,10 @@ materialization、平行 detector 和 report reuse 均不再支持。
 
 - Deskew 降为 Decision 后的非阻断输出整理。只有 `approved_auto` 才执行 6–24 trace 的 role-free
   观测；不可用时保持原始倾斜，`needs_review` 直接记录 `output_not_eligible`。Deskew 不参与
-  placement、Gate 或黄金准确性。
+  placement、Gate 或黄金准确性。默认 `--deskew auto`，也可用 `--deskew off` 明确保留原始方向。
+  Observation 补齐 v4.2.8 的 100 px outer 和每 trace `max(10 px, 5% short extent)`；finalization
+  继承 `0.03°` 和动态最小端点位移。V5 仍要求双侧稳定，并只应用不超过 `0.35°` 且端点位移不超过
+  120 px 的小整理。超限记录 `rotation_exceeds_cleanup_limit`，不改变批准状态。
 - Finalization 用同一个 affine transform 映射 source 与安全 polygon，再取精确半开 AABB；不得旋转
   后继续裁固定 W×H。AABB 在 polygon 外的角落允许为黑色 no-data。
 - Current report 为 `x5crop_v5_template_report_11`。它保存最终 deskew assessment，不重复保存旁路

@@ -99,8 +99,17 @@ def transform_lines(
         first = f"V5 · DESKEW APPLIED {applied:+.3f}°"
         detail = f"observed {observed:+.3f}°"
     elif observed is not None:
-        first = f"V5 · ROTATION NOT NEEDED {observed:+.3f}°"
-        detail = "endpoint displacement <3px"
+        reason = (
+            "unavailable"
+            if assessment.skip_reason is None
+            else assessment.skip_reason.value
+        )
+        if reason == "rotation_not_needed":
+            first = f"V5 · ROTATION NOT NEEDED {observed:+.3f}°"
+            detail = "below cleanup minimum"
+        else:
+            first = f"V5 · DESKEW SKIPPED · {reason}"
+            detail = f"observed {observed:+.3f}°"
     else:
         reason = (
             "unavailable"

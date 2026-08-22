@@ -47,6 +47,13 @@ Interactive mode asks for count for every format. Press Return to confirm the
 matched-holder default. `135-dual` accepts another typed number consistently,
 but every value other than 12 safely enters review.
 
+Deskew defaults to small cleanup only after approval. Preserve source
+orientation with:
+
+```bash
+python3 X5_Crop.py /path/to/scans --format 135 --deskew off
+```
+
 `--layout auto` chooses horizontal or vertical from the scan, or either may be
 specified. V5 accepts single-page 16-bit RGB TIFFs with supported lossless
 compression. See the [English User Guide](user-guide.en.md) for the complete
@@ -80,7 +87,7 @@ x5_crop_output/
 
 Approval is source-wide: if any slot is unsafe, the complete source enters
 `needs_review`. If the target already exists, X5 Crop stops and never replaces
-or deletes it. Deskew is optional cleanup after the safety decision; when its
-measurement is unavailable, safe photos are still written with their original
-tilt. Rotated envelopes may have black corners. See the
-[English User Guide](user-guide.en.md) for full details.
+or deletes it. Deskew is optional cleanup after the safety decision; when it is
+off, unavailable, or outside the small-cleanup range, safe photos are still
+written with their original tilt. Rotated envelopes may have black corners.
+See the [English User Guide](user-guide.en.md) for full details.

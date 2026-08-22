@@ -8,7 +8,10 @@ from .identity import make_runtime_identity, source_runtime_identity
 from ..configuration.model import DetectionConfiguration
 from ..detection.decision.decision_gate import apply_decision_gate
 from ..detection.final.finalize import finalize_detection
-from ..detection.output_deskew import observe_lightweight_deskew
+from ..detection.output_deskew import (
+    disabled_lightweight_deskew_observation,
+    observe_lightweight_deskew,
+)
 from ..detection.pipeline import choose_detection
 from ..detection.workspace import prepare_detection_workspace
 from ..export.actions import prepare_review_artifact
@@ -21,7 +24,7 @@ from ..report.record import (
     capture_workspace_report_facts,
     report_record_for_final_detection,
 )
-from ..run_config import RunConfig
+from ..run_config import DeskewMode, RunConfig
 from ..run_status import RunTerminalOutcome
 from ..utils import spatial_shape_from_shape
 from .outcome import (
@@ -94,11 +97,17 @@ def _process_one_scoped(
         )
 
         failure_stage = FailureStage.FINALIZATION
-        deskew_observation = (
-            observe_lightweight_deskew(workspace.source_gray, workspace.layout)
-            if decision.status == "approved_auto"
-            else None
-        )
+        if decision.status != "approved_auto":
+            deskew_observation = None
+        elif config.deskew_mode == DeskewMode.AUTO:
+            deskew_observation = observe_lightweight_deskew(
+                workspace.source_gray,
+                workspace.layout,
+            )
+        elif config.deskew_mode == DeskewMode.OFF:
+            deskew_observation = disabled_lightweight_deskew_observation()
+        else:
+            raise ValueError(f"unsupported deskew mode: {config.deskew_mode}")
         detection = finalize_detection(
             candidate,
             decision,

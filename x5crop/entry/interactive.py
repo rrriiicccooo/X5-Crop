@@ -7,6 +7,7 @@ from ..formats import FORMATS
 from ..runtime.bootstrap import SlotCountPreflightError, run_options
 from ..runtime.limits import STANDARD_JOB_DEFAULT
 from ..runtime.options import RuntimeOptions
+from ..run_config import DeskewMode
 
 
 FORMAT_SELECTIONS = {
@@ -77,6 +78,7 @@ def interactive_options(
     *,
     selected_format_id: str | None = None,
     selected_debug_analysis: bool | None = None,
+    selected_deskew_mode: DeskewMode | None = None,
 ) -> RuntimeOptions:
     if selected_format_id is None:
         print(f"{SCRIPT_NAME} {VERSION} launcher")
@@ -87,6 +89,14 @@ def interactive_options(
         print()
     format_id = selected_format_id or ask_format()
     requested_count = ask_count(format_id)
+    if selected_deskew_mode is None:
+        deskew_enabled = ask_yes_no(
+            "lightweight deskew after approval? [y/n, return=yes]: ",
+            default=True,
+        )
+        deskew_mode = DeskewMode.AUTO if deskew_enabled else DeskewMode.OFF
+    else:
+        deskew_mode = selected_deskew_mode
     debug_analysis = (
         ask_yes_no(
             "debug analysis? [y/n, return=no]: ",
@@ -109,6 +119,7 @@ def interactive_options(
         if requested_count is None
         else f"count: {requested_count}"
     )
+    print(f"deskew cleanup: {deskew_mode.value}")
     print()
 
     return RuntimeOptions(
@@ -119,6 +130,7 @@ def interactive_options(
         requested_count=requested_count,
         debug_analysis=debug_analysis,
         jobs=STANDARD_JOB_DEFAULT,
+        deskew_mode=deskew_mode,
         interactive=True,
     )
 
@@ -135,4 +147,5 @@ def run_interactive() -> int:
             options = interactive_options(
                 selected_format_id=options.format_id,
                 selected_debug_analysis=options.debug_analysis,
+                selected_deskew_mode=options.deskew_mode,
             )

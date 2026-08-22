@@ -96,8 +96,16 @@ outermost dark edges at 6–24 sparse positions along the strip and robustly fit
 each side. It rotates only when both sides agree and both fits are stable. It
 does not classify the observed edge as holder, film, or photo. Missing,
 conflicting, or out-of-range evidence skips deskew without fabricating `0°`
-and without downgrading an otherwise safe source. A valid angle is also left
-unchanged when its end-to-end displacement is less than 3 px.
+and without downgrading an otherwise safe source. `--deskew auto` is the
+default; `--deskew off` skips observation entirely and preserves orientation.
+
+`auto` inherits the release thresholds for dark support, outer extent, 6–24
+traces, minimum dark content per trace, robust fitting, two-side slope, and
+residual. It leaves orientation unchanged below `0.03°` or below the
+length-dependent 3–12 px minimum displacement. It also skips rather than
+rotates above `0.35°` or 120 px end-to-end displacement. The `2°` observation
+limit rejects implausible measurements; it is not permission for a large output
+rotation.
 
 When deskew is applied, the image and every already-safe frame polygon receive
 the same rotation. The output box is the axis-aligned envelope of that rotated
@@ -265,11 +273,13 @@ Main options:
 - `-n, --count N`: optional positive slot count; omit it to confirm the
   matched-holder default;
 - `--layout`: `auto`, `horizontal`, or `vertical`;
+- `--deskew`: `auto` (default, bounded cleanup after approval) or `off`
+  (preserve source orientation);
 - `--jobs N`: source concurrency, default 1 and maximum 3;
 - `--debug-analysis`: write 1,800 px wide, height-adaptive three-panel
   diagnostic JPGs, development report, and summary, but no official TIFF or
   review copy;
-- `--interactive`: prompt for format, count, and Debug Analysis.
+- `--interactive`: prompt for format, count, deskew, and Debug Analysis.
 
 Interactive mode displays count for every format. Press Return to confirm the
 matched-holder complete count, or type another valid count to confirm it

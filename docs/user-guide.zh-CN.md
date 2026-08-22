@@ -73,7 +73,12 @@ support 因自身就是最终 top/bottom，可以保留同一物理状态中的�
 Deskew 是安全决定之后的可选整理。程序在整条片带 6–24 个稀疏位置读取最外侧暗边，两侧分别
 稳健拟合；只有两侧方向一致、拟合稳定时才旋转。它不判断检测到的是片夹边、胶片边还是照片边。
 测量不足、两侧矛盾或角度不合格时跳过 deskew，不伪造 `0°`，也不会把原本安全的照片降为
-`needs_review`。有效角度在片带首尾造成的位移小于 3 px 时同样保留原方向。
+`needs_review`。默认 `--deskew auto`；`--deskew off` 完全跳过观测并保留原方向。
+
+`auto` 继承发布版的暗像素、outer、6–24 trace、每 trace 最少暗像素、稳健拟合、双侧 slope 和
+residual 阈值。观测角低于 `0.03°` 或首尾位移低于随片长在 3–12 px 间变化的下限时不旋转；高于
+`0.35°` 或首尾位移超过 120 px 时也只记录 typed skip。这里的 `2°` 观测上限只用于拒绝荒谬测量，
+不是允许输出大角度旋转的范围。
 
 应用 deskew 时，程序把原图和已经确认安全的 frame polygon 一起旋转，再取 polygon 的轴对齐
 外包矩形；不会继续裁固定 W×H。因此角度略有误差时最多残留少量倾斜或多一点边框，不会因旋转
@@ -202,10 +207,11 @@ python3 X5_Crop.py /path/to/scans --format 120-66 --count 2
 - `--format`：`135`、`135-dual`、`half`、`xpan`、`120-645`、`120-66` 或 `120-67`；
 - `-n, --count N`：可选的正整数 slot 数；省略表示确认匹配片夹默认值；
 - `--layout`：`auto`、`horizontal` 或 `vertical`；
+- `--deskew`：`auto`（默认，只在批准后作有界小整理）或 `off`（保留原方向）；
 - `--jobs N`：source 并发数，默认 1，上限 3；
 - `--debug-analysis`：只写 1800 px 宽、自适应高度的三联诊断 JPG、development report 和
   summary，不写正式 TIFF 或 review copy；
-- `--interactive`：交互选择 format、count 和 Debug Analysis。
+- `--interactive`：交互选择 format、count、deskew 和 Debug Analysis。
 
 交互模式对每个 format 都显示 count。直接回车表示确认匹配片夹的默认完整格数；输入其它合法
 数字表示用户明确确认该 count。`135-dual` 的交互相同，但除 12 外都会进入人工检查。

@@ -13,7 +13,16 @@ from ..output_deskew import (
 )
 
 
-DESKEW_MINIMUM_ENDPOINT_DISPLACEMENT_PX = 3.0
+_MINIMUM_ABSOLUTE_ANGLE_DEGREES = 0.03
+_MINIMUM_ENDPOINT_DISPLACEMENT_RATIO = 0.0005
+_MINIMUM_ENDPOINT_DISPLACEMENT_FLOOR_PX = 3.0
+_MINIMUM_ENDPOINT_DISPLACEMENT_CAP_PX = 12.0
+_MAXIMUM_CLEANUP_ANGLE_DEGREES = 0.35
+_MAXIMUM_CLEANUP_ENDPOINT_DISPLACEMENT_PX = 120.0
+_OBSERVED_SKIP_REASONS = {
+    DeskewSkipReason.ROTATION_NOT_NEEDED,
+    DeskewSkipReason.ROTATION_EXCEEDS_CLEANUP_LIMIT,
+}
 
 
 @dataclass(frozen=True)
@@ -48,15 +57,15 @@ class OutputDeskewAssessment:
             if (
                 self.applied_source_rotation_degrees is not None
                 or not isinstance(self.skip_reason, DeskewSkipReason)
-                or self.skip_reason == DeskewSkipReason.ROTATION_NOT_NEEDED
+                or self.skip_reason in _OBSERVED_SKIP_REASONS
             ):
                 raise ValueError("unavailable deskew assessment is inconsistent")
         elif (
             not math.isfinite(self.observed_angle_degrees)
             or self.applied_source_rotation_degrees != 0.0
-            or self.skip_reason != DeskewSkipReason.ROTATION_NOT_NEEDED
+            or self.skip_reason not in _OBSERVED_SKIP_REASONS
         ):
-            raise ValueError("unneeded deskew assessment is inconsistent")
+            raise ValueError("observed deskew skip is inconsistent")
 
 
 def assess_output_deskew(
@@ -98,13 +107,32 @@ def assess_output_deskew(
     observed_angle = observation.angle_degrees
     if observed_angle is None:
         raise ValueError("supported deskew lacks its observed angle")
-    long_extent = (
-        source_width - 1 if layout == "horizontal" else source_height - 1
-    )
+    long_extent = source_width if layout == "horizontal" else source_height
     endpoint_displacement = abs(
         math.tan(math.radians(observed_angle)) * long_extent
     )
-    if endpoint_displacement < DESKEW_MINIMUM_ENDPOINT_DISPLACEMENT_PX:
+    minimum_endpoint_displacement = min(
+        _MINIMUM_ENDPOINT_DISPLACEMENT_CAP_PX,
+        max(
+            _MINIMUM_ENDPOINT_DISPLACEMENT_FLOOR_PX,
+            long_extent * _MINIMUM_ENDPOINT_DISPLACEMENT_RATIO,
+        ),
+    )
+    if (
+        abs(observed_angle) > _MAXIMUM_CLEANUP_ANGLE_DEGREES
+        or endpoint_displacement > _MAXIMUM_CLEANUP_ENDPOINT_DISPLACEMENT_PX
+    ):
+        return OutputDeskewAssessment(
+            deskew_applied=False,
+            observed_angle_degrees=observed_angle,
+            applied_source_rotation_degrees=0.0,
+            skip_reason=DeskewSkipReason.ROTATION_EXCEEDS_CLEANUP_LIMIT,
+            transform=identity,
+        )
+    if (
+        abs(observed_angle) < _MINIMUM_ABSOLUTE_ANGLE_DEGREES
+        or endpoint_displacement < minimum_endpoint_displacement
+    ):
         return OutputDeskewAssessment(
             deskew_applied=False,
             observed_angle_degrees=observed_angle,

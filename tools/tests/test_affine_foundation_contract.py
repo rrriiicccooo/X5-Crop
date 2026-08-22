@@ -302,14 +302,14 @@ class AffineFoundationContractTest(unittest.TestCase):
 
     def test_nonzero_cosmetic_observation_drives_rotation(self) -> None:
         assessment = assess_output_deskew(
-            make_deskew_observation(1.0),
+            make_deskew_observation(0.2),
             layout="horizontal",
             source_width=1000,
             source_height=400,
         )
         self.assertTrue(assessment.deskew_applied)
         self.assertLess(assessment.applied_source_rotation_degrees, 0.0)
-        angle = math.radians(1.0)
+        angle = math.radians(0.2)
         first = assessment.transform.map_point(0.0, 20.0)
         second = assessment.transform.map_point(
             50.0,
@@ -319,7 +319,7 @@ class AffineFoundationContractTest(unittest.TestCase):
 
     def test_vertical_strip_uses_canonical_sign_to_remove_raster_tilt(self) -> None:
         assessment = assess_output_deskew(
-            make_deskew_observation(-1.0, fit_angle_degrees=1.0),
+            make_deskew_observation(-0.2, fit_angle_degrees=0.2),
             layout="vertical",
             source_width=100,
             source_height=1000,
@@ -327,7 +327,7 @@ class AffineFoundationContractTest(unittest.TestCase):
 
         self.assertTrue(assessment.deskew_applied)
         self.assertLess(assessment.applied_source_rotation_degrees, 0.0)
-        angle = math.radians(1.0)
+        angle = math.radians(0.2)
         first = assessment.transform.map_point(0.0, 20.0)
         second = assessment.transform.map_point(
             50.0,

@@ -101,7 +101,16 @@ Sequence 从不提供角度。超过预算就 review，不建立逐帧角度、�
 输出 deskew 是与模板无关的 role-free 旁路 observation。只有 `DecisionGate` 已批准输出时，
 finalization 才在整条片带的 6–24 个有界稀疏位置读取最外侧暗边；review 不执行这项扫描。两侧分别
 稳健拟合，只有 slope、residual 和角度范围相容时才产生角度。它不识别 holder、film 或 photo edge，
-不可用或矛盾时返回 typed skip reason 和 `None`，绝不伪造 `0°`。
+不可用或矛盾时返回 typed skip reason 和 `None`，绝不伪造 `0°`。`--deskew auto` 是默认值；
+`--deskew off` 不执行这项旁路观测并记录 `user_disabled`。两种模式都不能改变 placement、Gate 或
+final status。
+
+Observation 继承 v4.2.8 的数值合同，但保留 V5 的双侧必需与 typed skip：暗像素 `<245`，outer row/
+column 支撑至少 1%，outer 长轴至少 100 px；沿长轴约每 350 px 取样，总数限制为 6–24。每条 trace
+至少包含 `max(10 px, 5% × short_extent)` 个暗像素；每侧至少 4 点。MAD inlier 容差为
+`max(2 px, 3 × MAD)`，最终中位 residual 不超过 `max(3 px, 0.003 × short_extent)`，双侧 slope 差
+不超过 `0.006`，可报告观测角绝对值不超过 `2°`。`2°` 只是 measurement plausibility，不授予输出
+旋转权限。
 
 ## 5. 从整体到局部的模板编译
 
@@ -347,11 +356,13 @@ pixel-center span 和 bleed 全部加入后的精确 convex polygon。真实画�
 移动边界、选择 runner 或创造 phase。
 
 Decision 后 finalization 才执行并评估 lightweight deskew。`needs_review` 不扫描，记录
-`output_not_eligible`；approved observation 不可用时使用 identity 且不降级。有效角度在 source
-pixel-center 长轴上的端点位移小于 3 px 时也使用 identity，并记录
-`rotation_not_needed`。其余情况横向 layout 使用观测角的反号、纵向 layout 使用同号构造 expanded
-rotation。每个已经确认安全的 polygon 与 source 使用同一 affine transform，正式轴对齐 box 由旋转后
-polygon 的精确半开 AABB 得到，不能先把 polygon 扩成 source AABB，也不能继续裁固定 W×H。
+`output_not_eligible`；approved observation 不可用时使用 identity 且不降级。`auto` 只在观测角绝对值
+至少 `0.03°`、长轴端点位移至少 `clamp(0.0005 × long_extent, 3 px, 12 px)`，并且观测角不超过
+`0.35°`、端点位移不超过 `120 px` 时应用。低于下限记录 `rotation_not_needed`；高于小整理上限记录
+`rotation_exceeds_cleanup_limit`。跳过 deskew 不改变 `approved_auto`。有效旋转对横向 layout 使用观测
+角的反号、纵向 layout 使用同号构造 expanded rotation。每个已经确认安全的 polygon 与 source 使用
+同一 affine transform，正式轴对齐 box 由旋转后 polygon 的精确半开 AABB 得到，不能先把 polygon
+扩成 source AABB，也不能继续裁固定 W×H。
 
 旋转后 AABB 的角落可以位于安全 polygon 之外；这些表示性角落允许写黑色 no-data，不是检测缺口，
 不得回流 `CandidateGate`。Sampling 仍必须保证 polygon 内的已确认区域完整、输出 extent 有界、
@@ -452,7 +463,7 @@ Pillow 只在 Debug Analysis 时延迟导入。生产默认 `--jobs 1`、上限 
 | 路径 | 唯一职责 |
 |---|---|
 | `x5crop/formats/` | 固定 W/H、容差、gap 搜索先验、holder count 与输出保护常量 |
-| `x5crop/configuration/`、`x5crop/runtime/` | format/count 输入、matched-holder resolution 与 source workflow |
+| `x5crop/configuration/`、`x5crop/runtime/` | format/count/deskew mode 输入、matched-holder resolution 与 source workflow |
 | `x5crop/detection/source_core.py`、`evidence/scan_canvas.py` | source/lane 与 matched-holder authority |
 | `photo_geometry/coarse_strip_support.py`、`coarse_enclosing_model.py`、`coarse_enclosing_support.py` | 两个 role-free aggregate query、粗片带 interval、source-wide 双侧 track 与 receipt |
 | `photo_geometry/template_measurement_plan*.py` | pixel-free 模板、有限 query intents、停止与工作上界 |

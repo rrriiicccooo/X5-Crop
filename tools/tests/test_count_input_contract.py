@@ -140,12 +140,13 @@ class CountInputContractTest(unittest.TestCase):
             self.assertFalse(hasattr(spec, "partial_mode_supported"))
             self.assertFalse(hasattr(spec, "interactive_partial_counts"))
         with (
-            mock.patch("builtins.input", side_effect=("dual", "", "n")),
+            mock.patch("builtins.input", side_effect=("dual", "", "", "n")),
             contextlib.redirect_stdout(io.StringIO()),
         ):
             options = interactive_options()
         self.assertEqual(options.format_id, "135-dual")
         self.assertIsNone(options.requested_count)
+        self.assertEqual(options.deskew_mode, DeskewMode.AUTO)
         self.assertFalse(hasattr(options, "strip_mode"))
 
 

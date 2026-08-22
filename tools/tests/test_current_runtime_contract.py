@@ -147,6 +147,9 @@ class CurrentRuntimeContractTest(unittest.TestCase):
         self.assertNotIn("--diagnostics", option_strings)
         self.assertNotIn("--overwrite", option_strings)
         self.assertNotIn("--allow-best-effort-output", option_strings)
+        self.assertIn("--deskew", option_strings)
+        self.assertNotIn("--deskew-min-angle", option_strings)
+        self.assertNotIn("--deskew-max-angle", option_strings)
         normalized_help = " ".join(help_text.split())
         self.assertIn(
             "three-panel JPG comparing detected and selected TOP/BOTTOM, "
@@ -164,6 +167,24 @@ class CurrentRuntimeContractTest(unittest.TestCase):
             )
         )
         self.assertTrue(analysis_options.debug_analysis)
+        self.assertEqual(analysis_options.deskew_mode, DeskewMode.AUTO)
+        disabled_options = options_from_args(
+            parser.parse_args(
+                ["input.tif", "--format", "135", "--deskew", "off"]
+            )
+        )
+        self.assertEqual(disabled_options.deskew_mode, DeskewMode.OFF)
+        self.assertEqual(DESKEW_CHOICES, ("off", "auto"))
+        with mock.patch(
+            "x5crop.runtime.bootstrap.iter_input_files",
+            return_value=[Path("input.tif")],
+        ):
+            self.assertEqual(
+                runtime_invocation_from_options(
+                    disabled_options
+                ).config.deskew_mode,
+                DeskewMode.OFF,
+            )
         for runtime_type in (RuntimeOptions, RunConfig):
             with self.subTest(runtime_type=runtime_type.__name__):
                 self.assertNotIn(
@@ -172,6 +193,10 @@ class CurrentRuntimeContractTest(unittest.TestCase):
                 )
                 self.assertNotIn(
                     "preview",
+                    {field.name for field in fields(runtime_type)},
+                )
+                self.assertIn(
+                    "deskew_mode",
                     {field.name for field in fields(runtime_type)},
                 )
         with (

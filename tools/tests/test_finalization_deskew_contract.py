@@ -96,12 +96,10 @@ class FinalizationDeskewContractTest(unittest.TestCase):
         )
         self.assertEqual(detection.final_boxes[0], Box(10, 12, 36, 43))
 
-    def test_endpoint_displacement_threshold_preserves_real_zero_observation(
+    def test_release_minimum_angle_and_span_preserve_real_zero_observation(
         self,
     ) -> None:
-        long_extent = 1000
-        below = math.degrees(math.atan(2.999 / (long_extent - 1)))
-        above = math.degrees(math.atan(3.001 / (long_extent - 1)))
+        long_extent = 20_000
 
         zero = assess_output_deskew(
             _supported_observation(0.0),
@@ -110,13 +108,13 @@ class FinalizationDeskewContractTest(unittest.TestCase):
             source_height=100,
         )
         not_needed = assess_output_deskew(
-            _supported_observation(below),
+            _supported_observation(0.029),
             layout="horizontal",
             source_width=long_extent,
             source_height=100,
         )
         applied = assess_output_deskew(
-            _supported_observation(above),
+            _supported_observation(0.03),
             layout="horizontal",
             source_width=long_extent,
             source_height=100,
@@ -135,14 +133,65 @@ class FinalizationDeskewContractTest(unittest.TestCase):
         self.assertFalse(applied.transform.is_identity)
         self.assertIsNone(applied.skip_reason)
 
+        below_release_span = math.degrees(math.atan(2.999 / 1000.0))
+        above_release_span = math.degrees(math.atan(3.001 / 1000.0))
+        self.assertFalse(
+            assess_output_deskew(
+                _supported_observation(below_release_span),
+                layout="horizontal",
+                source_width=1000,
+                source_height=100,
+            ).deskew_applied
+        )
+        self.assertTrue(
+            assess_output_deskew(
+                _supported_observation(above_release_span),
+                layout="horizontal",
+                source_width=1000,
+                source_height=100,
+            ).deskew_applied
+        )
+
+    def test_large_measurement_is_skipped_without_blocking_output(self) -> None:
+        for angle, long_extent in ((0.36, 10_000), (0.2, 40_000)):
+            with self.subTest(angle=angle, long_extent=long_extent):
+                assessment = assess_output_deskew(
+                    _supported_observation(angle),
+                    layout="horizontal",
+                    source_width=long_extent,
+                    source_height=100,
+                )
+
+                self.assertFalse(assessment.deskew_applied)
+                self.assertTrue(assessment.transform.is_identity)
+                self.assertEqual(assessment.observed_angle_degrees, angle)
+                self.assertEqual(assessment.applied_source_rotation_degrees, 0.0)
+                self.assertEqual(
+                    assessment.skip_reason,
+                    DeskewSkipReason.ROTATION_EXCEEDS_CLEANUP_LIMIT,
+                )
+
+    def test_small_cleanup_inside_both_limits_is_applied(self) -> None:
+        for angle, long_extent in ((0.35, 10_000), (0.34, 20_000)):
+            with self.subTest(angle=angle, long_extent=long_extent):
+                assessment = assess_output_deskew(
+                    _supported_observation(angle),
+                    layout="horizontal",
+                    source_width=long_extent,
+                    source_height=100,
+                )
+
+                self.assertTrue(assessment.deskew_applied)
+                self.assertIsNone(assessment.skip_reason)
+
     def test_horizontal_and_vertical_source_rotation_signs_are_explicit(
         self,
     ) -> None:
         cases = (
-            ("horizontal", 1.0, -1.0),
-            ("horizontal", -1.0, 1.0),
-            ("vertical", 1.0, 1.0),
-            ("vertical", -1.0, -1.0),
+            ("horizontal", 0.2, -0.2),
+            ("horizontal", -0.2, 0.2),
+            ("vertical", 0.2, 0.2),
+            ("vertical", -0.2, -0.2),
         )
         for layout, observed, expected in cases:
             with self.subTest(layout=layout, observed=observed):
@@ -165,9 +214,9 @@ class FinalizationDeskewContractTest(unittest.TestCase):
         detection = finalize_detection(
             candidate,
             SimpleNamespace(status="approved_auto"),
-            _supported_observation(1.0),
+            _supported_observation(0.2),
             layout="horizontal",
-            source_width=160,
+            source_width=1000,
             source_height=100,
         )
         transform = detection.deskew_assessment.transform

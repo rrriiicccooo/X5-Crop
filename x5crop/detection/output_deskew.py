@@ -19,16 +19,19 @@ from ..geometry.layout import work_gray
 
 _DARK_THRESHOLD = 245
 _OUTER_SUPPORT_FRACTION = 0.01
+_MIN_OUTER_SUPPORT_WIDTH_PX = 100
 _TRACE_SPACING_PX = 350
 _MIN_TRACE_COUNT = 6
 _MAX_TRACE_COUNT = 24
+_MIN_TRACE_DARK_PX = 10
+_MIN_TRACE_DARK_SHORT_EXTENT_RATIO = 0.05
 _MIN_EDGE_POINT_COUNT = 4
 _MAD_INLIER_MULTIPLIER = 3.0
 _MIN_INLIER_TOLERANCE_PX = 2.0
 _MIN_RESIDUAL_LIMIT_PX = 3.0
 _RESIDUAL_SHORT_EXTENT_RATIO = 0.003
 _MAX_EDGE_SLOPE_DELTA = 0.006
-_MAX_ABSOLUTE_ANGLE_DEGREES = 2.0
+_MAX_MEASUREMENT_ANGLE_DEGREES = 2.0
 
 # The dark-support pass is source-sized work, but its threshold mask is
 # chunked.  Apart from the canonical vertical ``work_gray`` copy, temporary
@@ -40,13 +43,16 @@ _SUPPORT_MASK_CHUNK_PIXELS = 1 << 20
 
 class DeskewSkipReason(str, Enum):
     OUTPUT_NOT_ELIGIBLE = "output_not_eligible"
+    USER_DISABLED = "user_disabled"
     EMPTY_SOURCE = "empty_source"
     NO_DARK_SUPPORT = "no_dark_support"
+    OUTER_SUPPORT_TOO_SHORT = "outer_support_too_short"
     INSUFFICIENT_EDGE_POINTS = "insufficient_edge_points"
     EDGE_SLOPE_CONFLICT = "edge_slope_conflict"
     EDGE_RESIDUAL_TOO_HIGH = "edge_residual_too_high"
     ANGLE_OUT_OF_RANGE = "angle_out_of_range"
     ROTATION_NOT_NEEDED = "rotation_not_needed"
+    ROTATION_EXCEEDS_CLEANUP_LIMIT = "rotation_exceeds_cleanup_limit"
 
 
 @dataclass(frozen=True)
@@ -129,7 +135,7 @@ class LightweightDeskewObservation:
             if (
                 self.angle_degrees is None
                 or not math.isfinite(self.angle_degrees)
-                or abs(self.angle_degrees) > _MAX_ABSOLUTE_ANGLE_DEGREES
+                or abs(self.angle_degrees) > _MAX_MEASUREMENT_ANGLE_DEGREES
                 or self.top_fit is None
                 or self.bottom_fit is None
                 or self.skip_reason is not None
@@ -159,6 +165,7 @@ class LightweightDeskewObservation:
             in {
                 DeskewSkipReason.OUTPUT_NOT_ELIGIBLE,
                 DeskewSkipReason.ROTATION_NOT_NEEDED,
+                DeskewSkipReason.ROTATION_EXCEEDS_CLEANUP_LIMIT,
             }
         ):
             raise ValueError("skipped deskew observation is inconsistent")
@@ -179,6 +186,12 @@ def _unavailable(
         sample_trace_count=sample_trace_count,
         skip_reason=reason,
     )
+
+
+def disabled_lightweight_deskew_observation() -> LightweightDeskewObservation:
+    """Record that the optional approved-output measurement was disabled."""
+
+    return _unavailable(DeskewSkipReason.USER_DISABLED)
 
 
 def _outer_dark_support(
@@ -298,6 +311,8 @@ def observe_lightweight_deskew(
         return _unavailable(DeskewSkipReason.NO_DARK_SUPPORT)
     support_left, support_top, support_right, support_bottom = support
     support_width = support_right - support_left
+    if support_width < _MIN_OUTER_SUPPORT_WIDTH_PX:
+        return _unavailable(DeskewSkipReason.OUTER_SUPPORT_TOO_SHORT)
     requested_trace_count = min(
         _MAX_TRACE_COUNT,
         max(_MIN_TRACE_COUNT, support_width // _TRACE_SPACING_PX),
@@ -311,11 +326,15 @@ def observe_lightweight_deskew(
     )
     sample_trace_count = int(traces.size)
     support_midpoint = (support_top + support_bottom - 1) / 2.0
+    minimum_dark_rows = max(
+        _MIN_TRACE_DARK_PX,
+        short_extent * _MIN_TRACE_DARK_SHORT_EXTENT_RATIO,
+    )
     top_points: list[tuple[float, float]] = []
     bottom_points: list[tuple[float, float]] = []
     for trace in traces:
         dark_rows = np.flatnonzero(work[:, int(trace)] < _DARK_THRESHOLD)
-        if dark_rows.size == 0:
+        if dark_rows.size < minimum_dark_rows:
             continue
         top = int(dark_rows[0])
         bottom = int(dark_rows[-1])
@@ -358,7 +377,7 @@ def observe_lightweight_deskew(
     slope = float(np.median((top_fit.slope, bottom_fit.slope)))
     canonical_angle = math.degrees(math.atan(slope))
     angle = canonical_angle if layout == "horizontal" else -canonical_angle
-    if abs(angle) > _MAX_ABSOLUTE_ANGLE_DEGREES:
+    if abs(angle) > _MAX_MEASUREMENT_ANGLE_DEGREES:
         return _unavailable(
             DeskewSkipReason.ANGLE_OUT_OF_RANGE,
             sample_trace_count=sample_trace_count,

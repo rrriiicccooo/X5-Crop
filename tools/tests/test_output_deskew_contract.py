@@ -9,6 +9,7 @@ from x5crop.detection.output_deskew import (
     DeskewEdgeFit,
     DeskewSkipReason,
     LightweightDeskewObservation,
+    disabled_lightweight_deskew_observation,
     observe_lightweight_deskew,
 )
 from x5crop.domain import EvidenceState
@@ -164,6 +165,43 @@ class OutputDeskewContractTest(unittest.TestCase):
                 self.assertIsNone(observation.top_fit)
                 self.assertIsNone(observation.bottom_fit)
 
+    def test_release_minimum_outer_width_is_preserved(self) -> None:
+        observation = observe_lightweight_deskew(
+            _parallel_strip(0.1, width=99),
+            "horizontal",
+        )
+
+        self.assertEqual(observation.state, EvidenceState.UNAVAILABLE)
+        self.assertEqual(
+            observation.skip_reason,
+            DeskewSkipReason.OUTER_SUPPORT_TOO_SHORT,
+        )
+        self.assertEqual(observation.sample_trace_count, 0)
+
+    def test_release_minimum_dark_content_per_trace_is_preserved(self) -> None:
+        gray = np.full((240, 2800), 255, dtype=np.uint8)
+        gray[100:105, :] = 0
+
+        observation = observe_lightweight_deskew(gray, "horizontal")
+
+        self.assertEqual(observation.state, EvidenceState.UNAVAILABLE)
+        self.assertEqual(
+            observation.skip_reason,
+            DeskewSkipReason.INSUFFICIENT_EDGE_POINTS,
+        )
+        self.assertIsNone(observation.top_fit)
+        self.assertIsNone(observation.bottom_fit)
+
+    def test_release_outer_and_trace_thresholds_are_inclusive(self) -> None:
+        gray = np.full((200, 100), 255, dtype=np.uint8)
+        gray[100:110, :] = 0
+
+        observation = observe_lightweight_deskew(gray, "horizontal")
+
+        self.assertEqual(observation.state, EvidenceState.SUPPORTED)
+        self.assertEqual(observation.angle_degrees, 0.0)
+        self.assertEqual(observation.sample_trace_count, 6)
+
     def test_zero_extent_is_typed_empty_source(self) -> None:
         observation = observe_lightweight_deskew(
             np.empty((0, 100), dtype=np.uint8),
@@ -227,6 +265,17 @@ class OutputDeskewContractTest(unittest.TestCase):
             DeskewSkipReason.ROTATION_NOT_NEEDED.value,
             "rotation_not_needed",
         )
+
+    def test_user_disabled_is_a_typed_unattempted_observation(self) -> None:
+        observation = disabled_lightweight_deskew_observation()
+
+        self.assertEqual(observation.state, EvidenceState.UNAVAILABLE)
+        self.assertEqual(
+            observation.skip_reason,
+            DeskewSkipReason.USER_DISABLED,
+        )
+        self.assertIsNone(observation.angle_degrees)
+        self.assertEqual(observation.sample_trace_count, 0)
 
 
 if __name__ == "__main__":

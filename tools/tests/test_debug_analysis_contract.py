@@ -450,6 +450,16 @@ class DebugAnalysisContractTest(unittest.TestCase):
                 skip_reason=SimpleNamespace(value="edge_slope_conflict"),
             )
         )
+        too_large = SimpleNamespace(
+            deskew_assessment=SimpleNamespace(
+                deskew_applied=False,
+                applied_source_rotation_degrees=0.0,
+                observed_angle_degrees=0.4,
+                skip_reason=SimpleNamespace(
+                    value="rotation_exceeds_cleanup_limit"
+                ),
+            )
+        )
 
         self.assertEqual(
             transform_lines(not_needed, profile)[0],
@@ -459,6 +469,11 @@ class DebugAnalysisContractTest(unittest.TestCase):
             transform_lines(skipped, profile)[0],
             "V5 · DESKEW SKIPPED · edge_slope_conflict",
         )
+        self.assertEqual(
+            transform_lines(too_large, profile)[0],
+            "V5 · DESKEW SKIPPED · rotation_exceeds_cleanup_limit",
+        )
+        self.assertIn("observed +0.400°", transform_lines(too_large, profile)[1])
 
     def test_header_displays_and_bounds_the_original_source_filename(self) -> None:
         self.assertEqual(

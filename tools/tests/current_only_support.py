@@ -35,7 +35,7 @@ from x5crop.report.identity import (
     REPORT_SCHEMA_REVISION,
 )
 from x5crop.report.read_models import gate_check_read_model
-from x5crop.run_config import RunConfig
+from x5crop.run_config import DESKEW_CHOICES, DeskewMode, RunConfig
 from x5crop.runtime.bootstrap import runtime_invocation_from_options
 from x5crop.runtime.limits import (
     STANDARD_JOB_DEFAULT,

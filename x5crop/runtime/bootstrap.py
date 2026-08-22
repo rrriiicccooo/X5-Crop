@@ -95,6 +95,7 @@ def runtime_invocation_from_options(options: RuntimeOptions) -> RuntimeInvocatio
         count_request=count_request,
         debug_analysis=options.debug_analysis,
         jobs=max(1, min(STANDARD_JOB_LIMIT, int(options.jobs))),
+        deskew_mode=options.deskew_mode,
         interactive=options.interactive,
         development_detail=(
             options.debug_analysis or options.development_detail

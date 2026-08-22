@@ -9,6 +9,7 @@ from ..formats import FORMAT_CHOICES
 from ..runtime.bootstrap import run_options
 from ..runtime.limits import STANDARD_JOB_DEFAULT
 from ..runtime.options import LAYOUT_CHOICES, RuntimeOptions
+from ..run_config import DESKEW_CHOICES, DeskewMode
 from .text_output import configure_entry_text_output
 
 
@@ -47,6 +48,15 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--deskew",
+        choices=DESKEW_CHOICES,
+        default=DeskewMode.AUTO.value,
+        help=(
+            "Optional cleanup after approved detection: auto applies only a "
+            "small reliable rotation; off preserves source orientation."
+        ),
+    )
+    parser.add_argument(
         "--debug-analysis",
         action="store_true",
         help=(
@@ -65,7 +75,11 @@ def build_parser() -> argparse.ArgumentParser:
             "Parallel TIFF workers. Default 1; capped at 3."
         ),
     )
-    parser.add_argument("--interactive", action="store_true", help="Prompt for format, count, and Debug Analysis options.")
+    parser.add_argument(
+        "--interactive",
+        action="store_true",
+        help="Prompt for format, count, deskew, and Debug Analysis options.",
+    )
     parser.add_argument("--version", action="version", version=f"{SCRIPT_NAME} {VERSION}")
     return parser
 
@@ -86,6 +100,7 @@ def options_from_args(args: argparse.Namespace) -> RuntimeOptions:
         requested_count=(None if args.count is None else int(args.count)),
         debug_analysis=bool(args.debug_analysis),
         jobs=int(args.jobs),
+        deskew_mode=DeskewMode(args.deskew),
     )
 
 
