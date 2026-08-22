@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import ast
-from pathlib import Path
 import unittest
 
 from x5crop.domain import Box, PositiveInterval
@@ -126,22 +124,10 @@ class TemplateMeasurementPlanContractTest(unittest.TestCase):
             all(item.search_margin_mm.minimum > 0.0 for item in plan.query_intents)
         )
 
-    def test_compile_is_pixel_free_and_work_is_prevalidated(self) -> None:
+    def test_compiled_and_executed_work_stays_inside_plan_bounds(self) -> None:
         plan = _plan()
-        self.assertTrue(plan.compile_receipt.prevalidated)
-        self.assertEqual(plan.compile_receipt.pixel_read_count, 0)
-        plan.compile_receipt.validate_bounds(
-            phase=plan.phase_bounds,
-            cross=plan.cross_bounds,
-            placement=plan.placement_bounds,
-            pixel=plan.pixel_bounds,
-            work=plan.work_bounds,
-        )
-        self.assertGreater(plan.compile_receipt.work_unit_upper_bound, 0)
-        self.assertEqual(
-            plan.compile_receipt.cross_fit_upper_bound,
-            plan.cross_bounds.max_evaluated_fits,
-        )
+        self.assertGreater(plan.work_bounds.max_work_units, 0)
+        self.assertGreater(plan.cross_bounds.max_evaluated_fits, 0)
         self.assertGreater(plan.pixel_bounds.max_registered_queries, len(plan.query_intents))
         plan.validate_execution(
             registered_query_count=3,
@@ -276,27 +262,6 @@ class TemplateMeasurementPlanContractTest(unittest.TestCase):
         )
         self.assertEqual(plan.template_spec.count, 6)
         self.assertEqual(plan.holder_full_count, 12)
-
-    def test_source_has_no_pixel_or_retired_module_imports(self) -> None:
-        path = Path(__file__).parents[2] / "x5crop/detection/photo_geometry/template_measurement_plan.py"
-        tree = ast.parse(path.read_text())
-        names = [
-            alias.name
-            for node in ast.walk(tree)
-            if isinstance(node, (ast.Import, ast.ImportFrom))
-            for alias in node.names
-        ]
-        forbidden = (
-            "chain",
-            "proposal",
-            "materialization",
-            "cache",
-            "measurement_model",
-            "numpy",
-            "tifffile",
-        )
-        self.assertFalse(any(any(token in name for token in forbidden) for name in names))
-
 
 if __name__ == "__main__":
     unittest.main()

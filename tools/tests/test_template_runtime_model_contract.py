@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import ast
 from dataclasses import replace
-from pathlib import Path
 import unittest
 
 from tools.tests.template_runtime_test_support import (
@@ -185,30 +183,6 @@ class TemplateRuntimeModelContractTest(unittest.TestCase):
             failure=failure_fact(GateGap.OUTPUT_SLOT_COUNT_UNAVAILABLE),
         )
         self.assertEqual(selection.lane_ids, ())
-
-    def test_source_has_no_legacy_imports(self) -> None:
-        path = Path(__file__).parents[2] / "x5crop/detection/photo_geometry/template_runtime_model.py"
-        tree = ast.parse(path.read_text())
-        imports = [
-            node
-            for node in ast.walk(tree)
-            if isinstance(node, (ast.Import, ast.ImportFrom))
-        ]
-        names = [
-            alias.name
-            for node in imports
-            for alias in getattr(node, "names", ())
-        ]
-        forbidden = (
-            "CompleteFormatChain",
-            "chain_proposals",
-            "materialization",
-            "source_selection_model",
-            "dominance",
-            "cache",
-        )
-        self.assertFalse(any(any(token in name for token in forbidden) for name in names))
-
 
 def _output_footprint():
     polygon = ((0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0))

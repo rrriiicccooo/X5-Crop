@@ -758,8 +758,3 @@ def observe_coarse_short_axis_tracks(
             len(query.trace_positions_px),
         ),
     )
-
-
-__all__ = [
-    "observe_coarse_short_axis_tracks",
-]

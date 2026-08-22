@@ -71,24 +71,11 @@ def report_record_for_final_detection(
                 "frame_export_performed": export_performed,
                 "official_tiff_count": len(output_files),
                 "reason": detection.frame_export_reason,
-                "resolved_output_slots": typed_read_model(
-                    detection.resolved_output_slots
-                ),
-                "output_slot_count": detection.output_slot_count,
-                "slot_identities": typed_read_model(
-                    detection.output_slot_identities
-                ),
                 "deskew_assessment": typed_read_model(
                     detection.deskew_assessment
                 ),
-                "output_transforms": typed_read_model(
-                    detection.output_transforms
-                ),
                 "output_footprints": typed_read_model(
                     detection.output_footprints
-                ),
-                "sampling_authority_boxes": typed_read_model(
-                    detection.sampling_authority_boxes
                 ),
                 "final_boxes": typed_read_model(detection.final_boxes),
             },
@@ -96,16 +83,6 @@ def report_record_for_final_detection(
                 "validation": (
                     "header_validated" if output_files else "not_created"
                 ),
-                "preserved_properties": [
-                    "dtype",
-                    "axes",
-                    "channels",
-                    "icc_color_space",
-                    "resolution",
-                    "metadata",
-                    "frozen_lossless_compression",
-                    "orientation_baked_to_1",
-                ],
             },
             "output_files": list(output_files),
             "review_copy": review_copy,

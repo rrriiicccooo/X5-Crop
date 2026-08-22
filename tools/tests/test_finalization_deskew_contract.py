@@ -228,7 +228,6 @@ class FinalizationDeskewContractTest(unittest.TestCase):
 
         self.assertTrue(all(box.left <= x < box.right for x, _ in mapped))
         self.assertTrue(all(box.top <= y < box.bottom for _, y in mapped))
-        self.assertTrue(all(item is transform for item in detection.output_transforms))
         self.assertGreaterEqual(box.left, 0)
         self.assertGreaterEqual(box.top, 0)
         self.assertLessEqual(box.right, transform.output_extent.width)
@@ -251,9 +250,7 @@ class FinalizationDeskewContractTest(unittest.TestCase):
             detection.deskew_assessment.skip_reason,
             DeskewSkipReason.OUTPUT_NOT_ELIGIBLE,
         )
-        self.assertEqual(detection.output_transforms, ())
         self.assertEqual(detection.output_footprints, ())
-        self.assertEqual(detection.sampling_authority_boxes, ())
         self.assertEqual(detection.final_boxes, ())
 
 

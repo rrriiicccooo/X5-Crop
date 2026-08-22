@@ -653,12 +653,3 @@ def short_axis_center_authority(
         visible_authority_px,
         scale_authority_px_per_mm,
     )
-
-
-__all__ = [
-    "RegisteredCrossEvidence",
-    "register_cross_evidence",
-    "register_template_local_cross_refinements",
-    "short_axis_center_authority",
-    "template_spec_from_physical_authority",
-]

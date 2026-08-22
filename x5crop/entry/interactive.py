@@ -131,7 +131,6 @@ def interactive_options(
         debug_analysis=debug_analysis,
         jobs=STANDARD_JOB_DEFAULT,
         deskew_mode=deskew_mode,
-        interactive=True,
     )
 
 

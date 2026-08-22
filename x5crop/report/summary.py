@@ -10,15 +10,6 @@ from ..detection.photo_geometry.template_alignment_diagnostic import (
 from .read_models import typed_read_model
 
 
-AUTHORITY_PARTITION = {
-    "pixel_observation": "role_free_candidate_independent_measurement",
-    "format_physical": "fixed_template_dimensions_pitch_gap_count",
-    "selection": "bounded_phase_cross_placement",
-    "safety": "selected_joint_feasible_states_then_bleed_and_footprint",
-    "output_deskew": "role_free_optional_measurement_finalization_only",
-}
-
-
 def measurement_summary(detection: object, workspace: object) -> dict[str, Any]:
     field = workspace.boundary_measurement_field
     return {
@@ -33,9 +24,8 @@ def measurement_summary(detection: object, workspace: object) -> dict[str, Any]:
 def photo_geometry_summary(detection: object) -> dict[str, Any]:
     core = detection.source_core
     geometry = detection.candidate.geometry
-    selected_profile_id = (
-        None if core.matched_holder is None else core.matched_holder.profile.profile_id
-    )
+    holder = core.matched_holder
+    selected_profile_id = None if holder is None else holder.profile.profile_id
     selection = geometry.source_placement_selection
     alignments = {
         lane.lane_id: template_alignment_diagnostic(
@@ -46,9 +36,8 @@ def photo_geometry_summary(detection: object) -> dict[str, Any]:
         for lane in geometry.lane_reconstructions
     }
     return {
-        "authority_partition": dict(AUTHORITY_PARTITION),
         "selected_scan_canvas_profile_id": selected_profile_id,
-        "matched_holder": typed_read_model(core.matched_holder),
+        "matched_holder": typed_read_model(holder),
         "resolved_slot_count": typed_read_model(core.resolved_slot_count),
         "resolved_output_slots": typed_read_model(detection.resolved_output_slots),
         "output_slot_count": detection.output_slot_count,

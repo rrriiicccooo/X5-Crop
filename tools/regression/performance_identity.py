@@ -95,16 +95,3 @@ def load_performance_sources(
     if len({item.sample_id for item in sources}) != len(sources):
         raise ValueError("performance sample identities must be unique")
     return tuple(sources)
-
-
-def main() -> int:
-    sources = load_performance_sources(verify_source_files=True)
-    print(
-        f"performance identity: {len(sources)}/{FIXED_SOURCE_COUNT} sources "
-        f"sha256={cohort_sha256()}"
-    )
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

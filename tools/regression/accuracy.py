@@ -9,7 +9,7 @@ import sys
 from tempfile import TemporaryDirectory
 from typing import Iterable, Sequence
 
-from x5crop.report.validation import validate_current_report_record
+from .report_validation import validate_current_report_record
 
 from .cohort_count import validate_cohort_counts
 from .file_identity import sha256_file

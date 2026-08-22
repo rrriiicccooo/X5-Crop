@@ -11,8 +11,6 @@ from ..evidence.scan_canvas import CanvasAxisScaleIntervals
 from ..source_core import SourceStripValidationDomain
 from .template_model import TemplateSpec
 
-
-
 MAX_QUERY_INTENTS = 8
 MAX_REGISTERED_QUERIES = 64
 MAX_PHASE_OBSERVATIONS = 512
@@ -41,75 +39,6 @@ class MeasurementIntentKind(str, Enum):
     LATE_SEQUENCE_ANCHOR = "late_sequence_anchor"
     TOP = "top"
     BOTTOM = "bottom"
-
-
-@dataclass(frozen=True)
-class TemplateMeasurementInputs:
-    """Typed authority consumed by :func:`compile_template_measurement_plan`."""
-
-    format_spec: FormatSpec
-    frame_spec: FramePhysicalSpec
-    count: int
-    full_count: int
-    holder_full_count: int
-    lane_authority: SourceStripValidationDomain
-    layout: str
-    scale_authority: CanvasAxisScaleIntervals
-
-    def __post_init__(self) -> None:
-        if not isinstance(self.format_spec, FormatSpec):
-            raise TypeError("measurement inputs require a typed format spec")
-        if not isinstance(self.frame_spec, FramePhysicalSpec):
-            raise TypeError("measurement inputs require a frame physical spec")
-        if self.frame_spec != self.format_spec.frame:
-            raise ValueError("format and frame physical authority disagree")
-        if not isinstance(self.count, int) or isinstance(self.count, bool):
-            raise TypeError("measurement count must be an integer")
-        if (
-            not isinstance(self.full_count, int)
-            or isinstance(self.full_count, bool)
-            or not isinstance(self.holder_full_count, int)
-            or isinstance(self.holder_full_count, bool)
-        ):
-            raise TypeError("full counts must be integers")
-        if (
-            self.count <= 0
-            or self.full_count <= 0
-            or self.holder_full_count <= 0
-            or self.count > self.full_count
-        ):
-            raise ValueError("measurement count is outside holder authority")
-        if self.layout not in {"horizontal", "vertical"}:
-            raise ValueError("measurement layout must be horizontal or vertical")
-        if not isinstance(self.lane_authority, SourceStripValidationDomain):
-            raise TypeError("measurement inputs require source/lane authority")
-        expected_long_axis = "x" if self.layout == "horizontal" else "y"
-        if self.lane_authority.source_axis_long != expected_long_axis:
-            raise ValueError("lane authority does not match measurement layout")
-        if not isinstance(self.scale_authority, CanvasAxisScaleIntervals):
-            raise TypeError("measurement inputs require existing scale authority")
-        if self.scale_authority.holder_profile_id != self.lane_authority.authority_profile_id:
-            raise ValueError("scale and lane authority profiles disagree")
-        expected_axes = (
-            ("x", "y") if self.layout == "horizontal" else ("y", "x")
-        )
-        if (
-            self.scale_authority.source_width_axis,
-            self.scale_authority.source_height_axis,
-        ) != expected_axes:
-            raise ValueError("scale authority axes do not match measurement layout")
-        holder_count = self.format_spec.holder_full_count(
-            self.lane_authority.authority_profile_id
-        )
-        if holder_count is None:
-            raise ValueError("format has no full count for lane authority profile")
-        if holder_count != self.holder_full_count:
-            raise ValueError("declared holder count disagrees with format authority")
-        lane_count = self.format_spec.layout.lane_count
-        if self.holder_full_count % lane_count:
-            raise ValueError("holder count cannot be distributed across lanes")
-        if self.full_count != self.holder_full_count // lane_count:
-            raise ValueError("lane full count disagrees with format layout")
 
 
 @dataclass(frozen=True)
@@ -335,65 +264,6 @@ class TemplateWorkBounds:
 
 
 @dataclass(frozen=True)
-class TemplateCompileReceipt:
-    """Proof that compilation was finite and pixel-free."""
-
-    physical_identity: str
-    plan_identity: str
-    query_count: int
-    role_count: int
-    cross_fit_upper_bound: int
-    placement_check_count: int
-    pixel_coordinate_upper_bound: int
-    work_unit_upper_bound: int
-    pixel_read_count: int
-    prevalidated: bool
-
-    def __post_init__(self) -> None:
-        values = (
-            self.query_count,
-            self.role_count,
-            self.cross_fit_upper_bound,
-            self.placement_check_count,
-            self.pixel_coordinate_upper_bound,
-            self.work_unit_upper_bound,
-            self.pixel_read_count,
-        )
-        if (
-            not self.physical_identity
-            or not self.plan_identity
-            or any(not isinstance(value, int) or value < 0 for value in values)
-            or self.pixel_read_count != 0
-            or not self.prevalidated
-        ):
-            raise ValueError("template compile receipt is invalid")
-        if not isinstance(self.prevalidated, bool):
-            raise TypeError("template compile prevalidation must be boolean")
-
-    def validate_bounds(
-        self,
-        *,
-        phase: TemplatePhaseBounds,
-        cross: TemplateCrossBounds,
-        placement: TemplatePlacementBounds,
-        pixel: TemplatePixelBounds,
-        work: TemplateWorkBounds,
-    ) -> None:
-        if self.query_count > min(pixel.max_registered_queries, work.max_query_intents):
-            raise ValueError("template query bound exceeded")
-        if self.role_count > phase.max_role_count:
-            raise ValueError("template role bound exceeded")
-        if self.cross_fit_upper_bound != cross.max_evaluated_fits:
-            raise ValueError("template cross bound exceeded")
-        if self.placement_check_count > placement.max_placement_checks:
-            raise ValueError("template placement bound exceeded")
-        if self.pixel_coordinate_upper_bound > pixel.max_coordinate_samples:
-            raise ValueError("template pixel bound exceeded")
-        if self.work_unit_upper_bound > work.max_work_units:
-            raise ValueError("template work bound exceeded")
-
-
-@dataclass(frozen=True)
 class TemplateMeasurementPlan:
     """Canonical, immutable output of template compilation."""
 
@@ -417,7 +287,6 @@ class TemplateMeasurementPlan:
     work_bounds: TemplateWorkBounds
     physical_identity: str
     plan_identity: str
-    compile_receipt: TemplateCompileReceipt
 
     def __post_init__(self) -> None:
         if not isinstance(self.lane_authority, SourceStripValidationDomain):
@@ -433,8 +302,6 @@ class TemplateMeasurementPlan:
             or isinstance(self.holder_full_count, bool)
         ):
             raise TypeError("template plan full counts must be integers")
-        if not isinstance(self.compile_receipt, TemplateCompileReceipt):
-            raise TypeError("template plan requires compile receipt")
         if (
             not isinstance(self.format_spec, FormatSpec)
             or not isinstance(self.frame_spec, FramePhysicalSpec)
@@ -474,19 +341,19 @@ class TemplateMeasurementPlan:
             or self.physical_identity == self.plan_identity
         ):
             raise ValueError("template measurement plan is inconsistent")
-        if self.compile_receipt.physical_identity != self.physical_identity:
-            raise ValueError("compile receipt physical identity disagrees")
-        if self.compile_receipt.plan_identity != self.plan_identity:
-            raise ValueError("compile receipt plan identity disagrees")
-        if self.compile_receipt.query_count != len(self.query_intents):
-            raise ValueError("compile receipt query count disagrees")
-        self.compile_receipt.validate_bounds(
-            phase=self.phase_bounds,
-            cross=self.cross_bounds,
-            placement=self.placement_bounds,
-            pixel=self.pixel_bounds,
-            work=self.work_bounds,
-        )
+        if len(self.query_intents) > min(
+            self.pixel_bounds.max_registered_queries,
+            self.work_bounds.max_query_intents,
+        ):
+            raise ValueError("template query bound exceeded")
+        if 2 * self.count > self.phase_bounds.max_role_count:
+            raise ValueError("template role bound exceeded")
+        if (
+            self.placement_bounds.max_placement_checks > MAX_PLACEMENT_CHECKS
+            or self.pixel_bounds.max_coordinate_samples > MAX_PIXEL_COORDINATES
+            or self.work_bounds.max_work_units > MAX_WORK_UNITS
+        ):
+            raise ValueError("template work bound exceeded")
 
     def validate_execution(
         self,
@@ -498,9 +365,9 @@ class TemplateMeasurementPlan:
         """Validate actual registered pixel work against the compiled budget.
 
         A logical intent may compile to several finite pixel queries.  Those
-        two counts are deliberately separate: the compile receipt proves six
-        kinds of planned work, while the execution receipt proves how much
-        raster work those intents actually produced for this lane.
+        two counts are deliberately separate: the plan bounds finite compiled
+        work, while execution records how much raster work was produced for
+        this lane.
         """
 
         values = (

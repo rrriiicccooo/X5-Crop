@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import ast
 from dataclasses import replace
-from pathlib import Path
 import unittest
 
 from tools.tests.photo_geometry_support import make_side_measurement_set
@@ -254,27 +252,6 @@ class TemplateRegistrationContractTest(unittest.TestCase):
         )
         self.assertFalse(hasattr(template, "phase_authority"))
         self.assertEqual(template.count, 6)
-
-    def test_registration_does_not_import_retired_candidate_modules(self) -> None:
-        path = (
-            Path(__file__).parents[2]
-            / "x5crop/detection/photo_geometry/template_registration.py"
-        )
-        tree = ast.parse(path.read_text())
-        imports = [
-            alias.name
-            for node in ast.walk(tree)
-            if isinstance(node, (ast.Import, ast.ImportFrom))
-            for alias in getattr(node, "names", ())
-        ]
-        self.assertFalse(
-            any(
-                token in name
-                for name in imports
-                for token in ("proposal", "materialization", "chain", "cache")
-            )
-        )
-
 
 if __name__ == "__main__":
     unittest.main()

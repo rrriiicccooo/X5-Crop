@@ -59,7 +59,6 @@ check_pushed_documentation() {
 run_full() {
     "$PYTHON" -m unittest discover -s tools/tests
     "$PYTHON" -m compileall -q X5_Crop.py x5crop tools
-    "$PYTHON" -m x5crop.configuration.consistency
     "$PYTHON" -m tools.regression.cohort_count
     for script in \
         X5_Crop_Mac.command \

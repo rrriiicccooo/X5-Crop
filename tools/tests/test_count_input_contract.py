@@ -29,14 +29,6 @@ class CountInputContractTest(unittest.TestCase):
             "format_id": "135",
             "count": 6,
         },))
-        with self.assertRaisesRegex(ValueError, "removed count fields"):
-            validate(({
-                "sample_id": "old",
-                "source_sha256": "b" * 64,
-                "format_id": "135",
-                "strip_mode": "full",
-                "count": 6,
-            },))
         with self.assertRaisesRegex(ValueError, "conflicting format/count"):
             validate((
                 {

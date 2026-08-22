@@ -159,7 +159,7 @@ def prepare_detection_workspace(
 ) -> DetectionWorkspace:
     source_gray = make_base_gray_u8(
         arr,
-        configuration.preprocess.base_gray,
+        configuration.base_gray,
     )
     gray_work = work_gray(source_gray, layout)
     gray_work.flags.writeable = False

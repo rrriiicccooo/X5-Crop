@@ -679,10 +679,3 @@ def account_prior_phase_fit(
     """Attach a prior calibration fit to the lane's auditable work receipt."""
 
     return _aggregate_phase_work(result, prior.receipt)
-
-
-__all__ = [
-    "account_prior_phase_fit",
-    "fit_template_phase",
-    "fit_template_phase_with_local_advance",
-]

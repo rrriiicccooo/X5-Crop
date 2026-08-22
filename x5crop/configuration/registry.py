@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from ..formats import FORMAT_CHOICES, format_spec
+from ..image.gray import BaseGrayParameters
 from .diagnostics import DiagnosticsConfiguration
 from .model import DetectionConfiguration, SlotCountRequest
-from .preprocess import PreprocessConfiguration
 from .scan_canvas import ScanCanvasDetectionConfiguration
 from ..formats.scan_canvas import scan_canvas_specs_for_format
 
@@ -19,7 +19,7 @@ def get_detection_configuration(
     return DetectionConfiguration(
         physical_spec=spec,
         count_request=count_request,
-        preprocess=PreprocessConfiguration(),
+        base_gray=BaseGrayParameters(),
         scan_canvas=ScanCanvasDetectionConfiguration(
             scan_canvas_specs_for_format(format_id)
         ),

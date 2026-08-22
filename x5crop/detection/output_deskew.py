@@ -14,7 +14,7 @@ import math
 import numpy as np
 
 from ..domain import EvidenceState
-from ..geometry.layout import work_gray
+from ..geometry.layout import is_horizontal_layout
 
 
 _DARK_THRESHOLD = 245
@@ -301,7 +301,7 @@ def observe_lightweight_deskew(
         raise TypeError("deskew observation requires a numpy array")
     if source_gray.ndim != 2 or source_gray.dtype != np.uint8:
         raise ValueError("deskew observation requires two-dimensional uint8 gray")
-    work = work_gray(source_gray, layout)
+    work = source_gray if is_horizontal_layout(layout) else source_gray.T
     short_extent, long_extent = work.shape
     if short_extent == 0 or long_extent == 0:
         return _unavailable(DeskewSkipReason.EMPTY_SOURCE)

@@ -42,8 +42,9 @@ materialization、平行 detector 和 report reuse 均不再支持。
   120 px 的小整理。超限记录 `rotation_exceeds_cleanup_limit`，不改变批准状态。
 - Finalization 用同一个 affine transform 映射 source 与安全 polygon，再取精确半开 AABB；不得旋转
   后继续裁固定 W×H。AABB 在 polygon 外的角落允许为黑色 no-data。
-- Current report 为 `x5crop_v5_template_report_11`。它保存最终 deskew assessment，不重复保存旁路
-  observation；official footprints、transforms 和 final boxes 只对 approved output 暴露。
+- Current report 为 `x5crop_v5_template_report_12`。它只保存一次 holder/count/output-slot identity、
+  每格 `OutputFootprint` 内的 sampling authority 和 source-wide deskew transform；静态架构声明、
+  逐 slot 同义 transform/authority tuple 与旁路 observation 已删除。
 - 正式 TIFF 保留冻结输入域内的 16-bit RGB、ICC、resolution、metadata 和无损压缩，输出
   `Orientation=1`。全组先写 staging，全部成功后发布到尚不存在的目录。
 
@@ -53,6 +54,9 @@ materialization、平行 detector 和 report reuse 均不再支持。
   normalization plane；逐像素结果保持不变。普通 product path 在 report facts 冻结后、TIFF
   sampling 前释放整张 registered gray；development CLI 也在冻结完整 facts 后释放，只有 Debug
   Analysis 为画图保留。
+- Affine sampler 直接拥有 contiguous crop buffer，writer 在分配下一格前释放上一格；vertical deskew
+  与 registered interval 分别使用 transpose/slice view，transition-line cache 在每个 source 后清空。
+  这些变更不改变检测 observation、placement、Gate、footprint 或 TIFF 像素。
 - Final geometry、Gate facts 和 report record 由 canonical owner 直接导出，不再复制候选状态或使用
   单字段 wrapper。无消费者的 `RuntimeMetrics` 已删除；工作量与时间分别由 report 和 performance
   receipt 拥有。测试删除旧文件名、旧 schema 和任意模块行数上限等历史墓碑；物理反例合同保留。
@@ -67,8 +71,11 @@ materialization、平行 detector 和 report reuse 均不再支持。
   无效的 performance receipt 会直接失败，不再由 platform 流程静默重建。
 - Release contract 实际构建临时 ZIP，验证唯一 manifest、standalone source、LF bytes 和启动 smoke；
   用户包不包含 modular source、tests、tools、内部文档或开发输出。
-- Measurement replay 和 v4.2.8 对照仅为绑定 identity 的开发工具，不携带真值、不进入 production，
-  也不构成兼容路径。
+- 删除无现场消费者、无 verifier 入口的 measurement replay 与 v4.2.8 对照框架；历史行为留在 Git，
+  九张用户确认黄金继续是唯一 accuracy reference。
+- 删除一次性 measurement input/compile receipt、恒真 configuration 子 CLI、固定 report capability
+  自述、无调用 convex clipping 与 production `__all__`。外部 report validator 移到 regression 工具层，
+  不再嵌入 standalone；不为旧字段保留 alias、shim 或第二 schema。
 
 ### 验证边界
 

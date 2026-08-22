@@ -187,10 +187,3 @@ def build_template_gate(
         "direct_use_budget": budget_fact,
     }
     return facts
-
-
-__all__ = [
-    "build_template_gate",
-    "supported",
-    "unavailable",
-]

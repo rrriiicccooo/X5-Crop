@@ -164,11 +164,3 @@ class CoarseEnclosingSupport:
             < len(self.minimum_track.trace_coordinates_px)
         ):
             raise ValueError("coarse enclosing support is invalid")
-
-
-__all__ = [
-    "CoarseEnclosingSupport",
-    "CoarseEnclosingTrack",
-    "CoarseSharedDirection",
-    "CoarseSupportSide",
-]

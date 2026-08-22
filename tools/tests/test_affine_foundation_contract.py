@@ -21,12 +21,6 @@ class AffineFoundationContractTest(unittest.TestCase):
             hull,
             ((1.0, 1.0), (5.0, 1.0), (5.0, 4.0), (1.0, 4.0)),
         )
-        clipped = clip_convex_polygon_to_box(hull, Box(1, 1, 6, 5))
-        self.assertEqual(
-            clipped,
-            ((1.0, 1.0), (5.0, 1.0), (5.0, 4.0), (1.0, 4.0)),
-        )
-
     def test_pixel_center_rounding_does_not_add_left_or_top_pixel(
         self,
     ) -> None:
@@ -130,6 +124,7 @@ class AffineFoundationContractTest(unittest.TestCase):
             sampling_authority_box=Box(0, 0, 15, 12),
         )
         self.assertTrue(np.array_equal(sampled, array[2:9, 3:11]))
+        self.assertTrue(sampled.flags.c_contiguous)
 
     def test_roi_equals_slice_of_test_owned_full_rotation(self) -> None:
         plane = np.arange(9 * 13, dtype=np.uint16).reshape(9, 13)

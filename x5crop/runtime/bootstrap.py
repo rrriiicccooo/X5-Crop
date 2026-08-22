@@ -2,23 +2,22 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ..configuration.model import DetectionConfiguration
+from ..configuration.model import DetectionConfiguration, SlotCountRequest
 from ..configuration.registry import get_detection_configuration
-from ..configuration.model import SlotCountRequest
-from ..output.naming import portable_source_stems
-from ..run_config import RunConfig
-from .app import run_runtime
-from .input_probe import iter_input_files
-from .invocation import PlannedSource, RuntimeInvocation
-from .limits import STANDARD_JOB_LIMIT
-from .options import RuntimeOptions
 from ..detection.evidence.scan_canvas import (
     matched_holder_from_evidence,
     observe_scan_canvas,
 )
 from ..geometry.layout import infer_layout, is_horizontal_layout
 from ..io.tiff import read_tiff_profile
+from ..output.naming import portable_source_stems
+from ..run_config import RunConfig
 from ..utils import spatial_shape_from_shape
+from .app import run_runtime
+from .input_probe import iter_input_files
+from .invocation import PlannedSource, RuntimeInvocation
+from .limits import STANDARD_JOB_LIMIT
+from .options import RuntimeOptions
 
 
 class SlotCountPreflightError(ValueError):
@@ -83,20 +82,16 @@ def runtime_invocation_from_options(options: RuntimeOptions) -> RuntimeInvocatio
     )
     _preflight_batch_count(files, options, configuration)
 
-    layout_auto = options.layout == "auto"
-    layout = options.layout
     portable_stems = portable_source_stems(tuple(path.name for path in files))
     config = RunConfig(
         input_path=options.input_path,
         output_dir=options.output_dir,
         format_id=options.format_id,
-        layout_auto=layout_auto,
-        layout=layout,
+        layout=options.layout,
         count_request=count_request,
         debug_analysis=options.debug_analysis,
         jobs=max(1, min(STANDARD_JOB_LIMIT, int(options.jobs))),
         deskew_mode=options.deskew_mode,
-        interactive=options.interactive,
         development_detail=(
             options.debug_analysis or options.development_detail
         ),

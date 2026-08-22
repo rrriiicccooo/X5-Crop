@@ -20,11 +20,9 @@ class RunConfig:
     input_path: Path
     output_dir: Path | None
     format_id: str
-    layout_auto: bool
     layout: str
     count_request: SlotCountRequest
     debug_analysis: bool
     jobs: int
     deskew_mode: DeskewMode = DeskewMode.AUTO
-    interactive: bool = False
     development_detail: bool = False

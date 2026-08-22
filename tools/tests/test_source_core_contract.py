@@ -45,7 +45,7 @@ from x5crop.domain import (
     FiniteInterval,
     PositiveInterval,
 )
-from x5crop.formats import FRAME_DIMENSION_TOLERANCE_SPEC, format_spec
+from x5crop.formats import FORMAT_CHOICES, FRAME_DIMENSION_TOLERANCE_SPEC, format_spec
 from x5crop.formats.scan_canvas import (
     SCAN_CANVAS_PHYSICAL_SPECS,
     ScanCanvasPhysicalSpec,
@@ -77,6 +77,13 @@ def product_rgb_input(gray: np.ndarray) -> tuple[np.ndarray, ImageProfile]:
 
 
 class PhysicalAuthorityContractTest(unittest.TestCase):
+    def test_every_public_format_builds_one_matching_configuration(self) -> None:
+        for format_id in FORMAT_CHOICES:
+            with self.subTest(format_id=format_id):
+                configuration = get_detection_configuration(format_id)
+                self.assertEqual(configuration.physical_spec.format_id, format_id)
+                self.assertTrue(configuration.scan_canvas.profiles)
+
     def test_registered_gray_matches_full_array_reference(self) -> None:
         rng = np.random.default_rng(42)
         yxs = rng.integers(0, 65536, size=(257, 131, 3), dtype=np.uint16)

@@ -4,7 +4,6 @@
 
 from __future__ import annotations
 
-import argparse
 from pathlib import Path
 
 
@@ -111,30 +110,3 @@ def build_standalone_bytes(
     """Encode the standalone artifact without host newline translation."""
 
     return build_standalone_text(sources, packages).encode("utf-8")
-
-
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Build a standalone X5_Crop.py from the modular source tree."
-    )
-    parser.add_argument(
-        "--output",
-        type=Path,
-        default=ROOT / "dist" / "X5_Crop.py",
-        help="Output path for the generated standalone script.",
-    )
-    return parser.parse_args()
-
-
-def main() -> int:
-    args = parse_args()
-    output = args.output.resolve()
-    output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_bytes(build_standalone_bytes(read_sources(), package_names()))
-    output.chmod(0o755)
-    print(output)
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

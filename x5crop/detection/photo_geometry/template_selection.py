@@ -200,10 +200,3 @@ def select_template_source(
         None,
         tuple(item.runner_up_placement_id for item in competitions),
     )
-
-
-__all__ = [
-    "select_lane_template_placement",
-    "select_template_source",
-    "withhold_lane_winner",
-]

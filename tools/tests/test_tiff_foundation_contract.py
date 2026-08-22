@@ -57,8 +57,8 @@ class TiffFoundationContractTest(unittest.TestCase):
                             compression=source_compression,
                         ),
                         (box,),
-                        (Box(0, 0, 14, 10),),
-                        (AffineCoordinateTransform.identity(14, 10),),
+                        (sampling_footprint(Box(0, 0, 14, 10)),),
+                        AffineCoordinateTransform.identity(14, 10),
                         output,
                     )
                     self.assertEqual(len(written), 1)
@@ -130,8 +130,8 @@ class TiffFoundationContractTest(unittest.TestCase):
                 array,
                 profile,
                 (box,),
-                (Box(4, 3, 36, 27),),
-                (transform,),
+                (sampling_footprint(Box(4, 3, 36, 27)),),
+                transform,
                 Path(temporary),
             )
             actual, actual_profile, warnings = read_tiff(Path(written[0]))

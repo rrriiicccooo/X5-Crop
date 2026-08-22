@@ -13,6 +13,7 @@ from ..detection.output_deskew import (
     observe_lightweight_deskew,
 )
 from ..detection.pipeline import choose_detection
+from ..detection.photo_geometry.robust_line_fit import fit_transition_line
 from ..detection.workspace import prepare_detection_workspace
 from ..export.actions import prepare_review_artifact
 from ..export.crops import write_crops
@@ -44,13 +45,16 @@ def process_one(
     configuration: DetectionConfiguration,
     output_root: Path,
 ) -> InputProcessingOutcome:
-    with source_identity_scope():
-        return _process_one_scoped(
-            source,
-            config,
-            configuration,
-            output_root,
-        )
+    try:
+        with source_identity_scope():
+            return _process_one_scoped(
+                source,
+                config,
+                configuration,
+                output_root,
+            )
+    finally:
+        fit_transition_line.cache_clear()
 
 
 def _process_one_scoped(
@@ -67,7 +71,11 @@ def _process_one_scoped(
         profile, profile_warnings = read_tiff_profile(input_file)
         warnings.extend(profile_warnings)
         height, width = spatial_shape_from_shape(profile.shape)
-        layout = infer_layout(width, height) if config.layout_auto else config.layout
+        layout = (
+            infer_layout(width, height)
+            if config.layout == "auto"
+            else config.layout
+        )
         config = replace(config, layout=layout)
         failure_stage = FailureStage.IMAGE_READ
         arr, profile, page_warnings = read_tiff(input_file)
@@ -119,15 +127,6 @@ def _process_one_scoped(
         runtime_identity = make_runtime_identity(
             source_identity,
             config,
-            (
-                None
-                if not detection.source_core.lanes
-                else detection.source_core.lanes[
-                    0
-                ].scan_canvas.selected_profile.profile_id
-            ),
-            detection.resolved_output_slots,
-            detection.output_slot_identities,
         )
         measurement_detail, development_detail = capture_workspace_report_facts(
             detection,
@@ -152,8 +151,8 @@ def _process_one_scoped(
                 arr,
                 profile,
                 detection.final_boxes,
-                detection.sampling_authority_boxes,
-                detection.output_transforms,
+                detection.output_footprints,
+                detection.deskew_assessment.transform,
                 output_root,
             )
             artifacts = replace(

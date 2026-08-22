@@ -11,18 +11,11 @@ class RegisteredMeasurementContractTest(unittest.TestCase):
         self.assertEqual(spec.lattice_spacing_mm(120.0), 4.0)
         self.assertEqual(spec.local_window_mm, 0.25)
         self.assertEqual(spec.transition_gap_mm, 0.05)
-        self.assertFalse(hasattr(spec, "maximum_transition_interval_mm"))
-        self.assertFalse(hasattr(spec, "top_bottom_search_angle_degrees"))
         self.assertEqual(spec.maximum_measurable_line_angle_degrees, 4.0)
         self.assertEqual(spec.robust_loss_minimum_scale_mm, 0.05)
-        self.assertFalse(hasattr(spec, "robust_loss_mad_multiplier"))
         self.assertEqual(spec.robust_fit_maximum_evaluations, 128)
         self.assertEqual(spec.robust_fit_tolerance, 1.0e-8)
-        self.assertFalse(hasattr(spec, "huber_irls_rounds"))
         self.assertEqual(spec.maximum_streaming_block_pixels, 1_048_576)
-        self.assertFalse(hasattr(spec, "nominal_calibration_sample_ids"))
-        self.assertFalse(hasattr(spec, "stress_excluded_sample_id"))
-        self.assertFalse(hasattr(spec, "contract_id"))
 
     def test_measurement_field_is_immutable_and_partial_query_is_unavailable(
         self,

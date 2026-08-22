@@ -5,11 +5,10 @@ from __future__ import annotations
 import math
 from typing import Any
 
-from ..detection.candidate.assessment.model import CANDIDATE_GATE_CHECK_CODES
-from ..detection.decision.vocabulary import FINAL_REVIEW_REASONS
-from ..detection.output_deskew import DeskewSkipReason
-from .identity import REPORT_SCHEMA_ID, REPORT_SCHEMA_REVISION
-from .summary import AUTHORITY_PARTITION
+from x5crop.detection.candidate.assessment.model import CANDIDATE_GATE_CHECK_CODES
+from x5crop.detection.decision.vocabulary import FINAL_REVIEW_REASONS
+from x5crop.detection.output_deskew import DeskewSkipReason
+from x5crop.report.identity import REPORT_SCHEMA_ID, REPORT_SCHEMA_REVISION
 
 
 CURRENT_REPORT_SECTIONS = (
@@ -301,13 +300,12 @@ def _validate_gate(record: dict[str, Any], stage: str) -> None:
 def _validate_finalization(record: dict[str, Any]) -> None:
     status = record["decision"]["status"]
     finalization = record["output"]["finalization"]
-    resolved = finalization["resolved_output_slots"]
-    count = finalization["output_slot_count"]
-    identities = finalization["slot_identities"]
+    geometry = record["photo_geometry"]
+    resolved = geometry["resolved_output_slots"]
+    count = geometry["output_slot_count"]
+    identities = geometry["slot_identities"]
     footprints = finalization["output_footprints"]
-    authorities = finalization["sampling_authority_boxes"]
     boxes = finalization["final_boxes"]
-    transforms = finalization["output_transforms"]
     deskew = _validate_deskew_assessment(finalization["deskew_assessment"])
     output_files = record["output"]["output_files"]
     review_copy = record["output"]["review_copy"]
@@ -325,15 +323,12 @@ def _validate_finalization(record: dict[str, Any]) -> None:
             not finalization["frame_export_eligible"]
             or not isinstance(count, int)
             or count <= 0
-            or any(len(values) != count for values in (
-                footprints,
-                authorities,
-                boxes,
-                transforms,
-            ))
-            or any(transform != deskew["transform"] for transform in transforms)
+            or len(footprints) != count
+            or len(boxes) != count
         ):
             raise ValueError("approved output lacks complete geometry")
+        for footprint in footprints:
+            validate_output_footprint_authority(footprint)
         output_extent = deskew["transform"]["output_extent"]
         for box_value in boxes:
             box = _validate_box(box_value, "final output box")
@@ -358,9 +353,7 @@ def _validate_finalization(record: dict[str, Any]) -> None:
         or deskew["skip_reason"]
         != DeskewSkipReason.OUTPUT_NOT_ELIGIBLE.value
         or footprints
-        or authorities
         or boxes
-        or transforms
     ):
         raise ValueError("review output exposed official geometry")
     if not requested and (
@@ -381,8 +374,6 @@ def _validate_finalization(record: dict[str, Any]) -> None:
 
 def _validate_geometry(record: dict[str, Any]) -> None:
     geometry = record["photo_geometry"]
-    if geometry.get("authority_partition") != AUTHORITY_PARTITION:
-        raise ValueError("physical authority partition is invalid")
     resolved = geometry.get("resolved_slot_count")
     holder = geometry.get("matched_holder")
     if resolved is not None and (
@@ -512,8 +503,6 @@ def validate_current_report_record(record: dict[str, Any]) -> None:
     if (
         record["schema_id"] != REPORT_SCHEMA_ID
         or record["schema_revision"] != REPORT_SCHEMA_REVISION
-        or record["configuration"]["execution"]["detector_kind"]
-        != "v5_bounded_template_placement"
     ):
         raise ValueError("report does not use the current-only schema")
     _validate_geometry(record)
@@ -537,18 +526,4 @@ def validate_current_report_record(record: dict[str, Any]) -> None:
         or not isinstance(source.get("orientation"), dict)
     ):
         raise ValueError("runtime identity is not lightweight")
-    output_identity = runtime["output_identity"]
-    finalization = record["output"]["finalization"]
-    if (
-        geometry := record["photo_geometry"]
-    ) and (
-        geometry["resolved_output_slots"] != finalization["resolved_output_slots"]
-        or geometry["output_slot_count"] != finalization["output_slot_count"]
-        or geometry["slot_identities"] != finalization["slot_identities"]
-        or output_identity["resolved_output_slots"]
-        != finalization["resolved_output_slots"]
-        or output_identity["output_slot_count"] != finalization["output_slot_count"]
-        or output_identity["slot_identities"] != finalization["slot_identities"]
-    ):
-        raise ValueError("output identities disagree")
     _validate_development(record)

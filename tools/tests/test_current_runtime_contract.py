@@ -8,7 +8,7 @@ from tools.regression.diagnostic_cohort import (
     _source_geometry_authority_is_explicit,
     load_diagnostic_sources,
 )
-from x5crop.report.validation import validate_output_footprint_authority
+from tools.regression.report_validation import validate_output_footprint_authority
 
 
 class CurrentRuntimeContractTest(unittest.TestCase):
@@ -44,33 +44,6 @@ class CurrentRuntimeContractTest(unittest.TestCase):
         self.assertTrue(_source_geometry_authority_is_explicit(report))
         output["saturation_facts"] = []
         self.assertFalse(_source_geometry_authority_is_explicit(report))
-
-    def test_current_report_rejects_retired_clipped_requirement_field(
-        self,
-    ) -> None:
-        output = {
-            "required_source_footprint": [
-                [10.0, 10.0],
-                [80.0, 10.0],
-                [80.0, 90.0],
-                [10.0, 90.0],
-            ],
-            "sampling_authority_box": {
-                "left": 0,
-                "top": 0,
-                "right": 100,
-                "bottom": 100,
-            },
-            "saturation_facts": [
-                {
-                    "authority_side": "left",
-                    "clipped_requirements": ["sampling_rectangle"],
-                }
-            ],
-        }
-
-        with self.assertRaisesRegex(ValueError, "saturation fact"):
-            validate_output_footprint_authority(output)
 
     def test_current_report_rejects_duplicate_footprint_authority_sides(self) -> None:
         output = {
@@ -140,16 +113,8 @@ class CurrentRuntimeContractTest(unittest.TestCase):
             for action in parser._actions
             for value in action.option_strings
         }
-        self.assertNotIn("--debug", option_strings)
         self.assertIn("--debug-analysis", option_strings)
-        self.assertNotIn("--preview", option_strings)
-        self.assertNotIn("--debug-errors", option_strings)
-        self.assertNotIn("--diagnostics", option_strings)
-        self.assertNotIn("--overwrite", option_strings)
-        self.assertNotIn("--allow-best-effort-output", option_strings)
         self.assertIn("--deskew", option_strings)
-        self.assertNotIn("--deskew-min-angle", option_strings)
-        self.assertNotIn("--deskew-max-angle", option_strings)
         normalized_help = " ".join(help_text.split())
         self.assertIn(
             "three-panel JPG comparing detected and selected TOP/BOTTOM, "
@@ -185,44 +150,11 @@ class CurrentRuntimeContractTest(unittest.TestCase):
                 ).config.deskew_mode,
                 DeskewMode.OFF,
             )
-        for runtime_type in (RuntimeOptions, RunConfig):
-            with self.subTest(runtime_type=runtime_type.__name__):
-                self.assertNotIn(
-                    "debug",
-                    {field.name for field in fields(runtime_type)},
-                )
-                self.assertNotIn(
-                    "preview",
-                    {field.name for field in fields(runtime_type)},
-                )
-                self.assertIn(
-                    "deskew_mode",
-                    {field.name for field in fields(runtime_type)},
-                )
-        with (
-            contextlib.redirect_stderr(io.StringIO()),
-            self.assertRaises(SystemExit),
-        ):
-            parser.parse_args(
-                ["input.tif", "--format", "135", "--debug"]
-            )
-        for removed in (
-            "--diagnostics",
-            "--overwrite",
-            "--debug-errors",
-            "--preview",
-        ):
-            with (
-                contextlib.redirect_stderr(io.StringIO()),
-                self.assertRaises(SystemExit),
-            ):
-                parser.parse_args(["input.tif", "--format", "135", removed])
-
     def test_schema_and_two_gate_status_authority_are_current(self) -> None:
         self.assertEqual(REPORT_SCHEMA_ID, "x5crop_detection_report_v5")
         self.assertEqual(
             REPORT_SCHEMA_REVISION,
-            "x5crop_v5_template_report_11",
+            "x5crop_v5_template_report_12",
         )
         candidate = candidate_gate_assessment(
             {

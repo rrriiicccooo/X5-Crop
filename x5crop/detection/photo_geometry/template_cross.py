@@ -401,6 +401,25 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
             receipt,
         )
 
+    def unresolved(
+        receipt: CrossSearchReceipt,
+        reason: str,
+        *,
+        best: CrossFit | None = None,
+        runner_up: CrossFit | None = None,
+    ) -> CrossFitCompetition:
+        support_result, receipt = support_resolution(receipt)
+        if support_result is not None:
+            return support_result
+        return CrossFitCompetition(
+            template_id=inputs.template.template_id,
+            best=best,
+            runner_up=runner_up,
+            status=CrossFitStatus.UNRESOLVED,
+            reason=reason,
+            receipt=receipt,
+        )
+
     required_support_regions = inputs.minimum_shared_trace_support
     direct_candidates: list[_Candidate] = []
     candidates: list[_Candidate] = []
@@ -694,22 +713,12 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
         )
     receipt.validate_bounds()
     if not candidates:
-        support_result, receipt = support_resolution(receipt)
-        if support_result is not None:
-            return support_result
         reason = (
             "direct top/bottom evidence contradicts fixed height"
             if top and bottom
             else "single-side evidence lacks independent support or direction"
         )
-        return CrossFitCompetition(
-            template_id=inputs.template.template_id,
-            best=None,
-            runner_up=None,
-            status=CrossFitStatus.UNRESOLVED,
-            reason=reason,
-            receipt=receipt,
-        )
+        return unresolved(receipt, reason)
 
     # A unique two-sided enclosing support is stronger output authority than
     # a one-sided aperture whose opposite edge is only format-inferred. The
@@ -781,52 +790,27 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
     best = ordered_fits[0] if ordered_fits else None
     runner = ordered_fits[1] if len(ordered_fits) > 1 else None
     if best is None:
-        support_result, receipt = support_resolution(receipt)
-        if support_result is not None:
-            return support_result
-        return CrossFitCompetition(
-            template_id=inputs.template.template_id,
-            best=None,
-            runner_up=None,
-            status=CrossFitStatus.UNRESOLVED,
-            reason="cross fit has no physical group",
-            receipt=receipt,
-        )
+        return unresolved(receipt, "cross fit has no physical group")
     if len(authoritative) > 1 or (not authoritative and len(groups) > 1):
-        support_result, receipt = support_resolution(receipt)
-        if support_result is not None:
-            return support_result
-        return CrossFitCompetition(
-            template_id=inputs.template.template_id,
+        return unresolved(
+            receipt,
+            "non-equivalent cross fits remain",
             best=best,
             runner_up=runner,
-            status=CrossFitStatus.UNRESOLVED,
-            reason="non-equivalent cross fits remain",
-            receipt=receipt,
         )
     if not authoritative:
-        support_result, receipt = support_resolution(receipt)
-        if support_result is not None:
-            return support_result
-        return CrossFitCompetition(
-            template_id=inputs.template.template_id,
+        return unresolved(
+            receipt,
+            "cross fit lacks independent spatial support",
             best=best,
             runner_up=runner,
-            status=CrossFitStatus.UNRESOLVED,
-            reason="cross fit lacks independent spatial support",
-            receipt=receipt,
         )
     if best.selected_direction is None:
-        support_result, receipt = support_resolution(receipt)
-        if support_result is not None:
-            return support_result
-        return CrossFitCompetition(
-            template_id=inputs.template.template_id,
+        return unresolved(
+            receipt,
+            "cross direction unavailable",
             best=best,
             runner_up=runner,
-            status=CrossFitStatus.UNRESOLVED,
-            reason="cross direction unavailable",
-            receipt=receipt,
         )
     return CrossFitCompetition(
         template_id=inputs.template.template_id,
@@ -836,6 +820,3 @@ def fit_template_cross(inputs: TemplateCrossInput) -> CrossFitCompetition:
         reason=None,
         receipt=receipt,
     )
-
-
-__all__ = ["fit_template_cross"]

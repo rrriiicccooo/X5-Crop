@@ -20,5 +20,4 @@ class RuntimeOptions:
     debug_analysis: bool
     jobs: int
     deskew_mode: DeskewMode = DeskewMode.AUTO
-    interactive: bool = False
     development_detail: bool = False

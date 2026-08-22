@@ -20,7 +20,7 @@ from x5crop.detection.decision.vocabulary import (
     FINAL_REASON_NO_LEGAL_PLACEMENT,
 )
 from x5crop.report.identity import REPORT_SCHEMA_ID, REPORT_SCHEMA_REVISION
-from x5crop.report.validation import validate_current_report_record
+from tools.regression.report_validation import validate_current_report_record
 from x5crop.run_config import RunConfig
 from x5crop.runtime.invocation import PlannedSource
 from x5crop.runtime.bootstrap import run_options
@@ -45,7 +45,6 @@ def _run_config(
         input_path=source,
         output_dir=output,
         format_id=format_id,
-        layout_auto=False,
         layout="horizontal",
         count_request=configuration.count_request,
         debug_analysis=debug_analysis,

@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-import argparse
-import json
 from pathlib import Path
 import platform
 import plistlib
 import subprocess
 from tempfile import TemporaryDirectory
-from typing import Any, Sequence
+from typing import Any
 
 from x5crop.output.publication import FreshOutputDirectory, FreshOutputError
 
@@ -116,13 +114,3 @@ def run_platform_filesystem_validation() -> dict[str, Any]:
         "platform_system": system,
         "cases": cases,
     }
-
-
-def main(argv: Sequence[str] | None = None) -> int:
-    argparse.ArgumentParser(description=__doc__).parse_args(argv)
-    print(json.dumps(run_platform_filesystem_validation(), ensure_ascii=False, indent=2))
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

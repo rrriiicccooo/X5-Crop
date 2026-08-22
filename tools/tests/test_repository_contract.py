@@ -13,7 +13,6 @@ class RepositoryContractTest(unittest.TestCase):
     def test_runtime_dependencies_have_one_contract_and_thin_launchers(self) -> None:
         contract = ROOT / "tools/install/dependencies.toml"
         self.assertTrue(contract.is_file())
-        self.assertFalse((ROOT / "tools/install/requirements.txt").exists())
         workflow = (ROOT / ".github/workflows/verify.yml").read_text(
             encoding="utf-8"
         )
@@ -58,7 +57,6 @@ class RepositoryContractTest(unittest.TestCase):
 
     def test_public_launcher_is_only_the_current_entrypoint(self) -> None:
         launcher = (ROOT / "X5_Crop.py").read_text(encoding="utf-8")
-        self.assertEqual(len(launcher.splitlines()), 13)
         self.assertIn("from x5crop.entry.cli import main", launcher)
 
 

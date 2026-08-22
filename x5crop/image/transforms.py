@@ -52,7 +52,9 @@ def sample_affine_roi(
         and sampling_authority_box.right >= box.right
         and sampling_authority_box.bottom >= box.bottom
     ):
-        return arr[box.top : box.bottom, box.left : box.right]
+        return np.ascontiguousarray(
+            arr[box.top : box.bottom, box.left : box.right]
+        )
     # Keep SciPy out of the exact-slice path.  Review-only sources never reach
     # affine sampling, and an identity crop should not pay for ndimage import.
     from scipy.ndimage import map_coordinates

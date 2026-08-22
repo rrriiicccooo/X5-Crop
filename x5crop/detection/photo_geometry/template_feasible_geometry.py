@@ -687,10 +687,3 @@ def project_selected_placement(
         frame_states=tuple(frames),
         extreme_evaluation_count=evaluation_count,
     )
-
-
-__all__ = [
-    "FeasiblePlacementProjection",
-    "JointFrameState",
-    "project_selected_placement",
-]

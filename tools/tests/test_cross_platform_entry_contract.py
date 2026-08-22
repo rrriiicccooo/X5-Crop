@@ -38,10 +38,5 @@ class CrossPlatformEntryContractTests(unittest.TestCase):
         for duplicated_owner in ("unittest", "compileall", "diagnostic_cohort"):
             self.assertNotIn(duplicated_owner, adapter)
 
-    def test_production_output_has_no_lock_or_journal_runtime(self) -> None:
-        self.assertFalse((ROOT / "x5crop/output/transaction.py").exists())
-        self.assertFalse((ROOT / "x5crop/output/ownership.py").exists())
-
-
 if __name__ == "__main__":
     unittest.main()

@@ -637,13 +637,3 @@ def observe_coarse_strip_support(
         ),
         measurements,
     )
-
-
-__all__ = [
-    "CoarseAxisSupport",
-    "CoarseStripSupport",
-    "CoarseStripSupportReceipt",
-    "CoarseSupportAuthority",
-    "observe_coarse_strip_support",
-    "registered_coarse_support_queries",
-]

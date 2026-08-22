@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from ...domain import Box
-from ...geometry.affine import AffineCoordinateTransform
 from ..decision.model import DecisionGateAssessment
 from ..photo_geometry.output_model import (
     OutputFootprint,
@@ -39,17 +38,14 @@ class FinalDetection:
             )
             if (
                 expected is None
-                or len(self.output_transforms) != expected
                 or len(self.output_slot_identities) != expected
                 or len(self.output_footprints) != expected
-                or len(self.sampling_authority_boxes) != expected
                 or len(self.final_boxes) != expected
-                or any(not box.valid() for box in self.sampling_authority_boxes)
-                or any(not box.valid() for box in self.final_boxes)
                 or any(
-                    transform is not self.deskew_assessment.transform
-                    for transform in self.output_transforms
+                    not footprint.sampling_authority_box.valid()
+                    for footprint in self.output_footprints
                 )
+                or any(not box.valid() for box in self.final_boxes)
             ):
                 raise ValueError(
                     "approved finalization requires one resolved geometry "
@@ -87,20 +83,6 @@ class FinalDetection:
     def output_footprints(self) -> tuple[OutputFootprint, ...]:
         return (
             self.candidate.output_footprints
-            if self.frame_export_eligible
-            else ()
-        )
-
-    @property
-    def sampling_authority_boxes(self) -> tuple[Box, ...]:
-        return tuple(
-            item.sampling_authority_box for item in self.output_footprints
-        )
-
-    @property
-    def output_transforms(self) -> tuple[AffineCoordinateTransform, ...]:
-        return (
-            (self.deskew_assessment.transform,) * len(self.output_footprints)
             if self.frame_export_eligible
             else ()
         )

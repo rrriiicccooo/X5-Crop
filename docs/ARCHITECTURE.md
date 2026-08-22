@@ -390,9 +390,12 @@ complete/selected placement 后重复建立同义 Gate fact。它不读取 deske
 和必要 TIFF 事实。Saturation 只记录越界 `authority_side`；每项预算只按 output `geometry_id` 关联，
 不保留不可达的多 placement 或 named-gap 容器。Report 只保存最终 `deskew_assessment`：是否应用、
 观测角、实际旋转或 typed skip reason，不重复保存旁路 observation。
-`needs_review` 仍不暴露 official footprints、transforms 或 final boxes。每个阻止事实同时给出最小缺失事实、恢复类别和建议操作。完整 observations、
-alignment residual、winner/runner、direct/inferred ledger、content veto 和工作量只属于显式 Debug
-Analysis 或 verifier。
+Holder/count/output-slot identity 只在 `photo_geometry` 保存一次；finalization 复用每个
+`OutputFootprint` 内的 sampling authority 和 `deskew_assessment` 内的唯一 source transform，不再建立
+逐 slot 同义 tuple。`needs_review` 不暴露 approved sampling geometry 或 final boxes。每个阻止事实
+同时给出最小缺失事实、恢复类别和建议操作。完整 observations、alignment residual、winner/runner、
+direct/inferred ledger、content veto 和工作量只属于显式 Debug Analysis 或 verifier。外部 report
+validator 位于 `tools/regression/`，不进入用户 standalone。
 
 Debug Analysis 只读取同一次 runtime facts，不重算几何、不改变决定、不写正式 TIFF。它必须展示：
 
@@ -441,10 +444,10 @@ workspace-owned report facts 冻结后、TIFF sampling 前释放 registered gray
 冻结完整 facts 再释放，只有 Debug Analysis 为画图保留。是否继续拆分 decode、优化 detector、
 sampling 或 I/O 只由阶段证据决定。
 
-开发用 measurement replay 只保存 source SHA、format/count/holder、measurement revision、物理与
-plan identity、精确 phase/cross 输入及 coverage receipt。它可以在不重读 TIFF 的情况下复跑纯 solver
-并比较答案与 provenance；不能携带 reference、进入 production 或成为 fallback。v4.2.8 对照工具
-同样只比较行为，九张用户确认黄金始终是唯一 reference。
+Affine sampler 独占每格 contiguous 输出缓冲，writer 完成一格后才分配下一格，避免相邻大 crop 同时
+存活；vertical deskew 使用灰度转置 view，registered interval 使用连续 slice view。Transition-line
+cache 只在单个 source 内复用并在 source 结束时清空。这些优化不得改变 observation、placement、
+winner/runner、provenance、footprint 或输出像素。
 
 正式输入限于单页 unsigned 16-bit、RGB 三通道、contiguous TIFF；压缩接受 `NONE`、`LZW`、
 `DEFLATE` / `ADOBE_DEFLATE` 或 `ZSTD`。Orientation 1–8 在 decode boundary 规范化，输出写
@@ -480,10 +483,10 @@ Pillow 只在 Debug Analysis 时延迟导入。生产默认 `--jobs 1`、上限 
 | `photo_geometry/template_runtime_model.py`、`template_gate.py`、`detector.py` | current-only handoff、CandidateGate facts 与顶层编排 |
 | `x5crop/detection/output_deskew.py` | approved-only 6–24 trace、role-free、candidate-independent 的可选输出角度 observation |
 | `x5crop/detection/decision/`、`final/` | 最终决定、Decision 后 deskew assessment 与 approved geometry exposure |
-| `x5crop/report/` | compact production report 与 development facts |
+| `x5crop/report/` | compact production report 与 development facts 的生成 |
 | `x5crop/debug/` | 只读诊断 facts 与面板 |
 | `x5crop/io/`、`export/`、`output/` | TIFF domain、affine sampling、metadata 与原子发布 |
-| `tools/verify`、`tools/regression/` | 唯一验证入口与 accuracy/diagnostic/performance/platform 分层证据 |
+| `tools/verify`、`tools/regression/` | 唯一验证入口、外部 report validator 与 accuracy/diagnostic/performance/platform 分层证据 |
 
 ## 14. 验证边界
 

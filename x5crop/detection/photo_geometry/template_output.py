@@ -591,10 +591,3 @@ def template_direct_use_budget_assessment(
             else EvidenceState.CONTRADICTED
         ),
     )
-
-
-__all__ = [
-    "joint_placement_envelope",
-    "output_footprint_from_template_placement",
-    "template_direct_use_budget_assessment",
-]

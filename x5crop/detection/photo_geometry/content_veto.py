@@ -147,6 +147,3 @@ def content_veto_assessment(
         placement_id=placement.placement_id,
         facts=ordered,
     )
-
-
-__all__ = ["content_veto_assessment"]

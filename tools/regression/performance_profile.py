@@ -14,7 +14,7 @@ from tempfile import TemporaryDirectory
 import time
 from typing import Any
 
-from x5crop.report.validation import validate_current_report_record
+from .report_validation import validate_current_report_record
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]

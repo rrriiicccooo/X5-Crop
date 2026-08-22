@@ -12,7 +12,7 @@ import sys
 from tempfile import TemporaryDirectory
 from typing import Any, Sequence
 
-from x5crop.report.validation import (
+from .report_validation import (
     validate_current_report_record,
     validate_output_footprint_authority,
 )
@@ -324,9 +324,6 @@ def run_diagnostic_source(source: DiagnosticSource) -> dict[str, Any]:
             "assessment": report["output"]["finalization"][
                 "deskew_assessment"
             ],
-            "output_transforms": report["output"]["finalization"][
-                "output_transforms"
-            ],
         },
         "metrics": metrics,
         "structured_exception": None,
@@ -475,8 +472,6 @@ def run_diagnostic_cohort(
             sorted(boundary_use_counts.items())
         ),
         "recognition_accuracy_verdict": "not_assessed",
-        "filename_status_expectations_consumed": False,
-        "filename_count_annotations_consumed": False,
         "engineering_contract_passed": engineering_passed,
     }
     (output_root / "diagnostic_summary.json").write_text(

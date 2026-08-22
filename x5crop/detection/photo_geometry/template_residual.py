@@ -301,12 +301,3 @@ def derive_bounded_local_advances(
         evaluated,
         anomaly_ordinals=(anomaly.relation_ordinal,),
     )
-
-
-__all__ = [
-    "AdjacencyGapFact",
-    "LocalAdvanceFailureKind",
-    "LocalAdvanceAnalysis",
-    "ResidualPattern",
-    "derive_bounded_local_advances",
-]

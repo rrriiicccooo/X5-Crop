@@ -28,9 +28,7 @@ from .template_measurement_plan_model import (
     MeasurementAxis,
     MeasurementIntentKind,
     MeasurementUnit,
-    TemplateCompileReceipt,
     TemplateCrossBounds,
-    TemplateMeasurementInputs,
     TemplateMeasurementPlan,
     TemplatePhaseBounds,
     TemplatePixelBounds,
@@ -41,6 +39,7 @@ from .template_measurement_plan_model import (
     TemplateWorkBounds,
 )
 from .template_model import PhaseLatticeAuthority, TemplateSpec
+
 
 def compile_template_measurement_plan(
     *,
@@ -55,42 +54,32 @@ def compile_template_measurement_plan(
 ) -> TemplateMeasurementPlan:
     """Compile one fixed-format plan without touching pixels."""
 
-    inputs = TemplateMeasurementInputs(
-        format_spec=format_spec,
-        frame_spec=frame_spec,
-        count=count,
-        full_count=full_count,
-        holder_full_count=holder_full_count,
-        lane_authority=lane_authority,
-        layout=layout,
-        scale_authority=scale_authority,
-    )
     physical_identity = _stable_identity(
         "template-physical",
         FORMAT_CATALOG_REVISION,
-        inputs.format_spec.format_id,
-        inputs.frame_spec.identity_fields,
-        inputs.count,
-        inputs.full_count,
-        inputs.holder_full_count,
-        inputs.lane_authority.lane_id,
-        inputs.lane_authority.source_axis_long,
-        inputs.lane_authority.authority_profile_id,
-        inputs.layout,
+        format_spec.format_id,
+        frame_spec.identity_fields,
+        count,
+        full_count,
+        holder_full_count,
+        lane_authority.lane_id,
+        lane_authority.source_axis_long,
+        lane_authority.authority_profile_id,
+        layout,
     )
     frame_width_px = _scaled_extent(
-        inputs.frame_spec.frame_width_mm,
-        inputs.scale_authority.width_axis_px_per_mm,
+        frame_spec.frame_width_mm,
+        scale_authority.width_axis_px_per_mm,
         FRAME_DIMENSION_TOLERANCE_SPEC.frame_width_tolerance_ratio,
     )
     frame_height_px = _scaled_extent(
-        inputs.frame_spec.frame_height_mm,
-        inputs.scale_authority.height_axis_px_per_mm,
+        frame_spec.frame_height_mm,
+        scale_authority.height_axis_px_per_mm,
         FRAME_DIMENSION_TOLERANCE_SPEC.frame_height_tolerance_ratio,
     )
     gap_px = _gap_interval_px(
-        inputs.frame_spec,
-        inputs.scale_authority.width_axis_px_per_mm,
+        frame_spec,
+        scale_authority.width_axis_px_per_mm,
         frame_width_px,
     )
     pitch_px = FiniteInterval(
@@ -98,16 +87,16 @@ def compile_template_measurement_plan(
         frame_width_px.maximum + gap_px.maximum,
     )
     long_extent_px = (
-        inputs.lane_authority.work_box.width
-        if inputs.lane_authority.source_axis_long == "x"
-        else inputs.lane_authority.work_box.height
+        lane_authority.work_box.width
+        if lane_authority.source_axis_long == "x"
+        else lane_authority.work_box.height
     )
     phase_lattice = PhaseLatticeAuthority(
         period_px=pitch_px,
         cycle_origin_px=0.0,
         minimum_slot_offset=-1,
         maximum_slot_offset=max(
-            inputs.full_count,
+            full_count,
             int(math.ceil(long_extent_px / pitch_px.minimum)) + 1,
         ),
     )
@@ -117,32 +106,32 @@ def compile_template_measurement_plan(
         frame_height_px=frame_height_px,
         pitch_px=pitch_px,
         nominal_gap_px=gap_px,
-        count=inputs.count,
+        count=count,
         phase_lattice_authority=phase_lattice,
     )
     query_intents = _query_intents(
         physical_identity=physical_identity,
-        frame_spec=inputs.frame_spec,
-        count=inputs.count,
+        frame_spec=frame_spec,
+        count=count,
     )
     projected_queries = _project_queries(
-        inputs.lane_authority.work_box,
-        inputs.layout,
-        inputs.frame_spec,
+        lane_authority.work_box,
+        layout,
+        frame_spec,
         frame_width_px,
         frame_height_px,
-        inputs.scale_authority.width_axis_px_per_mm,
-        inputs.scale_authority.height_axis_px_per_mm,
+        scale_authority.width_axis_px_per_mm,
+        scale_authority.height_axis_px_per_mm,
     )
     phase_bounds = TemplatePhaseBounds(
-        max_hypotheses=MAX_PHASE_OBSERVATIONS * max(6, 2 * inputs.count),
-        max_role_count=2 * inputs.count,
+        max_hypotheses=MAX_PHASE_OBSERVATIONS * max(6, 2 * count),
+        max_role_count=2 * count,
         max_direct_observations=MAX_PHASE_OBSERVATIONS,
     )
     role_bounds = TemplateRoleBounds(
-        max_role_bindings=2 * inputs.count,
-        max_inferred_roles=2 * inputs.count,
-        max_local_relations=max(0, inputs.count - 1),
+        max_role_bindings=2 * count,
+        max_inferred_roles=2 * count,
+        max_local_relations=max(0, count - 1),
     )
     cross_bounds = TemplateCrossBounds(
         max_registered_runs=MAX_PHASE_OBSERVATIONS,
@@ -154,15 +143,13 @@ def compile_template_measurement_plan(
     placement_bounds = TemplatePlacementBounds(
         max_direction_candidates=2,
         max_placement_checks=MAX_PLACEMENT_CHECKS,
-        max_safety_checks=inputs.count,
+        max_safety_checks=count,
     )
     pixel_bounds, work_bounds = _bounds_for_lane(
-        inputs.lane_authority.work_box,
+        lane_authority.work_box,
         len(query_intents),
-        inputs.count,
+        count,
     )
-    if 2 * inputs.count > phase_bounds.max_role_count:
-        raise ValueError("template phase role bound overflow")
     plan_identity = _stable_identity(
         "template-plan",
         physical_identity,
@@ -184,28 +171,16 @@ def compile_template_measurement_plan(
         cross_bounds,
         placement_bounds,
     )
-    receipt = TemplateCompileReceipt(
-        physical_identity=physical_identity,
-        plan_identity=plan_identity,
-        query_count=len(query_intents),
-        role_count=2 * inputs.count,
-        cross_fit_upper_bound=cross_bounds.max_evaluated_fits,
-        placement_check_count=MAX_PLACEMENT_CHECKS,
-        pixel_coordinate_upper_bound=pixel_bounds.max_coordinate_samples,
-        work_unit_upper_bound=work_bounds.max_work_units,
-        pixel_read_count=0,
-        prevalidated=True,
-    )
     return TemplateMeasurementPlan(
-        format_spec=inputs.format_spec,
-        frame_spec=inputs.frame_spec,
-        count=inputs.count,
-        full_count=inputs.full_count,
-        holder_full_count=inputs.holder_full_count,
-        lane_id=inputs.lane_authority.lane_id,
-        layout=inputs.layout,
-        lane_authority=inputs.lane_authority,
-        scale_authority=inputs.scale_authority,
+        format_spec=format_spec,
+        frame_spec=frame_spec,
+        count=count,
+        full_count=full_count,
+        holder_full_count=holder_full_count,
+        lane_id=lane_authority.lane_id,
+        layout=layout,
+        lane_authority=lane_authority,
+        scale_authority=scale_authority,
         template_spec=template_spec,
         query_intents=query_intents,
         projected_queries=projected_queries,
@@ -217,7 +192,6 @@ def compile_template_measurement_plan(
         work_bounds=work_bounds,
         physical_identity=physical_identity,
         plan_identity=plan_identity,
-        compile_receipt=receipt,
     )
 
 
@@ -456,7 +430,7 @@ def _bounds_for_lane(
     slot_count: int,
 ) -> tuple[TemplatePixelBounds, TemplateWorkBounds]:
     # Logical intent count and concrete query count are different contracts.
-    # Current measurement can use many lattice traces under the six compiled
+    # Current measurement can use many lattice traces under the eight compiled
     # intents, but it must still remain bounded by source dimensions before
     # any candidate exists.
     source_pixels = work_box.width * work_box.height
@@ -490,6 +464,3 @@ def _stable_identity(prefix: str, *parts: object) -> str:
     payload = repr(parts).encode("utf-8")
     digest = hashlib.sha256(payload).hexdigest()[:24]
     return f"{prefix}:{digest}"
-
-
-__all__ = ["compile_template_measurement_plan"]

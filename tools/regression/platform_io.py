@@ -8,14 +8,14 @@ from pathlib import Path
 import subprocess
 import sys
 from tempfile import TemporaryDirectory
-from typing import Any, Sequence
+from typing import Any
 
 import numpy as np
 import tifffile
 
 from x5crop.io.orientation import canonicalize_orientation
 from x5crop.io.tiff import read_tiff, read_tiff_profile, tiff_write_kwargs
-from x5crop.report.validation import validate_current_report_record
+from .report_validation import validate_current_report_record
 
 from .cohort_count import validate_cohort_counts
 from .file_identity import sha256_file
@@ -232,8 +232,8 @@ def _validate_orientation_integrations(
         if (
             report["decision"]["status"] != "approved_auto"
             or len(files) != len(original_files)
-            or report["output"]["finalization"]["slot_identities"]
-            != original_report["output"]["finalization"]["slot_identities"]
+            or report["photo_geometry"]["slot_identities"]
+            != original_report["photo_geometry"]["slot_identities"]
         ):
             raise ValueError(f"Orientation {tag} changed production ordinals or status")
         for original, candidate in zip(original_files, files, strict=True):
@@ -299,18 +299,3 @@ def run_platform_io_validation() -> dict[str, Any]:
         "orientation_integrations": list(orientation_results),
         "accuracy_verdict": "not_assessed",
     }
-
-
-def main(argv: Sequence[str] | None = None) -> int:
-    if argv:
-        raise SystemExit("platform I/O validator takes no arguments")
-    result = run_platform_io_validation()
-    print(
-        f"platform I/O: {len(result['sources'])}/6 sources; "
-        "Orientation 3/8 production integration passed"
-    )
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

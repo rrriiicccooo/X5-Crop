@@ -23,17 +23,3 @@ def configure_numeric_threads() -> None:
             cv2.setNumThreads(0)
     except ImportError:
         pass
-
-
-def thread_identity() -> dict[str, object]:
-    try:
-        import cv2
-
-        opencv_threads: int | None = int(cv2.getNumThreads())
-    except ImportError:
-        opencv_threads = None
-    return {
-        "x5crop_source_workers": "--jobs",
-        "opencv_threads": opencv_threads,
-        "environment": {key: os.environ.get(key) for key in THREAD_ENVIRONMENT_KEYS},
-    }

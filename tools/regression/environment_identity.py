@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 import platform
 from typing import Any
@@ -10,10 +11,24 @@ from tools.install.dependency_manager import (
     inspect_dependency_states,
     load_dependency_contract,
 )
-from x5crop.runtime.threading import thread_identity
+from x5crop.runtime.threading import THREAD_ENVIRONMENT_KEYS
 
 
 CONTRACT_PATH = Path(__file__).parents[1] / "install" / "dependencies.toml"
+
+
+def thread_identity() -> dict[str, object]:
+    try:
+        import cv2
+
+        opencv_threads: int | None = int(cv2.getNumThreads())
+    except ImportError:
+        opencv_threads = None
+    return {
+        "x5crop_source_workers": "--jobs",
+        "opencv_threads": opencv_threads,
+        "environment": {key: os.environ.get(key) for key in THREAD_ENVIRONMENT_KEYS},
+    }
 
 
 def verification_environment_identity() -> dict[str, Any]:

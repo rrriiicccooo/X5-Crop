@@ -163,12 +163,3 @@ def template_evidence_use_ledger(
     if len(set(identities)) != len(identities):
         raise ValueError("one physical observation cannot have multiple template uses")
     return tuple(values)
-
-
-__all__ = [
-    "EvidenceUse",
-    "EvidenceUseFact",
-    "PhysicalUnknown",
-    "separator_support_authority",
-    "template_evidence_use_ledger",
-]

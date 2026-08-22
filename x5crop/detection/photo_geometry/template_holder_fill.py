@@ -204,16 +204,3 @@ def assess_holder_fill_state(
         lower,
         upper,
     )
-
-
-__all__ = [
-    "HolderFillAssessment",
-    "HolderFillSide",
-    "HolderFillSideFact",
-    "HolderFillSideRelation",
-    "HolderFillState",
-    "LaneLongAxisAuthority",
-    "PhotoGroupOuter",
-    "assess_holder_fill_state",
-    "photo_group_outer_from_selected_placement",
-]

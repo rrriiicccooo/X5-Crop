@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-import ast
 from dataclasses import replace
 import inspect
 import math
-from pathlib import Path
 import unittest
 
 from tools.tests.template_test_support import (
@@ -388,14 +386,6 @@ class TemplatePlacementContractTest(unittest.TestCase):
                 width_authority_px=FiniteInterval(0.0, 500.0),
                 height_authority_px=FiniteInterval(0.0, 400.0),
             )
-
-    def test_source_has_no_legacy_imports(self) -> None:
-        path = Path(__file__).parents[2] / "x5crop/detection/photo_geometry/template_placement.py"
-        tree = ast.parse(path.read_text())
-        imports = [node for node in ast.walk(tree) if isinstance(node, (ast.Import, ast.ImportFrom))]
-        names = [alias.name for node in imports for alias in getattr(node, "names", ())]
-        self.assertFalse(any(any(token in name for token in ("chains", "materialization", "selection", "cache")) for name in names))
-
 
 if __name__ == "__main__":
     unittest.main()

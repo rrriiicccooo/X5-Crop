@@ -7,6 +7,7 @@ import tempfile
 
 import numpy as np
 
+from ..detection.photo_geometry.output_model import OutputFootprint
 from ..domain import Box
 from ..geometry.affine import AffineCoordinateTransform
 from ..image.transforms import sample_affine_roi
@@ -21,13 +22,11 @@ def write_crops(
     source_arr: np.ndarray,
     profile: ImageProfile,
     frames: tuple[Box, ...],
-    sampling_authority_boxes: tuple[Box, ...],
-    transforms: tuple[AffineCoordinateTransform, ...],
+    footprints: tuple[OutputFootprint, ...],
+    transform: AffineCoordinateTransform,
     output_dir: Path,
 ) -> list[str]:
-    if not (
-        len(frames) == len(sampling_authority_boxes) == len(transforms)
-    ):
+    if len(frames) != len(footprints):
         raise ValueError("each crop requires one aligned sampling authority")
     output_files: list[str] = []
     promoted: list[Path] = []
@@ -38,8 +37,8 @@ def write_crops(
         )
     )
     try:
-        for i, (box, sampling_authority_box, transform) in enumerate(
-            zip(frames, sampling_authority_boxes, transforms, strict=True),
+        for i, (box, footprint) in enumerate(
+            zip(frames, footprints, strict=True),
             1,
         ):
             if not box.valid():
@@ -52,16 +51,17 @@ def write_crops(
             out_path = output_dir / name
             if out_path.exists():
                 raise RuntimeError(f"Output name was not fresh: {out_path}")
-            cropped = np.ascontiguousarray(
+            temporary_path = source_workspace / name
+            write_validated_tiff(
+                temporary_path,
                 sample_affine_roi(
                     source_arr,
                     transform,
                     box,
-                    sampling_authority_box=sampling_authority_box,
-                )
+                    sampling_authority_box=footprint.sampling_authority_box,
+                ),
+                profile,
             )
-            temporary_path = source_workspace / name
-            write_validated_tiff(temporary_path, cropped, profile)
             output_files.append(str(out_path))
         for output_path_string in output_files:
             output_path = Path(output_path_string)

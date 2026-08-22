@@ -21,8 +21,7 @@ def print_run_header(invocation: RuntimeInvocation, output_root: Path) -> None:
     print(f"{SCRIPT_NAME} {VERSION}")
     print(f"input: {config.input_path}")
     print(f"files: {len(invocation.sources)}")
-    layout_label = "auto" if config.layout_auto else config.layout
-    parts = [f"layout: {layout_label}"]
+    parts = [f"layout: {config.layout}"]
     parts.append(
         "configuration: "
         + invocation.configuration.configuration_id
@@ -70,16 +69,10 @@ def _process_all(
             (source, _process_source(source, invocation, output_root))
             for source in invocation.sources
         )
-    try:
-        executor = concurrent.futures.ProcessPoolExecutor(
-            max_workers=invocation.config.jobs
-        )
-    except (OSError, PermissionError):
-        executor = concurrent.futures.ThreadPoolExecutor(
-            max_workers=invocation.config.jobs
-        )
     outcomes: dict[int, tuple[PlannedSource, InputProcessingOutcome]] = {}
-    with executor:
+    with concurrent.futures.ProcessPoolExecutor(
+        max_workers=invocation.config.jobs
+    ) as executor:
         futures = {
             executor.submit(
                 _process_source,

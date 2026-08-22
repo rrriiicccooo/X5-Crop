@@ -29,7 +29,7 @@ def detection_configuration_read_model(
         ),
         "scan_layout": typed_read_model(spec.layout),
         "measurement": {
-            "preprocess": typed_read_model(configuration.preprocess),
+            "base_gray": typed_read_model(configuration.base_gray),
             "scan_canvas": typed_read_model(configuration.scan_canvas),
             "photo_boundary_measurement_spec": typed_read_model(
                 PHOTO_BOUNDARY_MEASUREMENT_SPEC
@@ -38,9 +38,4 @@ def detection_configuration_read_model(
                 CONTENT_OCCUPANCY_MEASUREMENT_SPEC
             ),
         },
-        "execution": {
-            "detector_kind": configuration.detector_kind,
-            "automatic_frame_export": True,
-        },
-        "diagnostics": typed_read_model(configuration.diagnostics),
     }

@@ -141,8 +141,6 @@ GitHub 是 tracked 源码与文档的权威来源。NAS 和复制目录只用于
   placement 的连续误差才进入联合安全范围。
 - 性能优化只能复用 candidate-independent 计算或完全相同的状态。除非用户明确批准行为变化，优化
   前后 registered observations、合法 placements、winner/runner 与 provenance 必须相同。
-- Measurement replay 仅是绑定 source SHA、configuration、measurement revision 和 plan identity 的
-  开发工具；不得携带真值、进入 production、充当 fallback 或提供更容易通过的 detector path。
 - `tifffile + imagecodecs` 独占正式 TIFF I/O；OpenCV 只作有界像素测量；SciPy 只作数值与
   sampling；Pillow 只在显式 Debug Analysis 时延迟导入。
 - V5 首版不加入视觉大模型、训练模型、ONNX Runtime 或 PyTorch runtime。未来 learned evidence

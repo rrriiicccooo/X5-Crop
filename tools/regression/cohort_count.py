@@ -21,16 +21,6 @@ def _rows(paths: Iterable[Path]) -> tuple[dict[str, Any], ...]:
 
 
 def cohort_slot_count(row: dict[str, Any]) -> int:
-    removed = {
-        "strip_mode",
-        "confirmed_slot_count",
-        "requested_count",
-        "count_authority",
-    }.intersection(row)
-    if removed:
-        raise ValueError(
-            "cohort uses removed count fields: " + ", ".join(sorted(removed))
-        )
     value = row.get("count")
     if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
         raise ValueError("cohort requires one explicit positive count")

@@ -668,11 +668,3 @@ def calibrate_template_source_pitch(
         lattice_hypothesis_count=lattice_hypothesis_count,
         bound_exceeded=False,
     )
-
-
-__all__ = [
-    "TemplatePitchCalibration",
-    "calibrate_template_source_pitch",
-    "close_separator_phase_hypothesis",
-    "refine_placement_pitch_interval",
-]

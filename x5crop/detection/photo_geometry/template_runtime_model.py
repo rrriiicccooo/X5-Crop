@@ -513,14 +513,3 @@ class PhotoGeometryDetectionResult:
             for lane in self.lane_reconstructions
             for assessment in lane.direct_use_budget_assessments
         )
-
-__all__ = [
-    "PhotoGeometryDetectionResult",
-    "PreparedTemplateLane",
-    "RegisteredTemplateLane",
-    "TemplateLaneReconstruction",
-    "TemplateMeasurementWorkReceipt",
-    "TemplatePlacementCompetition",
-    "TemplatePlacementWorkReceipt",
-    "TemplateSourceSelection",
-]

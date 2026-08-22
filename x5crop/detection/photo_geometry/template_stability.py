@@ -174,12 +174,3 @@ def leave_one_anchor_out_phase_stability(
         dependencies=tuple(dependencies),
         receipt=receipt,
     )
-
-
-__all__ = [
-    "AnchorDependencyEffect",
-    "AnchorDependencyFact",
-    "TemplateStabilityAnalysis",
-    "TemplateStabilityReceipt",
-    "leave_one_anchor_out_phase_stability",
-]

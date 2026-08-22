@@ -383,6 +383,3 @@ def reconstruct_photo_geometry(
         ),
         assessment_facts=gate,
     )
-
-
-__all__ = ["reconstruct_photo_geometry"]

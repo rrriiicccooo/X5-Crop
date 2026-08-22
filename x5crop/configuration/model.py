@@ -4,8 +4,8 @@ from dataclasses import dataclass
 from enum import Enum
 
 from ..formats import FormatSpec
+from ..image.gray import BaseGrayParameters
 from .diagnostics import DiagnosticsConfiguration
-from .preprocess import PreprocessConfiguration
 from .scan_canvas import ScanCanvasDetectionConfiguration
 
 
@@ -69,7 +69,7 @@ class ResolvedSlotCount:
 class DetectionConfiguration:
     physical_spec: FormatSpec
     count_request: SlotCountRequest
-    preprocess: PreprocessConfiguration
+    base_gray: BaseGrayParameters
     scan_canvas: ScanCanvasDetectionConfiguration
     diagnostics: DiagnosticsConfiguration
 
@@ -78,10 +78,6 @@ class DetectionConfiguration:
             raise ValueError(
                 "detection configuration requires scan-canvas profiles"
             )
-
-    @property
-    def detector_kind(self) -> str:
-        return "v5_bounded_template_placement"
 
     @property
     def configuration_id(self) -> str:

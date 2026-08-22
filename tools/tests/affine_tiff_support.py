@@ -15,13 +15,19 @@ from x5crop.detection.output_deskew import (
     DeskewEdgeFit,
     LightweightDeskewObservation,
 )
+from x5crop.detection.photo_geometry.model import BoundaryRole
+from x5crop.detection.photo_geometry.output_model import (
+    BoundaryProtectionFact,
+    JointPlacementEnvelope,
+    OutputBoundaryUse,
+    OutputFootprint,
+)
 from x5crop.export.crops import write_crops
 from x5crop.geometry.affine import (
     AFFINE_OUTPUT_RASTER_GUARD_PX,
     AffineCoordinateTransform,
 )
 from x5crop.geometry.convex import (
-    clip_convex_polygon_to_box,
     convex_hull,
     mapped_half_open_box,
 )
@@ -53,6 +59,42 @@ def make_deskew_observation(
         sample_trace_count=8,
         skip_reason=None,
     )
+
+
+def sampling_footprint(authority: Box) -> OutputFootprint:
+    polygon = (
+        (float(authority.left), float(authority.top)),
+        (float(authority.right - 1), float(authority.top)),
+        (float(authority.right - 1), float(authority.bottom - 1)),
+        (float(authority.left), float(authority.bottom - 1)),
+    )
+    return OutputFootprint(
+        geometry_id="sampling-fixture",
+        envelope=JointPlacementEnvelope(
+            placement_id="sampling-fixture",
+            projection_id="sampling-fixture",
+            lane_id="lane:0",
+            lane_ordinal=1,
+            boundary_use=OutputBoundaryUse.APERTURE_PAIR,
+            canonical_source_footprint=polygon,
+            feasible_source_footprint=polygon,
+            extreme_evaluation_count=1,
+        ),
+        required_source_footprint=polygon,
+        boundary_protections=tuple(
+            BoundaryProtectionFact(role, 0.0, 0.0, 0.0, 0.0)
+            for role in (
+                BoundaryRole.START,
+                BoundaryRole.END,
+                BoundaryRole.TOP,
+                BoundaryRole.BOTTOM,
+            )
+        ),
+        saturation_facts=(),
+        sampling_authority_box=authority,
+        authority_profile_id="sampling-fixture",
+    )
+
 
 # Affine and TIFF contracts share deterministic raster fixtures.
 __all__ = tuple(name for name in globals() if not name.startswith("__"))

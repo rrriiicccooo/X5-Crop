@@ -105,14 +105,6 @@ selected domain 中分别有 direct trace；selected domain 少于 3 个、缺�
 fragment 合计覆盖、role 未授权或方向不完整时，程序继续人工检查。片夹短轴中心只作兼容事实，
 不是该 authority 的必要条件；另一侧仍只由固定 H 推导，局部 departure 继续进入输出预算。
 
-同-role 的 broader track 与 local competitor 必须共享同一个 opposite binding、双方 role-authorized，
-且全部 supporting traces 已进入显式 registered lattice。若 local trace set 是 broader 的严格真子集，
-而 broader 覆盖严格更多 registered frame domains，exact registered-sample containment 可直接消去
-local；这不需要额外要求方向相交、allowed-gap 连通或三区域支持。若两者是 staggered sampling，
-则双方必须各自连通、observed/full 方向区间相交，broader 有 3 个独立区域、覆盖至少 3 个且严格
-更多 registered frame domains、长轴范围严格包含 local，同时 local 有至少 2 个独立支持区域。
-任一证明不完整时继续人工检查；这不是按 support 或 residual 强弱选位。
-
 ### 包住照片的外侧支撑
 
 如果找不到可靠 aperture，但存在一对直接、连续且局部方向相容的外侧支撑，它们完整包住固定 H，且
@@ -231,8 +223,7 @@ Debug Analysis 展示理论模板、实际观察、偏差形状、直接与推�
 输出 footprint、预算使用、第一个阻止自动输出的原因，以及 `DESKEW APPLIED`、
 `ROTATION NOT NEEDED` 或 typed `DESKEW SKIPPED`。Report 同时记录 `deskew_applied`、观测角、
 实际旋转和 skip reason。失败会区分用户可修正输入、重新测量可恢复和系统不应自动猜测三类。
-Current report 的越界事实每侧只记录 `authority_side`，每项预算只按对应 output `geometry_id` 关联；
-不重复保存已经由唯一 placement 确定的候选身份。Debug 只读取同一次检测事实，不重新求解。
+Debug 只读取同一次检测事实，不重新求解。
 
 默认结构：
 

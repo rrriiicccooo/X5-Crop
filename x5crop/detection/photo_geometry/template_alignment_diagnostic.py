@@ -288,10 +288,3 @@ def template_alignment_diagnostic(
         ),
         unresolved_reason=reason,
     )
-
-
-__all__ = [
-    "TemplateAlignmentDiagnostic",
-    "TemplateRoleResidual",
-    "template_alignment_diagnostic",
-]

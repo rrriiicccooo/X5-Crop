@@ -13,7 +13,7 @@ import sys
 from tempfile import TemporaryDirectory
 from typing import Any, Sequence
 
-from x5crop.report.validation import validate_current_report_record
+from .report_validation import validate_current_report_record
 from tools.install.dependency_manager import load_dependency_contract
 from .environment_identity import verification_environment_identity
 

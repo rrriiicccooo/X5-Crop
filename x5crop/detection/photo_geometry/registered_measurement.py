@@ -7,7 +7,7 @@ import math
 
 import numpy as np
 
-from ...domain import EvidenceState
+from ...domain import EvidenceState, FiniteInterval
 from .measurement_model import (
     PhotoBoundaryCoverageReceipt,
     PhotoBoundaryMeasurementField,
@@ -203,11 +203,15 @@ def _measure_query(
 
 def _slice_trace_measurement(
     measured: TraceMeasurement,
-    interval,
+    interval: FiniteInterval,
 ) -> TraceMeasurement:
-    retained = (
-        (measured.coordinates >= int(math.ceil(interval.minimum)))
-        & (measured.coordinates <= int(math.floor(interval.maximum)))
+    retained = slice(
+        measured.coordinates.searchsorted(
+            math.ceil(interval.minimum), side="left"
+        ),
+        measured.coordinates.searchsorted(
+            math.floor(interval.maximum), side="right"
+        ),
     )
     return replace(
         measured,
