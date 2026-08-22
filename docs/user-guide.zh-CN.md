@@ -162,10 +162,11 @@ placement 或替某个候选加分。角落极小擦边、锯齿和尘点保持�
 
 V5 开发源码支持 Python 3.12–3.14，并固定所需模块版本。在仓库根目录运行：
 
-- macOS：`install/X5_Crop_Mac_install.command`
-- Windows：`install/X5_Crop_win_install.bat`
+- macOS：`tools/install/X5_Crop_Mac_install.command`
+- Windows：`tools/install/X5_Crop_win_install.bat`
 
-安装器复用合格的全局 Python 和现有依赖，只安装缺失项。来源无法安全确认时会在改动前停止。
+未来 V5 Release 包中的相同安装器位于 `install/`，不带 `tools/` 前缀。安装器复用合格的全局
+Python 和现有依赖，只安装缺失项。来源无法安全确认时会在改动前停止。
 Homebrew 不是前置条件，也不会建立私有 `.venv`。卸载器只删除收据证明由 X5 Crop 新增且未被
 其它包使用的依赖。
 

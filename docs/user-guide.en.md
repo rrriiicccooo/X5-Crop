@@ -221,13 +221,15 @@ its bundled documentation.
 The V5 development source supports Python 3.12–3.14. From the repository root,
 run:
 
-- macOS: `install/X5_Crop_Mac_install.command`
-- Windows: `install/X5_Crop_win_install.bat`
+- macOS: `tools/install/X5_Crop_Mac_install.command`
+- Windows: `tools/install/X5_Crop_win_install.bat`
 
-Setup reuses a suitable global Python and existing dependencies, installing
-only missing items. Unknown ownership stops before any change. Homebrew is not
-required, and no private `.venv` is created. Uninstall removes only
-receipt-proven dependencies introduced by X5 Crop that no other package needs.
+The same installers are under `install/`, without the `tools/` prefix, in a
+future V5 release package. Setup reuses a suitable global Python and existing
+dependencies, installing only missing items. Unknown ownership stops before any
+change. Homebrew is not required, and no private `.venv` is created. Uninstall
+removes only receipt-proven dependencies introduced by X5 Crop that no other
+package needs.
 
 ## Input Contract
 

@@ -11,30 +11,50 @@ from .read_models import gate_read_model, typed_read_model
 from .summary import measurement_summary, photo_geometry_summary
 
 
+def capture_workspace_report_facts(
+    detection: FinalDetection,
+    workspace: DetectionWorkspace,
+    *,
+    development_detail: bool,
+) -> tuple[dict, dict | None]:
+    """Freeze report facts that require the detection workspace."""
+
+    return (
+        measurement_summary(detection, workspace),
+        (
+            development_report_facts(detection, workspace)
+            if development_detail
+            else None
+        ),
+    )
+
+
 def report_record_for_final_detection(
     detection: FinalDetection,
     *,
     source: str,
     profile: dict,
-    workspace: DetectionWorkspace,
+    measurement: dict,
+    development: dict | None,
     output_files: list[str],
     review_copy: str | None,
     warnings: list[str],
     configuration: dict,
     runtime_identity: dict,
     frame_export_requested: bool,
-    development_detail: bool,
 ) -> dict:
     export_performed = bool(output_files)
     record = {
         "schema_id": REPORT_SCHEMA_ID,
         "schema_revision": REPORT_SCHEMA_REVISION,
-        "detail_level": "development" if development_detail else "production",
+        "detail_level": (
+            "development" if development is not None else "production"
+        ),
         "script_version": VERSION,
         "source": str(source),
         "input": {"profile": dict(profile)},
         "configuration": dict(configuration),
-        "measurement": measurement_summary(detection, workspace),
+        "measurement": dict(measurement),
         "photo_geometry": photo_geometry_summary(detection),
         "candidate_gate": gate_read_model(detection.candidate.gate),
         "decision": {
@@ -92,10 +112,6 @@ def report_record_for_final_detection(
             "warnings": list(warnings),
         },
         "runtime_identity": dict(runtime_identity),
-        "development": (
-            development_report_facts(detection, workspace)
-            if development_detail
-            else None
-        ),
+        "development": development,
     }
     return record

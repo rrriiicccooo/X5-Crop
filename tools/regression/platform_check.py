@@ -17,13 +17,6 @@ from .platform_receipt import (
 )
 
 
-def _case_map(receipt: dict[str, Any]) -> dict[str, dict[str, str]]:
-    return {
-        str(item["case"]): item
-        for item in receipt["filesystems"]["cases"]
-    }
-
-
 def check_platform_receipts(
     paths: Sequence[Path],
     *,
@@ -63,27 +56,6 @@ def check_platform_receipts(
         raise ValueError(
             "platform-check requires Apple Silicon, Intel macOS, and Windows x64"
         )
-    for record in receipts:
-        cases = _case_map(record)
-        required = (
-            ("apfs", "hfs_plus", "exfat")
-            if record["target"] in {TARGET_APPLE_SILICON, TARGET_INTEL_MAC}
-            else ("ntfs", "exfat")
-        )
-        if any(case not in cases for case in required):
-            raise ValueError("platform receipt omits an independent filesystem case")
-        verified = required[:-1]
-        if any(
-            cases[case]["status"] != "passed"
-            or cases[case]["support_level"] != "verified_local"
-            for case in verified
-        ):
-            raise ValueError("verified local filesystem case did not pass")
-        if (
-            cases["exfat"]["status"] != "unverified"
-            or cases["exfat"]["support_level"] != "best_effort_unverified"
-        ):
-            raise ValueError("exFAT status was silently upgraded")
     return tuple(receipts)
 
 

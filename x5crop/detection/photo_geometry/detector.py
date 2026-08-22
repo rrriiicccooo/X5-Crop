@@ -368,7 +368,7 @@ def reconstruct_photo_geometry(
         output_slot_identities=_output_identities(
             lanes, resolved.lane_output_slot_counts
         ),
-        assessment_facts=gate.facts,
+        assessment_facts=gate,
     )
 
 

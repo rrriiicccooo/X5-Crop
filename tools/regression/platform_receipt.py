@@ -120,12 +120,9 @@ def _read_only_installer_check() -> dict[str, str]:
 
 def _load_or_build_performance(path: Path, commit: str) -> dict[str, Any]:
     if path.is_file():
-        try:
-            record = json.loads(path.read_text(encoding="utf-8"))
-            validate_receipt(record, expected_commit=commit)
-            return record
-        except (OSError, TypeError, ValueError, json.JSONDecodeError):
-            pass
+        record = json.loads(path.read_text(encoding="utf-8"))
+        validate_receipt(record, expected_commit=commit)
+        return record
     record = build_receipt()
     validate_receipt(record, expected_commit=commit)
     path.parent.mkdir(parents=True, exist_ok=True)

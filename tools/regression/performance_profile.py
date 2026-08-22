@@ -19,12 +19,13 @@ from x5crop.report.validation import validate_current_report_record
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 STAGE_NAMES = (
-    "startup_import_unattributed",
+    "unattributed_runtime",
     "decode",
     "workspace_gray",
     "coarse_support",
     "registered_measurement",
     "template_alignment_decision",
+    "output_deskew",
     "sampling",
     "encode_write",
     "readback",
@@ -37,7 +38,6 @@ class ProfiledSource:
     sample_id: str
     wall_seconds: float
     stages: dict[str, float]
-    io_total_seconds: float
     process_peak_rss_bytes: int
     runtime_peak_temporary_bytes: int
 
@@ -46,7 +46,6 @@ class ProfiledSource:
             "sample_id": self.sample_id,
             "wall_seconds": self.wall_seconds,
             "stages": dict(self.stages),
-            "io_total_seconds": self.io_total_seconds,
             "process_peak_rss_bytes": self.process_peak_rss_bytes,
             "runtime_peak_temporary_bytes": self.runtime_peak_temporary_bytes,
         }
@@ -187,6 +186,11 @@ def _stage_times(profile_path: Path, wall_seconds: float) -> dict[str, float]:
             ),
         )
     )
+    output_deskew = _cumulative(
+        stats,
+        "x5crop/detection/output_deskew.py",
+        "observe_lightweight_deskew",
+    )
     sampling = _cumulative(stats, "x5crop/image/transforms.py", "sample_affine_roi")
     validated_write = _cumulative(
         stats, "x5crop/io/tiff.py", "write_validated_tiff"
@@ -204,18 +208,20 @@ def _stage_times(profile_path: Path, wall_seconds: float) -> dict[str, float]:
         + coarse_support
         + measurement
         + template_alignment
+        + output_deskew
         + sampling
         + encode_write
         + readback
         + publish
     )
     return {
-        "startup_import_unattributed": max(0.0, wall_seconds - attributed),
+        "unattributed_runtime": max(0.0, wall_seconds - attributed),
         "decode": decode,
         "workspace_gray": workspace,
         "coarse_support": coarse_support,
         "registered_measurement": measurement,
         "template_alignment_decision": template_alignment,
+        "output_deskew": output_deskew,
         "sampling": sampling,
         "encode_write": encode_write,
         "readback": readback,
@@ -272,15 +278,10 @@ def profile_source(source) -> ProfiledSource:
         report = rows[0]
         validate_current_report_record(report)
         stages = _stage_times(profile_path, wall)
-        io_total = sum(
-            stages[name]
-            for name in ("decode", "encode_write", "readback", "publish")
-        )
         return ProfiledSource(
             sample_id=source.sample_id,
             wall_seconds=wall,
             stages=stages,
-            io_total_seconds=io_total,
             process_peak_rss_bytes=peak_rss,
             runtime_peak_temporary_bytes=_runtime_peak_temporary(report),
         )

@@ -26,24 +26,10 @@ class FinalDetection:
 
     candidate: PhotoGeometryCandidate
     decision: DecisionGateAssessment
-    source_core: SourceCoreEvidence
-    resolved_output_slots: ResolvedOutputSlots | None
-    output_slot_identities: tuple[OutputSlotIdentity, ...]
     deskew_assessment: OutputDeskewAssessment
-    output_transforms: tuple[AffineCoordinateTransform, ...]
-    output_footprints: tuple[OutputFootprint, ...]
-    sampling_authority_boxes: tuple[Box, ...]
     final_boxes: tuple[Box, ...]
 
     def __post_init__(self) -> None:
-        if self.candidate.source_core is not self.source_core:
-            raise ValueError("final detection must preserve source-core identity")
-        if self.resolved_output_slots is not self.candidate.resolved_output_slots:
-            raise ValueError(
-                "finalization cannot replace resolved output slots"
-            )
-        if self.output_slot_identities != self.candidate.output_slot_identities:
-            raise ValueError("finalization cannot replace slot identities")
         approved = self.decision.status == "approved_auto"
         if approved:
             expected = (
@@ -71,9 +57,6 @@ class FinalDetection:
                 )
         elif (
             self.decision.status != "needs_review"
-            or self.output_transforms
-            or self.output_footprints
-            or self.sampling_authority_boxes
             or self.final_boxes
         ):
             raise ValueError(
@@ -87,6 +70,40 @@ class FinalDetection:
     @property
     def frame_export_reason(self) -> str | None:
         return None if self.frame_export_eligible else "decision_gate_needs_review"
+
+    @property
+    def source_core(self) -> SourceCoreEvidence:
+        return self.candidate.source_core
+
+    @property
+    def resolved_output_slots(self) -> ResolvedOutputSlots | None:
+        return self.candidate.resolved_output_slots
+
+    @property
+    def output_slot_identities(self) -> tuple[OutputSlotIdentity, ...]:
+        return self.candidate.output_slot_identities
+
+    @property
+    def output_footprints(self) -> tuple[OutputFootprint, ...]:
+        return (
+            self.candidate.output_footprints
+            if self.frame_export_eligible
+            else ()
+        )
+
+    @property
+    def sampling_authority_boxes(self) -> tuple[Box, ...]:
+        return tuple(
+            item.sampling_authority_box for item in self.output_footprints
+        )
+
+    @property
+    def output_transforms(self) -> tuple[AffineCoordinateTransform, ...]:
+        return (
+            (self.deskew_assessment.transform,) * len(self.output_footprints)
+            if self.frame_export_eligible
+            else ()
+        )
 
     @property
     def output_slot_count(self) -> int | None:

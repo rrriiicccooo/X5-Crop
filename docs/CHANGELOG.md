@@ -1,7 +1,7 @@
 # X5 Crop 更新日志
 
 本文件只记录版本级行为与验证边界。当前合同见
-[ARCHITECTURE.md](ARCHITECTURE.md)，当前目标与未闭风险见
+[ARCHITECTURE.md](ARCHITECTURE.md)，当前目标与开放风险见
 [PROJECT_MEMORY.md](PROJECT_MEMORY.md)。
 
 ## V5（当前开发版本，尚未发布）
@@ -9,127 +9,66 @@
 V5 只有一条 current-only runtime。被替代的 mode、schema、fallback、shim、Grid、完整链
 materialization、平行 detector 和 report reuse 均不再支持。
 
-### 用户行为
+### 产品行为
 
-- 输入改为 format + 可选 count。省略 count 表示确认匹配片夹默认格数；明确 count 表示用户确认
-  实际 slot 数，包括中间空白曝光格。Runtime 不再要求 full/partial mode。
-- `135-dual` 默认且只自动处理 12 格、每 lane 6。其它 count 安全进入 review，不猜 lane 分配。
-- 是否铺满在 placement 选定后按 outer 外侧能否再容纳一个 W 判断；不附加 gap，不提供长轴居中。
-- 任一 slot 不安全时整张 source review。正式输出只发布到全新目录，不覆盖或接管旧结果。
+- 用户提供 format，并确认匹配片夹的默认 count 或明确 count；count 包含中间空白曝光格。Runtime
+  不猜 format、照片数或 blank，也不保存 full/partial mode。
+- `135-dual` 只自动处理 12 格、每 lane 6 格；其它 count 安全进入 review。任一 slot 不安全时整张
+  source review，不做 slot salvage。
+- Detector 改为有界 fixed-template-first 对准：先建立 role-free coarse support，再在固定 outer、
+  separator 和 top/bottom 窗口一次登记、一次测量。Format 固定 W/H，像素 observation 只负责对准、
+  解释最多一次 direct wide/narrow local advance，并否决非法 placement。
+- Phase、pitch、cross、ordinal、content 和 holder fill 使用 typed physical authority。不同 placement
+  保持竞争；不按强度、距离、holder center、总分或样片规则挑 winner。Contact、overlap、多异常和
+  authority 不足继续 review。
+- Cross 只解决短轴 offset、fixed H 与局部 frame axis。`APERTURE_PAIR` 和完整包住 fixed H、总高度
+  不超过 `1.1H` 的 `ENCLOSING_SUPPORT_PAIR` 互斥；registered-lattice containment 的完整条件由
+  [架构第 8 节](ARCHITECTURE.md#8-crossouter-与固定-h)唯一说明。
+- 安全层只处理唯一 selected placement 的联合可行状态。Aperture 四边完整 expansion 各自使用 5%
+  上限；enclosing top/bottom 使用 `1.1H` 合同。真正所需 polygon 越界时 review，不静默裁小。
+- 二维内容只作 negative veto，不能移动边界、选择 runner 或创造 phase。
 
-### 模板对准
+### 输出与报告
 
-- Detector 改为有界模板编译器，并吸收 v4.2.8 的 whole-to-local 行为：先确定粗片带区域和局部
-  测量方向，再在理论 outer、separator 和 top/bottom 附近做一次有界局部精修。
-- Format 固定全部 frame 的 W/H。Role-free observation 只在模板提出理论角色后绑定；同一物理
-  separator 的 edge、band 和多条 trace 不重复投票。
-- Source pitch 由至少两个独立直接位置建立。缺失 first/last 可由已经获得 authority 的 phase、
-  pitch 和 ordinal 投影；模板不能创造自己的 phase anchor。
-- 两个 separator 的投影 phase 只有在另一份独立 direct support 闭合完整合法 fit 后才可晋升为
-  authority；没有闭合时只保留其 pitch，不得把其它合法 placement 全部过滤。
-- 未标 ordinal 的 separator 使用有界 lattice 对齐：source-wide material support 优先；否则只有
-  唯一且极性闭合的局部 band 可提供 END→START 角色。Band 宽度本身不创造 local step。
-- 偏差诊断明确区分 normal、一次 direct local step 与 unresolved。Wide/narrow 最多产生一次
-  suffix shift；contact、overlap、多异常或 ordinal 不明保持 review。
-- 检测不再建立 source-wide deskew authority。Cross 只拥有短轴 offset、fixed H 和一个 placement
-  的 source-space 局部 frame axis；sequence 最多约束该 polygon 的保守方向范围，不能拥有输出旋转。
-  双 lane 只共享 W/H 与尺度，不再因局部方向不同而失败。
-- 角色资格、source-wide 连续性和逐 trace 内外关系均闭合的轻微弯曲 observation 可以保留局部
-  位置，但不在 direct anchor 已闭合全秩解时重标定 phase、W 或 pitch；残差进入
-  selected-placement safety，不建立曲线或逐帧方向。
+- Deskew 降为 Decision 后的非阻断输出整理。只有 `approved_auto` 才执行 6–24 trace 的 role-free
+  观测；不可用时保持原始倾斜，`needs_review` 直接记录 `output_not_eligible`。Deskew 不参与
+  placement、Gate 或黄金准确性。
+- Finalization 用同一个 affine transform 映射 source 与安全 polygon，再取精确半开 AABB；不得旋转
+  后继续裁固定 W×H。AABB 在 polygon 外的角落允许为黑色 no-data。
+- Current report 为 `x5crop_v5_template_report_10`。它保存最终 deskew assessment，不重复保存旁路
+  observation；official footprints、transforms 和 final boxes 只对 approved output 暴露。
+- 正式 TIFF 保留冻结输入域内的 16-bit RGB、ICC、resolution、metadata 和无损压缩，输出
+  `Orientation=1`。全组先写 staging，全部成功后发布到尚不存在的目录。
 
-### Cross 与输出保护
+### 实现与工具
 
-- Top/bottom 支持两种互斥用途：固定 H 的 `APERTURE_PAIR`，以及直接连续、完整包住 H 且总高度
-  不超过 1.1H 的 `ENCLOSING_SUPPORT_PAIR`。后者可来自片夹或胶片材料支撑，但两侧不得与 aperture
-  混用。
-- Cross 单侧 aperture 现在允许一个 role-authorized direct binding 在 selected frame domains
-  （数量至少为 3）中逐一拥有 direct trace，即使它的 aggregate independent support 只有两个
-  区域；该权限不降低普通局部 two-region threshold，不拼接不连通 fragments，也不改变方向、
-  role、fixed-H 或 output budget 约束。
-- Cross local competitor 的消去改为显式 registered-lattice 物理 containment，并保留两个直接证明
-  基础：exact registered-sample strict subset 加严格更多 frame domains 可直接支配；staggered
-  sampling 则不再要求 trace ID 精确子集，但双方必须各自连通、observed/full 方向区间相交，broader
-  有 3 个独立区域并覆盖至少 3 个且严格更多 registered frame domains，local 有 2 个独立区域，且
-  broader 长轴 extent 严格包含 local。两条证明都要求同一 opposite、同 role authority、lattice
-  明确且全部 trace 已注册；不按 support、residual 或 holder center 选位。
-- 短轴 coarse query 的 aggregate interval 仍只定位局部测量；同一批已注册 trace 若直接形成
-  source-wide 双侧 track，可以独立提供局部 top/bottom 方向闭合和 enclosing support。Aggregate
-  interval 不能因此获得照片边界或输出 deskew 权限。
-- Aperture 正常 bleed 为 `max(0.15 mm, 0.7% W)` 和 cross 0.25 mm；四边完整 expansion 统一使用
-  单边 5% 上限。Enclosing support 不加 cross bleed，使用总高度 1.1H 的独立合同。
-- Enclosing support 的 1.1H 预算只读取直接 observation 的最坏 `observed_span`；不把不同联合可行
-  状态的 top/bottom footprint 极值拼成并不存在的物理高度。
-- 安全计算改为 selected-only 联合可行集合。Phase、pitch、direction、cross、local advance 和直线
-  residual 的相关性一起传播，不把独立最大值相加，不合并 runner-up，不把越界 footprint 静默裁小。
-- 二维内容只在 placement 唯一后作 negative veto，不能选位、移动边界或创造照片。
-
-### 可选输出 deskew
-
-- 新增唯一 role-free lightweight observation：在整条片带 6–24 个有界稀疏位置读取最外侧暗边，
-  两侧分别稳健拟合；只有 slope、residual 和角度范围全部相容时才产生角度。它不识别 holder、film
-  或 photo edge，不可用时返回 typed skip reason 和 `None`，不伪造 `0°`。
-- `CandidateGate` 与 `DecisionGate` 不读取 deskew。安全 placement 即使无法 deskew 仍保持
-  `approved_auto`；有效角度造成的端点位移小于 3 px 时记录 `rotation_not_needed`，其余情况才在
-  Decision 后应用 expanded rotation。
-- Finalization 用同一 affine transform 映射 source 与已确认安全的 frame polygon，再取旋转后
-  polygon 的精确半开 AABB。AABB 在 polygon 外的表示性角落允许为黑色 no-data；不得旋转后继续
-  裁固定 W×H，也不得让这些角落回流检测 Gate。
-- 删除旧 source/lane transform assessment、shared-direction Gate、transform-sampling Gate、
-  `template_direction.py` 和 detection-time mapped sampling rectangle。一次 direct local advance 保留。
-
-### 报告、工具与性能
-
-- Current report 升级为 `x5crop_v5_template_report_9`：`CandidateGate` 删除四个由 complete/selected
-  placement 重复推出的 sequence/cross/shared/ordinal facts；saturation 每个越界 side 只保留
-  `authority_side`；direct-use budget 删除未启用的多 placement、worst-placement 和 named-gap 字段。
-  真实 phase/cross/shared 失败仍由 placement selection 的 typed root failure 表达。
-- 冻结依赖同步到已验证环境：NumPy 2.5.2、tifffile 2026.8.16、imagecodecs 2026.8.16；安装器
-  仍沿已确认 provider 只处理缺失或版本不符项，不建立第二套环境。
-- Debug Analysis 使用 1800 px 宽、自适应高度的三联图，展示理论模板、实际观察、逐 role
-  residual、direct/inferred ledger、best/runner、boundary use、最终 footprint、预算使用和根阻止
-  事实；展示层不重算几何。
-- Diagnostic summary 按根 review reason、blocking gap、phase/cross 状态、alignment pattern 和
-  boundary use 聚合，并统计最小缺失事实、恢复类别和建议操作；仍不产生 accuracy verdict。
-- 新增绑定 source SHA、configuration、measurement revision 与 plan identity 的开发 replay；它只复跑
-  同一 phase/cross solver 输入，不携带真值，也不进入 production。
-- 新增九张黄金的 v4.2.8 / V5 / 人工边界对照工具。它用于分清 coarse outer、最终 crop 与 bleed 的
-  行为，不把历史版本当 reference，也不复制旧 Grid、score 或 fallback。
-- Accuracy 在判断 nominal/challenge 与 final status 之前，先验证所有已选 candidate footprint
-  是否覆盖用户确认边界；review 不再因正式输出被隐藏而跳过候选几何错误。批准结果仍另外验证
-  正式输出的覆盖与直接使用预算。Cosmetic deskew 精度不再是黄金阻断条件；affine polygon envelope
-  与 TIFF 安全合同仍阻断。
-- Separator lattice hypothesis 是显式 receipt 工作量；编译上界不足时停止并进入 review，不做
-  silent first-N。
-- Performance profiler 覆盖完整用户路径，并拆分 startup/import、decode、gray/coarse support、
-  registered measurement、template alignment/decision、sampling、encode/write、readback 和 publish。
-- Performance receipt 在未插桩正式子进程中直接记录 peak RSS，并与 cProfile RSS、detector
-  临时缓冲分开；5 秒均值仍是正式 Gate，3 秒均值新增为不阻断的 challenge。
-- Registered gray 直接从原始 16-bit RGB 分块生成，不保留整张 float32 中间图；输出只对
-  各 frame 做反向 affine ROI 采样，三通道复用预分配的坐标和值缓冲，不预先清零随后必定覆盖的
-  输出，也不创建额外 uint16 分块；逐像素值与原采样合同一致。完全相同的 robust-line 输入才可
-  复用精确结果，不剪枝、不改 observation 或 provenance。
-- Affine ROI 在安全 polygon 的轴对齐包络角落允许写黑色无数据像素，插值结果仍按完整 uint16
-  范围保留；测试同时覆盖 polygon 内非零照片像素、边界插值、表示性黑角和 TIFF metadata，避免
-  几何通过但正式 TIFF 被写成全黑或切掉已确认内容。
-- 工具、tests、report 和 release manifest 只引用 current 模块与 schema；`tools/verify` 是唯一验证入口。
-- Release contract 会实际构建临时 ZIP，校验路径唯一、排除 modular source/tests/tools、standalone
-  与当前模块源码一致，并启动生成的 `X5_Crop.py --version`。Standalone text 只由一个 UTF-8 bytes
-  owner 写入，固定使用 LF，不再受 Windows text-mode newline translation 影响。
-- v4/V5 黄金对照只接受正式九张 user-confirmed gold cohort；自定义 geometry 不得被标成黄金
-  authority。Platform 聚合统一要求 Apple Silicon、Intel macOS 与 Windows x64 三份同 commit
-  receipt，exFAT 无独立卷时保持显式 best-effort 未验证。
-- 变形合同覆盖 coarse support 的边框平移、翻转、横竖转置与亮度/对比度，以及 phase 的平移、缩放
-  和 fractional pitch；性能改动必须保持 solver 答案与 provenance。
+- Registered gray 直接从 uint16 RGB 分块计算，复用两个 float32 luma plane 和一个 float64
+  normalization plane；逐像素结果保持不变。普通 product path 在 report facts 冻结后、TIFF
+  sampling 前释放整张 registered gray，Debug/development 保留同次诊断事实。
+- Final geometry、Gate facts 和 report record 由 canonical owner 直接导出，不再复制候选状态或使用
+  单字段 wrapper。无消费者的 `RuntimeMetrics` 已删除；工作量与时间分别由 report 和 performance
+  receipt 拥有。测试删除旧文件名、旧 schema 和任意模块行数上限等历史墓碑；物理反例合同保留。
+- Performance receipt 为 `x5crop_performance_receipt_v5_5`：完整用户路径外部记录未插桩 peak RSS，
+  cProfile 另行归因 `unattributed runtime`、decode、gray、coarse、measurement、alignment/decision、
+  output deskew、sampling、write/readback 与 publish。派生 I/O 总时长不在每个 source 重复保存。
+- 5 秒 mean 是正式性能 Gate；3 秒 mean 是记录明确但不阻断的 challenge。默认 `--jobs 1`、上限 3，
+  内部数值线程固定为 1。
+- `tools/verify` 是唯一验证入口。GitHub CI 不跳过 Markdown commit；本地 pre-push 仍按实际 commit
+  range 选择 documentation 或 full。
+- Performance、platform 和 release receipt 只证明绑定的 commit、依赖、机器与 cohort。已存在但
+  无效的 performance receipt 会直接失败，不再由 platform 流程静默重建。
+- Release contract 实际构建临时 ZIP，验证唯一 manifest、standalone source、LF bytes 和启动 smoke；
+  用户包不包含 modular source、tests、tools、内部文档或开发输出。
+- Measurement replay 和 v4.2.8 对照仅为绑定 identity 的开发工具，不携带真值、不进入 production，
+  也不构成兼容路径。
 
 ### 验证边界
 
-- 九张用户确认黄金决定几何准确性，当前九项均为 nominal，必须安全自动批准。任何黄金不得错误
-  自动通过；未来 challenge 从安全 review 变为正确批准是允许的改进。
-- 111-source diagnostic 只证明工程稳定、工作量、终态和 TIFF 合同。
-- 24-source performance 的完整路径平均上限为 5 秒，3 秒为非阻断 challenge；receipt 只证明
-  绑定的 commit、依赖和机器。
-- 全部 release receipt 绑定同一 commit 以前，V5 不创建 RC、tag、Release 或公开 ZIP。
+- 用户确认黄金决定几何准确性；nominal 必须安全自动批准，challenge 允许安全 review。
+- 111-source diagnostic 只证明终态、schema、authority、工作量和 TIFF 工程合同，不产生准确率 verdict。
+- Apple Silicon macOS、Intel macOS 与 Windows x64 必须在同一最终 commit 取得实机 receipt；没有独立
+  卷时 exFAT 保持 `best_effort_unverified`。
+- Accuracy、性能与三平台 receipt 全部绑定同一 release commit 前，不创建 RC、tag、Release 或公开 ZIP。
 
 ## V4.9（架构实验，不发布）
 
@@ -138,11 +77,11 @@ V4.9 建立 fixed-format template-first、source geometry、两级 Gate 与 sour
 
 ## v4.2.8（当前稳定发布）
 
-v4.2.8 证明了“先看整条片带，再在理论位置附近找 outer 和 separator”的行为能够快速覆盖绝大多数
-规则片条。V5 继承理论 pitch、material band、有限局部搜索、缺边投影和正常快车道；不恢复旧
-confidence、best-score、Grid 自证、content equal-split、固定像素 bleed 或 separator-center crop。
+v4.2.8 证明了“先看整条片带，再在理论位置附近找 outer 和 separator”的行为可以快速覆盖规则片条。
+V5 继承理论 pitch、material band、有限局部搜索、缺边投影和正常快车道；不恢复旧 confidence、
+best-score、Grid 自证、content equal-split、固定像素 bleed 或 separator-center crop。
 
 ## 回滚
 
-恢复历史版本时必须整体使用同一 commit 的 detector、configuration、schema、tests 与文档，不能
-跨版本拼接组件。
+恢复历史版本时必须整体使用同一 commit 的 detector、configuration、schema、tests 与文档，不能跨版本
+拼接组件。

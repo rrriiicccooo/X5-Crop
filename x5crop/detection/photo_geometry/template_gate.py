@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-
 from ...domain import EvidenceState
 from ..gate_checks import (
     DetectionFailureFact,
@@ -37,16 +35,11 @@ def contradicted(
     return TypedAssessment(EvidenceState.CONTRADICTED, gap, failure)
 
 
-@dataclass(frozen=True)
-class TemplateGateResult:
-    facts: dict[str, TypedAssessment]
-
-
 def build_template_gate(
     resolved: ResolvedOutputSlots,
     reconstructions: tuple[TemplateLaneReconstruction, ...],
     source_selection: TemplateSourceSelection,
-) -> TemplateGateResult:
+) -> dict[str, TypedAssessment]:
     if not reconstructions:
         raise ValueError("template gate requires every reconstructed lane")
     measurement_complete = all(
@@ -193,11 +186,10 @@ def build_template_gate(
         ),
         "direct_use_budget": budget_fact,
     }
-    return TemplateGateResult(facts)
+    return facts
 
 
 __all__ = [
-    "TemplateGateResult",
     "build_template_gate",
     "supported",
     "unavailable",

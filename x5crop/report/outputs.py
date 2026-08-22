@@ -3,23 +3,23 @@ from __future__ import annotations
 import csv
 import json
 from pathlib import Path
+from typing import Any
 
 from ..app_info import REPORT_JSONL_NAME, SUMMARY_CSV_NAME
-from .model import ReportResult
 
 
-def append_report_jsonl(path: Path, result: ReportResult) -> None:
-    if not result.record:
+def append_report_jsonl(path: Path, result: dict[str, Any]) -> None:
+    if not result:
         raise ValueError("Current report record is missing")
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(result.record, ensure_ascii=False) + "\n")
+        f.write(json.dumps(result, ensure_ascii=False) + "\n")
 
 
-def append_summary_csv(path: Path, result: ReportResult) -> None:
-    if not result.record:
+def append_summary_csv(path: Path, result: dict[str, Any]) -> None:
+    if not result:
         raise ValueError("Current report record is missing")
-    record = result.record
+    record = result
     script_version = record["script_version"]
     output_files = record["output"]["output_files"]
     decision = record["decision"]
@@ -89,6 +89,9 @@ def append_summary_csv(path: Path, result: ReportResult) -> None:
         )
 
 
-def write_report_outputs_for_result(result: ReportResult, output_dir: Path) -> None:
+def write_report_outputs_for_result(
+    result: dict[str, Any],
+    output_dir: Path,
+) -> None:
     append_summary_csv(output_dir / SUMMARY_CSV_NAME, result)
     append_report_jsonl(output_dir / REPORT_JSONL_NAME, result)

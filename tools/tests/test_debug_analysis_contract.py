@@ -46,6 +46,7 @@ from x5crop.debug.panels import (
 from x5crop.debug.status import fit_text, source_header, transform_lines
 from x5crop.detection.decision.decision_gate import apply_decision_gate
 from x5crop.detection.final.finalize import finalize_detection
+from x5crop.detection.output_deskew import observe_lightweight_deskew
 from x5crop.detection.pipeline import choose_detection
 from x5crop.detection.workspace import prepare_detection_workspace
 from x5crop.domain import FiniteInterval
@@ -85,7 +86,11 @@ def _fixture(
     detection = finalize_detection(
         candidate,
         decision,
-        workspace.deskew_observation,
+        (
+            observe_lightweight_deskew(workspace.source_gray, workspace.layout)
+            if decision.status == "approved_auto"
+            else None
+        ),
         layout=workspace.layout,
         source_width=workspace.source_gray.shape[1],
         source_height=workspace.source_gray.shape[0],

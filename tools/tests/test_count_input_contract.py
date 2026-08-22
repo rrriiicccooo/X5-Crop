@@ -54,16 +54,16 @@ class CountInputContractTest(unittest.TestCase):
             ))
 
     def test_count_request_carries_only_user_intent(self) -> None:
-        explicit = SlotCountRequest.from_user_input(3)
-        default = SlotCountRequest.from_user_input(None)
+        explicit = SlotCountRequest(3)
+        default = SlotCountRequest(None)
         self.assertEqual(explicit.user_count, 3)
         self.assertEqual(explicit.authority.value, "user_explicit_count")
         self.assertIsNone(default.user_count)
         self.assertEqual(default.authority.value, "matched_holder_default_count")
         with self.assertRaises(ValueError):
-            SlotCountRequest.from_user_input(0)
+            SlotCountRequest(0)
         with self.assertRaises(TypeError):
-            SlotCountRequest.from_user_input(True)  # type: ignore[arg-type]
+            SlotCountRequest(True)  # type: ignore[arg-type]
 
         parser = build_parser()
         option_strings = {

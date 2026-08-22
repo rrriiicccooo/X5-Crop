@@ -7,8 +7,10 @@ Release 包并阅读包内随附的 v4.2.8 文档，不要把本文中的 V5 命
 
 取得完整仓库源码后，在仓库根目录运行对应安装器：
 
-- macOS：`install/X5_Crop_Mac_install.command`
-- Windows：`install/X5_Crop_win_install.bat`
+- macOS：`tools/install/X5_Crop_Mac_install.command`
+- Windows：`tools/install/X5_Crop_win_install.bat`
+
+未来 V5 Release 包中的相同安装器位于 `install/`，不带 `tools/` 前缀。
 
 安装器寻找 Python 3.12–3.14，复用合格依赖，只安装缺失项。Homebrew 不是前置条件，也不会建立
 私有虚拟环境。

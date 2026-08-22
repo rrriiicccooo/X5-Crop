@@ -46,15 +46,6 @@ class PhotoGeometryCandidate:
     def output_footprints(self) -> tuple[OutputFootprint, ...]:
         return self.geometry.output_footprints
 
-    @property
-    def output_slot_count(self) -> int | None:
-        return (
-            None
-            if self.resolved_output_slots is None
-            else self.resolved_output_slots.output_slot_count
-        )
-
-
 def choose_detection(
     workspace: DetectionWorkspace,
     configuration: DetectionConfiguration,

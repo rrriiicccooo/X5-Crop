@@ -26,13 +26,6 @@ class SlotCountRequest:
         if self.user_count <= 0:
             raise ValueError("--count must be a positive integer")
 
-    @classmethod
-    def from_user_input(
-        cls,
-        requested_count: int | None,
-    ) -> "SlotCountRequest":
-        return cls(requested_count)
-
     @property
     def authority(self) -> SlotCountAuthority:
         return (

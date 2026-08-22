@@ -17,6 +17,36 @@ from ..utils import (
 GRAY_ROW_CHUNK_SIZE = 128
 
 
+def _luma_u16(
+    rgb: np.ndarray,
+    out: np.ndarray,
+    scratch: np.ndarray,
+    params: "BaseGrayParameters",
+) -> None:
+    """Evaluate registered luma with two reusable float32 planes."""
+
+    np.multiply(
+        rgb[..., 0],
+        np.float32(params.red_weight),
+        out=out,
+        casting="unsafe",
+    )
+    np.multiply(
+        rgb[..., 1],
+        np.float32(params.green_weight),
+        out=scratch,
+        casting="unsafe",
+    )
+    np.add(out, scratch, out=out)
+    np.multiply(
+        rgb[..., 2],
+        np.float32(params.blue_weight),
+        out=scratch,
+        casting="unsafe",
+    )
+    np.add(out, scratch, out=out)
+
+
 @dataclass(frozen=True)
 class BaseGrayParameters:
     """Registered-gray calibration used only by pixel measurement.
@@ -80,32 +110,43 @@ def make_base_gray_u8(
         )
         rows, columns = np.divmod(positions, width)
         sampled_rgb = arr[rows, columns]
-    sampled_rgb = sampled_rgb.astype(np.float32)
-    finite_values = (
-        params.red_weight * sampled_rgb[:, 0]
-        + params.green_weight * sampled_rgb[:, 1]
-        + params.blue_weight * sampled_rgb[:, 2]
-    )
+        del positions, rows, columns
+    finite_values = np.empty(sampled_rgb.shape[0], dtype=np.float32)
+    sample_scratch = np.empty_like(finite_values)
+    _luma_u16(sampled_rgb, finite_values, sample_scratch, params)
     lo, hi = np.percentile(finite_values, [params.low_percentile, params.high_percentile])
     if hi <= lo:
         hi = float(finite_values.max())
         lo = float(finite_values.min())
+    del finite_values, sample_scratch, sampled_rgb
     if hi <= lo:
         out = np.zeros((height, width), dtype=np.uint8)
     else:
         out = np.empty((height, width), dtype=np.uint8)
         scale = UINT8_MAX_VALUE / (hi - lo)
+        buffer_rows = min(height, GRAY_ROW_CHUNK_SIZE)
+        values = np.empty((buffer_rows, width), dtype=np.float32)
+        scratch = np.empty_like(values)
+        normalized = np.empty((buffer_rows, width), dtype=np.float64)
         for start in range(0, height, GRAY_ROW_CHUNK_SIZE):
             stop = min(height, start + GRAY_ROW_CHUNK_SIZE)
-            rgb = arr[start:stop].astype(np.float32)
-            values = (
-                params.red_weight * rgb[..., 0]
-                + params.green_weight * rgb[..., 1]
-                + params.blue_weight * rgb[..., 2]
+            rows = stop - start
+            chunk_values = values[:rows]
+            chunk_scratch = scratch[:rows]
+            chunk_normalized = normalized[:rows]
+            _luma_u16(
+                arr[start:stop],
+                chunk_values,
+                chunk_scratch,
+                params,
             )
-            out[start:stop] = np.clip(
-                (values - lo) * scale,
-                0,
-                UINT8_MAX_VALUE,
-            ).astype(np.uint8)
+            np.subtract(chunk_values, lo, out=chunk_normalized)
+            np.multiply(chunk_normalized, scale, out=chunk_normalized)
+            np.clip(
+                chunk_normalized,
+                0.0,
+                float(UINT8_MAX_VALUE),
+                out=chunk_normalized,
+            )
+            out[start:stop] = chunk_normalized
     return out

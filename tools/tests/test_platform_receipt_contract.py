@@ -15,6 +15,7 @@ from tools.regression.platform_receipt import (
     TARGET_APPLE_SILICON,
     TARGET_INTEL_MAC,
     TARGET_WINDOWS_X64,
+    _load_or_build_performance,
     _run_verifier,
     validate_platform_receipt,
 )
@@ -103,6 +104,19 @@ def _receipt(target: str, performance_name: str, performance_sha: str) -> dict:
 
 
 class PlatformReceiptContractTests(unittest.TestCase):
+    def test_existing_performance_receipt_is_never_silently_rebuilt(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "performance.json"
+            path.write_text("not json", encoding="utf-8")
+            with (
+                mock.patch(
+                    "tools.regression.platform_receipt.build_receipt"
+                ) as build,
+                self.assertRaises(json.JSONDecodeError),
+            ):
+                _load_or_build_performance(path, COMMIT)
+            build.assert_not_called()
+
     def test_verifier_receipt_hashes_the_completed_output(self) -> None:
         output = "full verifier passed\n"
         with (

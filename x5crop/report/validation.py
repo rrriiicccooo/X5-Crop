@@ -351,6 +351,8 @@ def _validate_finalization(record: dict[str, Any]) -> None:
             raise ValueError("approved output lacks validated TIFFs")
     elif status != "needs_review" or (
         finalization["frame_export_eligible"]
+        or deskew["skip_reason"]
+        != DeskewSkipReason.OUTPUT_NOT_ELIGIBLE.value
         or footprints
         or authorities
         or boxes

@@ -39,6 +39,7 @@ _SUPPORT_MASK_CHUNK_PIXELS = 1 << 20
 
 
 class DeskewSkipReason(str, Enum):
+    OUTPUT_NOT_ELIGIBLE = "output_not_eligible"
     EMPTY_SOURCE = "empty_source"
     NO_DARK_SUPPORT = "no_dark_support"
     INSUFFICIENT_EDGE_POINTS = "insufficient_edge_points"
@@ -154,7 +155,11 @@ class LightweightDeskewObservation:
         if (
             self.angle_degrees is not None
             or not isinstance(self.skip_reason, DeskewSkipReason)
-            or self.skip_reason == DeskewSkipReason.ROTATION_NOT_NEEDED
+            or self.skip_reason
+            in {
+                DeskewSkipReason.OUTPUT_NOT_ELIGIBLE,
+                DeskewSkipReason.ROTATION_NOT_NEEDED,
+            }
         ):
             raise ValueError("skipped deskew observation is inconsistent")
 

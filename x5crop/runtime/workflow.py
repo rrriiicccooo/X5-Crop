@@ -2,21 +2,25 @@ from __future__ import annotations
 
 from dataclasses import replace
 from pathlib import Path
-from time import perf_counter
 import traceback
 
 from .identity import make_runtime_identity, source_runtime_identity
 from ..configuration.model import DetectionConfiguration
 from ..detection.decision.decision_gate import apply_decision_gate
 from ..detection.final.finalize import finalize_detection
+from ..detection.output_deskew import observe_lightweight_deskew
 from ..detection.pipeline import choose_detection
-from ..detection.workspace import DetectionWorkspace, prepare_detection_workspace
+from ..detection.workspace import prepare_detection_workspace
 from ..export.actions import prepare_review_artifact
 from ..export.crops import write_crops
 from ..geometry.layout import infer_layout
 from ..io.tiff import read_tiff, read_tiff_profile
 from ..report.configuration import detection_configuration_read_model
-from ..report.result_builder import result_from_detection
+from ..report.read_models import typed_read_model
+from ..report.record import (
+    capture_workspace_report_facts,
+    report_record_for_final_detection,
+)
 from ..run_config import RunConfig
 from ..run_status import RunTerminalOutcome
 from ..utils import spatial_shape_from_shape
@@ -26,112 +30,9 @@ from .outcome import (
     FailureStage,
     InputProcessingOutcome,
     RuntimeArtifacts,
-    RuntimeMetrics,
 )
 from .invocation import PlannedSource
 from ..run_local_identity import source_identity_scope
-
-
-def _metrics(
-    started_at: float,
-    detection_seconds: float,
-    workspace: DetectionWorkspace | None,
-    detection=None,
-) -> RuntimeMetrics:
-    processing_seconds = perf_counter() - started_at
-    if workspace is None:
-        return RuntimeMetrics.unavailable()
-    work = (
-        ()
-        if detection is None
-        else tuple(
-            lane.work
-            for lane in detection.candidate.geometry.lane_reconstructions
-            if lane.work is not None
-        )
-    )
-    reconstructed = (
-        ()
-        if detection is None
-        else detection.candidate.geometry.lane_reconstructions
-    )
-    prepared = tuple(lane.prepared for lane in reconstructed)
-    return RuntimeMetrics(
-        processing_seconds=processing_seconds,
-        detection_seconds=detection_seconds,
-        domain_pixels=sum(
-            lane.domain.work_box.width * lane.domain.work_box.height
-            for lane in workspace.source_core.lanes
-        ),
-        measurement_query_count=sum(
-            lane.measurement_work.measurement_query_count for lane in prepared
-        ),
-        pixel_query_count=sum(
-            lane.measurement_work.pixel_query_count for lane in prepared
-        ),
-        basic_profile_coordinate_count=sum(
-            lane.sequence_profile.coordinate_count
-            + lane.cross_profile.coordinate_count
-            for lane in prepared
-        ),
-        basic_profile_run_count=sum(
-            len(lane.sequence_profile.runs) + len(lane.cross_profile.runs)
-            for lane in prepared
-        ),
-        registered_sequence_observation_count=sum(
-            len(lane.sequence_edges) for lane in prepared
-        ),
-        phase_hypothesis_count=sum(
-            lane.phase_competition.receipt.phase_hypothesis_count
-            for lane in prepared
-        ),
-        separator_lattice_hypothesis_count=sum(
-            lane.phase_competition.receipt.separator_lattice_hypothesis_count
-            for lane in prepared
-        ),
-        phase_fit_pass_count=sum(
-            lane.phase_competition.receipt.fit_pass_count
-            for lane in prepared
-        ),
-        phase_role_lookup_count=sum(
-            lane.phase_competition.receipt.phase_lookup_count
-            for lane in prepared
-        ),
-        phase_role_binding_count=sum(
-            lane.phase_competition.receipt.role_binding_count
-            for lane in prepared
-        ),
-        local_relation_evaluation_count=sum(
-            lane.phase_competition.receipt.local_relation_evaluation_count
-            for lane in prepared
-        ),
-        cross_registered_run_count=sum(
-            lane.cross_competition.receipt.registered_run_count
-            for lane in prepared
-        ),
-        cross_fit_evaluation_count=sum(
-            lane.cross_competition.receipt.evaluated_fit_count
-            for lane in prepared
-        ),
-        placement_evaluation_count=sum(
-            item.placement_evaluation_count for item in work
-        ),
-        boundary_evaluation_count=sum(
-            item.boundary_evaluation_count for item in work
-        ),
-        content_evaluation_count=sum(
-            item.content_evaluation_count for item in work
-        ),
-        peak_temporary_bytes=max(
-            (
-                *(
-                    item.peak_temporary_bytes
-                    for item in work
-                ),
-                0,
-            )
-        ),
-    )
 
 
 def process_one(
@@ -156,13 +57,9 @@ def _process_one_scoped(
     output_root: Path,
 ) -> InputProcessingOutcome:
     input_file = source.path
-    started_at = perf_counter()
-    detection_seconds = 0.0
     failure_stage = FailureStage.INPUT_PROFILE
     artifacts = RuntimeArtifacts.empty()
     warnings: list[str] = []
-    workspace: DetectionWorkspace | None = None
-    detection = None
     try:
         profile, profile_warnings = read_tiff_profile(input_file)
         warnings.extend(profile_warnings)
@@ -180,7 +77,6 @@ def _process_one_scoped(
             configuration
         )
         failure_stage = FailureStage.DETECTION
-        detection_started = perf_counter()
         workspace = prepare_detection_workspace(
             arr,
             profile,
@@ -191,7 +87,6 @@ def _process_one_scoped(
             workspace,
             configuration,
         )
-        detection_seconds = perf_counter() - detection_started
 
         failure_stage = FailureStage.DECISION
         decision = apply_decision_gate(
@@ -199,10 +94,15 @@ def _process_one_scoped(
         )
 
         failure_stage = FailureStage.FINALIZATION
+        deskew_observation = (
+            observe_lightweight_deskew(workspace.source_gray, workspace.layout)
+            if decision.status == "approved_auto"
+            else None
+        )
         detection = finalize_detection(
             candidate,
             decision,
-            workspace.deskew_observation,
+            deskew_observation,
             layout=workspace.layout,
             source_width=workspace.source_gray.shape[1],
             source_height=workspace.source_gray.shape[0],
@@ -220,6 +120,15 @@ def _process_one_scoped(
             detection.resolved_output_slots,
             detection.output_slot_identities,
         )
+        measurement_detail, development_detail = capture_workspace_report_facts(
+            detection,
+            workspace,
+            development_detail=config.development_detail,
+        )
+        if not config.debug_analysis:
+            # Product output no longer needs registered gray after optional
+            # deskew and report-fact capture. Release it before TIFF sampling.
+            workspace = None
 
         failure_stage = FailureStage.OUTPUT
         if config.debug_analysis:
@@ -255,6 +164,7 @@ def _process_one_scoped(
 
         failure_stage = FailureStage.DEBUG
         if config.debug_analysis:
+            assert workspace is not None
             from ..debug.writer import write_debug_analysis
 
             debug_analysis = write_debug_analysis(
@@ -279,41 +189,31 @@ def _process_one_scoped(
             )
 
         failure_stage = FailureStage.REPORT_BUILD
-        result = result_from_detection(
-            input_file,
+        result = report_record_for_final_detection(
             detection,
-            profile,
-            workspace,
-            [
+            source=str(input_file),
+            profile=typed_read_model(profile),
+            measurement=measurement_detail,
+            development=development_detail,
+            output_files=[
                 Path(path).relative_to(output_root).as_posix()
                 for path in artifacts.frame_outputs
             ],
-            (
+            review_copy=(
                 None
                 if artifacts.review_copy is None
                 else Path(artifacts.review_copy)
                 .relative_to(output_root)
                 .as_posix()
             ),
-            warnings,
-            configuration_detail=configuration_detail,
+            warnings=warnings,
+            configuration=configuration_detail,
             runtime_identity=runtime_identity,
             frame_export_requested=not config.debug_analysis,
-            development_detail=config.development_detail,
         )
         return CompletedInput(
             result=result,
             artifacts=artifacts,
-            metrics=(
-                _metrics(
-                    started_at,
-                    detection_seconds,
-                    workspace,
-                    detection,
-                )
-                if config.development_detail
-                else RuntimeMetrics.unavailable()
-            ),
         )
     except Exception as exc:
         return FailedInput(
@@ -323,15 +223,5 @@ def _process_one_scoped(
             error_message=str(exc),
             artifacts=artifacts,
             traceback_text=traceback.format_exc(),
-            metrics=(
-                _metrics(
-                    started_at,
-                    detection_seconds,
-                    workspace,
-                    detection,
-                )
-                if config.development_detail
-                else RuntimeMetrics.unavailable()
-            ),
             error_errno=(exc.errno if isinstance(exc, OSError) else None),
         )

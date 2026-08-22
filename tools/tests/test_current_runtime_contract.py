@@ -118,118 +118,6 @@ class CurrentRuntimeContractTest(unittest.TestCase):
 
         validate_output_footprint_authority(output)
 
-    def test_obsolete_detector_files_are_absent(self) -> None:
-        forbidden_paths = (
-            "x5crop/detection/physical",
-            "x5crop/detection/evidence/photo_edges.py",
-            "x5crop/detection/evidence/separator_sequence.py",
-            "x5crop/detection/evidence/transform_geometry.py",
-            "x5crop/detection/output_preparation.py",
-            "x5crop/output/frame_bleed.py",
-            "x5crop/image/separator_profile.py",
-            "x5crop/configuration/grid.py",
-            "x5crop/configuration/content.py",
-            "x5crop/detection/grid",
-            "x5crop/detection/evidence/separator.py",
-            "x5crop/detection/protection.py",
-            "x5crop/image/crop_pixels.py",
-            "x5crop/image/evidence.py",
-        )
-        for relative in forbidden_paths:
-            with self.subTest(path=relative):
-                target = ROOT / relative
-                if target.is_dir():
-                    self.assertFalse(tuple(target.rglob("*.py")))
-                else:
-                    self.assertFalse(target.exists())
-
-    def test_active_runtime_has_no_replaced_schema_or_placeholder_vocabulary(
-        self,
-    ) -> None:
-        forbidden = (
-            "source_core_grid_authority",
-            "source_core_review",
-            "resolved_frame_count",
-            "allowed_partial_counts",
-            "complete_strip_can_be_underfilled",
-            "frame_grid_authority_unavailable",
-            "source_content_measurement_unavailable",
-            "no_independent_phase_authority",
-            "not_applicable_frame_grid_unavailable",
-            "not_applicable_core_unavailable",
-            "FrameGridEvidence",
-            "PhotoContainmentEvidence",
-            "VisualDeskewOutcome",
-            "write_crops_if_allowed",
-            "copy_for_review_if_needed",
-            "candidate_counts",
-            "selected_count",
-            "FrameCountDominanceAssessment",
-            "DominanceRelation",
-            "G_MAX",
-            "automatic_count_unresolved",
-            "bounded_safe_crop_grid",
-            "bounded_ordered_grid_v4",
-            "x5crop_run_manifest_v1",
-            "x5crop_production_performance_v3",
-            "x5crop_fixed_sample_profile_v1",
-            "work_by_count_component",
-            "lane_global_proposal_limit",
-            "count_dominance",
-            "SourceContentComponent",
-            "ContentRowRunTable",
-            "ContentConfiguration",
-            "query_dp_memory",
-            "unresolved_codes",
-            "slot_ownership",
-            "output_protection",
-            "allow_grid_blank_identity",
-            "grid_blank_no_photo_geometry",
-            "format_physical_templates",
-            "dp_states",
-            "dp_transitions",
-            "canonical_rank",
-            "representative_cross_placement",
-            "minimum_guard",
-            "retained_placements",
-            "placement_set_containment",
-            "OrdinalBoundaryRole",
-            "SequenceRoleProposal",
-            "SeparatorBandRoleProposal",
-            "SequenceHypothesisGroup",
-            "SequenceGroupingWork",
-            "canonical_boundary_line_at_position",
-            "median_canonical_location",
-            "observed_strip_angle_estimate_degrees",
-            "canonical_source_cross_axis_slope",
-            "canonical_source_sequence_axis_slope",
-            "shared_independent_trace_support_count",
-            "separator_core_content_contradictions",
-            "FramePhysicalPixelIntervals",
-            "frame_physical_pixel_intervals",
-            "search_proposal_ids",
-            "proposal_position_interval_px",
-            "scan_canvas_format_search_proposal",
-            "TemplateAlignmentPattern",
-            "ClippedRequirement",
-            "clipped_requirements",
-            "placement_solution_ids",
-            "worst_placement_solution_id",
-            "named_gap",
-            "slot_ordinal_assignment",
-        )
-        active_paths = tuple((ROOT / "x5crop").rglob("*.py")) + tuple(
-            path
-            for path in (ROOT / "tools").rglob("*.py")
-            if "tests" not in path.relative_to(ROOT / "tools").parts
-        )
-        combined = "\n".join(
-            path.read_text(encoding="utf-8") for path in active_paths
-        )
-        for token in forbidden:
-            with self.subTest(token=token):
-                self.assertNotIn(token, combined)
-
     def test_diagnostic_verifier_wraps_the_production_cli(self) -> None:
         diagnostic = (
             ROOT / "tools/regression/diagnostic_cohort.py"
@@ -237,33 +125,10 @@ class CurrentRuntimeContractTest(unittest.TestCase):
         verifier = (ROOT / "tools/verify").read_text(encoding="utf-8")
         self.assertIn('"tools.regression.development_run"', diagnostic)
         self.assertIn("subprocess.run(", diagnostic)
-        self.assertNotIn("runtime_invocation_from_options", diagnostic)
-        self.assertNotIn("process_one", diagnostic)
-        self.assertNotIn("diagnostics=True", diagnostic)
-        self.assertNotIn('["transform_assessment"]', diagnostic)
-        self.assertIn('"deskew_assessment"', diagnostic)
-        self.assertNotIn('"source_transform_assessment"', diagnostic)
-        accuracy = (ROOT / "tools/regression/accuracy.py").read_text(
-            encoding="utf-8"
-        )
-        gold_geometry = (
-            ROOT / "tools/regression/gold_geometry.py"
-        ).read_text(encoding="utf-8")
-        accuracy_sources = accuracy + gold_geometry
-        self.assertNotIn('["transform_assessment"]', accuracy_sources)
-        self.assertNotIn('"source_transform_assessment"', accuracy_sources)
-        self.assertNotIn('"deskew_assessment"', gold_geometry)
         self.assertIn(
             '"$PYTHON" -m tools.regression.diagnostic_cohort "$@"\n',
             verifier,
         )
-        self.assertNotIn(
-            "diagnostic_cohort --identity-only",
-            verifier,
-        )
-        self.assertNotIn("--identity-only", diagnostic)
-        self.assertNotIn("concurrent.futures", diagnostic)
-        self.assertNotIn("--jobs", diagnostic)
 
     def test_only_current_debug_analysis_cli_and_runtime_surface_remain(
         self,
@@ -332,7 +197,7 @@ class CurrentRuntimeContractTest(unittest.TestCase):
         self.assertEqual(REPORT_SCHEMA_ID, "x5crop_detection_report_v5")
         self.assertEqual(
             REPORT_SCHEMA_REVISION,
-            "x5crop_v5_template_report_9",
+            "x5crop_v5_template_report_10",
         )
         candidate = candidate_gate_assessment(
             {

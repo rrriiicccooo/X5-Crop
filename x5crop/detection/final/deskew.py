@@ -60,7 +60,7 @@ class OutputDeskewAssessment:
 
 
 def assess_output_deskew(
-    observation: LightweightDeskewObservation,
+    observation: LightweightDeskewObservation | None,
     *,
     layout: str,
     source_width: int,
@@ -68,13 +68,21 @@ def assess_output_deskew(
 ) -> OutputDeskewAssessment:
     """Turn one optional observation into an identity or expanded rotation."""
 
-    if not isinstance(observation, LightweightDeskewObservation):
-        raise TypeError("output deskew requires its canonical observation")
     if layout not in {"horizontal", "vertical"}:
         raise ValueError(f"unsupported deskew layout: {layout}")
     if min(source_width, source_height) <= 0:
         raise ValueError("output deskew requires a positive source extent")
     identity = AffineCoordinateTransform.identity(source_width, source_height)
+    if observation is None:
+        return OutputDeskewAssessment(
+            deskew_applied=False,
+            observed_angle_degrees=None,
+            applied_source_rotation_degrees=None,
+            skip_reason=DeskewSkipReason.OUTPUT_NOT_ELIGIBLE,
+            transform=identity,
+        )
+    if not isinstance(observation, LightweightDeskewObservation):
+        raise TypeError("output deskew requires its canonical observation")
     if observation.state == EvidenceState.UNAVAILABLE:
         if observation.skip_reason is None:
             raise ValueError("unavailable deskew lacks its typed skip reason")

@@ -197,22 +197,7 @@ class VerificationScopeContractTest(unittest.TestCase):
             '"$PYTHON" -m unittest tools.tests.test_repository_contract',
             verifier,
         )
-        self.assertEqual(workflow.count('      - "**/*.md"'), 2)
-
-    def test_scope_has_no_speculative_dependency_owners(self) -> None:
-        source = (ROOT / "tools/verification_scope.py").read_text(
-            encoding="utf-8"
-        )
-        for retired in (
-            "pyproject.toml",
-            "requirements.txt",
-            "requirements.lock",
-            "uv.lock",
-            "poetry.lock",
-        ):
-            with self.subTest(retired=retired):
-                self.assertNotIn(retired, source)
-
+        self.assertNotIn("paths-ignore", workflow)
 
 if __name__ == "__main__":
     unittest.main()

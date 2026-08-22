@@ -9,8 +9,11 @@ is different from this V5 preview.
 
 Obtain the complete repository checkout, then run its platform installer:
 
-- macOS: `install/X5_Crop_Mac_install.command`
-- Windows: `install/X5_Crop_win_install.bat`
+- macOS: `tools/install/X5_Crop_Mac_install.command`
+- Windows: `tools/install/X5_Crop_win_install.bat`
+
+The same installers are under `install/`, without the `tools/` prefix, in a
+future V5 release package.
 
 Setup finds Python 3.12–3.14, reuses suitable dependencies, and installs only
 missing items. Homebrew is not required, and no private environment is created.

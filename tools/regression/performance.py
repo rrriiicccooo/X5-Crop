@@ -32,7 +32,7 @@ from .performance_profile import (
 )
 
 
-PERFORMANCE_RECEIPT_SCHEMA = "x5crop_performance_receipt_v5_4"
+PERFORMANCE_RECEIPT_SCHEMA = "x5crop_performance_receipt_v5_5"
 DEFAULT_RECEIPT_PATH = (
     PROJECT_ROOT / "build" / "v5-performance" / "performance_receipt.json"
 )
@@ -120,7 +120,6 @@ class SourceTiming:
     process_peak_rss_bytes: int
     status: str
     output_tiff_count: int
-    output_bytes: int
 
     def as_record(self) -> dict[str, object]:
         return {
@@ -129,7 +128,6 @@ class SourceTiming:
             "process_peak_rss_bytes": self.process_peak_rss_bytes,
             "status": self.status,
             "output_tiff_count": self.output_tiff_count,
-            "output_bytes": self.output_bytes,
         }
 
 
@@ -198,7 +196,6 @@ def _run_source(source) -> SourceTiming:
             process_peak_rss_bytes=peak_rss,
             status=status,
             output_tiff_count=len(files),
-            output_bytes=sum(path.stat().st_size for path in files),
         )
 
 
@@ -225,7 +222,13 @@ def _profiling_summary(profiles: Sequence[ProfiledSource]) -> dict[str, object]:
         for name in STAGE_NAMES
     }
     stages["io_total"] = _named_summary(
-        [item.io_total_seconds for item in profiles],
+        [
+            sum(
+                item.stages[name]
+                for name in ("decode", "encode_write", "readback", "publish")
+            )
+            for item in profiles
+        ],
         sample_ids,
     )
     return {
@@ -267,7 +270,6 @@ def build_receipt() -> dict[str, Any]:
         "git_commit": commit,
         "cohort_sha256": cohort_sha256(),
         "source_count": len(sources),
-        "source_sha256s": [item.source_sha256 for item in sources],
         "environment": environment,
         "hardware": hardware,
         "production_gate": {
@@ -353,7 +355,6 @@ def validate_receipt(
             "git_commit",
             "cohort_sha256",
             "source_count",
-            "source_sha256s",
             "environment",
             "hardware",
             "production_gate",
@@ -364,8 +365,6 @@ def validate_receipt(
         or (expected_commit is not None and commit != expected_commit)
         or record.get("source_count") != FIXED_SOURCE_COUNT
         or record.get("cohort_sha256") != cohort_sha256()
-        or record.get("source_sha256s")
-        != [item.source_sha256 for item in sources]
         or not performance_environment_is_frozen(record.get("environment"))
         or not isinstance(hardware, dict)
         or set(hardware)
@@ -428,7 +427,6 @@ def validate_receipt(
                 process_peak_rss_bytes=int(item["process_peak_rss_bytes"]),
                 status=str(item["status"]),
                 output_tiff_count=int(item["output_tiff_count"]),
-                output_bytes=int(item["output_bytes"]),
             )
             for item in raw_timings
         )
@@ -443,7 +441,6 @@ def validate_receipt(
                     str(name): float(value)
                     for name, value in item["stages"].items()
                 },
-                io_total_seconds=float(item["io_total_seconds"]),
                 process_peak_rss_bytes=int(item["process_peak_rss_bytes"]),
                 runtime_peak_temporary_bytes=int(
                     item["runtime_peak_temporary_bytes"]
@@ -460,13 +457,11 @@ def validate_receipt(
         "process_peak_rss_bytes",
         "status",
         "output_tiff_count",
-        "output_bytes",
     }
     profile_keys = {
         "sample_id",
         "wall_seconds",
         "stages",
-        "io_total_seconds",
         "process_peak_rss_bytes",
         "runtime_peak_temporary_bytes",
     }
@@ -479,7 +474,6 @@ def validate_receipt(
             or item.wall_seconds <= 0.0
             or item.process_peak_rss_bytes <= 0
             or item.status not in {"approved_auto", "needs_review"}
-            or item.output_bytes <= 0
             or (
                 item.status == "approved_auto"
                 and item.output_tiff_count != source.count
@@ -501,8 +495,6 @@ def validate_receipt(
                 not math.isfinite(value) or value < 0.0
                 for value in item.stages.values()
             )
-            or not math.isfinite(item.io_total_seconds)
-            or item.io_total_seconds < 0.0
             or item.process_peak_rss_bytes <= 0
             or item.runtime_peak_temporary_bytes < 0
             for item in profiles

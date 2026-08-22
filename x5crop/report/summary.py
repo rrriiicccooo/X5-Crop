@@ -27,9 +27,6 @@ def measurement_summary(detection: object, workspace: object) -> dict[str, Any]:
         "layout": field.layout,
         "scan_canvas_state": detection.source_core.scan_canvas_state.value,
         "incomplete_reasons": list(detection.source_core.incomplete_reasons),
-        "output_deskew_observation": typed_read_model(
-            workspace.deskew_observation
-        ),
     }
 
 

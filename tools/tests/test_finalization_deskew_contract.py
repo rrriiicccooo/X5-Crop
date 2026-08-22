@@ -185,19 +185,23 @@ class FinalizationDeskewContractTest(unittest.TestCase):
         self.assertLessEqual(box.right, transform.output_extent.width)
         self.assertLessEqual(box.bottom, transform.output_extent.height)
 
-    def test_review_reports_assessment_but_exposes_no_official_geometry(
+    def test_review_skips_measurement_and_exposes_no_official_geometry(
         self,
     ) -> None:
         detection = finalize_detection(
             _candidate(),
             SimpleNamespace(status="needs_review"),
-            _supported_observation(0.75),
+            None,
             layout="horizontal",
             source_width=1000,
             source_height=100,
         )
 
-        self.assertTrue(detection.deskew_assessment.deskew_applied)
+        self.assertFalse(detection.deskew_assessment.deskew_applied)
+        self.assertEqual(
+            detection.deskew_assessment.skip_reason,
+            DeskewSkipReason.OUTPUT_NOT_ELIGIBLE,
+        )
         self.assertEqual(detection.output_transforms, ())
         self.assertEqual(detection.output_footprints, ())
         self.assertEqual(detection.sampling_authority_boxes, ())

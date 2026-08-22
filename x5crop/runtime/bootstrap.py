@@ -76,9 +76,7 @@ def runtime_invocation_from_options(options: RuntimeOptions) -> RuntimeInvocatio
     files = iter_input_files(options.input_path)
     if not files:
         raise ValueError(f"No TIFF files found: {options.input_path}")
-    count_request = SlotCountRequest.from_user_input(
-        options.requested_count,
-    )
+    count_request = SlotCountRequest(options.requested_count)
     configuration = get_detection_configuration(
         options.format_id,
         options.requested_count,

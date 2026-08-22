@@ -98,10 +98,10 @@ selected-only budget 决定是否安全，而不是制造新的方向失败。
 保护。Sequence 不能拥有输出 deskew，也不能在已有足够 direct anchor 闭合全秩解时重标定 phase、
 W 或 pitch。超过预算就 review，不建立逐帧角度、自由四边形或曲线 detector。
 
-输出 deskew 是与模板无关的 role-free 旁路 observation：在整条片带的 6–24 个有界稀疏位置读取
-最外侧暗边，两侧分别稳健拟合，只有两侧 slope 相容、residual 合格且角度在产品范围内时才产生
-一个角度。它不识别 holder、film 或 photo edge，不可用或矛盾时返回 typed skip reason 和 `None`，
-绝不伪造 `0°`。这份 observation 只在 `DecisionGate` 之后由 finalization 消费。
+输出 deskew 是与模板无关的 role-free 旁路 observation。只有 `DecisionGate` 已批准输出时，
+finalization 才在整条片带的 6–24 个有界稀疏位置读取最外侧暗边；review 不执行这项扫描。两侧分别
+稳健拟合，只有 slope、residual 和角度范围相容时才产生角度。它不识别 holder、film 或 photo edge，
+不可用或矛盾时返回 typed skip reason 和 `None`，绝不伪造 `0°`。
 
 ## 5. 从整体到局部的模板编译
 
@@ -341,8 +341,9 @@ aperture 单边 5%；它只接受上节的总 span `<= 1.1H`。Start/end 仍使�
 polygon 完整位于 lane authority；任一真正所需区域越界都按 authority side 保存一个 saturation fact
 并进入 review。
 
-Decision 后 finalization 才评估 lightweight deskew。Observation 不可用时使用 identity 且不降级；
-有效角度在 source pixel-center 长轴上的端点位移小于 3 px 时也使用 identity，并记录
+Decision 后 finalization 才执行并评估 lightweight deskew。`needs_review` 不扫描，记录
+`output_not_eligible`；approved observation 不可用时使用 identity 且不降级。有效角度在 source
+pixel-center 长轴上的端点位移小于 3 px 时也使用 identity，并记录
 `rotation_not_needed`。其余情况横向 layout 使用观测角的反号、纵向 layout 使用同号构造 expanded
 rotation。每个已经确认安全的 polygon 与 source 使用同一 affine transform，正式轴对齐 box 由旋转后
 polygon 的精确半开 AABB 得到，不能先把 polygon 扩成 source AABB，也不能继续裁固定 W×H。
@@ -371,8 +372,8 @@ complete/selected placement 后重复建立同义 Gate fact。它不读取 deske
 
 普通 report 只保存输入、holder/count authority、最终选择、OutputFootprint、预算、根因、输出文件
 和必要 TIFF 事实。Saturation 只记录越界 `authority_side`；每项预算只按 output `geometry_id` 关联，
-不保留不可达的多 placement 或 named-gap 容器。Report 始终保存 `deskew_assessment`：是否应用、观测角、
-实际旋转或 typed skip reason。
+不保留不可达的多 placement 或 named-gap 容器。Report 只保存最终 `deskew_assessment`：是否应用、
+观测角、实际旋转或 typed skip reason，不重复保存旁路 observation。
 `needs_review` 仍不暴露 official footprints、transforms 或 final boxes。每个阻止事实同时给出最小缺失事实、恢复类别和建议操作。完整 observations、
 alignment residual、winner/runner、direct/inferred ledger、content veto 和工作量只属于显式 Debug
 Analysis 或 verifier。
@@ -413,14 +414,15 @@ query 或 content-driven placement。
 临时测量缓冲，不代表进程 RSS。Profiler 将完整路径拆成：
 
 ```text
-startup/import → TIFF decode → gray/coarse support
-→ registered measurement → template alignment/decision
+unattributed runtime → TIFF decode → workspace gray → coarse support
+→ registered measurement → template alignment/decision → output deskew
 → sampling → TIFF encode/write → readback → publish
 ```
 
 Detector 只消费 8-bit gray、稀疏 aggregate profile 与有界局部窗口；正式输出仍从已验证的原始
-16-bit RGB 通过每-frame 反向 affine ROI 采样，不先旋转整张大图。是否继续拆分 decode、优化
-detector、sampling 或 I/O 只由阶段证据决定。
+16-bit RGB 通过每-frame 反向 affine ROI 采样，不先旋转整张大图。普通 product path 在 deskew 和
+workspace-owned report facts 冻结后、TIFF sampling 前释放 registered gray；Debug/development 为读取
+同次事实而保留。是否继续拆分 decode、优化 detector、sampling 或 I/O 只由阶段证据决定。
 
 开发用 measurement replay 只保存 source SHA、format/count/holder、measurement revision、物理与
 plan identity、精确 phase/cross 输入及 coverage receipt。它可以在不重读 TIFF 的情况下复跑纯 solver
@@ -460,7 +462,7 @@ Pillow 只在 Debug Analysis 时延迟导入。生产默认 `--jobs 1`、上限 
 | `photo_geometry/template_feasible_geometry.py` | selected placement 的低维联合可行集合 |
 | `photo_geometry/template_output.py`、`output_model.py` | JointPlacementEnvelope、bleed、OutputFootprint 与 budget |
 | `photo_geometry/template_runtime_model.py`、`template_gate.py`、`detector.py` | current-only handoff、CandidateGate facts 与顶层编排 |
-| `x5crop/detection/output_deskew.py` | 6–24 trace、role-free、candidate-independent 的可选输出角度 observation |
+| `x5crop/detection/output_deskew.py` | approved-only 6–24 trace、role-free、candidate-independent 的可选输出角度 observation |
 | `x5crop/detection/decision/`、`final/` | 最终决定、Decision 后 deskew assessment 与 approved geometry exposure |
 | `x5crop/report/` | compact production report 与 development facts |
 | `x5crop/debug/` | 只读诊断 facts 与面板 |
@@ -469,11 +471,10 @@ Pillow 只在 Debug Analysis 时延迟导入。生产默认 `--jobs 1`、上限 
 
 ## 14. 验证边界
 
-- 九张用户确认黄金判断几何准确性，当前九项均为 nominal，必须安全自动批准。Accuracy 对任何
-  已选 candidate 的 footprint 先做与 final status 无关的黄金覆盖检查；只有不存在 selected
-  candidate 的安全 review 不产生几何 verdict，`approved_auto` 仍须另外验证正式输出的覆盖与预算。
-  Cosmetic deskew 精度不再是黄金阻断条件，但 affine polygon envelope 与 TIFF 安全合同仍阻断。
-  任何黄金不得错误自动通过；未来 challenge 从安全 review 变为正确批准是改进。
+- 用户确认黄金判断几何准确性；nominal 必须安全自动批准，challenge 允许安全 review。Accuracy 对
+  任何已选 candidate 的 footprint 先做与 final status 无关的黄金覆盖检查；只有不存在 selected
+  candidate 的安全 review 不产生几何 verdict，`approved_auto` 仍须另外验证正式输出覆盖与预算。
+  Cosmetic deskew 精度不阻断黄金；affine polygon envelope 与 TIFF 安全合同仍阻断。
 - 111-source diagnostic 只证明不崩溃、工作量有界、报告闭合和 TIFF 工程合同，不证明几何正确。
 - 24-source performance 只证明其绑定 commit、依赖和机器上的完整路径时间与资源；5 秒均值是
   blocking Gate，3 秒均值只是 non-blocking challenge。

@@ -5,11 +5,11 @@ from __future__ import annotations
 import concurrent.futures
 from pathlib import Path
 import sys
+from typing import Any
 
 from ..app_info import SCRIPT_NAME, VERSION
 from ..output.publication import FreshOutputDirectory, FreshOutputError
 from ..output.surface import output_directory_for
-from ..report.model import ReportResult
 from ..report.outputs import write_report_outputs_for_result
 from .invocation import PlannedSource, RuntimeInvocation
 from .outcome import FailedInput, InputProcessingOutcome, RuntimeArtifacts
@@ -37,8 +37,8 @@ def print_run_header(invocation: RuntimeInvocation, output_root: Path) -> None:
     print(f"output: {output_root}")
 
 
-def print_report_result(result: ReportResult, artifacts: RuntimeArtifacts) -> None:
-    record = result.record
+def print_report_result(result: dict[str, Any], artifacts: RuntimeArtifacts) -> None:
+    record = result
     print(f"  status={record['decision']['status']}")
     for warning in record["output"]["warnings"]:
         print(f"  info: {warning}")
@@ -130,7 +130,6 @@ def _discard_failed_artifacts(
         error_message=outcome.error_message,
         artifacts=RuntimeArtifacts.empty(),
         traceback_text=outcome.traceback_text,
-        metrics=outcome.metrics,
         error_errno=outcome.error_errno,
     )
 

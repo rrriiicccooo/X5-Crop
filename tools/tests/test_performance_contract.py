@@ -62,17 +62,18 @@ class V5PerformanceContractTest(unittest.TestCase):
     def test_receipt_revision_is_current_only(self) -> None:
         self.assertEqual(
             PERFORMANCE_RECEIPT_SCHEMA,
-            "x5crop_performance_receipt_v5_4",
+            "x5crop_performance_receipt_v5_5",
         )
         self.assertEqual(
             STAGE_NAMES,
             (
-                "startup_import_unattributed",
+                "unattributed_runtime",
                 "decode",
                 "workspace_gray",
                 "coarse_support",
                 "registered_measurement",
                 "template_alignment_decision",
+                "output_deskew",
                 "sampling",
                 "encode_write",
                 "readback",
@@ -125,7 +126,6 @@ class V5PerformanceContractTest(unittest.TestCase):
             "git_commit": commit,
             "cohort_sha256": cohort_sha256(),
             "source_count": 24,
-            "source_sha256s": [item.source_sha256 for item in sources],
             "environment": self._environment(),
             "hardware": {
                 "machine_name": "named-machine",
@@ -169,7 +169,6 @@ class V5PerformanceContractTest(unittest.TestCase):
                         "process_peak_rss_bytes": 1024,
                         "status": "needs_review",
                         "output_tiff_count": 1,
-                        "output_bytes": 1024,
                     }
                     for item in sources
                 ],
@@ -207,7 +206,6 @@ class V5PerformanceContractTest(unittest.TestCase):
                         "sample_id": item.sample_id,
                         "wall_seconds": 5.0,
                         "stages": {name: 0.1 for name in STAGE_NAMES},
-                        "io_total_seconds": 0.4,
                         "process_peak_rss_bytes": 1024,
                         "runtime_peak_temporary_bytes": 512,
                     }

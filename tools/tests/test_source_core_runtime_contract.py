@@ -97,7 +97,7 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
             )
         self.assertIsInstance(outcome, CompletedInput)
         assert isinstance(outcome, CompletedInput)
-        record = outcome.result.record
+        record = outcome.result
         self.assertEqual(record["schema_id"], REPORT_SCHEMA_ID)
         self.assertEqual(record["schema_revision"], REPORT_SCHEMA_REVISION)
         self.assertEqual(record["decision"]["status"], "needs_review")
@@ -143,7 +143,7 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
             )
         self.assertIsInstance(outcome, CompletedInput)
         assert isinstance(outcome, CompletedInput)
-        self.assertEqual(outcome.result.record["decision"]["status"], "needs_review")
+        self.assertEqual(outcome.result["decision"]["status"], "needs_review")
         self.assertEqual(outcome.artifacts.frame_outputs, ())
 
     def test_explicit_count_equal_to_holder_count_has_no_center_authority(
@@ -158,7 +158,7 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
             )
         self.assertIsInstance(outcome, CompletedInput)
         assert isinstance(outcome, CompletedInput)
-        resolved = outcome.result.record["photo_geometry"]["resolved_slot_count"]
+        resolved = outcome.result["photo_geometry"]["resolved_slot_count"]
         self.assertEqual(resolved["output_count"], 2)
         self.assertEqual(resolved["holder_full_count"], 2)
         self.assertEqual(
@@ -176,7 +176,7 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
             )
         self.assertIsInstance(outcome, CompletedInput)
         assert isinstance(outcome, CompletedInput)
-        record = deepcopy(outcome.result.record)
+        record = deepcopy(outcome.result)
         record["output"]["tiff_fidelity"]["validation"] = "pixel_validated"
         with self.assertRaises(ValueError):
             validate_current_report_record(record)
@@ -189,7 +189,7 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
             )
         self.assertIsInstance(outcome, CompletedInput)
         assert isinstance(outcome, CompletedInput)
-        record = outcome.result.record
+        record = outcome.result
         self.assertEqual(record["decision"]["status"], "needs_review")
         self.assertIn(
             FINAL_REASON_NO_LEGAL_PLACEMENT,
@@ -258,7 +258,7 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
             self.assertIsInstance(analysis_outcome, CompletedInput)
             assert isinstance(analysis_outcome, CompletedInput)
             self.assertFalse(
-                analysis_outcome.result.record["output"]["finalization"][
+                analysis_outcome.result["output"]["finalization"][
                     "frame_export_requested"
                 ]
             )
@@ -281,7 +281,7 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
             self.assertIsInstance(normal_outcome, CompletedInput)
             assert isinstance(normal_outcome, CompletedInput)
             self.assertTrue(
-                normal_outcome.result.record["output"]["finalization"][
+                normal_outcome.result["output"]["finalization"][
                     "frame_export_requested"
                 ]
             )
@@ -322,11 +322,11 @@ class SourceCoordinateRuntimeContractTest(unittest.TestCase):
             )
             self.assertIsInstance(outcome, CompletedInput)
             assert isinstance(outcome, CompletedInput)
-            self.assertEqual(analysis_outcome.result.record["detail_level"], "development")
-            self.assertIsNotNone(analysis_outcome.result.record["development"])
-            self.assertEqual(outcome.result.record["detail_level"], "production")
-            self.assertIsNone(outcome.result.record["development"])
-            production_geometry = outcome.result.record["photo_geometry"]
+            self.assertEqual(analysis_outcome.result["detail_level"], "development")
+            self.assertIsNotNone(analysis_outcome.result["development"])
+            self.assertEqual(outcome.result["detail_level"], "production")
+            self.assertIsNone(outcome.result["development"])
+            production_geometry = outcome.result["photo_geometry"]
             self.assertNotIn(
                 "legal_combination_count",
                 production_geometry["source_placement_selection"],
