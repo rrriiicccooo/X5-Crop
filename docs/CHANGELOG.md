@@ -44,7 +44,8 @@ materialization、平行 detector 和 report reuse 均不再支持。
 
 - Registered gray 直接从 uint16 RGB 分块计算，复用两个 float32 luma plane 和一个 float64
   normalization plane；逐像素结果保持不变。普通 product path 在 report facts 冻结后、TIFF
-  sampling 前释放整张 registered gray，Debug/development 保留同次诊断事实。
+  sampling 前释放整张 registered gray；development CLI 也在冻结完整 facts 后释放，只有 Debug
+  Analysis 为画图保留。
 - Final geometry、Gate facts 和 report record 由 canonical owner 直接导出，不再复制候选状态或使用
   单字段 wrapper。无消费者的 `RuntimeMetrics` 已删除；工作量与时间分别由 report 和 performance
   receipt 拥有。测试删除旧文件名、旧 schema 和任意模块行数上限等历史墓碑；物理反例合同保留。

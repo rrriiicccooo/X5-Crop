@@ -421,8 +421,9 @@ unattributed runtime → TIFF decode → workspace gray → coarse support
 
 Detector 只消费 8-bit gray、稀疏 aggregate profile 与有界局部窗口；正式输出仍从已验证的原始
 16-bit RGB 通过每-frame 反向 affine ROI 采样，不先旋转整张大图。普通 product path 在 deskew 和
-workspace-owned report facts 冻结后、TIFF sampling 前释放 registered gray；Debug/development 为读取
-同次事实而保留。是否继续拆分 decode、优化 detector、sampling 或 I/O 只由阶段证据决定。
+workspace-owned report facts 冻结后、TIFF sampling 前释放 registered gray；development CLI 同样先
+冻结完整 facts 再释放，只有 Debug Analysis 为画图保留。是否继续拆分 decode、优化 detector、
+sampling 或 I/O 只由阶段证据决定。
 
 开发用 measurement replay 只保存 source SHA、format/count/holder、measurement revision、物理与
 plan identity、精确 phase/cross 输入及 coverage receipt。它可以在不重读 TIFF 的情况下复跑纯 solver
