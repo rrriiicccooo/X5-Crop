@@ -7,8 +7,8 @@
 ## 产品行为
 
 X5 Crop 把输入看成“已知格式模板的自动对准”，而不是通用照片边界识别。用户提供 format 和
-照片格数；程序使用固定物理宽高、照片组 outer、separator、局部 frame geometry 和二维内容保护
-来放置模板。只有整张 source 的全部 slot 都能安全输出时才写正式照片，否则整张进入
+照片格数；程序使用固定物理宽高、照片组 outer、separator、source-axis frame geometry 和二维
+内容保护来放置模板。只有整张 source 的全部 slot 都能安全输出时才写正式照片，否则整张进入
 `needs_review`，不做局部挽救。
 
 程序不从文件名、画面内容或片夹容量猜 format 或真实照片数。Count 包括中间空白曝光格；空白格
@@ -60,16 +60,15 @@ advance：异常点以后的照片整体移动一次，后续仍恢复共同 pit
 位移、接触或 overlap 时保持 `needs_review`。当前没有用户确认的 overlap 黄金，因此 V5 不自动
 批准叠片，也不启用特殊 overlap bleed。
 
-### 局部几何、轻微弯曲与可选 deskew
+### Source-axis 几何、轻微弯曲与可选 deskew
 
-检测中的方向只用于在 source 坐标中包住当前 placement 的安全 frame polygon。局部 top/bottom
-负责 fixed H、短轴位置和这个局部 frame axis；sequence 最多帮助约束 polygon 的保守方向范围，
-不能决定输出旋转。双 lane 的局部方向也可以不同。
+检测 placement 没有角度：start/end 与 aperture top/bottom 始终沿 source axes。Cross 的局部方向只
+证明 fragment 连续、两侧相容，并计算安全保护；它不能旋转 frame、选择位置或决定输出 deskew。
+直接 aperture 边只可在自己实际采样的 trace 范围内投影短轴位置，未覆盖的 frame 不沿拟合线外推。
 
-轻微弯曲不建立曲线模型。只有已经证明角色正确、由直接像素连续覆盖整条片带，并且在剔除有界
-异常点后每条保留 trace 都一致证明同一内外关系的边界，才能保留其局部位置；它不能在已有足够
-直线边界时重标定全局模板。弯曲残差只进入胜出 placement 的安全范围。若所需保护超出预算，整张
-source 进入人工检查。每张照片不会拥有独立检测角度或自由四边形。
+轻微弯曲不建立曲线模型。逐 trace departure 只进入胜出 placement 的安全范围；直接 enclosing
+support 因自身就是最终 top/bottom，可以保留同一物理状态中的局部 slope。若所需保护超出预算，
+整张 source 进入人工检查。每张照片不会拥有独立检测角度或自由四边形。
 
 Deskew 是安全决定之后的可选整理。程序在整条片带 6–24 个稀疏位置读取最外侧暗边，两侧分别
 稳健拟合；只有两侧方向一致、拟合稳定时才旋转。它不判断检测到的是片夹边、胶片边还是照片边。
@@ -86,8 +85,8 @@ Deskew 是安全决定之后的可选整理。程序在整条片带 6–24 个�
 
 ### 照片 aperture
 
-有资格代表照片真实 top/bottom 的局部观察必须同时满足有限位置、局部共同方向、正确内外关系和固定
-H 闭环。可以使用：
+有资格代表照片真实 top/bottom 的局部观察必须同时满足有限位置、局部方向相容、正确内外关系和固定
+H 闭环。方向只证明这组 cross evidence，不会成为 placement angle。可以使用：
 
 - 直接 top 与 bottom；
 - 一条 source-wide 的直接边，加固定 H 推导另一侧；
@@ -134,9 +133,9 @@ start/end bleed = max(0.15 mm, 0.7% W)
 top/bottom bleed = 0.25 mm
 ```
 
-程序先保留同一个胜出 placement 的所有联合可行状态，包括 phase、pitch、direction、cross、
-一次局部位移和直线残差，再加入 bleed。它不会把互相不能同时发生的各项最大误差简单相加，也
-不会合并 runner-up。
+程序先保留同一个胜出 placement 的所有联合可行状态，包括 phase、pitch、cross、一次局部位移和
+直线残差；直接 enclosing pair 还保留自己的 same-state slope，然后再加入 bleed。它不会把互相
+不能同时发生的各项最大误差简单相加，也不会合并 runner-up。
 
 使用 aperture 的自动输出上限是四边各自最多扩张 format 对应尺寸的 5%。这 5% 包含测量不确定性、
 直线残差和 bleed；四边不能互借额度。以 36 mm 宽的 135 为例，正常 start/end bleed 是
@@ -150,9 +149,9 @@ top/bottom bleed = 0.25 mm
 polygon 超出可采样范围，或者任一边超过对应预算，整张 source 就进入 `needs_review`。Decision
 后的 deskew 包络角落不反向改变这一安全结论。
 
-二维内容只回答“当前输出会不会明显切进真实照片内容”。它不能移动边界、平分照片、创造
-placement 或替某个候选加分。角落极小擦边、锯齿和尘点保持中性；连续跨过完整边界的不安全内容
-才会否决自动输出。
+二维内容只对最终 post-residual、post-bleed polygon 回答“当前输出会不会明显切进真实照片内容”。
+画面超出 nominal frame 但仍位于 bleed 内可以通过；只有可靠内容越过最终 crop 边界才否决。内容
+不能移动边界、平分照片、创造 placement 或替某个候选加分；角落极小擦边、锯齿和尘点保持中性。
 
 ## 安装开发源码
 

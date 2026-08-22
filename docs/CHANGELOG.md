@@ -21,12 +21,16 @@ materialization、平行 detector 和 report reuse 均不再支持。
 - Phase、pitch、cross、ordinal、content 和 holder fill 使用 typed physical authority。不同 placement
   保持竞争；不按强度、距离、holder center、总分或样片规则挑 winner。Contact、overlap、多异常和
   authority 不足继续 review。
-- Cross 只解决短轴 offset、fixed H 与局部 frame axis。`APERTURE_PAIR` 和完整包住 fixed H、总高度
-  不超过 `1.1H` 的 `ENCLOSING_SUPPORT_PAIR` 互斥；registered-lattice containment 的完整条件由
-  [架构第 8 节](ARCHITECTURE.md#8-crossouter-与固定-h)唯一说明。
+- Placement 不再拥有检测角度：sequence 只解决长轴 phase/pitch，cross 只解决短轴 offset、fixed H
+  和局部证据闭合。Aperture 边界保持 source-axis；局部 slope 只扩大输出保护，直接 enclosing pair
+  才保留自己的 same-state slope。`APERTURE_PAIR` 和总高度不超过 `1.1H` 的
+  `ENCLOSING_SUPPORT_PAIR` 互斥。
 - 安全层只处理唯一 selected placement 的联合可行状态。Aperture 四边完整 expansion 各自使用 5%
-  上限；enclosing top/bottom 使用 `1.1H` 合同。真正所需 polygon 越界时 review，不静默裁小。
-- 二维内容只作 negative veto，不能移动边界、选择 runner 或创造 phase。
+  上限；enclosing top/bottom 使用 `1.1H` 合同。完整 pixel-center span 被纳入最终 footprint；真正所需
+  polygon 越界时 review，不静默裁小。
+- 二维内容只在最终 post-residual、post-bleed polygon 上作 negative veto。画面落在 nominal frame
+  外但仍在 bleed 内可以通过；只有越过最终 crop 才否决。Content 不能移动边界、选择 runner 或创造
+  phase。
 
 ### 输出与报告
 
@@ -35,7 +39,7 @@ materialization、平行 detector 和 report reuse 均不再支持。
   placement、Gate 或黄金准确性。
 - Finalization 用同一个 affine transform 映射 source 与安全 polygon，再取精确半开 AABB；不得旋转
   后继续裁固定 W×H。AABB 在 polygon 外的角落允许为黑色 no-data。
-- Current report 为 `x5crop_v5_template_report_10`。它保存最终 deskew assessment，不重复保存旁路
+- Current report 为 `x5crop_v5_template_report_11`。它保存最终 deskew assessment，不重复保存旁路
   observation；official footprints、transforms 和 final boxes 只对 approved output 暴露。
 - 正式 TIFF 保留冻结输入域内的 16-bit RGB、ICC、resolution、metadata 和无损压缩，输出
   `Orientation=1`。全组先写 staging，全部成功后发布到尚不存在的目录。

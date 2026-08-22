@@ -746,26 +746,15 @@ class BoundaryMeasurementContractTest(unittest.TestCase):
             {item.observation_id for item in markers.values()},
         )
 
-    def test_canonical_direction_keeps_rotation_equivalent_slope_sign(self) -> None:
-        direction = SharedStripDirection(
-            direction_id="direction:slope-sign",
-            selected_observation_ids=(ObservationId("observation:slope-sign"),),
-            full_angle_interval_degrees=FiniteInterval(-0.3, -0.2),
-            observed_angle_interval_degrees=FiniteInterval(-0.3, -0.2),
-            canonical_angle_degrees=-0.25,
-        )
-        expected = np.tan(np.deg2rad(-0.25))
-
+    def test_canonical_output_boundary_is_source_axis_aligned(self) -> None:
         for long_axis, cross_axis in (
             (BoundaryAxis.X, BoundaryAxis.Y),
             (BoundaryAxis.Y, BoundaryAxis.X),
         ):
             with self.subTest(long_axis=long_axis):
                 cross_line = canonical_boundary_line(
-                    direction,
                     boundary_axis=cross_axis,
                     source_axis_long=long_axis,
-                    trace_coordinate_px=100.0,
                     position_px=20.0,
                     support_projection_px=FiniteInterval(0.0, 200.0),
                 )
@@ -778,10 +767,7 @@ class BoundaryMeasurementContractTest(unittest.TestCase):
                     )
                     / cross_line.normal_x
                 )
-                self.assertAlmostEqual(
-                    coordinate - 20.0,
-                    expected * 50.0,
-                )
+                self.assertEqual(coordinate, 20.0)
 
     def test_vertical_strip_preserves_source_slope_sign(self) -> None:
         measurement_set = make_side_measurement_set(

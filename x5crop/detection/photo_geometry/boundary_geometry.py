@@ -1,6 +1,7 @@
+"""Materialize source-axis crop boundaries and enclosing-support states."""
+
 from __future__ import annotations
 
-from dataclasses import dataclass
 import math
 
 from ...domain import FiniteInterval
@@ -9,87 +10,41 @@ from .model import (
     BoundaryAxis,
     BoundaryRole,
 )
-from .output_model import FrameBoundaryGeometry, SharedStripDirection
-
-
-@dataclass(frozen=True)
-class OutwardBoundaryProjection:
-    """Cheap exact projection of one retained discard-edge family."""
-
-    outward_position_px: float
-    reference_trace_px: float
-    slopes: tuple[float, float]
-
-    def coordinate_bounds(
-        self,
-        orthogonal_minimum_px: float,
-        orthogonal_maximum_px: float,
-    ) -> tuple[float, float]:
-        values = tuple(
-            self.outward_position_px
-            + slope * (orthogonal - self.reference_trace_px)
-            for slope in self.slopes
-            for orthogonal in (
-                orthogonal_minimum_px,
-                orthogonal_maximum_px,
-            )
-        )
-        return min(values), max(values)
-
-    def coordinate_interval(
-        self,
-        orthogonal_interval_px: FiniteInterval,
-    ) -> FiniteInterval:
-        return FiniteInterval(
-            *self.coordinate_bounds(
-                orthogonal_interval_px.minimum,
-                orthogonal_interval_px.maximum,
-            )
-        )
+from .output_model import FrameBoundaryGeometry
 
 
 def canonical_boundary_line(
-    direction: SharedStripDirection,
     *,
     boundary_axis: BoundaryAxis,
     source_axis_long: BoundaryAxis,
-    trace_coordinate_px: float,
     position_px: float,
     support_projection_px: FiniteInterval,
 ) -> SourceCoordinateLine:
-    angle = math.radians(direction.canonical_angle_degrees)
-    if boundary_axis == source_axis_long:
-        normal_x, normal_y = (
-            (math.cos(angle), math.sin(angle))
-            if source_axis_long == BoundaryAxis.X
-            else (math.sin(angle), math.cos(angle))
-        )
-    else:
-        normal_x, normal_y = (
-            (-math.sin(angle), math.cos(angle))
-            if source_axis_long == BoundaryAxis.X
-            else (math.cos(angle), -math.sin(angle))
-        )
-    offset = (
-        normal_x * position_px + normal_y * trace_coordinate_px
+    normal_x, normal_y = (
+        (1.0, 0.0)
         if boundary_axis == BoundaryAxis.X
-        else normal_x * trace_coordinate_px + normal_y * position_px
+        else (0.0, 1.0)
     )
     return SourceCoordinateLine(
         normal_x=normal_x,
         normal_y=normal_y,
-        offset_px=offset,
+        offset_px=position_px,
         support_projection_px=support_projection_px,
         source_axis_long=source_axis_long,
     )
+
 
 def boundary_line_at_state(
     boundary: FrameBoundaryGeometry,
     *,
     position_px: float,
-    angle_degrees: float,
+    enclosing_support_slope: float | None = None,
 ) -> SourceCoordinateLine:
-    """Materialize one retained position/direction state for a boundary."""
+    """Materialize one boundary state without creating a placement angle.
+
+    Only a directly observed enclosing support pair may retain its own local
+    slope. Aperture and sequence boundaries remain source-axis aligned.
+    """
 
     source_axis_long = boundary.line.source_axis_long
     boundary_axis = (
@@ -101,18 +56,17 @@ def boundary_line_at_state(
             else BoundaryAxis.X
         )
     )
-    angle = math.radians(angle_degrees)
-    if boundary_axis == source_axis_long:
-        normal_x, normal_y = (
-            (math.cos(angle), math.sin(angle))
-            if source_axis_long == BoundaryAxis.X
-            else (math.sin(angle), math.cos(angle))
-        )
+    if enclosing_support_slope is None:
+        normal_x = boundary.line.normal_x
+        normal_y = boundary.line.normal_y
     else:
+        if boundary.role not in {BoundaryRole.TOP, BoundaryRole.BOTTOM}:
+            raise ValueError("enclosing slope can only own cross boundaries")
+        norm = math.hypot(1.0, enclosing_support_slope)
         normal_x, normal_y = (
-            (-math.sin(angle), math.cos(angle))
+            (-enclosing_support_slope / norm, 1.0 / norm)
             if source_axis_long == BoundaryAxis.X
-            else (math.cos(angle), -math.sin(angle))
+            else (1.0 / norm, -enclosing_support_slope / norm)
         )
     offset_px = (
         normal_x * position_px + normal_y * boundary.reference_trace_px
@@ -125,34 +79,4 @@ def boundary_line_at_state(
         offset_px=offset_px,
         support_projection_px=boundary.line.support_projection_px,
         source_axis_long=source_axis_long,
-    )
-
-
-def outward_boundary_projection(
-    boundary: FrameBoundaryGeometry,
-) -> OutwardBoundaryProjection:
-    """Compile the final safe discard edge into strip-coordinate slopes.
-
-    JointPlacementEnvelope retains the outward position endpoint and both retained
-    direction endpoints.  The compiled projection is reused across all exact
-    content cells queried for that boundary.
-    """
-
-    outward_position = (
-        boundary.full_position_interval_px.minimum
-        if boundary.role in {BoundaryRole.TOP, BoundaryRole.START}
-        else boundary.full_position_interval_px.maximum
-    )
-    cross_boundary = boundary.role in {BoundaryRole.TOP, BoundaryRole.BOTTOM}
-    sign = 1.0 if cross_boundary else -1.0
-    return OutwardBoundaryProjection(
-        outward_position_px=outward_position,
-        reference_trace_px=boundary.reference_trace_px,
-        slopes=tuple(
-            sign * math.tan(math.radians(angle))
-            for angle in (
-                boundary.full_direction_interval_degrees.minimum,
-                boundary.full_direction_interval_degrees.maximum,
-            )
-        ),
     )

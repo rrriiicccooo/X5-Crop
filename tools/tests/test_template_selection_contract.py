@@ -276,14 +276,15 @@ class TemplateSelectionContractTest(unittest.TestCase):
 
     def test_source_selection_allows_lane_local_directions_to_differ(self) -> None:
         phase, cross, left_placement = _resolved()
+        assert cross.best is not None and cross.best.selected_direction is not None
         right_direction = replace(
-            left_placement.direction,
+            cross.best.selected_direction,
             direction_id="direction:right",
             full_angle_interval_degrees=FiniteInterval(0.1, 0.2),
             observed_angle_interval_degrees=FiniteInterval(0.1, 0.2),
             canonical_angle_degrees=0.15,
         )
-        assert cross.best is not None and phase.best is not None
+        assert phase.best is not None
         right_cross_fit = replace(
             cross.best,
             selected_direction=right_direction,

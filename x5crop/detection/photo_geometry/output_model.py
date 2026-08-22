@@ -12,19 +12,17 @@ from .line_observations import SourceCoordinateLine
 from .model import (
     AuthoritySide,
     BoundaryRole,
-    DirectionAuthority,
     PositionSource,
 )
 
+
 @dataclass(frozen=True)
 class SharedStripDirection:
-    """One placement-local frame axis and its observed angle span.
+    """One bounded direction family retained inside cross evidence.
 
-    ``full_angle_interval_degrees`` is the low-dimensional feasible interval
-    used only to bound source-space placement geometry. Local edge departures,
-    including slight film bend, live in ``observed_angle_interval_degrees``
-    and in each boundary's residual interval. This type never owns cosmetic
-    output deskew.
+    It can prove local parallelism and enclosing-support projection.  It never
+    becomes a placement axis, rotates an output frame, or owns cosmetic
+    deskew.
     """
 
     direction_id: str
@@ -53,7 +51,7 @@ class SharedStripDirection:
             )
             or not math.isfinite(self.canonical_angle_degrees)
         ):
-            raise ValueError("placement frame axis is invalid")
+            raise ValueError("cross direction evidence is invalid")
 
 
 @dataclass(frozen=True)
@@ -63,12 +61,10 @@ class FrameBoundaryGeometry:
     reference_trace_px: float
     canonical_position_px: float
     full_position_interval_px: FiniteInterval
-    full_direction_interval_degrees: FiniteInterval
+    local_outward_departure_px: float
     position_source: PositionSource
     position_observation_ids: tuple[ObservationId, ...]
     named_position_inference: str | None
-    direction_authority: DirectionAuthority
-    direction_reference_id: str
 
     def __post_init__(self) -> None:
         if not self.full_position_interval_px.contains(
@@ -80,6 +76,11 @@ class FrameBoundaryGeometry:
             )
         if not math.isfinite(self.reference_trace_px):
             raise ValueError("frame boundary reference trace must be finite")
+        if (
+            not math.isfinite(self.local_outward_departure_px)
+            or self.local_outward_departure_px < 0.0
+        ):
+            raise ValueError("frame boundary departure must be non-negative")
         observed = self.position_source == PositionSource.OBSERVED_TRANSITION
         if observed:
             if (
@@ -92,21 +93,7 @@ class FrameBoundaryGeometry:
             or not self.named_position_inference
         ):
             raise ValueError("inferred boundary requires named observed inputs")
-        if not self.direction_reference_id:
-            raise ValueError("frame boundary requires direction provenance")
-        if self.role in {BoundaryRole.START, BoundaryRole.END}:
-            if (
-                self.direction_authority
-                != DirectionAuthority.BOUNDED_SEQUENCE_EDGE_DIRECTION
-            ):
-                raise ValueError(
-                    "start/end require bounded sequence-edge direction"
-                )
-        elif (
-            self.direction_authority
-            != DirectionAuthority.SHARED_TOP_BOTTOM_DIRECTION
-        ):
-            raise ValueError("top/bottom must use shared canonical direction")
+
 
 @dataclass(frozen=True)
 class FootprintSaturationFact:
@@ -249,6 +236,7 @@ class OutputFootprint:
             self.saturation_facts
         ):
             raise ValueError("saturation facts require one fact per authority side")
+
 
 @dataclass(frozen=True)
 class DirectUseBudgetEdgeAssessment:

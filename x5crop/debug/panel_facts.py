@@ -326,7 +326,8 @@ def axis_authority_summaries(
         )
         return (
             f"CROSS FIT · {cross_status} · COARSE {coarse_short} · "
-            f"DIR {direction} · ENCLOSING {enclosing} · RUNNER {cross_runners}",
+            f"COARSE ORIENTATION {direction} · ENCLOSING {enclosing} · "
+            f"RUNNER {cross_runners}",
             f"SEQUENCE FIT · {phase_status} · COARSE {coarse_long} · "
             f"RUNNER {phase_runners}",
             f"SOURCE FIT · {competitors} PLACEMENTS · {detail}",
@@ -357,7 +358,7 @@ def axis_authority_summaries(
     )
     return (
         f"CROSS FIT · {cross_status} · COARSE {coarse_short} · "
-        f"DIR {direction} · ENCLOSING {enclosing} → "
+        f"COARSE ORIENTATION {direction} · ENCLOSING {enclosing} → "
         + "/".join(
             sorted(
                 {

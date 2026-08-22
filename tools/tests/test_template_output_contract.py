@@ -68,6 +68,7 @@ def _enclosing_support_placement(
     frame_count: int = 1,
     support_span_px: float = 250.0,
     support_position_uncertainty_px: float = 0.0,
+    support_slope: float = 0.0,
 ):
     template = _template(frame_count)
     direction = _direction()
@@ -88,6 +89,7 @@ def _enclosing_support_placement(
             support_bottom + support_position_uncertainty_px,
         ),
     )
+    support_traces = (0, 150, 300)
     support = EnclosingSupportPair(
         top_canonical_px=support_top,
         bottom_canonical_px=support_bottom,
@@ -106,20 +108,28 @@ def _enclosing_support_placement(
             support_span_px + 2.0 * support_position_uncertainty_px,
         ),
         reference_trace_px=150.0,
-        trace_coordinates_px=(0, 150, 300),
+        trace_coordinates_px=support_traces,
         top_trace_intervals_px=tuple(
             FiniteInterval(
-                support_top - support_position_uncertainty_px,
-                support_top + support_position_uncertainty_px,
+                support_top
+                + support_slope * (trace - 150.0)
+                - support_position_uncertainty_px,
+                support_top
+                + support_slope * (trace - 150.0)
+                + support_position_uncertainty_px,
             )
-            for _ in range(3)
+            for trace in support_traces
         ),
         bottom_trace_intervals_px=tuple(
             FiniteInterval(
-                support_bottom - support_position_uncertainty_px,
-                support_bottom + support_position_uncertainty_px,
+                support_bottom
+                + support_slope * (trace - 150.0)
+                - support_position_uncertainty_px,
+                support_bottom
+                + support_slope * (trace - 150.0)
+                + support_position_uncertainty_px,
             )
-            for _ in range(3)
+            for trace in support_traces
         ),
     )
     cross = CrossFit(
@@ -192,6 +202,25 @@ def _lane(lane_id: str = "lane:test") -> SourceLaneEvidence:
 
 
 class TemplateOutputContractTest(unittest.TestCase):
+    def test_enclosing_support_keeps_its_same_state_target_projection(self) -> None:
+        placement = _enclosing_support_placement(
+            frame_count=2,
+            support_slope=0.002,
+        )
+        projection = project_selected_placement(placement)
+        frame = placement.frames[1]
+        expected_top = 27.0 + 0.002 * (
+            frame.top.reference_trace_px - 150.0
+        )
+
+        self.assertTrue(
+            all(
+                abs(state.top_at_lane_reference_px - expected_top) < 1.0e-8
+                and abs(float(state.enclosing_support_slope) - 0.002) < 1.0e-10
+                for state in projection.frame_states[1]
+            )
+        )
+
     def test_enclosing_support_uses_no_cross_bleed_and_its_own_height_limit(self) -> None:
         placement = _enclosing_support_placement()
         output = output_footprint_from_template_placement(
@@ -375,25 +404,35 @@ class TemplateOutputContractTest(unittest.TestCase):
         top, bottom = cross.direct_bindings
         top = replace(
             top,
-            canonical_direction_degrees=-0.15,
-            fit_direction_interval_degrees=FiniteInterval(-0.18, -0.12),
-            full_direction_interval_degrees=FiniteInterval(-0.20, -0.10),
-            observed_direction_interval_degrees=FiniteInterval(-0.20, -0.10),
+            canonical_direction_degrees=0.15,
+            fit_direction_interval_degrees=FiniteInterval(0.12, 0.18),
+            full_direction_interval_degrees=FiniteInterval(0.10, 0.20),
+            observed_direction_interval_degrees=FiniteInterval(0.10, 0.20),
+            trace_position_intervals_px=(
+                FiniteInterval.exact(10.0),
+                FiniteInterval.exact(10.0),
+                FiniteInterval(8.0, 10.0),
+            ),
         )
         bottom = replace(
             bottom,
-            canonical_direction_degrees=0.05,
-            fit_direction_interval_degrees=FiniteInterval(0.02, 0.08),
-            full_direction_interval_degrees=FiniteInterval(0.00, 0.10),
-            observed_direction_interval_degrees=FiniteInterval(0.00, 0.10),
+            canonical_direction_degrees=-0.05,
+            fit_direction_interval_degrees=FiniteInterval(-0.08, -0.02),
+            full_direction_interval_degrees=FiniteInterval(-0.10, 0.00),
+            observed_direction_interval_degrees=FiniteInterval(-0.10, 0.00),
+            trace_position_intervals_px=(
+                FiniteInterval.exact(250.0),
+                FiniteInterval.exact(250.0),
+                FiniteInterval(250.0, 252.0),
+            ),
         )
         local_direction = replace(
             _direction(),
             direction_id="direction:local-cross-departure",
             selected_observation_ids=(top.observation_id, bottom.observation_id),
-            full_angle_interval_degrees=FiniteInterval(-0.20, 0.10),
-            observed_angle_interval_degrees=FiniteInterval(-0.20, 0.10),
-            canonical_angle_degrees=-0.05,
+            full_angle_interval_degrees=FiniteInterval(-0.10, 0.20),
+            observed_angle_interval_degrees=FiniteInterval(-0.10, 0.20),
+            canonical_angle_degrees=0.05,
         )
         cross = replace(
             cross,
@@ -424,7 +463,7 @@ class TemplateOutputContractTest(unittest.TestCase):
                 protections[BoundaryRole.TOP].local_boundary_residual_px,
                 protections[BoundaryRole.BOTTOM].local_boundary_residual_px,
             ),
-            0.0,
+            1.0,
         )
         assessment = template_direct_use_budget_assessment(placement, output)
         budget = {item.role: item for item in assessment.edge_assessments}
@@ -438,6 +477,64 @@ class TemplateOutputContractTest(unittest.TestCase):
                 protections[BoundaryRole.BOTTOM].local_boundary_residual_px,
             ),
         )
+
+    def test_cross_position_and_trace_residual_share_one_state(self) -> None:
+        template = _template(1)
+        cross = _cross(template, direction=_direction())
+        top, bottom = cross.direct_bindings
+        top = replace(
+            top,
+            coordinate_interval_px=FiniteInterval(8.0, 10.0),
+            fit_interval_px=FiniteInterval(8.0, 10.0),
+            full_interval_px=FiniteInterval(8.0, 10.0),
+            fit_direction_interval_degrees=FiniteInterval.exact(0.0),
+            full_direction_interval_degrees=FiniteInterval.exact(0.0),
+            observed_direction_interval_degrees=FiniteInterval.exact(0.0),
+            trace_position_intervals_px=(
+                FiniteInterval.exact(8.0),
+                FiniteInterval.exact(8.0),
+                FiniteInterval.exact(8.0),
+            ),
+        )
+        bottom = replace(
+            bottom,
+            coordinate_interval_px=FiniteInterval(248.0, 250.0),
+            fit_interval_px=FiniteInterval(248.0, 250.0),
+            full_interval_px=FiniteInterval(248.0, 250.0),
+            fit_direction_interval_degrees=FiniteInterval.exact(0.0),
+            full_direction_interval_degrees=FiniteInterval.exact(0.0),
+            observed_direction_interval_degrees=FiniteInterval.exact(0.0),
+            trace_position_intervals_px=(
+                FiniteInterval.exact(250.0),
+                FiniteInterval.exact(250.0),
+                FiniteInterval.exact(250.0),
+            ),
+        )
+        cross = replace(
+            cross,
+            top_fit_interval_px=FiniteInterval(8.0, 10.0),
+            bottom_fit_interval_px=FiniteInterval(248.0, 250.0),
+            top_full_interval_px=FiniteInterval(8.0, 10.0),
+            bottom_full_interval_px=FiniteInterval(248.0, 250.0),
+            direct_bindings=(top, bottom),
+        )
+        placement = _compose(template, _sequence(template), cross)
+        output = output_footprint_from_template_placement(
+            placement,
+            project_selected_placement(placement),
+            lane=_lane(),
+            lane_ordinal=1,
+            layout="horizontal",
+        )
+        protection = next(
+            item
+            for item in output.boundary_protections
+            if item.role == BoundaryRole.TOP
+        )
+
+        self.assertAlmostEqual(protection.measurement_expansion_px, 2.0)
+        self.assertAlmostEqual(protection.local_boundary_residual_px, 3.0)
+        self.assertAlmostEqual(protection.joint_expansion_px, 5.5)
 
     def test_selected_frame_residual_is_retained_before_bleed(self) -> None:
         template = _template(1)
@@ -467,6 +564,28 @@ class TemplateOutputContractTest(unittest.TestCase):
         )
         self.assertGreaterEqual(end.local_boundary_residual_px, 9.9)
         self.assertGreater(end.joint_expansion_px, end.local_boundary_residual_px)
+
+    def test_final_footprint_retains_the_complete_pixel_center_span(self) -> None:
+        template = _template(1)
+        placement = _compose(
+            template,
+            _sequence(template),
+            _cross(template, direction=_direction()),
+        )
+        output = output_footprint_from_template_placement(
+            placement,
+            project_selected_placement(placement),
+            lane=_lane(),
+            lane_ordinal=1,
+            layout="horizontal",
+        )
+
+        self.assertTrue(
+            all(
+                item.local_boundary_residual_px >= 1.0
+                for item in output.boundary_protections
+            )
+        )
         self.assertEqual(
             template_direct_use_budget_assessment(placement, output).state,
             EvidenceState.SUPPORTED,
@@ -550,7 +669,7 @@ class TemplateOutputContractTest(unittest.TestCase):
         )
         self.assertAlmostEqual(
             protections[BoundaryRole.END].local_boundary_residual_px,
-            6.0,
+            7.0 + placement.frames[2].end.local_outward_departure_px,
         )
 
     def test_selected_frame_residual_still_obeys_five_percent_limit(self) -> None:

@@ -110,7 +110,7 @@ class DebugAnalysisContractTest(unittest.TestCase):
             )
         cross, sequence, source = axis_authority_summaries(detection)
         self.assertIn("CROSS FIT ·", cross)
-        self.assertIn("DIR ", cross)
+        self.assertIn("COARSE ORIENTATION ", cross)
         self.assertIn("ENCLOSING ", cross)
         self.assertIn("SEQUENCE FIT ·", sequence)
         self.assertIn("SOURCE FIT ·", source)

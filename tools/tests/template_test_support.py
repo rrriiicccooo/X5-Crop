@@ -376,7 +376,6 @@ def placement_compose(
     *,
     frame_spec: FramePhysicalSpec | None = None,
     lane_id: str = "lane:test",
-    sequence_observations: tuple[BoundaryEdgeObservation, ...] = (),
 ) -> FormatPlacement:
     spec = frame_spec or FramePhysicalSpec(36.0, 24.0, 2.0)
     source = SourceScanGeometry.create(
@@ -397,7 +396,6 @@ def placement_compose(
             max(sequence.canonical_role_positions_px) + 100.0,
         ),
         height_authority_px=FiniteInterval(0.0, 400.0),
-        sequence_observations=sequence_observations,
     )
 
 

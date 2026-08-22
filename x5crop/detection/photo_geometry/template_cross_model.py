@@ -330,6 +330,30 @@ class CrossRoleBinding:
             raise ValueError("cross source observations must be unique")
         object.__setattr__(self, "source_observation_ids", source)
 
+    def projected_shift_px(
+        self,
+        *,
+        source_trace_px: float,
+        target_trace_px: float,
+    ) -> float | None:
+        """Project only inside this binding's directly observed trace domain."""
+
+        if not math.isfinite(source_trace_px) or not math.isfinite(
+            target_trace_px
+        ):
+            raise ValueError("cross projection traces must be finite")
+        if (
+            not self.role_authorized
+            or self.canonical_direction_degrees is None
+            or len(self.trace_coordinates_px) < 2
+            or target_trace_px < self.trace_coordinates_px[0] - 0.5
+            or target_trace_px > self.trace_coordinates_px[-1] + 0.5
+        ):
+            return None
+        return math.tan(
+            math.radians(self.canonical_direction_degrees)
+        ) * (target_trace_px - source_trace_px)
+
     @classmethod
     def from_measurement(
         cls,

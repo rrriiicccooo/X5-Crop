@@ -1,7 +1,7 @@
 """Role-free source-wide track geometry and enclosing-support records.
 
-These records may bound a placement-local frame axis but never own cosmetic
-output deskew.
+These records may prove local cross geometry but never own a placement axis or
+cosmetic output deskew.
 """
 
 from __future__ import annotations

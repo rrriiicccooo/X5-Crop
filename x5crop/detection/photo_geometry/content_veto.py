@@ -1,10 +1,11 @@
-"""Interpret candidate-independent content topology as negative evidence."""
+"""Interpret content topology against one final post-bleed footprint set."""
 
 from __future__ import annotations
 
-from ...domain import FiniteInterval
+from ...geometry.convex import ConvexPolygon
 from ...run_local_identity import run_local_id
 from .content_boundary_queries import (
+    StripFootprint,
     content_cross_boundary_ids,
     content_sequence_boundary_ids,
     content_occupies_sequence_core,
@@ -15,30 +16,50 @@ from .content_veto_model import (
     ContentVetoFact,
     ContentVetoReason,
 )
-from .model import BoundaryRole
+from .model import BoundaryAxis, BoundaryRole
 from .template_placement import FormatPlacement
+
+
+def _strip_footprint(
+    placement: FormatPlacement,
+    footprint: ConvexPolygon,
+) -> StripFootprint:
+    """Normalize one source-coordinate footprint to strip axes."""
+
+    return StripFootprint(
+        points=(
+            footprint
+            if placement.width_axis == BoundaryAxis.X
+            else tuple((y, x) for x, y in footprint)
+        )
+    )
 
 
 def content_veto_assessment(
     placement: FormatPlacement,
+    required_source_footprints: tuple[ConvexPolygon, ...],
     content_index: ContentTopologyIndex,
 ) -> ContentVetoAssessment:
+    """Veto only when content crosses the crop after residual and bleed.
+
+    The polygons are already fixed by the unique placement.  Content cannot
+    move an edge, select a runner, or create geometry; it can only contradict
+    the complete final footprint set.
+    """
+
+    if len(required_source_footprints) != placement.output_slot_count:
+        raise ValueError("content veto requires one final footprint per slot")
     facts: list[ContentVetoFact] = []
-    frames = placement.frames
-    for ordinal, frame in enumerate(frames, 1):
-        slot_core_minimum = frame.start.full_position_interval_px.maximum
-        slot_core_maximum = frame.end.full_position_interval_px.minimum
-        if slot_core_maximum < slot_core_minimum:
-            continue
-        slot_core = FiniteInterval(slot_core_minimum, slot_core_maximum)
-        for role, boundary in (
-            (BoundaryRole.TOP, frame.top),
-            (BoundaryRole.BOTTOM, frame.bottom),
-        ):
+    footprints = tuple(
+        _strip_footprint(placement, footprint)
+        for footprint in required_source_footprints
+    )
+    for ordinal, footprint in enumerate(footprints, 1):
+        for role in (BoundaryRole.TOP, BoundaryRole.BOTTOM):
             veto_ids = content_cross_boundary_ids(
                 content_index,
-                slot_core=slot_core,
-                boundary=boundary,
+                footprint=footprint,
+                role=role,
             )
             if veto_ids:
                 facts.append(
@@ -50,22 +71,14 @@ def content_veto_assessment(
                     )
                 )
 
-    first = frames[0]
-    last = frames[-1]
-    for role, ordinal, boundary in (
-        (BoundaryRole.START, 1, first.start),
-        (BoundaryRole.END, len(frames), last.end),
+    for role, ordinal, footprint in (
+        (BoundaryRole.START, 1, footprints[0]),
+        (BoundaryRole.END, len(footprints), footprints[-1]),
     ):
-        adjacent = first if role == BoundaryRole.START else last
-        cross_core_minimum = adjacent.top.full_position_interval_px.maximum
-        cross_core_maximum = adjacent.bottom.full_position_interval_px.minimum
-        if cross_core_maximum < cross_core_minimum:
-            continue
-        cross_core = FiniteInterval(cross_core_minimum, cross_core_maximum)
         crossing_ids = content_sequence_boundary_ids(
             content_index,
-            boundary=boundary,
-            cross_core=cross_core,
+            footprint=footprint,
+            role=role,
         )
         if crossing_ids:
             facts.append(
@@ -77,23 +90,14 @@ def content_veto_assessment(
                 )
             )
 
-    for ordinal, (left, right) in enumerate(zip(frames, frames[1:]), 1):
-        core_minimum = left.end.full_position_interval_px.maximum
-        core_maximum = right.start.full_position_interval_px.minimum
-        cross_core_minimum = max(
-            left.top.full_position_interval_px.maximum,
-            right.top.full_position_interval_px.maximum,
-        )
-        cross_core_maximum = min(
-            left.bottom.full_position_interval_px.minimum,
-            right.bottom.full_position_interval_px.minimum,
-        )
-        if core_minimum >= core_maximum or cross_core_minimum >= cross_core_maximum:
-            continue
+    for ordinal, (left, right) in enumerate(
+        zip(footprints, footprints[1:]),
+        1,
+    ):
         crossing_ids = content_occupies_sequence_core(
             content_index,
-            sequence_core=FiniteInterval(core_minimum, core_maximum),
-            cross_core=FiniteInterval(cross_core_minimum, cross_core_maximum),
+            left=left,
+            right=right,
         )
         if crossing_ids:
             facts.append(

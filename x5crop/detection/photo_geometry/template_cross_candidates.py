@@ -100,7 +100,7 @@ def _direct_candidate(
         ):
             return None
         # The whole-strip observation validates that both local fragments
-        # belong to the same strip and bounds their source-space frame axis.
+        # belong to the same strip and bounds their local cross relation.
         # It never owns cosmetic output deskew; small local departures remain
         # a straight-model residual instead of entering the coarse fit.
         direction = source_direction.observed_angle_interval_degrees

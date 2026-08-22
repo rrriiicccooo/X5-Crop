@@ -35,11 +35,6 @@ class PositionSource(str, Enum):
     INFERRED_SEQUENCE = "inferred_sequence"
 
 
-class DirectionAuthority(str, Enum):
-    SHARED_TOP_BOTTOM_DIRECTION = "shared_top_bottom_direction"
-    BOUNDED_SEQUENCE_EDGE_DIRECTION = "bounded_sequence_edge_direction"
-
-
 class AuthoritySide(str, Enum):
     LEFT = "left"
     TOP = "top"

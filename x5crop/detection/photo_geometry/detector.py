@@ -9,13 +9,14 @@ from ..gate_checks import GateGap, failure_fact
 from ..source_core import SourceLaneEvidence
 from .content_topology import build_content_topology_index
 from .content_veto import content_veto_assessment
+from .content_veto_model import ContentVetoAssessment
 from .lane_preparation import (
     lane_measurement_capacity,
     prepare_template_lane,
     resolve_output_slots,
 )
 from .measurement_model import PhotoBoundaryMeasurementField
-from .output_model import OutputSlotIdentity
+from .output_model import OutputFootprint, OutputSlotIdentity
 from .source_geometry import SourceScanGeometry
 from .template_cross_model import CrossFit, CrossFitStatus
 from .template_feasible_geometry import project_selected_placement
@@ -101,7 +102,6 @@ def _compose(
             height_axis=prepared.height_axis,
             width_authority_px=prepared.width_authority_px,
             height_authority_px=prepared.height_authority_px,
-            sequence_observations=prepared.sequence_edges,
             template=prepared.template_spec,
         )
     except ValueError:
@@ -221,7 +221,13 @@ def reconstruct_photo_geometry(
     )
     shared_geometry = _shared_geometry(prepared)
     provisional: list[
-        tuple[FormatPlacement | None, FormatPlacement | None, object, TemplatePlacementCompetition]
+        tuple[
+            FormatPlacement | None,
+            FormatPlacement | None,
+            ContentVetoAssessment | None,
+            TemplatePlacementCompetition,
+            tuple[OutputFootprint, ...],
+        ]
     ] = []
     for lane, content in zip(
         prepared,
@@ -233,15 +239,33 @@ def reconstruct_photo_geometry(
             lane,
             source_geometry=geometry,
         )
+        best_outputs = ()
+        if best is not None:
+            try:
+                projection = project_selected_placement(best)
+                best_outputs = tuple(
+                    output_footprint_from_template_placement(
+                        best,
+                        projection,
+                        lane=lane.lane,
+                        lane_ordinal=ordinal,
+                        layout=layout,
+                    )
+                    for ordinal in range(1, best.output_slot_count + 1)
+                )
+            except ValueError:
+                best_outputs = ()
         content_assessment = (
             None
             if (
                 best is None
+                or len(best_outputs) != best.output_slot_count
                 or lane.phase_competition.status != PhaseFitStatus.RESOLVED
                 or lane.cross_competition.status != CrossFitStatus.RESOLVED
             )
             else content_veto_assessment(
                 best,
+                tuple(item.required_source_footprint for item in best_outputs),
                 build_content_topology_index(content, layout=layout),
             )
         )
@@ -253,7 +277,9 @@ def reconstruct_photo_geometry(
             cross=lane.cross_competition,
             content_assessment=content_assessment,
         )
-        provisional.append((best, runner, content_assessment, competition))
+        provisional.append(
+            (best, runner, content_assessment, competition, best_outputs)
+        )
 
     source_selection = select_template_source(
         tuple(item[3] for item in provisional),
@@ -290,20 +316,7 @@ def reconstruct_photo_geometry(
         )
         output_footprints = ()
         if selected is not None:
-            projection = project_selected_placement(selected)
-            try:
-                output_footprints = tuple(
-                    output_footprint_from_template_placement(
-                        selected,
-                        projection,
-                        lane=source_lane,
-                        lane_ordinal=ordinal,
-                        layout=layout,
-                    )
-                    for ordinal in range(1, selected.output_slot_count + 1)
-                )
-            except ValueError:
-                output_footprints = ()
+            output_footprints = values[4]
         budgets = tuple(
             template_direct_use_budget_assessment(
                 selected, output

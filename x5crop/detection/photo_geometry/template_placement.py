@@ -1,7 +1,10 @@
 """Compose fixed-size source frames from selected template fits."""
+
 from __future__ import annotations
+
 from dataclasses import dataclass
 import math
+
 from ...domain import FiniteInterval, ObservationId
 from ...formats import FramePhysicalSpec
 from ...geometry.convex import ConvexPolygon, signed_area
@@ -11,14 +14,19 @@ from .interval_math import (
     intersect as _intersect,
     subtract as _interval_difference,
 )
-from .model import BoundaryAxis, BoundaryRole, DirectionAuthority, PositionSource
-from .observation_types import BoundaryEdgeObservation
-from .output_model import FrameBoundaryGeometry, SharedStripDirection
+from .model import BoundaryAxis, BoundaryRole, PositionSource
+from .output_model import FrameBoundaryGeometry, OutputBoundaryUse
 from .source_geometry import SourceScanGeometry
 from .template_cross_model import CrossFit
-from .template_frame_axis import placement_frame_axis
 from .template_model import SequenceFit, TemplateSpec
-_ROLES = (BoundaryRole.TOP, BoundaryRole.BOTTOM, BoundaryRole.START, BoundaryRole.END)
+
+
+_ROLES = (
+    BoundaryRole.TOP,
+    BoundaryRole.BOTTOM,
+    BoundaryRole.START,
+    BoundaryRole.END,
+)
 _EPSILON = 1.0e-8
 
 
@@ -44,14 +52,37 @@ def _retreat(
         if direction > 0
         else _interval_sum(position, extent)
     )
-def _oriented_width(start: FiniteInterval, end: FiniteInterval, direction: int) -> FiniteInterval:
-    return _interval_difference(end, start) if direction > 0 else _interval_difference(start, end)
+
+
+def _oriented_width(
+    start: FiniteInterval,
+    end: FiniteInterval,
+    direction: int,
+) -> FiniteInterval:
+    return (
+        _interval_difference(end, start)
+        if direction > 0
+        else _interval_difference(start, end)
+    )
+
+
 def _canonical_width(sequence: SequenceFit, template: TemplateSpec) -> float:
     width = float(sequence.pitch_fit.canonical_frame_width_px)
-    if not template.frame_width_px.minimum - _EPSILON <= width <= template.frame_width_px.maximum + _EPSILON:
+    if not (
+        template.frame_width_px.minimum - _EPSILON
+        <= width
+        <= template.frame_width_px.maximum + _EPSILON
+    ):
         raise ValueError("sequence canonical width contradicts template width")
     return width
-def _validate_interval_contains(interval: FiniteInterval, value: float, *, name: str) -> None:
+
+
+def _validate_interval_contains(
+    interval: FiniteInterval,
+    value: float,
+    *,
+    name: str,
+) -> None:
     if not interval.contains(value, epsilon=_EPSILON):
         raise ValueError(f"{name} canonical position leaves its interval")
 
@@ -59,16 +90,21 @@ def _validate_interval_contains(interval: FiniteInterval, value: float, *, name:
 @dataclass(frozen=True)
 class TemplateFrame:
     """One fixed W/H frame and its four source-coordinate boundaries."""
+
     lane_ordinal: int
     top: FrameBoundaryGeometry
     bottom: FrameBoundaryGeometry
     start: FrameBoundaryGeometry
     end: FrameBoundaryGeometry
     canonical_source_polygon: ConvexPolygon
+
     def __post_init__(self) -> None:
         if (
             self.lane_ordinal <= 0
-            or tuple(item.role for item in (self.top, self.bottom, self.start, self.end))
+            or tuple(
+                item.role
+                for item in (self.top, self.bottom, self.start, self.end)
+            )
             != _ROLES
             or len(self.canonical_source_polygon) != 4
             or any(
@@ -79,9 +115,12 @@ class TemplateFrame:
             or abs(signed_area(self.canonical_source_polygon)) <= _EPSILON
         ):
             raise ValueError("template frame is degenerate or has invalid roles")
+
+
 @dataclass(frozen=True)
 class FormatPlacement:
     """One lane's fixed-count placement from selected template fits."""
+
     placement_id: str
     lane_id: str
     frame_spec: FramePhysicalSpec
@@ -89,12 +128,12 @@ class FormatPlacement:
     source_scan_geometry: SourceScanGeometry
     sequence_fit: SequenceFit
     cross_fit: CrossFit
-    direction: SharedStripDirection
     width_axis: BoundaryAxis
     height_axis: BoundaryAxis
     width_authority_px: FiniteInterval
     height_authority_px: FiniteInterval
     frames: tuple[TemplateFrame, ...]
+
     def __post_init__(self) -> None:
         template = self.sequence_fit.template
         if (
@@ -104,22 +143,9 @@ class FormatPlacement:
             or self.source_scan_geometry.frame_spec != self.frame_spec
             or self.cross_fit.template_id != template.template_id
             or self.width_axis == self.height_axis
-            or not isinstance(self.direction, SharedStripDirection)
             or not self.frames
             or tuple(frame.lane_ordinal for frame in self.frames)
             != tuple(range(1, self.output_slot_count + 1))
-            or self.cross_fit.selected_direction is None
-            or not set(
-                self.cross_fit.selected_direction.selected_observation_ids
-            ).issubset(self.direction.selected_observation_ids)
-            or not self.direction.observed_angle_interval_degrees.contains(
-                self.cross_fit.selected_direction.observed_angle_interval_degrees.minimum,
-                epsilon=1.0e-12,
-            )
-            or not self.direction.observed_angle_interval_degrees.contains(
-                self.cross_fit.selected_direction.observed_angle_interval_degrees.maximum,
-                epsilon=1.0e-12,
-            )
         ):
             raise ValueError("format placement identity or authority is inconsistent")
         if not isinstance(self.width_authority_px, FiniteInterval) or not isinstance(
@@ -128,17 +154,20 @@ class FormatPlacement:
             raise TypeError("format placement lane authority must be intervals")
         for frame in self.frames:
             for boundary in (frame.top, frame.bottom, frame.start, frame.end):
-                if boundary.line.source_axis_long != self.width_axis or boundary.direction_reference_id != self.direction.direction_id:
+                if boundary.line.source_axis_long != self.width_axis:
                     raise ValueError("frame boundary authority disagrees with placement")
+
+
 @dataclass(frozen=True)
 class _ResolvedBoundary:
     role: BoundaryRole
     canonical: float
     full_interval: FiniteInterval
-    observed_direction_interval: FiniteInterval | None
     observation_ids: tuple[ObservationId, ...]
     source: PositionSource
     inference: str | None
+
+
 def _sequence_boundary(
     sequence: SequenceFit,
     template: TemplateSpec,
@@ -164,14 +193,15 @@ def _sequence_boundary(
         source = PositionSource.INFERRED_SEQUENCE
         inference = f"{role.role.value}_from_template_fixed_width"
     return _ResolvedBoundary(
-        role.role,
-        canonical,
-        interval,
-        None,
-        ids,
-        source,
-        inference,
+        role=role.role,
+        canonical=canonical,
+        full_interval=interval,
+        observation_ids=ids,
+        source=source,
+        inference=inference,
     )
+
+
 def _resolve_sequence_pair(
     sequence: SequenceFit,
     template: TemplateSpec,
@@ -192,13 +222,12 @@ def _resolve_sequence_pair(
         )
         inferred_canonical = start.canonical + width * template.direction
         end = _ResolvedBoundary(
-            end.role,
-            inferred_canonical,
-            inferred_interval,
-            end.observed_direction_interval,
-            end.observation_ids,
-            end.source,
-            "end_from_observed_start_and_fixed_template_width",
+            role=end.role,
+            canonical=inferred_canonical,
+            full_interval=inferred_interval,
+            observation_ids=end.observation_ids,
+            source=end.source,
+            inference="end_from_observed_start_and_fixed_template_width",
         )
     elif end_direct and not start_direct:
         inferred_interval = _retreat(
@@ -208,37 +237,57 @@ def _resolve_sequence_pair(
         )
         inferred_canonical = end.canonical - width * template.direction
         start = _ResolvedBoundary(
-            start.role,
-            inferred_canonical,
-            inferred_interval,
-            start.observed_direction_interval,
-            start.observation_ids,
-            start.source,
-            "start_from_observed_end_and_fixed_template_width",
+            role=start.role,
+            canonical=inferred_canonical,
+            full_interval=inferred_interval,
+            observation_ids=start.observation_ids,
+            source=start.source,
+            inference="start_from_observed_end_and_fixed_template_width",
         )
     # When both sides are direct, each keeps its own measured physical
     # interval.  Fixed W is already enforced by the selected placement's
     # joint feasible set; hulling a direct END with START + the independent
     # source-scale extrema would manufacture a state that no observation and
     # no joint solution supports.
-    _validate_interval_contains(start.full_interval, start.canonical, name="start")
+    _validate_interval_contains(
+        start.full_interval,
+        start.canonical,
+        name="start",
+    )
     _validate_interval_contains(end.full_interval, end.canonical, name="end")
-    oriented = _oriented_width(start.full_interval, end.full_interval, template.direction)
+    oriented = _oriented_width(
+        start.full_interval,
+        end.full_interval,
+        template.direction,
+    )
     width_value = template.direction * (end.canonical - start.canonical)
-    frame_width = FiniteInterval(template.frame_width_px.minimum, template.frame_width_px.maximum)
-    if not template.frame_width_px.minimum - _EPSILON <= width_value <= template.frame_width_px.maximum + _EPSILON or _intersect(oriented, frame_width) is None:
+    frame_width = FiniteInterval(
+        template.frame_width_px.minimum,
+        template.frame_width_px.maximum,
+    )
+    if (
+        not template.frame_width_px.minimum - _EPSILON
+        <= width_value
+        <= template.frame_width_px.maximum + _EPSILON
+        or _intersect(oriented, frame_width) is None
+    ):
         raise ValueError("sequence frame edges contradict fixed template width")
     return start, end
+
+
 def _cross_boundaries(
     cross: CrossFit,
-    direction: SharedStripDirection,
 ) -> tuple[_ResolvedBoundary, _ResolvedBoundary]:
     direct = {item.role: item for item in cross.direct_bindings}
     inferred = {item.role: item for item in cross.inferred_bindings}
     result: list[_ResolvedBoundary] = []
     for role, canonical, full_interval in (
         (BoundaryRole.TOP, cross.top_canonical_px, cross.top_full_interval_px),
-        (BoundaryRole.BOTTOM, cross.bottom_canonical_px, cross.bottom_full_interval_px),
+        (
+            BoundaryRole.BOTTOM,
+            cross.bottom_canonical_px,
+            cross.bottom_full_interval_px,
+        ),
     ):
         binding = direct.get(role)
         if binding is not None:
@@ -258,13 +307,12 @@ def _cross_boundaries(
         _validate_interval_contains(full_interval, canonical, name=role.value)
         result.append(
             _ResolvedBoundary(
-                role,
-                canonical,
-                full_interval,
-                binding.full_direction_interval_degrees,
-                ids,
-                source,
-                inference,
+                role=role,
+                canonical=canonical,
+                full_interval=full_interval,
+                observation_ids=ids,
+                source=source,
+                inference=inference,
             )
         )
     if cross.bottom_canonical_px <= cross.top_canonical_px:
@@ -275,97 +323,108 @@ def _cross_boundaries(
     ):
         raise ValueError("cross span contradicts fixed template height")
     return result[0], result[1]
+
+
 def _boundary_geometry(
     resolved: _ResolvedBoundary,
     *,
     reference_trace_px: float,
     support_projection_px: FiniteInterval,
-    direction: SharedStripDirection,
+    local_outward_departure_px: float = 0.0,
     width_axis: BoundaryAxis,
     height_axis: BoundaryAxis,
 ) -> FrameBoundaryGeometry:
-    boundary_axis = width_axis if resolved.role in {BoundaryRole.START, BoundaryRole.END} else height_axis
+    boundary_axis = (
+        width_axis
+        if resolved.role in {BoundaryRole.START, BoundaryRole.END}
+        else height_axis
+    )
     return FrameBoundaryGeometry(
         role=resolved.role,
         line=canonical_boundary_line(
-            direction,
             boundary_axis=boundary_axis,
             source_axis_long=width_axis,
-            trace_coordinate_px=reference_trace_px,
             position_px=resolved.canonical,
             support_projection_px=support_projection_px,
         ),
         reference_trace_px=reference_trace_px,
         canonical_position_px=resolved.canonical,
         full_position_interval_px=resolved.full_interval,
-        full_direction_interval_degrees=(
-            direction.full_angle_interval_degrees
-            if resolved.observed_direction_interval is None
-            else resolved.observed_direction_interval
-        ),
+        local_outward_departure_px=local_outward_departure_px,
         position_source=resolved.source,
         position_observation_ids=resolved.observation_ids,
         named_position_inference=resolved.inference,
-        direction_authority=(
-            DirectionAuthority.BOUNDED_SEQUENCE_EDGE_DIRECTION
-            if resolved.role in {BoundaryRole.START, BoundaryRole.END}
-            else DirectionAuthority.SHARED_TOP_BOTTOM_DIRECTION
-        ),
-        direction_reference_id=direction.direction_id,
     )
-def _reanchor_cross_boundary(
-    resolved: _ResolvedBoundary,
-    *,
-    source_trace_px: float,
+
+
+def _aperture_corner_outward_departure_px(
+    cross: CrossFit,
+    cross_support_px: FiniteInterval,
+) -> float:
+    """Contain aperture corners without creating a placement frame axis.
+
+    A resolved direct top/bottom aperture pair proves the local orientation of
+    the fixed-H photo region.  Its fit interval may therefore enlarge the two
+    source-axis side bounds by the half-height corner departure.  Enclosing
+    support and one-sided inference do not prove that relation and contribute
+    nothing here.
+    """
+
+    if (
+        cross.boundary_use != OutputBoundaryUse.APERTURE_PAIR
+        or not cross.direct_pair
+        or len(cross.direct_bindings) != 2
+    ):
+        return 0.0
+    directions = tuple(
+        item.fit_direction_interval_degrees
+        for item in cross.direct_bindings
+        if item.fit_direction_interval_degrees is not None
+    )
+    if not directions:
+        return 0.0
+    maximum_slope = max(
+        abs(math.tan(math.radians(angle)))
+        for interval in directions
+        for angle in (interval.minimum, interval.maximum)
+    )
+    return maximum_slope * cross_support_px.width / 2.0
+
+
+def _aperture_center_shift_px(
+    cross: CrossFit,
     target_trace_px: float,
-    support_projection_px: FiniteInterval,
-    direction: SharedStripDirection,
-    width_axis: BoundaryAxis,
-    height_axis: BoundaryAxis,
+) -> float | None:
+    if cross.boundary_use != OutputBoundaryUse.APERTURE_PAIR:
+        return None
+    shifts: list[float] = []
+    for binding in cross.direct_bindings:
+        shift = binding.projected_shift_px(
+            source_trace_px=cross.lane_reference_trace_px,
+            target_trace_px=target_trace_px,
+        )
+        if shift is not None:
+            shifts.append(shift)
+    return sum(shifts) / len(shifts) if shifts else None
+
+
+def _shift_boundary(
+    boundary: _ResolvedBoundary,
+    shift_px: float,
 ) -> _ResolvedBoundary:
-    """Move a cross edge coordinate to a frame trace on its line."""
-    del support_projection_px, width_axis, height_axis
-
-    def at_trace(position_px: float, angle_degrees: float) -> float:
-        return position_px + math.tan(math.radians(angle_degrees)) * (
-            target_trace_px - source_trace_px
-        )
-
-    canonical = at_trace(
-        resolved.canonical,
-        direction.canonical_angle_degrees,
-    )
-    projection_angles = (
-        direction.full_angle_interval_degrees
-        if resolved.observed_direction_interval is None
-        else FiniteInterval(
-            min(
-                direction.full_angle_interval_degrees.minimum,
-                resolved.observed_direction_interval.minimum,
-            ),
-            max(
-                direction.full_angle_interval_degrees.maximum,
-                resolved.observed_direction_interval.maximum,
-            ),
-        )
-    )
-    endpoints = tuple(
-        at_trace(value, angle)
-        for value in (resolved.full_interval.minimum, resolved.full_interval.maximum)
-        for angle in (
-            projection_angles.minimum,
-            projection_angles.maximum,
-        )
-    )
     return _ResolvedBoundary(
-        resolved.role,
-        canonical,
-        FiniteInterval(min(endpoints), max(endpoints)),
-        resolved.observed_direction_interval,
-        resolved.observation_ids,
-        resolved.source,
-        resolved.inference,
+        role=boundary.role,
+        canonical=boundary.canonical + shift_px,
+        full_interval=FiniteInterval(
+            boundary.full_interval.minimum + shift_px,
+            boundary.full_interval.maximum + shift_px,
+        ),
+        observation_ids=boundary.observation_ids,
+        source=boundary.source,
+        inference=boundary.inference,
     )
+
+
 def compose_format_placement(
     *,
     lane_id: str,
@@ -377,7 +436,6 @@ def compose_format_placement(
     height_axis: BoundaryAxis,
     width_authority_px: FiniteInterval,
     height_authority_px: FiniteInterval,
-    sequence_observations: tuple[BoundaryEdgeObservation, ...] = (),
     template: TemplateSpec | None = None,
     placement_id: str | None = None,
 ) -> FormatPlacement:
@@ -386,7 +444,10 @@ def compose_format_placement(
         raise TypeError("format placement requires lane and frame spec")
     if not isinstance(source_scan_geometry, SourceScanGeometry):
         raise TypeError("format placement requires source scan geometry")
-    if not isinstance(sequence_fit, SequenceFit) or not isinstance(cross_fit, CrossFit):
+    if not isinstance(sequence_fit, SequenceFit) or not isinstance(
+        cross_fit,
+        CrossFit,
+    ):
         raise TypeError("format placement requires canonical template fits")
     if template is None:
         template = sequence_fit.template
@@ -396,17 +457,17 @@ def compose_format_placement(
         raise ValueError("source scan and requested frame specifications disagree")
     if cross_fit.template_id != template.template_id:
         raise ValueError("cross fit and template identities disagree")
-    if width_axis == height_axis or not isinstance(width_axis, BoundaryAxis) or not isinstance(height_axis, BoundaryAxis):
+    if (
+        width_axis == height_axis
+        or not isinstance(width_axis, BoundaryAxis)
+        or not isinstance(height_axis, BoundaryAxis)
+    ):
         raise ValueError("placement source axes must be distinct typed axes")
-    if not isinstance(width_authority_px, FiniteInterval) or not isinstance(height_authority_px, FiniteInterval):
+    if not isinstance(width_authority_px, FiniteInterval) or not isinstance(
+        height_authority_px,
+        FiniteInterval,
+    ):
         raise TypeError("lane authority must use FiniteInterval")
-    direction = placement_frame_axis(
-        sequence_fit,
-        sequence_observations,
-        cross_fit,
-    )
-    if not isinstance(direction, SharedStripDirection):
-        raise TypeError("placement direction must be SharedStripDirection")
     if not math.isfinite(cross_fit.lane_reference_trace_px):
         raise ValueError("cross lane reference trace is not finite")
     if len(sequence_fit.role_positions_px) != 2 * template.count:
@@ -416,65 +477,77 @@ def compose_format_placement(
         template.frame_height_px, cross_fit.fixed_height_px
     ):
         raise ValueError("cross fixed height contradicts template frame height")
-    cross_top, cross_bottom = _cross_boundaries(
-        cross_fit,
-        direction,
-    )
+    cross_top, cross_bottom = _cross_boundaries(cross_fit)
     frames: list[TemplateFrame] = []
     for ordinal in range(template.count):
-        start, end = _resolve_sequence_pair(sequence_fit, template, ordinal, width)
+        start, end = _resolve_sequence_pair(
+            sequence_fit,
+            template,
+            ordinal,
+            width,
+        )
         frame_reference = (start.canonical + end.canonical) / 2.0
+        projected_cross_shift = _aperture_center_shift_px(
+            cross_fit,
+            frame_reference,
+        )
+        cross_shift = 0.0 if projected_cross_shift is None else projected_cross_shift
+        frame_top = _shift_boundary(cross_top, cross_shift)
+        frame_bottom = _shift_boundary(cross_bottom, cross_shift)
         frame_width_support = FiniteInterval(
             min(start.full_interval.minimum, end.full_interval.minimum),
             max(start.full_interval.maximum, end.full_interval.maximum),
         )
+        frame_cross_support = FiniteInterval(
+            min(
+                frame_top.full_interval.minimum,
+                frame_bottom.full_interval.minimum,
+            ),
+            max(
+                frame_top.full_interval.maximum,
+                frame_bottom.full_interval.maximum,
+            ),
+        )
+        side_departure = _aperture_corner_outward_departure_px(
+            cross_fit,
+            frame_cross_support,
+        )
         start_geometry = _boundary_geometry(
             start,
-            reference_trace_px=height_authority_px.center,
-            support_projection_px=height_authority_px,
-            direction=direction,
+            reference_trace_px=frame_cross_support.center,
+            support_projection_px=frame_cross_support,
+            local_outward_departure_px=side_departure,
             width_axis=width_axis,
             height_axis=height_axis,
         )
         end_geometry = _boundary_geometry(
             end,
-            reference_trace_px=height_authority_px.center,
-            support_projection_px=height_authority_px,
-            direction=direction,
+            reference_trace_px=frame_cross_support.center,
+            support_projection_px=frame_cross_support,
+            local_outward_departure_px=side_departure,
             width_axis=width_axis,
             height_axis=height_axis,
         )
-        frame_top = _reanchor_cross_boundary(
-            cross_top,
-            source_trace_px=cross_fit.lane_reference_trace_px,
-            target_trace_px=frame_reference,
-            support_projection_px=frame_width_support,
-            direction=direction,
-            width_axis=width_axis,
-            height_axis=height_axis,
-        )
-        frame_bottom = _reanchor_cross_boundary(
-            cross_bottom,
-            source_trace_px=cross_fit.lane_reference_trace_px,
-            target_trace_px=frame_reference,
-            support_projection_px=frame_width_support,
-            direction=direction,
-            width_axis=width_axis,
-            height_axis=height_axis,
+        cross_reference = (
+            frame_reference
+            if (
+                projected_cross_shift is not None
+                or cross_fit.boundary_use
+                == OutputBoundaryUse.ENCLOSING_SUPPORT_PAIR
+            )
+            else cross_fit.lane_reference_trace_px
         )
         top_geometry = _boundary_geometry(
             frame_top,
-            reference_trace_px=frame_reference,
+            reference_trace_px=cross_reference,
             support_projection_px=frame_width_support,
-            direction=direction,
             width_axis=width_axis,
             height_axis=height_axis,
         )
         bottom_geometry = _boundary_geometry(
             frame_bottom,
-            reference_trace_px=frame_reference,
+            reference_trace_px=cross_reference,
             support_projection_px=frame_width_support,
-            direction=direction,
             width_axis=width_axis,
             height_axis=height_axis,
         )
@@ -484,7 +557,14 @@ def compose_format_placement(
             bottom_geometry.line.intersection(end_geometry.line),
             bottom_geometry.line.intersection(start_geometry.line),
         )
-        if any(not math.isfinite(value) for point in polygon for value in point) or abs(signed_area(polygon)) <= _EPSILON:
+        if (
+            any(
+                not math.isfinite(value)
+                for point in polygon
+                for value in point
+            )
+            or abs(signed_area(polygon)) <= _EPSILON
+        ):
             raise ValueError("fixed template frame polygon is degenerate")
         frames.append(
             TemplateFrame(
@@ -499,7 +579,7 @@ def compose_format_placement(
     phase = sequence_fit.phase_lattice_fit.canonical_absolute_phase_px.hex()
     identity = placement_id or (
         f"template-placement:{lane_id}:{template.template_id}:"
-        f"{source_scan_geometry.geometry_id}:{direction.direction_id}:{phase}:"
+        f"{source_scan_geometry.geometry_id}:{phase}:"
         f"{cross_fit.top_canonical_px.hex()}:{cross_fit.bottom_canonical_px.hex()}"
     )
     return FormatPlacement(
@@ -510,12 +590,16 @@ def compose_format_placement(
         source_scan_geometry=source_scan_geometry,
         sequence_fit=sequence_fit,
         cross_fit=cross_fit,
-        direction=direction,
         width_axis=width_axis,
         height_axis=height_axis,
         width_authority_px=width_authority_px,
         height_authority_px=height_authority_px,
         frames=tuple(frames),
     )
+
+
 def _intersects(left: FiniteInterval, right: FiniteInterval) -> bool:
-    return max(left.minimum, right.minimum) <= min(left.maximum, right.maximum) + _EPSILON
+    return (
+        max(left.minimum, right.minimum)
+        <= min(left.maximum, right.maximum) + _EPSILON
+    )

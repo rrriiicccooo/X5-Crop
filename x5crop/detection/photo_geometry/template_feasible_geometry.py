@@ -38,7 +38,7 @@ class JointFrameState:
     sequence_end_px: float
     top_at_lane_reference_px: float
     bottom_at_lane_reference_px: float
-    angle_degrees: float
+    enclosing_support_slope: float | None
     sequence_start_model_residual_px: float
     sequence_end_model_residual_px: float
 
@@ -48,15 +48,21 @@ class JointFrameState:
             self.sequence_end_px,
             self.top_at_lane_reference_px,
             self.bottom_at_lane_reference_px,
-            self.angle_degrees,
             self.sequence_start_model_residual_px,
             self.sequence_end_model_residual_px,
         )
-        if any(not math.isfinite(value) for value in values) or any(
-            value < 0.0
-            for value in (
-                self.sequence_start_model_residual_px,
-                self.sequence_end_model_residual_px,
+        if (
+            any(not math.isfinite(value) for value in values)
+            or (
+                self.enclosing_support_slope is not None
+                and not math.isfinite(self.enclosing_support_slope)
+            )
+            or any(
+                value < 0.0
+                for value in (
+                    self.sequence_start_model_residual_px,
+                    self.sequence_end_model_residual_px,
+                )
             )
         ):
             raise ValueError("joint frame state must be finite")
@@ -306,7 +312,10 @@ def _project_pair_solutions(
                         "joint feasible projection exceeded its vertex bound"
                     )
         if not added:
-            keys = tuple(_point_key(point) for point in _ordered_hull(tuple(points.values())))
+            keys = tuple(
+                _point_key(point)
+                for point in _ordered_hull(tuple(points.values()))
+            )
             return tuple(solutions[key] for key in keys), evaluations
 
 
@@ -480,7 +489,22 @@ def _support_system(
     support = placement.cross_fit.enclosing_support_pair
     if support is None:
         raise ValueError("enclosing output requires its direct support pair")
-    direction = placement.direction.full_angle_interval_degrees
+    top_binding, bottom_binding = placement.cross_fit.direct_bindings
+    if (
+        top_binding.full_direction_interval_degrees is None
+        or bottom_binding.full_direction_interval_degrees is None
+    ):
+        raise ValueError("enclosing support lacks measured local directions")
+    shared_direction = FiniteInterval(
+        max(
+            top_binding.full_direction_interval_degrees.minimum,
+            bottom_binding.full_direction_interval_degrees.minimum,
+        ),
+        min(
+            top_binding.full_direction_interval_degrees.maximum,
+            bottom_binding.full_direction_interval_degrees.maximum,
+        ),
+    )
     bounds = (
         (
             support.top_full_interval_px.minimum,
@@ -491,8 +515,8 @@ def _support_system(
             support.bottom_full_interval_px.maximum,
         ),
         (
-            math.tan(math.radians(direction.minimum)),
-            math.tan(math.radians(direction.maximum)),
+            math.tan(math.radians(shared_direction.minimum)),
+            math.tan(math.radians(shared_direction.maximum)),
         ),
     )
     top_reference = _LinearExpression(np.asarray((1.0, 0.0, 0.0)), 0.0)
@@ -565,23 +589,16 @@ def _support_cross_states(
         top_at_target,
         bottom_at_target,
     )
-    slope = _LinearExpression(np.asarray((0.0, 0.0, 1.0)), 0.0)
-    zero = _LinearExpression(np.zeros(3, dtype=np.float64), 0.0)
-    slope_solutions = tuple(
-        _support_solution(system, slope, zero, direction)[1]
-        for direction in ((1.0, 0.0), (-1.0, 0.0))
-    )
-    evaluations += len(slope_solutions)
     unique = {
         tuple(round(float(value), 12) for value in solution): solution
-        for solution in (*solutions, *slope_solutions)
+        for solution in solutions
     }
     return (
         tuple(
             (
-                float(solution[0]),
-                float(solution[1]),
-                math.degrees(math.atan(float(solution[2]))),
+                top_at_target.value(solution),
+                bottom_at_target.value(solution),
+                float(solution[2]),
             )
             for solution in unique.values()
         ),
@@ -605,19 +622,9 @@ def project_selected_placement(
     )
     if support_system is None:
         cross_vertices, evaluation_count = _aperture_cross_vertices(placement)
-        angles = tuple(
-            dict.fromkeys(
-                (
-                    placement.direction.full_angle_interval_degrees.minimum,
-                    placement.direction.canonical_angle_degrees,
-                    placement.direction.full_angle_interval_degrees.maximum,
-                )
-            )
-        )
         aperture_states = tuple(
-            (top, bottom, angle)
+            (top, bottom, None)
             for top, bottom in cross_vertices
-            for angle in angles
         )
     else:
         evaluation_count = 0
@@ -631,7 +638,14 @@ def project_selected_placement(
         )
         evaluation_count += evaluations
         if support_system is None:
-            cross_states = aperture_states
+            cross_shift = (
+                placement.frames[ordinal].top.canonical_position_px
+                - placement.cross_fit.top_canonical_px
+            )
+            cross_states = tuple(
+                (top + cross_shift, bottom + cross_shift, support_slope)
+                for top, bottom, support_slope in aperture_states
+            )
         else:
             cross_states, evaluations = _support_cross_states(
                 placement,
@@ -655,11 +669,11 @@ def project_selected_placement(
                     end,
                     top,
                     bottom,
-                    angle,
+                    support_slope,
                     start_residual,
                     end_residual,
                 )
-                for top, bottom, angle in cross_states
+                for top, bottom, support_slope in cross_states
             )
         if not states:
             raise ValueError("selected placement projected no feasible frame state")

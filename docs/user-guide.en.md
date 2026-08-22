@@ -11,7 +11,7 @@
 X5 Crop treats detection as alignment of a known format template, not as
 general-purpose photo-boundary recognition. You provide format and count. The
 program places fixed physical rectangles using photo-group outer, separator
-bands, local frame geometry, and two-dimensional content protection. It
+bands, source-axis frame geometry, and two-dimensional content protection. It
 writes official photos only when every slot of the source is safe. Otherwise
 the complete source enters `needs_review`; individual slots are never salvaged.
 
@@ -76,22 +76,20 @@ shift, contact, or overlap remains `needs_review`. V5 has no user-confirmed
 overlap golden sample, so it does not automatically approve overlap or enable
 special overlap bleed.
 
-### Local Geometry, Mild Bend, And Optional Deskew
+### Source-Axis Geometry, Mild Bend, And Optional Deskew
 
-Direction inside detection only bounds the selected placement's safe frame
-polygon in source coordinates. Local top/bottom own fixed H, short-axis
-position, and this local frame axis. Sequence evidence may only constrain the
-polygon's conservative direction range; it cannot decide output rotation. Two
-lanes may retain different local directions.
+Detection placements have no angle: start/end and aperture top/bottom always
+follow the source axes. Local cross direction proves fragment continuity and
+side compatibility and contributes only to safety protection. It cannot rotate
+a frame, choose a placement, or decide output deskew. A direct aperture edge may
+project its short-axis position only within its sampled trace span; uncovered
+frames are never extrapolated along the fitted line.
 
-A mild bend does not create a curve model. Only a role-qualified boundary with
-direct, continuous strip-wide pixel support may retain a local position after
-bounded outlier removal, and every retained trace must still agree on the same
-inside/outside relation. It cannot recalibrate the global template when enough
-straight boundaries already close that solution. The bend residual belongs
-only to selected-placement safety. If required protection exceeds the output
-budget, the whole source enters review. Frames do not receive independent
-detection angles or free quadrilaterals.
+A mild bend does not create a curve model. Per-trace departure belongs only to
+selected-placement safety. A directly observed enclosing support may retain its
+same-state local slope because that support itself owns final top/bottom. If
+required protection exceeds the output budget, the whole source enters review.
+Frames do not receive independent detection angles or free quadrilaterals.
 
 Deskew is optional cleanup after the safety decision. X5 Crop reads the
 outermost dark edges at 6–24 sparse positions along the strip and robustly fits
@@ -116,8 +114,9 @@ material edge, but it distinguishes two final uses.
 ### Photo Aperture
 
 A local observation may represent the real photo top or bottom only when its
-finite position, locally shared direction, inside/outside relation, and fixed-H closure
-agree. Valid evidence can be:
+finite position, locally compatible direction, inside/outside relation, and
+fixed-H closure agree. Direction proves this cross evidence; it never becomes a
+placement angle. Valid evidence can be:
 
 - direct top and bottom;
 - one source-wide direct side with the opposite side inferred by fixed H;
@@ -183,9 +182,10 @@ top/bottom bleed = 0.25 mm
 ```
 
 X5 Crop first retains all jointly feasible states of the one selected
-placement—phase, pitch, direction, cross position, one local advance, and
-straight-line residual—then adds bleed. It does not add independent maxima that
-cannot occur together and never absorbs a runner-up.
+placement—phase, pitch, cross position, one local advance, and straight-line
+residual. A direct enclosing pair also retains its own same-state slope. Bleed
+is added afterward. X5 Crop does not add independent maxima that cannot occur
+together and never absorbs a runner-up.
 
 Automatic aperture output allows at most 5% expansion per side relative to the
 corresponding format dimension. Measurement uncertainty, straight residual,
@@ -204,11 +204,11 @@ authority, or any exceeded limit, sends the complete source to `needs_review`.
 Representational envelope corners introduced by post-decision deskew do not
 change that safety result.
 
-Two-dimensional content answers only whether the current output clearly cuts
-real picture structure. It cannot move boundaries, split frames, create a
-placement, or score a competitor. Tiny corner grazes, aliasing, and dust remain
-neutral; only reliable content continuing across a complete boundary can veto
-automatic output.
+Two-dimensional content is queried against the final post-residual, post-bleed
+polygon. Picture structure outside the nominal frame but still inside bleed may
+pass; only reliable content crossing the final crop boundary can veto automatic
+output. Content cannot move boundaries, split frames, create a placement, or
+score a competitor. Tiny corner grazes, aliasing, and dust remain neutral.
 
 ## Install The Development Source
 

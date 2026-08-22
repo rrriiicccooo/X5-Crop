@@ -1,15 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import replace
 from types import SimpleNamespace
 import unittest
 
 from x5crop.detection.evidence.content_occupancy_model import (
     ContentOccupancyObservation,
     ContentOccupancyObservationSet,
-)
-from x5crop.detection.photo_geometry.boundary_geometry import (
-    outward_boundary_projection,
 )
 from x5crop.detection.photo_geometry.content_topology import (
     build_content_topology_index,
@@ -20,11 +16,9 @@ from x5crop.detection.photo_geometry.line_observations import SourceCoordinateLi
 from x5crop.detection.photo_geometry.model import (
     BoundaryAxis,
     BoundaryRole,
-    DirectionAuthority,
     PositionSource,
 )
 from x5crop.detection.photo_geometry.output_model import FrameBoundaryGeometry
-from x5crop.detection.photo_geometry.template_model import LocalAdvanceKind
 from x5crop.domain import Box, FiniteInterval, ObservationId
 
 
@@ -59,8 +53,6 @@ def make_observation(box: Box) -> ContentOccupancyObservationSet:
 def make_frame(
     start: float,
     end: float,
-    *,
-    direction_degrees: FiniteInterval = FiniteInterval.exact(0.0),
 ):
     def boundary(role: BoundaryRole, position: float) -> FrameBoundaryGeometry:
         cross = role in {BoundaryRole.TOP, BoundaryRole.BOTTOM}
@@ -76,18 +68,12 @@ def make_frame(
             reference_trace_px=15.0,
             canonical_position_px=position,
             full_position_interval_px=FiniteInterval.exact(position),
-            full_direction_interval_degrees=direction_degrees,
+            local_outward_departure_px=0.0,
             position_source=PositionSource.OBSERVED_TRANSITION,
             position_observation_ids=(
                 ObservationId(f"boundary:{role.value}:{position}"),
             ),
             named_position_inference=None,
-            direction_authority=(
-                DirectionAuthority.SHARED_TOP_BOTTOM_DIRECTION
-                if cross
-                else DirectionAuthority.BOUNDED_SEQUENCE_EDGE_DIRECTION
-            ),
-            direction_reference_id="direction:test",
         )
 
     return SimpleNamespace(
@@ -100,30 +86,77 @@ def make_frame(
 
 
 def make_content_placement(frames: tuple[object, ...], _relations: tuple[object, ...]):
-    return SimpleNamespace(placement_id="placement:content", frames=frames)
+    return SimpleNamespace(
+        placement_id="placement:content",
+        output_slot_count=len(frames),
+        width_axis=BoundaryAxis.X,
+        frames=frames,
+    )
+
+
+def required_footprints(
+    frames: tuple[object, ...],
+    *,
+    sequence_bleed: float = 0.0,
+    cross_bleed: float = 0.0,
+):
+    return tuple(
+        (
+            (
+                frame.start.canonical_position_px - sequence_bleed,
+                frame.top.canonical_position_px - cross_bleed,
+            ),
+            (
+                frame.end.canonical_position_px + sequence_bleed,
+                frame.top.canonical_position_px - cross_bleed,
+            ),
+            (
+                frame.end.canonical_position_px + sequence_bleed,
+                frame.bottom.canonical_position_px + cross_bleed,
+            ),
+            (
+                frame.start.canonical_position_px - sequence_bleed,
+                frame.bottom.canonical_position_px + cross_bleed,
+            ),
+        )
+        for frame in frames
+    )
+
+
+def assess(
+    frames: tuple[object, ...],
+    observation: ContentOccupancyObservationSet,
+    *,
+    sequence_bleed: float = 0.0,
+    cross_bleed: float = 0.0,
+):
+    placement = make_content_placement(frames, ())
+    return content_veto_assessment(
+        placement,
+        required_footprints(
+            frames,
+            sequence_bleed=sequence_bleed,
+            cross_bleed=cross_bleed,
+        ),
+        build_content_topology_index(observation, layout="horizontal"),
+    )
 
 
 class ContentVetoContractTest(unittest.TestCase):
     def test_start_end_and_contact_content_are_neutral(self) -> None:
         outside_observation = make_observation(Box(0, 12, 5, 16))
-        outside = content_veto_assessment(
-            make_content_placement((make_frame(10.0, 20.0),), ()),
-            build_content_topology_index(outside_observation, layout="horizontal"),
+        outside = assess(
+            (make_frame(10.0, 20.0),),
+            outside_observation,
         )
         contact_observation = make_observation(Box(18, 12, 22, 16))
-        contact = content_veto_assessment(
-            make_content_placement(
-                (make_frame(10.0, 20.0), make_frame(20.0, 30.0)),
-                (LocalAdvanceKind.CONTACT,),
-            ),
-            build_content_topology_index(contact_observation, layout="horizontal"),
+        contact = assess(
+            (make_frame(10.0, 20.0), make_frame(20.0, 30.0)),
+            contact_observation,
         )
-        overlap = content_veto_assessment(
-            make_content_placement(
-                (make_frame(10.0, 21.0), make_frame(19.0, 30.0)),
-                (LocalAdvanceKind.OVERLAP,),
-            ),
-            build_content_topology_index(contact_observation, layout="horizontal"),
+        overlap = assess(
+            (make_frame(10.0, 21.0), make_frame(19.0, 30.0)),
+            contact_observation,
         )
         self.assertFalse(outside.vetoed)
         self.assertFalse(contact.vetoed)
@@ -131,17 +164,14 @@ class ContentVetoContractTest(unittest.TestCase):
 
     def test_only_slot_crop_or_normal_separator_crossing_vetoes(self) -> None:
         slot_observation = make_observation(Box(12, 8, 16, 13))
-        slot = content_veto_assessment(
-            make_content_placement((make_frame(10.0, 20.0),), ()),
-            build_content_topology_index(slot_observation, layout="horizontal"),
+        slot = assess(
+            (make_frame(10.0, 20.0),),
+            slot_observation,
         )
         separator_observation = make_observation(Box(16, 12, 24, 16))
-        separator = content_veto_assessment(
-            make_content_placement(
-                (make_frame(10.0, 18.0), make_frame(22.0, 30.0)),
-                (LocalAdvanceKind.NOMINAL,),
-            ),
-            build_content_topology_index(separator_observation, layout="horizontal"),
+        separator = assess(
+            (make_frame(10.0, 18.0), make_frame(22.0, 30.0)),
+            separator_observation,
         )
         self.assertEqual(
             {item.reason for item in slot.facts},
@@ -152,22 +182,16 @@ class ContentVetoContractTest(unittest.TestCase):
             {ContentVetoReason.SEPARATOR_CORE_CONTENT_CROSSING},
         )
     def test_edge_intersection_at_slot_corner_is_not_content_veto(self) -> None:
-        corner = content_veto_assessment(
-            make_content_placement((make_frame(10.0, 20.0),), ()),
-            build_content_topology_index(
-                make_observation(Box(9, 8, 11, 13)),
-                layout="horizontal",
-            ),
+        corner = assess(
+            (make_frame(10.0, 20.0),),
+            make_observation(Box(9, 8, 11, 13)),
         )
         self.assertFalse(corner.vetoed)
 
     def test_content_one_cell_inside_corner_is_still_edge_interior(self) -> None:
-        assessment = content_veto_assessment(
-            make_content_placement((make_frame(10.0, 20.0),), ()),
-            build_content_topology_index(
-                make_observation(Box(10, 8, 14, 13)),
-                layout="horizontal",
-            ),
+        assessment = assess(
+            (make_frame(10.0, 20.0),),
+            make_observation(Box(10, 8, 14, 13)),
         )
         self.assertIn(
             ContentVetoReason.SLOT_CONTENT_CROPPED_IN,
@@ -178,48 +202,74 @@ class ContentVetoContractTest(unittest.TestCase):
         self,
     ) -> None:
         observation = make_observation(Box(0, 8, 16, 13))
-        assessment = content_veto_assessment(
-            make_content_placement((make_frame(10.0, 20.0),), ()),
-            build_content_topology_index(observation, layout="horizontal"),
+        assessment = assess(
+            (make_frame(10.0, 20.0),),
+            observation,
         )
         self.assertIn(
             ContentVetoReason.SLOT_CONTENT_CROPPED_IN,
             {item.reason for item in assessment.facts},
         )
 
-    def test_content_veto_uses_the_safe_envelope_discard_edge(self) -> None:
-        frame = make_frame(10.0, 20.0)
-        frame.top = replace(
-            frame.top,
-            full_position_interval_px=FiniteInterval(10.0, 12.0),
+    def test_content_inside_final_bleed_is_not_vetoed(self) -> None:
+        observation = make_observation(Box(12, 8, 16, 14))
+        self.assertTrue(
+            assess((make_frame(10.0, 20.0),), observation).vetoed
         )
-        assessment = content_veto_assessment(
-            make_content_placement((frame,), ()),
-            build_content_topology_index(
-                make_observation(Box(12, 8, 16, 13)),
-                layout="horizontal",
-            ),
+        assessment = assess(
+            (make_frame(10.0, 20.0),),
+            observation,
+            cross_bleed=2.0,
+        )
+        self.assertFalse(assessment.vetoed)
+
+    def test_content_beyond_final_bleed_is_vetoed(self) -> None:
+        assessment = assess(
+            (make_frame(10.0, 20.0),),
+            make_observation(Box(12, 6, 16, 12)),
+            cross_bleed=2.0,
         )
         self.assertEqual(
             {item.reason for item in assessment.facts},
             {ContentVetoReason.SLOT_CONTENT_CROPPED_IN},
         )
 
-    def test_angled_boundary_projects_at_each_real_content_cell(self) -> None:
-        frame = make_frame(
-            10.0,
-            20.0,
-            direction_degrees=FiniteInterval.exact(45.0),
+    def test_outer_content_is_judged_against_final_sequence_bleed(self) -> None:
+        observation = make_observation(Box(18, 12, 24, 16))
+        without_bleed = assess((make_frame(10.0, 20.0),), observation)
+        with_bleed = assess(
+            (make_frame(10.0, 20.0),),
+            observation,
+            sequence_bleed=4.0,
         )
-        top = outward_boundary_projection(frame.top).coordinate_interval(
-            FiniteInterval(20.0, 22.0)
+
+        self.assertEqual(
+            {item.reason for item in without_bleed.facts},
+            {ContentVetoReason.OUTER_SLOT_CONTENT_OMITTED},
         )
-        start = outward_boundary_projection(frame.start).coordinate_interval(
-            FiniteInterval(20.0, 22.0)
+        self.assertFalse(with_bleed.vetoed)
+
+    def test_sloped_edge_uses_the_exact_final_polygon(self) -> None:
+        placement = make_content_placement((make_frame(10.0, 20.0),), ())
+        footprint = (
+            (10.0, 10.0),
+            (20.0, 14.0),
+            (20.0, 20.0),
+            (10.0, 20.0),
         )
-        self.assertEqual(top, FiniteInterval(15.0, 17.0))
-        self.assertAlmostEqual(start.minimum, 3.0)
-        self.assertAlmostEqual(start.maximum, 5.0)
+        assessment = content_veto_assessment(
+            placement,
+            (footprint,),
+            build_content_topology_index(
+                make_observation(Box(16, 11, 19, 16)),
+                layout="horizontal",
+            ),
+        )
+
+        self.assertEqual(
+            {item.reason for item in assessment.facts},
+            {ContentVetoReason.SLOT_CONTENT_CROPPED_IN},
+        )
 
 
 if __name__ == "__main__":

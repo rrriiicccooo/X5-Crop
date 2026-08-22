@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 from dataclasses import replace
+import inspect
 import math
 from pathlib import Path
 import unittest
@@ -13,7 +14,6 @@ from tools.tests.template_test_support import (
     placement_direction as _direction,
     placement_sequence as _sequence,
     placement_template as _template,
-    phase_edge as _edge,
 )
 from x5crop.domain import FiniteInterval, ObservationId, PositiveInterval
 from x5crop.formats import FramePhysicalSpec
@@ -36,21 +36,21 @@ from x5crop.detection.photo_geometry.template_placement import (
 
 
 class TemplatePlacementContractTest(unittest.TestCase):
-    def test_three_region_pair_uses_direct_fit_hull_for_frame_axis(self) -> None:
+    def test_three_region_direction_does_not_create_a_frame_axis(self) -> None:
         template = _template(1)
         cross = _cross(template, direction=_direction(0.15))
         top, bottom = cross.direct_bindings
         top = replace(
             top,
-            canonical_direction_degrees=0.10,
-            fit_direction_interval_degrees=FiniteInterval(0.08, 0.12),
+            canonical_direction_degrees=0.0,
+            fit_direction_interval_degrees=FiniteInterval(-0.02, 0.02),
             full_direction_interval_degrees=FiniteInterval(-0.50, 0.50),
             observed_direction_interval_degrees=FiniteInterval(-0.50, 0.50),
         )
         bottom = replace(
             bottom,
-            canonical_direction_degrees=0.20,
-            fit_direction_interval_degrees=FiniteInterval(0.18, 0.22),
+            canonical_direction_degrees=0.0,
+            fit_direction_interval_degrees=FiniteInterval(-0.02, 0.02),
             full_direction_interval_degrees=FiniteInterval(-0.40, 0.60),
             observed_direction_interval_degrees=FiniteInterval(-0.40, 0.60),
         )
@@ -69,13 +69,15 @@ class TemplatePlacementContractTest(unittest.TestCase):
 
         placement = _compose(template, _sequence(template), cross)
 
+        self.assertFalse(hasattr(placement, "direction"))
         self.assertEqual(
-            placement.direction.full_angle_interval_degrees,
-            FiniteInterval(0.08, 0.22),
+            placement.frames[0].canonical_source_polygon,
+            ((100.0, 10.0), (200.0, 10.0), (200.0, 250.0), (100.0, 250.0)),
         )
-        self.assertEqual(placement.direction.canonical_angle_degrees, 0.15)
 
-    def test_two_sequence_positions_bound_disjoint_local_frame_axis(self) -> None:
+    def test_shared_direction_cannot_change_boundary_local_geometry(
+        self,
+    ) -> None:
         template = _template(1)
         sequence = _sequence(template)
         cross = _cross(template, direction=_direction(0.20))
@@ -108,31 +110,25 @@ class TemplatePlacementContractTest(unittest.TestCase):
             longitudinal_support_domain_count=2,
             role_authorized_pair_support_domain_count=2,
         )
-        first = replace(
-            _edge("sequence:0", 100.0),
-            canonical_direction_degrees=0.18,
-            fit_direction_interval_degrees=FiniteInterval(0.15, 0.21),
-            full_direction_interval_degrees=FiniteInterval(0.14, 0.22),
-        )
-        second = replace(
-            _edge("sequence:1", 200.0),
-            canonical_direction_degrees=0.26,
-            fit_direction_interval_degrees=FiniteInterval(0.23, 0.29),
-            full_direction_interval_degrees=FiniteInterval(0.22, 0.30),
-        )
-
+        baseline = _compose(template, sequence, cross)
         placement = _compose(
             template,
             sequence,
-            cross,
-            sequence_observations=(first, second),
+            replace(cross, selected_direction=_direction(-0.15)),
         )
 
-        self.assertEqual(
-            placement.direction.full_angle_interval_degrees,
-            FiniteInterval(0.19, 0.25),
+        self.assertNotIn(
+            "sequence_observations",
+            inspect.signature(compose_format_placement).parameters,
         )
-        self.assertEqual(placement.direction.canonical_angle_degrees, 0.22)
+        self.assertFalse(hasattr(placement, "direction"))
+        self.assertEqual(placement.frames[0].top.line.normal_x, 0.0)
+        self.assertEqual(placement.frames[0].top.line.normal_y, 1.0)
+        self.assertEqual(placement.frames[0].bottom.line.normal_x, 0.0)
+        self.assertEqual(placement.frames[0].bottom.line.normal_y, 1.0)
+        self.assertEqual(placement.frames[0].start.line.normal_x, 1.0)
+        self.assertEqual(placement.frames[0].start.line.normal_y, 0.0)
+        self.assertEqual(placement.frames, baseline.frames)
 
     def test_three_direct_frames_preserve_ids_and_polygon(self) -> None:
         template = _template()
@@ -213,36 +209,81 @@ class TemplatePlacementContractTest(unittest.TestCase):
         self.assertEqual(frame.top.full_position_interval_px, FiniteInterval.exact(10.0))
         self.assertEqual(frame.bottom.full_position_interval_px, FiniteInterval.exact(250.0))
 
-    def test_sloped_cross_line_is_reanchored_at_each_frame_trace(self) -> None:
+    def test_sloped_cross_evidence_does_not_reanchor_output_boundary(self) -> None:
         template = _template(1)
-        placement = _compose(template, _sequence(template), _cross(template, direction=_direction(0.2), lane_reference=100.0))
+        cross = _cross(
+            template,
+            direction=_direction(-0.15),
+            lane_reference=100.0,
+        )
+        top, bottom = cross.direct_bindings
+        top = replace(
+            top,
+            canonical_direction_degrees=0.2,
+            fit_direction_interval_degrees=FiniteInterval(0.18, 0.22),
+            full_direction_interval_degrees=FiniteInterval(0.16, 0.24),
+            observed_direction_interval_degrees=FiniteInterval(0.16, 0.24),
+        )
+        cross = replace(cross, direct_bindings=(top, bottom))
+        placement = _compose(template, _sequence(template), cross)
         top = placement.frames[0].top
-        angle = math.radians(0.2)
-        normal_x, normal_y = -math.sin(angle), math.cos(angle)
-        source_trace = 100.0
-        source_position = 10.0
-        offset = normal_x * source_trace + normal_y * source_position
-        frame_trace = top.reference_trace_px
-        expected = (offset - normal_x * frame_trace) / normal_y
-        self.assertAlmostEqual(top.canonical_position_px, expected, places=8)
-        expected_states = tuple(
-            source_position
-            + math.tan(math.radians(state_angle))
-            * (frame_trace - source_trace)
-            for state_angle in (-0.2, 0.2)
+        self.assertEqual(top.canonical_position_px, 10.0)
+        self.assertEqual(top.full_position_interval_px, FiniteInterval.exact(10.0))
+        self.assertEqual(top.line.normal_x, 0.0)
+        self.assertEqual(top.line.normal_y, 1.0)
+        self.assertEqual(placement.frames[0].start.line.normal_x, 1.0)
+        self.assertEqual(placement.frames[0].start.line.normal_y, 0.0)
+
+    def test_aperture_offset_projects_only_inside_direct_trace_support(self) -> None:
+        template = _template(2)
+        cross = _cross(
+            template,
+            direction=_direction(0.1),
+            lane_reference=150.0,
+        )
+        top, bottom = cross.direct_bindings
+        supported = tuple(
+            replace(
+                binding,
+                trace_coordinates_px=(100, 150, 300),
+                canonical_direction_degrees=0.1,
+            )
+            for binding in (top, bottom)
+        )
+        placement = _compose(
+            template,
+            _sequence(template),
+            replace(cross, direct_bindings=supported),
+        )
+        expected_shift = math.tan(math.radians(0.1)) * 120.0
+
+        self.assertAlmostEqual(
+            placement.frames[1].top.canonical_position_px,
+            10.0 + expected_shift,
         )
         self.assertAlmostEqual(
-            top.full_position_interval_px.minimum,
-            min(expected_states),
-            places=8,
+            placement.frames[1].bottom.canonical_position_px
+            - placement.frames[1].top.canonical_position_px,
+            240.0,
         )
-        self.assertAlmostEqual(
-            top.full_position_interval_px.maximum,
-            max(expected_states),
-            places=8,
+        self.assertEqual(placement.frames[1].top.line.normal_x, 0.0)
+        self.assertEqual(placement.frames[1].top.line.normal_y, 1.0)
+
+        unsupported = tuple(
+            replace(binding, trace_coordinates_px=(100, 150, 200))
+            for binding in supported
+        )
+        unprojected = _compose(
+            template,
+            _sequence(template),
+            replace(cross, direct_bindings=unsupported),
+        )
+        self.assertEqual(
+            unprojected.frames[1].top.canonical_position_px,
+            10.0,
         )
 
-    def test_cross_local_direction_is_the_placement_direction(self) -> None:
+    def test_cross_local_direction_is_not_a_placement_property(self) -> None:
         template = _template(1)
         lane_direction = _direction(0.05)
         shared = SharedStripDirection(
@@ -260,11 +301,8 @@ class TemplatePlacementContractTest(unittest.TestCase):
             _sequence(template),
             _cross(template, direction=shared),
         )
-        self.assertEqual(placement.direction, shared)
-        self.assertEqual(
-            placement.frames[0].top.direction_reference_id,
-            shared.direction_id,
-        )
+        self.assertFalse(hasattr(placement, "direction"))
+        self.assertFalse(hasattr(placement.frames[0].top, "direction_reference_id"))
 
     def test_resolved_cross_local_direction_is_not_blocked_by_sequence_direction_conflict(
         self,
@@ -308,20 +346,29 @@ class TemplatePlacementContractTest(unittest.TestCase):
             cross,
         )
 
-        self.assertIs(placement.direction, local_direction)
+        self.assertFalse(hasattr(placement, "direction"))
         self.assertTrue(
             all(
-                frame.top.direction_reference_id == local_direction.direction_id
-                and frame.bottom.direction_reference_id
-                == local_direction.direction_id
+                frame.top.line.normal_x == 0.0
+                and frame.top.line.normal_y == 1.0
+                and frame.bottom.line.normal_x == 0.0
+                and frame.bottom.line.normal_y == 1.0
+                and frame.start.line.normal_x == 1.0
+                and frame.start.line.normal_y == 0.0
+                and frame.end.line.normal_x == 1.0
+                and frame.end.line.normal_y == 0.0
                 for frame in placement.frames
             )
         )
 
-    def test_no_direction_and_contradiction_are_rejected(self) -> None:
+    def test_missing_cross_direction_is_allowed_but_geometry_contradiction_is_rejected(self) -> None:
         template = _template(1)
-        with self.assertRaises(ValueError):
-            _compose(template, _sequence(template), _cross(template, direction=None))
+        placement = _compose(
+            template,
+            _sequence(template),
+            _cross(template, direction=None),
+        )
+        self.assertFalse(hasattr(placement, "direction"))
         good_spec = FramePhysicalSpec(36.0, 24.0, 2.0)
         bad_spec = FramePhysicalSpec(35.0, 24.0, 2.0)
         source = SourceScanGeometry.create(
