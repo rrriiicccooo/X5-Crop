@@ -279,11 +279,23 @@ function renderGeometry() {
     elements.polygonLayer.appendChild(polygon);
   });
 
-  for (const entry of activeLineEntries()) {
+  const entries = activeLineEntries();
+  entries.sort((left, right) => (
+    Number(left.line.line_id === selectedLineId) -
+    Number(right.line.line_id === selectedLineId)
+  ));
+  for (const entry of entries) {
     const [first, second] = entry.line.points_display;
+    const selected = entry.line.line_id === selectedLineId;
     const classes = ["annotation-line", entry.family];
     if (!entry.active) classes.push("inactive");
-    if (entry.line.line_id === selectedLineId) classes.push("selected");
+    if (selected) {
+      classes.push("selected");
+      elements.lineLayer.appendChild(svgElement("line", {
+        x1: first[0], y1: first[1], x2: second[0], y2: second[1],
+        class: "annotation-selection-halo"
+      }));
+    }
     const node = svgElement("line", {
       x1: first[0], y1: first[1], x2: second[0], y2: second[1],
       class: classes.join(" "), "data-line-id": entry.line.line_id
@@ -680,10 +692,22 @@ async function loadLoupe(point) {
 function renderLoupeLines() {
   elements.loupeLineLayer.replaceChildren();
   if (!currentRecord) return;
-  for (const entry of activeLineEntries().filter((item) => item.active)) {
+  const entries = activeLineEntries().filter((item) => item.active);
+  entries.sort((left, right) => (
+    Number(left.line.line_id === selectedLineId) -
+    Number(right.line.line_id === selectedLineId)
+  ));
+  for (const entry of entries) {
     const [first, second] = entry.line.points_display;
+    const selected = entry.line.line_id === selectedLineId;
     const classes = ["loupe-annotation-line", entry.family];
-    if (entry.line.line_id === selectedLineId) classes.push("selected");
+    if (selected) {
+      classes.push("selected");
+      elements.loupeLineLayer.appendChild(svgElement("line", {
+        x1: first[0], y1: first[1], x2: second[0], y2: second[1],
+        class: "loupe-selection-halo"
+      }));
+    }
     elements.loupeLineLayer.appendChild(svgElement("line", {
       x1: first[0], y1: first[1], x2: second[0], y2: second[1],
       class: classes.join(" "), "data-line-id": entry.line.line_id

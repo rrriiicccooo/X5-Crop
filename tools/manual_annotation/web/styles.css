@@ -95,7 +95,8 @@ button:disabled { opacity: .38; cursor: not-allowed; }
 .annotation-line.shared { stroke: var(--cyan); }
 .annotation-line.boundary { stroke: var(--red); }
 .annotation-line.inactive { stroke: #7f8792; opacity: .26; }
-.annotation-line.selected { stroke: #fff; stroke-width: 3.3; filter: drop-shadow(0 0 5px rgba(255,255,255,.65)); }
+.annotation-selection-halo { stroke: #050608; stroke-width: 8; stroke-linecap: round; vector-effect: non-scaling-stroke; pointer-events: none; opacity: .92; }
+.annotation-line.selected { stroke: var(--amber); stroke-width: 3.4; stroke-linecap: round; filter: none; opacity: 1; }
 .line-label { fill: white; paint-order: stroke; stroke: rgba(0,0,0,.8); stroke-width: 3px; vector-effect: non-scaling-stroke; font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; pointer-events: none; }
 .endpoint { fill: #fff; stroke: #15181e; stroke-width: 2; vector-effect: non-scaling-stroke; cursor: move; }
 .endpoint.active { fill: var(--amber); }
@@ -114,7 +115,8 @@ button:disabled { opacity: .38; cursor: not-allowed; }
 .loupe-annotation-line { stroke-width: 2.4; vector-effect: non-scaling-stroke; pointer-events: none; filter: drop-shadow(0 0 2px #000); }
 .loupe-annotation-line.shared { stroke: var(--cyan); }
 .loupe-annotation-line.boundary { stroke: var(--red); }
-.loupe-annotation-line.selected { stroke: #fff; stroke-width: 3.6; filter: drop-shadow(0 0 3px #000); }
+.loupe-selection-halo { stroke: #050608; stroke-width: 8; stroke-linecap: round; vector-effect: non-scaling-stroke; pointer-events: none; opacity: .95; }
+.loupe-annotation-line.selected { stroke: var(--amber); stroke-width: 3.8; stroke-linecap: round; filter: none; }
 .coordinate-grid { display: grid; grid-template-columns: 65px 1fr; gap: 7px 8px; align-items: center; font-size: 11px; }
 .coordinate-grid span { color: var(--muted); }
 .coordinate-grid code { overflow: hidden; text-overflow: ellipsis; color: #dbe5f5; font-size: 10px; }
