@@ -30,7 +30,8 @@ def cohort_slot_count(row: dict[str, Any]) -> int:
 def validate_cohort_counts(
     paths: Iterable[Path] = COHORT_PATHS,
 ) -> None:
-    counts_by_sha: dict[str, tuple[str, int]] = {}
+    formats_by_sha: dict[str, str] = {}
+    authorities_by_task: dict[tuple[str, str], tuple[str, int]] = {}
     for row in _rows(paths):
         sample_id = str(row.get("sample_id", "<unknown>"))
         count = cohort_slot_count(row)
@@ -40,11 +41,18 @@ def validate_cohort_counts(
         digest = str(row.get("source_sha256", "")).lower()
         if len(digest) != 64:
             continue
-        identity = (format_id, count)
-        previous = counts_by_sha.setdefault(digest, identity)
-        if previous != identity:
+        previous_format = formats_by_sha.setdefault(digest, format_id)
+        if previous_format != format_id:
             raise ValueError(
-                f"source SHA has conflicting format/count authority: {sample_id}"
+                f"source SHA has conflicting format authority: {sample_id}"
+            )
+        identity = (format_id, count)
+        previous_authority = authorities_by_task.setdefault(
+            (digest, sample_id), identity
+        )
+        if previous_authority != identity:
+            raise ValueError(
+                f"sample task has conflicting format/count authority: {sample_id}"
             )
 
 

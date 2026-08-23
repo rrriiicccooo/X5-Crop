@@ -13,6 +13,8 @@ materialization、平行 detector 和 report reuse 均不再支持。
 
 - 用户提供 format，并确认匹配片夹的默认 count 或明确 count；count 包含中间空白曝光格。Runtime
   不猜 format、照片数或 blank，也不保存 full/partial mode。
+- 同一 source SHA 可保留多个显式 count 的独立测试任务并复用一份物理边界标注；cohort 只要求同源
+  format 一致以及同一 task 的 format/count 不矛盾，不再错误地把 count 绑定到 source SHA。
 - `135-dual` 只自动处理 12 格、每 lane 6 格；其它 count 安全进入 review。任一 slot 不安全时整张
   source review，不做 slot salvage。
 - Detector 改为有界 fixed-template-first 对准：先建立 role-free coarse support，再在固定 outer、
@@ -82,7 +84,7 @@ materialization、平行 detector 和 report reuse 均不再支持。
 ### 验证边界
 
 - 用户确认黄金决定几何准确性；nominal 必须安全自动批准，challenge 允许安全 review。
-- 111-source diagnostic 只证明终态、schema、authority、工作量和 TIFF 工程合同，不产生准确率 verdict。
+- 110-task diagnostic 只证明终态、schema、authority、工作量和 TIFF 工程合同，不产生准确率 verdict。
 - Apple Silicon macOS、Intel macOS 与 Windows x64 必须在同一最终 commit 取得实机 receipt；没有独立
   卷时 exFAT 保持 `best_effort_unverified`。
 - Accuracy、性能与三平台 receipt 全部绑定同一 release commit 前，不创建 RC、tag、Release 或公开 ZIP。

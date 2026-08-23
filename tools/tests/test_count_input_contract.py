@@ -29,19 +29,48 @@ class CountInputContractTest(unittest.TestCase):
             "format_id": "135",
             "count": 6,
         },))
-        with self.assertRaisesRegex(ValueError, "conflicting format/count"):
+        validate((
+            {
+                "sample_id": "count-six-task",
+                "source_sha256": "c" * 64,
+                "format_id": "135",
+                "count": 6,
+            },
+            {
+                "sample_id": "count-five-task",
+                "source_sha256": "c" * 64,
+                "format_id": "135",
+                "count": 5,
+            },
+        ))
+        with self.assertRaisesRegex(ValueError, "sample task has conflicting"):
             validate((
                 {
-                    "sample_id": "first",
-                    "source_sha256": "c" * 64,
+                    "sample_id": "same-task",
+                    "source_sha256": "d" * 64,
                     "format_id": "135",
                     "count": 6,
                 },
                 {
-                    "sample_id": "alias",
-                    "source_sha256": "c" * 64,
+                    "sample_id": "same-task",
+                    "source_sha256": "d" * 64,
                     "format_id": "135",
                     "count": 5,
+                },
+            ))
+        with self.assertRaisesRegex(ValueError, "source SHA has conflicting format"):
+            validate((
+                {
+                    "sample_id": "first-format",
+                    "source_sha256": "e" * 64,
+                    "format_id": "135",
+                    "count": 6,
+                },
+                {
+                    "sample_id": "second-format",
+                    "source_sha256": "e" * 64,
+                    "format_id": "half",
+                    "count": 6,
                 },
             ))
 

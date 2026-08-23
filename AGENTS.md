@@ -170,15 +170,17 @@ platform | platform-check | platform-package | pre-push
   format 和显式 count 绑定样片。当前本地样片统一为
   `Test/<format>/Sxxx_count-N.tif`，使用正式 format ID，不建立 `full/partial` 子目录。文件名中的 count
   只镜像 cohort authority，任何工具都不得从路径反推。不得把 TIFF、生成输出或 receipt 提交到 Git。
-- 人工校准工作集按 source SHA 去重；同一字节内容的多个 sample identity 在 manifest 中保留 alias，
-  但只准备一张待标注工作副本。只有用户明确确认的原图坐标才能进入黄金基线。
+- 人工校准工作集按 source SHA 去重；同一字节内容只准备一张待标注工作副本，但不同显式 count 的
+  sample task 必须分别保留，不能当成重复项合并。Manifest 同时记录 task identity、count 与 source
+  alias；共享工作副本用 `counts-N-M` 镜像全部 task count，不从该文件名反推 authority。只有用户明确
+  确认的原图坐标才能进入黄金基线。
 - Accuracy 只有 `gold_accuracy_blocking` 与 `diagnostic_unreviewed` 两种角色。九张黄金各运行一项，
   共九项，并逐项携带用户确认 count；不保留 auto 重复任务。
   Nominal 必须安全自动批准，challenge 允许安全 `needs_review`。不得新增样片规则、whitelist、
   格式 denylist 或根据当前输出自动晋升黄金。
 - Accuracy、diagnostic、performance 与 platform cohort 的每条记录都必须携带明确 count；工具不得
   从片夹容量、文件名、目录中的历史 full/partial 标签或像素推导。
-- 111-source diagnostic 只判断 crash、hang、terminal/schema 完整性、authority、query/template、
+- 110-task diagnostic 只判断 crash、hang、terminal/schema 完整性、authority、query/template、
   内存和 TIFF 工程合同，不产生 accuracy verdict。
 - 性能 Gate 使用 24-source 完整用户路径，正式 mean 上限为 5 秒；3 秒 mean 只作不阻断的
   challenge。SHA、profiling 和 Debug Analysis 在计时外；未插桩 production RSS 与 cProfile RSS

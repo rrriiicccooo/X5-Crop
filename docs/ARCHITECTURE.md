@@ -22,6 +22,8 @@ X5 Crop 是已知胶片模板的自动对准器，不是通用照片边界检测
 - Count 包含中间空白曝光格；不做 blank suppression。
 - 省略 count 表示用户确认匹配片夹的默认完整格数。
 - 明确 count 表示用户确认实际 slot 数，必须满足 `1 <= count <= holder_full_count`。
+- 同一 source SHA 可以建立多个显式 count 的独立 evaluation task；它们复用同一物理边界标注，但
+  分别验证对应 slot 解释和输出。Source SHA 只固定 format 与像素身份，不固定 count。
 - Runtime 不保存 full/partial mode。是否铺满是 placement 选定后的物理事实，不是搜索权限。
 - `135-dual` 默认 12 格、每 lane 6 格。其它明确 count 产生
   `unsupported_dual_count` 并进入 review，不猜 lane 分配，不运行自动 placement。
@@ -497,7 +499,7 @@ Pillow 只在 Debug Analysis 时延迟导入。生产默认 `--jobs 1`、上限 
   只有不存在 selected candidate 的安全 review 不产生几何 verdict，`approved_auto` 仍须另外验证正式
   输出覆盖与预算。
   Cosmetic deskew 精度不阻断黄金；affine polygon envelope 与 TIFF 安全合同仍阻断。
-- 111-source diagnostic 只证明不崩溃、工作量有界、报告闭合和 TIFF 工程合同，不证明几何正确。
+- 110-task diagnostic 只证明不崩溃、工作量有界、报告闭合和 TIFF 工程合同，不证明几何正确。
 - 24-source performance 只证明其绑定 commit、依赖和机器上的完整路径时间与资源；5 秒均值是
   blocking Gate，3 秒均值只是 non-blocking challenge。
 - Platform 聚合必须同时收到同一 commit 的 Apple Silicon macOS、Intel macOS 与 Windows x64
