@@ -468,6 +468,7 @@ class ManualAnnotationPackagingContractTest(unittest.TestCase):
         self.assertIn("loupe-selection-halo", joined)
         self.assertNotIn(".annotation-line.selected { stroke: #fff", joined)
         self.assertNotIn(".loupe-annotation-line.selected { stroke: #fff", joined)
+        self.assertIn("min(564px, 46vw)", joined)
         self.assertIn("bracketleft", joined)
         self.assertIn('data-rotate="-1"', joined)
         self.assertFalse(

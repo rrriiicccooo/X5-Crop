@@ -80,7 +80,7 @@ button:disabled { opacity: .38; cursor: not-allowed; }
 .review-check { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; }
 .review-check input { accent-color: #4a8cf2; }
 
-.canvas-grid { display: grid; grid-template-columns: minmax(0, 1fr) 344px; flex: 1; min-height: 0; }
+.canvas-grid { display: grid; grid-template-columns: minmax(0, 1fr) min(564px, 46vw); flex: 1; min-height: 0; }
 .canvas-stage { position: relative; min-width: 0; min-height: 0; overflow: hidden; background: #08090c; }
 .canvas-stage::before { content: ""; position: absolute; inset: 0; pointer-events: none; background-image: linear-gradient(45deg, #0f1116 25%, transparent 25%), linear-gradient(-45deg, #0f1116 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #0f1116 75%), linear-gradient(-45deg, transparent 75%, #0f1116 75%); background-size: 24px 24px; background-position: 0 0, 0 12px, 12px -12px, -12px 0; opacity: .45; }
 #annotationSvg { position: absolute; inset: 0; width: 100%; height: 100%; outline: none; touch-action: none; cursor: crosshair; }
@@ -144,6 +144,5 @@ dialog::backdrop { background: rgba(3,5,8,.74); backdrop-filter: blur(5px); }
 
 @media (max-width: 1260px) {
   .app-shell { grid-template-columns: 256px minmax(0, 1fr); }
-  .canvas-grid { grid-template-columns: minmax(0, 1fr) 300px; }
   .inspect-panel { padding: 8px; }
 }
