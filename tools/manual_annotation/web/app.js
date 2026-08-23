@@ -1,6 +1,7 @@
 "use strict";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
+const ROTATION_STEP_DEGREES = 0.01;
 const token = new URLSearchParams(window.location.search).get("token") || "";
 
 const elements = Object.fromEntries([
@@ -9,7 +10,7 @@ const elements = Object.fromEntries([
   "undoButton", "redoButton", "resetViewButton", "taskTabs", "taskReviewed",
   "confirmButton", "canvasStage", "annotationSvg", "sourceImage", "polygonLayer",
   "lineLayer", "handleLayer", "cursorCoordinate", "loupeSvg", "loupeImage",
-  "loupeLine", "loupeCrossX", "loupeCrossY", "loupeEmpty", "selectedLineLabel",
+  "loupeLineLayer", "loupeCrossX", "loupeCrossY", "loupeEmpty", "selectedLineLabel",
   "lineCoordinates", "diagnostics", "confirmDialog", "confirmTitle",
   "finalConfirmButton", "toast"
 ].map((id) => [id, document.getElementById(id)]));
@@ -243,13 +244,30 @@ function svgElement(name, attributes = {}) {
   return node;
 }
 
+function activeLineEntries() {
+  const task = activeTask();
+  const used = new Set(task?.boundary_ids || []);
+  return [
+    ...currentRecord.shared_edges.map((line, index) => ({
+      line,
+      family: "shared",
+      label: index === 0 ? "共享边 A" : "共享边 B",
+      active: true
+    })),
+    ...currentRecord.boundary_pool.map((line) => {
+      const position = task?.boundary_ids.indexOf(line.line_id) ?? -1;
+      const label = position >= 0 ? `${Math.floor(position / 2) + 1}${position % 2 ? "R" : "L"}` : line.line_id;
+      return {line, family: "boundary", label, active: used.has(line.line_id)};
+    })
+  ];
+}
+
 function renderGeometry() {
   elements.polygonLayer.replaceChildren();
   elements.lineLayer.replaceChildren();
   elements.handleLayer.replaceChildren();
   if (!currentRecord) return;
   const task = activeTask();
-  const used = new Set(task?.boundary_ids || []);
   taskPolygons(task).forEach((points, index) => {
     const polygon = svgElement("polygon", {
       points: points.map((point) => `${point[0]},${point[1]}`).join(" "),
@@ -261,15 +279,7 @@ function renderGeometry() {
     elements.polygonLayer.appendChild(polygon);
   });
 
-  const lineEntries = [
-    ...currentRecord.shared_edges.map((line, index) => ({line, family: "shared", label: index === 0 ? "共享边 A" : "共享边 B", active: true})),
-    ...currentRecord.boundary_pool.map((line) => {
-      const position = task?.boundary_ids.indexOf(line.line_id) ?? -1;
-      const label = position >= 0 ? `${Math.floor(position / 2) + 1}${position % 2 ? "R" : "L"}` : line.line_id;
-      return {line, family: "boundary", label, active: used.has(line.line_id)};
-    })
-  ];
-  for (const entry of lineEntries) {
+  for (const entry of activeLineEntries()) {
     const [first, second] = entry.line.points_display;
     const classes = ["annotation-line", entry.family];
     if (!entry.active) classes.push("inactive");
@@ -313,6 +323,7 @@ function renderSelectedLine() {
   if (!line) {
     elements.selectedLineLabel.textContent = "未选择";
     elements.lineCoordinates.querySelectorAll("code").forEach((node) => node.textContent = "—");
+    renderLoupeLines();
     return;
   }
   elements.selectedLineLabel.textContent = `${line.line_id} · ${line.origin}`;
@@ -320,7 +331,7 @@ function renderSelectedLine() {
   line.points_display.forEach((point, index) => {
     codes[index].textContent = `x ${point[0].toFixed(2)} · y ${point[1].toFixed(2)}`;
   });
-  updateLoupeLine();
+  renderLoupeLines();
 }
 
 function renderDiagnostics() {
@@ -354,7 +365,7 @@ function updateControls() {
   elements.undoButton.disabled = immutable || history.length === 0;
   elements.redoButton.disabled = immutable || future.length === 0;
   elements.annotationSvg.style.pointerEvents = immutable ? "auto" : "auto";
-  document.querySelectorAll(".nudge-grid button").forEach((button) => button.disabled = immutable || !selectedLineId);
+  document.querySelectorAll("[data-nudge],[data-rotate]").forEach((button) => button.disabled = immutable || !selectedLineId);
 }
 
 function geometrySnapshot() {
@@ -567,6 +578,30 @@ function nudge(dx, dy, multiplier = 1) {
   markDirty(); renderGeometry(); updateControls();
 }
 
+function rotateSelectedLine(direction, multiplier = 1) {
+  const line = lineById(selectedLineId);
+  if (!line || currentRecord.state === "user_confirmed") return;
+  const angle = direction * ROTATION_STEP_DEGREES * multiplier * Math.PI / 180;
+  const [first, second] = line.points_display;
+  const pivot = selectedEndpoint === null
+    ? [(first[0] + second[0]) / 2, (first[1] + second[1]) / 2]
+    : [...line.points_display[selectedEndpoint]];
+  const cosine = Math.cos(angle);
+  const sine = Math.sin(angle);
+  const rotated = line.points_display.map((point, index) => {
+    if (index === selectedEndpoint) return [...pivot];
+    const dx = point[0] - pivot[0];
+    const dy = point[1] - pivot[1];
+    return [
+      pivot[0] + dx * cosine - dy * sine,
+      pivot[1] + dx * sine + dy * cosine
+    ];
+  });
+  pushHistory();
+  line.points_display = rotated;
+  markDirty(); renderGeometry(); updateControls();
+}
+
 function resetView() {
   if (!currentRecord) { viewBox = null; return; }
   const extent = currentRecord.source.canonical_extent;
@@ -636,22 +671,24 @@ async function loadLoupe(point) {
     elements.loupeCrossY.setAttribute("x1", point[0]); elements.loupeCrossY.setAttribute("x2", point[0]);
     elements.loupeCrossY.setAttribute("y1", extent.top); elements.loupeCrossY.setAttribute("y2", extent.top + extent.height);
     document.querySelector(".loupe-wrap").classList.add("ready");
-    updateLoupeLine();
+    renderLoupeLines();
   } catch (error) {
     if (error.name !== "AbortError") showToast(error.message, true);
   }
 }
 
-function updateLoupeLine() {
-  const line = lineById(selectedLineId);
-  if (!line) {
-    elements.loupeLine.setAttribute("visibility", "hidden");
-    return;
+function renderLoupeLines() {
+  elements.loupeLineLayer.replaceChildren();
+  if (!currentRecord) return;
+  for (const entry of activeLineEntries().filter((item) => item.active)) {
+    const [first, second] = entry.line.points_display;
+    const classes = ["loupe-annotation-line", entry.family];
+    if (entry.line.line_id === selectedLineId) classes.push("selected");
+    elements.loupeLineLayer.appendChild(svgElement("line", {
+      x1: first[0], y1: first[1], x2: second[0], y2: second[1],
+      class: classes.join(" "), "data-line-id": entry.line.line_id
+    }));
   }
-  const [first, second] = line.points_display;
-  elements.loupeLine.setAttribute("x1", first[0]); elements.loupeLine.setAttribute("y1", first[1]);
-  elements.loupeLine.setAttribute("x2", second[0]); elements.loupeLine.setAttribute("y2", second[1]);
-  elements.loupeLine.setAttribute("visibility", "visible");
 }
 
 async function toggleTaskReview() {
@@ -727,6 +764,14 @@ document.querySelectorAll("[data-nudge]").forEach((button) => {
   button.addEventListener("click", (event) => {
     const [dx, dy] = button.dataset.nudge.split(",").map(Number);
     nudge(dx, dy, event.shiftKey ? 10 : 1);
+    elements.annotationSvg.focus({preventScroll: true});
+  });
+});
+
+document.querySelectorAll("[data-rotate]").forEach((button) => {
+  button.addEventListener("click", (event) => {
+    rotateSelectedLine(Number(button.dataset.rotate), event.shiftKey ? 10 : 1);
+    elements.annotationSvg.focus({preventScroll: true});
   });
 });
 
@@ -741,11 +786,15 @@ document.addEventListener("keydown", (event) => {
   if (modifier && event.key.toLowerCase() === "z") {
     event.preventDefault(); event.shiftKey ? redo() : undo(); return;
   }
+  if (modifier || event.altKey) return;
   if (event.target.matches("input,select,button")) return;
   const multiplier = event.shiftKey ? 10 : 1;
   const directions = {ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1]};
+  const rotations = {BracketLeft: -1, BracketRight: 1};
   if (directions[event.key] && selectedLineId) {
     event.preventDefault(); nudge(...directions[event.key], multiplier);
+  } else if (rotations[event.code] && selectedLineId) {
+    event.preventDefault(); rotateSelectedLine(rotations[event.code], multiplier);
   } else if (event.key === "0") {
     event.preventDefault(); resetView();
   }

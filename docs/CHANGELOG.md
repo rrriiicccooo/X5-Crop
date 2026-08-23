@@ -57,6 +57,7 @@ materialization、平行 detector 和 report reuse 均不再支持。
 - 新增 source-SHA-bound 本地黄金标注器：按 SHA 去重物理边界，以共享短轴边、source-level
   `boundary_pool` 和每个显式 count 的 `boundary_ids` 表达多任务；支持 Orientation 1–8 可逆显示、
   有界总览、单张原 TIFF 的 1:1 局部检查、拖线/端点/逐像素微调、原子自动保存与最终确认冻结。
+  1:1 局部图叠加当前任务的全部机器/人工边界；键盘 `[` / `]` 可绕整线中点或选中端点精细旋转。
   独立像素拟合和旧红线草稿只生成 proposal，确认不会自动晋升 tracked accuracy cohort，工具及本地
   状态均不进入发布包。
 - Registered gray 直接从 uint16 RGB 分块计算，复用两个 float32 luma plane 和一个 float64

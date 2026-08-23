@@ -77,7 +77,7 @@
             <strong>从左侧选择样片</strong>
             <span>机器预标只是提案；黄金坐标只来自你的逐点审核和明确确认。</span>
           </div>
-          <div class="zoom-hint">滚轮缩放 · 空白处拖动平移 · 方向键微调 1px · Shift 10px</div>
+          <div class="zoom-hint">滚轮缩放 · 空白处拖动平移 · 方向键平移 1px · [ ] 旋转 0.01° · Shift ×10</div>
         </div>
 
         <aside class="inspect-panel">
@@ -89,7 +89,7 @@
             <div class="loupe-wrap">
               <svg id="loupeSvg" xmlns="http://www.w3.org/2000/svg" aria-label="原生像素局部图">
                 <image id="loupeImage" preserveAspectRatio="none"></image>
-                <line id="loupeLine" class="loupe-line" visibility="hidden"></line>
+                <g id="loupeLineLayer"></g>
                 <line id="loupeCrossX" class="loupe-cross"></line>
                 <line id="loupeCrossY" class="loupe-cross"></line>
               </svg>
@@ -111,7 +111,12 @@
               <span></span><button data-nudge="0,-1">↑</button><span></span>
               <button data-nudge="-1,0">←</button><button data-nudge="0,1">↓</button><button data-nudge="1,0">→</button>
             </div>
-            <p>拖整条线会沿法向移动；拖圆点只改一个端点。点击端点后，方向键只微调该端点。</p>
+            <div class="rotation-controls" aria-label="旋转当前线">
+              <button data-rotate="-1" title="逆时针旋转 0.01°">[ 逆时针</button>
+              <button data-rotate="1" title="顺时针旋转 0.01°">顺时针 ]</button>
+            </div>
+            <p>方向键平移 1 px，Shift 为 10 px；<kbd>[</kbd> / <kbd>]</kbd> 旋转 0.01°，Shift 为
+              0.1°。整线绕中点旋转；选中端点时绕该端点旋转。</p>
           </div>
 
           <div id="diagnosticCard" class="inspect-card diagnostic-card">

@@ -461,6 +461,11 @@ class ManualAnnotationPackagingContractTest(unittest.TestCase):
         self.assertNotIn('src="http', joined)
         self.assertNotIn('href="http', joined)
         self.assertNotIn("cdn", joined)
+        self.assertIn('id="loupelinelayer"', joined)
+        self.assertNotIn('id="loupeline"', joined)
+        self.assertIn("renderloupelines", joined)
+        self.assertIn("bracketleft", joined)
+        self.assertIn('data-rotate="-1"', joined)
         self.assertFalse(
             any(
                 source and source.startswith("tools/manual_annotation/")

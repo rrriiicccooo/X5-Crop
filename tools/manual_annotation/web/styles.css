@@ -111,12 +111,18 @@ button:disabled { opacity: .38; cursor: not-allowed; }
 .loupe-empty { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font-size: 12px; }
 .loupe-wrap.ready .loupe-empty { display: none; }
 .loupe-cross { stroke: rgba(255,255,255,.65); stroke-width: 1; vector-effect: non-scaling-stroke; stroke-dasharray: 4 4; }
-.loupe-line { stroke: var(--red); stroke-width: 2; vector-effect: non-scaling-stroke; }
+.loupe-annotation-line { stroke-width: 2.4; vector-effect: non-scaling-stroke; pointer-events: none; filter: drop-shadow(0 0 2px #000); }
+.loupe-annotation-line.shared { stroke: var(--cyan); }
+.loupe-annotation-line.boundary { stroke: var(--red); }
+.loupe-annotation-line.selected { stroke: #fff; stroke-width: 3.6; filter: drop-shadow(0 0 3px #000); }
 .coordinate-grid { display: grid; grid-template-columns: 65px 1fr; gap: 7px 8px; align-items: center; font-size: 11px; }
 .coordinate-grid span { color: var(--muted); }
 .coordinate-grid code { overflow: hidden; text-overflow: ellipsis; color: #dbe5f5; font-size: 10px; }
 .nudge-grid { display: grid; grid-template-columns: repeat(3, 38px); justify-content: center; gap: 5px; margin-top: 12px; }
 .nudge-grid button { min-height: 34px; padding: 0; background: #252a33; border-color: #373e4a; }
+.rotation-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 9px; }
+.rotation-controls button { min-height: 32px; padding: 0 8px; background: #252a33; border-color: #373e4a; font-size: 11px; }
+.geometry-card kbd { padding: 1px 4px; border: 1px solid #4a5260; border-radius: 4px; background: #252a33; color: #e9eef7; font: 10px ui-monospace, SFMono-Regular, Menlo, monospace; }
 .diagnostic-card dl { display: grid; grid-template-columns: 1fr auto; gap: 6px 10px; margin: 0; font-size: 11px; }
 .diagnostic-card dt { color: var(--muted); }
 .diagnostic-card dd { margin: 0; font: 10px ui-monospace, SFMono-Regular, Menlo, monospace; }
