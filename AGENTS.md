@@ -81,6 +81,7 @@ GitHub 是 tracked 源码与文档的权威来源。NAS 和复制目录只用于
 | `docs/quick-start.zh-CN.md` | V5 中文快速启动（发布前为开发预览） | 中文 |
 | `docs/quick-start.en.md` | V5 English quick start (development preview before release) | English |
 | `docs/ARCHITECTURE.md` | 已确认的 V5 合同、运行流、数值合同与源码 owner | 中文 |
+| `docs/MANUAL_ANNOTATION.md` | 本地黄金基线标注器的使用与权限边界 | 中文 |
 | `docs/CHANGELOG.md` | 版本级行为与验证边界 | 中文 |
 | `docs/PROJECT_MEMORY.md` | 当前目标、证据边界、风险与下一步 | 中文 |
 | `AGENTS.md` | 长期协作政策 | 中文 |

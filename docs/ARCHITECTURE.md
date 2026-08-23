@@ -490,6 +490,15 @@ Pillow 只在 Debug Analysis 时延迟导入。生产默认 `--jobs 1`、上限 
 | `x5crop/debug/` | 只读诊断 facts 与面板 |
 | `x5crop/io/`、`export/`、`output/` | TIFF domain、affine sampling、metadata 与原子发布 |
 | `tools/verify`、`tools/regression/` | 唯一验证入口、外部 report validator 与 accuracy/diagnostic/performance/platform 分层证据 |
+| `tools/manual_annotation/` | source-SHA-bound 的本地 proposal、原图坐标人工审核与确认冻结；不进入 production 或 release |
+
+人工标注器严格对齐 tracked cohort 与本地 manifest，并以 source SHA 聚合任务。一个 source 只有两条
+共享短轴边和一个物理 `boundary_pool`；不同显式 count 任务各自引用 `2 × count` 个 boundary identity。
+页面中的 Orientation 只做可逆显示，持久化权威始终是原 TIFF raster pixel-center 坐标。
+
+独立有界像素拟合、用户红线草稿恢复和有界 JPG 都只能生成 proposal。只有用户逐项审核全部 count、
+检查 1:1 原生像素并执行最终确认，记录才成为不可变 `user_confirmed` 本地基线。确认不自动改写
+tracked accuracy cohort；完整操作与文件边界见 [MANUAL_ANNOTATION.md](MANUAL_ANNOTATION.md)。
 
 ## 14. 验证边界
 

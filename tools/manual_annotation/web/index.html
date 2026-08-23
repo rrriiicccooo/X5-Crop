@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>X5 Crop 黄金基线标注器</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div id="app" class="app-shell">
+    <aside class="queue-panel">
+      <header class="brand">
+        <span class="brand-mark">X5</span>
+        <div>
+          <h1>黄金基线标注器</h1>
+          <p id="progressText">正在读取本地工作集…</p>
+        </div>
+      </header>
+
+      <div class="queue-controls">
+        <input id="searchInput" type="search" placeholder="搜索 S001 或 SHA" autocomplete="off">
+        <div class="filter-row">
+          <select id="formatFilter" aria-label="格式筛选">
+            <option value="all">全部格式</option>
+          </select>
+          <select id="stateFilter" aria-label="状态筛选">
+            <option value="unfinished">待完成</option>
+            <option value="all">全部状态</option>
+            <option value="machine_proposal">机器预标</option>
+            <option value="human_adjusted">已调整</option>
+            <option value="user_confirmed">已确认</option>
+          </select>
+        </div>
+      </div>
+
+      <nav id="sourceList" class="source-list" aria-label="样片队列"></nav>
+      <button id="nextButton" class="secondary wide">下一张未完成</button>
+    </aside>
+
+    <main class="workspace-panel">
+      <header class="workspace-header">
+        <div>
+          <div class="title-row">
+            <h2 id="sampleTitle">选择一张样片</h2>
+            <span id="stateBadge" class="badge neutral">未打开</span>
+          </div>
+          <p id="sourceFacts" class="source-facts">源 TIFF 不会上传，也不会被修改。</p>
+        </div>
+        <div class="header-actions">
+          <span id="saveStatus" class="save-status">本地就绪</span>
+          <button id="undoButton" class="icon-button" title="撤销（⌘Z）" disabled>↶</button>
+          <button id="redoButton" class="icon-button" title="重做（⇧⌘Z）" disabled>↷</button>
+          <button id="resetViewButton" class="secondary">重置视图</button>
+        </div>
+      </header>
+
+      <section class="task-bar">
+        <div id="taskTabs" class="task-tabs"></div>
+        <div class="task-actions">
+          <label class="review-check">
+            <input id="taskReviewed" type="checkbox" disabled>
+            <span>本任务边界已审核</span>
+          </label>
+          <button id="confirmButton" class="primary" disabled>确认整张黄金基线</button>
+        </div>
+      </section>
+
+      <section class="canvas-grid">
+        <div id="canvasStage" class="canvas-stage empty">
+          <svg id="annotationSvg" xmlns="http://www.w3.org/2000/svg" tabindex="0" aria-label="源图边界标注画布">
+            <image id="sourceImage" preserveAspectRatio="none"></image>
+            <g id="polygonLayer"></g>
+            <g id="lineLayer"></g>
+            <g id="handleLayer"></g>
+          </svg>
+          <div id="emptyState" class="empty-state">
+            <strong>从左侧选择样片</strong>
+            <span>机器预标只是提案；黄金坐标只来自你的逐点审核和明确确认。</span>
+          </div>
+          <div class="zoom-hint">滚轮缩放 · 空白处拖动平移 · 方向键微调 1px · Shift 10px</div>
+        </div>
+
+        <aside class="inspect-panel">
+          <div class="inspect-card">
+            <div class="inspect-heading">
+              <h3>1:1 原生像素检查</h3>
+              <span id="cursorCoordinate">x — · y —</span>
+            </div>
+            <div class="loupe-wrap">
+              <svg id="loupeSvg" xmlns="http://www.w3.org/2000/svg" aria-label="原生像素局部图">
+                <image id="loupeImage" preserveAspectRatio="none"></image>
+                <line id="loupeLine" class="loupe-line" visibility="hidden"></line>
+                <line id="loupeCrossX" class="loupe-cross"></line>
+                <line id="loupeCrossY" class="loupe-cross"></line>
+              </svg>
+              <div id="loupeEmpty" class="loupe-empty">把鼠标移到图像上</div>
+            </div>
+            <p>局部图直接来自原 TIFF 像素。用它检查线是否安全贴合物理边缘。</p>
+          </div>
+
+          <div class="inspect-card geometry-card">
+            <div class="inspect-heading">
+              <h3>当前线</h3>
+              <span id="selectedLineLabel">未选择</span>
+            </div>
+            <div id="lineCoordinates" class="coordinate-grid">
+              <span>端点 1</span><code>—</code>
+              <span>端点 2</span><code>—</code>
+            </div>
+            <div class="nudge-grid" aria-label="逐像素微调">
+              <span></span><button data-nudge="0,-1">↑</button><span></span>
+              <button data-nudge="-1,0">←</button><button data-nudge="0,1">↓</button><button data-nudge="1,0">→</button>
+            </div>
+            <p>拖整条线会沿法向移动；拖圆点只改一个端点。点击端点后，方向键只微调该端点。</p>
+          </div>
+
+          <div id="diagnosticCard" class="inspect-card diagnostic-card">
+            <div class="inspect-heading"><h3>提案证据</h3></div>
+            <dl id="diagnostics"></dl>
+          </div>
+        </aside>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="confirmDialog">
+    <form method="dialog" class="confirm-dialog">
+      <div>
+        <span class="dialog-kicker">最终权限确认</span>
+        <h2 id="confirmTitle">确认黄金基线</h2>
+        <p>确认后记录冻结，不再允许原地修改。Bleed 不参与以下判断。</p>
+      </div>
+      <label><input type="checkbox" data-confirm-check="shared_edges"> 两条共享边已在整条片带上检查</label>
+      <label><input type="checkbox" data-confirm-check="task_boundaries"> 每个 count 任务的全部成对短边已检查</label>
+      <label><input type="checkbox" data-confirm-check="native_pixel_checks"> 关键位置已使用 1:1 原生像素检查</label>
+      <label><input type="checkbox" data-confirm-check="safe_without_bleed"> 0 bleed 基础矩形已经足够安全，不会危险越界</label>
+      <div class="dialog-actions">
+        <button value="cancel" class="secondary">返回继续检查</button>
+        <button id="finalConfirmButton" value="default" class="danger" disabled>冻结并确认</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script src="/app.js"></script>
+</body>
+</html>

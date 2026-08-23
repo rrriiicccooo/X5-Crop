@@ -62,6 +62,9 @@ class ReleaseBuildContractTest(unittest.TestCase):
                         for name in names
                     )
                 )
+                self.assertFalse(
+                    any("manual_annotation" in name for name in names)
+                )
                 standalone = package.read("X5_Crop.py").decode("utf-8")
                 self.assertEqual(
                     standalone,
