@@ -6,7 +6,7 @@ from tools.tests.current_only_support import *
 class CountInputContractTest(unittest.TestCase):
     def test_cohort_count_is_explicit_and_filename_independent(self) -> None:
         filename_only = {
-            "source_relative_path": "Test/135/partial/pass_X5_99_00001.tif",
+            "source_relative_path": "Test/135/S999_count-99.tif",
             "format_id": "135",
         }
         with self.assertRaisesRegex(ValueError, "explicit positive count"):
@@ -44,6 +44,37 @@ class CountInputContractTest(unittest.TestCase):
                     "count": 5,
                 },
             ))
+
+    def test_tracked_cohort_paths_use_canonical_format_sample_and_count(self) -> None:
+        cohort_directory = ROOT / "tools" / "regression" / "cohorts"
+        for cohort_path in sorted(cohort_directory.glob("*.jsonl")):
+            for line in cohort_path.read_text(encoding="utf-8").splitlines():
+                if not line.strip():
+                    continue
+                row = json.loads(line)
+                expected_source = (
+                    f"Test/{row['format_id']}/{row['sample_id']}"
+                    f"_count-{row['count']}.tif"
+                )
+                self.assertEqual(
+                    row["source_relative_path"],
+                    expected_source,
+                    cohort_path.name,
+                )
+                confirmed = row.get("confirmed_geometry")
+                if confirmed is not None:
+                    self.assertEqual(
+                        confirmed["source_relative_path"],
+                        expected_source,
+                    )
+                    self.assertEqual(
+                        confirmed["marked_relative_path"],
+                        (
+                            "Test/manual_review/gold_calibration_v1/"
+                            f"{row['format_id']}/{row['sample_id']}"
+                            f"_count-{row['count']}.tif"
+                        ),
+                    )
 
     def test_count_request_carries_only_user_intent(self) -> None:
         explicit = SlotCountRequest(3)
