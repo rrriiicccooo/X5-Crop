@@ -27,6 +27,7 @@ from x5crop.debug.panel_facts import (
     alignment_summary,
     axis_authority_summaries,
     competition_summary,
+    output_footprints,
     primary_geometry_by_identity,
     root_gate_summary,
     selected_output_safety_summary,
@@ -158,40 +159,19 @@ class DebugAnalysisContractTest(unittest.TestCase):
             (grid.canvas_height, style.canvas_width, 3),
         )
 
-    def test_output_panel_reads_selected_joint_and_required_footprints(
+    def test_output_panel_fills_only_final_required_footprints(
         self,
     ) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            configuration, _profile, workspace, detection = _fixture(
-                Path(temporary)
-            )
-            with mock.patch(
-                "x5crop.debug.output_panel.fill_polygon"
-            ) as fill:
-                protected_output_panel(
-                    workspace,
-                    detection,
-                    configuration.diagnostics.style,
-                    DebugRenderCache(),
-                    _grid(workspace, configuration.diagnostics.style),
-                )
-        self.assertFalse(detection.frame_export_eligible)
-        outputs = detection.candidate.geometry.output_footprints
-        self.assertCountEqual(
-            tuple(call.args[1] for call in fill.call_args_list),
-            (
-                tuple(
-                    footprint
-                    for output in outputs
-                    for footprint in (
-                        output.envelope.canonical_source_footprint,
-                        output.envelope.feasible_source_footprint,
-                    )
-                )
-                if outputs
-                else ()
-            ),
-        )
+        source = inspect.getsource(protected_output_panel)
+        self.assertIn("output.required_source_footprint", source)
+        self.assertNotIn("envelope.canonical_source_footprint", source)
+        self.assertNotIn("envelope.feasible_source_footprint", source)
+        self.assertNotIn("draw_dashed_polyline", source)
+
+    def test_output_panel_facts_are_decision_gated(self) -> None:
+        final_outputs = (object(), object())
+        detection = SimpleNamespace(output_footprints=final_outputs)
+        self.assertIs(output_footprints(detection), final_outputs)
 
     def test_budget_hatching_preserves_the_photo_interior(self) -> None:
         source = Image.new("RGB", (160, 160), (90, 90, 90))
@@ -508,7 +488,7 @@ class DebugAnalysisContractTest(unittest.TestCase):
         self.assertGreater(sum(style.detected_transition_color), 600)
         self.assertLess(
             sum(style.detected_transition_color),
-            sum(style.safety_envelope_color),
+            sum(style.text_color),
         )
 
     def test_legend_matches_the_three_row_fact_ownership(self) -> None:
@@ -524,7 +504,6 @@ class DebugAnalysisContractTest(unittest.TestCase):
                 "DETECTED START/END",
                 "SELECTED START/END",
                 "RUNNER / COMPETITOR",
-                "SAFETY ENVELOPE",
                 "FINAL OUTPUT",
                 "BUDGET VIOLATION",
             ),

@@ -223,7 +223,8 @@ Debug Analysis 展示理论模板、实际观察、偏差形状、直接与推�
 输出 footprint、预算使用、第一个阻止自动输出的原因，以及 `DESKEW APPLIED`、
 `ROTATION NOT NEEDED` 或 typed `DESKEW SKIPPED`。Report 同时记录 `deskew_applied`、观测角、
 实际旋转和 skip reason。失败会区分用户可修正输入、重新测量可恢复和系统不应自动猜测三类。
-Debug 只读取同一次检测事实，不重新求解。
+第三联只按照片编号用不同颜色半透明填充实际最终输出 footprint，并绘制同色边界；不再叠加
+placement/feasible 范围或白色虚线框。Debug 只读取同一次检测事实，不重新求解。
 
 默认结构：
 

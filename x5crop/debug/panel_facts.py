@@ -77,7 +77,7 @@ def runner_geometry_by_identity(
 def output_footprints(
     detection: FinalDetection,
 ) -> tuple[OutputFootprint, ...]:
-    return detection.candidate.geometry.output_footprints
+    return detection.output_footprints
 
 
 def selection_summary(detection: FinalDetection) -> str:
@@ -174,7 +174,7 @@ def selected_output_safety_summary(detection: FinalDetection) -> str:
     """Name boundary ownership and the largest final per-side budget use."""
 
     geometry = detection.candidate.geometry
-    outputs = geometry.output_footprints
+    outputs = detection.output_footprints
     budgets = geometry.direct_use_budget_assessments
     if not outputs or not budgets:
         return "SELECTED OUTPUT SAFETY · NOT EVALUATED"

@@ -1,4 +1,4 @@
-"""Selected-only safety and direct-use Debug Analysis panel."""
+"""Final selected-output Debug Analysis panel."""
 
 from __future__ import annotations
 
@@ -21,7 +21,6 @@ from .panel_facts import (
 )
 from .panel_layout import (
     PresentationGrid,
-    draw_dashed_polyline,
     draw_label_chip,
     fill_polygon,
     font,
@@ -127,16 +126,9 @@ def protected_output_panel(
         color = frame_color(identity.global_output_ordinal)
         fill_polygon(
             overlay_draw,
-            envelope.canonical_source_footprint,
+            output.required_source_footprint,
             color,
-            style.frame_fill_alpha,
-            selected_viewport=selected_viewport,
-        )
-        fill_polygon(
-            overlay_draw,
-            envelope.feasible_source_footprint,
-            color,
-            style.safe_fill_alpha,
+            style.output_fill_alpha,
             selected_viewport=selected_viewport,
         )
     panel = Image.alpha_composite(panel.convert("RGBA"), overlay).convert("RGB")
@@ -145,20 +137,11 @@ def protected_output_panel(
         envelope = output.envelope
         identity = identities[(envelope.lane_id, envelope.lane_ordinal)]
         color = frame_color(identity.global_output_ordinal)
-        draw_dashed_polyline(
-            draw,
-            selected_viewport.polygon(output.required_source_footprint),
-            style.safety_envelope_color,
-            style.retained_line_width,
-            style.line_dash_length,
-            style.line_dash_gap,
-            closed=True,
-        )
-        feasible = selected_viewport.polygon(
-            envelope.feasible_source_footprint
+        final_output = selected_viewport.polygon(
+            output.required_source_footprint
         )
         draw.line(
-            feasible + (feasible[0],),
+            final_output + (final_output[0],),
             fill=color,
             width=style.frame_line_width,
         )
@@ -166,7 +149,7 @@ def protected_output_panel(
         if budget is not None and budget.state.value == "contradicted":
             panel = draw_hatched_polygon(
                 panel,
-                feasible,
+                final_output,
                 style.review_color,
                 style.budget_hatch_border_width,
             )
@@ -180,18 +163,18 @@ def protected_output_panel(
                 (
                     max(
                         target_box[0],
-                        int(math.floor(min(point[0] for point in feasible))),
+                        int(math.floor(min(point[0] for point in final_output))),
                     ),
                     f"F{identity.global_output_ordinal} · BUDGET {failed_roles}",
                 )
             )
         left = max(
             target_box[0] + 4,
-            int(math.floor(min(point[0] for point in feasible))) + 4,
+            int(math.floor(min(point[0] for point in final_output))) + 4,
         )
         top = max(
             target_box[1] + 4,
-            int(math.floor(min(point[1] for point in feasible))) + 4,
+            int(math.floor(min(point[1] for point in final_output))) + 4,
         )
         draw_label_chip(
             draw,
@@ -217,10 +200,7 @@ def protected_output_panel(
         previous_right = x + label_width
     footer_font = font(style.annotation_font_size)
     if footprints:
-        footer = (
-            "PLACEMENT / REQUIRED · OUTPUT FOOTPRINT    "
-            "FINAL OUTPUT · COLORED OVERLAY"
-        )
+        footer = "FINAL OUTPUT · COLORED OVERLAY"
     else:
         footer = "NO OUTPUT FOOTPRINT · NO OFFICIAL OUTPUT"
         note = "NO SAFE OUTPUT · SOURCE ATOMIC · 0 OFFICIAL TIFF"

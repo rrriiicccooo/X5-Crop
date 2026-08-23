@@ -37,10 +37,8 @@ class DebugStyleParameters:
     long_axis_media_bottom_padding: int = 55
     output_media_top: int = 81
     output_media_bottom_padding: int = 62
-    frame_fill_alpha: float = 0.20
-    safe_fill_alpha: float = 0.25
+    output_fill_alpha: float = 0.40
     frame_line_width: int = 2
-    retained_line_width: int = 1
     evidence_line_width: int = 3
     raw_transition_line_width: int = 1
     annotation_extension: int = 22
@@ -68,7 +66,6 @@ class DebugStyleParameters:
     detected_transition_color: tuple[int, int, int] = (205, 211, 216)
     selected_boundary_color: tuple[int, int, int] = (255, 171, 37)
     competitor_color: tuple[int, int, int] = (197, 111, 255)
-    safety_envelope_color: tuple[int, int, int] = (230, 234, 238)
     safe_output_color: tuple[int, int, int] = (30, 144, 255)
     approved_color: tuple[int, int, int] = (50, 183, 105)
     review_color: tuple[int, int, int] = (230, 73, 61)
@@ -89,7 +86,6 @@ class DebugStyleParameters:
             self.output_media_top,
             self.output_media_bottom_padding,
             self.frame_line_width,
-            self.retained_line_width,
             self.evidence_line_width,
             self.raw_transition_line_width,
             self.annotation_extension,
@@ -109,8 +105,7 @@ class DebugStyleParameters:
         )
         for value in positive_values:
             require_positive("debug adaptive-grid value", value)
-        require_unit_interval("debug frame fill alpha", self.frame_fill_alpha)
-        require_unit_interval("debug safe fill alpha", self.safe_fill_alpha)
+        require_unit_interval("debug output fill alpha", self.output_fill_alpha)
         if self.canvas_width <= 2 * (
             self.outer_margin + self.panel_media_inset_x
         ):
@@ -129,7 +124,6 @@ class DebugStyleParameters:
             self.detected_transition_color,
             self.selected_boundary_color,
             self.competitor_color,
-            self.safety_envelope_color,
             self.safe_output_color,
             self.approved_color,
             self.review_color,
@@ -155,7 +149,6 @@ class DiagnosticsConfiguration:
             DebugLegendEntry("DETECTED START/END", style.detected_transition_color, "dashed"),
             DebugLegendEntry("SELECTED START/END", style.selected_boundary_color, "solid"),
             DebugLegendEntry("RUNNER / COMPETITOR", style.competitor_color, "dashed"),
-            DebugLegendEntry("SAFETY ENVELOPE", style.safety_envelope_color, "box"),
             DebugLegendEntry("FINAL OUTPUT", style.safe_output_color, "box"),
             DebugLegendEntry("BUDGET VIOLATION", style.review_color, "hatched"),
         )

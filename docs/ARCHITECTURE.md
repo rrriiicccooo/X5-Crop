@@ -404,7 +404,8 @@ Debug Analysis 只读取同一次 runtime facts，不重算几何、不改变决
 - direct 与 inferred 边界；
 - best、runner 及真正不同之处；
 - `APERTURE_PAIR` 或 `ENCLOSING_SUPPORT_PAIR`；
-- selected-only OutputFootprint、四边 bleed/联合 expansion/预算；
+- selected-only OutputFootprint，以分帧颜色半透明填充最终 required polygon，不另画白色虚线框，
+  并显示四边 bleed/联合 expansion/预算；
 - `DESKEW APPLIED`、`ROTATION NOT NEEDED` 或 typed `DESKEW SKIPPED`；
 - 第一个 blocking Gate gap，或全部事实已支持。
 

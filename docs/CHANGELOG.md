@@ -34,6 +34,8 @@ materialization、平行 detector 和 report reuse 均不再支持。
 
 ### 输出与报告
 
+- Debug Analysis 第三联只用分帧颜色半透明填充实际最终 `OutputFootprint`，并保留同色实线边界；
+  不再叠加 placement/feasible 范围或白色虚线框，review candidate 也不显示为正式输出。
 - Deskew 降为 Decision 后的非阻断输出整理。只有 `approved_auto` 才执行 6–24 trace 的 role-free
   观测；不可用时保持原始倾斜，`needs_review` 直接记录 `output_not_eligible`。Deskew 不参与
   placement、Gate 或黄金准确性。默认 `--deskew auto`，也可用 `--deskew off` 明确保留原始方向。
