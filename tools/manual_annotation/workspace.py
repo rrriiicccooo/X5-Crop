@@ -31,11 +31,16 @@ from .model import (
     display_to_raw_point,
     geometry_snapshot,
     record_for_client,
+    referenced_boundary_ids,
     utc_now,
     validate_annotation_record,
     apply_client_geometry,
 )
-from .proposal import import_red_markup_draft, propose_record
+from .proposal import (
+    apply_review_context_slot_semantics,
+    import_red_markup_draft,
+    propose_record,
+)
 
 
 MANIFEST_SCHEMA = "x5crop_manual_review_manifest_v3"
@@ -142,7 +147,7 @@ class ReviewWorkspace:
         self.records_root = self.state_root / "records"
         self.previews_root = self.state_root / "previews"
         self.artifacts_root = self.state_root / "review_artifacts"
-        self.confirmed_rows_path = self.state_root / "confirmed_source_geometry_v3.jsonl"
+        self.confirmed_rows_path = self.state_root / "confirmed_source_geometry.jsonl"
         self._lock = threading.RLock()
         self.manifest_rows = self._load_and_reconcile_authority()
         self.groups = self._group_rows(self.manifest_rows)
@@ -455,9 +460,12 @@ class ReviewWorkspace:
                 "slots": [
                     {
                         "ordinal": index + 1,
-                        "start_boundary_id": boundary_ids[index * 2],
-                        "end_boundary_id": boundary_ids[index * 2 + 1],
                         "slot_kind": "image",
+                        "reference_geometry": {
+                            "kind": "boundary_pair",
+                            "start_boundary_id": boundary_ids[index * 2],
+                            "end_boundary_id": boundary_ids[index * 2 + 1],
+                        },
                     }
                     for index in range(int(member["count"]))
                 ],
@@ -568,6 +576,7 @@ class ReviewWorkspace:
                                 f"{canonical['sample_id']}: modified work copy cannot be safely imported: {error}"
                             ) from error
                         counts["red_drafts"] += 1
+                    record = apply_review_context_slot_semantics(record)
                 preview = raster.preview_jpeg(
                     levels=record["diagnostics"].get("render_levels")
                 )
@@ -721,15 +730,7 @@ class ReviewWorkspace:
                 raise WorkspaceError("bounded source preview changed after preparation")
             source_sha = current["source"]["sha256"]
             self._verify_source(self._canonical_row(self.groups[source_sha]))
-            used_boundary_ids = {
-                line_id
-                for task in current["tasks"]
-                for slot in task["slots"]
-                for line_id in (
-                    slot["start_boundary_id"],
-                    slot["end_boundary_id"],
-                )
-            }
+            used_boundary_ids = referenced_boundary_ids(current)
             current["boundary_pool"] = [
                 line
                 for line in current["boundary_pool"]

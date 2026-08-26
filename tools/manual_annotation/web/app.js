@@ -216,8 +216,15 @@ function allLines() {
   return currentRecord ? [...currentRecord.shared_edges, ...currentRecord.boundary_pool] : [];
 }
 
-function taskBoundaryIds(task) {
-  return task ? task.slots.flatMap((slot) => [slot.start_boundary_id, slot.end_boundary_id]) : [];
+function taskBoundaryRoles(task) {
+  return task ? task.slots.flatMap((slot) => {
+    const reference = slot.reference_geometry;
+    if (reference?.kind !== "boundary_pair") return [];
+    return [
+      {identity: reference.start_boundary_id, ordinal: slot.ordinal, role: "start"},
+      {identity: reference.end_boundary_id, ordinal: slot.ordinal, role: "end"}
+    ];
+  }) : [];
 }
 
 function lineById(identity) {
@@ -243,12 +250,14 @@ function taskPolygons(task) {
   const high = currentRecord.shared_edges[1];
   const polygons = [];
   for (const slot of task.slots) {
-    const start = pool.get(slot.start_boundary_id);
-    const stop = pool.get(slot.end_boundary_id);
+    const reference = slot.reference_geometry;
+    if (reference?.kind !== "boundary_pair") continue;
+    const start = pool.get(reference.start_boundary_id);
+    const stop = pool.get(reference.end_boundary_id);
     const polygon = currentRecord.strip_axis_display === "horizontal"
       ? [intersection(low, start), intersection(low, stop), intersection(high, stop), intersection(high, start)]
       : [intersection(low, start), intersection(high, start), intersection(high, stop), intersection(low, stop)];
-    if (polygon.every(Boolean)) polygons.push(polygon);
+    if (polygon.every(Boolean)) polygons.push({slot, points: polygon});
   }
   return polygons;
 }
@@ -261,7 +270,8 @@ function svgElement(name, attributes = {}) {
 
 function activeLineEntries() {
   const task = activeTask();
-  const taskIds = taskBoundaryIds(task);
+  const taskRoles = taskBoundaryRoles(task);
+  const taskIds = taskRoles.map((entry) => entry.identity);
   const used = new Set(taskIds);
   return [
     ...currentRecord.shared_edges.map((line, index) => ({
@@ -272,11 +282,11 @@ function activeLineEntries() {
       role: "shared"
     })),
     ...currentRecord.boundary_pool.map((line) => {
-      const positions = taskIds.flatMap((identity, position) => identity === line.line_id ? [position] : []);
-      const roles = new Set(positions.map((position) => position % 2 ? "end" : "start"));
+      const assignments = taskRoles.filter((entry) => entry.identity === line.line_id);
+      const roles = new Set(assignments.map((entry) => entry.role));
       const role = roles.size === 2 ? "start-end" : (roles.values().next().value || "unused");
-      const label = positions.length
-        ? positions.map((position) => `${Math.floor(position / 2) + 1}${position % 2 ? "E" : "S"}`).join("/")
+      const label = assignments.length
+        ? assignments.map((entry) => `${entry.ordinal}${entry.role === "end" ? "E" : "S"}`).join("/")
         : line.line_id;
       return {line, family: "boundary", label, active: used.has(line.line_id), role};
     })
@@ -305,13 +315,13 @@ function renderGeometry() {
   elements.handleLayer.replaceChildren();
   if (!currentRecord) return;
   const task = activeTask();
-  taskPolygons(task).forEach((points, index) => {
+  taskPolygons(task).forEach(({slot, points}) => {
     const polygon = svgElement("polygon", {
       points: points.map((point) => `${point[0]},${point[1]}`).join(" "),
       class: "frame-polygon"
     });
     const title = svgElement("title");
-    title.textContent = `照片 ${index + 1} · ${task.slots[index].slot_kind}`;
+    title.textContent = `照片 ${slot.ordinal} · ${slot.slot_kind}`;
     polygon.appendChild(title);
     elements.polygonLayer.appendChild(polygon);
   });
@@ -403,6 +413,10 @@ function renderDiagnostics() {
     .filter((slot) => slot.slot_kind !== "image")
     .map((slot) => `${slot.ordinal}:${slot.slot_kind}`)
     .join(" / ") || "全部 image";
+  const noReferenceSummary = activeTask()?.slots
+    .filter((slot) => slot.reference_geometry?.kind === "not_applicable")
+    .map((slot) => `${slot.ordinal}:${slot.slot_kind}`)
+    .join(" / ") || "无";
   const adjacencySummary = activeTask()?.adjacencies
     .filter((adjacency) => adjacency.kind !== "separator")
     .map((adjacency) => `${adjacency.left_ordinal}-${adjacency.right_ordinal}:${adjacency.kind}`)
@@ -416,6 +430,7 @@ function renderDiagnostics() {
     ["模板分数", taskFit ? Number(taskFit.template_score).toFixed(3) : "—"],
     ["结构标签", taskContext.case_tags?.join(" / ") || "常规"],
     ["Slot 语义", slotSummary],
+    ["无需人工 reference", noReferenceSummary],
     ["相邻关系", adjacencySummary],
     ["人工备注", taskContext.notes?.join("；") || "无"],
     ["待重点检查", currentRecord.diagnostics.unresolved?.length ? `${currentRecord.diagnostics.unresolved.length} 项` : "无额外提示"],
@@ -808,7 +823,7 @@ function setLoupeMaximized(maximized, reload = true) {
   elements.maximizeLoupeButton.textContent = next ? "退出审阅" : "完整高度审阅";
   elements.maximizeLoupeButton.title = next ? "退出完整高度审阅（F 或 Esc）" : "完整高度审阅（F）";
   elements.loupeHelp.textContent = next
-    ? "共享短轴 H 占可用高度约 94%。洋红=start，橙色=end，双色虚线=start/end 接触边；绿色闭合区域是各 Frame。点击线可选中并用方向键或 [ ] 修改；点击空白处沿胶片长轴移动。按 F 或 Esc 退出。"
+    ? "共享短轴 H 占可用高度约 94%。洋红=start，橙色=end，双色虚线=start/end 接触边；绿色闭合区域是有内容 reference 的 Frame，空曝光 slot 不画边界。点击线可选中并用方向键或 [ ] 修改；点击空白处沿胶片长轴移动。按 F 或 Esc 退出。"
     : "局部图直接来自原 TIFF 像素。用它检查线是否安全贴合物理边缘；按 F 进入完整高度审阅。";
   renderLoupeGeometry();
   if (reload && lastPointer) requestAnimationFrame(() => loadLoupe(lastPointer));
@@ -892,14 +907,14 @@ function renderLoupeGeometry() {
       view.width / Math.max(1, bounds.width),
       view.height / Math.max(1, bounds.height)
     );
-    taskPolygons(task).forEach((points, index) => {
+    taskPolygons(task).forEach(({slot, points}) => {
       const polygon = svgElement("polygon", {
         points: points.map((point) => `${point[0]},${point[1]}`).join(" "),
         class: "loupe-frame-polygon",
-        "data-frame-ordinal": index + 1
+        "data-frame-ordinal": slot.ordinal
       });
       const title = svgElement("title");
-      title.textContent = `Frame ${index + 1} · ${task.slots[index].slot_kind}`;
+      title.textContent = `Frame ${slot.ordinal} · ${slot.slot_kind}`;
       polygon.appendChild(title);
       elements.loupePolygonLayer.appendChild(polygon);
       const center = points.reduce(
@@ -912,7 +927,7 @@ function renderLoupeGeometry() {
         "font-size": Math.max(1, 13 * labelScale),
         "stroke-width": Math.max(0.5, 3 * labelScale)
       });
-      label.textContent = `Frame ${index + 1}`;
+      label.textContent = `Frame ${slot.ordinal}`;
       elements.loupePolygonLayer.appendChild(label);
     });
   }

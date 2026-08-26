@@ -20,6 +20,7 @@ import tifffile
 from tools.manual_annotation.imaging import orientation_record, sha256_file
 from tools.manual_annotation.model import (
     ANNOTATION_SCHEMA,
+    BASELINE_SCHEMA,
     COORDINATE_SYSTEM,
     AnnotationError,
     apply_client_geometry,
@@ -27,6 +28,7 @@ from tools.manual_annotation.model import (
     display_to_raw_point,
     frame_polygons_display,
     record_for_client,
+    slot_boundary_ids,
     validate_annotation_record,
 )
 from tools.manual_annotation.proposal import (
@@ -72,9 +74,12 @@ def _annotation_record(*, orientation: int = 1) -> dict[str, object]:
                 "slots": [
                     {
                         "ordinal": 1,
-                        "start_boundary_id": "B001",
-                        "end_boundary_id": "B002",
                         "slot_kind": "image",
+                        "reference_geometry": {
+                            "kind": "boundary_pair",
+                            "start_boundary_id": "B001",
+                            "end_boundary_id": "B002",
+                        },
                     }
                 ],
                 "adjacencies": [],
@@ -87,15 +92,21 @@ def _annotation_record(*, orientation: int = 1) -> dict[str, object]:
                 "slots": [
                     {
                         "ordinal": 1,
-                        "start_boundary_id": "B001",
-                        "end_boundary_id": "B002",
                         "slot_kind": "image",
+                        "reference_geometry": {
+                            "kind": "boundary_pair",
+                            "start_boundary_id": "B001",
+                            "end_boundary_id": "B002",
+                        },
                     },
                     {
                         "ordinal": 2,
-                        "start_boundary_id": "B003",
-                        "end_boundary_id": "B004",
                         "slot_kind": "image",
+                        "reference_geometry": {
+                            "kind": "boundary_pair",
+                            "start_boundary_id": "B003",
+                            "end_boundary_id": "B004",
+                        },
                     },
                 ],
                 "adjacencies": [
@@ -170,26 +181,29 @@ class ManualAnnotationModelContractTest(unittest.TestCase):
         self.assertEqual(len(frame_polygons_display(record, record["tasks"][0])), 1)
         self.assertEqual(len(frame_polygons_display(record, record["tasks"][1])), 2)
         self.assertEqual(
-            record["tasks"][0]["slots"][0]["start_boundary_id"],
-            record["tasks"][1]["slots"][0]["start_boundary_id"],
+            slot_boundary_ids(record["tasks"][0]["slots"][0])[0],
+            slot_boundary_ids(record["tasks"][1]["slots"][0])[0],
         )
 
     def test_contact_reuses_one_physical_boundary(self) -> None:
         record = _annotation_record()
         task = record["tasks"][1]
-        task["slots"][1]["start_boundary_id"] = "B002"
+        task["slots"][1]["reference_geometry"]["start_boundary_id"] = "B002"
         task["adjacencies"][0]["kind"] = "contact"
+        record["boundary_pool"] = [
+            line for line in record["boundary_pool"] if line["line_id"] != "B003"
+        ]
         validate_annotation_record(record)
         self.assertEqual(
-            task["slots"][0]["end_boundary_id"],
-            task["slots"][1]["start_boundary_id"],
+            slot_boundary_ids(task["slots"][0])[1],
+            slot_boundary_ids(task["slots"][1])[0],
         )
 
     def test_overlap_keeps_crossed_physical_boundaries(self) -> None:
         record = _annotation_record()
         task = record["tasks"][1]
-        task["slots"][0]["end_boundary_id"] = "B003"
-        task["slots"][1]["start_boundary_id"] = "B002"
+        task["slots"][0]["reference_geometry"]["end_boundary_id"] = "B003"
+        task["slots"][1]["reference_geometry"]["start_boundary_id"] = "B002"
         task["adjacencies"][0]["kind"] = "overlap"
         validate_annotation_record(record)
         self.assertEqual(len(frame_polygons_display(record, task)), 2)
@@ -197,10 +211,65 @@ class ManualAnnotationModelContractTest(unittest.TestCase):
     def test_unresolved_machine_adjacency_may_keep_crossed_proposals(self) -> None:
         record = _annotation_record()
         task = record["tasks"][1]
-        task["slots"][0]["end_boundary_id"] = "B003"
-        task["slots"][1]["start_boundary_id"] = "B002"
+        task["slots"][0]["reference_geometry"]["end_boundary_id"] = "B003"
+        task["slots"][1]["reference_geometry"]["start_boundary_id"] = "B002"
         task["adjacencies"][0]["kind"] = "unresolved"
         validate_annotation_record(record)
+
+    def test_blank_exposure_has_no_reference_polygon_or_accuracy_frame(self) -> None:
+        record = _annotation_record()
+        task = record["tasks"][1]
+        task["slots"][1]["slot_kind"] = "blank_exposure"
+        task["slots"][1]["reference_geometry"] = {"kind": "not_applicable"}
+        task["adjacencies"][0]["kind"] = "not_applicable"
+        record["boundary_pool"] = record["boundary_pool"][:2]
+        validate_annotation_record(record)
+        self.assertEqual(len(frame_polygons_display(record, task)), 1)
+        self.assertIsNone(slot_boundary_ids(task["slots"][1]))
+
+        record["state"] = "user_confirmed"
+        record["reviewed_task_ids"] = ["S001", "S002"]
+        record["confirmation"] = {
+            "confirmed_at_utc": "2026-08-24T00:00:00Z",
+            "proposal_snapshot_sha256": "b" * 64,
+            "review_artifact_relative_path": "Test/manual_review/review.jpg",
+            "review_artifact_sha256": "c" * 64,
+            "checklist": {
+                "shared_edges": True,
+                "task_boundaries": True,
+                "native_pixel_checks": True,
+                "safe_without_bleed": True,
+            },
+        }
+        row = confirmed_baseline_rows(record)[1]
+        self.assertEqual(row["baseline_schema"], BASELINE_SCHEMA)
+        self.assertEqual([frame["frame_index"] for frame in row["frames"]], [1])
+        self.assertEqual(
+            row["slots"][1]["reference_geometry"],
+            {"kind": "not_applicable"},
+        )
+
+    def test_nonblank_slot_cannot_omit_reference_geometry(self) -> None:
+        record = _annotation_record()
+        record["tasks"][0]["slots"][0]["reference_geometry"] = {
+            "kind": "not_applicable"
+        }
+        with self.assertRaisesRegex(
+            AnnotationError,
+            "only blank exposure may omit reference geometry",
+        ):
+            validate_annotation_record(record)
+
+    def test_unused_machine_line_cannot_pose_as_reference_geometry(self) -> None:
+        record = _annotation_record()
+        orphan = deepcopy(record["boundary_pool"][-1])
+        orphan["line_id"] = "B005"
+        record["boundary_pool"].append(orphan)
+        with self.assertRaisesRegex(
+            AnnotationError,
+            "unused machine boundary is not reference geometry",
+        ):
+            validate_annotation_record(record)
 
     def test_orientation_eight_client_round_trip_preserves_raw_authority(self) -> None:
         record = _annotation_record(orientation=8)
@@ -411,14 +480,30 @@ class SyntheticReviewRepository:
             encoding="utf-8",
         )
 
-    def write_review_context(self, *, unmarked: bool = False) -> None:
+    def write_review_context(
+        self,
+        *,
+        unmarked: bool = False,
+        blank: bool = False,
+    ) -> None:
         context = {
             "review_context_schema": "x5crop_manual_review_context_v1",
             "default_pending_markup_state": "user_declared_marked",
             "default_film_polarity": "negative",
             "positive_sample_ids": [],
             "unmarked_sample_ids": ["S001"] if unmarked else [],
-            "samples": {},
+            "samples": (
+                {
+                    "S001": {
+                        "markup_import": {
+                            "missing_slots": [1],
+                            "slot_kinds": {"1": "blank_exposure"},
+                        }
+                    }
+                }
+                if blank
+                else {}
+            ),
         }
         path = self.root / "Test/manual_review/review_context.json"
         path.write_text(json.dumps(context), encoding="utf-8")
@@ -554,6 +639,17 @@ class ManualAnnotationWorkspaceContractTest(unittest.TestCase):
         record = workspace.load_record("S001")
         self.assertEqual(counts["red_drafts"], 0)
         self.assertEqual(record["state"], "machine_proposal")
+
+    def test_unmarked_blank_slot_has_no_machine_reference_geometry(self) -> None:
+        self.fixture.write_review_context(unmarked=True, blank=True)
+        workspace = ReviewWorkspace(self.fixture.root)
+        workspace.prepare()
+        record = workspace.load_record("S001")
+        slot = record["tasks"][0]["slots"][0]
+        self.assertEqual(slot["slot_kind"], "blank_exposure")
+        self.assertEqual(slot["reference_geometry"], {"kind": "not_applicable"})
+        self.assertEqual(record["boundary_pool"], [])
+        self.assertEqual(frame_polygons_display(record, record["tasks"][0]), ())
 
     def test_manifest_must_match_tracked_count(self) -> None:
         manifest = self.fixture.root / "Test/manual_review/manifest.jsonl"
@@ -706,7 +802,8 @@ class ManualAnnotationPackagingContractTest(unittest.TestCase):
         self.assertIn("共享短轴 h 占可用高度约 94%", joined)
         self.assertIn("洋红=start，橙色=end", joined)
         self.assertIn("双色虚线=start/end 接触边", joined)
-        self.assertIn("绿色闭合区域是各 frame", joined)
+        self.assertIn("绿色闭合区域是有内容 reference 的 frame", joined)
+        self.assertIn("空曝光 slot 不画边界", joined)
         self.assertIn("点击线可选中并用方向键或 [ ] 修改", joined)
         self.assertIn("点击空白处沿胶片长轴移动", joined)
         self.assertIn("最内侧可接受", joined)

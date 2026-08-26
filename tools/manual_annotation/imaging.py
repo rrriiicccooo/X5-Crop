@@ -16,7 +16,11 @@ from PIL import Image, ImageDraw
 
 from x5crop.io.orientation import OrientationMapping, orientation_mapping
 
-from .model import frame_polygons_display, raw_to_display_point
+from .model import (
+    frame_polygons_display,
+    raw_to_display_point,
+    referenced_boundary_ids,
+)
 
 
 MAX_ANALYSIS_LONG_SIDE = 3600
@@ -316,12 +320,7 @@ def render_review_artifact(
     for line in record["shared_edges"]:
         points = [scaled(raw_to_display_point(record, point)) for point in line["points_raw"]]
         draw.line(points, fill=(0, 235, 255, 255), width=line_width)
-    used_ids = {
-        line_id
-        for task in record["tasks"]
-        for slot in task["slots"]
-        for line_id in (slot["start_boundary_id"], slot["end_boundary_id"])
-    }
+    used_ids = referenced_boundary_ids(record)
     for line in record["boundary_pool"]:
         points = [scaled(raw_to_display_point(record, point)) for point in line["points_raw"]]
         color = (255, 95, 105, 255) if line["line_id"] in used_ids else (170, 170, 180, 180)

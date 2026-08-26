@@ -503,6 +503,10 @@ Pillow 只在 Debug Analysis 时延迟导入。生产默认 `--jobs 1`、上限 
 共享短轴边和一个物理 `boundary_pool`；不同显式 count 任务各自保存 typed `slots` 与
 `adjacencies`。普通 separator 使用两条边，contact 的前格 END 与后格 START 复用同一物理 boundary，
 overlap 保留顺序交叉的两条边；空曝光、残缺曝光、源截断和未知 slot 不得被静默删除。
+其中只有真正的 `blank_exposure` 没有可见内容边界：其人工 `reference_geometry` 必须明确为
+`not_applicable`，不建立 `start/end` 或 Frame polygon，也不作为缺失标注或 accuracy unresolved。
+该 slot 仍属于显式 count，Runtime 仍由 format/count/template 放置并输出空 TIFF；其它 slot kind
+必须保留 `boundary_pair` reference。
 页面中的 Orientation 只做可逆显示，持久化权威始终是原 TIFF raster pixel-center 坐标。
 
 独立有界像素拟合、用户红线草稿恢复和有界 JPG 都只能生成 proposal。只有用户逐项审核全部 count、
@@ -526,6 +530,9 @@ format/count authority、Gate 分支或 detector 选择器。
   几何 epsilon 只吸收浮点计算误差。每侧向外的总 expansion 不得超过对应确认 W/H span 的 5% 加
   命名的 sampling allowance，uncertainty、residual 与 bleed 均消耗该预算。这不是零像素误差或对称
   接近度要求。
+- 几何 accuracy 只比较带 `boundary_pair` reference 的 Frame ordinal。`blank_exposure` 的
+  `not_applicable` 表示没有人工内容边界，不是通配框、估计框或放行特例；它不减少 Runtime count，
+  也不改变模板、源内安全和整张 source 决策合同。
 - 上述黄金合同不因 `boundary_use` 改变。`enclosing_support_pair` 的总高度不超过 `1.1H` 仍是 runtime
   自动决策合同，但在黄金 accuracy 中还必须满足逐侧 5% 外扩上限，不能用总 span 隐藏单侧过度外扩。
   Nominal 必须安全自动批准，challenge 允许安全 review。只有不存在 selected candidate 的安全 review

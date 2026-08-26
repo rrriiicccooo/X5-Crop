@@ -10,8 +10,8 @@ import math
 from typing import Any, Iterable, Sequence
 
 
-ANNOTATION_SCHEMA = "x5crop_source_annotation_v2"
-BASELINE_SCHEMA = "x5crop_user_confirmed_source_geometry_v3"
+ANNOTATION_SCHEMA = "x5crop_source_annotation_v3"
+BASELINE_SCHEMA = "x5crop_user_confirmed_source_geometry_v4"
 COORDINATE_SYSTEM = "raw_tiff_raster_pixel_centers"
 MACHINE_ORIGIN = "independent_bounded_pixel_proposal_v1"
 RED_MARKUP_ORIGIN = "user_red_markup_hybrid_draft_import_v2"
@@ -34,7 +34,9 @@ LINE_REVIEW_BASES = frozenset(
 SLOT_KINDS = frozenset(
     {"image", "blank_exposure", "partial_exposure", "source_truncated", "unknown"}
 )
-ADJACENCY_KINDS = frozenset({"separator", "contact", "overlap", "unresolved"})
+ADJACENCY_KINDS = frozenset(
+    {"separator", "contact", "overlap", "unresolved", "not_applicable"}
+)
 
 
 class AnnotationError(RuntimeError):
@@ -156,6 +158,54 @@ def _intersection(
     ]
 
 
+def slot_boundary_ids(
+    slot: dict[str, Any],
+    *,
+    name: str = "slot",
+) -> tuple[str, str] | None:
+    """Return the authoritative boundary pair, or None when it is inapplicable."""
+    reference = slot.get("reference_geometry")
+    if not isinstance(reference, dict):
+        raise AnnotationError(f"{name}: reference geometry is malformed")
+    kind = reference.get("kind")
+    if kind == "not_applicable":
+        if set(reference) != {"kind"} or slot.get("slot_kind") != "blank_exposure":
+            raise AnnotationError(
+                f"{name}: only blank exposure may omit reference geometry"
+            )
+        return None
+    if kind != "boundary_pair" or set(reference) != {
+        "kind",
+        "start_boundary_id",
+        "end_boundary_id",
+    }:
+        raise AnnotationError(f"{name}: reference geometry is malformed")
+    start = reference["start_boundary_id"]
+    end = reference["end_boundary_id"]
+    if (
+        not isinstance(start, str)
+        or not start
+        or not isinstance(end, str)
+        or not end
+        or start == end
+    ):
+        raise AnnotationError(f"{name}: boundary pair is invalid")
+    if slot.get("slot_kind") == "blank_exposure":
+        raise AnnotationError(f"{name}: blank exposure cannot own reference boundaries")
+    return start, end
+
+
+def referenced_boundary_ids(record: dict[str, Any]) -> set[str]:
+    return {
+        line_id
+        for task in record["tasks"]
+        for slot in task["slots"]
+        for boundary_pair in (slot_boundary_ids(slot),)
+        if boundary_pair is not None
+        for line_id in boundary_pair
+    }
+
+
 def _polygon_area(polygon: Sequence[Sequence[float]]) -> float:
     return (
         sum(
@@ -194,24 +244,27 @@ def frame_polygons_display(
         for line in boundary_pool
         if isinstance(line, dict)
     }
-    boundary_ids = [
-        line_id
+    boundary_pairs = [
+        (slot, slot_boundary_ids(slot, name=f"slot {slot.get('ordinal', '?')}"))
         for slot in slots
         if isinstance(slot, dict)
-        for line_id in (slot.get("start_boundary_id"), slot.get("end_boundary_id"))
     ]
-    if len(boundary_ids) != count * 2 or len(pool_by_id) != len(boundary_pool) or any(
-        not isinstance(line_id, str) or line_id not in pool_by_id
-        for line_id in boundary_ids
+    if len(boundary_pairs) != count or len(pool_by_id) != len(boundary_pool) or any(
+        line_id not in pool_by_id
+        for _slot, pair in boundary_pairs
+        if pair is not None
+        for line_id in pair
     ):
         raise AnnotationError("task references an unknown physical boundary")
     low = _line_points_display(record, shared[0])
     high = _line_points_display(record, shared[1])
     horizontal = record.get("strip_axis_display") == "horizontal"
     polygons: list[list[list[float]]] = []
-    for slot in slots:
-        start = _line_points_display(record, pool_by_id[slot["start_boundary_id"]])
-        stop = _line_points_display(record, pool_by_id[slot["end_boundary_id"]])
+    for _slot, pair in boundary_pairs:
+        if pair is None:
+            continue
+        start = _line_points_display(record, pool_by_id[pair[0]])
+        stop = _line_points_display(record, pool_by_id[pair[1]])
         if horizontal:
             polygon = [
                 _intersection(low, start),
@@ -401,7 +454,7 @@ def validate_annotation_record(record: dict[str, Any]) -> None:
     line_ids = {shared[0]["line_id"], shared[1]["line_id"]}
 
     boundary_pool = record["boundary_pool"]
-    if not isinstance(boundary_pool, list) or not boundary_pool:
+    if not isinstance(boundary_pool, list):
         raise AnnotationError("annotation requires a physical boundary pool")
     for boundary in boundary_pool:
         _validate_line(record, boundary, expected_role="long_boundary")
@@ -455,29 +508,30 @@ def validate_annotation_record(record: dict[str, Any]) -> None:
             not isinstance(slot, dict)
             or set(slot) != {
                 "ordinal",
-                "start_boundary_id",
-                "end_boundary_id",
                 "slot_kind",
+                "reference_geometry",
             }
             for slot in slots
         ):
             raise AnnotationError(f"{task_id}: slot mapping is malformed")
         if [slot["ordinal"] for slot in slots] != list(range(1, count + 1)):
             raise AnnotationError(f"{task_id}: slot ordinals are not canonical")
-        boundary_ids = [
-            line_id
-            for slot in slots
-            for line_id in (slot["start_boundary_id"], slot["end_boundary_id"])
-        ]
         if any(
-            not isinstance(slot["start_boundary_id"], str)
-            or not isinstance(slot["end_boundary_id"], str)
-            or not isinstance(slot["slot_kind"], str)
+            not isinstance(slot["slot_kind"], str)
             or slot["slot_kind"] not in SLOT_KINDS
-            or slot["start_boundary_id"] == slot["end_boundary_id"]
             for slot in slots
         ):
             raise AnnotationError(f"{task_id}: slot semantics are invalid")
+        boundary_pairs = [
+            slot_boundary_ids(slot, name=f"{task_id} slot {slot['ordinal']}")
+            for slot in slots
+        ]
+        boundary_ids = [
+            line_id
+            for pair in boundary_pairs
+            if pair is not None
+            for line_id in pair
+        ]
         if not set(boundary_ids).issubset(pool_ids):
             raise AnnotationError(f"{task_id}: task references an unknown boundary")
         if any(
@@ -499,9 +553,21 @@ def validate_annotation_record(record: dict[str, Any]) -> None:
             raise AnnotationError(f"{task_id}: adjacency semantics are invalid")
         pool_by_id = {line["line_id"]: line for line in boundary_pool}
         for index, adjacency in enumerate(adjacencies):
-            left_id = slots[index]["end_boundary_id"]
-            right_id = slots[index + 1]["start_boundary_id"]
+            left_pair = boundary_pairs[index]
+            right_pair = boundary_pairs[index + 1]
             kind = adjacency["kind"]
+            if left_pair is None or right_pair is None:
+                if kind != "not_applicable":
+                    raise AnnotationError(
+                        f"{task_id}: adjacency touching a blank slot is not applicable"
+                    )
+                continue
+            if kind == "not_applicable":
+                raise AnnotationError(
+                    f"{task_id}: nonblank adjacency requires physical semantics"
+                )
+            left_id = left_pair[1]
+            right_id = right_pair[0]
             if kind == "contact":
                 if left_id != right_id:
                     raise AnnotationError(f"{task_id}: contact must share one physical line")
@@ -516,13 +582,11 @@ def validate_annotation_record(record: dict[str, Any]) -> None:
             if kind == "separator" and left_position > right_position:
                 raise AnnotationError(f"{task_id}: separator boundaries overlap")
         uses: dict[str, list[tuple[int, str]]] = {}
-        for slot in slots:
-            uses.setdefault(slot["start_boundary_id"], []).append(
-                (slot["ordinal"], "start")
-            )
-            uses.setdefault(slot["end_boundary_id"], []).append(
-                (slot["ordinal"], "end")
-            )
+        for slot, pair in zip(slots, boundary_pairs, strict=True):
+            if pair is None:
+                continue
+            uses.setdefault(pair[0], []).append((slot["ordinal"], "start"))
+            uses.setdefault(pair[1], []).append((slot["ordinal"], "end"))
         for roles in uses.values():
             if len(roles) == 1:
                 continue
@@ -549,6 +613,14 @@ def validate_annotation_record(record: dict[str, Any]) -> None:
             if center <= previous_center:
                 raise AnnotationError("annotation frames are not in display order")
             previous_center = center
+
+    used_boundary_ids = referenced_boundary_ids(record)
+    if any(
+        line["line_id"] not in used_boundary_ids
+        and line["review_basis"] != "unresolved_red_stroke"
+        for line in boundary_pool
+    ):
+        raise AnnotationError("unused machine boundary is not reference geometry")
 
     reviewed = record["reviewed_task_ids"]
     if (
@@ -610,10 +682,6 @@ def record_for_client(record: dict[str, Any]) -> dict[str, Any]:
             raw_to_display_point(record, point)
             for point in line.pop("points_raw")
         ]
-    for task in result["tasks"]:
-        task["frame_polygons_display"] = list(
-            frame_polygons_display(record, task)
-        )
     return result
 
 
@@ -684,6 +752,11 @@ def confirmed_baseline_rows(record: dict[str, Any]) -> tuple[dict[str, Any], ...
     rows: list[dict[str, Any]] = []
     for task in record["tasks"]:
         polygons_raw = frame_polygons_raw(record, task)
+        reference_slots = [
+            slot
+            for slot in task["slots"]
+            if slot_boundary_ids(slot) is not None
+        ]
         rows.append(
             {
                 "baseline_schema": BASELINE_SCHEMA,
@@ -691,9 +764,10 @@ def confirmed_baseline_rows(record: dict[str, Any]) -> tuple[dict[str, Any], ...
                 "status": "user_confirmed",
                 "authority": "explicit_user_confirmation_in_local_source_annotator",
                 "confirmation_scope": (
-                    "shared_edges_all_task_boundaries_native_pixel_checks_and_"
+                    "shared_edges_applicable_task_boundaries_native_pixel_checks_and_"
                     "minimum_acceptable_no_bleed_crop_baseline"
                 ),
+                "accuracy_scope": "slots_with_boundary_pair_reference_geometry",
                 "confirmed_at_utc": confirmation["confirmed_at_utc"],
                 "proposal_snapshot_sha256": confirmation[
                     "proposal_snapshot_sha256"
@@ -718,14 +792,18 @@ def confirmed_baseline_rows(record: dict[str, Any]) -> tuple[dict[str, Any], ...
                 "adjacencies": deepcopy(task["adjacencies"]),
                 "frames": [
                     {
-                        "frame_index": index,
+                        "frame_index": slot["ordinal"],
                         "polygon_source_pixel_center_coordinates": polygon,
                         "confirmed_integer_boundary_polygon": [
                             [round(point[0]), round(point[1])]
                             for point in polygon
                         ],
                     }
-                    for index, polygon in enumerate(polygons_raw, start=1)
+                    for slot, polygon in zip(
+                        reference_slots,
+                        polygons_raw,
+                        strict=True,
+                    )
                 ],
                 "confirmed_review_artifact": confirmation[
                     "review_artifact_relative_path"

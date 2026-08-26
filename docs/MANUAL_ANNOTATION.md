@@ -19,6 +19,12 @@ Accuracy 采用单向包含关系，而不是要求检测结果与红线逐像�
 - Runtime 的 `enclosing_support_pair` 仍遵守自己的 `1.1H` 自动决策合同；进入黄金 accuracy 时还必须
   同时满足上述逐侧单向合同，不能用总 span 掩盖单侧过度外扩。
 
+只有带 `boundary_pair` reference 的内容 Frame 进入几何 accuracy。真正的 `blank_exposure` slot 没有
+可见内容边界，其 `reference_geometry` 明确为 `not_applicable`：人工不画 `start/end`，页面不画绿色
+Frame，也不要求凭空确认位置。这不是漏标或 unresolved；slot ordinal 和显式 count 仍保留，Runtime
+仍按 format/count/template 输出对应空 TIFF。残缺曝光、源截断和肉眼难辨的内容格仍需要成对 reference，
+不能借用 `not_applicable` 跳过审核。
+
 ## 启动
 
 在仓库根目录运行：
@@ -41,26 +47,27 @@ python3 -m tools.manual_annotation audit
 ## 审核流程
 
 1. 在左侧按 format、状态或 sample/SHA 筛选；每次只打开一个有界预览。
-2. 先检查两条共享短轴边，再检查当前 count 页签中的每对长轴边。绿色四边形是这些直线交点围成的
-   基础照片区域，不包含产品 bleed。
+2. 先检查两条共享短轴边，再检查当前 count 页签中适用的每对长轴边。绿色四边形是这些直线交点
+   围成的基础照片区域，不包含产品 bleed；空曝光 slot 没有人工长轴边或四边形。
 3. 点击边界后拖整条线可沿法向移动，拖端点可修正斜率；方向键移动 1 px，按住 Shift 移动
    10 px。`[` / `]` 每次逆时针/顺时针旋转 0.01°，Shift 为 0.1°；整线绕中点旋转，选中端点时
    绕该端点旋转。`⌘Z` / `Ctrl+Z` 撤销。
 4. 鼠标所在位置的右侧局部图直接读取原 TIFF 的 1:1 像素，并叠加当前 count 任务的两条共享边和
-   全部成对长轴边；选中线显示为带深色轮廓的黄色，避免在白色片基或暗部中消失。总览只负责导航，
+   全部适用的成对长轴边；选中线显示为带深色轮廓的黄色，避免在白色片基或暗部中消失。总览只负责导航，
    最终应在局部图中确认边界没有危险切入真实画面。常规窗口下，512×512 原图块使用约
    512×512 的检查区；窗口较窄时才按可用宽度收缩。不需要拖线时，点击“完整高度审阅”或按 `F`，
    检查区会占满浏览器内容区，并按当前位置两条共享边计算短轴 H，让完整 H 占可用交叉轴约 94%，
    上下保留少量余量。该模式直接从原 TIFF 读取所需源区域，再按当前屏幕尺寸缩小，不放大有界总览
-   JPG。每个 Frame 由同一套共享边和成对长轴边画成绿色闭合区域；`start` 为洋红色，`end` 为橙色，
+   JPG。每个有内容 reference 的 Frame 由同一套共享边和成对长轴边画成绿色闭合区域；`start` 为洋红色，`end` 为橙色，
    接触 Frame 复用的 `start/end` 物理边显示为两色交替虚线。叠片中的两条独立边仍按各自角色着色，
    重叠区域会叠加加深。点击任一线可选中整线，并直接用方向键或 `[` / `]` 修改；点击空白处只沿
    胶片长轴移动，短轴始终回到共享边中间。按 `F` 或 `Esc` 恢复 1:1 标注布局。
 5. 同一 source SHA 若有多个 count，逐个切换页签并勾选“本任务边界已审核”。不同任务复用一个
    source-level `boundary_pool`，但各自保存明确的 `slots` 与 `adjacencies`，不会把 count 绑定到 SHA。
-   `contact` 的相邻照片共享同一条物理线；`overlap` 保留交叉的两条边；空片、残缺曝光和源截断分别
-   记录在 `slot_kind`，不能通过少输出一格来隐藏。
-6. 所有 count 都审核后，点击“确认整张黄金基线”，逐项确认共享边、任务边界、原生像素检查和
+   `contact` 的相邻照片共享同一条物理线；`overlap` 保留交叉的两条边。`slot_kind` 保留空片、残缺
+   曝光和源截断；只有 `blank_exposure` 使用 `reference_geometry: not_applicable`，且不能通过少输出
+   一格来隐藏。
+6. 所有 count 都审核后，点击“确认整张黄金基线”，逐项确认共享边、适用的任务边界、原生像素检查和
    无 bleed 基础裁切安全性。确认后的 source 立即冻结，不可继续编辑。
 
 机器 proposal 只减少起点工作量。遇到 contact、overlap、曲边、老化相机造成的不规则片距或边界
@@ -85,7 +92,8 @@ python3 -m tools.manual_annotation audit
 - 记录按 source SHA 去重。同字节、多 count 的样片只解码和标注一次物理边界。
 - 本地状态保存在 `Test/manual_review/source_annotations/`：`records/` 是可恢复的原子 JSON，
   `previews/` 是有界导航 JPG，`review_artifacts/` 是确认快照，
-  `confirmed_source_geometry_v3.jsonl` 汇总所有已确认任务。
+  `confirmed_source_geometry.jsonl` 汇总所有已确认任务。汇总行的 `slots` 保留全部 count 语义，
+  `frames` 只包含拥有 `boundary_pair` reference 的 ordinal。
 - `Test/` 不受 Git 跟踪。确认只建立本地、source-SHA-bound 的最内侧可接受裁切基准，不会自动修改 tracked
   accuracy cohort；纳入阻断黄金仍需一次独立、显式的 cohort 审核。
 

@@ -68,6 +68,10 @@ materialization、平行 detector 和 report reuse 均不再支持。
   几何生成的 Frame 闭合范围，重叠区域叠加加深；`start` 为洋红色、`end` 为橙色，接触 Frame 复用
   的 `start/end` 边显示为两色交替虚线。线可直接选中并用现有键盘微调或旋转。该模式不改变常规
   1:1 检查，也不放大有界总览 JPG。
+  真正的 `blank_exposure` 现在使用 typed `reference_geometry: not_applicable`：不拥有人工
+  `start/end`、不画 Frame polygon，也不进入内容几何 accuracy；ordinal、显式 count 和 Runtime 空
+  TIFF 输出保持不变。旧本地 v2 记录原子迁移到当前 schema，已确认的非空几何与 review artifact
+  不变，汇总使用稳定文件名 `confirmed_source_geometry.jsonl`。
   独立像素拟合和旧红线草稿只生成 proposal，确认不会自动晋升 tracked accuracy cohort，工具及本地
   状态均不进入发布包。
 - v2 红线批量恢复按用户声明区分已标注与未标注副本，并保存逐线 review basis。完整红线组按物理顺序

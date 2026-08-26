@@ -28,6 +28,8 @@ from .model import (
     display_to_raw_point,
     frame_polygons_display,
     raw_to_display_point,
+    referenced_boundary_ids,
+    slot_boundary_ids,
     validate_annotation_record,
 )
 
@@ -755,9 +757,12 @@ def propose_record(
                 "slots": [
                     {
                         "ordinal": index + 1,
-                        "start_boundary_id": task_boundary_ids[index * 2],
-                        "end_boundary_id": task_boundary_ids[index * 2 + 1],
                         "slot_kind": "image",
+                        "reference_geometry": {
+                            "kind": "boundary_pair",
+                            "start_boundary_id": task_boundary_ids[index * 2],
+                            "end_boundary_id": task_boundary_ids[index * 2 + 1],
+                        },
                     }
                     for index in range(int(row["count"]))
                 ],
@@ -774,8 +779,12 @@ def propose_record(
     pool_by_id = {line["line_id"]: line for line in record["boundary_pool"]}
     for task in record["tasks"]:
         for adjacency_index, adjacency in enumerate(task["adjacencies"]):
-            left_id = task["slots"][adjacency_index]["end_boundary_id"]
-            right_id = task["slots"][adjacency_index + 1]["start_boundary_id"]
+            left_pair = slot_boundary_ids(task["slots"][adjacency_index])
+            right_pair = slot_boundary_ids(task["slots"][adjacency_index + 1])
+            if left_pair is None or right_pair is None:
+                raise ValueError("machine proposal unexpectedly lacks a boundary pair")
+            left_id = left_pair[1]
+            right_id = right_pair[0]
             left_position = _machine_boundary_position(record, pool_by_id[left_id])
             right_position = _machine_boundary_position(record, pool_by_id[right_id])
             if left_position <= right_position:
@@ -1092,11 +1101,13 @@ def _machine_boundary_position(
 
 
 def _task_role_ids(task: dict[str, Any]) -> list[str]:
-    return [
-        line_id
-        for slot in task["slots"]
-        for line_id in (slot["start_boundary_id"], slot["end_boundary_id"])
-    ]
+    result: list[str] = []
+    for slot in task["slots"]:
+        pair = slot_boundary_ids(slot)
+        if pair is None:
+            raise ValueError("red import requires the original machine boundary pair")
+        result.extend(pair)
+    return result
 
 
 def _role_groups(
@@ -1237,6 +1248,100 @@ def _task_markup_context(record: dict[str, Any], task_id: str) -> dict[str, Any]
     return value if isinstance(value, dict) else {}
 
 
+def apply_review_context_slot_semantics(record: dict[str, Any]) -> dict[str, Any]:
+    """Apply typed slot facts without promoting machine geometry to authority."""
+    updated = deepcopy(record)
+    blank_by_task: dict[str, set[int]] = {}
+    for task in updated["tasks"]:
+        context = _task_markup_context(updated, task["task_id"])
+        hints = context.get("markup_import", {}) if isinstance(context, dict) else {}
+        if not isinstance(hints, dict):
+            raise ValueError(f"{task['task_id']}: markup_import must be an object")
+        slot_kinds = {
+            int(key): str(value) for key, value in hints.get("slot_kinds", {}).items()
+        }
+        if not set(slot_kinds).issubset(range(1, int(task["count"]) + 1)) or any(
+            value not in SLOT_KINDS for value in slot_kinds.values()
+        ):
+            raise ValueError(f"{task['task_id']}: slot kind hint is invalid")
+        blank_ordinals: set[int] = set()
+        for slot in task["slots"]:
+            kind = slot_kinds.get(int(slot["ordinal"]), str(slot["slot_kind"]))
+            slot["slot_kind"] = kind
+            if kind == "blank_exposure":
+                slot["reference_geometry"] = {"kind": "not_applicable"}
+                blank_ordinals.add(int(slot["ordinal"]))
+        blank_by_task[task["task_id"]] = blank_ordinals
+        for adjacency in task["adjacencies"]:
+            if (
+                int(adjacency["left_ordinal"]) in blank_ordinals
+                or int(adjacency["right_ordinal"]) in blank_ordinals
+            ):
+                adjacency["kind"] = "not_applicable"
+
+    used_ids = referenced_boundary_ids(updated)
+    updated["boundary_pool"] = [
+        line
+        for line in updated["boundary_pool"]
+        if line["line_id"] in used_ids
+        or line.get("review_basis") == "unresolved_red_stroke"
+    ]
+    unresolved: list[dict[str, Any]] = []
+    for item in updated["diagnostics"].get("unresolved", []):
+        if not isinstance(item, dict):
+            unresolved.append(item)
+            continue
+        task_id = item.get("task_id")
+        blank_ordinals = blank_by_task.get(str(task_id), set())
+        if item.get("kind") in {
+            "weak_local_boundary_evidence",
+            "red_markup_missing_boundary_roles",
+        }:
+            blank_roles = {
+                role
+                for ordinal in blank_ordinals
+                for role in (2 * ordinal - 1, 2 * ordinal)
+            }
+            retained = [
+                role
+                for role in item.get("boundary_role_indices", [])
+                if role not in blank_roles
+            ]
+            if not retained:
+                continue
+            item = {**item, "boundary_role_indices": retained}
+        if item.get("kind") == "machine_separator_relation_unresolved" and (
+            item.get("left_ordinal") in blank_ordinals
+            or item.get("right_ordinal") in blank_ordinals
+        ):
+            continue
+        unresolved.append(item)
+    updated["diagnostics"]["unresolved"] = unresolved
+    red_import = updated["diagnostics"].get("red_markup_import")
+    if isinstance(red_import, dict):
+        assignments = red_import.get("task_assignments")
+        if isinstance(assignments, dict):
+            for task_id, diagnostic in assignments.items():
+                if not isinstance(diagnostic, dict):
+                    continue
+                blank_ordinals = blank_by_task.get(str(task_id), set())
+                blank_roles = {
+                    role
+                    for ordinal in blank_ordinals
+                    for role in (2 * ordinal - 1, 2 * ordinal)
+                }
+                diagnostic["machine_retained_role_indices"] = [
+                    role
+                    for role in diagnostic.get("machine_retained_role_indices", [])
+                    if role not in blank_roles
+                ]
+                diagnostic["reference_geometry_not_applicable_ordinals"] = sorted(
+                    blank_ordinals
+                )
+    validate_annotation_record(updated)
+    return updated
+
+
 def _frames_are_source_bounded(record: dict[str, Any]) -> bool:
     width = float(record["source"]["canonical_extent"]["width"])
     height = float(record["source"]["canonical_extent"]["height"])
@@ -1367,6 +1472,15 @@ def import_red_markup_draft(
             value not in SLOT_KINDS for value in slot_kinds.values()
         ):
             raise ValueError(f"{task['task_id']}: slot kind hint is invalid")
+        blank_ordinals = {
+            ordinal
+            for ordinal, kind in slot_kinds.items()
+            if kind == "blank_exposure"
+        }
+        if not blank_ordinals.issubset(missing_slots):
+            raise ValueError(
+                f"{task['task_id']}: blank exposure must omit red boundary roles"
+            )
         valid_role_keys = {
             f"{ordinal}.{role}"
             for ordinal in range(1, count + 1)
@@ -1405,7 +1519,8 @@ def import_red_markup_draft(
             observed_index = role_to_observed.get(role_index)
             if observed_index is None:
                 mapped_role_ids.append(machine_id)
-                used_machine_ids.add(machine_id)
+                if role_index // 2 + 1 not in blank_ordinals:
+                    used_machine_ids.add(machine_id)
                 continue
             red_id = observed_lines[observed_index]["line_id"]
             mapped_role_ids.append(red_id)
@@ -1418,9 +1533,16 @@ def import_red_markup_draft(
         task["slots"] = [
             {
                 "ordinal": index + 1,
-                "start_boundary_id": mapped_role_ids[index * 2],
-                "end_boundary_id": mapped_role_ids[index * 2 + 1],
                 "slot_kind": slot_kinds.get(index + 1, "image"),
+                "reference_geometry": (
+                    {"kind": "not_applicable"}
+                    if slot_kinds.get(index + 1) == "blank_exposure"
+                    else {
+                        "kind": "boundary_pair",
+                        "start_boundary_id": mapped_role_ids[index * 2],
+                        "end_boundary_id": mapped_role_ids[index * 2 + 1],
+                    }
+                ),
             }
             for index in range(count)
         ]
@@ -1429,7 +1551,9 @@ def import_red_markup_draft(
                 "left_ordinal": index,
                 "right_ordinal": index + 1,
                 "kind": (
-                    "contact"
+                    "not_applicable"
+                    if index in blank_ordinals or index + 1 in blank_ordinals
+                    else "contact"
                     if index in contact_after
                     else "overlap"
                     if index in overlap_after
@@ -1445,15 +1569,24 @@ def import_red_markup_draft(
         for adjacency_index, adjacency in enumerate(task["adjacencies"]):
             if adjacency["kind"] != "separator":
                 continue
-            left_id = task["slots"][adjacency_index]["end_boundary_id"]
-            right_id = task["slots"][adjacency_index + 1]["start_boundary_id"]
+            left_pair = slot_boundary_ids(task["slots"][adjacency_index])
+            right_pair = slot_boundary_ids(task["slots"][adjacency_index + 1])
+            if left_pair is None or right_pair is None:
+                raise ValueError("nonblank separator unexpectedly lacks geometry")
+            left_id = left_pair[1]
+            right_id = right_pair[0]
             left_position = _machine_boundary_position(updated, pool_for_positions[left_id])
             right_position = _machine_boundary_position(updated, pool_for_positions[right_id])
             if left_position > right_position:
                 adjacency["kind"] = "unresolved"
         task_diagnostics[task["task_id"]] = {
             "matched_red_role_indices": sorted(index + 1 for index in role_to_observed),
-            "machine_retained_role_indices": sorted(index + 1 for index in skipped_roles),
+            "machine_retained_role_indices": sorted(
+                index + 1
+                for index in skipped_roles
+                if index // 2 + 1 not in blank_ordinals
+            ),
+            "reference_geometry_not_applicable_ordinals": sorted(blank_ordinals),
             "unmatched_red_stroke_indices": sorted(index + 1 for index in skipped_observed),
             "alignment_cost": cost,
         }
@@ -1534,5 +1667,5 @@ def import_red_markup_draft(
         "task_assignments": task_diagnostics,
         "authority": "user_red_strokes_fitted_pending_native_pixel_confirmation",
     }
-    validate_annotation_record(updated)
+    updated = apply_review_context_slot_semantics(updated)
     return updated
