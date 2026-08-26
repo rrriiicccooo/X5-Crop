@@ -12,7 +12,7 @@ import threading
 from typing import Any
 from urllib.parse import parse_qs, unquote, urlsplit
 
-from .imaging import SourceRaster, sha256_file
+from .imaging import ImagingError, SourceRaster, sha256_file
 from .workspace import ReviewWorkspace, WorkspaceError
 
 
@@ -58,22 +58,26 @@ class RasterCache:
         self._raster = None
         self._levels = None
 
-    def native_tile(
+    def review_tile(
         self,
         identity: str,
         *,
         center_x: float,
         center_y: float,
-        width: int,
-        height: int,
+        source_width: int,
+        source_height: int,
+        render_width: int,
+        render_height: int,
     ) -> tuple[bytes, dict[str, int]]:
         with self._lock:
             raster, levels = self.get(identity)
-            return raster.native_tile_png(
+            return raster.review_tile_png(
                 center_x=center_x,
                 center_y=center_y,
-                width=width,
-                height=height,
+                source_width=source_width,
+                source_height=source_height,
+                render_width=render_width,
+                render_height=render_height,
                 levels=levels,
             )
 
@@ -214,18 +218,22 @@ class AnnotationRequestHandler(BaseHTTPRequestHandler):
                 try:
                     x = float(query.get("x", [""])[0])
                     y = float(query.get("y", [""])[0])
-                    width = int(query.get("width", ["512"])[0])
-                    height = int(query.get("height", ["512"])[0])
+                    source_width = int(query.get("source_width", ["512"])[0])
+                    source_height = int(query.get("source_height", ["512"])[0])
+                    render_width = int(query.get("render_width", ["512"])[0])
+                    render_height = int(query.get("render_height", ["512"])[0])
                 except ValueError as error:
-                    raise WorkspaceError("native tile coordinates are invalid") from error
+                    raise WorkspaceError("review tile coordinates are invalid") from error
                 if not math.isfinite(x) or not math.isfinite(y):
-                    raise WorkspaceError("native tile coordinates must be finite")
-                payload, extent = self.server.raster_cache.native_tile(
+                    raise WorkspaceError("review tile coordinates must be finite")
+                payload, extent = self.server.raster_cache.review_tile(
                     identity,
                     center_x=x,
                     center_y=y,
-                    width=width,
-                    height=height,
+                    source_width=source_width,
+                    source_height=source_height,
+                    render_width=render_width,
+                    render_height=render_height,
                 )
                 self._send(
                     HTTPStatus.OK,
@@ -240,7 +248,7 @@ class AnnotationRequestHandler(BaseHTTPRequestHandler):
                 )
                 return
             self._error(HTTPStatus.NOT_FOUND, "unknown local annotation endpoint")
-        except WorkspaceError as error:
+        except (ImagingError, WorkspaceError) as error:
             self._error(HTTPStatus.BAD_REQUEST, str(error))
         except Exception as error:
             self._error(HTTPStatus.INTERNAL_SERVER_ERROR, str(error))

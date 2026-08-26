@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from io import BytesIO
 import json
 from pathlib import Path
 import shutil
@@ -13,6 +14,7 @@ from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 import numpy as np
+from PIL import Image
 import tifffile
 
 from tools.manual_annotation.imaging import orientation_record, sha256_file
@@ -328,7 +330,13 @@ class SyntheticReviewRepository:
         raster[65:255, 170:470, 0] = texture
         raster[65:255, 170:470, 1] = np.flip(texture, axis=1)
         raster[65:255, 170:470, 2] = np.flip(texture, axis=0)
-        tifffile.imwrite(source, raster, photometric="rgb", compression=None)
+        tifffile.imwrite(
+            source,
+            raster,
+            photometric="rgb",
+            compression=None,
+            byteorder=">",
+        )
         copy = self.root / self.copy_relative
         copy.parent.mkdir(parents=True)
         shutil.copyfile(source, copy)
@@ -612,8 +620,10 @@ class ManualAnnotationServerContractTest(unittest.TestCase):
         )
         self.assertEqual(status, 200)
         index = json.loads(body)
-        self.assertEqual(index["index_schema"], "x5crop_source_annotation_index_v2")
-        self.assertEqual(index["native_tile_max_dimension"], 3072)
+        self.assertEqual(index["index_schema"], "x5crop_source_annotation_index_v3")
+        self.assertEqual(index["tile_max_render_dimension"], 3072)
+        self.assertEqual(index["tile_max_source_dimension"], 16384)
+        self.assertEqual(index["tile_max_source_pixels"], 32_000_000)
         self.assertEqual(index["total_unique_sources"], 1)
         status, _ = self._status(
             Request(
@@ -643,15 +653,21 @@ class ManualAnnotationServerContractTest(unittest.TestCase):
         )
         self.assertEqual(status, 403)
 
-    def test_native_tile_is_bounded_and_source_bound(self) -> None:
+    def test_review_tile_is_bounded_scaled_and_source_bound(self) -> None:
         status, payload = self._status(
             Request(
-                f"{self.base}/api/tile/S001?x=320&y=160&width=128&height=96",
+                f"{self.base}/api/tile/S001?x=320&y=160&source_width=640"
+                "&source_height=320&render_width=320&render_height=160",
                 headers={"X-X5-Token": "fixed-test-token"},
             )
         )
         self.assertEqual(status, 200)
         self.assertTrue(payload.startswith(b"\x89PNG"))
+        with Image.open(BytesIO(payload)) as image:
+            self.assertEqual(image.size, (320, 160))
+            pixels = np.asarray(image)
+        self.assertGreater(float(pixels[5, 5].mean()), 240.0)
+        self.assertLess(float(pixels[80, 75].mean()), 30.0)
 
 
 class ManualAnnotationPackagingContractTest(unittest.TestCase):
@@ -674,8 +690,10 @@ class ManualAnnotationPackagingContractTest(unittest.TestCase):
         self.assertIn("min(564px, 46vw)", joined)
         self.assertIn('id="maximizeloupebutton"', joined)
         self.assertIn("loupe-maximized", joined)
-        self.assertIn("nativetilesize", joined)
-        self.assertIn("点击图内位置可将其移到中心", joined)
+        self.assertIn("fit_review_cross_fraction", joined)
+        self.assertIn("sharedcrosscoordinate", joined)
+        self.assertIn("共享短轴 h 占可用高度约 94%", joined)
+        self.assertIn("点击图内位置可沿胶片长轴移动", joined)
         self.assertIn("最内侧可接受", joined)
         self.assertIn("不得向其内侧越界", joined)
         self.assertIn("bracketleft", joined)

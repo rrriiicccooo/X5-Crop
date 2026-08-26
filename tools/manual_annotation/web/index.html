@@ -83,11 +83,11 @@
         <aside class="inspect-panel">
           <div id="loupeCard" class="inspect-card loupe-card">
             <div class="inspect-heading">
-              <h3>1:1 原生像素检查</h3>
+              <h3 id="loupeTitle">1:1 原生像素检查</h3>
               <div class="inspect-heading-actions">
                 <span id="cursorCoordinate">x — · y —</span>
                 <button id="maximizeLoupeButton" class="inspect-expand-button secondary" type="button"
-                  title="最大化审阅（F）" aria-pressed="false" disabled>最大化审阅</button>
+                  title="完整高度审阅（F）" aria-pressed="false" disabled>完整高度审阅</button>
               </div>
             </div>
             <div id="loupeWrap" class="loupe-wrap">
@@ -99,7 +99,7 @@
               </svg>
               <div id="loupeEmpty" class="loupe-empty">把鼠标移到图像上</div>
             </div>
-            <p id="loupeHelp">局部图直接来自原 TIFF 像素。用它检查线是否安全贴合物理边缘；按 F 最大化审阅。</p>
+            <p id="loupeHelp">局部图直接来自原 TIFF 像素。用它检查线是否安全贴合物理边缘；按 F 进入完整高度审阅。</p>
           </div>
 
           <div class="inspect-card geometry-card">

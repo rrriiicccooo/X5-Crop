@@ -2,6 +2,7 @@
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const ROTATION_STEP_DEGREES = 0.01;
+const FIT_REVIEW_CROSS_FRACTION = 0.94;
 const token = new URLSearchParams(window.location.search).get("token") || "";
 
 const elements = Object.fromEntries([
@@ -10,7 +11,7 @@ const elements = Object.fromEntries([
   "undoButton", "redoButton", "resetViewButton", "taskTabs", "taskReviewed",
   "confirmButton", "canvasStage", "annotationSvg", "sourceImage", "polygonLayer",
   "lineLayer", "handleLayer", "cursorCoordinate", "loupeSvg", "loupeImage",
-  "loupeCard", "loupeWrap", "maximizeLoupeButton", "loupeHelp", "loupeLineLayer",
+  "loupeCard", "loupeWrap", "loupeTitle", "maximizeLoupeButton", "loupeHelp", "loupeLineLayer",
   "loupeCrossX", "loupeCrossY", "loupeEmpty", "selectedLineLabel",
   "lineCoordinates", "diagnostics", "confirmDialog", "confirmTitle",
   "finalConfirmButton", "toast"
@@ -695,12 +696,73 @@ function scheduleLoupe(point) {
   loupeTimer = setTimeout(() => loadLoupe(point), 110);
 }
 
-function nativeTileSize() {
+function renderedTileSize() {
   const bounds = elements.loupeWrap.getBoundingClientRect();
-  const maximum = Number(indexData?.native_tile_max_dimension) || 768;
+  const maximum = Number(indexData?.tile_max_render_dimension) || 768;
   return {
     width: Math.max(64, Math.min(maximum, Math.round(bounds.width || 512))),
     height: Math.max(64, Math.min(maximum, Math.round(bounds.height || bounds.width || 512)))
+  };
+}
+
+function sharedCrossCoordinate(line, longPosition) {
+  const [[x1, y1], [x2, y2]] = line.points_display;
+  if (currentRecord.strip_axis_display === "horizontal") {
+    if (Math.abs(x2 - x1) < 1.0e-9) return (y1 + y2) / 2;
+    return y1 + (longPosition - x1) * (y2 - y1) / (x2 - x1);
+  }
+  if (Math.abs(y2 - y1) < 1.0e-9) return (x1 + x2) / 2;
+  return x1 + (longPosition - y1) * (x2 - x1) / (y2 - y1);
+}
+
+function fitReviewGeometry(point, render) {
+  const extent = currentRecord.source.canonical_extent;
+  const horizontal = currentRecord.strip_axis_display === "horizontal";
+  const longPosition = horizontal ? point[0] : point[1];
+  const first = sharedCrossCoordinate(currentRecord.shared_edges[0], longPosition);
+  const second = sharedCrossCoordinate(currentRecord.shared_edges[1], longPosition);
+  const sharedSpan = Math.max(64, Math.abs(second - first));
+  const center = horizontal
+    ? clampPoint([longPosition, (first + second) / 2])
+    : clampPoint([(first + second) / 2, longPosition]);
+  const sourceCross = sharedSpan / FIT_REVIEW_CROSS_FRACTION;
+  let sourceWidth = horizontal
+    ? sourceCross * render.width / render.height
+    : sourceCross;
+  let sourceHeight = horizontal
+    ? sourceCross
+    : sourceCross * render.height / render.width;
+  const maximumDimension = Number(indexData?.tile_max_source_dimension) || 8192;
+  const maximumPixels = Number(indexData?.tile_max_source_pixels) || 16_000_000;
+  const factor = Math.min(
+    1,
+    extent.width / sourceWidth,
+    extent.height / sourceHeight,
+    maximumDimension / sourceWidth,
+    maximumDimension / sourceHeight,
+    Math.sqrt(maximumPixels / (sourceWidth * sourceHeight))
+  );
+  sourceWidth = Math.max(64, Math.round(sourceWidth * factor));
+  sourceHeight = Math.max(64, Math.round(sourceHeight * factor));
+  return {center, sourceWidth, sourceHeight};
+}
+
+function tileRequest(point) {
+  const render = renderedTileSize();
+  if (!loupeMaximized) {
+    return {
+      center: clampPoint(point),
+      sourceWidth: render.width,
+      sourceHeight: render.height,
+      renderWidth: render.width,
+      renderHeight: render.height
+    };
+  }
+  const fitted = fitReviewGeometry(point, render);
+  return {
+    ...fitted,
+    renderWidth: render.width,
+    renderHeight: render.height
   };
 }
 
@@ -710,11 +772,13 @@ function setLoupeMaximized(maximized, reload = true) {
   loupeMaximized = next;
   document.body.classList.toggle("loupe-maximized", next);
   elements.maximizeLoupeButton.setAttribute("aria-pressed", String(next));
-  elements.maximizeLoupeButton.textContent = next ? "退出最大化" : "最大化审阅";
-  elements.maximizeLoupeButton.title = next ? "退出最大化（F 或 Esc）" : "最大化审阅（F）";
+  elements.loupeTitle.textContent = next ? "完整高度审阅" : "1:1 原生像素检查";
+  elements.loupeSvg.setAttribute("aria-label", next ? "胶片完整高度审阅图" : "原生像素局部图");
+  elements.maximizeLoupeButton.textContent = next ? "退出审阅" : "完整高度审阅";
+  elements.maximizeLoupeButton.title = next ? "退出完整高度审阅（F 或 Esc）" : "完整高度审阅（F）";
   elements.loupeHelp.textContent = next
-    ? "保持 1:1 原生像素显示；点击图内位置可将其移到中心。按 F 或 Esc 退出。"
-    : "局部图直接来自原 TIFF 像素。用它检查线是否安全贴合物理边缘；按 F 最大化审阅。";
+    ? "共享短轴 H 占可用高度约 94%；点击图内位置可沿胶片长轴移动。按 F 或 Esc 退出。"
+    : "局部图直接来自原 TIFF 像素。用它检查线是否安全贴合物理边缘；按 F 进入完整高度审阅。";
   if (reload && lastPointer) requestAnimationFrame(() => loadLoupe(lastPointer));
 }
 
@@ -726,7 +790,10 @@ function recenterLoupe(event) {
   point.x = event.clientX;
   point.y = event.clientY;
   const sourcePoint = point.matrixTransform(matrix.inverse());
-  lastPointer = clampPoint([sourcePoint.x, sourcePoint.y]);
+  lastPointer = fitReviewGeometry(
+    [sourcePoint.x, sourcePoint.y],
+    renderedTileSize()
+  ).center;
   elements.cursorCoordinate.textContent = `x ${lastPointer[0].toFixed(1)} · y ${lastPointer[1].toFixed(1)}`;
   scheduleLoupe(lastPointer);
 }
@@ -736,8 +803,18 @@ async function loadLoupe(point) {
   if (loupeAbort) loupeAbort.abort();
   loupeAbort = new AbortController();
   try {
-    const size = nativeTileSize();
-    const response = await api(`/api/tile/${encodeURIComponent(currentRecord.source.sha256)}?x=${point[0]}&y=${point[1]}&width=${size.width}&height=${size.height}`, {signal: loupeAbort.signal});
+    const request = tileRequest(point);
+    lastPointer = request.center;
+    elements.cursorCoordinate.textContent = `x ${lastPointer[0].toFixed(1)} · y ${lastPointer[1].toFixed(1)}`;
+    const query = new URLSearchParams({
+      x: String(request.center[0]),
+      y: String(request.center[1]),
+      source_width: String(request.sourceWidth),
+      source_height: String(request.sourceHeight),
+      render_width: String(request.renderWidth),
+      render_height: String(request.renderHeight)
+    });
+    const response = await api(`/api/tile/${encodeURIComponent(currentRecord.source.sha256)}?${query}`, {signal: loupeAbort.signal});
     const extent = {
       left: Number(response.headers.get("X-X5-Tile-Left")),
       top: Number(response.headers.get("X-X5-Tile-Top")),
@@ -754,8 +831,8 @@ async function loadLoupe(point) {
     elements.loupeImage.setAttribute("width", extent.width);
     elements.loupeImage.setAttribute("height", extent.height);
     elements.loupeCrossX.setAttribute("x1", extent.left); elements.loupeCrossX.setAttribute("x2", extent.left + extent.width);
-    elements.loupeCrossX.setAttribute("y1", point[1]); elements.loupeCrossX.setAttribute("y2", point[1]);
-    elements.loupeCrossY.setAttribute("x1", point[0]); elements.loupeCrossY.setAttribute("x2", point[0]);
+    elements.loupeCrossX.setAttribute("y1", request.center[1]); elements.loupeCrossX.setAttribute("y2", request.center[1]);
+    elements.loupeCrossY.setAttribute("x1", request.center[0]); elements.loupeCrossY.setAttribute("x2", request.center[0]);
     elements.loupeCrossY.setAttribute("y1", extent.top); elements.loupeCrossY.setAttribute("y2", extent.top + extent.height);
     elements.loupeWrap.classList.add("ready");
     renderLoupeLines();

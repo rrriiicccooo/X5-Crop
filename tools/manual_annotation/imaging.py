@@ -21,7 +21,9 @@ from .model import frame_polygons_display, raw_to_display_point
 
 MAX_ANALYSIS_LONG_SIDE = 3600
 MAX_PREVIEW_LONG_SIDE = 2400
-MAX_NATIVE_TILE_DIMENSION = 3072
+MAX_TILE_RENDER_DIMENSION = 3072
+MAX_TILE_SOURCE_DIMENSION = 16384
+MAX_TILE_SOURCE_PIXELS = 32_000_000
 
 
 class ImagingError(RuntimeError):
@@ -202,35 +204,68 @@ class SourceRaster(AbstractContextManager["SourceRaster"]):
         image.save(output, format="JPEG", quality=quality, optimize=True)
         return output.getvalue()
 
-    def native_tile_png(
+    def review_tile_png(
         self,
         *,
         center_x: float,
         center_y: float,
-        width: int,
-        height: int,
+        source_width: int,
+        source_height: int,
+        render_width: int,
+        render_height: int,
         levels: list[list[float]],
     ) -> tuple[bytes, dict[str, int]]:
-        if not 64 <= width <= MAX_NATIVE_TILE_DIMENSION:
+        if not 64 <= source_width <= MAX_TILE_SOURCE_DIMENSION:
             raise ImagingError(
-                f"native tile width must be 64..{MAX_NATIVE_TILE_DIMENSION}"
+                f"review tile source width must be 64..{MAX_TILE_SOURCE_DIMENSION}"
             )
-        if not 64 <= height <= MAX_NATIVE_TILE_DIMENSION:
+        if not 64 <= source_height <= MAX_TILE_SOURCE_DIMENSION:
             raise ImagingError(
-                f"native tile height must be 64..{MAX_NATIVE_TILE_DIMENSION}"
+                f"review tile source height must be 64..{MAX_TILE_SOURCE_DIMENSION}"
             )
-        source_width, source_height = self.canonical_extent
+        if source_width * source_height > MAX_TILE_SOURCE_PIXELS:
+            raise ImagingError(
+                f"review tile source area must not exceed {MAX_TILE_SOURCE_PIXELS} pixels"
+            )
+        if not 64 <= render_width <= MAX_TILE_RENDER_DIMENSION:
+            raise ImagingError(
+                f"review tile render width must be 64..{MAX_TILE_RENDER_DIMENSION}"
+            )
+        if not 64 <= render_height <= MAX_TILE_RENDER_DIMENSION:
+            raise ImagingError(
+                f"review tile render height must be 64..{MAX_TILE_RENDER_DIMENSION}"
+            )
+        canonical_width, canonical_height = self.canonical_extent
         left = min(
-            max(0, int(round(center_x)) - width // 2),
-            max(0, source_width - width),
+            max(0, int(round(center_x)) - source_width // 2),
+            max(0, canonical_width - source_width),
         )
         top = min(
-            max(0, int(round(center_y)) - height // 2),
-            max(0, source_height - height),
+            max(0, int(round(center_y)) - source_height // 2),
+            max(0, canonical_height - source_height),
         )
-        right = min(source_width, left + width)
-        bottom = min(source_height, top + height)
+        right = min(canonical_width, left + source_width)
+        bottom = min(canonical_height, top + source_height)
         tile = np.asarray(self.canonical[top:bottom, left:right])
+        if tile.shape[1] != render_width or tile.shape[0] != render_height:
+            resize_source = tile
+            if not tile.dtype.isnative:
+                resize_source = tile.astype(
+                    tile.dtype.newbyteorder("="),
+                    copy=False,
+                )
+            interpolation = (
+                cv2.INTER_AREA
+                if render_width <= tile.shape[1] and render_height <= tile.shape[0]
+                else cv2.INTER_LINEAR
+            )
+            tile = cv2.resize(
+                resize_source,
+                (render_width, render_height),
+                interpolation=interpolation,
+            )
+            if tile.ndim == 2:
+                tile = tile[..., None]
         rgb, _ = raster_to_rgb8(tile, levels)
         image = Image.fromarray(rgb)
         output = io.BytesIO()
