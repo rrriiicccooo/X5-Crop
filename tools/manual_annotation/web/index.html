@@ -139,15 +139,11 @@
       <div>
         <span class="dialog-kicker">最终权限确认</span>
         <h2 id="confirmTitle">确认黄金基线</h2>
-        <p>确认后记录冻结。有可见内容的 Frame polygon 是最内侧可接受的 0 bleed 裁切基准，不是真实内容边界的唯一答案；空曝光 slot 不建立人工边界或 polygon，但仍保留在 count 和正式输出中。</p>
+        <p>确认后将立即冻结这张 source 的黄金基线，表示共享边、全部适用边界和原生像素已经检查。有内容的 Frame polygon 是最内侧可接受的无 bleed 基础裁切，正式输出不得向其内侧越界。空曝光 slot 无人工边界，但仍保留在 count 和正式输出中。</p>
       </div>
-      <label><input type="checkbox" data-confirm-check="shared_edges"> 两条共享边已在整条片带上检查</label>
-      <label><input type="checkbox" data-confirm-check="task_boundaries"> 该 source 中全部适用的成对短边已检查；空曝光 slot 无人工 reference</label>
-      <label><input type="checkbox" data-confirm-check="native_pixel_checks"> 关键位置已使用 1:1 原生像素检查</label>
-      <label><input type="checkbox" data-confirm-check="safe_without_bleed"> 此 0 bleed 基准裁切可以直接接受；正式输出不得向其内侧越界</label>
       <div class="dialog-actions">
-        <button value="cancel" class="secondary">返回继续检查</button>
-        <button id="finalConfirmButton" value="default" class="danger" disabled>冻结并确认</button>
+        <button value="cancel" class="secondary">取消</button>
+        <button id="finalConfirmButton" value="default" class="danger">确认并冻结</button>
       </div>
     </form>
   </dialog>

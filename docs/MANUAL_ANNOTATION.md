@@ -69,8 +69,8 @@ python3 -m tools.manual_annotation audit
    `contact` 的相邻照片共享同一条物理线；`overlap` 保留交叉的两条边。`slot_kind` 保留空片、残缺
    曝光和源截断；只有 `blank_exposure` 使用 `reference_geometry: not_applicable`，且不能通过少输出
    一格来隐藏。
-6. source reference 审核后，点击“确认整张黄金基线”，逐项确认共享边、全部适用边界、原生像素检查和
-   无 bleed 基础裁切安全性。确认后的 source 立即冻结，不可继续编辑。
+6. source reference 审核后，点击“确认整张黄金基线”。最终弹窗只提供取消与确认；一次确认表示共享边、
+   全部适用边界、原生像素和无 bleed 基础裁切安全性均已检查。确认后的 source 立即冻结，不可继续编辑。
 
 机器 proposal 只减少起点工作量。遇到 contact、overlap、曲边、老化相机造成的不规则片距或边界
 歧义时，按物理边界修正；无法确定的 source 不确认，保持待审。
@@ -105,7 +105,7 @@ python3 -m tools.manual_annotation audit
 |---|---|
 | `machine_proposal` | 独立有界像素算法生成，尚无人确认 |
 | `human_adjusted` | 用户红线草稿已恢复，或页面中几何已被人工修改 |
-| `user_confirmed` | source reference 与四项检查已明确确认，记录和快照冻结 |
+| `user_confirmed` | source reference 已经最终确认，记录和快照冻结 |
 
 页面每次修改都会带 revision 原子保存；并发或旧页面写入会因 revision conflict 被拒绝。保存失败时
 不能切换样片，浏览器关闭前也会提示。重新运行默认命令会复用已保存状态；不要通过删除记录来修改

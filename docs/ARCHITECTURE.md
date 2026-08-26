@@ -513,7 +513,8 @@ overlap 保留顺序交叉的两条边；空曝光、残缺曝光、源截断和
 页面中的 Orientation 只做可逆显示，持久化权威始终是原 TIFF raster pixel-center 坐标。
 
 独立有界像素拟合、用户红线草稿恢复和有界 JPG 都只能生成 proposal。只有用户在单一 source 视图中审核全部适用物理边界、
-检查 1:1 原生像素并执行最终确认，记录才成为不可变 `user_confirmed` 本地验收基线。它不声称是
+检查 1:1 原生像素并执行一次最终确认，记录才成为不可变 `user_confirmed` 本地验收基线；最终弹窗不重复要求
+逐项勾选。它不声称是
 真实内容边界的 100% 测量或 detector 唯一正确答案。确认不自动改写
 tracked accuracy cohort；完整操作与文件边界见 [MANUAL_ANNOTATION.md](MANUAL_ANNOTATION.md)。
 

@@ -1015,18 +1015,16 @@ async function toggleSourceReview() {
 function openConfirmation() {
   if (!currentRecord) return;
   elements.confirmTitle.textContent = `确认 ${currentRecord.tasks.map((task) => task.sample_id).join(" / ")} 的黄金基线`;
-  document.querySelectorAll("[data-confirm-check]").forEach((input) => input.checked = false);
-  elements.finalConfirmButton.disabled = true;
+  elements.finalConfirmButton.disabled = false;
   elements.confirmDialog.showModal();
 }
 
 async function finalConfirmation(event) {
   event.preventDefault();
-  const checklist = Object.fromEntries([...document.querySelectorAll("[data-confirm-check]")].map((input) => [input.dataset.confirmCheck, input.checked]));
   try {
     elements.finalConfirmButton.disabled = true;
     const response = await api(`/api/confirm/${encodeURIComponent(currentRecord.source.sha256)}`, {
-      method: "POST", body: JSON.stringify({expected_revision: currentRecord.revision, checklist})
+      method: "POST", body: JSON.stringify({expected_revision: currentRecord.revision})
     });
     currentRecord = await response.json();
     elements.confirmDialog.close();
@@ -1077,12 +1075,6 @@ document.querySelectorAll("[data-rotate]").forEach((button) => {
   button.addEventListener("click", (event) => {
     rotateSelectedLine(Number(button.dataset.rotate), event.shiftKey ? 10 : 1);
     elements.annotationSvg.focus({preventScroll: true});
-  });
-});
-
-document.querySelectorAll("[data-confirm-check]").forEach((input) => {
-  input.addEventListener("change", () => {
-    elements.finalConfirmButton.disabled = ![...document.querySelectorAll("[data-confirm-check]")].every((item) => item.checked);
   });
 });
 

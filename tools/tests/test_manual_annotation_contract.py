@@ -611,12 +611,6 @@ class ManualAnnotationWorkspaceContractTest(unittest.TestCase):
         confirmed = workspace.confirm(
             "S001",
             expected_revision=reviewed["revision"],
-            checklist={
-                "shared_edges": True,
-                "task_boundaries": True,
-                "native_pixel_checks": True,
-                "safe_without_bleed": True,
-            },
         )
         self.assertEqual(confirmed["state"], "user_confirmed")
         artifact = (
@@ -865,6 +859,36 @@ class ManualAnnotationServerContractTest(unittest.TestCase):
         self.assertGreater(float(pixels[5, 5].mean()), 240.0)
         self.assertLess(float(pixels[80, 75].mean()), 30.0)
 
+    def test_confirmation_is_one_source_level_decision(self) -> None:
+        headers = {
+            "X-X5-Token": "fixed-test-token",
+            "X-X5-Write": "1",
+            "Content-Type": "application/json",
+        }
+        status, body = self._status(
+            Request(
+                f"{self.base}/api/review/S001",
+                data=json.dumps(
+                    {"expected_revision": 1, "reviewed": True}
+                ).encode(),
+                method="POST",
+                headers=headers,
+            )
+        )
+        self.assertEqual(status, 200, body)
+        status, body = self._status(
+            Request(
+                f"{self.base}/api/confirm/S001",
+                data=json.dumps({"expected_revision": 2}).encode(),
+                method="POST",
+                headers=headers,
+            )
+        )
+        self.assertEqual(status, 200, body)
+        record = json.loads(body)
+        self.assertEqual(record["state"], "user_confirmed")
+        self.assertTrue(all(record["confirmation"]["checklist"].values()))
+
 
 class ManualAnnotationPackagingContractTest(unittest.TestCase):
     def test_web_assets_are_local_and_tool_is_not_released(self) -> None:
@@ -916,6 +940,9 @@ class ManualAnnotationPackagingContractTest(unittest.TestCase):
         self.assertIn("点击空白处沿胶片长轴移动", joined)
         self.assertIn("最内侧可接受", joined)
         self.assertIn("不得向其内侧越界", joined)
+        self.assertNotIn("data-confirm-check", joined)
+        self.assertIn("确认后将立即冻结", joined)
+        self.assertIn("确认并冻结", joined)
         self.assertIn("bracketleft", joined)
         self.assertIn('data-rotate="-1"', joined)
         self.assertFalse(

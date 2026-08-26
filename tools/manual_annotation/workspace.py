@@ -717,7 +717,6 @@ class ReviewWorkspace:
         identity: str,
         *,
         expected_revision: int,
-        checklist: dict[str, Any],
     ) -> dict[str, Any]:
         required_checks = {
             "shared_edges",
@@ -725,10 +724,6 @@ class ReviewWorkspace:
             "native_pixel_checks",
             "safe_without_bleed",
         }
-        if set(checklist) != required_checks or not all(
-            checklist[key] is True for key in required_checks
-        ):
-            raise WorkspaceError("all confirmation checks must be explicitly accepted")
         with self._lock:
             current = self.load_record(identity)
             if current["state"] == "user_confirmed":

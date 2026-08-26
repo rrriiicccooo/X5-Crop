@@ -18,6 +18,7 @@ materialization、平行 detector 和 report reuse 均不再支持。
 - 本地黄金基线标注器将同源多 count 任务聚合为一个 source reference 审阅视图：相同 Frame 只画一次，
   最大 count 定义物理 Frame 集，其他 count 按长轴顺序引用子集；不再按 count 切换或重复确认。底层
   evaluation task 仍保留独立 count 语义。
+- 最终黄金确认弹窗只保留取消与确认。一次确认覆盖既定检查范围，前端不再要求重复勾选四项。
 - `135-dual` 只自动处理 12 格、每 lane 6 格；其它 count 安全进入 review。任一 slot 不安全时整张
   source review，不做 slot salvage。
 - Detector 改为有界 fixed-template-first 对准：先建立 role-free coarse support，再在固定 outer、

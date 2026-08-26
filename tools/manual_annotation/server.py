@@ -274,12 +274,11 @@ class AnnotationRequestHandler(BaseHTTPRequestHandler):
                 )
             elif path.startswith("/api/confirm/") and self.command == "POST":
                 identity = path.removeprefix("/api/confirm/")
-                if set(payload) != {"expected_revision", "checklist"}:
+                if set(payload) != {"expected_revision"}:
                     raise WorkspaceError("confirmation request has unexpected fields")
                 result = self.server.workspace.confirm(
                     identity,
                     expected_revision=payload["expected_revision"],
-                    checklist=payload["checklist"],
                 )
             else:
                 self._error(HTTPStatus.NOT_FOUND, "unknown local annotation endpoint")
