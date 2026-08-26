@@ -272,7 +272,8 @@ def render_review_artifact(
     used_ids = {
         line_id
         for task in record["tasks"]
-        for line_id in task["boundary_ids"]
+        for slot in task["slots"]
+        for line_id in (slot["start_boundary_id"], slot["end_boundary_id"])
     }
     for line in record["boundary_pool"]:
         points = [scaled(raw_to_display_point(record, point)) for point in line["points_raw"]]

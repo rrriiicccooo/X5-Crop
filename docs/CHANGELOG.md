@@ -58,13 +58,17 @@ materialization、平行 detector 和 report reuse 均不再支持。
 ### 实现与工具
 
 - 新增 source-SHA-bound 本地黄金标注器：按 SHA 去重物理边界，以共享短轴边、source-level
-  `boundary_pool` 和每个显式 count 的 `boundary_ids` 表达多任务；支持 Orientation 1–8 可逆显示、
+  `boundary_pool` 和每个显式 count 的 `slots`/`adjacencies` 表达多任务；contact 复用一条物理线，
+  overlap 保留交叉边，空片、残缺曝光与源截断保留 typed slot 语义；支持 Orientation 1–8 可逆显示、
   有界总览、单张原 TIFF 的 1:1 局部检查、拖线/端点/逐像素微调、原子自动保存与最终确认冻结。
   1:1 局部图叠加当前任务的全部机器/人工边界，并在常规窗口中以约 512×512 的检查区呈现；
   选中线使用黄色前景与深色轮廓保持明暗背景可见；键盘 `[` / `]` 可绕整线中点或选中端点精细
   旋转。
   独立像素拟合和旧红线草稿只生成 proposal，确认不会自动晋升 tracked accuracy cohort，工具及本地
   状态均不进入发布包。
+- v2 红线批量恢复按用户声明区分已标注与未标注副本，并保存逐线 review basis。完整红线组按物理顺序
+  对齐，不让错误机器 phase 覆盖人工线；缺线继续显示机器补线。会让照片离开 TIFF 栅格的红色共享边
+  不被伪装成有效真值，而是保留对应机器 proposal 并要求原生像素审核。
 - 黄金 accuracy 统一为单向最内侧可接受裁切合同，适用于 v1、v2 及以后 baseline schema：人工红线
   不是内容边界 oracle 或 detector 唯一答案；candidate 与正式 footprint 均不得向红线内侧越界，每侧
   向外安全包络受对应确认 span 的 5% 上限约束。删除了角点向内切的内容采样例外，
@@ -101,7 +105,7 @@ materialization、平行 detector 和 report reuse 均不再支持。
 
 - 用户确认黄金按单向最内侧可接受裁切合同决定几何准确性；nominal 必须安全自动批准，challenge 允许
   安全 review。
-- 110-task diagnostic 只证明终态、schema、authority、工作量和 TIFF 工程合同，不产生准确率 verdict。
+- 109-task diagnostic 只证明终态、schema、authority、工作量和 TIFF 工程合同，不产生准确率 verdict。
 - Apple Silicon macOS、Intel macOS 与 Windows x64 必须在同一最终 commit 取得实机 receipt；没有独立
   卷时 exFAT 保持 `best_effort_unverified`。
 - Accuracy、性能与三平台 receipt 全部绑定同一 release commit 前，不创建 RC、tag、Release 或公开 ZIP。

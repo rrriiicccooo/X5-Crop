@@ -205,6 +205,10 @@ function allLines() {
   return currentRecord ? [...currentRecord.shared_edges, ...currentRecord.boundary_pool] : [];
 }
 
+function taskBoundaryIds(task) {
+  return task ? task.slots.flatMap((slot) => [slot.start_boundary_id, slot.end_boundary_id]) : [];
+}
+
 function lineById(identity) {
   return allLines().find((line) => line.line_id === identity) || null;
 }
@@ -227,9 +231,9 @@ function taskPolygons(task) {
   const low = currentRecord.shared_edges[0];
   const high = currentRecord.shared_edges[1];
   const polygons = [];
-  for (let index = 0; index < task.count; index += 1) {
-    const start = pool.get(task.boundary_ids[index * 2]);
-    const stop = pool.get(task.boundary_ids[index * 2 + 1]);
+  for (const slot of task.slots) {
+    const start = pool.get(slot.start_boundary_id);
+    const stop = pool.get(slot.end_boundary_id);
     const polygon = currentRecord.strip_axis_display === "horizontal"
       ? [intersection(low, start), intersection(low, stop), intersection(high, stop), intersection(high, start)]
       : [intersection(low, start), intersection(high, start), intersection(high, stop), intersection(low, stop)];
@@ -246,7 +250,8 @@ function svgElement(name, attributes = {}) {
 
 function activeLineEntries() {
   const task = activeTask();
-  const used = new Set(task?.boundary_ids || []);
+  const taskIds = taskBoundaryIds(task);
+  const used = new Set(taskIds);
   return [
     ...currentRecord.shared_edges.map((line, index) => ({
       line,
@@ -255,8 +260,10 @@ function activeLineEntries() {
       active: true
     })),
     ...currentRecord.boundary_pool.map((line) => {
-      const position = task?.boundary_ids.indexOf(line.line_id) ?? -1;
-      const label = position >= 0 ? `${Math.floor(position / 2) + 1}${position % 2 ? "R" : "L"}` : line.line_id;
+      const positions = taskIds.flatMap((identity, position) => identity === line.line_id ? [position] : []);
+      const label = positions.length
+        ? positions.map((position) => `${Math.floor(position / 2) + 1}${position % 2 ? "R" : "L"}`).join("/")
+        : line.line_id;
       return {line, family: "boundary", label, active: used.has(line.line_id)};
     })
   ];
@@ -274,7 +281,7 @@ function renderGeometry() {
       class: "frame-polygon"
     });
     const title = svgElement("title");
-    title.textContent = `照片 ${index + 1}`;
+    title.textContent = `照片 ${index + 1} · ${task.slots[index].slot_kind}`;
     polygon.appendChild(title);
     elements.polygonLayer.appendChild(polygon);
   });
@@ -338,7 +345,7 @@ function renderSelectedLine() {
     renderLoupeLines();
     return;
   }
-  elements.selectedLineLabel.textContent = `${line.line_id} · ${line.origin}`;
+  elements.selectedLineLabel.textContent = `${line.line_id} · ${line.review_basis} · ${line.origin}`;
   const codes = elements.lineCoordinates.querySelectorAll("code");
   line.points_display.forEach((point, index) => {
     codes[index].textContent = `x ${point[0].toFixed(2)} · y ${point[1].toFixed(2)}`;
@@ -350,16 +357,37 @@ function renderDiagnostics() {
   elements.diagnostics.replaceChildren();
   if (!currentRecord) return;
   const taskFit = currentRecord.diagnostics.task_fits?.[activeTaskId];
+  const reviewContext = currentRecord.diagnostics.review_context || {};
+  const taskContext = reviewContext.tasks?.[activeTaskId] || {};
+  const redImport = currentRecord.diagnostics.red_markup_import;
+  const redTask = redImport?.task_assignments?.[activeTaskId];
+  const slotSummary = activeTask()?.slots
+    .filter((slot) => slot.slot_kind !== "image")
+    .map((slot) => `${slot.ordinal}:${slot.slot_kind}`)
+    .join(" / ") || "全部 image";
+  const adjacencySummary = activeTask()?.adjacencies
+    .filter((adjacency) => adjacency.kind !== "separator")
+    .map((adjacency) => `${adjacency.left_ordinal}-${adjacency.right_ordinal}:${adjacency.kind}`)
+    .join(" / ") || "全部 separator";
   const rows = [
     ["来源", currentRecord.origin],
+    ["胶片极性", reviewContext.film_polarity ? `${reviewContext.film_polarity}（仅校准分层）` : "未记录"],
     ["坐标", "raw TIFF pixel centers"],
     ["预标版本", currentRecord.diagnostics.proposal_revision || currentRecord.diagnostics.legacy_algorithm_revision || "legacy confirmed"],
     ["共享边 MAD", (currentRecord.diagnostics.shared_fit_mad_analysis_px || []).map((value) => Number(value).toFixed(2)).join(" / ") || "已确认旧基线"],
     ["模板分数", taskFit ? Number(taskFit.template_score).toFixed(3) : "—"],
+    ["结构标签", taskContext.case_tags?.join(" / ") || "常规"],
+    ["Slot 语义", slotSummary],
+    ["相邻关系", adjacencySummary],
+    ["人工备注", taskContext.notes?.join("；") || "无"],
     ["待重点检查", currentRecord.diagnostics.unresolved?.length ? `${currentRecord.diagnostics.unresolved.length} 项` : "无额外提示"],
     ["权限", currentRecord.state === "user_confirmed" ? "用户确认" : "仅 proposal"]
   ];
-  if (currentRecord.diagnostics.partial_red_markup_import) rows.splice(1, 0, ["红线草稿", `${currentRecord.diagnostics.partial_red_markup_import.imported_boundary_count} 条已恢复`]);
+  if (redImport) {
+    rows.splice(1, 0, ["红线草稿", `${redImport.applied_shared_edge_count}/${redImport.detected_shared_edge_count} 条共享边已采用 · ${redImport.detected_boundary_count} 条长轴边`]);
+    rows.splice(2, 0, ["机器补线", redTask?.machine_retained_role_indices?.length ? `角色 ${redTask.machine_retained_role_indices.join(", ")}` : "无"]);
+    rows.splice(3, 0, ["机器共享边", redImport.machine_retained_shared_edge_indices?.length ? `边 ${redImport.machine_retained_shared_edge_indices.join(", ")}` : "无"]);
+  }
   for (const [name, value] of rows) {
     const term = document.createElement("dt"); term.textContent = name;
     const detail = document.createElement("dd"); detail.textContent = value;

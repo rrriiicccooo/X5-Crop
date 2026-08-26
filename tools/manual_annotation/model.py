@@ -10,15 +10,31 @@ import math
 from typing import Any, Iterable, Sequence
 
 
-ANNOTATION_SCHEMA = "x5crop_source_annotation_v1"
-BASELINE_SCHEMA = "x5crop_user_confirmed_source_geometry_v2"
+ANNOTATION_SCHEMA = "x5crop_source_annotation_v2"
+BASELINE_SCHEMA = "x5crop_user_confirmed_source_geometry_v3"
 COORDINATE_SYSTEM = "raw_tiff_raster_pixel_centers"
 MACHINE_ORIGIN = "independent_bounded_pixel_proposal_v1"
-RED_MARKUP_ORIGIN = "user_red_markup_import_v1"
+RED_MARKUP_ORIGIN = "user_red_markup_hybrid_draft_import_v2"
 CONFIRMED_IMPORT_ORIGIN = "existing_user_confirmed_baseline_import_v1"
 RECORD_STATES = frozenset(
     {"machine_proposal", "human_adjusted", "user_confirmed"}
 )
+LINE_REVIEW_BASES = frozenset(
+    {
+        "machine_proposal_pending_review",
+        "directly_visible",
+        "visible_content_limit",
+        "human_width_estimate",
+        "human_adjusted_native_pixel",
+        "user_accepted_machine_inference",
+        "explicit_prior_user_confirmation",
+        "unresolved_red_stroke",
+    }
+)
+SLOT_KINDS = frozenset(
+    {"image", "blank_exposure", "partial_exposure", "source_truncated", "unknown"}
+)
+ADJACENCY_KINDS = frozenset({"separator", "contact", "overlap", "unresolved"})
 
 
 class AnnotationError(RuntimeError):
@@ -160,7 +176,7 @@ def frame_polygons_display(
 ) -> tuple[list[list[float]], ...]:
     shared = record.get("shared_edges")
     boundary_pool = record.get("boundary_pool")
-    boundary_ids = task.get("boundary_ids")
+    slots = task.get("slots")
     count = task.get("count")
     if not isinstance(shared, list) or len(shared) != 2:
         raise AnnotationError("source annotation requires two shared edges")
@@ -169,27 +185,33 @@ def frame_polygons_display(
         or isinstance(count, bool)
         or count <= 0
         or not isinstance(boundary_pool, list)
-        or not isinstance(boundary_ids, list)
-        or len(boundary_ids) != count * 2
+        or not isinstance(slots, list)
+        or len(slots) != count
     ):
-        raise AnnotationError("task boundary count does not match explicit count")
+        raise AnnotationError("task slot count does not match explicit count")
     pool_by_id = {
         line.get("line_id"): line
         for line in boundary_pool
         if isinstance(line, dict)
     }
-    if len(pool_by_id) != len(boundary_pool) or any(
-        line_id not in pool_by_id for line_id in boundary_ids
+    boundary_ids = [
+        line_id
+        for slot in slots
+        if isinstance(slot, dict)
+        for line_id in (slot.get("start_boundary_id"), slot.get("end_boundary_id"))
+    ]
+    if len(boundary_ids) != count * 2 or len(pool_by_id) != len(boundary_pool) or any(
+        not isinstance(line_id, str) or line_id not in pool_by_id
+        for line_id in boundary_ids
     ):
         raise AnnotationError("task references an unknown physical boundary")
-    boundaries = [pool_by_id[line_id] for line_id in boundary_ids]
     low = _line_points_display(record, shared[0])
     high = _line_points_display(record, shared[1])
     horizontal = record.get("strip_axis_display") == "horizontal"
     polygons: list[list[list[float]]] = []
-    for index in range(count):
-        start = _line_points_display(record, boundaries[index * 2])
-        stop = _line_points_display(record, boundaries[index * 2 + 1])
+    for slot in slots:
+        start = _line_points_display(record, pool_by_id[slot["start_boundary_id"]])
+        stop = _line_points_display(record, pool_by_id[slot["end_boundary_id"]])
         if horizontal:
             polygon = [
                 _intersection(low, start),
@@ -226,7 +248,13 @@ def _validate_line(
 ) -> None:
     if not isinstance(line, dict):
         raise AnnotationError("annotation line must be an object")
-    if set(line) != {"line_id", "role", "points_raw", "origin"}:
+    if set(line) != {
+        "line_id",
+        "role",
+        "points_raw",
+        "origin",
+        "review_basis",
+    }:
         raise AnnotationError("annotation line has unexpected fields")
     if not isinstance(line["line_id"], str) or not line["line_id"]:
         raise AnnotationError("annotation line requires an identity")
@@ -234,7 +262,35 @@ def _validate_line(
         raise AnnotationError(f"{line['line_id']} has an unexpected role")
     if not isinstance(line["origin"], str) or not line["origin"]:
         raise AnnotationError(f"{line['line_id']} requires provenance")
+    if (
+        not isinstance(line["review_basis"], str)
+        or line["review_basis"] not in LINE_REVIEW_BASES
+    ):
+        raise AnnotationError(f"{line['line_id']} has an invalid review basis")
     _line_points_display(record, line)
+
+
+def _boundary_axis_position(
+    record: dict[str, Any],
+    line: dict[str, Any],
+) -> float:
+    first, second = _line_points_display(record, line)
+    horizontal = record["strip_axis_display"] == "horizontal"
+    if horizontal:
+        reference = 0.5 * (
+            float(record["source"]["canonical_extent"]["height"]) - 1.0
+        )
+        denominator = second[1] - first[1]
+        if abs(denominator) < 1.0e-9:
+            raise AnnotationError("long boundary is parallel to the strip axis")
+        return first[0] + (second[0] - first[0]) * (reference - first[1]) / denominator
+    reference = 0.5 * (
+        float(record["source"]["canonical_extent"]["width"]) - 1.0
+    )
+    denominator = second[0] - first[0]
+    if abs(denominator) < 1.0e-9:
+        raise AnnotationError("long boundary is parallel to the strip axis")
+    return first[1] + (second[1] - first[1]) * (reference - first[0]) / denominator
 
 
 def _validate_source(record: dict[str, Any]) -> None:
@@ -367,7 +423,8 @@ def validate_annotation_record(record: dict[str, Any]) -> None:
             "sample_id",
             "source_relative_path",
             "count",
-            "boundary_ids",
+            "slots",
+            "adjacencies",
         }:
             raise AnnotationError("annotation task is malformed")
         task_id = task["task_id"]
@@ -382,21 +439,100 @@ def validate_annotation_record(record: dict[str, Any]) -> None:
             raise AnnotationError("annotation task identity is invalid")
         task_ids.add(task_id)
         count = task["count"]
-        boundary_ids = task["boundary_ids"]
+        slots = task["slots"]
+        adjacencies = task["adjacencies"]
         if (
             not isinstance(count, int)
             or isinstance(count, bool)
             or count <= 0
-            or not isinstance(boundary_ids, list)
-            or len(boundary_ids) != count * 2
+            or not isinstance(slots, list)
+            or len(slots) != count
+            or not isinstance(adjacencies, list)
+            or len(adjacencies) != max(0, count - 1)
         ):
             raise AnnotationError("annotation task count is invalid")
-        if len(set(boundary_ids)) != len(boundary_ids):
-            raise AnnotationError(
-                f"{task_id}: one task maps multiple roles to the same boundary"
-            )
+        if any(
+            not isinstance(slot, dict)
+            or set(slot) != {
+                "ordinal",
+                "start_boundary_id",
+                "end_boundary_id",
+                "slot_kind",
+            }
+            for slot in slots
+        ):
+            raise AnnotationError(f"{task_id}: slot mapping is malformed")
+        if [slot["ordinal"] for slot in slots] != list(range(1, count + 1)):
+            raise AnnotationError(f"{task_id}: slot ordinals are not canonical")
+        boundary_ids = [
+            line_id
+            for slot in slots
+            for line_id in (slot["start_boundary_id"], slot["end_boundary_id"])
+        ]
+        if any(
+            not isinstance(slot["start_boundary_id"], str)
+            or not isinstance(slot["end_boundary_id"], str)
+            or not isinstance(slot["slot_kind"], str)
+            or slot["slot_kind"] not in SLOT_KINDS
+            or slot["start_boundary_id"] == slot["end_boundary_id"]
+            for slot in slots
+        ):
+            raise AnnotationError(f"{task_id}: slot semantics are invalid")
         if not set(boundary_ids).issubset(pool_ids):
             raise AnnotationError(f"{task_id}: task references an unknown boundary")
+        if any(
+            not isinstance(adjacency, dict)
+            or set(adjacency) != {"left_ordinal", "right_ordinal", "kind"}
+            for adjacency in adjacencies
+        ):
+            raise AnnotationError(f"{task_id}: adjacency mapping is malformed")
+        expected_pairs = [(index, index + 1) for index in range(1, count)]
+        actual_pairs = [
+            (adjacency["left_ordinal"], adjacency["right_ordinal"])
+            for adjacency in adjacencies
+        ]
+        if actual_pairs != expected_pairs or any(
+            not isinstance(adjacency["kind"], str)
+            or adjacency["kind"] not in ADJACENCY_KINDS
+            for adjacency in adjacencies
+        ):
+            raise AnnotationError(f"{task_id}: adjacency semantics are invalid")
+        pool_by_id = {line["line_id"]: line for line in boundary_pool}
+        for index, adjacency in enumerate(adjacencies):
+            left_id = slots[index]["end_boundary_id"]
+            right_id = slots[index + 1]["start_boundary_id"]
+            kind = adjacency["kind"]
+            if kind == "contact":
+                if left_id != right_id:
+                    raise AnnotationError(f"{task_id}: contact must share one physical line")
+            elif left_id == right_id:
+                raise AnnotationError(
+                    f"{task_id}: shared boundary identity requires contact semantics"
+                )
+            left_position = _boundary_axis_position(record, pool_by_id[left_id])
+            right_position = _boundary_axis_position(record, pool_by_id[right_id])
+            if kind == "overlap" and left_position <= right_position:
+                raise AnnotationError(f"{task_id}: overlap boundaries are not crossed")
+            if kind == "separator" and left_position > right_position:
+                raise AnnotationError(f"{task_id}: separator boundaries overlap")
+        uses: dict[str, list[tuple[int, str]]] = {}
+        for slot in slots:
+            uses.setdefault(slot["start_boundary_id"], []).append(
+                (slot["ordinal"], "start")
+            )
+            uses.setdefault(slot["end_boundary_id"], []).append(
+                (slot["ordinal"], "end")
+            )
+        for roles in uses.values():
+            if len(roles) == 1:
+                continue
+            if len(roles) != 2:
+                raise AnnotationError(f"{task_id}: physical line is reused ambiguously")
+            first, second = sorted(roles)
+            if first[1] != "end" or second != (first[0] + 1, "start"):
+                raise AnnotationError(f"{task_id}: physical line reuse is not contact")
+            if adjacencies[first[0] - 1]["kind"] != "contact":
+                raise AnnotationError(f"{task_id}: reused line lacks contact semantics")
         polygons = frame_polygons_display(record, task)
         previous_center = -math.inf
         horizontal = record["strip_axis_display"] == "horizontal"
@@ -527,6 +663,7 @@ def apply_client_geometry(
                 for before, after in zip(line["points_raw"], mapped, strict=True)
             ):
                 line["origin"] = "human_adjustment"
+                line["review_basis"] = "human_adjusted_native_pixel"
             line["points_raw"] = mapped
 
     replace_lines(updated["shared_edges"], payload["shared_edges"])
@@ -577,7 +714,8 @@ def confirmed_baseline_rows(record: dict[str, Any]) -> tuple[dict[str, Any], ...
                 "strip_orientation": record["strip_axis_display"],
                 "shared_edges": deepcopy(record["shared_edges"]),
                 "boundary_pool": deepcopy(record["boundary_pool"]),
-                "boundary_ids": deepcopy(task["boundary_ids"]),
+                "slots": deepcopy(task["slots"]),
+                "adjacencies": deepcopy(task["adjacencies"]),
                 "frames": [
                     {
                         "frame_index": index,

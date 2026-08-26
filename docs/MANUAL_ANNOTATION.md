@@ -51,12 +51,22 @@ python3 -m tools.manual_annotation audit
    最终应在局部图中确认边界没有危险切入真实画面。常规窗口下，512×512 原图块使用约
    512×512 的检查区；窗口较窄时才按可用宽度收缩。
 5. 同一 source SHA 若有多个 count，逐个切换页签并勾选“本任务边界已审核”。不同任务复用一个
-   source-level `boundary_pool`，但各自保存明确的 `boundary_ids`，不会把 count 绑定到 SHA。
+   source-level `boundary_pool`，但各自保存明确的 `slots` 与 `adjacencies`，不会把 count 绑定到 SHA。
+   `contact` 的相邻照片共享同一条物理线；`overlap` 保留交叉的两条边；空片、残缺曝光和源截断分别
+   记录在 `slot_kind`，不能通过少输出一格来隐藏。
 6. 所有 count 都审核后，点击“确认整张黄金基线”，逐项确认共享边、任务边界、原生像素检查和
    无 bleed 基础裁切安全性。确认后的 source 立即冻结，不可继续编辑。
 
 机器 proposal 只减少起点工作量。遇到 contact、overlap、曲边、老化相机造成的不规则片距或边界
 歧义时，按物理边界修正；无法确定的 source 不确认，保持待审。
+
+每条线还保存 `review_basis`：肉眼直接可见、可见内容极限、按 frame width 估计、机器补线或原生像素
+人工调整必须可区分。红线数量不足时保留机器补线并在页面提示；若拟合出的红色共享边会让任一照片
+离开源栅格，只采用仍能形成源内安全矩形的红线，其余共享边保留机器 proposal 等待人工修正。
+
+`Test/manual_review/review_context.json` 保存本轮逐样片审阅上下文，例如空 slot、接触、叠片、猜测边、
+漏光、片夹遮挡和正负片分层。它只帮助校准和审核：不能成为 production whitelist、样片特例、format
+推断或 Gate authority。正负片只作覆盖面分层；production 仍使用同一物理检测路径。
 
 ## 坐标、身份与本地文件
 
@@ -67,7 +77,7 @@ python3 -m tools.manual_annotation audit
 - 记录按 source SHA 去重。同字节、多 count 的样片只解码和标注一次物理边界。
 - 本地状态保存在 `Test/manual_review/source_annotations/`：`records/` 是可恢复的原子 JSON，
   `previews/` 是有界导航 JPG，`review_artifacts/` 是确认快照，
-  `confirmed_source_geometry_v2.jsonl` 汇总所有已确认任务。
+  `confirmed_source_geometry_v3.jsonl` 汇总所有已确认任务。
 - `Test/` 不受 Git 跟踪。确认只建立本地、source-SHA-bound 的最内侧可接受裁切基准，不会自动修改 tracked
   accuracy cohort；纳入阻断黄金仍需一次独立、显式的 cohort 审核。
 

@@ -19,17 +19,20 @@ from x5crop.formats import format_spec
 from .imaging import SourceRaster, orientation_record
 from .model import (
     ANNOTATION_SCHEMA,
+    AnnotationError,
     COORDINATE_SYSTEM,
+    LINE_REVIEW_BASES,
     MACHINE_ORIGIN,
+    RED_MARKUP_ORIGIN,
+    SLOT_KINDS,
     display_to_raw_point,
+    frame_polygons_display,
+    raw_to_display_point,
     validate_annotation_record,
 )
 
 
 PROPOSAL_REVISION = "independent_bounded_gradient_template_v1"
-RED_DRAFT_ORIGIN = "user_red_markup_partial_draft_import_v1"
-
-
 @dataclass(frozen=True)
 class LogicalFit:
     shared: tuple[tuple[float, float], tuple[float, float]]
@@ -495,12 +498,14 @@ def _new_line(
     role: str,
     points_display: list[list[float]],
     origin: str,
+    review_basis: str = "machine_proposal_pending_review",
 ) -> dict[str, Any]:
     return {
         "line_id": line_id,
         "role": role,
         "points_raw": [display_to_raw_point(record, point) for point in points_display],
         "origin": origin,
+        "review_basis": review_basis,
     }
 
 
@@ -512,6 +517,7 @@ def propose_record(
     canonical_sample_id: str,
     format_id: str,
     tasks: Iterable[dict[str, Any]],
+    review_context: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], np.ndarray]:
     task_rows = sorted(tasks, key=lambda item: (int(item["count"]), item["sample_id"]))
     analysis_rgb, levels = raster.analysis_rgb8()
@@ -670,6 +676,7 @@ def propose_record(
             },
             "unresolved": unresolved,
             "authority": "proposal_only_requires_native_pixel_human_review",
+            "review_context": deepcopy(review_context) if review_context else {},
         },
         "reviewed_task_ids": [],
         "confirmation": None,
@@ -745,9 +752,44 @@ def propose_record(
                 "sample_id": row["sample_id"],
                 "source_relative_path": row["source_relative_path"],
                 "count": int(row["count"]),
-                "boundary_ids": task_boundary_ids,
+                "slots": [
+                    {
+                        "ordinal": index + 1,
+                        "start_boundary_id": task_boundary_ids[index * 2],
+                        "end_boundary_id": task_boundary_ids[index * 2 + 1],
+                        "slot_kind": "image",
+                    }
+                    for index in range(int(row["count"]))
+                ],
+                "adjacencies": [
+                    {
+                        "left_ordinal": index,
+                        "right_ordinal": index + 1,
+                        "kind": "separator",
+                    }
+                    for index in range(1, int(row["count"]))
+                ],
             }
         )
+    pool_by_id = {line["line_id"]: line for line in record["boundary_pool"]}
+    for task in record["tasks"]:
+        for adjacency_index, adjacency in enumerate(task["adjacencies"]):
+            left_id = task["slots"][adjacency_index]["end_boundary_id"]
+            right_id = task["slots"][adjacency_index + 1]["start_boundary_id"]
+            left_position = _machine_boundary_position(record, pool_by_id[left_id])
+            right_position = _machine_boundary_position(record, pool_by_id[right_id])
+            if left_position <= right_position:
+                continue
+            adjacency["kind"] = "unresolved"
+            record["diagnostics"]["unresolved"].append(
+                {
+                    "kind": "machine_separator_relation_unresolved",
+                    "task_id": task["task_id"],
+                    "left_ordinal": adjacency["left_ordinal"],
+                    "right_ordinal": adjacency["right_ordinal"],
+                    "action": "inspect_both_adjacent_boundaries_at_native_pixels",
+                }
+            )
     validate_annotation_record(record)
     return record, analysis_rgb
 
@@ -755,86 +797,529 @@ def propose_record(
 def _red_delta_mask(source: np.ndarray, marked: np.ndarray) -> np.ndarray:
     if source.shape[:2] != marked.shape[:2] or min(source.shape[-1], marked.shape[-1]) < 3:
         raise ValueError("red markup draft does not preserve source raster geometry")
+
+    def channel_scale(array: np.ndarray) -> float:
+        if np.issubdtype(array.dtype, np.integer):
+            return float(np.iinfo(array.dtype).max)
+        maximum = float(np.nanmax(array))
+        return max(1.0, maximum)
+
     height, width = source.shape[:2]
     mask = np.zeros((height, width), dtype=bool)
+    source_scale = channel_scale(source)
+    marked_scale = channel_scale(marked)
     for start in range(0, height, 256):
         stop = min(height, start + 256)
-        original = source[start:stop, :, :3].astype(np.int32)
-        overlay = marked[start:stop, :, :3].astype(np.int32)
-        delta = overlay - original
-        red = delta[..., 0]
+        original = source[start:stop, :, :3].astype(np.float32) / source_scale
+        overlay = marked[start:stop, :, :3].astype(np.float32) / marked_scale
+        change = np.max(np.abs(overlay - original), axis=-1)
+        red_dominance = overlay[..., 0] - np.maximum(
+            overlay[..., 1], overlay[..., 2]
+        )
         mask[start:stop] = (
-            (red > 2_000)
-            & (red - delta[..., 1] > 5_000)
-            & (red - delta[..., 2] > 5_000)
+            (overlay[..., 0] >= 0.35)
+            & (red_dominance >= 0.12)
+            & (change >= 0.02)
         )
     return mask
 
 
-def import_partial_red_boundary_draft(
+def _runs(indices: np.ndarray, *, allowed_gap: int = 2) -> list[tuple[int, int]]:
+    if not len(indices):
+        return []
+    result: list[tuple[int, int]] = []
+    start = previous = int(indices[0])
+    for raw in indices[1:]:
+        value = int(raw)
+        if value - previous > allowed_gap + 1:
+            result.append((start, previous))
+            start = value
+        previous = value
+    result.append((start, previous))
+    return result
+
+
+def _fit_red_band(
+    logical: np.ndarray,
+    *,
+    slope: float,
+    intercept: float,
+    family: str,
+    search_distance: float,
+) -> tuple[float, float, float, int]:
+    y, x = np.nonzero(logical)
+    if family == "boundary":
+        distance = np.abs(x - (slope * y + intercept))
+        selected = distance <= search_distance
+        independent = y[selected].astype(np.float64)
+        dependent = x[selected].astype(np.float64)
+    else:
+        distance = np.abs(y - (slope * x + intercept))
+        selected = distance <= search_distance
+        independent = x[selected].astype(np.float64)
+        dependent = y[selected].astype(np.float64)
+    if len(independent) < 16:
+        raise ValueError("red line seed has insufficient pixel support")
+    unique = np.unique(independent)
+    centers = np.asarray(
+        [np.median(dependent[independent == value]) for value in unique],
+        dtype=np.float64,
+    )
+    fitted_slope, fitted_intercept, mad = _robust_line(unique, centers)
+    return fitted_slope, fitted_intercept, mad, int(len(unique))
+
+
+def _cluster_hough_seeds(
+    candidates: list[tuple[float, float, float, float]],
+    *,
+    cluster_gap: float,
+) -> list[tuple[float, float, float, float]]:
+    clusters: list[list[tuple[float, float, float, float]]] = []
+    for candidate in sorted(candidates, key=lambda item: item[0]):
+        if (
+            not clusters
+            or candidate[0]
+            - float(np.median([item[0] for item in clusters[-1]]))
+            > cluster_gap
+        ):
+            clusters.append([candidate])
+        else:
+            clusters[-1].append(candidate)
+    result: list[tuple[float, float, float, float]] = []
+    for cluster in clusters:
+        weights = np.asarray([item[3] for item in cluster], dtype=np.float64)
+        result.append(
+            (
+                float(np.average([item[0] for item in cluster], weights=weights)),
+                float(np.average([item[1] for item in cluster], weights=weights)),
+                float(np.average([item[2] for item in cluster], weights=weights)),
+                float(np.sum(weights)),
+            )
+        )
+    return result
+
+
+def _hough_red_lines(
+    logical: np.ndarray,
+    *,
+    family: str,
+) -> list[dict[str, float]]:
+    cross_length, axis_length = logical.shape
+    if family == "boundary":
+        minimum_length = max(32, int(round(cross_length * 0.32)))
+        threshold = max(28, int(round(cross_length * 0.10)))
+        maximum_gap = max(10, int(round(cross_length * 0.07)))
+    else:
+        minimum_length = max(48, int(round(axis_length * 0.12)))
+        threshold = max(36, int(round(axis_length * 0.025)))
+        maximum_gap = max(16, int(round(axis_length * 0.045)))
+    hough = cv2.HoughLinesP(
+        logical.astype(np.uint8) * 255,
+        1.0,
+        np.pi / 1800.0,
+        threshold=threshold,
+        minLineLength=minimum_length,
+        maxLineGap=maximum_gap,
+    )
+    if hough is None:
+        return []
+    candidates: list[tuple[float, float, float, float]] = []
+    maximum_slope = math.tan(math.radians(6.0))
+    if family == "boundary":
+        reference = 0.5 * (cross_length - 1)
+        for raw in np.asarray(hough).reshape(-1, 4):
+            x1, y1, x2, y2 = (float(value) for value in raw)
+            independent_delta = y2 - y1
+            if abs(independent_delta) < minimum_length:
+                continue
+            slope = (x2 - x1) / independent_delta
+            if abs(slope) > maximum_slope:
+                continue
+            intercept = x1 - slope * y1
+            candidates.append(
+                (slope * reference + intercept, slope, intercept, abs(independent_delta))
+            )
+        cluster_gap = max(4.0, min(8.0, cross_length * 0.003))
+        search_distance = max(5.0, min(9.0, cross_length * 0.004))
+    else:
+        reference = 0.5 * (axis_length - 1)
+        for raw in np.asarray(hough).reshape(-1, 4):
+            x1, y1, x2, y2 = (float(value) for value in raw)
+            independent_delta = x2 - x1
+            if abs(independent_delta) < minimum_length:
+                continue
+            slope = (y2 - y1) / independent_delta
+            if abs(slope) > maximum_slope:
+                continue
+            intercept = y1 - slope * x1
+            candidates.append(
+                (slope * reference + intercept, slope, intercept, abs(independent_delta))
+            )
+        cluster_gap = max(4.0, min(9.0, cross_length * 0.004))
+        search_distance = max(5.0, min(10.0, cross_length * 0.005))
+    lines: list[dict[str, float]] = []
+    for position, slope, intercept, coverage in _cluster_hough_seeds(
+        candidates,
+        cluster_gap=cluster_gap,
+    ):
+        try:
+            fitted_slope, fitted_intercept, mad, support = _fit_red_band(
+                logical,
+                slope=slope,
+                intercept=intercept,
+                family=family,
+                search_distance=search_distance,
+            )
+        except ValueError:
+            continue
+        fitted_position = (
+            fitted_slope * (0.5 * (cross_length - 1)) + fitted_intercept
+            if family == "boundary"
+            else fitted_slope * (0.5 * (axis_length - 1)) + fitted_intercept
+        )
+        lines.append(
+            {
+                "position": float(fitted_position),
+                "slope": float(fitted_slope),
+                "intercept": float(fitted_intercept),
+                "mad_px": float(mad),
+                "support": float(max(support, coverage)),
+            }
+        )
+    return sorted(lines, key=lambda item: item["position"])
+
+
+def _projection_red_boundaries(logical: np.ndarray) -> list[dict[str, float]]:
+    cross_length, axis_length = logical.shape
+    projection = np.sum(logical, axis=0)
+    threshold = max(24, int(round(cross_length * 0.04)))
+    runs = _runs(np.flatnonzero(projection >= threshold), allowed_gap=2)
+    maximum_band = max(24, int(round(axis_length * 0.01)))
+    lines: list[dict[str, float]] = []
+    for start, stop in runs:
+        if stop - start + 1 > maximum_band:
+            continue
+        band_start = max(0, start - 3)
+        band_stop = min(axis_length, stop + 4)
+        band = logical[:, band_start:band_stop]
+        y, local_x = np.nonzero(band)
+        if len(y) < 16:
+            continue
+        x = local_x + band_start
+        unique = np.unique(y)
+        centers = np.asarray([np.median(x[y == value]) for value in unique])
+        slope, intercept, mad = _robust_line(unique.astype(np.float64), centers)
+        lines.append(
+            {
+                "position": float(slope * (0.5 * (cross_length - 1)) + intercept),
+                "slope": float(slope),
+                "intercept": float(intercept),
+                "mad_px": float(mad),
+                "support": float(len(unique)),
+            }
+        )
+    return sorted(lines, key=lambda item: item["position"])
+
+
+def _select_red_boundaries(
+    logical: np.ndarray,
+    *,
+    maximum_roles: int,
+    force_hough: bool,
+) -> tuple[list[dict[str, float]], dict[str, int | str]]:
+    projected = _projection_red_boundaries(logical)
+    hough = (
+        _hough_red_lines(logical, family="boundary")
+        if force_hough or len(projected) != maximum_roles
+        else []
+    )
+    if force_hough and hough:
+        selected = hough
+        method = "hough_for_typed_overlap"
+    elif len(projected) > maximum_roles + 2 and hough:
+        selected = hough
+        method = "hough_rejected_projection_noise"
+    elif len(projected) > maximum_roles and 0 < len(hough) <= maximum_roles:
+        selected = hough
+        method = "hough_resolved_extra_projection_strokes"
+    elif len(hough) > len(projected) and len(hough) <= maximum_roles + 2:
+        selected = hough
+        method = "hough_recovered_close_strokes"
+    else:
+        selected = projected
+        method = "axis_projection"
+    return selected, {
+        "method": method,
+        "projection_count": len(projected),
+        "hough_count": len(hough),
+    }
+
+
+def _red_shared_edges(logical: np.ndarray) -> list[dict[str, float]]:
+    candidates = _hough_red_lines(logical, family="shared")
+    if len(candidates) < 2:
+        return []
+    cross_length = logical.shape[0]
+    eligible: list[tuple[float, int, int]] = []
+    for low_index, low in enumerate(candidates):
+        for high_index in range(low_index + 1, len(candidates)):
+            high = candidates[high_index]
+            separation = high["position"] - low["position"]
+            if separation < cross_length * 0.35:
+                continue
+            score = low["support"] + high["support"]
+            eligible.append((score, low_index, high_index))
+    if not eligible:
+        return []
+    _score, low_index, high_index = max(eligible)
+    return [candidates[low_index], candidates[high_index]]
+
+
+def _machine_boundary_position(
+    record: dict[str, Any],
+    line: dict[str, Any],
+) -> float:
+    first, second = [
+        raw_to_display_point(record, point) for point in line["points_raw"]
+    ]
+    if record["strip_axis_display"] == "horizontal":
+        reference = 0.5 * (record["source"]["canonical_extent"]["height"] - 1)
+        denominator = second[1] - first[1]
+        return first[0] + (second[0] - first[0]) * (reference - first[1]) / denominator
+    reference = 0.5 * (record["source"]["canonical_extent"]["width"] - 1)
+    denominator = second[0] - first[0]
+    return first[1] + (second[1] - first[1]) * (reference - first[0]) / denominator
+
+
+def _task_role_ids(task: dict[str, Any]) -> list[str]:
+    return [
+        line_id
+        for slot in task["slots"]
+        for line_id in (slot["start_boundary_id"], slot["end_boundary_id"])
+    ]
+
+
+def _role_groups(
+    count: int,
+    *,
+    contact_after: set[int],
+    overlap_after: set[int],
+    missing_slots: set[int],
+) -> list[tuple[int, ...]]:
+    if contact_after & overlap_after:
+        raise ValueError("one adjacency cannot be both contact and overlap")
+    missing_roles = {
+        role
+        for ordinal in missing_slots
+        for role in (2 * (ordinal - 1), 2 * (ordinal - 1) + 1)
+    }
+    groups: list[tuple[int, ...]] = []
+    role = 0
+    while role < count * 2:
+        if role in missing_roles:
+            role += 1
+            continue
+        separator_ordinal = (role + 1) // 2 if role % 2 else None
+        if role % 2 == 1 and separator_ordinal in contact_after:
+            if role + 1 in missing_roles:
+                raise ValueError("contact cannot cross a missing slot")
+            groups.append((role, role + 1))
+            role += 2
+            continue
+        if role % 2 == 1 and separator_ordinal in overlap_after:
+            if role + 1 in missing_roles:
+                raise ValueError("overlap cannot cross a missing slot")
+            groups.extend(((role + 1,), (role,)))
+            role += 2
+            continue
+        groups.append((role,))
+        role += 1
+    return groups
+
+
+def _align_red_roles(
+    role_positions: list[float],
+    groups: list[tuple[int, ...]],
+    observed: list[dict[str, float]],
+) -> tuple[dict[int, int], list[int], list[int], float]:
+    widths = [
+        role_positions[index + 1] - role_positions[index]
+        for index in range(0, len(role_positions), 2)
+        if role_positions[index + 1] > role_positions[index]
+    ]
+    scale = max(float(np.median(widths)) if widths else 1.0, 1.0)
+    group_count = len(groups)
+    observed_count = len(observed)
+    if group_count == observed_count:
+        mapping = {
+            role: observed_index
+            for observed_index, group in enumerate(groups)
+            for role in group
+        }
+        cost = sum(
+            (
+                (
+                    observed[index]["position"]
+                    - float(np.mean([role_positions[role] for role in group]))
+                )
+                / scale
+            )
+            ** 2
+            for index, group in enumerate(groups)
+        )
+        return mapping, [], [], float(cost)
+    costs = np.full((group_count + 1, observed_count + 1), np.inf)
+    previous: dict[tuple[int, int], tuple[int, int, str]] = {}
+    costs[0, 0] = 0.0
+    for group_index in range(group_count + 1):
+        for observed_index in range(observed_count + 1):
+            current = float(costs[group_index, observed_index])
+            if not math.isfinite(current):
+                continue
+            if group_index < group_count:
+                skipped = current + 1.6 * len(groups[group_index])
+                if skipped < costs[group_index + 1, observed_index]:
+                    costs[group_index + 1, observed_index] = skipped
+                    previous[(group_index + 1, observed_index)] = (
+                        group_index,
+                        observed_index,
+                        "skip_group",
+                    )
+            if observed_index < observed_count:
+                skipped = current + 1.8
+                if skipped < costs[group_index, observed_index + 1]:
+                    costs[group_index, observed_index + 1] = skipped
+                    previous[(group_index, observed_index + 1)] = (
+                        group_index,
+                        observed_index,
+                        "skip_observed",
+                    )
+            if group_index < group_count and observed_index < observed_count:
+                expected = float(
+                    np.mean([role_positions[index] for index in groups[group_index]])
+                )
+                normalized = (observed[observed_index]["position"] - expected) / scale
+                matched = current + normalized * normalized
+                if matched < costs[group_index + 1, observed_index + 1]:
+                    costs[group_index + 1, observed_index + 1] = matched
+                    previous[(group_index + 1, observed_index + 1)] = (
+                        group_index,
+                        observed_index,
+                        "match",
+                    )
+    role_to_observed: dict[int, int] = {}
+    skipped_groups: list[int] = []
+    skipped_observed: list[int] = []
+    cursor = (group_count, observed_count)
+    while cursor != (0, 0):
+        before_group, before_observed, operation = previous[cursor]
+        group_index, observed_index = cursor
+        if operation == "match":
+            for role in groups[group_index - 1]:
+                role_to_observed[role] = observed_index - 1
+        elif operation == "skip_group":
+            skipped_groups.extend(groups[group_index - 1])
+        else:
+            skipped_observed.append(observed_index - 1)
+        cursor = (before_group, before_observed)
+    return (
+        role_to_observed,
+        sorted(skipped_groups),
+        sorted(skipped_observed),
+        float(costs[group_count, observed_count]),
+    )
+
+
+def _task_markup_context(record: dict[str, Any], task_id: str) -> dict[str, Any]:
+    review_context = record["diagnostics"].get("review_context", {})
+    tasks = review_context.get("tasks", {}) if isinstance(review_context, dict) else {}
+    value = tasks.get(task_id, {}) if isinstance(tasks, dict) else {}
+    return value if isinstance(value, dict) else {}
+
+
+def _frames_are_source_bounded(record: dict[str, Any]) -> bool:
+    width = float(record["source"]["canonical_extent"]["width"])
+    height = float(record["source"]["canonical_extent"]["height"])
+    try:
+        polygons = [
+            polygon
+            for task in record["tasks"]
+            for polygon in frame_polygons_display(record, task)
+        ]
+    except (AnnotationError, ValueError, ZeroDivisionError):
+        return False
+    return all(
+        -0.5 <= x <= width - 0.5 and -0.5 <= y <= height - 0.5
+        for polygon in polygons
+        for x, y in polygon
+    )
+
+
+def import_red_markup_draft(
     record: dict[str, Any],
     *,
     source_raster: SourceRaster,
     marked_path: Path,
 ) -> dict[str, Any]:
     with SourceRaster(marked_path) as marked_raster:
-        if source_raster.raw_extent != marked_raster.raw_extent:
+        if source_raster.canonical_extent != marked_raster.canonical_extent:
             raise ValueError("red markup draft was resized")
-        mask_raw = _red_delta_mask(source_raster.raw, marked_raster.raw)
-    # Preview saved the existing v2 drafts with Orientation=1.  The mask is
-    # raw-coordinate evidence and is mapped through the source orientation.
-    orientation = source_raster.orientation
-    if orientation == 1:
-        canonical_mask = mask_raw
-    elif orientation == 2:
-        canonical_mask = np.flip(mask_raw, axis=1)
-    elif orientation == 3:
-        canonical_mask = np.flip(mask_raw, axis=(0, 1))
-    elif orientation == 4:
-        canonical_mask = np.flip(mask_raw, axis=0)
-    elif orientation == 5:
-        canonical_mask = np.swapaxes(mask_raw, 0, 1)
-    elif orientation == 6:
-        canonical_mask = np.rot90(mask_raw, k=3)
-    elif orientation == 7:
-        canonical_mask = np.flip(np.swapaxes(mask_raw, 0, 1), axis=(0, 1))
-    else:
-        canonical_mask = np.rot90(mask_raw, k=1)
+        canonical_mask = _red_delta_mask(
+            source_raster.canonical,
+            marked_raster.canonical,
+        )
     horizontal = record["strip_axis_display"] == "horizontal"
     logical = canonical_mask if horizontal else canonical_mask.T
-    projection = np.sum(logical, axis=0)
-    threshold = max(24, int(round(logical.shape[0] * 0.04)))
-    indices = np.flatnonzero(projection >= threshold)
-    runs: list[tuple[int, int]] = []
-    if len(indices):
-        start = previous = int(indices[0])
-        for raw in indices[1:]:
-            value = int(raw)
-            if value - previous > 3:
-                runs.append((start, previous))
-                start = value
-            previous = value
-        runs.append((start, previous))
-    task = record["tasks"][0]
-    expected = int(task["count"]) * 2
-    if len(runs) != expected:
-        raise ValueError(
-            f"partial red draft contains {len(runs)} strong boundaries; expected {expected}"
+    if int(np.count_nonzero(logical)) < 500:
+        raise ValueError("red markup draft contains no supported red line evidence")
+    maximum_roles = max(int(task["count"]) * 2 for task in record["tasks"])
+    force_hough = any(
+        bool(
+            _task_markup_context(record, task["task_id"])
+            .get("markup_import", {})
+            .get("overlap_after")
         )
+        for task in record["tasks"]
+    )
+    observed, extraction = _select_red_boundaries(
+        logical,
+        maximum_roles=maximum_roles,
+        force_hough=force_hough,
+    )
+    if not observed:
+        raise ValueError("red markup draft contains no fitted long-axis boundary")
+    shared = _red_shared_edges(logical)
     display_width = int(record["source"]["canonical_extent"]["width"])
     display_height = int(record["source"]["canonical_extent"]["height"])
     logical_height, logical_width = logical.shape
-    pool: list[dict[str, Any]] = []
-    boundary_ids: list[str] = []
-    for index, (start, stop) in enumerate(runs, start=1):
-        band = logical[:, max(0, start - 3) : min(logical_width, stop + 4)]
-        y, x_local = np.nonzero(band)
-        x = x_local + max(0, start - 3)
-        unique_y = np.unique(y)
-        centers = np.asarray([np.median(x[y == value]) for value in unique_y])
-        slope, intercept, _ = _robust_line(unique_y.astype(np.float64), centers)
+    updated = deepcopy(record)
+    machine_shared_edges = deepcopy(record["shared_edges"])
+    if len(shared) == 2:
+        updated["shared_edges"] = []
+        for index, line in enumerate(shared, start=1):
+            points = _line_points_display(
+                line=(line["slope"], line["intercept"]),
+                family="shared",
+                horizontal=horizontal,
+                analysis_width=logical_width,
+                analysis_height=logical_height,
+                display_width=display_width,
+                display_height=display_height,
+            )
+            updated["shared_edges"].append(
+                _new_line(
+                    updated,
+                    line_id=f"E{index}",
+                    role="short_low" if index == 1 else "short_high",
+                    points_display=points,
+                    origin=RED_MARKUP_ORIGIN,
+                    review_basis="directly_visible",
+                )
+            )
+    observed_lines: list[dict[str, Any]] = []
+    for index, line in enumerate(observed, start=1):
         points = _line_points_display(
-            line=(slope, intercept),
+            line=(line["slope"], line["intercept"]),
             family="boundary",
             horizontal=horizontal,
             analysis_width=logical_width,
@@ -842,31 +1327,208 @@ def import_partial_red_boundary_draft(
             display_width=display_width,
             display_height=display_height,
         )
-        line_id = f"B{index:03d}"
-        pool.append(
+        observed_lines.append(
             _new_line(
-                record,
-                line_id=line_id,
+                updated,
+                line_id=f"R{index:03d}",
                 role="long_boundary",
                 points_display=points,
-                origin=RED_DRAFT_ORIGIN,
+                origin=RED_MARKUP_ORIGIN,
+                review_basis="directly_visible",
             )
         )
-        boundary_ids.append(line_id)
-    updated = deepcopy(record)
-    updated["boundary_pool"] = pool
-    updated["tasks"][0]["boundary_ids"] = boundary_ids
+    original_pool = {line["line_id"]: line for line in record["boundary_pool"]}
+    used_machine_ids: set[str] = set()
+    used_observed_ids: set[str] = set()
+    task_diagnostics: dict[str, Any] = {}
+    for task in updated["tasks"]:
+        context = _task_markup_context(updated, task["task_id"])
+        hints = context.get("markup_import", {}) if isinstance(context, dict) else {}
+        if not isinstance(hints, dict):
+            raise ValueError(f"{task['task_id']}: markup_import must be an object")
+        count = int(task["count"])
+        contact_after = {int(value) for value in hints.get("contact_after", [])}
+        overlap_after = {int(value) for value in hints.get("overlap_after", [])}
+        missing_slots = {int(value) for value in hints.get("missing_slots", [])}
+        slot_kinds = {
+            int(key): str(value) for key, value in hints.get("slot_kinds", {}).items()
+        }
+        role_bases = {
+            str(key): str(value)
+            for key, value in hints.get("role_review_basis", {}).items()
+        }
+        if not contact_after.issubset(range(1, count)):
+            raise ValueError(f"{task['task_id']}: contact adjacency is out of range")
+        if not overlap_after.issubset(range(1, count)):
+            raise ValueError(f"{task['task_id']}: overlap adjacency is out of range")
+        if not missing_slots.issubset(range(1, count + 1)):
+            raise ValueError(f"{task['task_id']}: missing slot is out of range")
+        if not set(slot_kinds).issubset(range(1, count + 1)) or any(
+            value not in SLOT_KINDS for value in slot_kinds.values()
+        ):
+            raise ValueError(f"{task['task_id']}: slot kind hint is invalid")
+        valid_role_keys = {
+            f"{ordinal}.{role}"
+            for ordinal in range(1, count + 1)
+            for role in ("start", "end")
+        }
+        if not set(role_bases).issubset(valid_role_keys) or any(
+            value not in LINE_REVIEW_BASES for value in role_bases.values()
+        ):
+            raise ValueError(f"{task['task_id']}: line review basis hint is invalid")
+        role_ids = _task_role_ids(task)
+        role_positions = [
+            _machine_boundary_position(updated, original_pool[line_id])
+            for line_id in role_ids
+        ]
+        groups = _role_groups(
+            count,
+            contact_after=contact_after,
+            overlap_after=overlap_after,
+            missing_slots=missing_slots,
+        )
+        role_to_observed, skipped_roles, skipped_observed, cost = _align_red_roles(
+            role_positions,
+            groups,
+            observed,
+        )
+        skipped_roles = sorted(
+            set(skipped_roles)
+            | {
+                role
+                for ordinal in missing_slots
+                for role in (2 * (ordinal - 1), 2 * (ordinal - 1) + 1)
+            }
+        )
+        mapped_role_ids: list[str] = []
+        for role_index, machine_id in enumerate(role_ids):
+            observed_index = role_to_observed.get(role_index)
+            if observed_index is None:
+                mapped_role_ids.append(machine_id)
+                used_machine_ids.add(machine_id)
+                continue
+            red_id = observed_lines[observed_index]["line_id"]
+            mapped_role_ids.append(red_id)
+            used_observed_ids.add(red_id)
+            ordinal = role_index // 2 + 1
+            role_name = "start" if role_index % 2 == 0 else "end"
+            requested_basis = role_bases.get(f"{ordinal}.{role_name}")
+            if requested_basis:
+                observed_lines[observed_index]["review_basis"] = requested_basis
+        task["slots"] = [
+            {
+                "ordinal": index + 1,
+                "start_boundary_id": mapped_role_ids[index * 2],
+                "end_boundary_id": mapped_role_ids[index * 2 + 1],
+                "slot_kind": slot_kinds.get(index + 1, "image"),
+            }
+            for index in range(count)
+        ]
+        task["adjacencies"] = [
+            {
+                "left_ordinal": index,
+                "right_ordinal": index + 1,
+                "kind": (
+                    "contact"
+                    if index in contact_after
+                    else "overlap"
+                    if index in overlap_after
+                    else "separator"
+                ),
+            }
+            for index in range(1, count)
+        ]
+        pool_for_positions = {
+            **original_pool,
+            **{line["line_id"]: line for line in observed_lines},
+        }
+        for adjacency_index, adjacency in enumerate(task["adjacencies"]):
+            if adjacency["kind"] != "separator":
+                continue
+            left_id = task["slots"][adjacency_index]["end_boundary_id"]
+            right_id = task["slots"][adjacency_index + 1]["start_boundary_id"]
+            left_position = _machine_boundary_position(updated, pool_for_positions[left_id])
+            right_position = _machine_boundary_position(updated, pool_for_positions[right_id])
+            if left_position > right_position:
+                adjacency["kind"] = "unresolved"
+        task_diagnostics[task["task_id"]] = {
+            "matched_red_role_indices": sorted(index + 1 for index in role_to_observed),
+            "machine_retained_role_indices": sorted(index + 1 for index in skipped_roles),
+            "unmatched_red_stroke_indices": sorted(index + 1 for index in skipped_observed),
+            "alignment_cost": cost,
+        }
+    for line in observed_lines:
+        if line["line_id"] not in used_observed_ids:
+            line["review_basis"] = "unresolved_red_stroke"
+    updated["boundary_pool"] = [
+        *observed_lines,
+        *(deepcopy(original_pool[line_id]) for line_id in sorted(used_machine_ids)),
+    ]
+    applied_shared_edge_count = 0
+    rejected_shared_edge_indices: list[int] = []
+    if len(shared) == 2:
+        fitted_shared_edges = deepcopy(updated["shared_edges"])
+        updated["shared_edges"] = machine_shared_edges
+        for index, fitted in enumerate(fitted_shared_edges):
+            original = updated["shared_edges"][index]
+            updated["shared_edges"][index] = fitted
+            if _frames_are_source_bounded(updated):
+                applied_shared_edge_count += 1
+            else:
+                updated["shared_edges"][index] = original
+                rejected_shared_edge_indices.append(index + 1)
     updated["revision"] = int(record["revision"]) + 1
     updated["state"] = "human_adjusted"
-    updated["origin"] = RED_DRAFT_ORIGIN
+    updated["origin"] = RED_MARKUP_ORIGIN
     updated["reviewed_task_ids"] = []
     updated["confirmation"] = None
     updated["diagnostics"] = dict(record["diagnostics"])
-    updated["diagnostics"]["partial_red_markup_import"] = {
+    unresolved = list(updated["diagnostics"].get("unresolved", []))
+    if len(shared) != 2:
+        unresolved.append(
+            {
+                "kind": "red_markup_shared_edges_not_recovered",
+                "action": "review_both_machine_shared_edges_at_native_pixels",
+            }
+        )
+    if rejected_shared_edge_indices:
+        unresolved.append(
+            {
+                "kind": "red_markup_shared_edge_incompatible_with_source_raster",
+                "shared_edge_indices": rejected_shared_edge_indices,
+                "action": "review_machine_retained_shared_edges_at_native_pixels",
+            }
+        )
+    for task_id, diagnostic in task_diagnostics.items():
+        if diagnostic["machine_retained_role_indices"]:
+            unresolved.append(
+                {
+                    "kind": "red_markup_missing_boundary_roles",
+                    "task_id": task_id,
+                    "boundary_role_indices": diagnostic["machine_retained_role_indices"],
+                    "action": "review_machine_retained_roles_at_native_pixels",
+                }
+            )
+        if diagnostic["unmatched_red_stroke_indices"]:
+            unresolved.append(
+                {
+                    "kind": "red_markup_unmatched_strokes",
+                    "task_id": task_id,
+                    "red_stroke_indices": diagnostic["unmatched_red_stroke_indices"],
+                    "action": "inspect_inactive_red_lines_and_task_mapping",
+                }
+            )
+    updated["diagnostics"]["unresolved"] = unresolved
+    updated["diagnostics"]["red_markup_import"] = {
         "marked_path": str(marked_path),
-        "red_pixel_count": int(np.count_nonzero(mask_raw)),
-        "imported_boundary_count": len(pool),
-        "missing_shared_edges_retained_from_machine_proposal": True,
+        "red_pixel_count": int(np.count_nonzero(canonical_mask)),
+        "detected_boundary_count": len(observed_lines),
+        "detected_shared_edge_count": len(shared),
+        "applied_shared_edge_count": applied_shared_edge_count,
+        "machine_retained_shared_edge_indices": rejected_shared_edge_indices,
+        "boundary_extraction": extraction,
+        "task_assignments": task_diagnostics,
+        "authority": "user_red_strokes_fitted_pending_native_pixel_confirmation",
     }
     validate_annotation_record(updated)
     return updated

@@ -27,7 +27,10 @@ from tools.manual_annotation.model import (
     record_for_client,
     validate_annotation_record,
 )
-from tools.manual_annotation.proposal import _constrain_boundary_line_to_source
+from tools.manual_annotation.proposal import (
+    _align_red_roles,
+    _constrain_boundary_line_to_source,
+)
 from tools.manual_annotation.server import create_server
 from tools.manual_annotation.workspace import ReviewWorkspace, WorkspaceError
 from tools.release.manifest import RELEASE_FILES
@@ -64,14 +67,38 @@ def _annotation_record(*, orientation: int = 1) -> dict[str, object]:
                 "sample_id": "S001",
                 "source_relative_path": "Test/135/S001_count-1.tif",
                 "count": 1,
-                "boundary_ids": ["B001", "B002"],
+                "slots": [
+                    {
+                        "ordinal": 1,
+                        "start_boundary_id": "B001",
+                        "end_boundary_id": "B002",
+                        "slot_kind": "image",
+                    }
+                ],
+                "adjacencies": [],
             },
             {
                 "task_id": "S002",
                 "sample_id": "S002",
                 "source_relative_path": "Test/135/S002_count-2.tif",
                 "count": 2,
-                "boundary_ids": ["B001", "B002", "B003", "B004"],
+                "slots": [
+                    {
+                        "ordinal": 1,
+                        "start_boundary_id": "B001",
+                        "end_boundary_id": "B002",
+                        "slot_kind": "image",
+                    },
+                    {
+                        "ordinal": 2,
+                        "start_boundary_id": "B003",
+                        "end_boundary_id": "B004",
+                        "slot_kind": "image",
+                    },
+                ],
+                "adjacencies": [
+                    {"left_ordinal": 1, "right_ordinal": 2, "kind": "separator"}
+                ],
             },
         ],
         "diagnostics": {},
@@ -89,6 +116,7 @@ def _annotation_record(*, orientation: int = 1) -> dict[str, object]:
             "role": role,
             "points_raw": [display_to_raw_point(record, point) for point in points],
             "origin": "test_machine_proposal",
+            "review_basis": "machine_proposal_pending_review",
         }
 
     record["shared_edges"] = [
@@ -105,6 +133,19 @@ def _annotation_record(*, orientation: int = 1) -> dict[str, object]:
 
 
 class ManualAnnotationModelContractTest(unittest.TestCase):
+    def test_complete_red_line_set_maps_in_order_even_when_machine_phase_is_wrong(self) -> None:
+        mapping, skipped_roles, skipped_observed, _cost = _align_red_roles(
+            [0.0, 10.0],
+            [(0,), (1,)],
+            [
+                {"position": 100.0},
+                {"position": 110.0},
+            ],
+        )
+        self.assertEqual(mapping, {0: 0, 1: 1})
+        self.assertEqual(skipped_roles, [])
+        self.assertEqual(skipped_observed, [])
+
     def test_machine_boundary_is_translated_inside_source_intersections(self) -> None:
         shared = ((0.004, 302.0), (0.004, 2100.0))
         bounded, constrained = _constrain_boundary_line_to_source(
@@ -127,9 +168,37 @@ class ManualAnnotationModelContractTest(unittest.TestCase):
         self.assertEqual(len(frame_polygons_display(record, record["tasks"][0])), 1)
         self.assertEqual(len(frame_polygons_display(record, record["tasks"][1])), 2)
         self.assertEqual(
-            record["tasks"][0]["boundary_ids"][0],
-            record["tasks"][1]["boundary_ids"][0],
+            record["tasks"][0]["slots"][0]["start_boundary_id"],
+            record["tasks"][1]["slots"][0]["start_boundary_id"],
         )
+
+    def test_contact_reuses_one_physical_boundary(self) -> None:
+        record = _annotation_record()
+        task = record["tasks"][1]
+        task["slots"][1]["start_boundary_id"] = "B002"
+        task["adjacencies"][0]["kind"] = "contact"
+        validate_annotation_record(record)
+        self.assertEqual(
+            task["slots"][0]["end_boundary_id"],
+            task["slots"][1]["start_boundary_id"],
+        )
+
+    def test_overlap_keeps_crossed_physical_boundaries(self) -> None:
+        record = _annotation_record()
+        task = record["tasks"][1]
+        task["slots"][0]["end_boundary_id"] = "B003"
+        task["slots"][1]["start_boundary_id"] = "B002"
+        task["adjacencies"][0]["kind"] = "overlap"
+        validate_annotation_record(record)
+        self.assertEqual(len(frame_polygons_display(record, task)), 2)
+
+    def test_unresolved_machine_adjacency_may_keep_crossed_proposals(self) -> None:
+        record = _annotation_record()
+        task = record["tasks"][1]
+        task["slots"][0]["end_boundary_id"] = "B003"
+        task["slots"][1]["start_boundary_id"] = "B002"
+        task["adjacencies"][0]["kind"] = "unresolved"
+        validate_annotation_record(record)
 
     def test_orientation_eight_client_round_trip_preserves_raw_authority(self) -> None:
         record = _annotation_record(orientation=8)
@@ -296,6 +365,32 @@ class SyntheticReviewRepository:
         self.source_sha = source_sha
         self.source_path = source
 
+    def write_review_context(self, *, unmarked: bool = False) -> None:
+        context = {
+            "review_context_schema": "x5crop_manual_review_context_v1",
+            "default_pending_markup_state": "user_declared_marked",
+            "default_film_polarity": "negative",
+            "positive_sample_ids": [],
+            "unmarked_sample_ids": ["S001"] if unmarked else [],
+            "samples": {},
+        }
+        path = self.root / "Test/manual_review/review_context.json"
+        path.write_text(json.dumps(context), encoding="utf-8")
+
+    def draw_red_markup(self) -> None:
+        raster = tifffile.imread(self.source_path)
+        red = np.asarray([65535, 0, 0], dtype=np.uint16)
+        raster[51:57, 110:530] = red
+        raster[263:269, 110:530] = red
+        raster[45:275, 141:147] = red
+        raster[45:275, 493:499] = red
+        tifffile.imwrite(
+            self.root / self.copy_relative,
+            raster,
+            photometric="rgb",
+            compression=None,
+        )
+
     def close(self) -> None:
         self.temporary.cleanup()
 
@@ -353,6 +448,33 @@ class ManualAnnotationWorkspaceContractTest(unittest.TestCase):
                 task_id="S001",
                 reviewed=False,
             )
+
+    def test_user_red_markup_is_fitted_as_reviewable_geometry(self) -> None:
+        self.fixture.write_review_context()
+        self.fixture.draw_red_markup()
+        workspace = ReviewWorkspace(self.fixture.root)
+        counts = workspace.prepare()
+        record = workspace.load_record("S001")
+        self.assertEqual(counts["red_drafts"], 1)
+        self.assertEqual(record["state"], "human_adjusted")
+        self.assertEqual(record["origin"], "user_red_markup_hybrid_draft_import_v2")
+        self.assertEqual(
+            record["diagnostics"]["red_markup_import"]["detected_shared_edge_count"],
+            2,
+        )
+        self.assertEqual(
+            record["diagnostics"]["red_markup_import"]["detected_boundary_count"],
+            2,
+        )
+
+    def test_explicitly_unmarked_copy_does_not_become_human_geometry(self) -> None:
+        self.fixture.write_review_context(unmarked=True)
+        self.fixture.draw_red_markup()
+        workspace = ReviewWorkspace(self.fixture.root)
+        counts = workspace.prepare()
+        record = workspace.load_record("S001")
+        self.assertEqual(counts["red_drafts"], 0)
+        self.assertEqual(record["state"], "machine_proposal")
 
     def test_manifest_must_match_tracked_count(self) -> None:
         manifest = self.fixture.root / "Test/manual_review/manifest.jsonl"
