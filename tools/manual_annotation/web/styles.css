@@ -107,14 +107,19 @@ button:disabled { opacity: .38; cursor: not-allowed; }
 .inspect-heading h3 { font-size: 13px; }
 .inspect-heading span { color: var(--muted); font: 10px ui-monospace, SFMono-Regular, Menlo, monospace; }
 .inspect-heading-actions { display: flex; align-items: center; gap: 8px; }
+.loupe-selection-label { color: var(--muted); }
+.loupe-selection-label.active { color: var(--amber); font-weight: 700; }
 .inspect-expand-button { min-height: 27px; padding: 0 9px; font-size: 11px; }
 .inspect-card > p { margin-top: 9px; color: var(--muted); font-size: 11px; line-height: 1.5; }
 .loupe-wrap { position: relative; width: 100%; aspect-ratio: 1; overflow: hidden; border-radius: 8px; background: #090a0d; touch-action: none; }
 #loupeSvg { width: 100%; height: 100%; }
 .loupe-empty { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font-size: 12px; }
 .loupe-wrap.ready .loupe-empty { display: none; }
-.loupe-cross { stroke: rgba(255,255,255,.65); stroke-width: 1; vector-effect: non-scaling-stroke; stroke-dasharray: 4 4; }
-.loupe-annotation-line { stroke-width: 2.4; vector-effect: non-scaling-stroke; pointer-events: none; filter: drop-shadow(0 0 2px #000); }
+.loupe-cross { stroke: rgba(255,255,255,.65); stroke-width: 1; vector-effect: non-scaling-stroke; stroke-dasharray: 4 4; pointer-events: none; }
+.loupe-frame-polygon { fill: rgba(82,223,162,.08); stroke: rgba(82,223,162,.92); stroke-width: 1.8; vector-effect: non-scaling-stroke; pointer-events: none; }
+.loupe-frame-label { fill: #f4fff9; paint-order: stroke; stroke: rgba(0,0,0,.82); text-anchor: middle; dominant-baseline: central; pointer-events: none; }
+.loupe-line-hit-target { stroke: transparent; stroke-width: 18; vector-effect: non-scaling-stroke; pointer-events: stroke; cursor: pointer; }
+.loupe-annotation-line { stroke-width: 2.4; vector-effect: non-scaling-stroke; pointer-events: stroke; cursor: pointer; filter: drop-shadow(0 0 2px #000); }
 .loupe-annotation-line.shared { stroke: var(--cyan); }
 .loupe-annotation-line.boundary { stroke: var(--red); }
 .loupe-selection-halo { stroke: #050608; stroke-width: 8; stroke-linecap: round; vector-effect: non-scaling-stroke; pointer-events: none; opacity: .95; }
@@ -123,6 +128,7 @@ body.loupe-maximized { overflow: hidden; }
 body.loupe-maximized .loupe-card { position: fixed; inset: 0; z-index: 1000; display: flex; flex-direction: column; margin: 0; padding: 12px; border: 0; border-radius: 0; background: #11151c; box-shadow: none; }
 body.loupe-maximized .loupe-card .inspect-heading { flex: 0 0 auto; margin-bottom: 7px; }
 body.loupe-maximized .loupe-wrap { width: 100%; height: auto; min-height: 64px; flex: 1 1 auto; margin: 0; aspect-ratio: auto; cursor: crosshair; }
+body.loupe-maximized #loupeSvg:focus { outline: 2px solid rgba(114,171,255,.55); outline-offset: -2px; }
 body.loupe-maximized .loupe-card > p { flex: 0 0 auto; margin-top: 6px; text-align: center; }
 .coordinate-grid { display: grid; grid-template-columns: 65px 1fr; gap: 7px 8px; align-items: center; font-size: 11px; }
 .coordinate-grid span { color: var(--muted); }

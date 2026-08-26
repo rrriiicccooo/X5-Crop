@@ -11,7 +11,8 @@ const elements = Object.fromEntries([
   "undoButton", "redoButton", "resetViewButton", "taskTabs", "taskReviewed",
   "confirmButton", "canvasStage", "annotationSvg", "sourceImage", "polygonLayer",
   "lineLayer", "handleLayer", "cursorCoordinate", "loupeSvg", "loupeImage",
-  "loupeCard", "loupeWrap", "loupeTitle", "maximizeLoupeButton", "loupeHelp", "loupeLineLayer",
+  "loupeCard", "loupeWrap", "loupeTitle", "loupeSelectionLabel", "maximizeLoupeButton", "loupeHelp",
+  "loupePolygonLayer", "loupeLineLayer",
   "loupeCrossX", "loupeCrossY", "loupeEmpty", "selectedLineLabel",
   "lineCoordinates", "diagnostics", "confirmDialog", "confirmTitle",
   "finalConfirmButton", "toast"
@@ -349,10 +350,14 @@ function renderHandles() {
 
 function renderSelectedLine() {
   const line = lineById(selectedLineId);
+  elements.loupeSelectionLabel.textContent = line
+    ? `${line.line_id}${selectedEndpoint === null ? " · 整线" : ` · 端点 ${selectedEndpoint + 1}`}`
+    : "未选线";
+  elements.loupeSelectionLabel.classList.toggle("active", Boolean(line));
   if (!line) {
     elements.selectedLineLabel.textContent = "未选择";
     elements.lineCoordinates.querySelectorAll("code").forEach((node) => node.textContent = "—");
-    renderLoupeLines();
+    renderLoupeGeometry();
     return;
   }
   elements.selectedLineLabel.textContent = `${line.line_id} · ${line.review_basis} · ${line.origin}`;
@@ -360,7 +365,7 @@ function renderSelectedLine() {
   line.points_display.forEach((point, index) => {
     codes[index].textContent = `x ${point[0].toFixed(2)} · y ${point[1].toFixed(2)}`;
   });
-  renderLoupeLines();
+  renderLoupeGeometry();
 }
 
 function renderDiagnostics() {
@@ -469,6 +474,9 @@ function markDirty() {
   setSaveStatus("有未保存修改");
   clearTimeout(saveTimer);
   saveTimer = setTimeout(saveNow, 450);
+  if (loupeMaximized && lastPointer && currentRecord.shared_edges.some((line) => line.line_id === selectedLineId)) {
+    scheduleLoupe(lastPointer);
+  }
 }
 
 async function saveNow() {
@@ -777,8 +785,9 @@ function setLoupeMaximized(maximized, reload = true) {
   elements.maximizeLoupeButton.textContent = next ? "退出审阅" : "完整高度审阅";
   elements.maximizeLoupeButton.title = next ? "退出完整高度审阅（F 或 Esc）" : "完整高度审阅（F）";
   elements.loupeHelp.textContent = next
-    ? "共享短轴 H 占可用高度约 94%；点击图内位置可沿胶片长轴移动。按 F 或 Esc 退出。"
+    ? "共享短轴 H 占可用高度约 94%；绿色闭合区域是各 Frame。点击线可选中，方向键移动，[ ] 旋转；点击空白处沿胶片长轴移动。按 F 或 Esc 退出。"
     : "局部图直接来自原 TIFF 像素。用它检查线是否安全贴合物理边缘；按 F 进入完整高度审阅。";
+  renderLoupeGeometry();
   if (reload && lastPointer) requestAnimationFrame(() => loadLoupe(lastPointer));
 }
 
@@ -835,15 +844,55 @@ async function loadLoupe(point) {
     elements.loupeCrossY.setAttribute("x1", request.center[0]); elements.loupeCrossY.setAttribute("x2", request.center[0]);
     elements.loupeCrossY.setAttribute("y1", extent.top); elements.loupeCrossY.setAttribute("y2", extent.top + extent.height);
     elements.loupeWrap.classList.add("ready");
-    renderLoupeLines();
+    renderLoupeGeometry();
   } catch (error) {
     if (error.name !== "AbortError") showToast(error.message, true);
   }
 }
 
-function renderLoupeLines() {
+function selectLoupeLine(event, identity) {
+  event.preventDefault();
+  event.stopPropagation();
+  selectLine(identity, null);
+  elements.loupeSvg.focus({preventScroll: true});
+}
+
+function renderLoupeGeometry() {
+  elements.loupePolygonLayer.replaceChildren();
   elements.loupeLineLayer.replaceChildren();
   if (!currentRecord) return;
+  if (loupeMaximized) {
+    const task = activeTask();
+    const view = elements.loupeSvg.viewBox.baseVal;
+    const bounds = elements.loupeSvg.getBoundingClientRect();
+    const labelScale = Math.max(
+      view.width / Math.max(1, bounds.width),
+      view.height / Math.max(1, bounds.height)
+    );
+    taskPolygons(task).forEach((points, index) => {
+      const polygon = svgElement("polygon", {
+        points: points.map((point) => `${point[0]},${point[1]}`).join(" "),
+        class: "loupe-frame-polygon",
+        "data-frame-ordinal": index + 1
+      });
+      const title = svgElement("title");
+      title.textContent = `Frame ${index + 1} · ${task.slots[index].slot_kind}`;
+      polygon.appendChild(title);
+      elements.loupePolygonLayer.appendChild(polygon);
+      const center = points.reduce(
+        (total, point) => [total[0] + point[0] / points.length, total[1] + point[1] / points.length],
+        [0, 0]
+      );
+      const label = svgElement("text", {
+        x: center[0], y: center[1],
+        class: "loupe-frame-label",
+        "font-size": Math.max(1, 13 * labelScale),
+        "stroke-width": Math.max(0.5, 3 * labelScale)
+      });
+      label.textContent = `Frame ${index + 1}`;
+      elements.loupePolygonLayer.appendChild(label);
+    });
+  }
   const entries = activeLineEntries().filter((item) => item.active);
   entries.sort((left, right) => (
     Number(left.line.line_id === selectedLineId) -
@@ -853,6 +902,12 @@ function renderLoupeLines() {
     const [first, second] = entry.line.points_display;
     const selected = entry.line.line_id === selectedLineId;
     const classes = ["loupe-annotation-line", entry.family];
+    const hitTarget = svgElement("line", {
+      x1: first[0], y1: first[1], x2: second[0], y2: second[1],
+      class: "loupe-line-hit-target", "data-line-id": entry.line.line_id
+    });
+    hitTarget.addEventListener("click", (event) => selectLoupeLine(event, entry.line.line_id));
+    elements.loupeLineLayer.appendChild(hitTarget);
     if (selected) {
       classes.push("selected");
       elements.loupeLineLayer.appendChild(svgElement("line", {
@@ -860,10 +915,12 @@ function renderLoupeLines() {
         class: "loupe-selection-halo"
       }));
     }
-    elements.loupeLineLayer.appendChild(svgElement("line", {
+    const visibleLine = svgElement("line", {
       x1: first[0], y1: first[1], x2: second[0], y2: second[1],
       class: classes.join(" "), "data-line-id": entry.line.line_id
-    }));
+    });
+    visibleLine.addEventListener("click", (event) => selectLoupeLine(event, entry.line.line_id));
+    elements.loupeLineLayer.appendChild(visibleLine);
   }
 }
 

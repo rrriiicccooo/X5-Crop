@@ -85,14 +85,16 @@
             <div class="inspect-heading">
               <h3 id="loupeTitle">1:1 原生像素检查</h3>
               <div class="inspect-heading-actions">
+                <span id="loupeSelectionLabel" class="loupe-selection-label">未选线</span>
                 <span id="cursorCoordinate">x — · y —</span>
                 <button id="maximizeLoupeButton" class="inspect-expand-button secondary" type="button"
                   title="完整高度审阅（F）" aria-pressed="false" disabled>完整高度审阅</button>
               </div>
             </div>
             <div id="loupeWrap" class="loupe-wrap">
-              <svg id="loupeSvg" xmlns="http://www.w3.org/2000/svg" aria-label="原生像素局部图">
+              <svg id="loupeSvg" xmlns="http://www.w3.org/2000/svg" tabindex="0" aria-label="原生像素局部图">
                 <image id="loupeImage" preserveAspectRatio="none"></image>
+                <g id="loupePolygonLayer"></g>
                 <g id="loupeLineLayer"></g>
                 <line id="loupeCrossX" class="loupe-cross"></line>
                 <line id="loupeCrossY" class="loupe-cross"></line>
