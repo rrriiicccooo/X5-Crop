@@ -103,11 +103,13 @@ button:disabled { opacity: .38; cursor: not-allowed; }
 
 .inspect-panel { min-height: 0; overflow-y: auto; padding: 12px; border-left: 1px solid var(--line); background: #15181e; }
 .inspect-card { padding: 13px; margin-bottom: 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); box-shadow: 0 10px 28px rgba(0,0,0,.12); }
-.inspect-heading { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 10px; }
+.inspect-heading { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 10px; }
 .inspect-heading h3 { font-size: 13px; }
 .inspect-heading span { color: var(--muted); font: 10px ui-monospace, SFMono-Regular, Menlo, monospace; }
+.inspect-heading-actions { display: flex; align-items: center; gap: 8px; }
+.inspect-expand-button { min-height: 27px; padding: 0 9px; font-size: 11px; }
 .inspect-card > p { margin-top: 9px; color: var(--muted); font-size: 11px; line-height: 1.5; }
-.loupe-wrap { position: relative; width: 100%; aspect-ratio: 1; overflow: hidden; border-radius: 8px; background: #090a0d; }
+.loupe-wrap { position: relative; width: 100%; aspect-ratio: 1; overflow: hidden; border-radius: 8px; background: #090a0d; touch-action: none; }
 #loupeSvg { width: 100%; height: 100%; }
 .loupe-empty { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font-size: 12px; }
 .loupe-wrap.ready .loupe-empty { display: none; }
@@ -117,6 +119,11 @@ button:disabled { opacity: .38; cursor: not-allowed; }
 .loupe-annotation-line.boundary { stroke: var(--red); }
 .loupe-selection-halo { stroke: #050608; stroke-width: 8; stroke-linecap: round; vector-effect: non-scaling-stroke; pointer-events: none; opacity: .95; }
 .loupe-annotation-line.selected { stroke: var(--amber); stroke-width: 3.8; stroke-linecap: round; filter: none; }
+body.loupe-maximized { overflow: hidden; }
+body.loupe-maximized .loupe-card { position: fixed; inset: 0; z-index: 1000; display: flex; flex-direction: column; margin: 0; padding: 12px; border: 0; border-radius: 0; background: #11151c; box-shadow: none; }
+body.loupe-maximized .loupe-card .inspect-heading { flex: 0 0 auto; margin-bottom: 7px; }
+body.loupe-maximized .loupe-wrap { width: 100%; height: auto; min-height: 64px; flex: 1 1 auto; margin: 0; aspect-ratio: auto; cursor: crosshair; }
+body.loupe-maximized .loupe-card > p { flex: 0 0 auto; margin-top: 6px; text-align: center; }
 .coordinate-grid { display: grid; grid-template-columns: 65px 1fr; gap: 7px 8px; align-items: center; font-size: 11px; }
 .coordinate-grid span { color: var(--muted); }
 .coordinate-grid code { overflow: hidden; text-overflow: ellipsis; color: #dbe5f5; font-size: 10px; }

@@ -10,7 +10,8 @@ const elements = Object.fromEntries([
   "undoButton", "redoButton", "resetViewButton", "taskTabs", "taskReviewed",
   "confirmButton", "canvasStage", "annotationSvg", "sourceImage", "polygonLayer",
   "lineLayer", "handleLayer", "cursorCoordinate", "loupeSvg", "loupeImage",
-  "loupeLineLayer", "loupeCrossX", "loupeCrossY", "loupeEmpty", "selectedLineLabel",
+  "loupeCard", "loupeWrap", "maximizeLoupeButton", "loupeHelp", "loupeLineLayer",
+  "loupeCrossX", "loupeCrossY", "loupeEmpty", "selectedLineLabel",
   "lineCoordinates", "diagnostics", "confirmDialog", "confirmTitle",
   "finalConfirmButton", "toast"
 ].map((id) => [id, document.getElementById(id)]));
@@ -40,6 +41,8 @@ let loupeAbort = null;
 let loupeUrl = null;
 let loupeTimer = null;
 let lastPointer = null;
+let loupeMaximized = false;
+let loupeResizeTimer = null;
 let toastTimer = null;
 
 async function api(path, options = {}) {
@@ -137,6 +140,7 @@ async function openSource(item) {
   }
   try {
     await flushSave();
+    setLoupeMaximized(false, false);
     setSaveStatus("正在打开…");
     const response = await api(`/api/record/${encodeURIComponent(item.source_sha256)}`);
     currentItem = item;
@@ -148,8 +152,13 @@ async function openSource(item) {
     future = [];
     dirty = false;
     editGeneration = 0;
+    const extent = currentRecord.source.canonical_extent;
+    lastPointer = [extent.width / 2, extent.height / 2];
+    elements.cursorCoordinate.textContent = `x ${lastPointer[0].toFixed(1)} · y ${lastPointer[1].toFixed(1)}`;
+    elements.loupeWrap.classList.remove("ready");
     resetView();
     renderRecord();
+    scheduleLoupe(lastPointer);
     setSaveStatus("已保存", "ok");
     renderIndex();
   } catch (error) {
@@ -404,6 +413,7 @@ function updateControls() {
   elements.confirmButton.disabled = !currentRecord || immutable || !allReviewed || dirty;
   elements.undoButton.disabled = immutable || history.length === 0;
   elements.redoButton.disabled = immutable || future.length === 0;
+  elements.maximizeLoupeButton.disabled = !currentRecord || !lastPointer;
   elements.annotationSvg.style.pointerEvents = immutable ? "auto" : "auto";
   document.querySelectorAll("[data-nudge],[data-rotate]").forEach((button) => button.disabled = immutable || !selectedLineId);
 }
@@ -685,12 +695,49 @@ function scheduleLoupe(point) {
   loupeTimer = setTimeout(() => loadLoupe(point), 110);
 }
 
+function nativeTileSize() {
+  const bounds = elements.loupeWrap.getBoundingClientRect();
+  const maximum = Number(indexData?.native_tile_max_dimension) || 768;
+  return {
+    width: Math.max(64, Math.min(maximum, Math.round(bounds.width || 512))),
+    height: Math.max(64, Math.min(maximum, Math.round(bounds.height || bounds.width || 512)))
+  };
+}
+
+function setLoupeMaximized(maximized, reload = true) {
+  const next = Boolean(maximized && currentRecord && lastPointer);
+  if (loupeMaximized === next) return;
+  loupeMaximized = next;
+  document.body.classList.toggle("loupe-maximized", next);
+  elements.maximizeLoupeButton.setAttribute("aria-pressed", String(next));
+  elements.maximizeLoupeButton.textContent = next ? "退出最大化" : "最大化审阅";
+  elements.maximizeLoupeButton.title = next ? "退出最大化（F 或 Esc）" : "最大化审阅（F）";
+  elements.loupeHelp.textContent = next
+    ? "保持 1:1 原生像素显示；点击图内位置可将其移到中心。按 F 或 Esc 退出。"
+    : "局部图直接来自原 TIFF 像素。用它检查线是否安全贴合物理边缘；按 F 最大化审阅。";
+  if (reload && lastPointer) requestAnimationFrame(() => loadLoupe(lastPointer));
+}
+
+function recenterLoupe(event) {
+  if (!loupeMaximized || !currentRecord || !elements.loupeWrap.classList.contains("ready")) return;
+  const matrix = elements.loupeSvg.getScreenCTM();
+  if (!matrix) return;
+  const point = elements.loupeSvg.createSVGPoint();
+  point.x = event.clientX;
+  point.y = event.clientY;
+  const sourcePoint = point.matrixTransform(matrix.inverse());
+  lastPointer = clampPoint([sourcePoint.x, sourcePoint.y]);
+  elements.cursorCoordinate.textContent = `x ${lastPointer[0].toFixed(1)} · y ${lastPointer[1].toFixed(1)}`;
+  scheduleLoupe(lastPointer);
+}
+
 async function loadLoupe(point) {
   if (!currentRecord) return;
   if (loupeAbort) loupeAbort.abort();
   loupeAbort = new AbortController();
   try {
-    const response = await api(`/api/tile/${encodeURIComponent(currentRecord.source.sha256)}?x=${point[0]}&y=${point[1]}&side=512`, {signal: loupeAbort.signal});
+    const size = nativeTileSize();
+    const response = await api(`/api/tile/${encodeURIComponent(currentRecord.source.sha256)}?x=${point[0]}&y=${point[1]}&width=${size.width}&height=${size.height}`, {signal: loupeAbort.signal});
     const extent = {
       left: Number(response.headers.get("X-X5-Tile-Left")),
       top: Number(response.headers.get("X-X5-Tile-Top")),
@@ -710,7 +757,7 @@ async function loadLoupe(point) {
     elements.loupeCrossX.setAttribute("y1", point[1]); elements.loupeCrossX.setAttribute("y2", point[1]);
     elements.loupeCrossY.setAttribute("x1", point[0]); elements.loupeCrossY.setAttribute("x2", point[0]);
     elements.loupeCrossY.setAttribute("y1", extent.top); elements.loupeCrossY.setAttribute("y2", extent.top + extent.height);
-    document.querySelector(".loupe-wrap").classList.add("ready");
+    elements.loupeWrap.classList.add("ready");
     renderLoupeLines();
   } catch (error) {
     if (error.name !== "AbortError") showToast(error.message, true);
@@ -806,11 +853,13 @@ elements.finalConfirmButton.addEventListener("click", finalConfirmation);
 elements.undoButton.addEventListener("click", undo);
 elements.redoButton.addEventListener("click", redo);
 elements.resetViewButton.addEventListener("click", resetView);
+elements.maximizeLoupeButton.addEventListener("click", () => setLoupeMaximized(!loupeMaximized));
 elements.annotationSvg.addEventListener("pointerdown", startPan);
 elements.annotationSvg.addEventListener("pointermove", handlePointerMove);
 elements.annotationSvg.addEventListener("pointerup", finishDrag);
 elements.annotationSvg.addEventListener("pointercancel", finishDrag);
 elements.annotationSvg.addEventListener("wheel", zoomAt, {passive: false});
+elements.loupeSvg.addEventListener("click", recenterLoupe);
 
 document.querySelectorAll("[data-nudge]").forEach((button) => {
   button.addEventListener("click", (event) => {
@@ -839,6 +888,12 @@ document.addEventListener("keydown", (event) => {
     event.preventDefault(); event.shiftKey ? redo() : undo(); return;
   }
   if (modifier || event.altKey) return;
+  if (event.key === "Escape" && loupeMaximized) {
+    event.preventDefault(); setLoupeMaximized(false); return;
+  }
+  if (event.key.toLowerCase() === "f" && !event.target.matches("input,select")) {
+    event.preventDefault(); setLoupeMaximized(!loupeMaximized); return;
+  }
   if (event.target.matches("input,select,button")) return;
   const multiplier = event.shiftKey ? 10 : 1;
   const directions = {ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1]};
@@ -854,6 +909,12 @@ document.addEventListener("keydown", (event) => {
 
 window.addEventListener("beforeunload", (event) => {
   if (dirty || savePromise) { event.preventDefault(); event.returnValue = ""; }
+});
+
+window.addEventListener("resize", () => {
+  if (!lastPointer) return;
+  clearTimeout(loupeResizeTimer);
+  loupeResizeTimer = setTimeout(() => loadLoupe(lastPointer), 140);
 });
 
 if (!token) {

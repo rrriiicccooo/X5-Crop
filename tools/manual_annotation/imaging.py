@@ -21,7 +21,7 @@ from .model import frame_polygons_display, raw_to_display_point
 
 MAX_ANALYSIS_LONG_SIDE = 3600
 MAX_PREVIEW_LONG_SIDE = 2400
-MAX_NATIVE_TILE_SIDE = 768
+MAX_NATIVE_TILE_DIMENSION = 3072
 
 
 class ImagingError(RuntimeError):
@@ -207,17 +207,29 @@ class SourceRaster(AbstractContextManager["SourceRaster"]):
         *,
         center_x: float,
         center_y: float,
-        side: int,
+        width: int,
+        height: int,
         levels: list[list[float]],
     ) -> tuple[bytes, dict[str, int]]:
-        if not 64 <= side <= MAX_NATIVE_TILE_SIDE:
-            raise ImagingError(f"native tile side must be 64..{MAX_NATIVE_TILE_SIDE}")
-        width, height = self.canonical_extent
-        half = side // 2
-        left = min(max(0, int(round(center_x)) - half), max(0, width - side))
-        top = min(max(0, int(round(center_y)) - half), max(0, height - side))
-        right = min(width, left + side)
-        bottom = min(height, top + side)
+        if not 64 <= width <= MAX_NATIVE_TILE_DIMENSION:
+            raise ImagingError(
+                f"native tile width must be 64..{MAX_NATIVE_TILE_DIMENSION}"
+            )
+        if not 64 <= height <= MAX_NATIVE_TILE_DIMENSION:
+            raise ImagingError(
+                f"native tile height must be 64..{MAX_NATIVE_TILE_DIMENSION}"
+            )
+        source_width, source_height = self.canonical_extent
+        left = min(
+            max(0, int(round(center_x)) - width // 2),
+            max(0, source_width - width),
+        )
+        top = min(
+            max(0, int(round(center_y)) - height // 2),
+            max(0, source_height - height),
+        )
+        right = min(source_width, left + width)
+        bottom = min(source_height, top + height)
         tile = np.asarray(self.canonical[top:bottom, left:right])
         rgb, _ = raster_to_rgb8(tile, levels)
         image = Image.fromarray(rgb)

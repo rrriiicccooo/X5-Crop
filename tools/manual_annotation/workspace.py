@@ -13,6 +13,7 @@ import threading
 from typing import Any, Iterable
 
 from .imaging import (
+    MAX_NATIVE_TILE_DIMENSION,
     SourceRaster,
     orientation_record,
     render_review_artifact,
@@ -623,7 +624,8 @@ class ReviewWorkspace:
                 }
             )
         return {
-            "index_schema": "x5crop_source_annotation_index_v1",
+            "index_schema": "x5crop_source_annotation_index_v2",
+            "native_tile_max_dimension": MAX_NATIVE_TILE_DIMENSION,
             "total_unique_sources": len(items),
             "states": dict(sorted(states.items())),
             "items": items,

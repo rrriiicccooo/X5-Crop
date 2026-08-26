@@ -611,7 +611,10 @@ class ManualAnnotationServerContractTest(unittest.TestCase):
             )
         )
         self.assertEqual(status, 200)
-        self.assertEqual(json.loads(body)["total_unique_sources"], 1)
+        index = json.loads(body)
+        self.assertEqual(index["index_schema"], "x5crop_source_annotation_index_v2")
+        self.assertEqual(index["native_tile_max_dimension"], 3072)
+        self.assertEqual(index["total_unique_sources"], 1)
         status, _ = self._status(
             Request(
                 f"{self.base}/api/record/%2e%2e%2fREADME.md",
@@ -643,7 +646,7 @@ class ManualAnnotationServerContractTest(unittest.TestCase):
     def test_native_tile_is_bounded_and_source_bound(self) -> None:
         status, payload = self._status(
             Request(
-                f"{self.base}/api/tile/S001?x=320&y=160&side=128",
+                f"{self.base}/api/tile/S001?x=320&y=160&width=128&height=96",
                 headers={"X-X5-Token": "fixed-test-token"},
             )
         )
@@ -669,6 +672,10 @@ class ManualAnnotationPackagingContractTest(unittest.TestCase):
         self.assertNotIn(".annotation-line.selected { stroke: #fff", joined)
         self.assertNotIn(".loupe-annotation-line.selected { stroke: #fff", joined)
         self.assertIn("min(564px, 46vw)", joined)
+        self.assertIn('id="maximizeloupebutton"', joined)
+        self.assertIn("loupe-maximized", joined)
+        self.assertIn("nativetilesize", joined)
+        self.assertIn("点击图内位置可将其移到中心", joined)
         self.assertIn("最内侧可接受", joined)
         self.assertIn("不得向其内侧越界", joined)
         self.assertIn("bracketleft", joined)

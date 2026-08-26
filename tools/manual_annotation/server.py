@@ -64,14 +64,16 @@ class RasterCache:
         *,
         center_x: float,
         center_y: float,
-        side: int,
+        width: int,
+        height: int,
     ) -> tuple[bytes, dict[str, int]]:
         with self._lock:
             raster, levels = self.get(identity)
             return raster.native_tile_png(
                 center_x=center_x,
                 center_y=center_y,
-                side=side,
+                width=width,
+                height=height,
                 levels=levels,
             )
 
@@ -212,7 +214,8 @@ class AnnotationRequestHandler(BaseHTTPRequestHandler):
                 try:
                     x = float(query.get("x", [""])[0])
                     y = float(query.get("y", [""])[0])
-                    side = int(query.get("side", ["512"])[0])
+                    width = int(query.get("width", ["512"])[0])
+                    height = int(query.get("height", ["512"])[0])
                 except ValueError as error:
                     raise WorkspaceError("native tile coordinates are invalid") from error
                 if not math.isfinite(x) or not math.isfinite(y):
@@ -221,7 +224,8 @@ class AnnotationRequestHandler(BaseHTTPRequestHandler):
                     identity,
                     center_x=x,
                     center_y=y,
-                    side=side,
+                    width=width,
+                    height=height,
                 )
                 self._send(
                     HTTPStatus.OK,
