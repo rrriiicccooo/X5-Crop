@@ -268,16 +268,35 @@ function activeLineEntries() {
       line,
       family: "shared",
       label: index === 0 ? "共享边 A" : "共享边 B",
-      active: true
+      active: true,
+      role: "shared"
     })),
     ...currentRecord.boundary_pool.map((line) => {
       const positions = taskIds.flatMap((identity, position) => identity === line.line_id ? [position] : []);
+      const roles = new Set(positions.map((position) => position % 2 ? "end" : "start"));
+      const role = roles.size === 2 ? "start-end" : (roles.values().next().value || "unused");
       const label = positions.length
-        ? positions.map((position) => `${Math.floor(position / 2) + 1}${position % 2 ? "R" : "L"}`).join("/")
+        ? positions.map((position) => `${Math.floor(position / 2) + 1}${position % 2 ? "E" : "S"}`).join("/")
         : line.line_id;
-      return {line, family: "boundary", label, active: used.has(line.line_id)};
+      return {line, family: "boundary", label, active: used.has(line.line_id), role};
     })
   ];
+}
+
+function roleLabel(entry) {
+  return ({
+    shared: "共享边",
+    start: "start",
+    end: "end",
+    "start-end": "start/end 接触边",
+    unused: "未用于当前 count"
+  })[entry?.role] || "未分类";
+}
+
+function visibleStrokeVariants(entry, selected) {
+  return entry.family === "boundary" && entry.role === "start-end" && !selected
+    ? ["contact-start", "contact-end"]
+    : [null];
 }
 
 function renderGeometry() {
@@ -305,22 +324,25 @@ function renderGeometry() {
   for (const entry of entries) {
     const [first, second] = entry.line.points_display;
     const selected = entry.line.line_id === selectedLineId;
-    const classes = ["annotation-line", entry.family];
-    if (!entry.active) classes.push("inactive");
     if (selected) {
-      classes.push("selected");
       elements.lineLayer.appendChild(svgElement("line", {
         x1: first[0], y1: first[1], x2: second[0], y2: second[1],
         class: "annotation-selection-halo"
       }));
     }
-    const node = svgElement("line", {
-      x1: first[0], y1: first[1], x2: second[0], y2: second[1],
-      class: classes.join(" "), "data-line-id": entry.line.line_id
-    });
-    node.addEventListener("pointerdown", (event) => startLineDrag(event, entry.line.line_id));
-    node.addEventListener("click", (event) => { event.stopPropagation(); selectLine(entry.line.line_id, null); });
-    elements.lineLayer.appendChild(node);
+    for (const variant of visibleStrokeVariants(entry, selected)) {
+      const classes = ["annotation-line", entry.family, entry.role];
+      if (!entry.active) classes.push("inactive");
+      if (selected) classes.push("selected");
+      if (variant) classes.push(variant);
+      const node = svgElement("line", {
+        x1: first[0], y1: first[1], x2: second[0], y2: second[1],
+        class: classes.join(" "), "data-line-id": entry.line.line_id
+      });
+      node.addEventListener("pointerdown", (event) => startLineDrag(event, entry.line.line_id));
+      node.addEventListener("click", (event) => { event.stopPropagation(); selectLine(entry.line.line_id, null); });
+      elements.lineLayer.appendChild(node);
+    }
     if (entry.active) {
       const middle = [(first[0] + second[0]) / 2, (first[1] + second[1]) / 2];
       const label = svgElement("text", {x: middle[0] + 5, y: middle[1] - 5, class: "line-label"});
@@ -350,8 +372,9 @@ function renderHandles() {
 
 function renderSelectedLine() {
   const line = lineById(selectedLineId);
+  const entry = line ? activeLineEntries().find((item) => item.line.line_id === line.line_id) : null;
   elements.loupeSelectionLabel.textContent = line
-    ? `${line.line_id}${selectedEndpoint === null ? " · 整线" : ` · 端点 ${selectedEndpoint + 1}`}`
+    ? `${line.line_id} · ${roleLabel(entry)}${selectedEndpoint === null ? " · 整线" : ` · 端点 ${selectedEndpoint + 1}`}`
     : "未选线";
   elements.loupeSelectionLabel.classList.toggle("active", Boolean(line));
   if (!line) {
@@ -360,7 +383,7 @@ function renderSelectedLine() {
     renderLoupeGeometry();
     return;
   }
-  elements.selectedLineLabel.textContent = `${line.line_id} · ${line.review_basis} · ${line.origin}`;
+  elements.selectedLineLabel.textContent = `${line.line_id} · ${roleLabel(entry)} · ${line.review_basis} · ${line.origin}`;
   const codes = elements.lineCoordinates.querySelectorAll("code");
   line.points_display.forEach((point, index) => {
     codes[index].textContent = `x ${point[0].toFixed(2)} · y ${point[1].toFixed(2)}`;
@@ -785,7 +808,7 @@ function setLoupeMaximized(maximized, reload = true) {
   elements.maximizeLoupeButton.textContent = next ? "退出审阅" : "完整高度审阅";
   elements.maximizeLoupeButton.title = next ? "退出完整高度审阅（F 或 Esc）" : "完整高度审阅（F）";
   elements.loupeHelp.textContent = next
-    ? "共享短轴 H 占可用高度约 94%；绿色闭合区域是各 Frame。点击线可选中，方向键移动，[ ] 旋转；点击空白处沿胶片长轴移动。按 F 或 Esc 退出。"
+    ? "共享短轴 H 占可用高度约 94%。洋红=start，橙色=end，双色虚线=start/end 接触边；绿色闭合区域是各 Frame。点击线可选中并用方向键或 [ ] 修改；点击空白处沿胶片长轴移动。按 F 或 Esc 退出。"
     : "局部图直接来自原 TIFF 像素。用它检查线是否安全贴合物理边缘；按 F 进入完整高度审阅。";
   renderLoupeGeometry();
   if (reload && lastPointer) requestAnimationFrame(() => loadLoupe(lastPointer));
@@ -901,7 +924,6 @@ function renderLoupeGeometry() {
   for (const entry of entries) {
     const [first, second] = entry.line.points_display;
     const selected = entry.line.line_id === selectedLineId;
-    const classes = ["loupe-annotation-line", entry.family];
     const hitTarget = svgElement("line", {
       x1: first[0], y1: first[1], x2: second[0], y2: second[1],
       class: "loupe-line-hit-target", "data-line-id": entry.line.line_id
@@ -909,18 +931,22 @@ function renderLoupeGeometry() {
     hitTarget.addEventListener("click", (event) => selectLoupeLine(event, entry.line.line_id));
     elements.loupeLineLayer.appendChild(hitTarget);
     if (selected) {
-      classes.push("selected");
       elements.loupeLineLayer.appendChild(svgElement("line", {
         x1: first[0], y1: first[1], x2: second[0], y2: second[1],
         class: "loupe-selection-halo"
       }));
     }
-    const visibleLine = svgElement("line", {
-      x1: first[0], y1: first[1], x2: second[0], y2: second[1],
-      class: classes.join(" "), "data-line-id": entry.line.line_id
-    });
-    visibleLine.addEventListener("click", (event) => selectLoupeLine(event, entry.line.line_id));
-    elements.loupeLineLayer.appendChild(visibleLine);
+    for (const variant of visibleStrokeVariants(entry, selected)) {
+      const classes = ["loupe-annotation-line", entry.family, entry.role];
+      if (selected) classes.push("selected");
+      if (variant) classes.push(variant);
+      const visibleLine = svgElement("line", {
+        x1: first[0], y1: first[1], x2: second[0], y2: second[1],
+        class: classes.join(" "), "data-line-id": entry.line.line_id
+      });
+      visibleLine.addEventListener("click", (event) => selectLoupeLine(event, entry.line.line_id));
+      elements.loupeLineLayer.appendChild(visibleLine);
+    }
   }
 }
 
