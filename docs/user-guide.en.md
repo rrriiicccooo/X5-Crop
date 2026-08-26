@@ -85,6 +85,13 @@ a frame, choose a placement, or decide output deskew. A direct aperture edge may
 project its short-axis position only within its sampled trace span; uncovered
 frames are never extrapolated along the fitted line.
 
+A directly bound start/end edge may be slightly non-perpendicular without
+turning the frame into a free quadrilateral. Its stable fitted line is used only
+across the current frame's short-axis support. Any outward line extent beyond
+the already retained full position interval enlarges the safety envelope; a
+residual already inside that interval is not added again. This protects mildly
+trapezoidal edges in aged scans while preserving the fixed physical template.
+
 A mild bend does not create a curve model. Per-trace departure belongs only to
 selected-placement safety. A directly observed enclosing support may retain its
 same-state local slope because that support itself owns final top/bottom. If
@@ -176,10 +183,11 @@ top/bottom bleed = 0.25 mm
 ```
 
 X5 Crop first retains all jointly feasible states of the one selected
-placement—phase, pitch, cross position, one local advance, and straight-line
-residual. A direct enclosing pair also retains its own same-state slope. Bleed
-is added afterward. X5 Crop does not add independent maxima that cannot occur
-together and never absorbs a runner-up.
+placement—phase, pitch, cross position, one local advance, full position
+intervals, and any local fitted-line outward extent not already covered by
+those intervals. A direct enclosing pair also retains its own same-state slope.
+Bleed is added afterward. X5 Crop does not double-count one residual, add
+independent maxima that cannot occur together, or absorb a runner-up.
 
 Automatic aperture output allows at most 5% expansion per side relative to the
 corresponding format dimension. Measurement uncertainty, straight residual,

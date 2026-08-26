@@ -5,12 +5,16 @@ import unittest
 from tools.regression.accuracy import _validate_task_result
 from tools.regression.gold_geometry import (
     ordered_gold_mapping,
+    validate_approved_geometry,
     validate_selected_candidate_coverage,
 )
 
 
 def _frame(polygon: list[list[float]]) -> dict[str, object]:
-    return {"polygon_source_pixel_center_coordinates": polygon}
+    return {
+        "frame_index": 1,
+        "polygon_source_pixel_center_coordinates": polygon,
+    }
 
 
 def _output(polygon: list[list[float]]) -> dict[str, object]:
@@ -50,7 +54,10 @@ class GoldAccuracyContractTest(unittest.TestCase):
             "output": {"finalization": {"output_footprints": []}},
         }
 
-        with self.assertRaisesRegex(ValueError, "candidate cuts confirmed content"):
+        with self.assertRaisesRegex(
+            ValueError,
+            "candidate crosses user-confirmed inward baseline",
+        ):
             _validate_task_result(record, report)
 
     def test_review_candidate_geometry_is_checked_without_official_outputs(
@@ -72,7 +79,9 @@ class GoldAccuracyContractTest(unittest.TestCase):
 
         self.assertTrue(validate_selected_candidate_coverage(record, report))
 
-    def test_review_candidate_that_cuts_content_is_rejected(self) -> None:
+    def test_review_candidate_that_crosses_inward_baseline_is_rejected(
+        self,
+    ) -> None:
         gold = [[0.0, 0.0], [560.0, 0.0], [560.0, 560.0], [0.0, 560.0]]
         record = {
             "sample_id": "candidate-cut",
@@ -102,7 +111,10 @@ class GoldAccuracyContractTest(unittest.TestCase):
             "output": {"finalization": {"output_footprints": []}},
         }
 
-        with self.assertRaisesRegex(ValueError, "candidate cuts confirmed content"):
+        with self.assertRaisesRegex(
+            ValueError,
+            "candidate crosses user-confirmed inward baseline",
+        ):
             validate_selected_candidate_coverage(record, report)
 
     def test_review_without_selected_candidate_has_no_geometry_verdict(self) -> None:
@@ -121,7 +133,7 @@ class GoldAccuracyContractTest(unittest.TestCase):
 
         self.assertFalse(validate_selected_candidate_coverage(record, report))
 
-    def test_corner_local_sampling_difference_is_accepted(self) -> None:
+    def test_subpixel_corner_inset_crosses_the_inward_baseline(self) -> None:
         gold = [[0.0, 0.0], [560.0, 0.0], [560.0, 560.0], [0.0, 560.0]]
         corner_local = [
             [0.0, -1.0],
@@ -135,9 +147,8 @@ class GoldAccuracyContractTest(unittest.TestCase):
                 [_frame(gold)],
                 [_output(corner_local)],
                 "horizontal",
-                "120-66",
             ),
-            (0,),
+            (),
         )
 
     def test_continuous_edge_inset_is_not_corner_local(self) -> None:
@@ -154,14 +165,11 @@ class GoldAccuracyContractTest(unittest.TestCase):
                 [_frame(gold)],
                 [_output(bottom_inset)],
                 "horizontal",
-                "120-66",
             ),
             (),
         )
 
-    def test_corner_difference_beyond_sampling_uncertainty_is_rejected(
-        self,
-    ) -> None:
+    def test_corner_inset_is_rejected(self) -> None:
         gold = [[0.0, 0.0], [560.0, 0.0], [560.0, 560.0], [0.0, 560.0]]
         large_corner_cut = [
             [0.0, -5.0],
@@ -175,10 +183,58 @@ class GoldAccuracyContractTest(unittest.TestCase):
                 [_frame(gold)],
                 [_output(large_corner_cut)],
                 "horizontal",
-                "120-66",
             ),
             (),
         )
+
+    def test_five_percent_outward_envelope_is_direct_use(self) -> None:
+        gold = [[100.0, 100.0], [660.0, 100.0], [660.0, 660.0], [100.0, 660.0]]
+        five_percent = [[72.0, 72.0], [688.0, 72.0], [688.0, 688.0], [72.0, 688.0]]
+        record = {
+            "sample_id": "five-percent",
+            "confirmed_geometry": {
+                "strip_orientation": "horizontal",
+                "frames": [_frame(gold)],
+            },
+        }
+        report = {
+            "output": {
+                "finalization": {
+                    "output_footprints": [_output(five_percent)],
+                }
+            }
+        }
+
+        validate_approved_geometry(record, report)
+
+    def test_enclosing_height_cannot_hide_one_sided_ten_percent_expansion(
+        self,
+    ) -> None:
+        gold = [[100.0, 100.0], [660.0, 100.0], [660.0, 660.0], [100.0, 660.0]]
+        one_sided_ten_percent = [
+            [100.0, 44.0],
+            [660.0, 44.0],
+            [660.0, 660.0],
+            [100.0, 660.0],
+        ]
+        record = {
+            "sample_id": "one-sided-ten-percent",
+            "confirmed_geometry": {
+                "strip_orientation": "horizontal",
+                "frames": [_frame(gold)],
+            },
+        }
+        output = _output(one_sided_ten_percent)
+        output["envelope"] = {"boundary_use": "enclosing_support_pair"}
+        report = {
+            "output": {"finalization": {"output_footprints": [output]}}
+        }
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "exceeds acceptance-baseline direct-use budget",
+        ):
+            validate_approved_geometry(record, report)
 
     def test_extra_output_is_not_a_valid_gold_mapping(self) -> None:
         gold = [[0.0, 0.0], [560.0, 0.0], [560.0, 560.0], [0.0, 560.0]]
@@ -188,7 +244,6 @@ class GoldAccuracyContractTest(unittest.TestCase):
                 [_frame(gold)],
                 [_output(gold), _output(gold)],
                 "horizontal",
-                "120-66",
             ),
             (),
         )

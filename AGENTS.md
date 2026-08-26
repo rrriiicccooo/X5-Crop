@@ -98,8 +98,10 @@ GitHub 是 tracked 源码与文档的权威来源。NAS 和复制目录只用于
   `NEXT_ACTIONS.md`、`DECISIONS.md` 或同类文件。
 - 只在用户明确要求时读写，并只保留当前目标、已验证事实、开放风险和精确下一步。
 - Baseline 必须绑定 source SHA，并由用户在原图坐标中直接确认，或来自独立校准的外部测量。
-  OpenCV、SciPy、X5 Crop、模型视觉、生成 JPG 和算法一致只能产生非权威 proposal。
-- 不让模型查看完整长 TIFF 后代写 reference 边界；真值歧义保持 unresolved。
+  用户确认的是最内侧可接受裁切基准，不是内容边界真值或 detector 唯一答案；方向性包含与 5% 外扩
+  预算以 `docs/ARCHITECTURE.md` 为准，并统一适用于 gold v1、v2 和以后版本。OpenCV、SciPy、
+  X5 Crop、模型视觉、生成 JPG 和算法一致只能产生非权威 proposal。
+- 不让模型查看完整长 TIFF 后代写 reference 边界；边界判断歧义保持 unresolved。
 
 ## 当前产品边界
 

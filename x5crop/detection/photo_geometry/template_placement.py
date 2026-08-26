@@ -18,7 +18,11 @@ from .model import BoundaryAxis, BoundaryRole, PositionSource
 from .output_model import FrameBoundaryGeometry, OutputBoundaryUse
 from .source_geometry import SourceScanGeometry
 from .template_cross_model import CrossFit
-from .template_model import SequenceFit, TemplateSpec
+from .template_model import (
+    SequenceFit,
+    SequenceRoleLineEvidence,
+    TemplateSpec,
+)
 
 
 _ROLES = (
@@ -166,6 +170,7 @@ class _ResolvedBoundary:
     observation_ids: tuple[ObservationId, ...]
     source: PositionSource
     inference: str | None
+    line_evidence: SequenceRoleLineEvidence | None
 
 
 def _sequence_boundary(
@@ -199,6 +204,26 @@ def _sequence_boundary(
         observation_ids=ids,
         source=source,
         inference=inference,
+        line_evidence=sequence.role_line_evidence[role_index],
+    )
+
+
+def _shift_sequence_line_evidence(
+    evidence: SequenceRoleLineEvidence | None,
+    delta_px: float,
+) -> SequenceRoleLineEvidence | None:
+    if evidence is None:
+        return None
+    return SequenceRoleLineEvidence(
+        observation_id=evidence.observation_id,
+        reference_trace_px=evidence.reference_trace_px,
+        fit_position_interval_px=FiniteInterval(
+            evidence.fit_position_interval_px.minimum + delta_px,
+            evidence.fit_position_interval_px.maximum + delta_px,
+        ),
+        fit_direction_interval_degrees=(
+            evidence.fit_direction_interval_degrees
+        ),
     )
 
 
@@ -228,6 +253,10 @@ def _resolve_sequence_pair(
             observation_ids=end.observation_ids,
             source=end.source,
             inference="end_from_observed_start_and_fixed_template_width",
+            line_evidence=_shift_sequence_line_evidence(
+                start.line_evidence,
+                width * template.direction,
+            ),
         )
     elif end_direct and not start_direct:
         inferred_interval = _retreat(
@@ -243,6 +272,10 @@ def _resolve_sequence_pair(
             observation_ids=start.observation_ids,
             source=start.source,
             inference="start_from_observed_end_and_fixed_template_width",
+            line_evidence=_shift_sequence_line_evidence(
+                end.line_evidence,
+                -width * template.direction,
+            ),
         )
     # When both sides are direct, each keeps its own measured physical
     # interval.  Fixed W is already enforced by the selected placement's
@@ -313,6 +346,7 @@ def _cross_boundaries(
                 observation_ids=ids,
                 source=source,
                 inference=inference,
+                line_evidence=None,
             )
         )
     if cross.bottom_canonical_px <= cross.top_canonical_px:
@@ -391,6 +425,41 @@ def _aperture_corner_outward_departure_px(
     return maximum_slope * cross_support_px.width / 2.0
 
 
+def _sequence_line_outward_departure_px(
+    boundary: _ResolvedBoundary,
+    cross_support_px: FiniteInterval,
+    direction: int,
+) -> float:
+    """Protect only fitted-line extent not already owned by full position."""
+
+    evidence = boundary.line_evidence
+    if evidence is None:
+        return 0.0
+    projected = tuple(
+        position
+        - math.tan(math.radians(angle))
+        * (trace - evidence.reference_trace_px)
+        for position in (
+            evidence.fit_position_interval_px.minimum,
+            evidence.fit_position_interval_px.maximum,
+        )
+        for angle in (
+            evidence.fit_direction_interval_degrees.minimum,
+            evidence.fit_direction_interval_degrees.maximum,
+        )
+        for trace in (
+            cross_support_px.minimum,
+            cross_support_px.maximum,
+        )
+    )
+    outward_is_positive = (
+        boundary.role == BoundaryRole.END
+    ) == (direction > 0)
+    if outward_is_positive:
+        return max(0.0, max(projected) - boundary.full_interval.maximum)
+    return max(0.0, boundary.full_interval.minimum - min(projected))
+
+
 def _aperture_center_shift_px(
     cross: CrossFit,
     target_trace_px: float,
@@ -422,6 +491,7 @@ def _shift_boundary(
         observation_ids=boundary.observation_ids,
         source=boundary.source,
         inference=boundary.inference,
+        line_evidence=boundary.line_evidence,
     )
 
 
@@ -508,7 +578,7 @@ def compose_format_placement(
                 frame_bottom.full_interval.maximum,
             ),
         )
-        side_departure = _aperture_corner_outward_departure_px(
+        aperture_side_departure = _aperture_corner_outward_departure_px(
             cross_fit,
             frame_cross_support,
         )
@@ -516,7 +586,14 @@ def compose_format_placement(
             start,
             reference_trace_px=frame_cross_support.center,
             support_projection_px=frame_cross_support,
-            local_outward_departure_px=side_departure,
+            local_outward_departure_px=max(
+                aperture_side_departure,
+                _sequence_line_outward_departure_px(
+                    start,
+                    frame_cross_support,
+                    template.direction,
+                ),
+            ),
             width_axis=width_axis,
             height_axis=height_axis,
         )
@@ -524,7 +601,14 @@ def compose_format_placement(
             end,
             reference_trace_px=frame_cross_support.center,
             support_projection_px=frame_cross_support,
-            local_outward_departure_px=side_departure,
+            local_outward_departure_px=max(
+                aperture_side_departure,
+                _sequence_line_outward_departure_px(
+                    end,
+                    frame_cross_support,
+                    template.direction,
+                ),
+            ),
             width_axis=width_axis,
             height_axis=height_axis,
         )

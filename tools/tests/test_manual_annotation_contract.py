@@ -224,6 +224,13 @@ class ManualAnnotationModelContractTest(unittest.TestCase):
         rows = confirmed_baseline_rows(record)
         self.assertEqual([row["count"] for row in rows], [1, 2])
         self.assertTrue(all(row["strip_orientation"] == "horizontal" for row in rows))
+        self.assertTrue(
+            all(
+                "minimum_acceptable_no_bleed_crop_baseline"
+                in row["confirmation_scope"]
+                for row in rows
+            )
+        )
         with self.assertRaisesRegex(AnnotationError, "immutable"):
             apply_client_geometry(
                 record,
@@ -469,6 +476,8 @@ class ManualAnnotationPackagingContractTest(unittest.TestCase):
         self.assertNotIn(".annotation-line.selected { stroke: #fff", joined)
         self.assertNotIn(".loupe-annotation-line.selected { stroke: #fff", joined)
         self.assertIn("min(564px, 46vw)", joined)
+        self.assertIn("最内侧可接受", joined)
+        self.assertIn("不得向其内侧越界", joined)
         self.assertIn("bracketleft", joined)
         self.assertIn('data-rotate="-1"', joined)
         self.assertFalse(

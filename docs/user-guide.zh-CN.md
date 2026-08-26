@@ -66,6 +66,10 @@ advance：异常点以后的照片整体移动一次，后续仍恢复共同 pit
 证明 fragment 连续、两侧相容，并计算安全保护；它不能旋转 frame、选择位置或决定输出 deskew。
 直接 aperture 边只可在自己实际采样的 trace 范围内投影短轴位置，未覆盖的 frame 不沿拟合线外推。
 
+直接绑定的 start/end 即使略微不垂直，也不会把 frame 变成自由四边形。其稳定拟合线只用于检查当前
+frame 的短轴范围：若拟合线向外超出已经保留的完整位置区间，超出的部分加入安全包络；已经包含在
+完整位置区间内的残差不会再次相加。这样可以保护老化扫描中的轻微梯形边缘，同时保持固定物理模板。
+
 轻微弯曲不建立曲线模型。逐 trace departure 只进入胜出 placement 的安全范围；直接 enclosing
 support 因自身就是最终 top/bottom，可以保留同一物理状态中的局部 slope。若所需保护超出预算，
 整张 source 进入人工检查。每张照片不会拥有独立检测角度或自由四边形。
@@ -130,9 +134,9 @@ start/end bleed = max(0.15 mm, 0.7% W)
 top/bottom bleed = 0.25 mm
 ```
 
-程序先保留同一个胜出 placement 的所有联合可行状态，包括 phase、pitch、cross、一次局部位移和
-直线残差；直接 enclosing pair 还保留自己的 same-state slope，然后再加入 bleed。它不会把互相
-不能同时发生的各项最大误差简单相加，也不会合并 runner-up。
+程序先保留同一个胜出 placement 的所有联合可行状态，包括 phase、pitch、cross、一次局部位移、
+完整位置区间和未被该区间覆盖的局部直线向外部分；直接 enclosing pair 还保留自己的 same-state
+slope，然后再加入 bleed。它不会重复相加同一残差、组合互相不能同时发生的最大误差或合并 runner-up。
 
 使用 aperture 的自动输出上限是四边各自最多扩张 format 对应尺寸的 5%。这 5% 包含测量不确定性、
 直线残差和 bleed；四边不能互借额度。以 36 mm 宽的 135 为例，正常 start/end bleed 是

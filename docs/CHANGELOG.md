@@ -27,6 +27,9 @@ materialization、平行 detector 和 report reuse 均不再支持。
   和局部证据闭合。Aperture 边界保持 source-axis；局部 slope 只扩大输出保护，直接 enclosing pair
   才保留自己的 same-state slope。`APERTURE_PAIR` 和总高度不超过 `1.1H` 的
   `ENCLOSING_SUPPORT_PAIR` 互斥。
+- 直接绑定的 sequence start/end 直线仍不旋转 placement 或提供 phase，但其 fit line 若在当前 frame
+  短轴 support 上超出已有 full position interval，超出的向外部分会进入 selected-placement 安全包络；
+  已由 full interval 覆盖的 residual 不重复相加。这个合同覆盖 S098 一类实际分隔边不垂直的老化扫描。
 - 安全层只处理唯一 selected placement 的联合可行状态。Aperture 四边完整 expansion 各自使用 5%
   上限；enclosing top/bottom 使用 `1.1H` 合同。完整 pixel-center span 被纳入最终 footprint；真正所需
   polygon 越界时 review，不静默裁小。
@@ -62,6 +65,11 @@ materialization、平行 detector 和 report reuse 均不再支持。
   旋转。
   独立像素拟合和旧红线草稿只生成 proposal，确认不会自动晋升 tracked accuracy cohort，工具及本地
   状态均不进入发布包。
+- 黄金 accuracy 统一为单向最内侧可接受裁切合同，适用于 v1、v2 及以后 baseline schema：人工红线
+  不是内容边界 oracle 或 detector 唯一答案；candidate 与正式 footprint 均不得向红线内侧越界，每侧
+  向外安全包络受对应确认 span 的 5% 上限约束。删除了角点向内切的内容采样例外，
+  `enclosing_support_pair` 也不能用 `1.1H` 总 span 掩盖单侧过度外扩；cohort 字段由
+  `geometry_oracle_schema` 改为 `acceptance_contract` 与 `acceptance_baseline_schema`。
 - Registered gray 直接从 uint16 RGB 分块计算，复用两个 float32 luma plane 和一个 float64
   normalization plane；逐像素结果保持不变。普通 product path 在 report facts 冻结后、TIFF
   sampling 前释放整张 registered gray；development CLI 也在冻结完整 facts 后释放，只有 Debug
@@ -91,7 +99,8 @@ materialization、平行 detector 和 report reuse 均不再支持。
 
 ### 验证边界
 
-- 用户确认黄金决定几何准确性；nominal 必须安全自动批准，challenge 允许安全 review。
+- 用户确认黄金按单向最内侧可接受裁切合同决定几何准确性；nominal 必须安全自动批准，challenge 允许
+  安全 review。
 - 110-task diagnostic 只证明终态、schema、authority、工作量和 TIFF 工程合同，不产生准确率 verdict。
 - Apple Silicon macOS、Intel macOS 与 Windows x64 必须在同一最终 commit 取得实机 receipt；没有独立
   卷时 exFAT 保持 `best_effort_unverified`。

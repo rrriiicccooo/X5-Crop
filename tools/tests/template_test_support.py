@@ -283,6 +283,7 @@ def placement_sequence(
             FiniteInterval.exact(value) for value in positions
         ),
         role_observation_ids=ids,
+        role_line_evidence=(None,) * (2 * template.count),
         matched_role_indices=matched,
         inferred_role_indices=tuple(missing),
         direct_observation_ids=tuple(item for item in ids if item is not None),

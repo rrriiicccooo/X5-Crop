@@ -300,6 +300,12 @@ domain、把两个不连通 fragments 合计覆盖、role 未授权或方向不�
 - first/last、separator、top/bottom 和总跨度闭环；
 - 双 lane 的共享尺度与 slot identity 相容。
 
+直接绑定的 sequence start/end 若有稳定直线拟合，`SequenceFit` 只把该 observation 的
+reference trace、fit position interval 和 fit direction interval 交给输出安全层。Placement 仍保持
+source-axis，不沿该直线移动 phase 或旋转 frame；安全层只计算拟合直线在当前 frame 短轴 support 上
+超过既有 full position interval 的向外部分，已经由 full interval 覆盖的 residual 不重复相加。固定 W
+推导的 opposite edge 继承同一个直线证据；没有直接方向证据时不创造 slope authority。
+
 选择只使用 typed hard facts 和证据职责，不使用加权总分、confidence 补偿、top-K、投票或
 样片/format 特判。同一 template identity、integer offset、local topology 与独立物理 support 下，
 相交的 role interval 是一个连续 placement；不同坐标、ordinal、非等价 observation binding、
@@ -331,8 +337,9 @@ selected placement
 
 `PlacementFeasibleSet` 保留同一 observation bindings、ordinal topology、boundary use 和 placement
 identity 下仍合法的 phase、W、pitch、local delta 与 cross 联合状态；直接 enclosing pair 额外保留
-自己的 same-state slope。每个 frame 的边界极值从这个低维联合集合求出；不把互相不能同时发生的
-独立最大值相加，不吸收 runner-up，也不重新读取像素。
+自己的 same-state slope。每个 frame 的边界极值从这个低维联合集合求出，再加入上一节中未被 full
+position interval 覆盖的 sequence-line outward departure；不把同一 residual 重复相加，不吸收
+runner-up，也不重新读取像素。
 
 产品 bleed：
 
@@ -489,25 +496,32 @@ Pillow 只在 Debug Analysis 时延迟导入。生产默认 `--jobs 1`、上限 
 | `x5crop/report/` | compact production report 与 development facts 的生成 |
 | `x5crop/debug/` | 只读诊断 facts 与面板 |
 | `x5crop/io/`、`export/`、`output/` | TIFF domain、affine sampling、metadata 与原子发布 |
-| `tools/verify`、`tools/regression/` | 唯一验证入口、外部 report validator 与 accuracy/diagnostic/performance/platform 分层证据 |
-| `tools/manual_annotation/` | source-SHA-bound 的本地 proposal、原图坐标人工审核与确认冻结；不进入 production 或 release |
+| `tools/verify`、`tools/regression/` | 唯一验证入口、外部 report validator、方向性黄金验收与 accuracy/diagnostic/performance/platform 分层证据 |
+| `tools/manual_annotation/` | source-SHA-bound 的本地 proposal、原图坐标人工审核与最内侧可接受裁切基准冻结；不进入 production 或 release |
 
 人工标注器严格对齐 tracked cohort 与本地 manifest，并以 source SHA 聚合任务。一个 source 只有两条
 共享短轴边和一个物理 `boundary_pool`；不同显式 count 任务各自引用 `2 × count` 个 boundary identity。
 页面中的 Orientation 只做可逆显示，持久化权威始终是原 TIFF raster pixel-center 坐标。
 
 独立有界像素拟合、用户红线草稿恢复和有界 JPG 都只能生成 proposal。只有用户逐项审核全部 count、
-检查 1:1 原生像素并执行最终确认，记录才成为不可变 `user_confirmed` 本地基线。确认不自动改写
+检查 1:1 原生像素并执行最终确认，记录才成为不可变 `user_confirmed` 本地验收基线。它不声称是
+真实内容边界的 100% 测量或 detector 唯一正确答案。确认不自动改写
 tracked accuracy cohort；完整操作与文件边界见 [MANUAL_ANNOTATION.md](MANUAL_ANNOTATION.md)。
 
 ## 14. 验证边界
 
-- 用户确认黄金判断几何准确性；统一通过标准是最终 post-bleed crop 不切入用户确认的真实画面，
-  nominal frame 是否先接触画面不单独构成失败。Nominal 必须安全自动批准，challenge 允许安全
-  review。Accuracy 对任何已选 candidate 的最终 footprint 先做与 final status 无关的黄金覆盖检查；
-  只有不存在 selected candidate 的安全 review 不产生几何 verdict，`approved_auto` 仍须另外验证正式
-  输出覆盖与预算。
-  Cosmetic deskew 精度不阻断黄金；affine polygon envelope 与 TIFF 安全合同仍阻断。
+- `x5crop_directional_minimum_acceptable_crop_v1` 是 gold v1、v2 和以后 baseline schema 共用的
+  accuracy 合同。用户确认 polygon 表示最内侧可接受的无 bleed 裁切，不表示真实内容边界的 100%
+  测量，也不限定 detector 只能产生一个逐像素相同的答案。
+- 黄金比较是方向性的：任何已选 candidate 及 `approved_auto` 的正式 post-bleed
+  `required_source_footprint` 都必须完整包含确认 polygon，边、角点或亚像素位置不得向其内侧越界；
+  几何 epsilon 只吸收浮点计算误差。每侧向外的总 expansion 不得超过对应确认 W/H span 的 5% 加
+  命名的 sampling allowance，uncertainty、residual 与 bleed 均消耗该预算。这不是零像素误差或对称
+  接近度要求。
+- 上述黄金合同不因 `boundary_use` 改变。`enclosing_support_pair` 的总高度不超过 `1.1H` 仍是 runtime
+  自动决策合同，但在黄金 accuracy 中还必须满足逐侧 5% 外扩上限，不能用总 span 隐藏单侧过度外扩。
+  Nominal 必须安全自动批准，challenge 允许安全 review。只有不存在 selected candidate 的安全 review
+  不产生几何 verdict；cosmetic deskew 精度不阻断黄金，affine polygon envelope 与 TIFF 安全合同仍阻断。
 - 110-task diagnostic 只证明不崩溃、工作量有界、报告闭合和 TIFF 工程合同，不证明几何正确。
 - 24-source performance 只证明其绑定 commit、依赖和机器上的完整路径时间与资源；5 秒均值是
   blocking Gate，3 秒均值只是 non-blocking challenge。

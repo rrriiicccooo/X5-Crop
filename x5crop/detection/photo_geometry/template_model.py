@@ -393,6 +393,28 @@ class LocalAdvanceRelation:
 
 
 @dataclass(frozen=True)
+class SequenceRoleLineEvidence:
+    """One bound sequence edge's fitted line, retained for output safety only."""
+
+    observation_id: ObservationId
+    reference_trace_px: float
+    fit_position_interval_px: FiniteInterval
+    fit_direction_interval_degrees: FiniteInterval
+
+    def __post_init__(self) -> None:
+        if (
+            not isinstance(self.observation_id, ObservationId)
+            or not math.isfinite(self.reference_trace_px)
+            or not isinstance(self.fit_position_interval_px, FiniteInterval)
+            or not isinstance(
+                self.fit_direction_interval_degrees,
+                FiniteInterval,
+            )
+        ):
+            raise ValueError("sequence role line evidence is invalid")
+
+
+@dataclass(frozen=True)
 class SequenceFit:
     """A fixed-count sequence placement with direct/inferred role accounting."""
 
@@ -403,6 +425,7 @@ class SequenceFit:
     role_positions_px: tuple[FiniteInterval, ...]
     role_full_position_intervals_px: tuple[FiniteInterval, ...]
     role_observation_ids: tuple[ObservationId | None, ...]
+    role_line_evidence: tuple[SequenceRoleLineEvidence | None, ...]
     matched_role_indices: tuple[int, ...]
     inferred_role_indices: tuple[int, ...]
     direct_observation_ids: tuple[ObservationId, ...]
@@ -431,6 +454,7 @@ class SequenceFit:
             or len(self.role_full_position_intervals_px)
             != 2 * self.template.count
             or len(self.role_observation_ids) != 2 * self.template.count
+            or len(self.role_line_evidence) != 2 * self.template.count
         ):
             raise ValueError("sequence role position count is invalid")
         if any(
@@ -514,6 +538,28 @@ class SequenceFit:
             self.matched_role_indices
         ):
             raise ValueError("sequence matched roles disagree with role observations")
+        if any(
+            evidence is not None
+            and (
+                identity is None
+                or evidence.observation_id != identity
+                or not full.contains(
+                    evidence.fit_position_interval_px.minimum,
+                    epsilon=1.0e-9,
+                )
+                or not full.contains(
+                    evidence.fit_position_interval_px.maximum,
+                    epsilon=1.0e-9,
+                )
+            )
+            for identity, evidence, full in zip(
+                self.role_observation_ids,
+                self.role_line_evidence,
+                self.role_full_position_intervals_px,
+                strict=True,
+            )
+        ):
+            raise ValueError("sequence role line evidence lost its bound identity")
         if not set(bound_ids).issubset(self.direct_observation_ids):
             raise ValueError("bound role observations must be direct observations")
         direction = self.template.direction
@@ -625,6 +671,7 @@ class SequenceFit:
             role_positions_px=tuple(role_intervals),
             role_full_position_intervals_px=tuple(role_full_intervals),
             role_observation_ids=self.role_observation_ids,
+            role_line_evidence=self.role_line_evidence,
             matched_role_indices=self.matched_role_indices,
             inferred_role_indices=self.inferred_role_indices,
             direct_observation_ids=self.direct_observation_ids,

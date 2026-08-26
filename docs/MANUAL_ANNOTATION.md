@@ -4,6 +4,21 @@
 不属于 production detector、公开用户界面或发布包；任何机器拟合、红线导入和预览图在用户最终确认
 前都不是 accuracy reference。
 
+## 黄金验收语义
+
+这套语义统一适用于 gold v1、v2 和以后版本：用户确认的 polygon 是**最内侧可接受的无 bleed
+裁切基准**，不是对真实内容边界的 100% 测量，也不是 detector 唯一正确答案。人工审核的目标是尽量
+贴近真实内容边界，并确认按该 polygon 裁切已经可以直接使用。
+
+Accuracy 采用单向包含关系，而不是要求检测结果与红线逐像素重合：
+
+- candidate 和正式 `required_source_footprint` 必须完整包住确认 polygon；任一边或角点向其内侧越界
+  都失败。浮点 epsilon 只处理数值计算，不构成可切入的像素容差。
+- 每一侧允许在对应确认 W/H span 的 5% 以内向外形成安全包络；uncertainty、residual、bleed 和命名的
+  sampling allowance 都消耗这份预算。
+- Runtime 的 `enclosing_support_pair` 仍遵守自己的 `1.1H` 自动决策合同；进入黄金 accuracy 时还必须
+  同时满足上述逐侧单向合同，不能用总 span 掩盖单侧过度外扩。
+
 ## 启动
 
 在仓库根目录运行：
@@ -40,7 +55,7 @@ python3 -m tools.manual_annotation audit
 6. 所有 count 都审核后，点击“确认整张黄金基线”，逐项确认共享边、任务边界、原生像素检查和
    无 bleed 基础裁切安全性。确认后的 source 立即冻结，不可继续编辑。
 
-机器 proposal 只减少起点工作量。遇到 contact、overlap、曲边、老化相机造成的不规则片距或真值
+机器 proposal 只减少起点工作量。遇到 contact、overlap、曲边、老化相机造成的不规则片距或边界
 歧义时，按物理边界修正；无法确定的 source 不确认，保持待审。
 
 ## 坐标、身份与本地文件
@@ -53,7 +68,7 @@ python3 -m tools.manual_annotation audit
 - 本地状态保存在 `Test/manual_review/source_annotations/`：`records/` 是可恢复的原子 JSON，
   `previews/` 是有界导航 JPG，`review_artifacts/` 是确认快照，
   `confirmed_source_geometry_v2.jsonl` 汇总所有已确认任务。
-- `Test/` 不受 Git 跟踪。确认只建立本地、source-SHA-bound 的用户真值，不会自动修改 tracked
+- `Test/` 不受 Git 跟踪。确认只建立本地、source-SHA-bound 的最内侧可接受裁切基准，不会自动修改 tracked
   accuracy cohort；纳入阻断黄金仍需一次独立、显式的 cohort 审核。
 
 ## 状态与故障恢复
@@ -66,4 +81,4 @@ python3 -m tools.manual_annotation audit
 
 页面每次修改都会带 revision 原子保存；并发或旧页面写入会因 revision conflict 被拒绝。保存失败时
 不能切换样片，浏览器关闭前也会提示。重新运行默认命令会复用已保存状态；不要通过删除记录来修改
-已确认真值。
+已确认基准。

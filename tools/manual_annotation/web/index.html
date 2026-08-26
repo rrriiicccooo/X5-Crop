@@ -133,12 +133,12 @@
       <div>
         <span class="dialog-kicker">最终权限确认</span>
         <h2 id="confirmTitle">确认黄金基线</h2>
-        <p>确认后记录冻结，不再允许原地修改。Bleed 不参与以下判断。</p>
+        <p>确认后记录冻结。边界 polygon 是最内侧可接受的 0 bleed 裁切基准，不是真实内容边界的唯一答案；正式输出必须完整包住它，外扩受 5% 直接可用预算限制。</p>
       </div>
       <label><input type="checkbox" data-confirm-check="shared_edges"> 两条共享边已在整条片带上检查</label>
       <label><input type="checkbox" data-confirm-check="task_boundaries"> 每个 count 任务的全部成对短边已检查</label>
       <label><input type="checkbox" data-confirm-check="native_pixel_checks"> 关键位置已使用 1:1 原生像素检查</label>
-      <label><input type="checkbox" data-confirm-check="safe_without_bleed"> 0 bleed 基础矩形已经足够安全，不会危险越界</label>
+      <label><input type="checkbox" data-confirm-check="safe_without_bleed"> 此 0 bleed 基准裁切可以直接接受；正式输出不得向其内侧越界</label>
       <div class="dialog-actions">
         <button value="cancel" class="secondary">返回继续检查</button>
         <button id="finalConfirmButton" value="default" class="danger" disabled>冻结并确认</button>

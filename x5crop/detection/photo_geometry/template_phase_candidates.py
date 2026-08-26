@@ -17,6 +17,7 @@ from .template_model import (
     PhaseLatticeFit,
     PitchFit,
     SequenceFit,
+    SequenceRoleLineEvidence,
     TemplateRole,
     TemplateSpec,
     template_role_refinement_radius_px,
@@ -36,7 +37,7 @@ class _AnchorFact:
     direct: bool
     support_fraction: float
     fit_residual_px: float
-    straight_line_fit_authority: bool
+    line_evidence: SequenceRoleLineEvidence | None
     polarity: int
     qualified_anchor_roles: tuple[BoundaryRole, ...]
 
@@ -80,24 +81,37 @@ def _facts(
             raise TypeError("phase input requires typed boundary observations")
         result.append(
             _AnchorFact(
-                observation.observation_id,
-                separator_support_ids.get(
+                observation_id=observation.observation_id,
+                independent_support_id=separator_support_ids.get(
                     observation.observation_id,
                     observation.observation_id,
                 ),
-                observation.fit_position_interval_px,
-                observation.full_position_interval_px,
-                None,
-                (
+                interval_px=observation.fit_position_interval_px,
+                full_interval_px=observation.full_position_interval_px,
+                role_index=None,
+                direct=(
                     observation.support_fraction >= 0.35
                     or observation.observation_id in separator_support_ids
                 )
                 and bool(observation.qualified_anchor_roles),
-                observation.support_fraction,
-                observation.fit_residual_px,
-                observation.canonical_direction_degrees is not None,
-                observation.polarity,
-                observation.qualified_anchor_roles,
+                support_fraction=observation.support_fraction,
+                fit_residual_px=observation.fit_residual_px,
+                line_evidence=(
+                    SequenceRoleLineEvidence(
+                        observation_id=observation.observation_id,
+                        reference_trace_px=observation.reference_trace_px,
+                        fit_position_interval_px=(
+                            observation.fit_position_interval_px
+                        ),
+                        fit_direction_interval_degrees=(
+                            observation.fit_direction_interval_degrees
+                        ),
+                    )
+                    if observation.fit_direction_interval_degrees is not None
+                    else None
+                ),
+                polarity=observation.polarity,
+                qualified_anchor_roles=observation.qualified_anchor_roles,
             )
         )
     if len({item.observation_id for item in result}) != len(result):
@@ -654,7 +668,7 @@ def _linear_fit(
     if not matches:
         raise ValueError("global template fit requires direct matches")
     straight = tuple(
-        item for item in matches if item[1].straight_line_fit_authority
+        item for item in matches if item[1].line_evidence is not None
     )
     straight_matrix = np.asarray(
         [
@@ -856,6 +870,7 @@ def _fit_seed(
     role_intervals: list[FiniteInterval] = []
     role_full_intervals: list[FiniteInterval] = []
     role_ids: list[ObservationId | None] = []
+    role_lines: list[SequenceRoleLineEvidence | None] = []
     for role, canonical in zip(roles, canonical_positions, strict=True):
         observed = by_role.get(role.role_index)
         if observed is None:
@@ -876,6 +891,7 @@ def _fit_seed(
             role_intervals.append(inferred_interval)
             role_full_intervals.append(inferred_interval)
             role_ids.append(None)
+            role_lines.append(None)
         else:
             role_intervals.append(
                 FiniteInterval(
@@ -890,6 +906,7 @@ def _fit_seed(
                 )
             )
             role_ids.append(observed.observation_id)
+            role_lines.append(observed.line_evidence)
     matched = tuple(sorted(by_role))
     inferred = tuple(index for index in range(len(roles)) if index not in by_role)
     direct_ids = tuple(
@@ -939,6 +956,7 @@ def _fit_seed(
         role_positions_px=tuple(role_intervals),
         role_full_position_intervals_px=tuple(role_full_intervals),
         role_observation_ids=tuple(role_ids),
+        role_line_evidence=tuple(role_lines),
         matched_role_indices=matched,
         inferred_role_indices=inferred,
         direct_observation_ids=direct_ids,

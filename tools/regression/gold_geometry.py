@@ -1,17 +1,19 @@
-"""Geometry comparison for the user-confirmed golden cohort."""
+"""Directional acceptance checks for the user-confirmed golden cohort."""
 
 from __future__ import annotations
 
 import math
 from typing import Sequence
 
-from x5crop.detection.evidence.content_occupancy import (
-    CONTENT_OCCUPANCY_MEASUREMENT_SPEC,
-)
 from x5crop.detection.photo_geometry.model import (
     PHOTO_BOUNDARY_MEASUREMENT_SPEC,
 )
-from x5crop.formats import OUTPUT_PROTECTION_SPEC, format_spec
+from x5crop.formats import OUTPUT_PROTECTION_SPEC
+
+
+GOLD_ACCEPTANCE_CONTRACT = (
+    "x5crop_directional_minimum_acceptable_crop_v1"
+)
 
 
 def _contains_point(
@@ -36,36 +38,6 @@ def _contains_polygon(
     inner: Sequence[Sequence[float]],
 ) -> bool:
     return all(_contains_point(outer, point) for point in inner)
-
-
-def _trimmed_edge_endpoints(
-    polygon: Sequence[Sequence[float]],
-    trim_depths_px: Sequence[float],
-) -> tuple[tuple[float, float], ...]:
-    points: list[tuple[float, float]] = []
-    for left, right, depth in zip(
-        polygon,
-        (*polygon[1:], polygon[0]),
-        trim_depths_px,
-        strict=True,
-    ):
-        length = math.hypot(right[0] - left[0], right[1] - left[1])
-        if length <= 0.0 or not 0.0 < depth < length / 2.0:
-            raise ValueError("gold edge cannot establish a physical interior")
-        fraction = depth / length
-        points.extend(
-            (
-                (
-                    left[0] + fraction * (right[0] - left[0]),
-                    left[1] + fraction * (right[1] - left[1]),
-                ),
-                (
-                    right[0] + fraction * (left[0] - right[0]),
-                    right[1] + fraction * (left[1] - right[1]),
-                ),
-            )
-        )
-    return tuple(points)
 
 
 def _unit_vector(x: float, y: float) -> tuple[float, float]:
@@ -112,7 +84,6 @@ def _assert_direct_use_budget(
     gold: Sequence[Sequence[float]],
     output: Sequence[Sequence[float]],
     strip_orientation: str,
-    boundary_use: str,
 ) -> None:
     horizontal = strip_orientation == "horizontal"
     sequence_axis = _mean_edge_axis(
@@ -148,26 +119,16 @@ def _assert_direct_use_budget(
         > sequence_span * OUTPUT_PROTECTION_SPEC.maximum_expansion_ratio_per_side
         + pixel_allowance
     )
-    if boundary_use == "enclosing_support_pair":
-        output_cross_span = output_cross[1] - output_cross[0]
-        cross_exceeded = (
-            output_cross_span
-            > cross_span
-            * OUTPUT_PROTECTION_SPEC.maximum_enclosing_support_height_ratio
-            + 2.0 * pixel_allowance
-        )
-    elif boundary_use == "aperture_pair":
-        cross_exceeded = (
-            cross_expansion
-            > cross_span
-            * OUTPUT_PROTECTION_SPEC.maximum_expansion_ratio_per_side
-            + pixel_allowance
-        )
-    else:
-        raise ValueError("gold output has an unknown cross-boundary use")
+    cross_exceeded = (
+        cross_expansion
+        > cross_span
+        * OUTPUT_PROTECTION_SPEC.maximum_expansion_ratio_per_side
+        + pixel_allowance
+    )
     if sequence_exceeded or cross_exceeded:
         raise ValueError(
-            f"{sample_id} frame {frame_index} exceeds gold direct-use budget"
+            f"{sample_id} frame {frame_index} exceeds acceptance-baseline "
+            "direct-use budget"
         )
 
 
@@ -175,61 +136,11 @@ def ordered_gold_mapping(
     gold_frames: Sequence[dict[str, object]],
     output_geometries: Sequence[dict[str, object]],
     strip_orientation: str,
-    format_id: str,
 ) -> tuple[int, ...]:
     if len(gold_frames) != len(output_geometries):
         return ()
-    horizontal = strip_orientation == "horizontal"
-
-    def safely_covers(
-        gold: Sequence[Sequence[float]],
-        output: Sequence[Sequence[float]],
-    ) -> bool:
-        if _contains_polygon(output, gold):
-            return True
-        sequence_axis = _mean_edge_axis(
-            gold,
-            (0, 1) if horizontal else (0, 3),
-            (3, 2) if horizontal else (1, 2),
-        )
-        cross_axis = _mean_edge_axis(
-            gold,
-            (0, 3) if horizontal else (0, 1),
-            (1, 2) if horizontal else (3, 2),
-        )
-        frame = format_spec(format_id).frame
-        edge_lengths = tuple(
-            math.hypot(right[0] - left[0], right[1] - left[1])
-            for left, right in zip(gold, (*gold[1:], gold[0]), strict=True)
-        )
-        sequence_scale = (edge_lengths[0] + edge_lengths[2]) / (
-            2.0 * frame.frame_width_mm
-        )
-        cross_scale = (edge_lengths[1] + edge_lengths[3]) / (
-            2.0 * frame.frame_height_mm
-        )
-        # A user-confirmed direct-use frame may graze content only at the
-        # intersection of two adjacent boundaries.  Remove one already-owned
-        # content-measurement support depth from both ends of every edge and
-        # require the remaining edge interiors to be covered.  This is the
-        # same topological rule as the runtime content veto: it is expressed
-        # in physical units and does not permit an arbitrary number of lost
-        # pixels at a corner.
-        sequence_depth = (
-            CONTENT_OCCUPANCY_MEASUREMENT_SPEC.cell_extent_mm
-            * sequence_scale
-        )
-        cross_depth = (
-            CONTENT_OCCUPANCY_MEASUREMENT_SPEC.cell_extent_mm
-            * cross_scale
-        )
-        return all(
-            _contains_point(output, point)
-            for point in _trimmed_edge_endpoints(
-                gold,
-                (sequence_depth, cross_depth) * 2,
-            )
-        )
+    if strip_orientation not in {"horizontal", "vertical"}:
+        raise ValueError("gold strip orientation is invalid")
 
     mapping: list[int] = []
     next_output = 0
@@ -238,9 +149,9 @@ def ordered_gold_mapping(
         matches = tuple(
             index
             for index in range(next_output, len(output_geometries))
-            if safely_covers(
-                polygon,
+            if _contains_polygon(
                 output_geometries[index]["required_source_footprint"],
+                polygon,
             )
         )
         if not matches:
@@ -271,10 +182,11 @@ def validate_selected_candidate_coverage(
         frames,
         outputs,
         str(gold["strip_orientation"]),
-        str(record["format_id"]),
     )
     if len(mapping) != len(frames):
-        raise ValueError(f"{sample_id} candidate cuts confirmed content")
+        raise ValueError(
+            f"{sample_id} candidate crosses user-confirmed inward baseline"
+        )
     return True
 
 
@@ -290,10 +202,11 @@ def validate_approved_geometry(
         frames,
         outputs,
         str(gold["strip_orientation"]),
-        str(record["format_id"]),
     )
     if len(mapping) != len(frames):
-        raise ValueError(f"{sample_id} approved output cuts confirmed content")
+        raise ValueError(
+            f"{sample_id} approved output crosses user-confirmed inward baseline"
+        )
     for frame, output_index in zip(frames, mapping, strict=True):
         polygon = frame["polygon_source_pixel_center_coordinates"]
         output_polygon = outputs[output_index]["required_source_footprint"]
@@ -303,5 +216,4 @@ def validate_approved_geometry(
             polygon,
             output_polygon,
             str(gold["strip_orientation"]),
-            str(outputs[output_index]["envelope"]["boundary_use"]),
         )

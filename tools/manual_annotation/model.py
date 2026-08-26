@@ -554,7 +554,8 @@ def confirmed_baseline_rows(record: dict[str, Any]) -> tuple[dict[str, Any], ...
                 "status": "user_confirmed",
                 "authority": "explicit_user_confirmation_in_local_source_annotator",
                 "confirmation_scope": (
-                    "shared_edges_all_task_boundaries_native_pixel_checks_and_safe_no_bleed_frames"
+                    "shared_edges_all_task_boundaries_native_pixel_checks_and_"
+                    "minimum_acceptable_no_bleed_crop_baseline"
                 ),
                 "confirmed_at_utc": confirmation["confirmed_at_utc"],
                 "proposal_snapshot_sha256": confirmation[

@@ -14,6 +14,7 @@ from .report_validation import validate_current_report_record
 from .cohort_count import validate_cohort_counts
 from .file_identity import sha256_file
 from .gold_geometry import (
+    GOLD_ACCEPTANCE_CONTRACT,
     validate_approved_geometry,
     validate_selected_candidate_coverage,
 )
@@ -48,7 +49,8 @@ def validate_gold_source_identities() -> tuple[dict[str, object], ...]:
             "count",
             "validation_role",
             "cohort_role",
-            "geometry_oracle_schema",
+            "acceptance_contract",
+            "acceptance_baseline_schema",
             "geometry_digest",
             "confirmed_geometry",
             "confirmed_geometry_slot_count",
@@ -65,6 +67,8 @@ def validate_gold_source_identities() -> tuple[dict[str, object], ...]:
             or sample_id in sample_ids
             or record.get("validation_role") != "gold_accuracy_blocking"
             or record.get("cohort_role") not in {"nominal", "challenge"}
+            or record.get("acceptance_contract")
+            != GOLD_ACCEPTANCE_CONTRACT
             or not isinstance(count, int)
             or isinstance(count, bool)
             or count <= 0
@@ -80,6 +84,8 @@ def validate_gold_source_identities() -> tuple[dict[str, object], ...]:
             not isinstance(geometry, dict)
             or geometry.get("status") != "user_confirmed"
             or geometry.get("source_sha256") != expected_sha
+            or record.get("acceptance_baseline_schema")
+            != geometry.get("baseline_schema")
             or len(geometry.get("frames", ()))
             != int(record.get("confirmed_geometry_slot_count", 0))
         ):

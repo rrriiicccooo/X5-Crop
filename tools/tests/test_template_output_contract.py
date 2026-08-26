@@ -39,6 +39,9 @@ from x5crop.detection.photo_geometry.template_output import (
 from x5crop.detection.photo_geometry.template_feasible_geometry import (
     project_selected_placement,
 )
+from x5crop.detection.photo_geometry.template_model import (
+    SequenceRoleLineEvidence,
+)
 from x5crop.detection.source_core import (
     SourceLaneEvidence,
     SourceStripValidationDomain,
@@ -476,6 +479,120 @@ class TemplateOutputContractTest(unittest.TestCase):
                 protections[BoundaryRole.TOP].local_boundary_residual_px,
                 protections[BoundaryRole.BOTTOM].local_boundary_residual_px,
             ),
+        )
+
+    def test_sequence_line_departure_protects_axis_aligned_output(self) -> None:
+        template = _template(1)
+        sequence = _sequence(template)
+        lines = list(sequence.role_line_evidence)
+        end_id = sequence.role_observation_ids[1]
+        assert end_id is not None
+        lines[1] = SequenceRoleLineEvidence(
+            observation_id=end_id,
+            reference_trace_px=130.0,
+            fit_position_interval_px=FiniteInterval.exact(200.0),
+            fit_direction_interval_degrees=FiniteInterval.exact(-1.0),
+        )
+        sequence = replace(sequence, role_line_evidence=tuple(lines))
+        placement = _compose(
+            template,
+            sequence,
+            _cross(template, direction=_direction()),
+        )
+        output = output_footprint_from_template_placement(
+            placement,
+            project_selected_placement(placement),
+            lane=_lane(),
+            lane_ordinal=1,
+            layout="horizontal",
+        )
+        end = next(
+            item
+            for item in output.boundary_protections
+            if item.role == BoundaryRole.END
+        )
+
+        self.assertGreater(placement.frames[0].end.local_outward_departure_px, 2.0)
+        self.assertAlmostEqual(
+            end.local_boundary_residual_px,
+            placement.frames[0].end.local_outward_departure_px + 1.0,
+        )
+        self.assertTrue(
+            all(
+                frame.start.line.normal_x == 1.0
+                and frame.start.line.normal_y == 0.0
+                and frame.end.line.normal_x == 1.0
+                and frame.end.line.normal_y == 0.0
+                for frame in placement.frames
+            )
+        )
+
+    def test_sequence_line_extent_already_in_full_interval_is_not_added_twice(
+        self,
+    ) -> None:
+        template = _template(1)
+        sequence = _sequence(template)
+        full = list(sequence.role_full_position_intervals_px)
+        full[1] = FiniteInterval(200.0, 204.0)
+        sequence = replace(
+            sequence,
+            role_full_position_intervals_px=tuple(full),
+        )
+        baseline = _compose(
+            template,
+            sequence,
+            _cross(template, direction=_direction()),
+        ).frames[0].end.local_outward_departure_px
+        lines = list(sequence.role_line_evidence)
+        end_id = sequence.role_observation_ids[1]
+        assert end_id is not None
+        lines[1] = SequenceRoleLineEvidence(
+            observation_id=end_id,
+            reference_trace_px=130.0,
+            fit_position_interval_px=FiniteInterval.exact(200.0),
+            fit_direction_interval_degrees=FiniteInterval.exact(-1.0),
+        )
+        sequence = replace(
+            sequence,
+            role_line_evidence=tuple(lines),
+        )
+        placement = _compose(
+            template,
+            sequence,
+            _cross(template, direction=_direction()),
+        )
+
+        self.assertAlmostEqual(
+            placement.frames[0].end.local_outward_departure_px,
+            baseline,
+        )
+
+    def test_inferred_fixed_width_edge_inherits_shifted_line_safety(self) -> None:
+        template = _template(1)
+        sequence = _sequence(template, missing=(1,))
+        lines = list(sequence.role_line_evidence)
+        start_id = sequence.role_observation_ids[0]
+        assert start_id is not None
+        lines[0] = SequenceRoleLineEvidence(
+            observation_id=start_id,
+            reference_trace_px=130.0,
+            fit_position_interval_px=FiniteInterval.exact(100.0),
+            fit_direction_interval_degrees=FiniteInterval.exact(-1.0),
+        )
+        sequence = replace(sequence, role_line_evidence=tuple(lines))
+        placement = _compose(
+            template,
+            sequence,
+            _cross(template, direction=_direction()),
+        )
+
+        self.assertEqual(
+            placement.frames[0].end.position_source.value,
+            "inferred_sequence",
+        )
+        self.assertGreater(
+            placement.frames[0].end.local_outward_departure_px,
+            2.0,
         )
 
     def test_cross_position_and_trace_residual_share_one_state(self) -> None:
