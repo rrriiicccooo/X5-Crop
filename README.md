@@ -29,4 +29,4 @@ generated Source code archive.
 
 维护文档：[当前架构](docs/ARCHITECTURE.md) · [更新日志](docs/CHANGELOG.md)
 
-License: MIT — [LICENSE](LICENSE)
+License: MIT — [GitHub LICENSE](https://github.com/rrriiicccooo/X5-Crop/blob/main/LICENSE)

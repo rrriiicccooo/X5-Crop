@@ -328,4 +328,4 @@ channels, ICC, resolution, supported metadata, lossless compression, and
 `Orientation=1` are checked. Each run writes staging first and publishes with
 one rename; an existing target is never traversed, replaced, or deleted.
 
-License: MIT — [LICENSE](../LICENSE)
+License: MIT — [GitHub LICENSE](https://github.com/rrriiicccooo/X5-Crop/blob/main/LICENSE)

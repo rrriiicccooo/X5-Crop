@@ -1509,15 +1509,19 @@ def import_red_markup_draft(
                     "action": "review_machine_retained_roles_at_native_pixels",
                 }
             )
-        if diagnostic["unmatched_red_stroke_indices"]:
-            unresolved.append(
-                {
-                    "kind": "red_markup_unmatched_strokes",
-                    "task_id": task_id,
-                    "red_stroke_indices": diagnostic["unmatched_red_stroke_indices"],
-                    "action": "inspect_inactive_red_lines_and_task_mapping",
-                }
-            )
+    globally_unmatched_strokes = [
+        index + 1
+        for index, line in enumerate(observed_lines)
+        if line["line_id"] not in used_observed_ids
+    ]
+    if globally_unmatched_strokes:
+        unresolved.append(
+            {
+                "kind": "red_markup_unmatched_strokes",
+                "red_stroke_indices": globally_unmatched_strokes,
+                "action": "inspect_inactive_red_lines_and_task_mapping",
+            }
+        )
     updated["diagnostics"]["unresolved"] = unresolved
     updated["diagnostics"]["red_markup_import"] = {
         "marked_path": str(marked_path),

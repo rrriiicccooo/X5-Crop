@@ -64,9 +64,11 @@ python3 -m tools.manual_annotation audit
 人工调整必须可区分。红线数量不足时保留机器补线并在页面提示；若拟合出的红色共享边会让任一照片
 离开源栅格，只采用仍能形成源内安全矩形的红线，其余共享边保留机器 proposal 等待人工修正。
 
-`Test/manual_review/review_context.json` 保存本轮逐样片审阅上下文，例如空 slot、接触、叠片、猜测边、
-漏光、片夹遮挡和正负片分层。它只帮助校准和审核：不能成为 production whitelist、样片特例、format
-推断或 Gate authority。正负片只作覆盖面分层；production 仍使用同一物理检测路径。
+`Test/manual_review/review_context.json` 保存逐样片审阅上下文，例如空 slot、接触、叠片、猜测边、
+漏光、片夹遮挡和正负片分层。它只帮助校准和审核，不能成为 production whitelist、样片特例、format
+推断或 Gate authority。漏光和可舍弃小角标签用于检查通用二维 content 证据是否造成不必要的 review，
+只能推动适用于全部样片的证据定义改进；标签本身不能放行某张样片。正负片只用于分别统计覆盖面和
+误判，runtime 不读取该标签、不切换阈值，也不选择另一条 detector path。
 
 ## 坐标、身份与本地文件
 

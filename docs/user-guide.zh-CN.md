@@ -253,4 +253,4 @@ x5_crop_output/
 metadata、无损压缩与 `Orientation=1`。程序先写 staging，全部完成后一次 rename 发布；已有目标
 不会被遍历、覆盖或删除。
 
-License: MIT — [LICENSE](../LICENSE)
+License: MIT — [GitHub LICENSE](https://github.com/rrriiicccooo/X5-Crop/blob/main/LICENSE)

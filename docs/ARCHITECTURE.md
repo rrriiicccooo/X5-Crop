@@ -511,9 +511,10 @@ overlap 保留顺序交叉的两条边；空曝光、残缺曝光、源截断和
 tracked accuracy cohort；完整操作与文件边界见 [MANUAL_ANNOTATION.md](MANUAL_ANNOTATION.md)。
 
 人工审核中故意排除的漏光痕迹或小角只形成校准标签，不产生 ignore mask、whitelist 或样片阈值。
-Production `content_veto` 仍只在最终 footprint 上作保守 negative veto；若通用二维证据确实越过最终
-裁切，安全进入 `needs_review` 是正确行为。正片/负片只允许作为 source-level 校准分层，用于检查覆盖面
-和未来的通用物理证据，不是 runtime input、format/count authority、Gate 分支或 detector 选择器。
+这些标签只用于检验、改进对所有样片相同的二维 content 定义；若通用证据仍可靠地越过最终 footprint，
+Production `content_veto` 让整张 source 进入 `needs_review` 才是安全行为。正片/负片只允许作为
+source-level 校准分层，用于检查覆盖面和通用证据在两类片材上的一致性，不是 runtime input、
+format/count authority、Gate 分支或 detector 选择器。
 
 ## 14. 验证边界
 
@@ -529,7 +530,7 @@ Production `content_veto` 仍只在最终 footprint 上作保守 negative veto�
   自动决策合同，但在黄金 accuracy 中还必须满足逐侧 5% 外扩上限，不能用总 span 隐藏单侧过度外扩。
   Nominal 必须安全自动批准，challenge 允许安全 review。只有不存在 selected candidate 的安全 review
   不产生几何 verdict；cosmetic deskew 精度不阻断黄金，affine polygon envelope 与 TIFF 安全合同仍阻断。
-- 109-task diagnostic 只证明不崩溃、工作量有界、报告闭合和 TIFF 工程合同，不证明几何正确。
+- 受跟踪的 diagnostic cohort 只证明不崩溃、工作量有界、报告闭合和 TIFF 工程合同，不证明几何正确。
 - 24-source performance 只证明其绑定 commit、依赖和机器上的完整路径时间与资源；5 秒均值是
   blocking Gate，3 秒均值只是 non-blocking challenge。
 - Platform 聚合必须同时收到同一 commit 的 Apple Silicon macOS、Intel macOS 与 Windows x64

@@ -1,4 +1,4 @@
-"""Run the tracked 109-task cohort as non-blocking recognition diagnostics."""
+"""Run the tracked 110-task cohort as non-blocking recognition diagnostics."""
 
 from __future__ import annotations
 
@@ -34,7 +34,7 @@ DIAGNOSTIC_COHORT_PATH = (
 COHORT_SCHEMA = "x5crop_diagnostic_unreviewed_cohort_v2"
 RECORD_SCHEMA = "x5crop_diagnostic_record_v5"
 SUMMARY_SCHEMA = "x5crop_diagnostic_summary_v5"
-EXPECTED_RECORD_COUNT = 109
+EXPECTED_RECORD_COUNT = 110
 DIAGNOSTIC_SOURCE_TIMEOUT_SECONDS = 600
 
 
@@ -483,7 +483,7 @@ def run_diagnostic_cohort(
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Run the non-blocking 109-task diagnostic cohort"
+        description="Run the non-blocking 110-task diagnostic cohort"
     )
     parser.add_argument("--output-root", type=Path)
     args = parser.parse_args(argv)

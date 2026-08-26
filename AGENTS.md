@@ -183,7 +183,7 @@ platform | platform-check | platform-package | pre-push
   格式 denylist 或根据当前输出自动晋升黄金。
 - Accuracy、diagnostic、performance 与 platform cohort 的每条记录都必须携带明确 count；工具不得
   从片夹容量、文件名、目录中的历史 full/partial 标签或像素推导。
-- 109-task diagnostic 只判断 crash、hang、terminal/schema 完整性、authority、query/template、
+- 受跟踪的 diagnostic cohort 只判断 crash、hang、terminal/schema 完整性、authority、query/template、
   内存和 TIFF 工程合同，不产生 accuracy verdict。
 - 性能 Gate 使用 24-source 完整用户路径，正式 mean 上限为 5 秒；3 秒 mean 只作不阻断的
   challenge。SHA、profiling 和 Debug Analysis 在计时外；未插桩 production RSS 与 cProfile RSS
@@ -199,6 +199,8 @@ platform | platform-check | platform-package | pre-push
   推送当前 `main`。
 - 不提交 `.venv/`、`build/`、`dist/`、`release/`、cache、`.DS_Store`、`Test/`、
   `x5_crop_output/` 或大 TIFF；除非用户明确批准 Git LFS fixture。
+- `LICENSE` 由 GitHub tracked tree 与 Release 包保存；本地工作区使用 non-cone sparse checkout
+  排除它，README 与公共手册直接链接 GitHub。准备 Release 的完整 checkout 必须恢复该文件。
 - `tools/release/manifest.py` 是发布内容唯一 owner。用户包不包含 modular source、tests、tools、
   fixtures、内部文档、开发依赖或生成输出。
 - 构建命令为 `python3 -m tools.release.build --version <version>`。只有 accuracy、性能、依赖、

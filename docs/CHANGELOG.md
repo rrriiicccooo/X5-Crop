@@ -68,7 +68,8 @@ materialization、平行 detector 和 report reuse 均不再支持。
   状态均不进入发布包。
 - v2 红线批量恢复按用户声明区分已标注与未标注副本，并保存逐线 review basis。完整红线组按物理顺序
   对齐，不让错误机器 phase 覆盖人工线；缺线继续显示机器补线。会让照片离开 TIFF 栅格的红色共享边
-  不被伪装成有效真值，而是保留对应机器 proposal 并要求原生像素审核。
+  不被伪装成有效真值，而是保留对应机器 proposal 并要求原生像素审核。同源多 count 映射中，只有
+  未被任何 task 使用的红线才产生 unresolved；被另一 count 使用的线只作为当前 task 的 inactive 映射事实。
 - 黄金 accuracy 统一为单向最内侧可接受裁切合同，适用于 v1、v2 及以后 baseline schema：人工红线
   不是内容边界 oracle 或 detector 唯一答案；candidate 与正式 footprint 均不得向红线内侧越界，每侧
   向外安全包络受对应确认 span 的 5% 上限约束。删除了角点向内切的内容采样例外，
@@ -105,7 +106,7 @@ materialization、平行 detector 和 report reuse 均不再支持。
 
 - 用户确认黄金按单向最内侧可接受裁切合同决定几何准确性；nominal 必须安全自动批准，challenge 允许
   安全 review。
-- 109-task diagnostic 只证明终态、schema、authority、工作量和 TIFF 工程合同，不产生准确率 verdict。
+- 受跟踪的 diagnostic cohort 只证明终态、schema、authority、工作量和 TIFF 工程合同，不产生准确率 verdict。
 - Apple Silicon macOS、Intel macOS 与 Windows x64 必须在同一最终 commit 取得实机 receipt；没有独立
   卷时 exFAT 保持 `best_effort_unverified`。
 - Accuracy、性能与三平台 receipt 全部绑定同一 release commit 前，不创建 RC、tag、Release 或公开 ZIP。

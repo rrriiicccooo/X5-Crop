@@ -365,6 +365,44 @@ class SyntheticReviewRepository:
         self.source_sha = source_sha
         self.source_path = source
 
+    def add_two_count_alias(self) -> None:
+        cohort_path = (
+            self.root
+            / "tools/regression/cohorts/diagnostic_unreviewed.jsonl"
+        )
+        first_cohort = json.loads(cohort_path.read_text(encoding="utf-8"))
+        first_cohort["format_id"] = "half"
+        second_cohort = {
+            **first_cohort,
+            "sample_id": "S002",
+            "count": 2,
+        }
+        cohort_path.write_text(
+            "\n".join(json.dumps(row) for row in (first_cohort, second_cohort))
+            + "\n",
+            encoding="utf-8",
+        )
+
+        manifest_path = self.root / "Test/manual_review/manifest.jsonl"
+        first_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        first_manifest.update(
+            {
+                "format_id": "half",
+                "source_alias_sample_ids": ["S001", "S002"],
+            }
+        )
+        second_manifest = {
+            **first_manifest,
+            "sample_id": "S002",
+            "sort_index": 2,
+            "count": 2,
+        }
+        manifest_path.write_text(
+            "\n".join(json.dumps(row) for row in (first_manifest, second_manifest))
+            + "\n",
+            encoding="utf-8",
+        )
+
     def write_review_context(self, *, unmarked: bool = False) -> None:
         context = {
             "review_context_schema": "x5crop_manual_review_context_v1",
@@ -384,6 +422,20 @@ class SyntheticReviewRepository:
         raster[263:269, 110:530] = red
         raster[45:275, 141:147] = red
         raster[45:275, 493:499] = red
+        tifffile.imwrite(
+            self.root / self.copy_relative,
+            raster,
+            photometric="rgb",
+            compression=None,
+        )
+
+    def draw_four_red_boundaries(self) -> None:
+        raster = tifffile.imread(self.source_path)
+        red = np.asarray([65535, 0, 0], dtype=np.uint16)
+        raster[51:57, 80:560] = red
+        raster[263:269, 80:560] = red
+        for coordinate in (110, 270, 330, 500):
+            raster[45:275, coordinate : coordinate + 6] = red
         tifffile.imwrite(
             self.root / self.copy_relative,
             raster,
@@ -465,6 +517,25 @@ class ManualAnnotationWorkspaceContractTest(unittest.TestCase):
         self.assertEqual(
             record["diagnostics"]["red_markup_import"]["detected_boundary_count"],
             2,
+        )
+
+    def test_multi_count_alias_does_not_report_red_lines_used_by_other_task(self) -> None:
+        self.fixture.add_two_count_alias()
+        self.fixture.write_review_context()
+        self.fixture.draw_four_red_boundaries()
+        workspace = ReviewWorkspace(self.fixture.root)
+        workspace.prepare()
+        record = workspace.load_record("S001")
+        assignments = record["diagnostics"]["red_markup_import"][
+            "task_assignments"
+        ]
+        self.assertTrue(assignments["S001"]["unmatched_red_stroke_indices"])
+        self.assertEqual(assignments["S002"]["unmatched_red_stroke_indices"], [])
+        self.assertFalse(
+            any(
+                item["kind"] == "red_markup_unmatched_strokes"
+                for item in record["diagnostics"]["unresolved"]
+            )
         )
 
     def test_explicitly_unmarked_copy_does_not_become_human_geometry(self) -> None:
