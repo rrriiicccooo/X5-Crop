@@ -200,7 +200,8 @@ platform | platform-check | platform-package | pre-push
 - 不提交 `.venv/`、`build/`、`dist/`、`release/`、cache、`.DS_Store`、`Test/`、
   `x5_crop_output/` 或大 TIFF；除非用户明确批准 Git LFS fixture。
 - `LICENSE` 由 GitHub tracked tree 与 Release 包保存；本地工作区使用 non-cone sparse checkout
-  排除它，README 与公共手册直接链接 GitHub。准备 Release 的完整 checkout 必须恢复该文件。
+  排除它，README 与公共手册直接链接 GitHub。发布构建仅在确认该路径带 Git `skip-worktree` 时从
+  当前 `HEAD` 读取同一字节写入临时包；不得因此把文件恢复到本地工作区或掩盖其它缺失发布源。
 - `tools/release/manifest.py` 是发布内容唯一 owner。用户包不包含 modular source、tests、tools、
   fixtures、内部文档、开发依赖或生成输出。
 - 构建命令为 `python3 -m tools.release.build --version <version>`。只有 accuracy、性能、依赖、

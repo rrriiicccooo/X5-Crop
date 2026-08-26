@@ -8,6 +8,7 @@ import unittest
 from unittest.mock import patch
 from zipfile import ZipFile
 
+from tools.release import build as release_build
 from tools.release.build import build_release
 from tools.release.manifest import RELEASE_PATHS
 from tools.release.standalone import (
@@ -20,6 +21,40 @@ from x5crop.app_info import VERSION
 
 
 class ReleaseBuildContractTest(unittest.TestCase):
+    def test_sparse_excluded_license_is_read_from_current_git_tree(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+
+            def git(*arguments: str) -> None:
+                completed = subprocess.run(
+                    ("git", *arguments),
+                    cwd=root,
+                    text=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    check=False,
+                )
+                self.assertEqual(completed.returncode, 0, completed.stdout)
+
+            git("init")
+            license_path = root / "LICENSE"
+            expected = b"tracked license bytes\n"
+            license_path.write_bytes(expected)
+            git("add", "LICENSE")
+            git(
+                "-c", "user.name=X5 Crop Test",
+                "-c", "user.email=x5-crop-test@example.invalid",
+                "commit", "-m", "fixture",
+            )
+            git("update-index", "--skip-worktree", "LICENSE")
+            license_path.unlink()
+
+            staging = root / "staging"
+            with patch.object(release_build, "ROOT", root):
+                release_build._write_staging_file(staging, "LICENSE", "LICENSE")
+
+            self.assertEqual((staging / "LICENSE").read_bytes(), expected)
+
     def test_generated_standalone_bytes_ignore_host_newline_translation(
         self,
     ) -> None:

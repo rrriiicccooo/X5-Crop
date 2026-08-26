@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import re
 import shutil
+import subprocess
 import tempfile
 from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile
@@ -20,6 +21,7 @@ from tools.release.standalone import (
 
 ROOT = Path(__file__).resolve().parents[2]
 VERSION_PATTERN = re.compile(r"v[0-9A-Za-z][0-9A-Za-z._-]*")
+SPARSE_RELEASE_SOURCE = "LICENSE"
 
 
 def normalize_version(value: str) -> str:
@@ -31,6 +33,32 @@ def normalize_version(value: str) -> str:
     return version
 
 
+def _read_sparse_tracked_source(source_path: str) -> bytes:
+    if source_path != SPARSE_RELEASE_SOURCE:
+        raise FileNotFoundError(f"release source is unavailable: {source_path}")
+    listing = subprocess.run(
+        ("git", "ls-files", "-v", "--", source_path),
+        cwd=ROOT,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    if listing.returncode != 0 or not listing.stdout.startswith(b"S "):
+        raise FileNotFoundError(f"release source is unavailable: {source_path}")
+    blob = subprocess.run(
+        ("git", "cat-file", "blob", f"HEAD:{source_path}"),
+        cwd=ROOT,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    if blob.returncode != 0:
+        raise FileNotFoundError(
+            f"release source is unavailable from HEAD: {source_path}"
+        )
+    return blob.stdout
+
+
 def _write_staging_file(staging: Path, archive_path: str, source_path: str | None) -> None:
     destination = staging / archive_path
     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -40,9 +68,10 @@ def _write_staging_file(staging: Path, archive_path: str, source_path: str | Non
         )
     else:
         source = ROOT / source_path
-        if not source.is_file():
-            raise FileNotFoundError(f"release source is unavailable: {source_path}")
-        shutil.copy2(source, destination)
+        if source.is_file():
+            shutil.copy2(source, destination)
+        else:
+            destination.write_bytes(_read_sparse_tracked_source(source_path))
     if destination.suffix == ".command" or archive_path == "X5_Crop.py":
         destination.chmod(destination.stat().st_mode | 0o111)
 
