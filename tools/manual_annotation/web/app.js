@@ -8,7 +8,7 @@ const token = new URLSearchParams(window.location.search).get("token") || "";
 const elements = Object.fromEntries([
   "progressText", "searchInput", "formatFilter", "stateFilter", "sourceList",
   "nextButton", "sampleTitle", "stateBadge", "sourceFacts", "saveStatus",
-  "undoButton", "redoButton", "resetViewButton", "taskTabs", "taskReviewed",
+  "undoButton", "redoButton", "resetViewButton", "sourceReferenceSummary", "sourceReviewed",
   "confirmButton", "canvasStage", "annotationSvg", "sourceImage", "polygonLayer",
   "lineLayer", "handleLayer", "cursorCoordinate", "loupeSvg", "loupeImage",
   "loupeCard", "loupeWrap", "loupeTitle", "loupeSelectionLabel", "maximizeLoupeButton", "loupeHelp",
@@ -28,7 +28,6 @@ const stateLabels = {
 let indexData = null;
 let currentItem = null;
 let currentRecord = null;
-let activeTaskId = null;
 let selectedLineId = null;
 let selectedEndpoint = null;
 let saveTimer = null;
@@ -147,7 +146,6 @@ async function openSource(item) {
     const response = await api(`/api/record/${encodeURIComponent(item.source_sha256)}`);
     currentItem = item;
     currentRecord = await response.json();
-    activeTaskId = currentRecord.tasks[0].task_id;
     selectedLineId = null;
     selectedEndpoint = null;
     history = [];
@@ -183,48 +181,32 @@ function renderRecord() {
   elements.stateBadge.textContent = stateLabels[currentRecord.state] || currentRecord.state;
   elements.stateBadge.className = `badge ${currentRecord.state}`;
   elements.sourceFacts.textContent = `${currentRecord.format_id} · raw ${currentRecord.source.raw_extent.width}×${currentRecord.source.raw_extent.height} · Orientation ${currentRecord.source.orientation_mapping.original_tag} · revision ${currentRecord.revision}`;
-  renderTaskTabs();
+  renderReferenceSummary();
   renderGeometry();
   renderDiagnostics();
   updateControls();
 }
 
-function renderTaskTabs() {
-  elements.taskTabs.replaceChildren();
-  for (const task of currentRecord.tasks) {
-    const button = document.createElement("button");
-    button.className = `task-tab${task.task_id === activeTaskId ? " active" : ""}${currentRecord.reviewed_task_ids.includes(task.task_id) ? " reviewed" : ""}`;
-    button.textContent = `${task.sample_id} · count ${task.count}`;
-    button.addEventListener("click", () => {
-      activeTaskId = task.task_id;
-      selectedLineId = null;
-      selectedEndpoint = null;
-      renderTaskTabs();
-      renderGeometry();
-      renderDiagnostics();
-      updateControls();
-    });
-    elements.taskTabs.appendChild(button);
-  }
+function sourceIsReviewed() {
+  return Boolean(
+    currentRecord
+    && currentRecord.tasks.every((task) => currentRecord.reviewed_task_ids.includes(task.task_id))
+  );
 }
 
-function activeTask() {
-  return currentRecord?.tasks.find((task) => task.task_id === activeTaskId) || null;
+function renderReferenceSummary() {
+  elements.sourceReferenceSummary.replaceChildren();
+  if (!currentRecord) return;
+  const label = document.createElement("strong");
+  label.textContent = "共享 source reference";
+  const detail = document.createElement("span");
+  detail.textContent = `${currentRecord.tasks.map((task) => task.sample_id).join(" / ")} · count ${currentRecord.tasks.map((task) => task.count).join("/")}`;
+  elements.sourceReferenceSummary.append(label, detail);
+  elements.sourceReferenceSummary.classList.toggle("reviewed", sourceIsReviewed());
 }
 
 function allLines() {
   return currentRecord ? [...currentRecord.shared_edges, ...currentRecord.boundary_pool] : [];
-}
-
-function taskBoundaryRoles(task) {
-  return task ? task.slots.flatMap((slot) => {
-    const reference = slot.reference_geometry;
-    if (reference?.kind !== "boundary_pair") return [];
-    return [
-      {identity: reference.start_boundary_id, ordinal: slot.ordinal, role: "start"},
-      {identity: reference.end_boundary_id, ordinal: slot.ordinal, role: "end"}
-    ];
-  }) : [];
 }
 
 function lineById(identity) {
@@ -244,22 +226,58 @@ function intersection(first, second) {
   ];
 }
 
-function taskPolygons(task) {
+function polygonForReference(reference) {
   const pool = new Map(currentRecord.boundary_pool.map((line) => [line.line_id, line]));
   const low = currentRecord.shared_edges[0];
   const high = currentRecord.shared_edges[1];
-  const polygons = [];
-  for (const slot of task.slots) {
-    const reference = slot.reference_geometry;
-    if (reference?.kind !== "boundary_pair") continue;
-    const start = pool.get(reference.start_boundary_id);
-    const stop = pool.get(reference.end_boundary_id);
-    const polygon = currentRecord.strip_axis_display === "horizontal"
-      ? [intersection(low, start), intersection(low, stop), intersection(high, stop), intersection(high, start)]
-      : [intersection(low, start), intersection(high, start), intersection(high, stop), intersection(low, stop)];
-    if (polygon.every(Boolean)) polygons.push({slot, points: polygon});
+  const start = pool.get(reference.start_boundary_id);
+  const stop = pool.get(reference.end_boundary_id);
+  if (!start || !stop) return null;
+  const polygon = currentRecord.strip_axis_display === "horizontal"
+    ? [intersection(low, start), intersection(low, stop), intersection(high, stop), intersection(high, start)]
+    : [intersection(low, start), intersection(high, start), intersection(high, stop), intersection(low, stop)];
+  return polygon.every(Boolean) ? polygon : null;
+}
+
+function sourceReferenceFrames() {
+  if (!currentRecord) return [];
+  const byPair = new Map();
+  for (const task of currentRecord.tasks) {
+    for (const slot of task.slots) {
+      const reference = slot.reference_geometry;
+      if (reference?.kind !== "boundary_pair") continue;
+      const key = `${reference.start_boundary_id}/${reference.end_boundary_id}`;
+      if (!byPair.has(key)) {
+        byPair.set(key, {
+          reference,
+          assignments: []
+        });
+      }
+      byPair.get(key).assignments.push({
+        taskId: task.task_id,
+        sampleId: task.sample_id,
+        count: task.count,
+        ordinal: slot.ordinal,
+        slotKind: slot.slot_kind
+      });
+    }
   }
-  return polygons;
+  const longIndex = currentRecord.strip_axis_display === "horizontal" ? 0 : 1;
+  return [...byPair.values()].map((frame) => {
+    const points = polygonForReference(frame.reference);
+    const position = points
+      ? points.reduce((sum, point) => sum + point[longIndex] / points.length, 0)
+      : Number.POSITIVE_INFINITY;
+    return {...frame, points, position};
+  }).filter((frame) => frame.points).sort((left, right) => left.position - right.position)
+    .map((frame, index) => ({...frame, sourceOrdinal: index + 1}));
+}
+
+function sourceBoundaryRoles() {
+  return sourceReferenceFrames().flatMap((frame) => [
+    {identity: frame.reference.start_boundary_id, ordinal: frame.sourceOrdinal, role: "start"},
+    {identity: frame.reference.end_boundary_id, ordinal: frame.sourceOrdinal, role: "end"}
+  ]);
 }
 
 function svgElement(name, attributes = {}) {
@@ -269,10 +287,8 @@ function svgElement(name, attributes = {}) {
 }
 
 function activeLineEntries() {
-  const task = activeTask();
-  const taskRoles = taskBoundaryRoles(task);
-  const taskIds = taskRoles.map((entry) => entry.identity);
-  const used = new Set(taskIds);
+  const sourceRoles = sourceBoundaryRoles();
+  const used = new Set(sourceRoles.map((entry) => entry.identity));
   return [
     ...currentRecord.shared_edges.map((line, index) => ({
       line,
@@ -282,7 +298,7 @@ function activeLineEntries() {
       role: "shared"
     })),
     ...currentRecord.boundary_pool.map((line) => {
-      const assignments = taskRoles.filter((entry) => entry.identity === line.line_id);
+      const assignments = sourceRoles.filter((entry) => entry.identity === line.line_id);
       const roles = new Set(assignments.map((entry) => entry.role));
       const role = roles.size === 2 ? "start-end" : (roles.values().next().value || "unused");
       const label = assignments.length
@@ -299,7 +315,7 @@ function roleLabel(entry) {
     start: "start",
     end: "end",
     "start-end": "start/end 接触边",
-    unused: "未用于当前 count"
+    unused: "未用于 source reference"
   })[entry?.role] || "未分类";
 }
 
@@ -314,14 +330,14 @@ function renderGeometry() {
   elements.lineLayer.replaceChildren();
   elements.handleLayer.replaceChildren();
   if (!currentRecord) return;
-  const task = activeTask();
-  taskPolygons(task).forEach(({slot, points}) => {
+  sourceReferenceFrames().forEach((frame) => {
     const polygon = svgElement("polygon", {
-      points: points.map((point) => `${point[0]},${point[1]}`).join(" "),
+      points: frame.points.map((point) => `${point[0]},${point[1]}`).join(" "),
       class: "frame-polygon"
     });
     const title = svgElement("title");
-    title.textContent = `照片 ${slot.ordinal} · ${slot.slot_kind}`;
+    const assignments = frame.assignments.map((item) => `${item.sampleId}#${item.ordinal}`).join(" / ");
+    title.textContent = `Frame ${frame.sourceOrdinal} · ${assignments}`;
     polygon.appendChild(title);
     elements.polygonLayer.appendChild(polygon);
   });
@@ -404,41 +420,57 @@ function renderSelectedLine() {
 function renderDiagnostics() {
   elements.diagnostics.replaceChildren();
   if (!currentRecord) return;
-  const taskFit = currentRecord.diagnostics.task_fits?.[activeTaskId];
   const reviewContext = currentRecord.diagnostics.review_context || {};
-  const taskContext = reviewContext.tasks?.[activeTaskId] || {};
   const redImport = currentRecord.diagnostics.red_markup_import;
-  const redTask = redImport?.task_assignments?.[activeTaskId];
-  const slotSummary = activeTask()?.slots
+  const taskContexts = reviewContext.tasks || {};
+  const taskSummary = currentRecord.tasks
+    .map((task) => `${task.sample_id}:${task.count}`)
+    .join(" / ");
+  const templateSummary = currentRecord.tasks.map((task) => {
+    const fit = currentRecord.diagnostics.task_fits?.[task.task_id];
+    return `${task.sample_id}:${fit ? Number(fit.template_score).toFixed(3) : "—"}`;
+  }).join(" / ");
+  const caseTags = [...new Set(currentRecord.tasks.flatMap(
+    (task) => taskContexts[task.task_id]?.case_tags || []
+  ))];
+  const slotSummary = currentRecord.tasks.flatMap((task) => task.slots
     .filter((slot) => slot.slot_kind !== "image")
-    .map((slot) => `${slot.ordinal}:${slot.slot_kind}`)
-    .join(" / ") || "全部 image";
-  const noReferenceSummary = activeTask()?.slots
+    .map((slot) => `${task.sample_id} ${slot.ordinal}:${slot.slot_kind}`)
+  ).join(" / ") || "全部 image";
+  const noReferenceSummary = currentRecord.tasks.flatMap((task) => task.slots
     .filter((slot) => slot.reference_geometry?.kind === "not_applicable")
-    .map((slot) => `${slot.ordinal}:${slot.slot_kind}`)
-    .join(" / ") || "无";
-  const adjacencySummary = activeTask()?.adjacencies
+    .map((slot) => `${task.sample_id} ${slot.ordinal}:${slot.slot_kind}`)
+  ).join(" / ") || "无";
+  const adjacencySummary = currentRecord.tasks.flatMap((task) => task.adjacencies
     .filter((adjacency) => adjacency.kind !== "separator")
-    .map((adjacency) => `${adjacency.left_ordinal}-${adjacency.right_ordinal}:${adjacency.kind}`)
-    .join(" / ") || "全部 separator";
+    .map((adjacency) => `${task.sample_id} ${adjacency.left_ordinal}-${adjacency.right_ordinal}:${adjacency.kind}`)
+  ).join(" / ") || "全部 separator";
+  const notes = [...new Set(currentRecord.tasks.flatMap(
+    (task) => taskContexts[task.task_id]?.notes || []
+  ))];
+  const machineLines = currentRecord.tasks.flatMap((task) => {
+    const retained = redImport?.task_assignments?.[task.task_id]?.machine_retained_role_indices || [];
+    return retained.length ? [`${task.sample_id}:角色 ${retained.join(", ")}`] : [];
+  });
   const rows = [
     ["来源", currentRecord.origin],
+    ["count 任务", `${taskSummary}（共享一套 source reference）`],
     ["胶片极性", reviewContext.film_polarity ? `${reviewContext.film_polarity}（仅校准分层）` : "未记录"],
     ["坐标", "raw TIFF pixel centers"],
     ["预标版本", currentRecord.diagnostics.proposal_revision || currentRecord.diagnostics.legacy_algorithm_revision || "legacy confirmed"],
     ["共享边 MAD", (currentRecord.diagnostics.shared_fit_mad_analysis_px || []).map((value) => Number(value).toFixed(2)).join(" / ") || "已确认旧基线"],
-    ["模板分数", taskFit ? Number(taskFit.template_score).toFixed(3) : "—"],
-    ["结构标签", taskContext.case_tags?.join(" / ") || "常规"],
+    ["模板分数", templateSummary],
+    ["结构标签", caseTags.join(" / ") || "常规"],
     ["Slot 语义", slotSummary],
     ["无需人工 reference", noReferenceSummary],
     ["相邻关系", adjacencySummary],
-    ["人工备注", taskContext.notes?.join("；") || "无"],
+    ["人工备注", notes.join("；") || "无"],
     ["待重点检查", currentRecord.diagnostics.unresolved?.length ? `${currentRecord.diagnostics.unresolved.length} 项` : "无额外提示"],
     ["权限", currentRecord.state === "user_confirmed" ? "用户确认" : "仅 proposal"]
   ];
   if (redImport) {
     rows.splice(1, 0, ["红线草稿", `${redImport.applied_shared_edge_count}/${redImport.detected_shared_edge_count} 条共享边已采用 · ${redImport.detected_boundary_count} 条长轴边`]);
-    rows.splice(2, 0, ["机器补线", redTask?.machine_retained_role_indices?.length ? `角色 ${redTask.machine_retained_role_indices.join(", ")}` : "无"]);
+    rows.splice(2, 0, ["机器补线", machineLines.join(" / ") || "无"]);
     rows.splice(3, 0, ["机器共享边", redImport.machine_retained_shared_edge_indices?.length ? `边 ${redImport.machine_retained_shared_edge_indices.join(", ")}` : "无"]);
   }
   for (const [name, value] of rows) {
@@ -449,11 +481,10 @@ function renderDiagnostics() {
 }
 
 function updateControls() {
-  const task = activeTask();
   const immutable = currentRecord?.state === "user_confirmed";
-  elements.taskReviewed.disabled = !task || immutable;
-  elements.taskReviewed.checked = Boolean(task && currentRecord.reviewed_task_ids.includes(task.task_id));
-  const allReviewed = currentRecord && currentRecord.tasks.every((item) => currentRecord.reviewed_task_ids.includes(item.task_id));
+  const allReviewed = sourceIsReviewed();
+  elements.sourceReviewed.disabled = !currentRecord || immutable;
+  elements.sourceReviewed.checked = allReviewed;
   elements.confirmButton.disabled = !currentRecord || immutable || !allReviewed || dirty;
   elements.undoButton.disabled = immutable || history.length === 0;
   elements.redoButton.disabled = immutable || future.length === 0;
@@ -507,7 +538,7 @@ function markDirty() {
   editGeneration += 1;
   if (!wasDirty) {
     currentRecord.reviewed_task_ids = [];
-    renderTaskTabs();
+    renderReferenceSummary();
   }
   setSaveStatus("有未保存修改");
   clearTimeout(saveTimer);
@@ -900,25 +931,24 @@ function renderLoupeGeometry() {
   elements.loupeLineLayer.replaceChildren();
   if (!currentRecord) return;
   if (loupeMaximized) {
-    const task = activeTask();
     const view = elements.loupeSvg.viewBox.baseVal;
     const bounds = elements.loupeSvg.getBoundingClientRect();
     const labelScale = Math.max(
       view.width / Math.max(1, bounds.width),
       view.height / Math.max(1, bounds.height)
     );
-    taskPolygons(task).forEach(({slot, points}) => {
+    sourceReferenceFrames().forEach((frame) => {
       const polygon = svgElement("polygon", {
-        points: points.map((point) => `${point[0]},${point[1]}`).join(" "),
+        points: frame.points.map((point) => `${point[0]},${point[1]}`).join(" "),
         class: "loupe-frame-polygon",
-        "data-frame-ordinal": slot.ordinal
+        "data-frame-ordinal": frame.sourceOrdinal
       });
       const title = svgElement("title");
-      title.textContent = `Frame ${slot.ordinal} · ${slot.slot_kind}`;
+      title.textContent = `Frame ${frame.sourceOrdinal} · ${frame.assignments.map((item) => `${item.sampleId}#${item.ordinal}`).join(" / ")}`;
       polygon.appendChild(title);
       elements.loupePolygonLayer.appendChild(polygon);
-      const center = points.reduce(
-        (total, point) => [total[0] + point[0] / points.length, total[1] + point[1] / points.length],
+      const center = frame.points.reduce(
+        (total, point) => [total[0] + point[0] / frame.points.length, total[1] + point[1] / frame.points.length],
         [0, 0]
       );
       const label = svgElement("text", {
@@ -927,7 +957,7 @@ function renderLoupeGeometry() {
         "font-size": Math.max(1, 13 * labelScale),
         "stroke-width": Math.max(0.5, 3 * labelScale)
       });
-      label.textContent = `Frame ${slot.ordinal}`;
+      label.textContent = `Frame ${frame.sourceOrdinal}`;
       elements.loupePolygonLayer.appendChild(label);
     });
   }
@@ -965,20 +995,19 @@ function renderLoupeGeometry() {
   }
 }
 
-async function toggleTaskReview() {
-  const task = activeTask();
-  if (!task || currentRecord.state === "user_confirmed") return;
+async function toggleSourceReview() {
+  if (!currentRecord || currentRecord.state === "user_confirmed") return;
   try {
     await flushSave();
     const response = await api(`/api/review/${encodeURIComponent(currentRecord.source.sha256)}`, {
       method: "POST",
-      body: JSON.stringify({expected_revision: currentRecord.revision, task_id: task.task_id, reviewed: elements.taskReviewed.checked})
+      body: JSON.stringify({expected_revision: currentRecord.revision, reviewed: elements.sourceReviewed.checked})
     });
     currentRecord = await response.json();
     setSaveStatus("审核状态已保存", "ok");
     renderRecord(); updateIndexItemState(currentRecord.state);
   } catch (error) {
-    elements.taskReviewed.checked = !elements.taskReviewed.checked;
+    elements.sourceReviewed.checked = !elements.sourceReviewed.checked;
     showToast(error.message, true);
   }
 }
@@ -1022,7 +1051,7 @@ elements.searchInput.addEventListener("input", renderIndex);
 elements.formatFilter.addEventListener("change", renderIndex);
 elements.stateFilter.addEventListener("change", renderIndex);
 elements.nextButton.addEventListener("click", nextUnfinished);
-elements.taskReviewed.addEventListener("change", toggleTaskReview);
+elements.sourceReviewed.addEventListener("change", toggleSourceReview);
 elements.confirmButton.addEventListener("click", openConfirmation);
 elements.finalConfirmButton.addEventListener("click", finalConfirmation);
 elements.undoButton.addEventListener("click", undo);

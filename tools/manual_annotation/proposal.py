@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import dataclass
+from itertools import combinations
 import math
 from pathlib import Path
 from typing import Any, Iterable
@@ -35,6 +36,9 @@ from .model import (
 
 
 PROPOSAL_REVISION = "independent_bounded_gradient_template_v1"
+SOURCE_REFERENCE_MAPPING_REVISION = "max_count_monotonic_frame_subset_v1"
+
+
 @dataclass(frozen=True)
 class LogicalFit:
     shared: tuple[tuple[float, float], tuple[float, float]]
@@ -799,6 +803,7 @@ def propose_record(
                     "action": "inspect_both_adjacent_boundaries_at_native_pixels",
                 }
             )
+    record = canonicalize_source_reference_mappings(record)
     validate_annotation_record(record)
     return record, analysis_rgb
 
@@ -1248,6 +1253,109 @@ def _task_markup_context(record: dict[str, Any], task_id: str) -> dict[str, Any]
     return value if isinstance(value, dict) else {}
 
 
+def canonicalize_source_reference_mappings(
+    record: dict[str, Any],
+) -> dict[str, Any]:
+    """Map every count task onto one bounded source-level Frame set."""
+    updated = deepcopy(record)
+    if len(updated["tasks"]) < 2:
+        return updated
+    canonical = min(
+        updated["tasks"],
+        key=lambda task: (
+            -int(task["count"]),
+            -sum(slot_boundary_ids(slot) is not None for slot in task["slots"]),
+            str(task["task_id"]),
+        ),
+    )
+    pool = {line["line_id"]: line for line in updated["boundary_pool"]}
+
+    def frame_rows(task: dict[str, Any]) -> list[dict[str, Any]]:
+        rows: list[dict[str, Any]] = []
+        for slot in task["slots"]:
+            pair = slot_boundary_ids(slot)
+            if pair is None:
+                continue
+            start = _machine_boundary_position(updated, pool[pair[0]])
+            end = _machine_boundary_position(updated, pool[pair[1]])
+            rows.append(
+                {
+                    "slot": slot,
+                    "pair": pair,
+                    "position": 0.5 * (start + end),
+                }
+            )
+        return rows
+
+    canonical_rows = frame_rows(canonical)
+    canonical_adjacencies = {
+        (int(row["left_ordinal"]), int(row["right_ordinal"])): row["kind"]
+        for row in canonical["adjacencies"]
+    }
+    for task in updated["tasks"]:
+        if task["task_id"] == canonical["task_id"]:
+            continue
+        task_rows = frame_rows(task)
+        if len(task_rows) > len(canonical_rows):
+            raise ValueError(
+                f"{task['task_id']}: count task has more visible Frames than the source reference"
+            )
+        choices = combinations(range(len(canonical_rows)), len(task_rows))
+        selected = min(
+            choices,
+            key=lambda indices: sum(
+                (
+                    task_rows[offset]["position"]
+                    - canonical_rows[index]["position"]
+                )
+                ** 2
+                for offset, index in enumerate(indices)
+            ),
+            default=(),
+        )
+        canonical_ordinal_by_task_ordinal: dict[int, int] = {}
+        for task_row, canonical_index in zip(task_rows, selected, strict=True):
+            canonical_row = canonical_rows[canonical_index]
+            task_row["slot"]["reference_geometry"] = deepcopy(
+                canonical_row["slot"]["reference_geometry"]
+            )
+            canonical_ordinal_by_task_ordinal[int(task_row["slot"]["ordinal"])] = int(
+                canonical_row["slot"]["ordinal"]
+            )
+        for adjacency in task["adjacencies"]:
+            left = int(adjacency["left_ordinal"])
+            right = int(adjacency["right_ordinal"])
+            if (
+                left not in canonical_ordinal_by_task_ordinal
+                or right not in canonical_ordinal_by_task_ordinal
+            ):
+                adjacency["kind"] = "not_applicable"
+                continue
+            canonical_pair = (
+                canonical_ordinal_by_task_ordinal[left],
+                canonical_ordinal_by_task_ordinal[right],
+            )
+            adjacency["kind"] = canonical_adjacencies.get(
+                canonical_pair,
+                "unresolved",
+            )
+
+    updated["diagnostics"]["source_reference_mapping"] = {
+        "revision": SOURCE_REFERENCE_MAPPING_REVISION,
+        "canonical_task_id": canonical["task_id"],
+        "canonical_count": canonical["count"],
+        "task_ids": [task["task_id"] for task in updated["tasks"]],
+    }
+    used_ids = referenced_boundary_ids(updated)
+    updated["boundary_pool"] = [
+        line
+        for line in updated["boundary_pool"]
+        if line["line_id"] in used_ids
+        or line.get("review_basis") == "unresolved_red_stroke"
+    ]
+    return updated
+
+
 def apply_review_context_slot_semantics(record: dict[str, Any]) -> dict[str, Any]:
     """Apply typed slot facts without promoting machine geometry to authority."""
     updated = deepcopy(record)
@@ -1278,6 +1386,8 @@ def apply_review_context_slot_semantics(record: dict[str, Any]) -> dict[str, Any
                 or int(adjacency["right_ordinal"]) in blank_ordinals
             ):
                 adjacency["kind"] = "not_applicable"
+
+    updated = canonicalize_source_reference_mappings(updated)
 
     used_ids = referenced_boundary_ids(updated)
     updated["boundary_pool"] = [

@@ -15,6 +15,9 @@ materialization、平行 detector 和 report reuse 均不再支持。
   不猜 format、照片数或 blank，也不保存 full/partial mode。
 - 同一 source SHA 可保留多个显式 count 的独立测试任务并复用一份物理边界标注；cohort 只要求同源
   format 一致以及同一 task 的 format/count 不矛盾，不再错误地把 count 绑定到 source SHA。
+- 本地黄金基线标注器将同源多 count 任务聚合为一个 source reference 审阅视图：相同 Frame 只画一次，
+  最大 count 定义物理 Frame 集，其他 count 按长轴顺序引用子集；不再按 count 切换或重复确认。底层
+  evaluation task 仍保留独立 count 语义。
 - `135-dual` 只自动处理 12 格、每 lane 6 格；其它 count 安全进入 review。任一 slot 不安全时整张
   source review，不做 slot salvage。
 - Detector 改为有界 fixed-template-first 对准：先建立 role-free coarse support，再在固定 outer、

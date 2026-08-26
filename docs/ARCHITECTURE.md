@@ -501,7 +501,10 @@ Pillow 只在 Debug Analysis 时延迟导入。生产默认 `--jobs 1`、上限 
 
 人工标注器严格对齐 tracked cohort 与本地 manifest，并以 source SHA 聚合任务。一个 source 只有两条
 共享短轴边和一个物理 `boundary_pool`；不同显式 count 任务各自保存 typed `slots` 与
-`adjacencies`。普通 separator 使用两条边，contact 的前格 END 与后格 START 复用同一物理 boundary，
+`adjacencies`，但页面只提供一个 source-level 审阅视图和一次审核勾选，不为 count 建立切换页签。
+最大显式 count 任务定义 source 的物理 Frame 集；其他 count 任务只能按长轴顺序引用其子集，不得建立平行黄金几何。
+相同边界对只显示一个物理 Frame。
+普通 separator 使用两条边，contact 的前格 END 与后格 START 复用同一物理 boundary，
 overlap 保留顺序交叉的两条边；空曝光、残缺曝光、源截断和未知 slot 不得被静默删除。
 其中只有真正的 `blank_exposure` 没有可见内容边界：其人工 `reference_geometry` 必须明确为
 `not_applicable`，不建立 `start/end` 或 Frame polygon，也不作为缺失标注或 accuracy unresolved。
@@ -509,7 +512,7 @@ overlap 保留顺序交叉的两条边；空曝光、残缺曝光、源截断和
 必须保留 `boundary_pair` reference。
 页面中的 Orientation 只做可逆显示，持久化权威始终是原 TIFF raster pixel-center 坐标。
 
-独立有界像素拟合、用户红线草稿恢复和有界 JPG 都只能生成 proposal。只有用户逐项审核全部 count、
+独立有界像素拟合、用户红线草稿恢复和有界 JPG 都只能生成 proposal。只有用户在单一 source 视图中审核全部适用物理边界、
 检查 1:1 原生像素并执行最终确认，记录才成为不可变 `user_confirmed` 本地验收基线。它不声称是
 真实内容边界的 100% 测量或 detector 唯一正确答案。确认不自动改写
 tracked accuracy cohort；完整操作与文件边界见 [MANUAL_ANNOTATION.md](MANUAL_ANNOTATION.md)。

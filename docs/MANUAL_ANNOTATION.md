@@ -47,12 +47,12 @@ python3 -m tools.manual_annotation audit
 ## 审核流程
 
 1. 在左侧按 format、状态或 sample/SHA 筛选；每次只打开一个有界预览。
-2. 先检查两条共享短轴边，再检查当前 count 页签中适用的每对长轴边。绿色四边形是这些直线交点
+2. 先检查两条共享短轴边，再检查该 source 中适用的每对长轴边。绿色四边形是这些直线交点
    围成的基础照片区域，不包含产品 bleed；空曝光 slot 没有人工长轴边或四边形。
 3. 点击边界后拖整条线可沿法向移动，拖端点可修正斜率；方向键移动 1 px，按住 Shift 移动
    10 px。`[` / `]` 每次逆时针/顺时针旋转 0.01°，Shift 为 0.1°；整线绕中点旋转，选中端点时
    绕该端点旋转。`⌘Z` / `Ctrl+Z` 撤销。
-4. 鼠标所在位置的右侧局部图直接读取原 TIFF 的 1:1 像素，并叠加当前 count 任务的两条共享边和
+4. 鼠标所在位置的右侧局部图直接读取原 TIFF 的 1:1 像素，并叠加该 source 的两条共享边和
    全部适用的成对长轴边；选中线显示为带深色轮廓的黄色，避免在白色片基或暗部中消失。总览只负责导航，
    最终应在局部图中确认边界没有危险切入真实画面。常规窗口下，512×512 原图块使用约
    512×512 的检查区；窗口较窄时才按可用宽度收缩。不需要拖线时，点击“完整高度审阅”或按 `F`，
@@ -62,12 +62,14 @@ python3 -m tools.manual_annotation audit
    接触 Frame 复用的 `start/end` 物理边显示为两色交替虚线。叠片中的两条独立边仍按各自角色着色，
    重叠区域会叠加加深。点击任一线可选中整线，并直接用方向键或 `[` / `]` 修改；点击空白处只沿
    胶片长轴移动，短轴始终回到共享边中间。按 `F` 或 `Esc` 恢复 1:1 标注布局。
-5. 同一 source SHA 若有多个 count，逐个切换页签并勾选“本任务边界已审核”。不同任务复用一个
-   source-level `boundary_pool`，但各自保存明确的 `slots` 与 `adjacencies`，不会把 count 绑定到 SHA。
+5. 同一 source SHA 若有多个 count，页面仍只显示一个 source reference，不建立 count 页签。最大显式 count
+   任务定义该 source 的物理 Frame 集；其他 count 只能按长轴顺序引用该集合的子集，不能再生成另一套黄金矩形。
+   相同物理 Frame 只画一次。勾选“本 source reference 已审核”一次即覆盖该 source。底层 count 任务仍各自保存
+   明确的 `slots` 与 `adjacencies`，并共用一个 source-level `boundary_pool`，不会把 count 绑定到 SHA。
    `contact` 的相邻照片共享同一条物理线；`overlap` 保留交叉的两条边。`slot_kind` 保留空片、残缺
    曝光和源截断；只有 `blank_exposure` 使用 `reference_geometry: not_applicable`，且不能通过少输出
    一格来隐藏。
-6. 所有 count 都审核后，点击“确认整张黄金基线”，逐项确认共享边、适用的任务边界、原生像素检查和
+6. source reference 审核后，点击“确认整张黄金基线”，逐项确认共享边、全部适用边界、原生像素检查和
    无 bleed 基础裁切安全性。确认后的 source 立即冻结，不可继续编辑。
 
 机器 proposal 只减少起点工作量。遇到 contact、overlap、曲边、老化相机造成的不规则片距或边界
@@ -103,7 +105,7 @@ python3 -m tools.manual_annotation audit
 |---|---|
 | `machine_proposal` | 独立有界像素算法生成，尚无人确认 |
 | `human_adjusted` | 用户红线草稿已恢复，或页面中几何已被人工修改 |
-| `user_confirmed` | 全部 count 与四项检查已明确确认，记录和快照冻结 |
+| `user_confirmed` | source reference 与四项检查已明确确认，记录和快照冻结 |
 
 页面每次修改都会带 revision 原子保存；并发或旧页面写入会因 revision conflict 被拒绝。保存失败时
 不能切换样片，浏览器关闭前也会提示。重新运行默认命令会复用已保存状态；不要通过删除记录来修改

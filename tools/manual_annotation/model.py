@@ -614,6 +614,29 @@ def validate_annotation_record(record: dict[str, Any]) -> None:
                 raise AnnotationError("annotation frames are not in display order")
             previous_center = center
 
+    canonical_task = min(
+        tasks,
+        key=lambda task: (
+            -int(task["count"]),
+            -sum(slot_boundary_ids(slot) is not None for slot in task["slots"]),
+            str(task["task_id"]),
+        ),
+    )
+    canonical_pairs = {
+        pair
+        for slot in canonical_task["slots"]
+        if (pair := slot_boundary_ids(slot)) is not None
+    }
+    if any(
+        pair not in canonical_pairs
+        for task in tasks
+        for slot in task["slots"]
+        if (pair := slot_boundary_ids(slot)) is not None
+    ):
+        raise AnnotationError(
+            "count task reference geometry is not a subset of the source reference"
+        )
+
     used_boundary_ids = referenced_boundary_ids(record)
     if any(
         line["line_id"] not in used_boundary_ids
@@ -627,8 +650,9 @@ def validate_annotation_record(record: dict[str, Any]) -> None:
         not isinstance(reviewed, list)
         or len(set(reviewed)) != len(reviewed)
         or not set(reviewed).issubset(task_ids)
+        or (reviewed and set(reviewed) != task_ids)
     ):
-        raise AnnotationError("reviewed task identities are invalid")
+        raise AnnotationError("source reference review state is invalid")
     confirmation = record["confirmation"]
     if record["state"] == "user_confirmed":
         if not isinstance(confirmation, dict) or set(confirmation) != {

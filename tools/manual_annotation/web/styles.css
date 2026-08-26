@@ -74,10 +74,10 @@ button:disabled { opacity: .38; cursor: not-allowed; }
 .icon-button { width: 34px; padding: 0; background: #252a33; border-color: #363d49; font-size: 19px; }
 
 .task-bar { display: flex; justify-content: space-between; align-items: center; min-height: 55px; padding: 8px 20px; border-bottom: 1px solid var(--line); background: #15181e; }
-.task-tabs { display: flex; gap: 7px; }
-.task-tab { background: transparent; border-color: #353b47; color: var(--muted); }
-.task-tab.active { background: #293142; border-color: #55709d; color: var(--text); }
-.task-tab.reviewed::after { content: " ✓"; color: var(--green); }
+.source-reference-summary { display: flex; align-items: baseline; gap: 9px; min-width: 0; }
+.source-reference-summary strong { color: var(--text); font-size: 13px; }
+.source-reference-summary span { color: var(--muted); font: 11px ui-monospace, SFMono-Regular, Menlo, monospace; }
+.source-reference-summary.reviewed strong::after { content: " ✓"; color: var(--green); }
 .task-actions { display: flex; align-items: center; gap: 15px; }
 .review-check { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; }
 .review-check input { accent-color: #4a8cf2; }

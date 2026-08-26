@@ -38,6 +38,7 @@ from .model import (
 )
 from .proposal import (
     apply_review_context_slot_semantics,
+    canonicalize_source_reference_mappings,
     import_red_markup_draft,
     propose_record,
 )
@@ -322,7 +323,7 @@ class ReviewWorkspace:
         canonical = str(members[0]["calibration_canonical_sample_id"])
         return next((row for row in members if row["sample_id"] == canonical), members[0])
 
-    def load_record(self, identity: str, *, client: bool = False) -> dict[str, Any]:
+    def _read_record(self, identity: str) -> dict[str, Any]:
         sha = self.resolve_identity(identity)
         path = self.record_path(sha)
         if not path.is_file():
@@ -333,12 +334,17 @@ class ReviewWorkspace:
             raise WorkspaceError(f"cannot read annotation record {path}") from error
         if not isinstance(record, dict):
             raise WorkspaceError("annotation record must be an object")
+        source = record.get("source")
+        if not isinstance(source, dict) or source.get("sha256") != sha:
+            raise WorkspaceError("annotation filename and source SHA disagree")
+        return record
+
+    def load_record(self, identity: str, *, client: bool = False) -> dict[str, Any]:
+        record = self._read_record(identity)
         try:
             validate_annotation_record(record)
         except AnnotationError as error:
             raise WorkspaceError(f"annotation record is invalid: {error}") from error
-        if record["source"]["sha256"] != sha:
-            raise WorkspaceError("annotation filename and source SHA disagree")
         return record_for_client(record) if client else record
 
     def _save_record(self, record: dict[str, Any]) -> None:
@@ -495,7 +501,13 @@ class ReviewWorkspace:
             else set(self.groups)
         )
         legacy = self._legacy_baselines()
-        counts = {"prepared": 0, "existing": 0, "confirmed_imported": 0, "red_drafts": 0}
+        counts = {
+            "prepared": 0,
+            "existing": 0,
+            "confirmed_imported": 0,
+            "red_drafts": 0,
+            "source_references_normalized": 0,
+        }
         for offset, sha in enumerate(
             sorted(requested, key=lambda value: int(self.groups[value][0]["sort_index"])),
             start=1,
@@ -503,8 +515,28 @@ class ReviewWorkspace:
             members = self.groups[sha]
             existing_path = self.record_path(sha)
             if existing_path.is_file():
-                existing = self.load_record(sha)
+                existing = self._read_record(sha)
                 if existing["state"] != "machine_proposal" or not force_machine:
+                    if existing["state"] != "user_confirmed":
+                        try:
+                            normalized = canonicalize_source_reference_mappings(existing)
+                        except (KeyError, TypeError, ValueError) as error:
+                            raise WorkspaceError(
+                                f"{members[0]['sample_id']}: cannot normalize source reference"
+                            ) from error
+                        if normalized != existing:
+                            normalized["revision"] = int(existing["revision"]) + 1
+                            normalized["reviewed_task_ids"] = []
+                            validate_annotation_record(normalized)
+                            self._save_record(normalized)
+                            existing = normalized
+                            counts["source_references_normalized"] += 1
+                    try:
+                        validate_annotation_record(existing)
+                    except AnnotationError as error:
+                        raise WorkspaceError(
+                            f"annotation record is invalid: {error}"
+                        ) from error
                     preview_path = self.preview_path(sha)
                     if not preview_path.is_file():
                         raise WorkspaceError(
@@ -576,7 +608,8 @@ class ReviewWorkspace:
                                 f"{canonical['sample_id']}: modified work copy cannot be safely imported: {error}"
                             ) from error
                         counts["red_drafts"] += 1
-                    record = apply_review_context_slot_semantics(record)
+                    else:
+                        record = apply_review_context_slot_semantics(record)
                 preview = raster.preview_jpeg(
                     levels=record["diagnostics"].get("render_levels")
                 )
@@ -654,12 +687,11 @@ class ReviewWorkspace:
             self._save_record(updated)
             return record_for_client(updated)
 
-    def set_task_reviewed(
+    def set_source_reviewed(
         self,
         identity: str,
         *,
         expected_revision: int,
-        task_id: str,
         reviewed: bool,
     ) -> dict[str, Any]:
         with self._lock:
@@ -673,16 +705,9 @@ class ReviewWorkspace:
             ):
                 raise WorkspaceError("annotation revision conflict")
             if not isinstance(reviewed, bool):
-                raise WorkspaceError("task review state must be boolean")
+                raise WorkspaceError("source reference review state must be boolean")
             task_ids = {task["task_id"] for task in current["tasks"]}
-            if task_id not in task_ids:
-                raise WorkspaceError("unknown annotation task")
-            selected = set(current["reviewed_task_ids"])
-            if reviewed:
-                selected.add(task_id)
-            else:
-                selected.discard(task_id)
-            current["reviewed_task_ids"] = sorted(selected)
+            current["reviewed_task_ids"] = sorted(task_ids) if reviewed else []
             current["revision"] += 1
             self._save_record(current)
             return record_for_client(current)
@@ -716,7 +741,7 @@ class ReviewWorkspace:
                 raise WorkspaceError("annotation revision conflict")
             task_ids = {task["task_id"] for task in current["tasks"]}
             if set(current["reviewed_task_ids"]) != task_ids:
-                raise WorkspaceError("every count task must be reviewed before confirmation")
+                raise WorkspaceError("source reference must be reviewed before confirmation")
             preview_path = self.preview_path(current["source"]["sha256"])
             if not preview_path.is_file():
                 raise WorkspaceError("bounded source preview is missing")

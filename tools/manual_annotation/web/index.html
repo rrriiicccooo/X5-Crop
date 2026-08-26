@@ -55,11 +55,11 @@
       </header>
 
       <section class="task-bar">
-        <div id="taskTabs" class="task-tabs"></div>
+        <div id="sourceReferenceSummary" class="source-reference-summary"></div>
         <div class="task-actions">
           <label class="review-check">
-            <input id="taskReviewed" type="checkbox" disabled>
-            <span>本任务 reference 已审核</span>
+            <input id="sourceReviewed" type="checkbox" disabled>
+            <span>本 source reference 已审核</span>
           </label>
           <button id="confirmButton" class="primary" disabled>确认整张黄金基线</button>
         </div>
@@ -142,7 +142,7 @@
         <p>确认后记录冻结。有可见内容的 Frame polygon 是最内侧可接受的 0 bleed 裁切基准，不是真实内容边界的唯一答案；空曝光 slot 不建立人工边界或 polygon，但仍保留在 count 和正式输出中。</p>
       </div>
       <label><input type="checkbox" data-confirm-check="shared_edges"> 两条共享边已在整条片带上检查</label>
-      <label><input type="checkbox" data-confirm-check="task_boundaries"> 每个 count 任务中适用的成对短边已检查；空曝光 slot 无人工 reference</label>
+      <label><input type="checkbox" data-confirm-check="task_boundaries"> 该 source 中全部适用的成对短边已检查；空曝光 slot 无人工 reference</label>
       <label><input type="checkbox" data-confirm-check="native_pixel_checks"> 关键位置已使用 1:1 原生像素检查</label>
       <label><input type="checkbox" data-confirm-check="safe_without_bleed"> 此 0 bleed 基准裁切可以直接接受；正式输出不得向其内侧越界</label>
       <div class="dialog-actions">

@@ -265,12 +265,11 @@ class AnnotationRequestHandler(BaseHTTPRequestHandler):
                 result = self.server.workspace.update_geometry(identity, payload)
             elif path.startswith("/api/review/") and self.command == "POST":
                 identity = path.removeprefix("/api/review/")
-                if set(payload) != {"expected_revision", "task_id", "reviewed"}:
-                    raise WorkspaceError("task review request has unexpected fields")
-                result = self.server.workspace.set_task_reviewed(
+                if set(payload) != {"expected_revision", "reviewed"}:
+                    raise WorkspaceError("source review request has unexpected fields")
+                result = self.server.workspace.set_source_reviewed(
                     identity,
                     expected_revision=payload["expected_revision"],
-                    task_id=payload["task_id"],
                     reviewed=payload["reviewed"],
                 )
             elif path.startswith("/api/confirm/") and self.command == "POST":

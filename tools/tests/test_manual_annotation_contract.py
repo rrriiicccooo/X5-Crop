@@ -34,6 +34,7 @@ from tools.manual_annotation.model import (
 from tools.manual_annotation.proposal import (
     _align_red_roles,
     _constrain_boundary_line_to_source,
+    canonicalize_source_reference_mappings,
 )
 from tools.manual_annotation.server import create_server
 from tools.manual_annotation.workspace import ReviewWorkspace, WorkspaceError
@@ -185,6 +186,45 @@ class ManualAnnotationModelContractTest(unittest.TestCase):
             slot_boundary_ids(record["tasks"][1]["slots"][0])[0],
         )
 
+    def test_source_review_cannot_be_partial_across_count_aliases(self) -> None:
+        record = _annotation_record()
+        record["reviewed_task_ids"] = ["S001"]
+        with self.assertRaisesRegex(
+            AnnotationError,
+            "source reference review state is invalid",
+        ):
+            validate_annotation_record(record)
+
+    def test_lower_count_maps_to_canonical_source_frame_subset(self) -> None:
+        record = _annotation_record()
+        record["tasks"][0]["slots"][0]["reference_geometry"] = {
+            "kind": "boundary_pair",
+            "start_boundary_id": "B001",
+            "end_boundary_id": "B004",
+        }
+        with self.assertRaisesRegex(
+            AnnotationError,
+            "not a subset of the source reference",
+        ):
+            validate_annotation_record(record)
+        normalized = canonicalize_source_reference_mappings(record)
+        canonical_pairs = {
+            slot_boundary_ids(slot)
+            for slot in normalized["tasks"][1]["slots"]
+            if slot_boundary_ids(slot) is not None
+        }
+        lower_pairs = {
+            slot_boundary_ids(slot)
+            for slot in normalized["tasks"][0]["slots"]
+            if slot_boundary_ids(slot) is not None
+        }
+        self.assertTrue(lower_pairs.issubset(canonical_pairs))
+        self.assertEqual(
+            normalized["diagnostics"]["source_reference_mapping"]["canonical_task_id"],
+            "S002",
+        )
+        validate_annotation_record(normalized)
+
     def test_contact_reuses_one_physical_boundary(self) -> None:
         record = _annotation_record()
         task = record["tasks"][1]
@@ -205,6 +245,7 @@ class ManualAnnotationModelContractTest(unittest.TestCase):
         task["slots"][0]["reference_geometry"]["end_boundary_id"] = "B003"
         task["slots"][1]["reference_geometry"]["start_boundary_id"] = "B002"
         task["adjacencies"][0]["kind"] = "overlap"
+        record = canonicalize_source_reference_mappings(record)
         validate_annotation_record(record)
         self.assertEqual(len(frame_polygons_display(record, task)), 2)
 
@@ -214,6 +255,7 @@ class ManualAnnotationModelContractTest(unittest.TestCase):
         task["slots"][0]["reference_geometry"]["end_boundary_id"] = "B003"
         task["slots"][1]["reference_geometry"]["start_boundary_id"] = "B002"
         task["adjacencies"][0]["kind"] = "unresolved"
+        record = canonicalize_source_reference_mappings(record)
         validate_annotation_record(record)
 
     def test_blank_exposure_has_no_reference_polygon_or_accuracy_frame(self) -> None:
@@ -561,10 +603,9 @@ class ManualAnnotationWorkspaceContractTest(unittest.TestCase):
             sha256_file(preview),
             record["diagnostics"]["preview_jpeg_sha256"],
         )
-        reviewed = workspace.set_task_reviewed(
+        reviewed = workspace.set_source_reviewed(
             "S001",
             expected_revision=record["revision"],
-            task_id="S001",
             reviewed=True,
         )
         confirmed = workspace.confirm(
@@ -587,12 +628,59 @@ class ManualAnnotationWorkspaceContractTest(unittest.TestCase):
             confirmed["confirmation"]["review_artifact_sha256"],
         )
         with self.assertRaisesRegex(WorkspaceError, "immutable"):
-            workspace.set_task_reviewed(
+            workspace.set_source_reviewed(
                 "S001",
                 expected_revision=confirmed["revision"],
-                task_id="S001",
                 reviewed=False,
             )
+
+    def test_one_source_review_covers_every_count_alias(self) -> None:
+        self.fixture.add_two_count_alias()
+        workspace = ReviewWorkspace(self.fixture.root)
+        workspace.prepare()
+        record = workspace.load_record("S001")
+        reviewed = workspace.set_source_reviewed(
+            "S001",
+            expected_revision=record["revision"],
+            reviewed=True,
+        )
+        self.assertEqual(
+            reviewed["reviewed_task_ids"],
+            ["S001", "S002"],
+        )
+        unreviewed = workspace.set_source_reviewed(
+            "S001",
+            expected_revision=reviewed["revision"],
+            reviewed=False,
+        )
+        self.assertEqual(unreviewed["reviewed_task_ids"], [])
+
+    def test_prepare_normalizes_existing_unconfirmed_count_mapping(self) -> None:
+        self.fixture.add_two_count_alias()
+        workspace = ReviewWorkspace(self.fixture.root)
+        workspace.prepare()
+        record_path = workspace.record_path(self.fixture.source_sha)
+        record = json.loads(record_path.read_text(encoding="utf-8"))
+        canonical = max(record["tasks"], key=lambda task: int(task["count"]))
+        canonical_pairs = [
+            slot_boundary_ids(slot)
+            for slot in canonical["slots"]
+            if slot_boundary_ids(slot) is not None
+        ]
+        record["tasks"][0]["slots"][0]["reference_geometry"] = {
+            "kind": "boundary_pair",
+            "start_boundary_id": canonical_pairs[0][0],
+            "end_boundary_id": canonical_pairs[-1][1],
+        }
+        record_path.write_text(json.dumps(record), encoding="utf-8")
+
+        counts = workspace.prepare()
+        self.assertEqual(counts["source_references_normalized"], 1)
+        normalized = workspace.load_record("S001")
+        self.assertIn(
+            slot_boundary_ids(normalized["tasks"][0]["slots"][0]),
+            set(canonical_pairs),
+        )
 
     def test_user_red_markup_is_fitted_as_reviewable_geometry(self) -> None:
         self.fixture.write_review_context()
@@ -649,6 +737,19 @@ class ManualAnnotationWorkspaceContractTest(unittest.TestCase):
         self.assertEqual(slot["slot_kind"], "blank_exposure")
         self.assertEqual(slot["reference_geometry"], {"kind": "not_applicable"})
         self.assertEqual(record["boundary_pool"], [])
+        self.assertEqual(frame_polygons_display(record, record["tasks"][0]), ())
+
+    def test_red_markup_import_applies_blank_slot_after_role_alignment(self) -> None:
+        self.fixture.write_review_context(blank=True)
+        self.fixture.draw_red_markup()
+        workspace = ReviewWorkspace(self.fixture.root)
+        counts = workspace.prepare()
+        record = workspace.load_record("S001")
+        self.assertEqual(counts["red_drafts"], 1)
+        self.assertEqual(
+            record["tasks"][0]["slots"][0]["reference_geometry"],
+            {"kind": "not_applicable"},
+        )
         self.assertEqual(frame_polygons_display(record, record["tasks"][0]), ())
 
     def test_manifest_must_match_tracked_count(self) -> None:
@@ -734,7 +835,6 @@ class ManualAnnotationServerContractTest(unittest.TestCase):
                 data=json.dumps(
                     {
                         "expected_revision": 1,
-                        "task_id": "S001",
                         "reviewed": True,
                     }
                 ).encode(),
@@ -804,6 +904,14 @@ class ManualAnnotationPackagingContractTest(unittest.TestCase):
         self.assertIn("双色虚线=start/end 接触边", joined)
         self.assertIn("绿色闭合区域是有内容 reference 的 frame", joined)
         self.assertIn("空曝光 slot 不画边界", joined)
+        self.assertIn('id="sourcereferencesummary"', joined)
+        self.assertIn('id="sourcereviewed"', joined)
+        self.assertIn("共享 source reference", joined)
+        self.assertIn("sourcereferenceframes", joined)
+        self.assertIn("sourceboundaryroles", joined)
+        self.assertNotIn('id="tasktabs"', joined)
+        self.assertNotIn("task-tab", joined)
+        self.assertNotIn("activetaskid", joined)
         self.assertIn("点击线可选中并用方向键或 [ ] 修改", joined)
         self.assertIn("点击空白处沿胶片长轴移动", joined)
         self.assertIn("最内侧可接受", joined)

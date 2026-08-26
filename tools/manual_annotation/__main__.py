@@ -84,7 +84,8 @@ def _prepare(workspace: object, arguments: argparse.Namespace) -> None:
     )
     print(
         "Prepared {prepared}; existing {existing}; imported confirmed {confirmed_imported}; "
-        "recovered red drafts {red_drafts}.".format(**counts),
+        "recovered red drafts {red_drafts}; normalized shared source references "
+        "{source_references_normalized}.".format(**counts),
         flush=True,
     )
 
