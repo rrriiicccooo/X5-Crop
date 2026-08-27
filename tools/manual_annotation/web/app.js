@@ -3,11 +3,7 @@
 const SVG_NS = "http://www.w3.org/2000/svg";
 const ROTATION_STEP_DEGREES = 0.01;
 const FIT_REVIEW_CROSS_FRACTION = 0.94;
-const FRAME_FILL_COLORS = [
-  [30, 144, 255], [255, 120, 40], [80, 200, 120], [210, 90, 255],
-  [255, 210, 40], [40, 210, 220], [255, 90, 120], [150, 170, 255],
-  [180, 120, 60], [120, 220, 60], [255, 160, 190], [70, 110, 210]
-];
+const FRAME_COLOR_COUNT = 12;
 const token = new URLSearchParams(window.location.search).get("token") || "";
 
 const elements = Object.fromEntries([
@@ -293,11 +289,8 @@ function svgElement(name, attributes = {}) {
   return node;
 }
 
-function frameVisualStyle(sourceOrdinal, fillAlpha) {
-  const [red, green, blue] = FRAME_FILL_COLORS[
-    (sourceOrdinal - 1) % FRAME_FILL_COLORS.length
-  ];
-  return `fill: rgba(${red}, ${green}, ${blue}, ${fillAlpha}); stroke: rgb(${red}, ${green}, ${blue})`;
+function frameColorClass(sourceOrdinal) {
+  return `frame-color-${((sourceOrdinal - 1) % FRAME_COLOR_COUNT) + 1}`;
 }
 
 function activeLineEntries() {
@@ -347,8 +340,7 @@ function renderGeometry() {
   sourceReferenceFrames().forEach((frame) => {
     const polygon = svgElement("polygon", {
       points: frame.points.map((point) => `${point[0]},${point[1]}`).join(" "),
-      class: "frame-polygon",
-      style: frameVisualStyle(frame.sourceOrdinal, 0.16),
+      class: `frame-polygon ${frameColorClass(frame.sourceOrdinal)}`,
       "data-frame-ordinal": frame.sourceOrdinal
     });
     const title = svgElement("title");
@@ -972,8 +964,7 @@ function renderLoupeGeometry() {
     sourceReferenceFrames().forEach((frame) => {
       const polygon = svgElement("polygon", {
         points: frame.points.map((point) => `${point[0]},${point[1]}`).join(" "),
-        class: "loupe-frame-polygon",
-        style: frameVisualStyle(frame.sourceOrdinal, 0.13),
+        class: `loupe-frame-polygon ${frameColorClass(frame.sourceOrdinal)}`,
         "data-frame-ordinal": frame.sourceOrdinal
       });
       const title = svgElement("title");

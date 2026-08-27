@@ -941,19 +941,34 @@ class ManualAnnotationPackagingContractTest(unittest.TestCase):
         self.assertIn("洋红=start，橙色=end", joined)
         self.assertIn("双色虚线=start/end 接触边", joined)
         self.assertIn("多色半透明区域=各个有内容 reference 的 frame", joined)
-        self.assertIn("const frame_fill_colors", joined)
-        self.assertIn("framevisualstyle", joined)
-        self.assertGreaterEqual(joined.count("style: framevisualstyle"), 2)
+        self.assertIn("const frame_color_count", joined)
+        self.assertIn("framecolorclass", joined)
+        self.assertGreaterEqual(
+            joined.count("framecolorclass(frame.sourceordinal)"),
+            2,
+        )
+        self.assertNotIn("framevisualstyle", joined)
+        self.assertNotIn("style: frame", joined)
         self.assertLess(joined.index('id="polygonlayer"'), joined.index('id="linelayer"'))
         self.assertNotIn("绿色闭合区域是有内容 reference 的 frame", joined)
-        palette_match = re.search(
-            r"const FRAME_FILL_COLORS = (\[[\s\S]*?\]);",
-            assets["app.js"],
+        palette_matches = re.findall(
+            r"\.frame-color-(\d+)\s*\{\s*fill:\s*rgb\((\d+),\s*(\d+),\s*(\d+)\);",
+            assets["styles.css"],
         )
-        self.assertIsNotNone(palette_match)
         self.assertEqual(
-            tuple(tuple(color) for color in json.loads(palette_match.group(1))),
+            tuple(
+                tuple(int(value) for value in match[1:])
+                for match in sorted(palette_matches, key=lambda match: int(match[0]))
+            ),
             FRAME_FILL_COLORS,
+        )
+        self.assertRegex(
+            assets["styles.css"],
+            r"\.frame-polygon\s*\{[^}]*fill:\s*none;[^}]*stroke:\s*none;",
+        )
+        self.assertRegex(
+            assets["styles.css"],
+            r"\.loupe-frame-polygon\s*\{[^}]*fill:\s*none;[^}]*stroke:\s*none;",
         )
         self.assertIn("空曝光 slot 不画边界", joined)
         self.assertIn('id="sourcereferencesummary"', joined)

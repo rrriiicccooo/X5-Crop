@@ -92,7 +92,7 @@ button:disabled { opacity: .38; cursor: not-allowed; }
 .empty-state span { max-width: 520px; font-size: 13px; }
 .canvas-stage:not(.empty) .empty-state { display: none; }
 .zoom-hint { position: absolute; left: 14px; bottom: 12px; padding: 6px 9px; border-radius: 7px; background: rgba(10,12,16,.74); color: #aab3c1; font-size: 11px; pointer-events: none; }
-.frame-polygon { stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.frame-polygon { fill: none; stroke: none; fill-opacity: .16; stroke-opacity: .96; stroke-width: 1.5; vector-effect: non-scaling-stroke; }
 .annotation-line { stroke-width: 2.2; vector-effect: non-scaling-stroke; cursor: grab; pointer-events: stroke; }
 .annotation-line.shared { stroke: var(--cyan); }
 .annotation-line.boundary.start, .annotation-line.boundary.contact-start { stroke: var(--boundary-start); }
@@ -121,8 +121,20 @@ button:disabled { opacity: .38; cursor: not-allowed; }
 .loupe-empty { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font-size: 12px; }
 .loupe-wrap.ready .loupe-empty { display: none; }
 .loupe-cross { stroke: rgba(255,255,255,.65); stroke-width: 1; vector-effect: non-scaling-stroke; stroke-dasharray: 4 4; pointer-events: none; }
-.loupe-frame-polygon { stroke-width: 1.8; vector-effect: non-scaling-stroke; pointer-events: none; }
+.loupe-frame-polygon { fill: none; stroke: none; fill-opacity: .13; stroke-opacity: .96; stroke-width: 1.8; vector-effect: non-scaling-stroke; pointer-events: none; }
 .loupe-frame-label { fill: #f4fff9; paint-order: stroke; stroke: rgba(0,0,0,.82); text-anchor: middle; dominant-baseline: central; pointer-events: none; }
+.frame-color-1 { fill: rgb(30, 144, 255); stroke: rgb(30, 144, 255); }
+.frame-color-2 { fill: rgb(255, 120, 40); stroke: rgb(255, 120, 40); }
+.frame-color-3 { fill: rgb(80, 200, 120); stroke: rgb(80, 200, 120); }
+.frame-color-4 { fill: rgb(210, 90, 255); stroke: rgb(210, 90, 255); }
+.frame-color-5 { fill: rgb(255, 210, 40); stroke: rgb(255, 210, 40); }
+.frame-color-6 { fill: rgb(40, 210, 220); stroke: rgb(40, 210, 220); }
+.frame-color-7 { fill: rgb(255, 90, 120); stroke: rgb(255, 90, 120); }
+.frame-color-8 { fill: rgb(150, 170, 255); stroke: rgb(150, 170, 255); }
+.frame-color-9 { fill: rgb(180, 120, 60); stroke: rgb(180, 120, 60); }
+.frame-color-10 { fill: rgb(120, 220, 60); stroke: rgb(120, 220, 60); }
+.frame-color-11 { fill: rgb(255, 160, 190); stroke: rgb(255, 160, 190); }
+.frame-color-12 { fill: rgb(70, 110, 210); stroke: rgb(70, 110, 210); }
 .loupe-line-hit-target { stroke: transparent; stroke-width: 18; vector-effect: non-scaling-stroke; pointer-events: stroke; cursor: pointer; }
 .loupe-annotation-line { stroke-width: 2.4; vector-effect: non-scaling-stroke; pointer-events: stroke; cursor: pointer; filter: drop-shadow(0 0 2px #000); }
 .loupe-annotation-line.shared { stroke: var(--cyan); }
