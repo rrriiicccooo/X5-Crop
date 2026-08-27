@@ -40,6 +40,7 @@ from tools.manual_annotation.proposal import (
 from tools.manual_annotation.server import create_server
 from tools.manual_annotation.workspace import ReviewWorkspace, WorkspaceError
 from tools.release.manifest import RELEASE_FILES
+from x5crop.configuration.diagnostics import DebugStyleParameters
 from x5crop.debug.canvas import FRAME_FILL_COLORS
 from x5crop.io.orientation import orientation_mapping
 
@@ -940,7 +941,7 @@ class ManualAnnotationPackagingContractTest(unittest.TestCase):
         self.assertIn("共享短轴 h 占可用高度约 94%", joined)
         self.assertIn("洋红=start，橙色=end", joined)
         self.assertIn("双色虚线=start/end 接触边", joined)
-        self.assertIn("多色半透明区域=各个有内容 reference 的 frame", joined)
+        self.assertIn("彩色轮廓=各个有内容 reference 的 frame", joined)
         self.assertIn("const frame_color_count", joined)
         self.assertIn("framecolorclass", joined)
         self.assertGreaterEqual(
@@ -970,6 +971,20 @@ class ManualAnnotationPackagingContractTest(unittest.TestCase):
             assets["styles.css"],
             r"\.loupe-frame-polygon\s*\{[^}]*fill:\s*none;[^}]*stroke:\s*none;",
         )
+        frame_fill_expectations = {
+            "frame-polygon": DebugStyleParameters().output_fill_alpha,
+            "loupe-frame-polygon": 0.0,
+        }
+        for selector, expected_opacity in frame_fill_expectations.items():
+            opacity_match = re.search(
+                rf"\.{selector}\s*\{{[^}}]*fill-opacity:\s*([0-9.]+);",
+                assets["styles.css"],
+            )
+            self.assertIsNotNone(opacity_match)
+            self.assertEqual(
+                float(opacity_match.group(1)),
+                expected_opacity,
+            )
         self.assertIn("空曝光 slot 不画边界", joined)
         self.assertIn('id="sourcereferencesummary"', joined)
         self.assertIn('id="sourcereviewed"', joined)

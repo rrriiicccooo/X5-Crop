@@ -878,7 +878,7 @@ function setLoupeMaximized(maximized, reload = true) {
   elements.maximizeLoupeButton.textContent = next ? "退出审阅" : "完整高度审阅";
   elements.maximizeLoupeButton.title = next ? "退出完整高度审阅（F 或 Esc）" : "完整高度审阅（F）";
   elements.loupeHelp.textContent = next
-    ? "共享短轴 H 占可用高度约 94%。洋红=start，橙色=end，双色虚线=start/end 接触边；多色半透明区域=各个有内容 reference 的 Frame，空曝光 slot 不画边界。点击线可选中并用方向键或 [ ] 修改；点击空白处沿胶片长轴移动。按 F 或 Esc 退出。"
+    ? "共享短轴 H 占可用高度约 94%。洋红=start，橙色=end，双色虚线=start/end 接触边；彩色轮廓=各个有内容 reference 的 Frame，空曝光 slot 不画边界。点击线可选中并用方向键或 [ ] 修改；点击空白处沿胶片长轴移动。按 F 或 Esc 退出。"
     : "局部图直接来自原 TIFF 像素。用它检查线是否安全贴合物理边缘；按 F 进入完整高度审阅。";
   renderLoupeGeometry();
   if (reload && lastPointer) requestAnimationFrame(() => loadLoupe(lastPointer));
