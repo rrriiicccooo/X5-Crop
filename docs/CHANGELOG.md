@@ -20,6 +20,8 @@ materialization、平行 detector 和 report reuse 均不再支持。
   evaluation task 仍保留独立 count 语义。
 - 最终黄金确认弹窗只保留取消与确认。一次确认覆盖既定检查范围，前端不再要求重复勾选四项；冻结成功后
   按队列顺序自动打开下一张未完成样片。
+- 完整高度审阅首次从片带长轴起点打开；1:1 与完整高度审阅中的选中线改为半透明芯线和轻量轮廓，
+  避免遮挡线下的真实像素边缘。
 - `135-dual` 只自动处理 12 格、每 lane 6 格；其它 count 安全进入 review。任一 slot 不安全时整张
   source review，不做 slot salvage。
 - Detector 改为有界 fixed-template-first 对准：先建立 role-free coarse support，再在固定 outer、

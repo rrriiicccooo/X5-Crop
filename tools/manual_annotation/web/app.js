@@ -43,6 +43,7 @@ let loupeUrl = null;
 let loupeTimer = null;
 let lastPointer = null;
 let loupeMaximized = false;
+let fullHeightReviewVisited = false;
 let loupeResizeTimer = null;
 let toastTimer = null;
 
@@ -154,6 +155,7 @@ async function openSource(item) {
     editGeneration = 0;
     const extent = currentRecord.source.canonical_extent;
     lastPointer = [extent.width / 2, extent.height / 2];
+    fullHeightReviewVisited = false;
     elements.cursorCoordinate.textContent = `x ${lastPointer[0].toFixed(1)} · y ${lastPointer[1].toFixed(1)}`;
     elements.loupeWrap.classList.remove("ready");
     resetView();
@@ -824,6 +826,18 @@ function fitReviewGeometry(point, render) {
   return {center, sourceWidth, sourceHeight};
 }
 
+function fullHeightStartPoint() {
+  const extent = currentRecord.source.canonical_extent;
+  const horizontal = currentRecord.strip_axis_display === "horizontal";
+  const seed = horizontal
+    ? [0, extent.height / 2]
+    : [extent.width / 2, 0];
+  const fitted = fitReviewGeometry(seed, renderedTileSize());
+  return horizontal
+    ? [Math.floor(fitted.sourceWidth / 2), fitted.center[1]]
+    : [fitted.center[0], Math.floor(fitted.sourceHeight / 2)];
+}
+
 function tileRequest(point) {
   const render = renderedTileSize();
   if (!loupeMaximized) {
@@ -848,6 +862,10 @@ function setLoupeMaximized(maximized, reload = true) {
   if (loupeMaximized === next) return;
   loupeMaximized = next;
   document.body.classList.toggle("loupe-maximized", next);
+  if (next && !fullHeightReviewVisited) {
+    lastPointer = fullHeightStartPoint();
+    fullHeightReviewVisited = true;
+  }
   elements.maximizeLoupeButton.setAttribute("aria-pressed", String(next));
   elements.loupeTitle.textContent = next ? "完整高度审阅" : "1:1 原生像素检查";
   elements.loupeSvg.setAttribute("aria-label", next ? "胶片完整高度审阅图" : "原生像素局部图");

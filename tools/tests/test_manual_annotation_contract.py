@@ -922,6 +922,18 @@ class ManualAnnotationPackagingContractTest(unittest.TestCase):
         self.assertIn('id="maximizeloupebutton"', joined)
         self.assertIn("loupe-maximized", joined)
         self.assertIn("fit_review_cross_fraction", joined)
+        self.assertIn("fullheightreviewvisited = false", joined)
+        self.assertIn("if (next && !fullheightreviewvisited)", joined)
+        self.assertIn("fullheightstartpoint", joined)
+        self.assertIn("math.floor(fitted.sourcewidth / 2)", joined)
+        self.assertRegex(
+            joined,
+            r"\.loupe-selection-halo\s*\{[^}]*opacity:\s*\.28;",
+        )
+        self.assertRegex(
+            joined,
+            r"\.loupe-annotation-line\.selected\s*\{[^}]*opacity:\s*\.58;",
+        )
         self.assertIn("sharedcrosscoordinate", joined)
         self.assertIn("共享短轴 h 占可用高度约 94%", joined)
         self.assertIn("洋红=start，橙色=end", joined)
