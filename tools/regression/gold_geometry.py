@@ -34,12 +34,9 @@ def _blocking_sides_by_frame(
     gold: dict[str, object],
     frames: Sequence[dict[str, object]],
 ) -> tuple[frozenset[str], ...]:
-    basis_evidence_present = tuple(
-        key in gold for key in ("boundary_pool", "slots")
-    )
-    if not any(basis_evidence_present):
-        return tuple(FRAME_SIDES for _frame in frames)
-    if not all(basis_evidence_present) or "shared_edges" not in gold:
+    if not all(
+        key in gold for key in ("shared_edges", "boundary_pool", "slots")
+    ):
         raise ValueError("gold directional evidence is incomplete")
 
     shared_edges = gold["shared_edges"]

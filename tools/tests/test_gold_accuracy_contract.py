@@ -1,8 +1,17 @@
 from __future__ import annotations
 
+import json
 import unittest
 
-from tools.regression.accuracy import _validate_task_result
+from tools.manual_annotation.model import (
+    BASELINE_SCHEMA,
+    canonical_record_sha256,
+)
+from tools.regression.accuracy import (
+    CONFIRMED_GEOMETRY_KEYS,
+    GOLD_COHORT_PATH,
+    _validate_task_result,
+)
 from tools.regression.gold_geometry import (
     ordered_gold_mapping,
     validate_approved_geometry,
@@ -25,35 +34,46 @@ def _basis_line(line_id: str, review_basis: str) -> dict[str, object]:
     return {"line_id": line_id, "review_basis": review_basis}
 
 
+def _directional_geometry(
+    polygon: list[list[float]],
+    *,
+    start_basis: str = "directly_visible",
+) -> dict[str, object]:
+    return {
+        "strip_orientation": "horizontal",
+        "shared_edges": [
+            _basis_line("E1", "directly_visible"),
+            _basis_line("E2", "directly_visible"),
+        ],
+        "boundary_pool": [
+            _basis_line("B001", start_basis),
+            _basis_line("B002", "directly_visible"),
+        ],
+        "slots": [
+            {
+                "ordinal": 1,
+                "slot_kind": "image",
+                "reference_geometry": {
+                    "kind": "boundary_pair",
+                    "start_boundary_id": "B001",
+                    "end_boundary_id": "B002",
+                },
+            }
+        ],
+        "frames": [_frame(polygon)],
+    }
+
+
 def _basis_aware_record() -> dict[str, object]:
     gold = [[0.0, 0.0], [560.0, 0.0], [560.0, 560.0], [0.0, 560.0]]
     return {
         "sample_id": "estimated-start",
         "format_id": "120-66",
         "cohort_role": "nominal",
-        "confirmed_geometry": {
-            "strip_orientation": "horizontal",
-            "shared_edges": [
-                _basis_line("E1", "directly_visible"),
-                _basis_line("E2", "directly_visible"),
-            ],
-            "boundary_pool": [
-                _basis_line("R001", "human_width_estimate"),
-                _basis_line("R002", "directly_visible"),
-            ],
-            "slots": [
-                {
-                    "ordinal": 1,
-                    "slot_kind": "photo",
-                    "reference_geometry": {
-                        "kind": "boundary_pair",
-                        "start_boundary_id": "R001",
-                        "end_boundary_id": "R002",
-                    },
-                }
-            ],
-            "frames": [_frame(gold)],
-        },
+        "confirmed_geometry": _directional_geometry(
+            gold,
+            start_basis="human_width_estimate",
+        ),
     }
 
 
@@ -67,13 +87,62 @@ def _approved_report(polygon: list[list[float]]) -> dict[str, object]:
 
 
 class GoldAccuracyContractTest(unittest.TestCase):
-    def test_legacy_shared_edges_without_review_basis_remain_strict(self) -> None:
+    def test_tracked_v1_rows_use_current_directional_schema(self) -> None:
+        records = [
+            json.loads(line)
+            for line in GOLD_COHORT_PATH.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+        self.assertEqual(len(records), 9)
+        for record in records:
+            geometry = record["confirmed_geometry"]
+            self.assertEqual(set(geometry), CONFIRMED_GEOMETRY_KEYS)
+            self.assertEqual(geometry["baseline_schema"], BASELINE_SCHEMA)
+            self.assertEqual(record["acceptance_baseline_schema"], BASELINE_SCHEMA)
+            self.assertEqual(
+                record["geometry_digest"],
+                canonical_record_sha256(geometry),
+            )
+            lines = geometry["shared_edges"] + geometry["boundary_pool"]
+            self.assertEqual(
+                [line["role"] for line in geometry["shared_edges"]],
+                ["short_low", "short_high"],
+            )
+            self.assertTrue(
+                all(line["review_basis"] == "directly_visible" for line in lines)
+            )
+            self.assertTrue(
+                all(slot["slot_kind"] == "image" for slot in geometry["slots"])
+            )
+            self.assertTrue(
+                all(
+                    slot["reference_geometry"]["kind"] == "boundary_pair"
+                    for slot in geometry["slots"]
+                )
+            )
+            boundary_ids = {
+                line["line_id"] for line in geometry["boundary_pool"]
+            }
+            self.assertTrue(
+                all(
+                    {
+                        slot["reference_geometry"]["start_boundary_id"],
+                        slot["reference_geometry"]["end_boundary_id"],
+                    }
+                    <= boundary_ids
+                    for slot in geometry["slots"]
+                )
+            )
+            self.assertTrue(
+                all(item["kind"] == "separator" for item in geometry["adjacencies"])
+            )
+
+    def test_incomplete_directional_geometry_is_rejected(self) -> None:
         gold = [[0.0, 0.0], [560.0, 0.0], [560.0, 560.0], [0.0, 560.0]]
         record = {
-            "sample_id": "legacy-v1",
+            "sample_id": "incomplete",
             "confirmed_geometry": {
                 "strip_orientation": "horizontal",
-                "shared_edges": [{"role": "top"}, {"role": "bottom"}],
                 "frames": [_frame(gold)],
             },
         }
@@ -82,7 +151,11 @@ class GoldAccuracyContractTest(unittest.TestCase):
             "output": {"finalization": {"output_footprints": []}},
         }
 
-        self.assertTrue(validate_selected_candidate_coverage(record, report))
+        with self.assertRaisesRegex(
+            ValueError,
+            "gold directional evidence is incomplete",
+        ):
+            validate_selected_candidate_coverage(record, report)
 
     def test_estimated_start_does_not_block_inward_accuracy(self) -> None:
         output = [[10.0, 0.0], [560.0, 0.0], [560.0, 560.0], [10.0, 560.0]]
@@ -139,10 +212,7 @@ class GoldAccuracyContractTest(unittest.TestCase):
             "sample_id": "challenge-cut",
             "format_id": "120-66",
             "cohort_role": "challenge",
-            "confirmed_geometry": {
-                "strip_orientation": "horizontal",
-                "frames": [_frame(gold)],
-            },
+            "confirmed_geometry": _directional_geometry(gold),
         }
         report = {
             "decision": {"status": "needs_review"},
@@ -178,10 +248,7 @@ class GoldAccuracyContractTest(unittest.TestCase):
         record = {
             "sample_id": "candidate-review",
             "format_id": "120-66",
-            "confirmed_geometry": {
-                "strip_orientation": "horizontal",
-                "frames": [_frame(gold)],
-            },
+            "confirmed_geometry": _directional_geometry(gold),
         }
         report = {
             "photo_geometry": {"lanes": [{"output_footprints": [_output(gold)]}]},
@@ -197,10 +264,7 @@ class GoldAccuracyContractTest(unittest.TestCase):
         record = {
             "sample_id": "candidate-cut",
             "format_id": "120-66",
-            "confirmed_geometry": {
-                "strip_orientation": "horizontal",
-                "frames": [_frame(gold)],
-            },
+            "confirmed_geometry": _directional_geometry(gold),
         }
         report = {
             "photo_geometry": {
@@ -232,10 +296,9 @@ class GoldAccuracyContractTest(unittest.TestCase):
         record = {
             "sample_id": "candidate-absent",
             "format_id": "120-66",
-            "confirmed_geometry": {
-                "strip_orientation": "horizontal",
-                "frames": [_frame([[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]])],
-            },
+            "confirmed_geometry": _directional_geometry(
+                [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]]
+            ),
         }
         report = {
             "photo_geometry": {"lanes": [{"output_footprints": []}]},
@@ -303,10 +366,7 @@ class GoldAccuracyContractTest(unittest.TestCase):
         five_percent = [[72.0, 72.0], [688.0, 72.0], [688.0, 688.0], [72.0, 688.0]]
         record = {
             "sample_id": "five-percent",
-            "confirmed_geometry": {
-                "strip_orientation": "horizontal",
-                "frames": [_frame(gold)],
-            },
+            "confirmed_geometry": _directional_geometry(gold),
         }
         report = {
             "output": {
@@ -330,10 +390,7 @@ class GoldAccuracyContractTest(unittest.TestCase):
         ]
         record = {
             "sample_id": "one-sided-ten-percent",
-            "confirmed_geometry": {
-                "strip_orientation": "horizontal",
-                "frames": [_frame(gold)],
-            },
+            "confirmed_geometry": _directional_geometry(gold),
         }
         output = _output(one_sided_ten_percent)
         output["envelope"] = {"boundary_use": "enclosing_support_pair"}

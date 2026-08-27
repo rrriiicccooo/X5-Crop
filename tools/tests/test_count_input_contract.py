@@ -96,14 +96,9 @@ class CountInputContractTest(unittest.TestCase):
                         confirmed["source_relative_path"],
                         expected_source,
                     )
-                    self.assertEqual(
-                        confirmed["marked_relative_path"],
-                        (
-                            "Test/manual_review/gold_calibration_v1/"
-                            f"{row['format_id']}/{row['sample_id']}"
-                            f"_count-{row['count']}.tif"
-                        ),
-                    )
+                    self.assertEqual(confirmed["sample_id"], row["sample_id"])
+                    self.assertEqual(confirmed["format_id"], row["format_id"])
+                    self.assertEqual(confirmed["count"], row["count"])
 
     def test_count_request_carries_only_user_intent(self) -> None:
         explicit = SlotCountRequest(3)

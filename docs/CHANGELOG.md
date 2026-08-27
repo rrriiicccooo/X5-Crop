@@ -93,6 +93,10 @@ materialization、平行 detector 和 report reuse 均不再支持。
   `geometry_oracle_schema` 改为 `acceptance_contract` 与 `acceptance_baseline_schema`。逐线
   `human_width_estimate` 只将对应方向降为 accuracy 非阻断证据；同格其余可见边继续阻断，Runtime
   安全与 Gate 不变。
+- 九张既有 v1 黄金样片已无损规范化为当前 source geometry schema：保留原有 polygon、source SHA、
+  count、确认时间和 review artifact；补齐逐线 `review_basis`、共享短轴边、`boundary_pool`、
+  `slots`、`adjacencies` 以及每格 `start/end` 引用。依据人工复核声明，全部边为
+  `directly_visible`，全部格为 `image`，相邻关系为 `separator`；旧式四边隐式兼容路径已删除。
 - Registered gray 直接从 uint16 RGB 分块计算，复用两个 float32 luma plane 和一个 float64
   normalization plane；逐像素结果保持不变。普通 product path 在 report facts 冻结后、TIFF
   sampling 前释放整张 registered gray；development CLI 也在冻结完整 facts 后释放，只有 Debug

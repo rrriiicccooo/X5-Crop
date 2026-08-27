@@ -69,6 +69,9 @@ python3 -m tools.manual_annotation audit
    任务定义该 source 的物理 Frame 集；其他 count 只能按长轴顺序引用该集合的子集，不能再生成另一套黄金矩形。
    相同物理 Frame 只画一次。勾选“本 source reference 已审核”一次即覆盖该 source。底层 count 任务仍各自保存
    明确的 `slots` 与 `adjacencies`，并共用一个 source-level `boundary_pool`，不会把 count 绑定到 SHA。
+   每个有内容 slot 通过 `start_boundary_id` / `end_boundary_id` 明确长轴起止边，并与
+   `shared_edges` 的 `short_low` / `short_high` 共同唯一确定四边；后两者在横向片带中对应
+   top/bottom，在纵向片带中对应显示坐标的 left/right。
    `contact` 的相邻照片共享同一条物理线；`overlap` 保留交叉的两条边。`slot_kind` 保留空片、残缺
    曝光和源截断；只有 `blank_exposure` 使用 `reference_geometry: not_applicable`，且不能通过少输出
    一格来隐藏。

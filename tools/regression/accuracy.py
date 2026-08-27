@@ -9,6 +9,11 @@ import sys
 from tempfile import TemporaryDirectory
 from typing import Iterable, Sequence
 
+from tools.manual_annotation.model import (
+    BASELINE_SCHEMA,
+    canonical_record_sha256,
+)
+
 from .report_validation import validate_current_report_record
 
 from .cohort_count import validate_cohort_counts
@@ -24,6 +29,31 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 GOLD_COHORT_PATH = Path(__file__).with_name("cohorts") / "gold_accuracy.jsonl"
 EXPECTED_SOURCE_COUNT = 9
 EXPECTED_TASK_COUNT = 9
+CONFIRMED_GEOMETRY_KEYS = frozenset(
+    {
+        "baseline_schema",
+        "sample_id",
+        "status",
+        "authority",
+        "confirmation_scope",
+        "accuracy_scope",
+        "confirmed_at_utc",
+        "proposal_snapshot_sha256",
+        "source_relative_path",
+        "source_sha256",
+        "format_id",
+        "count",
+        "coordinate_system",
+        "strip_orientation",
+        "shared_edges",
+        "boundary_pool",
+        "slots",
+        "adjacencies",
+        "frames",
+        "confirmed_review_artifact",
+        "confirmed_review_artifact_sha256",
+    }
+)
 
 
 def validate_gold_source_identities() -> tuple[dict[str, object], ...]:
@@ -82,10 +112,23 @@ def validate_gold_source_identities() -> tuple[dict[str, object], ...]:
         geometry = record.get("confirmed_geometry")
         if (
             not isinstance(geometry, dict)
+            or set(geometry) != CONFIRMED_GEOMETRY_KEYS
+            or geometry.get("baseline_schema") != BASELINE_SCHEMA
             or geometry.get("status") != "user_confirmed"
+            or geometry.get("sample_id") != sample_id
+            or geometry.get("source_relative_path") != relative.as_posix()
             or geometry.get("source_sha256") != expected_sha
+            or geometry.get("format_id") != record.get("format_id")
+            or geometry.get("count") != count
+            or geometry.get("accuracy_scope")
+            != "slots_with_boundary_pair_reference_geometry"
             or record.get("acceptance_baseline_schema")
-            != geometry.get("baseline_schema")
+            != BASELINE_SCHEMA
+            or canonical_record_sha256(geometry)
+            != record.get("geometry_digest")
+            or not isinstance(geometry.get("slots"), list)
+            or len(geometry["slots"]) != count
+            or not isinstance(geometry.get("frames"), list)
             or len(geometry.get("frames", ()))
             != int(record.get("confirmed_geometry_slot_count", 0))
         ):
