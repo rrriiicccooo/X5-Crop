@@ -4,6 +4,7 @@ from copy import deepcopy
 from io import BytesIO
 import json
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -39,6 +40,7 @@ from tools.manual_annotation.proposal import (
 from tools.manual_annotation.server import create_server
 from tools.manual_annotation.workspace import ReviewWorkspace, WorkspaceError
 from tools.release.manifest import RELEASE_FILES
+from x5crop.debug.canvas import FRAME_FILL_COLORS
 from x5crop.io.orientation import orientation_mapping
 
 
@@ -938,7 +940,21 @@ class ManualAnnotationPackagingContractTest(unittest.TestCase):
         self.assertIn("共享短轴 h 占可用高度约 94%", joined)
         self.assertIn("洋红=start，橙色=end", joined)
         self.assertIn("双色虚线=start/end 接触边", joined)
-        self.assertIn("绿色闭合区域是有内容 reference 的 frame", joined)
+        self.assertIn("多色半透明区域=各个有内容 reference 的 frame", joined)
+        self.assertIn("const frame_fill_colors", joined)
+        self.assertIn("framevisualstyle", joined)
+        self.assertGreaterEqual(joined.count("style: framevisualstyle"), 2)
+        self.assertLess(joined.index('id="polygonlayer"'), joined.index('id="linelayer"'))
+        self.assertNotIn("绿色闭合区域是有内容 reference 的 frame", joined)
+        palette_match = re.search(
+            r"const FRAME_FILL_COLORS = (\[[\s\S]*?\]);",
+            assets["app.js"],
+        )
+        self.assertIsNotNone(palette_match)
+        self.assertEqual(
+            tuple(tuple(color) for color in json.loads(palette_match.group(1))),
+            FRAME_FILL_COLORS,
+        )
         self.assertIn("空曝光 slot 不画边界", joined)
         self.assertIn('id="sourcereferencesummary"', joined)
         self.assertIn('id="sourcereviewed"', joined)

@@ -21,7 +21,118 @@ def _output(polygon: list[list[float]]) -> dict[str, object]:
     return {"required_source_footprint": polygon}
 
 
+def _basis_line(line_id: str, review_basis: str) -> dict[str, object]:
+    return {"line_id": line_id, "review_basis": review_basis}
+
+
+def _basis_aware_record() -> dict[str, object]:
+    gold = [[0.0, 0.0], [560.0, 0.0], [560.0, 560.0], [0.0, 560.0]]
+    return {
+        "sample_id": "estimated-start",
+        "format_id": "120-66",
+        "cohort_role": "nominal",
+        "confirmed_geometry": {
+            "strip_orientation": "horizontal",
+            "shared_edges": [
+                _basis_line("E1", "directly_visible"),
+                _basis_line("E2", "directly_visible"),
+            ],
+            "boundary_pool": [
+                _basis_line("R001", "human_width_estimate"),
+                _basis_line("R002", "directly_visible"),
+            ],
+            "slots": [
+                {
+                    "ordinal": 1,
+                    "slot_kind": "photo",
+                    "reference_geometry": {
+                        "kind": "boundary_pair",
+                        "start_boundary_id": "R001",
+                        "end_boundary_id": "R002",
+                    },
+                }
+            ],
+            "frames": [_frame(gold)],
+        },
+    }
+
+
+def _approved_report(polygon: list[list[float]]) -> dict[str, object]:
+    output = _output(polygon)
+    return {
+        "decision": {"status": "approved_auto"},
+        "photo_geometry": {"lanes": [{"output_footprints": [output]}]},
+        "output": {"finalization": {"output_footprints": [output]}},
+    }
+
+
 class GoldAccuracyContractTest(unittest.TestCase):
+    def test_legacy_shared_edges_without_review_basis_remain_strict(self) -> None:
+        gold = [[0.0, 0.0], [560.0, 0.0], [560.0, 560.0], [0.0, 560.0]]
+        record = {
+            "sample_id": "legacy-v1",
+            "confirmed_geometry": {
+                "strip_orientation": "horizontal",
+                "shared_edges": [{"role": "top"}, {"role": "bottom"}],
+                "frames": [_frame(gold)],
+            },
+        }
+        report = {
+            "photo_geometry": {"lanes": [{"output_footprints": [_output(gold)]}]},
+            "output": {"finalization": {"output_footprints": []}},
+        }
+
+        self.assertTrue(validate_selected_candidate_coverage(record, report))
+
+    def test_estimated_start_does_not_block_inward_accuracy(self) -> None:
+        output = [[10.0, 0.0], [560.0, 0.0], [560.0, 560.0], [10.0, 560.0]]
+
+        self.assertEqual(
+            _validate_task_result(_basis_aware_record(), _approved_report(output)),
+            "approved_auto",
+        )
+
+    def test_directional_check_does_not_depend_on_output_vertex_origin(self) -> None:
+        output = [[560.0, 0.0], [560.0, 560.0], [10.0, 560.0], [10.0, 0.0]]
+
+        self.assertEqual(
+            _validate_task_result(_basis_aware_record(), _approved_report(output)),
+            "approved_auto",
+        )
+
+    def test_estimated_start_does_not_block_direct_use_budget(self) -> None:
+        output = [
+            [-100.0, 0.0],
+            [560.0, 0.0],
+            [560.0, 560.0],
+            [-100.0, 560.0],
+        ]
+
+        self.assertEqual(
+            _validate_task_result(_basis_aware_record(), _approved_report(output)),
+            "approved_auto",
+        )
+
+    def test_visible_end_remains_blocking_when_start_is_estimated(self) -> None:
+        output = [[0.0, 0.0], [559.0, 0.0], [559.0, 560.0], [0.0, 560.0]]
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "candidate crosses user-confirmed inward baseline",
+        ):
+            _validate_task_result(_basis_aware_record(), _approved_report(output))
+
+    def test_visible_end_budget_remains_blocking_when_start_is_estimated(
+        self,
+    ) -> None:
+        output = [[0.0, 0.0], [660.0, 0.0], [660.0, 560.0], [0.0, 560.0]]
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "exceeds acceptance-baseline direct-use budget",
+        ):
+            _validate_task_result(_basis_aware_record(), _approved_report(output))
+
     def test_challenge_review_cannot_bypass_candidate_coverage(self) -> None:
         gold = [[0.0, 0.0], [560.0, 0.0], [560.0, 560.0], [0.0, 560.0]]
         record = {

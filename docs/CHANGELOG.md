@@ -72,7 +72,8 @@ materialization、平行 detector 和 report reuse 均不再支持。
   选中线使用黄色前景与深色轮廓保持明暗背景可见；键盘 `[` / `]` 可绕整线中点或选中端点精细
   旋转。完整高度审阅按当前位置两条共享边计算短轴 H，让 H 占浏览器可用交叉轴约 94%；源 TIFF
   区域按屏幕尺寸缩小，点击空白处只沿胶片长轴移动，短轴自动保持在共享边中间。该模式显示由同一
-  几何生成的 Frame 闭合范围，重叠区域叠加加深；`start` 为洋红色、`end` 为橙色，接触 Frame 复用
+  几何生成的 Frame 闭合范围，并按 ordinal 使用与 Debug Analysis 一致的稳定多色半透明填充，重叠区域
+  叠加加深；`start` 为洋红色、`end` 为橙色且覆盖在填充之上，接触 Frame 复用
   的 `start/end` 边显示为两色交替虚线。线可直接选中并用现有键盘微调或旋转。该模式不改变常规
   1:1 检查，也不放大有界总览 JPG。
   真正的 `blank_exposure` 现在使用 typed `reference_geometry: not_applicable`：不拥有人工
@@ -89,7 +90,9 @@ materialization、平行 detector 和 report reuse 均不再支持。
   不是内容边界 oracle 或 detector 唯一答案；candidate 与正式 footprint 均不得向红线内侧越界，每侧
   向外安全包络受对应确认 span 的 5% 上限约束。删除了角点向内切的内容采样例外，
   `enclosing_support_pair` 也不能用 `1.1H` 总 span 掩盖单侧过度外扩；cohort 字段由
-  `geometry_oracle_schema` 改为 `acceptance_contract` 与 `acceptance_baseline_schema`。
+  `geometry_oracle_schema` 改为 `acceptance_contract` 与 `acceptance_baseline_schema`。逐线
+  `human_width_estimate` 只将对应方向降为 accuracy 非阻断证据；同格其余可见边继续阻断，Runtime
+  安全与 Gate 不变。
 - Registered gray 直接从 uint16 RGB 分块计算，复用两个 float32 luma plane 和一个 float64
   normalization plane；逐像素结果保持不变。普通 product path 在 report facts 冻结后、TIFF
   sampling 前释放整张 registered gray；development CLI 也在冻结完整 facts 后释放，只有 Debug

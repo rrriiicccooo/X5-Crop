@@ -534,6 +534,11 @@ format/count authority、Gate 分支或 detector 选择器。
   几何 epsilon 只吸收浮点计算误差。每侧向外的总 expansion 不得超过对应确认 W/H span 的 5% 加
   命名的 sampling allowance，uncertainty、residual 与 bleed 均消耗该预算。这不是零像素误差或对称
   接近度要求。
+- 逐线 `review_basis` 决定该方向能否产生阻断 accuracy verdict。`human_width_estimate` 表示人工按
+  Frame 宽度给出的可接受安全估计，而非独立观察到的真实内容边；对应一侧既不以向内越过估计线判错，
+  也不以相对该线超过 5% 外扩判错。同一 Frame 的其余可见 start/end 与共享边仍逐侧阻断，不能因一侧
+  估计而豁免整格或整张 source。该权限只属于黄金 accuracy 比较，不放宽 Runtime 的 source 内安全、
+  format/count、Gate、TIFF 或正式输出合同。
 - 几何 accuracy 只比较带 `boundary_pair` reference 的 Frame ordinal。`blank_exposure` 的
   `not_applicable` 表示没有人工内容边界，不是通配框、估计框或放行特例；它不减少 Runtime count，
   也不改变模板、源内安全和整张 source 决策合同。

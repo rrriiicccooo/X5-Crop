@@ -3,6 +3,11 @@
 const SVG_NS = "http://www.w3.org/2000/svg";
 const ROTATION_STEP_DEGREES = 0.01;
 const FIT_REVIEW_CROSS_FRACTION = 0.94;
+const FRAME_FILL_COLORS = [
+  [30, 144, 255], [255, 120, 40], [80, 200, 120], [210, 90, 255],
+  [255, 210, 40], [40, 210, 220], [255, 90, 120], [150, 170, 255],
+  [180, 120, 60], [120, 220, 60], [255, 160, 190], [70, 110, 210]
+];
 const token = new URLSearchParams(window.location.search).get("token") || "";
 
 const elements = Object.fromEntries([
@@ -288,6 +293,13 @@ function svgElement(name, attributes = {}) {
   return node;
 }
 
+function frameVisualStyle(sourceOrdinal, fillAlpha) {
+  const [red, green, blue] = FRAME_FILL_COLORS[
+    (sourceOrdinal - 1) % FRAME_FILL_COLORS.length
+  ];
+  return `fill: rgba(${red}, ${green}, ${blue}, ${fillAlpha}); stroke: rgb(${red}, ${green}, ${blue})`;
+}
+
 function activeLineEntries() {
   const sourceRoles = sourceBoundaryRoles();
   const used = new Set(sourceRoles.map((entry) => entry.identity));
@@ -335,7 +347,9 @@ function renderGeometry() {
   sourceReferenceFrames().forEach((frame) => {
     const polygon = svgElement("polygon", {
       points: frame.points.map((point) => `${point[0]},${point[1]}`).join(" "),
-      class: "frame-polygon"
+      class: "frame-polygon",
+      style: frameVisualStyle(frame.sourceOrdinal, 0.16),
+      "data-frame-ordinal": frame.sourceOrdinal
     });
     const title = svgElement("title");
     const assignments = frame.assignments.map((item) => `${item.sampleId}#${item.ordinal}`).join(" / ");
@@ -872,7 +886,7 @@ function setLoupeMaximized(maximized, reload = true) {
   elements.maximizeLoupeButton.textContent = next ? "退出审阅" : "完整高度审阅";
   elements.maximizeLoupeButton.title = next ? "退出完整高度审阅（F 或 Esc）" : "完整高度审阅（F）";
   elements.loupeHelp.textContent = next
-    ? "共享短轴 H 占可用高度约 94%。洋红=start，橙色=end，双色虚线=start/end 接触边；绿色闭合区域是有内容 reference 的 Frame，空曝光 slot 不画边界。点击线可选中并用方向键或 [ ] 修改；点击空白处沿胶片长轴移动。按 F 或 Esc 退出。"
+    ? "共享短轴 H 占可用高度约 94%。洋红=start，橙色=end，双色虚线=start/end 接触边；多色半透明区域=各个有内容 reference 的 Frame，空曝光 slot 不画边界。点击线可选中并用方向键或 [ ] 修改；点击空白处沿胶片长轴移动。按 F 或 Esc 退出。"
     : "局部图直接来自原 TIFF 像素。用它检查线是否安全贴合物理边缘；按 F 进入完整高度审阅。";
   renderLoupeGeometry();
   if (reload && lastPointer) requestAnimationFrame(() => loadLoupe(lastPointer));
@@ -959,6 +973,7 @@ function renderLoupeGeometry() {
       const polygon = svgElement("polygon", {
         points: frame.points.map((point) => `${point[0]},${point[1]}`).join(" "),
         class: "loupe-frame-polygon",
+        style: frameVisualStyle(frame.sourceOrdinal, 0.13),
         "data-frame-ordinal": frame.sourceOrdinal
       });
       const title = svgElement("title");
