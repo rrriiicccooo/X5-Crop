@@ -1031,18 +1031,25 @@ async function finalConfirmation(event) {
     setSaveStatus("黄金基线已冻结", "ok");
     showToast("已写入用户确认的本地黄金基线。", false);
     renderRecord(); updateIndexItemState(currentRecord.state);
+    await nextUnfinished();
   } catch (error) {
     elements.finalConfirmButton.disabled = false;
     showToast(error.message, true);
   }
 }
 
-function nextUnfinished() {
-  if (!indexData) return;
-  const unfinished = indexData.items.filter((item) => item.prepared && item.state !== "user_confirmed");
-  if (!unfinished.length) { showToast("所有已准备样片都已确认。", false); return; }
-  const position = unfinished.findIndex((item) => item.source_sha256 === currentItem?.source_sha256);
-  openSource(unfinished[(position + 1) % unfinished.length]);
+async function nextUnfinished() {
+  const items = indexData?.items || [];
+  if (!items.length) return;
+  const position = items.findIndex((item) => item.source_sha256 === currentItem?.source_sha256);
+  for (let offset = 1; offset <= items.length; offset += 1) {
+    const candidate = items[(position + offset) % items.length];
+    if (candidate.prepared && candidate.state !== "user_confirmed") {
+      await openSource(candidate);
+      return;
+    }
+  }
+  showToast("所有已准备样片都已确认。", false);
 }
 
 elements.searchInput.addEventListener("input", renderIndex);

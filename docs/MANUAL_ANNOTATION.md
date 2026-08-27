@@ -70,7 +70,8 @@ python3 -m tools.manual_annotation audit
    曝光和源截断；只有 `blank_exposure` 使用 `reference_geometry: not_applicable`，且不能通过少输出
    一格来隐藏。
 6. source reference 审核后，点击“确认整张黄金基线”。最终弹窗只提供取消与确认；一次确认表示共享边、
-   全部适用边界、原生像素和无 bleed 基础裁切安全性均已检查。确认后的 source 立即冻结，不可继续编辑。
+   全部适用边界、原生像素和无 bleed 基础裁切安全性均已检查。确认后的 source 立即冻结，页面按队列顺序
+   自动打开下一张未完成样片；全部完成时停留并提示。
 
 机器 proposal 只减少起点工作量。遇到 contact、overlap、曲边、老化相机造成的不规则片距或边界
 歧义时，按物理边界修正；无法确定的 source 不确认，保持待审。

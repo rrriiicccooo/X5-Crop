@@ -943,6 +943,7 @@ class ManualAnnotationPackagingContractTest(unittest.TestCase):
         self.assertNotIn("data-confirm-check", joined)
         self.assertIn("确认后将立即冻结", joined)
         self.assertIn("确认并冻结", joined)
+        self.assertIn("await nextunfinished();", joined)
         self.assertIn("bracketleft", joined)
         self.assertIn('data-rotate="-1"', joined)
         self.assertFalse(
