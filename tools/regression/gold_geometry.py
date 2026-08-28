@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from dataclasses import dataclass
 from typing import Sequence
 
 from x5crop.detection.photo_geometry.model import (
@@ -18,22 +19,38 @@ GOLD_ACCEPTANCE_CONTRACT = (
 FRAME_SIDES = frozenset(
     {"sequence_start", "sequence_end", "cross_low", "cross_high"}
 )
-NON_BLOCKING_ACCURACY_REVIEW_BASES = frozenset({"human_width_estimate"})
+NON_BLOCKING_INWARD_REVIEW_BASES = frozenset({"human_width_estimate"})
+NON_BLOCKING_OUTWARD_BUDGET_REVIEW_BASES = frozenset(
+    {"human_width_estimate", "visible_content_limit"}
+)
 
 
-def _line_blocks_accuracy(line: object, *, name: str) -> bool:
+@dataclass(frozen=True)
+class _FrameAccuracySides:
+    inward_blocking: frozenset[str]
+    outward_budget_blocking: frozenset[str]
+
+
+def _line_blocking_permissions(
+    line: object,
+    *,
+    name: str,
+) -> tuple[bool, bool]:
     if not isinstance(line, dict):
         raise ValueError(f"{name} is malformed")
     review_basis = line.get("review_basis")
     if not isinstance(review_basis, str) or review_basis not in LINE_REVIEW_BASES:
         raise ValueError(f"{name} review basis is invalid")
-    return review_basis not in NON_BLOCKING_ACCURACY_REVIEW_BASES
+    return (
+        review_basis not in NON_BLOCKING_INWARD_REVIEW_BASES,
+        review_basis not in NON_BLOCKING_OUTWARD_BUDGET_REVIEW_BASES,
+    )
 
 
-def _blocking_sides_by_frame(
+def _accuracy_sides_by_frame(
     gold: dict[str, object],
     frames: Sequence[dict[str, object]],
-) -> tuple[frozenset[str], ...]:
+) -> tuple[_FrameAccuracySides, ...]:
     if not all(
         key in gold for key in ("shared_edges", "boundary_pool", "slots")
     ):
@@ -73,14 +90,21 @@ def _blocking_sides_by_frame(
             raise ValueError("gold slot ordinal is invalid")
         slots_by_ordinal[ordinal] = slot
 
-    cross_sides = {
-        side
-        for side, line in zip(
-            ("cross_low", "cross_high"), shared_edges, strict=True
+    cross_inward: set[str] = set()
+    cross_outward_budget: set[str] = set()
+    for side, line in zip(
+        ("cross_low", "cross_high"), shared_edges, strict=True
+    ):
+        blocks_inward, blocks_outward_budget = _line_blocking_permissions(
+            line,
+            name=f"gold {side}",
         )
-        if _line_blocks_accuracy(line, name=f"gold {side}")
-    }
-    blocking_by_frame: list[frozenset[str]] = []
+        if blocks_inward:
+            cross_inward.add(side)
+        if blocks_outward_budget:
+            cross_outward_budget.add(side)
+
+    sides_by_frame: list[_FrameAccuracySides] = []
     for frame in frames:
         frame_index = frame.get("frame_index")
         if (
@@ -101,17 +125,27 @@ def _blocking_sides_by_frame(
             or end_id not in pool_by_id
         ):
             raise ValueError("gold frame references an unknown boundary")
-        blocking = set(cross_sides)
-        if _line_blocks_accuracy(
-            pool_by_id[start_id], name=f"gold frame {frame_index} start"
+        inward_blocking = set(cross_inward)
+        outward_budget_blocking = set(cross_outward_budget)
+        for side, line_id in (
+            ("sequence_start", start_id),
+            ("sequence_end", end_id),
         ):
-            blocking.add("sequence_start")
-        if _line_blocks_accuracy(
-            pool_by_id[end_id], name=f"gold frame {frame_index} end"
-        ):
-            blocking.add("sequence_end")
-        blocking_by_frame.append(frozenset(blocking))
-    return tuple(blocking_by_frame)
+            blocks_inward, blocks_outward_budget = _line_blocking_permissions(
+                pool_by_id[line_id],
+                name=f"gold frame {frame_index} {side}",
+            )
+            if blocks_inward:
+                inward_blocking.add(side)
+            if blocks_outward_budget:
+                outward_budget_blocking.add(side)
+        sides_by_frame.append(
+            _FrameAccuracySides(
+                inward_blocking=frozenset(inward_blocking),
+                outward_budget_blocking=frozenset(outward_budget_blocking),
+            )
+        )
+    return tuple(sides_by_frame)
 
 
 def _contains_point(
@@ -275,7 +309,7 @@ def _assert_direct_use_budget(
     gold: Sequence[Sequence[float]],
     output: Sequence[Sequence[float]],
     strip_orientation: str,
-    blocking_sides: frozenset[str] = FRAME_SIDES,
+    outward_budget_blocking_sides: frozenset[str] = FRAME_SIDES,
 ) -> None:
     horizontal = strip_orientation == "horizontal"
     sequence_axis = _mean_edge_axis(
@@ -315,12 +349,12 @@ def _assert_direct_use_budget(
     sequence_exceeded = any(
         expansion_by_side[side] > sequence_limit
         for side in ("sequence_start", "sequence_end")
-        if side in blocking_sides
+        if side in outward_budget_blocking_sides
     )
     cross_exceeded = any(
         expansion_by_side[side] > cross_limit
         for side in ("cross_low", "cross_high")
-        if side in blocking_sides
+        if side in outward_budget_blocking_sides
     )
     if sequence_exceeded or cross_exceeded:
         raise ValueError(
@@ -333,24 +367,24 @@ def ordered_gold_mapping(
     gold_frames: Sequence[dict[str, object]],
     output_geometries: Sequence[dict[str, object]],
     strip_orientation: str,
-    frame_blocking_sides: Sequence[frozenset[str]] | None = None,
+    frame_inward_blocking_sides: Sequence[frozenset[str]] | None = None,
 ) -> tuple[int, ...]:
     if len(gold_frames) != len(output_geometries):
         return ()
     if strip_orientation not in {"horizontal", "vertical"}:
         raise ValueError("gold strip orientation is invalid")
-    if frame_blocking_sides is None:
-        frame_blocking_sides = tuple(FRAME_SIDES for _frame in gold_frames)
-    if len(frame_blocking_sides) != len(gold_frames) or any(
+    if frame_inward_blocking_sides is None:
+        frame_inward_blocking_sides = tuple(FRAME_SIDES for _frame in gold_frames)
+    if len(frame_inward_blocking_sides) != len(gold_frames) or any(
         not blocking_sides.issubset(FRAME_SIDES)
-        for blocking_sides in frame_blocking_sides
+        for blocking_sides in frame_inward_blocking_sides
     ):
-        raise ValueError("gold frame blocking sides are invalid")
+        raise ValueError("gold frame inward-blocking sides are invalid")
 
     mapping: list[int] = []
     next_output = 0
     for frame, blocking_sides in zip(
-        gold_frames, frame_blocking_sides, strict=True
+        gold_frames, frame_inward_blocking_sides, strict=True
     ):
         polygon = frame["polygon_source_pixel_center_coordinates"]
         matches = tuple(
@@ -387,12 +421,12 @@ def validate_selected_candidate_coverage(
     sample_id = str(record["sample_id"])
     gold = record["confirmed_geometry"]
     frames = gold["frames"]
-    blocking_sides = _blocking_sides_by_frame(gold, frames)
+    accuracy_sides = _accuracy_sides_by_frame(gold, frames)
     mapping = ordered_gold_mapping(
         frames,
         outputs,
         str(gold["strip_orientation"]),
-        blocking_sides,
+        tuple(sides.inward_blocking for sides in accuracy_sides),
     )
     if len(mapping) != len(frames):
         raise ValueError(
@@ -409,19 +443,19 @@ def validate_approved_geometry(
     gold = record["confirmed_geometry"]
     frames = gold["frames"]
     outputs = report["output"]["finalization"]["output_footprints"]
-    blocking_sides = _blocking_sides_by_frame(gold, frames)
+    accuracy_sides = _accuracy_sides_by_frame(gold, frames)
     mapping = ordered_gold_mapping(
         frames,
         outputs,
         str(gold["strip_orientation"]),
-        blocking_sides,
+        tuple(sides.inward_blocking for sides in accuracy_sides),
     )
     if len(mapping) != len(frames):
         raise ValueError(
             f"{sample_id} approved output crosses user-confirmed inward baseline"
         )
-    for frame, output_index, frame_blocking_sides in zip(
-        frames, mapping, blocking_sides, strict=True
+    for frame, output_index, frame_accuracy_sides in zip(
+        frames, mapping, accuracy_sides, strict=True
     ):
         polygon = frame["polygon_source_pixel_center_coordinates"]
         output_polygon = outputs[output_index]["required_source_footprint"]
@@ -431,5 +465,5 @@ def validate_approved_geometry(
             polygon,
             output_polygon,
             str(gold["strip_orientation"]),
-            frame_blocking_sides,
+            frame_accuracy_sides.outward_budget_blocking,
         )

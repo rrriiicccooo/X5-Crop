@@ -534,17 +534,23 @@ format/count authority、Gate 分支或 detector 选择器。
   测量，也不限定 detector 只能产生一个逐像素相同的答案。
 - 黄金比较是方向性的：任何已选 candidate 及 `approved_auto` 的正式 post-bleed
   `required_source_footprint` 都必须完整包含确认 polygon，边、角点或亚像素位置不得向其内侧越界；
-  几何 epsilon 只吸收浮点计算误差。每侧向外的总 expansion 不得超过对应确认 W/H span 的 5% 加
-  命名的 sampling allowance，uncertainty、residual 与 bleed 均消耗该预算。这不是零像素误差或对称
-  接近度要求。
-- 逐线 `review_basis` 决定该方向能否产生阻断 accuracy verdict。`human_width_estimate` 表示人工按
-  Frame 宽度给出的可接受安全估计，而非独立观察到的真实内容边；对应一侧既不以向内越过估计线判错，
-  也不以相对该线超过 5% 外扩判错。同一 Frame 的其余可见 start/end 与共享边仍逐侧阻断，不能因一侧
-  估计而豁免整格或整张 source。该权限只属于黄金 accuracy 比较，不放宽 Runtime 的 source 内安全、
-  format/count、Gate、TIFF 或正式输出合同。`origin` 只记录坐标来源，`review_basis` 独立记录证据基础；
-  人工移动或冻结不能把已经声明的 `human_width_estimate` 改写为可见边界。
-- `visible_content_limit` 表示残缺曝光中仍可见内容的最外侧安全界限。它是人工可见证据，参与方向性
-  accuracy 阻断；与无法看见、只能按 Frame 宽度推定且不阻断该方向的 `human_width_estimate` 不同。
+  几何 epsilon 只吸收浮点计算误差。具有向外预算权限的每一侧，其总 expansion 不得超过对应确认
+  W/H span 的 5% 加命名的 sampling allowance，uncertainty、residual 与 bleed 均消耗该预算。这不是
+  零像素误差或对称接近度要求。
+- 逐线 `review_basis` 分别决定向内包含与向外 5% 预算能否产生阻断 accuracy verdict：
+
+  | 证据基础 | 向内越线 | 向外超过 5% |
+  |---|---|---|
+  | `visible_content_limit` | 阻断 | 不阻断 |
+  | `human_width_estimate` | 不阻断 | 不阻断 |
+  | 其它有效证据基础 | 阻断 | 阻断 |
+
+  `visible_content_limit` 是残缺曝光中仍可见内容的最内侧安全保护线：裁切进入该线以内会丢失可见内容，
+  必须阻断；线外没有可见内容证据，因此不能用相对该线的 5% 预算阻断更大的外扩。
+  `human_width_estimate` 只是人工按 Frame 宽度作出的纯估计，线内、线外均不产生 accuracy verdict。
+  同一 Frame 的其它边仍逐侧独立生效，不能因一侧豁免整格或整张 source。以上权限只属于黄金 accuracy
+  比较，不放宽 Runtime 的 source 内安全、format/count、Gate、TIFF 或正式输出合同。`origin` 只记录
+  坐标来源，`review_basis` 独立记录证据基础；人工移动或冻结不能改写已经声明的证据基础。
 - 几何 accuracy 只比较带 `boundary_pair` reference 的 Frame ordinal。`blank_exposure` 的
   `not_applicable` 表示没有人工内容边界，不是通配框、估计框或放行特例；它不减少 Runtime count，
   也不改变模板、源内安全和整张 source 决策合同。

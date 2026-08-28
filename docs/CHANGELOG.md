@@ -91,8 +91,9 @@ materialization、平行 detector 和 report reuse 均不再支持。
   向外安全包络受对应确认 span 的 5% 上限约束。删除了角点向内切的内容采样例外，
   `enclosing_support_pair` 也不能用 `1.1H` 总 span 掩盖单侧过度外扩；cohort 字段由
   `geometry_oracle_schema` 改为 `acceptance_contract` 与 `acceptance_baseline_schema`。逐线
-  `human_width_estimate` 只将对应方向降为 accuracy 非阻断证据；同格其余可见边继续阻断，Runtime
-  安全与 Gate 不变。
+  权限已拆分为向内包含与向外 5% 预算：`human_width_estimate` 两者均不阻断；
+  `visible_content_limit` 只阻断向内越线，不以线外扩展超过 5% 阻断。同格其余边继续独立判断，
+  Runtime 安全与 Gate 不变。
 - 九张既有 v1 黄金样片已无损规范化为当前 source geometry schema：保留原有 polygon、source SHA、
   count、确认时间和 review artifact；补齐逐线 `review_basis`、共享短轴边、`boundary_pool`、
   `slots`、`adjacencies` 以及每格 `start/end` 引用。依据人工复核声明，全部边为

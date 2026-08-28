@@ -64,7 +64,10 @@ def _directional_geometry(
     }
 
 
-def _basis_aware_record() -> dict[str, object]:
+def _basis_aware_record(
+    *,
+    start_basis: str = "human_width_estimate",
+) -> dict[str, object]:
     gold = [[0.0, 0.0], [560.0, 0.0], [560.0, 560.0], [0.0, 560.0]]
     return {
         "sample_id": "estimated-start",
@@ -72,7 +75,7 @@ def _basis_aware_record() -> dict[str, object]:
         "cohort_role": "nominal",
         "confirmed_geometry": _directional_geometry(
             gold,
-            start_basis="human_width_estimate",
+            start_basis=start_basis,
         ),
     }
 
@@ -183,6 +186,34 @@ class GoldAccuracyContractTest(unittest.TestCase):
 
         self.assertEqual(
             _validate_task_result(_basis_aware_record(), _approved_report(output)),
+            "approved_auto",
+        )
+
+    def test_visible_content_limit_blocks_inward_accuracy(self) -> None:
+        output = [[10.0, 0.0], [560.0, 0.0], [560.0, 560.0], [10.0, 560.0]]
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "candidate crosses user-confirmed inward baseline",
+        ):
+            _validate_task_result(
+                _basis_aware_record(start_basis="visible_content_limit"),
+                _approved_report(output),
+            )
+
+    def test_visible_content_limit_does_not_block_outward_budget(self) -> None:
+        output = [
+            [-100.0, 0.0],
+            [560.0, 0.0],
+            [560.0, 560.0],
+            [-100.0, 560.0],
+        ]
+
+        self.assertEqual(
+            _validate_task_result(
+                _basis_aware_record(start_basis="visible_content_limit"),
+                _approved_report(output),
+            ),
             "approved_auto",
         )
 
