@@ -6,6 +6,25 @@ const FIT_REVIEW_CROSS_FRACTION = 0.94;
 const FRAME_COLOR_COUNT = 12;
 const token = new URLSearchParams(window.location.search).get("token") || "";
 
+const lineBasisLabels = {
+  machine_proposal_pending_review: "尚未分类（机器提案）",
+  directly_visible: "直接可见边界",
+  visible_content_limit: "可见内容极限",
+  human_width_estimate: "按 frame width 估计（该方向不阻断）",
+  human_adjusted_native_pixel: "原生像素人工调整（未分类）",
+  user_accepted_machine_inference: "人工接受机器推断",
+  explicit_prior_user_confirmation: "既有人工确认",
+  unresolved_red_stroke: "未解决的红线"
+};
+
+const slotKindLabels = {
+  image: "正常照片",
+  blank_exposure: "空曝光（无人工几何）",
+  partial_exposure: "残缺曝光",
+  source_truncated: "源截断",
+  unknown: "未知"
+};
+
 const elements = Object.fromEntries([
   "progressText", "searchInput", "formatFilter", "stateFilter", "sourceList",
   "nextButton", "sampleTitle", "stateBadge", "sourceFacts", "saveStatus",
@@ -15,7 +34,8 @@ const elements = Object.fromEntries([
   "loupeCard", "loupeWrap", "loupeTitle", "loupeSelectionLabel", "maximizeLoupeButton", "loupeHelp",
   "loupePolygonLayer", "loupeLineLayer",
   "loupeCrossX", "loupeCrossY", "loupeEmpty", "selectedLineLabel",
-  "lineCoordinates", "diagnostics", "confirmDialog", "confirmTitle",
+  "lineCoordinates", "lineReviewBasisSelect", "frameSelect", "frameSlotKindSelect",
+  "frameAssignmentSummary", "diagnostics", "confirmDialog", "confirmTitle",
   "finalConfirmButton", "toast"
 ].map((id) => [id, document.getElementById(id)]));
 
@@ -31,6 +51,7 @@ let currentItem = null;
 let currentRecord = null;
 let selectedLineId = null;
 let selectedEndpoint = null;
+let selectedFrameKey = null;
 let saveTimer = null;
 let savePromise = null;
 let dirty = false;
@@ -150,6 +171,7 @@ async function openSource(item) {
     currentRecord = await response.json();
     selectedLineId = null;
     selectedEndpoint = null;
+    selectedFrameKey = null;
     history = [];
     future = [];
     dirty = false;
@@ -186,6 +208,7 @@ function renderRecord() {
   elements.sourceFacts.textContent = `${currentRecord.format_id} · raw ${currentRecord.source.raw_extent.width}×${currentRecord.source.raw_extent.height} · Orientation ${currentRecord.source.orientation_mapping.original_tag} · revision ${currentRecord.revision}`;
   renderReferenceSummary();
   renderGeometry();
+  renderFrameControls();
   renderDiagnostics();
   updateControls();
 }
@@ -252,6 +275,7 @@ function sourceReferenceFrames() {
       const key = `${reference.start_boundary_id}/${reference.end_boundary_id}`;
       if (!byPair.has(key)) {
         byPair.set(key, {
+          key,
           reference,
           assignments: []
         });
@@ -367,6 +391,7 @@ function renderGeometry() {
     for (const variant of visibleStrokeVariants(entry, selected)) {
       const classes = ["annotation-line", entry.family, entry.role];
       if (!entry.active) classes.push("inactive");
+      if (entry.line.review_basis === "human_width_estimate") classes.push("estimated");
       if (selected) classes.push("selected");
       if (variant) classes.push(variant);
       const node = svgElement("line", {
@@ -380,7 +405,7 @@ function renderGeometry() {
     if (entry.active) {
       const middle = [(first[0] + second[0]) / 2, (first[1] + second[1]) / 2];
       const label = svgElement("text", {x: middle[0] + 5, y: middle[1] - 5, class: "line-label"});
-      label.textContent = entry.label;
+      label.textContent = `${entry.line.review_basis === "human_width_estimate" ? "≈" : ""}${entry.label}`;
       elements.lineLayer.appendChild(label);
     }
   }
@@ -408,21 +433,56 @@ function renderSelectedLine() {
   const line = lineById(selectedLineId);
   const entry = line ? activeLineEntries().find((item) => item.line.line_id === line.line_id) : null;
   elements.loupeSelectionLabel.textContent = line
-    ? `${line.line_id} · ${roleLabel(entry)}${selectedEndpoint === null ? " · 整线" : ` · 端点 ${selectedEndpoint + 1}`}`
+    ? `${line.line_id} · ${roleLabel(entry)} · ${lineBasisLabels[line.review_basis] || line.review_basis}${selectedEndpoint === null ? " · 整线" : ` · 端点 ${selectedEndpoint + 1}`}`
     : "未选线";
   elements.loupeSelectionLabel.classList.toggle("active", Boolean(line));
   if (!line) {
     elements.selectedLineLabel.textContent = "未选择";
+    elements.lineReviewBasisSelect.value = "";
     elements.lineCoordinates.querySelectorAll("code").forEach((node) => node.textContent = "—");
     renderLoupeGeometry();
     return;
   }
-  elements.selectedLineLabel.textContent = `${line.line_id} · ${roleLabel(entry)} · ${line.review_basis} · ${line.origin}`;
+  const basisLabel = lineBasisLabels[line.review_basis] || line.review_basis;
+  elements.selectedLineLabel.textContent = `${line.line_id} · ${roleLabel(entry)} · ${basisLabel} · ${line.origin}`;
+  elements.lineReviewBasisSelect.value = line.review_basis;
   const codes = elements.lineCoordinates.querySelectorAll("code");
   line.points_display.forEach((point, index) => {
     codes[index].textContent = `x ${point[0].toFixed(2)} · y ${point[1].toFixed(2)}`;
   });
   renderLoupeGeometry();
+}
+
+function renderFrameControls() {
+  const frames = sourceReferenceFrames();
+  elements.frameSelect.replaceChildren();
+  if (!frames.length) {
+    selectedFrameKey = null;
+    elements.frameAssignmentSummary.textContent = "无有界 Frame";
+    elements.frameSlotKindSelect.value = "image";
+    return;
+  }
+  if (!frames.some((frame) => frame.key === selectedFrameKey)) {
+    selectedFrameKey = frames[0].key;
+  }
+  for (const frame of frames) {
+    const kind = frame.assignments[0].slotKind;
+    const assignments = frame.assignments
+      .map((item) => `${item.sampleId}#${item.ordinal}`)
+      .join(" / ");
+    const option = document.createElement("option");
+    option.value = frame.key;
+    option.textContent = `Frame ${frame.sourceOrdinal} · ${assignments} · ${slotKindLabels[kind] || kind}`;
+    elements.frameSelect.appendChild(option);
+  }
+  elements.frameSelect.value = selectedFrameKey;
+  const selected = frames.find((frame) => frame.key === selectedFrameKey);
+  const kinds = new Set(selected.assignments.map((item) => item.slotKind));
+  const kind = kinds.size === 1 ? selected.assignments[0].slotKind : "unknown";
+  elements.frameSlotKindSelect.value = kind;
+  elements.frameAssignmentSummary.textContent = selected.assignments
+    .map((item) => `${item.sampleId}#${item.ordinal}`)
+    .join(" / ");
 }
 
 function renderDiagnostics() {
@@ -498,13 +558,32 @@ function updateControls() {
   elements.redoButton.disabled = immutable || future.length === 0;
   elements.maximizeLoupeButton.disabled = !currentRecord || !lastPointer;
   elements.annotationSvg.style.pointerEvents = immutable ? "auto" : "auto";
+  const selectedEntry = selectedLineId
+    ? activeLineEntries().find((entry) => entry.line.line_id === selectedLineId)
+    : null;
+  elements.lineReviewBasisSelect.disabled = immutable || selectedEntry?.family !== "boundary";
+  elements.frameSelect.disabled = !currentRecord || sourceReferenceFrames().length === 0;
+  elements.frameSlotKindSelect.disabled = immutable || !selectedFrameKey;
   document.querySelectorAll("[data-nudge],[data-rotate]").forEach((button) => button.disabled = immutable || !selectedLineId);
 }
 
 function geometrySnapshot() {
   return {
-    shared_edges: currentRecord.shared_edges.map((line) => ({line_id: line.line_id, points_display: line.points_display.map((point) => [...point])})),
-    boundary_pool: currentRecord.boundary_pool.map((line) => ({line_id: line.line_id, points_display: line.points_display.map((point) => [...point])}))
+    shared_edges: currentRecord.shared_edges.map((line) => ({
+      line_id: line.line_id,
+      points_display: line.points_display.map((point) => [...point]),
+      review_basis: line.review_basis
+    })),
+    boundary_pool: currentRecord.boundary_pool.map((line) => ({
+      line_id: line.line_id,
+      points_display: line.points_display.map((point) => [...point]),
+      review_basis: line.review_basis
+    })),
+    slot_kinds: currentRecord.tasks.flatMap((task) => task.slots.map((slot) => ({
+      task_id: task.task_id,
+      ordinal: slot.ordinal,
+      slot_kind: slot.slot_kind
+    })))
   };
 }
 
@@ -512,12 +591,24 @@ function applySnapshot(snapshot) {
   replaceGeometryFromSnapshot(snapshot);
   markDirty();
   renderGeometry();
+  renderFrameControls();
+  renderDiagnostics();
   updateControls();
 }
 
 function replaceGeometryFromSnapshot(snapshot) {
-  const incoming = new Map([...snapshot.shared_edges, ...snapshot.boundary_pool].map((line) => [line.line_id, line.points_display]));
-  allLines().forEach((line) => { line.points_display = incoming.get(line.line_id).map((point) => [...point]); });
+  const incoming = new Map([...snapshot.shared_edges, ...snapshot.boundary_pool].map((line) => [line.line_id, line]));
+  allLines().forEach((line) => {
+    const replacement = incoming.get(line.line_id);
+    line.points_display = replacement.points_display.map((point) => [...point]);
+    line.review_basis = replacement.review_basis;
+  });
+  const incomingSlotKinds = new Map(
+    snapshot.slot_kinds.map((slot) => [`${slot.task_id}/${slot.ordinal}`, slot.slot_kind])
+  );
+  currentRecord.tasks.forEach((task) => task.slots.forEach((slot) => {
+    slot.slot_kind = incomingSlotKinds.get(`${task.task_id}/${slot.ordinal}`);
+  }));
 }
 
 function pushHistory() {
@@ -622,6 +713,45 @@ function selectLine(identity, endpoint = null) {
   selectedLineId = identity;
   selectedEndpoint = endpoint;
   renderGeometry();
+  updateControls();
+}
+
+function changeLineReviewBasis() {
+  const line = lineById(selectedLineId);
+  const entry = line
+    ? activeLineEntries().find((item) => item.line.line_id === line.line_id)
+    : null;
+  if (!line || entry?.family !== "boundary" || currentRecord.state === "user_confirmed") return;
+  const next = elements.lineReviewBasisSelect.value;
+  if (line.review_basis === next) return;
+  pushHistory();
+  line.review_basis = next;
+  markDirty();
+  renderGeometry();
+  updateControls();
+}
+
+function changeFrameSelection() {
+  selectedFrameKey = elements.frameSelect.value || null;
+  renderFrameControls();
+  updateControls();
+}
+
+function changeFrameSlotKind() {
+  if (!currentRecord || currentRecord.state === "user_confirmed" || !selectedFrameKey) return;
+  const frame = sourceReferenceFrames().find((item) => item.key === selectedFrameKey);
+  if (!frame) return;
+  const next = elements.frameSlotKindSelect.value;
+  if (frame.assignments.every((item) => item.slotKind === next)) return;
+  pushHistory();
+  const taskById = new Map(currentRecord.tasks.map((task) => [task.task_id, task]));
+  for (const assignment of frame.assignments) {
+    taskById.get(assignment.taskId).slots[assignment.ordinal - 1].slot_kind = next;
+  }
+  markDirty();
+  renderGeometry();
+  renderFrameControls();
+  renderDiagnostics();
   updateControls();
 }
 
@@ -1007,6 +1137,7 @@ function renderLoupeGeometry() {
     }
     for (const variant of visibleStrokeVariants(entry, selected)) {
       const classes = ["loupe-annotation-line", entry.family, entry.role];
+      if (entry.line.review_basis === "human_width_estimate") classes.push("estimated");
       if (selected) classes.push("selected");
       if (variant) classes.push(variant);
       const visibleLine = svgElement("line", {
@@ -1087,6 +1218,9 @@ elements.undoButton.addEventListener("click", undo);
 elements.redoButton.addEventListener("click", redo);
 elements.resetViewButton.addEventListener("click", resetView);
 elements.maximizeLoupeButton.addEventListener("click", () => setLoupeMaximized(!loupeMaximized));
+elements.lineReviewBasisSelect.addEventListener("change", changeLineReviewBasis);
+elements.frameSelect.addEventListener("change", changeFrameSelection);
+elements.frameSlotKindSelect.addEventListener("change", changeFrameSlotKind);
 elements.annotationSvg.addEventListener("pointerdown", startPan);
 elements.annotationSvg.addEventListener("pointermove", handlePointerMove);
 elements.annotationSvg.addEventListener("pointerup", finishDrag);

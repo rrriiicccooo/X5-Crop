@@ -26,7 +26,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "command",
         nargs="?",
-        choices=("start", "prepare", "serve", "audit"),
+        choices=("start", "prepare", "serve", "audit", "reconcile-context"),
         default="start",
         help="start prepares missing proposals and opens the annotator (default)",
     )
@@ -51,6 +51,11 @@ def _parser() -> argparse.ArgumentParser:
         "--force-machine",
         action="store_true",
         help="replace only existing untouched machine proposals; never replaces human work",
+    )
+    parser.add_argument(
+        "--include-confirmed",
+        action="store_true",
+        help="allow explicit review-context metadata corrections in frozen records",
     )
     parser.add_argument(
         "--repository-root",
@@ -136,6 +141,15 @@ def main(argv: list[str] | None = None) -> int:
                 + " · ".join(
                     f"{key}={value}" for key, value in summary["states"].items()
                 )
+            )
+        if arguments.command == "reconcile-context":
+            counts = workspace.reconcile_review_context(
+                identities=arguments.sample_ids,
+                include_confirmed=arguments.include_confirmed,
+            )
+            print(
+                "Reconciled {changed_lines} line bases and {changed_slots} slot kinds across "
+                "{changed_sources} sources.".format(**counts)
             )
         return 0
     except (RuntimeError, ValueError, OSError) as error:

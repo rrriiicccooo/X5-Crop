@@ -113,6 +113,19 @@
               <span>端点 1</span><code>—</code>
               <span>端点 2</span><code>—</code>
             </div>
+            <label class="field-control">
+              <span>边界依据</span>
+              <select id="lineReviewBasisSelect" disabled>
+                <option value="machine_proposal_pending_review" disabled>尚未分类（机器提案）</option>
+                <option value="directly_visible">直接可见边界</option>
+                <option value="visible_content_limit">可见内容极限</option>
+                <option value="human_width_estimate">按 frame width 估计（该方向不阻断）</option>
+                <option value="human_adjusted_native_pixel">原生像素人工调整（未分类）</option>
+                <option value="user_accepted_machine_inference" disabled>人工接受机器推断</option>
+                <option value="explicit_prior_user_confirmation" disabled>既有人工确认</option>
+                <option value="unresolved_red_stroke" disabled>未解决的红线</option>
+              </select>
+            </label>
             <div class="nudge-grid" aria-label="逐像素微调">
               <span></span><button data-nudge="0,-1">↑</button><span></span>
               <button data-nudge="-1,0">←</button><button data-nudge="0,1">↓</button><button data-nudge="1,0">→</button>
@@ -123,6 +136,27 @@
             </div>
             <p>方向键平移 1 px，Shift 为 10 px；<kbd>[</kbd> / <kbd>]</kbd> 旋转 0.01°，Shift 为
               0.1°。整线绕中点旋转；选中端点时绕该端点旋转。</p>
+          </div>
+
+          <div class="inspect-card frame-card">
+            <div class="inspect-heading">
+              <h3>当前 Frame</h3>
+              <span id="frameAssignmentSummary">未选择</span>
+            </div>
+            <label class="field-control">
+              <span>共享物理 Frame</span>
+              <select id="frameSelect" disabled></select>
+            </label>
+            <label class="field-control">
+              <span>Frame 状态</span>
+              <select id="frameSlotKindSelect" disabled>
+                <option value="image">正常照片</option>
+                <option value="partial_exposure">残缺曝光</option>
+                <option value="source_truncated">源截断</option>
+                <option value="unknown">未知</option>
+              </select>
+            </label>
+            <p>残缺曝光仍有可见内容并保留边界；源截断只表示 TIFF 已把 frame 截断。空曝光没有人工几何，不能在这里转换。</p>
           </div>
 
           <div id="diagnosticCard" class="inspect-card diagnostic-card">

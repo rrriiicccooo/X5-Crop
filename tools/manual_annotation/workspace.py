@@ -37,6 +37,7 @@ from .model import (
     apply_client_geometry,
 )
 from .proposal import (
+    apply_review_context_metadata,
     apply_review_context_slot_semantics,
     canonicalize_source_reference_mappings,
     import_red_markup_draft,
@@ -686,6 +687,98 @@ class ReviewWorkspace:
                 raise WorkspaceError(str(error)) from error
             self._save_record(updated)
             return record_for_client(updated)
+
+    def reconcile_review_context(
+        self,
+        *,
+        identities: Iterable[str] | None,
+        include_confirmed: bool = False,
+    ) -> dict[str, int]:
+        """Apply explicit nonstructural review metadata without changing geometry."""
+        if identities is None:
+            raise WorkspaceError("review-context reconciliation requires sample identities")
+        requested = {self.resolve_identity(identity) for identity in identities}
+        if not requested:
+            raise WorkspaceError("review-context reconciliation requires sample identities")
+        changed_sources = 0
+        changed_lines = 0
+        changed_slots = 0
+        changed_confirmed = False
+        with self._lock:
+            for sha in sorted(
+                requested,
+                key=lambda value: int(self.groups[value][0]["sort_index"]),
+            ):
+                current = self.load_record(sha)
+                if current["state"] == "user_confirmed" and not include_confirmed:
+                    raise WorkspaceError(
+                        "confirmed review-context correction requires explicit permission"
+                    )
+                updated = deepcopy(current)
+                updated["diagnostics"]["review_context"] = self._source_review_context(
+                    self.groups[sha]
+                )
+                try:
+                    updated = apply_review_context_metadata(updated)
+                except (AnnotationError, KeyError, TypeError, ValueError) as error:
+                    raise WorkspaceError(
+                        f"{updated['source']['canonical_sample_id']}: cannot reconcile review context"
+                    ) from error
+                before = {
+                    line["line_id"]: line["review_basis"]
+                    for line in [*current["shared_edges"], *current["boundary_pool"]]
+                }
+                after = {
+                    line["line_id"]: line["review_basis"]
+                    for line in [*updated["shared_edges"], *updated["boundary_pool"]]
+                }
+                corrected = sorted(
+                    line_id
+                    for line_id, basis in after.items()
+                    if before.get(line_id) != basis
+                )
+                before_slots = {
+                    (task["task_id"], slot["ordinal"]): slot["slot_kind"]
+                    for task in current["tasks"]
+                    for slot in task["slots"]
+                }
+                after_slots = {
+                    (task["task_id"], slot["ordinal"]): slot["slot_kind"]
+                    for task in updated["tasks"]
+                    for slot in task["slots"]
+                }
+                corrected_slots = sorted(
+                    f"{task_id}#{ordinal}"
+                    for (task_id, ordinal), kind in after_slots.items()
+                    if before_slots.get((task_id, ordinal)) != kind
+                )
+                if updated == current:
+                    continue
+                updated["revision"] = int(current["revision"]) + 1
+                updated["diagnostics"]["review_context_reconciliation"] = {
+                    "authority": "explicit_user_review_context",
+                    "corrected_line_ids": corrected,
+                    "corrected_slots": corrected_slots,
+                }
+                if updated["state"] == "user_confirmed":
+                    updated["confirmation"]["proposal_snapshot_sha256"] = (
+                        canonical_record_sha256(geometry_snapshot(updated))
+                    )
+                    changed_confirmed = True
+                else:
+                    updated["reviewed_task_ids"] = []
+                    updated["confirmation"] = None
+                self._save_record(updated)
+                changed_sources += 1
+                changed_lines += len(corrected)
+                changed_slots += len(corrected_slots)
+            if changed_confirmed:
+                self._refresh_confirmed_rows()
+        return {
+            "changed_sources": changed_sources,
+            "changed_lines": changed_lines,
+            "changed_slots": changed_slots,
+        }
 
     def set_source_reviewed(
         self,

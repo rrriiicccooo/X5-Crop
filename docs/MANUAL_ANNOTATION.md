@@ -47,11 +47,13 @@ python3 -m tools.manual_annotation audit
 ## 审核流程
 
 1. 在左侧按 format、状态或 sample/SHA 筛选；每次只打开一个有界预览。
-2. 先检查两条共享短轴边，再检查该 source 中适用的每对长轴边。绿色四边形是这些直线交点
-   围成的基础照片区域，不包含产品 bleed；空曝光 slot 没有人工长轴边或四边形。
+2. 先检查两条共享短轴边，再检查该 source 中适用的每对长轴边。总览中的稳定多色半透明四边形是
+   这些直线交点围成的基础照片区域，不包含产品 bleed；空曝光 slot 没有人工长轴边或四边形。
 3. 点击边界后拖整条线可沿法向移动，拖端点可修正斜率；方向键移动 1 px，按住 Shift 移动
    10 px。`[` / `]` 每次逆时针/顺时针旋转 0.01°，Shift 为 0.1°；整线绕中点旋转，选中端点时
-   绕该端点旋转。`⌘Z` / `Ctrl+Z` 撤销。
+   绕该端点旋转。`⌘Z` / `Ctrl+Z` 撤销。选中长轴边后，在“边界依据”中明确选择直接可见边界、
+   可见内容极限或按 Frame 宽度估计；估计线以 `≈` 和虚线标识，该方向不阻断黄金 accuracy。
+   移动估计线只改变坐标来源，不会把证据基础误写为肉眼可见边界。
 4. 鼠标所在位置的右侧局部图直接读取原 TIFF 的 1:1 像素，并叠加该 source 的两条共享边和
    全部适用的成对长轴边；选中线显示为半透明黄色芯线和轻量深色轮廓，既保持选择状态，又能看清线下的
    真实像素与物理边缘。总览只负责导航，
@@ -60,10 +62,10 @@ python3 -m tools.manual_annotation audit
    首次进入会从片带长轴起点开始，横向片带即图片最左端；再次进入沿用当前审阅位置。检查区会占满
    浏览器内容区，并按当前位置两条共享边计算短轴 H，让完整 H 占可用交叉轴约 94%，
    上下保留少量余量。该模式直接从原 TIFF 读取所需源区域，再按当前屏幕尺寸缩小，不放大有界总览
-   JPG。每个有内容 reference 的 Frame 由同一套共享边和成对长轴边闭合，并按 Frame ordinal 使用与
-   Debug Analysis 一致的稳定多色半透明填充；`start` 为洋红色，`end` 为橙色且始终画在填充之上，
-   接触 Frame 复用的 `start/end` 物理边显示为两色交替虚线。叠片中的两条独立边仍按各自角色着色，
-   重叠区域会叠加加深。点击任一线可选中整线，并直接用方向键或 `[` / `]` 修改；点击空白处只沿
+   JPG。每个有内容 reference 的 Frame 由同一套共享边和成对长轴边闭合，并按 Frame ordinal 使用
+   稳定多色轮廓；完整高度审阅不填充画面。`start` 为洋红色，`end` 为橙色，
+   接触 Frame 复用的 `start/end` 物理边显示为两色交替虚线；叠片中的两条独立边仍各自着色，不合并为
+   `contact`。点击任一线可选中整线，并直接用方向键或 `[` / `]` 修改；点击空白处只沿
    胶片长轴移动，短轴始终回到共享边中间。按 `F` 或 `Esc` 恢复 1:1 标注布局。
 5. 同一 source SHA 若有多个 count，页面仍只显示一个 source reference，不建立 count 页签。最大显式 count
    任务定义该 source 的物理 Frame 集；其他 count 只能按长轴顺序引用该集合的子集，不能再生成另一套黄金矩形。
@@ -72,8 +74,10 @@ python3 -m tools.manual_annotation audit
    每个有内容 slot 通过 `start_boundary_id` / `end_boundary_id` 明确长轴起止边，并与
    `shared_edges` 的 `short_low` / `short_high` 共同唯一确定四边；后两者在横向片带中对应
    top/bottom，在纵向片带中对应显示坐标的 left/right。
-   `contact` 的相邻照片共享同一条物理线；`overlap` 保留交叉的两条边。`slot_kind` 保留空片、残缺
-   曝光和源截断；只有 `blank_exposure` 使用 `reference_geometry: not_applicable`，且不能通过少输出
+   `contact` 的相邻照片共享同一条物理线；`overlap` 保留交叉的两条边。“当前 Frame”可为共享物理
+   Frame 选择正常照片、残缺曝光、源截断或未知；所有引用它的 count 任务会同步更新，不能产生冲突。
+   `partial_exposure` 仍有可见内容，`source_truncated` 只表示 TIFF 已截断 Frame，两者均保留成对边界。
+   只有 `blank_exposure` 使用 `reference_geometry: not_applicable`，且不能在该控件中转换或通过少输出
    一格来隐藏。
 6. source reference 审核后，点击“确认整张黄金基线”。最终弹窗只提供取消与确认；一次确认表示共享边、
    全部适用边界、原生像素和无 bleed 基础裁切安全性均已检查。确认后的 source 立即冻结，页面按队列顺序
@@ -85,8 +89,21 @@ python3 -m tools.manual_annotation audit
 每条线还保存 `review_basis`：肉眼直接可见、可见内容极限、按 frame width 估计、机器补线或原生像素
 人工调整必须可区分。最终确认后，`human_width_estimate` 仍是可审计的安全裁切估计，但不是独立观察到
 的真实边缘：黄金 accuracy 不允许该方向单独造成内切或 5% 外扩阻断；同一 Frame 其余可见边仍正常
-阻断，Runtime 的源内安全与 Gate 也不改变。红线数量不足时保留机器补线并在页面提示；若拟合出的红色共享边会让任一照片
+阻断，Runtime 的源内安全与 Gate 也不改变。`origin` 与 `review_basis` 相互独立；移动、保存和最终冻结
+都不得清除已经声明的宽度估计。红线数量不足时保留机器补线并在页面提示；若拟合出的红色共享边会让任一照片
 离开源栅格，只采用仍能形成源内安全矩形的红线，其余共享边保留机器 proposal 等待人工修正。
+
+若用户在确认后补充了某条线的证据基础或有边界 Frame 的类型，只能先把精确 role/slot 写入
+`Test/manual_review/review_context.json`，再显式运行：
+
+```bash
+python3 -m tools.manual_annotation reconcile-context \
+  --sample-id S030 --include-confirmed
+```
+
+该命令只同步非结构性的逐线 `review_basis`、有边界 Frame 的 `slot_kind`、审计上下文和冻结快照摘要，
+不改坐标、状态、确认时间或确认图片；空曝光的无几何结构仍只能在 proposal 准备阶段建立。
+不带 `--include-confirmed` 时拒绝修改已冻结 source。
 
 `Test/manual_review/review_context.json` 保存逐样片审阅上下文，例如空 slot、接触、叠片、猜测边、
 漏光、片夹遮挡和正负片分层。它只帮助校准和审核，不能成为 production whitelist、样片特例、format

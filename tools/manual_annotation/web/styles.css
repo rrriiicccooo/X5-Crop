@@ -99,6 +99,7 @@ button:disabled { opacity: .38; cursor: not-allowed; }
 .annotation-line.boundary.end, .annotation-line.boundary.contact-end { stroke: var(--boundary-end); }
 .annotation-line.boundary.contact-start, .annotation-line.boundary.contact-end { stroke-dasharray: 10 10; }
 .annotation-line.boundary.contact-end { stroke-dashoffset: 10; }
+.annotation-line.estimated { stroke-dasharray: 5 5; }
 .annotation-line.inactive { stroke: #7f8792; opacity: .26; }
 .annotation-selection-halo { stroke: #050608; stroke-width: 8; stroke-linecap: round; vector-effect: non-scaling-stroke; pointer-events: none; opacity: .92; }
 .annotation-line.selected { stroke: var(--amber); stroke-width: 3.4; stroke-linecap: round; stroke-dasharray: none; stroke-dashoffset: 0; filter: none; opacity: 1; }
@@ -142,6 +143,7 @@ button:disabled { opacity: .38; cursor: not-allowed; }
 .loupe-annotation-line.boundary.end, .loupe-annotation-line.boundary.contact-end { stroke: var(--boundary-end); }
 .loupe-annotation-line.boundary.contact-start, .loupe-annotation-line.boundary.contact-end { stroke-dasharray: 10 10; }
 .loupe-annotation-line.boundary.contact-end { stroke-dashoffset: 10; }
+.loupe-annotation-line.estimated { stroke-dasharray: 5 5; }
 .loupe-selection-halo { stroke: #050608; stroke-width: 5.6; stroke-linecap: round; vector-effect: non-scaling-stroke; pointer-events: none; opacity: .28; }
 .loupe-annotation-line.selected { stroke: var(--amber); stroke-width: 2.8; stroke-linecap: round; stroke-dasharray: none; stroke-dashoffset: 0; filter: none; opacity: .58; }
 body.loupe-maximized { overflow: hidden; }
@@ -153,6 +155,10 @@ body.loupe-maximized .loupe-card > p { flex: 0 0 auto; margin-top: 6px; text-ali
 .coordinate-grid { display: grid; grid-template-columns: 65px 1fr; gap: 7px 8px; align-items: center; font-size: 11px; }
 .coordinate-grid span { color: var(--muted); }
 .coordinate-grid code { overflow: hidden; text-overflow: ellipsis; color: #dbe5f5; font-size: 10px; }
+.field-control { display: grid; grid-template-columns: 88px minmax(0, 1fr); align-items: center; gap: 8px; margin-top: 11px; color: var(--muted); font-size: 11px; }
+.field-control select { min-width: 0; height: 34px; padding: 0 8px; font-size: 11px; }
+.field-control:has(select:disabled) { opacity: .55; }
+.frame-card .inspect-heading > span { max-width: 190px; overflow: hidden; color: var(--muted); text-overflow: ellipsis; white-space: nowrap; }
 .nudge-grid { display: grid; grid-template-columns: repeat(3, 38px); justify-content: center; gap: 5px; margin-top: 12px; }
 .nudge-grid button { min-height: 34px; padding: 0; background: #252a33; border-color: #373e4a; }
 .rotation-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 9px; }

@@ -21,6 +21,7 @@ from .imaging import SourceRaster, orientation_record
 from .model import (
     ANNOTATION_SCHEMA,
     AnnotationError,
+    CLIENT_EDITABLE_SLOT_KINDS,
     COORDINATE_SYSTEM,
     LINE_REVIEW_BASES,
     MACHINE_ORIGIN,
@@ -1356,6 +1357,86 @@ def canonicalize_source_reference_mappings(
     return updated
 
 
+def apply_review_context_line_bases(record: dict[str, Any]) -> dict[str, Any]:
+    """Apply explicit user evidence-basis declarations to referenced boundaries."""
+    updated = deepcopy(record)
+    lines = {
+        line["line_id"]: line
+        for line in [*updated["shared_edges"], *updated["boundary_pool"]]
+    }
+    requested_by_line: dict[str, str] = {}
+    for task in updated["tasks"]:
+        context = _task_markup_context(updated, task["task_id"])
+        hints = context.get("markup_import", {}) if isinstance(context, dict) else {}
+        if not isinstance(hints, dict):
+            raise ValueError(f"{task['task_id']}: markup_import must be an object")
+        role_bases = hints.get("role_review_basis", {})
+        if not isinstance(role_bases, dict):
+            raise ValueError(f"{task['task_id']}: line review basis hints must be an object")
+        valid_role_keys = {
+            f"{ordinal}.{role}"
+            for ordinal in range(1, int(task["count"]) + 1)
+            for role in ("start", "end")
+        }
+        if not set(role_bases).issubset(valid_role_keys) or any(
+            not isinstance(value, str) or value not in LINE_REVIEW_BASES
+            for value in role_bases.values()
+        ):
+            raise ValueError(f"{task['task_id']}: line review basis hint is invalid")
+        slots = {int(slot["ordinal"]): slot for slot in task["slots"]}
+        for role_key, basis in role_bases.items():
+            ordinal_text, role = str(role_key).split(".", 1)
+            pair = slot_boundary_ids(slots[int(ordinal_text)])
+            if pair is None:
+                raise ValueError(
+                    f"{task['task_id']}: line review basis cannot target a blank slot"
+                )
+            line_id = pair[0] if role == "start" else pair[1]
+            previous = requested_by_line.get(line_id)
+            if previous is not None and previous != basis:
+                raise ValueError("one physical boundary has conflicting review bases")
+            requested_by_line[line_id] = str(basis)
+    for line_id, basis in requested_by_line.items():
+        if line_id not in lines:
+            raise ValueError("line review basis references an unknown boundary")
+        lines[line_id]["review_basis"] = basis
+    return updated
+
+
+def apply_review_context_metadata(record: dict[str, Any]) -> dict[str, Any]:
+    """Apply nonstructural user-declared slot and line evidence metadata."""
+    updated = deepcopy(record)
+    for task in updated["tasks"]:
+        context = _task_markup_context(updated, task["task_id"])
+        hints = context.get("markup_import", {}) if isinstance(context, dict) else {}
+        if not isinstance(hints, dict):
+            raise ValueError(f"{task['task_id']}: markup_import must be an object")
+        raw_slot_kinds = hints.get("slot_kinds", {})
+        if not isinstance(raw_slot_kinds, dict):
+            raise ValueError(f"{task['task_id']}: slot kind hints must be an object")
+        slot_kinds = {int(key): str(value) for key, value in raw_slot_kinds.items()}
+        if not set(slot_kinds).issubset(range(1, int(task["count"]) + 1)) or any(
+            value not in SLOT_KINDS for value in slot_kinds.values()
+        ):
+            raise ValueError(f"{task['task_id']}: slot kind hint is invalid")
+        for slot in task["slots"]:
+            requested = slot_kinds.get(int(slot["ordinal"]), slot["slot_kind"])
+            if requested == slot["slot_kind"]:
+                continue
+            if (
+                requested not in CLIENT_EDITABLE_SLOT_KINDS
+                or slot["slot_kind"] not in CLIENT_EDITABLE_SLOT_KINDS
+                or slot_boundary_ids(slot) is None
+            ):
+                raise ValueError(
+                    f"{task['task_id']}: structural blank-slot changes require proposal preparation"
+                )
+            slot["slot_kind"] = requested
+    updated = apply_review_context_line_bases(updated)
+    validate_annotation_record(updated)
+    return updated
+
+
 def apply_review_context_slot_semantics(record: dict[str, Any]) -> dict[str, Any]:
     """Apply typed slot facts without promoting machine geometry to authority."""
     updated = deepcopy(record)
@@ -1388,6 +1469,7 @@ def apply_review_context_slot_semantics(record: dict[str, Any]) -> dict[str, Any
                 adjacency["kind"] = "not_applicable"
 
     updated = canonicalize_source_reference_mappings(updated)
+    updated = apply_review_context_line_bases(updated)
 
     used_ids = referenced_boundary_ids(updated)
     updated["boundary_pool"] = [
@@ -1568,10 +1650,6 @@ def import_red_markup_draft(
         slot_kinds = {
             int(key): str(value) for key, value in hints.get("slot_kinds", {}).items()
         }
-        role_bases = {
-            str(key): str(value)
-            for key, value in hints.get("role_review_basis", {}).items()
-        }
         if not contact_after.issubset(range(1, count)):
             raise ValueError(f"{task['task_id']}: contact adjacency is out of range")
         if not overlap_after.issubset(range(1, count)):
@@ -1591,15 +1669,6 @@ def import_red_markup_draft(
             raise ValueError(
                 f"{task['task_id']}: blank exposure must omit red boundary roles"
             )
-        valid_role_keys = {
-            f"{ordinal}.{role}"
-            for ordinal in range(1, count + 1)
-            for role in ("start", "end")
-        }
-        if not set(role_bases).issubset(valid_role_keys) or any(
-            value not in LINE_REVIEW_BASES for value in role_bases.values()
-        ):
-            raise ValueError(f"{task['task_id']}: line review basis hint is invalid")
         role_ids = _task_role_ids(task)
         role_positions = [
             _machine_boundary_position(updated, original_pool[line_id])
@@ -1635,11 +1704,6 @@ def import_red_markup_draft(
             red_id = observed_lines[observed_index]["line_id"]
             mapped_role_ids.append(red_id)
             used_observed_ids.add(red_id)
-            ordinal = role_index // 2 + 1
-            role_name = "start" if role_index % 2 == 0 else "end"
-            requested_basis = role_bases.get(f"{ordinal}.{role_name}")
-            if requested_basis:
-                observed_lines[observed_index]["review_basis"] = requested_basis
         task["slots"] = [
             {
                 "ordinal": index + 1,

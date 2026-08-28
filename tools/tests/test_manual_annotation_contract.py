@@ -25,9 +25,11 @@ from tools.manual_annotation.model import (
     COORDINATE_SYSTEM,
     AnnotationError,
     apply_client_geometry,
+    canonical_record_sha256,
     confirmed_baseline_rows,
     display_to_raw_point,
     frame_polygons_display,
+    geometry_snapshot,
     record_for_client,
     slot_boundary_ids,
     validate_annotation_record,
@@ -147,6 +149,41 @@ def _annotation_record(*, orientation: int = 1) -> dict[str, object]:
         line("B004", "long_boundary", [[490.0, 0.0], [491.0, 99.0]]),
     ]
     return record
+
+
+def _client_edit_payload(
+    client_record: dict[str, object],
+    *,
+    expected_revision: int = 1,
+) -> dict[str, object]:
+    return {
+        "expected_revision": expected_revision,
+        "shared_edges": [
+            {
+                "line_id": line["line_id"],
+                "points_display": line["points_display"],
+                "review_basis": line["review_basis"],
+            }
+            for line in client_record["shared_edges"]
+        ],
+        "boundary_pool": [
+            {
+                "line_id": line["line_id"],
+                "points_display": line["points_display"],
+                "review_basis": line["review_basis"],
+            }
+            for line in client_record["boundary_pool"]
+        ],
+        "slot_kinds": [
+            {
+                "task_id": task["task_id"],
+                "ordinal": slot["ordinal"],
+                "slot_kind": slot["slot_kind"],
+            }
+            for task in client_record["tasks"]
+            for slot in task["slots"]
+        ],
+    }
 
 
 class ManualAnnotationModelContractTest(unittest.TestCase):
@@ -321,23 +358,7 @@ class ManualAnnotationModelContractTest(unittest.TestCase):
         validate_annotation_record(record)
         client = record_for_client(record)
         original = deepcopy(record)
-        payload = {
-            "expected_revision": 1,
-            "shared_edges": [
-                {
-                    "line_id": line["line_id"],
-                    "points_display": line["points_display"],
-                }
-                for line in client["shared_edges"]
-            ],
-            "boundary_pool": [
-                {
-                    "line_id": line["line_id"],
-                    "points_display": line["points_display"],
-                }
-                for line in client["boundary_pool"]
-            ],
-        }
+        payload = _client_edit_payload(client)
         updated = apply_client_geometry(record, payload)
         self.assertEqual(updated["revision"], 2)
         for before, after in zip(
@@ -361,33 +382,115 @@ class ManualAnnotationModelContractTest(unittest.TestCase):
 
     def test_geometry_update_marks_only_the_changed_line_as_human(self) -> None:
         record = _annotation_record()
+        record["boundary_pool"][1]["review_basis"] = "human_width_estimate"
         client = record_for_client(record)
         client["boundary_pool"][1]["points_display"][0][0] += 1.0
-        updated = apply_client_geometry(
-            record,
-            {
-                "expected_revision": 1,
-                "shared_edges": [
-                    {
-                        "line_id": line["line_id"],
-                        "points_display": line["points_display"],
-                    }
-                    for line in client["shared_edges"]
-                ],
-                "boundary_pool": [
-                    {
-                        "line_id": line["line_id"],
-                        "points_display": line["points_display"],
-                    }
-                    for line in client["boundary_pool"]
-                ],
-            },
-        )
+        updated = apply_client_geometry(record, _client_edit_payload(client))
         self.assertEqual(updated["boundary_pool"][1]["origin"], "human_adjustment")
+        self.assertEqual(
+            updated["boundary_pool"][1]["review_basis"],
+            "human_width_estimate",
+        )
         self.assertEqual(
             updated["boundary_pool"][0]["origin"],
             "test_machine_proposal",
         )
+
+    def test_visible_content_limit_survives_native_pixel_adjustment(self) -> None:
+        record = _annotation_record()
+        record["boundary_pool"][0]["review_basis"] = "visible_content_limit"
+        client = record_for_client(record)
+        client["boundary_pool"][0]["points_display"][0][0] += 1.0
+
+        updated = apply_client_geometry(record, _client_edit_payload(client))
+
+        self.assertEqual(updated["boundary_pool"][0]["origin"], "human_adjustment")
+        self.assertEqual(
+            updated["boundary_pool"][0]["review_basis"],
+            "visible_content_limit",
+        )
+
+    def test_client_can_classify_boundary_evidence(self) -> None:
+        for review_basis in (
+            "directly_visible",
+            "visible_content_limit",
+            "human_width_estimate",
+        ):
+            with self.subTest(review_basis=review_basis):
+                record = _annotation_record()
+                client = record_for_client(record)
+                client["boundary_pool"][0]["review_basis"] = review_basis
+
+                updated = apply_client_geometry(
+                    record,
+                    _client_edit_payload(client),
+                )
+
+                self.assertEqual(
+                    updated["boundary_pool"][0]["review_basis"],
+                    review_basis,
+                )
+                self.assertEqual(
+                    updated["boundary_pool"][0]["origin"],
+                    "test_machine_proposal",
+                )
+
+    def test_client_updates_one_physical_frame_kind_across_count_tasks(self) -> None:
+        for slot_kind in ("partial_exposure", "source_truncated", "unknown"):
+            with self.subTest(slot_kind=slot_kind):
+                record = _annotation_record()
+                client = record_for_client(record)
+                for task in client["tasks"]:
+                    task["slots"][0]["slot_kind"] = slot_kind
+
+                updated = apply_client_geometry(
+                    record,
+                    _client_edit_payload(client),
+                )
+
+                self.assertTrue(
+                    all(
+                        task["slots"][0]["slot_kind"] == slot_kind
+                        for task in updated["tasks"]
+                    )
+                )
+
+    def test_client_cannot_convert_structural_blank_slot(self) -> None:
+        record = _annotation_record()
+        record["tasks"][0]["slots"][0] = {
+            "ordinal": 1,
+            "slot_kind": "blank_exposure",
+            "reference_geometry": {"kind": "not_applicable"},
+        }
+        validate_annotation_record(record)
+        client = record_for_client(record)
+
+        unchanged = apply_client_geometry(record, _client_edit_payload(client))
+        self.assertEqual(
+            unchanged["tasks"][0]["slots"][0]["slot_kind"],
+            "blank_exposure",
+        )
+
+        client["tasks"][0]["slots"][0]["slot_kind"] = "partial_exposure"
+        with self.assertRaisesRegex(
+            AnnotationError,
+            "slot kind change is not editable",
+        ):
+            apply_client_geometry(
+                record,
+                _client_edit_payload(client),
+            )
+
+    def test_client_rejects_conflicting_kinds_for_one_physical_frame(self) -> None:
+        record = _annotation_record()
+        client = record_for_client(record)
+        client["tasks"][0]["slots"][0]["slot_kind"] = "partial_exposure"
+
+        with self.assertRaisesRegex(
+            AnnotationError,
+            "one physical frame cannot have conflicting slot kinds",
+        ):
+            apply_client_geometry(record, _client_edit_payload(client))
 
     def test_confirmation_is_immutable_and_exports_accuracy_key(self) -> None:
         record = _annotation_record()
@@ -423,6 +526,7 @@ class ManualAnnotationModelContractTest(unittest.TestCase):
                     "expected_revision": 1,
                     "shared_edges": [],
                     "boundary_pool": [],
+                    "slot_kinds": [],
                 },
             )
 
@@ -530,6 +634,8 @@ class SyntheticReviewRepository:
         *,
         unmarked: bool = False,
         blank: bool = False,
+        width_estimate: bool = False,
+        partial: bool = False,
     ) -> None:
         context = {
             "review_context_schema": "x5crop_manual_review_context_v1",
@@ -547,6 +653,27 @@ class SyntheticReviewRepository:
                     }
                 }
                 if blank
+                else {
+                    "S001": {
+                        "case_tags": ["human_width_estimate"],
+                        "markup_import": {
+                            "role_review_basis": {
+                                "1.start": "human_width_estimate"
+                            }
+                        },
+                    }
+                }
+                if width_estimate
+                else {
+                    sample_id: {
+                        "case_tags": ["partial_exposure"],
+                        "markup_import": {
+                            "slot_kinds": {"1": "partial_exposure"}
+                        },
+                    }
+                    for sample_id in ("S001", "S002")
+                }
+                if partial
                 else {}
             ),
         }
@@ -651,6 +778,95 @@ class ManualAnnotationWorkspaceContractTest(unittest.TestCase):
             reviewed=False,
         )
         self.assertEqual(unreviewed["reviewed_task_ids"], [])
+
+    def test_explicit_context_reconciles_frozen_width_estimate_metadata(self) -> None:
+        workspace = ReviewWorkspace(self.fixture.root)
+        workspace.prepare()
+        record = workspace.load_record("S001")
+        reviewed = workspace.set_source_reviewed(
+            "S001",
+            expected_revision=record["revision"],
+            reviewed=True,
+        )
+        workspace.confirm(
+            "S001",
+            expected_revision=reviewed["revision"],
+        )
+        self.fixture.write_review_context(width_estimate=True)
+        workspace = ReviewWorkspace(self.fixture.root)
+
+        counts = workspace.reconcile_review_context(
+            identities=["S001"],
+            include_confirmed=True,
+        )
+
+        self.assertEqual(
+            counts,
+            {"changed_sources": 1, "changed_lines": 1, "changed_slots": 0},
+        )
+        corrected = workspace.load_record("S001")
+        self.assertEqual(corrected["state"], "user_confirmed")
+        start_id = corrected["tasks"][0]["slots"][0]["reference_geometry"][
+            "start_boundary_id"
+        ]
+        start = next(
+            line for line in corrected["boundary_pool"] if line["line_id"] == start_id
+        )
+        self.assertEqual(start["review_basis"], "human_width_estimate")
+        self.assertEqual(
+            corrected["confirmation"]["proposal_snapshot_sha256"],
+            canonical_record_sha256(geometry_snapshot(corrected)),
+        )
+        baseline = [
+            json.loads(line)
+            for line in workspace.confirmed_rows_path.read_text(
+                encoding="utf-8"
+            ).splitlines()
+        ]
+        exported_start = next(
+            line
+            for line in baseline[0]["boundary_pool"]
+            if line["line_id"] == start_id
+        )
+        self.assertEqual(exported_start["review_basis"], "human_width_estimate")
+
+    def test_explicit_context_reconciles_shared_partial_frame_without_geometry_change(
+        self,
+    ) -> None:
+        self.fixture.add_two_count_alias()
+        workspace = ReviewWorkspace(self.fixture.root)
+        workspace.prepare()
+        before = workspace.load_record("S001")
+        points_before = [
+            deepcopy(line["points_raw"])
+            for line in [*before["shared_edges"], *before["boundary_pool"]]
+        ]
+        self.fixture.write_review_context(partial=True)
+        workspace = ReviewWorkspace(self.fixture.root)
+
+        counts = workspace.reconcile_review_context(identities=["S001"])
+
+        self.assertEqual(
+            counts,
+            {"changed_sources": 1, "changed_lines": 0, "changed_slots": 2},
+        )
+        corrected = workspace.load_record("S001")
+        self.assertTrue(
+            all(
+                task["slots"][0]["slot_kind"] == "partial_exposure"
+                for task in corrected["tasks"]
+            )
+        )
+        self.assertEqual(
+            points_before,
+            [
+                line["points_raw"]
+                for line in [
+                    *corrected["shared_edges"],
+                    *corrected["boundary_pool"],
+                ]
+            ],
+        )
 
     def test_prepare_normalizes_existing_unconfirmed_count_mapping(self) -> None:
         self.fixture.add_two_count_alias()
@@ -942,6 +1158,18 @@ class ManualAnnotationPackagingContractTest(unittest.TestCase):
         self.assertIn("洋红=start，橙色=end", joined)
         self.assertIn("双色虚线=start/end 接触边", joined)
         self.assertIn("彩色轮廓=各个有内容 reference 的 frame", joined)
+        self.assertIn("按 frame width 估计（该方向不阻断）", joined)
+        self.assertIn("直接可见边界", joined)
+        self.assertIn("可见内容极限", joined)
+        self.assertIn('id="linereviewbasisselect"', joined)
+        self.assertNotIn('id="widthestimatetoggle"', joined)
+        self.assertIn('id="frameselect"', joined)
+        self.assertIn('id="frameslotkindselect"', joined)
+        self.assertIn("残缺曝光", joined)
+        self.assertIn("源截断", joined)
+        self.assertIn("review_basis: line.review_basis", joined)
+        self.assertIn("slot_kinds", joined)
+        self.assertIn("estimated", joined)
         self.assertIn("const frame_color_count", joined)
         self.assertIn("framecolorclass", joined)
         self.assertGreaterEqual(

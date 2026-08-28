@@ -509,7 +509,10 @@ overlap 保留顺序交叉的两条边；空曝光、残缺曝光、源截断和
 其中只有真正的 `blank_exposure` 没有可见内容边界：其人工 `reference_geometry` 必须明确为
 `not_applicable`，不建立 `start/end` 或 Frame polygon，也不作为缺失标注或 accuracy unresolved。
 该 slot 仍属于显式 count，Runtime 仍由 format/count/template 放置并输出空 TIFF；其它 slot kind
-必须保留 `boundary_pair` reference。
+必须保留 `boundary_pair` reference。`partial_exposure` 表示仍有可见内容但 Frame 不完整，
+`source_truncated` 只表示源 TIFF 已截断 Frame；两者都不是空 slot。同一 source SHA 的多个 count
+任务若引用同一 `boundary_pair`，必须保存相同 `slot_kind`，不能让同一物理 Frame 在不同任务中具有
+冲突语义。
 页面中的 Orientation 只做可逆显示，持久化权威始终是原 TIFF raster pixel-center 坐标。
 
 独立有界像素拟合、用户红线草稿恢复和有界 JPG 都只能生成 proposal。只有用户在单一 source 视图中审核全部适用物理边界、
@@ -538,7 +541,10 @@ format/count authority、Gate 分支或 detector 选择器。
   Frame 宽度给出的可接受安全估计，而非独立观察到的真实内容边；对应一侧既不以向内越过估计线判错，
   也不以相对该线超过 5% 外扩判错。同一 Frame 的其余可见 start/end 与共享边仍逐侧阻断，不能因一侧
   估计而豁免整格或整张 source。该权限只属于黄金 accuracy 比较，不放宽 Runtime 的 source 内安全、
-  format/count、Gate、TIFF 或正式输出合同。
+  format/count、Gate、TIFF 或正式输出合同。`origin` 只记录坐标来源，`review_basis` 独立记录证据基础；
+  人工移动或冻结不能把已经声明的 `human_width_estimate` 改写为可见边界。
+- `visible_content_limit` 表示残缺曝光中仍可见内容的最外侧安全界限。它是人工可见证据，参与方向性
+  accuracy 阻断；与无法看见、只能按 Frame 宽度推定且不阻断该方向的 `human_width_estimate` 不同。
 - 几何 accuracy 只比较带 `boundary_pair` reference 的 Frame ordinal。`blank_exposure` 的
   `not_applicable` 表示没有人工内容边界，不是通配框、估计框或放行特例；它不减少 Runtime count，
   也不改变模板、源内安全和整张 source 决策合同。

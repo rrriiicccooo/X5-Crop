@@ -31,8 +31,19 @@ LINE_REVIEW_BASES = frozenset(
         "unresolved_red_stroke",
     }
 )
+CLIENT_EDITABLE_LINE_REVIEW_BASES = frozenset(
+    {
+        "directly_visible",
+        "visible_content_limit",
+        "human_width_estimate",
+        "human_adjusted_native_pixel",
+    }
+)
 SLOT_KINDS = frozenset(
     {"image", "blank_exposure", "partial_exposure", "source_truncated", "unknown"}
+)
+CLIENT_EDITABLE_SLOT_KINDS = frozenset(
+    {"image", "partial_exposure", "source_truncated", "unknown"}
 )
 ADJACENCY_KINDS = frozenset(
     {"separator", "contact", "overlap", "unresolved", "not_applicable"}
@@ -637,6 +648,18 @@ def validate_annotation_record(record: dict[str, Any]) -> None:
             "count task reference geometry is not a subset of the source reference"
         )
 
+    physical_frame_kinds: dict[tuple[str, str], str] = {}
+    for task in tasks:
+        for slot in task["slots"]:
+            pair = slot_boundary_ids(slot)
+            if pair is None:
+                continue
+            previous = physical_frame_kinds.setdefault(pair, slot["slot_kind"])
+            if previous != slot["slot_kind"]:
+                raise AnnotationError(
+                    "one physical frame cannot have conflicting slot kinds"
+                )
+
     used_boundary_ids = referenced_boundary_ids(record)
     if any(
         line["line_id"] not in used_boundary_ids
@@ -713,7 +736,12 @@ def apply_client_geometry(
     current: dict[str, Any],
     payload: dict[str, Any],
 ) -> dict[str, Any]:
-    if set(payload) != {"expected_revision", "shared_edges", "boundary_pool"}:
+    if set(payload) != {
+        "expected_revision",
+        "shared_edges",
+        "boundary_pool",
+        "slot_kinds",
+    }:
         raise AnnotationError("geometry update has unexpected fields")
     if (
         not isinstance(payload["expected_revision"], int)
@@ -728,6 +756,8 @@ def apply_client_geometry(
     def replace_lines(
         target: list[dict[str, Any]],
         incoming: object,
+        *,
+        editable_bases: frozenset[str],
     ) -> None:
         if not isinstance(incoming, list) or len(incoming) != len(target):
             raise AnnotationError("geometry line set does not match the task")
@@ -735,31 +765,88 @@ def apply_client_geometry(
         for item in incoming:
             if (
                 not isinstance(item, dict)
-                or set(item) != {"line_id", "points_display"}
+                or set(item) != {"line_id", "points_display", "review_basis"}
                 or not isinstance(item["line_id"], str)
+                or not isinstance(item["review_basis"], str)
+                or item["review_basis"] not in LINE_REVIEW_BASES
             ):
                 raise AnnotationError("geometry line update is malformed")
             incoming_by_id[item["line_id"]] = item
         if set(incoming_by_id) != {line["line_id"] for line in target}:
             raise AnnotationError("geometry line identities changed")
         for line in target:
-            points = incoming_by_id[line["line_id"]]["points_display"]
+            incoming_line = incoming_by_id[line["line_id"]]
+            points = incoming_line["points_display"]
             if not isinstance(points, list) or len(points) != 2:
                 raise AnnotationError("geometry line requires two display points")
+            requested_basis = incoming_line["review_basis"]
+            if requested_basis != line["review_basis"] and (
+                requested_basis not in editable_bases
+            ):
+                raise AnnotationError("line review basis change is not editable")
             mapped = [
                 display_to_raw_point(updated, _point(point, "display point"))
                 for point in points
             ]
-            if any(
+            geometry_changed = any(
                 math.dist(before, after) > 1.0e-7
                 for before, after in zip(line["points_raw"], mapped, strict=True)
-            ):
+            )
+            if geometry_changed:
                 line["origin"] = "human_adjustment"
-                line["review_basis"] = "human_adjusted_native_pixel"
+                if requested_basis not in CLIENT_EDITABLE_LINE_REVIEW_BASES:
+                    requested_basis = "human_adjusted_native_pixel"
+            line["review_basis"] = requested_basis
             line["points_raw"] = mapped
 
-    replace_lines(updated["shared_edges"], payload["shared_edges"])
-    replace_lines(updated["boundary_pool"], payload["boundary_pool"])
+    replace_lines(
+        updated["shared_edges"],
+        payload["shared_edges"],
+        editable_bases=frozenset(
+            {"directly_visible", "human_adjusted_native_pixel"}
+        ),
+    )
+    replace_lines(
+        updated["boundary_pool"],
+        payload["boundary_pool"],
+        editable_bases=CLIENT_EDITABLE_LINE_REVIEW_BASES,
+    )
+
+    incoming_slot_kinds = payload["slot_kinds"]
+    if not isinstance(incoming_slot_kinds, list):
+        raise AnnotationError("slot kind update must be a list")
+    current_slots = {
+        (task["task_id"], slot["ordinal"]): slot
+        for task in updated["tasks"]
+        for slot in task["slots"]
+    }
+    requested_slot_kinds: dict[tuple[str, int], str] = {}
+    for item in incoming_slot_kinds:
+        if (
+            not isinstance(item, dict)
+            or set(item) != {"task_id", "ordinal", "slot_kind"}
+            or not isinstance(item["task_id"], str)
+            or not isinstance(item["ordinal"], int)
+            or isinstance(item["ordinal"], bool)
+            or not isinstance(item["slot_kind"], str)
+            or item["slot_kind"] not in SLOT_KINDS
+        ):
+            raise AnnotationError("slot kind update is malformed")
+        identity = (item["task_id"], item["ordinal"])
+        if identity in requested_slot_kinds:
+            raise AnnotationError("slot kind identities are duplicated")
+        requested_slot_kinds[identity] = item["slot_kind"]
+    if set(requested_slot_kinds) != set(current_slots):
+        raise AnnotationError("slot kind identities changed")
+    for identity, slot in current_slots.items():
+        requested_kind = requested_slot_kinds[identity]
+        if requested_kind != slot["slot_kind"] and (
+            requested_kind not in CLIENT_EDITABLE_SLOT_KINDS
+            or slot["slot_kind"] not in CLIENT_EDITABLE_SLOT_KINDS
+        ):
+            raise AnnotationError("slot kind change is not editable")
+        slot["slot_kind"] = requested_kind
+
     updated["revision"] += 1
     updated["state"] = "human_adjusted"
     updated["reviewed_task_ids"] = []
