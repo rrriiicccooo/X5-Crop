@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from copy import deepcopy
 from io import BytesIO
-import hashlib
 import json
 from pathlib import Path
 import re
@@ -20,12 +19,6 @@ from PIL import Image
 import tifffile
 
 from tools.manual_annotation.imaging import SourceRaster, orientation_record, sha256_file
-from tools.manual_annotation.machine_salience import (
-    MACHINE_SALIENCE_ANALYSIS_REVISION,
-    analyze_source_lines,
-    build_machine_salience_review,
-    set_line_review_status,
-)
 from tools.manual_annotation.model import (
     ANNOTATION_SCHEMA,
     BASELINE_SCHEMA,
@@ -230,46 +223,6 @@ def _extend_second_task_to_four_frames(
             line = deepcopy(record["boundary_pool"][0])
             line["line_id"] = line_id
             record["boundary_pool"].append(line)
-
-
-def _salience_line_fact(
-    identity: str,
-    *,
-    recognized: bool,
-    metric: float,
-) -> dict[str, object]:
-    return {
-        "line_id": identity,
-        "line_geometry_sha256": hashlib.sha256(identity.encode()).hexdigest(),
-        "review_basis": "directly_visible",
-        "uses": [
-            {"task_id": "S001", "sample_id": "S001", "ordinal": 1, "role": "start"}
-        ],
-        "physical_role": "start",
-        "eligible": True,
-        "not_applicable_reason": None,
-        "machine_classification": (
-            "production_edge_matched" if recognized else "no_matched_production_edge"
-        ),
-        "recall_candidate": not recognized,
-        "high_confidence_proposal": False,
-        "proposal_reasons": [],
-        "review_status": "unreviewed",
-        "reviewed_at_utc": None,
-        "measurement": {
-            "qualified_region_count": 1 if recognized else 0,
-            "matched_region_count": 1 if recognized else 0,
-            "bilateral_side_metrics_measurable": True,
-            "side_metrics": {
-                name: {"median": metric, "q75": metric, "q90": metric}
-                for name in (
-                    "tone_difference_codes",
-                    "texture_difference_codes",
-                    "inside_texture_codes",
-                )
-            },
-        },
-    }
 
 
 class ManualAnnotationModelContractTest(unittest.TestCase):
@@ -1327,109 +1280,6 @@ class SyntheticReviewRepository:
         self.temporary.cleanup()
 
 
-class ManualAnnotationMachineSalienceContractTest(unittest.TestCase):
-    def test_contact_boundary_is_not_a_directional_salience_target(self) -> None:
-        record = _annotation_record()
-        _classify_all_lines_directly_visible(record)
-        record["tasks"][1]["slots"][1]["reference_geometry"][
-            "start_boundary_id"
-        ] = "B002"
-        gray = np.zeros((100, 600), dtype=np.uint8)
-        gray[:, 20:211] = 80
-        gray[:, 300:491] = 120
-
-        facts = analyze_source_lines(record, gray)["lines"]
-
-        self.assertTrue(facts["B001"]["eligible"])
-        self.assertFalse(facts["B002"]["eligible"])
-        self.assertEqual(
-            facts["B002"]["not_applicable_reason"],
-            "shared_start_end_contact_boundary",
-        )
-
-    def test_machine_proposal_and_human_verdict_remain_separate(self) -> None:
-        lines = {
-            f"R{index:03d}": _salience_line_fact(
-                f"R{index:03d}",
-                recognized=True,
-                metric=float(10 + index),
-            )
-            for index in range(1, 9)
-        }
-        lines["R009"] = _salience_line_fact(
-            "R009",
-            recognized=False,
-            metric=1.0,
-        )
-        lines["R010"] = {
-            "line_id": "R010",
-            "line_geometry_sha256": hashlib.sha256(b"R010").hexdigest(),
-            "review_basis": "directly_visible",
-            "uses": [
-                {"task_id": "S001", "sample_id": "S001", "ordinal": 1, "role": "start"},
-                {"task_id": "S001", "sample_id": "S001", "ordinal": 2, "role": "end"},
-            ],
-            "physical_role": None,
-            "eligible": False,
-            "not_applicable_reason": "shared_start_end_contact_boundary",
-            "machine_classification": "not_applicable",
-            "recall_candidate": False,
-            "high_confidence_proposal": False,
-            "proposal_reasons": [],
-            "review_status": "unreviewed",
-            "reviewed_at_utc": None,
-        }
-        source = {
-            "source_sha256": "a" * 64,
-            "canonical_sample_id": "S001",
-            "format_id": "135",
-            "source_geometry_sha256": "b" * 64,
-            "lines": lines,
-        }
-
-        review = build_machine_salience_review([source])
-
-        self.assertEqual(
-            review["analysis_revision"],
-            MACHINE_SALIENCE_ANALYSIS_REVISION,
-        )
-        self.assertTrue(
-            review["sources"]["a" * 64]["lines"]["R009"][
-                "high_confidence_proposal"
-            ]
-        )
-        self.assertFalse(
-            review["sources"]["a" * 64]["lines"]["R010"][
-                "high_confidence_proposal"
-            ]
-        )
-        self.assertEqual(review["summary"]["high_confidence_proposal_line_count"], 1)
-        updated = set_line_review_status(
-            review,
-            source_sha256="a" * 64,
-            source_geometry_sha256="b" * 64,
-            line_id="R009",
-            review_status="confirmed_low",
-            expected_review_revision=review["review_revision"],
-        )
-        self.assertEqual(updated["summary"]["confirmed_low_line_count"], 1)
-        self.assertEqual(updated["summary"]["pending_proposal_line_count"], 0)
-
-        regenerated = build_machine_salience_review([source], existing=updated)
-
-        self.assertEqual(
-            regenerated["sources"]["a" * 64]["lines"]["R009"]["review_status"],
-            "confirmed_low",
-        )
-        changed = deepcopy(source)
-        changed["lines"]["R009"]["line_geometry_sha256"] = "c" * 64
-        stale = build_machine_salience_review([changed], existing=updated)
-        self.assertEqual(
-            stale["sources"]["a" * 64]["lines"]["R009"]["review_status"],
-            "unreviewed",
-        )
-
-
 class ManualAnnotationWorkspaceContractTest(unittest.TestCase):
     def setUp(self) -> None:
         self.fixture = SyntheticReviewRepository()
@@ -1986,7 +1836,7 @@ class ManualAnnotationServerContractTest(unittest.TestCase):
         )
         self.assertEqual(status, 200)
         index = json.loads(body)
-        self.assertEqual(index["index_schema"], "x5crop_source_annotation_index_v7")
+        self.assertEqual(index["index_schema"], "x5crop_source_annotation_index_v6")
         self.assertEqual(index["tile_max_render_dimension"], 3072)
         self.assertEqual(index["tile_max_source_dimension"], 16384)
         self.assertEqual(index["tile_max_source_pixels"], 32_000_000)
@@ -1994,11 +1844,6 @@ class ManualAnnotationServerContractTest(unittest.TestCase):
         self.assertEqual(index["basis_states"], {"needs_classification": 1})
         self.assertEqual(index["frame_states"], {"all_frames_normal": 1})
         self.assertEqual(index["evaluation_roles"], {"challenge": 1})
-        self.assertIsNone(index["machine_salience"]["analysis_revision"])
-        self.assertEqual(
-            index["items"][0]["machine_salience_summary"]["analysis_state"],
-            "missing",
-        )
         self.assertEqual(
             index["items"][0]["evaluation_role_summary"]["source_role"],
             "challenge",
@@ -2112,8 +1957,6 @@ class ManualAnnotationPackagingContractTest(unittest.TestCase):
         self.assertIn('id="annotationsvg"', joined)
         self.assertIn('id="loupesvg"', joined)
         self.assertIn('id="rolefilter"', joined)
-        self.assertIn('id="machinesaliencereviewselect"', joined)
-        self.assertIn('value="salience_pending"', joined)
         palette_matches = re.findall(
             r"\.frame-color-(\d+)\s*\{\s*fill:\s*rgb\((\d+),\s*(\d+),\s*(\d+)\);",
             assets["styles.css"],

@@ -24,10 +24,6 @@
             <option value="all">全部格式</option>
           </select>
           <select id="stateFilter" aria-label="状态筛选">
-            <option value="salience_pending">机器低显著度候选 · 待审核</option>
-            <option value="salience_recall_unreviewed">宽召回线索 · 待审核</option>
-            <option value="salience_confirmed_low">已确认机器低显著度</option>
-            <option value="salience_confirmed_not_low">已确认并非低显著度</option>
             <option value="unfinished">待完成</option>
             <option value="basis_attention">需分类 / 含非直接可见边界</option>
             <option value="all_directly_visible">全部为直接可见边界</option>
@@ -137,18 +133,6 @@
                 <option value="unresolved_red_stroke" disabled>未解决的红线</option>
               </select>
             </label>
-            <div id="machineSaliencePanel" class="machine-salience-panel">
-              <div class="machine-salience-heading">
-                <span>机器显著度审阅</span>
-                <strong id="machineSalienceLabel">选择一条 start/end</strong>
-              </div>
-              <p id="machineSalienceEvidence">只统计直接可见、且不是接触共用边的 start/end。</p>
-              <select id="machineSalienceReviewSelect" disabled>
-                <option value="unreviewed">未人工结论</option>
-                <option value="confirmed_low">确认：机器低显著度</option>
-                <option value="confirmed_not_low">确认：不是机器低显著度</option>
-              </select>
-            </div>
             <div class="nudge-grid" aria-label="逐像素微调">
               <span></span><button data-nudge="0,-1">↑</button><span></span>
               <button data-nudge="-1,0">←</button><button data-nudge="0,1">↓</button><button data-nudge="1,0">→</button>
@@ -160,8 +144,7 @@
             <p>直接可见表示人类能从真实像素分界确信内容边缘；证据可以很淡或很短，不要求覆盖整条 H，
               也不要求 detector 检出同一条线。点击线后直接修改整线：方向键平移 1 px，Shift 为 10 px；
               <kbd>[</kbd> / <kbd>]</kbd> 绕整线中点旋转 0.01°，Shift 为 0.1°。
-              标注器会阻止正常 Frame 越出 TIFF，并保留已经声明为源截断的 Frame 外推。机器显著度是独立的
-              查漏提案，不修改这条线的边界依据、黄金坐标、challenge 或 runtime。</p>
+              标注器会阻止正常 Frame 越出 TIFF，并保留已经声明为源截断的 Frame 外推。</p>
           </div>
 
           <div class="inspect-card batch-classification-card">

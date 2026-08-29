@@ -43,8 +43,6 @@ V5 只有一条 current-only runtime；历史 mode、schema、fallback 与平行
 - 红线导入、机器 proposal、有界预览与原 TIFF 窄带精修都不授予黄金权限。逐线
   `review_basis`、Frame 状态、原生像素审核与明确确认完成后，source 才成为不可变
   `user_confirmed`。
-- 本地标注器可对直接可见 start/end 生成独立的机器低显著度审阅层；proposal、宽召回与人工结论不改动
-  黄金几何、边界依据、评测角色、accuracy 或 runtime。
 - 黄金验收统一为最内侧可接受无 bleed 裁切：candidate 与正式 footprint 不得向确认 polygon 内侧
   越界；有预算权限的每侧最多向外 5%。`visible_content_limit` 只阻断向内越界，
   `human_width_estimate` 两向均不阻断，其它边仍独立生效。

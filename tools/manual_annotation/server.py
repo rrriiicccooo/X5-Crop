@@ -280,22 +280,6 @@ class AnnotationRequestHandler(BaseHTTPRequestHandler):
                     identity,
                     expected_revision=payload["expected_revision"],
                 )
-            elif path.startswith("/api/machine-salience/") and self.command == "POST":
-                identity = path.removeprefix("/api/machine-salience/")
-                if set(payload) != {
-                    "expected_review_revision",
-                    "line_id",
-                    "review_status",
-                }:
-                    raise WorkspaceError(
-                        "machine salience review request has unexpected fields"
-                    )
-                result = self.server.workspace.set_machine_salience_review(
-                    identity,
-                    expected_review_revision=payload["expected_review_revision"],
-                    line_id=payload["line_id"],
-                    review_status=payload["review_status"],
-                )
             else:
                 self._error(HTTPStatus.NOT_FOUND, "unknown local annotation endpoint")
                 return

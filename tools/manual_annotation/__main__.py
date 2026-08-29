@@ -33,7 +33,6 @@ def _parser() -> argparse.ArgumentParser:
             "audit",
             "reconcile-context",
             "refine",
-            "salience",
         ),
         default="start",
         help="start prepares missing proposals and opens the annotator (default)",
@@ -99,21 +98,6 @@ def _refinement_progress(
     print(
         f"[{index:03d}/{total:03d}] {identities}: {result['status']} · "
         f"moved={result['moved_line_count']} · retained={result['retained_line_count']}",
-        flush=True,
-    )
-
-
-def _salience_progress(
-    index: int,
-    total: int,
-    members: list[dict[str, object]],
-    result: dict[str, object],
-) -> None:
-    identities = "/".join(str(row["sample_id"]) for row in members)
-    print(
-        f"[{index:03d}/{total:03d}] {identities}: "
-        f"eligible={result['eligible_line_count']} · "
-        f"recall={result['recall_candidate_line_count']}",
         flush=True,
     )
 
@@ -200,24 +184,6 @@ def main(argv: list[str] | None = None) -> int:
                 "{skipped_confirmed}.".format(
                     mode="dry run" if counts["dry_run"] else "applied",
                     **counts,
-                ),
-                flush=True,
-            )
-        if arguments.command == "salience":
-            if arguments.sample_ids:
-                raise RuntimeError(
-                    "salience calibration must cover the complete golden source set"
-                )
-            summary = workspace.analyze_machine_salience(
-                progress=_salience_progress,
-            )
-            print(
-                "Machine salience review: {high_confidence_proposal_line_count} "
-                "high-confidence lines across "
-                "{high_confidence_proposal_source_count} sources; "
-                "{recall_candidate_line_count} recall candidates; "
-                "{not_measurable_line_count} source-boundary line not measurable.".format(
-                    **summary
                 ),
                 flush=True,
             )

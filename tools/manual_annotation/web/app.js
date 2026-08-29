@@ -50,19 +50,6 @@ const evaluationReasonLabels = {
   count_outside_fixed_template_contract: "count 超出当前固定模板合同"
 };
 
-const salienceClassificationLabels = {
-  not_applicable: "不适用",
-  production_edge_matched: "生产测量已匹配",
-  no_matched_production_edge: "生产测量未匹配",
-  not_measurable_at_source_boundary: "贴近 TIFF 边缘，无法双侧测量"
-};
-
-const salienceReviewLabels = {
-  unreviewed: "未人工结论",
-  confirmed_low: "已确认机器低显著度",
-  confirmed_not_low: "已确认并非低显著度"
-};
-
 const elements = Object.fromEntries([
   "progressText", "searchInput", "formatFilter", "stateFilter", "roleFilter", "sourceList",
   "nextButton", "sampleTitle", "stateBadge", "sourceFacts", "saveStatus",
@@ -73,8 +60,6 @@ const elements = Object.fromEntries([
   "loupePolygonLayer", "loupeLineLayer",
   "loupeCrossX", "loupeCrossY", "loupeEmpty", "selectedLineLabel",
   "lineCoordinates", "lineReviewBasisSelect", "frameSelect", "frameSlotKindSelect",
-  "machineSaliencePanel", "machineSalienceLabel", "machineSalienceEvidence",
-  "machineSalienceReviewSelect",
   "batchSelectionSummary", "selectUnclassifiedLinesButton", "selectAllLinesButton",
   "clearLineSelectionButton", "batchLineList", "batchReviewBasisSelect",
   "applyBatchReviewBasisButton", "frameAssignmentSummary", "adjacencyList", "diagnostics",
@@ -202,18 +187,11 @@ function renderIndex() {
   const direct = indexData.basis_states?.all_directly_visible || 0;
   const nominal = indexData.evaluation_roles?.nominal || 0;
   const challenge = indexData.evaluation_roles?.challenge || 0;
-  const salience = indexData.machine_salience || {};
-  const salienceTotal = salience.high_confidence_proposal_line_count || 0;
-  const saliencePending = salience.pending_proposal_line_count || 0;
-  const salienceReviewed = salienceTotal - saliencePending;
-  elements.progressText.textContent = `${confirmed}/${indexData.total_unique_sources} 已确认 · 机器低显著 ${salienceReviewed}/${salienceTotal} 已审 · ${needsClassification} 待分类 · ${nonDirect} 非直接 · ${direct} 全直接 · ${nominal} nominal · ${challenge} challenge`;
+  elements.progressText.textContent = `${confirmed}/${indexData.total_unique_sources} 已确认 · ${needsClassification} 待分类 · ${nonDirect} 非直接 · ${direct} 全直接 · ${nominal} nominal · ${challenge} challenge`;
   const query = elements.searchInput.value.trim().toLowerCase();
   const state = elements.stateFilter.value;
   const format = elements.formatFilter.value;
   const role = elements.roleFilter.value;
-  elements.nextButton.textContent = state.startsWith("salience_")
-    ? "下一张显著度审阅"
-    : "下一张未完成";
   elements.sourceList.replaceChildren();
   const items = indexData.items.filter((item) => {
     const matchesSearch = !query || sourceLabel(item).toLowerCase().includes(query) || item.source_sha256.includes(query);
@@ -221,7 +199,6 @@ function renderIndex() {
     const basisStatus = item.line_basis_summary?.status;
     const frameStatus = item.frame_state_summary?.status;
     const refinement = item.refinement_summary;
-    const itemSalience = item.machine_salience_summary || {};
     const sourceRole = item.evaluation_role_summary?.source_role;
     const matchesState = state === "all"
       || (state === "unfinished" && item.state !== "user_confirmed")
@@ -231,10 +208,6 @@ function renderIndex() {
       || (state === "has_non_normal_frames" && frameStatus === "has_non_normal_frames")
       || (state === "refinement_moved" && refinement?.moved_line_count > 0)
       || (state === "refinement_retained" && refinement && refinement.moved_line_count === 0)
-      || (state === "salience_pending" && itemSalience.pending_proposal_line_count > 0)
-      || (state === "salience_recall_unreviewed" && itemSalience.pending_recall_line_count > 0)
-      || (state === "salience_confirmed_low" && itemSalience.confirmed_low_line_count > 0)
-      || (state === "salience_confirmed_not_low" && itemSalience.confirmed_not_low_line_count > 0)
       || item.state === state;
     const matchesRole = role === "all" || sourceRole === role;
     return matchesSearch && matchesFormat && matchesState && matchesRole;
@@ -248,15 +221,10 @@ function renderIndex() {
     const roleClass = ["nominal", "challenge"].includes(item.evaluation_role_summary?.source_role)
       ? item.evaluation_role_summary.source_role
       : "pending";
-    const pendingSalience = item.machine_salience_summary?.pending_proposal_line_count || 0;
-    const confirmedLow = item.machine_salience_summary?.confirmed_low_line_count || 0;
-    const salienceText = pendingSalience
-      ? `低显著候选 ${pendingSalience}`
-      : (confirmedLow ? `已确认低显著 ${confirmedLow}` : "");
     button.title = `${roleText} · ${challengeReasonText(item.evaluation_role_summary)} · ${basisText}`;
     button.innerHTML = `
       <span class="state-dot ${item.state}"></span>
-      <span class="source-name"><strong>${escapeHtml(sourceLabel(item))}</strong><small>${escapeHtml(item.format_id)} · ${item.source_sha256.slice(0, 10)}</small><small>${escapeHtml(roleText)}</small><small>${escapeHtml(basisText)}</small>${salienceText ? `<small class="salience-source-note">${escapeHtml(salienceText)}</small>` : ""}</span>
+      <span class="source-name"><strong>${escapeHtml(sourceLabel(item))}</strong><small>${escapeHtml(item.format_id)} · ${item.source_sha256.slice(0, 10)}</small><small>${escapeHtml(roleText)}</small><small>${escapeHtml(basisText)}</small></span>
       <span class="source-tail"><span class="source-role ${roleClass}">${escapeHtml(roleClass === "pending" ? "待计算" : roleClass)}</span><span class="source-count">count ${escapeHtml(countsLabel(item))}</span></span>`;
     button.addEventListener("click", () => openSource(item));
     elements.sourceList.appendChild(button);
@@ -280,8 +248,7 @@ async function loadIndex() {
     elements.formatFilter.appendChild(option);
   }
   renderIndex();
-  const initial = indexData.items.find((item) => item.machine_salience_summary?.pending_proposal_line_count > 0 && item.prepared)
-    || indexData.items.find((item) => item.state !== "user_confirmed" && item.prepared)
+  const initial = indexData.items.find((item) => item.state !== "user_confirmed" && item.prepared)
     || indexData.items.find((item) => item.prepared);
   if (initial) await openSource(initial);
 }
@@ -298,7 +265,7 @@ async function openSource(item) {
     const response = await api(`/api/record/${encodeURIComponent(item.source_sha256)}`);
     currentItem = item;
     currentRecord = await response.json();
-    selectedLineId = firstSalienceLineId(elements.stateFilter.value);
+    selectedLineId = null;
     selectedFrameKey = null;
     batchSelectedLineIds = new Set();
     elements.batchReviewBasisSelect.value = "";
@@ -307,13 +274,7 @@ async function openSource(item) {
     dirty = false;
     editGeneration = 0;
     const extent = currentRecord.source.canonical_extent;
-    const selected = lineById(selectedLineId);
-    lastPointer = selected
-      ? [
-          (selected.points_display[0][0] + selected.points_display[1][0]) / 2,
-          (selected.points_display[0][1] + selected.points_display[1][1]) / 2
-        ]
-      : [extent.width / 2, extent.height / 2];
+    lastPointer = [extent.width / 2, extent.height / 2];
     fullHeightReviewVisited = false;
     elements.cursorCoordinate.textContent = `x ${lastPointer[0].toFixed(1)} · y ${lastPointer[1].toFixed(1)}`;
     elements.loupeWrap.classList.remove("ready");
@@ -376,26 +337,6 @@ function allLines() {
 
 function lineById(identity) {
   return allLines().find((line) => line.line_id === identity) || null;
-}
-
-function salienceMatchesFilter(fact, filter) {
-  if (!fact?.eligible) return false;
-  if (filter === "salience_pending") {
-    return fact.high_confidence_proposal && fact.review_status === "unreviewed";
-  }
-  if (filter === "salience_recall_unreviewed") {
-    return fact.recall_candidate && fact.review_status === "unreviewed";
-  }
-  if (filter === "salience_confirmed_low") return fact.review_status === "confirmed_low";
-  if (filter === "salience_confirmed_not_low") return fact.review_status === "confirmed_not_low";
-  return false;
-}
-
-function firstSalienceLineId(filter) {
-  if (!filter.startsWith("salience_") || !currentRecord) return null;
-  return currentRecord.boundary_pool.find((line) => (
-    salienceMatchesFilter(line.machine_salience, filter)
-  ))?.line_id || null;
 }
 
 function intersection(first, second) {
@@ -780,11 +721,7 @@ function renderBatchClassification() {
     const name = document.createElement("strong");
     name.textContent = entry.label;
     const basis = document.createElement("small");
-    const salience = entry.line.machine_salience;
-    const salienceTag = salience?.review_status === "confirmed_low"
-      ? " · 已确认机器低显著"
-      : (salience?.high_confidence_proposal ? " · ◇低显著候选" : "");
-    basis.textContent = `${identity} · ${lineBasisLabels[entry.line.review_basis] || entry.line.review_basis}${salienceTag}`;
+    basis.textContent = `${identity} · ${lineBasisLabels[entry.line.review_basis] || entry.line.review_basis}`;
     description.append(name, basis);
     row.append(checkbox, role, description);
     elements.batchLineList.appendChild(row);
@@ -843,14 +780,6 @@ function visibleStrokeVariants(entry, selected) {
     : [null];
 }
 
-function salienceMarkerClass(fact, prefix = "") {
-  if (!fact?.eligible) return null;
-  if (fact.review_status === "confirmed_low") return `${prefix}machine-salience-marker confirmed-low`;
-  if (fact.review_status === "confirmed_not_low") return `${prefix}machine-salience-marker confirmed-not-low`;
-  if (fact.high_confidence_proposal) return `${prefix}machine-salience-marker proposed-low`;
-  return null;
-}
-
 function renderGeometry() {
   elements.polygonLayer.replaceChildren();
   elements.lineLayer.replaceChildren();
@@ -882,13 +811,6 @@ function renderGeometry() {
         class: "annotation-selection-halo"
       }));
     }
-    const salienceClass = salienceMarkerClass(entry.line.machine_salience);
-    if (salienceClass) {
-      elements.lineLayer.appendChild(svgElement("line", {
-        x1: first[0], y1: first[1], x2: second[0], y2: second[1],
-        class: salienceClass
-      }));
-    }
     for (const variant of visibleStrokeVariants(entry, selected)) {
       const classes = ["annotation-line", entry.family, entry.role];
       if (!entry.active) classes.push("inactive");
@@ -910,8 +832,7 @@ function renderGeometry() {
       const prefix = entry.line.review_basis === "human_width_estimate"
         ? "≈"
         : (["unclassified", "unresolved_red_stroke"].includes(entry.line.review_basis) ? "?" : "");
-      const saliencePrefix = entry.line.machine_salience?.high_confidence_proposal ? "◇" : "";
-      label.textContent = `${saliencePrefix}${prefix}${entry.label}`;
+      label.textContent = `${prefix}${entry.label}`;
       elements.lineLayer.appendChild(label);
     }
   }
@@ -929,10 +850,6 @@ function renderSelectedLine() {
     elements.selectedLineLabel.textContent = "未选择";
     elements.lineReviewBasisSelect.value = "";
     elements.lineCoordinates.querySelectorAll("code").forEach((node) => node.textContent = "—");
-    elements.machineSalienceLabel.textContent = "选择一条 start/end";
-    elements.machineSalienceEvidence.textContent = "只统计直接可见、且不是接触共用边的 start/end。";
-    elements.machineSalienceReviewSelect.value = "unreviewed";
-    elements.machineSaliencePanel.className = "machine-salience-panel";
     renderLoupeGeometry();
     return;
   }
@@ -947,50 +864,7 @@ function renderSelectedLine() {
   line.points_display.forEach((point, index) => {
     codes[index].textContent = `x ${point[0].toFixed(2)} · y ${point[1].toFixed(2)}`;
   });
-  renderMachineSalience(line);
   renderLoupeGeometry();
-}
-
-function renderMachineSalience(line) {
-  const fact = line.machine_salience;
-  elements.machineSaliencePanel.className = "machine-salience-panel";
-  if (!fact) {
-    elements.machineSalienceLabel.textContent = "尚未分析或几何已变化";
-    elements.machineSalienceEvidence.textContent = "重新运行本地显著度统计后才能审阅；黄金线不受影响。";
-    elements.machineSalienceReviewSelect.value = "unreviewed";
-    return;
-  }
-  elements.machineSalienceReviewSelect.value = fact.review_status;
-  if (!fact.eligible) {
-    const reasons = {
-      shared_start_end_contact_boundary: "接触共用边没有唯一的照片侧与 separator 侧",
-      not_directly_visible: "不是直接可见边界",
-      not_referenced_by_frame: "未被 Frame 引用",
-      ambiguous_physical_role: "物理角色不唯一"
-    };
-    elements.machineSalienceLabel.textContent = "不适用";
-    elements.machineSalienceEvidence.textContent = reasons[fact.not_applicable_reason] || fact.not_applicable_reason;
-    elements.machineSaliencePanel.classList.add("not-applicable");
-    return;
-  }
-  const classification = salienceClassificationLabels[fact.machine_classification]
-    || fact.machine_classification;
-  const review = salienceReviewLabels[fact.review_status] || fact.review_status;
-  const proposal = fact.high_confidence_proposal
-    ? "高置信机器候选"
-    : (fact.recall_candidate ? "宽召回线索" : classification);
-  elements.machineSalienceLabel.textContent = `${proposal} · ${review}`;
-  if (fact.high_confidence_proposal) elements.machineSaliencePanel.classList.add("proposed-low");
-  if (fact.review_status === "confirmed_low") elements.machineSaliencePanel.classList.add("confirmed-low");
-  if (fact.review_status === "confirmed_not_low") elements.machineSaliencePanel.classList.add("confirmed-not-low");
-  const measurement = fact.measurement || {};
-  const metrics = measurement.side_metrics || {};
-  const q75 = (name) => Number(metrics[name]?.q75).toFixed(2);
-  elements.machineSalienceEvidence.textContent = (
-    fact.machine_classification === "not_measurable_at_source_boundary"
-      ? "线旁无法在 TIFF 内取得完整双侧像素窗，因此不判为低显著。"
-      : `${classification} · 合格局部强边 ${measurement.qualified_region_count ?? "—"} · 匹配 ${measurement.matched_region_count ?? "—"} · tone Δ q75 ${q75("tone_difference_codes")} · texture Δ q75 ${q75("texture_difference_codes")} · 画面内纹理 q75 ${q75("inside_texture_codes")}`
-  );
 }
 
 function renderFrameControls() {
@@ -1147,11 +1021,6 @@ function updateControls() {
     ? activeLineEntries().find((entry) => entry.line.line_id === selectedLineId)
     : null;
   elements.lineReviewBasisSelect.disabled = immutable || !selectedEntry;
-  const selectedSalience = selectedEntry?.line.machine_salience;
-  elements.machineSalienceReviewSelect.disabled = !(
-    selectedSalience?.eligible
-    && Number.isInteger(currentRecord?.machine_salience_review?.review_revision)
-  );
   const batchEntries = batchLineEntries();
   const activeBatchIds = new Set(batchEntries.map((entry) => entry.line.line_id));
   const selectedBatchCount = [...batchSelectedLineIds]
@@ -1320,7 +1189,6 @@ function updateIndexItemState(state) {
     target.line_basis_summary = currentRecord.line_basis_summary;
     target.frame_state_summary = currentRecord.frame_state_summary;
     target.evaluation_role_summary = currentRecord.evaluation_role_summary;
-    target.machine_salience_summary = currentRecord.machine_salience_review?.source_summary;
     target.refinement_summary = currentRecord.diagnostics?.refinement
       ? {
           refinement_revision: currentRecord.diagnostics.refinement.refinement_revision,
@@ -1333,7 +1201,6 @@ function updateIndexItemState(state) {
   currentItem.line_basis_summary = currentRecord.line_basis_summary;
   currentItem.frame_state_summary = currentRecord.frame_state_summary;
   currentItem.evaluation_role_summary = currentRecord.evaluation_role_summary;
-  currentItem.machine_salience_summary = currentRecord.machine_salience_review?.source_summary;
   indexData.states = {};
   for (const item of indexData.items) indexData.states[item.state] = (indexData.states[item.state] || 0) + 1;
   indexData.basis_states = {};
@@ -1375,37 +1242,6 @@ function changeLineReviewBasis() {
   renderReferenceSummary();
   renderDiagnostics();
   updateControls();
-}
-
-async function changeMachineSalienceReview() {
-  const line = lineById(selectedLineId);
-  const fact = line?.machine_salience;
-  if (!currentRecord || !fact?.eligible) return;
-  const next = elements.machineSalienceReviewSelect.value;
-  if (fact.review_status === next) return;
-  elements.machineSalienceReviewSelect.disabled = true;
-  try {
-    await flushSave();
-    const response = await api(`/api/machine-salience/${encodeURIComponent(currentRecord.source.sha256)}`, {
-      method: "POST",
-      body: JSON.stringify({
-        expected_review_revision: currentRecord.machine_salience_review.review_revision,
-        line_id: line.line_id,
-        review_status: next
-      })
-    });
-    const result = await response.json();
-    currentRecord = result.record;
-    indexData = result.index;
-    currentItem = indexData.items.find((item) => item.source_sha256 === currentRecord.source.sha256) || currentItem;
-    setSaveStatus("机器显著度审阅已保存", "ok");
-    renderRecord();
-    renderIndex();
-  } catch (error) {
-    elements.machineSalienceReviewSelect.value = fact.review_status;
-    showToast(error.message, true);
-    updateControls();
-  }
 }
 
 function changeFrameSelection() {
@@ -1855,16 +1691,6 @@ function renderLoupeGeometry() {
         class: "loupe-selection-halo"
       }));
     }
-    const salienceClass = salienceMarkerClass(
-      entry.line.machine_salience,
-      "loupe-"
-    );
-    if (salienceClass) {
-      elements.loupeLineLayer.appendChild(svgElement("line", {
-        x1: first[0], y1: first[1], x2: second[0], y2: second[1],
-        class: salienceClass
-      }));
-    }
     for (const variant of visibleStrokeVariants(entry, selected)) {
       const classes = ["loupe-annotation-line", entry.family, entry.role];
       if (entry.line.review_basis === "human_width_estimate") classes.push("estimated");
@@ -1928,35 +1754,14 @@ async function nextUnfinished() {
   const items = indexData?.items || [];
   if (!items.length) return;
   const position = items.findIndex((item) => item.source_sha256 === currentItem?.source_sha256);
-  const state = elements.stateFilter.value;
-  const saliencePredicate = (item) => {
-    const summary = item.machine_salience_summary || {};
-    if (state === "salience_pending") return summary.pending_proposal_line_count > 0;
-    if (state === "salience_recall_unreviewed") return summary.pending_recall_line_count > 0;
-    if (state === "salience_confirmed_low") return summary.confirmed_low_line_count > 0;
-    if (state === "salience_confirmed_not_low") return summary.confirmed_not_low_line_count > 0;
-    return false;
-  };
   for (let offset = 1; offset <= items.length; offset += 1) {
     const candidate = items[(position + offset) % items.length];
-    if (
-      candidate.prepared
-      && (
-        state.startsWith("salience_")
-          ? saliencePredicate(candidate)
-          : candidate.state !== "user_confirmed"
-      )
-    ) {
+    if (candidate.prepared && candidate.state !== "user_confirmed") {
       await openSource(candidate);
       return;
     }
   }
-  showToast(
-    state.startsWith("salience_")
-      ? "当前显著度筛选没有其它 source。"
-      : "所有已准备样片都已确认。",
-    false
-  );
+  showToast("所有已准备样片都已确认。", false);
 }
 
 elements.searchInput.addEventListener("input", renderIndex);
@@ -1972,7 +1777,6 @@ elements.redoButton.addEventListener("click", redo);
 elements.resetViewButton.addEventListener("click", resetView);
 elements.maximizeLoupeButton.addEventListener("click", () => setLoupeMaximized(!loupeMaximized));
 elements.lineReviewBasisSelect.addEventListener("change", changeLineReviewBasis);
-elements.machineSalienceReviewSelect.addEventListener("change", changeMachineSalienceReview);
 elements.selectUnclassifiedLinesButton.addEventListener("click", () => selectBatchLines(
   (entry) => ["unclassified", "unresolved_red_stroke"].includes(entry.line.review_basis)
 ));

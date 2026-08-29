@@ -20,12 +20,6 @@ from .imaging import (
     render_review_artifact,
     sha256_file,
 )
-from .machine_salience import (
-    build_machine_salience_review,
-    set_line_review_status,
-    source_review_summary,
-    validate_machine_salience_review,
-)
 from .model import (
     AnnotationError,
     canonical_record_sha256,
@@ -132,7 +126,6 @@ class ReviewWorkspace:
         self.previews_root = self.state_root / "previews"
         self.artifacts_root = self.state_root / "review_artifacts"
         self.confirmed_rows_path = self.state_root / "confirmed_source_geometry.jsonl"
-        self.machine_salience_path = self.state_root / "machine_salience_review.json"
         self._lock = threading.RLock()
         self.manifest_rows = self._load_and_reconcile_authority()
         self.groups = self._group_rows(self.manifest_rows)
@@ -369,66 +362,7 @@ class ReviewWorkspace:
                 != canonical["calibration_copy_relative_path"]
             ):
                 raise WorkspaceError("red-markup source path is not current")
-        return self._record_for_client(record) if client else record
-
-    def _load_machine_salience_review(self) -> dict[str, Any] | None:
-        if not self.machine_salience_path.is_file():
-            return None
-        try:
-            review = json.loads(self.machine_salience_path.read_text(encoding="utf-8"))
-            if not isinstance(review, dict):
-                raise ValueError("machine salience review must be an object")
-            validate_machine_salience_review(review)
-        except (OSError, json.JSONDecodeError, ValueError) as error:
-            raise WorkspaceError(f"machine salience review is invalid: {error}") from error
-        return review
-
-    @staticmethod
-    def _current_salience_source(
-        record: dict[str, Any],
-        review: dict[str, Any] | None,
-    ) -> dict[str, Any] | None:
-        if review is None:
-            return None
-        source = review["sources"].get(record["source"]["sha256"])
-        if (
-            not isinstance(source, dict)
-            or source.get("source_geometry_sha256")
-            != canonical_record_sha256(geometry_snapshot(record))
-        ):
-            return None
-        return source
-
-    def _record_for_client(
-        self,
-        record: dict[str, Any],
-        *,
-        review: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
-        result = record_for_client(record)
-        active_review = (
-            review
-            if review is not None
-            else self._load_machine_salience_review()
-        )
-        source = self._current_salience_source(record, active_review)
-        facts = source.get("lines", {}) if source is not None else {}
-        for line in result["boundary_pool"]:
-            line["machine_salience"] = deepcopy(facts.get(line["line_id"]))
-        result["machine_salience_review"] = {
-            "analysis_revision": (
-                active_review.get("analysis_revision")
-                if active_review is not None
-                else None
-            ),
-            "review_revision": (
-                active_review.get("review_revision")
-                if active_review is not None
-                else None
-            ),
-            "source_summary": source_review_summary(source),
-        }
-        return result
+        return record_for_client(record) if client else record
 
     def _save_record(self, record: dict[str, Any]) -> None:
         validate_annotation_record(record)
@@ -562,9 +496,6 @@ class ReviewWorkspace:
         basis_states: dict[str, int] = defaultdict(int)
         frame_states: dict[str, int] = defaultdict(int)
         evaluation_roles: dict[str, int] = defaultdict(int)
-        salience_counts: dict[str, int] = defaultdict(int)
-        salience_current_sources = 0
-        salience_review = self._load_machine_salience_review()
         for sha, members in sorted(
             self.groups.items(), key=lambda item: int(item[1][0]["sort_index"])
         ):
@@ -594,11 +525,6 @@ class ReviewWorkspace:
                     if isinstance(refinement, dict)
                     else None
                 )
-                salience_source = self._current_salience_source(
-                    record,
-                    salience_review,
-                )
-                salience_summary = source_review_summary(salience_source)
             else:
                 state = "not_prepared"
                 reviewed = []
@@ -606,18 +532,6 @@ class ReviewWorkspace:
                 frame_summary = None
                 role_summary = None
                 refinement_summary = None
-                salience_summary = source_review_summary(None)
-            if salience_summary["analysis_state"] == "current":
-                salience_current_sources += 1
-                for key, value in salience_summary.items():
-                    if key != "analysis_state":
-                        salience_counts[key] += int(value)
-                salience_counts["high_confidence_proposal_source_count"] += int(
-                    salience_summary["high_confidence_proposal_line_count"] > 0
-                )
-                salience_counts["pending_proposal_source_count"] += int(
-                    salience_summary["pending_proposal_line_count"] > 0
-                )
             states[state] += 1
             canonical = self._canonical_row(members)
             items.append(
@@ -632,7 +546,6 @@ class ReviewWorkspace:
                     "frame_state_summary": frame_summary,
                     "evaluation_role_summary": role_summary,
                     "refinement_summary": refinement_summary,
-                    "machine_salience_summary": salience_summary,
                     "tasks": [
                         {"sample_id": row["sample_id"], "count": row["count"]}
                         for row in members
@@ -640,7 +553,7 @@ class ReviewWorkspace:
                 }
             )
         return {
-            "index_schema": "x5crop_source_annotation_index_v7",
+            "index_schema": "x5crop_source_annotation_index_v6",
             "tile_max_render_dimension": MAX_TILE_RENDER_DIMENSION,
             "tile_max_source_dimension": MAX_TILE_SOURCE_DIMENSION,
             "tile_max_source_pixels": MAX_TILE_SOURCE_PIXELS,
@@ -649,24 +562,6 @@ class ReviewWorkspace:
             "basis_states": dict(sorted(basis_states.items())),
             "frame_states": dict(sorted(frame_states.items())),
             "evaluation_roles": dict(sorted(evaluation_roles.items())),
-            "machine_salience": (
-                {
-                    "analysis_revision": salience_review["analysis_revision"],
-                    "review_revision": salience_review["review_revision"],
-                    "source_count": salience_current_sources,
-                    "stale_or_missing_source_count": (
-                        len(items) - salience_current_sources
-                    ),
-                    **dict(sorted(salience_counts.items())),
-                }
-                if salience_review is not None
-                else {
-                    "analysis_revision": None,
-                    "review_revision": None,
-                    "source_count": 0,
-                    "stale_or_missing_source_count": len(items),
-                }
-            ),
             "items": items,
         }
 
@@ -678,92 +573,7 @@ class ReviewWorkspace:
             except AnnotationError as error:
                 raise WorkspaceError(str(error)) from error
             self._save_record(updated)
-            return self._record_for_client(updated)
-
-    def analyze_machine_salience(
-        self,
-        *,
-        progress: Any | None = None,
-    ) -> dict[str, Any]:
-        """Regenerate local review facts without changing golden annotations."""
-
-        from x5crop.image.gray import BaseGrayParameters, make_base_gray_u8
-        from x5crop.io.tiff import read_tiff
-
-        from .machine_salience import analyze_source_lines
-
-        source_facts: list[dict[str, Any]] = []
-        ordered = sorted(
-            self.groups.items(),
-            key=lambda item: int(item[1][0]["sort_index"]),
-        )
-        for offset, (sha, members) in enumerate(ordered, start=1):
-            record = self.load_record(sha)
-            source_path = self._verify_source(self._canonical_row(members))
-            raster, _profile, warnings = read_tiff(source_path)
-            if warnings:
-                raise WorkspaceError(
-                    f"{members[0]['sample_id']}: source TIFF produced warnings"
-                )
-            gray = make_base_gray_u8(raster, BaseGrayParameters())
-            source_fact = analyze_source_lines(record, gray)
-            source_facts.append(source_fact)
-            if progress is not None:
-                progress(
-                    offset,
-                    len(ordered),
-                    members,
-                    source_review_summary(source_fact),
-                )
-            del gray, raster
-        existing = self._load_machine_salience_review()
-        try:
-            review = build_machine_salience_review(
-                source_facts,
-                existing=existing,
-            )
-        except ValueError as error:
-            raise WorkspaceError(str(error)) from error
-        _atomic_json(self.machine_salience_path, review)
-        return deepcopy(review["summary"])
-
-    def set_machine_salience_review(
-        self,
-        identity: str,
-        *,
-        expected_review_revision: int,
-        line_id: str,
-        review_status: str,
-    ) -> dict[str, Any]:
-        """Save an orthogonal human verdict on one current machine proposal."""
-
-        with self._lock:
-            record = self.load_record(identity)
-            if line_id not in {
-                str(line["line_id"]) for line in record["boundary_pool"]
-            }:
-                raise WorkspaceError("machine salience line is not in the source record")
-            review = self._load_machine_salience_review()
-            if review is None:
-                raise WorkspaceError("machine salience analysis is not prepared")
-            try:
-                updated = set_line_review_status(
-                    review,
-                    source_sha256=str(record["source"]["sha256"]),
-                    source_geometry_sha256=canonical_record_sha256(
-                        geometry_snapshot(record)
-                    ),
-                    line_id=line_id,
-                    review_status=review_status,
-                    expected_review_revision=expected_review_revision,
-                )
-            except ValueError as error:
-                raise WorkspaceError(str(error)) from error
-            _atomic_json(self.machine_salience_path, updated)
-            return {
-                "record": self._record_for_client(record, review=updated),
-                "index": self.index(),
-            }
+            return record_for_client(updated)
 
     def reconcile_review_context(
         self,
@@ -1016,7 +826,7 @@ class ReviewWorkspace:
                             )
             current["revision"] += 1
             self._save_record(current)
-            return self._record_for_client(current)
+            return record_for_client(current)
 
     def confirm(
         self,
@@ -1103,4 +913,4 @@ class ReviewWorkspace:
             }
             self._save_record(current)
             self._refresh_confirmed_rows()
-            return self._record_for_client(current)
+            return record_for_client(current)
