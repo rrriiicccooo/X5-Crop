@@ -31,6 +31,7 @@ from .gold_geometry import (
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 GOLD_COHORT_PATH = Path(__file__).with_name("cohorts") / "gold_accuracy.jsonl"
 GOLD_COHORT_SCHEMA = "x5crop_gold_accuracy_cohort_v7"
+GOLD_COMPLETION_SCOPE = "all_current_user_confirmed_tasks_exactly_once"
 CONFIRMED_GEOMETRY_KEYS = frozenset(
     {
         "baseline_schema",
@@ -59,7 +60,7 @@ CONFIRMED_GEOMETRY_KEYS = frozenset(
 )
 
 
-def _validate_evaluation_role(record: dict[str, object]) -> None:
+def validate_gold_evaluation_role(record: dict[str, object]) -> None:
     """Reject a cohort role that disagrees with its frozen human evidence."""
     sample_id = str(record.get("sample_id", ""))
     geometry = record.get("confirmed_geometry")
@@ -136,6 +137,7 @@ def validate_gold_source_identities() -> tuple[dict[str, object], ...]:
         if (
             set(record) != expected_keys
             or record.get("cohort_schema") != GOLD_COHORT_SCHEMA
+            or record.get("completion_scope") != GOLD_COMPLETION_SCOPE
             or not sample_id
             or sample_id in sample_ids
             or record.get("validation_role") != "gold_accuracy_blocking"
@@ -188,7 +190,7 @@ def validate_gold_source_identities() -> tuple[dict[str, object], ...]:
             }
         ):
             raise ValueError(f"gold geometry is invalid: {sample_id}")
-        _validate_evaluation_role(record)
+        validate_gold_evaluation_role(record)
         sample_ids.add(sample_id)
     return records
 
@@ -214,7 +216,7 @@ def _production_command(
     return command
 
 
-def _validate_task_result(
+def validate_gold_task_result(
     record: dict[str, object],
     report: dict[str, object],
 ) -> str:
@@ -272,7 +274,7 @@ def _run_task(record: dict[str, object]) -> str:
             or identity["mtime_ns"] != before.st_mtime_ns
         ):
             raise ValueError("source stat identity changed across accuracy task")
-        return _validate_task_result(record, report)
+        return validate_gold_task_result(record, report)
 
 
 def run_accuracy(records: Iterable[dict[str, object]]) -> tuple[int, int]:

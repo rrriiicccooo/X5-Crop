@@ -579,7 +579,16 @@ identity、task mapping、Frame 语义或相邻关系；只有用户完成原生
 - 受跟踪的 diagnostic cohort 只证明不崩溃、工作量有界、报告闭合和 TIFF 工程合同，不证明几何正确。
 - 黄金校准只有一个 source-SHA-bound 集合。只有当前 `user_confirmed` 记录可生成
   blocking cohort；集合被重置或没有当前确认时，accuracy 明确报告 `calibration is incomplete`，不读取
-  旧确认、旧 JPG 或历史 cohort 作为回退。
+  旧确认、旧 JPG 或历史 cohort 作为回退。`tools.regression.gold_cohort` 是确认汇总到 tracked blocking
+  cohort 的唯一生成入口：逐一复核 source、确认快照、审阅 artifact、task identity、format、count、
+  角色和 geometry digest，且不由标注器自动触发。
+- `tools.regression.gold_analysis` 只在 blocking cohort 上生成优化分层与 development diagnostic；不进入
+  runtime、Gate 或黄金 verdict。分层只读取冻结人工事实：结构正常、全部直接可见、`count >= 3` 且人工
+  几何对最佳固定 `phase + pitch + W` lattice 的最大 role residual 不超过 `0.02W` 时进入基础 nominal
+  分桶，其它 nominal 进入较难分桶，challenge 保持原角色。该 2% 只是优化顺序，不是 runtime 阈值、
+  5% 安全预算或样片白名单。“机器是否看见”必须由每次运行的 observation/binding 事实重新生成，不能
+  写回人工基线。分析结果绑定 HEAD、detector source manifest SHA 与黄金 cohort SHA，并明确记录 detector
+  路径是否与 HEAD 一致。
 - 24-source performance 只证明其绑定 commit、依赖和机器上的完整路径时间与资源；5 秒均值是
   blocking Gate，3 秒均值只是 non-blocking challenge。
 - Platform 聚合必须同时收到同一 commit 的 Apple Silicon macOS、Intel macOS 与 Windows x64

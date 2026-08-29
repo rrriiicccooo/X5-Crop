@@ -53,6 +53,10 @@ V5 只有一条 current-only runtime；历史 mode、schema、fallback 与平行
 - Accuracy 只接受当前确认 task。没有当前 blocking cohort 时明确报告
   `calibration is incomplete`，不回退历史基线。空 slot 不参与几何比较，但 runtime 对应输出与 ordinal
   必须保留。
+- 完整确认集合通过唯一生成器独立核对 source、确认快照、审阅 artifact、task authority、角色和 geometry
+  digest 后，才写入 tracked blocking cohort。Development-only 黄金分析把基础 nominal、较难 nominal 与
+  challenge 分开，并逐边区分已观察且绑定、已观察未绑定、模板补全和竞争状态；这些诊断不进入 runtime
+  或黄金权限。
 
 ### 工程与验证
 

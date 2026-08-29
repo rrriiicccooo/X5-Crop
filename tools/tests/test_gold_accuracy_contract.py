@@ -3,17 +3,25 @@ from __future__ import annotations
 from contextlib import redirect_stderr
 import io
 import json
+from pathlib import Path
+from tempfile import TemporaryDirectory
 import unittest
+from unittest.mock import patch
 
 from tools.manual_annotation.model import EVALUATION_ROLE_CONTRACT
+from tools.regression import accuracy
 from tools.regression.accuracy import (
     GOLD_COHORT_PATH,
-    _validate_evaluation_role,
-    _validate_task_result,
+    GOLD_COHORT_SCHEMA,
+    GOLD_COMPLETION_SCOPE,
     main as accuracy_main,
+    validate_gold_evaluation_role,
     validate_gold_source_identities,
+    validate_gold_task_result,
 )
+from tools.regression.gold_cohort import build_gold_cohort_records
 from tools.regression.gold_geometry import (
+    gold_frame_diagnostics,
     ordered_gold_mapping,
     validate_approved_geometry,
     validate_selected_candidate_coverage,
@@ -178,40 +186,89 @@ class GoldAccuracyContractTest(unittest.TestCase):
             "confirmed_geometry": geometry,
         }
 
-        _validate_evaluation_role(record)
+        validate_gold_evaluation_role(record)
 
         record["cohort_role"] = "nominal"
         with self.assertRaisesRegex(ValueError, "evaluation role is invalid"):
-            _validate_evaluation_role(record)
+            validate_gold_evaluation_role(record)
 
     def test_cohort_role_must_match_frozen_human_evidence(self) -> None:
         record = _basis_aware_record()
-        _validate_evaluation_role(record)
+        validate_gold_evaluation_role(record)
 
         record["cohort_role"] = "challenge"
         with self.assertRaisesRegex(ValueError, "evaluation role is invalid"):
-            _validate_evaluation_role(record)
+            validate_gold_evaluation_role(record)
 
         record = _basis_aware_record()
         record["confirmed_geometry"]["evaluation_role"]["reasons"] = [
             "manually_overridden"
         ]
         with self.assertRaisesRegex(ValueError, "evaluation role is invalid"):
-            _validate_evaluation_role(record)
+            validate_gold_evaluation_role(record)
 
-    def test_tracked_cohort_is_explicitly_incomplete_during_recalibration(self) -> None:
+    def test_tracked_cohort_contains_every_current_confirmed_task(self) -> None:
         records = [
             json.loads(line)
             for line in GOLD_COHORT_PATH.read_text(encoding="utf-8").splitlines()
             if line.strip()
         ]
-        self.assertEqual(records, [])
-        with self.assertRaisesRegex(ValueError, "calibration is incomplete"):
-            validate_gold_source_identities()
-        error = io.StringIO()
-        with redirect_stderr(error):
-            self.assertEqual(accuracy_main(), 1)
+        self.assertEqual(len(records), 110)
+        self.assertEqual(len({row["sample_id"] for row in records}), 110)
+        self.assertTrue(
+            all(row["cohort_schema"] == GOLD_COHORT_SCHEMA for row in records)
+        )
+        self.assertTrue(
+            all(
+                row["completion_scope"] == GOLD_COMPLETION_SCOPE
+                for row in records
+            )
+        )
+        self.assertTrue(
+            all(
+                row["confirmed_geometry"]["status"] == "user_confirmed"
+                for row in records
+            )
+        )
+
+    def test_empty_cohort_still_fails_as_incomplete(self) -> None:
+        with TemporaryDirectory() as temporary:
+            empty = Path(temporary) / "gold.jsonl"
+            empty.write_text("", encoding="utf-8")
+            with patch.object(accuracy, "GOLD_COHORT_PATH", empty):
+                with self.assertRaisesRegex(ValueError, "calibration is incomplete"):
+                    validate_gold_source_identities()
+                error = io.StringIO()
+                with redirect_stderr(error):
+                    self.assertEqual(accuracy_main(), 1)
         self.assertIn("calibration is incomplete", error.getvalue())
+
+    def test_cohort_record_is_a_deterministic_binding_of_confirmed_geometry(
+        self,
+    ) -> None:
+        tracked = json.loads(
+            next(
+                line
+                for line in GOLD_COHORT_PATH.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            )
+        )
+        diagnostic = {
+            "sample_id": tracked["sample_id"],
+            "sort_index": 1,
+            "source_relative_path": tracked["source_relative_path"],
+            "source_sha256": tracked["source_sha256"],
+            "format_id": tracked["format_id"],
+            "count": tracked["count"],
+        }
+
+        self.assertEqual(
+            build_gold_cohort_records(
+                [tracked["confirmed_geometry"]],
+                [diagnostic],
+            ),
+            (tracked,),
+        )
 
     def test_incomplete_directional_geometry_is_rejected(self) -> None:
         gold = [[0.0, 0.0], [560.0, 0.0], [560.0, 560.0], [0.0, 560.0]]
@@ -233,11 +290,27 @@ class GoldAccuracyContractTest(unittest.TestCase):
         ):
             validate_selected_candidate_coverage(record, report)
 
+    def test_frame_diagnostic_names_the_exact_inward_side(self) -> None:
+        gold = [[0.0, 0.0], [560.0, 0.0], [560.0, 560.0], [0.0, 560.0]]
+        record = _basis_aware_record(start_basis="directly_visible")
+        report = _approved_report(
+            [[10.0, 0.0], [560.0, 0.0], [560.0, 560.0], [10.0, 560.0]]
+        )
+
+        diagnostics = gold_frame_diagnostics(record, report)
+
+        self.assertEqual(len(diagnostics), 1)
+        self.assertEqual(
+            diagnostics[0]["inward_failure_sides"],
+            ["sequence_start"],
+        )
+        self.assertEqual(diagnostics[0]["outward_budget_failure_sides"], [])
+
     def test_estimated_start_does_not_block_inward_accuracy(self) -> None:
         output = [[10.0, 0.0], [560.0, 0.0], [560.0, 560.0], [10.0, 560.0]]
 
         self.assertEqual(
-            _validate_task_result(_basis_aware_record(), _approved_report(output)),
+            validate_gold_task_result(_basis_aware_record(), _approved_report(output)),
             "approved_auto",
         )
 
@@ -254,7 +327,7 @@ class GoldAccuracyContractTest(unittest.TestCase):
         self.assertNotIn("observations", report["photo_geometry"])
 
         self.assertEqual(
-            _validate_task_result(
+            validate_gold_task_result(
                 _basis_aware_record(start_basis="directly_visible"),
                 report,
             ),
@@ -265,7 +338,7 @@ class GoldAccuracyContractTest(unittest.TestCase):
         output = [[560.0, 0.0], [560.0, 560.0], [10.0, 560.0], [10.0, 0.0]]
 
         self.assertEqual(
-            _validate_task_result(_basis_aware_record(), _approved_report(output)),
+            validate_gold_task_result(_basis_aware_record(), _approved_report(output)),
             "approved_auto",
         )
 
@@ -278,7 +351,7 @@ class GoldAccuracyContractTest(unittest.TestCase):
         ]
 
         self.assertEqual(
-            _validate_task_result(_basis_aware_record(), _approved_report(output)),
+            validate_gold_task_result(_basis_aware_record(), _approved_report(output)),
             "approved_auto",
         )
 
@@ -289,7 +362,7 @@ class GoldAccuracyContractTest(unittest.TestCase):
             ValueError,
             "candidate crosses user-confirmed inward baseline",
         ):
-            _validate_task_result(
+            validate_gold_task_result(
                 _basis_aware_record(start_basis="visible_content_limit"),
                 _approved_report(output),
             )
@@ -303,7 +376,7 @@ class GoldAccuracyContractTest(unittest.TestCase):
         ]
 
         self.assertEqual(
-            _validate_task_result(
+            validate_gold_task_result(
                 _basis_aware_record(start_basis="visible_content_limit"),
                 _approved_report(output),
             ),
@@ -317,7 +390,7 @@ class GoldAccuracyContractTest(unittest.TestCase):
             ValueError,
             "candidate crosses user-confirmed inward baseline",
         ):
-            _validate_task_result(_basis_aware_record(), _approved_report(output))
+            validate_gold_task_result(_basis_aware_record(), _approved_report(output))
 
     def test_visible_end_budget_remains_blocking_when_start_is_estimated(
         self,
@@ -328,7 +401,7 @@ class GoldAccuracyContractTest(unittest.TestCase):
             ValueError,
             "exceeds acceptance-baseline direct-use budget",
         ):
-            _validate_task_result(_basis_aware_record(), _approved_report(output))
+            validate_gold_task_result(_basis_aware_record(), _approved_report(output))
 
     def test_source_truncated_budget_uses_physical_line_axes(self) -> None:
         clipped_gold = [
@@ -356,7 +429,7 @@ class GoldAccuracyContractTest(unittest.TestCase):
             ValueError,
             "exceeds acceptance-baseline direct-use budget",
         ):
-            _validate_task_result(record, _approved_report(output))
+            validate_gold_task_result(record, _approved_report(output))
 
     def test_challenge_review_cannot_bypass_candidate_coverage(self) -> None:
         gold = [[0.0, 0.0], [560.0, 0.0], [560.0, 560.0], [0.0, 560.0]]
@@ -391,7 +464,7 @@ class GoldAccuracyContractTest(unittest.TestCase):
             ValueError,
             "candidate crosses user-confirmed inward baseline",
         ):
-            _validate_task_result(record, report)
+            validate_gold_task_result(record, report)
 
     def test_review_candidate_geometry_is_checked_without_official_outputs(
         self,

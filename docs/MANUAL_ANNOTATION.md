@@ -58,6 +58,18 @@ python3 -m tools.manual_annotation audit
 TIFF 像素中心。Manifest 必须与 tracked diagnostic cohort 的 sample、format、count、相对路径和 source
 SHA 完全一致；工具不从路径猜 count。`Test/` 不受 Git 跟踪，确认不会自动改写 tracked accuracy cohort。
 
+全部 task 确认后，只有显式执行下面的命令才会把当前确认集合提升为 blocking 黄金：
+
+```bash
+python3 -m tools.regression.gold_cohort --write
+python3 -m tools.regression.gold_cohort
+tools/verify accuracy
+```
+
+生成器逐一核对 source SHA、确认快照、审阅 artifact、tracked task identity、format、count 和自动派生
+角色，并要求每个当前 task 恰好一行。第二条命令只读检查 tracked cohort 是否仍是同一推导；标注器、
+机器 proposal 和普通启动流程都不能隐式执行提升。
+
 ## 边界、Frame 与评测角色
 
 每条活动线必须有一种 `review_basis`：

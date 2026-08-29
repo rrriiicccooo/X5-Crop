@@ -600,6 +600,107 @@ def validate_selected_candidate_coverage(
     return True
 
 
+def gold_frame_diagnostics(
+    record: dict[str, object],
+    report: dict[str, object],
+) -> tuple[dict[str, object], ...]:
+    """Explain the selected candidate with the exact directional gold rules."""
+
+    outputs = tuple(
+        output
+        for lane in report["photo_geometry"]["lanes"]
+        for output in lane["output_footprints"]
+    )
+    gold = record["confirmed_geometry"]
+    frames = gold["frames"]
+    slots = gold["slots"]
+    if len(outputs) != len(slots):
+        return ()
+    accuracy_sides = _accuracy_sides_by_frame(gold, frames)
+    diagnostics: list[dict[str, object]] = []
+    for frame, frame_accuracy_sides in zip(
+        frames,
+        accuracy_sides,
+        strict=True,
+    ):
+        frame_index = int(frame["frame_index"])
+        output = outputs[frame_index - 1]["required_source_footprint"]
+        polygon = frame["polygon_source_pixel_center_coordinates"]
+        inward_failures = tuple(
+            side
+            for side in sorted(frame_accuracy_sides.inward_blocking)
+            if not _respects_blocking_sides(
+                output,
+                polygon,
+                str(gold["strip_orientation"]),
+                frozenset({side}),
+            )
+        )
+        gold_sequence = _projection_bounds(
+            polygon,
+            frame_accuracy_sides.sequence_axis,
+        )
+        output_sequence = _projection_bounds(
+            output,
+            frame_accuracy_sides.sequence_axis,
+        )
+        gold_cross = _projection_bounds(
+            polygon,
+            frame_accuracy_sides.cross_axis,
+        )
+        output_cross = _projection_bounds(
+            output,
+            frame_accuracy_sides.cross_axis,
+        )
+        expansion_by_side = {
+            "sequence_start": gold_sequence[0] - output_sequence[0],
+            "sequence_end": output_sequence[1] - gold_sequence[1],
+            "cross_low": gold_cross[0] - output_cross[0],
+            "cross_high": output_cross[1] - gold_cross[1],
+        }
+        pixel_allowance = (
+            PHOTO_BOUNDARY_MEASUREMENT_SPEC
+            .transition_coordinate_sampling_uncertainty_px
+        )
+        limits = {
+            "sequence_start": (
+                (gold_sequence[1] - gold_sequence[0])
+                * OUTPUT_PROTECTION_SPEC.maximum_expansion_ratio_per_side
+                + pixel_allowance
+            ),
+            "sequence_end": (
+                (gold_sequence[1] - gold_sequence[0])
+                * OUTPUT_PROTECTION_SPEC.maximum_expansion_ratio_per_side
+                + pixel_allowance
+            ),
+            "cross_low": (
+                (gold_cross[1] - gold_cross[0])
+                * OUTPUT_PROTECTION_SPEC.maximum_expansion_ratio_per_side
+                + pixel_allowance
+            ),
+            "cross_high": (
+                (gold_cross[1] - gold_cross[0])
+                * OUTPUT_PROTECTION_SPEC.maximum_expansion_ratio_per_side
+                + pixel_allowance
+            ),
+        }
+        outward_failures = tuple(
+            side
+            for side in sorted(frame_accuracy_sides.outward_budget_blocking)
+            if expansion_by_side[side] > limits[side]
+        )
+        diagnostics.append(
+            {
+                "frame_index": frame_index,
+                "inward_failure_sides": list(inward_failures),
+                "outward_budget_failure_sides": list(outward_failures),
+                "expansion_px_by_side": expansion_by_side,
+                "outward_limit_px_by_side": limits,
+            }
+        )
+    return tuple(diagnostics)
+
+
 def validate_approved_geometry(
     record: dict[str, object],
     report: dict[str, object],
