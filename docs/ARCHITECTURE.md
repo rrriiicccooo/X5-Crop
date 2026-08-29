@@ -566,7 +566,11 @@ identity、task mapping、Frame 语义或相邻关系；只有用户完成原生
   `visible_content_limit` 与 `human_width_estimate` 计为非直接可见边界；按唯一物理 boundary identity
   计数，contact 共用线不得重复。满足任一条件即为 challenge：某个 Frame 的 start/end 均非直接可见且
   另一 Frame 还有另一条非直接可见边界；`count <= 3` 且非直接可见边界不少于 2 条；`count > 3` 且
-  不少于 4 条。单个标签或低于预算的分散估计不自动降级，未分类线仍由必要边界权限缺失单独阻断。
+  不少于 4 条；或 count 小于 format 最大完整格数、人工照片组在 source 长轴两侧都明确空余至少一个
+  固定 W，且首张 START 与末张 END 不是两条都直接可见。最后一种事实命名为
+  `two_sided_floating_partial_sequence`：它从确认前的 source extent、format W 与物理 outer 推导，不读取
+  detector 输出，也不复用 selection 后的 `HolderFillAssessment`。两端 outer 都直接可见的内部短片条
+  仍为 nominal。单个标签或低于预算的分散估计不自动降级，未分类线仍由必要边界权限缺失单独阻断。
   角色不能在观察失败后修改，也不能成为样片 whitelist。
   标注器按该合同逐 task 派生并展示角色，不提供人工切换；同一 source 的任一 task 为 challenge 时，
   source 队列归入 challenge，同时保留各 count task 的独立角色与原因。

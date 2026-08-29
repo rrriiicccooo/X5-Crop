@@ -186,6 +186,10 @@ platform | platform-check | platform-package | pre-push
   明确失败为 `calibration is incomplete`，不得回退旧基线。
   Nominal 必须安全自动批准，challenge 允许安全 `needs_review`。不得新增样片规则、whitelist、
   格式 denylist 或根据当前输出自动晋升黄金。
+  对 count 小于 format 最大完整格数的单片带，若人工确认的照片组在 source 长轴两侧都至少留有一个
+  固定 W，且首张 START 与末张 END 不是两条都直接可见，则属于
+  `two_sided_floating_partial_sequence` challenge；该事实只能从冻结前的 source 几何推导，不能读取
+  detector 输出或 post-selection holder fill。
 - Accuracy、diagnostic、performance 与 platform cohort 的每条记录都必须携带明确 count；工具不得
   从片夹容量、文件名、目录中的历史 full/partial 标签或像素推导。
 - 受跟踪的 diagnostic cohort 只判断 crash、hang、terminal/schema 完整性、authority、query/template、

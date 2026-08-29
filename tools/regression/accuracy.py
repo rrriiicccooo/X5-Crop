@@ -30,7 +30,7 @@ from .gold_geometry import (
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 GOLD_COHORT_PATH = Path(__file__).with_name("cohorts") / "gold_accuracy.jsonl"
-GOLD_COHORT_SCHEMA = "x5crop_gold_accuracy_cohort_v6"
+GOLD_COHORT_SCHEMA = "x5crop_gold_accuracy_cohort_v7"
 CONFIRMED_GEOMETRY_KEYS = frozenset(
     {
         "baseline_schema",
@@ -72,9 +72,15 @@ def _validate_evaluation_role(record: dict[str, object]) -> None:
         "slots": geometry.get("slots"),
         "adjacencies": geometry.get("adjacencies"),
     }
+    coordinate_system = geometry.get("coordinate_system")
+    if not isinstance(coordinate_system, dict):
+        raise ValueError(f"gold evaluation role is invalid: {sample_id}")
     try:
         derived = evaluation_task_role(
             format_id=str(geometry["format_id"]),
+            strip_axis_display=str(geometry["strip_orientation"]),
+            source_canonical_extent=coordinate_system["canonical_extent"],
+            orientation_mapping=coordinate_system["orientation_mapping"],
             shared_edges=geometry["shared_edges"],
             boundary_pool=geometry["boundary_pool"],
             task=task,
@@ -147,6 +153,11 @@ def validate_gold_source_identities() -> tuple[dict[str, object], ...]:
         ):
             raise ValueError(f"gold source identity is invalid: {sample_id or relative}")
         geometry = record.get("confirmed_geometry")
+        coordinate_system = (
+            geometry.get("coordinate_system")
+            if isinstance(geometry, dict)
+            else None
+        )
         if (
             not isinstance(geometry, dict)
             or set(geometry) != CONFIRMED_GEOMETRY_KEYS
@@ -166,6 +177,15 @@ def validate_gold_source_identities() -> tuple[dict[str, object], ...]:
             or not isinstance(geometry.get("slots"), list)
             or len(geometry["slots"]) != count
             or not isinstance(geometry.get("frames"), list)
+            or not isinstance(coordinate_system, dict)
+            or set(coordinate_system) != {
+                "origin",
+                "x_direction",
+                "y_direction",
+                "continuous_coordinates",
+                "canonical_extent",
+                "orientation_mapping",
+            }
         ):
             raise ValueError(f"gold geometry is invalid: {sample_id}")
         _validate_evaluation_role(record)

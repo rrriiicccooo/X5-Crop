@@ -81,12 +81,17 @@ end/start 物理线为 `contact`；前一 end 越过后一 start 为 `overlap`�
 - contact 或 overlap 始终为 challenge；
 - 非空 Frame 两侧均非直接可见，且另一 Frame 还有不同的非直接可见边界时为 challenge；
 - `count <= 3` 时，2 条及以上非直接可见边界为 challenge；`count > 3` 时，4 条及以上为 challenge；
+- count 小于 format 最大完整格数、照片组在 source 长轴两侧都至少留有一个固定 W，且首张 START 与
+  末张 END 不是两条都直接可见时，为 `two_sided_floating_partial_sequence` challenge；
 - 必需依据缺失、没有直接可见的长轴 anchor、未知 Frame、源截断几何未成立或 count 超出固定模板合同
   时为 challenge。
 
 长轴边按唯一物理 line ID 计数，contact 共用线不重复，空曝光不参与。角色与原因在确认基线中冻结，
 accuracy 会从冻结证据重新推导并核对。Nominal 必须安全自动批准；challenge 允许安全
 `needs_review`，不能通过手工改类、白名单或放宽 Gate 提高通过率。
+“两侧浮动”使用人工 geometry、source extent 与 format W 在 detector 运行前推导；不读取当前检测
+结果，也不复用 selection 之后的 `HolderFillAssessment`。两端 outer 都直接可见时仍为 nominal，以继续
+约束 detector 正确处理证据完整的内部短片条。
 
 ## 有界精修
 

@@ -42,6 +42,7 @@ const evaluationReasonLabels = {
   no_direct_sequence_anchor: "没有直接可见的长轴定位边",
   clustered_non_direct_boundaries: "一个 Frame 两侧均非直接可见，且其它 Frame 仍有非直接边界",
   non_direct_boundary_count_threshold: "非直接可见边界数量达到 challenge 阈值",
+  two_sided_floating_partial_sequence: "两侧浮动的短片条缺少双端直接 outer",
   unknown_required_frame: "存在未知必需 Frame",
   contact_adjacency: "存在接触 Frame",
   overlap_adjacency: "存在叠片 Frame",

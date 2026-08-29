@@ -5,6 +5,7 @@ import io
 import json
 import unittest
 
+from tools.manual_annotation.model import EVALUATION_ROLE_CONTRACT
 from tools.regression.accuracy import (
     GOLD_COHORT_PATH,
     _validate_evaluation_role,
@@ -51,6 +52,26 @@ def _directional_geometry(
         "format_id": "120-66",
         "count": 1,
         "strip_orientation": "horizontal",
+        "coordinate_system": {
+            "origin": "top_left",
+            "x_direction": "right",
+            "y_direction": "down",
+            "continuous_coordinates": "raw_tiff_raster_pixel_centers",
+            "canonical_extent": {"width": 560, "height": 560},
+            "orientation_mapping": {
+                "original_tag": 1,
+                "raw_to_canonical": [
+                    [1.0, 0.0, 0.0],
+                    [0.0, 1.0, 0.0],
+                    [0.0, 0.0, 1.0],
+                ],
+                "canonical_to_raw": [
+                    [1.0, 0.0, 0.0],
+                    [0.0, 1.0, 0.0],
+                    [0.0, 0.0, 1.0],
+                ],
+            },
+        },
         "shared_edges": [
             _basis_line("E1", "directly_visible", [[0.0, 0.0], [560.0, 0.0]]),
             _basis_line("E2", "directly_visible", [[0.0, 560.0], [560.0, 560.0]]),
@@ -73,7 +94,7 @@ def _directional_geometry(
         "adjacencies": [],
         "frames": [_frame(polygon)],
         "evaluation_role": {
-            "contract": "x5crop_pre_detector_evidence_role_v1",
+            "contract": EVALUATION_ROLE_CONTRACT,
             "cohort_role": "nominal",
             "reasons": [],
         },
@@ -106,6 +127,63 @@ def _approved_report(polygon: list[list[float]]) -> dict[str, object]:
 
 
 class GoldAccuracyContractTest(unittest.TestCase):
+    def test_floating_partial_role_is_recomputed_from_frozen_geometry(self) -> None:
+        gold = [
+            [560.0, 0.0],
+            [1120.0, 0.0],
+            [1120.0, 560.0],
+            [560.0, 560.0],
+        ]
+        geometry = _directional_geometry(
+            gold,
+            start_basis="visible_content_limit",
+        )
+        geometry["coordinate_system"]["canonical_extent"] = {
+            "width": 1681,
+            "height": 560,
+        }
+        geometry["shared_edges"] = [
+            _basis_line(
+                "E1",
+                "directly_visible",
+                [[0.0, 0.0], [1680.0, 0.0]],
+            ),
+            _basis_line(
+                "E2",
+                "directly_visible",
+                [[0.0, 560.0], [1680.0, 560.0]],
+            ),
+        ]
+        geometry["boundary_pool"] = [
+            _basis_line(
+                "B001",
+                "visible_content_limit",
+                [[560.0, 0.0], [560.0, 560.0]],
+            ),
+            _basis_line(
+                "B002",
+                "directly_visible",
+                [[1120.0, 0.0], [1120.0, 560.0]],
+            ),
+        ]
+        geometry["evaluation_role"] = {
+            "contract": EVALUATION_ROLE_CONTRACT,
+            "cohort_role": "challenge",
+            "reasons": ["two_sided_floating_partial_sequence"],
+        }
+        record = {
+            "sample_id": "floating-partial",
+            "format_id": "120-66",
+            "cohort_role": "challenge",
+            "confirmed_geometry": geometry,
+        }
+
+        _validate_evaluation_role(record)
+
+        record["cohort_role"] = "nominal"
+        with self.assertRaisesRegex(ValueError, "evaluation role is invalid"):
+            _validate_evaluation_role(record)
+
     def test_cohort_role_must_match_frozen_human_evidence(self) -> None:
         record = _basis_aware_record()
         _validate_evaluation_role(record)

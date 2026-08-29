@@ -13,8 +13,8 @@ from x5crop.formats import format_spec
 
 
 ANNOTATION_SCHEMA = "x5crop_source_annotation_v4"
-BASELINE_SCHEMA = "x5crop_user_confirmed_source_geometry_v5"
-EVALUATION_ROLE_CONTRACT = "x5crop_pre_detector_evidence_role_v1"
+BASELINE_SCHEMA = "x5crop_user_confirmed_source_geometry_v6"
+EVALUATION_ROLE_CONTRACT = "x5crop_pre_detector_evidence_role_v2"
 COORDINATE_SYSTEM = "raw_tiff_raster_pixel_centers"
 MACHINE_ORIGIN = "independent_bounded_pixel_proposal_v1"
 RED_MARKUP_ORIGIN = "user_red_markup_import"
@@ -336,9 +336,115 @@ def frame_state_summary(record: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _floating_partial_sequence_facts(
+    *,
+    format_id: str,
+    strip_axis_display: str,
+    source_canonical_extent: dict[str, Any],
+    orientation_mapping: dict[str, Any],
+    shared_edges: Sequence[dict[str, Any]],
+    boundary_pool: Sequence[dict[str, Any]],
+    task: dict[str, Any],
+) -> dict[str, Any]:
+    """Describe a partial task that floats by at least one W on both sides."""
+
+    result: dict[str, Any] = {
+        "two_sided_floating_source_span": False,
+        "direct_sequence_outer_count": 0,
+        "source_axis_margin_frame_ratios": None,
+    }
+    try:
+        physical = format_spec(str(format_id))
+    except KeyError:
+        return result
+    count = task.get("count")
+    slots = task.get("slots")
+    if (
+        physical.layout.kind != "single_strip"
+        or not isinstance(count, int)
+        or isinstance(count, bool)
+        or count <= 0
+        or count >= physical.maximum_full_count
+        or not isinstance(slots, list)
+        or len(slots) != count
+        or not slots
+    ):
+        return result
+    first_pair = slot_boundary_ids(slots[0], name=f"{task['task_id']} first slot")
+    last_pair = slot_boundary_ids(slots[-1], name=f"{task['task_id']} last slot")
+    if first_pair is None or last_pair is None:
+        return result
+
+    boundary_by_id = {line["line_id"]: line for line in boundary_pool}
+    outer_ids = (first_pair[0], last_pair[1])
+    result["direct_sequence_outer_count"] = sum(
+        boundary_by_id[line_id]["review_basis"] == "directly_visible"
+        for line_id in outer_ids
+    )
+    role_record = {
+        "source": {
+            "canonical_extent": source_canonical_extent,
+            "orientation_mapping": orientation_mapping,
+        },
+        "strip_axis_display": strip_axis_display,
+        "shared_edges": list(shared_edges),
+        "boundary_pool": list(boundary_pool),
+    }
+    polygons = _physical_frame_polygons_display(role_record, task)
+    if not polygons:
+        return result
+    horizontal = strip_axis_display == "horizontal"
+    long_axis = 0 if horizontal else 1
+    long_extent_key = "width" if horizontal else "height"
+    long_extent = float(source_canonical_extent[long_extent_key])
+    cross_edges = ((0, 3), (1, 2)) if horizontal else ((0, 1), (3, 2))
+    cross_spans = sorted(
+        math.dist(polygon[left], polygon[right])
+        for polygon in polygons
+        for left, right in cross_edges
+    )
+    midpoint = len(cross_spans) // 2
+    median_cross_span = (
+        cross_spans[midpoint]
+        if len(cross_spans) % 2
+        else (cross_spans[midpoint - 1] + cross_spans[midpoint]) / 2.0
+    )
+    nominal_frame_width = (
+        median_cross_span
+        * physical.frame.frame_width_mm
+        / physical.frame.frame_height_mm
+    )
+    if not math.isfinite(nominal_frame_width) or nominal_frame_width <= 0.0:
+        raise AnnotationError("floating partial sequence has no valid nominal W")
+    group_minimum = min(
+        point[long_axis]
+        for polygon in polygons
+        for point in polygon
+    )
+    group_maximum = max(
+        point[long_axis]
+        for polygon in polygons
+        for point in polygon
+    )
+    margins = (
+        group_minimum + 0.5,
+        long_extent - 0.5 - group_maximum,
+    )
+    result["source_axis_margin_frame_ratios"] = [
+        margin / nominal_frame_width for margin in margins
+    ]
+    result["two_sided_floating_source_span"] = all(
+        margin + 1.0e-7 >= nominal_frame_width for margin in margins
+    )
+    return result
+
+
 def evaluation_task_role(
     *,
     format_id: str,
+    strip_axis_display: str,
+    source_canonical_extent: dict[str, Any],
+    orientation_mapping: dict[str, Any],
     shared_edges: Sequence[dict[str, Any]],
     boundary_pool: Sequence[dict[str, Any]],
     task: dict[str, Any],
@@ -430,6 +536,21 @@ def evaluation_task_role(
     if any(slot["ordinal"] in pending_ordinals for slot in task["slots"]):
         reasons.append("source_truncation_not_geometrically_established")
 
+    floating_partial = _floating_partial_sequence_facts(
+        format_id=format_id,
+        strip_axis_display=strip_axis_display,
+        source_canonical_extent=source_canonical_extent,
+        orientation_mapping=orientation_mapping,
+        shared_edges=shared_edges,
+        boundary_pool=boundary_pool,
+        task=task,
+    )
+    if (
+        floating_partial["two_sided_floating_source_span"]
+        and floating_partial["direct_sequence_outer_count"] < 2
+    ):
+        reasons.append("two_sided_floating_partial_sequence")
+
     count_supported = (
         physical is not None
         and isinstance(count, int)
@@ -457,6 +578,7 @@ def evaluation_task_role(
         "non_direct_boundary_ids": sorted(non_direct_boundary_ids),
         "two_sided_non_direct_frame_ordinals": two_sided_non_direct_frames,
         "clustered_non_direct_frame_ordinals": clustered_non_direct_frames,
+        **floating_partial,
     }
 
 
@@ -468,6 +590,9 @@ def evaluation_role_summary(record: dict[str, Any]) -> dict[str, Any]:
     tasks = [
         evaluation_task_role(
             format_id=str(record["format_id"]),
+            strip_axis_display=str(record["strip_axis_display"]),
+            source_canonical_extent=record["source"]["canonical_extent"],
+            orientation_mapping=record["source"]["orientation_mapping"],
             shared_edges=record["shared_edges"],
             boundary_pool=record["boundary_pool"],
             task=task,
@@ -1367,6 +1492,9 @@ def confirmed_baseline_rows(record: dict[str, Any]) -> tuple[dict[str, Any], ...
                     "x_direction": "right",
                     "y_direction": "down",
                     "continuous_coordinates": COORDINATE_SYSTEM,
+                    "canonical_extent": deepcopy(
+                        record["source"]["canonical_extent"]
+                    ),
                     "orientation_mapping": deepcopy(
                         record["source"]["orientation_mapping"]
                     ),

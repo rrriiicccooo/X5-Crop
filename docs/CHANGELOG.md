@@ -48,6 +48,8 @@ V5 只有一条 current-only runtime；历史 mode、schema、fallback 与平行
   `human_width_estimate` 两向均不阻断，其它边仍独立生效。
 - Nominal/challenge 在 detector 运行前由人工证据和固定模板合同逐 task 派生，并随确认基线冻结；
   accuracy 会重新推导核对，不能手填改类。Nominal 必须安全自动批准，challenge 允许安全 review。
+- 两侧各空余至少一个固定 W、又缺少双端直接 outer 的内部 partial sequence 属于 challenge；该角色只从
+  确认前几何推导，不由当前 detector 的结果或 post-selection holder fill 决定。
 - Accuracy 只接受当前确认 task。没有当前 blocking cohort 时明确报告
   `calibration is incomplete`，不回退历史基线。空 slot 不参与几何比较，但 runtime 对应输出与 ordinal
   必须保留。

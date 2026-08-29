@@ -23,6 +23,7 @@ from tools.manual_annotation.model import (
     ANNOTATION_SCHEMA,
     BASELINE_SCHEMA,
     COORDINATE_SYSTEM,
+    EVALUATION_ROLE_CONTRACT,
     AnnotationError,
     apply_client_geometry,
     confirmed_baseline_rows,
@@ -225,6 +226,40 @@ def _extend_second_task_to_four_frames(
 
 
 class ManualAnnotationModelContractTest(unittest.TestCase):
+    def test_two_sided_floating_partial_sequence_needs_two_direct_outers(
+        self,
+    ) -> None:
+        record = _annotation_record()
+        record["tasks"] = [record["tasks"][0]]
+        _classify_all_lines_directly_visible(record)
+        for line_id, x in (("B001", 150.0), ("B002", 340.0)):
+            line = next(
+                item
+                for item in record["boundary_pool"]
+                if item["line_id"] == line_id
+            )
+            line["points_raw"] = [
+                display_to_raw_point(record, [x, 0.0]),
+                display_to_raw_point(record, [x + 1.0, 99.0]),
+            ]
+
+        direct_summary = evaluation_role_summary(record)["tasks"][0]
+        self.assertEqual(direct_summary["cohort_role"], "nominal")
+        self.assertEqual(direct_summary["reasons"], [])
+
+        next(
+            line
+            for line in record["boundary_pool"]
+            if line["line_id"] == "B002"
+        )["review_basis"] = "visible_content_limit"
+        floating_summary = evaluation_role_summary(record)["tasks"][0]
+
+        self.assertEqual(floating_summary["cohort_role"], "challenge")
+        self.assertEqual(
+            floating_summary["reasons"],
+            ["two_sided_floating_partial_sequence"],
+        )
+
     def test_evaluation_roles_are_task_level_and_structural(self) -> None:
         record = _annotation_record()
         _classify_all_lines_directly_visible(record)
@@ -1041,10 +1076,17 @@ class ManualAnnotationModelContractTest(unittest.TestCase):
             all(
                 row["evaluation_role"]
                 == {
-                    "contract": "x5crop_pre_detector_evidence_role_v1",
+                    "contract": EVALUATION_ROLE_CONTRACT,
                     "cohort_role": "nominal",
                     "reasons": [],
                 }
+                for row in rows
+            )
+        )
+        self.assertTrue(
+            all(
+                row["coordinate_system"]["canonical_extent"]
+                == record["source"]["canonical_extent"]
                 for row in rows
             )
         )
