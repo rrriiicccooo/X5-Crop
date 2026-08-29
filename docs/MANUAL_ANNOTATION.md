@@ -42,6 +42,7 @@ python3 -m tools.manual_annotation
 ```bash
 python3 -m tools.manual_annotation prepare
 python3 -m tools.manual_annotation audit
+python3 -m tools.manual_annotation salience
 ```
 
 `prepare --sample-id S063` 只处理指定 identity；`--force-machine` 只重建未触碰的
@@ -52,6 +53,7 @@ python3 -m tools.manual_annotation audit
 - `records/`：原子 source record；
 - `previews/`：有界导航 JPG；
 - `review_artifacts/`：确认时生成的审阅快照；
+- `machine_salience_review.json`：直接可见 start/end 的机器显著度事实与独立人工结论；
 - `confirmed_source_geometry.jsonl`：全部当前确认 task 的派生汇总。
 
 权威坐标为 `raw_tiff_raster_pixel_centers`。页面只用 Orientation 1–8 的可逆映射显示，保存时回到原始
@@ -115,10 +117,24 @@ python3 -m tools.manual_annotation refine
 不勾选 source review，也不授予黄金权限。人工随后修改坐标、依据或 Frame 状态会把相应证据标为
 `adjusted_after_refinement`；有人工修改的记录不会被后续批量精修覆盖。
 
+## 机器低显著度审阅
+
+`salience` 逐张读取原 TIFF，用 production registered gray、transition 阈值和有界局部查询统计全部当前
+直接可见 start/end。它不移动线，也不改变 `review_basis`、黄金几何、nominal/challenge、accuracy 或
+runtime。接触共用线没有唯一的照片侧与 separator 侧，不参与；无法在 TIFF 内取得完整双侧像素窗的线
+只记为不可测。
+
+高置信候选必须同时满足：生产 transition 未匹配人工线、局部查询内没有另一条合格强边，以及两侧 tone
+差、texture 差和照片侧 texture 均落入同格式已检出直接可见边界的低 20%。页面以黄色虚线显示候选，
+并保留更宽的未匹配召回层供查漏。用户可逐条确认“机器低显著度”、否决候选，或主动补标机器未提议的
+适用线；人工结论与 proposal 分开保存，坐标或依据变化后自动失效。重新运行 `salience` 会覆盖机器事实，
+但只在 source geometry 与 line identity 均未变化时保留人工结论。
+
 ## 审核流程
 
 1. 按 format、状态、边界依据、Frame 状态或评测角色筛选；每次只打开一个 source 的有界预览。同源
    多 count 不建立页签，只显示一套 source reference，并列出各 task 的映射与角色。
+   机器显著度筛选可分别查看高置信待审、宽召回待审、已确认低显著和已否决线。
 2. 先检查两条共享短轴边，再检查每个内容 Frame 的 start/end。总览用多色半透明区域区分 Frame；
    `start` 与 `end` 使用不同颜色，contact 共用线以双色虚线显示，overlap 保留两条独立线。
 3. 点击或拖动只编辑整线。方向键沿法向移动 1 px，Shift 为 10 px；`[` / `]` 绕中点旋转 0.01°，
